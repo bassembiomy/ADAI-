@@ -11,34 +11,53 @@ export class SparseLinearSolver {
    */
   static solveRankDeficient(A: number[][], b: number[], preferFreeColumns: number[] = []): number[] {
     const n = b.length;
+    // WP-31c: flat typed rows and an array lookup for the free columns (the Set lookup inside the O(n^2) pivot search of every
+    // elimination step made this the dominant cost of a multibody step); the pivot choice and the arithmetic are unchanged.
     const matrix = A.map((row, i) => {
-      const scale = Math.max(...row.map(Math.abs), 1e-30);
-      return [...row.map(v => v / scale), b[i] / scale];
+      let scale = 1e-30;
+      for (const v of row) { const a = Math.abs(v); if (a > scale) scale = a; }
+      const r = new Float64Array(n + 1);
+      for (let j = 0; j < n; j++) r[j] = row[j] / scale;
+      r[n] = b[i] / scale;
+      return r;
     });
     // Equilibrate columns as well: row scaling alone mistakes independent
     // coordinates for free ones when a stiffness couples very different units.
-    const columnScales = Array.from({ length: n }, (_, j) => Math.max(...matrix.map(row => Math.abs(row[j])), 1e-30));
+    const columnScales = new Array<number>(n);
+    for (let j = 0; j < n; j++) {
+      let m = 1e-30;
+      for (const row of matrix) { const a = Math.abs(row[j]); if (a > m) m = a; }
+      columnScales[j] = m;
+    }
     for (const row of matrix) for (let j = 0; j < n; j++) row[j] /= columnScales[j];
     const columns = Array.from({ length: n }, (_, i) => i);
-    const free = new Set(preferFreeColumns);
+    const freeSet = new Set(preferFreeColumns);
+    const isFree = columns.map(c => freeSet.has(c));
     let rank = 0;
     for (let k = 0; k < n; k++) {
+      // best entry among the non-free columns first (scan order i, j; strict >), the free columns only if none reaches 1e-7
       let pivot = 0, row = k, col = k;
-      for (const priority of [false, true]) {
-        for (let i = k; i < n; i++) for (let j = k; j < n; j++) {
-          if (free.has(columns[j]) !== priority) continue;
-          if (Math.abs(matrix[i][j]) > pivot) { pivot = Math.abs(matrix[i][j]); row = i; col = j; }
+      let freePivot = 0, freeRow = k, freeCol = k;
+      for (let i = k; i < n; i++) {
+        const mi = matrix[i];
+        for (let j = k; j < n; j++) {
+          const a = Math.abs(mi[j]);
+          if (isFree[j]) { if (a > freePivot) { freePivot = a; freeRow = i; freeCol = j; } }
+          else if (a > pivot) { pivot = a; row = i; col = j; }
         }
-        if (pivot >= 1e-7) break;
       }
+      if (!(pivot >= 1e-7) && freePivot > pivot) { pivot = freePivot; row = freeRow; col = freeCol; }
       if (pivot < 1e-7) break;
-      [matrix[k], matrix[row]] = [matrix[row], matrix[k]];
-      for (const r of matrix) [r[k], r[col]] = [r[col], r[k]];
-      [columns[k], columns[col]] = [columns[col], columns[k]];
+      const tr = matrix[k]; matrix[k] = matrix[row]; matrix[row] = tr;
+      for (const r of matrix) { const t = r[k]; r[k] = r[col]; r[col] = t; }
+      const tc = columns[k]; columns[k] = columns[col]; columns[col] = tc;
+      const tf = isFree[k]; isFree[k] = isFree[col]; isFree[col] = tf;
+      const mk = matrix[k];
       for (let i = k + 1; i < n; i++) {
-        const factor = matrix[i][k] / matrix[k][k];
-        matrix[i][k] = 0;
-        for (let j = k + 1; j <= n; j++) matrix[i][j] -= factor * matrix[k][j];
+        const mi = matrix[i];
+        const factor = mi[k] / mk[k];
+        mi[k] = 0;
+        for (let j = k + 1; j <= n; j++) mi[j] -= factor * mk[j];
       }
       rank++;
     }

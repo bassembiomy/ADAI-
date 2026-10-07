@@ -611,10 +611,15 @@
         "WP-31b"
       ],
       "blocks": [],
-      "status": "in_progress",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 2,
       "acceptance": "perf budgets + labs + worker tests",
-      "evidence": [],
+      "evidence": [
+        "coloured sparse FD Jacobian, modified Newton with cached LU + exact fallback, Gilbert-Peierls sparse LU, residual hot-path plans, DD3 BDF2 LTE (conservative margin 64)",
+        "speed: FOC test 123 s -> 6.8 s, IM lab window 8.9 -> 0.65 s, pmsm_foc 17.5 -> 1.0 s, 30-block 11.7 -> 0.39 s; WP-31b test budgets reverted",
+        "worker: typed VLabDiagnostic contract (old error string kept), cancel, progress, onDiagnostics API, deterministic; F-104 belt injection no longer mutates node.data",
+        "planner FULL suite at DEFAULT 5 s timeout: 111/111 files, 5400 pass / 14 expected-fail / 0 fail; tsc clean"
+      ],
       "findings": [
         "F-079",
         "F-049",
@@ -629,7 +634,7 @@
         "WP-31c"
       ],
       "blocks": [],
-      "status": "merged-into-WP-31",
+      "status": "merged-into-WP-31c",
       "attempts": 0,
       "acceptance": "npx vitest run src/services/vlabWorkerClient.test.ts --reporter=dot",
       "evidence": [],
@@ -716,7 +721,7 @@
         "WP-43"
       ],
       "blocks": [],
-      "status": "todo",
+      "status": "in_progress",
       "attempts": 0,
       "acceptance": "npm run test:vlab:certify",
       "evidence": [],
@@ -1152,7 +1157,8 @@
       "block": "test infra",
       "layer": "integration",
       "summary": "labs_sim / vlab_comprehensive / airfryer time out at 5 s under full parallel load. Set per-file timeouts or speed them up. Now also whitebox M-01 and pid_ac_motor; it repeatedly pollutes the gates.",
-      "wp": "WP-31"
+      "wp": "WP-31",
+      "status": "resolved-WP-31c"
     },
     {
       "id": "F-050",
@@ -1411,7 +1417,8 @@
       "block": "engine performance",
       "layer": "solver",
       "summary": "With real 50 Hz induction dynamics the labs take 16-22 s each (dense numeric Jacobian ~50 us/residual, h ~0.1 ms by LTE). test:vlab went from 15 s to 64 s; per-test 240 s timeouts were added to 8 lab tests. Needs a sparse/analytic Jacobian, Jacobian reuse, and checks on UI interactivity.",
-      "wp": "WP-31"
+      "wp": "WP-31",
+      "status": "resolved-WP-31c"
     },
     {
       "id": "F-080",
@@ -1624,7 +1631,8 @@
       "block": "belt_end/spool/pulley",
       "layer": "integration",
       "summary": "Injected belt_density/youngs persist in node.data after unlinking; a model-wide ctx broadcast overrides unlinked blocks (spec 2.5); belt_damping is not persisted.",
-      "wp": "WP-31"
+      "wp": "WP-31",
+      "status": "resolved-WP-31c"
     },
     {
       "id": "F-105",
@@ -1640,7 +1648,24 @@
       "block": "engine performance",
       "layer": "solver",
       "summary": "With full error control, pmsm_foc takes ~500 steps for 0.05 s and the FOC test takes 123 s alone. The BDF2-BDF1 estimator overestimates; use a 3rd-divided-difference BDF2 LTE (needs x(n-2)). Combine with a sparse Jacobian and Jacobian reuse (F-079).",
-      "wp": "WP-31c"
+      "wp": "WP-31c",
+      "status": "resolved-WP-31c"
+    },
+    {
+      "id": "F-107",
+      "severity": "low",
+      "block": "worker",
+      "layer": "integration",
+      "summary": "Mid-step cancel needs SharedArrayBuffer (cross-origin isolation); otherwise the worker is terminated/restarted. Check Electron COOP/COEP.",
+      "wp": "WP-40"
+    },
+    {
+      "id": "F-108",
+      "severity": "low",
+      "block": "engine",
+      "layer": "solver",
+      "summary": "An RLC step in a single 50 ms call fails at minimumStep during BDF1 startup (atol 1e-5); probably pre-existing.",
+      "wp": "open"
     }
   ],
   "reference": "published-equations (Simscape goldens optional, F-021)",

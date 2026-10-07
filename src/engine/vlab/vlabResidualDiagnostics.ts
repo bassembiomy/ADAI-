@@ -114,3 +114,15 @@ export const anonymousNonFinite = (rowIndex: number, value: number): ResidualDia
   kind: 'non-finite-residual', blockId: '', blockType: '', rowIndex, value,
   reason: `residual row ${rowIndex} is ${value}`,
 });
+
+/**
+ * WP-31c: the caller cancelled the step (worker cancel flag, see VLabPhysicsEngine.setCancellation). Checked once per solver attempt, so
+ * a long step stops within one Newton solve. NOT recoverable; no state is returned.
+ */
+export class VLabCancelledError extends Error {
+  readonly recoverable = false;
+  constructor(readonly time: number, readonly acceptedSteps: number) {
+    super(`V-Lab step cancelled at t=${time} after ${acceptedSteps} accepted solver step(s).`);
+    this.name = 'VLabCancelledError';
+  }
+}

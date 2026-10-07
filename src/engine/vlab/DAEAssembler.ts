@@ -1016,7 +1016,11 @@ export class DAEAssembler {
     });
     const warnedAmbiguousBeltProps = new Set<string>();
     const injectBeltMaterial = (nodeId: string, blockType: string, ports: string[], params: Record<string, any>, nodeData?: any) => {
-      if (!BELT_CONSUMER_TYPES.has(blockType) || beltMaterialSources.length === 0) return;
+      if (!BELT_CONSUMER_TYPES.has(blockType)) return;
+      // WP-31c (F-104): the injected properties exist only in this assembly's per-block `params`, scoped to LINKED blocks. A stale injection that an
+      // older version persisted into node.data.params (and that survives unlinking) is never read as a link: it is dropped here.
+      delete params.belt_density; delete params.belt_youngs; delete params.belt_damping; delete params.belt_properties_source;
+      if (beltMaterialSources.length === 0) return;
       // Strictly check the dedicated property port 'p'
       const pRoot = uf.find(`${nodeId}_p`);
       const matchedSource = beltMaterialSources.find(s => s.root === pRoot);
@@ -1028,11 +1032,7 @@ export class DAEAssembler {
       params.belt_youngs = matchedSource.youngs;
       params.belt_damping = matchedSource.damping;
       params.belt_properties_source = matchedSource.nodeId;
-      if (nodeData && typeof nodeData === 'object' && nodeData.params) {
-        nodeData.params.belt_density = matchedSource.density;
-        nodeData.params.belt_youngs = matchedSource.youngs;
-        nodeData.params.belt_properties_source = matchedSource.nodeId;
-      }
+      // node.data is never written: the model the user sees and saves is not changed by simulating it
     };
 
     const exemptVariableIndices: number[] = [];
@@ -1098,63 +1098,52 @@ export class DAEAssembler {
       // Evaluate the block's equation factory. `guard` (structural probe only) records branch/state reads outside the
       // allocation instead of letting them silently read `undefined`.
       // The equation arguments of this block at the unknown vector `x` (WP-20a: shared by the residual and by the history recorder).
+      const portPlan = ports.map(portId => {
+        const key = `${node.id}_${portId}`;
+        const domain = nodePortDomains.get(key);
+        const width = nodePortShapes.get(key)?.width ?? 1;
+        const connected = connectedPortKeys.has(key);
+        return {
+          portId, width, connected,
+          unwiredPhysical: domain === 'physical' && !connected,
+          isFrame: domain === 'frame' || domain === 'multibodyframe',
+          base: portToVarIndex.get(key),
+        };
+      });
+      const connectedPortList = ports.filter(p => connectedPortKeys.has(`${node.id}_${p}`));
       const buildArgs = (x: number[], dx: number[], ctx: EquationContext, guard?: Set<string>): BlockEquationArgs => {
-        // Map block ports to global across variable values and their derivatives
-        const acrossVals = ports.map(portId => {
-          const key = `${node.id}_${portId}`;
-          const domain = nodePortDomains.get(key);
-          const width = nodePortShapes.get(key)?.width ?? 1;
-          if (width > 1) {
+        // Map block ports to global across variable values and their derivatives. WP-31c: the per-port lookups (key string, domain,
+        // width, variable index, connection) never change after assembly; they are resolved once into `portPlan`, so a residual
+        // evaluation only reads x / dx (this closure ran ~10^6 times per second of model time and was the dominant cost).
+        const acrossVals = portPlan.map(pl => {
+          if (pl.width > 1) {
             // vector port: an N-element array. An unwired signal vector reads N zeros (topology validation reports required ones).
-            if (domain === 'physical' && !connectedPortKeys.has(key)) return new Array(width).fill(0);
-            const base = portToVarIndex.get(key)!;
-            return Array.from({ length: width }, (_, k) => x[base + k]);
+            if (pl.unwiredPhysical) return new Array(pl.width).fill(0);
+            return Array.from({ length: pl.width }, (_, k) => x[pl.base! + k]);
           }
-          if (domain === 'physical' && !connectedPortKeys.has(key)) {
-            if (type === 'nmos' && portId === 'g' && !warnedUnconnectedNmosGates.has(node.id)) {
+          if (pl.unwiredPhysical) {
+            if (type === 'nmos' && pl.portId === 'g' && !warnedUnconnectedNmosGates.has(node.id)) {
               warnedUnconnectedNmosGates.add(node.id);
               console.warn(`NMOS gate input is unconnected on block "${node.id}"; using 0 V.`);
             }
             return 0;
           }
-          if ((domain === 'frame' || domain === 'multibodyframe') && !connectedPortKeys.has(key)) {
-            return [0, 0, 0, 0, 0, 0];
+          if (pl.isFrame && !pl.connected) return [0, 0, 0, 0, 0, 0];
+          if (pl.isFrame) {
+            return [x[pl.base! + 0] ?? 0, x[pl.base! + 1] ?? 0, x[pl.base! + 2] ?? 0, x[pl.base! + 3] ?? 0, x[pl.base! + 4] ?? 0, x[pl.base! + 5] ?? 0];
           }
-          const varIdx = portToVarIndex.get(key)!;
-          if (domain === 'frame' || domain === 'multibodyframe') {
-            return [
-              x[varIdx + 0] ?? 0,
-              x[varIdx + 1] ?? 0,
-              x[varIdx + 2] ?? 0,
-              x[varIdx + 3] ?? 0,
-              x[varIdx + 4] ?? 0,
-              x[varIdx + 5] ?? 0
-            ];
-          }
-          return x[varIdx];
+          return x[pl.base!];
         });
-        
-        const acrossDervs = ports.map(portId => {
-          const key = `${node.id}_${portId}`;
-          const domain = nodePortDomains.get(key);
-          const width = nodePortShapes.get(key)?.width ?? 1;
-          if (width > 1) {
-            if (domain === 'physical' && !connectedPortKeys.has(key)) return new Array(width).fill(0);
-            const base = portToVarIndex.get(key)!;
-            return Array.from({ length: width }, (_, k) => dx[base + k]);
+
+        const acrossDervs = portPlan.map(pl => {
+          if (pl.width > 1) {
+            if (pl.unwiredPhysical) return new Array(pl.width).fill(0);
+            return Array.from({ length: pl.width }, (_, k) => dx[pl.base! + k]);
           }
-          if (domain === 'physical' && !connectedPortKeys.has(key)) {
-            return 0;
-          }
-          const isFramePort = domain === 'frame' || domain === 'multibodyframe';
-          if (isFramePort && !connectedPortKeys.has(key)) {
-            return [0, 0, 0, 0, 0, 0];
-          }
-          const varIdx = portToVarIndex.get(key)!;
-          if (isFramePort) {
-            return [0, 1, 2, 3, 4, 5].map(k => dx[varIdx + k] ?? 0);
-          }
-          return dx[varIdx];
+          if (pl.unwiredPhysical) return 0;
+          if (pl.isFrame && !pl.connected) return [0, 0, 0, 0, 0, 0];
+          if (pl.isFrame) return [0, 1, 2, 3, 4, 5].map(k => dx[pl.base! + k] ?? 0);
+          return dx[pl.base!];
         });
 
         // Map component branch variables and their derivatives
@@ -1174,7 +1163,15 @@ export class DAEAssembler {
         // A non-finite input (a diverged Newton iterate) must never reach the equation: the many `across[i] || 0`
         // optional-port reads inside the factories would silently turn NaN into 0 (F-045). Missing (undefined) ports
         // are not flagged: those are the optional-port reads, which are legitimately 0.
-        if (!guard) {
+        // WP-31c: one allocation-free pass decides whether the (rare) diagnostic scan below is needed at all
+        const hasNonFinite = (v: unknown): boolean => {
+          if (typeof v === 'number') return !Number.isFinite(v);
+          if (Array.isArray(v)) { for (let k = 0; k < v.length; k++) if (typeof v[k] === 'number' && !Number.isFinite(v[k])) return true; }
+          return false;
+        };
+        const anyNonFinite = (list: unknown[]): boolean => { for (let k = 0; k < list.length; k++) if (hasNonFinite(list[k])) return true; return false; };
+        if (!guard && (anyNonFinite(acrossVals) || anyNonFinite(acrossDervs) || anyNonFinite(branchVals) || anyNonFinite(branchDervs)
+          || anyNonFinite(stateVals) || anyNonFinite(stateDervs))) {
           const bad: ResidualDiagnostic[] = [];
           const scan = (label: string, value: unknown) => {
             const parts = Array.isArray(value) ? value : [value];
@@ -1207,7 +1204,7 @@ export class DAEAssembler {
           params,
           ports,
           nodeId: node.id,
-          connectedPorts: ports.filter(p => connectedPortKeys.has(`${node.id}_${p}`))
+          connectedPorts: connectedPortList.slice()
         };
       };
 
@@ -1754,7 +1751,34 @@ export class DAEAssembler {
 
     // 7. Assemble global residuals function
     const firstOrderOnlyMask = variableNames.map(n => /_\((frame|multibodyframe)\)$/.test(n));
-    const residuals = (x: number[], arg2: number[] | EquationContext, arg3?: EquationContext): number[] => {
+    // WP-31c: lookups that are fixed once the system is assembled, resolved on the first evaluation (not per call: the residual
+    // is evaluated ~n times per Jacobian, and these were linear scans of the block / Kirchhoff lists)
+    let cachedPlan: {
+      blocks: { comp: ComponentEquation; allIndices: number[] }[];
+      kirchhoffByNode: Map<string, (typeof kirchhoffNodes)[number]>;
+      kirchhoffByChannel: Map<string, (typeof kirchhoffNodes)[number]>;
+      pureSourceToScope: Map<string, boolean>;
+    } | undefined;
+    const residualPlan = () => {
+      if (cachedPlan) return cachedPlan;
+      const compById = new Map<string, ComponentEquation>();
+      for (const c of componentsList) if (!compById.has(c.blockId)) compById.set(c.blockId, c);
+      const blocks: { comp: ComponentEquation; allIndices: number[] }[] = [];
+      nodes.forEach(node => {
+        const comp = compById.get(node.id);
+        if (!comp) return;
+        blocks.push({ comp, allIndices: [...(componentBranchVarIndices.get(node.id) || []), ...(componentStateVarIndices.get(node.id) || [])] });
+      });
+      const kirchhoffByNode = new Map<string, (typeof kirchhoffNodes)[number]>();
+      const kirchhoffByChannel = new Map<string, (typeof kirchhoffNodes)[number]>();
+      for (const k of kirchhoffNodes) {
+        if (!kirchhoffByNode.has(k.nodeId)) kirchhoffByNode.set(k.nodeId, k);
+        const key = `${k.nodeId}#${k.channel}`;
+        if (!kirchhoffByChannel.has(key)) kirchhoffByChannel.set(key, k);
+      }
+      cachedPlan = { blocks, kirchhoffByNode, kirchhoffByChannel, pureSourceToScope: new Map() };
+      return cachedPlan;
+    };    const residuals = (x: number[], arg2: number[] | EquationContext, arg3?: EquationContext): number[] => {
       let dx: number[];
       let ctx: EquationContext;
       
@@ -1774,23 +1798,18 @@ export class DAEAssembler {
       ctx.stateDerivatives = dx;
 
       const res = new Array(varCount).fill(0);
+      const plan = residualPlan();
       
       // Equation pointer tracks where we put component residual equations
       // We will place component equations at the branch and state indices allocated for them
-      nodes.forEach(node => {
-        const comp = componentsList.find(c => c.blockId === node.id);
-        if (!comp) return;
-        
-        const branchIndices = componentBranchVarIndices.get(node.id) || [];
-        const stateIndices = componentStateVarIndices.get(node.id) || [];
-        
+      plan.blocks.forEach(({ comp, allIndices }) => {
         const compRes = comp.residual(x, dx, ctx);
         
         // Row i of the block equation is the equation of its i-th allocated unknown (branches, then states). A
         // non-finite row is a diagnostic naming block / row / unknown, never 0 (F-045).
         const bad: ResidualDiagnostic[] = [];
         let resPtr = 0;
-        [...branchIndices, ...stateIndices].forEach(idx => {
+        allIndices.forEach(idx => {
           const value = compRes[resPtr];
           if (typeof value !== 'number' || !Number.isFinite(value)) {
             bad.push({
@@ -1830,7 +1849,7 @@ export class DAEAssembler {
           // Vector net (WP-09c): one row per channel. A width-N signal net equals the sum of the signal branches that drive
           // its channel k; a composite three-phase electrical node obeys KCL per phase (sum of through variables = 0).
           for (let k = 0; k < pn.stride; k++) {
-            const kn = kirchhoffNodes.find(n => n.nodeId === pn.id && n.channel === k);
+            const kn = plan.kirchhoffByChannel.get(`${pn.id}#${k}`);
             const sum = kn ? kn.throughIndices.reduce((acc, ti, i) => acc + kn.signs[i] * x[ti], 0) : 0;
             const driven = !!kn && kn.throughIndices.length > 0;
             res[acrossVarIdx + k] = pn.domain === 'physical'
@@ -1840,7 +1859,7 @@ export class DAEAssembler {
         } else if (pn.domain === 'physical') {
           // Physical signal node:
           // It is equal to the sum of its connected signal output branch variables.
-          const kn = kirchhoffNodes.find(k => k.nodeId === pn.id);
+          const kn = plan.kirchhoffByNode.get(pn.id);
           if (kn && kn.throughIndices.length > 0) {
             let sum = 0;
             for (let i = 0; i < kn.throughIndices.length; i++) {
@@ -1873,21 +1892,25 @@ export class DAEAssembler {
           }
         } else {
           // Kirchhoff Conservation node: Sum of through variables = 0
-          const kn = kirchhoffNodes.find(k => k.nodeId === pn.id);
+          const kn = plan.kirchhoffByNode.get(pn.id);
           if (kn && kn.throughIndices.length > 0) {
             let sum = 0;
             for (let i = 0; i < kn.throughIndices.length; i++) {
               sum += kn.signs[i] * x[kn.throughIndices[i]];
             }
             // For open mechanical source-to-scope measurement nodes with no other physical loads, velocity is 0
-            const portsOnNode = rootToPorts.get(pn.id) || [];
-            const isPureSourceToScope = portsOnNode.length > 0 && portsOnNode.every(pKey => {
-              const lastIdx = pKey.lastIndexOf('_');
-              const nodeId = lastIdx !== -1 ? pKey.slice(0, lastIdx) : pKey;
-              const n = nodes.find(item => item.id === nodeId);
-              const t = (n?.data as any)?.type || n?.type || '';
-              return ['force_source', 'torque_source', 'constant', 'ps_constant', 'ps_step', 'ps_sine', 'scope', 'vlab_probe', 'conn_label'].includes(t);
-            });
+            let isPureSourceToScope = plan.pureSourceToScope.get(pn.id);
+            if (isPureSourceToScope === undefined) {
+              const portsOnNode = rootToPorts.get(pn.id) || [];
+              isPureSourceToScope = portsOnNode.length > 0 && portsOnNode.every(pKey => {
+                const lastIdx = pKey.lastIndexOf('_');
+                const nodeId = lastIdx !== -1 ? pKey.slice(0, lastIdx) : pKey;
+                const n = nodes.find(item => item.id === nodeId);
+                const t = (n?.data as any)?.type || n?.type || '';
+                return ['force_source', 'torque_source', 'constant', 'ps_constant', 'ps_step', 'ps_sine', 'scope', 'vlab_probe', 'conn_label'].includes(t);
+              });
+              plan.pureSourceToScope.set(pn.id, isPureSourceToScope);
+            }
 
             if (isPureSourceToScope && (pn.domain === 'translational' || pn.domain === 'rotational') && kn.throughIndices.length === 1) {
               res[acrossVarIdx] = x[acrossVarIdx];

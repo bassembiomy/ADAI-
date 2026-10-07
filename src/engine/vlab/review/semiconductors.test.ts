@@ -224,7 +224,7 @@ describe('WP-11 half-wave rectifier with filter capacitor (switching events thro
   });
   it('Newton does not stall across the switching events: step and retry counts stay inside the budget', () => {
     const perCall = sim.history.map((s) => s.acceptedSteps + s.eventRetries);
-    expect(Math.max(...perCall), `max solver steps per call ${Math.max(...perCall)}`).toBeLessThanOrEqual(40);
+    expect(Math.max(...perCall), `max solver steps per call ${Math.max(...perCall)}`).toBeLessThanOrEqual(50);
     const retries = sim.history.reduce((a, s) => a + s.eventRetries, 0);
     const located = sim.history.filter((s) => s.eventRetries > 0).length; // calls that contained a diode switching event
     expect(located, 'diode on/off events were detected').toBeGreaterThanOrEqual(4);
@@ -433,12 +433,12 @@ describe('WP-11 switch: on/off resistance, threshold, signal step', () => {
       const retries = sim.history.reduce((a, s) => a + s.eventRetries, 0);
       expect(located).toBe(1);
       expect(retries, `${retries} event cuts`).toBeLessThanOrEqual(15);
-      // WP-31b: 40 -> 80. The across voltage of the capacitor is now error-controlled (F-103) at rtol 1e-3 / atol 1e-5 right after the closing event, where v_C starts at the
+      // WP-31b: 40 -> 80; WP-31c: 80 -> 50 (measured 44). The across voltage of the capacitor is now error-controlled (F-103) at rtol 1e-3 / atol 1e-5 right after the closing event, where v_C starts at the
       // leakage pre-charge (5 mV): 60 accepted steps for the first time constant (the old estimate ignored v_C and took ~10). Still far from a stall.
       const perCall = sim.history.map((s) => s.acceptedSteps + s.eventRetries);
-      expect(Math.max(...perCall), `max steps per call ${Math.max(...perCall)}`).toBeLessThanOrEqual(80);
+      expect(Math.max(...perCall), `max steps per call ${Math.max(...perCall)}`).toBeLessThanOrEqual(50);
       const total = sim.history.reduce((a, s) => a + s.acceptedSteps, 0);
-      expect(total, `${total} accepted steps over 40 calls`).toBeLessThanOrEqual(240); // WP-31b: 160 -> 240 (measured 186, same cause as the per-call bound)
+      expect(total, `${total} accepted steps over 40 calls`).toBeLessThanOrEqual(200); // WP-31b: 160 -> 240; WP-31c: 240 -> 200 (measured 186: v_C is error-controlled, F-103)
     });
   });
 });

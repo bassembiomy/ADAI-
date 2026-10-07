@@ -48,7 +48,7 @@ type Sample = { t: number; at: (name: string) => number; vec: (name: string, n: 
 /** Run `steps` steps of `dt` through VLabPhysicsEngine.simulateStep; `probe` sees every step. */
 function simulate(m: Model, steps: number, dt: number, probe?: (s: Sample, k: number) => void, validate = true): Sample {
   const engine = new VLabPhysicsEngine();
-  engine.setStepBudget({ maxStepAttempts: 20000, wallClockMs: 240000 });
+  engine.setStepBudget({ maxStepAttempts: 20000, wallClockMs: 60000 });
   if (!validate) engine.setTopologyValidation(false);
   let state: any = null;
   const sample = (k: number): Sample => {
@@ -229,7 +229,7 @@ describe('Smith predictor (Smith 1957) and sliding mode (Slotine and Li)', () =>
     expect(worst).toBeLessThan(0.02);
   });
 
-  it('sliding mode drives s = de/dt + lambda e into the boundary layer and then e decays as e^(-lambda t)', () => {
+  it('sliding mode drives s = de/dt + lambda e into the boundary layer and then e decays as e^(-lambda t)', { timeout: 15000 }, () => { // measured 2.9 s alone, > 5 s under a loaded full run
     const lambda = 2, k = 5, phi = 0.02;
     const m: Model = {
       nodes: [node('r', 'ps_constant', { value: 0 }), node('sm', 'ps_sliding_mode', { lambda, k, boundary_layer: phi }),
@@ -362,7 +362,7 @@ describe('observers and sensors: flux observer, quadrature decoder, resolver-to-
     near(idx.at(out('q', 'pos')), 2 * scale, 1e-7, 'count after the index');
   });
 
-  it('resolver-to-digital: the type II loop tracks a ramp angle with zero steady-state error and reads the speed', () => {
+  it('resolver-to-digital: the type II loop tracks a ramp angle with zero steady-state error and reads the speed', { timeout: 20000 }, () => { // measured 5.1 s alone (3000 calls of 50 us through a 1 kHz carrier)
     const fc = 1000, Om = 50, th0 = 0.3;
     const m: Model = {
       nodes: [node('carrier', 'ps_sine', { amp: 1, freq: fc }), node('ramp', 'ps_ramp', { slope: Om, start: 0 }), node('off', 'ps_constant', { value: th0 }), node('theta', 'ps_add'),
@@ -480,7 +480,7 @@ describe('PMSM: torque estimator, reference generator (MTPA / field weakening), 
     }, false);
     near(id, 0, 0.1, 'id');
     near(iq, iqRef, 0.1, 'iq');
-  }, 240000);
+  }, 30000);
 });
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════

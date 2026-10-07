@@ -1,5 +1,6 @@
 import { describe, it } from 'vitest';
 import { VLabPhysicsEngine } from './vlabPhysics';
+import { cscToDense } from './SparseLU';
 import { VLAB_LIBRARY } from '../../utils/vlabLibrary';
 
 const allBlocks = VLAB_LIBRARY.flatMap(d => d.blocks);
@@ -73,10 +74,10 @@ describe('Debug Blender Mixer Jacobian', () => {
     const J = engine['solver']['computeJacobian']((solveX, solveCtx) => {
       const solveDx = solveX.map((val, idx) => (val - solveCtx.prevStates[idx]) / ctx.dt);
       return system.residuals(solveX, solveDx, solveCtx);
-    }, x, fx, ctx);
+    }, x, fx, ctx, false);
 
     console.log("\nJacobian J row-by-row:");
-    J.forEach((row, i) => {
+    cscToDense(J).forEach((row, i) => {
       console.log(`Row ${i} (${system.variableNames[i]}):`, JSON.stringify(row));
     });
   });

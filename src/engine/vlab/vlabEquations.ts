@@ -299,16 +299,18 @@ const portIndex = (ports: string[], name: string, fallback: number): number => {
   return idx !== -1 ? idx : fallback;
 };
 
-// Belt/cable material resolution. Precedence: live ctx.parameters broadcast
-// (published by belt_properties) > assembly-injected belt_density/belt_youngs
-// > block's own density/youngs params. Returns null when no material source
-// exists so consumers keep their legacy standalone behavior.
+// Belt/cable material resolution (spec 2026-09-30 belt-pulley 2.5: no fallback for an unlinked block). Precedence: the live value of the
+// belt_properties block this consumer's P port is LINKED to (ctx.parameters `belt_density@<source>`, source = params.belt_properties_source,
+// set by the assembly) > the assembly-injected belt_density/belt_youngs of that link > the block's own density/youngs params. The model-wide
+// broadcast (`belt_density`) never reaches a consumer: it used to override the own parameters of an UNLINKED block (WP-31c, F-104).
+// Returns null when no material source exists so consumers keep their legacy standalone behavior.
 const resolveBeltMaterial = (
   params: Record<string, any> | undefined,
   ctx: EquationContext | undefined
 ): { density: number; youngs: number } | null => {
-  const broadcastDensity = ctx?.parameters ? numParam(ctx.parameters['belt_density'], NaN) : NaN;
-  const broadcastYoungs = ctx?.parameters ? numParam(ctx.parameters['belt_youngs'], NaN) : NaN;
+  const source = params && typeof params.belt_properties_source === 'string' ? params.belt_properties_source : undefined;
+  const broadcastDensity = source && ctx?.parameters ? numParam(ctx.parameters[`belt_density@${source}`], NaN) : NaN;
+  const broadcastYoungs = source && ctx?.parameters ? numParam(ctx.parameters[`belt_youngs@${source}`], NaN) : NaN;
   const injectedDensity = params ? numParam(params.belt_density, NaN) : NaN;
   const injectedYoungs = params ? numParam(params.belt_youngs, NaN) : NaN;
   const ownDensity = params ? numParam(params.density, NaN) : NaN;

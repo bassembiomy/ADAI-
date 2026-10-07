@@ -8,9 +8,9 @@ import { explicitSolverStep } from './ExplicitSolverAdapter';
 import { initializeJointFrames } from './vlabJointInitialization';
 import { jointKindOf, isJointMultiplierName } from './vlabJointCore';
 import { assertValidTopology } from './vlabTopologyValidation';
-import { assertStructurallyWellPosed, DAEStructureError } from './vlabStructure';
+import { assertStructurallyWellPosed, detectJacobianPattern, DAEStructureError } from './vlabStructure';
 import {
-  BlockEquationError, NonFiniteResidualError, SolverConvergenceError, VLabSolverDiagnosticError, type WorstResidualRow,
+  BlockEquationError, NonFiniteResidualError, SolverConvergenceError, VLabCancelledError, VLabSolverDiagnosticError, type WorstResidualRow,
 } from './vlabResidualDiagnostics';
 import { readSolvedVariable } from './vlabScopeRead';
 import { scopeTraceKey } from './vlabVectorPorts';
@@ -35,8 +35,18 @@ const A32 = 0.25 * (6 * GAMMA * GAMMA - 20 * GAMMA + 5);
 const EVENT_BAND = 1e-7;
 /** Step-size controller safety factor: the accepted local error settles near STEP_SAFETY^3 of the tolerance (Hairer, Norsett & Wanner I, II.4). */
 const STEP_SAFETY = 0.7;
+/**
+ * WP-31c (F-106): the divided-difference estimate is the TRUE local error of the BDF2 step. The pre-WP-31c estimate (BDF2 - BDF1, the error of the
+ * first-order solution) was 5 to 25 times larger on oscillatory signals, and every analytic reference test of the review suite (induction machine,
+ * PMSM, tight-tolerance convergence) is calibrated to that stricter control: the local errors of ~10^2 steps accumulate into the global error.
+ * The factor keeps the global accuracy at least what it was; it multiplies the estimate (it never relaxes a tolerance).
+ */
+const BDF2_ERROR_MARGIN = 64;
 
 /** The error estimate exceeds the tolerance at the minimum step (WP-31b: reported, never accepted). */
+/** WP-31c: progress report of a running simulateStep call */
+export interface VLabStepProgress { time: number; targetTime: number; acceptedSteps: number; rejectedSteps: number; stepSize: number }
+
 class ToleranceAtMinimumStepError extends Error {
   constructor(message: string) {
     super(message);
@@ -121,6 +131,24 @@ export class VLabPhysicsEngine {
       this.wallClockBudgetMs = options.wallClockMs;
     }
   }
+
+  private cancelCheck: (() => boolean) | null = null;
+  private progressCallback: ((p: VLabStepProgress) => void) | null = null;
+  private lastProgressAt = 0;
+
+  /**
+   * WP-31c: cooperative cancellation. `check` is polled once per solver attempt (outside the Newton loop, so it can never be
+   * mistaken for a solver failure); when it returns true the call throws VLabCancelledError. In the worker the check reads a
+   * shared flag (a worker blocked in a synchronous step cannot receive a message).
+   */
+  setCancellation(check: (() => boolean) | null): void { this.cancelCheck = check; }
+
+  /** WP-31c: progress of a long simulateStep call (time reached, target, accepted / rejected steps), throttled to one report per `minIntervalMs`. */
+  setProgress(callback: ((p: VLabStepProgress) => void) | null, minIntervalMs = 100): void {
+    this.progressCallback = callback;
+    this.progressIntervalMs = minIntervalMs;
+  }
+  private progressIntervalMs = 100;
 
   constructor(solverConfiguration: SolverConfiguration | null = null) {
     this.assembler = new DAEAssembler();
@@ -405,6 +433,13 @@ export class VLabPhysicsEngine {
     let prevX = sameMethod && prevState?.prevX && prevState.prevX.length === system.systemSize ? [...prevState.prevX] : undefined;
     let lastDt = sameMethod ? prevState?.prevDt : undefined;
     let bdfOrder = (prevX && lastDt) ? 2 : 1;
+    // WP-31c (F-106): the point before prevX (x_{n-2}, step h2 = t_{n-1} - t_{n-2}) for the variable-step BDF2 error estimate from the third divided
+    // difference. `smoothPts` = consecutive points ending at xCurrent on one smooth segment (reset by the initialization step and at a
+    // located event, whose new mode has a discontinuous derivative); the estimate needs 3 of them (x_n, x_{n-1}, x_{n-2}).
+    let prevPrevX = sameMethod && prevState?.prevPrevX && prevState.prevPrevX.length === system.systemSize && prevX && lastDt ? [...prevState.prevPrevX] as number[] : undefined;
+    let lastDt2: number | undefined = prevPrevX ? prevState?.prevPrevDt : undefined;
+    if (!(typeof lastDt2 === 'number' && lastDt2 > 0)) { prevPrevX = undefined; lastDt2 = undefined; }
+    let smoothPts = prevPrevX ? 3 : (prevX && lastDt ? 2 : 1);
     // Configured auto uses BDF for VLab DAEs. Legacy unconfigured runs retain SDIRK fallback.
     let useSdirk = !isAlgebraicSystem && !config && (prevState?.useSdirk || prevState?.solver === 'sdirk3' || false);
     let acceptedSteps = 0;
@@ -476,6 +511,7 @@ export class VLabPhysicsEngine {
       while (!stepAccepted) {
         if (attemptsThisStep++ > 0) rejectedAttempts++;
         totalAttempts++;
+        if (this.cancelCheck && this.cancelCheck()) throw new VLabCancelledError(t, acceptedSteps);
         const overWallClock = this.wallClockBudgetMs > 0 && Date.now() - budgetStart > this.wallClockBudgetMs;
         if (rejectedAttempts > this.maxStepAttempts || totalAttempts > maxTotalAttempts || overWallClock) {
           const reason = rejectedAttempts > this.maxStepAttempts
@@ -507,7 +543,7 @@ export class VLabPhysicsEngine {
           let explicitLte = 0;
           if (isAlgebraicSystem) {
             // Solve once per algebraic step, with no artificial coordinate velocity.
-            nextX = this.solver.solve(
+            nextX = this.solveNewton(system, 
               (solveX, solveCtx) => system.residuals(solveX, new Array(system.systemSize).fill(0), solveCtx),
               xCurrent, ctx,
             );
@@ -537,7 +573,7 @@ export class VLabPhysicsEngine {
               const dx = ddtVector(solveX, solveCtx, system.firstOrderOnly);
               return system.residuals(solveX, dx, solveCtx);
             };
-            const X1 = this.solver.solve(solveResiduals1, xCurrent, ctx1);
+            const X1 = this.solveNewton(system, solveResiduals1, xCurrent, ctx1);
             const g1 = X1.map((val, idx) => (val - xCurrent[idx]) / (h * GAMMA));
 
             // SDIRK-3 Solve Stage 2
@@ -556,7 +592,7 @@ export class VLabPhysicsEngine {
               const dx = ddtVector(solveX, solveCtx, system.firstOrderOnly);
               return system.residuals(solveX, dx, solveCtx);
             };
-            const X2 = this.solver.solve(solveResiduals2, X1, ctx2);
+            const X2 = this.solveNewton(system, solveResiduals2, X1, ctx2);
             const g2 = X2.map((val, idx) => (val - z2[idx]) / (h * GAMMA));
 
             // SDIRK-3 Solve Stage 3
@@ -575,7 +611,7 @@ export class VLabPhysicsEngine {
               const dx = ddtVector(solveX, solveCtx, system.firstOrderOnly);
               return system.residuals(solveX, dx, solveCtx);
             };
-            nextX = this.solver.solve(solveResiduals3, X2, ctx3);
+            nextX = this.solveNewton(system, solveResiduals3, X2, ctx3);
           } else {
             // WP-31b: variable-step BDF2 is zero-stable only for step ratios w = h / h_prev < 1 + sqrt(2) (Grigorieff 1983;
             // Hairer & Wanner II, III.5). A larger ratio (the step after a sub-microsecond event landing or an end-of-interval
@@ -597,7 +633,7 @@ export class VLabPhysicsEngine {
             const solveResiduals = (solveX: number[], solveCtx: EquationContext) =>
               system.residuals(solveX, ddtVector(solveX, solveCtx, system.firstOrderOnly), solveCtx);
             
-            nextX = this.solver.solve(solveResiduals, xCurrent, ctx);
+            nextX = this.solveNewton(system, solveResiduals, xCurrent, ctx);
           }
           
           // --- Zero Crossing & Event Detection ---
@@ -627,7 +663,7 @@ export class VLabPhysicsEngine {
                   stateDerivatives: new Array(system.systemSize).fill(0), order: ctx.order === 2 ? 2 : 1,
                   prevPrevStates: ctx.order === 2 ? ctx.prevPrevStates : undefined, prevDt: ctx.order === 2 ? ctx.prevDt : undefined,
                 };
-                return this.solver.solve((sx, sc) => system.residuals(sx, ddtVector(sx, sc, system.firstOrderOnly), sc), guess, c);
+                return this.solveNewton(system, (sx, sc) => system.residuals(sx, ddtVector(sx, sc, system.firstOrderOnly), sc), guess, c);
               };
               let a = 0, b = h, k = crossing.index;
               let gaVec = g0, gbVec = g1;
@@ -689,13 +725,17 @@ export class VLabPhysicsEngine {
             // BDF2 step: the BDF1 solution of the same step is the comparison. BDF1 needs a startup estimate too: compare one
             // full step to two half steps (step doubling, Hairer, Norsett & Wanner I, II.4). WP-31b (F-103): also without a
             // Solver Configuration, the first step used to have no estimate.
-            let comparison = ctx.order === 1 ? nextX : this.solver.solve(bdf1Residuals, xCurrent, bdf1Ctx);
+            // WP-31c (F-106): a BDF2 step on a smooth segment with x_{n-2} available is error-estimated from the third divided
+            // difference, with no extra solve (see `dd3Error` below); otherwise the BDF1 comparison solve of the same step.
+            const margin = BDF2_ERROR_MARGIN;
+            const useDD3 = ctx.order === 2 && smoothPts >= 3 && !!prevPrevX && !!prevX && !!lastDt && !!lastDt2;
+            let comparison = ctx.order === 1 || useDD3 ? nextX : this.solveNewton(system, bdf1Residuals, xCurrent, bdf1Ctx);
             if (ctx.order === 1) {
               const halfResiduals = (solveX: number[], solveCtx: EquationContext) =>
                 system.residuals(solveX, ddtVector(solveX, solveCtx, system.firstOrderOnly), solveCtx);
               const halfContext = { ...bdf1Ctx, dt: h / 2, time: t + h / 2 };
-              const half = this.solver.solve(halfResiduals, xCurrent, halfContext);
-              comparison = this.solver.solve(halfResiduals, half, { ...halfContext, time: t + h, prevStates: half });
+              const half = this.solveNewton(system, halfResiduals, xCurrent, halfContext);
+              comparison = this.solveNewton(system, halfResiduals, half, { ...halfContext, time: t + h, prevStates: half });
             }
 
             // WP-31b (F-103): the weighted RMS norm covers every DIFFERENTIATED unknown: each one whose derivative from the
@@ -709,22 +749,64 @@ export class VLabPhysicsEngine {
             // e_full = (y_full - y_two_halves) / (1 - 1/2) = 2 (y_full - y_two_halves) (Hairer, Norsett & Wanner I, II.4). Without the factor 2
             // the two differ by 2x and the controller alternates (BDF2 attempt rejected, BDF1 attempt accepted, repeated every step).
             const lteScale = ctx.order === 1 ? 2 : 1;
-            let sumSq = 0;
-            let diffCount = 0;
-            for (let idx = 0; idx < system.systemSize; idx++) {
-              if (!differentiated[idx]) continue;
-              diffCount++;
-              const diff = lteScale * (nextX[idx] - comparison[idx]);
-              const scale = (config?.relativeTolerance ?? 1e-3) * Math.max(Math.abs(nextX[idx]), Math.abs(xCurrent[idx]))
-                + (config?.absoluteTolerance ?? 1e-5);
-              sumSq += (diff / scale) * (diff / scale);
+            // Variable-step BDF2 local error from the third divided difference (Hairer & Wanner, Solving ODEs II, III.5 and IV.8;
+            // Shampine, Numerical Solution of ODEs, 1.5). With h = t_{n+1} - t_n, h1 = t_n - t_{n-1}, h2 = t_{n-1} - t_{n-2}:
+            //   defect of the stencil derivative  x'(t_{n+1}) - p'(t_{n+1}) = h (h + h1) x[t_{n+1}, t_n, t_{n-1}, t_{n+1}]  ~ h (h + h1) x'''/6,
+            //   divided by the leading coefficient a0 = (2h + h1) / (h (h + h1))        ->  LTE = K x[t_{n+1}, t_n, t_{n-1}, t_{n-2}]_exact,  K = h^2 (h + h1)^2 / (2h + h1)
+            //     (constant step: (2/9) h^3 x''', the classical BDF2 constant);
+            //   x[t_{n+1}, t_n, t_{n-1}, t_{n-2}] = (x_{n+1} - P(t_{n+1})) / Pi, Pi = h (h + h1) (h + h1 + h2), P = the quadratic through
+            //   the three earlier points. The computed x_{n+1} carries the error itself (exact - computed = -K DD_exact, the sign of the BDF2 defect), so the divided
+            //   difference of computed values is DD_exact (1 + K / Pi) and
+            //   LTE ~ C h (h + h1) (h + h1 + h2) DD3 = C (x_{n+1} - P(t_{n+1})),   C = K / (Pi + K)   (constant step: 2/11; checked
+            //   against the exact local error of x' = -x, see review/performance.test.ts).
+            // Unknowns pinned to the BDF1 stencil (frame poses) have a BDF1 error: the second divided difference gives
+            //   LTE ~ h^2 (h + h1) / (2h + h1) * x[t_{n+1}, t_n, t_{n-1}] (the same self-consistent form).
+            let dd3Error: ((idx: number) => number) | undefined;
+            if (useDD3) {
+              const h1 = lastDt!, h2 = lastDt2!;
+              const Pi = h * (h + h1) * (h + h1 + h2);
+              const K = (h * h * (h + h1) * (h + h1)) / (2 * h + h1);
+              const C = K / (Pi + K);
+              const l0 = ((h + h1) * (h + h1 + h2)) / (h1 * (h1 + h2));
+              const l1 = -(h * (h + h1 + h2)) / (h1 * h2);
+              const l2 = (h * (h + h1)) / (h2 * (h1 + h2));
+              dd3Error = (idx: number) => {
+                if (system.firstOrderOnly?.[idx]) {
+                  const dd2 = ((nextX[idx] - xCurrent[idx]) / h - (xCurrent[idx] - prevX![idx]) / h1) / (h + h1);
+                  return (h * h * (h + h1) / (2 * h + h1)) * dd2;
+                }
+                const pred = l0 * xCurrent[idx] + l1 * prevX![idx] + l2 * prevPrevX![idx];
+                return margin * C * (nextX[idx] - pred);
+              };
             }
-
-            lte = diffCount > 0 ? Math.sqrt(sumSq / diffCount) : 0;
+            const errorAt = (idx: number, value: number) => dd3Error ? dd3Error(idx) : lteScale * (value - comparison[idx]);
+            const weightedNorm = (): number => {
+              let sumSq = 0;
+              let diffCount = 0;
+              for (let idx = 0; idx < system.systemSize; idx++) {
+                if (!differentiated[idx]) continue;
+                diffCount++;
+                const diff = errorAt(idx, nextX[idx]);
+                const scale = (config?.relativeTolerance ?? 1e-3) * Math.max(Math.abs(nextX[idx]), Math.abs(xCurrent[idx]))
+                  + (config?.absoluteTolerance ?? 1e-5);
+                sumSq += (diff / scale) * (diff / scale);
+              }
+              return diffCount > 0 ? Math.sqrt(sumSq / diffCount) : 0;
+            };
+            lte = weightedNorm();
+            if (lte > 1.0 && dd3Error) {
+              // The divided difference reads the stored history. A kink in it that no event surface announced (a diode that
+              // commutated, a saturation) is a false alarm that no step reduction can cure (it stays in the history for three steps):
+              // the step is judged by the independent BDF1 comparison solve of the same step (the pre-WP-31c estimator) before it is
+              // rejected. Never less strict than before: a step is accepted only if one of the two estimates accepts it.
+              dd3Error = undefined;
+              comparison = this.solveNewton(system, bdf1Residuals, xCurrent, bdf1Ctx);
+              lte = weightedNorm();
+            }
             if (lte > 1.0) {
               if (h <= stepFloor && !landing) {
                 const worst = nextX.map((v, idx) => ({
-                  idx, w: !differentiated[idx] ? 0 : lteScale * Math.abs(v - comparison[idx]) / ((config?.relativeTolerance ?? 1e-3) * Math.max(Math.abs(v), Math.abs(xCurrent[idx])) + (config?.absoluteTolerance ?? 1e-5)),
+                  idx, w: !differentiated[idx] ? 0 : Math.abs(errorAt(idx, v)) / ((config?.relativeTolerance ?? 1e-3) * Math.max(Math.abs(v), Math.abs(xCurrent[idx])) + (config?.absoluteTolerance ?? 1e-5)),
                 })).sort((p, q) => q.w - p.w).slice(0, 3).map(e => `${system.variableNames[e.idx]} (${e.w.toPrecision(3)})`).join(', ');
                 throw new ToleranceAtMinimumStepError(`BDF solver cannot satisfy tolerances at minimumStep (weighted error ${lte.toPrecision(3)}; largest: ${worst}).`);
               }
@@ -748,8 +830,17 @@ export class VLabPhysicsEngine {
 
           stepAccepted = true;
           acceptedSteps++;
+          if (this.progressCallback) {
+            const now = Date.now();
+            if (now - this.lastProgressAt >= this.progressIntervalMs) {
+              this.lastProgressAt = now;
+              this.progressCallback({ time: t + h, targetTime: tTarget, acceptedSteps, rejectedSteps, stepSize: h });
+            }
+          }
+          prevPrevX = prevX; lastDt2 = lastDt;
           prevX = [...xCurrent];
           lastDt = h;
+          smoothPts++;
           xCurrent = [...nextX];
           t += h;
           // the consistent-initialization step is not a sample of the committed signal history (discrete blocks keep their
@@ -761,6 +852,7 @@ export class VLabPhysicsEngine {
             lockedEvents = undefined;
             h = hAfterInit;
             bdfOrder = 1;
+            smoothPts = 1;
           } else if (landing) {
             // the step ended just before the located root: the next step integrates the new mode from a fresh BDF1 start, at
             // the step size in force before the event, without re-locating the same root
@@ -768,6 +860,7 @@ export class VLabPhysicsEngine {
             lockedEvents = landing.indices;
             h = Math.min(maxStep, eventStepStart ?? nextH);
             bdfOrder = 1;
+            smoothPts = 1;
           } else {
             lockedEvents = undefined;
             h = nextH;
@@ -1059,6 +1152,9 @@ export class VLabPhysicsEngine {
       // After an event/reset step the BDF2 history is not valid: the next call restarts with BDF1.
       prevX: bdfOrder === 2 ? prevX : undefined,
       prevDt: lastDt,
+      // WP-31c: x_{n-2} and its step, valid only on the same smooth segment as prevX
+      prevPrevX: bdfOrder === 2 && smoothPts >= 3 ? prevPrevX : undefined,
+      prevPrevDt: bdfOrder === 2 && smoothPts >= 3 ? lastDt2 : undefined,
       history,
       time: tTarget,
       systemSize: system.systemSize,
@@ -1116,6 +1212,23 @@ export class VLabPhysicsEngine {
     return new VLabSolverDiagnosticError(`${message} [t=${time}, h=${h}]${blockList}${singularText}`, {
       time, h, reason: message, worstResidualRows, singularUnknowns, blocks,
     });
+  }
+
+  /** Work counters of the nonlinear solver (residual evaluations, Jacobians, factorizations, iterations): machine-independent cost measures. */
+  get solverStats(): Readonly<ImplicitSolver['stats']> { return this.solver.stats; }
+
+  private patternCache = new WeakMap<AssembledSystem, number[][] | null>();
+
+  /** WP-31c: the structural Jacobian pattern of an assembled system (detected once), for the colored Jacobian and the cached factorization. */
+  private solveNewton(
+    system: AssembledSystem, equations: (x: number[], ctx: EquationContext) => number[], x0: number[], ctx: EquationContext,
+  ): number[] {
+    let pattern = this.patternCache.get(system);
+    if (pattern === undefined) {
+      try { pattern = detectJacobianPattern(system); } catch { pattern = null; }
+      this.patternCache.set(system, pattern);
+    }
+    return this.solver.solve(equations, x0, ctx, { system, pattern });
   }
 
   private differentiatedCache = new WeakMap<AssembledSystem, boolean[]>();

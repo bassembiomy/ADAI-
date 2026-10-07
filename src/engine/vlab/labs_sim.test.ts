@@ -269,6 +269,6 @@ describe('VLab Learning Labs Simulation Tests', () => {
       } else if (lab.id === 'voltage_sensing_circuit') {
         expect(Math.abs(state.scopeValues)).toBeGreaterThan(1.0);
       }
-    }, 240000); // WP-12a: the induction-machine labs integrate real 50 Hz stator dynamics (~20 s each)
+    }, 30000); // WP-12a: 240 s (the induction-machine labs integrate real 50 Hz stator dynamics, ~20 s each); WP-31c: 30 s (now ~1 s)
   });
 });

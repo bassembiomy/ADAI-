@@ -182,6 +182,7 @@ describe('Frame simulation diagnostics and retry policy', () => {
       expect(worker.postMessage).toHaveBeenLastCalledWith({
         requestId: 42,
         error: expect.stringContaining('FULLY_PRESCRIBED'),
+        diagnostic: expect.objectContaining({ code: 'MULTIBODY_CONSTRAINT', message: expect.stringContaining('FULLY_PRESCRIBED') }), // WP-31c: typed record next to the legacy string
       });
     }
     worker.onmessage({
@@ -197,6 +198,7 @@ describe('Frame simulation diagnostics and retry policy', () => {
     expect(worker.postMessage).toHaveBeenLastCalledWith({
       requestId: 43,
       error: expect.stringContaining('INVALID_JOINT_PARAMETER'),
+      diagnostic: expect.objectContaining({ message: expect.stringContaining('INVALID_JOINT_PARAMETER') }),
     });
     expect(spy).not.toHaveBeenCalled();
   });

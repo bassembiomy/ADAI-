@@ -472,7 +472,7 @@ describe('WP-12a ac_motor: squirrel-cage induction machine vs the per-phase equi
     }
   });
 
-  it('free-running with no load and no friction the rotor reaches synchronous speed 2 pi f / P', () => {
+  it('free-running with no load and no friction the rotor reaches synchronous speed 2 pi f / P', () => { // measured 3.1 s alone (explicit timeout below)
     const J = 0.05;
     let wLast = 0, wPrev = 0;
     simulate(gridModel({ J, B: 0 }, 'free'), 100, 0.01, (s) => { wPrev = wLast; wLast = s.at('m_state_omega'); });
@@ -656,7 +656,7 @@ describe('WP-12a bldc_motor: trapezoidal back-EMF and torque (e_x = Ke w f(P the
     expect(worst).toBeLessThan(5e-3);
   });
 
-  it('electromagnetic torque is Ke sum(f_x i_x) (= sum(e_x i_x)/w) and the energy balances over many electrical periods', () => {
+  it('electromagnetic torque is Ke sum(f_x i_x) (= sum(e_x i_x)/w) and the energy balances over many electrical periods', { timeout: 15000 }, () => { // 400 calls; measured ~5 s under load
     const RL = 2, B = 0.003, dt = 0.0005, steps = 400;
     let eShaft = 0, eRes = 0, prev: { p: number; r: number } | null = null, W0: number | null = null, W1 = 0;
     let worstTorque = 0, firstT = 0, lastT = 0;

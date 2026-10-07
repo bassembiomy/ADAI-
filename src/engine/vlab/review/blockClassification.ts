@@ -134,9 +134,9 @@ export const ORPHAN_DEFINITION_KEYS: Record<string, string> = {
  * the canonical key at model load by vlabModelMigration.ts, so no synonym is listed here any more.)
  */
 export const PARAM_ALIASES: Record<string, Record<string, string>> = {
-  belt_end: { belt_density: '@injected', belt_youngs: '@injected', belt_damping: '@injected', density: '@injected', youngs: '@injected' },
-  belt_spool: { belt_density: '@injected', belt_youngs: '@injected', density: '@injected', youngs: '@injected' },
-  pulley: { belt_density: '@injected', belt_youngs: '@injected', density: '@injected', youngs: '@injected' },
+  belt_end: { belt_density: '@injected', belt_youngs: '@injected', belt_damping: '@injected', belt_properties_source: '@injected', density: '@injected', youngs: '@injected' },
+  belt_spool: { belt_density: '@injected', belt_youngs: '@injected', belt_properties_source: '@injected', density: '@injected', youngs: '@injected' },
+  pulley: { belt_density: '@injected', belt_youngs: '@injected', belt_properties_source: '@injected', density: '@injected', youngs: '@injected' },
 };
 
 /**

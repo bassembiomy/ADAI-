@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { VLAB_LIBRARY } from '../../utils/vlabLibrary';
 import { DAEAssembler } from './DAEAssembler';
+import { beltEndStiffness } from './vlabEquations';
 
 describe('VLab Belt and Pulley Domain Definitions', () => {
   const findBlock = (id: string) => {
@@ -99,16 +100,19 @@ describe('VLab Belt and Pulley Domain Definitions', () => {
       }
     ];
 
-    assembler.assemble(nodes as any, edges as any);
+    const assembled = assembler.assemble(nodes as any, edges as any);
+    const assembledParams = (id: string) => assembled.components.find(c => c.blockId === id)!.params;
 
-    // be1 should have injected properties
-    const be1Params = (nodes[1].data as any).params;
+    // be1 should have injected properties (WP-31c, F-104: in the assembled component, never written into node.data)
+    const be1Params = assembledParams('be1');
     expect(be1Params.belt_density).toBe(2.5);
     expect(be1Params.belt_youngs).toBe(5e8);
     expect(be1Params.belt_properties_source).toBe('bp1');
 
     // be_unwired MUST NOT inherit properties from bp1 (no silent fallback)
-    const unwiredParams = (nodes[2].data as any).params;
+    const unwiredParams = assembledParams('be_unwired');
+    expect((nodes[1].data as any).params.belt_density).toBeUndefined(); // the user's model is untouched
+    expect((nodes[2].data as any).params.belt_density).toBeUndefined();
     expect(unwiredParams.belt_density).toBeUndefined();
     expect(unwiredParams.belt_youngs).toBeUndefined();
     expect(unwiredParams.belt_properties_source).toBeUndefined();
@@ -267,7 +271,7 @@ describe('VLab Belt and Pulley Domain Definitions', () => {
       ];
 
       const sys = assembler.assemble(nodes as any, edges as any);
-      return { sys, beParams: (nodes[1].data as any).params };
+      return { sys, beParams: sys.components.find(c => c.blockId === 'be')!.params };
     };
 
     const simSteel = runBeltSystem(2e11); // Steel: 200 GPa
@@ -355,7 +359,7 @@ describe('VLab Belt and Pulley Domain Definitions', () => {
       ];
 
       const sys = assembler.assemble(nodes as any, edges as any);
-      return { sys, pParams: (nodes[1].data as any).params };
+      return { sys, pParams: sys.components.find(c => c.blockId === 'pulley')!.params };
     };
 
     const sysHeavy = runPulleySystem(5.0); // 5.0 kg/m
@@ -402,6 +406,51 @@ describe('VLab Belt and Pulley Domain Definitions', () => {
     expect(evalTorqueResidual(sysHeavy, expectedTorqueHeavy)).toBeCloseTo(0);
     expect(evalTorqueResidual(sysLight, expectedTorqueLight)).toBeCloseTo(0);
   });
+
+  // WP-31c, F-104 (spec 2026-09-30 belt-pulley 2.5): material properties are computed per assembly, scoped to LINKED blocks, and never
+  // written into node.data; the model-wide ctx broadcast never overrides an unlinked block.
+  describe('F-104: belt property injection is per assembly and linked-only', () => {
+    const mk = (id: string, type: string, params: Record<string, any>, ports: string[]) =>
+      ({ id, type: 'default', position: { x: 0, y: 0 }, data: { type, params, ports: ports.map(p => ({ id: p })) } });
+    const bp = mk('bp', 'belt_properties', { density: { value: 2.5 }, youngs: { value: 5e8 }, damping: { value: 0 } }, ['p']);
+    const be = () => mk('be', 'belt_end', { youngs: { value: 1e7 }, density: { value: 1.1 } }, ['r', 'e', 'p', 'f']);
+    const link = [{ id: 'l1', source: 'bp', target: 'be', sourceHandle: 'p', targetHandle: 'p' }];
+    const paramsOf = (nodes: any[], edges: any[], id: string) => new DAEAssembler().assemble(nodes as any, edges as any).components.find(c => c.blockId === id)!.params;
+
+    it('node.data is not modified by assembling a linked model', () => {
+      const nodes = [bp, be()];
+      const before = JSON.stringify(nodes);
+      expect(paramsOf(nodes, link, 'be').belt_youngs).toBe(5e8);
+      expect(JSON.stringify(nodes)).toBe(before);
+    });
+
+    it('linking, simulating, then unlinking the same node: the unlinked block has no injected property left', () => {
+      const nodes = [bp, be()];
+      expect(paramsOf(nodes, link, 'be').belt_properties_source).toBe('bp');
+      const unlinked = paramsOf(nodes, [], 'be');
+      expect(unlinked.belt_density).toBeUndefined();
+      expect(unlinked.belt_youngs).toBeUndefined();
+      expect(unlinked.belt_damping).toBeUndefined();
+      expect(unlinked.belt_properties_source).toBeUndefined();
+      expect(unlinked.youngs).toBe(1e7);
+    });
+
+    it('a stale injection persisted in node.data.params by an older version is not read as a link', () => {
+      const stale = be();
+      Object.assign(stale.data.params, { belt_density: 9, belt_youngs: 9e9, belt_properties_source: 'bp' });
+      const p = paramsOf([bp, stale], [], 'be');
+      expect(p.belt_youngs).toBeUndefined();
+      expect(p.belt_properties_source).toBeUndefined();
+      expect(beltEndStiffness(p, { parameters: {} } as any)).toBeCloseTo(1e7 * 1e-3, 6); // own youngs x area / length
+    });
+
+    it('the model-wide broadcast does not override an unlinked block, a linked block follows its own source', () => {
+      const broadcast: any = { parameters: { belt_density: 5, belt_youngs: 9e9, 'belt_youngs@bp': 9e9, 'belt_youngs@other': 3e9 } };
+      const unlinked = { youngs: 1e7, area: 1e-3, length: 1 };
+      expect(beltEndStiffness(unlinked, broadcast)).toBeCloseTo(1e7 * 1e-3, 6);
+      const linked = { belt_properties_source: 'bp', belt_youngs: 5e8, area: 1e-3, length: 1 };
+      expect(beltEndStiffness(linked, broadcast)).toBeCloseTo(9e9 * 1e-3, 3); // the live value of ITS source, not of another block's
+      expect(beltEndStiffness(linked, { parameters: {} } as any)).toBeCloseTo(5e8 * 1e-3, 3); // else the assembly injection
+    });
+  });
 });
-
-

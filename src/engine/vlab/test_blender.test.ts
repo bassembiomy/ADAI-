@@ -110,7 +110,7 @@ describe('Debug Blender Mixer', () => {
         console.log(`  [${idx}] ${name}: ${state.x[idx]}`);
       });
     }
-  }, 240000); // WP-12b: real 50 Hz induction-machine dynamics (~30 s), like the other lab simulations
+  }, 30000); // WP-12b: 240 s (real 50 Hz induction-machine dynamics, ~30 s); WP-31c: 30 s
 
   it('debugs air_fryer_thermal', () => {
     const lab = {

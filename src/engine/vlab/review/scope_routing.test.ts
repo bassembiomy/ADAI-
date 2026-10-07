@@ -91,9 +91,9 @@ const sampleClose = (actual: number | number[] | undefined, expected: number | n
 
 function simulate(nodes: Node[], edges: Edge[], steps = 2): any {
   const engine = new VLabPhysicsEngine();
-  // WP-31b: the budget only has to stop a non-advancing model; the error control now covers every differentiated unknown, so the
+  // WP-31b: 3 s -> 30 s; WP-31c: back to 3 s. The budget only has to stop a non-advancing model; the error control now covers every differentiated unknown, so the
   // heavy controller / machine blocks (pmsm_foc: 430 steps of ~7 ms for 50 ms) need more than the former 3 s per call
-  engine.setStepBudget({ maxStepAttempts: 2000, wallClockMs: 30000 });
+  engine.setStepBudget({ maxStepAttempts: 2000, wallClockMs: 3000 });
   let state: any = null;
   quiet(() => { for (let i = 0; i < steps; i++) state = engine.simulateStep(nodes, edges, state, 0.05); });
   return state;
@@ -198,7 +198,7 @@ describe('multi-output blocks: each output has its own channel, independent of o
 
   // a Scope has at most 8 channels: blocks with more outputs are checked in two overlapping groups (first 8, last 8)
   for (const [id, allPorts] of multi) {
-    it(`${id} (${allPorts.join(', ')})`, () => {
+    it(`${id} (${allPorts.join(', ')})`, { timeout: 30000 }, () => { // measured 8.1 s (im_flux_observer), 5.2 s (pmsm_foc); the rest < 2.5 s
       const block = blocks.find(b => b.id === id)!;
       for (const ports of allPorts.length <= 8 ? [allPorts] : [allPorts.slice(0, 8), allPorts.slice(-8)]) {
       const n = ports.length;
