@@ -793,3 +793,34 @@ header button:not(.bg-emerald-600):not(.bg-rose-600):not(.bg-red-600):hover svg 
   backdrop-filter: none !important;
   filter: none !important;
 }
+
+/* Custom slim horizontal scrollbar for diagram action toolbars */
+.adia-toolbar-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+
+.adia-toolbar-scrollbar::-webkit-scrollbar {
+  height: 4px;
+}
+
+.adia-toolbar-scrollbar::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 9999px;
+}
+
+.adia-toolbar-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 9999px;
+  transition: background-color 0.2s ease;
+}
+
+.adia-toolbar-scrollbar:hover::-webkit-scrollbar-thumb,
+.adia-toolbar-scrollbar:focus-within::-webkit-scrollbar-thumb {
+  background: rgba(249, 115, 22, 0.75);
+}
+
+.adia-toolbar-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #f97316;
+}
+
