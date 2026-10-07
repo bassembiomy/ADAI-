@@ -33,6 +33,10 @@ You are the V-Lab review executor. The planner (Opus) gives you one work package
 - Never run `npm install/ci/prune/uninstall` or modify node_modules. If vitest is missing, stop and report.
 - Never run the whole `src/utils` test directory (a state-machine test creates and deletes build folders). Run only the V-Lab files there.
 
+## Token budget (user decision 2026-10-06)
+- Do NOT run the full `src/engine/vlab src/components/vlab` suite unless the brief explicitly asks. Run only the acceptance set. The planner runs the full suite every few WPs.
+- Keep exploration targeted: use the file:line pointers in the brief and inventory.json; don't re-read whole large files when a range suffices.
+
 ## Hard rules
 - Change an equation only with a citation in your report, either a Simscape doc equation or a derivation.
 - Never loosen tolerances, never hand-edit `benchmarks/simscape/golden/*`, and never delete or skip tests. Use `it.fails` plus a finding ID for out-of-scope failures.

@@ -149,6 +149,8 @@ describe('VLabWorkspace.onConnect uses the shared rules (RTL integration)', () =
     expect(screen.getByText(/1 invalid connection\(s\) detected\..*Cannot connect/)).toBeTruthy();
     fireEvent.click(screen.getByText('RUN SIMULATION'));
     expect(screen.getByText(/CANNOT RUN SIMULATION: Invalid V-Lab topology/)).toBeTruthy();
-    expect(screen.getByText(/Required port "u" of "g1" \(ps_gain\) is not connected/)).toBeTruthy();
+    // shown in the status bar and (WP-40) in the diagnostics panel together with the offending block
+    expect(screen.getAllByText(/Required port "u" of "g1" \(ps_gain\) is not connected/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByTestId('vlab-diagnostics-panel').getAttribute('data-diagnostic-code')).toBe('TOPOLOGY');
   });
 });

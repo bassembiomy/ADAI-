@@ -86,4 +86,49 @@ describe('VLabSimulinkScope', () => {
     expect(html).toContain('3×');
     expect(html).toContain('Speed (Simulation Rate)');
   });
-});
+
+  describe('WP-40 channel labels', () => {
+    const sensor = { id: 'vs', type: 'default', data: { type: 'v_sensor', label: 'Vsense' } };
+    const motion = { id: 'mot', type: 'default', data: { type: 'rot_motion_sensor', label: 'Shaft' } };
+    const scope = (numSignals: number) => ({ id: 'scope_1', type: 'default', data: { type: 'scope' }, numSignals });
+    const wire = (id: string, source: string, sourceHandle: string, ch: number) =>
+      ({ id, source, sourceHandle, target: 'scope_1', targetHandle: `scope_1-in${ch}` });
+    const render = (nodes: any[], edges: any[], n: number, data: any[]) => renderToStaticMarkup(
+      <VLabSimulinkScope {...defaultProps} data={data} nodes={nodes} edges={edges} params={{ ...defaultProps.params, numSignals: { value: n } }} />,
+    );
+
+    it('labels each scalar channel "<block>.<port> - <quantity> [<unit>]"', () => {
+      const html = render([sensor, motion, scope(2)], [wire('e1', 'vs', 'vs-v', 1), wire('e2', 'mot', 'mot-w', 2)], 2,
+        [{ time: 0, in1: 1, in2: 2 }, { time: 1, in1: 2, in2: 3 }]);
+      expect(html).toContain('Vsense.V — voltage [V]');
+      expect(html).toContain('Shaft.W — angular velocity [rad/s]');
+    });
+
+    it('reopens an old saved scope with the same channels (legacy handle ids, numSignals preserved)', () => {
+      // a model saved before WP-09b: edges use the `<port>_s` / `in<k>_t` handle ids; the scope keeps numSignals = 2
+      const saved = JSON.parse(JSON.stringify({
+        nodes: [sensor, motion, scope(2)],
+        edges: [{ id: 'a', source: 'vs', sourceHandle: 'v_s', target: 'scope_1', targetHandle: 'in1_t' }, { id: 'b', source: 'mot', sourceHandle: 'w_s', target: 'scope_1', targetHandle: 'in2_t' }],
+      }));
+      const data = [{ time: 0, in1: 1, in2: 2 }, { time: 1, in1: 2, in2: 3 }];
+      const html = render(saved.nodes, saved.edges, 2, data);
+      expect(html).toContain('Channels: 2');
+      expect(html).toContain('Vsense.V — voltage [V]');
+      expect(html).toContain('Shaft.W — angular velocity [rad/s]');
+      expect(html).not.toContain('Unconnected');
+    });
+
+    it('shows N traces with the channel names of a vector channel, each labelled with the port and its quantity', () => {
+      const sine = { id: 'sine', type: 'default', data: { type: 'ps_sine_3phase', label: 'Sine' } };
+      const abc = [{ time: 0, 'in1[a]': 0, 'in1[b]': -86.6, 'in1[c]': 86.6 }, { time: 1, 'in1[a]': 100, 'in1[b]': 0, 'in1[c]': -100 }];
+      const html = render([sine, scope(1)], [wire('e', 'sine', 'sine-abc', 1)], 1, abc);
+      expect(html).toContain('Channels: 1 (3 traces)');
+      for (const name of ['a', 'b', 'c']) expect(html).toContain(`Sine.abc[${name}]`);
+    });
+
+    it('labels an unwired channel as unconnected instead of inventing a source', () => {
+      const html = render([sensor, scope(2)], [wire('e1', 'vs', 'vs-v', 1)], 2, [{ time: 0, in1: 1 }, { time: 1, in1: 2 }]);
+      expect(html).toContain('Vsense.V — voltage [V]');
+      expect(html).toContain('Channel 2');
+    });
+  });});

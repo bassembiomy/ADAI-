@@ -1,0 +1,16 @@
+/* WP-40: composite / vector ports are drawn with a thick double ring; a block named by a run diagnostic is outlined red. */
+.vlab-node .react-flow__handle.vlab-handle-vector {
+  border-width: 4px !important;
+  border-style: double !important;
+}
+.vlab-node[data-vlab-diagnostic="true"] > div:first-child {
+  outline: 2px solid #ef4444;
+  outline-offset: 4px;
+  border-radius: 8px;
+  box-shadow: 0 0 14px rgba(239, 68, 68, 0.55);
+}
+.vlab-node .react-flow__handle.vlab-handle-diagnostic {
+  border-color: #ef4444 !important;
+  background: #7f1d1d !important;
+  box-shadow: 0 0 10px #ef4444 !important;
+}

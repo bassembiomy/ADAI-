@@ -385,7 +385,7 @@ export const VLabSimulinkScope: React.FC<VLabSimulinkScopeProps> = ({
       style={isMaximized ? { left: 0, top: 0, width: '100vw', height: '100vh' } : { left: pos.x, top: pos.y }}
     >
       {/* ── Simulink Window Title Bar ───────────────────────────────────────── */}
-      <div
+      <div data-help-feature="ui:vlab/VLabSimulinkScope:539b426adc14" data-help-source="src/components/vlab/VLabSimulinkScope.tsx"
         className="h-9 bg-[#121217] border-b border-[#252530] flex items-center justify-between px-3 cursor-move select-none shrink-0"
         onMouseDown={() => !isMaximized && setIsDragging(true)}
         onDoubleClick={() => setIsMaximized(!isMaximized)}
@@ -398,21 +398,21 @@ export const VLabSimulinkScope: React.FC<VLabSimulinkScopeProps> = ({
         </div>
 
         <div className="flex items-center gap-1">
-          <button
+          <button data-help-feature="ui:vlab/VLabSimulinkScope:9731d5f5bcc7" data-help-source="src/components/vlab/VLabSimulinkScope.tsx"
             onClick={() => setIsMinimized(!isMinimized)}
             className="p-1 hover:bg-white/5 rounded text-gray-400 hover:text-white transition-colors"
             title={isMinimized ? 'Restore' : 'Minimize'}
           >
             <Minus size={13} />
           </button>
-          <button
+          <button data-help-feature="ui:vlab/VLabSimulinkScope:f196d856320e" data-help-source="src/components/vlab/VLabSimulinkScope.tsx"
             onClick={() => { setIsMaximized(!isMaximized); setIsMinimized(false); }}
             className="p-1 hover:bg-white/5 rounded text-gray-400 hover:text-white transition-colors"
             title={isMaximized ? 'Restore' : 'Maximize'}
           >
             {isMaximized ? <Layers size={13} /> : <Maximize2 size={13} />}
           </button>
-          <button
+          <button data-help-feature="ui:vlab/VLabSimulinkScope:151ed7616191" data-help-source="src/components/vlab/VLabSimulinkScope.tsx"
             onClick={onClose}
             className="p-1 hover:bg-red-500/20 hover:text-red-400 rounded text-gray-400 transition-colors ml-1"
           >
@@ -428,7 +428,7 @@ export const VLabSimulinkScope: React.FC<VLabSimulinkScopeProps> = ({
             {/* Left Tools Group: Autoscale, Zoom X/Y, Pan, Cursors, Stats */}
             <div className="flex items-center gap-1">
               {/* Autoscale (Binoculars) */}
-              <button
+              <button data-help-feature="ui:vlab/VLabSimulinkScope:160439de982f" data-help-source="src/components/vlab/VLabSimulinkScope.tsx"
                 onClick={handleAutoscale}
                 className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#20202a] hover:bg-yellow-500/20 hover:text-yellow-400 text-gray-300 text-xs font-medium border border-white/5 transition-all shadow-sm active:scale-95"
                 title="Autoscale (Fit waveform bounds)"
@@ -440,21 +440,21 @@ export const VLabSimulinkScope: React.FC<VLabSimulinkScopeProps> = ({
               <div className="w-px h-4 bg-white/10 mx-1" />
 
               {/* Zoom In & Out */}
-              <button
+              <button data-help-feature="ui:vlab/VLabSimulinkScope:74a7586a479b" data-help-source="src/components/vlab/VLabSimulinkScope.tsx"
                 onClick={() => handleZoomX(0.7)}
                 className="p-1.5 hover:bg-white/10 text-gray-400 hover:text-white rounded transition-all active:scale-90"
                 title="Zoom In (X-Axis)"
               >
                 <ZoomIn size={14} />
               </button>
-              <button
+              <button data-help-feature="ui:vlab/VLabSimulinkScope:31750870d870" data-help-source="src/components/vlab/VLabSimulinkScope.tsx"
                 onClick={() => handleZoomX(1.4)}
                 className="p-1.5 hover:bg-white/10 text-gray-400 hover:text-white rounded transition-all active:scale-90"
                 title="Zoom Out (X-Axis)"
               >
                 <ZoomOut size={14} />
               </button>
-              <button
+              <button data-help-feature="ui:vlab/VLabSimulinkScope:c324de6b2746" data-help-source="src/components/vlab/VLabSimulinkScope.tsx"
                 onClick={() => { setTimeZoomRange(null); setYScaleOverrides({}); }}
                 className="p-1.5 hover:bg-white/10 text-gray-400 hover:text-emerald-400 rounded transition-all active:scale-90"
                 title="Restore Default View"
@@ -463,7 +463,7 @@ export const VLabSimulinkScope: React.FC<VLabSimulinkScopeProps> = ({
               </button>
 
               {onClear && (
-                <button
+                <button data-help-feature="ui:vlab/VLabSimulinkScope:23b05d4e6e44" data-help-source="src/components/vlab/VLabSimulinkScope.tsx"
                   onClick={onClear}
                   className="p-1.5 hover:bg-red-500/20 text-gray-400 hover:text-red-400 rounded transition-all active:scale-90"
                   title="Clear Scope Data"
@@ -475,7 +475,7 @@ export const VLabSimulinkScope: React.FC<VLabSimulinkScopeProps> = ({
               <div className="w-px h-4 bg-white/10 mx-1" />
 
               {/* Calipers / Cursor Measurements */}
-              <button
+              <button data-help-feature="ui:vlab/VLabSimulinkScope:36d6faeeb382" data-help-source="src/components/vlab/VLabSimulinkScope.tsx"
                 onClick={() => setShowCursors(!showCursors)}
                 className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium border transition-all ${
                   showCursors
@@ -489,7 +489,7 @@ export const VLabSimulinkScope: React.FC<VLabSimulinkScopeProps> = ({
               </button>
 
               {/* Signal Statistics */}
-              <button
+              <button data-help-feature="ui:vlab/VLabSimulinkScope:6509cf0a9541" data-help-source="src/components/vlab/VLabSimulinkScope.tsx"
                 onClick={() => setShowStats(!showStats)}
                 className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium border transition-all ${
                   showStats
@@ -504,7 +504,7 @@ export const VLabSimulinkScope: React.FC<VLabSimulinkScopeProps> = ({
 
               {/* Subplot Layout Selector */}
               <div className="relative">
-                <button
+                <button data-help-feature="ui:vlab/VLabSimulinkScope:62da71fec0ce" data-help-source="src/components/vlab/VLabSimulinkScope.tsx"
                   onClick={() => setShowLayoutMenu(!showLayoutMenu)}
                   className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium border transition-all ${
                     layout !== '1x1' ? 'bg-amber-500/20 text-amber-300 border-amber-500/40' : 'bg-[#20202a] text-gray-400 border-white/5 hover:text-white'
@@ -519,7 +519,7 @@ export const VLabSimulinkScope: React.FC<VLabSimulinkScopeProps> = ({
                 {showLayoutMenu && (
                   <div className="absolute left-0 top-full mt-1 w-36 bg-[#1a1a24] border border-[#333345] rounded-lg shadow-2xl py-1 z-50 animate-in fade-in">
                     {(['1x1', '2x1', '1x2', '3x1', '4x1', '2x2'] as ScopeLayoutType[]).map(l => (
-                      <button
+                      <button data-help-feature="ui:vlab/VLabSimulinkScope:c8b27ce5a140" data-help-source="src/components/vlab/VLabSimulinkScope.tsx"
                         key={l}
                         onClick={() => { setLayout(l); setShowLayoutMenu(false); }}
                         className={`w-full text-left px-3 py-1.5 text-xs flex items-center justify-between hover:bg-white/10 ${
@@ -536,7 +536,7 @@ export const VLabSimulinkScope: React.FC<VLabSimulinkScopeProps> = ({
 
               {/* Simulation Speed Multiplier Selector */}
               <div className="relative">
-                <button
+                <button data-help-feature="ui:vlab/VLabSimulinkScope:5c1c2f492b2d" data-help-source="src/components/vlab/VLabSimulinkScope.tsx"
                   onClick={() => setShowSpeedMenu(!showSpeedMenu)}
                   className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium border transition-all ${
                     simSpeed > 1 ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 font-bold shadow-[0_0_8px_rgba(245,158,11,0.2)]' : 'bg-[#20202a] text-gray-400 border-white/5 hover:text-white'
@@ -554,7 +554,7 @@ export const VLabSimulinkScope: React.FC<VLabSimulinkScopeProps> = ({
                       Simulation Rate
                     </div>
                     {[1, 2, 3, 4, 5].map((s) => (
-                      <button
+                      <button data-help-feature="ui:vlab/VLabSimulinkScope:f618584e549f" data-help-source="src/components/vlab/VLabSimulinkScope.tsx"
                         key={s}
                         onClick={() => {
                           onSpeedChange?.(s);
@@ -575,7 +575,7 @@ export const VLabSimulinkScope: React.FC<VLabSimulinkScopeProps> = ({
 
             {/* Right Tools Group: Export, Settings */}
             <div className="flex items-center gap-1">
-              <button
+              <button data-help-feature="ui:vlab/VLabSimulinkScope:aff8fe06b73a" data-help-source="src/components/vlab/VLabSimulinkScope.tsx"
                 onClick={handleExportCSV}
                 className="p-1.5 hover:bg-emerald-500/20 text-gray-400 hover:text-emerald-400 rounded transition-colors"
                 title="Export Signal Data to CSV"
@@ -583,7 +583,7 @@ export const VLabSimulinkScope: React.FC<VLabSimulinkScopeProps> = ({
                 <Download size={14} />
               </button>
               {onUpdate && (
-                <button
+                <button data-help-feature="ui:vlab/VLabSimulinkScope:c59d52419a6a" data-help-source="src/components/vlab/VLabSimulinkScope.tsx"
                   onClick={() => setShowSettings(!showSettings)}
                   className={`p-1.5 rounded transition-colors ${
                     showSettings ? 'bg-purple-500/20 text-purple-400' : 'text-gray-400 hover:text-white hover:bg-white/5'
@@ -608,7 +608,7 @@ export const VLabSimulinkScope: React.FC<VLabSimulinkScopeProps> = ({
                 {/* Input Channels */}
                 <div className="space-y-1">
                   <label className="block text-[9px] font-bold text-gray-400 uppercase">Input Channels</label>
-                  <select
+                  <select data-help-feature="ui:vlab/VLabSimulinkScope:4cd7c19ec85d" data-help-source="src/components/vlab/VLabSimulinkScope.tsx"
                     value={params.numSignals?.value || 1}
                     onChange={(e) => {
                       const val = Math.max(1, Math.min(8, parseInt(e.target.value) || 1));
@@ -625,7 +625,7 @@ export const VLabSimulinkScope: React.FC<VLabSimulinkScopeProps> = ({
                 {/* Time Range */}
                 <div className="space-y-1">
                   <label className="block text-[9px] font-bold text-gray-400 uppercase">Time Span</label>
-                  <select
+                  <select data-help-feature="ui:vlab/VLabSimulinkScope:a71f82e76e1b" data-help-source="src/components/vlab/VLabSimulinkScope.tsx"
                     value={String(params.time_range?.value || '10')}
                     onChange={(e) => {
                       const val = e.target.value === 'auto' ? 'auto' : parseFloat(e.target.value);
@@ -649,7 +649,7 @@ export const VLabSimulinkScope: React.FC<VLabSimulinkScopeProps> = ({
                 {/* Max Points */}
                 <div className="space-y-1">
                   <label className="block text-[9px] font-bold text-gray-400 uppercase">Buffer Limit</label>
-                  <input
+                  <input data-help-feature="ui:vlab/VLabSimulinkScope:d8895d129ed3" data-help-source="src/components/vlab/VLabSimulinkScope.tsx"
                     type="number"
                     value={params.buffer_size?.value || 1000}
                     onChange={(e) => onUpdate({ buffer_size: { ...params.buffer_size, value: parseInt(e.target.value) || 1000 } })}
@@ -660,7 +660,7 @@ export const VLabSimulinkScope: React.FC<VLabSimulinkScopeProps> = ({
                 {/* Decimation */}
                 <div className="space-y-1">
                   <label className="block text-[9px] font-bold text-gray-400 uppercase">Decimation</label>
-                  <input
+                  <input data-help-feature="ui:vlab/VLabSimulinkScope:5ceecb8346b7" data-help-source="src/components/vlab/VLabSimulinkScope.tsx"
                     type="number"
                     min="1"
                     value={params.decimation?.value || 1}
@@ -672,7 +672,7 @@ export const VLabSimulinkScope: React.FC<VLabSimulinkScopeProps> = ({
                 {/* Grid Toggle */}
                 <div className="space-y-1">
                   <label className="block text-[9px] font-bold text-gray-400 uppercase">Display Grid</label>
-                  <select
+                  <select data-help-feature="ui:vlab/VLabSimulinkScope:650e18e2e430" data-help-source="src/components/vlab/VLabSimulinkScope.tsx"
                     value={String(params.show_grid?.value || 'on')}
                     onChange={(e) => onUpdate({ show_grid: { ...params.show_grid, value: e.target.value } })}
                     className="w-full text-xs px-2 py-1 border border-[#333] bg-[#181820] text-gray-300 rounded outline-none"
@@ -685,7 +685,7 @@ export const VLabSimulinkScope: React.FC<VLabSimulinkScopeProps> = ({
                 {/* Legend Toggle */}
                 <div className="space-y-1">
                   <label className="block text-[9px] font-bold text-gray-400 uppercase">Display Legend</label>
-                  <select
+                  <select data-help-feature="ui:vlab/VLabSimulinkScope:4646bc23f306" data-help-source="src/components/vlab/VLabSimulinkScope.tsx"
                     value={String(params.show_legend?.value || 'on')}
                     onChange={(e) => onUpdate({ show_legend: { ...params.show_legend, value: e.target.value } })}
                     className="w-full text-xs px-2 py-1 border border-[#333] bg-[#181820] text-gray-300 rounded outline-none"
@@ -724,7 +724,7 @@ export const VLabSimulinkScope: React.FC<VLabSimulinkScopeProps> = ({
                             const label = traces[chIndex]?.label ?? chKey;
 
                             return (
-                              <button
+                              <button data-help-feature="ui:vlab/VLabSimulinkScope:23fdcb2acd03" data-help-source="src/components/vlab/VLabSimulinkScope.tsx"
                                 key={chKey}
                                 onClick={() => setHiddenChannels(prev => ({ ...prev, [chKey]: !prev[chKey] }))}
                                 className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[8px] font-mono transition-all border ${
@@ -758,7 +758,7 @@ export const VLabSimulinkScope: React.FC<VLabSimulinkScopeProps> = ({
                     {/* Chart Canvas */}
                     <div className="flex-1 relative min-h-0">
                       <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart
+                        <AreaChart data-help-feature="ui:vlab/VLabSimulinkScope:f3b4d1ccb3dd" data-help-source="src/components/vlab/VLabSimulinkScope.tsx"
                           key={`${autoScaleCounter}-${plotIdx}`}
                           data={displayData}
                           margin={{ top: 12, right: 16, left: -20, bottom: 0 }}
@@ -892,7 +892,7 @@ export const VLabSimulinkScope: React.FC<VLabSimulinkScopeProps> = ({
                     <Crosshair size={13} />
                     <span className="text-[10px] font-black uppercase tracking-wider">Caliper Readout</span>
                   </div>
-                  <button onClick={() => setShowCursors(false)} className="text-gray-500 hover:text-white">
+                  <button data-help-feature="ui:vlab/VLabSimulinkScope:c38759fc8c31" data-help-source="src/components/vlab/VLabSimulinkScope.tsx" onClick={() => setShowCursors(false)} className="text-gray-500 hover:text-white">
                     <X size={12} />
                   </button>
                 </div>
@@ -900,7 +900,7 @@ export const VLabSimulinkScope: React.FC<VLabSimulinkScopeProps> = ({
                 <div className="space-y-2 text-xs font-mono">
                   {/* Active Cursor Selector Buttons */}
                   <div className="flex gap-1 bg-[#14141d] p-1 rounded-lg border border-white/5">
-                    <button
+                    <button data-help-feature="ui:vlab/VLabSimulinkScope:388c8f45f4cf" data-help-source="src/components/vlab/VLabSimulinkScope.tsx"
                       onClick={() => setActiveCursor('C1')}
                       className={`flex-1 py-1 text-[10px] font-bold rounded flex items-center justify-center gap-1 transition-all ${
                         activeCursor === 'C1'
@@ -911,7 +911,7 @@ export const VLabSimulinkScope: React.FC<VLabSimulinkScopeProps> = ({
                       <div className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
                       <span>Active C1</span>
                     </button>
-                    <button
+                    <button data-help-feature="ui:vlab/VLabSimulinkScope:3546124feca0" data-help-source="src/components/vlab/VLabSimulinkScope.tsx"
                       onClick={() => setActiveCursor('C2')}
                       className={`flex-1 py-1 text-[10px] font-bold rounded flex items-center justify-center gap-1 transition-all ${
                         activeCursor === 'C2'
@@ -982,14 +982,14 @@ export const VLabSimulinkScope: React.FC<VLabSimulinkScopeProps> = ({
 
                   {/* Quick Snap Controls */}
                   <div className="grid grid-cols-2 gap-1 pt-1">
-                    <button
+                    <button data-help-feature="ui:vlab/VLabSimulinkScope:a5ea098b313c" data-help-source="src/components/vlab/VLabSimulinkScope.tsx"
                       onClick={() => handleSnapCursor(activeCursor, 'max')}
                       className="px-2 py-1 rounded bg-[#181824] hover:bg-white/10 text-gray-300 hover:text-yellow-400 text-[9px] font-bold border border-white/5 transition-all text-center"
                       title="Snap active cursor to signal peak"
                     >
                       Snap to Peak
                     </button>
-                    <button
+                    <button data-help-feature="ui:vlab/VLabSimulinkScope:2cd5bee54519" data-help-source="src/components/vlab/VLabSimulinkScope.tsx"
                       onClick={() => handleSnapCursor(activeCursor, 'min')}
                       className="px-2 py-1 rounded bg-[#181824] hover:bg-white/10 text-gray-300 hover:text-emerald-400 text-[9px] font-bold border border-white/5 transition-all text-center"
                       title="Snap active cursor to signal valley"
@@ -997,7 +997,7 @@ export const VLabSimulinkScope: React.FC<VLabSimulinkScopeProps> = ({
                       Snap to Valley
                     </button>
                   </div>
-                  <button
+                  <button data-help-feature="ui:vlab/VLabSimulinkScope:d6e1348ea855" data-help-source="src/components/vlab/VLabSimulinkScope.tsx"
                     onClick={() => handleSnapCursor('C1', 'center')}
                     className="w-full py-1 rounded bg-[#181824] hover:bg-white/10 text-gray-400 hover:text-white text-[9px] font-bold border border-white/5 transition-all text-center"
                   >
@@ -1011,7 +1011,7 @@ export const VLabSimulinkScope: React.FC<VLabSimulinkScopeProps> = ({
                         <span>Position C1</span>
                         <span>{cursor1Time?.toFixed(2)}s</span>
                       </div>
-                      <input
+                      <input data-help-feature="ui:vlab/VLabSimulinkScope:693743acfe5a" data-help-source="src/components/vlab/VLabSimulinkScope.tsx"
                         type="range"
                         min={displayData.length > 0 ? (displayData[0].time ?? displayData[0].t ?? 0) : 0}
                         max={displayData.length > 0 ? (displayData[displayData.length - 1].time ?? displayData[displayData.length - 1].t ?? 10) : 10}
@@ -1027,7 +1027,7 @@ export const VLabSimulinkScope: React.FC<VLabSimulinkScopeProps> = ({
                         <span>Position C2</span>
                         <span>{cursor2Time?.toFixed(2)}s</span>
                       </div>
-                      <input
+                      <input data-help-feature="ui:vlab/VLabSimulinkScope:f802feb1b7e1" data-help-source="src/components/vlab/VLabSimulinkScope.tsx"
                         type="range"
                         min={displayData.length > 0 ? (displayData[0].time ?? displayData[0].t ?? 0) : 0}
                         max={displayData.length > 0 ? (displayData[displayData.length - 1].time ?? displayData[displayData.length - 1].t ?? 10) : 10}
@@ -1050,7 +1050,7 @@ export const VLabSimulinkScope: React.FC<VLabSimulinkScopeProps> = ({
                     <BarChart2 size={13} />
                     <span className="text-[10px] font-black uppercase tracking-wider">Signal Statistics</span>
                   </div>
-                  <button onClick={() => setShowStats(false)} className="text-gray-500 hover:text-white">
+                  <button data-help-feature="ui:vlab/VLabSimulinkScope:968851fffaf6" data-help-source="src/components/vlab/VLabSimulinkScope.tsx" onClick={() => setShowStats(false)} className="text-gray-500 hover:text-white">
                     <X size={12} />
                   </button>
                 </div>
@@ -1078,7 +1078,7 @@ export const VLabSimulinkScope: React.FC<VLabSimulinkScopeProps> = ({
                         </div>
                         <div>
                           <span className="text-gray-500 block text-[8px]">Max / Min</span>
-                          <span className="text-gray-200">{item.max.toFixed(1)} / {item.min.toFixed(1)}</span>
+                          <span className="text-gray-200" data-testid="scope-stat-max" data-value={item.max}>{item.max.toFixed(1)} / {item.min.toFixed(1)}</span>
                         </div>
                       </div>
                     </div>

@@ -24,6 +24,10 @@ import * as math from 'mathjs';
 import { VLabWorkspaceProps, VLabNode as AppVLabNode, VLabEdge as AppVLabEdge } from './VLabWorkspaceTypes';
 import { normalizeLegacyVLabGraph } from './vlabModelMigration';
 import { VLabNode, NodeErrorBoundary } from './VLabNode';
+import { VLabParamField } from './VLabParamField';
+import { VLabDiagnosticsPanel, diagnosticTargets, toRunDiagnostic, topologyRunDiagnostic } from './VLabDiagnosticsPanel';
+import { VLabMigrationBanner } from './VLabMigrationBanner';
+import type { VLabDiagnostic } from '../../engine/vlab/vlabDiagnostics';
 import { SymbolRenderer } from './VLabSymbols';
 import { VLAB_LIBRARY, VLabBlock, VLabPort, scoreVLabBlock, searchVLabBlocks } from '../../utils/vlabLibrary';
 import { VLAB_COMPONENT_DEFINITIONS } from '../../engine/vlab/vlabComponentDefinitions';
@@ -1100,6 +1104,8 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
   const hasSimulatedStepRef = useRef(false);
   const solverJobRef = useRef<VLabSolverJob | null>(null);
   const vlabWorkerRef = useRef<VLabWorkerClient | null>(null);
+  const [runDiagnostic, setRunDiagnostic] = useState<VLabDiagnostic | null>(null);
+  const diagnosticTargetMap = useMemo(() => diagnosticTargets(runDiagnostic), [runDiagnostic]);
   const [vlabLimitInput, setVlabLimitInput] = useState('');
   const vlabLimitRef = useRef<number | null>(null);
   const [simSpeed, setSimSpeed] = useState<number>(1);
@@ -1394,6 +1400,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
     }
   }, [initialSelectedNodeId, reactFlowInstance, nodes]);
   const [invalidEdges, setInvalidEdges] = useState<Set<string>>(new Set());
+  const [snapEnabled, setSnapEnabled] = useState(false);
   const [status, setStatus] = useState<{ message: string; type: 'idle' | 'info' | 'success' | 'warning' | 'error' }>({
     message: 'System Ready',
     type: 'idle'
@@ -1414,6 +1421,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
     solverJobRef.current = solverJob;
     const engine = solverJob.engine;
     let useFallback = false;
+    let engineFailure: unknown;
 
     // Helper: get a param value from a node by id for the fallback
     const param = (nodeId: string, key: string, fallback: number) => {
@@ -1680,7 +1688,11 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
         };
       }
 
-      return (_t: number, _dt: number) => 0;
+      // No hard-coded model matches: a constant 0 would be a silent "no readings", so the engine failure itself is reported.
+      return (_t: number, _dt: number) => {
+        if (engineFailure !== undefined) throw engineFailure;
+        return 0;
+      };
     };
 
     const fallbackStep = runFallbackSolver();
@@ -1688,7 +1700,11 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
     return (t: number, dt: number) => {
       if (!useFallback) {
         if (useWorker) {
-          if (!vlabWorkerRef.current) vlabWorkerRef.current = new VLabWorkerClient();
+          if (!vlabWorkerRef.current) {
+            vlabWorkerRef.current = new VLabWorkerClient();
+            // WP-40: every failed worker step reaches the UI as a typed diagnostic (never a silent "no readings")
+            vlabWorkerRef.current.onDiagnostics((diagnostic) => { if (diagnostic.code !== 'CANCELLED') setRunDiagnostic(diagnostic); });
+          }
           if (vlabWorkerRef.current.available) {
             return vlabWorkerRef.current.step(nodesRef.current, edgesRef.current, solverJob.solverConfiguration, simPhysicsStateRef.current, dt)
               .then((result) => {
@@ -1727,8 +1743,10 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
           // A configured solver failure must reach the simulation diagnostic.
           // Switching to a hardcoded model would discard the user's settings.
           // An invalid topology must surface its diagnostic, never be hidden by the fallback model.
-          if (engine.getSolverConfiguration() || e instanceof MultibodyConstraintDiagnosticError || e instanceof TopologyValidationError) throw e;
+          // Every typed V-Lab diagnostic (PARAM, DAE_STRUCTURE, BLOCK_EQUATION, ...) reaches the UI as well.
+          if (engine.getSolverConfiguration() || e instanceof MultibodyConstraintDiagnosticError || e instanceof TopologyValidationError || toRunDiagnostic(e).code !== 'UNKNOWN') throw e;
           console.warn("DAE Physics Engine failed, falling back to Euler model:", e);
+          engineFailure = e;
           useFallback = true;
         }
       }
@@ -1870,6 +1888,8 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
           console.error("Simulation step failed:", err);
         }
         setIsSimulating(false);
+        const failure = toRunDiagnostic(err);
+        if (failure.code !== 'CANCELLED') setRunDiagnostic(failure);
         setStatus({
           message: `Simulation crashed: ${err instanceof Error ? err.message : 'Numerical instability or invalid configuration.'}`,
           type: 'error'
@@ -2099,12 +2119,15 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
     // it loads and shows these diagnostics instead of crashing or solving garbage.
     const topology = validateTopology(nodes as any, edges as any);
     if (!topology.valid) {
+      const message = formatTopologyMessage(topology.diagnostics);
+      setRunDiagnostic(topologyRunDiagnostic(message, topology.diagnostics as any));
       setStatus({
-        message: `CANNOT RUN SIMULATION: ${formatTopologyMessage(topology.diagnostics)}`,
+        message: `CANNOT RUN SIMULATION: ${message}`,
         type: 'error'
       });
       return;
     }
+    setRunDiagnostic(null);
 
     // A run always begins with the current solver_config; pause/resume keeps
     // this job and its physics state while live edits refresh it in the loop.
@@ -3015,6 +3038,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                                         {catBlocks.map(block => (
                                           <div data-help-feature="ui:vlab/VLabWorkspace:bf1fd0b768fd" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                                             key={block.id}
+                                            data-block-id={block.id}
                                             draggable
                                             onDragStart={(e) => onDragStart(e, block)}
                                             onClick={() => addBlockToCenter(block)}
@@ -3111,6 +3135,8 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
               ...n,
               data: {
                 ...n.data,
+                // display-only (never saved): the blocks / ports a failed run points at
+                diagnosticPorts: diagnosticTargetMap.has(n.id) ? [...diagnosticTargetMap.get(n.id)!] : undefined,
                 onNodeMouseDown: (e: React.MouseEvent) => handleNodeMouseDown(e, n),
                 onRenameNode: (nodeId: string, newLabel: string) => {
                   setNodes(nds => nds.map(nd => {
@@ -3130,7 +3156,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                   }));
                 }
               }
-            })), [nodes, currentParentId, handleNodeMouseDown, setNodes])}
+            })), [nodes, currentParentId, handleNodeMouseDown, setNodes, diagnosticTargetMap])}
             edges={useMemo(() => edges.filter(e => {
               const sourceNode = nodes.find(n => n.id === e.source);
               return sourceNode && (sourceNode.data.parentId || 'root') === currentParentId;
@@ -3157,7 +3183,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
             connectionMode={ConnectionMode.Loose}
             className="engineering-canvas"
             fitView
-            snapToGrid
+            snapToGrid={snapEnabled}
             snapGrid={[10, 10]}
           >
             <Background color="var(--diagram-grid)" gap={20} variant={BackgroundVariant.Lines} />
@@ -3195,6 +3221,19 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                 >
                   <Maximize2 size={12} />
                   <span>Fit View</span>
+                </button>
+                <div className="w-px h-4 bg-white/10 mx-0.5" />
+                <button
+                  type="button"
+                  onClick={() => setSnapEnabled(prev => !prev)}
+                  className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold transition-all active:scale-95 ${
+                    snapEnabled
+                      ? 'bg-purple-500/30 text-purple-200 border border-purple-500/50'
+                      : 'hover:bg-white/10 text-gray-400 hover:text-white'
+                  }`}
+                  title={snapEnabled ? 'Grid snap enabled (10px)' : 'Smooth pixel precision (Grid snap off)'}
+                >
+                  <span>{snapEnabled ? 'Snap: On' : 'Snap: Off'}</span>
                 </button>
               </div>
             </Panel>
@@ -3290,6 +3329,17 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
               maskColor="rgba(0,0,0,0.7)"
               className="bg-[#1a1a1a] border border-[#333] rounded-lg"
             />
+
+            {/* WP-40: run diagnostics and one-time model-migration notices */}
+            <Panel position="top-center" className="mt-14 flex flex-col items-center gap-2">
+              <VLabDiagnosticsPanel
+                diagnostic={runDiagnostic}
+                labelOf={(blockId) => String((nodes.find(n => n.id === blockId)?.data as any)?.label || blockId)}
+                onDismiss={() => setRunDiagnostic(null)}
+                onSelectBlock={(blockId) => setSelectedNodeId(blockId)}
+              />
+              <VLabMigrationBanner nodes={nodes as any} onSelectBlock={(blockId) => setSelectedNodeId(blockId)} />
+            </Panel>
 
             {/* Premium Status Bar */}
             <Panel position="bottom-center" className="mb-6">
@@ -3872,24 +3922,19 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                                 <option value="physical">Physical Signal</option>
                               </select>
                             ) : (
-                              (() => {
-                                const isPositivePhysical = ['C', 'heat_capacity', 'mass', 'm', 'R', 'resistance', 'k', 'conductivity', 'L', 'inductance', 'b', 'damping', 'J', 'inertia'].includes(key);
-                                return (
+                              <VLabParamField
+                                key={`${selectedNode.id}:${key}`}
+                                blockType={String((selectedNode.data as any).type)}
+                                paramKey={key}
+                                param={param}
+                                onCommit={(val) => updateParameter(key, val)}
+                              >
+                                {(fieldProps) => (
                                   <input data-help-feature="ui:vlab/VLabWorkspace:b5a7c9d05554" data-help-source="src/components/vlab/VLabWorkspace.tsx"
-                                    type={typeof (param.value ?? 0) === 'number' ? "number" : "text"}
-                                    min={isPositivePhysical ? 0 : undefined}
-                                    value={param.value ?? ''}
-                                    onChange={(e) => {
-                                      let val = typeof (param.value ?? 0) === 'number' ? parseFloat(e.target.value) : e.target.value;
-                                      if (isPositivePhysical && typeof val === 'number' && !isNaN(val) && val < 0) {
-                                        val = 0;
-                                      }
-                                      updateParameter(key, val);
-                                    }}
-                                    className="w-full bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-3 text-xs focus:border-purple-500 outline-none"
+                                    {...fieldProps}
                                   />
-                                );
-                              })()
+                                )}
+                              </VLabParamField>
                             )}
                           </div>
                         ))}

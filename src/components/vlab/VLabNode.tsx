@@ -2,9 +2,10 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Handle, Position, useUpdateNodeInternals, useStore } from '@xyflow/react';
 import { Activity } from 'lucide-react';
 import { SymbolRenderer } from './VLabSymbols';
-import { getBlockDimensions } from './blockDimensions';
 import { libraryBlock } from '../../engine/vlab/vlabConnectionRules';
 import { widthOf } from '../../engine/vlab/vlabVectorPorts';
+import { computeNodeLayout, symbolTypeOf } from './vlabPortLayout';
+import './vlabNode.css';
 
 export const getRotatedPosition = (originalPos: Position, rotation: number): Position => {
   const normRot = ((rotation % 360) + 360) % 360;
@@ -72,6 +73,23 @@ export const NodeErrorBoundary = class extends React.Component<{ children: React
 
 /** Handle tooltip: signal ports show their direction (library direction), the rest are conserving ports. */
 const portTitle = (port: any, blockDomain?: string, blockType?: string): string => {
+  const head = portHeadline(port, blockDomain, blockType);
+  const meta = (blockType ? libraryBlock(blockType)?.ports.find(p => p.id === port.id) : undefined) ?? port;
+  const domain = port.domain || blockDomain || 'Physical';
+  const signal = String(domain).toLowerCase() === 'physical';
+  const direction = signal ? (port.direction ?? meta.direction) : undefined;
+  const quantity = meta.quantity ?? port.quantity;
+  const unit = meta.quantity !== undefined ? meta.unit : port.unit;
+  const unitText = unit === '*' ? 'unit of the wired input' : unit;
+  return [
+    head,
+    `domain: ${domain}`,
+    `direction: ${direction === 'in' ? 'input' : direction === 'out' ? 'output' : signal ? 'signal' : 'bidirectional (through / across)'}`,
+    quantity ? `quantity: ${quantity}${unitText ? ` [${unitText}]` : ''}` : '',
+  ].filter(Boolean).join(' | ');
+};
+
+const portHeadline = (port: any, blockDomain?: string, blockType?: string): string => {
   if (port.domain === 'isothermal_liquid') return 'Isothermal Liquid conserving port';
   const domain = port.domain || blockDomain || 'Physical';
   // width / composite metadata comes from the library (a saved instance copy may predate it), WP-09c
@@ -121,14 +139,10 @@ export const VLabNode = ({ id, data, selected }: { id: string; data: any; select
     return acc;
   }, {});
 
-  const { width: baseWidth, height: baseHeight } = getBlockDimensions(data.type);
-  const maxPortsOnSide = Math.max(
-    portsBySide.left?.length || 0,
-    portsBySide.right?.length || 0,
-    1
-  );
-  const height = Math.max(baseHeight, maxPortsOnSide * 20 + 10);
-  const width = baseWidth;
+  // WP-40: one layout for every port (blockDimensions is the minimum box; the box grows so handles never overlap)
+  const layout = computeNodeLayout(data.type, rawPorts.filter(Boolean), data.icon);
+  const { width, height } = layout;
+  const diagnosticPorts: string[] | undefined = data.diagnosticPorts;
   const paramBadge = formatNodeParameterBadge(data.type, data.params);
 
   // Handles referenced by an edge -> solid fill feedback ("connected dot")
@@ -162,7 +176,9 @@ export const VLabNode = ({ id, data, selected }: { id: string; data: any; select
 
   return (
     <div
+      data-help-topic={`vlab:${data.type}`}
       data-selected={selected ? 'true' : 'false'}
+      data-vlab-diagnostic={diagnosticPorts ? 'true' : undefined}
       className={`vlab-node ui-card relative group flex flex-col items-center transition-all ${selected ? 'z-50' : 'z-10'}`}
       onMouseDown={(e) => data.onNodeMouseDown && data.onNodeMouseDown(e)}
     >
@@ -171,17 +187,20 @@ export const VLabNode = ({ id, data, selected }: { id: string; data: any; select
         {Object.entries(portsBySide).map(([side, sidePorts]: [any, any]) =>
           sidePorts.map((port: any, index: number) => {
             const totalOnSide = sidePorts.length;
-            const offset = totalOnSide > 1 ? (index - (totalOnSide - 1) / 2) * 20 : 0;
-            const position = side === 'left' ? Position.Left :
+            const offset = layout.slots.get(port.id)?.offset ?? (totalOnSide > 1 ? (index - (totalOnSide - 1) / 2) * 20 : 0);
+            const libPort = libraryBlock(data.type)?.ports.find(p => p.id === port.id) ?? port;
+            const isVector = widthOf(libPort) > 1 || !!libPort.composite;
+            const isDiagnosticPort = !!diagnosticPorts?.includes(port.id);            const position = side === 'left' ? Position.Left :
               side === 'right' ? Position.Right :
                 side === 'top' ? Position.Top : Position.Bottom;
             const rotatedPos = getRotatedPosition(position, rotation);
             const handleId = `${id}-${port.id}`;
             const isConnected = connectedHandles.has(handleId);
+            const handleClass = `${isConnected ? 'vlab-handle vlab-handle-connected' : 'vlab-handle'}${isVector ? ' vlab-handle-vector' : ''}${isDiagnosticPort ? ' vlab-handle-diagnostic' : ''}`;
             const pc = data.color || '#3b82f6';
 
             return (
-              <div key={port.id} className="absolute"
+              <div key={port.id} className="absolute" data-port-id={port.id} data-port-width={widthOf(libPort)}
                 style={{
                   width: 12, height: 12,
                   top: (side === 'left' || side === 'right') ? `calc(50% + ${offset}px - 6px)` : (side === 'top' ? '-6px' : 'calc(100% - 6px)'),
@@ -192,7 +211,7 @@ export const VLabNode = ({ id, data, selected }: { id: string; data: any; select
                   position={rotatedPos}
                   id={handleId}
                   title={portTitle(port, data.domain, data.type)}
-                  className={isConnected ? 'vlab-handle vlab-handle-connected' : 'vlab-handle'}
+                  className={handleClass}
                   style={{ ['--pc' as any]: pc }}
                 />
                 <Handle
@@ -200,7 +219,7 @@ export const VLabNode = ({ id, data, selected }: { id: string; data: any; select
                   position={rotatedPos}
                   id={handleId}
                   title={portTitle(port, data.domain, data.type)}
-                  className={isConnected ? 'vlab-handle vlab-handle-connected' : 'vlab-handle'}
+                  className={handleClass}
                   style={{ ['--pc' as any]: pc }}
                 />
                 {/* Port label */}
@@ -220,14 +239,14 @@ export const VLabNode = ({ id, data, selected }: { id: string; data: any; select
 
         {/* The SVG Symbol */}
         <div className={selected ? 'symbol-bright' : ''}>
-          <SymbolRenderer type={data.type} color={data.color} />
+          <SymbolRenderer type={symbolTypeOf(data.type, data.icon)} color={data.color} />
         </div>
       </div>
 
       {/* Clean instance label beneath the symbol with inline double-click editing */}
       <div className="mt-1.5 flex flex-col items-center max-w-[160px]">
         {isEditingLabel ? (
-          <input
+          <input data-help-feature="ui:vlab/VLabNode:f080e0b0136f" data-help-source="src/components/vlab/VLabNode.tsx"
             ref={inputRef}
             type="text"
             value={labelDraft}
@@ -239,7 +258,7 @@ export const VLabNode = ({ id, data, selected }: { id: string; data: any; select
             onMouseDown={(e) => e.stopPropagation()}
           />
         ) : (
-          <div
+          <div data-help-feature="ui:vlab/VLabNode:58a354c5be90" data-help-source="src/components/vlab/VLabNode.tsx"
             onDoubleClick={(e) => {
               e.stopPropagation();
               setIsEditingLabel(true);

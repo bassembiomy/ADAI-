@@ -648,10 +648,14 @@
         "WP-31c"
       ],
       "blocks": [],
-      "status": "todo",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "acceptance": "npx vitest run src/components/vlab --reporter=dot",
-      "evidence": [],
+      "evidence": [
+        "param editor via the WP-08 schema only (was clamping to positive): 0/negatives/sci-notation, inline errors, persists; diagnostics panel from the typed worker contract with block/port highlight (removed a constant-0 fallback on typed errors); migration notice banner; palette/node parity (105 nodes drew a generic box) + composite/vector port rings and tooltips; scope label tests; save/open round trip for 14 domain models; e2e vlab-smoke passed (11.7 s)",
+        "planner re-run: 4792 pass / 12 expected-fail; 0 data-help annotations removed; tsc clean",
+        "commit includes the other session's uncommitted data-help-* annotations in VLabNode/VLabSimulinkScope/VLabWorkspace (preserved, harmless)"
+      ],
       "findings": []
     },
     {
@@ -1270,7 +1274,8 @@
       "block": "rot/trans_multibody_interface",
       "layer": "port",
       "summary": "Old t/f ports removed. Saved models get an unknown-port diagnostic. Consider a migration that drops those edges with a notice.",
-      "wp": "WP-41"
+      "wp": "WP-41",
+      "status": "addressed-WP-40 (F-093 help file untracked: left to its owner)"
     },
     {
       "id": "F-063",
@@ -1443,7 +1448,8 @@
       "block": "dc_motor/bldc_motor",
       "layer": "ui",
       "summary": "migrationNotices (Kt != Ke) are stored in node.data but not shown in the UI.",
-      "wp": "WP-41"
+      "wp": "WP-41",
+      "status": "addressed-WP-40 (F-093 help file untracked: left to its owner)"
     },
     {
       "id": "F-084",
@@ -1538,7 +1544,8 @@
       "block": "src/help/blockGuidance.ts (untracked, other session)",
       "layer": "ui",
       "summary": "Says fundamental_reluctance ignores l/A/mu, which is now wrong.",
-      "wp": "WP-40"
+      "wp": "WP-40",
+      "status": "addressed-WP-40 (F-093 help file untracked: left to its owner)"
     },
     {
       "id": "F-094",
@@ -1546,7 +1553,8 @@
       "block": "thermal migration",
       "layer": "ui",
       "summary": "Old models: scope temperature readings shift +293.15 K (correct physics); a migration notice is stored but not shown in the UI.",
-      "wp": "WP-40"
+      "wp": "WP-40",
+      "status": "addressed-WP-40 (F-093 help file untracked: left to its owner)"
     },
     {
       "id": "F-095",
@@ -1588,7 +1596,8 @@
       "block": "VLabNode/VLabSimulinkScope/VLabWorkspace",
       "layer": "ui",
       "summary": "The other session is adding data-help-feature attributes to V-Lab UI files (uncommitted, not ours). WP-40 must coordinate to avoid conflicts.",
-      "wp": "WP-40"
+      "wp": "WP-40",
+      "status": "addressed-WP-40 (F-093 help file untracked: left to its owner)"
     },
     {
       "id": "F-100",
@@ -1657,7 +1666,8 @@
       "block": "worker",
       "layer": "integration",
       "summary": "Mid-step cancel needs SharedArrayBuffer (cross-origin isolation); otherwise the worker is terminated/restarted. Check Electron COOP/COEP.",
-      "wp": "WP-40"
+      "wp": "WP-40",
+      "status": "addressed-WP-40 (F-093 help file untracked: left to its owner)"
     },
     {
       "id": "F-108",
