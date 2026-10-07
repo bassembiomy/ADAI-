@@ -3,8 +3,9 @@ import { Node, Edge } from '@xyflow/react';
 import { VLAB_LIBRARY } from '../../utils/vlabLibrary';
 import { interfaceBranchSpecs, jointBranchSpecs, jointConfiguration, jointKindOf } from './vlabJointCore';
 import { EquationContext, AssembledSystem, PhysicalDomain, ComponentEquation, ScopeChannelBinding } from './types';
-import { blockEquations, DERIVATIVE_DEPENDENT_BLOCK_TYPES, withStatefulEquationCaches, type BlockEquationArgs } from './vlabEquations';
+import { blockEquations, DERIVATIVE_DEPENDENT_BLOCK_TYPES, type BlockEquationArgs } from './vlabEquations';
 import { blockHistory } from './vlabHistory';
+import { controllerHistory } from './vlabControllers';
 import { numericParam, stringParam, VLabParamError } from './vlabParams';
 import { computeAbsoluteReferencePressure, computeEffectivePortPressure } from '../../utils/hydraulicUnits';
 import {
@@ -496,10 +497,40 @@ export class DAEAssembler {
         branches.push({ name: 'signal_f', ports: [{ id: 'f', sign: 1 }] });
         break;
       case 'luenberger_observer':
-        states.push('xhat');
+        states.push('xhat0', 'xhat1');
         break;
       case 'im_flux_observer':
-        states.push('psi_d', 'psi_q');
+      case 'im_dtc_ctrl':
+        states.push('psi_alpha', 'psi_beta');
+        break;
+      case 'im_foc_ctrl':
+        states.push('theta_f', 'integ_w', 'integ_d', 'integ_q');
+        break;
+      case 'pmsm_curr_ctrl':
+      case 'im_curr_ctrl':
+        states.push('integ_d', 'integ_q');
+        break;
+      case 'pmsm_field_weakening':
+      case 'bldc_current_ctrl':
+      case 'bldc_pwm_ctrl':
+      case 'dcdc_ctrl':
+      case 'dc_voltage_ctrl':
+      case 'dc_current_ctrl':
+      case 'velocity_ctrl':
+      case 'pfc_rectifier_ctrl':
+        states.push('integral');
+        break;
+      case 'cycloconverter_ctrl':
+        states.push('theta_o');
+        break;
+      case 'im_scalar_ctrl':
+        states.push('theta');
+        break;
+      case 'resolver_to_digital':
+        states.push('phi', 'omega', 'e_f');
+        break;
+      case 'ps_smith_predictor':
+        states.push('ym', 'integral');
         break;
       case 'pmsm_foc':
         states.push('integ_d', 'integ_q');
@@ -838,7 +869,6 @@ export class DAEAssembler {
           break;
         case 'ps_integrator':
         case 'ps_integrator_gen':
-        case 'ps_smith_predictor':
         case 'ps_transfer_fcn':
         case 'ps_lpf':
         case 'ps_washout':
@@ -875,14 +905,11 @@ export class DAEAssembler {
           states.push('y');
           states.push('dy');
           break;
-        case 'lms_adaptive_filter':
-          states.push('w1', 'w2', 'x_prev');
-          break;
         case 'neural_neuron_learning':
           states.push('w1', 'w2', 'bias');
           break;
         case 'rl_q_learning_controller':
-          // RL uses a persistent state cache, no continuous DAE states
+          // WP-20b: the Q-table is committed discrete memory (vlabControllers.controllerHistory), no continuous DAE states
           break;
         case 'ac_motor_pid_control':
           states.push('ias', 'ibs', 'psiar', 'psibr', 'omega', 'theta', 'i_state', 'd_state');
@@ -1228,7 +1255,7 @@ export class DAEAssembler {
             const probeCtx: EquationContext = { dt: 1e-3, time: 0, parameters: {}, prevStates: zeros.slice(), states: zeros.slice(), stateDerivatives: zeros.slice(), order: 1 };
             let rows: number[];
             try {
-              rows = withStatefulEquationCaches(() => evaluate(zeros.slice(), zeros.slice(), probeCtx, reads));
+              rows = evaluate(zeros.slice(), zeros.slice(), probeCtx, reads);
             } catch (e) {
               // cannot be evaluated at the origin (e.g. a malformed parameter that the pre-solve validation reports);
               // the per-evaluation row check still applies
@@ -1253,7 +1280,7 @@ export class DAEAssembler {
       });
 
       // WP-20a: a block that looks back in time declares what it records after every accepted step (vlabEquations.blockHistory).
-      const historySpec = blockHistory[type];
+      const historySpec = blockHistory[type] ?? controllerHistory[type];
       if (historySpec && !isUnsupported) {
         let span: number;
         try {
@@ -1271,9 +1298,10 @@ export class DAEAssembler {
           nodeId: node.id,
           span,
           first: historySpec.first,
-          record: (xv, time) => {
+          initial: historySpec.initial ? () => historySpec.initial!(params) : undefined,
+          record: (xv, time, memory) => {
             const zeros = new Array(xv.length).fill(0);
-            return historySpec.record(buildArgs(xv, zeros, { dt: 0, time, parameters: {}, prevStates: xv, states: xv, stateDerivatives: zeros, order: 1 }));
+            return historySpec.record(buildArgs(xv, zeros, { dt: 0, time, history: memory, parameters: {}, prevStates: xv, states: xv, stateDerivatives: zeros, order: 1 }));
           },
         });
       }

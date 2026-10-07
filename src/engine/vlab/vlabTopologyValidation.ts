@@ -63,6 +63,9 @@ export const SEMANTIC_OPTIONAL_INPUTS: ReadonlySet<string> = new Set([
  */
 export const SEMANTIC_REQUIRED_INPUTS: ReadonlySet<string> = new Set([
   'igbt.g', 'ps_delay.u', 'ps_integrator_gen.u', 'ps_sr_flipflop.r', 'ps_switch.u2',
+  // WP-20b: the derivation shifts every channel of a vector by the same amount (a pure zero-sequence change that Clarke removes),
+  // and saturated outputs (the PWM modulation clamp, the carrier comparison) hide a dependence that is real
+  'im_flux_observer.iabc', 'pmsm_foc.iabc_s', 'bldc_pwm_ctrl.is_ref', 'bldc_pwm_ctrl.is', 'bldc_pwm_ctrl.hall',
 ]);
 
 export class TopologyValidationError extends Error {

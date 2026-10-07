@@ -93,6 +93,14 @@ describe('library metadata: width / channelNames / composite', () => {
     'three_phase_source.abc', // WP-12a (F-068): composite three-phase source port
     // WP-12b: stator / AC terminals of the machines and the inverter are composite; the PWM reference vectors are width 3
     'ac_motor.abc', 'pmsm.abc', 'bldc_motor.abc', 'pwm_3ph_2level.abc', 'pwm_3ph_2level.vabc', 'pwm_3ph_3level.vabc',
+    // WP-20b: controllers, estimators and the abc / dq / gate vectors of the motor and converter controllers
+    'ps_state_feedback.x', 'luenberger_observer.xhat', 'hysteresis_ctrl_3ph.iabc_ref', 'hysteresis_ctrl_3ph.iabc', 'hysteresis_ctrl_3ph.s',
+    'im_scalar_ctrl.vabc', 'im_foc_ctrl.iabc', 'im_foc_ctrl.g', 'im_dtc_ctrl.vabc', 'im_dtc_ctrl.iabc', 'im_dtc_ctrl.g',
+    'im_flux_observer.iabc', 'im_flux_observer.idqsef', 'pmsm_foc.iabc_s', 'pmsm_foc.g', 'im_curr_ctrl.idq_ref', 'im_curr_ctrl.idq',
+    'im_curr_ctrl.vdq_ff', 'im_curr_ctrl.vdq_ref', 'pmsm_curr_ctrl.idq_ref', 'pmsm_curr_ctrl.idq', 'pmsm_curr_ctrl.vdq_ff',
+    'pmsm_curr_ctrl.vdq_ref', 'pmsm_ref_gen.idq_ref', 'pmsm_field_weakening.idq_ref', 'pmsm_field_weakening.vdq',
+    'pmsm_field_weakening.idq_ref_fw', 'pmsm_tq_est.idq', 'bldc_commutation.abc', 'bldc_current_ctrl.vabc', 'bldc_pwm_ctrl.g',
+    'pfc_rectifier_ctrl.vabc_sens', 'pfc_rectifier_ctrl.iabc_sens', 'pfc_rectifier_ctrl.vabc_ref', 'cycloconverter_ctrl.vabc',
   ];
   const marked = blocks.flatMap(b => b.ports.filter(p => p.width !== undefined || p.composite !== undefined).map(p => `${b.id}.${p.id}`));
 

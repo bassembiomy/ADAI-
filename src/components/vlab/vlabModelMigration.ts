@@ -79,6 +79,8 @@ export const LEGACY_PARAM_DROPS: Record<string, string[]> = {
   // WP-12b: the three-level PWM takes its reference vector from the wired vabc (width 3); the internal reference oscillator
   // (and its output frequency) is gone, so the saved value is never read
   pwm_3ph_3level: ['output_frequency_hz'],
+  // WP-20b: the current model of the rotor flux needs no stator resistance (the observer has no voltage input)
+  im_flux_observer: ['Rs'],
 };
 
 /** Library parameters exposed by WP-08 (previously hidden): backfilled into saved nodes so the inspector shows them. */
@@ -91,7 +93,7 @@ export const WP08_EXPOSED_PARAMS: Record<string, string[]> = {
   rot_spring: ['theta0'], trans_spring: ['x0'], belt_end: ['damping'],
   ma_chamber: ['ambient_temp', 'wall_mass', 'wall_cp', 'food_mass', 'food_cp', 'k_loss', 'max_temp', 'P0', 'phi'],
   ma_pipe: ['resistance', 'D', 'roughness', 'T', 'phi', 'UA'],
-  ma_rot_conv: ['h0', 'k', 'V0', 'T', 'P0', 'p_env', 'phi'], ma_trans_conv: ['h0', 'k', 'V0', 'T', 'P0', 'p_env', 'phi'], im_flux_observer: ['Lr', 'Rr'],
+  ma_rot_conv: ['h0', 'k', 'V0', 'T', 'P0', 'p_env', 'phi'], ma_trans_conv: ['h0', 'k', 'V0', 'T', 'P0', 'p_env', 'phi'], im_flux_observer: ['Lr', 'Rr', 'P'],
   ps_lookup_1d: ['table_x', 'table_y'], ps_sliding_mode: ['boundary_layer'], magnetron: ['v_nominal'],
   upper_heater: ['efficiency'], mag_controlled_mmf: ['MMF'], washing_basket: ['damping'], doe_custom: ['deploymentModel'],
   ps_dead_zone: ['upper', 'lower'], ps_sine_3phase: ['Vpk', 'f'],
@@ -109,6 +111,14 @@ export const WP08_EXPOSED_PARAMS: Record<string, string[]> = {
   ac_motor: ['Lls', 'Llr'], pmsm: ['L0'], three_phase_source: ['phase'],
   // WP-12b: amplitude of the inverter's internal V/f generator (the old equation took it from the scalar vabc input)
   pwm_3ph_2level: ['modulation_index'],
+  // WP-20b: parameters the controllers / estimators need for their published equations (defaults = library defaults)
+  ps_pi_ctrl: ['Kb'], ps_pid_ctrl: ['Kb'], ps_state_feedback: ['Nr'], ps_smith_predictor: ['theta', 'Km', 'Kp', 'Ki'], luenberger_observer: ['B', 'C'],
+  pmsm_tq_est: ['flux', 'Ld', 'Lq'], pmsm_foc: ['pole_pairs', 'Ld', 'Lq', 'flux'], pmsm_curr_ctrl: ['Ki'], im_curr_ctrl: ['Ki'],
+  pmsm_ref_gen: ['pole_pairs', 'i_max'], pmsm_field_weakening: ['Kp', 'Ki', 'id_fw_max'], im_scalar_ctrl: ['f_rated', 'v_boost'],
+  im_dtc_ctrl: ['Rs', 'P', 'flux_band', 'tq_band', 'ts'], bldc_current_ctrl: ['v_max'], bldc_pwm_ctrl: ['Kp', 'Ki'], dcdc_ctrl: ['Kp', 'Ki'],
+  hysteresis_ctrl_3ph: ['ts'], cycloconverter_ctrl: ['phase_deg'], quad_decoder: ['ts'], resolver_to_digital: ['bandwidth', 'vp_pk'],
+  lms_adaptive_filter: ['ts'], rl_q_learning_controller: ['ts', 'seed'],
+  im_foc_ctrl: ['Lr', 'Ls', 'P', 'v_dc', 'imr_ref', 'Kp_w', 'Ki_w', 'T_max', 'Kp_i', 'Ki_i'],
   // WP-19a: joint parameters of the shared multibody joint core (axis defaults to Z like Simscape; weld reference pose)
   revolute_joint: ['axis'], prismatic_joint: ['axis'], weld_joint: ['offset', 'rotation'],
 };

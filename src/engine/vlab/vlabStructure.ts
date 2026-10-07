@@ -14,7 +14,6 @@
  *     This runs once per topology next to vlabTopologyValidation, before any Newton iteration.
  */
 import type { AssembledSystem, EquationContext } from './types';
-import { withStatefulEquationCaches } from './vlabEquations';
 import { floatingNetworkReason } from './vlabElectricalReference';
 import { floatingMechanicalReason, openSourcePortReason } from './vlabMechanicalReference';
 import { floatingMagneticReason, floatingThermalReason } from './vlabThermalMagneticReference';
@@ -100,47 +99,8 @@ export const UNSUPPORTED_BLOCKS: Record<string, UnsupportedBlockSpec> = {
     wp: 'WP-17',
     missingSpec: 'Measurement Selector (MA) selects temperature, pressure and humidity (t, p, w) from a composite moist-air measurement vector on `in`. Missing: the channel layout and width of that vector (for example [T, p, w]) and a sensor that produces it (ma_pt_sensor, ma_thermo_sensor and ma_moisture_sensor output scalars), so the input has no source to select from',
   },
-  // ── WP-20 (signal processing, controls, estimators) ──
-  bldc_commutation: {
-    wp: 'WP-20',
-    missingSpec: 'hall-state decoding (3-bit `hall` -> six-step gate pattern, reversed by `dir`) and a 3-wire `abc` output; the equation takes sign(sin(theta)) of the hall input and returns three rows for one scalar port',
-  },
-  pfc_rectifier_ctrl: {
-    wp: 'WP-20',
-    missingSpec: 'outer DC-voltage loop (vdc_ref - vdc_sens), inner current loop on vabc_sens/iabc_sens, reactive reference q_ref and the vabc_ref / vis outputs; the equation reads vdc_ref/q_ref/vdc_sens as V_out/V_ref/I_ac, drives one output and leaves `vis` undriven',
-  },
-  cycloconverter_ctrl: {
-    wp: 'WP-20',
-    missingSpec: 'per-phase firing-angle generation from v_ref/f_ref with converter feedback (vabc, vcyc, icyc); the equation uses v_ref as the output frequency with a fixed 45 +/- 30 deg sweep and leaves `vis` undriven',
-  },
-  hysteresis_ctrl_3ph: {
-    wp: 'WP-20',
-    missingSpec: '3-wire iabc_ref / iabc inputs, a hysteresis-band parameter and per-phase relay memory, and a 3-wire `s` output; the equation indexes six input channels the block does not have (iabc reads 0), returns three rows for one port and outputs 0.5 inside the band instead of holding the previous state',
-  },
-  im_scalar_ctrl: {
-    wp: 'WP-20',
-    missingSpec: 'V/f law parameters (rated frequency and voltage, boost) and a 3-wire `vabc` output; the equation hides a 1500 rating, substitutes 1500 when f_ref = 0 and returns a second row for a port that does not exist',
-  },
-  im_dtc_ctrl: {
-    wp: 'WP-20',
-    missingSpec: 'stator-flux and torque estimators from vabc/iabc, hysteresis comparators with a switching table and a 6-gate output `g`; the equation reads (flux_ref, tq_ref) and (vabc, iabc) as error pairs and returns two rows for one output',
-  },
-  im_flux_observer: {
-    wp: 'WP-20',
-    missingSpec: 'rotor-flux angle `theta`, synchronous speed `we` (slip relation we = wr + (Lm/Tr) iq/psi_r) and stator current in field coordinates `idqsef`, with a 3-wire iabc input; only imr is implemented, so three of the four outputs are undriven',
-  },
-  quad_decoder: {
-    wp: 'WP-20',
-    missingSpec: 'A/B/Z edge counting with a position/velocity update from the pulse inputs; the equation never reads a, b or z (state derivative = 0, vel = state, pos = 0)',
-  },
-  resolver_to_digital: {
-    wp: 'WP-20',
-    missingSpec: 'tracking loop on the excitation `vp` with the sine/cosine inputs `vx`/`vy` producing `ang` and `vel`; the equation reads vp/vx as sin/cos, drives vel from the angle, holds ang = 0 and keeps a state with zero derivative',
-  },
-  pmsm_ref_gen: {
-    wp: 'WP-20',
-    missingSpec: 'torque-to-idq map (MTPA / field weakening with the vdc limit) and the `tq_lim` output; the equation reads w_mech as tq_ref, returns id_ref = 0 and drives two of three outputs',
-  },
+  // (WP-20b: bldc_commutation, pfc_rectifier_ctrl, cycloconverter_ctrl, hysteresis_ctrl_3ph, im_scalar_ctrl, im_dtc_ctrl, im_flux_observer,
+  // quad_decoder, resolver_to_digital and pmsm_ref_gen are implemented from their published algorithms, see vlabControllers.ts)
 };
 
 // ── pattern detection ──────────────────────────────────────────────────────────
@@ -299,7 +259,7 @@ export function assertStructurallyWellPosed(system: AssembledSystem): void {
       expectedRows: 0, actualRows: 0, missingIndices: net.blocks.map(b => b.blockId), reason: floatingFluidReason(net.blocks),
     })));
   }
-  const full = withStatefulEquationCaches(() => detectJacobianPattern(system));
+  const full = detectJacobianPattern(system);
   if (!full) return;
   const diagnostics: StructuralDiagnostic[] = [];
 

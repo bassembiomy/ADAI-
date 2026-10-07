@@ -22,10 +22,7 @@ const KNOWN_SOLVER_FAILURES: Record<string, { finding: string; wp: string; diagn
   // WP-19a: dist_constraint and the five joints now simulate in a well-posed fixture (World frame on B, weight on F).
   // WP-07: the fixture now wires every signal input by its declared direction (library `direction`). These blocks used to
   // pass only because the old name-vocabulary fixture put a Scope on an input port and left the real input unwired.
-  im_flux_observer: {
-    finding: 'F-012', wp: 'WP-10..21 (control/estimators)',
-    diagnosis: 'with iabc/wr driven by constants the observer collapses the step to 1e-6 and times out; previously masked because iabc/wr were left unwired',
-  },
+
 };
 
 // WP-09a: blocks the assembler rejects with an explicit missing-spec diagnostic (vlabStructure.UNSUPPORTED_BLOCKS).

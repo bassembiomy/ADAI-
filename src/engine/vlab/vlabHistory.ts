@@ -50,6 +50,22 @@ export function historyAt(ctx: EquationContext, nodeId: string, tq: number, curr
   return dt > 0 ? lerp(v[lo], v[hi], Math.max(0, (tq - t[lo]) / dt)) : v[hi];
 }
 
+/**
+ * WP-20b: the last COMMITTED vector of a block that keeps discrete memory (sampled controllers, relays, counters, learning
+ * agents), or `initial` before the first accepted step. It is the value the memory had at the end of the previous accepted step,
+ * never a function of the attempt being solved, so a Newton iterate / a rejected attempt can not change it and no module-level
+ * cache is needed. The equation computes its outputs from this vector and the current inputs; the block's recorder
+ * (blockHistory.record, `first: 'initial'`) computes the NEXT vector from the accepted solution with the same function.
+ */
+export function committedMemory(ctx: EquationContext, nodeId: string, initial: number[]): number[] {
+  const h = ctx.history?.[nodeId];
+  if (!h) return initial;
+  // strictly before the time being solved: a sample AT ctx.time belongs to a finished solve of this instant (a replay), not to its past
+  let n = h.t.length - 1;
+  while (n >= 0 && h.t[n] >= ctx.time - SAME_TIME * Math.max(1, Math.abs(ctx.time))) n--;
+  return n >= 0 ? h.v[n] : initial;
+}
+
 /** Deep-enough copy (arrays are append-only, the recorded vectors are immutable): a replayed state never sees later samples. */
 export function cloneHistory(h: HistoryMemory | undefined): HistoryMemory {
   const out: HistoryMemory = {};
@@ -67,12 +83,13 @@ export function recordHistory(
   system: AssembledSystem, memory: HistoryMemory, xBefore: number[], xAfter: number[], tPrev: number, tNow: number,
 ): void {
   for (const r of system.historyRecorders ?? []) {
-    const v = r.record(xAfter, tNow);
+    // the recorder sees the memory committed BEFORE this step (a discrete block advances it from there, WP-20b)
+    const v = r.record(xAfter, tNow, memory);
     if (!v.every(Number.isFinite)) continue;
     const h = (memory[r.nodeId] ??= { t: [], v: [] });
     if (h.t.length === 0 && tPrev < tNow) {
       h.t.push(tPrev);
-      h.v.push(r.first === 'state' ? r.record(xBefore, tPrev) : v);
+      h.v.push(r.first === 'initial' && r.initial ? r.initial() : r.first === 'state' ? r.record(xBefore, tPrev, memory) : v);
       if (r.first === 'extend') h.extended = true;
     }
     const n = h.t.length;
@@ -113,11 +130,18 @@ export const movingAverageSpec = (params: Record<string, any>): { n: number; ts:
  *  - ps_rms: the running integral Q(t) = int u^2 dt (state 0): y^2 = (Q(t) - Q(t - W)) / W
  *  - sym_comp_transform: the six running Fourier integrals (re, im of the +, -, 0 sequence at f0)
  */
-export const blockHistory: Record<string, {
+export interface BlockHistorySpec {
   span: (params: Record<string, any>) => number;
   record: (a: BlockEquationArgs) => number[];
-  first: 'extend' | 'state';
-}> = {
+  /**
+   * extend: an input signal, constant over the first step; state: a state, its value before the step is the initial condition;
+   * initial (WP-20b): discrete memory of a sampled / event-driven block, the vector before the first step is `initial(params)`.
+   */
+  first: 'extend' | 'state' | 'initial';
+  initial?: (params: Record<string, any>) => number[];
+}
+
+export const blockHistory: Record<string, BlockHistorySpec> = {
   ps_delay: {
     span: p => Math.max(0, numericParam(p, 'delay', 1)),
     record: a => [portValue(a, 'u')],

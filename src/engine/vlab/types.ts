@@ -100,7 +100,13 @@ export interface AssembledSystem {
    * WP-20a: blocks that need committed history. After every accepted step the engine calls `record(x)` of each entry and
    * appends the vector at that time (see BlockHistory). `span` [s] is how far back the block ever looks (older samples are pruned).
    */
-  historyRecorders?: { nodeId: string; span: number; first: 'extend' | 'state'; record: (x: number[], time: number) => number[] }[];
+  historyRecorders?: {
+    nodeId: string; span: number; first: 'extend' | 'state' | 'initial';
+    /** the vector before the first step of a run (`first: 'initial'`, WP-20b discrete memory) */
+    initial?: () => number[];
+    /** `memory` = the committed history before this step (a discrete block advances its own last vector from it) */
+    record: (x: number[], time: number, memory?: HistoryMemory) => number[];
+  }[];
   // Node-level Kirchhoff equations (through-variable sum = 0). A vector net (width-N signal, composite three-phase electrical
   // port) has one entry per channel: `channel` is the 0-based channel (absent on scalar nets).
   kirchhoffNodes: { nodeId: string; throughIndices: number[]; signs: number[]; channel?: number }[];

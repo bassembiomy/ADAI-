@@ -230,6 +230,17 @@ function buildFixture(block: VLabBlock, dutParams: Record<string, any>, terminat
           addNode(srcId, 'ps_sine_3phase', 50, 100 * idx, { Vpk: 5, f: 50 });
           wire(`e_ps_src_${portId}`, srcId, 'abc_s', 'dut', `${portId}_t`);
           connected.add(portId);
+        } else if (widthOf(port) === 2) {
+          // WP-20b: a width-2 signal (dq current / voltage, state vector): the only width-2 producer is the Luenberger observer estimate,
+          // driven here by two constants
+          const srcId = `src_ps_${portId}`;
+          addNode(srcId, 'luenberger_observer', 50, 100 * idx);
+          addNode(`${srcId}_u`, 'ps_constant', 0, 100 * idx, { value: 1 });
+          addNode(`${srcId}_y`, 'ps_constant', 0, 100 * idx + 50, { value: 0.5 });
+          wire(`e_ps_src_${portId}_u`, `${srcId}_u`, 'y_s', srcId, 'u_t');
+          wire(`e_ps_src_${portId}_y`, `${srcId}_y`, 'y_s', srcId, 'y_t');
+          wire(`e_ps_src_${portId}`, srcId, 'xhat_s', 'dut', `${portId}_t`);
+          connected.add(portId);
         }
       } else if (wantsDrive) {
         const srcId = `src_ps_${portId}`;

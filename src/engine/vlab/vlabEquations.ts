@@ -2,6 +2,7 @@ import { EquationContext } from './types';
 import { numericParam, stringParam, vectorParam, unwrapParam, parseNumeric, VLabParamError } from './vlabParams';
 import { scalarInput, vectorInput } from './vlabVectorPorts';
 import { historyAt, movingAverageSpec } from './vlabHistory';
+import { controllerEquations, SIGNAL_TIME_QUANTUM as CONTROLLER_TIME_QUANTUM } from './vlabControllers';
 import { interfaceResiduals, jointResiduals } from './vlabJointCore';
 import { computeAbsoluteReferencePressure, computeEffectivePortPressure } from '../../utils/hydraulicUnits';
 import {
@@ -41,13 +42,15 @@ export const DERIVATIVE_DEPENDENT_BLOCK_TYPES = new Set([
   'ps_integrator_gen', 'ps_moving_avg', 'ps_sr_flipflop', 'ps_sample_hold',
   'ps_smith_predictor', 'ps_second_order_filter', 'ps_washout',
   'quad_decoder', 'resolver_to_digital', 'belt_end',
+  // WP-20b: sliding mode reads d/dt of its inputs; the sampled / relay / learning blocks keep committed discrete memory
+  'ps_sliding_mode', 'rl_q_learning_controller', 'hysteresis_ctrl_3ph', 'im_dtc_ctrl', 'cycloconverter_ctrl',
   // WP-20a: blocks that look back in time through the committed history (vlabHistory.ts); the Sequence Analyzer keeps its
   // running Fourier integrals as states
   'ps_delay', 'ps_rms', 'sym_comp_transform',
 ]);
 
 /** Time resolution of the discontinuous sources (step, stair, sample grid): the jump is taken at t >= T - quantum / 2 [s]. */
-export const SIGNAL_TIME_QUANTUM = 1e-9;
+export const SIGNAL_TIME_QUANTUM = CONTROLLER_TIME_QUANTUM;
 /** Logic threshold of the physical-signal logic inputs (SR flip-flop S / R, sample-and-hold S, integrator reset): high when > 0.5. */
 export const SIGNAL_LOGIC_THRESHOLD = 0.5;
 
@@ -1402,58 +1405,6 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     ];
   },
 
-  ps_pi_ctrl: ({ across, branch, state, dState, params }) => {
-    const Kp = numericParam(params, 'Kp', 1.0);
-    const Ki = numericParam(params, 'Ki', 0.0);
-    const error = across[0] || 0;
-    const integral = state[0];
-    
-    // Saturation limit
-    const limit = numericParam(params, 'limit', Infinity);
-    const u_unsat = Kp * error + Ki * integral;
-    const u = Math.max(-limit, Math.min(limit, u_unsat));
-    
-    // Anti-windup
-    let error_int = error;
-    if (u !== u_unsat && Math.sign(error) === Math.sign(u_unsat)) {
-      error_int = 0; // stop integrating if saturated
-    }
-    
-    return [
-      branch[0] - u,
-      dState[0] - error_int
-    ];
-  },
-
-  ps_pid_ctrl: ({ across, branch, state, dState, params, ctx }) => {
-    const Kp = numericParam(params, 'Kp', 1.0);
-    const Ki = numericParam(params, 'Ki', 0.0);
-    const Kd = numericParam(params, 'Kd', 0.0);
-    const N = numericParam(params, 'N', 100); // derivative filter coef
-    const error = across[0] || 0;
-    const integral = state[0];
-    const filter = state[1];
-    
-    // Derivative filter dynamics: filter_dot = N * (error - filter)
-    const deriv = N * (error - filter);
-    const limit = numericParam(params, 'limit', Infinity);
-    
-    const u_unsat = Kp * error + Ki * integral + Kd * deriv;
-    const u = Math.max(-limit, Math.min(limit, u_unsat));
-    
-    // Anti-windup
-    let error_int = error;
-    if (u !== u_unsat && Math.sign(error) === Math.sign(u_unsat)) {
-      error_int = 0;
-    }
-    
-    return [
-      branch[0] - u,
-      dState[0] - error_int,
-      dState[1] - deriv
-    ];
-  },
-
   // ── DOMAIN APPLIANCES & CUSTOM ─────────────────────────────────────────────
   washing_basket: ({ across, dAcross, branch, params }) => {
     // across[0] is omega (angular velocity)
@@ -1723,26 +1674,6 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     return residuals;
   },
 
-  im_foc_ctrl: ({ across, branch, params, ctx, ports, connectedPorts }) => {
-    const wRefId = ports.find(p => p.toLowerCase().startsWith('w') && p.toLowerCase().includes('ref')) ?? 'wr_ref';
-    const w_ref = inputOrParam({ across, ports, connectedPorts }, wRefId, numericParam(params, 'target_rpm', 1500));
-    const w_rad = w_ref * (2 * Math.PI / 60);
-    ctx.parameters['grid_freq'] = w_rad;
-
-    const isPhysicalOutput = (pId: string) => {
-      const id = pId.toLowerCase();
-      return ['g', 'vabc', 'vis', 'y', 'out'].includes(id) || id.startsWith('out') || id.startsWith('signal');
-    };
-    const outputs = ports.filter(isPhysicalOutput);
-    const residuals = outputs.map((outPort, idx) => {
-      const id = outPort.toLowerCase();
-      if (id === 'vabc') return branch[idx] - 1.0;
-      if (id === 'g') return branch[idx] - 1.0;
-      return branch[idx] - 0.0;
-    });
-    return residuals;
-  },
-
   // ── GAS AND MOIST AIR DOMAINS ──────────────────────────────────────────────
   ma_ref: () => [],
 
@@ -1796,29 +1727,6 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     return [(Pb - Pa) - P_max * ctrl];
   },
 
-  lms_adaptive_filter: ({ across, branch, state, dState, params, ports, connectedPorts }) => {
-    const a = { across, ports, connectedPorts };
-    const x = inputOrParam(a, 'x', 0, 0);
-    const d = inputOrParam(a, 'd', 0, 1);
-    const lr = inputOrParam(a, 'lr', numericParam(params, 'lr', 0.05), 2);
-    const w1 = state[0];
-    const w2 = state[1];
-    const x_prev = state[2];
-
-    const y = w1 * x + w2 * x_prev;
-    const err = d - y;
-
-    return [
-      branch[0] - y,
-      branch[1] - err,
-      branch[2] - w1,
-      branch[3] - w2,
-      dState[0] - lr * err * x,
-      dState[1] - lr * err * x_prev,
-      dState[2] - (x - x_prev) / 0.01
-    ];
-  },
-
   neural_neuron_learning: ({ across, branch, state, dState, params, ports, connectedPorts }) => {
     const a = { across, ports, connectedPorts };
     const x1 = inputOrParam(a, 'x1', 0, 0);
@@ -1844,93 +1752,6 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
       dState[0] - lr * err * f_prime * x1,
       dState[1] - lr * err * f_prime * x2,
       dState[2] - lr * err * f_prime
-    ];
-  },
-
-  rl_q_learning_controller: ({ across, branch, params, ctx, nodeId }) => {
-    const error = across[0] !== undefined ? across[0] : 0;
-    const reward = across[1] !== undefined ? across[1] : 0;
-    const reset = across[2] !== undefined ? !!across[2] : false;
-
-    const alpha = numericParam(params, 'alpha', 0.1);
-    const gamma = numericParam(params, 'gamma', 0.9);
-    const epsilon = numericParam(params, 'epsilon', 0.1);
-    const nS = Math.max(1, Math.round(numericParam(params, 'numStates', 5)));
-    const nA = Math.max(1, Math.round(numericParam(params, 'numActions', 3)));
-
-    const actions: number[] = [];
-    if (nA === 1) {
-      actions.push(0.0);
-    } else {
-      for (let i = 0; i < nA; i++) {
-        actions.push(-1.0 + (2.0 * i) / (nA - 1));
-      }
-    }
-
-    let cached = rlStateCache.get(nodeId);
-    if (!cached || cached.qTable.length !== nS || cached.qTable[0]?.length !== nA || ctx.time < 1e-5 || reset) {
-      cached = {
-        qTable: Array.from({ length: nS }, () => Array(nA).fill(0)),
-        lastStateIdx: Math.floor(nS / 2),
-        lastActionIdx: Math.floor(nA / 2),
-        hasPrev: 0,
-        lastUpdateTime: -1.0,
-        currentAction: actions[Math.floor(nA / 2)] ?? 0,
-        currentMaxQ: 0.0
-      };
-      rlStateCache.set(nodeId, cached);
-    }
-
-    const Ts = 0.05;
-    if (ctx.time - cached.lastUpdateTime >= Ts - 1e-12) {
-      let s = Math.floor(nS / 2);
-      if (nS === 5) {
-        if (error < -1.0) s = 0;
-        else if (error < -0.1) s = 1;
-        else if (error > 1.0) s = 4;
-        else if (error > 0.1) s = 3;
-        else s = 2;
-      } else {
-        const range = 3.0;
-        const normalized = (error + 1.5) / range;
-        s = Math.max(0, Math.min(nS - 1, Math.floor(normalized * nS)));
-      }
-
-      if (cached.hasPrev === 1 && !reset) {
-        const maxQNext = Math.max(...(cached.qTable[s] ?? [0]));
-        const targetQ = reward + gamma * maxQNext;
-        const currentQ = cached.qTable[cached.lastStateIdx]?.[cached.lastActionIdx] ?? 0;
-        if (cached.qTable[cached.lastStateIdx]) {
-          cached.qTable[cached.lastStateIdx][cached.lastActionIdx] = currentQ + alpha * (targetQ - currentQ);
-        }
-      }
-
-      let aIdx = Math.floor(nA / 2);
-      const pseudoRand = Math.abs(Math.sin((ctx.time + 0.001) * 12345.67 + s * 987.65)) % 1;
-      if (pseudoRand < epsilon) {
-        aIdx = Math.floor(pseudoRand * nA) % nA;
-      } else {
-        let maxVal = cached.qTable[s]?.[0] ?? 0;
-        aIdx = 0;
-        for (let i = 1; i < nA; i++) {
-          if ((cached.qTable[s]?.[i] ?? 0) > maxVal) {
-            maxVal = cached.qTable[s][i];
-            aIdx = i;
-          }
-        }
-      }
-
-      cached.currentAction = actions[aIdx] ?? 0;
-      cached.currentMaxQ = Math.max(...(cached.qTable[s] ?? [0]));
-      cached.lastStateIdx = s;
-      cached.lastActionIdx = aIdx;
-      cached.hasPrev = 1;
-      cached.lastUpdateTime = ctx.time;
-    }
-
-    return [
-      branch[0] - cached.currentAction,
-      branch[1] - cached.currentMaxQ
     ];
   },
 
@@ -1969,7 +1790,8 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const v_mag = Math.max(0, Kp * error + integral + deriv);
 
     // 2. Stator Voltage Generation
-    const theta_v = w_ref * ctx.time;
+    // w_ref is a MECHANICAL speed command (like omega): the stator frequency of the V/f set is the electrical speed P w_ref (157 rad/s, P = 2 -> 50 Hz)
+    const theta_v = P * w_ref * ctx.time;
     const va = v_mag * Math.sin(theta_v);
     const vb = v_mag * Math.sin(theta_v - 2 * Math.PI / 3);
     const vc = v_mag * Math.sin(theta_v + 2 * Math.PI / 3);
@@ -1982,8 +1804,8 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const kr = Lm / Lr;
     const tr = Lr / Rr;
 
-    const dias = (vAlpha - (Rs + kr * kr * Rr) / sigma * ias + (kr / (sigma * tr)) * psiar + (kr * P * omega / sigma) * psibr) / (sigma * Ls);
-    const dibs = (vBeta - (Rs + kr * kr * Rr) / sigma * ibs + (kr / (sigma * tr)) * psibr - (kr * P * omega / sigma) * psiar) / (sigma * Ls);
+    const dias = (vAlpha - (Rs + kr * kr * Rr) * ias + (kr / tr) * psiar + (kr * P * omega) * psibr) / (sigma * Ls);
+    const dibs = (vBeta - (Rs + kr * kr * Rr) * ibs + (kr / tr) * psibr - (kr * P * omega) * psiar) / (sigma * Ls);
     const dpsiar = (Lm / tr) * ias - (1 / tr) * psiar - P * omega * psibr;
     const dpsibr = (Lm / tr) * ibs - (1 / tr) * psibr + P * omega * psiar;
 
@@ -2247,61 +2069,6 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   },
 
   // ── ADVANCED CONTROL & OBSERVERS ───────────────────────────────────────────
-  luenberger_observer: ({ across, branch, state, dState, params }) => {
-    const A = -1;
-    // Scalar observer gain: the first element of the gain list ("[10; 10]" -> 10).
-    const L = vectorParam(params, 'L', [10])[0];
-    const u = across[0] || 0;
-    const y = across[1] || 0;
-    const xhat = state[0];
-    const dxhat = dState[0];
-    return [
-      branch[0] - xhat,
-      dxhat - (A * xhat + u + L * (y - xhat))
-    ];
-  },
-  im_flux_observer: ({ across, branch, state, dState, params }) => {
-    const Rs = numericParam(params, 'Rs', 0.1);
-    const Lm = numericParam(params, 'Lm', 0.05);
-    const Lr = numericParam(params, 'Lr', 0.06);
-    const Rr = numericParam(params, 'Rr', 0.08);
-    const Tr = Lr / Rr;
-    const is = across[0] || 0;
-    const wr = across[1] || 0;
-    const psi_d = state[0];
-    const psi_q = state[1];
-    const dPsi_d = dState[0];
-    const dPsi_q = dState[1];
-    return [
-      branch[0] - psi_d,
-      branch[1] - (psi_d / Math.max(0.01, Lm)),
-      dPsi_d - ((Lm / Tr) * is - (1 / Tr) * psi_d - wr * psi_q),
-      dPsi_q - (- (1 / Tr) * psi_q + wr * psi_d)
-    ];
-  },
-  pmsm_foc: ({ across, branch, state, dState, params }) => {
-    const Kp = numericParam(params, 'Kp', 5.0);
-    const Ki = numericParam(params, 'Ki', 100.0);
-    const ref_speed = across[0] || 0;
-    const iabc = across[1] || 0;
-    const w = across[2] || 0;
-    const theta = across[3] || 0;
-    const id = iabc * Math.cos(theta);
-    const iq = iabc * Math.sin(theta);
-    const id_ref = 0;
-    const iq_ref = Math.max(-50, Math.min(50, (ref_speed - w) * 2.0));
-    const err_d = id_ref - id;
-    const err_q = iq_ref - iq;
-    const vd = Kp * err_d + state[0];
-    const vq = Kp * err_q + state[1];
-    const va = vd * Math.cos(theta) - vq * Math.sin(theta);
-    return [
-      branch[0] - va,
-      branch[1] - w,
-      dState[0] - Ki * err_d,
-      dState[1] - Ki * err_q
-    ];
-  },
   clarke_transform: (args) => {
     // Abc -> alpha-beta-zero (Simscape "Clarke Transform"; Clarke 1943, amplitude-invariant form):
     //   alpha = (2/3)(a - b/2 - c/2),  beta = (b - c)/sqrt(3),  zero = (a + b + c)/3
@@ -2811,14 +2578,6 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     ];
   },
 
-  ps_smith_predictor: ({ across, branch, state, dState, params }) => {
-    const T = numericParam(params, 'tau', 0.1);
-    return [
-      dState[0] - ((across[0] || 0) - state[0]) / T,
-      branch[0] - state[0]
-    ];
-  },
-
   ps_sine_3phase: (a) => {
     // Balanced positive-sequence set (Simscape "Sine Generator" convention, phase a reference):
     //   a = m Vpk sin(wt), b = m Vpk sin(wt - 2pi/3), c = m Vpk sin(wt + 2pi/3),  wt = 2*pi*f*t + ang   [rad]
@@ -2847,21 +2606,6 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
       dState[1] - (wn * wn * u - 2 * zeta * wn * state[1] - wn * wn * state[0]),
       branch[0] - state[0]
     ];
-  },
-
-  ps_state_feedback: ({ across, branch, params }) => {
-    const x = across[0] || 0;
-    // Scalar feedback gain: the first element of the gain list ("[1 2]" -> 1).
-    const K = vectorParam(params, 'K', [1.0])[0];
-    return [branch[0] - (-K * x)];
-  },
-
-  ps_sliding_mode: ({ across, branch, params }) => {
-    const s = across[0] || 0;
-    const eta = numericParam(params, 'k', 10);
-    const limit = numericParam(params, 'boundary_layer', 0.05);
-    const sat = Math.max(-1.0, Math.min(1.0, s / limit));
-    return [branch[0] - (-eta * sat)];
   },
 
   ps_stair_gen: ({ branch, params, ctx }) => {
@@ -2958,68 +2702,7 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const c = v1 * Math.cos(wt + sh) + v2 * Math.cos(wt - sh) + v0 * Math.cos(wt);
     return [args.branch[0] - a, args.branch[1] - b, args.branch[2] - c];
   },
-  quad_decoder: ({ across, branch, state, dState }) => {
-    return [
-      dState[0] - 0,
-      branch[0] - (state[0] || 0),
-      branch[1] - 0
-    ];
-  },
-
-  resolver_to_digital: ({ across, branch, state, dState }) => {
-    const s = across[0] || 0;
-    const c = across[1] || 0;
-    const theta = Math.atan2(s, c);
-    return [
-      dState[0] - 0,
-      branch[0] - theta,
-      branch[1] - 0
-    ];
-  },
-
   // ── BLDC & POWER ELECTRONICS CONTROL ────────────────────────────────────────
-  bldc_commutation: ({ across, branch }) => {
-    const theta = across[0] || 0;
-    const ha = Math.sin(theta) > 0 ? 1 : 0;
-    const hb = Math.sin(theta - 2*Math.PI/3) > 0 ? 1 : 0;
-    const hc = Math.sin(theta + 2*Math.PI/3) > 0 ? 1 : 0;
-    return [
-      branch[0] - ha,
-      branch[1] - hb,
-      branch[2] - hc
-    ];
-  },
-
-  bldc_current_ctrl: ({ across, branch }) => {
-    const error = (across[0] || 0) - (across[1] || 0);
-    return [branch[0] - error * 5.0];
-  },
-
-  bldc_pwm_ctrl: ({ across, branch }) => {
-    const ctrl = across[0] || 0;
-    return [branch[0] - Math.max(0, Math.min(1.0, ctrl))];
-  },
-
-  dcdc_ctrl: ({ across, branch }) => {
-    const error = (across[0] || 0) - (across[1] || 0);
-    return [branch[0] - Math.max(0.01, Math.min(0.99, 0.5 + error * 0.1))];
-  },
-
-  pfc_rectifier_ctrl: ({ across, branch }) => {
-    const V_out = across[0] || 0;
-    const V_ref = across[1] || 0;
-    const I_ac = across[2] || 0;
-    const duty = (V_ref - V_out) * 0.05 + Math.abs(I_ac) * 0.01;
-    return [branch[0] - Math.max(0, Math.min(0.95, duty))];
-  },
-
-  cycloconverter_ctrl: ({ across, branch, ctx }) => {
-    const f_out = across[0] || 10;
-    const w = 2 * Math.PI * f_out;
-    const firing_angle = 45 + 30 * Math.sin(w * ctx.time);
-    return [branch[0] - firing_angle];
-  },
-
   pwm_3ph_3level: (args) => {
     // Three-level (NPC) phase-disposition PWM (Holmes and Lipo, "Pulse Width Modulation for Power Converters", ch. 3 level-shifted
     // carriers; Simscape Electrical "PWM Generator (Three-Level)"). Reference vector m_abc = vabc in [-1, 1] (unit = Vdc/2), two
@@ -3181,89 +2864,6 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
       const residual = (branch[index] ?? 0) - gate;
       return residual === 0 ? 0 : residual;
     });
-  },
-
-  dc_current_ctrl: ({ across, branch }) => {
-    const error = (across[0] || 0) - (across[1] || 0);
-    return [branch[0] - error * 2.0];
-  },
-
-  dc_voltage_ctrl: ({ across, branch }) => {
-    const error = (across[0] || 0) - (across[1] || 0);
-    return [branch[0] - error * 5.0];
-  },
-
-  hysteresis_ctrl_3ph: ({ across, branch }) => {
-    const error_a = (across[0] || 0) - (across[3] || 0);
-    const error_b = (across[1] || 0) - (across[4] || 0);
-    const error_c = (across[2] || 0) - (across[5] || 0);
-    return [
-      branch[0] - (error_a > 0.05 ? 1.0 : (error_a < -0.05 ? 0.0 : 0.5)),
-      branch[1] - (error_b > 0.05 ? 1.0 : (error_b < -0.05 ? 0.0 : 0.5)),
-      branch[2] - (error_c > 0.05 ? 1.0 : (error_c < -0.05 ? 0.0 : 0.5))
-    ];
-  },
-
-  velocity_ctrl: ({ across, branch }) => {
-    const error = (across[0] || 0) - (across[1] || 0);
-    return [branch[0] - error * 10.0];
-  },
-
-  im_scalar_ctrl: ({ across, branch }) => {
-    const w_ref = across[0] || 1500;
-    const V_mag = Math.max(0.1, Math.min(1.0, Math.abs(w_ref) / 1500));
-    return [
-      branch[0] - V_mag,
-      branch[1] - w_ref
-    ];
-  },
-
-  im_dtc_ctrl: ({ across, branch }) => {
-    const error_tq = (across[0] || 0) - (across[1] || 0);
-    const error_flux = (across[2] || 0) - (across[3] || 0);
-    return [
-      branch[0] - (error_tq > 5 ? 1 : (error_tq < -5 ? -1 : 0)),
-      branch[1] - (error_flux > 0.01 ? 1 : 0)
-    ];
-  },
-
-  im_curr_ctrl: ({ across, branch }) => {
-    // idq_ref / idq / vdq_ref are single scalar ports: they carry the d channel. The q-channel row read vdq_ff and
-    // v_max (across[2], across[3]) as if they were idq_ref_q / idq_q and had no unknown (F-025); it is removed until
-    // vector ports exist (WP-20). The gain 2.0 is the unexposed placeholder tracked by params-dead (WP-20).
-    const error_d = (across[0] || 0) - (across[1] || 0);
-    return [
-      branch[0] - error_d * 2.0
-    ];
-  },
-
-  pmsm_curr_ctrl: ({ across, branch }) => {
-    // Same single d-channel mapping as im_curr_ctrl (see there).
-    const error_d = (across[0] || 0) - (across[1] || 0);
-    return [
-      branch[0] - error_d * 2.0
-    ];
-  },
-
-  pmsm_ref_gen: ({ across, branch }) => {
-    const tq_ref = across[1] || 0;
-    return [
-      branch[0] - 0.0,
-      branch[1] - tq_ref * 0.5
-    ];
-  },
-
-  pmsm_field_weakening: ({ across, branch }) => {
-    const speed = across[0] || 0;
-    const limit = 200;
-    const id_fw = speed > limit ? -(speed - limit) * 0.1 : 0.0;
-    return [branch[0] - id_fw];
-  },
-
-  pmsm_tq_est: ({ across, branch }) => {
-    const iq = across[1] || 0;
-    const Kt = 0.2;
-    return [branch[0] - (Kt * iq)];
   },
 
   // ── MECHANICAL & MULTIBODY ──────────────────────────────────────────────────
@@ -3468,29 +3068,8 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     return [branch[0] - S];
   },
 
-  ma_properties: () => []
+  ma_properties: () => [],
+
+  // WP-20b: controllers, estimators, motor / converter controllers and learning blocks (vlabControllers.ts)
+  ...controllerEquations,
 };
-
-const rlStateCache = new Map<string, {
-  qTable: number[][];
-  lastStateIdx: number;
-  lastActionIdx: number;
-  hasPrev: number;
-  lastUpdateTime: number;
-  currentAction: number;
-  currentMaxQ: number;
-}>();
-
-/**
- * Run `fn` and then restore every equation cache that outlives a single evaluation (the RL Q-table). The assembler's
- * structural probe evaluates each factory once at assembly time; that must not advance a running block's memory.
- */
-export function withStatefulEquationCaches<T>(fn: () => T): T {
-  const snapshot = new Map([...rlStateCache].map(([k, v]) => [k, structuredClone(v)] as const));
-  try {
-    return fn();
-  } finally {
-    rlStateCache.clear();
-    snapshot.forEach((v, k) => rlStateCache.set(k, v));
-  }
-}

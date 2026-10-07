@@ -37,9 +37,7 @@ export const CONFLICT_IS_INPUT: string[] = [];
 
 /** read as across AND driven; physics says the block produces it (the readback is a residual artefact). */
 export const CONFLICT_IS_OUTPUT = [
-  'ma_selector.t', 'pmsm_tq_est.tq_est',
-  // outputs the old name vocabulary called conserving (s, p): the equation still reads them back as across
-  'hysteresis_ctrl_3ph.s',
+  'ma_selector.t',
 ];
 
 /**
@@ -53,19 +51,10 @@ export const READ_BUT_OUTPUT: string[] = [];
 
 /** not read and not driven (equation does not implement it): decided from the block physics, input. */
 export const SILENT_IS_INPUT = [
-  'ps_smith_predictor.y', 'ps_state_feedback.x', 'ps_sliding_mode.y', 'quad_decoder.a',
-  'im_curr_ctrl.vdq_ff', 'im_curr_ctrl.v_max', 'pmsm_curr_ctrl.vdq_ff', 'pmsm_curr_ctrl.v_max',
-  'scope.in1', 'bldc_commutation.dir',
-  'bldc_current_ctrl.reset', 'bldc_current_ctrl.hall', 'bldc_current_ctrl.dir',
-  'bldc_pwm_ctrl.is', 'bldc_pwm_ctrl.reset', 'bldc_pwm_ctrl.hall', 'bldc_pwm_ctrl.dir',
-  'dcdc_ctrl.ff', 'dcdc_ctrl.reset', 'pfc_rectifier_ctrl.vabc_sens', 'pfc_rectifier_ctrl.iabc_sens',
-  'cycloconverter_ctrl.f_ref', 'cycloconverter_ctrl.vabc', 'cycloconverter_ctrl.vcyc', 'cycloconverter_ctrl.icyc',
-  'ps_pi_ctrl.reset', 'ps_pid_ctrl.reset', 'ps_state_feedback.reset',
-  'dc_current_ctrl.v_max', 'dc_current_ctrl.reset', 'dc_voltage_ctrl.reset', 'velocity_ctrl.tq_sat', 'velocity_ctrl.reset',
-  'im_foc_ctrl.imr_ref', 'im_foc_ctrl.iabc', 'im_foc_ctrl.wr', 'im_foc_ctrl.vdc', 'im_curr_ctrl.reset',
-  'quad_decoder.b', 'quad_decoder.z', 'resolver_to_digital.vy', 'pmsm_curr_ctrl.reset',
-  'pmsm_ref_gen.tq_ref', 'pmsm_ref_gen.vdc', 'pmsm_foc.vdc_s', 'pmsm_field_weakening.vdq', 'pmsm_field_weakening.v_max',
-  'pmsm_tq_est.idq', 'pwm_3ph_2level.amp', 'pwm_3ph_2level.ma', 'pwm_3ph_2level.mb', 'pwm_3ph_2level.mc',
+  // WP-20b: the controllers read their optional inputs now; what stays silent is by design (a memoryless state feedback has no reset,
+  // the open-loop cycloconverter law does not use the grid / converter voltage)
+  'ps_state_feedback.reset', 'cycloconverter_ctrl.vabc', 'cycloconverter_ctrl.vcyc',
+  'scope.in1', 'pwm_3ph_2level.amp', 'pwm_3ph_2level.ma', 'pwm_3ph_2level.mb', 'pwm_3ph_2level.mc',
   'ps_terminator.u', 'outport.in',
 ];
 

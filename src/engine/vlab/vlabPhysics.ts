@@ -15,6 +15,7 @@ import { numericParam, stringParam } from './vlabParams';
 import { twoLevelReferences, triangularCarrier, beltEndStiffness, SIGNAL_TIME_QUANTUM, SIGNAL_LOGIC_THRESHOLD } from './vlabEquations';
 import { ddtVector } from './vlabDiscretization';
 import { cloneHistory, recordHistory } from './vlabHistory';
+import { RESET_BLOCKS, SAMPLE_PERIODS } from './vlabControllers';
 import { RHO_WATER_LIQUID, STANDARD_ATMOSPHERE, moistAirState } from './vlabFluidProperties';
 
 // SDIRK-3 Butcher tableau constants
@@ -1025,6 +1026,13 @@ export class VLabPhysicsEngine {
           const carrier = triangularCarrier(time, numericParam(params, 'f_sw', 5000));
           twoLevelReferences(argsLike, time).forEach(ref => indicators.push(ref - carrier));
         }
+
+        // WP-20b: sampled blocks update on the grid k Ts (the step is cut at every sample), the encoder decoder also at every
+        // edge of A / B / Z, and the blocks with an external reset at its level change
+        const samplePeriod = SAMPLE_PERIODS[type];
+        if (samplePeriod) indicators.push(Math.sin(Math.PI * (time + SIGNAL_TIME_QUANTUM) / samplePeriod(params)));
+        if (type === 'quad_decoder') for (const id of ['a', 'b', 'z']) indicators.push(getPortVal(id) - SIGNAL_LOGIC_THRESHOLD);
+        if (RESET_BLOCKS.has(type)) indicators.push(getPortVal('reset') - SIGNAL_LOGIC_THRESHOLD);
 
         return indicators;
       };

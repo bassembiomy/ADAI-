@@ -5153,11 +5153,17 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Physical",
             "direction": "out",
             "quantity": "phase commutation pattern",
-            "unit": "1"
+            "unit": "1",
+            "width": 3,
+            "channelNames": [
+              "a",
+              "b",
+              "c"
+            ]
           }
         ],
-        "equation": "BLDC Commutation Logic governing physical equation",
-        "description": "Physical component model for BLDC Commutation Logic."
+        "equation": "Hall code H = 4*Ha + 2*Hb + Hc:  5: A+B-,  4: A+C-,  6: B+C-,  2: B+A-,  3: C+A-,  1: C+B-,  0 / 7: all floating\nabc = [+1 upper, -1 lower, 0 floating],  dir < 0 reverses the polarity",
+        "description": "Six-step (120 degree) commutation logic: decodes the three Hall sensors (code 4*Ha + 2*Hb + Hc) into the energised pair of phases. Direction input below zero reverses the torque. The table matches the trapezoidal back-EMF of the BLDC motor block (Hall A high over 30 to 210 electrical degrees)."
       },
       {
         "id": "bldc_current_ctrl",
@@ -5175,6 +5181,13 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 10,
             "unit": "",
             "label": "Int Gain"
+          },
+          "v_max": {
+            "value": 24,
+            "unit": "V",
+            "label": "Voltage limit",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -5220,11 +5233,17 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Physical",
             "direction": "out",
             "quantity": "phase voltage reference",
-            "unit": "V"
+            "unit": "V",
+            "width": 3,
+            "channelNames": [
+              "a",
+              "b",
+              "c"
+            ]
           }
         ],
-        "equation": "BLDC Current Controller governing physical equation",
-        "description": "Physical component model for BLDC Current Controller."
+        "equation": "e = is_ref - is,  v = Kp*e + I,  u = clamp(v, -v_max, +v_max),  dI/dt = Ki*e + (Ki/Kp)*(u - v)\nvabc = pattern(hall, dir)*u   (pattern = +1 / -1 / 0 of the six-step table)",
+        "description": "BLDC current controller: PI on the DC-link current error with output limit and back-calculation anti-windup, the voltage is applied to the pair of phases selected by the Hall code and direction (six-step commutation)."
       },
       {
         "id": "bldc_pwm_ctrl",
@@ -5237,6 +5256,18 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 20000,
             "unit": "Hz",
             "label": "PWM Freq"
+          },
+          "Kp": {
+            "value": 0.1,
+            "unit": "1/A",
+            "label": "Prop Gain",
+            "min": 0
+          },
+          "Ki": {
+            "value": 10,
+            "unit": "1/(A*s)",
+            "label": "Int Gain",
+            "min": 0
           }
         },
         "ports": [
@@ -5282,11 +5313,17 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Physical",
             "direction": "out",
             "quantity": "gate signal",
-            "unit": "1"
+            "unit": "1",
+            "width": 3,
+            "channelNames": [
+              "a",
+              "b",
+              "c"
+            ]
           }
         ],
-        "equation": "BLDC Current Controller with PWM governing physical equation",
-        "description": "Physical component model for BLDC Current Controller with PWM."
+        "equation": "e = is_ref - is,  u = clamp(Kp*e + I, -1, 1) (back-calculation anti-windup)\nduty d_k = (1 + pattern_k(hall, dir)*u)/2,  g_k = +1 if d_k >= carrier(freq*t) else -1",
+        "description": "BLDC current controller with PWM: the current PI output is the modulation of the energised pair (six-step pattern from Hall and direction; the floating phase sits at mid-rail) compared with a triangular carrier of frequency freq. g is the leg-state vector (+1 upper switch on) for the inverter m_abc input."
       },
       {
         "id": "dcdc_ctrl",
@@ -5299,6 +5336,18 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 48,
             "unit": "V",
             "label": "Ref Voltage"
+          },
+          "Kp": {
+            "value": 0.01,
+            "unit": "1/V",
+            "label": "Prop Gain",
+            "min": 0
+          },
+          "Ki": {
+            "value": 1,
+            "unit": "1/(V*s)",
+            "label": "Int Gain",
+            "min": 0
           }
         },
         "ports": [
@@ -5340,8 +5389,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "1"
           }
         ],
-        "equation": "DC-DC Voltage Controller governing physical equation",
-        "description": "Physical component model for DC-DC Voltage Controller."
+        "equation": "e = vRef - v,  duty = clamp(FF + Kp*e + I, 0, 1),  dI/dt = Ki*e + (Ki/Kp)*(duty - (FF + Kp*e + I))",
+        "description": "DC-DC voltage controller: PI on the output voltage error plus a duty-cycle feed-forward FF, duty limited to [0, 1] with back-calculation anti-windup. An open vRef uses the v_ref parameter."
       },
       {
         "id": "pfc_rectifier_ctrl",
@@ -5393,14 +5442,26 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "pos": "left",
             "label": "VabcSens (pu)",
             "domain": "Physical",
-            "direction": "in"
+            "direction": "in",
+            "width": 3,
+            "channelNames": [
+              "a",
+              "b",
+              "c"
+            ]
           },
           {
             "id": "iabc_sens",
             "pos": "left",
             "label": "IabcSens (pu)",
             "domain": "Physical",
-            "direction": "in"
+            "direction": "in",
+            "width": 3,
+            "channelNames": [
+              "a",
+              "b",
+              "c"
+            ]
           },
           {
             "id": "vabc_ref",
@@ -5409,7 +5470,13 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Physical",
             "direction": "out",
             "quantity": "modulation reference",
-            "unit": "1"
+            "unit": "1",
+            "width": 3,
+            "channelNames": [
+              "a",
+              "b",
+              "c"
+            ]
           },
           {
             "id": "vis",
@@ -5421,8 +5488,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "*"
           }
         ],
-        "equation": "PFC Rectifier Controller governing physical equation",
-        "description": "Physical component model for PFC Rectifier Controller."
+        "equation": "theta = atan2(v_beta, v_alpha) of VabcSens,  (vd, vq), (id, iq) = Park(Clarke(.), theta)\nid* = Kp_v*(VdcRef - VdcSens) + I,  dI/dt = Ki_v*(VdcRef - VdcSens),  iq* = -QRef\nv_conv,dq = v_dq - Kp_i*(i*_dq - i_dq),  VabcRef = clamp(InvPark(v_conv,dq, theta), -1, 1),  vis = id*",
+        "description": "PFC (active front-end) rectifier controller in per unit of the modulator range: DC-voltage PI sets the in-phase current reference, QRef the reactive one, a proportional dq current loop with grid-voltage feed-forward produces the modulation reference VabcRef. The grid angle is taken from the sensed voltage vector. An open QRef means unity power factor."
       },
       {
         "id": "cycloconverter_ctrl",
@@ -5440,6 +5507,11 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 0.1,
             "unit": "s",
             "label": "Bank Delay"
+          },
+          "phase_deg": {
+            "value": 0,
+            "unit": "deg",
+            "label": "Output phase offset"
           }
         },
         "ports": [
@@ -5462,7 +5534,13 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "pos": "left",
             "label": "vabc",
             "domain": "Physical",
-            "direction": "in"
+            "direction": "in",
+            "width": 3,
+            "channelNames": [
+              "a",
+              "b",
+              "c"
+            ]
           },
           {
             "id": "vcyc",
@@ -5484,8 +5562,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "label": "P",
             "domain": "Physical",
             "direction": "out",
-            "quantity": "gate pulses",
-            "unit": "1"
+            "quantity": "firing angle",
+            "unit": "rad"
           },
           {
             "id": "vis",
@@ -5497,8 +5575,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "*"
           }
         ],
-        "equation": "Cycloconverter Controller governing physical equation",
-        "description": "Physical component model for Cycloconverter Controller."
+        "equation": "d theta_o/dt = 2*pi*fRef,  r = m*clamp(VRef, 0, 1)\ncos(alpha) = r*sin(theta_o + phase)   (cosine-wave crossing),  P = alpha [rad]\nbank = sign(icyc), blocked for bank_limit seconds at a polarity change (vis = +1 / -1 / 0)",
+        "description": "Cycloconverter controller, cosine-wave crossing method: outputs the firing angle in radians (multiply by 180/pi for the degree input alpha of the thyristor 6-pulse generator) that makes the converter output follow r*sin(2*pi*fRef*t), and the bank selection from the output current polarity with a blocking time between banks. Use one controller per output phase (phase offset 0, -120, +120 degrees). Vabc and Vcyc are not used by this open-loop law."
       },
       {
         "id": "ps_pi_ctrl",
@@ -5523,6 +5601,12 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "label": "Saturation",
             "min": 0,
             "exclusiveMin": true
+          },
+          "Kb": {
+            "value": 10,
+            "unit": "1/s",
+            "label": "Anti-windup gain Kb",
+            "min": 0
           }
         },
         "ports": [
@@ -5550,8 +5634,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "*"
           }
         ],
-        "equation": "Discrete PI Controller governing physical equation",
-        "description": "Physical component model for Discrete PI Controller."
+        "equation": "v = Kp*e + I,  u = clamp(v, -limit, +limit)\ndI/dt = Ki*e + Kb*(u - v)   (back-calculation anti-windup; Kb = 0: none, Simulink default Kb = Ki/Kp)\nReset > 0.5: I = 0",
+        "description": "Parallel-form PI controller with output saturation and back-calculation anti-windup (Simulink PID Controller). The integral state is the integral term, so it stops growing when the output saturates; Kb sets how fast it unwinds. A high Reset input clears the integrator."
       },
       {
         "id": "ps_pid_ctrl",
@@ -5588,6 +5672,12 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "label": "Saturation",
             "min": 0,
             "exclusiveMin": true
+          },
+          "Kb": {
+            "value": 2,
+            "unit": "1/s",
+            "label": "Anti-windup gain Kb",
+            "min": 0
           }
         },
         "ports": [
@@ -5615,8 +5705,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "*"
           }
         ],
-        "equation": "u = PI + D",
-        "description": "Standard discrete-time PID controller with derivative filtering and saturation limits."
+        "equation": "F: dF/dt = N*(e - F),  D = Kd*N*(e - F)   (derivative filter, U(s) = (Kp + Ki/s + Kd*N*s/(s + N))*E(s))\nv = Kp*e + I + D,  u = clamp(v, -limit, +limit)\ndI/dt = Ki*e + Kb*(u - v)   (back-calculation anti-windup)\nReset > 0.5: I = 0, F = e",
+        "description": "Parallel-form PID controller with first-order derivative filter (coefficient N), output saturation and back-calculation anti-windup (Simulink PID Controller). A high Reset input clears the integrator and the filter."
       },
       {
         "id": "ps_lpf",
@@ -5829,6 +5919,29 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "label": "Dead Time",
             "min": 0,
             "exclusiveMin": true
+          },
+          "theta": {
+            "value": 0.1,
+            "unit": "s",
+            "label": "Model dead time",
+            "min": 0
+          },
+          "Km": {
+            "value": 1,
+            "unit": "1",
+            "label": "Model gain"
+          },
+          "Kp": {
+            "value": 1,
+            "unit": "1",
+            "label": "PI proportional gain",
+            "min": 0
+          },
+          "Ki": {
+            "value": 10,
+            "unit": "1/s",
+            "label": "PI integral gain",
+            "min": 0
           }
         },
         "ports": [
@@ -5856,8 +5969,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "*"
           }
         ],
-        "equation": "Smith Predictor governing physical equation",
-        "description": "Physical component model for Smith Predictor."
+        "equation": "tau*dym/dt + ym = Km*u   (delay-free model)\ne_c = r - (y + ym - ym(t - theta))\nu = Kp*e_c + I,  dI/dt = Ki*e_c",
+        "description": "Smith predictor (O. J. M. Smith, 1957) around a PI controller: the internal model (gain Km, lag tau, dead time theta) predicts the plant output without delay, so the controller closes its loop on y + ym - ym(t - theta). With an exact model the loop behaves as the delay-free loop and y is its response shifted by theta."
       },
       {
         "id": "ps_sine_3phase",
@@ -5969,6 +6082,11 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": "[1 2]",
             "unit": "",
             "label": "Gain K"
+          },
+          "Nr": {
+            "value": 1,
+            "unit": "1",
+            "label": "Reference gain Nr"
           }
         },
         "ports": [
@@ -5984,7 +6102,12 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "pos": "left",
             "label": "x",
             "domain": "Physical",
-            "direction": "in"
+            "direction": "in",
+            "width": 2,
+            "channelNames": [
+              "x1",
+              "x2"
+            ]
           },
           {
             "id": "u",
@@ -6003,8 +6126,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "direction": "in"
           }
         ],
-        "equation": "State-Feedback Controller governing physical equation",
-        "description": "Physical component model for State-Feedback Controller."
+        "equation": "u = Nr*r - K*x,   K = [k1 k2], x = [x1; x2]",
+        "description": "Full-state feedback u = Nr*r - K*x on the 2-element state vector x (the gain list K must have 2 entries) with a reference gain Nr. The law has no memory, so the Reset input has no effect. Feed x from the Luenberger Observer estimate."
       },
       {
         "id": "ps_sliding_mode",
@@ -6056,8 +6179,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "*"
           }
         ],
-        "equation": "Sliding Mode Controller governing physical equation",
-        "description": "Physical component model for Sliding Mode Controller."
+        "equation": "e = y - r,  s = de/dt + lambda*e\nu = -k*sat(s/phi),  sat = clamp(., -1, 1)   (phi = boundary_layer; phi = 0: u = -k*sign(s))",
+        "description": "Boundary-layer sliding-mode controller for a relative-degree-2 plant (Slotine and Li): the surface s = de/dt + lambda*e is driven to zero by u = -k*sat(s/phi); inside the layer |s| < phi the law is linear (no chattering)."
       },
       {
         "id": "ps_stair_gen",
@@ -6191,8 +6314,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "V"
           }
         ],
-        "equation": "DC Current Controller governing physical equation",
-        "description": "Physical component model for DC Current Controller."
+        "equation": "e = iRef - i,  vRef = clamp(Kp*e + I, -vMax, +vMax),  dI/dt = Ki*e + (Ki/Kp)*(vRef - (Kp*e + I)),  Reset > 0.5: I = 0",
+        "description": "DC (armature) current controller: PI on the current error, voltage reference limited to +-vMax (port when wired, else the v_max parameter) with back-calculation anti-windup."
       },
       {
         "id": "dc_voltage_ctrl",
@@ -6244,8 +6367,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "1"
           }
         ],
-        "equation": "DC Voltage Controller governing physical equation",
-        "description": "Physical component model for DC Voltage Controller."
+        "equation": "e = vRef - v,  duty = clamp(Kp*e + I, 0, 1),  dI/dt = Ki*e + (Ki/Kp)*(duty - (Kp*e + I)),  Reset > 0.5: I = 0",
+        "description": "DC voltage controller: PI on the voltage error, duty cycle limited to [0, 1] with back-calculation anti-windup."
       },
       {
         "id": "hysteresis_ctrl_3ph",
@@ -6258,6 +6381,13 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 0.1,
             "unit": "A",
             "label": "Hyst Band"
+          },
+          "ts": {
+            "value": 0.00002,
+            "unit": "s",
+            "label": "Sample time",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -6266,14 +6396,26 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "pos": "left",
             "label": "iabc*",
             "domain": "Physical",
-            "direction": "in"
+            "direction": "in",
+            "width": 3,
+            "channelNames": [
+              "a",
+              "b",
+              "c"
+            ]
           },
           {
             "id": "iabc",
             "pos": "left",
             "label": "iabc",
             "domain": "Physical",
-            "direction": "in"
+            "direction": "in",
+            "width": 3,
+            "channelNames": [
+              "a",
+              "b",
+              "c"
+            ]
           },
           {
             "id": "s",
@@ -6282,11 +6424,17 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Physical",
             "direction": "out",
             "quantity": "switching state",
-            "unit": "1"
+            "unit": "1",
+            "width": 3,
+            "channelNames": [
+              "a",
+              "b",
+              "c"
+            ]
           }
         ],
-        "equation": "Hysteresis Current Controller (3-Ph) governing physical equation",
-        "description": "Physical component model for Hysteresis Current Controller (3-Ph)."
+        "equation": "every ts, per phase k: e = iabc*_k - iabc_k;  s_k = +1 if e > band/2,  -1 if e < -band/2,  else s_k (previous, initially -1)",
+        "description": "Three-phase hysteresis current controller: each phase is a relay with memory and total band `band`, evaluated on the sample grid ts. s is the leg-state vector (+1 upper switch on) for the inverter m_abc input; the phase current stays within iabc* +- band/2 up to the overshoot of one sample."
       },
       {
         "id": "velocity_ctrl",
@@ -6345,8 +6493,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "N*m"
           }
         ],
-        "equation": "Velocity Controller governing physical equation",
-        "description": "Physical component model for Velocity Controller."
+        "equation": "e = wRef - wMech,  TqRefUnsat = Kp*e + I,  dI/dt = Ki*e + (Ki/Kp)*(TqRefSat - TqRefUnsat)  (anti-windup when TqRefSat is wired),  Reset > 0.5: I = 0",
+        "description": "Velocity controller: PI on the speed error producing the unsaturated torque reference; the saturated torque fed back on TqRefSat closes the back-calculation anti-windup loop."
       },
       {
         "id": "im_scalar_ctrl",
@@ -6359,6 +6507,19 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 4.4,
             "unit": "",
             "label": "V/f Ratio"
+          },
+          "f_rated": {
+            "value": 50,
+            "unit": "Hz",
+            "label": "Rated frequency",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "v_boost": {
+            "value": 0,
+            "unit": "V",
+            "label": "Low-frequency voltage boost",
+            "min": 0
           }
         },
         "ports": [
@@ -6376,11 +6537,17 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Physical",
             "direction": "out",
             "quantity": "phase voltage reference",
-            "unit": "V"
+            "unit": "V",
+            "width": 3,
+            "channelNames": [
+              "a",
+              "b",
+              "c"
+            ]
           }
         ],
-        "equation": "Induction Machine Scalar Control governing physical equation",
-        "description": "Physical component model for Induction Machine Scalar Control."
+        "equation": "V(f) = v_boost + (V_rated - v_boost)*|f|/f_rated for |f| < f_rated, V_rated above,  V_rated = v_f_ratio*f_rated\nd theta/dt = 2*pi*f,  vabc = V(f)*[sin(th), sin(th - 2*pi/3), sin(th + 2*pi/3)]",
+        "description": "Scalar (constant volts-per-hertz) control of an induction machine: the three-phase voltage reference rises linearly with the frequency from the boost voltage to the rated voltage at the rated frequency and stays at the rated voltage above it (field weakening). v_f_ratio is V per Hz of the peak phase voltage."
       },
       {
         "id": "im_foc_ctrl",
@@ -6395,14 +6562,18 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "label": "Mutual Ind"
           },
           "Rr": {
-            "value": 0.1,
+            "value": 0.08,
             "unit": "Ohm",
-            "label": "Rotor Res"
+            "label": "Rotor resistance",
+            "min": 0,
+            "exclusiveMin": true
           },
           "mode": {
             "value": 1,
             "unit": "",
-            "label": "Mode (0:V/f, 1:FOC)"
+            "label": "Mode (0 = V/f, 1 = FOC)",
+            "min": 0,
+            "max": 1
           },
           "v_f_ratio": {
             "value": 4.4,
@@ -6413,6 +6584,70 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 1500,
             "unit": "RPM",
             "label": "Target Speed"
+          },
+          "Lr": {
+            "value": 0.06,
+            "unit": "H",
+            "label": "Rotor inductance",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "Ls": {
+            "value": 0.06,
+            "unit": "H",
+            "label": "Stator inductance",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "P": {
+            "value": 2,
+            "unit": "1",
+            "label": "Pole pairs",
+            "min": 1
+          },
+          "v_dc": {
+            "value": 600,
+            "unit": "V",
+            "label": "DC link voltage (Vdc open)",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "imr_ref": {
+            "value": 10,
+            "unit": "A",
+            "label": "Magnetizing current (imrRef open)",
+            "min": 0
+          },
+          "Kp_w": {
+            "value": 0.5,
+            "unit": "N*m*s/rad",
+            "label": "Speed loop Kp",
+            "min": 0
+          },
+          "Ki_w": {
+            "value": 2,
+            "unit": "N*m/rad",
+            "label": "Speed loop Ki",
+            "min": 0
+          },
+          "T_max": {
+            "value": 20,
+            "unit": "N*m",
+            "label": "Torque limit",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "Kp_i": {
+            "value": 5,
+            "unit": "V/A",
+            "label": "Current loop Kp",
+            "min": 0
+          },
+          "Ki_i": {
+            "value": 100,
+            "unit": "V/(A*s)",
+            "label": "Current loop Ki",
+            "min": 0
           }
         },
         "ports": [
@@ -6435,7 +6670,13 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "pos": "left",
             "label": "iabc",
             "domain": "Physical",
-            "direction": "in"
+            "direction": "in",
+            "width": 3,
+            "channelNames": [
+              "a",
+              "b",
+              "c"
+            ]
           },
           {
             "id": "wr",
@@ -6457,8 +6698,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "label": "G",
             "domain": "Physical",
             "direction": "out",
-            "quantity": "gate signal",
-            "unit": "1"
+            "quantity": "modulation reference",
+            "unit": "1",
+            "width": 3,
+            "channelNames": [
+              "a",
+              "b",
+              "c"
+            ]
           },
           {
             "id": "vabc",
@@ -6466,7 +6713,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "label": "Vabc",
             "domain": "Physical",
             "direction": "out",
-            "quantity": "phase voltage reference",
+            "quantity": "phase voltage reference amplitude",
             "unit": "V"
           },
           {
@@ -6479,8 +6726,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "*"
           }
         ],
-        "equation": "Is_d = Ψr_ref / Lm\\nIs_q = (2/3)*(2/P)*(Lr/Lm)*(τ_ref/Ψr_ref)",
-        "description": "Rotor flux-oriented Field Oriented Control (FOC) decoupled torque and flux regulator for Induction Machines."
+        "equation": "psi_r* = Lm*imr*,  Tq* = clamp(Kp_w*(w* - wr) + I_w, +-T_max),  id* = imr*,  iq* = (2/3)*(1/P)*(Lr/Lm)*Tq*/psi_r*\nslip w_sl = (Rr/Lr)*iq*/id*,  d theta_f/dt = P*wr + w_sl\nvd = Kp_i*ed + Id - we*sigma*Ls*iq,  vq = Kp_i*eq + Iq + we*(sigma*Ls*id + (Lm/Lr)*psi_r*),  |v| <= vdc/2\nmode 0 (V/f): we = P*w*, |v| = v_f_ratio*|we|/(2*pi)",
+        "description": "Indirect rotor-flux-oriented control of an induction machine (Vas): speed PI -> torque -> iq*, id* from the magnetizing current, slip-based field angle, dq PI current loops with decoupling, circular voltage limit vdc/2. g is the three-phase modulation vector for the inverter (m_abc), Vabc is the amplitude of the phase voltage reference set, vis is the torque command. Mode 0 is open-loop V/f (v_f_ratio, no feedback). An open wrRef uses target_rpm, an open iabc / wr reads 0, an open Vdc uses v_dc."
       },
       {
         "id": "im_dtc_ctrl",
@@ -6493,6 +6740,38 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 0.8,
             "unit": "Wb",
             "label": "Flux Ref"
+          },
+          "Rs": {
+            "value": 0.1,
+            "unit": "Ohm",
+            "label": "Stator resistance",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "P": {
+            "value": 2,
+            "unit": "1",
+            "label": "Pole pairs",
+            "min": 1
+          },
+          "flux_band": {
+            "value": 0.02,
+            "unit": "Wb",
+            "label": "Flux hysteresis band",
+            "min": 0
+          },
+          "tq_band": {
+            "value": 1,
+            "unit": "N*m",
+            "label": "Torque hysteresis band",
+            "min": 0
+          },
+          "ts": {
+            "value": 0.00005,
+            "unit": "s",
+            "label": "Sample time",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -6515,14 +6794,26 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "pos": "left",
             "label": "vabc",
             "domain": "Physical",
-            "direction": "in"
+            "direction": "in",
+            "width": 3,
+            "channelNames": [
+              "a",
+              "b",
+              "c"
+            ]
           },
           {
             "id": "iabc",
             "pos": "left",
             "label": "iabc",
             "domain": "Physical",
-            "direction": "in"
+            "direction": "in",
+            "width": 3,
+            "channelNames": [
+              "a",
+              "b",
+              "c"
+            ]
           },
           {
             "id": "g",
@@ -6531,11 +6822,17 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Physical",
             "direction": "out",
             "quantity": "gate signal",
-            "unit": "1"
+            "unit": "1",
+            "width": 3,
+            "channelNames": [
+              "a",
+              "b",
+              "c"
+            ]
           }
         ],
-        "equation": "Induction Machine DTC governing physical equation",
-        "description": "Physical component model for Induction Machine DTC."
+        "equation": "dpsi_s/dt = v_s - Rs*i_s,  Tq = 1.5*P*(psi_a*i_b - psi_b*i_a)   (estimators from vabc, iabc)\nflux up / down and torque up / hold / down comparators (hysteresis bands), flux sector k from the angle of psi_s\nTakahashi table: flux up: V(k+1) / zero / V(k-1);  flux down: V(k+2) / zero / V(k-2)   (evaluated every ts)\ng = 2*S - 1 in {-1, +1} per leg",
+        "description": "Direct torque control of an induction machine (Takahashi and Noguchi): stator-flux and torque estimators, hysteresis comparators and the optimal switching table select one of the six active voltage vectors or the zero vector every sample time. g is the leg-state vector (+1 upper switch on) for the inverter m_abc input. An open FluxRef uses the flux_ref parameter."
       },
       {
         "id": "im_curr_ctrl",
@@ -6548,6 +6845,12 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 1,
             "unit": "",
             "label": "Prop Gain"
+          },
+          "Ki": {
+            "value": 100,
+            "unit": "V/(A*s)",
+            "label": "Integral gain",
+            "min": 0
           }
         },
         "ports": [
@@ -6556,21 +6859,36 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "pos": "left",
             "label": "idqRef",
             "domain": "Physical",
-            "direction": "in"
+            "direction": "in",
+            "width": 2,
+            "channelNames": [
+              "d",
+              "q"
+            ]
           },
           {
             "id": "idq",
             "pos": "left",
             "label": "idq",
             "domain": "Physical",
-            "direction": "in"
+            "direction": "in",
+            "width": 2,
+            "channelNames": [
+              "d",
+              "q"
+            ]
           },
           {
             "id": "vdq_ff",
             "pos": "left",
             "label": "vdqFF",
             "domain": "Physical",
-            "direction": "in"
+            "direction": "in",
+            "width": 2,
+            "channelNames": [
+              "d",
+              "q"
+            ]
           },
           {
             "id": "v_max",
@@ -6593,11 +6911,16 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Physical",
             "direction": "out",
             "quantity": "dq voltage reference",
-            "unit": "V"
+            "unit": "V",
+            "width": 2,
+            "channelNames": [
+              "d",
+              "q"
+            ]
           }
         ],
-        "equation": "Induction Machine Current Controller governing physical equation",
-        "description": "Physical component model for Induction Machine Current Controller."
+        "equation": "v = Kp*(idq* - idq) + I + vdq_ff,  |v| <= VphMax (circle)\ndI/dt = Ki*e + (Ki/Kp)*(v_lim - v),  Reset > 0.5: I = 0\nvdq_ref = v_lim",
+        "description": "dq-axis current regulator of an induction machine (field frame): PI on each axis plus the decoupling feed-forward input vdq_ff, circular voltage limit VphMax (when wired) and back-calculation anti-windup."
       },
       {
         "id": "clarke_transform",
@@ -6852,11 +7175,6 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "icon": "flux_obs",
         "category": "Observers & Sensors",
         "params": {
-          "Rs": {
-            "value": 0.1,
-            "unit": "Ohm",
-            "label": "Stator Res"
-          },
           "Lm": {
             "value": 0.05,
             "unit": "H",
@@ -6871,6 +7189,12 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 0.08,
             "unit": "Ohm",
             "label": "Rotor Resistance"
+          },
+          "P": {
+            "value": 2,
+            "unit": "1",
+            "label": "Pole pairs",
+            "min": 1
           }
         },
         "ports": [
@@ -6879,7 +7203,13 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "pos": "left",
             "label": "iabc",
             "domain": "Physical",
-            "direction": "in"
+            "direction": "in",
+            "width": 3,
+            "channelNames": [
+              "a",
+              "b",
+              "c"
+            ]
           },
           {
             "id": "wr",
@@ -6895,7 +7225,12 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Physical",
             "direction": "out",
             "quantity": "stator current in field frame",
-            "unit": "A"
+            "unit": "A",
+            "width": 2,
+            "channelNames": [
+              "d",
+              "q"
+            ]
           },
           {
             "id": "imr",
@@ -6925,8 +7260,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "rad/s"
           }
         ],
-        "equation": "Induction Machine Flux Observer governing physical equation",
-        "description": "Physical component model for Induction Machine Flux Observer."
+        "equation": "Tr = Lr/Rr,  w_e = P*wr,  i_s = Clarke(iabc)\ndpsi_r/dt = -psi_r/Tr + j*w_e*psi_r + (Lm/Tr)*i_s   (psi_r = psi_alpha + j*psi_beta)\nimr = |psi_r|/Lm,  theta = atan2(psi_beta, psi_alpha),  idqseF = Park(i_s, theta)\nwe = w_e + (Lm/Tr)*i_sq/|psi_r|",
+        "description": "Rotor-flux observer of an induction machine, current model in the stationary frame (Krause; Vas). From the stator currents iabc and the rotor speed wr (mechanical, rad/s) it outputs the rotor magnetizing current imr, the flux angle theta, the synchronous speed we and the stator current in field coordinates (d on the rotor flux). The stator resistance does not enter the current model."
       },
       {
         "id": "luenberger_observer",
@@ -6944,6 +7279,16 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": "[10; 10]",
             "unit": "",
             "label": "Gain L"
+          },
+          "B": {
+            "value": "[0; 1]",
+            "unit": "",
+            "label": "Input matrix B"
+          },
+          "C": {
+            "value": "[1 0]",
+            "unit": "",
+            "label": "Output matrix C"
           }
         },
         "ports": [
@@ -6968,11 +7313,16 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Physical",
             "direction": "out",
             "quantity": "state estimate",
-            "unit": "*"
+            "unit": "*",
+            "width": 2,
+            "channelNames": [
+              "x1",
+              "x2"
+            ]
           }
         ],
-        "equation": "Luenberger Observer governing physical equation",
-        "description": "Physical component model for Luenberger Observer."
+        "equation": "dx^/dt = A*x^ + B*u + L*(y - C*x^),   x^ = [x1; x2]\nestimation error e = x - x^ obeys de/dt = (A - L*C)*e",
+        "description": "Luenberger state observer of a 2-state single-input single-output plant with the library matrices A (2x2), B (2x1), C (1x2) and the gain L (2x1). The estimate error decays at the eigenvalues of A - L*C."
       },
       {
         "id": "quad_decoder",
@@ -6985,6 +7335,13 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 1024,
             "unit": "",
             "label": "Pulses/Rev"
+          },
+          "ts": {
+            "value": 0.001,
+            "unit": "s",
+            "label": "Velocity sample time",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -7028,8 +7385,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "rad"
           }
         ],
-        "equation": "Quadrature Shaft Decoder governing physical equation",
-        "description": "Physical component model for Quadrature Shaft Decoder."
+        "equation": "4x counting along 00 -> 10 -> 11 -> 01 (A leads B: +1, reverse: -1);  Z rising edge: count = 0\npos = 2*pi*count/(4*ppr),  vel = 2*pi*dcount/(4*ppr*ts) (M method over ts)",
+        "description": "Quadrature (incremental encoder) decoder: counts every edge of A and B (4x), the index Z clears the count. Position is the count in radians, velocity the count change per sample time ts."
       },
       {
         "id": "resolver_to_digital",
@@ -7042,6 +7399,20 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 10000,
             "unit": "Hz",
             "label": "Excitation"
+          },
+          "bandwidth": {
+            "value": 100,
+            "unit": "Hz",
+            "label": "Tracking loop bandwidth",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "vp_pk": {
+            "value": 1,
+            "unit": "V",
+            "label": "Excitation amplitude",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -7085,8 +7456,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "rad"
           }
         ],
-        "equation": "Resolver-to-Digital Converter governing physical equation",
-        "description": "Physical component model for Resolver-to-Digital Converter."
+        "equation": "eps = 2*(Vx*cos(phi) - Vy*sin(phi))*Vp/vp_pk^2 (mean sin(theta - phi)),  d ef/dt = 2*pi*(freq/5)*(eps - ef)\nd w/dt = wn^2*ef,  d phi/dt = w + 2*zeta*wn*ef,  wn = 2*pi*bandwidth, zeta = 0.707   (type II)\nAngle = phi, Velocity = w",
+        "description": "Resolver-to-digital converter with a type II tracking loop: synchronous demodulation of Vx = Vp*sin(theta), Vy = Vp*cos(theta) on the carrier Vp, low pass at one fifth of the carrier frequency and a PI + integrator loop; zero steady-state error for a ramp angle."
       },
       {
         "id": "pmsm_curr_ctrl",
@@ -7099,6 +7470,12 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 2,
             "unit": "",
             "label": "Prop Gain"
+          },
+          "Ki": {
+            "value": 100,
+            "unit": "V/(A*s)",
+            "label": "Integral gain",
+            "min": 0
           }
         },
         "ports": [
@@ -7107,21 +7484,36 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "pos": "left",
             "label": "idqRef",
             "domain": "Physical",
-            "direction": "in"
+            "direction": "in",
+            "width": 2,
+            "channelNames": [
+              "d",
+              "q"
+            ]
           },
           {
             "id": "idq",
             "pos": "left",
             "label": "idq",
             "domain": "Physical",
-            "direction": "in"
+            "direction": "in",
+            "width": 2,
+            "channelNames": [
+              "d",
+              "q"
+            ]
           },
           {
             "id": "vdq_ff",
             "pos": "left",
             "label": "vdqFF",
             "domain": "Physical",
-            "direction": "in"
+            "direction": "in",
+            "width": 2,
+            "channelNames": [
+              "d",
+              "q"
+            ]
           },
           {
             "id": "v_max",
@@ -7144,11 +7536,16 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Physical",
             "direction": "out",
             "quantity": "dq voltage reference",
-            "unit": "V"
+            "unit": "V",
+            "width": 2,
+            "channelNames": [
+              "d",
+              "q"
+            ]
           }
         ],
-        "equation": "PMSM Current Controller governing physical equation",
-        "description": "Physical component model for PMSM Current Controller."
+        "equation": "v = Kp*(idq* - idq) + I + vdq_ff,  |v| <= VphMax (circle)\ndI/dt = Ki*e + (Ki/Kp)*(v_lim - v),  Reset > 0.5: I = 0\nvdq_ref = v_lim",
+        "description": "dq-axis current regulator of a PMSM: PI on each axis plus the decoupling / back-EMF feed-forward input vdq_ff, circular voltage limit VphMax (when wired) and back-calculation anti-windup."
       },
       {
         "id": "pmsm_ref_gen",
@@ -7171,6 +7568,19 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 0.1,
             "unit": "Wb",
             "label": "PM Flux"
+          },
+          "pole_pairs": {
+            "value": 4,
+            "unit": "1",
+            "label": "Pole pairs",
+            "min": 1
+          },
+          "i_max": {
+            "value": 30,
+            "unit": "A",
+            "label": "Current limit",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -7202,7 +7612,12 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Physical",
             "direction": "out",
             "quantity": "dq current reference",
-            "unit": "A"
+            "unit": "A",
+            "width": 2,
+            "channelNames": [
+              "d",
+              "q"
+            ]
           },
           {
             "id": "tq_ref_sat",
@@ -7223,8 +7638,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "N*m"
           }
         ],
-        "equation": "PMSM Current Reference Generator governing physical equation",
-        "description": "Physical component model for PMSM Current Reference Generator."
+        "equation": "minimise id^2 + iq^2 subject to Tq = 1.5*p*iq*(flux + (Ld - Lq)*id),  id^2 + iq^2 <= i_max^2,\n  we^2*((Ld*id + flux)^2 + (Lq*iq)^2) <= (vdc/2)^2,  we = p*|w|\n(MTPA below base speed, field weakening above; Tq limited to the largest feasible torque = TqLim)",
+        "description": "Torque-to-current map of a PMSM: maximum torque per ampere inside the current limit and the voltage limit of the DC link (field weakening above base speed). Outputs the dq current reference, the limited torque reference and the torque limit at the present speed and DC voltage. An open Vdc means no voltage limit."
       },
       {
         "id": "pmsm_foc",
@@ -7247,6 +7662,33 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 100,
             "unit": "",
             "label": "Integral Gain (Ki)"
+          },
+          "pole_pairs": {
+            "value": 4,
+            "unit": "1",
+            "label": "Pole pairs",
+            "min": 1
+          },
+          "Ld": {
+            "value": 0.005,
+            "unit": "H",
+            "label": "d-axis inductance",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "Lq": {
+            "value": 0.005,
+            "unit": "H",
+            "label": "q-axis inductance",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "flux": {
+            "value": 0.1,
+            "unit": "Wb",
+            "label": "PM flux linkage",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -7262,7 +7704,13 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "pos": "left",
             "label": "iabcSens",
             "domain": "Physical",
-            "direction": "in"
+            "direction": "in",
+            "width": 3,
+            "channelNames": [
+              "a",
+              "b",
+              "c"
+            ]
           },
           {
             "id": "w_s",
@@ -7291,8 +7739,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "label": "G",
             "domain": "Physical",
             "direction": "out",
-            "quantity": "gate signal",
-            "unit": "1"
+            "quantity": "modulation reference",
+            "unit": "1",
+            "width": 3,
+            "channelNames": [
+              "a",
+              "b",
+              "c"
+            ]
           },
           {
             "id": "vis",
@@ -7304,8 +7758,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "*"
           }
         ],
-        "equation": "Id_ref = 0 (or MTPA)\\nIq_ref = τ_ref / (1.5 * P * Ψf)",
-        "description": "Field Oriented Control vector current regulator for Permanent Magnet Synchronous Motors."
+        "equation": "id* = 0,  iq* = Tq*/(1.5*p*(flux + (Ld - Lq)*id*)),  (id, iq) = Park(Clarke(iabc), p*theta)\nvd = Kp*ed + Id + Rs*id* - we*Lq*iq,  vq = Kp*eq + Iq + Rs*iq* + we*(Ld*id + flux),  we = p*w\n|v| <= vdc/2,  dI/dt = Ki*e + (Ki/Kp)*(v_lim - v)\ng = m_abc = clamp(InvPark(v)/(vdc/2), -1, 1)",
+        "description": "Field-oriented control of a PMSM: torque reference -> q-axis current, dq PI current loops with decoupling and resistive feed-forward, circular voltage limit at vdc/2, inverse Park to the three-phase modulation vector g (wire it to the m_abc input of the two-level inverter). th_s and w_s are the mechanical rotor angle and speed; vis is the commanded iq*."
       },
       {
         "id": "pmsm_field_weakening",
@@ -7318,6 +7772,24 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 0.95,
             "unit": "",
             "label": "Volt Margin"
+          },
+          "Kp": {
+            "value": 0.5,
+            "unit": "A/V",
+            "label": "Proportional gain",
+            "min": 0
+          },
+          "Ki": {
+            "value": 50,
+            "unit": "A/(V*s)",
+            "label": "Integral gain",
+            "min": 0
+          },
+          "id_fw_max": {
+            "value": 20,
+            "unit": "A",
+            "label": "Maximum d-axis injection",
+            "min": 0
           }
         },
         "ports": [
@@ -7326,14 +7798,24 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "pos": "left",
             "label": "idqRef",
             "domain": "Physical",
-            "direction": "in"
+            "direction": "in",
+            "width": 2,
+            "channelNames": [
+              "d",
+              "q"
+            ]
           },
           {
             "id": "vdq",
             "pos": "left",
             "label": "vdq",
             "domain": "Physical",
-            "direction": "in"
+            "direction": "in",
+            "width": 2,
+            "channelNames": [
+              "d",
+              "q"
+            ]
           },
           {
             "id": "v_max",
@@ -7349,11 +7831,16 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Physical",
             "direction": "out",
             "quantity": "field-weakened dq current reference",
-            "unit": "A"
+            "unit": "A",
+            "width": 2,
+            "channelNames": [
+              "d",
+              "q"
+            ]
           }
         ],
-        "equation": "PMSM Field-Weakening Controller governing physical equation",
-        "description": "Physical component model for PMSM Field-Weakening Controller."
+        "equation": "e = v_margin*VphMax - |vdq|,  d = clamp(Kp*e + I, -id_fw_max, 0),  dI/dt = Ki*e + (Ki/Kp)*(d - (Kp*e + I))\nidq_ref_fw = [id* + d, iq*]",
+        "description": "Voltage-feedback field weakening of a PMSM: when the stator voltage magnitude exceeds v_margin times the limit the d-axis current reference is reduced (negative id opposes the magnet flux). An open VphMax disables the loop."
       },
       {
         "id": "pmsm_tq_est",
@@ -7366,6 +7853,27 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 4,
             "unit": "",
             "label": "Pole Pairs"
+          },
+          "flux": {
+            "value": 0.1,
+            "unit": "Wb",
+            "label": "PM flux linkage",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "Ld": {
+            "value": 0.005,
+            "unit": "H",
+            "label": "d-axis inductance",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "Lq": {
+            "value": 0.005,
+            "unit": "H",
+            "label": "q-axis inductance",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -7374,7 +7882,12 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "pos": "left",
             "label": "idq",
             "domain": "Physical",
-            "direction": "in"
+            "direction": "in",
+            "width": 2,
+            "channelNames": [
+              "d",
+              "q"
+            ]
           },
           {
             "id": "tq_est",
@@ -7386,8 +7899,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "N*m"
           }
         ],
-        "equation": "PMSM Torque Estimator governing physical equation",
-        "description": "Physical component model for PMSM Torque Estimator."
+        "equation": "Tq = 1.5*p*(flux*iq + (Ld - Lq)*id*iq)",
+        "description": "Electromagnetic torque of a PMSM from the measured dq currents (amplitude-invariant Park): permanent-magnet torque plus reluctance torque."
       },
       {
         "id": "pwm_3ph_2level",
@@ -9570,6 +10083,13 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "1",
             "label": "Learning Rate",
             "min": 0
+          },
+          "ts": {
+            "value": 0.01,
+            "unit": "s",
+            "label": "Sample time",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -9631,8 +10151,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "1"
           }
         ],
-        "equation": "y = w1*x + w2*x_prev\\nerr = d - y\\nw = w + lr*err*x_vec",
-        "description": "A 2-tap Least Mean Squares (LMS) Adaptive Filter. Automatically learns to predict a target signal d from an input x by updating filter weights w1 and w2."
+        "equation": "every ts:  y(k) = w1*x(k) + w2*x(k-1),  err = d - y,  w = w + lr*err*[x(k), x(k-1)]   (LMS, outputs held between samples)",
+        "description": "A 2-tap Least Mean Squares adaptive filter (Widrow-Hoff) updated once per sample time ts: it learns to predict the target d from x by adapting the weights w1, w2 (shown after the update)."
       },
       {
         "id": "neural_neuron_learning",
@@ -9781,6 +10301,18 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "1",
             "label": "Number of Actions",
             "min": 1
+          },
+          "ts": {
+            "value": 0.05,
+            "unit": "s",
+            "label": "Sample time",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "seed": {
+            "value": 1,
+            "unit": "1",
+            "label": "Random seed"
           }
         },
         "ports": [
@@ -9824,8 +10356,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "unit": "1"
           }
         ],
-        "equation": "Q(s,a) += α*(R + γ*max_q(s') - Q(s,a))",
-        "description": "Discrete Q-learning control agent. Maps continuous system error into a configurable number of state bins, selects control actions spaced between [-1, 1], and updates Q-values online."
+        "equation": "every ts: s = bin(error);  Q(s_prev, a_prev) += alpha*(R + gamma*max_a Q(s, a) - Q(s_prev, a_prev))\na = random action with probability epsilon (seeded PRNG) else argmax_a Q(s, a)",
+        "description": "Tabular epsilon-greedy Q-learning agent (Watkins): maps the error into numStates bins, selects one of numActions actions evenly spaced in [-1, 1] and updates the Q-table every sample time. Deterministic for a given seed; the Q-table is part of the simulation state and is cleared by Reset."
       },
       {
         "id": "ac_motor_pid_control",

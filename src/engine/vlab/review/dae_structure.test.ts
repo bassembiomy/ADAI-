@@ -58,10 +58,10 @@ describe('handles resolve to exact port ids (F-037)', () => {
     sys.components.find(c => c.blockId === id)!.portNodeMap.get(port);
 
   it('pmsm_foc ports that really end in _s are not stripped (editor handle <node>-<port>)', () => {
-    const nodes = [node('foc', 'pmsm_foc'), node('c1', 'ps_constant'), node('c2', 'ps_constant'), node('c3', 'ps_constant'), node('c4', 'ps_constant')];
+    const nodes = [node('foc', 'pmsm_foc'), node('c1', 'ps_constant'), node('c2', 'ps_sine_3phase'), node('c3', 'ps_constant'), node('c4', 'ps_constant')];
     const edges = [
       { id: 'e1', source: 'c1', sourceHandle: 'c1-y', target: 'foc', targetHandle: 'foc-vdc_s' },
-      { id: 'e2', source: 'c2', sourceHandle: 'c2-y', target: 'foc', targetHandle: 'foc-iabc_s' },
+      { id: 'e2', source: 'c2', sourceHandle: 'c2-abc', target: 'foc', targetHandle: 'foc-iabc_s' },
       { id: 'e3', source: 'c3', sourceHandle: 'c3-y', target: 'foc', targetHandle: 'foc-w_s' },
       { id: 'e4', source: 'c4', sourceHandle: 'c4-y', target: 'foc', targetHandle: 'foc-th_s' },
     ] as Edge[];
@@ -69,7 +69,7 @@ describe('handles resolve to exact port ids (F-037)', () => {
     const ports = [...sys.components.find(c => c.blockId === 'foc')!.portNodeMap.keys()];
     expect(ports.sort()).toEqual(['g', 'iabc_s', 'ref', 'th_s', 'vdc_s', 'vis', 'w_s']);
     expect(rootOf(sys, 'foc', 'vdc_s')).toBe(rootOf(sys, 'c1', 'y'));
-    expect(rootOf(sys, 'foc', 'iabc_s')).toBe(rootOf(sys, 'c2', 'y'));
+    expect(rootOf(sys, 'foc', 'iabc_s')).toBe(rootOf(sys, 'c2', 'abc'));
     expect(rootOf(sys, 'foc', 'w_s')).toBe(rootOf(sys, 'c3', 'y'));
     expect(rootOf(sys, 'foc', 'th_s')).toBe(rootOf(sys, 'c4', 'y'));
     expect(sys.variableNames.some(n => n.startsWith(k('foc', 'vdc')) && !n.startsWith(k('foc', 'vdc_s')))).toBe(false);
@@ -160,11 +160,11 @@ describe('fixed blocks (allocation == equation)', () => {
     expect(alloc('gas_flow_source')).toEqual(['branch_mass_flow']);   // `m` is an input
     // `abc` input has no branch; the width-3 `ab0` output allocates one signal branch per channel (WP-09c)
     expect(alloc('clarke_transform')).toEqual(['branch_signal_ab0[0]', 'branch_signal_ab0[1]', 'branch_signal_ab0[2]']);
-    expect(alloc('ps_smith_predictor')).toEqual(['branch_signal_u', 'state_y']);
-    expect(alloc('hysteresis_ctrl_3ph')).toEqual(['branch_signal_s']);
+    expect(alloc('ps_smith_predictor')).toEqual(['branch_signal_u', 'state_ym', 'state_integral']);
+    expect(alloc('hysteresis_ctrl_3ph')).toEqual(['branch_signal_s[0]', 'branch_signal_s[1]', 'branch_signal_s[2]']); // WP-20b: width-3 leg-state vector
     expect(alloc('ma_pt_sensor')).toEqual(['branch_signal_p', 'branch_signal_t']);
     expect(alloc('ps_demux_3')).toEqual(['branch_signal_a', 'branch_signal_b', 'branch_signal_c']);
-    expect(alloc('im_foc_ctrl')).toEqual(['branch_signal_g', 'branch_signal_vabc', 'branch_signal_vis']);
+    expect(alloc('im_foc_ctrl')).toEqual(['branch_signal_g[0]', 'branch_signal_g[1]', 'branch_signal_g[2]', 'branch_signal_vabc', 'branch_signal_vis', 'state_theta_f', 'state_integ_w', 'state_integ_d', 'state_integ_q']);
   });
   it('busbar: one current per terminal, n-1 equalities + a current balance', () => {
     expect(alloc('busbar')).toEqual(['branch_current_1', 'branch_current_2']);

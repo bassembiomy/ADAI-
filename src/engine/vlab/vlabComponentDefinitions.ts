@@ -988,58 +988,58 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Synthesizes the three-phase abc signals at the base frequency from the magnitudes of their positive, negative and zero sequence components (phase a is the cos(wt) reference).'
   },
   im_flux_observer: {
-    equations: ['d(phi_r)/dt = -(1/Tr - j*w_r)*phi_r + (Lm/Tr)*is', 'theta = atan2(phi_beta, phi_alpha)'],
+    equations: ['dpsi_r/dt = -psi_r/Tr + j*P*wr*psi_r + (Lm/Tr)*is,  Tr = Lr/Rr', 'imr = |psi_r|/Lm,  theta = atan2(psi_beta, psi_alpha)', 'we = P*wr + (Lm/Tr)*i_sq/|psi_r|'],
     latex: ['\dot{\hat{\Psi}}_r = -(\frac{1}{T_r} - j\omega_r) \hat{\Psi}_r + \frac{L_m}{T_r} \mathbf{i}_s'],
     across: 'None', through: 'None',
-    description: 'Estimates the rotor flux magnitude and angle for an induction machine in the stationary frame. Essential for sensorless FOC or flux-oriented regulation.'
+    description: 'Rotor-flux observer of an induction machine, current model in the stationary frame (Krause; Vas). Outputs the magnetizing current, the flux angle, the synchronous speed and the stator current in field coordinates.'
   },
   luenberger_observer: {
-    equations: ['dx_hat/dt = A*x_hat + B*u + L*(y - C*x_hat)'],
+    equations: ['dx_hat/dt = A*x_hat + B*u + L*(y - C*x_hat)', 'de/dt = (A - L*C)*e'],
     latex: ['\dot{\hat{\mathbf{x}}} = \mathbf{A}\hat{\mathbf{x}} + \mathbf{B}\mathbf{u} + \mathbf{L}(\mathbf{y} - \mathbf{C}\hat{\mathbf{x}})'],
     across: 'None', through: 'None',
-    description: 'A classic Luenberger state observer. Estimates internal system states (x_hat) by combining a plant model with an error correction term based on output measurements (y).'
+    description: 'Luenberger state observer of a 2-state plant with the matrices A, B, C and the gain L. The estimation error decays at the eigenvalues of A - L*C.'
   },
   quad_decoder: {
-    equations: ['count = count + (A_edge ? (B ? -1 : 1) : 0)', 'theta = 2*pi * count / PPR'],
+    equations: ['count = count + 1 (00 -> 10 -> 11 -> 01), count - 1 (reverse); Z rising edge: count = 0', 'theta = 2*pi*count/(4*PPR),  omega = 2*pi*dcount/(4*PPR*ts)'],
     latex: ['\theta = \frac{2\pi \cdot N_{pulses}}{PPR}'],
     across: 'None', through: 'None',
-    description: 'Decodes signals from a quadrature incremental encoder. Calculates precise shaft position and angular velocity from Phase A and B pulse sequences.'
+    description: 'Quadrature (incremental encoder) decoder with 4x counting, index reset and an M-method velocity over the sample time ts.'
   },
   resolver_to_digital: {
-    equations: ['theta = atan2(Vy, Vx)', 'omega = d(theta)/dt'],
+    equations: ['eps = 2*(Vx*cos(phi) - Vy*sin(phi))*Vp/vp_pk^2,  d ef/dt = 2*pi*(freq/5)*(eps - ef)', 'd w/dt = wn^2*ef,  d phi/dt = w + 2*zeta*wn*ef'],
     latex: ['\theta = \arctan\left(\frac{V_{sin}}{V_{cos}}\right)'],
     across: 'None', through: 'None',
-    description: 'Models a Resolver-to-Digital (R/D) conversion loop. Extracts rotor position and speed from high-frequency carrier signals (Sine/Cosine envelopes).'
+    description: 'Resolver-to-digital converter with a type II tracking loop (synchronous demodulation, PI + integrator): zero steady-state error for a ramp angle.'
   },
   pmsm_curr_ctrl: {
-    equations: ['Vd = PI(id_err) - w*Lq*iq', 'Vq = PI(iq_err) + w*(Ld*id + Flux)'],
+    equations: ['v_dq = Kp*(idq* - idq) + I + vdq_ff,  |v_dq| <= VphMax', 'dI/dt = Ki*e + (Ki/Kp)*(v_lim - v)'],
     latex: ['\mathbf{V}_{dq}^* = PI(\mathbf{I}_{dq}^* - \mathbf{I}_{dq}) + \mathbf{V}_{decoupling}'],
     across: 'None', through: 'None',
-    description: 'A dedicated dq-axis current regulator for PMSM machines. Includes cross-coupling decoupling and voltage feed-forward to maintain torque control at high speeds.'
+    description: 'dq-axis current regulator of a PMSM: PI per axis, decoupling and back-EMF feed-forward through vdq_ff, circular voltage limit and back-calculation anti-windup.'
   },
   pmsm_ref_gen: {
-    equations: ['id_ref = f(MTPA, TqRef)', 'iq_ref = TqRef / (1.5*P*(Flux + (Ld-Lq)*id))'],
+    equations: ['min id^2 + iq^2  s.t.  Tq = 1.5*p*iq*(flux + (Ld - Lq)*id),  id^2 + iq^2 <= i_max^2', 'we^2*((Ld*id + flux)^2 + (Lq*iq)^2) <= (vdc/2)^2  (MTPA / field weakening)'],
     latex: ['i_{dq}^* = f_{MTPA}(T_{ref})'],
     across: 'None', through: 'None',
-    description: 'Generates optimal d-axis and q-axis current references for a PMSM. Implements Maximum Torque Per Ampere (MTPA) trajectories to maximize efficiency.'
+    description: 'Torque-to-current map of a PMSM: maximum torque per ampere inside the current and voltage limits, with the torque limit as an output.'
   },
   pmsm_foc: {
-    equations: ['dq = ClarkePark(abc, theta)', 'Vabc = InvParkClarke(Vdq, theta)'],
+    equations: ['iq* = Tq*/(1.5*p*(flux + (Ld - Lq)*id*)),  id* = 0,  (id, iq) = Park(Clarke(iabc), p*theta)', 'vd = Kp*ed + I + Rs*id* - we*Lq*iq,  vq = Kp*eq + I + Rs*iq* + we*(Ld*id + flux)', 'm_abc = clamp(InvPark(v)/(vdc/2), -1, 1)'],
     latex: ['\mathbf{V}_{abc} = \mathbf{T}^{-1} \mathbf{V}_{dq}'],
     across: 'None', through: 'None',
-    description: 'Complete Field-Oriented Control (FOC) system for Permanent Magnet machines. Coordinates transformations, current loops, and speed regulation.'
+    description: 'Field-oriented control of a PMSM: torque reference to q-axis current, dq PI loops with decoupling, voltage limit and inverse Park to the inverter modulation vector.'
   },
   pmsm_field_weakening: {
-    equations: ['V_mag = sqrt(Vd^2 + Vq^2)', 'id_fw = id_ref - PI(V_max - V_mag)'],
+    equations: ['e = v_margin*VphMax - |vdq|,  d = clamp(Kp*e + I, -id_fw_max, 0)', 'id_fw = id* + d'],
     latex: ['i_d^* = i_{d,ref} + \Delta i_{d,fw}'],
     across: 'None', through: 'None',
-    description: 'Extends the operating range of a PMSM above rated speed. Injecting negative d-axis current opposes the permanent magnet flux to limit terminal voltage.'
+    description: 'Voltage-feedback field weakening: reduces the d-axis current reference when the stator voltage reaches the limit.'
   },
   pmsm_tq_est: {
-    equations: ['Tq = 1.5 * P * (Flux*iq + (Ld - Lq)*id*iq)'],
+    equations: ['Tq = 1.5*p*(flux*iq + (Ld - Lq)*id*iq)'],
     latex: ['T_e = \\frac{3}{2} p [\\Psi_m i_q + (L_d - L_q) i_d i_q]'],
     across: 'None', through: 'None',
-    description: 'Estimates the electromagnetic torque produced by a PMSM based on measured currents and known machine parameters (flux, inductances).'
+    description: 'Electromagnetic torque of a PMSM from the measured dq currents.'
   },
   pmsm: {
     equations: [
@@ -1057,16 +1057,16 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Permanent Magnet Synchronous Motor in the rotor-fixed dq-reference frame (amplitude-invariant Clarke/Park). Wye stator with a real star-point terminal n; stator terminals: composite three-phase port abc. Phase back-EMF amplitude is lambda_m*w_e. Connect to an inverter for high-performance motion control.'
   },
   ps_pid_ctrl: {
-    equations: ['u = Kp*e + Ki*integral(e) + Kd*de/dt'],
+    equations: ['u = clamp(Kp*e + I + Kd*N*(e - F), -limit, limit)', 'dI/dt = Ki*e + Kb*(u - v),  dF/dt = N*(e - F)'],
     latex: ['U(s) = (K_p + \\frac{K_i}{s} + \\frac{K_d s}{1 + Ns}) E(s)'],
-    across: 'Input Error', through: 'Control Output',
-    description: 'Implements a standard Proportional-Integral-Derivative controller with anti-windup and derivative filtering.'
+    across: 'None', through: 'None',
+    description: 'Parallel-form PID controller with derivative filter, output saturation and back-calculation anti-windup (Simulink PID Controller).'
   },
   im_foc_ctrl: {
-    equations: ['iq_ref = PI(w_ref - w)', 'id_ref = Constant', 'Vdq = CurrentCtrl(idq_ref, idq)'],
+    equations: ['Tq* = PI(w* - wr),  id* = imr*,  iq* = (2/3)*(1/P)*(Lr/Lm)*Tq*/(Lm*imr*)', 'theta_f: d theta/dt = P*wr + (Rr/Lr)*iq*/id*', 'Vdq = PI(idq* - idq) + decoupling, |v| <= vdc/2;  mode 0: open-loop V/f'],
     latex: ['i_q^* = k_p (\\omega^* - \\omega) + k_i \\int (\\omega^* - \\omega) dt'],
-    across: 'Reference Speed, Feedback', through: 'Gate Signals',
-    description: 'High-performance Field-Oriented Controller for Induction Machines. Decouples torque and flux control for precise speed regulation.'
+    across: 'None', through: 'None',
+    description: 'Indirect rotor-flux-oriented control of an induction machine (or open-loop V/f in mode 0) with speed and current loops.'
   },
   washing_basket: {
     equations: [

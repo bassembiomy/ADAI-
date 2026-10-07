@@ -40,7 +40,6 @@ const quiet = <T>(fn: () => T): T => {
 // Blocks that cannot be simulated today. Each is a documented, owned reason; the test asserts the engine still REFUSES them
 // (so a block that starts to simulate fails here and must be removed from the list: ratchet).
 const NOT_SIMULATED: Record<string, string> = {
-  im_flux_observer: 'F-012 / WP-20: observer collapses the step in the minimal fixture',
 };
 for (const [id, spec] of Object.entries(UNSUPPORTED_BLOCKS)) NOT_SIMULATED[id] ??= `explicitly unsupported (${spec.wp}): ${spec.missingSpec}`;
 

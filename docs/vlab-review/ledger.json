@@ -512,10 +512,13 @@
         "WP-20a"
       ],
       "blocks": [],
-      "status": "in_progress",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 2,
       "acceptance": "controllers.test.ts",
-      "evidence": [],
+      "evidence": [
+        "controllers/estimators/motor+converter controllers/learning blocks on published algorithms (new vlabControllers.ts + controllers.test.ts); 13 unsupported implemented; vector-port backlog empty; no WP-20 expected failures remain",
+        "agent stopped by the Sonnet WEEKLY limit before reporting; planner verified the tree: no stripped interpolations, tsc clean, review+all-blocks+certification+components 4895 pass / 16 expected-fail (pmsm_foc all-blocks failure = 3 s wall-clock under load, passes alone), labs/comprehensive 67/67"
+      ],
       "findings": [
         "F-073"
       ]
@@ -877,7 +880,7 @@
       "layer": "integration",
       "summary": "Expected failures (it.fails) in all-blocks: gas_reservoir stalls at P/2 -> WP-18; ma_pressure_source floating -> WP-17; mass_flow_source needs a sink -> WP-17; dist_constraint frames unconnected -> WP-19a; luenberger_observer ignores matrix A -> WP-20",
       "wp": "WP-17/18/19a/20",
-      "status": "resolved/decided-WP-17"
+      "status": "resolved-WP-20b"
     },
     {
       "id": "F-023",
@@ -1088,7 +1091,7 @@
       "layer": "eq",
       "summary": "A scalar solver port carries one channel. clarke, inv_clarke, inv_sym_comp, im/pmsm_curr_ctrl and ps_sine_3phase carry channel 1 only. Needs vector signal ports.",
       "wp": "WP-20",
-      "status": "infrastructure done WP-09c; remaining ports WP-12/WP-20"
+      "status": "resolved-WP-20b"
     },
     {
       "id": "F-047",
@@ -1316,7 +1319,8 @@
       "block": "lms_adaptive_filter",
       "layer": "eq",
       "summary": "Hard-coded (x - x_prev)/0.01 derivative ignores the step.",
-      "wp": "WP-20"
+      "wp": "WP-20",
+      "status": "resolved-WP-20b"
     },
     {
       "id": "F-074",
