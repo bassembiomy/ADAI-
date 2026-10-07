@@ -1,25 +1,30 @@
-# State Machine Execution Order, Use Case & Sequence Help Enhancements
+# Diagram & Module Action Toolbar Horizontal Scroll Tasks
 
-- [x] Task 1: State Machine Execution Order Diagram & Lifecycle Breakdown
-  - [x] Step 1.1: Write failing test in `src/help/moduleTopics.test.ts` asserting lifecycle order section & diagram.
-  - [x] Step 1.2: Run `npx vitest run src/help/moduleTopics.test.ts` (expect failure).
-  - [x] Step 1.3: Update `src/help/moduleTopics.ts` with detailed execution flow diagram and step-by-step evaluation order.
-  - [x] Step 1.4: Run `npx vitest run src/help/moduleTopics.test.ts` (expect pass).
-  - [x] Step 1.5: Commit changes.
-- [x] Task 2: Use Case Diagram Item/Symbol Catalog and Error Causes Reference
-  - [x] Step 2.1: Write failing test in `src/help/moduleTopics.test.ts` asserting use case symbols and error causes.
-  - [x] Step 2.2: Run `npx vitest run src/help/moduleTopics.test.ts` (expect failure).
-  - [x] Step 2.3: Implement `symbols` and `errors` sections in `src/help/moduleTopics.ts`.
-  - [x] Step 2.4: Run `npx vitest run src/help/moduleTopics.test.ts` (expect pass).
-  - [x] Step 2.5: Commit changes.
-- [x] Task 3: Sequence Diagram Item/Symbol Catalog and 18-Validator Error Reference
-  - [x] Step 3.1: Write failing test in `src/help/moduleTopics.test.ts` asserting sequence symbols and all 18 validator codes.
-  - [x] Step 3.2: Run `npx vitest run src/help/moduleTopics.test.ts` (expect failure).
-  - [x] Step 3.3: Implement `symbols` and `errors` sections in `src/help/moduleTopics.ts`.
-  - [x] Step 3.4: Run `npx vitest run src/help/moduleTopics.test.ts` (expect pass).
-  - [x] Step 3.5: Commit changes.
-- [x] Task 4: Full Gate Verification & Documentation
-  - [x] Step 4.1: Run complete help test suite `npm run test:help`.
-  - [x] Step 4.2: Run help coverage audit `npm run help:coverage` (enforce 100%).
-  - [x] Step 4.3: Run TypeScript compiler `npx tsc --noEmit`.
-  - [x] Step 4.4: Commit and finalize.
+- [x] Task 1: CSS Scrollbar Utility & Wheel Scroll Helper
+  - [x] Step 1.1: Write failing test in `src/utils/toolbarScroll.test.ts`
+  - [x] Step 1.2: Run `npx vitest run src/utils/toolbarScroll.test.ts` (expect failure)
+  - [x] Step 1.3: Implement `handleHorizontalToolbarWheel` in `src/utils/toolbarScroll.ts` and `.adia-toolbar-scrollbar` in `src/index.css`
+  - [x] Step 1.4: Run `npx vitest run src/utils/toolbarScroll.test.ts` (expect pass)
+  - [x] Step 1.5: Commit changes
+- [x] Task 2: Floating Canvas Toolbar Horizontal Scroll in `src/App.tsx`
+  - [x] Step 2.1: Write failing test in `src/components/canvasToolbarScroll.test.ts`
+  - [x] Step 2.2: Run test (expect failure)
+  - [x] Step 2.3: Update canvas toolbar container in `src/App.tsx` with `max-w-[calc(100%-1.5rem)]`, `overflow-x-auto`, `adia-toolbar-scrollbar`, `onWheel`, and `shrink-0` on children
+  - [x] Step 2.4: Run test (expect pass)
+  - [x] Step 2.5: Commit changes
+- [x] Task 3: SysML Workspaces Header Horizontal Scroll (`UseCaseWorkspace`, `ActivityWorkspace`, `SequenceWorkspace`)
+  - [x] Step 3.1: Write failing test in `src/components/sysml/sysmlWorkspaceToolbarScroll.test.ts`
+  - [x] Step 3.2: Run test (expect failure)
+  - [x] Step 3.3: Update headers in `UseCaseWorkspace.tsx`, `ActivityWorkspace.tsx`, and `SequenceWorkspace.tsx`
+  - [x] Step 3.4: Run test (expect pass)
+  - [x] Step 3.5: Commit changes
+- [x] Task 4: Simulation & Studio Modules (`XbridgesWorkspace`, `VLabWorkspace`, `HILWorkspace`, `PlantUmlWorkspace`)
+  - [x] Step 4.1: Write failing test in `src/components/moduleToolbarScroll.test.ts`
+  - [x] Step 4.2: Run test (expect failure)
+  - [x] Step 4.3: Update toolbars in `XbridgesWorkspace.tsx`, `VLabWorkspace.tsx`, `HILWorkspace.tsx`, and `PlantUmlWorkspace.tsx`
+  - [x] Step 4.4: Run test (expect pass)
+  - [x] Step 4.5: Commit changes
+- [x] Task 5: Full Regression Testing & Verification
+  - [x] Step 5.1: Run full test suite and TypeScript check
+  - [x] Step 5.2: Verify visual and functional parity
+  - [x] Step 5.3: Commit any final verification updates
