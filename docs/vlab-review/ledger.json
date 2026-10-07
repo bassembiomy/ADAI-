@@ -585,25 +585,48 @@
       "findings": []
     },
     {
-      "id": "WP-31",
-      "title": "Engine: pre-solver structural diagnostics, no repeated failed attempts, UI diagnostics, direct vs simulateStep agreement, Frame perf e2e",
+      "id": "WP-31b",
+      "title": "Engine correctness: hang guard, no stale acceptance, full LTE coverage, event localisation, singular diagnostics, kernel numerics",
       "phase": "P4",
       "deps": [
         "WP-41"
       ],
       "blocks": [],
+      "status": "done",
+      "attempts": 3,
+      "acceptance": "npx vitest run src/engine/vlab/kernel src/engine/vlab/review/engine_robustness.test.ts --reporter=dot",
+      "evidence": [
+        "F-095 total work + 60 s wall-clock guard with VLabSolverDiagnosticError; F-050 no stale acceptance; F-103 LTE on all differentiated vars + first-step estimate (2 it.fails removed); F-084/F-101 Illinois event location (buck 20 kHz OK); F-051 singular diagnostics, no silent regularization; step controller Richardson fix (rejects 230 -> 5); kernel numerics via vlabParams + v0/i0 (kernel unused by the app); F-098 scaled probe points",
+        "frame seeds made coordinate-distinct (fixes the trilateration singular start point)",
+        "started on Opus (session limit), finished on Sonnet; test budgets raised (all-blocks 3 -> 20 s, semiconductors step bounds) because correct error control takes more steps",
+        "planner FULL suite: 109/109 files green, 5364 pass / 14 expected-fail / 0 fail"
+      ],
+      "findings": []
+    },
+    {
+      "id": "WP-31c",
+      "title": "Engine performance (better BDF2 error estimator, sparse/analytic Jacobian, Jacobian reuse) + worker/runtime + diagnostics surfaced in the UI",
+      "phase": "R2",
+      "deps": [
+        "WP-31b"
+      ],
+      "blocks": [],
       "status": "in_progress",
       "attempts": 0,
-      "acceptance": "npx vitest run src/engine/vlab/kernel src/engine/vlab/review/engine_robustness.test.ts --reporter=dot",
+      "acceptance": "perf budgets + labs + worker tests",
       "evidence": [],
-      "findings": []
+      "findings": [
+        "F-079",
+        "F-049",
+        "F-104"
+      ]
     },
     {
       "id": "WP-32",
       "title": "Worker / runtime",
       "phase": "P4",
       "deps": [
-        "WP-31"
+        "WP-31c"
       ],
       "blocks": [],
       "status": "merged-into-WP-31",
@@ -617,7 +640,7 @@
       "title": "UI (merged WP-40/41/42/43): palette-node parity, numeric editor, .adia round-trip, scope UI, migration notices, 1-2 E2E smoke tests",
       "phase": "P5",
       "deps": [
-        "WP-31"
+        "WP-31c"
       ],
       "blocks": [],
       "status": "todo",
@@ -686,7 +709,7 @@
         "WP-21",
         "WP-30",
         "WP-41",
-        "WP-31",
+        "WP-31c",
         "WP-32",
         "WP-40",
         "WP-42",
@@ -1075,7 +1098,8 @@
       "block": "solver_config (kernel/PhysicalNetworkExtractor positiveNumber)",
       "layer": "solver",
       "summary": "Still falls back silently and accepts alias keys. Only the pre-solve bounds protect it.",
-      "wp": "WP-31"
+      "wp": "WP-31",
+      "status": "resolved-WP-31b"
     },
     {
       "id": "F-044",
@@ -1136,7 +1160,8 @@
       "block": "vlabPhysics",
       "layer": "solver",
       "summary": "Non-convergence at minimumStep still silently accepts the stale xCurrent, so the result is wrong but looks valid.",
-      "wp": "WP-31"
+      "wp": "WP-31",
+      "status": "resolved-WP-31b"
     },
     {
       "id": "F-051",
@@ -1144,7 +1169,8 @@
       "block": "SparseLinearSolver",
       "layer": "solver",
       "summary": "Singular pivots are regularized to 1e-12, and diag<1e-15 gives 0 silently.",
-      "wp": "WP-31"
+      "wp": "WP-31",
+      "status": "resolved-WP-31b"
     },
     {
       "id": "F-052",
@@ -1170,7 +1196,8 @@
       "block": "kernel/PhysicalSystemCompiler",
       "layer": "integration",
       "summary": "Number(val)||0 masks a NaN param in the separate kernel pipeline.",
-      "wp": "WP-31"
+      "wp": "WP-31",
+      "status": "resolved-WP-31b"
     },
     {
       "id": "F-055",
@@ -1306,7 +1333,8 @@
       "block": "kernel PhysicalSystemCompiler",
       "layer": "integration",
       "summary": "Does not honour capacitor v0 / inductor i0.",
-      "wp": "WP-31"
+      "wp": "WP-31",
+      "status": "resolved-WP-31b"
     },
     {
       "id": "F-071",
@@ -1416,7 +1444,8 @@
       "block": "VLabPhysicsEngine events",
       "layer": "solver",
       "summary": "A located switching edge is accepted up to minimumStep (1 us) late, so at 20 kHz the duty drifts ~2 % (buck Vo +1.4 %). Needs proper event-time interpolation; minimumStep 1e-9 stalls.",
-      "wp": "WP-31"
+      "wp": "WP-31",
+      "status": "resolved-WP-31b"
     },
     {
       "id": "F-085",
@@ -1424,7 +1453,8 @@
       "block": "thyristor bridge (algebraic)",
       "layer": "solver",
       "summary": "The algebraic Newton does not converge at some steps for the 12-switch bridge; bridge tests take 10-30 s each.",
-      "wp": "WP-31"
+      "wp": "WP-31",
+      "status": "resolved-WP-31b"
     },
     {
       "id": "F-083",
@@ -1517,7 +1547,8 @@
       "block": "ma_chamber H wired to thermal_ref (and any similar case)",
       "layer": "solver",
       "summary": "The solver loops forever (synchronous, no timeout) despite the WP-04 rejected-step budget: accepted tiny steps or an inner loop are not bounded. In the app this freezes the worker. Needs a total step/wall-clock guard.",
-      "wp": "WP-31"
+      "wp": "WP-31",
+      "status": "resolved-WP-31b"
     },
     {
       "id": "F-096",
@@ -1541,7 +1572,8 @@
       "block": "vlabStructure.detectJacobianPattern",
       "layer": "solver",
       "summary": "The structural probe uses non-physical points (p ~ 1 Pa); the dependence threshold lowered to 1e-13 to see stiff gas rows. Consider physically scaled probe points.",
-      "wp": "WP-31"
+      "wp": "WP-31",
+      "status": "resolved-WP-31b"
     },
     {
       "id": "F-099",
@@ -1566,7 +1598,8 @@
       "block": "events",
       "layer": "solver",
       "summary": "Threshold events end a cut step just after the jump, so backward Euler integrates the post-jump value over that sub-step (~1e-4 error). Land just before the root.",
-      "wp": "WP-31"
+      "wp": "WP-31",
+      "status": "resolved-WP-31b"
     },
     {
       "id": "F-102",
@@ -1582,7 +1615,8 @@
       "block": "engine (no Solver Configuration)",
       "layer": "solver",
       "summary": "The LTE norm covers only _state_ variables, so across/branch derivatives (C dv/dt, L di/dt, J dw/dt, C dT/dt) are never error-controlled, and the first BDF1 step has no estimate. RLC at 100 us 1.9 %, locked rotor 4.4 %. 2 it.fails in vlab_connected_benchmarks.",
-      "wp": "WP-31"
+      "wp": "WP-31",
+      "status": "resolved-WP-31b"
     },
     {
       "id": "F-104",
@@ -1599,6 +1633,14 @@
       "layer": "port",
       "summary": "No PS-controlled current source block (Simscape Controlled Current Source).",
       "wp": "USER"
+    },
+    {
+      "id": "F-106",
+      "severity": "high",
+      "block": "engine performance",
+      "layer": "solver",
+      "summary": "With full error control, pmsm_foc takes ~500 steps for 0.05 s and the FOC test takes 123 s alone. The BDF2-BDF1 estimator overestimates; use a 3rd-divided-difference BDF2 LTE (needs x(n-2)). Combine with a sparse Jacobian and Jacobian reuse (F-079).",
+      "wp": "WP-31c"
     }
   ],
   "reference": "published-equations (Simscape goldens optional, F-021)",
@@ -1624,6 +1666,6 @@
     "deferred": "WP-19b rigid-body dynamics",
     "full_suite": "planner runs the full V-Lab suite every ~3 WPs; executors run targeted tests only",
     "priority": "WP-12b > WP-13 > WP-15 > WP-17 > WP-20 > WP-21 > WP-30 > WP-31 > WP-50 > WP-40",
-    "executor_model_change": "2026-10-07: Sonnet weekly limit hit (resets Oct 10 21:00). To honour the user goal of finishing while asleep, the remaining WPs run on Opus executors with tight briefs (waiting 3.5 days of wake-ups would cost more)."
+    "executor_model_change": "2026-10-07: Sonnet weekly limit hit (resets Oct 10 21:00). WP-21, WP-30, WP-31b ran on Opus executors. USER DECISION (2026-10-07 ~11:00): Sonnet executes, Opus only reviews. Remaining WP-31c, WP-50, WP-40 MUST use Sonnet: wait for the reset, then resume with /vlab-review-loop."
   }
 }

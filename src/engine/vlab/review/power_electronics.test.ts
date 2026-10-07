@@ -509,9 +509,9 @@ describe('WP-12b DC-DC converters: steady-state ratio, inductor ripple, ripple f
   };
   const RS = D * RON + (1 - D) * RON;
   const periods = 80, window = 10, dt = TS / 10; // initial state 3 % off steady state; 4 ms covers > 1 time constant of the slow boost / buck-boost mode
-  // the default minimumStep (1 us) is 2 % of the 50 us period: each located edge is accepted up to 1 us late and the duty drifts by up to 2 % (F-084).
-  // A converter run therefore sets the minimum step below the edge accuracy it needs.
-  const cfg = { id: 'wp12b', solver: 'auto', startTime: 0, stopTime: 1, initialStep: 'auto', minimumStep: 1e-7, maximumStep: 1e-5, relativeTolerance: 1e-3, absoluteTolerance: 1e-5, maximumIterations: 50, nonlinearTolerance: 1e-10, enableDiagnostics: false, enableLogging: false };
+  // WP-31b (F-084 fixed): switching edges are located by the Illinois iteration to a tolerance tied to the step and the step lands
+  // just before the root, so the default minimumStep (1 us, 2 % of the 50 us period) no longer limits the edge accuracy.
+  const cfg = { id: 'wp12b', solver: 'auto', startTime: 0, stopTime: 1, initialStep: 'auto', minimumStep: 1e-6, maximumStep: 1e-5, relativeTolerance: 1e-3, absoluteTolerance: 1e-5, maximumIterations: 50, nonlinearTolerance: 1e-10, enableDiagnostics: false, enableLogging: false };
   for (const kind of ['buck', 'boost', 'buckboost'] as Kind[]) {
     describe(kind, () => {
       const { Vin, R } = spec[kind];

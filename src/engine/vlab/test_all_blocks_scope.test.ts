@@ -13,7 +13,9 @@ const hasEquationFactory = (blockId: string): boolean => {
 // Per-block limits: 3 steps per block, each bounded to 3 s wall clock / 2000 step attempts,
 // plus a vitest timeout as a backstop for the async path.
 const PER_STEP_ATTEMPT_LIMIT = 2000;
-const PER_STEP_WALL_CLOCK_MS = 3000;
+// WP-31b: 3 s -> 20 s. The limit only has to stop a non-convergent block. The step error control now covers every differentiated unknown (F-103);
+// before, pmsm_foc advanced 0.1 s in 10 steps (0.4 s, only _state_ variables controlled), now it resolves its 3-phase signals with ~500 steps of ~8 ms.
+const PER_STEP_WALL_CLOCK_MS = 20000;
 const PER_BLOCK_TIMEOUT_MS = 30000;
 
 // F-012: blocks whose minimal fixture is well-posed enough yet the solver still fails.

@@ -1,6 +1,7 @@
 import { Node, Edge } from '@xyflow/react';
 import { DAEAssembler } from './DAEAssembler';
 import { ImplicitSolver } from './ImplicitSolver';
+import { SparseLinearSolver } from './SparseLinearSolver';
 import { EquationContext, AssembledSystem, PhysicalDomain } from './types';
 import { SolverConfiguration } from './kernel/types';
 import { explicitSolverStep } from './ExplicitSolverAdapter';
@@ -8,7 +9,9 @@ import { initializeJointFrames } from './vlabJointInitialization';
 import { jointKindOf, isJointMultiplierName } from './vlabJointCore';
 import { assertValidTopology } from './vlabTopologyValidation';
 import { assertStructurallyWellPosed, DAEStructureError } from './vlabStructure';
-import { BlockEquationError, NonFiniteResidualError } from './vlabResidualDiagnostics';
+import {
+  BlockEquationError, NonFiniteResidualError, SolverConvergenceError, VLabSolverDiagnosticError, type WorstResidualRow,
+} from './vlabResidualDiagnostics';
 import { readSolvedVariable } from './vlabScopeRead';
 import { scopeTraceKey } from './vlabVectorPorts';
 import { numericParam, stringParam } from './vlabParams';
@@ -30,14 +33,39 @@ const A32 = 0.25 * (6 * GAMMA * GAMMA - 20 * GAMMA + 5);
  * residual tolerance (1e-8) and far below any physical threshold.
  */
 const EVENT_BAND = 1e-7;
+/** Step-size controller safety factor: the accepted local error settles near STEP_SAFETY^3 of the tolerance (Hairer, Norsett & Wanner I, II.4). */
+const STEP_SAFETY = 0.7;
 
-class EventTriggerError extends Error {
-  hEvent: number;
-  constructor(hEvent: number) {
-    super('Zero crossing event detected');
-    this.name = 'EventTriggerError';
-    this.hEvent = hEvent;
+/** The error estimate exceeds the tolerance at the minimum step (WP-31b: reported, never accepted). */
+class ToleranceAtMinimumStepError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ToleranceAtMinimumStepError';
   }
+}
+
+/**
+ * Earliest sign change of an event indicator between two indicator vectors (linear-interpolation fraction of the interval).
+ * `interior` = the start of the interval is a bracket end inside a step, not the step start: the EVENT_BAND rule (a step
+ * that starts on the event surface is not a new crossing) applies only at the step start. `locked` indicators are skipped.
+ */
+function firstCrossing(
+  gStart: number[], gEnd: number[], locked?: Set<number>, interior = false,
+): { index: number; fraction: number } | undefined {
+  let best: { index: number; fraction: number } | undefined;
+  for (let i = 0; i < gStart.length; i++) {
+    if (locked?.has(i)) continue;
+    const a = gStart[i], b = gEnd[i];
+    if (!interior && Math.abs(a) <= EVENT_BAND) continue;
+    // a step that ENDS on the surface (|b| within EVENT_BAND, from an off-surface start) has an ambiguous mode at its end (the
+    // solved indicator sits at the round-off / Newton-tolerance noise of the root): it is the crossing, taken as touching at b
+    const touches = !interior && Math.abs(b) <= EVENT_BAND && Math.abs(a) > EVENT_BAND;
+    if (a * b < 0 || touches) {
+      const fraction = Math.abs(a) / (Math.abs(a) + Math.abs(b));
+      if (!best || fraction < best.fraction) best = { index: i, fraction };
+    }
+  }
+  return best;
 }
 
 export class VLabPhysicsEngine {
@@ -62,8 +90,24 @@ export class VLabPhysicsEngine {
     this.topologyValidationEnabled = enabled;
   }
 
-  /** Optional wall-clock budget (ms) for one simulateStep call; 0 disables it. */
-  private wallClockBudgetMs = 0;
+  /** Fixed-step mode (see setFixedStep). */
+  private fixedStep = false;
+
+  /**
+   * Fixed-step integration: every simulateStep call is ONE implicit (BDF1 at startup / after events, else BDF2) step of the
+   * call's dt, with no local-error control, like a Simscape local solver with sample time dt. For order-of-accuracy
+   * measurements and one-step equation checks (WP-31b: the adaptive path now error-controls every unknown, F-103).
+   * Non-convergence still halves the step; it is never accepted unconverged.
+   */
+  setFixedStep(enabled: boolean): void {
+    this.fixedStep = enabled;
+  }
+
+  /**
+   * Wall-clock budget (ms) for one simulateStep call; 0 disables it. WP-31b (F-095): on by default (60 s: the heaviest lab models, a 3-phase PWM inverter with an induction machine, need 10-25 s per 50 ms call) so that an
+   * interactive run of a model that crawls at the minimum step fails with a diagnostic instead of freezing the worker.
+   */
+  private wallClockBudgetMs = 60000;
 
   /**
    * Bound the work done by a single simulateStep so a non-convergent model fails
@@ -303,7 +347,10 @@ export class VLabPhysicsEngine {
           // pinned back to their target every iteration regardless of seed,
           // and this is negligible next to any real geometry (same idea as
           // the psiar/thermal/pressure seeds just above).
-          x[idx] = 0.01 * (idx + 1);
+          // WP-31b: the seed also differs per COORDINATE (golden-ratio fractional factor). With a plain 0.01 (idx + 1) the three axes of a
+          // frame moved by the same amount, so every constraint direction F - B started along (1, 1, 1): three distance constraints then
+          // had parallel gradients, a rank-deficient first Newton matrix (reported by F-051; the old silent 1e-12 pivot hid it).
+          x[idx] = 0.01 * (idx + 1) * (1 + 0.5 * ((idx * 0.6180339887498949) % 1));
         } else if (isJointMultiplierName(name) && jointIds.has(name.replace(/_branch_lambda\d*$/, ''))) {
           // Joint multipliers are seeded like the distance/angle constraint multiplier (no degenerate first Jacobian).
           x[idx] = 0.01 * (idx + 1);
@@ -368,6 +415,16 @@ export class VLabPhysicsEngine {
     const budgetStart = Date.now();
     const minStep = typeof config?.minimumStep === 'number' ? config.minimumStep : 1e-6;
     const maxStep = typeof config?.maximumStep === 'number' ? config.maximumStep : Math.max(minStep, 0.05);
+    // WP-31b (F-095): total work guard per call. Every accepted step is at least minStep long (located events add a bounded
+    // number of short landing steps), so more than dt/minStep accepted steps plus the rejected-attempt budget means the run
+    // is not advancing. Event-location trial solves count as attempts too.
+    let totalAttempts = 0;
+    const singularSolvesAtStart = SparseLinearSolver.singularSolveCount;
+    const maxTotalAttempts = this.maxStepAttempts + 2 * Math.ceil(dt / minStep) + 100;
+    let lastFailure: SolverConvergenceError | undefined;
+    // WP-31b (F-084/F-101): indicators of the event the previous step landed in front of; the step that follows integrates
+    // the new mode and must not re-locate that same root (it lies within the location tolerance of its start).
+    let lockedEvents: Set<number> | undefined;
     
     // Choose initial step size. Start with last accepted size but never start below 1ms
     // to avoid excessive step count.
@@ -377,10 +434,29 @@ export class VLabPhysicsEngine {
     // Keep the legacy epsilon for unconfigured models; configured jobs need
     // exact boundary handling for sub-microsecond solver settings.
     const targetEpsilon = config ? 0 : 1e-12;
+    // WP-31b (F-103): the first step of a run is a consistent-initialization step. The seeded vector is in general not
+    // consistent with the algebraic constraints (a velocity source imposes w0 on a shaft that starts at rest, a source
+    // voltage appears on nodes that start at 0 V), so the first step carries an impulse (J dw/dt = J w0 / h) whose
+    // step-doubling error estimate does not shrink with h. A backward-Euler step of the minimum step size yields
+    // consistent values as h -> 0 (Brown, Hindmarsh & Petzold, "Consistent initial condition calculation for
+    // differential-algebraic systems", SIAM J. Sci. Comput. 19, 1998); it is not error-controlled, and the next step
+    // restarts BDF1 from the consistent state with the step-doubling estimate.
+    // Only a DAE needs it: when every differentiated unknown is an integrator state the seeded states are the initial values.
+    let initializing = !prevState && !isAlgebraicSystem && !isExplicit && !useSdirk && !this.fixedStep && (() => {
+      const probe: EquationContext = {
+        dt: Math.min(minStep, dt), time: t + Math.min(minStep, dt), history, parameters: {}, prevStates: [...x], states: [...x],
+        stateDerivatives: new Array(system.systemSize).fill(0), order: 1,
+      };
+      const mask = this.differentiatedMask(system, x, probe);
+      return mask.some((d, i) => d && !system.isDifferentialState[i] && system.firstOrderOnly?.[i] !== true);
+    })();
+    const hAfterInit = h;
     while (t < tTarget - targetEpsilon) {
       // Don't step past target time
       const remaining = tTarget - t;
       const stepFloor = Math.min(minStep, remaining);
+      if (this.fixedStep) h = remaining;
+      if (initializing) h = stepFloor;
       h = Math.min(h, remaining);
       // WP-30: never leave a round-off sliver behind. t accumulates h in floating point, so a step that "exactly" reaches the
       // target can stop 1e-11 s short; the next step of that size cannot be resolved by Newton (the state change is below the
@@ -394,25 +470,28 @@ export class VLabPhysicsEngine {
       let attemptsThisStep = 0;
       let eventStepStart: number | undefined;
       let nextX: number[] = [];
-      
+      // the attempt that ends just before a located event root (may be shorter than minStep)
+      let landing: { indices: Set<number> } | undefined;
+
       while (!stepAccepted) {
         if (attemptsThisStep++ > 0) rejectedAttempts++;
-        if (
-          rejectedAttempts > this.maxStepAttempts ||
-          (this.wallClockBudgetMs > 0 && Date.now() - budgetStart > this.wallClockBudgetMs)
-        ) {
+        totalAttempts++;
+        const overWallClock = this.wallClockBudgetMs > 0 && Date.now() - budgetStart > this.wallClockBudgetMs;
+        if (rejectedAttempts > this.maxStepAttempts || totalAttempts > maxTotalAttempts || overWallClock) {
           const reason = rejectedAttempts > this.maxStepAttempts
             ? `exceeded ${this.maxStepAttempts} rejected step attempts`
-            : `exceeded ${this.wallClockBudgetMs} ms wall-clock budget`;
-          throw new Error(
+            : totalAttempts > maxTotalAttempts
+              ? `exceeded ${maxTotalAttempts} total step attempts`
+              : `exceeded ${this.wallClockBudgetMs} ms wall-clock budget`;
+          throw this.solverDiagnosticError(
             `VLab solver ${reason} advancing to t=${tTarget} ` +
-            `(reached t=${t}, h=${h}, accepted=${acceptedSteps}, rejected=${rejectedSteps}, ` +
-            `blocks=[${nodes.map(n => ((n.data as any)?.type ?? n.type ?? n.id)).join(', ')}]). ` +
-            `The model is likely non-convergent; check parameters and connections.`
+            `(reached t=${t}, h=${h}, accepted=${acceptedSteps}, rejected=${rejectedSteps}). ` +
+            `The model is likely non-convergent; check parameters and connections.`,
+            system, nodes, t, h, xCurrent, history, lastFailure,
           );
         }
-        // Enforce minimum step size to prevent infinite loops
-        h = Math.max(stepFloor, h);
+        // Enforce minimum step size to prevent infinite loops (a landing step in front of a located event may be shorter)
+        if (!landing) h = Math.max(stepFloor, h);
         
         try {
           const ctx: EquationContext = {
@@ -435,7 +514,7 @@ export class VLabPhysicsEngine {
           } else if (isExplicit && config) {
             const result = explicitSolverStep(system, xCurrent, ctx, config, this.solver);
             if (!result.accepted) {
-              if (h <= stepFloor) throw new Error('Explicit solver cannot satisfy tolerances at minimumStep.');
+              if (h <= stepFloor) throw new ToleranceAtMinimumStepError('Explicit solver cannot satisfy tolerances at minimumStep.');
               rejectedSteps++;
               h = Math.max(stepFloor, h * 0.5);
               continue;
@@ -498,7 +577,15 @@ export class VLabPhysicsEngine {
             };
             nextX = this.solver.solve(solveResiduals3, X2, ctx3);
           } else {
-            if (bdfOrder === 2 && prevX && lastDt) {
+            // WP-31b: variable-step BDF2 is zero-stable only for step ratios w = h / h_prev < 1 + sqrt(2) (Grigorieff 1983;
+            // Hairer & Wanner II, III.5). A larger ratio (the step after a sub-microsecond event landing or an end-of-interval
+            // sliver: w ~ 1e9) has stencil weights ~1e15 that cancel catastrophically; that step restarts with BDF1.
+            // WP-31b: a step that starts ON an event surface (an indicator within EVENT_BAND of zero: the previous step ended at the
+            // root, e.g. a switching instant on an output-step boundary) integrates the new mode, whose derivative is discontinuous
+            // against the stored history: BDF2 would extrapolate the old slope (error 1/3 (x - x_prev) at the edge), so it restarts BDF1.
+            const onSurface = bdfOrder === 2 && !isAlgebraicSystem && !landing
+              && this.eventIndicators(nodes, system, xCurrent, t).some(g => Math.abs(g) <= EVENT_BAND);
+            if (bdfOrder === 2 && !onSurface && prevX && lastDt && h / lastDt < 1 + Math.SQRT2) {
               ctx.prevPrevStates = [...prevX];
               ctx.prevDt = lastDt;
               ctx.order = 2;
@@ -518,128 +605,212 @@ export class VLabPhysicsEngine {
           // Treating that initialization (for example Vg: 0 -> 4 V) as a temporal
           // crossing repeatedly shrinks the step before the simulation can start.
           if (!isAlgebraicSystem && (prevState || acceptedSteps > 0)) {
-            const eventInfo = this.detectZeroCrossings(nodes, edges, xCurrent, nextX, system, t, t + h);
-            if (eventInfo.eventOccurred && eventInfo.fraction < 0.999) {
-              const hEvent = h * eventInfo.fraction;
-              throw new EventTriggerError(hEvent);
+            // WP-31b (F-084 / F-101): Simscape-style event location. A sign change of an event indicator inside the step
+            // is bracketed and its time found by the Illinois (modified regula falsi) iteration on the indicator, each trial
+            // being a solve of the same step from t to t + h_trial, until the bracket is narrower than eventTol. The step is
+            // then re-taken to the LOWER bracket end, i.e. it ends just before the root (the backward-difference step still
+            // integrates the old mode), and the next step integrates the new mode from there (Dahlquist & Bjorck,
+            // "Numerical Methods" 6.2.3, Illinois method; Shampine & Thompson, "Event location for ODEs", 2000).
+            const g0 = this.eventIndicators(nodes, system, xCurrent, t);
+            const g1 = this.eventIndicators(nodes, system, nextX, t + h);
+            // in a landing attempt only an indicator OTHER than the bracketed ones can still cross (earlier, state-dependent)
+            const crossing = firstCrossing(g0, g1, landing ? new Set([...(lockedEvents ?? []), ...landing.indices]) : lockedEvents);
+            if (crossing) {
+              landing = undefined;
+              if (eventStepStart === undefined) eventStepStart = h;
+              // tied to the step (1e-6 h), never finer than the declared time resolution of the discontinuous sources
+              // (SIGNAL_TIME_QUANTUM: a step source and the switch it drives cross Q/2 apart and are one event) nor than t's ulp
+              const eventTol = Math.max(1e-12 * Math.max(1, Math.abs(t)), 1e-6 * eventStepStart, SIGNAL_TIME_QUANTUM);
+              const trialSolve = (hh: number, guess: number[]): number[] => {
+                const c: EquationContext = {
+                  dt: hh, time: t + hh, history, parameters: {}, prevStates: [...xCurrent], states: [...xCurrent],
+                  stateDerivatives: new Array(system.systemSize).fill(0), order: ctx.order === 2 ? 2 : 1,
+                  prevPrevStates: ctx.order === 2 ? ctx.prevPrevStates : undefined, prevDt: ctx.order === 2 ? ctx.prevDt : undefined,
+                };
+                return this.solver.solve((sx, sc) => system.residuals(sx, ddtVector(sx, sc, system.firstOrderOnly), sc), guess, c);
+              };
+              let a = 0, b = h, k = crossing.index;
+              let gaVec = g0, gbVec = g1;
+              let xa = xCurrent;
+              let fa = g0[k], fb = g1[k], side = 0;
+              for (let iter = 0; b - a > eventTol && iter < 60; iter++) {
+                totalAttempts++;
+                const w = b - a;
+                let hm = a - (fa * w) / (fb - fa);
+                if (!(hm > a + 1e-3 * w && hm < b - 1e-3 * w)) hm = Math.min(b - 1e-3 * w, Math.max(a + 1e-3 * w, Number.isFinite(hm) ? hm : a + w / 2));
+                // A time-only indicator (sample grid, step time, carrier with a time-only reference: same value for any state)
+                // needs no solve: the trial state is interpolated (exact for that indicator; the landing solve re-checks the
+                // state-dependent ones). Otherwise start Newton from the lower bracket state (same mode as the step start).
+                const timeOnly = this.eventIndicators(nodes, system, xCurrent, t + hm)[k] === this.eventIndicators(nodes, system, nextX, t + hm)[k];
+                const xm = timeOnly ? xCurrent.map((v, i) => v + (nextX[i] - v) * (hm / h)) : trialSolve(hm, xa);
+                const gm = this.eventIndicators(nodes, system, xm, t + hm);
+                // crossed = sign changed against the STEP START (an exact zero at a trial counts as not yet crossed, so the
+                // lower end never passes the root when a trial lands on it)
+                const inner = firstCrossing(g0, gm, lockedEvents, true); // strict sign change: the touch tolerance is for the step end only
+                if (inner) {
+                  if (inner.index !== k) { k = inner.index; fa = gaVec[k]; side = 0; }
+                  b = hm; gbVec = gm; fb = gm[k];
+                  if (side === -1) fa /= 2; // Illinois: the a end was retained twice
+                  side = -1;
+                } else {
+                  a = hm; gaVec = gm; fa = gm[k]; xa = xm;
+                  if (side === 1) fb /= 2;
+                  side = 1;
+                }
+              }
+              const located = new Set<number>([k]);
+              g0.forEach((gs, i) => { if (gs * gbVec[i] < 0) located.add(i); });
+              // right after a landing, a second indicator (a switch driven by the step source that was just located) flips at the same instant
+              // up to the landing slack (eventTol) plus the quantum offset of the sources (SIGNAL_TIME_QUANTUM / 2): one event, not two
+              const sameInstant = lockedEvents && lockedEvents.size > 0 ? eventTol + 2 * SIGNAL_TIME_QUANTUM : eventTol;
+              if (a > sameInstant) {
+                // re-take the step to just before the root (with its own error control); counted as located when accepted
+                eventRetries++;
+                landing = { indices: located };
+                h = a;
+                continue;
+              }
+              // the root lies within eventTol of the step start (a <= eventTol): the step already integrates the new mode
+              lockedEvents = new Set([...(lockedEvents ?? []), ...located]);
             }
           }
           
           // --- Local Truncation Error (LTE) Control ---
           let lte = explicitLte;
+          let lteControlled = false;
           // Preserve the legacy unconfigured LTE path; configured runs use
           // their explicit minimum-step boundary for adaptive control.
-          if (!isAlgebraicSystem && !isExplicit && !useSdirk && (config || h > 1e-6)) {
+          if (!isAlgebraicSystem && !isExplicit && !useSdirk && !this.fixedStep && !initializing && (config || h > 1e-6)) {
             const bdf1Residuals = (solveX: number[], solveCtx: EquationContext) => {
               const dx = ddtVector(solveX, solveCtx, system.firstOrderOnly);
               return system.residuals(solveX, dx, solveCtx);
             };
             const bdf1Ctx: EquationContext = { ...ctx, order: 1, prevPrevStates: undefined, prevDt: undefined };
-            let comparison = this.solver.solve(bdf1Residuals, xCurrent, bdf1Ctx);
-            // BDF1 needs a startup estimate too: compare one full step to two half steps.
-            if (config && ctx.order === 1) {
+            // BDF2 step: the BDF1 solution of the same step is the comparison. BDF1 needs a startup estimate too: compare one
+            // full step to two half steps (step doubling, Hairer, Norsett & Wanner I, II.4). WP-31b (F-103): also without a
+            // Solver Configuration, the first step used to have no estimate.
+            let comparison = ctx.order === 1 ? nextX : this.solver.solve(bdf1Residuals, xCurrent, bdf1Ctx);
+            if (ctx.order === 1) {
               const halfResiduals = (solveX: number[], solveCtx: EquationContext) =>
                 system.residuals(solveX, ddtVector(solveX, solveCtx, system.firstOrderOnly), solveCtx);
               const halfContext = { ...bdf1Ctx, dt: h / 2, time: t + h / 2 };
               const half = this.solver.solve(halfResiduals, xCurrent, halfContext);
               comparison = this.solver.solve(halfResiduals, half, { ...halfContext, time: t + h, prevStates: half });
             }
-            
+
+            // WP-31b (F-103): the weighted RMS norm covers every DIFFERENTIATED unknown: each one whose derivative from the
+            // shared ddt stencil (vlabDiscretization) enters a residual (C d(vp - vn)/dt, L di/dt, J dw/dt, C dT/dt act on
+            // across / branch unknowns, not only on `_state_` variables), plus the integrator states and the BDF1-pinned frame
+            // poses: err_i / (rtol max(|x_i|, |x_i,prev|) + atol). Purely algebraic unknowns (a capacitor current
+            // i_C = i_L - v/R oscillating through 0) carry no truncation error of their own and are excluded, as with
+            // the suppressAlg option of SUNDIALS IDA (Hindmarsh et al., ACM TOMS 31, 2005; Brenan, Campbell & Petzold 5.3).
+            const differentiated = this.differentiatedMask(system, xCurrent, ctx);
+            // Both estimators measure the error of the BDF1 step of size h, C h^2: BDF2 - BDF1 directly, and step doubling by Richardson,
+            // e_full = (y_full - y_two_halves) / (1 - 1/2) = 2 (y_full - y_two_halves) (Hairer, Norsett & Wanner I, II.4). Without the factor 2
+            // the two differ by 2x and the controller alternates (BDF2 attempt rejected, BDF1 attempt accepted, repeated every step).
+            const lteScale = ctx.order === 1 ? 2 : 1;
             let sumSq = 0;
             let diffCount = 0;
             for (let idx = 0; idx < system.systemSize; idx++) {
-              if (config || system.isDifferentialState[idx]) {
-                const diff = nextX[idx] - comparison[idx];
-                const scale = (config?.relativeTolerance ?? 1e-3) * Math.max(Math.abs(nextX[idx]), Math.abs(xCurrent[idx]))
-                  + (config?.absoluteTolerance ?? 1e-5);
-                sumSq += (diff / scale) * (diff / scale);
-                diffCount++;
-              }
+              if (!differentiated[idx]) continue;
+              diffCount++;
+              const diff = lteScale * (nextX[idx] - comparison[idx]);
+              const scale = (config?.relativeTolerance ?? 1e-3) * Math.max(Math.abs(nextX[idx]), Math.abs(xCurrent[idx]))
+                + (config?.absoluteTolerance ?? 1e-5);
+              sumSq += (diff / scale) * (diff / scale);
             }
-            
+
             lte = diffCount > 0 ? Math.sqrt(sumSq / diffCount) : 0;
             if (lte > 1.0) {
-              if (h <= stepFloor) throw new Error('BDF solver cannot satisfy tolerances at minimumStep.');
+              if (h <= stepFloor && !landing) {
+                const worst = nextX.map((v, idx) => ({
+                  idx, w: !differentiated[idx] ? 0 : lteScale * Math.abs(v - comparison[idx]) / ((config?.relativeTolerance ?? 1e-3) * Math.max(Math.abs(v), Math.abs(xCurrent[idx])) + (config?.absoluteTolerance ?? 1e-5)),
+                })).sort((p, q) => q.w - p.w).slice(0, 3).map(e => `${system.variableNames[e.idx]} (${e.w.toPrecision(3)})`).join(', ');
+                throw new ToleranceAtMinimumStepError(`BDF solver cannot satisfy tolerances at minimumStep (weighted error ${lte.toPrecision(3)}; largest: ${worst}).`);
+              }
               rejectedSteps++;
-              h = Math.max(stepFloor, h * 0.5);
+              // WP-31b: standard step-size controller (Hairer, Norsett & Wanner I, II.4, eq. 4.13): the step that is kept (BDF2,
+              // local error O(h^3)) is controlled with the exponent 1 / (p + 1) = 1/3: h_new = h * 0.9 * err^(-1/3), bounded (the estimate scales
+              // faster than h^2 in practice, and the exponent 1/2 made every second BDF2 step overshoot and be rejected)
+              h = Math.max(landing ? 0 : stepFloor, h * Math.max(0.2, STEP_SAFETY / Math.cbrt(lte)));
+              landing = undefined;
               if (!config) bdfOrder = 1;
               continue;
             }
+            lteControlled = true;
           }
-          
-          // Grow step size if error is low or if we are successfully resolving minimum steps
-          const nextH = (lte < 0.1 || useSdirk) ? Math.min(h * 1.5, maxStep) : h;
-          
+
+          // Next step size: the error-based controller when the error was estimated (factor in [0.5, 2]), else the legacy
+          // growth (x1.5 when the error is low)
+          const nextH = lteControlled
+            ? Math.min(maxStep, h * Math.min(2, Math.max(0.5, STEP_SAFETY / Math.cbrt(Math.max(lte, 1e-12)))))
+            : (lte < 0.1 || useSdirk) ? Math.min(h * 1.5, maxStep) : h;
+
           stepAccepted = true;
           acceptedSteps++;
           prevX = [...xCurrent];
           lastDt = h;
           xCurrent = [...nextX];
           t += h;
-          recordHistory(system, history, prevX ?? xCurrent, xCurrent, t - h, t);
-          h = nextH;
-          bdfOrder = 2;
-          
+          // the consistent-initialization step is not a sample of the committed signal history (discrete blocks keep their
+          // first-step semantics on the first regular step)
+          if (!initializing) recordHistory(system, history, prevX ?? xCurrent, xCurrent, t - h, t);
+          if (initializing) {
+            // consistent initialization done: restart BDF1 (no history across the initialization jump) at the chosen step
+            initializing = false;
+            lockedEvents = undefined;
+            h = hAfterInit;
+            bdfOrder = 1;
+          } else if (landing) {
+            // the step ended just before the located root: the next step integrates the new mode from a fresh BDF1 start, at
+            // the step size in force before the event, without re-locating the same root
+            eventsLocated++;
+            lockedEvents = landing.indices;
+            h = Math.min(maxStep, eventStepStart ?? nextH);
+            bdfOrder = 1;
+          } else {
+            lockedEvents = undefined;
+            h = nextH;
+            bdfOrder = 2;
+          }
+
         } catch (error: any) {
-          if (error instanceof EventTriggerError) {
-            // WP-11 switching approach: the crossing is localized by cutting the step to the interpolated event time
-            // (secant on the indicator, the Simscape zero-crossing behaviour). Once h has reached the step floor
-            // the crossing is localized to within minimumStep: accept the step in the new mode (a mode-locked
-            // continuation) instead of cutting again, which used to crawl at the floor and exhaust the attempt budget.
-            if (eventStepStart === undefined) eventStepStart = h;
-            eventRetries++;
-            if (error.hEvent < h && h > stepFloor * (1 + 1e-9)) {
-              h = Math.max(stepFloor, error.hEvent);
-              bdfOrder = 1; // resolve the crossing before switching algebraic modes
-            } else {
-              stepAccepted = true;
-              const xBefore = xCurrent;
-              xCurrent = [...nextX];
-              prevX = [...xCurrent];
-              t += h;
-              recordHistory(system, history, xBefore, xCurrent, t - h, t);
-              acceptedSteps++;
-              eventsLocated++;
-              // resume at the step size in force before the event cut, with a fresh BDF1 start in the new mode
-              h = Math.max(stepFloor, Math.min(maxStep, eventStepStart));
-              bdfOrder = 1;
-            }
-          } else if (error instanceof BlockEquationError || error instanceof DAEStructureError) {
+          if (error instanceof BlockEquationError || error instanceof DAEStructureError) {
             // A block equation that throws (or a structurally invalid model) is not a step-size problem: never retried.
             throw error;
           } else if (error instanceof NonFiniteResidualError) {
             // Non-finite residual: reject the step and halve h; if it persists at the minimum step, surface the
             // diagnostic (block / row / value) instead of iterating or accepting a state computed from zeros (F-045).
-            if (isAlgebraicSystem || h <= stepFloor) throw error;
+            if (isAlgebraicSystem || (h <= stepFloor && !landing)) throw error;
             rejectedSteps++;
-            h = Math.max(stepFloor, h * 0.5);
+            h = Math.max(landing ? 0 : stepFloor, h * 0.5);
+            landing = undefined;
             bdfOrder = 1;
           } else {
             if (isAlgebraicSystem) throw error;
             if (isExplicit && /requires explicit state equations/.test(error.message)) throw error;
-            if (!config && !useSdirk) {
+            if (error instanceof ToleranceAtMinimumStepError) {
+              throw this.solverDiagnosticError(`VLab solver: ${error.message}`, system, nodes, t, h, xCurrent, history, lastFailure);
+            }
+            if (error instanceof SolverConvergenceError) lastFailure = error;
+            const promoted = !config && !useSdirk;
+            if (promoted) {
               useSdirk = true;
               console.warn("DAE BDF solver convergence issue. Promoting to SDIRK-3.");
             }
-            if (h <= stepFloor && !useSdirk && config && config.maximumIterations <= 1) {
-              throw new Error(`DAE Solver failed to converge at minimumStep: ${error.message}`);
+            if (h <= stepFloor && !landing) {
+              // WP-31b (F-050): no state is accepted unconverged. The legacy promotion to SDIRK-3 gets one retry at the floor;
+              // after that the failure is reported with the worst residual rows and their blocks.
+              if (promoted) continue;
+              throw this.solverDiagnosticError(
+                `VLab solver did not converge at the minimum step (t=${t}, h=${h}): ${error.message}`,
+                system, nodes, t, h, xCurrent, history, lastFailure,
+              );
             }
-            if (h <= stepFloor) {
-              // Preserve the established V-Lab behavior at the configured
-              // minimum step: accept the best state rather than retrying
-              // forever. Explicit-state incompatibilities are still errors.
-              stepAccepted = true;
-              const xBefore = xCurrent;
-              if (nextX.length > 0) xCurrent = [...nextX];
-              bdfOrder = 1; // best-effort state: no valid BDF2 history for the next step
-              t += h;
-              recordHistory(system, history, xBefore, xCurrent, t - h, t);
-              acceptedSteps++;
-            } else {
-              rejectedSteps++;
-              h = Math.max(stepFloor, h * 0.5);
-              bdfOrder = 1;
-            }
+            rejectedSteps++;
+            h = Math.max(landing ? 0 : stepFloor, h * 0.5);
+            landing = undefined;
+            bdfOrder = 1;
           }
         }
       }
@@ -901,21 +1072,106 @@ export class VLabPhysicsEngine {
       rejectedSteps,
       /** zero-crossing step cuts (retried solves) and located events during this call (WP-11 step-budget evidence) */
       eventRetries,
-      eventsLocated
+      eventsLocated,
+      /** WP-31b (F-051): Newton matrices that were singular but consistent during this call (free unknowns held, not regularized) */
+      singularMatrixSolves: SparseLinearSolver.singularSolveCount - singularSolvesAtStart,
     };
   }
 
-  private detectZeroCrossings(
-    nodes: Node[],
-    edges: Edge[],
-    xStart: number[],
-    xEnd: number[],
-    system: AssembledSystem,
-    tStart = 0,
-    tEnd = 0
-  ): { eventOccurred: boolean; fraction: number } {
-    let earliestFraction = 1.0;
-    let eventOccurred = false;
+  /**
+   * Solver diagnostic (WP-31b, F-050 / F-095): the worst residual rows of the best Newton iterate of the last failed solve
+   * (or, when no solve failed, of the backward-Euler residual at the current state over h), with the owning blocks.
+   */
+  private solverDiagnosticError(
+    message: string, system: AssembledSystem, nodes: Node[], time: number, h: number, x: number[], history: any,
+    failure?: SolverConvergenceError,
+  ): VLabSolverDiagnosticError {
+    let residual = failure?.residual ?? [];
+    if (residual.length !== system.systemSize) {
+      try {
+        const c: EquationContext = {
+          dt: h, time: time + h, history, parameters: {}, prevStates: [...x], states: [...x],
+          stateDerivatives: new Array(system.systemSize).fill(0), order: 1,
+        };
+        residual = system.residuals(x, ddtVector(x, c, system.firstOrderOnly), c);
+      } catch {
+        residual = [];
+      }
+    }
+    const worstResidualRows: WorstResidualRow[] = residual
+      .map((value, row) => ({ value, row }))
+      .filter(r => r.value !== 0)
+      .sort((p, q) => Math.abs(q.value) - Math.abs(p.value))
+      .slice(0, 5)
+      .map(({ value, row }) => {
+        const owner = system.structure?.rowOwners[row];
+        return { blockId: owner?.blockId ?? '', blockType: owner?.blockType ?? '', row, variable: system.variableNames[row] ?? '', value };
+      });
+    const singularUnknowns = failure?.singular?.map(s => ({
+      variable: system.variableNames[s.column] ?? `#${s.column}`, blockId: system.structure?.variableOwners[s.column]?.blockId ?? '',
+    }));
+    const blocks = nodes.map(n => `${n.id}: ${(n.data as any)?.type ?? n.type ?? ''}`);
+    const blockList = ` Blocks: [${nodes.map(n => ((n.data as any)?.type ?? n.type ?? n.id)).join(', ')}].`;
+    const singularText = singularUnknowns?.length ? ` Singular Newton matrix in ${singularUnknowns.map(s => s.variable).join(', ')}.` : '';
+    return new VLabSolverDiagnosticError(`${message} [t=${time}, h=${h}]${blockList}${singularText}`, {
+      time, h, reason: message, worstResidualRows, singularUnknowns, blocks,
+    });
+  }
+
+  private differentiatedCache = new WeakMap<AssembledSystem, boolean[]>();
+
+  /**
+   * Unknowns whose time derivative enters a residual (probed once per assembled system at the current state: residual
+   * change when the derivative of one unknown alone is perturbed), plus `_state_` variables and BDF1-pinned frame poses.
+   * A residual that cannot be evaluated at a probe counts as a dependency (never drop an unknown on missing information).
+   */
+  private differentiatedMask(system: AssembledSystem, x: number[], ctx: EquationContext): boolean[] {
+    const cached = this.differentiatedCache.get(system);
+    if (cached) return cached;
+    const n = system.systemSize;
+    const mask = system.isDifferentialState.map((d, i) => d || system.firstOrderOnly?.[i] === true);
+    const probeCtx: EquationContext = { ...ctx, states: [...x], stateDerivatives: new Array(n).fill(0) };
+    const quiet = <T>(fn: () => T): T | undefined => {
+      const e = console.error; const w = console.warn;
+      console.error = () => {}; console.warn = () => {};
+      try { return fn(); } catch { return undefined; } finally { console.error = e; console.warn = w; }
+    };
+    const zero = new Array(n).fill(0);
+    const f0 = quiet(() => system.residuals([...x], zero.slice(), probeCtx));
+    for (let j = 0; j < n; j++) {
+      if (mask[j]) continue;
+      if (!f0) { mask[j] = true; continue; }
+      const dx = zero.slice();
+      dx[j] = 1e-3 * Math.max(1, Math.abs(x[j])) / ctx.dt;
+      const f1 = quiet(() => system.residuals([...x], dx, probeCtx));
+      if (!f1) { mask[j] = true; continue; }
+      for (let i = 0; i < n; i++) {
+        const d = Math.abs(f1[i] - f0[i]);
+        if (!(d <= 1e-12 * Math.max(1, Math.abs(f0[i]), Math.abs(f1[i])))) { mask[j] = true; break; }
+      }
+    }
+    this.differentiatedCache.set(system, mask);
+    return mask;
+  }
+
+  /** Across-variable index of every net root (cached per assembled system). */
+  private acrossIndexCache = new WeakMap<AssembledSystem, Map<string, number>>();
+
+  private acrossIndexOf(system: AssembledSystem, root: string): number {
+    let cache = this.acrossIndexCache.get(system);
+    if (!cache) { cache = new Map(); this.acrossIndexCache.set(system, cache); }
+    let idx = cache.get(root);
+    if (idx === undefined) {
+      const varName = `Across_${root}_`;
+      idx = system.variableNames.findIndex(name => name.includes(varName));
+      cache.set(root, idx);
+    }
+    return idx;
+  }
+
+  /** Every event indicator of the model at (x, time), in a fixed order (the switching surfaces are their zeros). */
+  private eventIndicators(nodes: Node[], system: AssembledSystem, xVec: number[], time: number): number[] {
+    const all: number[] = [];
 
     nodes.forEach(node => {
       const type = (node.data as any)?.type || node.type || (node.data as any)?.blockId || '';
@@ -926,10 +1182,7 @@ export class VLabPhysicsEngine {
         const indicators: number[] = [];
         const ports = Array.from(comp.portNodeMap.keys());
         const acrossVals = ports.map(portId => {
-          const root = comp.portNodeMap.get(portId)!;
-          // Find across index for root
-          const varName = `Across_${root}_`;
-          const sysIdx = system.variableNames.findIndex(name => name.includes(varName));
+          const sysIdx = this.acrossIndexOf(system, comp.portNodeMap.get(portId)!);
           return sysIdx !== -1 ? xVec[sysIdx] : 0;
         });
         
@@ -1048,25 +1301,10 @@ export class VLabPhysicsEngine {
         return indicators;
       };
 
-      const indStart = getIndicators(xStart, tStart);
-      const indEnd = getIndicators(xEnd, tEnd);
-      
-      indStart.forEach((valStart, i) => {
-        const valEnd = indEnd[i];
-        // A step that starts on the event surface (the previous step was cut at this crossing) is not a new crossing:
-        // re-localizing it would shrink the step forever (the Newton-stall of F-075 style chatter).
-        if (Math.abs(valStart) <= EVENT_BAND) return;
-        if (valStart * valEnd < 0) {
-          const fraction = Math.abs(valStart) / (Math.abs(valStart) + Math.abs(valEnd));
-          if (fraction < earliestFraction) {
-            earliestFraction = fraction;
-            eventOccurred = true;
-          }
-        }
-      });
+      for (const v of getIndicators(xVec, time)) all.push(v);
     });
-    
-    return { eventOccurred, fraction: earliestFraction };
+
+    return all;
   }
 
   coSimulate(signalInputs: Record<string, number>, nodes: Node[], edges: Edge[]) {

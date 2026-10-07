@@ -35,9 +35,11 @@ const wire = (a: string, b: string): Edge => {
 };
 interface Model { nodes: Node[]; edges: Edge[] }
 
-function simulate(m: Model, steps: number, dt: number) {
+/** `fixedStep`: one backward-Euler step of dt per call (WP-31b engine.setFixedStep), for the checks written as one implicit step */
+function simulate(m: Model, steps: number, dt: number, fixedStep = false) {
   const engine = new VLabPhysicsEngine();
   engine.setStepBudget({ maxStepAttempts: 60, wallClockMs: 20000 });
+  engine.setFixedStep(fixedStep);
   let state: any = null;
   const history: any[] = [];
   for (let i = 0; i < steps; i++) {
@@ -394,7 +396,7 @@ describe('WP-13b belt_spool / pulley / belt_end / belt_properties', () => {
         node('dut', 'belt_spool', { radius: R, inertia }), node('load', 'trans_damper', { b: c }), node('rref', 'rot_ref'), node('tref', 'trans_ref')],
       edges: [wire('bp.p', 'dut.p'), wire('ts.c', 'dut.r'), wire('ts.r', 'rref.r'), wire('dut.a', 'load.r'), wire('load.c', 'tref.p')],
     };
-    const sim = simulate(m, 1, dt);
+    const sim = simulate(m, 1, dt, true);
     const J = inertia + 2 * Math.PI * rho * R ** 3;
     // first (backward Euler) step from rest: J (w1 - 0)/dt = T - c R^2 w1
     const w1 = (T * dt) / (J + c * R * R * dt);
@@ -429,13 +431,13 @@ describe('WP-13b belt_spool / pulley / belt_end / belt_properties', () => {
         node('dut', 'belt_end', { stiffness: 1, length: L, area: A }), node('tref', 'trans_ref')],
       edges: [wire('bp.p', 'dut.p'), wire('dut.r', 'tref.p'), wire('fs.b', 'dut.e'), wire('fs.a', 'tref.p')],
     };
-    const sim = simulate(m, 1, dt);
+    const sim = simulate(m, 1, dt, true);
     // tension of the belt pulled by F at E with R fixed is F, whatever the stiffness
     near(sim.at('dut_branch_signal_f'), F, 1e-8, 'tension');
     // E moves away from R: v_E = d(x_E)/dt, x_E = F / k reached in the first step => v_E = F / (k dt)
     near(sim.across('dut', 'e'), F / (k * dt), 1e-6, 'v_E = F/(k dt) fixes k = E A / L');
     // a stiffer (steel) belt stretches 100x less
-    const stiff = simulate({ ...m, nodes: m.nodes.map((n) => (n.id === 'bp' ? node('bp', 'belt_properties', { density: 1.1, youngs: 100 * E }) : n)) }, 1, dt);
+    const stiff = simulate({ ...m, nodes: m.nodes.map((n) => (n.id === 'bp' ? node('bp', 'belt_properties', { density: 1.1, youngs: 100 * E }) : n)) }, 1, dt, true);
     near(stiff.across('dut', 'e'), F / (100 * k * dt), 1e-6, 'stiffer belt');
   });
 

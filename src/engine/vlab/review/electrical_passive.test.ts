@@ -33,9 +33,11 @@ const wire = (a: string, b: string): Edge => {
 };
 interface Model { nodes: Node[]; edges: Edge[] }
 
-function simulate(m: Model, steps: number, dt: number) {
+/** `fixedStep`: one implicit step of dt per call (WP-31b engine.setFixedStep), for checks of the discretisation itself */
+function simulate(m: Model, steps: number, dt: number, fixedStep = false) {
   const engine = new VLabPhysicsEngine();
   engine.setStepBudget({ maxStepAttempts: 200, wallClockMs: 30000 });
+  engine.setFixedStep(fixedStep);
   let state: any = null;
   const history: any[] = [];
   for (let i = 0; i < steps; i++) {
@@ -122,8 +124,10 @@ describe('WP-10 RC charge against the closed form', () => {
     near(sim.across('c', 'p'), V * (1 - Math.exp(-5)), 5e-3, 'final value');
   });
   it('the error shrinks with the step (consistency: halving dt at least halves the worst error)', () => {
+    // fixed step: the adaptive path error-controls the capacitor voltage since WP-31b (F-103), so its error follows the
+    // tolerance, not dt; the consistency of the discretisation is measured at one step of dt per call
     const worstAt = (dt: number) => {
-      const sim = simulate(model(), Math.round(2 * tau / dt), dt);
+      const sim = simulate(model(), Math.round(2 * tau / dt), dt, true);
       return Math.max(...sim.history.map((s) => Math.abs(sim.across('c', 'p', s) - V * (1 - Math.exp(-s.time / tau)))));
     };
     const e1 = worstAt(8e-6), e2 = worstAt(4e-6);

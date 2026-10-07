@@ -110,6 +110,13 @@ function lcg(seed: number): () => number {
   return () => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s / 4294967296; };
 }
 
+/** Nominal magnitude of an unknown for the structural probe: absolute pressure / temperature potentials and states, else 1. */
+function probeNominal(name: string): number {
+  if (/^Across_.+_\((gas|fluid|isothermal_liquid|moist_air|moistair|hydraulic)\)$/i.test(name) || /_state_(pressure|p)$/i.test(name)) return 101325;
+  if (/^Across_.+_\(thermal\)$/i.test(name) || /_state_(temp|T|Tg|T_w|temperature)$/i.test(name)) return 293.15;
+  return 1;
+}
+
 /**
  * Sparsity pattern of d(residual)/d(unknown) for the backward-Euler Jacobian the solver builds
  * (dx = (x - xprev)/dt), the union of two generic points. `pattern[i]` lists the columns of row i.
@@ -118,10 +125,14 @@ function lcg(seed: number): () => number {
 export function detectJacobianPattern(system: AssembledSystem, points = 2): number[][] | null {
   const n = system.systemSize;
   const rows: Set<number>[] = Array.from({ length: n }, () => new Set<number>());
+  // WP-31b (F-098): probe at physically scaled points around the nominal value of each unknown (the same seeds the engine
+  // starts from: absolute pressures ~1 atm, absolute temperatures ~293 K), not at p ~ 1 Pa / T ~ 1 K where gas and
+  // thermal equations are far from their operating range.
+  const nominal = system.variableNames.map(probeNominal);
   for (let k = 0; k < points; k++) {
     const rnd = lcg(0x9e3779b9 + 7919 * k);
-    const x0 = Array.from({ length: n }, () => 0.35 + 1.3 * rnd());
-    const prev = Array.from({ length: n }, () => 0.35 + 1.3 * rnd());
+    const x0 = Array.from({ length: n }, (_, i) => nominal[i] * (0.35 + 1.3 * rnd()));
+    const prev = Array.from({ length: n }, (_, i) => nominal[i] * (0.35 + 1.3 * rnd()));
     const ctx: EquationContext = {
       dt: 1, time: 0.137 + 0.11 * k, parameters: {}, prevStates: prev, states: x0.slice(), stateDerivatives: new Array(n).fill(0), order: 1,
     };

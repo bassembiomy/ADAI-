@@ -9,7 +9,15 @@ import {
   Parameter,
   Equation
 } from './types';
+import { numericParam, parseNumeric } from '../vlabParams';
 
+/**
+ * STATUS (WP-31b, F-043/F-054/F-070): this IR pipeline (PhysicalSystemCompiler -> EquationAssembler -> SolverManager) is NOT used by the app.
+ * The simulation path is DAEAssembler -> VLabPhysicsEngine (vlabPhysics.ts); only kernel/types, PhysicalNetworkExtractor.normalizeSolverConfiguration
+ * and SolverConfigurationSelection are imported outside kernel/ and its tests. It models three block types (capacitor, inductor, resistor).
+ * Its numeric handling is nevertheless kept honest: parameters go through vlabParams (zero / negatives valid, malformed values throw, never || 0),
+ * and the initial conditions v0 / i0 are honoured.
+ */
 export class PhysicalSystemCompiler {
   compile(network: PhysicalNetwork, rawNodes: Node[]): PhysicalSystemIR {
     const compNodes = rawNodes.filter(n => network.componentIds.includes(n.id));
@@ -24,11 +32,14 @@ export class PhysicalSystemCompiler {
       const params = (node.data as any)?.params || {};
 
       Object.entries(params).forEach(([k, v]) => {
-        const val = typeof v === 'object' && v !== null && 'value' in v ? (v as any).value : v;
+        // numeric parameters only: text / enum parameters are not numbers, a missing value is not recorded as 0
+        const parsed = parseNumeric(v);
+        if (parsed.kind === 'missing') return;
+        if (parsed.kind === 'invalid' && typeof parsed.raw === 'string') return;
         parameters.push({
           id: `${node.id}_${k}`,
           name: k,
-          value: Number(val) || 0,
+          value: numericParam({ [k]: v }, k, NaN, node.id),
           componentId: node.id
         });
       });
@@ -39,7 +50,7 @@ export class PhysicalSystemCompiler {
           name: `V_${node.id}`,
           symbol: 'V_C',
           unit: 'V',
-          initialValue: 0,
+          initialValue: numericParam(params, 'v0', 0, node.id),
           sourceComponentId: node.id,
           preferred: true
         });
@@ -58,7 +69,7 @@ export class PhysicalSystemCompiler {
           name: `I_${node.id}`,
           symbol: 'I_L',
           unit: 'A',
-          initialValue: 0,
+          initialValue: numericParam(params, 'i0', 0, node.id),
           sourceComponentId: node.id,
           preferred: true
         });

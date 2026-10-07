@@ -80,14 +80,13 @@ describe('V-Lab Connected Model Benchmarks (10 Major System Topologies)', () => 
     // series RLC, DC step (overdamped here: alpha = R/2L = 25000 > w0 = 1/sqrt(LC) = 1e4):
     //   vC(t) = V [1 - (s2 e^(s1 t) - s1 e^(s2 t)) / (s2 - s1)],  s1,2 = -alpha +- sqrt(alpha^2 - w0^2)
     runSteps(nodes, edges, 100, 0.0001);
-    // the fast pole (tau = 21 us) is resolved with a 2 us step; at the 100 us step above the engine is not error-controlled on
-    // capacitor voltages (F-103), see the it.fails below
+    // the fast pole (tau = 21 us) is resolved with a 2 us step; the 100 us step is checked below
     expect(rlcWorstError(nodes, edges, 2e-6, 1000)).toBeLessThan(0.01 * 24);
   });
 
-  // F-103 (proposed, WP-30): without a Solver Configuration the LTE estimate covers only `_state_` variables and the first BDF1
-  // step has no estimate, so across / branch variables (C dv/dt, L di/dt) are not error-controlled: 1.9 % error at dt = 100 us.
-  it.fails('benchmark 1 at its own 100 us step meets the 1 % reference (F-103: across variables not error-controlled)', () => {
+  // F-103 (fixed in WP-31b): without a Solver Configuration the LTE estimate used to cover only `_state_` variables and the first
+  // BDF1 step had no estimate, so across / branch variables (C dv/dt, L di/dt) were not error-controlled (1.9 % at dt = 100 us).
+  it('benchmark 1 at its own 100 us step meets the 1 % reference (F-103: across variables error-controlled)', () => {
     expect(rlcWorstError(rlcModel().nodes, rlcModel().edges, 1e-4, 100)).toBeLessThan(0.01 * 24);
   });
 
@@ -301,11 +300,11 @@ describe('V-Lab Connected Model Benchmarks (10 Major System Topologies)', () => 
     // the shaft R sits on the Mechanical Rotational Reference: a LOCKED-ROTOR test, w = 0, no back EMF, so
     //   La di/dt + Ra i = V  ->  i(t) = V/Ra (1 - e^(-t Ra/La)) (stall current 12 A)
     runSteps(nodes, edges, 50, 0.001);
-    // tau = La/Ra = 2.5 ms is resolved with a 0.1 ms step (at the 1 ms step above the first BDF1 step is not error-controlled, F-103)
+    // tau = La/Ra = 2.5 ms is resolved with a 0.1 ms step; the 1 ms step is checked below (F-103, WP-31b)
     expect(lockedRotorWorstError(nodes, edges, 1e-4, 500)).toBeLessThan(0.01 * 12);
   });
 
-  it.fails('benchmark 9 at its own 1 ms step meets the 1 % reference (F-103: first BDF1 step / branch currents not error-controlled)', () => {
+  it('benchmark 9 at its own 1 ms step meets the 1 % reference (F-103: first BDF1 step / branch currents error-controlled)', () => {
     const nodes: Node[] = [
       makeNode('dc', 'dc_voltage', { V: 24 }),
       makeNode('motor', 'dc_motor', { Ra: 2.0, La: 5e-3, Kt: 0.1, Ke: 0.1, J: 0.01, B: 0.001 }),

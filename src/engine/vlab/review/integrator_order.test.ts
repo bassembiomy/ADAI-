@@ -29,6 +29,9 @@ interface Trace { t: number[]; at: (name: string, k: number) => number; acrossAt
 function run(m: Model, dts: number[], opts: { bdf1?: boolean; fixedSteps?: boolean } = {}): Trace {
   const engine = new VLabPhysicsEngine();
   engine.setStepBudget({ maxStepAttempts: 500, wallClockMs: 60000 });
+  // WP-31b (F-103): the adaptive path error-controls every unknown and would sub-step these calls; the order measurement
+  // needs exactly one step of the given dt per call (Simscape local-solver style fixed step)
+  if (opts.fixedSteps !== false) engine.setFixedStep(true);
   const system = new DAEAssembler().assemble(m.nodes, m.edges);
   let state: any = null;
   const states: any[] = [];
@@ -195,9 +198,9 @@ describe('WP-31a variable step and restart', () => {
         const dt = t < TRLC / 4 ? h : 0.7 * h; // one step-size change mid-run (ratio 0.7), then growth via sub-steps
         dts.push(dt); t += dt; i++;
       }
-      // the engine may split a call into several solver steps when the size grows (it never exceeds the last accepted h),
-      // which is itself a step-size change; the global time grid is irregular by construction here.
-      const tr = run(rlc(), dts, { fixedSteps: false });
+      // one fixed step per call (WP-31b setFixedStep: the adaptive path now error-controls every unknown, so its error follows
+      // the tolerance, not dt); the 0.7 ratio change mid-run makes the grid irregular by construction.
+      const tr = run(rlc(), dts);
       const spacing = new Set(tr.t.slice(1).map((x, j) => Math.round((x - tr.t[j]) * 1e12)));
       expect(spacing.size, 'the grid has more than one step size').toBeGreaterThan(1);
       // error measured after the change (the early, fixed-h part carries its own, larger error)
@@ -213,6 +216,7 @@ describe('WP-31a variable step and restart', () => {
   it('a restart (history dropped) mid-run falls back to BDF1 for one step without a spike', () => {
     const h = tau / 80;
     const engine = new VLabPhysicsEngine();
+    engine.setFixedStep(true); // one step of h per call (WP-31b)
     const m = rc();
     let state: any = null;
     const vc: number[] = [];
@@ -241,6 +245,7 @@ describe('WP-31a variable step and restart', () => {
 
   it('simulateStep BDF2 history bookkeeping: (wrong-size history is ignored)', () => {
     const engine = new VLabPhysicsEngine();
+    engine.setFixedStep(true); // one step per call (WP-31b)
     const m = rc();
     const s1 = engine.simulateStep(m.nodes, m.edges, null, tau / 80);
     expect(s1.prevX).toBeDefined();

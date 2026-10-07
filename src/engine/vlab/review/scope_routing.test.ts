@@ -91,7 +91,9 @@ const sampleClose = (actual: number | number[] | undefined, expected: number | n
 
 function simulate(nodes: Node[], edges: Edge[], steps = 2): any {
   const engine = new VLabPhysicsEngine();
-  engine.setStepBudget({ maxStepAttempts: 2000, wallClockMs: 3000 });
+  // WP-31b: the budget only has to stop a non-advancing model; the error control now covers every differentiated unknown, so the
+  // heavy controller / machine blocks (pmsm_foc: 430 steps of ~7 ms for 50 ms) need more than the former 3 s per call
+  engine.setStepBudget({ maxStepAttempts: 2000, wallClockMs: 30000 });
   let state: any = null;
   quiet(() => { for (let i = 0; i < steps; i++) state = engine.simulateStep(nodes, edges, state, 0.05); });
   return state;

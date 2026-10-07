@@ -1,12 +1,26 @@
 // src/engine/vlab/kernel/EquationAssembler.ts
 import { PhysicalSystemIR, CompiledPhysicalSystem, SolverContext } from './types';
 
+/**
+ * Series RLC reference assembler of the kernel IR pipeline, which the app does not use (see PhysicalSystemCompiler; the simulation
+ * path is DAEAssembler -> VLabPhysicsEngine). WP-31b (F-043/F-054/F-070): a parameter that is present is used as given (0 and negative
+ * values are valid inputs, never replaced by the demo default); the demo defaults apply only to an ABSENT parameter; a non-finite value
+ * throws. L and C are divisors, so a zero there is reported instead of producing Infinity/NaN.
+ */
 export class EquationAssembler {
   assembleRLC(ir: PhysicalSystemIR): CompiledPhysicalSystem {
-    const R = ir.parameters.find(p => p.name === 'resistance')?.value || 100;
-    const L = ir.parameters.find(p => p.name === 'inductance')?.value || 0.1;
-    const C = ir.parameters.find(p => p.name === 'capacitance')?.value || 10e-6;
-    const Vs = ir.parameters.find(p => p.name === 'voltage')?.value || 10;
+    const param = (name: string, fallback: number): number => {
+      const v = ir.parameters.find(p => p.name === name)?.value;
+      if (v === undefined) return fallback;
+      if (!Number.isFinite(v)) throw new Error(`RLC parameter "${name}" is not a finite number (${v})`);
+      return v;
+    };
+    const R = param('resistance', 100);
+    const L = param('inductance', 0.1);
+    const C = param('capacitance', 10e-6);
+    const Vs = param('voltage', 10);
+    if (L === 0) throw new Error('RLC parameter "inductance" must be non-zero (L di/dt = Vs - vC - R i)');
+    if (C === 0) throw new Error('RLC parameter "capacitance" must be non-zero (C dvC/dt = i)');
 
     return {
       id: ir.id,
