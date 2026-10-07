@@ -1,0 +1,10 @@
+{
+  "id": "heater_convection",
+  "class": "linear_smooth",
+  "stopTime": 1200,
+  "dt": 2,
+  "signals": [
+    { "name": "dT", "unit": "K", "vlabProbe": { "nodeId": "sensor", "handle": "t_s", "variableName": "dT" } }
+  ],
+  "analytic": { "type": "first_order_step", "final": 28.8, "tau": 225 }
+}

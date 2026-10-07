@@ -8518,6 +8518,12 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "label": "Young Mod",
             "min": 0,
             "exclusiveMin": true
+          },
+          "damping": {
+            "value": 0,
+            "unit": "N-s/m",
+            "label": "Belt Damping",
+            "min": 0
           }
         },
         "ports": [
@@ -8528,8 +8534,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "BeltProperty"
           }
         ],
-        "equation": "ρ = linear density [kg/m],  E = Young modulus [Pa]\nk = E·A/L [N/m] (Belt-Cable End),  J_belt = 2π·ρ·R³ [kg·m²] (spool, pulley)",
-        "description": "Property link: publishes the linear density ρ (kg/m) and the Young modulus E (Pa) to every Belt-Cable End, Spool and Pulley wired to its BeltProperty port P. It has no mechanical ports and exchanges no power; a belt block that is not wired to it uses its own stiffness / inertia parameters."
+        "equation": "ρ = linear density [kg/m],  E = Young modulus [Pa],  c = belt damping [N·s/m]\nk = E·A/L [N/m],  f = max(0, k·x + c·dx/dt) (Belt-Cable End),  J_belt = 2π·ρ·R³ [kg·m²] (spool, pulley)",
+        "description": "Property link: publishes the linear density ρ (kg/m), the Young modulus E (Pa) and the belt damping c (N·s/m) to every Belt-Cable End, Spool and Pulley wired to its BeltProperty port P. It has no mechanical ports and exchanges no power; a belt block that is not wired to it uses its own stiffness / damping / inertia parameters."
       },
       {
         "id": "belt_end",

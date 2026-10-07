@@ -2895,12 +2895,16 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   belt_properties: ({ params, ctx, nodeId }) => {
     const density = numericParam(params, 'density', 1.1);
     const youngs = numericParam(params, 'youngs', 1e9);
+    // belt damping (spec 2026-09-30 belt-pulley 2.3): reaches a belt end only through its P link (assembly injection), never
+    // through the model-wide broadcast, so an unlinked belt end keeps its own damping (spec 2.5)
+    const damping = numericParam(params, 'damping', 0);
     if (ctx?.parameters) {
       ctx.parameters['belt_density'] = density;
       ctx.parameters['belt_youngs'] = youngs;
       if (nodeId) {
         ctx.parameters[`belt_density@${nodeId}`] = density;
         ctx.parameters[`belt_youngs@${nodeId}`] = youngs;
+        ctx.parameters[`belt_damping@${nodeId}`] = damping;
       }
     }
     return [];
@@ -2918,7 +2922,9 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     // (detectZeroCrossings). The extension is the state so that a taut belt is the state the structural probe sees.
     const v = across[eIdx] - across[rIdx];
     const x = state[0];
-    const c = numericParam(params, 'damping', 0);
+    // c: the damping of the belt_properties block wired to P (injected as belt_damping, spec 2.3), else the local damping (2.5)
+    const linkedDamping = params ? numParam(params.belt_damping, NaN) : NaN;
+    const c = Number.isFinite(linkedDamping) ? linkedDamping : numericParam(params, 'damping', 0);
     const res = [
       branch[0] + Math.max(0, k * x + c * v),
     ];    if (branch.length > 1) {

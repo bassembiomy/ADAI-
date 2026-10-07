@@ -382,6 +382,12 @@ export class VLabPhysicsEngine {
       const remaining = tTarget - t;
       const stepFloor = Math.min(minStep, remaining);
       h = Math.min(h, remaining);
+      // WP-30: never leave a round-off sliver behind. t accumulates h in floating point, so a step that "exactly" reaches the
+      // target can stop 1e-11 s short; the next step of that size cannot be resolved by Newton (the state change is below the
+      // ulp of the state: C dT/dt with dT < ulp(T)), failed to converge and was accepted as a best-effort state (a 0.5 K jump
+      // in a thermal model). Stretch the step onto the target when the remainder is within 1 ppm of h (the end-of-interval
+      // step adjustment of every production integrator, e.g. Shampine & Reichelt, "The MATLAB ODE Suite", 1997, ode45/ode15s).
+      if (remaining - h <= 1e-6 * h) h = remaining;
       if (t + h === t) throw new Error('Solver step is too small to advance simulation time.');
       
       let stepAccepted = false;

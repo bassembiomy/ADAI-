@@ -1160,16 +1160,16 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Generates twelve independent, finite-width thyristor firing pulses: six delta gates and six wye gates. The wye bridge is shifted by 30 degrees and successive gates in each bridge are separated by 60 degrees. theta is a phase offset in radians added to the internal ramp 2*pi*freq*t. Two six-pulse bridges 30 degrees apart in series give twice the six-pulse mean DC voltage with the ripple at 12 times the line frequency. Signal generator only.'
   },
   belt_properties: {
-    equations: ['rho = density', 'E = youngs', 'publish(belt_density, belt_youngs)'],
+    equations: ['rho = density', 'E = youngs', 'c = damping', 'publish(belt_density, belt_youngs, belt_damping)'],
     latex: ['E, \rho = \\text{const}'],
     across: 'None', through: 'Belt Properties',
-    description: 'Property-link block for a belt/cable network. Publishes linear density (kg/m) and Young modulus (Pa) to ctx.parameters and, at assembly time, injects them into explicitly wired (P port) belt_end / belt_spool / pulley blocks, where they drive stiffness k = E*A/L and wrapped-belt inertia.'
+    description: 'Property-link block for a belt/cable network. Publishes linear density (kg/m), Young modulus (Pa) and belt damping (N*s/m) to ctx.parameters and, at assembly time, injects them into explicitly wired (P port) belt_end / belt_spool / pulley blocks, where they drive stiffness k = E*A/L, the belt-end damping c and wrapped-belt inertia.'
   },
   belt_end: {
-    equations: ['dx/dt = v_e - v_r  (x = x_e - x_r)', 'f = max(0, k*x + c*dx/dt)  (tension-only)', 'k = E*A/L (material) or stiffness', 'F_r->e = -f'],
+    equations: ['dx/dt = v_e - v_r  (x = x_e - x_r)', 'f = max(0, k*x + c*dx/dt)  (tension-only)', 'k = E*A/L (material) or stiffness', 'c = linked belt damping or damping', 'F_r->e = -f'],
     latex: ['F = k \Delta x'],
     across: 'Translational Velocity (m/s)', through: 'Force (N)',
-    description: 'Compliant termination of a belt/cable. Axial stiffness comes from the linked belt_properties material (k = youngs*area/length) and falls back to the fixed stiffness param when no material is available.'
+    description: 'Compliant termination of a belt/cable. Axial stiffness and damping come from the linked belt_properties block (k = youngs*area/length, c = belt damping); a belt end not wired to it uses its own stiffness and damping params.'
   },
   belt_spool: {
     equations: ['v = omega * R', 'T + F*R = J*dw/dt', 'J = inertia + 2*pi*rho*R^3'],

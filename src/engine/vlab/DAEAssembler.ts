@@ -998,18 +998,20 @@ export class DAEAssembler {
     const BELT_CONSUMER_TYPES = new Set(['belt_end', 'belt_spool', 'pulley']);
     const unwrapNodeParam = (v: any) => (v && typeof v === 'object' && 'value' in v) ? v.value : v;
     const toFiniteNumber = (v: any) => { const n = Number(v); return Number.isFinite(n) ? n : undefined; };
-    const beltMaterialSources: { nodeId: string; root: string; density: number; youngs: number }[] = [];
+    const beltMaterialSources: { nodeId: string; root: string; density: number; youngs: number; damping: number }[] = [];
     nodes.forEach(node => {
       const type = (node.data as any)?.type || node.type || (node.data as any)?.blockId || '';
       if (type !== 'belt_properties') return;
       const p = (node.data as any)?.params || {};
       const density = numericParam(p, 'density', 1.1, node.id);
       const youngs = numericParam(p, 'youngs', 1e9, node.id);
+      const damping = numericParam(p, 'damping', 0, node.id);
       beltMaterialSources.push({
         nodeId: node.id,
         root: uf.find(`${node.id}_p`),
         density: Math.max(0, density),
         youngs: youngs > 0 ? youngs : 1e9,
+        damping, // validated >= 0 by the parameter bounds (vlabParams)
       });
     });
     const warnedAmbiguousBeltProps = new Set<string>();
@@ -1024,6 +1026,7 @@ export class DAEAssembler {
       }
       params.belt_density = matchedSource.density;
       params.belt_youngs = matchedSource.youngs;
+      params.belt_damping = matchedSource.damping;
       params.belt_properties_source = matchedSource.nodeId;
       if (nodeData && typeof nodeData === 'object' && nodeData.params) {
         nodeData.params.belt_density = matchedSource.density;

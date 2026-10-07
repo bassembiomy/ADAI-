@@ -560,10 +560,14 @@
         "WP-21"
       ],
       "blocks": [],
-      "status": "in_progress",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "acceptance": "npm run test:vlab:simscape",
-      "evidence": [],
+      "evidence": [
+        "8 cross-domain models vs independent references: PI motor 0.0085 %, heater 0.0002 %, hydraulic 0.13 %, choked gas 0 %, winding 0.03 %, inverter+IM V/f 0.014 % (slip 0.35 %), drivetrain+hard stop 0.009 %, sat-sine RC 0.008 %; direct solve vs simulateStep < 1e-6",
+        "engine: end-of-interval sliver step fixed; F-041 benchmarks now assert closed forms (3 inverted wirings fixed); F-090 fixture and belt_properties damping",
+        "planner FULL suite: 5346 pass / 16 expected-fail / 1 = pmsm_foc 3 s wall clock under load (passes alone)"
+      ],
       "findings": []
     },
     {
@@ -588,7 +592,7 @@
         "WP-41"
       ],
       "blocks": [],
-      "status": "todo",
+      "status": "in_progress",
       "attempts": 0,
       "acceptance": "npx vitest run src/engine/vlab/kernel src/engine/vlab/review/engine_robustness.test.ts --reporter=dot",
       "evidence": [],
@@ -1053,7 +1057,8 @@
       "block": "vlab_connected_benchmarks",
       "layer": "integration",
       "summary": "Benchmarks 1-6 and 8-10 only assert finite state (they did before too). Add independent reference values.",
-      "wp": "WP-30"
+      "wp": "WP-30",
+      "status": "resolved-WP-30"
     },
     {
       "id": "F-042",
@@ -1470,7 +1475,7 @@
       "layer": "eq",
       "summary": "belt_damping from belt_properties is not applied (belt_end has a local damping param). The whitebox MechanicalFixtures torque source wiring inverts the sign.",
       "wp": "WP-30",
-      "status": "resolved-WP-21"
+      "status": "resolved-WP-30"
     },
     {
       "id": "F-091",
@@ -1569,6 +1574,30 @@
       "block": "library",
       "layer": "port",
       "summary": "Missing Simulink/Simscape signal blocks: derivative, relay, quantizer, rate limiter, compare, counter, ZOH, clock, chirp, pulse, mux, scalar-to-vector; ps_sum has a scalar port only.",
+      "wp": "USER"
+    },
+    {
+      "id": "F-103",
+      "severity": "high",
+      "block": "engine (no Solver Configuration)",
+      "layer": "solver",
+      "summary": "The LTE norm covers only _state_ variables, so across/branch derivatives (C dv/dt, L di/dt, J dw/dt, C dT/dt) are never error-controlled, and the first BDF1 step has no estimate. RLC at 100 us 1.9 %, locked rotor 4.4 %. 2 it.fails in vlab_connected_benchmarks.",
+      "wp": "WP-31"
+    },
+    {
+      "id": "F-104",
+      "severity": "low",
+      "block": "belt_end/spool/pulley",
+      "layer": "integration",
+      "summary": "Injected belt_density/youngs persist in node.data after unlinking; a model-wide ctx broadcast overrides unlinked blocks (spec 2.5); belt_damping is not persisted.",
+      "wp": "WP-31"
+    },
+    {
+      "id": "F-105",
+      "severity": "low",
+      "block": "library",
+      "layer": "port",
+      "summary": "No PS-controlled current source block (Simscape Controlled Current Source).",
       "wp": "USER"
     }
   ],

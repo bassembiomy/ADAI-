@@ -36,12 +36,38 @@ export interface CaseSpec {
      */
     | { type: 'buck_converter_averaged'; Vin: number; D: number; L: number; C: number; R: number; Rs: number }
     /** force step F on a mass m with a spring k and a damper b to the reference: position of m x'' + b x' + k x = F, x(0) = x'(0) = 0 (WP-13) */
-    | { type: 'mass_spring_damper_step'; F: number; m: number; k: number; b: number };
+    | { type: 'mass_spring_damper_step'; F: number; m: number; k: number; b: number }
+    /**
+     * DC motor speed loop (WP-30): PI controller u = Kp e + Ki int(e), e = w_ref - w, driving the armature voltage of a DC motor with
+     * rotor inertia J and viscous damping B (motor + load): La di/dt = u - Ra i - k w, J dw/dt = k i - B w, i = w = int(e) = 0 at t = 0.
+     * Linear 3rd-order ODE, characteristic polynomial La J s^3 + (Ra J + La B) s^2 + (Ra B + k^2 + Kp k) s + Ki k; evaluated by RK4 at
+     * 1 us (exact to round-off for this linear system, independent of the engine).
+     */
+    | { type: 'dc_motor_pi_speed'; wref: number; Kp: number; Ki: number; Ra: number; La: number; k: number; J: number; B: number };
+}
+
+/** RK4 trajectory cache of the dc_motor_pi_speed reference: shaft speed at multiples of 1 us, extended on demand from the last state */
+const piSpeedCache = new Map<string, { w: number[]; x: number[] }>();
+function dcMotorPiSpeed(a: Extract<NonNullable<CaseSpec['analytic']>, { type: 'dc_motor_pi_speed' }>, t: number): number {
+  const h = 1e-6, key = JSON.stringify(a);
+  let c = piSpeedCache.get(key);
+  if (!c) { c = { w: [0], x: [0, 0, 0] }; piSpeedCache.set(key, c); }
+  const f = ([i, sp, I]: number[]) => { const e = a.wref - sp; const u = a.Kp * e + I; return [(u - a.Ra * i - a.k * sp) / a.La, (a.k * i - a.B * sp) / a.J, a.Ki * e]; };
+  const need = Math.ceil(t / h) + 2;
+  while (c.w.length < need) {
+    const x = c.x;
+    const k1 = f(x), k2 = f(x.map((v, j) => v + (h / 2) * k1[j])), k3 = f(x.map((v, j) => v + (h / 2) * k2[j])), k4 = f(x.map((v, j) => v + h * k3[j]));
+    c.x = x.map((v, j) => v + (h / 6) * (k1[j] + 2 * k2[j] + 2 * k3[j] + k4[j]));
+    c.w.push(c.x[1]);
+  }
+  const n = t / h, lo = Math.floor(n), fr = n - lo;
+  return c.w[lo] * (1 - fr) + c.w[lo + 1] * fr;
 }
 
 /** Closed-form reference of `spec.analytic` at time t. */
 export function analyticValue(a: NonNullable<CaseSpec['analytic']>, t: number): number {
   if (a.type === 'first_order_step') return a.final * (1 - Math.exp(-t / a.tau));
+  if (a.type === 'dc_motor_pi_speed') return dcMotorPiSpeed(a, t);
   if (a.type === 'halfwave_rectifier_pwl') {
     // Series loop vs = vD + i R with the Simscape piecewise-linear diode: off i = vD/Roff, on i = (vD - Vf)/Ron + Vf/Roff.
     const vs = a.Vpk * Math.sin(2 * Math.PI * a.f * t);

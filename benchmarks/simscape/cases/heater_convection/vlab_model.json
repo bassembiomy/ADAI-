@@ -1,0 +1,24 @@
+{
+  "name": "heater_convection",
+  "nodes": [
+    { "id": "vs", "type": "default", "position": { "x": 0, "y": 0 }, "data": { "type": "dc_voltage", "params": { "V": 24, "R_int": 0 } } },
+    { "id": "heater", "type": "default", "position": { "x": 0, "y": 0 }, "data": { "type": "thermal_resistor", "params": { "R": 10 } } },
+    { "id": "gnd", "type": "default", "position": { "x": 0, "y": 0 }, "data": { "type": "ground", "params": {} } },
+    { "id": "mass", "type": "default", "position": { "x": 0, "y": 0 }, "data": { "type": "thermal_mass", "params": { "C": 450, "T0": 293.15 } } },
+    { "id": "conv", "type": "default", "position": { "x": 0, "y": 0 }, "data": { "type": "convective_heat", "params": { "h": 20, "A": 0.1 } } },
+    { "id": "amb", "type": "default", "position": { "x": 0, "y": 0 }, "data": { "type": "temp_src", "params": { "T": 293.15 } } },
+    { "id": "sensor", "type": "default", "position": { "x": 0, "y": 0 }, "data": { "type": "temp_sensor", "params": {} } },
+    { "id": "scope", "type": "default", "position": { "x": 0, "y": 0 }, "data": { "type": "scope", "params": {} } }
+  ],
+  "edges": [
+    { "id": "vs-heater", "source": "vs", "sourceHandle": "p_s", "target": "heater", "targetHandle": "a_t" },
+    { "id": "heater-gnd", "source": "heater", "sourceHandle": "b_s", "target": "gnd", "targetHandle": "a_t" },
+    { "id": "vs-gnd", "source": "vs", "sourceHandle": "n_s", "target": "gnd", "targetHandle": "a_t" },
+    { "id": "heater-mass", "source": "heater", "sourceHandle": "h_s", "target": "mass", "targetHandle": "a_t" },
+    { "id": "mass-conv", "source": "mass", "sourceHandle": "a_s", "target": "conv", "targetHandle": "a_t" },
+    { "id": "conv-amb", "source": "conv", "sourceHandle": "b_s", "target": "amb", "targetHandle": "a_t" },
+    { "id": "mass-sensor", "source": "mass", "sourceHandle": "a_s", "target": "sensor", "targetHandle": "a_t" },
+    { "id": "amb-sensor", "source": "amb", "sourceHandle": "a_s", "target": "sensor", "targetHandle": "b_t" },
+    { "id": "sensor-scope", "source": "sensor", "sourceHandle": "t_s", "target": "scope", "targetHandle": "in1_t" }
+  ]
+}

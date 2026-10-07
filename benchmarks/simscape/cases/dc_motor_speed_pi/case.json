@@ -1,0 +1,10 @@
+{
+  "id": "dc_motor_speed_pi",
+  "class": "linear_smooth",
+  "stopTime": 1.5,
+  "dt": 0.001,
+  "signals": [
+    { "name": "omega", "unit": "rad/s", "vlabProbe": { "nodeId": "sens", "handle": "w_s", "variableName": "omega" } }
+  ],
+  "analytic": { "type": "dc_motor_pi_speed", "wref": 50, "Kp": 1, "Ki": 10, "Ra": 1, "La": 0.001, "k": 0.1, "J": 0.011, "B": 0.021 }
+}
