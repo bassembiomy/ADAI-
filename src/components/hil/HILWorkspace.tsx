@@ -18,6 +18,7 @@ import {
 } from '../../engine/hil/hilTypes';
 import { generateHALCode } from '../../engine/hil/hilCodeGenerator';
 import { generateMISRACCode } from '../../utils/stateMachineCodeGenerator';
+import { handleHorizontalToolbarWheel } from '../../utils/toolbarScroll';
 import { StateData, JunctionData, TransitionData, Layer, VariableDef } from '../../types/sm_types';
 
 interface HILWorkspaceProps {
@@ -505,9 +506,12 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
     <div className="hil-workspace flex flex-col h-full bg-[#070707] text-[#e0e0e0] font-sans overflow-hidden select-none">
       
       {/* Header bar */}
-      <header className="hil-header hil-panel h-14 bg-[#0f0f0f] border-b border-[#222] flex items-center justify-between px-4 shrink-0">
+      <header
+        onWheel={handleHorizontalToolbarWheel}
+        className="hil-header hil-panel h-14 bg-[#0f0f0f] border-b border-[#222] flex items-center justify-between px-4 shrink-0 overflow-x-auto overflow-y-hidden adia-toolbar-scrollbar [&>*]:shrink-0"
+      >
         <div className="flex items-center gap-3">
-          <button
+          <button data-help-feature="ui:hil/HILWorkspace:6e052e895d8f" data-help-source="src/components/hil/HILWorkspace.tsx"
             onClick={onBack}
             className="ui-control ui-focus-ring p-1.5 hover:bg-[#1f1f1f] border border-transparent hover:border-[#333] rounded text-gray-400 hover:text-white transition-all duration-150"
           >
@@ -532,7 +536,7 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
           {/* Target Selector */}
           <div className="flex items-center gap-1.5">
             <span className="text-[10px] text-[#888] font-bold uppercase">MCU Target:</span>
-            <select
+            <select data-help-feature="ui:hil/HILWorkspace:2349a7839fb6" data-help-source="src/components/hil/HILWorkspace.tsx"
               value={config.target}
               onChange={(e) => onChangeConfig(applyLegacyTargetSelection(config, e.target.value as HILConfig['target']))}
               className="ui-control ui-focus-ring bg-[#0a0a0a] border border-[#333] rounded px-1.5 py-0.5 text-xs text-white focus:outline-none focus:border-[#f97316]"
@@ -549,7 +553,7 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
           {/* Clock Speed Input */}
           <div className="flex items-center gap-1.5 border-l border-[#2d2d2d] pl-3">
             <span className="text-[10px] text-[#888] font-bold uppercase">Clock:</span>
-            <input
+            <input data-help-feature="ui:hil/HILWorkspace:68c902c0b1f6" data-help-source="src/components/hil/HILWorkspace.tsx"
               type="number"
               value={config.clockSpeed}
               onChange={(e) => onChangeConfig({ ...config, clockSpeed: parseInt(e.target.value) || 16 })}
@@ -561,7 +565,7 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
           {/* HIL Mode Toggle */}
           <div className="flex items-center gap-1.5 border-l border-[#2d2d2d] pl-3">
             <span className="text-[10px] text-[#888] font-bold uppercase">HIL Mode:</span>
-            <button
+            <button data-help-feature="ui:hil/HILWorkspace:bb6d412cf2a5" data-help-source="src/components/hil/HILWorkspace.tsx"
               onClick={() => onChangeConfig({ ...config, enabled: !config.enabled })}
               className={`ui-control ui-focus-ring relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
                 config.enabled ? 'bg-[#f97316]' : 'bg-[#333]'
@@ -579,7 +583,7 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
 
       {/* Main Tab bar */}
       <nav className="hil-nav h-11 bg-[#0c0c0c] border-b border-[#222] flex px-4 gap-2 shrink-0 items-center">
-        <button
+        <button data-help-feature="ui:hil/HILWorkspace:bddc377262ad" data-help-source="src/components/hil/HILWorkspace.tsx"
           onClick={() => setActiveMainTab('configure')}
           className={`ui-control ui-focus-ring flex items-center gap-1.5 px-4 py-1.5 rounded text-xs font-semibold border transition-all ${
             activeMainTab === 'configure'
@@ -590,7 +594,7 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
           <Settings2 size={14} />
           [1] Configure & Map Signals
         </button>
-        <button
+        <button data-help-feature="ui:hil/HILWorkspace:0a63eca5099e" data-help-source="src/components/hil/HILWorkspace.tsx"
           onClick={() => setActiveMainTab('build')}
           className={`ui-control ui-focus-ring flex items-center gap-1.5 px-4 py-1.5 rounded text-xs font-semibold border transition-all ${
             activeMainTab === 'build'
@@ -602,7 +606,7 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
           [2] Build & Burn Toolchain
           {buildStatus === 'success' && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>}
         </button>
-        <button
+        <button data-help-feature="ui:hil/HILWorkspace:35ed9ce773ac" data-help-source="src/components/hil/HILWorkspace.tsx"
           onClick={() => setActiveMainTab('telemetry')}
           className={`ui-control ui-focus-ring flex items-center gap-1.5 px-4 py-1.5 rounded text-xs font-semibold border transition-all ${
             activeMainTab === 'telemetry'
@@ -649,7 +653,7 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
                         </span>
                       </div>
                     </div>
-                    <button
+                    <button data-help-feature="ui:hil/HILWorkspace:8b22d5f1eacd" data-help-source="src/components/hil/HILWorkspace.tsx"
                       type="button"
                       onClick={toggleTargetPackCollapsed}
                       className="ui-control ui-focus-ring flex items-center gap-1.5 text-xs text-gray-400 hover:text-white px-2.5 py-1 rounded bg-[#1a1a1a] hover:bg-[#252525] border border-[#2e2e2e] transition-colors"
@@ -660,7 +664,7 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
                     </button>
                   </div>
                 ) : (
-                  <TargetPackSelector
+                  <TargetPackSelector data-help-feature="live:components/hil/HILWorkspace:2dc49710c9e7"
                     selectedTargetId={resolveTargetSelection(config)?.targetId ?? ''}
                     selectedDriverMode={resolveTargetSelection(config)?.driverMode ?? 'vendor'}
                     onSelectTarget={(targetId, mode, manifest) => {
@@ -672,7 +676,7 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
                       }));
                     }}
                     headerAction={
-                      <button
+                      <button data-help-feature="ui:hil/HILWorkspace:8b22d5f1eacd" data-help-source="src/components/hil/HILWorkspace.tsx"
                         type="button"
                         onClick={toggleTargetPackCollapsed}
                         className="ui-control ui-focus-ring flex items-center gap-1 text-xs text-gray-400 hover:text-white px-2 py-1 rounded bg-[#1a1a1a] hover:bg-[#252525] border border-[#333] transition-colors"
@@ -698,12 +702,12 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
               >
                 {/* Driver Setup */}
                 <div className="h-full overflow-hidden">
-                  <HILDriverPanel
+                  <HILDriverPanel data-help-feature="ui:hil/HILWorkspace:f301af6912a9" data-help-source="src/components/hil/HILWorkspace.tsx"
                     channels={config.channels}
                     target={config.target}
                     onChange={(channels) => onChangeConfig({ ...config, channels })}
                     headerAction={
-                      <PanelMaximizeButton
+                      <PanelMaximizeButton data-help-feature="live:components/hil/HILWorkspace:fe20b5a08b06"
                         isMaximized={tab1Maximized === 0}
                         onToggle={() => setTab1Maximized(tab1Maximized === 0 ? null : 0)}
                       />
@@ -713,13 +717,13 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
 
                 {/* Variable Mapper */}
                 <div className="h-full overflow-hidden">
-                  <HILSignalMapper
+                  <HILSignalMapper data-help-feature="ui:hil/HILWorkspace:ea3b3355831e" data-help-source="src/components/hil/HILWorkspace.tsx"
                     channels={config.channels}
                     mappings={config.mappings}
                     availableVariables={variables}
                     onChange={(mappings) => onChangeConfig({ ...config, mappings })}
                     headerAction={
-                      <PanelMaximizeButton
+                      <PanelMaximizeButton data-help-feature="live:components/hil/HILWorkspace:ad6d4f303c32"
                         isMaximized={tab1Maximized === 1}
                         onToggle={() => setTab1Maximized(tab1Maximized === 1 ? null : 1)}
                       />
@@ -737,7 +741,7 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
                       </h2>
                       <p className="text-[10px] text-[#888]">Direct C-code sync preview</p>
                     </div>
-                    <PanelMaximizeButton
+                    <PanelMaximizeButton data-help-feature="live:components/hil/HILWorkspace:2542b20156da"
                       isMaximized={tab1Maximized === 2}
                       onToggle={() => setTab1Maximized(tab1Maximized === 2 ? null : 2)}
                     />
@@ -747,7 +751,7 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
                   <div className="flex border-b border-[#222] gap-1 overflow-x-auto shrink-0 mb-3 no-scrollbar">
                     {generatedFiles.length > 0 ? (
                       generatedFiles.map(f => (
-                        <button
+                        <button data-help-feature="ui:hil/HILWorkspace:06b0e1cecf9e" data-help-source="src/components/hil/HILWorkspace.tsx"
                           key={f.name}
                           onClick={() => setActiveFileTab(f.name)}
                           className={`ui-control ui-focus-ring px-3 py-1.5 text-[10px] font-mono border-t-2 border-transparent transition-all rounded-t select-none ${
@@ -793,7 +797,7 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
                   <div className="grid grid-cols-1 gap-2 mt-1">
                     <div>
                       <label className="block text-[9px] text-gray-500 mb-0.5">Optimization Level</label>
-                      <select
+                      <select data-help-feature="ui:hil/HILWorkspace:29988bb57951" data-help-source="src/components/hil/HILWorkspace.tsx"
                         value={optimization}
                         onChange={(e) => setOptimization(e.target.value as any)}
                         className="ui-control ui-focus-ring w-full bg-[#070707] border border-[#222] text-xs text-white rounded px-2 py-1 focus:outline-none focus:border-[#f97316]"
@@ -807,7 +811,7 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
                     </div>
                     <div>
                       <label className="block text-[9px] text-gray-500 mb-0.5">Warning Level</label>
-                      <select
+                      <select data-help-feature="ui:hil/HILWorkspace:95af40d5241e" data-help-source="src/components/hil/HILWorkspace.tsx"
                         value={warningLevel}
                         onChange={(e) => setWarningLevel(e.target.value as any)}
                         className="ui-control ui-focus-ring w-full bg-[#070707] border border-[#222] text-xs text-white rounded px-2 py-1 focus:outline-none focus:border-[#f97316]"
@@ -870,7 +874,7 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
                   <div className="grid grid-cols-2 gap-2 mt-1">
                     <div>
                       <label className="block text-[9px] text-gray-500 mb-0.5">Interface Tool</label>
-                      <select
+                      <select data-help-feature="ui:hil/HILWorkspace:cab5c65cde1c" data-help-source="src/components/hil/HILWorkspace.tsx"
                         value={programmer}
                         onChange={(e) => setProgrammer(e.target.value)}
                         className="ui-control ui-focus-ring w-full bg-[#070707] border border-[#222] text-xs text-white rounded px-2 py-0.5 focus:outline-none focus:border-[#f97316]"
@@ -885,7 +889,7 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
                     <div>
                       <label className="block text-[9px] text-gray-500 mb-0.5">Serial COM Port</label>
                       {availablePorts.length > 0 ? (
-                        <select
+                        <select data-help-feature="ui:hil/HILWorkspace:d8e948791d9f" data-help-source="src/components/hil/HILWorkspace.tsx"
                           value={config.commPort || availablePorts[0]}
                           onChange={(e) => onChangeConfig({ ...config, commPort: e.target.value })}
                           className="ui-control ui-focus-ring w-full bg-[#070707] border border-[#222] text-xs text-white rounded px-2 py-0.5 focus:outline-none focus:border-[#f97316]"
@@ -895,7 +899,7 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
                           ))}
                         </select>
                       ) : (
-                        <input
+                        <input data-help-feature="ui:hil/HILWorkspace:b53b74864344" data-help-source="src/components/hil/HILWorkspace.tsx"
                           type="text"
                           placeholder="e.g. COM3"
                           value={config.commPort || 'COM3'}
@@ -906,7 +910,7 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
                     </div>
                     <div>
                       <label className="block text-[9px] text-gray-500 mb-0.5">Baud Rate</label>
-                      <select
+                      <select data-help-feature="ui:hil/HILWorkspace:1acce95566f6" data-help-source="src/components/hil/HILWorkspace.tsx"
                         value={config.baudRate || 115200}
                         onChange={(e) => onChangeConfig({ ...config, baudRate: parseInt(e.target.value) || 115200 })}
                         className="ui-control ui-focus-ring w-full bg-[#070707] border border-[#222] text-xs text-white rounded px-2 py-0.5 focus:outline-none focus:border-[#f97316]"
@@ -919,7 +923,7 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
                     </div>
                     <div>
                       <label className="block text-[9px] text-gray-500 mb-0.5">Flash Start Address</label>
-                      <input
+                      <input data-help-feature="ui:hil/HILWorkspace:807b966d3211" data-help-source="src/components/hil/HILWorkspace.tsx"
                         type="text"
                         value={flashAddress}
                         onChange={(e) => setFlashAddress(e.target.value)}
@@ -977,7 +981,7 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
                       <FileText size={14} className="text-[#f97316]" />
                       Linker Workspace Source Code
                     </span>
-                    <PanelMaximizeButton
+                    <PanelMaximizeButton data-help-feature="live:components/hil/HILWorkspace:d0f64e4f6ca1"
                       isMaximized={tab2Maximized === 0}
                       onToggle={() => setTab2Maximized(tab2Maximized === 0 ? null : 0)}
                     />
@@ -986,7 +990,7 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
                   {/* File list */}
                   <div className="flex gap-1 overflow-x-auto shrink-0 mb-2 no-scrollbar border-b border-[#222]">
                     {generatedFiles.map(f => (
-                      <button
+                      <button data-help-feature="ui:hil/HILWorkspace:06b0e1cecf9e" data-help-source="src/components/hil/HILWorkspace.tsx"
                         key={f.name}
                         onClick={() => setActiveFileTab(f.name)}
                         className={`ui-control ui-focus-ring px-2.5 py-1 text-[9px] font-mono border-b-2 transition-all ${
@@ -1023,7 +1027,7 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
                           [TARGET DEPLOYED]
                         </span>
                       )}
-                      <PanelMaximizeButton
+                      <PanelMaximizeButton data-help-feature="live:components/hil/HILWorkspace:84b56bb5e1d6"
                         isMaximized={tab2Maximized === 1}
                         onToggle={() => setTab2Maximized(tab2Maximized === 1 ? null : 1)}
                       />
@@ -1054,7 +1058,7 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
 
                   {/* Action Buttons */}
                   <div className="flex gap-3 mt-3 shrink-0">
-                    <button
+                    <button data-help-feature="ui:hil/HILWorkspace:ec34ff49da2f" data-help-source="src/components/hil/HILWorkspace.tsx"
                       onClick={handleBuild}
                       disabled={buildStatus === 'building' || config.channels.length === 0}
                       className="ui-control ui-focus-ring flex-1 bg-[#f97316] hover:bg-[#ea580c] disabled:opacity-40 text-black text-xs font-bold py-2 rounded flex items-center justify-center gap-1.5 transition-colors"
@@ -1062,7 +1066,7 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
                       <RefreshCcw size={14} className={buildStatus === 'building' ? 'animate-spin' : ''} />
                       Build C-Code
                     </button>
-                    <button
+                    <button data-help-feature="ui:hil/HILWorkspace:93a203e937ff" data-help-source="src/components/hil/HILWorkspace.tsx"
                       onClick={handleBurn}
                       disabled={buildStatus !== 'success' || burnStatus === 'burning'}
                       className="ui-control ui-focus-ring flex-1 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 disabled:opacity-40 text-black text-xs font-bold py-2 rounded flex items-center justify-center gap-1.5 transition-colors"
@@ -1070,7 +1074,7 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
                       <Zap size={14} className={burnStatus === 'burning' ? 'animate-pulse' : ''} />
                       Flash Target Firmware
                     </button>
-                    <button
+                    <button data-help-feature="ui:hil/HILWorkspace:8c2e6bc42341" data-help-source="src/components/hil/HILWorkspace.tsx"
                       onClick={handleErase}
                       disabled={burnStatus === 'burning'}
                       className="ui-control ui-focus-ring flex-1 bg-red-700 hover:bg-red-800 disabled:opacity-40 text-white text-xs font-bold py-2 rounded flex items-center justify-center gap-1.5 transition-colors"
@@ -1078,7 +1082,7 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
                       <Trash2 size={14} className={burnStatus === 'burning' ? 'animate-pulse' : ''} />
                       Erase Flash
                     </button>
-                    <button
+                    <button data-help-feature="ui:hil/HILWorkspace:f8b58decd5c3" data-help-source="src/components/hil/HILWorkspace.tsx"
                       onClick={handleDeploy}
                       disabled={burnStatus !== 'success'}
                       className="ui-control ui-focus-ring flex-1 bg-green-600 hover:bg-green-700 disabled:opacity-40 text-black text-xs font-bold py-2 rounded flex items-center justify-center gap-1.5 transition-colors animate-shimmer"

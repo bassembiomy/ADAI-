@@ -30,6 +30,7 @@ import {
   syncXBBoundaryNodeMetadata,
 } from '../../utils/stateMachine/xbBoundaryMappings';
 import { isInputFocused } from '../../utils/domUtils';
+import { handleHorizontalToolbarWheel } from '../../utils/toolbarScroll';
 import { XbridgesWorkerClient } from '../../services/xbridgesWorkerClient';
 
 // Map icon string names to Lucide icon components
@@ -1488,7 +1489,7 @@ export const XbridgesWorkspace: React.FC<{
     try {
       const electron = (window as any).require?.('electron');
       const payload = {
-        fileName: `xbridges_workspace_${new Date().toISOString().slice(0,10)}.json`,
+        fileName: `xbridges_workspace_${new Date().toISOString().slice(0,10)}.adia`,
         content: JSON.stringify({ nodes, edges }, null, 2),
         encoding: 'utf8',
         mimeType: 'application/json',
@@ -2914,7 +2915,7 @@ export const XbridgesWorkspace: React.FC<{
         >
           <div className="p-3 border-b border-[#333] flex items-center gap-2">
             <Search size={14} className="text-[#c9a86c]" />
-            <input
+            <input data-help-feature="ui:xbridges/XbridgesWorkspace:260fb2c5ad12" data-help-source="src/components/xbridges/XbridgesWorkspace.tsx"
               autoFocus
               placeholder="Search blocks..."
               className="bg-transparent border-none outline-none text-sm w-full text-[#e0e0e0] placeholder-slate-600 font-bold"
@@ -2931,7 +2932,7 @@ export const XbridgesWorkspace: React.FC<{
           </div>
           <div className="max-h-[300px] overflow-y-auto custom-scrollbar p-1">
             {filteredBlocks.map((b, i) => (
-              <div
+              <div data-help-feature="ui:xbridges/XbridgesWorkspace:19e0b916f25d" data-help-source="src/components/xbridges/XbridgesWorkspace.tsx"
                 key={i}
                 className="flex items-center justify-between p-2 hover:bg-[#222] rounded cursor-pointer group transition-colors"
                 onClick={() => addBlockAtPos(b.type, searchMenuPos.x, searchMenuPos.y)}
@@ -2971,7 +2972,7 @@ export const XbridgesWorkspace: React.FC<{
               <span className="text-[8px] text-[#c9a86c]/90 font-black uppercase tracking-widest mt-1 ml-9">Advanced Logic Suite</span>
             </div>
           )}
-          <button
+          <button data-help-feature="ui:xbridges/XbridgesWorkspace:7a9a25d60b06" data-help-source="src/components/xbridges/XbridgesWorkspace.tsx"
             onClick={() => setIsLibCollapsed(!isLibCollapsed)}
             className={`p-2 rounded-xl bg-[#222] border border-[#333] text-[#c9a86c] hover:bg-[#c9a86c]/10 hover:border-[#c9a86c]/30 transition-all ${isLibCollapsed ? 'mx-auto' : ''}`}
             title={isLibCollapsed ? "Expand Library" : "Collapse Library"}
@@ -2985,7 +2986,7 @@ export const XbridgesWorkspace: React.FC<{
           <div className="px-4 py-3 border-b border-[#333] bg-[#111]/50">
             <div className="relative group">
               <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-[#c9a86c] transition-colors" />
-              <input 
+              <input data-help-feature="ui:xbridges/XbridgesWorkspace:4483d2ee4f30" data-help-source="src/components/xbridges/XbridgesWorkspace.tsx"
                 placeholder="Search Logic..."
                 className="w-full bg-[#0a0a0a] border border-[#333] rounded-xl py-2 pl-9 pr-4 text-[10px] font-bold text-[#e0e0e0] placeholder-slate-600 focus:outline-none focus:border-[#c9a86c]/50 focus:ring-1 focus:ring-[#c9a86c]/50 transition-all"
                 value={searchTerm}
@@ -2998,7 +2999,7 @@ export const XbridgesWorkspace: React.FC<{
         {/* Sidebar Tab Switcher */}
         {!isLibCollapsed && (
           <div className="p-3 border-b border-[#333] flex gap-1 bg-[#111]/50">
-            <button
+            <button data-help-feature="ui:xbridges/XbridgesWorkspace:df8e33405a1b" data-help-source="src/components/xbridges/XbridgesWorkspace.tsx"
               onClick={() => setActiveSidebarTab('library')}
               className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${activeSidebarTab === 'library'
                   ? 'bg-[#222] text-[#c9a86c] border border-[#333] shadow-sm'
@@ -3008,7 +3009,7 @@ export const XbridgesWorkspace: React.FC<{
               <Layers size={14} />
               Library
             </button>
-            <button
+            <button data-help-feature="ui:xbridges/XbridgesWorkspace:f7b09f5ba3ba" data-help-source="src/components/xbridges/XbridgesWorkspace.tsx"
               onClick={() => setActiveSidebarTab('labs')}
               className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${activeSidebarTab === 'labs'
                   ? 'bg-[#222] text-[#c9a86c] border border-[#333] shadow-sm'
@@ -3027,7 +3028,7 @@ export const XbridgesWorkspace: React.FC<{
               const isExpanded = !!expandedCategories[cat.name];
               return (
                 <div key={cat.name} className="flex flex-col">
-                  <button
+                  <button data-help-feature="ui:xbridges/XbridgesWorkspace:61a30f15aec3" data-help-source="src/components/xbridges/XbridgesWorkspace.tsx"
                     onClick={() => toggleCategory(cat.name)}
                     className={`flex items-center justify-between w-full px-3 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${isExpanded ? 'bg-[#222] text-[#c9a86c] border-l-2 border-[#c9a86c]' : 'text-slate-500 hover:bg-[#222] hover:text-[#e0e0e0]'}`}
                   >
@@ -3041,7 +3042,7 @@ export const XbridgesWorkspace: React.FC<{
                   {isExpanded && (
                     <div className="flex flex-col gap-1 pl-4 pr-1 py-2 animate-in slide-in-from-top-2 duration-300">
                       {cat.blocks.map(b => (
-                        <div
+                        <div data-help-feature="live:components/xbridges/XbridgesWorkspace:c5274d9f5f13"
                           key={b.type}
                           draggable
                           onDragStart={(e) => onDragStart(e, b.type)}
@@ -3073,7 +3074,7 @@ export const XbridgesWorkspace: React.FC<{
               </div>
 
               {XBRIDGES_LEARNING_LABS.map(lab => (
-                <div
+                <div data-help-feature="ui:xbridges/XbridgesWorkspace:c5a2e2df3fad" data-help-source="src/components/xbridges/XbridgesWorkspace.tsx"
                   key={lab.id}
                   onClick={() => loadLabTemplate(lab.id)}
                   className="group relative bg-[#1a1a1a] border border-[#333] rounded-2xl overflow-hidden cursor-pointer hover:border-[#c9a86c]/40 hover:bg-[#222]/80 hover:shadow-md transition-all duration-300 active:scale-95 p-5"
@@ -3112,10 +3113,13 @@ export const XbridgesWorkspace: React.FC<{
       {/* Main Canvas Area */}
       <div className="flex-1 relative flex flex-col min-h-0">
         {/* Premium Top Toolbar */}
-        <div className="h-16 bg-[#1a1a1a]/90 backdrop-blur-2xl border-b border-[#333] flex items-center justify-between px-6 z-30 shadow-sm">
+        <div
+          onWheel={handleHorizontalToolbarWheel}
+          className="h-16 bg-[#1a1a1a]/90 backdrop-blur-2xl border-b border-[#333] flex items-center justify-between px-6 z-30 shadow-sm overflow-x-auto overflow-y-hidden adia-toolbar-scrollbar [&>*]:shrink-0"
+        >
           <div className="flex items-center gap-6">
             <div className="flex items-center bg-[#222] p-1 rounded-2xl border border-[#333] shadow-inner">
-              <button
+              <button data-help-feature="ui:xbridges/XbridgesWorkspace:7fe04527c60a" data-help-source="src/components/xbridges/XbridgesWorkspace.tsx"
                 onClick={() => !coSimEngine && setIsSimulating(!isSimulating)}
                 disabled={!!coSimEngine}
                 className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-[0.15em] transition-all duration-300 ${activeSimulating
@@ -3129,7 +3133,7 @@ export const XbridgesWorkspace: React.FC<{
 
               {isSimulating && (
                 <div className="flex items-center gap-1 ml-1 animate-in zoom-in duration-500">
-                  <button
+                  <button data-help-feature="ui:xbridges/XbridgesWorkspace:4c7bb77d9d01" data-help-source="src/components/xbridges/XbridgesWorkspace.tsx"
                     onClick={() => setIsPaused(!isPaused)}
                     className={`p-2.5 rounded-xl transition-all ${isPaused
                         ? 'bg-amber-500 text-white shadow-[0_0_15px_rgba(245,158,11,0.3)]'
@@ -3140,7 +3144,7 @@ export const XbridgesWorkspace: React.FC<{
                     {isPaused ? <Play size={16} fill="currentColor" /> : <Pause size={16} fill="currentColor" />}
                   </button>
 
-                  <button
+                  <button data-help-feature="ui:xbridges/XbridgesWorkspace:755de852d3e7" data-help-source="src/components/xbridges/XbridgesWorkspace.tsx"
                     onClick={stepSimulation}
                     disabled={!isPaused}
                     className={`p-2.5 rounded-xl transition-all ${isPaused
@@ -3162,7 +3166,7 @@ export const XbridgesWorkspace: React.FC<{
                 <span className="text-[8px] text-slate-400 font-black uppercase tracking-widest mb-1">Solver Method</span>
                 <div className="relative group">
                   <Settings2 size={10} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#c9a86c]" />
-                  <select
+                  <select data-help-feature="ui:xbridges/XbridgesWorkspace:264e711480bc" data-help-source="src/components/xbridges/XbridgesWorkspace.tsx"
                     value={solverType}
                     onChange={e => setSolverType(e.target.value as any)}
                     disabled={activeSimulating}
@@ -3183,7 +3187,7 @@ export const XbridgesWorkspace: React.FC<{
                 <span className="text-[8px] text-slate-400 font-black uppercase tracking-widest mb-1">Routing Style</span>
                 <div className="relative group">
                   <Network size={10} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#c9a86c]" />
-                  <select
+                  <select data-help-feature="ui:xbridges/XbridgesWorkspace:0b3ecba37e4a" data-help-source="src/components/xbridges/XbridgesWorkspace.tsx"
                     value={edgeType}
                     onChange={e => {
                       const newType = e.target.value as any;
@@ -3203,7 +3207,7 @@ export const XbridgesWorkspace: React.FC<{
                 <span className="text-[8px] text-slate-400 font-black uppercase tracking-widest mb-1">Time Step (Δt)</span>
                 <div className="relative group">
                   <div className="absolute left-2.5 top-1/2 -translate-y-1/2 text-emerald-600 text-[8px] font-bold italic">s</div>
-                  <input
+                  <input data-help-feature="ui:xbridges/XbridgesWorkspace:d928378d041c" data-help-source="src/components/xbridges/XbridgesWorkspace.tsx"
                     type="text"
                     value={stepSizeInput}
                     onChange={e => setStepSizeInput(normalizeNumerals(e.target.value).replace(/[^0-9.]/g, ''))}
@@ -3217,7 +3221,7 @@ export const XbridgesWorkspace: React.FC<{
                 <span className="text-[8px] text-slate-400 font-black uppercase tracking-widest mb-1">End Time</span>
                 <div className="relative group">
                   <div className="absolute left-2.5 top-1/2 -translate-y-1/2 text-rose-500 text-[8px] font-bold italic">s</div>
-                  <input
+                  <input data-help-feature="ui:xbridges/XbridgesWorkspace:84388e80584d" data-help-source="src/components/xbridges/XbridgesWorkspace.tsx"
                     type="text"
                     value={simLimitInput}
                     onChange={e => setSimLimitInput(normalizeNumerals(e.target.value).replace(/[^0-9.]/g, ''))}
@@ -3244,7 +3248,7 @@ export const XbridgesWorkspace: React.FC<{
                 {/* Diagnostics Badge */}
                 {diagnostics.length > 0 && (
                   <div className="relative">
-                    <button
+                    <button data-help-feature="ui:xbridges/XbridgesWorkspace:01f189b01e97" data-help-source="src/components/xbridges/XbridgesWorkspace.tsx"
                       onClick={() => setShowDiagnostics(v => !v)}
                       className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[10px] font-bold transition-all ${
                         diagnostics.some(d => d.severity === 'error')
@@ -3270,7 +3274,7 @@ export const XbridgesWorkspace: React.FC<{
                       <div className="absolute top-full right-0 mt-2 w-[400px] bg-[#1a1a1a] border border-[#333] rounded-xl shadow-2xl z-[9999] overflow-hidden text-[#e0e0e0] animate-in fade-in slide-in-from-top-2 duration-200">
                         <div className="flex items-center justify-between px-4 py-3 border-b border-[#333] bg-[#111]/50">
                           <span className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Model Diagnostics</span>
-                          <button onClick={() => setShowDiagnostics(false)} className="text-slate-500 hover:text-slate-300 transition-colors">
+                          <button data-help-feature="ui:xbridges/XbridgesWorkspace:8df1bd58765f" data-help-source="src/components/xbridges/XbridgesWorkspace.tsx" onClick={() => setShowDiagnostics(false)} className="text-slate-500 hover:text-slate-300 transition-colors">
                             <X size={14} />
                           </button>
                         </div>
@@ -3305,7 +3309,7 @@ export const XbridgesWorkspace: React.FC<{
                   </div>
                 )}
 
-                <button
+                <button data-help-feature="ui:xbridges/XbridgesWorkspace:94332d92c330" data-help-source="src/components/xbridges/XbridgesWorkspace.tsx"
                   onClick={() => handle3dxSyncInit('push')}
                   className="p-2.5 rounded-xl bg-blue-900/20 text-blue-400 hover:bg-blue-900/30 border border-blue-800/30 transition-all cursor-pointer shadow-sm"
                   title="Push to 3DEXPERIENCE"
@@ -3313,7 +3317,7 @@ export const XbridgesWorkspace: React.FC<{
                   <Cloud size={18} />
                 </button>
 
-                <button
+                <button data-help-feature="ui:xbridges/XbridgesWorkspace:92ab021123ff" data-help-source="src/components/xbridges/XbridgesWorkspace.tsx"
                   onClick={() => handle3dxSyncInit('pull')}
                   className="p-2.5 rounded-xl bg-blue-900/20 text-blue-400 hover:bg-blue-900/30 border border-blue-800/30 transition-all cursor-pointer shadow-sm"
                   title="Pull from 3DEXPERIENCE"
@@ -3347,7 +3351,7 @@ export const XbridgesWorkspace: React.FC<{
                 })()}
 
                 {onBack && (
-                  <button
+                  <button data-help-feature="ui:xbridges/XbridgesWorkspace:e348ee504d6a" data-help-source="src/components/xbridges/XbridgesWorkspace.tsx"
                     onClick={() => { if (onSave) persistWorkspace(nodes, edges); onBack(); }}
                     className="p-2.5 rounded-xl bg-[#222] text-[#e0e0e0] hover:bg-[#333] border border-[#333] transition-all shadow-sm"
                     title="Save & Exit"
@@ -3370,7 +3374,7 @@ export const XbridgesWorkspace: React.FC<{
             const isLast = idx === viewPath.length - 1;
             return (
               <React.Fragment key={pathId}>
-                <button
+                <button data-help-feature="ui:xbridges/XbridgesWorkspace:7ab8ac8f50ef" data-help-source="src/components/xbridges/XbridgesWorkspace.tsx"
                   onClick={() => setViewPath(viewPath.slice(0, idx + 1))}
                   className={`text-[9px] font-black tracking-[0.2em] uppercase transition-all hover:text-[#c9a86c] ${isLast ? 'text-[#c9a86c]' : 'text-slate-500'}`}
                 >
@@ -3403,7 +3407,7 @@ export const XbridgesWorkspace: React.FC<{
               isSimulating: isSimulating && !isPaused,
               getColor: getColor
             }}>
-              <ReactFlow
+              <ReactFlow data-help-feature="live:components/xbridges/XbridgesWorkspace:7abe5836c52e"
               deleteKeyCode={null}
               proOptions={{ hideAttribution: true }}
               onInit={setReactFlowInstance}
@@ -3473,7 +3477,7 @@ export const XbridgesWorkspace: React.FC<{
               {activeLabId && (
                 <Panel position="bottom-left" className="m-4 z-50">
                   {isLabGuideMinimized ? (
-                    <button
+                    <button data-help-feature="ui:xbridges/XbridgesWorkspace:d334b3c65414" data-help-source="src/components/xbridges/XbridgesWorkspace.tsx"
                       onClick={() => setIsLabGuideMinimized(false)}
                       className="flex items-center gap-2.5 bg-[#1a1a1a] border border-[#333] rounded-full shadow-lg px-4 py-2 hover:bg-[#222] border-l-4 border-l-[#c9a86c] transition-all text-left group"
                     >
@@ -3489,7 +3493,7 @@ export const XbridgesWorkspace: React.FC<{
                     <div className="w-[360px] bg-[#1a1a1a] border border-[#333] rounded-2xl shadow-2xl p-5 border-l-4 border-l-[#c9a86c] flex flex-col text-[#e0e0e0] transition-all duration-300 animate-in slide-in-from-left duration-300 select-text">
                       <div className="flex items-center justify-between border-b border-[#333] pb-3 mb-3">
                         <div className="flex items-center gap-2">
-                          <button
+                          <button data-help-feature="ui:xbridges/XbridgesWorkspace:4661a731171a" data-help-source="src/components/xbridges/XbridgesWorkspace.tsx"
                             onClick={() => setIsLabGuideMinimized(true)}
                             className="p-1 rounded text-slate-400 hover:text-slate-200 hover:bg-[#333] transition-colors"
                             title="Minimize Lab Guide"
@@ -3501,7 +3505,7 @@ export const XbridgesWorkspace: React.FC<{
                           </div>
                           <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#c9a86c]">Learning Lab</span>
                         </div>
-                        <button
+                        <button data-help-feature="ui:xbridges/XbridgesWorkspace:95f52c881edb" data-help-source="src/components/xbridges/XbridgesWorkspace.tsx"
                           onClick={exitActiveLab}
                           className="text-[9px] font-black tracking-widest text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 px-2 py-1 rounded transition-colors"
                         >
@@ -3562,7 +3566,7 @@ export const XbridgesWorkspace: React.FC<{
                             </div>
 
                             <div className="flex gap-2 border-t border-slate-100 pt-3">
-                              <button
+                              <button data-help-feature="ui:xbridges/XbridgesWorkspace:9a78f3402e7e" data-help-source="src/components/xbridges/XbridgesWorkspace.tsx"
                                 onClick={() => {
                                   if (currentStepIndex > 0) {
                                     setCurrentStepIndex(currentStepIndex - 1);
@@ -3574,7 +3578,7 @@ export const XbridgesWorkspace: React.FC<{
                               >
                                 Back
                               </button>
-                              <button
+                              <button data-help-feature="ui:xbridges/XbridgesWorkspace:b5848364a18b" data-help-source="src/components/xbridges/XbridgesWorkspace.tsx"
                                 onClick={() => {
                                   if (allDone) {
                                     if (currentStepIndex < totalSteps - 1) {
@@ -3604,7 +3608,7 @@ export const XbridgesWorkspace: React.FC<{
             </ReactFlow>
             </WorkspaceContext.Provider>
 
-            <button
+            <button data-help-feature="ui:xbridges/XbridgesWorkspace:c8e97fc36c43" data-help-source="src/components/xbridges/XbridgesWorkspace.tsx"
               onClick={() => setShowConfirmClear(true)}
               className="absolute top-4 right-4 z-50 bg-[#1a1a1a] border border-[#333] text-red-500 hover:bg-red-900/20 px-3 py-1.5 rounded text-xs font-bold shadow-md flex items-center gap-2"
             >
@@ -3715,7 +3719,7 @@ export const XbridgesWorkspace: React.FC<{
                 </ul>
               </div>
 
-              <button
+              <button data-help-feature="ui:xbridges/XbridgesWorkspace:95f52c881edb" data-help-source="src/components/xbridges/XbridgesWorkspace.tsx"
                 onClick={exitActiveLab}
                 className="w-full py-3 rounded-2xl bg-[#c9a86c] text-white text-xs font-black uppercase tracking-[0.15em] hover:scale-105 active:scale-95 transition-all shadow-md z-10"
               >
@@ -3734,7 +3738,7 @@ export const XbridgesWorkspace: React.FC<{
                     {syncAction === 'push' ? 'Push Workspace to 3DX' : 'Pull Workspace from 3DX'}
                   </h3>
                 </div>
-                <button
+                <button data-help-feature="ui:xbridges/XbridgesWorkspace:3e1101db01ef" data-help-source="src/components/xbridges/XbridgesWorkspace.tsx"
                   onClick={() => setShow3dxSyncModal(false)}
                   className="text-slate-500 hover:text-slate-300 p-1 hover:bg-[#333] rounded-md transition-colors cursor-pointer"
                 >
@@ -3766,7 +3770,7 @@ export const XbridgesWorkspace: React.FC<{
                     <div className="space-y-3">
                       <div>
                         <label className="text-[10px] text-slate-400 uppercase tracking-wider block mb-1">Target Workspace</label>
-                        <select
+                        <select data-help-feature="ui:xbridges/XbridgesWorkspace:0a26bce5e017" data-help-source="src/components/xbridges/XbridgesWorkspace.tsx"
                           value={selectedTdxWorkspace}
                           onChange={(e) => setSelectedTdxWorkspace(e.target.value)}
                           className="w-full bg-[#0a0a0a] border border-[#333] rounded-lg px-3 py-2 text-xs text-[#e0e0e0] focus:outline-none focus:border-[#c9a86c]"
@@ -3776,7 +3780,7 @@ export const XbridgesWorkspace: React.FC<{
                           ))}
                         </select>
                       </div>
-                      <button
+                      <button data-help-feature="ui:xbridges/XbridgesWorkspace:83d213ec5d73" data-help-source="src/components/xbridges/XbridgesWorkspace.tsx"
                         onClick={handle3dxPush}
                         className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer"
                       >
@@ -3791,7 +3795,7 @@ export const XbridgesWorkspace: React.FC<{
                       ) : (
                         <div className="max-h-[200px] overflow-y-auto border border-[#333] rounded-lg divide-y divide-[#222] bg-[#0a0a0a]">
                           {tdxDocs.map(doc => (
-                            <div
+                            <div data-help-feature="ui:xbridges/XbridgesWorkspace:3630bac82926" data-help-source="src/components/xbridges/XbridgesWorkspace.tsx"
                               key={doc.id}
                               onClick={() => handle3dxPull(doc.id)}
                               className="p-3 text-xs text-slate-400 hover:text-[#e0e0e0] hover:bg-[#222] cursor-pointer transition-all flex items-center justify-between"
@@ -3811,7 +3815,7 @@ export const XbridgesWorkspace: React.FC<{
         )}
 
         {showConfirmClear && (
-          <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999]" onMouseDown={() => setShowConfirmClear(false)}>
+          <div data-help-feature="live:components/xbridges/XbridgesWorkspace:f329ee58e245" className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999]" onMouseDown={() => setShowConfirmClear(false)}>
             <div className="bg-[#1a1a1a] border border-red-900 rounded-lg w-[550px] max-h-[90vh] flex flex-col relative" onMouseDown={e => e.stopPropagation()}>
               <div className="h-12 flex items-center px-5 border-b border-red-900/50">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ff6b6b" strokeWidth="2" className="mr-3">
@@ -3827,13 +3831,13 @@ export const XbridgesWorkspace: React.FC<{
               </div>
 
               <div className="h-14 flex items-center justify-end px-5 border-t border-[#222] gap-3">
-                <button
+                <button data-help-feature="ui:xbridges/XbridgesWorkspace:9aca4a179c45" data-help-source="src/components/xbridges/XbridgesWorkspace.tsx"
                   onClick={() => setShowConfirmClear(false)}
                   className="px-5 py-2 border border-[#333] text-[#a0a0a0] hover:text-[#e0e0e0] rounded bg-transparent text-sm transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
-                <button
+                <button data-help-feature="ui:xbridges/XbridgesWorkspace:aaaf166f283f" data-help-source="src/components/xbridges/XbridgesWorkspace.tsx"
                   onClick={() => {
                     setNodes([]);
                     setEdges([]);

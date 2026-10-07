@@ -36,6 +36,7 @@ import { Settings2, Play, Pause, Square, Send, ChevronLeft, ChevronDown, Chevron
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import * as XLSX from 'xlsx';
 import { isInputFocused } from '../../utils/domUtils';
+import { handleHorizontalToolbarWheel } from '../../utils/toolbarScroll';
 import { getVLabSignalInfo, exportScopeToCSV, VLAB_SIGNAL_COLORS } from '../../utils/scopeUtils';
 import { VLabSimulinkScope } from './VLabSimulinkScope';
 import { computeAbsoluteReferencePressure, convertPressureFromSI, type PressureUnit, type ElevationUnit } from '../../utils/hydraulicUnits';
@@ -680,7 +681,7 @@ const ScopeView = ({
 
         <div className="flex items-center gap-1">
           <div className="flex items-center bg-black/40 p-0.5 rounded-xl border border-white/5 mr-2">
-            <button
+            <button data-help-feature="ui:vlab/VLabWorkspace:34289216e134" data-help-source="src/components/vlab/VLabWorkspace.tsx"
               onClick={() => setZoomLevel(prev => prev / 1.25)}
               className="p-1.5 hover:bg-white/10 rounded-lg text-gray-500 hover:text-white transition-all active:scale-90"
               title="Scale Down"
@@ -688,7 +689,7 @@ const ScopeView = ({
               <ZoomOut size={14} />
             </button>
             <div className="w-px h-3 bg-white/5 mx-0.5" />
-            <button
+            <button data-help-feature="ui:vlab/VLabWorkspace:bbac09bccc52" data-help-source="src/components/vlab/VLabWorkspace.tsx"
               onClick={() => setZoomLevel(prev => prev * 1.25)}
               className="p-1.5 hover:bg-white/10 rounded-lg text-gray-500 hover:text-white transition-all active:scale-90"
               title="Scale Up"
@@ -697,7 +698,7 @@ const ScopeView = ({
             </button>
           </div>
 
-          <button
+          <button data-help-feature="ui:vlab/VLabWorkspace:e5dae6911deb" data-help-source="src/components/vlab/VLabWorkspace.tsx"
             onClick={handleAutoScale}
             className="p-2 hover:bg-white/10 rounded-xl text-gray-500 hover:text-emerald-400 transition-all group"
             title="Reset Scale"
@@ -705,7 +706,7 @@ const ScopeView = ({
             <RefreshCcw size={14} className="group-hover:rotate-180 transition-transform duration-500" />
           </button>
           {onExpand && (
-            <button
+            <button data-help-feature="ui:vlab/VLabWorkspace:3a1706872038" data-help-source="src/components/vlab/VLabWorkspace.tsx"
               onClick={(e) => { e.stopPropagation(); e.preventDefault(); onExpand(); }}
               className="p-2 hover:bg-white/10 rounded-xl text-gray-500 hover:text-white transition-all ml-2 active:scale-90 cursor-pointer z-50"
               title="Expand View"
@@ -767,7 +768,7 @@ const VLabScopeWindow = ({
         }`}
       style={isMaximized ? { left: 0, top: 0, width: '100vw', height: '100vh' } : { left: pos.x, top: pos.y }}
     >
-      <div
+      <div data-help-feature="ui:vlab/VLabWorkspace:539b426adc14" data-help-source="src/components/vlab/VLabWorkspace.tsx"
         className="h-10 bg-[#151515] border-b border-white/5 flex items-center justify-between px-4 cursor-move select-none shrink-0"
         onMouseDown={() => !isMaximized && setIsDragging(true)}
         onDoubleClick={() => setIsMaximized(!isMaximized)}
@@ -777,7 +778,7 @@ const VLabScopeWindow = ({
           <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] truncate max-w-[150px]">{title}</span>
         </div>
         <div className="flex items-center gap-1">
-          <button
+          <button data-help-feature="ui:vlab/VLabWorkspace:aff8fe06b73a" data-help-source="src/components/vlab/VLabWorkspace.tsx"
             onClick={handleExportCSV}
             className="p-1.5 hover:bg-emerald-500/20 hover:text-emerald-400 rounded-md transition-all text-gray-500"
             title="Export CSV Data"
@@ -785,7 +786,7 @@ const VLabScopeWindow = ({
             <Download size={14} />
           </button>
           {onUpdate && (
-            <button
+            <button data-help-feature="ui:vlab/VLabWorkspace:c59d52419a6a" data-help-source="src/components/vlab/VLabWorkspace.tsx"
               onClick={() => setShowSettings(!showSettings)}
               className={`p-1.5 rounded-md transition-all ${showSettings ? 'bg-purple-500/20 text-purple-400' : 'text-gray-500 hover:text-white'}`}
               title="Scope Settings"
@@ -793,21 +794,21 @@ const VLabScopeWindow = ({
               <Settings size={14} />
             </button>
           )}
-          <button
+          <button data-help-feature="ui:vlab/VLabWorkspace:9731d5f5bcc7" data-help-source="src/components/vlab/VLabWorkspace.tsx"
             onClick={() => setIsMinimized(!isMinimized)}
             className="p-1.5 hover:bg-white/5 rounded-md transition-all text-gray-500 hover:text-white"
             title={isMinimized ? "Restore" : "Minimize"}
           >
             <Minus size={14} />
           </button>
-          <button
+          <button data-help-feature="ui:vlab/VLabWorkspace:f196d856320e" data-help-source="src/components/vlab/VLabWorkspace.tsx"
             onClick={() => { setIsMaximized(!isMaximized); setIsMinimized(false); }}
             className="p-1.5 hover:bg-white/5 rounded-md transition-all text-gray-500 hover:text-white"
             title={isMaximized ? "Restore" : "Maximize"}
           >
             {isMaximized ? <Layers size={14} /> : <Maximize2 size={14} />}
           </button>
-          <button
+          <button data-help-feature="ui:vlab/VLabWorkspace:151ed7616191" data-help-source="src/components/vlab/VLabWorkspace.tsx"
             onClick={onClose}
             className="p-1.5 hover:bg-red-500/20 hover:text-red-500 rounded-md transition-all text-gray-500 ml-1"
           >
@@ -824,7 +825,7 @@ const VLabScopeWindow = ({
               {/* Number of Input Channels */}
               <div className="space-y-1">
                 <label className="block text-[8px] font-bold text-gray-400 uppercase">Input Channels (Ports)</label>
-                <input
+                <input data-help-feature="ui:vlab/VLabWorkspace:3dc02c5b291d" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                   type="number"
                   min="1"
                   max="8"
@@ -840,7 +841,7 @@ const VLabScopeWindow = ({
               {/* Time Range */}
               <div className="space-y-1">
                 <label className="block text-[8px] font-bold text-gray-400 uppercase">Time Range</label>
-                <select
+                <select data-help-feature="ui:vlab/VLabWorkspace:35ad75bc8c3a" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                   value={String(params.time_range?.value || '10')}
                   onChange={(e) => {
                     const val = e.target.value === 'auto' ? 'auto' : parseFloat(e.target.value);
@@ -861,7 +862,7 @@ const VLabScopeWindow = ({
               {/* Limit Data Points */}
               <div className="space-y-1">
                 <label className="block text-[8px] font-bold text-gray-400 uppercase">Limit Points</label>
-                <select
+                <select data-help-feature="ui:vlab/VLabWorkspace:f04521aafac1" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                   value={String(params.limit_data_points?.value || 'on')}
                   onChange={(e) => onUpdate({ limit_data_points: { ...params.limit_data_points, value: e.target.value } })}
                   className="w-full text-xs px-1.5 py-1 border border-[#333] bg-[#111] text-gray-300 rounded outline-none"
@@ -874,7 +875,7 @@ const VLabScopeWindow = ({
               {/* Buffer Size */}
               <div className="space-y-1">
                 <label className="block text-[8px] font-bold text-gray-400 uppercase">Max Points</label>
-                <input
+                <input data-help-feature="ui:vlab/VLabWorkspace:d8895d129ed3" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                   type="number"
                   value={params.buffer_size?.value || 1000}
                   onChange={(e) => onUpdate({ buffer_size: { ...params.buffer_size, value: parseInt(e.target.value) || 1000 } })}
@@ -885,7 +886,7 @@ const VLabScopeWindow = ({
               {/* Decimation */}
               <div className="space-y-1">
                 <label className="block text-[8px] font-bold text-gray-400 uppercase">Decimation</label>
-                <input
+                <input data-help-feature="ui:vlab/VLabWorkspace:5ceecb8346b7" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                   type="number"
                   min="1"
                   value={params.decimation?.value || 1}
@@ -897,7 +898,7 @@ const VLabScopeWindow = ({
               {/* Sample Time */}
               <div className="space-y-1">
                 <label className="block text-[8px] font-bold text-gray-400 uppercase">Sample Time (s)</label>
-                <input
+                <input data-help-feature="ui:vlab/VLabWorkspace:a19ca033c2b6" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                   type="number"
                   step="any"
                   value={params.sample_time?.value ?? -1}
@@ -909,7 +910,7 @@ const VLabScopeWindow = ({
               {/* Grid */}
               <div className="space-y-1">
                 <label className="block text-[8px] font-bold text-gray-400 uppercase">Grid</label>
-                <select
+                <select data-help-feature="ui:vlab/VLabWorkspace:650e18e2e430" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                   value={String(params.show_grid?.value || 'on')}
                   onChange={(e) => onUpdate({ show_grid: { ...params.show_grid, value: e.target.value } })}
                   className="w-full text-xs px-1.5 py-1 border border-[#333] bg-[#111] text-gray-300 rounded outline-none"
@@ -922,7 +923,7 @@ const VLabScopeWindow = ({
               {/* Legend */}
               <div className="space-y-1">
                 <label className="block text-[8px] font-bold text-gray-400 uppercase">Legend</label>
-                <select
+                <select data-help-feature="ui:vlab/VLabWorkspace:4646bc23f306" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                   value={String(params.show_legend?.value || 'on')}
                   onChange={(e) => onUpdate({ show_legend: { ...params.show_legend, value: e.target.value } })}
                   className="w-full text-xs px-1.5 py-1 border border-[#333] bg-[#111] text-gray-300 rounded outline-none"
@@ -1214,7 +1215,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
     try {
       const electron = (window as any).require?.('electron');
       const payload = {
-        fileName: `vlab_model_${new Date().toISOString().slice(0,10)}.json`,
+        fileName: `vlab_model_${new Date().toISOString().slice(0,10)}.adia`,
         content: JSON.stringify({ nodes, edges }, null, 2),
         encoding: 'utf8',
         mimeType: 'application/json',
@@ -2806,9 +2807,12 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
   return (
     <div id="vlab-workspace-container" className="vlab-workspace flex h-full w-full bg-[var(--surface-canvas)] text-[var(--text-primary)] overflow-hidden">
       {/* Top Bar */}
-      <div className="vlab-panel absolute top-0 left-0 right-0 h-12 bg-[var(--surface-panel)] border-b border-[var(--border-default)] flex items-center justify-between px-4 z-10">
+      <div
+        onWheel={handleHorizontalToolbarWheel}
+        className="vlab-panel absolute top-0 left-0 right-0 h-12 bg-[var(--surface-panel)] border-b border-[var(--border-default)] flex items-center justify-between px-4 z-10 overflow-x-auto overflow-y-hidden adia-toolbar-scrollbar [&>*]:shrink-0"
+      >
         <div className="flex items-center gap-4">
-          <button
+          <button data-help-feature="ui:vlab/VLabWorkspace:6e052e895d8f" data-help-source="src/components/vlab/VLabWorkspace.tsx"
             onClick={onBack}
             className="p-2 hover:bg-[#1a1a1a] rounded-lg transition-colors text-gray-400"
           >
@@ -2825,7 +2829,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
           <div className="flex items-center gap-2 bg-[#141414] border border-[#2d2d2d] rounded-lg px-2.5 py-1 text-xs font-bold text-gray-300 shadow-md">
             <span className="text-[9px] text-gray-500 uppercase font-black tracking-wider">End Time</span>
             <div className="relative flex items-center">
-              <input
+              <input data-help-feature="ui:vlab/VLabWorkspace:f385873ce067" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                 type="text"
                 value={vlabLimitInput}
                 onChange={e => handleVlabLimitChange(e.target.value)}
@@ -2837,7 +2841,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
             </div>
           </div>
 
-          <button
+          <button data-help-feature="ui:vlab/VLabWorkspace:500ee38c9f09" data-help-source="src/components/vlab/VLabWorkspace.tsx"
             onClick={handleStartSimulation}
             className={`flex items-center gap-2 ${isSimulating && !isPaused ? 'bg-amber-600 hover:bg-amber-500' : 'bg-purple-600 hover:bg-purple-500'} text-white px-4 py-1.5 rounded-lg text-xs font-bold transition-all shadow-lg shadow-purple-900/20`}
           >
@@ -2845,7 +2849,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
           </button>
 
           {isSimulating && (
-            <button
+            <button data-help-feature="ui:vlab/VLabWorkspace:6670138a2f1b" data-help-source="src/components/vlab/VLabWorkspace.tsx"
               onClick={() => {
                 setIsSimulating(false);
                 setIsPaused(false);
@@ -2860,7 +2864,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
           )}
 
           {(scopeData.length > 0 || Object.values(perScopeData).some(d => d.length > 0)) && (
-            <button
+            <button data-help-feature="ui:vlab/VLabWorkspace:e3bfae81ea5d" data-help-source="src/components/vlab/VLabWorkspace.tsx"
               onClick={exportToExcel}
               className="flex items-center gap-2 bg-emerald-600/20 border border-emerald-600/30 hover:bg-emerald-600/30 text-emerald-500 px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
               title="Export Results to Excel"
@@ -2869,14 +2873,14 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
             </button>
           )}
 
-          <button
+          <button data-help-feature="ui:vlab/VLabWorkspace:94a74c974df8" data-help-source="src/components/vlab/VLabWorkspace.tsx"
             onClick={() => onSendToDOE({ nodes, edges })}
             className="flex items-center gap-2 bg-[#1a1a1a] border border-[#333] hover:bg-[#222] text-gray-300 px-4 py-1.5 rounded-lg text-xs font-bold cursor-pointer"
           >
             <Send size={14} /> EXPORT TO DOE
           </button>
 
-          <button
+          <button data-help-feature="ui:vlab/VLabWorkspace:94332d92c330" data-help-source="src/components/vlab/VLabWorkspace.tsx"
             onClick={() => handle3dxSyncInit('push')}
             className="flex items-center gap-2 bg-blue-900/25 hover:bg-blue-900/45 text-[#4da6ff] border border-blue-800/30 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer"
             title="Push to 3DEXPERIENCE"
@@ -2884,7 +2888,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
             <Cloud size={14} /> PUSH 3DX
           </button>
 
-          <button
+          <button data-help-feature="ui:vlab/VLabWorkspace:92ab021123ff" data-help-source="src/components/vlab/VLabWorkspace.tsx"
             onClick={() => handle3dxSyncInit('pull')}
             className="flex items-center gap-2 bg-blue-900/25 hover:bg-blue-900/45 text-[#4da6ff] border border-blue-800/30 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer"
             title="Pull from 3DEXPERIENCE"
@@ -2905,7 +2909,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                 <h3 className="text-xs font-bold uppercase tracking-widest text-white">Library</h3>
               </div>
             )}
-            <button
+            <button data-help-feature="ui:vlab/VLabWorkspace:7a9a25d60b06" data-help-source="src/components/vlab/VLabWorkspace.tsx"
               onClick={() => setIsLibCollapsed(!isLibCollapsed)}
               className={`p-2 rounded-xl bg-[#181818] border border-[#2d2d2d] text-purple-400 hover:bg-purple-500/10 hover:border-purple-500/30 transition-all ${isLibCollapsed ? 'mx-auto' : ''}`}
               title={isLibCollapsed ? "Expand Library" : "Collapse Library"}
@@ -2918,7 +2922,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
             <>
               {/* Sidebar Tab Switcher */}
               <div className="p-3 border-b border-[#222] flex gap-1">
-                <button
+                <button data-help-feature="ui:vlab/VLabWorkspace:df8e33405a1b" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                   onClick={() => setActiveSidebarTab('library')}
                   className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${activeSidebarTab === 'library'
                       ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20 shadow-[0_0_15px_rgba(168,85,247,0.1)]'
@@ -2928,7 +2932,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                   <Layers size={14} />
                   Library
                 </button>
-                <button
+                <button data-help-feature="ui:vlab/VLabWorkspace:f7b09f5ba3ba" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                   onClick={() => setActiveSidebarTab('labs')}
                   className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${activeSidebarTab === 'labs'
                       ? 'bg-orange-500/10 text-orange-400 border border-orange-500/20 shadow-[0_0_15px_rgba(249,115,22,0.1)]'
@@ -2944,7 +2948,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                 <>
                   <div className="p-4 border-b border-[#222]">
                     <div className="relative">
-                      <input
+                      <input data-help-feature="ui:vlab/VLabWorkspace:184663a53b80" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                         type="text"
                         placeholder="Search blocks..."
                         value={searchQuery}
@@ -2968,7 +2972,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                       return (
                         <div key={domain.type} className="flex flex-col space-y-3">
                           {/* Domain Header Button */}
-                          <button
+                          <button data-help-feature="ui:vlab/VLabWorkspace:d21fceff29a1" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                             onClick={() => toggleDomain(domain.type)}
                             className={`flex items-center justify-between w-full px-3 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${
                               isDomainExpanded 
@@ -2993,7 +2997,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                                 return (
                                   <div key={catName} className="flex flex-col space-y-2 pl-2 border-l border-[#222]">
                                     {/* Category Header Button */}
-                                    <button
+                                    <button data-help-feature="ui:vlab/VLabWorkspace:acc7c067b6d4" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                                       onClick={() => toggleCategory(catKey)}
                                       className="flex items-center justify-between w-full py-1 text-left outline-none group text-gray-500 hover:text-gray-300 transition-colors"
                                     >
@@ -3009,7 +3013,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                                     {isCatExpanded && (
                                       <div className="grid grid-cols-2 gap-2 animate-in slide-in-from-top-1 duration-200">
                                         {catBlocks.map(block => (
-                                          <div
+                                          <div data-help-feature="ui:vlab/VLabWorkspace:bf1fd0b768fd" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                                             key={block.id}
                                             draggable
                                             onDragStart={(e) => onDragStart(e, block)}
@@ -3049,7 +3053,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                   </div>
 
                   {LEARNING_LABS.map(lab => (
-                    <div
+                    <div data-help-feature="ui:vlab/VLabWorkspace:af8d7533e85f" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                       key={lab.id}
                       onClick={() => loadLabTemplate(lab.id)}
                       onMouseEnter={() => setHoveredLabId(lab.id)}
@@ -3099,8 +3103,8 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
         </div>
 
         {/* Center: Flow Canvas */}
-        <div className={`flex-1 relative bg-[#0a0a0a] ${isConnecting ? 'react-flow--connection-active' : ''}`} onDrop={onDrop} onDragOver={onDragOver} onContextMenu={(e) => e.preventDefault()}>
-          <ReactFlow
+        <div data-help-feature="ui:vlab/VLabWorkspace:f4ba75cf7913" data-help-source="src/components/vlab/VLabWorkspace.tsx" className={`flex-1 relative bg-[#0a0a0a] ${isConnecting ? 'react-flow--connection-active' : ''}`} onDrop={onDrop} onDragOver={onDragOver} onContextMenu={(e) => e.preventDefault()}>
+          <ReactFlow data-help-feature="live:components/vlab/VLabWorkspace:99dea21cf220"
             deleteKeyCode={null}
             proOptions={{ hideAttribution: true }}
             nodes={useMemo(() => nodes.filter(n => (n.data.parentId || 'root') === currentParentId).map(n => ({
@@ -3162,21 +3166,21 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
             {/* Simulink Canvas Zoom HUD */}
             <Panel position="bottom-left" className="m-3 select-none">
               <div className="flex items-center gap-1 bg-[#121218]/90 border border-white/10 p-1 rounded-xl shadow-2xl backdrop-blur-md">
-                <button
+                <button data-help-feature="ui:vlab/VLabWorkspace:f12f39c3c738" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                   onClick={() => reactFlowInstance?.zoomOut({ duration: 300 })}
                   className="p-1.5 hover:bg-white/10 text-gray-400 hover:text-white rounded-lg transition-all active:scale-95"
                   title="Zoom Out (Ctrl + -)"
                 >
                   <ZoomOut size={14} />
                 </button>
-                <button
+                <button data-help-feature="ui:vlab/VLabWorkspace:9a920f3b8eb0" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                   onClick={() => reactFlowInstance?.zoomTo(1.0, { duration: 300 })}
                   className="px-2 py-1 text-[10px] font-mono font-bold text-purple-400 hover:bg-purple-500/10 rounded-lg transition-all"
                   title="Reset Zoom to 100% (Ctrl + 0)"
                 >
                   {Math.round((reactFlowInstance?.getZoom?.() || 1) * 100)}%
                 </button>
-                <button
+                <button data-help-feature="ui:vlab/VLabWorkspace:13965548ec0d" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                   onClick={() => reactFlowInstance?.zoomIn({ duration: 300 })}
                   className="p-1.5 hover:bg-white/10 text-gray-400 hover:text-white rounded-lg transition-all active:scale-95"
                   title="Zoom In (Ctrl + +)"
@@ -3184,7 +3188,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                   <ZoomIn size={14} />
                 </button>
                 <div className="w-px h-4 bg-white/10 mx-0.5" />
-                <button
+                <button data-help-feature="ui:vlab/VLabWorkspace:087b2d33dd04" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                   onClick={() => reactFlowInstance?.fitView({ padding: 0.2, duration: 400 })}
                   className="flex items-center gap-1 px-2 py-1 bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/30 rounded-lg text-[10px] font-bold transition-all active:scale-95"
                   title="Zoom to Fit (Space / F)"
@@ -3203,7 +3207,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                   return (
                     <React.Fragment key={pathId}>
                       {idx > 0 && <ChevronRight size={12} className="text-gray-600" />}
-                      <button
+                      <button data-help-feature="ui:vlab/VLabWorkspace:7ab8ac8f50ef" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                         type="button"
                         disabled={isLast}
                         onClick={() => setViewPath(viewPath.slice(0, idx + 1))}
@@ -3227,7 +3231,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
               >
                 <div className="flex items-center gap-2 p-2 border-b border-[#222]">
                   <Box size={14} className="text-purple-500" />
-                  <input
+                  <input data-help-feature="ui:vlab/VLabWorkspace:55e81977a373" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                     autoFocus
                     type="text"
                     placeholder="Quick insert..."
@@ -3244,7 +3248,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                 </div>
                 <div className="max-h-64 overflow-y-auto custom-scrollbar">
                   {quickSearchResults.map(block => (
-                    <button
+                    <button data-help-feature="ui:vlab/VLabWorkspace:365228c44a64" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                       key={block.id}
                       onClick={() => addBlockAtPos(block, quickSearchPos)}
                       className="w-full flex items-center gap-3 p-2 hover:bg-purple-600/10 transition-colors group text-left border-b border-white/5 last:border-0"
@@ -3321,7 +3325,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
             </Panel>
           </ReactFlow>
 
-          <button
+          <button data-help-feature="ui:vlab/VLabWorkspace:c8e97fc36c43" data-help-source="src/components/vlab/VLabWorkspace.tsx"
             onClick={() => setShowConfirmClear(true)}
             className="absolute top-4 right-4 z-50 bg-[#1a1a1a] border border-[#333] text-red-500 hover:bg-red-900/20 px-3 py-1.5 rounded text-xs font-bold shadow-md flex items-center gap-2 cursor-pointer"
           >
@@ -3340,7 +3344,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                 <h3 className="text-xs font-bold uppercase tracking-widest text-white">Properties</h3>
               </div>
             )}
-            <button
+            <button data-help-feature="ui:vlab/VLabWorkspace:9cd18a009a6c" data-help-source="src/components/vlab/VLabWorkspace.tsx"
               onClick={() => setIsPropsCollapsed(!isPropsCollapsed)}
               className={`p-2 rounded-xl bg-[#181818] border border-[#2d2d2d] text-purple-400 hover:bg-purple-500/10 hover:border-purple-500/30 transition-all ${isPropsCollapsed ? 'mx-auto' : ''}`}
               title={isPropsCollapsed ? "Expand Properties" : "Collapse Properties"}
@@ -3371,7 +3375,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                     <div className="space-y-2">
                       <div className="bg-[#141414] p-3 rounded-xl border border-[#222]">
                         <label className="text-[10px] text-gray-400 font-bold uppercase block mb-1">Block Name</label>
-                        <input
+                        <input data-help-feature="ui:vlab/VLabWorkspace:eec43190edff" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                           type="text"
                           value={(selectedNode.data as any).label || (selectedNode.data as any).type || ''}
                           onChange={(e) => {
@@ -3407,7 +3411,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                         {/* Segmented Solver Tab Switcher */}
                         <div className="grid grid-cols-4 gap-1 p-1 bg-[#141414] rounded-lg border border-[#222]">
                           {(['general', 'numerical', 'tolerances', 'diagnostics'] as const).map((tab) => (
-                            <button
+                            <button data-help-feature="ui:vlab/VLabWorkspace:76d07b3dab83" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                               key={tab}
                               onClick={() => setSolverConfigTab(tab)}
                               className={`py-1.5 px-1 text-[9px] font-bold uppercase rounded transition-all text-center ${
@@ -3426,7 +3430,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                           <div className="space-y-3 animate-in fade-in duration-200">
                             <div>
                               <label className="text-[10px] text-gray-400 font-bold uppercase block mb-1">Start Time (s)</label>
-                              <input
+                              <input data-help-feature="ui:vlab/VLabWorkspace:dba7a82e7dd6" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                                 type="number"
                                 value={(selectedNode.data as any).params?.startTime?.value ?? 0}
                                 onChange={(e) => updateParameter('startTime', parseFloat(e.target.value) || 0)}
@@ -3435,7 +3439,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                             </div>
                             <div>
                               <label className="text-[10px] text-gray-400 font-bold uppercase block mb-1">Stop Time (s)</label>
-                              <input
+                              <input data-help-feature="ui:vlab/VLabWorkspace:8ffd10eb2656" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                                 type="number"
                                 value={(selectedNode.data as any).params?.stopTime?.value ?? 10}
                                 onChange={(e) => updateParameter('stopTime', parseFloat(e.target.value) || 10)}
@@ -3455,7 +3459,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                                   SIMSCAPE KERNEL
                                 </span>
                               </div>
-                              <select
+                              <select data-help-feature="ui:vlab/VLabWorkspace:0393e6bfab9f" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                                 value={String((selectedNode.data as any).params?.solver?.value ?? 'auto')}
                                 onChange={(e) => updateParameter('solver', e.target.value)}
                                 className="w-full bg-[#1a1a1a] border border-purple-500/40 rounded-lg py-2 px-3 text-xs focus:border-purple-500 outline-none text-purple-300 font-bold cursor-pointer"
@@ -3491,7 +3495,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                           <div className="space-y-3 animate-in fade-in duration-200">
                             <div>
                               <label className="text-[10px] text-gray-400 font-bold uppercase block mb-1">Initial Step (s)</label>
-                              <input
+                              <input data-help-feature="ui:vlab/VLabWorkspace:030ea53c34df" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                                 type="number"
                                 step="any"
                                 value={(selectedNode.data as any).params?.initialStep?.value ?? 0.001}
@@ -3502,7 +3506,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                             <div className="grid grid-cols-2 gap-2">
                               <div>
                                 <label className="text-[9px] text-gray-400 font-bold uppercase block mb-1">Min Step (s)</label>
-                                <input
+                                <input data-help-feature="ui:vlab/VLabWorkspace:8e5f6baebb13" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                                   type="number"
                                   step="any"
                                   value={(selectedNode.data as any).params?.minimumStep?.value ?? 1e-6}
@@ -3512,7 +3516,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                               </div>
                               <div>
                                 <label className="text-[9px] text-gray-400 font-bold uppercase block mb-1">Max Step (s)</label>
-                                <input
+                                <input data-help-feature="ui:vlab/VLabWorkspace:0a6ca89cd9bb" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                                   type="number"
                                   step="any"
                                   value={(selectedNode.data as any).params?.maximumStep?.value ?? 0.05}
@@ -3524,7 +3528,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                             <div className="grid grid-cols-2 gap-2">
                               <div>
                                 <label className="text-[9px] text-gray-400 font-bold uppercase block mb-1">Relative Tol</label>
-                                <input
+                                <input data-help-feature="ui:vlab/VLabWorkspace:cba17cc9b835" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                                   type="number"
                                   step="any"
                                   value={(selectedNode.data as any).params?.relativeTolerance?.value ?? 1e-3}
@@ -3534,7 +3538,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                               </div>
                               <div>
                                 <label className="text-[9px] text-gray-400 font-bold uppercase block mb-1">Absolute Tol</label>
-                                <input
+                                <input data-help-feature="ui:vlab/VLabWorkspace:7c1f526065b1" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                                   type="number"
                                   step="any"
                                   value={(selectedNode.data as any).params?.absoluteTolerance?.value ?? 1e-6}
@@ -3551,7 +3555,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                           <div className="space-y-3 animate-in fade-in duration-200">
                             <div>
                               <label className="text-[10px] text-gray-400 font-bold uppercase block mb-1">Nonlinear Residual Tol</label>
-                              <input
+                              <input data-help-feature="ui:vlab/VLabWorkspace:67cafacfb7aa" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                                 type="number"
                                 step="any"
                                 value={(selectedNode.data as any).params?.nonlinearTolerance?.value ?? 1e-8}
@@ -3561,7 +3565,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                             </div>
                             <div>
                               <label className="text-[10px] text-gray-400 font-bold uppercase block mb-1">Max Newton Iterations</label>
-                              <input
+                              <input data-help-feature="ui:vlab/VLabWorkspace:c7d3a9c52e2a" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                                 type="number"
                                 value={(selectedNode.data as any).params?.maximumIterations?.value ?? 50}
                                 onChange={(e) => updateParameter('maximumIterations', parseInt(e.target.value) || 50)}
@@ -3571,7 +3575,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                             <div className="grid grid-cols-2 gap-2">
                               <div>
                                 <label className="text-[9px] text-gray-400 font-bold uppercase block mb-1">Diagnostics</label>
-                                <select
+                                <select data-help-feature="ui:vlab/VLabWorkspace:8edbaa90ead6" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                                   value={String((selectedNode.data as any).params?.enableDiagnostics?.value ?? 'on')}
                                   onChange={(e) => updateParameter('enableDiagnostics', e.target.value)}
                                   className="w-full bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-2 text-xs focus:border-purple-500 outline-none text-emerald-400 font-bold cursor-pointer"
@@ -3582,7 +3586,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                               </div>
                               <div>
                                 <label className="text-[9px] text-gray-400 font-bold uppercase block mb-1">Log Stats</label>
-                                <select
+                                <select data-help-feature="ui:vlab/VLabWorkspace:50f344e9e999" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                                   value={String((selectedNode.data as any).params?.enableLogging?.value ?? 'on')}
                                   onChange={(e) => updateParameter('enableLogging', e.target.value)}
                                   className="w-full bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-2 text-xs focus:border-purple-500 outline-none text-purple-400 font-bold cursor-pointer"
@@ -3625,7 +3629,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                                   Reference Pressure
                                 </label>
                                 <div className="flex gap-2">
-                                  <input
+                                  <input data-help-feature="ui:vlab/VLabWorkspace:4ea25147df29" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                                     type="number"
                                     step="any"
                                     value={pRef}
@@ -3635,7 +3639,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                                     }}
                                     className="flex-1 bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-3 text-xs focus:border-blue-500 outline-none text-white font-mono"
                                   />
-                                  <select
+                                  <select data-help-feature="ui:vlab/VLabWorkspace:b6cb9d1af7c7" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                                     value={pRefUnit}
                                     onChange={(e) => {
                                       updateParameter('referencePressure', { value: pRef, unit: e.target.value, label: 'Reference Pressure' } as any);
@@ -3659,7 +3663,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                                 </label>
                                 <div className="grid grid-cols-2 gap-1 p-1 bg-[#1a1a1a] rounded-lg border border-[#222]">
                                   {(['absolute', 'gauge'] as const).map((t) => (
-                                    <button
+                                    <button data-help-feature="ui:vlab/VLabWorkspace:6eaf413ec509" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                                       key={t}
                                       type="button"
                                       onClick={() => updateParameter('pressureType', { value: t, unit: '', label: 'Pressure Type' } as any)}
@@ -3688,7 +3692,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                                   )}
                                 </div>
                                 <div className="flex gap-2">
-                                  <input
+                                  <input data-help-feature="ui:vlab/VLabWorkspace:3646aa8222ca" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                                     type="number"
                                     step="any"
                                     value={pAtm}
@@ -3698,7 +3702,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                                     }}
                                     className="flex-1 bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-3 text-xs focus:border-blue-500 outline-none text-white font-mono"
                                   />
-                                  <select
+                                  <select data-help-feature="ui:vlab/VLabWorkspace:7ebd99388d8b" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                                     value={pAtmUnit}
                                     onChange={(e) => {
                                       updateParameter('atmosphericPressure', { value: pAtm, unit: e.target.value, label: 'Atmospheric Pressure' } as any);
@@ -3723,7 +3727,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                                   Elevation Settings
                                 </span>
                                 <label className="flex items-center gap-1.5 cursor-pointer">
-                                  <input
+                                  <input data-help-feature="ui:vlab/VLabWorkspace:b3d18aaa829b" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                                     type="checkbox"
                                     checked={elevCorr}
                                     onChange={(e) => {
@@ -3741,7 +3745,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                                     Reference Elevation (z_ref)
                                   </label>
                                   <div className="flex gap-2">
-                                    <input
+                                    <input data-help-feature="ui:vlab/VLabWorkspace:9398f30d2732" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                                       type="number"
                                       step="any"
                                       value={zRef}
@@ -3751,7 +3755,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                                       }}
                                       className="flex-1 bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-3 text-xs focus:border-blue-500 outline-none text-white font-mono"
                                     />
-                                    <select
+                                    <select data-help-feature="ui:vlab/VLabWorkspace:d38291631480" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                                       value={zRefUnit}
                                       onChange={(e) => {
                                         updateParameter('referenceElevation', { value: zRef, unit: e.target.value, label: 'Reference Elevation' } as any);
@@ -3780,7 +3784,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                                 <label className="text-[10px] text-gray-400 font-bold uppercase block mb-1">
                                   Initialization Priority
                                 </label>
-                                <select
+                                <select data-help-feature="ui:vlab/VLabWorkspace:0eb941175667" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                                   value={initPriority}
                                   onChange={(e) => updateParameter('initializationPriority', { value: e.target.value, unit: '', label: 'Initialization Priority' } as any)}
                                   className="w-full bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-3 text-xs focus:border-blue-500 outline-none text-blue-300 font-bold cursor-pointer"
@@ -3818,7 +3822,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                               <span className="text-[10px] text-gray-600">{param.unit || ''}</span>
                             </div>
                             {['limit_data_points', 'show_grid', 'show_legend'].includes(key) ? (
-                              <select
+                              <select data-help-feature="ui:vlab/VLabWorkspace:11c52a716a82" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                                 value={String(param.value ?? 'on')}
                                 onChange={(e) => updateParameter(key, e.target.value)}
                                 className="w-full bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-3 text-xs focus:border-purple-500 outline-none text-[#a855f7] font-bold cursor-pointer"
@@ -3827,7 +3831,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                                 <option value="off">Off (No)</option>
                               </select>
                             ) : key === 'time_range' ? (
-                              <select
+                              <select data-help-feature="ui:vlab/VLabWorkspace:7780cca042ce" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                                 value={String(param.value ?? '10')}
                                 onChange={(e) => {
                                   const val = e.target.value === 'auto' ? 'auto' : parseFloat(e.target.value);
@@ -3845,7 +3849,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                                 <option value="300">300s</option>
                               </select>
                             ) : key === 'numSignals' || key === 'numPorts' ? (
-                              <select
+                              <select data-help-feature="ui:vlab/VLabWorkspace:a6d74235390b" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                                 value={String(param.value ?? 1)}
                                 onChange={(e) => updateParameter(key, parseInt(e.target.value))}
                                 className="w-full bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-3 text-xs focus:border-purple-500 outline-none text-purple-400 font-bold cursor-pointer"
@@ -3855,7 +3859,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                                 ))}
                               </select>
                             ) : key === 'data_type' ? (
-                              <select
+                              <select data-help-feature="ui:vlab/VLabWorkspace:11c52a716a82" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                                 value={String(param.value ?? 'auto')}
                                 onChange={(e) => updateParameter(key, e.target.value)}
                                 className="w-full bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-3 text-xs focus:border-purple-500 outline-none text-purple-400 font-bold cursor-pointer"
@@ -3871,7 +3875,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                               (() => {
                                 const isPositivePhysical = ['C', 'heat_capacity', 'mass', 'm', 'R', 'resistance', 'k', 'conductivity', 'L', 'inductance', 'b', 'damping', 'J', 'inertia'].includes(key);
                                 return (
-                                  <input
+                                  <input data-help-feature="ui:vlab/VLabWorkspace:b5a7c9d05554" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                                     type={typeof (param.value ?? 0) === 'number' ? "number" : "text"}
                                     min={isPositivePhysical ? 0 : undefined}
                                     value={param.value ?? ''}
@@ -3914,7 +3918,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                             <div className="flex items-center gap-1.5">
                               <span className="text-[9px] font-mono text-emerald-500/70">[{port.id}]</span>
                               {selectedNode.data.type === 'subsystem' || selectedNode.data.type === 'Subsystem' ? (
-                                <input
+                                <input data-help-feature="ui:vlab/VLabWorkspace:80016a646238" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                                   type="text"
                                   value={port.label || ''}
                                   onChange={(e) => {
@@ -4083,7 +4087,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                     {syncAction === 'push' ? 'Push Workspace to 3DX' : 'Pull Workspace from 3DX'}
                   </h3>
                 </div>
-                <button
+                <button data-help-feature="ui:vlab/VLabWorkspace:3e1101db01ef" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                   onClick={() => setShow3dxSyncModal(false)}
                   className="text-gray-500 hover:text-white p-1 hover:bg-white/5 rounded-md transition-colors cursor-pointer"
                 >
@@ -4115,7 +4119,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                     <div className="space-y-3">
                       <div>
                         <label className="text-[10px] text-gray-500 uppercase tracking-wider block mb-1">Target Workspace</label>
-                        <select
+                        <select data-help-feature="ui:vlab/VLabWorkspace:0a26bce5e017" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                           value={selectedTdxWorkspace}
                           onChange={(e) => setSelectedTdxWorkspace(e.target.value)}
                           className="w-full bg-[#06080c] border border-[#1e2a3a] rounded-lg px-3 py-2 text-xs text-white focus:outline-none"
@@ -4125,7 +4129,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                           ))}
                         </select>
                       </div>
-                      <button
+                      <button data-help-feature="ui:vlab/VLabWorkspace:83d213ec5d73" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                         onClick={handle3dxPush}
                         className="w-full py-2.5 bg-[#0056b3] hover:bg-[#0069d9] text-white rounded-lg text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer"
                       >
@@ -4140,7 +4144,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                       ) : (
                         <div className="max-h-[200px] overflow-y-auto border border-[#1a2133] rounded-lg divide-y divide-[#1a2133] bg-[#06080c]">
                           {tdxDocs.map(doc => (
-                            <div
+                            <div data-help-feature="ui:vlab/VLabWorkspace:3630bac82926" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                               key={doc.id}
                               onClick={() => handle3dxPull(doc.id)}
                               className="p-3 text-xs text-gray-400 hover:text-white hover:bg-white/5 cursor-pointer transition-all flex items-center justify-between"
@@ -4160,7 +4164,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
         )}
 
         {showConfirmClear && (
-          <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999]" onMouseDown={() => setShowConfirmClear(false)}>
+          <div data-help-feature="live:components/vlab/VLabWorkspace:f329ee58e245" className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999]" onMouseDown={() => setShowConfirmClear(false)}>
             <div className="bg-[#1a1a1a] border border-red-900 rounded-lg w-[550px] max-h-[90vh] flex flex-col relative" onMouseDown={e => e.stopPropagation()}>
               <div className="h-12 flex items-center px-5 border-b border-red-900/50">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ff6b6b" strokeWidth="2" className="mr-3">
@@ -4176,13 +4180,13 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
               </div>
 
               <div className="h-14 flex items-center justify-end px-5 border-t border-[#222] gap-3">
-                <button
+                <button data-help-feature="ui:vlab/VLabWorkspace:9aca4a179c45" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                   onClick={() => setShowConfirmClear(false)}
                   className="px-5 py-2 border border-[#333] text-[#a0a0a0] hover:text-[#e0e0e0] rounded bg-transparent text-sm transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
-                <button
+                <button data-help-feature="ui:vlab/VLabWorkspace:7e7b5ed84837" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                   onClick={() => {
                     setIsSimulating(false);
                     setIsPaused(false);
