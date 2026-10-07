@@ -67,6 +67,8 @@ export interface BlockEquationArgs {
   params: Record<string, any>;
   ports: string[];
   nodeId: string;
+  /** Instance port id -> label (from the node's own `data.ports`), when the node declares any. */
+  portLabels?: Record<string, string>;
   /**
    * Port ids that are wired to another block. Optional physical-signal inputs
    * (e.g. the `s` port of force_source) read as 0 when unwired, so equations
@@ -2448,7 +2450,7 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   vlab_probe: ({ across, branch }) => [branch[0] - (across[0] || 0)],
   // A net label only names the net its single port is wired to: it has no through variable, hence no residual.
   conn_label: () => [],
-  doe_custom: ({ across, branch, params, nodeId, ctx, ports }) => {
+  doe_custom: ({ across, branch, params, nodeId, ctx, ports, portLabels }) => {
     let deployment: any = unwrapParam(params?.deploymentModel);
     if (typeof deployment === 'string') {
       try {
@@ -2458,28 +2460,53 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
       }
     }
 
+    // Inputs are selected by port id (in1..inN, in factorOrder order), never by position in `across`: `across` carries one entry
+    // per declared port INCLUDING the output `out`, in the node's port order, so a positional read would hand the model N+1
+    // inputs (or the wrong ones if the ports were reordered). A missing `inK` port truncates the vector (INSUFFICIENT_INPUTS).
+    const doeInputIds = (ports as string[]).filter(p => /^in\d+$/.test(p))
+      .sort((a, b) => Number(a.slice(2)) - Number(b.slice(2)));
+    const doeInputs = (count: number): number[] => {
+      const out: number[] = [];
+      for (let k = 1; k <= count; k++) {
+        const idx = (ports as string[]).indexOf(`in${k}`);
+        if (idx < 0) break;
+        out.push(across[idx] as number);
+      }
+      return out;
+    };
+
     let y = NaN;
     if (deployment && deployment.schemaVersion === 1) {
-      const res = evaluateDOEModelDetailed(deployment, across);
+      const nFactors = Array.isArray(deployment.factorOrder) ? deployment.factorOrder.length : doeInputIds.length;
+      const res = evaluateDOEModelDetailed(deployment, doeInputs(nFactors));
       if (!res.success) {
         if (params) params._runtimeDiagnostic = res.diagnostic;
         if (ctx?.parameters && nodeId) ctx.parameters[`${nodeId}_fault`] = res.diagnostic;
         y = NaN;
       } else {
         if (params) params._runtimeDiagnostic = null;
+        if (ctx?.parameters && nodeId) delete ctx.parameters[`${nodeId}_fault`];
         y = res.value;
       }
     } else {
       const eq = stringParam(params, 'equation', '');
       if (eq) {
-        const factorNames = across.map((_, i) => `X${i + 1}`);
-        const res = evaluateLegacyDOEEquationDetailed(eq, factorNames, across);
+        const legacyInputs = doeInputs(doeInputIds.length);
+        // Legacy exported equations use the real factor names (engine/doe/statistics.ts): take them from the node's port
+        // labels (port.label = factor name); X1..Xn stay available as aliases inside the evaluator.
+        const isIdent = (s: unknown): s is string => typeof s === 'string' && /^[A-Za-z_]\w*$/.test(s);
+        const factorNames = legacyInputs.map((_, i) => {
+          const fromPort = portLabels?.[`in${i + 1}`];
+          return isIdent(fromPort) ? fromPort : `X${i + 1}`;
+        });
+        const res = evaluateLegacyDOEEquationDetailed(eq, factorNames, legacyInputs);
         if (!res.success) {
           if (params) params._runtimeDiagnostic = res.diagnostic;
           if (ctx?.parameters && nodeId) ctx.parameters[`${nodeId}_fault`] = res.diagnostic;
           y = NaN;
         } else {
           if (params) params._runtimeDiagnostic = null;
+          if (ctx?.parameters && nodeId) delete ctx.parameters[`${nodeId}_fault`];
           y = res.value;
         }
       } else {

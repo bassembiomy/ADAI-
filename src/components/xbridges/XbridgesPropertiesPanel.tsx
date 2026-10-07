@@ -1312,11 +1312,13 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
               
               <div className="bg-emerald-900/10 border border-emerald-800/30 rounded-xl p-4 space-y-3">
                  <div className="grid grid-cols-2 gap-4">
+                    {typeof (block as any).metrics.R2 === 'number' && Number.isFinite((block as any).metrics.R2) && (
                     <div className="space-y-0.5">
                        <span className="text-[8px] text-emerald-400/80 uppercase font-black">R-Squared</span>
-                       <div className="text-xl font-black text-[#e0e0e0] leading-none">{(block as any).metrics.R2 ? ((block as any).metrics.R2 * 100).toFixed(2) : '0.00'}%</div>
+                       <div className="text-xl font-black text-[#e0e0e0] leading-none">{((block as any).metrics.R2 * 100).toFixed(2)}%</div>
                     </div>
-                    {(block as any).metrics.R2Adj !== undefined && (
+                    )}
+                    {typeof (block as any).metrics.R2Adj === 'number' && Number.isFinite((block as any).metrics.R2Adj) && (
                        <div className="space-y-0.5">
                           <span className="text-[8px] text-emerald-400/80 uppercase font-black">Adj. R-Squared</span>
                           <div className="text-xl font-black text-[#c0c0c0] leading-none">{((block as any).metrics.R2Adj * 100).toFixed(2)}%</div>

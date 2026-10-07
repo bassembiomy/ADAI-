@@ -24,7 +24,20 @@ export interface ResidualDiagnostic {
   value?: number;
   /** message of the thrown equation error */
   error?: string;
+  /** specific code of a block-reported runtime fault (`ctx.parameters[`${blockId}_fault`]`, e.g. a DOE model's INSUFFICIENT_INPUTS) */
+  faultCode?: string;
   reason: string;
+}
+
+/**
+ * Block-reported runtime fault convention: an equation that cannot produce a value publishes `{code, message}` at
+ * `ctx.parameters[`${blockId}_fault`]` (doe_custom does). When the block's residual then comes out non-finite, the
+ * fault explains why, so it is attached to the residual diagnostic instead of a bare "residual row is NaN".
+ */
+export function blockFaultOf(ctx: { parameters?: Record<string, any> } | undefined, blockId: string): { code: string; message: string } | null {
+  const f = ctx?.parameters?.[`${blockId}_fault`];
+  if (!f || typeof f !== 'object' || typeof f.code !== 'string') return null;
+  return { code: f.code, message: typeof f.message === 'string' ? f.message : '' };
 }
 
 const summarize = (diagnostics: ResidualDiagnostic[]) =>

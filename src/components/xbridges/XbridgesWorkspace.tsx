@@ -1999,7 +1999,8 @@ export const XbridgesWorkspace: React.FC<{
         });
         if (edge) {
           const sourceNode = nodes.find(n => n.id === edge.source);
-          if (sourceNode && sourceNode.data?.type === 'DOE_MODEL') {
+          const srcModelType = sourceNode?.data?.params?.modelType?.value || sourceNode?.data?.params?.modelType || sourceNode?.data?.modelType || 'RSM';
+          if (sourceNode && sourceNode.data?.type === 'DOE_MODEL' && srcModelType === 'RSM') {
             const equationStr = sourceNode.data.params?.equation?.value || sourceNode.data.params?.equation || '';
             const inputNames = sourceNode.data.params?.inputNames?.value || sourceNode.data.params?.inputNames || ['X1'];
             const factorName = inputNames[0] || 'X1';

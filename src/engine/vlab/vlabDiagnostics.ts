@@ -102,8 +102,8 @@ export function serializeVLabError(error: unknown): VLabDiagnostic {
   }
   if (error instanceof NonFiniteResidualError || error instanceof BlockEquationError) {
     return build(error instanceof BlockEquationError ? 'BLOCK_EQUATION' : 'NON_FINITE_RESIDUAL', error, error.diagnostics.map(d => ({
-      code: d.kind, message: d.reason, blockId: d.blockId || undefined,
-      details: plain({ blockType: d.blockType, rowIndex: d.rowIndex, variable: d.variable, value: d.value, error: d.error }),
+      code: d.faultCode ?? d.kind, message: d.reason, blockId: d.blockId || undefined,
+      details: plain({ blockType: d.blockType, rowIndex: d.rowIndex, variable: d.variable, value: d.value, error: d.error, kind: d.kind }),
     })), { recoverable: error.recoverable });
   }
   if (error instanceof ScopeReadError) {

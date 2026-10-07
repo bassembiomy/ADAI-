@@ -6741,7 +6741,6 @@ const ADIA = () => {
       }
       newNode = exportRes;
     }
-    console.log('[DOE EXPORT DEBUG] Exporting to VLab:', newNode);
 
     const getTargetFileForMode = (mode: DiagramMode) => {
       const activeFile = workspaceFiles.find(f => f.id === activeFileId);
@@ -6816,6 +6815,23 @@ const ADIA = () => {
         });
       });
 
+      // Repeated exports must not stack on one spot or reuse an id: offset the new block and de-duplicate its id against
+      // the nodes already in the target diagram (the active diagram's live nodes when it is the target).
+      const existingNodes: any[] = activeFileId === target.id
+        ? vlabNodes
+        : (workspaceFiles.find(f => f.id === target.id)?.data?.vlabNodes || []);
+      if (existingNodes.length > 0 && newNode && typeof newNode === 'object') {
+        const taken = new Set(existingNodes.map((n: any) => n.id));
+        let uniqueId = newNode.id;
+        for (let k = 2; taken.has(uniqueId); k++) uniqueId = `${newNode.id}_${k}`;
+        const offset = existingNodes.filter((n: any) => n?.data?.type === 'doe_custom').length * 40;
+        newNode = {
+          ...newNode,
+          id: uniqueId,
+          position: { x: (newNode.position?.x ?? 400) + offset, y: (newNode.position?.y ?? 300) + offset },
+          data: newNode.data ? { ...newNode.data, id: uniqueId } : newNode.data
+        };
+      }
       if (activeFileId === target.id) {
         setVlabNodes(prev => [...prev, newNode]);
       }

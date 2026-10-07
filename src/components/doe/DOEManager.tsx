@@ -217,7 +217,7 @@ export const DOEManager: React.FC<DOEManagerProps> = (props) => {
       return;
     }
     if (!results) return;
-    const blockRes = createXBridgesDOEBlock(results);
+    const blockRes = createXBridgesDOEBlock((results as any).canonicalResult || results);
     if ('success' in blockRes && blockRes.success === false) {
       props.addError?.('error', 'Cannot export invalid DOE model to X-Bridges.');
       return;
@@ -232,7 +232,7 @@ export const DOEManager: React.FC<DOEManagerProps> = (props) => {
       return;
     }
     if (!results) return;
-    const blockRes = createVLabDOEBlock(results);
+    const blockRes = createVLabDOEBlock((results as any).canonicalResult || results);
     if ('success' in blockRes && blockRes.success === false) {
       props.addError?.('error', 'Cannot export invalid DOE model to V-Lab.');
       return;

@@ -137,6 +137,7 @@ export interface XBridgesDOENode {
     inputNames: string[];
     outputName: string;
     deploymentModel: DOEDeploymentModel;
+    metrics?: { R2?: number; R2Adj?: number };
     inputs: Array<{
       id: string;
       name: string;

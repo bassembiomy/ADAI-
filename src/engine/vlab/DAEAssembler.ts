@@ -18,7 +18,7 @@ import {
   PortWidthMismatchError, channelVariableSuffix, portShape, vectorBranchName,
   type PortShape, type PortWidthDiagnostic,
 } from './vlabVectorPorts';
-import { BlockEquationError, NonFiniteResidualError, type ResidualDiagnostic } from './vlabResidualDiagnostics';
+import { BlockEquationError, NonFiniteResidualError, blockFaultOf, type ResidualDiagnostic } from './vlabResidualDiagnostics';
 import { ScopeReadError } from './vlabScopeRead';
 import { findFloatingElectricalNetworks, isInternalReferencePort } from './vlabElectricalReference';
 import {
@@ -1111,6 +1111,11 @@ export class DAEAssembler {
         };
       });
       const connectedPortList = ports.filter(p => connectedPortKeys.has(`${node.id}_${p}`));
+      // Instance port labels (e.g. a DOE node's factor names), for factories that evaluate by name.
+      const portLabels: Record<string, string> = {};
+      if (Array.isArray((node.data as any)?.ports)) {
+        (node.data as any).ports.forEach((p: any) => { if (p && p.id && typeof p.label === 'string') portLabels[p.id] = p.label; });
+      }
       const buildArgs = (x: number[], dx: number[], ctx: EquationContext, guard?: Set<string>): BlockEquationArgs => {
         // Map block ports to global across variable values and their derivatives. WP-31c: the per-port lookups (key string, domain,
         // width, variable index, connection) never change after assembly; they are resolved once into `portPlan`, so a residual
@@ -1204,6 +1209,7 @@ export class DAEAssembler {
           params,
           ports,
           nodeId: node.id,
+          portLabels,
           connectedPorts: connectedPortList.slice()
         };
       };
@@ -1812,10 +1818,13 @@ export class DAEAssembler {
         allIndices.forEach(idx => {
           const value = compRes[resPtr];
           if (typeof value !== 'number' || !Number.isFinite(value)) {
+            const fault = blockFaultOf(ctx, comp.blockId);
             bad.push({
               kind: 'non-finite-residual', blockId: comp.blockId, blockType: comp.blockType, rowIndex: resPtr,
               variable: variableNames[idx], value: value as number,
-              reason: `Block "${comp.blockId}" (${comp.blockType}): residual row ${resPtr} (${variableNames[idx]}) is ${value}`,
+              ...(fault ? { faultCode: fault.code } : {}),
+              reason: `Block "${comp.blockId}" (${comp.blockType}): residual row ${resPtr} (${variableNames[idx]}) is ${value}`
+                + (fault ? ` - runtime fault ${fault.code}: ${fault.message}` : ''),
             });
           } else {
             res[idx] = value;
