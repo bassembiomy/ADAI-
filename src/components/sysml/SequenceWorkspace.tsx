@@ -58,6 +58,7 @@ import {
 import { interactionToPlantUml } from '../../features/plantuml/adapters/sysmlInteractionToPlantUml';
 import { diagramFrameLabel } from '../../features/sysml/diagramFrame';
 import { resolveSysmlReferenceLabel, sysmlObjectLabel } from '../../features/sysml/sysmlDisplayLabel';
+import { handleHorizontalToolbarWheel } from '../../utils/toolbarScroll';
 
 export interface SequenceWorkspaceProps {
   repository: SysmlRepository;
@@ -524,7 +525,7 @@ export function SequenceWorkspace({ repository, diagramId, onExecute, onNavigate
   };
 
   const toolButton = (id: Tool, label: string, hint: string) => (
-    <button
+    <button data-help-feature="ui:sysml/SequenceWorkspace:cfdde9898862" data-help-source="src/components/sysml/SequenceWorkspace.tsx"
       key={id} type="button" aria-pressed={tool === id} title={hint}
       onClick={() => { setTool(id); setPendingSource(null); setMessage(''); }}
       className={`rounded border px-2 py-1 text-xs ${tool === id ? 'border-orange-600 bg-orange-950/50 text-orange-200' : 'border-neutral-700 text-neutral-300 hover:border-neutral-500'}`}
@@ -544,25 +545,28 @@ export function SequenceWorkspace({ repository, diagramId, onExecute, onNavigate
 
   return (
     <section className="flex h-full min-h-0 w-full flex-col bg-[var(--surface-canvas)] text-[var(--text-primary)]" aria-label="Sequence Diagram workspace" data-testid="sequence-workspace">
-      <header className="flex flex-wrap items-center gap-2 border-b border-[var(--border-default)] bg-[var(--surface-panel)] p-2">
+      <header
+        onWheel={handleHorizontalToolbarWheel}
+        className="flex items-center gap-2 overflow-x-auto overflow-y-hidden adia-toolbar-scrollbar border-b border-[var(--border-default)] bg-[var(--surface-panel)] p-2 shrink-0 [&>*]:shrink-0"
+      >
         <h2 className="mr-2 text-xs font-semibold" data-testid="sequence-frame-label">{frameLabel ?? 'Sequence Diagram'}</h2>
         <div className="flex flex-wrap items-center gap-1" role="toolbar" aria-label="Sequence palette">
           {toolButton('select', 'Select', 'Select; drag a message up or down to reorder it')}
-          <button type="button" className="rounded border border-neutral-700 px-2 py-1 text-xs text-neutral-300 hover:border-neutral-500" onClick={addLifeline} title="Add a lifeline" disabled={!interaction}>Lifeline</button>
+          <button data-help-feature="ui:sysml/SequenceWorkspace:f8f7b5368eda" data-help-source="src/components/sysml/SequenceWorkspace.tsx" type="button" className="rounded border border-neutral-700 px-2 py-1 text-xs text-neutral-300 hover:border-neutral-500" onClick={addLifeline} title="Add a lifeline" disabled={!interaction}>Lifeline</button>
           {MESSAGE_SORTS.map(sort => toolButton(sort, MESSAGE_SORT_LABELS[sort], `Click the sending lifeline, then the receiving lifeline (${MESSAGE_SORT_LABELS[sort]})`))}
           {toolButton('lost', 'Lost', 'Click the sending lifeline: the message is never received')}
           {toolButton('found', 'Found', 'Click the receiving lifeline: the sender is unknown')}
           <label className="flex items-center gap-1 text-[11px] text-neutral-400">
-            <input type="checkbox" checked={withReply} onChange={event => setWithReply(event.target.checked)} />
+            <input data-help-feature="ui:sysml/SequenceWorkspace:c15ce424c8ad" data-help-source="src/components/sysml/SequenceWorkspace.tsx" type="checkbox" checked={withReply} onChange={event => setWithReply(event.target.checked)} />
             Add the reply with a synchronous call
           </label>
           <label className="flex items-center gap-1 text-[11px] text-neutral-400">
-            <input type="checkbox" checked={asyncBars} onChange={event => setAsyncBars(event.target.checked)} />
+            <input data-help-feature="ui:sysml/SequenceWorkspace:2a03bc409fdd" data-help-source="src/components/sysml/SequenceWorkspace.tsx" type="checkbox" checked={asyncBars} onChange={event => setAsyncBars(event.target.checked)} />
             Execution bars for asynchronous calls
           </label>
         </div>
-        <button
-          type="button" disabled={!interaction} title="Download this interaction as PlantUML text (one way; it is not imported back)"
+        <button data-help-feature="ui:sysml/SequenceWorkspace:e9153ff84fc0" data-help-source="src/components/sysml/SequenceWorkspace.tsx"
+          type="button" disabled={!interaction} title="Download a visual PlantUML representation. Time/duration constraints and model links are omitted; this is not full model interchange."
           className="ml-auto rounded border border-neutral-700 px-2 py-1 text-xs text-neutral-300 hover:border-neutral-500 disabled:opacity-50"
           onClick={() => {
             try {
@@ -581,7 +585,7 @@ export function SequenceWorkspace({ repository, diagramId, onExecute, onNavigate
         >Export PlantUML</button>
         <label className="flex items-center gap-1 text-[11px] text-neutral-400">
           Ref frame
-          <select
+          <select data-help-feature="ui:sysml/SequenceWorkspace:ab0ad390cefa" data-help-source="src/components/sysml/SequenceWorkspace.tsx"
             aria-label="Add a ref frame to another interaction" value="" disabled={!interaction || referableInteractions.length === 0}
             onChange={event => {
               if (!event.target.value) return;
@@ -595,11 +599,11 @@ export function SequenceWorkspace({ repository, diagramId, onExecute, onNavigate
             {referableInteractions.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
           </select>
         </label>
-        <button type="button" disabled={selectedMessages.length !== 1} title="Select one message, then mark it with a time constraint" onClick={() => addConstraint('time')} className="rounded border border-neutral-700 px-2 py-1 text-xs text-neutral-300 hover:border-neutral-500 disabled:opacity-50">Time constraint</button>
-        <button type="button" disabled={selectedMessages.length !== 2} title="Select two messages, then span them with a duration constraint" onClick={() => addConstraint('duration')} className="rounded border border-neutral-700 px-2 py-1 text-xs text-neutral-300 hover:border-neutral-500 disabled:opacity-50">Duration constraint</button>
+        <button data-help-feature="ui:sysml/SequenceWorkspace:68e88789b1b3" data-help-source="src/components/sysml/SequenceWorkspace.tsx" type="button" disabled={selectedMessages.length !== 1} title="Select one message, then mark it with a time constraint" onClick={() => addConstraint('time')} className="rounded border border-neutral-700 px-2 py-1 text-xs text-neutral-300 hover:border-neutral-500 disabled:opacity-50">Time constraint</button>
+        <button data-help-feature="ui:sysml/SequenceWorkspace:ca8f3dab1b47" data-help-source="src/components/sysml/SequenceWorkspace.tsx" type="button" disabled={selectedMessages.length !== 2} title="Select two messages, then span them with a duration constraint" onClick={() => addConstraint('duration')} className="rounded border border-neutral-700 px-2 py-1 text-xs text-neutral-300 hover:border-neutral-500 disabled:opacity-50">Duration constraint</button>
         <label className="flex items-center gap-1 text-[11px] text-neutral-400">
           Combined fragment
-          <select
+          <select data-help-feature="ui:sysml/SequenceWorkspace:a79dffcf09be" data-help-source="src/components/sysml/SequenceWorkspace.tsx"
             aria-label="Enclose the selected messages in a combined fragment" value="" disabled={selectedMessages.length === 0}
             onChange={event => { if (event.target.value) addFragment(event.target.value as CombinedFragmentOperator); }}
             className={selectClass}
@@ -609,19 +613,19 @@ export function SequenceWorkspace({ repository, diagramId, onExecute, onNavigate
           </select>
         </label>
         <div className="flex items-center gap-1" role="toolbar" aria-label="Zoom">
-          <button type="button" aria-label="Zoom out" className="rounded border border-neutral-700 px-2 py-1 text-xs" onClick={() => zoomBy(1 / 1.2)}>−</button>
+          <button data-help-feature="ui:sysml/SequenceWorkspace:1c8f54ec7607" data-help-source="src/components/sysml/SequenceWorkspace.tsx" type="button" aria-label="Zoom out" className="rounded border border-neutral-700 px-2 py-1 text-xs" onClick={() => zoomBy(1 / 1.2)}>−</button>
           <span className="w-10 text-center text-[11px] text-neutral-400">{Math.round(zoom * 100)}%</span>
-          <button type="button" aria-label="Zoom in" className="rounded border border-neutral-700 px-2 py-1 text-xs" onClick={() => zoomBy(1.2)}>+</button>
-          <button type="button" className="rounded border border-neutral-700 px-2 py-1 text-xs" onClick={() => setZoom(1)}>Reset</button>
+          <button data-help-feature="ui:sysml/SequenceWorkspace:80d4cf789d4c" data-help-source="src/components/sysml/SequenceWorkspace.tsx" type="button" aria-label="Zoom in" className="rounded border border-neutral-700 px-2 py-1 text-xs" onClick={() => zoomBy(1.2)}>+</button>
+          <button data-help-feature="ui:sysml/SequenceWorkspace:284838e9a1ed" data-help-source="src/components/sysml/SequenceWorkspace.tsx" type="button" className="rounded border border-neutral-700 px-2 py-1 text-xs" onClick={() => setZoom(1)}>Reset</button>
         </div>
       </header>
 
-      <div
+      <div data-help-feature="live:components/sysml/SequenceWorkspace:5038e2c00767"
         tabIndex={0} onKeyDown={onKeyDown}
         className="relative min-h-0 flex-1 overflow-auto outline-none"
         aria-label="Sequence canvas" role="application" data-testid="sequence-canvas"
       >
-        <svg
+        <svg data-help-feature="live:components/sysml/SequenceWorkspace:e5ae7eaf6a04"
           ref={svgRef} width={view.canvasSize.width * zoom} height={view.canvasSize.height * zoom}
           style={{ cursor, touchAction: 'none', display: 'block' }} onPointerDown={onBackgroundPointerDown}
         >
@@ -637,19 +641,19 @@ export function SequenceWorkspace({ repository, diagramId, onExecute, onNavigate
           <rect width="100%" height="100%" fill="transparent" />
           <g transform={`scale(${zoom})`}>
             {view.fragments.map(fragment => (
-              <g key={fragment.id} onPointerDown={event => onFragmentPointerDown(event, fragment)}>
+              <g data-help-feature="live:components/sysml/SequenceWorkspace:575187c21f8f" key={fragment.id} onPointerDown={event => onFragmentPointerDown(event, fragment)}>
                 <FragmentShape fragment={fragment} selected={liveSelection.includes(fragment.id)} />
               </g>
             ))}
             {view.lifelines.map(lifeline => (
-              <g
+              <g data-help-feature="ui:sysml/SequenceWorkspace:ac9c6e35e893" data-help-source="src/components/sysml/SequenceWorkspace.tsx"
                 key={lifeline.id} data-pending-source={pendingSource === lifeline.id || undefined}
                 onDoubleClick={() => { const represents = interaction?.lifelines.find(candidate => candidate.id === lifeline.id)?.representsId; if (represents) onNavigate?.(represents); }}
               >
-                <g onPointerDown={event => onLifelinePointerDown(event, lifeline, false)}>
+                <g data-help-feature="live:components/sysml/SequenceWorkspace:3e6c88b6d3d8" onPointerDown={event => onLifelinePointerDown(event, lifeline, false)}>
                   <LifelineShape lifeline={lifeline} selected={liveSelection.includes(lifeline.id)} pending={pendingSource === lifeline.id} />
                 </g>
-                <rect
+                <rect data-help-feature="live:components/sysml/SequenceWorkspace:149dbca2d188"
                   data-testid="sequence-lifeline-head" data-label={lifeline.label}
                   x={lifeline.head.x} y={lifeline.head.y} width={lifeline.head.width} height={HEAD_HEIGHT} fill="transparent"
                   onPointerDown={event => onLifelinePointerDown(event, lifeline, true)}
@@ -657,7 +661,7 @@ export function SequenceWorkspace({ repository, diagramId, onExecute, onNavigate
               </g>
             ))}
             {view.uses.map(use => (
-              <g
+              <g data-help-feature="ui:sysml/SequenceWorkspace:d3192cbaa730" data-help-source="src/components/sysml/SequenceWorkspace.tsx"
                 key={use.id} onPointerDown={event => onUsePointerDown(event, use)}
                 onDoubleClick={() => onNavigate?.(use.refersToId)}
               >
@@ -665,12 +669,12 @@ export function SequenceWorkspace({ repository, diagramId, onExecute, onNavigate
               </g>
             ))}
             {view.constraints.map(constraint => (
-              <g key={constraint.id} onPointerDown={event => onConstraintPointerDown(event, constraint)}>
+              <g data-help-feature="live:components/sysml/SequenceWorkspace:6fbc52684016" key={constraint.id} onPointerDown={event => onConstraintPointerDown(event, constraint)}>
                 <ConstraintShape constraint={constraint} selected={liveSelection.includes(constraint.id)} />
               </g>
             ))}
             {view.stateInvariants.map(invariant => (
-              <g key={invariant.id} onPointerDown={event => onInvariantPointerDown(event, invariant)}>
+              <g data-help-feature="live:components/sysml/SequenceWorkspace:bf8a1d8a7f7c" key={invariant.id} onPointerDown={event => onInvariantPointerDown(event, invariant)}>
                 <InvariantShape invariant={invariant} selected={liveSelection.includes(invariant.id)} />
               </g>
             ))}
@@ -681,7 +685,7 @@ export function SequenceWorkspace({ repository, diagramId, onExecute, onNavigate
               />
             ))}
             {view.messages.map(entry => (
-              <g
+              <g data-help-feature="ui:sysml/SequenceWorkspace:2bea2988fb95" data-help-source="src/components/sysml/SequenceWorkspace.tsx"
                 key={entry.id} data-testid="sequence-message" data-sort={entry.sort} data-text={entry.text}
                 onPointerDown={event => onMessagePointerDown(event, entry)}
                 onDoubleClick={() => {
@@ -718,14 +722,14 @@ export function SequenceWorkspace({ repository, diagramId, onExecute, onNavigate
           {singleLifeline && (
             <>
               <span className="text-neutral-400">Lifeline</span>
-              <input
+              <input data-help-feature="ui:sysml/SequenceWorkspace:ab41531823b0" data-help-source="src/components/sysml/SequenceWorkspace.tsx"
                 aria-label="Name" value={nameValue}
                 onChange={event => setNameDraft({ id: singleLifeline.id, value: event.target.value })}
                 onBlur={commitName} onKeyDown={event => { if (event.key === 'Enter') (event.target as HTMLInputElement).blur(); }}
                 className={inputClass}
               />
               <label>Represents{' '}
-                <select
+                <select data-help-feature="ui:sysml/SequenceWorkspace:d5b627b85ebd" data-help-source="src/components/sysml/SequenceWorkspace.tsx"
                   aria-label="Lifeline represents" className={selectClass} value={storedLifeline?.representsId ?? ''}
                   onChange={event => executePlan(buildSetLifelineRepresentsCommand(repository, { interactionId, lifelineId: singleLifeline.id, representsId: event.target.value || undefined }), 'The lifeline could not be changed.')}
                 >
@@ -740,10 +744,10 @@ export function SequenceWorkspace({ repository, diagramId, onExecute, onNavigate
                   })}
                 </select>
               </label>
-              <button type="button" className={buttonClass} onClick={() => executePlan(buildMoveLifelineCommand(repository, { interactionId, lifelineId: singleLifeline.id, direction: -1 }), 'The lifeline could not be moved.')}>Move left</button>
-              <button type="button" className={buttonClass} onClick={() => executePlan(buildMoveLifelineCommand(repository, { interactionId, lifelineId: singleLifeline.id, direction: 1 }), 'The lifeline could not be moved.')}>Move right</button>
+              <button data-help-feature="ui:sysml/SequenceWorkspace:84d2ae1d9110" data-help-source="src/components/sysml/SequenceWorkspace.tsx" type="button" className={buttonClass} onClick={() => executePlan(buildMoveLifelineCommand(repository, { interactionId, lifelineId: singleLifeline.id, direction: -1 }), 'The lifeline could not be moved.')}>Move left</button>
+              <button data-help-feature="ui:sysml/SequenceWorkspace:bd220efece9e" data-help-source="src/components/sysml/SequenceWorkspace.tsx" type="button" className={buttonClass} onClick={() => executePlan(buildMoveLifelineCommand(repository, { interactionId, lifelineId: singleLifeline.id, direction: 1 }), 'The lifeline could not be moved.')}>Move right</button>
               <label>State invariant{' '}
-                <select
+                <select data-help-feature="ui:sysml/SequenceWorkspace:a51bf15ac72a" data-help-source="src/components/sysml/SequenceWorkspace.tsx"
                   aria-label="Add a state invariant on this lifeline" className={selectClass} value="" disabled={stateOptions.length === 0}
                   onChange={event => {
                     if (!event.target.value) return;
@@ -762,7 +766,7 @@ export function SequenceWorkspace({ repository, diagramId, onExecute, onNavigate
             <>
               <span className="text-neutral-400">{singleConstraint.kind === 'duration' ? 'Duration constraint' : 'Time constraint'}</span>
               <label>Expression{' '}
-                <input
+                <input data-help-feature="ui:sysml/SequenceWorkspace:08df3b8f32b7" data-help-source="src/components/sysml/SequenceWorkspace.tsx"
                   aria-label="Constraint expression"
                   value={argsDraft && argsDraft.id === singleConstraint.id ? argsDraft.value : storedConstraint.expression}
                   onChange={event => setArgsDraft({ id: singleConstraint.id, value: event.target.value })}
@@ -784,7 +788,7 @@ export function SequenceWorkspace({ repository, diagramId, onExecute, onNavigate
             <>
               <span className="text-neutral-400">State invariant on {nameOf(singleInvariant.lifelineId)}</span>
               <label>State{' '}
-                <select
+                <select data-help-feature="ui:sysml/SequenceWorkspace:c4ce65d9b572" data-help-source="src/components/sysml/SequenceWorkspace.tsx"
                   aria-label="Invariant state" className={selectClass} value={storedInvariant.stateId}
                   onChange={event => executePlan(buildUpdateStateInvariantCommand(repository, { interactionId, invariantId: singleInvariant.id, stateId: event.target.value }), 'The state could not be changed.')}
                 >
@@ -795,7 +799,7 @@ export function SequenceWorkspace({ repository, diagramId, onExecute, onNavigate
                 </select>
               </label>
               <label>After{' '}
-                <select
+                <select data-help-feature="ui:sysml/SequenceWorkspace:a8a416e633b8" data-help-source="src/components/sysml/SequenceWorkspace.tsx"
                   aria-label="Invariant follows message" className={selectClass} value={storedInvariant.afterMessageId ?? ''}
                   onChange={event => executePlan(buildUpdateStateInvariantCommand(repository, { interactionId, invariantId: singleInvariant.id, afterMessageId: event.target.value || null }), 'The state invariant could not be moved.')}
                 >
@@ -811,14 +815,14 @@ export function SequenceWorkspace({ repository, diagramId, onExecute, onNavigate
               <span className="text-neutral-400">{MESSAGE_SORT_LABELS[storedMessage.sort]}</span>
               <span>{sourceName} → {targetName}</span>
               <label>Kind{' '}
-                <select
+                <select data-help-feature="ui:sysml/SequenceWorkspace:f49bcd28fe77" data-help-source="src/components/sysml/SequenceWorkspace.tsx"
                   aria-label="Message kind" className={selectClass} value={storedMessage.sort}
                   onChange={event => executePlan(buildUpdateInteractionMessageCommand(repository, { interactionId, messageId: singleMessage.id, sort: event.target.value as InteractionMessageSort }), 'The message kind was rejected.')}
                 >
                   {MESSAGE_SORTS.map(sort => <option key={sort} value={sort}>{MESSAGE_SORT_LABELS[sort]}</option>)}
                 </select>
               </label>
-              <input
+              <input data-help-feature="ui:sysml/SequenceWorkspace:8663793c288c" data-help-source="src/components/sysml/SequenceWorkspace.tsx"
                 aria-label="Name" value={nameValue}
                 onChange={event => setNameDraft({ id: singleMessage.id, value: event.target.value })}
                 onBlur={commitName} onKeyDown={event => { if (event.key === 'Enter') (event.target as HTMLInputElement).blur(); }}
@@ -826,7 +830,7 @@ export function SequenceWorkspace({ repository, diagramId, onExecute, onNavigate
               />
               {storedMessage.sort === 'asynchSignal' && (
                 <label>Signal{' '}
-                  <select
+                  <select data-help-feature="ui:sysml/SequenceWorkspace:34c0526f5f04" data-help-source="src/components/sysml/SequenceWorkspace.tsx"
                     aria-label="Signal" className={selectClass} value={storedMessage.signatureId ?? ''}
                     onChange={event => executePlan(buildUpdateInteractionMessageCommand(repository, { interactionId, messageId: singleMessage.id, signatureId: event.target.value || null }), 'The signal was rejected.')}
                   >
@@ -850,7 +854,7 @@ export function SequenceWorkspace({ repository, diagramId, onExecute, onNavigate
                 </span>
               )}
               {storedMessage.sort === 'asynchSignal' && (
-                <button
+                <button data-help-feature="ui:sysml/SequenceWorkspace:aab4170184f8" data-help-source="src/components/sysml/SequenceWorkspace.tsx"
                   type="button" className={buttonClass} title="Create a new Signal and use it for this message"
                   onClick={() => executePlan(buildCreateSignalForMessageCommand(repository, { interactionId, messageId: singleMessage.id }), 'The signal could not be created.')}
                 >New signal</button>
@@ -858,7 +862,7 @@ export function SequenceWorkspace({ repository, diagramId, onExecute, onNavigate
               {(storedMessage.sort === 'synchCall' || storedMessage.sort === 'asynchCall') && (
                 targetOperations ? (
                   <label>Operation{' '}
-                    <select
+                    <select data-help-feature="ui:sysml/SequenceWorkspace:3c27d8cd8b1b" data-help-source="src/components/sysml/SequenceWorkspace.tsx"
                       aria-label="Operation" className={selectClass} value={storedMessage.signatureId ?? ''}
                       onChange={event => executePlan(buildUpdateInteractionMessageCommand(repository, { interactionId, messageId: singleMessage.id, signatureId: event.target.value || null }), 'The operation was rejected.')}
                     >
@@ -871,14 +875,14 @@ export function SequenceWorkspace({ repository, diagramId, onExecute, onNavigate
                 )
               )}
               {(storedMessage.sort === 'synchCall' || storedMessage.sort === 'asynchCall') && targetOperations && (
-                <button
+                <button data-help-feature="ui:sysml/SequenceWorkspace:f0a087e0f4f4" data-help-source="src/components/sysml/SequenceWorkspace.tsx"
                   type="button" className={buttonClass} title="Add an operation to the receiving Block and call it"
                   onClick={() => executePlan(buildCreateOperationForMessageCommand(repository, { interactionId, messageId: singleMessage.id }), 'The operation could not be created.')}
                 >New operation</button>
               )}
               {messageConnectors.length > 0 && (
                 <label>Connector{' '}
-                  <select
+                  <select data-help-feature="ui:sysml/SequenceWorkspace:346921ff8952" data-help-source="src/components/sysml/SequenceWorkspace.tsx"
                     aria-label="Connector" className={selectClass} value={storedMessage.connectorId ?? ''}
                     onChange={event => executePlan(buildUpdateInteractionMessageCommand(repository, { interactionId, messageId: singleMessage.id, connectorId: event.target.value || null }), 'The connector was rejected.')}
                   >
@@ -889,7 +893,7 @@ export function SequenceWorkspace({ repository, diagramId, onExecute, onNavigate
               )}
               {storedMessage.sort !== 'reply' && storedMessage.sort !== 'createMessage' && storedMessage.sort !== 'deleteMessage' && (
                 <label>Arguments{' '}
-                  <input
+                  <input data-help-feature="ui:sysml/SequenceWorkspace:54bbf60cfa12" data-help-source="src/components/sysml/SequenceWorkspace.tsx"
                     aria-label="Arguments" value={argsValue}
                     onChange={event => setArgsDraft({ id: singleMessage.id, value: event.target.value })}
                     onBlur={commitArgs} onKeyDown={event => { if (event.key === 'Enter') (event.target as HTMLInputElement).blur(); }}
@@ -897,15 +901,15 @@ export function SequenceWorkspace({ repository, diagramId, onExecute, onNavigate
                   />
                 </label>
               )}
-              <button type="button" className={buttonClass} disabled={messageIndex <= 0} onClick={() => executePlan(buildMoveInteractionMessageCommand(repository, { interactionId, messageId: singleMessage.id, toIndex: messageIndex - 1 }), 'The message could not be moved.')}>Move up</button>
-              <button type="button" className={buttonClass} disabled={messageIndex < 0 || messageIndex >= view.messages.length - 1} onClick={() => executePlan(buildMoveInteractionMessageCommand(repository, { interactionId, messageId: singleMessage.id, toIndex: messageIndex + 1 }), 'The message could not be moved.')}>Move down</button>
+              <button data-help-feature="ui:sysml/SequenceWorkspace:e883d5f7a38b" data-help-source="src/components/sysml/SequenceWorkspace.tsx" type="button" className={buttonClass} disabled={messageIndex <= 0} onClick={() => executePlan(buildMoveInteractionMessageCommand(repository, { interactionId, messageId: singleMessage.id, toIndex: messageIndex - 1 }), 'The message could not be moved.')}>Move up</button>
+              <button data-help-feature="ui:sysml/SequenceWorkspace:0c3b7566260d" data-help-source="src/components/sysml/SequenceWorkspace.tsx" type="button" className={buttonClass} disabled={messageIndex < 0 || messageIndex >= view.messages.length - 1} onClick={() => executePlan(buildMoveInteractionMessageCommand(repository, { interactionId, messageId: singleMessage.id, toIndex: messageIndex + 1 }), 'The message could not be moved.')}>Move down</button>
             </>
           )}
           {singleUse && storedUse && (
             <>
               <span className="text-neutral-400">Ref frame</span>
               <label>Refers to{' '}
-                <select
+                <select data-help-feature="ui:sysml/SequenceWorkspace:9b3fa1a5bb88" data-help-source="src/components/sysml/SequenceWorkspace.tsx"
                   aria-label="Referenced interaction" className={selectClass} value={storedUse.refersToId}
                   onChange={event => executePlan(buildUpdateInteractionUseCommand(repository, { interactionId, useId: singleUse.id, refersToId: event.target.value }), 'The ref frame was rejected.')}
                 >
@@ -916,7 +920,7 @@ export function SequenceWorkspace({ repository, diagramId, onExecute, onNavigate
                 </select>
               </label>
               <label>After{' '}
-                <select
+                <select data-help-feature="ui:sysml/SequenceWorkspace:4188774695a7" data-help-source="src/components/sysml/SequenceWorkspace.tsx"
                   aria-label="Ref frame follows message" className={selectClass} value={storedUse.afterMessageId ?? ''}
                   onChange={event => executePlan(buildUpdateInteractionUseCommand(repository, { interactionId, useId: singleUse.id, afterMessageId: event.target.value || null }), 'The ref frame could not be moved.')}
                 >
@@ -925,7 +929,7 @@ export function SequenceWorkspace({ repository, diagramId, onExecute, onNavigate
                 </select>
               </label>
               <label>Arguments{' '}
-                <input
+                <input data-help-feature="ui:sysml/SequenceWorkspace:27868daccf0d" data-help-source="src/components/sysml/SequenceWorkspace.tsx"
                   aria-label="Ref frame arguments" value={argsDraft && argsDraft.id === singleUse.id ? argsDraft.value : storedUse.arguments ?? ''}
                   onChange={event => setArgsDraft({ id: singleUse.id, value: event.target.value })}
                   onBlur={() => {
@@ -944,7 +948,7 @@ export function SequenceWorkspace({ repository, diagramId, onExecute, onNavigate
                 Covers
                 {view.lifelines.map(lifeline => (
                   <label key={lifeline.id} className="flex items-center gap-1">
-                    <input
+                    <input data-help-feature="ui:sysml/SequenceWorkspace:2ae7e6af5b02" data-help-source="src/components/sysml/SequenceWorkspace.tsx"
                       type="checkbox" checked={storedUse.coveredLifelineIds.includes(lifeline.id)}
                       onChange={event => executePlan(buildUpdateInteractionUseCommand(repository, {
                         interactionId, useId: singleUse.id,
@@ -963,7 +967,7 @@ export function SequenceWorkspace({ repository, diagramId, onExecute, onNavigate
             <>
               <span className="text-neutral-400">Combined fragment</span>
               <label>Operator{' '}
-                <select
+                <select data-help-feature="ui:sysml/SequenceWorkspace:78e1a3c2cf0d" data-help-source="src/components/sysml/SequenceWorkspace.tsx"
                   aria-label="Fragment operator" className={selectClass} value={storedFragment.operator}
                   onChange={event => executePlan(buildSetFragmentOperatorCommand(repository, { interactionId, fragmentId: singleFragment.id, operator: event.target.value as CombinedFragmentOperator }), 'The operator was rejected.')}
                 >
@@ -976,7 +980,7 @@ export function SequenceWorkspace({ repository, diagramId, onExecute, onNavigate
                 return (
                   <span key={key} className="flex items-center gap-1">
                     <label>Guard {index + 1}{' '}
-                      <input
+                      <input data-help-feature="ui:sysml/SequenceWorkspace:42fffa292e47" data-help-source="src/components/sysml/SequenceWorkspace.tsx"
                         aria-label={`Guard of operand ${index + 1}`} value={value}
                         onChange={event => setGuardDraft({ key, value: event.target.value })}
                         onBlur={() => {
@@ -992,17 +996,17 @@ export function SequenceWorkspace({ repository, diagramId, onExecute, onNavigate
                       />
                     </label>
                     {storedFragment.operands.length > 1 && (
-                      <button type="button" className={buttonClass} aria-label={`Remove operand ${index + 1}`} onClick={() => executePlan(buildRemoveFragmentOperandCommand(repository, { interactionId, fragmentId: storedFragment.id, operandIndex: index }), 'The operand could not be removed.')}>×</button>
+                      <button data-help-feature="ui:sysml/SequenceWorkspace:6d31a20ca026" data-help-source="src/components/sysml/SequenceWorkspace.tsx" type="button" className={buttonClass} aria-label={`Remove operand ${index + 1}`} onClick={() => executePlan(buildRemoveFragmentOperandCommand(repository, { interactionId, fragmentId: storedFragment.id, operandIndex: index }), 'The operand could not be removed.')}>×</button>
                     )}
                   </span>
                 );
               })}
-              <button type="button" className={buttonClass} onClick={() => executePlan(buildAddFragmentOperandCommand(repository, { interactionId, fragmentId: storedFragment.id }), 'The operand could not be added.')}>Add operand</button>
+              <button data-help-feature="ui:sysml/SequenceWorkspace:e92eaaf693e5" data-help-source="src/components/sysml/SequenceWorkspace.tsx" type="button" className={buttonClass} onClick={() => executePlan(buildAddFragmentOperandCommand(repository, { interactionId, fragmentId: storedFragment.id }), 'The operand could not be added.')}>Add operand</button>
             </>
           )}
           {liveSelection.length > 1 && <span>{liveSelection.length} items selected</span>}
           {liveSelection.length > 0 && (
-            <button type="button" className="rounded border border-red-800 px-2 py-0.5 text-red-300 hover:bg-red-950" onClick={deleteSelection}>
+            <button data-help-feature="ui:sysml/SequenceWorkspace:938a7bd4ffad" data-help-source="src/components/sysml/SequenceWorkspace.tsx" type="button" className="rounded border border-red-800 px-2 py-0.5 text-red-300 hover:bg-red-950" onClick={deleteSelection}>
               {singleConstraint ? 'Delete constraint' : singleInvariant ? 'Delete state invariant' : singleUse ? 'Delete ref frame' : singleFragment ? 'Delete fragment' : singleLifeline ? 'Delete lifeline' : 'Delete message'}
             </button>
           )}

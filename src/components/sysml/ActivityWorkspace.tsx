@@ -40,6 +40,7 @@ import {
 } from '../../features/sysml/activityDiagramView';
 import { diagramFrameLabel } from '../../features/sysml/diagramFrame';
 import { resolveSysmlReferenceLabel, sysmlObjectLabel } from '../../features/sysml/sysmlDisplayLabel';
+import { handleHorizontalToolbarWheel } from '../../utils/toolbarScroll';
 
 export interface ActivityWorkspaceProps {
   repository: SysmlRepository;
@@ -618,7 +619,7 @@ export function ActivityWorkspace({
   };
 
   const toolButton = (id: Tool, label: string, hint: string) => (
-    <button
+    <button data-help-feature="ui:sysml/ActivityWorkspace:cfdde9898862" data-help-source="src/components/sysml/ActivityWorkspace.tsx"
       key={id} type="button" aria-pressed={tool === id} title={hint}
       onClick={() => { setTool(id); setPendingSource(null); setMessage(''); }}
       className={`rounded border px-2 py-1 text-xs ${tool === id ? 'border-orange-600 bg-orange-950/50 text-orange-200' : 'border-neutral-700 text-neutral-300 hover:border-neutral-500'}`}
@@ -638,17 +639,20 @@ export function ActivityWorkspace({
 
   return (
     <section className="flex h-full min-h-0 w-full flex-col bg-[var(--surface-canvas)] text-[var(--text-primary)]" aria-label="Activity Diagram workspace" data-testid="activity-workspace">
-      <header className="flex flex-wrap items-center gap-2 border-b border-[var(--border-default)] bg-[var(--surface-panel)] p-2">
+      <header
+        onWheel={handleHorizontalToolbarWheel}
+        className="flex items-center gap-2 overflow-x-auto overflow-y-hidden adia-toolbar-scrollbar border-b border-[var(--border-default)] bg-[var(--surface-panel)] p-2 shrink-0 [&>*]:shrink-0"
+      >
         <h2 className="mr-2 text-xs font-semibold" data-testid="activity-frame-label">{frameLabel ?? 'Activity Diagram'}</h2>
         <div className="flex flex-wrap items-center gap-1" role="toolbar" aria-label="Activity palette">
           {toolButton('select', 'Select', 'Select, move and resize; drag the background to pan')}
           {ACTIVITY_PALETTE.map(item => toolButton(item.kind, item.label, `Click the canvas to place ${item.label}`))}
           {toolButton('flow', 'Flow', 'Click the source, then the target (control flow, or object flow between object nodes and pins)')}
-          <button type="button" className="rounded border border-neutral-700 px-2 py-1 text-xs text-neutral-300 hover:border-neutral-500" onClick={addPartition} title="Add a swimlane (partition)">Swimlane</button>
+          <button data-help-feature="ui:sysml/ActivityWorkspace:62a24bc6e55c" data-help-source="src/components/sysml/ActivityWorkspace.tsx" type="button" className="rounded border border-neutral-700 px-2 py-1 text-xs text-neutral-300 hover:border-neutral-500" onClick={addPartition} title="Add a swimlane (partition)">Swimlane</button>
         </div>
         <label className="ml-auto flex items-center gap-1 text-[11px] text-neutral-400">
           Show existing
-          <select
+          <select data-help-feature="ui:sysml/ActivityWorkspace:858e6357660c" data-help-source="src/components/sysml/ActivityWorkspace.tsx"
             aria-label="Show an existing node on this diagram" value="" onChange={event => addExisting(event.target.value)}
             className={selectClass}
           >
@@ -657,19 +661,19 @@ export function ActivityWorkspace({
           </select>
         </label>
         <div className="flex items-center gap-1" role="toolbar" aria-label="Zoom">
-          <button type="button" aria-label="Zoom out" className="rounded border border-neutral-700 px-2 py-1 text-xs" onClick={() => zoomBy(1 / 1.2)}>−</button>
+          <button data-help-feature="ui:sysml/ActivityWorkspace:1c8f54ec7607" data-help-source="src/components/sysml/ActivityWorkspace.tsx" type="button" aria-label="Zoom out" className="rounded border border-neutral-700 px-2 py-1 text-xs" onClick={() => zoomBy(1 / 1.2)}>−</button>
           <span className="w-10 text-center text-[11px] text-neutral-400">{Math.round(viewport.k * 100)}%</span>
-          <button type="button" aria-label="Zoom in" className="rounded border border-neutral-700 px-2 py-1 text-xs" onClick={() => zoomBy(1.2)}>+</button>
-          <button type="button" className="rounded border border-neutral-700 px-2 py-1 text-xs" onClick={fitToContent}>Fit</button>
+          <button data-help-feature="ui:sysml/ActivityWorkspace:80d4cf789d4c" data-help-source="src/components/sysml/ActivityWorkspace.tsx" type="button" aria-label="Zoom in" className="rounded border border-neutral-700 px-2 py-1 text-xs" onClick={() => zoomBy(1.2)}>+</button>
+          <button data-help-feature="ui:sysml/ActivityWorkspace:cbf1e02b9a2c" data-help-source="src/components/sysml/ActivityWorkspace.tsx" type="button" className="rounded border border-neutral-700 px-2 py-1 text-xs" onClick={fitToContent}>Fit</button>
         </div>
       </header>
 
-      <div
+      <div data-help-feature="live:components/sysml/ActivityWorkspace:5038e2c00767"
         ref={canvasRef} tabIndex={0} onKeyDown={onKeyDown}
         className="relative min-h-0 flex-1 overflow-hidden outline-none"
         aria-label="Activity canvas" role="application" data-testid="activity-canvas"
       >
-        <svg ref={svgRef} width="100%" height="100%" style={{ cursor, touchAction: 'none', display: 'block' }} onPointerDown={onBackgroundPointerDown}>
+        <svg data-help-feature="live:components/sysml/ActivityWorkspace:e5ae7eaf6a04" ref={svgRef} width="100%" height="100%" style={{ cursor, touchAction: 'none', display: 'block' }} onPointerDown={onBackgroundPointerDown}>
           <defs>
             {[['act-open', STROKE], ['act-open-sel', SELECTED]].map(([id, color]) => (
               <marker key={id} id={id} viewBox="0 0 12 12" refX="11" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto">
@@ -680,31 +684,31 @@ export function ActivityWorkspace({
           <rect width="100%" height="100%" fill="transparent" />
           <g transform={`translate(${viewport.x} ${viewport.y}) scale(${viewport.k})`}>
             {view.lanes.map(lane => (
-              <g key={lane.id} onPointerDown={event => onLanePointerDown(event, lane)}>
+              <g data-help-feature="live:components/sysml/ActivityWorkspace:3b835de5baad" key={lane.id} onPointerDown={event => onLanePointerDown(event, lane)}>
                 <LaneShape lane={lane} selected={liveSelection.includes(lane.id)} />
               </g>
             ))}
             {view.edges.map(edge => (
-              <g key={edge.id} data-testid="activity-edge" data-kind={edge.kind} onPointerDown={event => onEdgePointerDown(event, edge)}>
+              <g data-help-feature="live:components/sysml/ActivityWorkspace:4234c0b1a716" key={edge.id} data-testid="activity-edge" data-kind={edge.kind} onPointerDown={event => onEdgePointerDown(event, edge)}>
                 <EdgeShape edge={edge} selected={liveSelection.includes(edge.id)} />
               </g>
             ))}
             {view.nodes.map(node => (
-              <g
+              <g data-help-feature="ui:sysml/ActivityWorkspace:1160fff36baf" data-help-source="src/components/sysml/ActivityWorkspace.tsx"
                 key={node.id} data-testid={`activity-node-${node.kind}`} data-label={node.label} data-pending-source={pendingSource === node.id || undefined}
                 onPointerDown={event => onNodePointerDown(event, node)}
                 onDoubleClick={() => onNavigate?.(activityDef?.nodes.find(candidate => candidate.id === node.id)?.behaviorId ?? node.id)}
               >
                 <NodeShape node={node} selected={liveSelection.includes(node.id)} pending={pendingSource === node.id} />
                 {node.pins.map(pin => (
-                  <g key={pin.id} onPointerDown={event => onPinPointerDown(event, pin.id)}>
+                  <g data-help-feature="live:components/sysml/ActivityWorkspace:b8e817d967e7" key={pin.id} onPointerDown={event => onPinPointerDown(event, pin.id)}>
                     <PinShape pin={pin} selected={liveSelection.includes(pin.id)} pending={pendingSource === pin.id} />
                   </g>
                 ))}
               </g>
             ))}
             {singleNode && RESIZABLE.has(singleNode.kind) && tool === 'select' && (
-              <rect
+              <rect data-help-feature="live:components/sysml/ActivityWorkspace:98dd6f69b073"
                 data-testid="activity-resize-handle" x={singleNode.bounds.x + singleNode.bounds.width - 6} y={singleNode.bounds.y + singleNode.bounds.height - 6}
                 width={12} height={12} fill={SELECTED} style={{ cursor: 'nwse-resize' }}
                 onPointerDown={event => onResizePointerDown(event, singleNode)}
@@ -726,7 +730,7 @@ export function ActivityWorkspace({
         {view.missingElementIds.length > 0 && (
           <div className="mb-1 flex items-center gap-2 text-amber-300">
             <span>{view.missingElementIds.length} shown element(s) no longer exist in the activity.</span>
-            <button type="button" className="rounded border border-amber-700 px-2 py-0.5" onClick={() => execute({ type: 'removeFromDiagram', diagramId, elementIds: view.missingElementIds }, 'The stale symbols could not be removed.')}>Remove stale symbols</button>
+            <button data-help-feature="ui:sysml/ActivityWorkspace:2130a9741914" data-help-source="src/components/sysml/ActivityWorkspace.tsx" type="button" className="rounded border border-amber-700 px-2 py-0.5" onClick={() => execute({ type: 'removeFromDiagram', diagramId, elementIds: view.missingElementIds }, 'The stale symbols could not be removed.')}>Remove stale symbols</button>
           </div>
         )}
 
@@ -736,8 +740,8 @@ export function ActivityWorkspace({
               {liveProposals.map(p => <li key={p.nodeId}>{proposalText(p)}</li>)}
             </ul>
             <div className="flex gap-2">
-              <button type="button" className="rounded border border-sky-600 px-2 py-0.5" onClick={applyProposals}>Apply</button>
-              <button type="button" className={buttonClass} onClick={() => setProposals([])}>Keep as drawn only</button>
+              <button data-help-feature="ui:sysml/ActivityWorkspace:2b2c19587a64" data-help-source="src/components/sysml/ActivityWorkspace.tsx" type="button" className="rounded border border-sky-600 px-2 py-0.5" onClick={applyProposals}>Apply</button>
+              <button data-help-feature="ui:sysml/ActivityWorkspace:ba2ed068f674" data-help-source="src/components/sysml/ActivityWorkspace.tsx" type="button" className={buttonClass} onClick={() => setProposals([])}>Keep as drawn only</button>
             </div>
           </div>
         )}
@@ -748,7 +752,7 @@ export function ActivityWorkspace({
             <>
               <span className="text-neutral-400">{singleNode.kind === 'action' ? 'Action' : singleNode.kind === 'activityParameterNode' ? 'Activity Parameter' : singleNode.kind === 'objectNode' ? 'Object Node' : singleNode.label}</span>
               {(singleNode.kind === 'action' || singleNode.kind === 'objectNode' || singleNode.kind === 'activityParameterNode') ? (
-                <input
+                <input data-help-feature="ui:sysml/ActivityWorkspace:3b517e2bbebb" data-help-source="src/components/sysml/ActivityWorkspace.tsx"
                   aria-label="Name" value={draftValue}
                   onChange={event => setNameDraft({ id: singleNode.id, value: event.target.value })}
                   onBlur={commitName} onKeyDown={event => { if (event.key === 'Enter') (event.target as HTMLInputElement).blur(); }}
@@ -758,7 +762,7 @@ export function ActivityWorkspace({
               {singleNode.kind === 'action' && (
                 <>
                   <label>Calls{' '}
-                    <select
+                    <select data-help-feature="ui:sysml/ActivityWorkspace:8dd722e6468b" data-help-source="src/components/sysml/ActivityWorkspace.tsx"
                       aria-label="Called behavior" className={selectClass} value={storedNode?.behaviorId ?? ''}
                       onChange={event => executePlan(buildUpdateActivityNodeCommand(repository, { activityId, nodeId: singleNode.id, behaviorId: event.target.value || null }), 'The called behavior was rejected.')}
                     >
@@ -766,13 +770,13 @@ export function ActivityWorkspace({
                       {activityOptions.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
                     </select>
                   </label>
-                  <button type="button" className={buttonClass} onClick={() => addPin('in')}>Add input pin</button>
-                  <button type="button" className={buttonClass} onClick={() => addPin('out')}>Add output pin</button>
+                  <button data-help-feature="ui:sysml/ActivityWorkspace:516827c41914" data-help-source="src/components/sysml/ActivityWorkspace.tsx" type="button" className={buttonClass} onClick={() => addPin('in')}>Add input pin</button>
+                  <button data-help-feature="ui:sysml/ActivityWorkspace:b8d39e42778d" data-help-source="src/components/sysml/ActivityWorkspace.tsx" type="button" className={buttonClass} onClick={() => addPin('out')}>Add output pin</button>
                 </>
               )}
               {(singleNode.kind === 'objectNode' || singleNode.kind === 'activityParameterNode') && (
                 <label>Type{' '}
-                  <select
+                  <select data-help-feature="ui:sysml/ActivityWorkspace:000ce2ebeea0" data-help-source="src/components/sysml/ActivityWorkspace.tsx"
                     aria-label="Type" className={selectClass} value={storedNode?.typeId ?? ''}
                     onChange={event => executePlan(buildUpdateActivityNodeCommand(repository, { activityId, nodeId: singleNode.id, typeId: event.target.value || null }), 'The type was rejected.')}
                   >
@@ -783,7 +787,7 @@ export function ActivityWorkspace({
               )}
               {singleNode.kind === 'action' && (
                 <label>Allocate to{' '}
-                  <select aria-label="Allocate action to" className={selectClass} value="" onChange={event => allocate(event.target.value)}>
+                  <select data-help-feature="ui:sysml/ActivityWorkspace:41c005d58cfa" data-help-source="src/components/sysml/ActivityWorkspace.tsx" aria-label="Allocate action to" className={selectClass} value="" onChange={event => allocate(event.target.value)}>
                     <option value="">Choose Block…</option>
                     {allocatableTargets.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
                   </select>
@@ -796,14 +800,14 @@ export function ActivityWorkspace({
           {singlePin && (
             <>
               <span className="text-neutral-400">{singlePin.direction === 'in' ? 'Input pin' : 'Output pin'}</span>
-              <input
+              <input data-help-feature="ui:sysml/ActivityWorkspace:3b36e647d432" data-help-source="src/components/sysml/ActivityWorkspace.tsx"
                 aria-label="Name" value={draftValue}
                 onChange={event => setNameDraft({ id: singlePin.id, value: event.target.value })}
                 onBlur={commitName} onKeyDown={event => { if (event.key === 'Enter') (event.target as HTMLInputElement).blur(); }}
                 className={inputClass}
               />
               <label>Type{' '}
-                <select
+                <select data-help-feature="ui:sysml/ActivityWorkspace:6dc58adba70f" data-help-source="src/components/sysml/ActivityWorkspace.tsx"
                   aria-label="Pin type" className={selectClass} value={storedPin?.typeId ?? ''}
                   onChange={event => executePlan(buildUpdateActivityPinCommand(repository, { activityId, pinId: singlePin.id, typeId: event.target.value || null }), 'The pin type was rejected.')}
                 >
@@ -818,7 +822,7 @@ export function ActivityWorkspace({
               <span className="text-neutral-400">{singleEdge.kind === 'objectFlow' ? 'Object flow' : 'Control flow'}</span>
               <span>{nameOf(singleEdge.sourceId)} → {nameOf(singleEdge.targetId)}</span>
               <label>Guard{' '}
-                <input
+                <input data-help-feature="ui:sysml/ActivityWorkspace:49b318202225" data-help-source="src/components/sysml/ActivityWorkspace.tsx"
                   aria-label="Guard" value={guardValue}
                   onChange={event => setGuardDraft({ id: singleEdge.id, value: event.target.value })}
                   onBlur={commitGuard} onKeyDown={event => { if (event.key === 'Enter') (event.target as HTMLInputElement).blur(); }}
@@ -830,14 +834,14 @@ export function ActivityWorkspace({
           {singleLane && (
             <>
               <span className="text-neutral-400">Swimlane</span>
-              <input
+              <input data-help-feature="ui:sysml/ActivityWorkspace:a7183265e1f5" data-help-source="src/components/sysml/ActivityWorkspace.tsx"
                 aria-label="Name" value={draftValue}
                 onChange={event => setNameDraft({ id: singleLane.id, value: event.target.value })}
                 onBlur={commitName} onKeyDown={event => { if (event.key === 'Enter') (event.target as HTMLInputElement).blur(); }}
                 className={inputClass}
               />
               <label>Represents{' '}
-                <select
+                <select data-help-feature="ui:sysml/ActivityWorkspace:f1077e2cb566" data-help-source="src/components/sysml/ActivityWorkspace.tsx"
                   aria-label="Swimlane represents" className={selectClass} value={storedPartition?.representsId ?? ''}
                   onChange={event => executePlan(buildSetPartitionRepresentsCommand(repository, { activityId, partitionId: singleLane.id, representsId: event.target.value || undefined }), 'The swimlane could not be changed.')}
                 >
@@ -846,21 +850,21 @@ export function ActivityWorkspace({
                 </select>
               </label>
               <label>Allocate to{' '}
-                <select aria-label="Allocate swimlane to" className={selectClass} value="" onChange={event => allocate(event.target.value)}>
+                <select data-help-feature="ui:sysml/ActivityWorkspace:41c005d58cfa" data-help-source="src/components/sysml/ActivityWorkspace.tsx" aria-label="Allocate swimlane to" className={selectClass} value="" onChange={event => allocate(event.target.value)}>
                   <option value="">Choose Block…</option>
                   {allocatableTargets.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
                 </select>
               </label>
-              <button type="button" className={buttonClass} onClick={() => executePlan(buildMovePartitionCommand(repository, { activityId, partitionId: singleLane.id, direction: -1 }), 'The swimlane could not be moved.')}>Move left</button>
-              <button type="button" className={buttonClass} onClick={() => executePlan(buildMovePartitionCommand(repository, { activityId, partitionId: singleLane.id, direction: 1 }), 'The swimlane could not be moved.')}>Move right</button>
+              <button data-help-feature="ui:sysml/ActivityWorkspace:45c6d24a6f92" data-help-source="src/components/sysml/ActivityWorkspace.tsx" type="button" className={buttonClass} onClick={() => executePlan(buildMovePartitionCommand(repository, { activityId, partitionId: singleLane.id, direction: -1 }), 'The swimlane could not be moved.')}>Move left</button>
+              <button data-help-feature="ui:sysml/ActivityWorkspace:ba2a4f357883" data-help-source="src/components/sysml/ActivityWorkspace.tsx" type="button" className={buttonClass} onClick={() => executePlan(buildMovePartitionCommand(repository, { activityId, partitionId: singleLane.id, direction: 1 }), 'The swimlane could not be moved.')}>Move right</button>
             </>
           )}
           {liveSelection.length > 1 && <span>{liveSelection.length} items selected</span>}
           {selectedNodes.length > 0 && (
-            <button type="button" className={buttonClass} onClick={removeFromDiagram}>Remove from diagram</button>
+            <button data-help-feature="ui:sysml/ActivityWorkspace:4f18cb68499e" data-help-source="src/components/sysml/ActivityWorkspace.tsx" type="button" className={buttonClass} onClick={removeFromDiagram}>Remove from diagram</button>
           )}
           {liveSelection.length > 0 && (
-            <button type="button" className="rounded border border-red-800 px-2 py-0.5 text-red-300 hover:bg-red-950" onClick={deleteFromModel}>
+            <button data-help-feature="ui:sysml/ActivityWorkspace:d562a1c01cb8" data-help-source="src/components/sysml/ActivityWorkspace.tsx" type="button" className="rounded border border-red-800 px-2 py-0.5 text-red-300 hover:bg-red-950" onClick={deleteFromModel}>
               {singleEdge ? 'Delete flow' : singlePin ? 'Delete pin' : singleLane ? 'Delete swimlane' : 'Delete from model'}
             </button>
           )}

@@ -29,6 +29,7 @@ import {
 import { createActor, createSubject, createUseCase } from '../../features/modelExplorer/adapters/modelExplorerFactories';
 import { diagramFrameLabel } from '../../features/sysml/diagramFrame';
 import { resolveSysmlReferenceLabel, sysmlObjectLabel } from '../../features/sysml/sysmlDisplayLabel';
+import { handleHorizontalToolbarWheel } from '../../utils/toolbarScroll';
 
 export interface UseCaseWorkspaceProps {
   repository: SysmlRepository;
@@ -591,7 +592,7 @@ export function UseCaseWorkspace({
   };
 
   const toolButton = (id: Tool, label: string, hint: string) => (
-    <button
+    <button data-help-feature="ui:sysml/UseCaseWorkspace:cfdde9898862" data-help-source="src/components/sysml/UseCaseWorkspace.tsx"
       key={id} type="button" aria-pressed={tool === id} title={hint}
       onClick={() => { setTool(id); setPendingSource(null); setMessage(''); }}
       className={`rounded border px-2 py-1 text-xs ${tool === id ? 'border-orange-600 bg-orange-950/50 text-orange-200' : 'border-neutral-700 text-neutral-300 hover:border-neutral-500'}`}
@@ -603,14 +604,17 @@ export function UseCaseWorkspace({
 
   return (
     <section className="flex h-full min-h-0 w-full flex-col bg-[var(--surface-canvas)] text-[var(--text-primary)]" aria-label="Use Case Diagram workspace" data-testid="usecase-workspace">
-      <header className="flex flex-wrap items-center gap-2 border-b border-[var(--border-default)] bg-[var(--surface-panel)] p-2">
+      <header
+        onWheel={handleHorizontalToolbarWheel}
+        className="flex items-center gap-2 overflow-x-auto overflow-y-hidden adia-toolbar-scrollbar border-b border-[var(--border-default)] bg-[var(--surface-panel)] p-2 shrink-0 [&>*]:shrink-0"
+      >
         <h2 className="mr-2 text-xs font-semibold" data-testid="usecase-frame-label">{frameLabel ?? 'Use Case Diagram'}</h2>
         <div className="flex flex-wrap items-center gap-1" role="toolbar" aria-label="Use Case palette">
           {toolButton('select', 'Select', 'Select, move and resize; drag the background to pan')}
           {toolButton('actor', 'Actor', 'Click the canvas to place an Actor')}
           {toolButton('useCase', 'Use Case', 'Click the canvas to place a Use Case')}
           {toolButton('subject', 'Subject', 'Click the canvas to place a Subject rectangle')}
-          <button
+          <button data-help-feature="ui:sysml/UseCaseWorkspace:40def99da961" data-help-source="src/components/sysml/UseCaseWorkspace.tsx"
             type="button" disabled={singleNode?.kind !== 'useCase'} onClick={addExtensionPoint}
             title="Add an extension point to the selected Use Case"
             className="rounded border border-neutral-700 px-2 py-1 text-xs text-neutral-300 hover:border-neutral-500 disabled:opacity-40"
@@ -621,7 +625,7 @@ export function UseCaseWorkspace({
         </div>
         <label className="ml-auto flex items-center gap-1 text-[11px] text-neutral-400">
           Show existing
-          <select
+          <select data-help-feature="ui:sysml/UseCaseWorkspace:858e6357660c" data-help-source="src/components/sysml/UseCaseWorkspace.tsx"
             aria-label="Add existing element to this diagram" value="" onChange={event => addExisting(event.target.value)}
             className="max-w-[180px] rounded border border-neutral-700 bg-neutral-950 px-1 py-0.5 text-xs"
           >
@@ -630,19 +634,19 @@ export function UseCaseWorkspace({
           </select>
         </label>
         <div className="flex items-center gap-1" role="toolbar" aria-label="Zoom">
-          <button type="button" aria-label="Zoom out" className="rounded border border-neutral-700 px-2 py-1 text-xs" onClick={() => zoomBy(1 / 1.2)}>−</button>
+          <button data-help-feature="ui:sysml/UseCaseWorkspace:1c8f54ec7607" data-help-source="src/components/sysml/UseCaseWorkspace.tsx" type="button" aria-label="Zoom out" className="rounded border border-neutral-700 px-2 py-1 text-xs" onClick={() => zoomBy(1 / 1.2)}>−</button>
           <span className="w-10 text-center text-[11px] text-neutral-400">{Math.round(viewport.k * 100)}%</span>
-          <button type="button" aria-label="Zoom in" className="rounded border border-neutral-700 px-2 py-1 text-xs" onClick={() => zoomBy(1.2)}>+</button>
-          <button type="button" className="rounded border border-neutral-700 px-2 py-1 text-xs" onClick={fitToContent}>Fit</button>
+          <button data-help-feature="ui:sysml/UseCaseWorkspace:80d4cf789d4c" data-help-source="src/components/sysml/UseCaseWorkspace.tsx" type="button" aria-label="Zoom in" className="rounded border border-neutral-700 px-2 py-1 text-xs" onClick={() => zoomBy(1.2)}>+</button>
+          <button data-help-feature="ui:sysml/UseCaseWorkspace:cbf1e02b9a2c" data-help-source="src/components/sysml/UseCaseWorkspace.tsx" type="button" className="rounded border border-neutral-700 px-2 py-1 text-xs" onClick={fitToContent}>Fit</button>
         </div>
       </header>
 
-      <div
+      <div data-help-feature="live:components/sysml/UseCaseWorkspace:5038e2c00767"
         ref={canvasRef} tabIndex={0} onKeyDown={onKeyDown}
         className="relative min-h-0 flex-1 overflow-hidden outline-none"
         aria-label="Use Case canvas" role="application" data-testid="usecase-canvas"
       >
-        <svg
+        <svg data-help-feature="live:components/sysml/UseCaseWorkspace:e5ae7eaf6a04"
           ref={svgRef} width="100%" height="100%" style={{ cursor, touchAction: 'none', display: 'block' }}
           onPointerDown={onBackgroundPointerDown}
         >
@@ -661,17 +665,17 @@ export function UseCaseWorkspace({
           <rect width="100%" height="100%" fill="transparent" />
           <g transform={`translate(${viewport.x} ${viewport.y}) scale(${viewport.k})`}>
             {view.nodes.filter(node => node.kind === 'subject').map(node => (
-              <g key={node.id} data-testid={`uc-node-${node.kind}`} data-label={node.label} onPointerDown={event => onNodePointerDown(event, node)} onDoubleClick={() => onNavigate?.(node.id)}>
+              <g data-help-feature="ui:sysml/UseCaseWorkspace:8d5b0194af8f" data-help-source="src/components/sysml/UseCaseWorkspace.tsx" key={node.id} data-testid={`uc-node-${node.kind}`} data-label={node.label} onPointerDown={event => onNodePointerDown(event, node)} onDoubleClick={() => onNavigate?.(node.id)}>
                 <SubjectRectangle node={node} selected={liveSelection.includes(node.id)} />
               </g>
             ))}
             {view.edges.map(edge => (
-              <g key={edge.id} data-testid="uc-edge" data-kind={edge.relationshipKind} onPointerDown={event => onEdgePointerDown(event, edge)}>
+              <g data-help-feature="live:components/sysml/UseCaseWorkspace:4234c0b1a716" key={edge.id} data-testid="uc-edge" data-kind={edge.relationshipKind} onPointerDown={event => onEdgePointerDown(event, edge)}>
                 <EdgeShape edge={edge} selected={liveSelection.includes(edge.id)} />
               </g>
             ))}
             {view.nodes.filter(node => node.kind !== 'subject').map(node => (
-              <g
+              <g data-help-feature="ui:sysml/UseCaseWorkspace:8d5b0194af8f" data-help-source="src/components/sysml/UseCaseWorkspace.tsx"
                 key={node.id} data-testid={`uc-node-${node.kind}`} data-label={node.label} data-pending-source={pendingSource === node.id || undefined}
                 onPointerDown={event => onNodePointerDown(event, node)} onDoubleClick={() => onNavigate?.(node.id)}
               >
@@ -684,7 +688,7 @@ export function UseCaseWorkspace({
               </g>
             ))}
             {singleNode && singleNode.kind !== 'actor' && tool === 'select' && (
-              <rect
+              <rect data-help-feature="live:components/sysml/UseCaseWorkspace:98dd6f69b073"
                 data-testid="uc-resize-handle" x={singleNode.bounds.x + singleNode.bounds.width - 6} y={singleNode.bounds.y + singleNode.bounds.height - 6}
                 width={12} height={12} fill="var(--sysml-sem-selection)" style={{ cursor: 'nwse-resize' }}
                 onPointerDown={event => onResizePointerDown(event, singleNode)}
@@ -706,7 +710,7 @@ export function UseCaseWorkspace({
         {view.missingElementIds.length > 0 && (
           <div className="mb-1 flex items-center gap-2 text-amber-300">
             <span>{view.missingElementIds.length} shown element(s) no longer exist in the model.</span>
-            <button type="button" className="rounded border border-amber-700 px-2 py-0.5" onClick={() => execute({ type: 'removeFromDiagram', diagramId, elementIds: view.missingElementIds }, 'The stale symbols could not be removed.')}>Remove stale symbols</button>
+            <button data-help-feature="ui:sysml/UseCaseWorkspace:2130a9741914" data-help-source="src/components/sysml/UseCaseWorkspace.tsx" type="button" className="rounded border border-amber-700 px-2 py-0.5" onClick={() => execute({ type: 'removeFromDiagram', diagramId, elementIds: view.missingElementIds }, 'The stale symbols could not be removed.')}>Remove stale symbols</button>
           </div>
         )}
 
@@ -722,8 +726,8 @@ export function UseCaseWorkspace({
               ))}
             </ul>
             <div className="flex gap-2">
-              <button type="button" className="rounded border border-sky-600 px-2 py-0.5" onClick={applyProposals}>Apply</button>
-              <button type="button" className="rounded border border-neutral-600 px-2 py-0.5" onClick={() => setProposals([])}>Keep as drawn only</button>
+              <button data-help-feature="ui:sysml/UseCaseWorkspace:2b2c19587a64" data-help-source="src/components/sysml/UseCaseWorkspace.tsx" type="button" className="rounded border border-sky-600 px-2 py-0.5" onClick={applyProposals}>Apply</button>
+              <button data-help-feature="ui:sysml/UseCaseWorkspace:ba2ed068f674" data-help-source="src/components/sysml/UseCaseWorkspace.tsx" type="button" className="rounded border border-neutral-600 px-2 py-0.5" onClick={() => setProposals([])}>Keep as drawn only</button>
             </div>
           </div>
         )}
@@ -733,7 +737,7 @@ export function UseCaseWorkspace({
             <p className="mb-1">«extend» needs an extension point on “{nameOf(extendPrompt.targetId)}”.</p>
             {extendPrompt.candidates.length > 0 && (
               <label className="mr-3">Existing{' '}
-                <select
+                <select data-help-feature="ui:sysml/UseCaseWorkspace:54c41c7c738b" data-help-source="src/components/sysml/UseCaseWorkspace.tsx"
                   aria-label="Existing extension point" value={extendPrompt.chosenId}
                   onChange={event => setExtendPrompt({ ...extendPrompt, chosenId: event.target.value, newName: '' })}
                   className="rounded border border-neutral-700 bg-neutral-950 px-1 py-0.5"
@@ -743,22 +747,22 @@ export function UseCaseWorkspace({
               </label>
             )}
             <label className="mr-3">{extendPrompt.candidates.length > 0 ? 'or new' : 'New'}{' '}
-              <input
+              <input data-help-feature="ui:sysml/UseCaseWorkspace:78459755cd86" data-help-source="src/components/sysml/UseCaseWorkspace.tsx"
                 aria-label="New extension point name" value={extendPrompt.newName}
                 onChange={event => setExtendPrompt({ ...extendPrompt, newName: event.target.value })}
                 className="rounded border border-neutral-700 bg-neutral-950 px-1 py-0.5"
               />
             </label>
             <label>Condition{' '}
-              <input
+              <input data-help-feature="ui:sysml/UseCaseWorkspace:4b563dabd6a7" data-help-source="src/components/sysml/UseCaseWorkspace.tsx"
                 aria-label="Extend condition" value={extendPrompt.condition}
                 onChange={event => setExtendPrompt({ ...extendPrompt, condition: event.target.value })}
                 className="rounded border border-neutral-700 bg-neutral-950 px-1 py-0.5"
               />
             </label>
             <div className="mt-1 flex gap-2">
-              <button type="button" className="rounded border border-violet-600 px-2 py-0.5" onClick={confirmExtend}>Create «extend»</button>
-              <button type="button" className="rounded border border-neutral-600 px-2 py-0.5" onClick={() => { setExtendPrompt(null); setPendingSource(null); }}>Cancel</button>
+              <button data-help-feature="ui:sysml/UseCaseWorkspace:d2f1a9fd8203" data-help-source="src/components/sysml/UseCaseWorkspace.tsx" type="button" className="rounded border border-violet-600 px-2 py-0.5" onClick={confirmExtend}>Create «extend»</button>
+              <button data-help-feature="ui:sysml/UseCaseWorkspace:02031f24843b" data-help-source="src/components/sysml/UseCaseWorkspace.tsx" type="button" className="rounded border border-neutral-600 px-2 py-0.5" onClick={() => { setExtendPrompt(null); setPendingSource(null); }}>Cancel</button>
             </div>
           </div>
         )}
@@ -772,8 +776,8 @@ export function UseCaseWorkspace({
               {blocked ? ' This affects a protected baseline that has not been authorized.' : ''}
             </p>
             <div className="mt-1 flex gap-2">
-              <button type="button" disabled={blocked} className="rounded border border-red-700 px-2 py-0.5 text-red-200 disabled:opacity-40" onClick={confirmDeletion}>Confirm delete</button>
-              <button type="button" className="rounded border border-neutral-600 px-2 py-0.5" onClick={() => setPendingDeletion(null)}>Cancel</button>
+              <button data-help-feature="ui:sysml/UseCaseWorkspace:e64616ec09b8" data-help-source="src/components/sysml/UseCaseWorkspace.tsx" type="button" disabled={blocked} className="rounded border border-red-700 px-2 py-0.5 text-red-200 disabled:opacity-40" onClick={confirmDeletion}>Confirm delete</button>
+              <button data-help-feature="ui:sysml/UseCaseWorkspace:a682f2022a2d" data-help-source="src/components/sysml/UseCaseWorkspace.tsx" type="button" className="rounded border border-neutral-600 px-2 py-0.5" onClick={() => setPendingDeletion(null)}>Cancel</button>
             </div>
           </div>
         )}
@@ -784,7 +788,7 @@ export function UseCaseWorkspace({
             <>
               <span className="text-neutral-400">{singleNode.kind === 'useCase' ? 'Use Case' : singleNode.kind === 'actor' ? 'Actor' : singleNode.kind === 'subject' ? 'Subject' : 'Requirement'}</span>
               {canRenameNode ? (
-                <input
+                <input data-help-feature="ui:sysml/UseCaseWorkspace:3b517e2bbebb" data-help-source="src/components/sysml/UseCaseWorkspace.tsx"
                   aria-label="Name" value={draftValue}
                   onChange={event => setNameDraft({ id: singleNode.id, value: event.target.value })}
                   onBlur={commitName} onKeyDown={event => { if (event.key === 'Enter') (event.target as HTMLInputElement).blur(); }}
@@ -793,17 +797,17 @@ export function UseCaseWorkspace({
               ) : <strong>{singleNode.label}</strong>}
               {singleNode.kind === 'useCase' && (
                 <>
-                  <input
+                  <input data-help-feature="ui:sysml/UseCaseWorkspace:519693a9ea18" data-help-source="src/components/sysml/UseCaseWorkspace.tsx"
                     aria-label="Extension point name" placeholder="extension point name" value={extensionPointDraft}
                     onChange={event => setExtensionPointDraft(event.target.value)}
                     onKeyDown={event => { if (event.key === 'Enter') addExtensionPoint(); }}
                     className="rounded border border-neutral-700 bg-neutral-950 px-1 py-0.5"
                   />
-                  <button type="button" className="rounded border border-neutral-600 px-2 py-0.5" onClick={addExtensionPoint}>Add extension point</button>
+                  <button data-help-feature="ui:sysml/UseCaseWorkspace:40def99da961" data-help-source="src/components/sysml/UseCaseWorkspace.tsx" type="button" className="rounded border border-neutral-600 px-2 py-0.5" onClick={addExtensionPoint}>Add extension point</button>
                   {singleNode.subjectId && <span className="text-neutral-400">Subject: {nameOf(singleNode.subjectId)}</span>}
                 </>
               )}
-              <button type="button" className="rounded border border-neutral-600 px-2 py-0.5" onClick={() => onNavigate?.(singleNode.id)}>Open</button>
+              <button data-help-feature="ui:sysml/UseCaseWorkspace:48235b4d6daa" data-help-source="src/components/sysml/UseCaseWorkspace.tsx" type="button" className="rounded border border-neutral-600 px-2 py-0.5" onClick={() => onNavigate?.(singleNode.id)}>Open</button>
             </>
           )}
           {singleEdge && (
@@ -812,7 +816,7 @@ export function UseCaseWorkspace({
               <span>{nameOf(singleEdge.sourceId)} → {nameOf(singleEdge.targetId)}</span>
               {singleEdge.relationshipKind === 'extend' && (
                 <label>Condition{' '}
-                  <input
+                  <input data-help-feature="ui:sysml/UseCaseWorkspace:176720d40548" data-help-source="src/components/sysml/UseCaseWorkspace.tsx"
                     aria-label="Condition" value={draftValue}
                     onChange={event => setNameDraft({ id: singleEdge.id, value: event.target.value })}
                     onBlur={commitName} onKeyDown={event => { if (event.key === 'Enter') (event.target as HTMLInputElement).blur(); }}
@@ -825,8 +829,8 @@ export function UseCaseWorkspace({
           {liveSelection.length > 1 && <span>{liveSelection.length} items selected</span>}
           {liveSelection.length > 0 && (
             <>
-              <button type="button" className="rounded border border-neutral-600 px-2 py-0.5" onClick={removeFromDiagram}>Remove from diagram</button>
-              <button type="button" className="rounded border border-red-800 px-2 py-0.5 text-red-300 hover:bg-red-950" onClick={deleteFromModel}>Delete from model…</button>
+              <button data-help-feature="ui:sysml/UseCaseWorkspace:4f18cb68499e" data-help-source="src/components/sysml/UseCaseWorkspace.tsx" type="button" className="rounded border border-neutral-600 px-2 py-0.5" onClick={removeFromDiagram}>Remove from diagram</button>
+              <button data-help-feature="ui:sysml/UseCaseWorkspace:d562a1c01cb8" data-help-source="src/components/sysml/UseCaseWorkspace.tsx" type="button" className="rounded border border-red-800 px-2 py-0.5 text-red-300 hover:bg-red-950" onClick={deleteFromModel}>Delete from model…</button>
             </>
           )}
         </div>
