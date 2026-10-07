@@ -108,8 +108,9 @@ import {
 import type { SemanticTraceFrame } from './utils/stateMachine/smTrace';
 import { STATE_MACHINE_RUNTIME_BUNDLE } from './generated/stateMachineRuntimeBundle';
 import { analyzeStateMachine } from './utils/smAnalysisEngine';
-import { HELP_DATA } from './HelpData';
-import { SoftwareArchitectureExplorer } from './components/help/SoftwareArchitectureExplorer';
+import { HelpModal } from './components/help/HelpModal';
+import { resolveModuleHelp } from './help/helpNavigation';
+import { useContextualHelp } from './help/helpContext';
 import { AppModelExplorer } from './components/modelExplorer/AppModelExplorer';
 import { parseModelExplorerDragData } from './features/modelExplorer/modelExplorerDragDrop';
 import type { ActiveDiagramContext, ExplorerCommandResult } from './features/modelExplorer/modelExplorerTypes';
@@ -177,6 +178,7 @@ import type {
   ProjectApplicationDelegate,
 } from './agent/applicationDelegates';
 import { computeViewportBounds, cullElements } from './components/sysml/VirtualizedDiagram';
+import { handleHorizontalToolbarWheel } from './utils/toolbarScroll';
 import { LargeModelDiagnostics, loadStoredPerformanceLimits, saveStoredPerformanceLimits } from './components/sysml/LargeModelDiagnostics';
 import { validateLegacyConnectorCandidate, validateLegacyRequirementStatusTransition } from './services/sysmlCreationRules';
 import { getCanvasRelationshipKinds, getDirectBddPropertyRelationshipKind, rejectBlockConnectionChange, rejectUiRelationship, resolveUiConnectionEndpoint } from './services/sysmlConnectionUi';
@@ -265,18 +267,6 @@ const safeParseMultiplicity = (str?: string) => {
   } catch {
     return undefined;
   }
-};
-
-// Security Helper: Safe React renderer for Help Center bold text without dangerouslySetInnerHTML
-const renderFormattedHelpText = (text: string) => {
-  if (!text) return null;
-  const parts = text.split(/(\*\*.*?\*\*)/g);
-  return parts.map((part, index) => {
-    if (part.startsWith('**') && part.endsWith('**')) {
-      return <b key={index} className="text-white font-normal">{part.slice(2, -2)}</b>;
-    }
-    return part;
-  });
 };
 
 // Security Sandbox: Disallows access to sensitive environment globals in user expressions
@@ -708,7 +698,7 @@ const FloatingWindow = ({
   }, [isDragging, isResizing, dragOffset, resizeStart, windowState.id, onUpdate, isMobile]);
 
   return (
-    <div
+    <div data-help-feature="live:App:135ca98065b6"
       style={isMobile ? {
         position: 'fixed',
         top: 0,
@@ -741,7 +731,7 @@ const FloatingWindow = ({
       className="bg-[var(--surface-base)] border border-[var(--border-strong)] rounded-lg flex flex-col shadow-2xl overflow-hidden"
       onMouseDown={() => !isMobile && onUpdate(windowState.id, { zIndex: Date.now() })}
     >
-      <div
+      <div data-help-feature="live:App:2e5d580ebc83"
         style={{ userSelect: 'none' }}
         className={`h-8 bg-[var(--surface-raised)] border-b border-[var(--border-default)] flex items-center justify-between px-3 shrink-0 ${
           isMobile || windowState.isMaximized ? '' : 'cursor-move'
@@ -756,7 +746,7 @@ const FloatingWindow = ({
         <span className="text-xs font-bold text-orange-500">{windowState.title}</span>
         <div className="flex items-center gap-1" onMouseDown={(e) => e.stopPropagation()}>
           {/* Minimize Button */}
-          <button
+          <button data-help-feature="app-window-layout" data-help-source="src/App.tsx"
             onClick={() => onUpdate(windowState.id, { isMinimized: !windowState.isMinimized })}
             title={windowState.isMinimized ? "Restore" : "Minimize"}
             className="w-6 h-6 rounded flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-panel)] transition-colors"
@@ -776,7 +766,7 @@ const FloatingWindow = ({
           </button>
 
           {/* Maximize Button */}
-          <button
+          <button data-help-feature="app-window-layout" data-help-source="src/App.tsx"
             onClick={() => onUpdate(windowState.id, { isMaximized: !windowState.isMaximized, isMinimized: false })}
             title={windowState.isMaximized ? "Restore Size" : "Maximize"}
             className="w-6 h-6 rounded flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-panel)] transition-colors"
@@ -794,7 +784,7 @@ const FloatingWindow = ({
           </button>
 
           {/* Close/Exit Button */}
-          <button
+          <button data-help-feature="app-dialog-close" data-help-source="src/App.tsx"
             onClick={onClose}
             title="Close"
             className="w-6 h-6 rounded flex items-center justify-center text-[var(--text-muted)] hover:text-white hover:bg-rose-600 transition-colors"
@@ -812,7 +802,7 @@ const FloatingWindow = ({
       >
         {children}
       </div>
-      {!isMobile && !windowState.isMaximized && !windowState.isMinimized && <div
+      {!isMobile && !windowState.isMaximized && !windowState.isMinimized && <div data-help-feature="live:App:2aa4cff8d03c"
         className="absolute bottom-0 right-0 w-4 h-4 cursor-se-resize z-20"
         onMouseDown={(e) => {
           e.stopPropagation();
@@ -994,7 +984,7 @@ const LegacyTraceabilityMatrix = ({
       <div className="h-10 flex items-center px-4 border-b border-[#222] justify-between shrink-0">
         <div className="flex gap-2 items-center">
           <span className="text-xs text-[#888]">Filter:</span>
-          <select className="bg-[#0a0a0a] border border-[#333] text-xs rounded px-2 h-6 text-[#e0e0e0]" value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
+          <select data-help-feature="app-rtm-status-filter" data-help-source="src/App.tsx" className="bg-[#0a0a0a] border border-[#333] text-xs rounded px-2 h-6 text-[#e0e0e0]" value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
             <option value="">All Statuses</option>
             <option value="Draft">Draft</option>
             <option value="Approved">Approved</option>
@@ -1002,7 +992,7 @@ const LegacyTraceabilityMatrix = ({
           </select>
         </div>
         <div className="flex gap-2">
-          <Button size="sm" onClick={exportExcel} className="h-6 text-xs">Export Excel</Button>
+          <Button data-help-feature="app-rtm-excel" data-help-source="src/App.tsx" size="sm" onClick={exportExcel} className="h-6 text-xs">Export Excel</Button>
         </div>
       </div>
       <div className="flex-1 overflow-auto p-0">
@@ -1174,7 +1164,7 @@ const CodeGenerationDialog = ({
             <div>
               <div className="flex gap-2 mb-2 overflow-x-auto pb-2">
                 {files.map(f => (
-                  <button key={f.name} onClick={() => setActiveFile(f.name)} className={`px-3 py-1 text-xs rounded border ${activeFile === f.name ? 'bg-[#f97316] text-black border-[#f97316]' : 'bg-[#1a1a1a] text-[#888] border-[#333]'}`}>
+                  <button data-help-feature="app-code-file" data-help-source="src/App.tsx" key={f.name} onClick={() => setActiveFile(f.name)} className={`px-3 py-1 text-xs rounded border ${activeFile === f.name ? 'bg-[#f97316] text-black border-[#f97316]' : 'bg-[#1a1a1a] text-[#888] border-[#333]'}`}>
                     {f.name}
                   </button>
                 ))}
@@ -1230,7 +1220,7 @@ const CodeGenerationDialog = ({
       </div>
 
       <div className="h-14 flex items-center justify-end px-5 border-t border-[#222] gap-3">
-        <Button
+        <Button data-help-feature="app-dialog-close" data-help-source="src/App.tsx"
           variant="outline"
           onClick={onClose}
           className="border-[#333] text-[#a0a0a0] hover:text-[#e0e0e0] px-5"
@@ -1238,7 +1228,7 @@ const CodeGenerationDialog = ({
           Close
         </Button>
         {codegenErrors.length === 0 && files.length > 0 && (
-          <Button
+          <Button data-help-feature="app-code-download" data-help-source="src/App.tsx"
             onClick={async () => {
               try {
                 const zip = new JSZip();
@@ -1273,7 +1263,7 @@ const CodeGenerationDialog = ({
           </Button>
         )}
       </div>
-      <div
+      <div data-help-feature="live:App:313080de4e96"
         onMouseDown={handleModalResizeStart}
         className="absolute bottom-0 right-0 w-4 h-4 cursor-se-resize z-10 text-[#f97316] opacity-50 hover:opacity-100 flex items-end justify-end"
         title="Resize Window"
@@ -1434,21 +1424,21 @@ const PidWorkspaceDialog = ({
       <div className="flex-1 flex overflow-hidden">
         {/* Controls */}
         <div className="w-72 p-4 border-r border-[#222] flex flex-col gap-4 overflow-y-auto">
-          <input type="file" ref={fileInputRef} onChange={handlePidFileChange} className="hidden" accept=".xlsx,.csv" />
-          <Button onClick={handleLoadPidData} variant="outline">Load Data</Button>
+          <input data-help-feature="app-pid-load" data-help-source="src/App.tsx" type="file" ref={fileInputRef} onChange={handlePidFileChange} className="hidden" accept=".xlsx,.csv" />
+          <Button data-help-feature="app-pid-load" data-help-source="src/App.tsx" onClick={handleLoadPidData} variant="outline">Load Data</Button>
 
           <div className="space-y-2 p-3 bg-[#1a1a1a] rounded-lg border border-[#222]">
             <Label>PID Parameters</Label>
             <div className="grid grid-cols-3 gap-2">
-              <div><Label>Kp</Label><Input value={pidKp} onChange={e => setPidKp(e.target.value)} className="h-7" /></div>
-              <div><Label>Ki</Label><Input value={pidKi} onChange={e => setPidKi(e.target.value)} className="h-7" /></div>
-              <div><Label>Kd</Label><Input value={pidKd} onChange={e => setPidKd(e.target.value)} className="h-7" /></div>
+              <div><Label>Kp</Label><Input data-help-feature="app-pid-kp" data-help-source="src/App.tsx" value={pidKp} onChange={e => setPidKp(e.target.value)} className="h-7" /></div>
+              <div><Label>Ki</Label><Input data-help-feature="app-pid-ki" data-help-source="src/App.tsx" value={pidKi} onChange={e => setPidKi(e.target.value)} className="h-7" /></div>
+              <div><Label>Kd</Label><Input data-help-feature="app-pid-kd" data-help-source="src/App.tsx" value={pidKd} onChange={e => setPidKd(e.target.value)} className="h-7" /></div>
             </div>
           </div>
 
-          <Button onClick={() => runPidSimulation(true)} variant="default">Run Simulation</Button>
-          <Button onClick={handleAutoTune} variant="secondary">Auto Tune (Z-N)</Button>
-          <Button onClick={handleExportPidCode} variant="outline">Export C Code</Button>
+          <Button data-help-feature="app-pid-run" data-help-source="src/App.tsx" onClick={() => runPidSimulation(true)} variant="default">Run Simulation</Button>
+          <Button data-help-feature="app-pid-tune" data-help-source="src/App.tsx" onClick={handleAutoTune} variant="secondary">Auto Tune (Z-N)</Button>
+          <Button data-help-feature="app-pid-export" data-help-source="src/App.tsx" onClick={handleExportPidCode} variant="outline">Export C Code</Button>
         </div>
 
         {/* Plot */}
@@ -1714,14 +1704,14 @@ const Encoder = ({
   return (
     <div className="w-full h-full flex flex-col items-center justify-between p-2 select-none">
       <div className="flex gap-2 w-full justify-center shrink-0">
-        <button
+        <button data-help-feature="app-hmi-rotate" data-help-source="src/App.tsx"
           onClick={() => rotate(-1)}
           className="w-10 h-6 bg-[#222] border border-[#333] hover:border-[#f97316] rounded text-[#888] hover:text-[#fff] text-xs flex items-center justify-center active:scale-95 transition-all"
           disabled={editMode}
         >
           ↺
         </button>
-        <button
+        <button data-help-feature="app-hmi-rotate" data-help-source="src/App.tsx"
           onClick={() => rotate(1)}
           className="w-10 h-6 bg-[#222] border border-[#333] hover:border-[#f97316] rounded text-[#888] hover:text-[#fff] text-xs flex items-center justify-center active:scale-95 transition-all"
           disabled={editMode}
@@ -1731,7 +1721,7 @@ const Encoder = ({
       </div>
 
       <div className="relative flex-1 flex items-center justify-center my-1">
-        <div
+        <div data-help-feature="live:App:9b48b1e073d6"
           onMouseDown={handleMouseDown}
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseLeave}
@@ -1820,7 +1810,7 @@ const ModeSelector = ({
           }
 
           return (
-            <div
+            <div data-help-feature="app-hmi-select" data-help-source="src/App.tsx"
               key={idx}
               onClick={() => handleSelect(idx)}
               style={glowStyle}
@@ -2629,7 +2619,7 @@ const DoeWorkspace = ({
               { id: 'GMDH', label: 'Run GMDH', action: calculateGMDH },
               { id: 'Taguchi', label: 'Run Taguchi', action: calculateTaguchi },
             ].map(m => (
-              <button
+              <button data-help-feature="app-doe-fit" data-help-source="src/App.tsx"
                 key={m.id}
                 onClick={m.action}
                 className={`px-3 py-1 text-xs font-medium rounded-md whitespace-nowrap transition-colors ${
@@ -2644,7 +2634,7 @@ const DoeWorkspace = ({
           </div>
 
           {activeModel === 'Taguchi' && (
-            <Button
+            <Button data-help-feature="app-doe-design-open" data-help-source="src/App.tsx"
               variant="outline"
               size="sm"
               onClick={() => setShowDesignBuilder(true)}
@@ -2657,8 +2647,8 @@ const DoeWorkspace = ({
 
         {/* Top Actions Capsule */}
         <div className="flex items-center gap-1 bg-[var(--surface-panel)] border border-[var(--border-default)] rounded-lg p-1">
-          <input type="file" ref={fileInputRef} className="hidden" accept=".xlsx,.csv" onChange={handleFileUpload} />
-          <Button
+          <input data-help-feature="app-doe-upload" data-help-source="src/App.tsx" type="file" ref={fileInputRef} className="hidden" accept=".xlsx,.csv" onChange={handleFileUpload} />
+          <Button data-help-feature="app-module-export" data-help-source="src/App.tsx"
             variant="ghost"
             size="sm"
             onClick={handleExportProject}
@@ -2667,7 +2657,7 @@ const DoeWorkspace = ({
           >
             <Save size={13} className="mr-1.5 text-[var(--text-muted)]" /> Save
           </Button>
-          <Button
+          <Button data-help-feature="app-doe-upload" data-help-source="src/App.tsx"
             variant="ghost"
             size="sm"
             onClick={() => fileInputRef.current?.click()}
@@ -2675,7 +2665,7 @@ const DoeWorkspace = ({
           >
             <Upload size={13} className="mr-1.5 text-[var(--text-muted)]" /> Upload Data
           </Button>
-          <Button
+          <Button data-help-feature="app-report-generate" data-help-source="src/App.tsx"
             variant="ghost"
             size="sm"
             onClick={generateReport}
@@ -2684,7 +2674,7 @@ const DoeWorkspace = ({
             <FileText size={13} className="mr-1.5 text-[var(--text-muted)]" /> Report
           </Button>
           <Separator orientation="vertical" className="h-4 bg-[var(--border-default)]" />
-          <Button
+          <Button data-help-feature="app-dialog-close" data-help-source="src/App.tsx"
             variant="ghost"
             size="sm"
             onClick={onClose}
@@ -2704,7 +2694,7 @@ const DoeWorkspace = ({
               <section className="bg-[#18181c] p-3 rounded-xl border border-[#27272f]">
                 <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-2.5">Model Deployment</h3>
                 <div className="grid grid-cols-2 gap-2">
-                  <Button
+                  <Button data-help-feature="app-doe-export" data-help-source="src/App.tsx"
                     variant="outline"
                     size="sm"
                     className="h-7 text-xs font-medium border-sky-500/30 bg-sky-500/5 text-sky-400 hover:bg-sky-500/20 hover:text-sky-300 transition-colors whitespace-nowrap"
@@ -2712,7 +2702,7 @@ const DoeWorkspace = ({
                   >
                     <Network size={12} className="mr-1.5" /> X-Bridges
                   </Button>
-                  <Button
+                  <Button data-help-feature="app-doe-export" data-help-source="src/App.tsx"
                     variant="outline"
                     size="sm"
                     className="h-7 text-xs font-medium border-purple-500/30 bg-purple-500/5 text-purple-400 hover:bg-purple-500/20 hover:text-purple-300 transition-colors whitespace-nowrap"
@@ -2756,13 +2746,13 @@ const DoeWorkspace = ({
                     <div className="flex items-center justify-between mb-3">
                       <h3 className="text-xs font-bold text-[#888] uppercase tracking-widest">Response Table</h3>
                       <div className="flex bg-[#1a1a1a] p-0.5 rounded border border-[#222]">
-                        <button
+                        <button data-help-feature="app-doe-response-tab" data-help-source="src/App.tsx"
                           className={`px-2 py-1 text-[9px] rounded font-bold transition-all ${responseTableTab === 'sn' ? 'bg-[#f97316] text-black' : 'text-[#888] hover:text-[#fff]'}`}
                           onClick={() => setResponseTableTab('sn')}
                         >
                           S/N
                         </button>
-                        <button
+                        <button data-help-feature="app-doe-response-tab" data-help-source="src/App.tsx"
                           className={`px-2 py-1 text-[9px] rounded font-bold transition-all ${responseTableTab === 'mean' ? 'bg-[#f97316] text-black' : 'text-[#888] hover:text-[#fff]'}`}
                           onClick={() => setResponseTableTab('mean')}
                         >
@@ -2912,7 +2902,7 @@ const DoeWorkspace = ({
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-xs font-bold text-[#888] uppercase tracking-widest">Equation</h3>
                   <div className="flex gap-1 items-center">
-                    <Button
+                    <Button data-help-feature="app-doe-export" data-help-source="src/App.tsx"
                       variant="outline"
                       size="sm"
                       className="h-6 px-2 text-[10px] font-medium border-purple-500/30 bg-purple-500/5 text-purple-400 hover:bg-purple-500/20 hover:text-purple-300 whitespace-nowrap"
@@ -2920,7 +2910,7 @@ const DoeWorkspace = ({
                     >
                       <FlaskConical size={10} className="mr-1" /> V-Lab
                     </Button>
-                    <Button
+                    <Button data-help-feature="app-doe-export" data-help-source="src/App.tsx"
                       variant="outline"
                       size="sm"
                       className="h-6 px-2 text-[10px] font-medium border-sky-500/30 bg-sky-500/5 text-sky-400 hover:bg-sky-500/20 hover:text-sky-300 whitespace-nowrap"
@@ -2929,8 +2919,8 @@ const DoeWorkspace = ({
                       <Network size={10} className="mr-1" /> X-Bridges
                     </Button>
                     <div className="w-1" />
-                    <Button variant="ghost" size="icon" className="h-6 w-6 text-zinc-400 hover:text-white" onClick={() => setEqFontSize(p => Math.max(8, p - 1))}><span className="text-[9px]">A-</span></Button>
-                    <Button variant="ghost" size="icon" className="h-6 w-6 text-zinc-400 hover:text-white" onClick={() => setEqFontSize(p => Math.min(32, p + 1))}><span className="text-[11px]">A+</span></Button>
+                    <Button data-help-feature="app-doe-equation-size" data-help-source="src/App.tsx" variant="ghost" size="icon" className="h-6 w-6 text-zinc-400 hover:text-white" onClick={() => setEqFontSize(p => Math.max(8, p - 1))}><span className="text-[9px]">A-</span></Button>
+                    <Button data-help-feature="app-doe-equation-size" data-help-source="src/App.tsx" variant="ghost" size="icon" className="h-6 w-6 text-zinc-400 hover:text-white" onClick={() => setEqFontSize(p => Math.min(32, p + 1))}><span className="text-[11px]">A+</span></Button>
                   </div>
                 </div>
                 <div
@@ -2966,7 +2956,7 @@ const DoeWorkspace = ({
                     <>
                       <div>
                         <Label className="mb-2 block">X-Axis Factor</Label>
-                        <select
+                        <select data-help-feature="app-doe-axes" data-help-source="src/App.tsx"
                           className="w-full bg-[#1a1a1a] border border-[#222] rounded p-2 text-xs text-white"
                           value={plotFactors.x}
                           onChange={e => setPlotFactors(prev => ({ ...prev, x: Number(e.target.value) }))}
@@ -2976,7 +2966,7 @@ const DoeWorkspace = ({
                       </div>
                       <div>
                         <Label className="mb-2 block">Y-Axis Factor</Label>
-                        <select
+                        <select data-help-feature="app-doe-axes" data-help-source="src/App.tsx"
                           className="w-full bg-[#1a1a1a] border border-[#222] rounded p-2 text-xs text-white"
                           value={plotFactors.y}
                           onChange={e => setPlotFactors(prev => ({ ...prev, y: Number(e.target.value) }))}
@@ -3000,7 +2990,7 @@ const DoeWorkspace = ({
                         { id: 'taguchi_delta', label: 'Rank/Delta', show: results?.type === 'Taguchi' },
                         { id: 'pred_vs_act', label: 'Pred vs Act', show: results?.type === 'RSM' || results?.type === 'GMDH' || results?.type === 'Taguchi' },
                       ].filter(p => p.show).map(p => (
-                        <button
+                        <button data-help-feature="app-doe-plot" data-help-source="src/App.tsx"
                           key={p.id}
                           onClick={() => setPlotType(p.id as any)}
                           className={`h-7 px-2 text-xs font-medium rounded-md whitespace-nowrap transition-colors border ${
@@ -3023,7 +3013,7 @@ const DoeWorkspace = ({
                         {headers.slice(0, -1).map((h, i) => (
                           <div key={i} className="flex justify-between items-center gap-2">
                             <span className="text-[9px] text-gray-400 truncate w-24">{h}</span>
-                            <select
+                            <select data-help-feature="app-doe-holds" data-help-source="src/App.tsx"
                               className="bg-[#050505] border border-[#222] text-[9px] p-1 rounded text-white"
                               value={holdValues[i]}
                               onChange={(e) => {
@@ -3071,7 +3061,7 @@ const DoeWorkspace = ({
                       </div>
                       <div>
                         <Label className="mb-2 block">Objective (S/N)</Label>
-                        <select
+                        <select data-help-feature="app-doe-objective" data-help-source="src/App.tsx"
                           className="w-full bg-[#1a1a1a] border border-[#222] rounded p-2 text-xs text-white"
                           value={taguchiConfig.objective}
                           onChange={e => setTaguchiConfig(prev => ({ ...prev, objective: e.target.value as any }))}
@@ -3086,7 +3076,7 @@ const DoeWorkspace = ({
                       {taguchiConfig.objective === 'target' && (
                         <div>
                           <Label className="mb-2 block">Target Value</Label>
-                          <input
+                          <input data-help-feature="app-doe-objective" data-help-source="src/App.tsx"
                             type="number"
                             value={taguchiConfig.targetValue !== undefined ? taguchiConfig.targetValue : 0}
                             onChange={e => setTaguchiConfig(prev => ({ ...prev, targetValue: Number(e.target.value) }))}
@@ -3108,7 +3098,7 @@ const DoeWorkspace = ({
                               <span>{h}</span>
                               <span className="text-[#f97316]">{holdValues[i]?.toFixed(2)}</span>
                             </div>
-                            <input
+                            <input data-help-feature="app-doe-holds" data-help-source="src/App.tsx"
                               type="range"
                               min={Math.min(...data.map(r => r[i]))}
                               max={Math.max(...data.map(r => r[i]))}
@@ -3149,7 +3139,7 @@ const DoeWorkspace = ({
 
                 <div className="flex items-center gap-4 bg-[#141414] p-4 rounded-xl border border-[#222]">
                   <Label className="uppercase text-xs font-black tracking-widest text-[#f97316]">Number of Factors</Label>
-                  <input
+                  <input data-help-feature="app-doe-factor-count" data-help-source="src/App.tsx"
                     type="number"
                     min={2}
                     max={15}
@@ -3173,7 +3163,7 @@ const DoeWorkspace = ({
                         <tr key={idx}>
                           <td className="p-2 font-bold text-gray-400">Factor {idx + 1}</td>
                           <td className="p-1">
-                            <input
+                            <input data-help-feature="app-doe-factor-name" data-help-source="src/App.tsx"
                               type="text"
                               value={f.name}
                               onChange={(e) => handleBuilderFactorNameChange(idx, e.target.value)}
@@ -3181,7 +3171,7 @@ const DoeWorkspace = ({
                             />
                           </td>
                           <td className="p-1">
-                            <select
+                            <select data-help-feature="app-doe-factor-levels" data-help-source="src/App.tsx"
                               value={f.levels}
                               onChange={(e) => handleBuilderFactorLevelsChange(idx, Number(e.target.value))}
                               className="bg-[#050505] border border-[#222] p-1.5 rounded text-white text-xs w-full focus:border-[#f97316] outline-none"
@@ -3219,8 +3209,8 @@ const DoeWorkspace = ({
                 })()}
 
                 <div className="flex justify-end gap-2">
-                  <Button variant="outline" onClick={() => setShowDesignBuilder(false)}>Cancel</Button>
-                  <Button
+                  <Button data-help-feature="app-doe-design-open" data-help-source="src/App.tsx" variant="outline" onClick={() => setShowDesignBuilder(false)}>Cancel</Button>
+                  <Button data-help-feature="app-doe-design-generate" data-help-source="src/App.tsx"
                     variant="default"
                     disabled={!findBestOA(builderFactors.map(f => f.levels))}
                     onClick={handleGenerateDesign}
@@ -3239,7 +3229,7 @@ const DoeWorkspace = ({
                     <h3 className="text-lg font-bold text-white">Taguchi Design of Experiments</h3>
                     <p className="text-xs max-w-sm mx-auto mt-1">Configure your factors and levels to generate a coded orthogonal design matrix, or paste your experimental data below.</p>
                   </div>
-                  <Button
+                  <Button data-help-feature="app-doe-design-open" data-help-source="src/App.tsx"
                     variant="outline"
                     onClick={() => setShowDesignBuilder(true)}
                     className="h-8 px-4 text-xs font-semibold bg-[#18181c] border-orange-500/30 text-orange-400 hover:bg-orange-500/20"
@@ -3256,7 +3246,7 @@ const DoeWorkspace = ({
                       { id: 'taguchi_main_sn', label: 'Main Effects (SN)', show: results?.type === 'Taguchi' },
                       { id: 'taguchi_main_mean', label: 'Main Effects (Means)', show: results?.type === 'Taguchi' },
                     ].filter(p => p.show).map(p => (
-                      <button
+                      <button data-help-feature="app-doe-plot" data-help-source="src/App.tsx"
                         key={p.id}
                         onClick={() => setPlotType(p.id as any)}
                         className={`px-2.5 py-1 text-xs font-medium rounded-md whitespace-nowrap transition-colors ${
@@ -3324,7 +3314,7 @@ const EmojiPicker = ({
 
   return (
     <div className="relative mt-1">
-      <button
+      <button data-help-feature="app-emoji-picker" data-help-source="src/App.tsx"
         type="button"
         onClick={() => setIsOpen(!isOpen)}
         className="w-full h-8 px-2 bg-[#0a0a0a] border border-[#333] hover:border-[#f97316] rounded text-xs text-[#e0e0e0] flex items-center justify-between transition-colors"
@@ -3337,7 +3327,7 @@ const EmojiPicker = ({
         <div className="absolute left-0 right-0 z-50 mt-1 max-h-60 overflow-y-auto bg-[#141414] border border-[#2d2d2d] rounded shadow-2xl p-2 font-sans text-xs">
           <div className="flex justify-between items-center mb-1.5 border-b border-[#2d2d2d] pb-1">
             <span className="text-gray-400 font-bold">Pick an Icon</span>
-            <button
+            <button data-help-feature="app-emoji-picker" data-help-source="src/App.tsx"
               type="button"
               onClick={() => setIsOpen(false)}
               className="text-gray-500 hover:text-white"
@@ -3353,7 +3343,7 @@ const EmojiPicker = ({
                 </div>
                 <div className="grid grid-cols-7 gap-1">
                   {cat.icons.map((emoji) => (
-                    <button
+                    <button data-help-feature="app-emoji-picker" data-help-source="src/App.tsx"
                       key={emoji}
                       type="button"
                       onClick={() => {
@@ -3502,7 +3492,7 @@ const HmiDashboardContent = ({
         {selectedId === comp.id && editMode && (
           <>
             {['nw', 'ne', 'sw', 'se'].map(h => (
-              <div
+              <div data-help-feature="live:App:b506e73bb85a"
                 key={h}
                 className={`absolute w-2 h-2 bg-[#f97316] border border-black z-20 ${h === 'nw' ? 'top-0 left-0 cursor-nw-resize' : h === 'ne' ? 'top-0 right-0 cursor-ne-resize' : h === 'sw' ? 'bottom-0 left-0 cursor-sw-resize' : 'bottom-0 right-0 cursor-se-resize'}`}
                 onMouseDown={(e) => handleResizeMouseDown(e, h, comp.id)}
@@ -3513,7 +3503,7 @@ const HmiDashboardContent = ({
         {/* Component Content */}
         <div className="flex-1 flex items-center justify-center w-full p-2">
           {comp.type === 'toggle' && (
-            <div
+            <div data-help-feature="app-hmi-drive" data-help-source="src/App.tsx"
               className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors ${boolValue ? 'bg-[#f97316]' : 'bg-[#333]'}`}
               onClick={() => !editMode && variable && updateVariable(variable.id, (!boolValue).toString())}
             >
@@ -3578,7 +3568,7 @@ const HmiDashboardContent = ({
             return <div className={`w-4 h-4 rounded-full transition-all duration-200 ${colorClasses[ledColor] || colorClasses.red}`} />;
           })()}
           {comp.type === 'slider' && (
-            <input
+            <input data-help-feature="app-hmi-drive" data-help-source="src/App.tsx"
               type="range"
               min={comp.min ?? 0}
               max={comp.max ?? 100}
@@ -3589,7 +3579,7 @@ const HmiDashboardContent = ({
             />
           )}
           {comp.type === 'input' && (
-            <input
+            <input data-help-feature="app-hmi-drive" data-help-source="src/App.tsx"
               type="number"
               value={numValue}
               onChange={(e) => !editMode && variable && updateVariable(variable.id, e.target.value)}
@@ -3691,7 +3681,7 @@ const HmiDashboardContent = ({
               const posText = `Pos ${currentIndex + 1}`;
 
               return (
-                <div className="relative w-full h-full flex items-center justify-center" onMouseDown={handleRotaryMouseDown} style={{ cursor: editMode ? 'default' : 'pointer' }}>
+                <div data-help-feature="live:App:a4a06cc0bbf5" className="relative w-full h-full flex items-center justify-center" onMouseDown={handleRotaryMouseDown} style={{ cursor: editMode ? 'default' : 'pointer' }}>
                   <svg viewBox="0 0 100 100" className="w-full h-full">
                     <defs><radialGradient id="grad-rotary"><stop offset="0%" stopColor="#555" /><stop offset="90%" stopColor="#222" /><stop offset="100%" stopColor="#1a1a1a" /></radialGradient></defs>
                     <circle cx="50" cy="50" r="40" fill="url(#grad-rotary)" stroke="#1a1a1a" strokeWidth="2" />
@@ -3753,7 +3743,7 @@ const HmiDashboardContent = ({
             };
 
             return (
-              <div className="relative w-full h-full flex items-center justify-center" onMouseDown={handleRotaryMouseDown} style={{ cursor: editMode ? 'default' : 'grab' }}>
+              <div data-help-feature="live:App:a4a06cc0bbf5" className="relative w-full h-full flex items-center justify-center" onMouseDown={handleRotaryMouseDown} style={{ cursor: editMode ? 'default' : 'grab' }}>
                 <svg viewBox="0 0 100 100" className="w-full h-full">
                   <defs><radialGradient id="grad-rotary"><stop offset="0%" stopColor="#555" /><stop offset="90%" stopColor="#222" /><stop offset="100%" stopColor="#1a1a1a" /></radialGradient></defs>
                   <circle cx="50" cy="50" r="40" fill="url(#grad-rotary)" stroke="#1a1a1a" strokeWidth="2" />
@@ -3816,7 +3806,7 @@ const HmiDashboardContent = ({
             };
 
             return (
-              <div
+              <div data-help-feature="app-hmi-select" data-help-source="src/App.tsx"
                 onClick={handleClick}
                 style={glowStyle}
                 className={`w-full h-full border rounded flex flex-col items-center justify-center cursor-pointer p-1 transition-all active:scale-95 ${borderClass} ${bgClass}`}
@@ -3836,12 +3826,12 @@ const HmiDashboardContent = ({
   };
 
   return (
-    <div className="flex flex-col h-full w-full bg-[#1a1a1a]" onMouseUp={handleMouseUp} onMouseMove={handleMouseMove}>
+    <div data-help-feature="live:App:675a8d507f4c" className="flex flex-col h-full w-full bg-[#1a1a1a]" onMouseUp={handleMouseUp} onMouseMove={handleMouseMove}>
       <div className="h-10 flex items-center px-4 border-b border-[#222] justify-between bg-[#1a1a1a] shrink-0">
         <div className="flex items-center gap-3">
           <div className="flex bg-[#0a0a0a] rounded p-0.5 border border-[#333]">
-            <button onClick={() => setEditMode(true)} className={"px-3 py-1 text-xs rounded " + (editMode ? "bg-[#333] text-white" : "text-[#888]")}>Edit</button>
-            <button onClick={() => { setEditMode(false); setSelectedId(null); }} className={"px-3 py-1 text-xs rounded " + (!editMode ? "bg-[#f97316] text-black font-bold" : "text-[#888]")}>Run</button>
+            <button data-help-feature="app-hmi-edit" data-help-source="src/App.tsx" onClick={() => setEditMode(true)} className={"px-3 py-1 text-xs rounded " + (editMode ? "bg-[#333] text-white" : "text-[#888]")}>Edit</button>
+            <button data-help-feature="app-hmi-run" data-help-source="src/App.tsx" onClick={() => { setEditMode(false); setSelectedId(null); }} className={"px-3 py-1 text-xs rounded " + (!editMode ? "bg-[#f97316] text-black font-bold" : "text-[#888]")}>Run</button>
           </div>
         </div>
       </div>
@@ -3857,7 +3847,7 @@ const HmiDashboardContent = ({
             <Label>Components</Label>
             <div className="grid grid-cols-2 gap-2">
               {['toggle', 'button', 'slider', 'input', 'lamp', 'led', 'lcd', 'gauge', 'rotary', 'hybrid-rotary', 'buzzer', 'oled', 'encoder', 'mode-selector', 'mode-icon'].map(t => (
-                <button key={t} onClick={() => addComponent(t as HmiComponentType)} className="flex flex-col items-center justify-center p-2 bg-[#1a1a1a] border border-[#333] rounded hover:bg-[#222] hover:border-[#f97316]">
+                <button data-help-feature="app-hmi-add" data-help-source="src/App.tsx" key={t} onClick={() => addComponent(t as HmiComponentType)} className="flex flex-col items-center justify-center p-2 bg-[#1a1a1a] border border-[#333] rounded hover:bg-[#222] hover:border-[#f97316]">
                   <span className="text-[10px] capitalize text-[#ccc]">{t}</span>
                 </button>
               ))}
@@ -3873,10 +3863,10 @@ const HmiDashboardContent = ({
                   if (!comp) return null;
                   return (
                     <>
-                      <div><Label>Name</Label><Input value={comp.name} onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, name: e.target.value } : c))} /></div>
+                      <div><Label>Name</Label><Input data-help-feature="app-hmi-name" data-help-source="src/App.tsx" value={comp.name} onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, name: e.target.value } : c))} /></div>
                       <div>
                         <Label>Variable</Label>
-                        <select
+                        <select data-help-feature="app-hmi-variableId" data-help-source="src/App.tsx"
                           value={comp.variableId || ''}
                           onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, variableId: e.target.value || null } : c))}
                           className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-xs text-[#e0e0e0] mt-1"
@@ -3890,7 +3880,7 @@ const HmiDashboardContent = ({
                         <div className="space-y-2 mt-2">
                           <div>
                             <Label>Color / Theme</Label>
-                            <select
+                            <select data-help-feature="app-hmi-color" data-help-source="src/App.tsx"
                               value={comp.color || 'orange'}
                               onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, color: e.target.value as any } : c))}
                               className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-xs text-[#e0e0e0] mt-1"
@@ -3906,7 +3896,7 @@ const HmiDashboardContent = ({
                           {comp.type === 'button' && (
                             <div>
                               <Label>Button Icon</Label>
-                              <select
+                              <select data-help-feature="app-hmi-icon" data-help-source="src/App.tsx"
                                 value={comp.icon || 'none'}
                                 onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, icon: e.target.value as any } : c))}
                                 className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-xs text-[#e0e0e0] mt-1"
@@ -3925,7 +3915,7 @@ const HmiDashboardContent = ({
                         <div className="space-y-2 mt-2">
                           <div>
                             <Label>Button Press Bind (GPIO)</Label>
-                            <select
+                            <select data-help-feature="app-hmi-pressVariableId" data-help-source="src/App.tsx"
                               value={comp.pressVariableId || ''}
                               onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, pressVariableId: e.target.value || null } : c))}
                               className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-xs text-[#e0e0e0] mt-1"
@@ -3938,19 +3928,19 @@ const HmiDashboardContent = ({
                             <Label>Encoder Values (Discrete Mode)</Label>
                             {(comp.encoderValues || []).map((val, idx) => (
                               <div key={idx} className="flex gap-1">
-                                <Input
+                                <Input data-help-feature="app-hmi-encoderValues" data-help-source="src/App.tsx"
                                   value={val}
                                   onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, encoderValues: (c.encoderValues || []).map((v, i) => i === idx ? e.target.value : v) } : c))}
                                   className="flex-1 h-6 text-[10px]"
                                 />
-                                <button
+                                <button data-help-feature="app-hmi-encoderValues" data-help-source="src/App.tsx"
                                   type="button"
                                   onClick={() => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, encoderValues: (c.encoderValues || []).filter((_, i) => i !== idx) } : c))}
                                   className="text-[#666] hover:text-red-400 px-1"
                                 >×</button>
                               </div>
                             ))}
-                            <Button size="sm" variant="secondary" className="w-full h-6 text-[10px]" onClick={() => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, encoderValues: [...(c.encoderValues || []), '0'] } : c))}>+ Add Value</Button>
+                            <Button data-help-feature="app-hmi-encoderValues" data-help-source="src/App.tsx" size="sm" variant="secondary" className="w-full h-6 text-[10px]" onClick={() => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, encoderValues: [...(c.encoderValues || []), '0'] } : c))}>+ Add Value</Button>
                           </div>
                         </div>
                       )}
@@ -3958,7 +3948,7 @@ const HmiDashboardContent = ({
                       {comp.type === 'mode-selector' && (
                         <div className="space-y-2 mt-2">
                           <Label>Cursor Variable (Index)</Label>
-                          <select
+                          <select data-help-feature="app-hmi-cursorVariableId" data-help-source="src/App.tsx"
                             value={comp.cursorVariableId || ''}
                             onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, cursorVariableId: e.target.value || null } : c))}
                             className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-xs text-[#e0e0e0] mt-1"
@@ -3973,7 +3963,7 @@ const HmiDashboardContent = ({
                         <div className="space-y-2 mt-2">
                           <div>
                             <Label>Icon (Emoji)</Label>
-                            <Input
+                            <Input data-help-feature="app-hmi-iconEmoji" data-help-source="src/App.tsx"
                               value={comp.iconEmoji || ''}
                               onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, iconEmoji: e.target.value } : c))}
                               placeholder="e.g. 🍟"
@@ -3986,7 +3976,7 @@ const HmiDashboardContent = ({
                           </div>
                           <div>
                             <Label>Target Value</Label>
-                            <Input
+                            <Input data-help-feature="app-hmi-targetValue" data-help-source="src/App.tsx"
                               value={comp.targetValue || ''}
                               onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, targetValue: e.target.value } : c))}
                               placeholder="e.g. 0, 1, or Air Fry"
@@ -4013,7 +4003,7 @@ const HmiDashboardContent = ({
                           ].map(mapping => (
                             <div key={mapping.key} className="mt-1">
                               <span className="text-[10px] text-gray-400">{mapping.label}</span>
-                              <select
+                              <select data-help-feature="app-hmi-oled-mapping" data-help-source="src/App.tsx"
                                 value={(comp as any)[mapping.key] || ''}
                                 onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, [mapping.key]: e.target.value || null } : c))}
                                 className="w-full h-7 bg-[#0a0a0a] border border-[#333] rounded px-1.5 text-[10px] text-[#e0e0e0] mt-0.5"
@@ -4025,7 +4015,7 @@ const HmiDashboardContent = ({
                           ))}
                           <div className="mt-2 border-t border-[#222] pt-2">
                             <Label>Screen Title</Label>
-                            <Input
+                            <Input data-help-feature="app-hmi-oledTitle" data-help-source="src/App.tsx"
                               value={comp.oledTitle || ''}
                               onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, oledTitle: e.target.value } : c))}
                               placeholder="e.g. MAIN PANEL"
@@ -4034,7 +4024,7 @@ const HmiDashboardContent = ({
                           </div>
                           <div className="mt-2 border-t border-[#222] pt-2">
                             <Label>Mode Names (comma-separated)</Label>
-                            <textarea
+                            <textarea data-help-feature="app-hmi-oledModeNames" data-help-source="src/App.tsx"
                               value={comp.oledModeNames || ''}
                               onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, oledModeNames: e.target.value } : c))}
                               placeholder="AIR FRYER, STEAMER, OVEN, ..."
@@ -4047,7 +4037,7 @@ const HmiDashboardContent = ({
                               <div key={idx} className="flex flex-col gap-1 p-1.5 bg-[#111] border border-[#222] rounded mt-1">
                                 <div className="flex gap-1 items-center justify-between">
                                   <span className="text-[10px] text-gray-400 font-bold">Indicator #{idx + 1}</span>
-                                  <button
+                                  <button data-help-feature="app-hmi-oledIndicatorEmojis" data-help-source="src/App.tsx"
                                     onClick={() => setComponents(prev => prev.map(c => c.id === comp.id ? {
                                       ...c,
                                       oledIndicatorEmojis: (c.oledIndicatorEmojis || []).filter((_, i) => i !== idx),
@@ -4062,7 +4052,7 @@ const HmiDashboardContent = ({
                                 <div className="grid grid-cols-2 gap-1 mt-1">
                                   <div>
                                     <span className="text-[8px] text-gray-500">Emoji/Icon</span>
-                                    <Input
+                                    <Input data-help-feature="app-hmi-oledIndicatorEmojis" data-help-source="src/App.tsx"
                                       value={emoji}
                                       onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? {
                                         ...c,
@@ -4080,7 +4070,7 @@ const HmiDashboardContent = ({
                                   </div>
                                   <div>
                                     <span className="text-[8px] text-gray-500">Label</span>
-                                    <Input
+                                    <Input data-help-feature="app-hmi-oledIndicatorLabels" data-help-source="src/App.tsx"
                                       value={comp.oledIndicatorLabels?.[idx] || ''}
                                       onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? {
                                         ...c,
@@ -4093,7 +4083,7 @@ const HmiDashboardContent = ({
                                 </div>
                                 <div className="mt-1">
                                   <span className="text-[8px] text-gray-500">Bind Variable</span>
-                                  <select
+                                  <select data-help-feature="app-hmi-oledIndicatorVarIds" data-help-source="src/App.tsx"
                                     value={comp.oledIndicatorVarIds?.[idx] || ''}
                                     onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? {
                                       ...c,
@@ -4108,7 +4098,7 @@ const HmiDashboardContent = ({
                               </div>
                             ))}
                             {((comp.oledIndicatorEmojis || []).length < 8) && (
-                              <Button
+                              <Button data-help-feature="app-hmi-oledIndicatorEmojis" data-help-source="src/App.tsx"
                                 size="sm"
                                 variant="secondary"
                                 className="w-full h-6 text-[10px] mt-1"
@@ -4131,7 +4121,7 @@ const HmiDashboardContent = ({
                           <Label>Multi-Variable Mode (Max 5)</Label>
                           {(comp.variableIds || []).map((vid, idx) => (
                             <div key={idx} className="flex gap-1">
-                              <select
+                              <select data-help-feature="app-hmi-variableIds" data-help-source="src/App.tsx"
                                 value={vid || ''}
                                 onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, variableIds: (c.variableIds || []).map((v, i) => i === idx ? e.target.value : v) } : c))}
                                 className="flex-1 h-6 bg-[#0a0a0a] border border-[#333] rounded px-1 text-[10px] text-[#e0e0e0]"
@@ -4139,14 +4129,14 @@ const HmiDashboardContent = ({
                                 <option value="">-- Select --</option>
                                 {variables.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
                               </select>
-                              <button
+                              <button data-help-feature="app-hmi-variableIds" data-help-source="src/App.tsx"
                                 onClick={() => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, variableIds: (c.variableIds || []).filter((_, i) => i !== idx) } : c))}
                                 className="text-[#666] hover:text-red-400 px-1"
                               >×</button>
                             </div>
                           ))}
                           {(comp.variableIds?.length || 0) < 5 && (
-                            <Button size="sm" variant="secondary" className="w-full h-6 text-[10px]" onClick={() => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, variableIds: [...(c.variableIds || []), ''] } : c))}>+ Add Position</Button>
+                            <Button data-help-feature="app-hmi-variableIds" data-help-source="src/App.tsx" size="sm" variant="secondary" className="w-full h-6 text-[10px]" onClick={() => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, variableIds: [...(c.variableIds || []), ''] } : c))}>+ Add Position</Button>
                           )}
                         </div>
                       )}
@@ -4156,32 +4146,32 @@ const HmiDashboardContent = ({
                           <Label>Hybrid Values</Label>
                           {(comp.hybridValues || []).map((val, idx) => (
                             <div key={idx} className="flex gap-1">
-                              <Input
+                              <Input data-help-feature="app-hmi-hybridValues" data-help-source="src/App.tsx"
                                 value={val}
                                 onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, hybridValues: (c.hybridValues || []).map((v, i) => i === idx ? e.target.value : v) } : c))}
                                 className="flex-1 h-6 text-[10px]"
                               />
-                              <button
+                              <button data-help-feature="app-hmi-hybridValues" data-help-source="src/App.tsx"
                                 onClick={() => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, hybridValues: (c.hybridValues || []).filter((_, i) => i !== idx) } : c))}
                                 className="text-[#666] hover:text-red-400 px-1"
                               >×</button>
                             </div>
                           ))}
-                          <Button size="sm" variant="secondary" className="w-full h-6 text-[10px]" onClick={() => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, hybridValues: [...(c.hybridValues || []), '0'] } : c))}>+ Add Value</Button>
+                          <Button data-help-feature="app-hmi-hybridValues" data-help-source="src/App.tsx" size="sm" variant="secondary" className="w-full h-6 text-[10px]" onClick={() => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, hybridValues: [...(c.hybridValues || []), '0'] } : c))}>+ Add Value</Button>
                         </div>
                       )}
 
                       {(comp.type === 'slider' || comp.type === 'gauge') && (
                         <div className="grid grid-cols-2 gap-2">
-                          <div><Label>Min</Label><Input type="number" value={comp.min ?? 0} onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, min: parseFloat(e.target.value) } : c))} /></div>
-                          <div><Label>Max</Label><Input type="number" value={comp.max ?? 0} onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, max: parseFloat(e.target.value) } : c))} /></div>
+                          <div><Label>Min</Label><Input data-help-feature="app-hmi-min" data-help-source="src/App.tsx" type="number" value={comp.min ?? 0} onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, min: parseFloat(e.target.value) } : c))} /></div>
+                          <div><Label>Max</Label><Input data-help-feature="app-hmi-max" data-help-source="src/App.tsx" type="number" value={comp.max ?? 0} onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, max: parseFloat(e.target.value) } : c))} /></div>
                         </div>
                       )}
 
                       {comp.type === 'buzzer' && (
                         <div className="mt-2">
                           <Label>Sound Type</Label>
-                          <select
+                          <select data-help-feature="app-hmi-soundType" data-help-source="src/App.tsx"
                             value={comp.soundType || 'square'}
                             onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, soundType: e.target.value as any } : c))}
                             className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-xs text-[#e0e0e0] mt-1"
@@ -4193,7 +4183,7 @@ const HmiDashboardContent = ({
                           </select>
                         </div>
                       )}
-                      <Button variant="destructive" size="sm" onClick={() => { setComponents(prev => prev.filter(c => c.id !== comp.id)); setSelectedId(null); }} className="w-full mt-2">Delete</Button>
+                      <Button data-help-feature="app-hmi-delete" data-help-source="src/App.tsx" variant="destructive" size="sm" onClick={() => { setComponents(prev => prev.filter(c => c.id !== comp.id)); setSelectedId(null); }} className="w-full mt-2">Delete</Button>
                     </>
                   );
                 })()}
@@ -4203,7 +4193,7 @@ const HmiDashboardContent = ({
         )}
 
         {/* Canvas */}
-        <div className="flex-1 bg-[#0a0a0a] relative overflow-hidden" onClick={() => setSelectedId(null)}>
+        <div data-help-feature="app-dialog-close" data-help-source="src/App.tsx" className="flex-1 bg-[#0a0a0a] relative overflow-hidden" onClick={() => setSelectedId(null)}>
           <div className="absolute inset-0 opacity-20 pointer-events-none" style={{ backgroundImage: 'radial-gradient(#333 1px, transparent 1px)', backgroundSize: '20px 20px' }}></div>
           {components.map(renderComponent)}
         </div>
@@ -4223,7 +4213,7 @@ const ReportDialog = ({
   const [author, setAuthor] = useState('Author');
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50" onMouseDown={onClose}>
+    <div data-help-feature="live:App:345b43c4fed5" className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50" onMouseDown={onClose}>
       <div className="bg-[#1a1a1a] border border-[#f97316] rounded-lg w-[400px] flex flex-col" onMouseDown={e => e.stopPropagation()}>
         <div className="h-12 flex items-center px-5 border-b border-[#222]">
           <h2 className="text-lg font-bold text-[#f97316]">Generate Report</h2>
@@ -4231,13 +4221,13 @@ const ReportDialog = ({
         <div className="p-5 space-y-4">
           <div>
             <Label>Project Name</Label>
-            <Input value={projectName} onChange={e => setProjectName(e.target.value)} className="w-full mt-1" />
+            <Input data-help-feature="app-project-name" data-help-source="src/App.tsx" value={projectName} onChange={e => setProjectName(e.target.value)} className="w-full mt-1" />
           </div>
           <div>
             <Label>Author</Label>
-            <Input value={author} onChange={e => setAuthor(e.target.value)} className="w-full mt-1" />
+            <Input data-help-feature="app-report-author" data-help-source="src/App.tsx" value={author} onChange={e => setAuthor(e.target.value)} className="w-full mt-1" />
           </div>
-          <Button onClick={() => onGenerate(projectName, author)} className="w-full bg-[#f97316] text-[#0a0a0a] font-bold">Generate Report</Button>
+          <Button data-help-feature="app-report-generate" data-help-source="src/App.tsx" onClick={() => onGenerate(projectName, author)} className="w-full bg-[#f97316] text-[#0a0a0a] font-bold">Generate Report</Button>
         </div>
       </div>
     </div>
@@ -4254,7 +4244,7 @@ const NewProjectDialog = ({
   const [name, setName] = useState('');
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50" onMouseDown={onClose}>
+    <div data-help-feature="live:App:345b43c4fed5" className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50" onMouseDown={onClose}>
       <div className="bg-[#1a1a1a] border border-[#f97316] rounded-lg w-[400px] flex flex-col shadow-2xl" onMouseDown={(e: React.MouseEvent) => e.stopPropagation()}>
         <div className="h-12 flex items-center px-5 border-b border-[#222]">
           <h2 className="text-lg font-bold text-[#f97316]">Create New Project</h2>
@@ -4262,7 +4252,7 @@ const NewProjectDialog = ({
         <div className="p-5 space-y-4">
           <div>
             <Label>Project Name</Label>
-            <Input
+            <Input data-help-feature="app-asset-name" data-help-source="src/App.tsx"
               autoFocus
               value={name}
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)}
@@ -4276,8 +4266,8 @@ const NewProjectDialog = ({
             />
           </div>
           <div className="flex gap-2 justify-end pt-2">
-            <Button onClick={onClose} className="px-4 py-2 border border-[#333] bg-transparent text-white hover:bg-[#222]">Cancel</Button>
-            <Button
+            <Button data-help-feature="app-dialog-close" data-help-source="src/App.tsx" onClick={onClose} className="px-4 py-2 border border-[#333] bg-transparent text-white hover:bg-[#222]">Cancel</Button>
+            <Button data-help-feature="app-asset-create" data-help-source="src/App.tsx"
               onClick={() => name.trim() && onCreate(name.trim())}
               disabled={!name.trim()}
               className="px-4 py-2 bg-[#f97316] text-[#0a0a0a] font-bold hover:bg-[#ea580c] disabled:opacity-50"
@@ -4389,7 +4379,7 @@ const WorkspaceFileDialog = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/75 backdrop-blur-md flex items-center justify-center z-50 animate-in fade-in duration-300" onMouseDown={onClose}>
+    <div data-help-feature="live:App:345b43c4fed5" className="fixed inset-0 bg-black/75 backdrop-blur-md flex items-center justify-center z-50 animate-in fade-in duration-300" onMouseDown={onClose}>
       <div className="bg-[#111] border border-[#f97316]/40 rounded-2xl w-[750px] max-h-[85vh] flex flex-col shadow-2xl overflow-hidden" onMouseDown={(e) => e.stopPropagation()}>
 
         {/* Header */}
@@ -4398,24 +4388,24 @@ const WorkspaceFileDialog = ({
             <span className="text-[#f97316] text-xl">📁</span>
             <h2 className="text-lg font-black uppercase tracking-wider text-[#e0e0e0]">Workspace Asset Manager</h2>
           </div>
-          <button onClick={onClose} className="text-slate-500 hover:text-white transition-colors">✕</button>
+          <button data-help-feature="app-dialog-close" data-help-source="src/App.tsx" onClick={onClose} className="text-slate-500 hover:text-white transition-colors">✕</button>
         </div>
 
         {/* Tab Buttons */}
         <div className="flex bg-[#0f0f0f] border-b border-[#222] p-1 gap-2 px-6">
-          <button
+          <button data-help-feature="app-asset-create-tab" data-help-source="src/App.tsx"
             onClick={() => setActiveTab('create')}
             className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${activeTab === 'create' ? 'bg-[#f97316]/10 text-[#f97316] border border-[#f97316]/30' : 'text-slate-500 hover:text-slate-300'}`}
           >
             Create New Asset
           </button>
-          <button
+          <button data-help-feature="app-asset-manage-tab" data-help-source="src/App.tsx"
             onClick={() => setActiveTab('manage')}
             className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${activeTab === 'manage' ? 'bg-[#f97316]/10 text-[#f97316] border border-[#f97316]/30' : 'text-slate-500 hover:text-slate-300'}`}
           >
             Manage Files ({existingFiles.length})
           </button>
-          <button
+          <button data-help-feature="app-asset-import-tab" data-help-source="src/App.tsx"
             onClick={() => setActiveTab('import')}
             className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${activeTab === 'import' ? 'bg-[#f97316]/10 text-[#f97316] border border-[#f97316]/30' : 'text-slate-500 hover:text-slate-300'}`}
           >
@@ -4430,7 +4420,7 @@ const WorkspaceFileDialog = ({
               {/* Asset Type Grid */}
               <div className="grid grid-cols-2 gap-3">
                 {/* Project Option */}
-                <div
+                <div data-help-feature="app-asset-create-tab" data-help-source="src/App.tsx"
                   onClick={() => setSelectedType('project')}
                   className={`p-4 rounded-xl border transition-all cursor-pointer flex gap-4 items-start ${selectedType === 'project' ? 'bg-[#f97316]/10 border-[#f97316] shadow-[0_0_15px_rgba(249,115,22,0.15)]' : 'bg-[#181818] border-[#222] hover:border-[#333]'}`}
                 >
@@ -4448,7 +4438,7 @@ const WorkspaceFileDialog = ({
 
                 {/* Modules */}
                 {modules.map(m => (
-                  <div
+                  <div data-help-feature="app-asset-create-tab" data-help-source="src/App.tsx"
                     key={m.id}
                     onClick={() => setSelectedType(m.id)}
                     className={`p-3 rounded-xl border transition-all cursor-pointer flex gap-3 items-center ${selectedType === m.id ? 'bg-[#181818] border-l-4 shadow-[0_0_15px_rgba(255,255,255,0.05)]' : 'bg-[#161616] border-[#222] hover:border-[#333]'}`}
@@ -4470,7 +4460,7 @@ const WorkspaceFileDialog = ({
                 {selectedType === 'project' ? (
                   <div>
                     <label className="text-xs font-bold text-slate-400 uppercase">Project Name</label>
-                    <Input
+                    <Input data-help-feature="app-project-name" data-help-source="src/App.tsx"
                       autoFocus
                       value={projectName}
                       onChange={e => setProjectName(e.target.value)}
@@ -4482,7 +4472,7 @@ const WorkspaceFileDialog = ({
                 ) : (
                   <div>
                     <label className="text-xs font-bold text-slate-400 uppercase">Asset File/Tab Name</label>
-                    <Input
+                    <Input data-help-feature="app-asset-name" data-help-source="src/App.tsx"
                       autoFocus
                       value={fileName}
                       onChange={e => setFileName(e.target.value)}
@@ -4494,8 +4484,8 @@ const WorkspaceFileDialog = ({
                 )}
 
                 <div className="flex justify-end gap-3 pt-2">
-                  <Button onClick={onClose} className="px-5 border border-[#222] bg-transparent text-slate-400 hover:bg-[#181818]">Cancel</Button>
-                  <Button
+                  <Button data-help-feature="app-dialog-close" data-help-source="src/App.tsx" onClick={onClose} className="px-5 border border-[#222] bg-transparent text-slate-400 hover:bg-[#181818]">Cancel</Button>
+                  <Button data-help-feature="app-asset-create" data-help-source="src/App.tsx"
                     onClick={handleCreate}
                     disabled={selectedType === 'project' ? !projectName.trim() : false}
                     className="px-5 bg-[#f97316] text-black hover:bg-[#ea580c] font-bold"
@@ -4525,7 +4515,7 @@ const WorkspaceFileDialog = ({
                       const isOpen = openTabIds.includes(file.id);
                       const modInfo = modules.find(m => m.id === file.type);
                       return (
-                        <tr key={file.id} className="border-b border-[#181818] hover:bg-[#151515] transition-colors group" onDoubleClick={() => !isOpen && onOpenFile(file.id)}>
+                        <tr data-help-feature="app-asset-open" data-help-source="src/App.tsx" key={file.id} className="border-b border-[#181818] hover:bg-[#151515] transition-colors group" onDoubleClick={() => !isOpen && onOpenFile(file.id)}>
                           <td className="p-3 font-bold text-white truncate max-w-[200px]" title={file.name}>{file.name}</td>
                           <td className="p-3">
                             <span className="px-2 py-0.5 rounded text-[10px] font-bold" style={{ backgroundColor: `${modInfo?.color || '#333'}15`, color: modInfo?.color || '#ccc' }}>
@@ -4541,7 +4531,7 @@ const WorkspaceFileDialog = ({
                           </td>
                           <td className="p-3 text-right space-x-2">
                             {!isOpen && (
-                              <button
+                              <button data-help-feature="app-asset-open" data-help-source="src/App.tsx"
                                 onClick={() => onOpenFile(file.id)}
                                 className="text-xs text-[#f97316] hover:underline"
                               >
@@ -4551,7 +4541,7 @@ const WorkspaceFileDialog = ({
                             {file.id.startsWith('default_') ? (
                               <span className="text-[10px] text-slate-600 font-bold uppercase select-none">System Default</span>
                             ) : (
-                              <button
+                              <button data-help-feature="app-asset-delete" data-help-source="src/App.tsx"
                                 onClick={() => onDeleteFile(file.id)}
                                 className="text-xs text-red-500 hover:text-red-400 hover:underline"
                               >
@@ -4570,7 +4560,7 @@ const WorkspaceFileDialog = ({
 
           {activeTab === 'import' && (
             <div className="space-y-5">
-              <div
+              <div data-help-feature="app-asset-import-tab" data-help-source="src/App.tsx"
                 onClick={() => importInputRef.current?.click()}
                 className="border-2 border-dashed border-[#333] hover:border-[#f97316]/50 rounded-2xl p-10 text-center cursor-pointer transition-all bg-[#0a0a0a]"
               >
@@ -4579,11 +4569,11 @@ const WorkspaceFileDialog = ({
                   ref={importInputRef}
                   onChange={handleFileChange}
                   className="hidden"
-                  accept=".json"
+                  accept=".adia,.json"
                 />
                 <div className="text-4xl mb-4">📥</div>
                 <h3 className="text-sm font-bold text-white">Click to Select Module JSON File</h3>
-                <p className="text-xs text-slate-500 mt-2">Supports files generated by exporting individual modules (e.g. xbridges.json, vlab.json, etc.)</p>
+                <p className="text-xs text-slate-500 mt-2">Supports files generated by exporting individual modules (e.g. xbridges.adia, vlab.adia, etc.)</p>
               </div>
 
               {importedJson && (
@@ -4596,15 +4586,15 @@ const WorkspaceFileDialog = ({
                   </div>
                   <div>
                     <label className="text-xs font-bold text-slate-400 uppercase">Import Asset Tab Name</label>
-                    <Input
+                    <Input data-help-feature="app-asset-name" data-help-source="src/App.tsx"
                       value={importFileName}
                       onChange={e => setImportFileName(e.target.value)}
                       className="w-full mt-1.5 bg-[#111] border-[#222] focus:border-[#f97316] text-white font-mono"
                     />
                   </div>
                   <div className="flex justify-end gap-3 pt-2">
-                    <Button onClick={() => setImportedJson(null)} className="px-5 border border-[#222] bg-transparent text-slate-400 hover:bg-[#111]">Reset</Button>
-                    <Button onClick={handleImportExecute} className="px-5 bg-emerald-600 text-white hover:bg-emerald-700 font-bold">Import Tab</Button>
+                    <Button data-help-feature="app-import-reset" data-help-source="src/App.tsx" onClick={() => setImportedJson(null)} className="px-5 border border-[#222] bg-transparent text-slate-400 hover:bg-[#111]">Reset</Button>
+                    <Button data-help-feature="app-asset-import" data-help-source="src/App.tsx" onClick={handleImportExecute} className="px-5 bg-emerald-600 text-white hover:bg-emerald-700 font-bold">Import Tab</Button>
                   </div>
                 </div>
               )}
@@ -4655,7 +4645,7 @@ const WorkspaceTabBar = ({
           const modInfo = modules.find(m => m.id === file.type);
 
           return (
-            <div
+            <div data-help-feature="app-asset-open" data-help-source="src/App.tsx"
               key={tabId}
               role="tab"
               aria-selected={isActive}
@@ -4672,7 +4662,7 @@ const WorkspaceTabBar = ({
             >
               <span style={{ color: modInfo?.color }}>{modInfo?.icon || '📁'}</span>
               <span className="truncate max-w-[120px]">{file.name}</span>
-              <button
+              <button data-help-feature="app-asset-close" data-help-source="src/App.tsx"
                 onClick={(e) => {
                   e.stopPropagation();
                   onCloseTab(tabId);
@@ -4686,7 +4676,7 @@ const WorkspaceTabBar = ({
           );
         })}
       </div>
-      <button
+      <button data-help-feature="app-asset-manager" data-help-source="src/App.tsx"
         onClick={onOpenDialog}
         className="ui-control ui-focus-ring ml-4 p-1 rounded hover:bg-[var(--surface-raised)] text-[#f97316] transition-colors flex items-center justify-center"
         title="Open Workspace Asset Manager"
@@ -4710,17 +4700,17 @@ const SaveSelectionDialog = ({
   ]);
 
   const modules = [
-    { id: 'unified', name: 'Unified Project File (contains everything in one file)', desc: 'adia_project_unified.json' },
-    { id: 'statemachine', name: 'State Machine Module', desc: 'statemachine.json' },
-    { id: 'bdd', name: 'SysML BDD Module', desc: 'bdd.json' },
-    { id: 'ibd', name: 'SysML IBD Module', desc: 'ibd.json' },
-    { id: 'requirements', name: 'Requirements Module', desc: 'requirements.json' },
-    { id: 'xbridges', name: 'X-Bridges Module', desc: 'xbridges.json' },
-    { id: 'vlab', name: 'V-Lab Physical Model Module', desc: 'vlab.json' },
-    { id: 'hmi', name: 'HMI Dashboard Layout', desc: 'hmi.json' },
-    { id: 'hil', name: 'HIL Configuration', desc: 'hil.json' },
-    { id: 'doe', name: 'DOE RSM Analysis Data', desc: 'doe.json' },
-    { id: 'entropy', name: 'ENTROPY OPM Module', desc: 'entropy.json' },
+    { id: 'unified', name: 'Unified Project File (contains everything in one file)', desc: 'adia_project_unified.adia' },
+    { id: 'statemachine', name: 'State Machine Module', desc: 'statemachine.adia' },
+    { id: 'bdd', name: 'SysML BDD Module', desc: 'bdd.adia' },
+    { id: 'ibd', name: 'SysML IBD Module', desc: 'ibd.adia' },
+    { id: 'requirements', name: 'Requirements Module', desc: 'requirements.adia' },
+    { id: 'xbridges', name: 'X-Bridges Module', desc: 'xbridges.adia' },
+    { id: 'vlab', name: 'V-Lab Physical Model Module', desc: 'vlab.adia' },
+    { id: 'hmi', name: 'HMI Dashboard Layout', desc: 'hmi.adia' },
+    { id: 'hil', name: 'HIL Configuration', desc: 'hil.adia' },
+    { id: 'doe', name: 'DOE RSM Analysis Data', desc: 'doe.adia' },
+    { id: 'entropy', name: 'ENTROPY OPM Module', desc: 'entropy.adia' },
   ];
 
   const handleToggle = (id: string) => {
@@ -4738,11 +4728,11 @@ const SaveSelectionDialog = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 animate-fade-in" onMouseDown={onClose}>
+    <div data-help-feature="live:App:345b43c4fed5" className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 animate-fade-in" onMouseDown={onClose}>
       <div className="bg-[#1a1a1a] border border-[#f97316] rounded-xl w-[500px] max-h-[90vh] flex flex-col shadow-2xl" onMouseDown={(e: React.MouseEvent) => e.stopPropagation()}>
         <div className="h-14 flex items-center justify-between px-6 border-b border-[#222]">
           <h2 className="text-lg font-bold text-[#f97316]">Select Modules to Save</h2>
-          <button
+          <button data-help-feature="app-module-select" data-help-source="src/App.tsx"
             onClick={handleToggleAll}
             className="text-xs text-[#888] hover:text-[#f97316] transition-colors cursor-pointer"
           >
@@ -4758,7 +4748,7 @@ const SaveSelectionDialog = ({
                 key={m.id}
                 className="flex items-start gap-3 p-2 rounded hover:bg-[#222]/50 cursor-pointer transition-colors"
               >
-                <input
+                <input data-help-feature="app-module-select" data-help-source="src/App.tsx"
                   type="checkbox"
                   checked={selectedKeys.includes(m.id)}
                   onChange={() => handleToggle(m.id)}
@@ -4774,13 +4764,13 @@ const SaveSelectionDialog = ({
         </div>
 
         <div className="h-16 flex items-center justify-end px-6 border-t border-[#222] gap-3">
-          <Button
+          <Button data-help-feature="app-dialog-close" data-help-source="src/App.tsx"
             onClick={onClose}
             className="px-4 py-2 border border-[#333] bg-transparent text-white hover:bg-[#222]"
           >
             Cancel
           </Button>
-          <Button
+          <Button data-help-feature="app-module-export" data-help-source="src/App.tsx"
             onClick={() => onSave(selectedKeys)}
             disabled={selectedKeys.length === 0}
             className="px-5 py-2 bg-[#f97316] text-[#0a0a0a] font-bold hover:bg-[#ea580c] disabled:opacity-50"
@@ -4810,7 +4800,7 @@ const TickRateInput = ({ value, onChange }: { value: number, onChange: (val: num
   };
 
   return (
-    <Input
+    <Input data-help-feature="app-tick" data-help-source="src/App.tsx"
       type="text"
       value={localValue}
       onChange={(e) => setLocalValue(e.target.value)}
@@ -4882,7 +4872,7 @@ const ManualEntryTable = ({
       <div className="flex items-center justify-between px-3 py-2 border-b border-[#27272f] bg-[#141417]">
         <span className="text-xs font-bold uppercase tracking-wider text-zinc-400">Experiment Data</span>
         <div className="flex gap-2">
-          <Button
+          <Button data-help-feature="app-table-add-factor" data-help-source="src/App.tsx"
             size="sm"
             variant="ghost"
             onClick={addFactor}
@@ -4890,7 +4880,7 @@ const ManualEntryTable = ({
           >
             <Plus size={12} className="mr-1 text-zinc-400" /> Factor
           </Button>
-          <Button
+          <Button data-help-feature="app-table-add-row" data-help-source="src/App.tsx"
             size="sm"
             variant="ghost"
             onClick={addRow}
@@ -4900,7 +4890,7 @@ const ManualEntryTable = ({
           </Button>
         </div>
       </div>
-      <div className="flex-1 overflow-auto custom-scrollbar" onPaste={handlePaste}>
+      <div data-help-feature="live:App:f197a9653268" className="flex-1 overflow-auto custom-scrollbar" onPaste={handlePaste}>
         <table className="w-full text-xs text-left border-collapse">
           <thead className="sticky top-0 bg-[#1a1a1a] z-10 shadow-sm">
             <tr>
@@ -4919,7 +4909,7 @@ const ManualEntryTable = ({
                 <td className="p-2 text-center text-[#444]">{rIdx + 1}</td>
                 {row.map((cell, cIdx) => (
                   <td key={cIdx} className="p-0 border-r border-[#1a1a1a]">
-                    <input
+                    <input data-help-feature="app-table-cell" data-help-source="src/App.tsx"
                       type="number"
                       value={cell}
                       onChange={(e) => updateCell(rIdx, cIdx, e.target.value)}
@@ -4928,7 +4918,7 @@ const ManualEntryTable = ({
                   </td>
                 ))}
                 <td className="p-1">
-                  <button onClick={() => removeRow(rIdx)} className="text-red-500/50 hover:text-red-500 p-1 transition-colors">
+                  <button data-help-feature="app-table-remove-row" data-help-source="src/App.tsx" onClick={() => removeRow(rIdx)} className="text-red-500/50 hover:text-red-500 p-1 transition-colors">
                     <Trash2 size={12} />
                   </button>
                 </td>
@@ -4956,596 +4946,6 @@ const ALL_MODULES = [
   { id: 'hil', label: 'HIL' },
   { id: 'entropy', label: 'ENTROPY OPM' },
 ] as const;
-
-const DynamicIcon = ({ name, size, className }: { name?: string; size: number; className?: string }) => {
-  switch (name) {
-    case 'activity': return <Activity size={size} className={className} />;
-    case 'zap': return <Zap size={size} className={className} />;
-    case 'cpu': return <Cpu size={size} className={className} />;
-    case 'layers': return <Layers size={size} className={className} />;
-    case 'database': return <Database size={size} className={className} />;
-    case 'network': return <Network size={size} className={className} />;
-    case 'plus': return <Plus size={size} className={className} />;
-    case 'resistor': return <Zap size={size} className={className} />;
-    case 'capacitor': return <Layers size={size} className={className} />;
-    case 'inductor': return <Activity size={size} className={className} />;
-    case 'dc_motor': return <Cpu size={size} className={className} />;
-    case 'inertia': return <Database size={size} className={className} />;
-    case 'mass': return <Box size={size} className={className} />;
-    case 'trans_spring': return <Rows size={size} className={className} />;
-    case 'scope': return <Activity size={size} className={className} />;
-    case 'settings-2': return <Settings2 size={size} className={className} />;
-    case 'magnetron': return <Zap size={size} className={className} />;
-    case 'heater': return <Flame size={size} className={className} />;
-    case 'cavity': return <Box size={size} className={className} />;
-    case 'inverter': return <RefreshCcw size={size} className={className} />;
-    case 'gas_chamber': return <Wind size={size} className={className} />;
-    case 'ma_chamber': return <Cloud size={size} className={className} />;
-    case 'reluctance': return <Activity size={size} className={className} />;
-    case 'doe_model': return <Database size={size} className={className} />;
-    default: return <Box size={size} className={className} />;
-  }
-};
-
-const HelpModal = ({ isOpen, onClose, initialTopic }: { isOpen: boolean; onClose: () => void; initialTopic?: string }) => {
-  const [activeTopic, setActiveTopic] = useState<string>(initialTopic || "getting-started");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [showBlockRef, setShowBlockRef] = useState(false);
-  const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
-  const [selectedDomainFilter, setSelectedDomainFilter] = useState<string>("All");
-  const [selectedSourceFilter, setSelectedSourceFilter] = useState<string>("All");
-  const [showArchitectureExplorer, setShowArchitectureExplorer] = useState(false);
-
-  useEffect(() => {
-    if (initialTopic && isOpen) {
-      setActiveTopic(initialTopic);
-      setShowBlockRef(false);
-      setShowArchitectureExplorer(false);
-    }
-  }, [initialTopic, isOpen]);
-
-  if (!isOpen) return null;
-
-  const topic = HELP_DATA[activeTopic] || HELP_DATA["getting-started"];
-
-  // Categories for Help Topics
-  const topicCategories: Record<string, string[]> = {};
-  Object.keys(HELP_DATA).forEach(key => {
-    const cat = HELP_DATA[key].category;
-    if (!topicCategories[cat]) topicCategories[cat] = [];
-    topicCategories[cat].push(key);
-  });
-
-  // Flattened library for search
-  const vlabBlocks = VLAB_LIBRARY.flatMap(domain =>
-    domain.blocks.map(b => ({ ...b, domain: domain.type, source: 'V-Lab' }))
-  );
-
-  const xbridgesBlocks = Object.keys(XBRIDGES_LIBRARY).map(key => {
-    try {
-      const b = XBRIDGES_LIBRARY[key]('tmp', {});
-      return {
-        id: key,
-        name: key,
-        domain: 'Control',
-        source: 'X-Bridges',
-        params: b.params,
-        ports: [...(b.inputs || []), ...(b.outputs || [])],
-        icon: b.icon,
-        equation: b.equation,
-        description: b.description
-      };
-    } catch(e) {
-      return { id: key, name: key, domain: 'Control', source: 'X-Bridges', params: {}, ports: [], icon: undefined, equation: undefined, description: undefined };
-    }
-  });
-
-  const allBlocks = [...vlabBlocks, ...xbridgesBlocks];
-
-  const domainsList = ["All", ...Array.from(new Set(allBlocks.map(b => b.domain)))];
-
-  const filteredBlocks = allBlocks
-    .map(b => {
-      const q = searchQuery.toLowerCase().trim();
-      const name = b.name.toLowerCase();
-      const id = b.id.toLowerCase();
-      const domain = b.domain.toLowerCase();
-      const desc = (b.description || '').toLowerCase();
-      const eq = (b.equation || '').toLowerCase();
-
-      let score = 0;
-      if (!q) {
-        score = 1;
-      } else if (name === q || id === q) {
-        score = 1000;
-      } else if (name.startsWith(q) || id.startsWith(q)) {
-        score = 800;
-      } else if (name.includes(q) || id.includes(q)) {
-        score = 600;
-      } else if (domain.includes(q)) {
-        score = 400;
-      } else if (desc.includes(q) || eq.includes(q)) {
-        score = 100;
-      }
-
-      const matchesDomain = selectedDomainFilter === "All" || b.domain.toLowerCase() === selectedDomainFilter.toLowerCase();
-      const matchesSource = selectedSourceFilter === "All" || b.source.toLowerCase() === selectedSourceFilter.toLowerCase();
-
-      return { block: b, score, match: score > 0 && matchesDomain && matchesSource };
-    })
-    .filter(item => item.match)
-    .sort((a, b) => b.score - a.score)
-    .map(item => item.block);
-
-  const selectedBlock = allBlocks.find(b => b.id === selectedBlockId);
-
-  const getDomainColor = (domain: string) => {
-    const d = domain.toLowerCase();
-    if (d.includes('electr')) return 'text-cyan-400 bg-cyan-500/10 border-cyan-500/30';
-    if (d.includes('mechanic') || d.includes('rotat') || d.includes('translat')) return 'text-amber-400 bg-amber-500/10 border-amber-500/30';
-    if (d.includes('therm')) return 'text-red-400 bg-red-500/10 border-red-500/30';
-    if (d.includes('magnet')) return 'text-purple-400 bg-purple-500/10 border-purple-500/30';
-    if (d.includes('gas') || d.includes('fluid') || d.includes('air')) return 'text-sky-400 bg-sky-500/10 border-sky-500/30';
-    if (d.includes('control')) return 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30';
-    return 'text-orange-400 bg-orange-500/10 border-orange-500/30';
-  };
-
-  return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/95 backdrop-blur-3xl p-6 md:p-10 text-white font-sans">
-      <div className="bg-[#0f0f0f] rounded-3xl border border-white/10 w-full h-full max-w-7xl flex flex-col shadow-[0_0_150px_rgba(0,0,0,0.8)] overflow-hidden">
-
-        {/* TOP HEADER */}
-        <header className="h-20 border-b border-white/5 flex items-center justify-between px-8 md:px-10 bg-[#151515]/50 backdrop-blur-xl shrink-0">
-          <div className="flex items-center gap-6 md:gap-8">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-orange-500 to-red-600 rounded-xl flex items-center justify-center font-black text-xl shadow-[0_0_20px_rgba(249,115,22,0.3)]">A</div>
-              <div className="flex flex-col">
-                <span className="font-black tracking-tight text-xl leading-none">ADIA <span className="text-orange-500">DOCS</span></span>
-                <span className="text-[9px] text-gray-500 font-bold uppercase tracking-[0.2em] mt-1">Multi-Domain MBD & HIL Reference</span>
-              </div>
-            </div>
-
-            <div className="h-10 w-[1px] bg-white/10 hidden sm:block"></div>
-
-            <div className="flex bg-black/40 p-1 rounded-xl border border-white/5">
-              <button
-                onClick={() => setShowBlockRef(false)}
-                className={`px-5 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${!showBlockRef ? 'bg-orange-500 text-black shadow-lg shadow-orange-500/20' : 'text-gray-500 hover:text-white'}`}
-              >
-                User Guide & Modules
-              </button>
-              <button
-                onClick={() => setShowBlockRef(true)}
-                className={`px-5 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${showBlockRef ? 'bg-orange-500 text-black shadow-lg shadow-orange-500/20' : 'text-gray-500 hover:text-white'}`}
-              >
-                Illustrated Block Reference ({allBlocks.length})
-              </button>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-4 md:gap-6">
-            <div className="relative group">
-              <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-orange-500 transition-colors">
-                <Search size={16} />
-              </div>
-              <input
-                type="text"
-                placeholder={showBlockRef ? "Search 250+ blocks, equations, ports..." : "Search documentation topics & guides..."}
-                className="bg-black/60 border border-white/10 rounded-full py-2.5 pl-12 pr-6 text-xs w-64 md:w-80 focus:outline-none focus:border-orange-500/50 focus:ring-1 focus:ring-orange-500/20 transition-all font-medium"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-            <button
-              onClick={onClose}
-              className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-white/5 hover:bg-red-500/20 hover:text-red-500 flex items-center justify-center transition-all group shrink-0"
-              title="Close Help"
-            >
-              <X size={22} className="group-hover:rotate-90 transition-transform" />
-            </button>
-          </div>
-        </header>
-
-        <div className="flex flex-1 overflow-hidden">
-
-          {/* SIDEBAR */}
-          <aside className="w-80 border-r border-white/5 bg-[#0a0a0a] flex flex-col shrink-0">
-            {showBlockRef && (
-              <div className="p-4 border-b border-white/5 bg-[#121212]/80 space-y-3 shrink-0">
-                {/* Engine Filter */}
-                <div className="flex items-center gap-1.5 bg-black/50 p-1 rounded-lg border border-white/5 text-[9px] font-bold">
-                  {["All", "V-Lab", "X-Bridges"].map(src => (
-                    <button
-                      key={src}
-                      onClick={() => setSelectedSourceFilter(src)}
-                      className={`flex-1 py-1 rounded text-center transition-all ${selectedSourceFilter === src ? 'bg-orange-500 text-black font-black' : 'text-gray-400 hover:text-white'}`}
-                    >
-                      {src}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Domain Selector */}
-                <div className="flex items-center gap-1 overflow-x-auto custom-scrollbar pb-1">
-                  {domainsList.slice(0, 8).map(d => (
-                    <button
-                      key={d}
-                      onClick={() => setSelectedDomainFilter(d)}
-                      className={`px-2 py-1 rounded text-[8px] font-bold uppercase whitespace-nowrap transition-all ${selectedDomainFilter === d ? 'bg-orange-500/20 text-orange-400 border border-orange-500/40' : 'bg-white/5 text-gray-500 hover:text-gray-300'}`}
-                    >
-                      {d}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
-              {!showBlockRef ? (
-                /* DOCUMENTATION TREE */
-                <div className="space-y-8">
-                  {Object.keys(topicCategories).map(cat => (
-                    <div key={cat}>
-                      <h4 className="text-[10px] font-black text-gray-600 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
-                        <div className="w-1.5 h-1.5 rounded-full bg-orange-500"></div>
-                        {cat}
-                      </h4>
-                      <ul className="space-y-1">
-                        {topicCategories[cat].map(key => (
-                          <li key={key}>
-                            <button
-                              onClick={() => setActiveTopic(key)}
-                              className={`w-full text-left px-4 py-2.5 rounded-xl text-xs transition-all flex items-center gap-3 ${activeTopic === key ? 'bg-orange-500/10 text-orange-500 font-bold border border-orange-500/20' : 'text-gray-500 hover:bg-white/5 hover:text-gray-300'}`}
-                            >
-                              <BookOpen size={14} className={activeTopic === key ? 'text-orange-500' : 'text-gray-700'} />
-                              {HELP_DATA[key].title}
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                /* BLOCK LIBRARY TREE */
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between mb-3 text-[10px] font-black text-gray-600 uppercase tracking-[0.2em]">
-                    <span>Components ({filteredBlocks.length})</span>
-                    {selectedDomainFilter !== "All" && (
-                      <button onClick={() => setSelectedDomainFilter("All")} className="text-orange-500 hover:underline">Reset</button>
-                    )}
-                  </div>
-                  {filteredBlocks.map(block => (
-                    <button
-                      key={block.id}
-                      onClick={() => setSelectedBlockId(block.id)}
-                      className={`w-full text-left px-3.5 py-2.5 rounded-xl text-[11px] transition-all flex items-center justify-between group ${selectedBlockId === block.id ? 'bg-orange-500 text-black font-black shadow-md shadow-orange-500/20' : 'text-gray-400 hover:bg-white/5'}`}
-                    >
-                      <div className="flex items-center gap-2.5 truncate">
-                        <Box size={13} className={selectedBlockId === block.id ? 'text-black' : 'text-gray-600'} />
-                        <span className="truncate">{block.name}</span>
-                      </div>
-                      <span className={`text-[8px] uppercase font-black px-1.5 py-0.5 rounded shrink-0 ml-2 ${selectedBlockId === block.id ? 'bg-black/20 text-black' : 'bg-white/5 text-gray-500'}`}>
-                        {block.domain}
-                      </span>
-                    </button>
-                  ))}
-                  {filteredBlocks.length === 0 && (
-                    <div className="p-6 text-center text-xs text-gray-600 italic">
-                      No blocks match your search or filter.
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </aside>
-
-          {/* MAIN CONTENT AREA */}
-          <main className="flex-1 overflow-y-auto bg-[#0a0a0a] p-10 md:p-14 custom-scrollbar relative">
-            {!showBlockRef ? (
-              /* TOPIC VIEW */
-              <div className="max-w-4xl mx-auto">
-                {activeTopic === 'software-architecture' && showArchitectureExplorer ? (
-                  <SoftwareArchitectureExplorer onClose={() => setShowArchitectureExplorer(false)} />
-                ) : <>
-                <div className="mb-14">
-                  <nav className="flex items-center gap-3 text-[10px] font-bold text-gray-600 uppercase tracking-widest mb-6">
-                    <span className="hover:text-orange-500 cursor-pointer" onClick={() => setActiveTopic("getting-started")}>ADIA Docs</span>
-                    <ChevronRight size={10} />
-                    <span className="text-gray-400">{topic.category}</span>
-                    <ChevronRight size={10} />
-                    <span className="text-white">{topic.title}</span>
-                  </nav>
-
-                <h1 className="text-5xl font-black text-white tracking-tighter mb-4 leading-tight">
-                    {topic.title}
-                  </h1>
-                  <p className="text-lg text-gray-400 leading-relaxed font-light max-w-3xl">
-                    {topic.description}
-                  </p>
-                </div>
-
-                {activeTopic === 'software-architecture' && (
-                  <button onClick={() => setShowArchitectureExplorer(true)} className="mb-10 flex items-center gap-3 rounded-xl border border-orange-500/40 bg-orange-500/10 px-5 py-3 text-sm font-bold text-orange-400 hover:bg-orange-500/20">
-                    <Layers size={18} /> Open Architecture Explorer
-                  </button>
-                )}
-
-                {topic.image && (
-                  <div className="mb-14 rounded-3xl overflow-hidden border border-white/10 shadow-2xl group relative bg-black/40">
-                    <img src={topic.image} alt={topic.title} className="w-full object-cover group-hover:scale-105 transition-transform duration-700 max-h-[380px]" />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent"></div>
-                    <div className="absolute bottom-6 left-6 flex items-center gap-3">
-                      <div className="p-2 bg-orange-500 rounded-lg text-black"><Activity size={16} /></div>
-                      <span className="text-xs font-black uppercase tracking-widest text-white shadow-sm">Illustrated Architecture Diagram</span>
-                    </div>
-                  </div>
-                )}
-
-                <div className="prose prose-invert max-w-none">
-                  <div className="text-gray-300 leading-relaxed text-base mb-14 font-light bg-white/[0.02] p-8 rounded-3xl border border-white/5">
-                    {topic.content}
-                  </div>
-
-                  <div className="space-y-16">
-                    {topic.sections?.map((section, idx) => (
-                      <section key={idx} className="relative pl-10 border-l-2 border-white/10 group">
-                        <div className="absolute left-[-7px] top-1 w-3 h-3 rounded-full bg-white/20 group-hover:bg-orange-500 transition-colors shadow-[0_0_15px_rgba(255,255,255,0.1)] group-hover:shadow-orange-500/50"></div>
-                        <h2 className="text-2xl font-black text-white mb-4 tracking-tight flex items-center gap-3">
-                          {section.title}
-                        </h2>
-                        <div className="text-gray-400 leading-relaxed mb-6 whitespace-pre-wrap font-light text-sm">
-                          {section.body}
-                        </div>
-
-                        {section.list && (
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6">
-                            {section.list.map((item, i) => (
-                              <div key={i} className="flex items-start gap-3 p-4 bg-white/[0.02] border border-white/5 rounded-2xl">
-                                <div className="w-1.5 h-1.5 rounded-full bg-orange-500 mt-1.5 shrink-0"></div>
-                                <span className="text-xs text-gray-300 font-light leading-relaxed">{renderFormattedHelpText(item)}</span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-
-                        {section.code && (
-                          <div className="relative group/code mt-6">
-                            <div className="absolute right-4 top-3 text-[9px] font-black text-white/30 uppercase tracking-widest">Mathematical / Code Formulation</div>
-                            <div className="bg-black/90 rounded-2xl border border-white/10 p-6 font-mono text-xs text-orange-400 overflow-x-auto shadow-inner">
-                              <pre className="m-0">{section.code}</pre>
-                            </div>
-                          </div>
-                        )}
-                      </section>
-                    ))}
-                  </div>
-
-                  {topic.related && (
-                    <div className="mt-24 pt-12 border-t border-white/5">
-                      <h3 className="text-[10px] font-black text-gray-600 uppercase tracking-[0.3em] mb-8">Related Modules & Deep Dives</h3>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        {topic.related.map(key => (
-                          <button
-                            key={key}
-                            onClick={() => setActiveTopic(key)}
-                            className="p-6 bg-[#151515] border border-white/5 rounded-3xl hover:border-orange-500/40 transition-all text-left group hover:-translate-y-1"
-                          >
-                            <span className="text-[9px] text-orange-500 uppercase font-black block mb-1.5 tracking-widest">{HELP_DATA[key]?.category}</span>
-                            <span className="text-sm font-bold text-white group-hover:text-orange-500 transition-colors block leading-tight">{HELP_DATA[key]?.title}</span>
-                            <div className="mt-3 flex items-center gap-1.5 text-[9px] font-bold text-gray-500 group-hover:text-gray-300 transition-colors">
-                              Explore Guide <ChevronRight size={10} />
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-                </>}
-              </div>
-            ) : (
-              /* BLOCK REFERENCE VIEW */
-              <div className="max-w-4xl mx-auto">
-                {selectedBlock ? (
-                  <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-                    {/* Header */}
-                    <div className="flex items-start justify-between mb-12 border-b border-white/5 pb-8">
-                      <div className="flex flex-col">
-                        <div className="flex items-center gap-4 mb-3">
-                          <div className="p-3.5 bg-orange-500 rounded-2xl text-black shadow-xl shadow-orange-500/20">
-                            <DynamicIcon name={selectedBlock.icon} size={28} />
-                          </div>
-                          <div>
-                            <h1 className="text-4xl font-black text-white tracking-tighter">{selectedBlock.name}</h1>
-                            <div className="flex items-center gap-2.5 mt-1.5">
-                              <span className="px-3 py-0.5 bg-white/5 border border-white/10 rounded-full text-[9px] font-black text-gray-400 uppercase tracking-widest">{selectedBlock.source} Component</span>
-                              <span className={`px-3 py-0.5 border rounded-full text-[9px] font-black uppercase tracking-widest ${getDomainColor(selectedBlock.domain)}`}>
-                                {selectedBlock.domain} Domain
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-[9px] font-black text-gray-600 uppercase tracking-widest mb-1">Catalog Status</div>
-                        <div className="text-emerald-400 font-bold text-xs flex items-center gap-1.5 justify-end">
-                          <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></div>
-                          Full Physics & Port Verified
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                      {/* Left Column: Pinout & Parameters */}
-                      <div className="space-y-8">
-                        <section>
-                          <h3 className="text-xs font-black text-gray-400 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
-                            <Box size={14} className="text-orange-500" />
-                            Schematic Terminal Interface
-                          </h3>
-                          <div className="bg-black/60 rounded-3xl border border-white/5 p-6 relative flex flex-col items-center justify-center min-h-[260px] shadow-inner">
-                            {/* Block Visualization */}
-                            <div className="w-36 h-36 bg-orange-500/5 border-2 border-orange-500/30 rounded-3xl flex flex-col items-center justify-center relative shadow-[0_0_50px_rgba(249,115,22,0.1)] group">
-                              <DynamicIcon name={selectedBlock.icon} size={40} className="text-orange-500 mb-1" />
-                              <span className="text-[10px] font-black text-white/80 max-w-[100px] text-center truncate px-1">{selectedBlock.name}</span>
-
-                              {/* Port Pins */}
-                              {selectedBlock.ports?.map((p: any, i: number) => {
-                                const pos = p.position || (i % 2 === 0 ? 'left' : 'right');
-                                return (
-                                  <div
-                                    key={i}
-                                    className={`absolute text-[8px] font-black uppercase text-gray-400 flex items-center gap-1 ${pos === 'left' ? '-left-14' : pos === 'right' ? '-right-14' : pos === 'top' ? '-top-8' : '-bottom-8'}`}
-                                  >
-                                    <span className="px-1 py-0.5 bg-black/80 rounded border border-white/10 text-orange-400/90">{p.label || p.name || `Pin ${i+1}`}</span>
-                                    <div className={`w-2.5 h-2.5 rounded-full border-2 border-orange-500 bg-black ${pos === 'left' ? 'order-last' : 'order-first'}`}></div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                            <span className="text-[9px] text-gray-600 font-bold uppercase tracking-widest mt-6">
-                              {selectedBlock.ports?.length || 2} Connected Terminals ({selectedBlock.source === 'V-Lab' ? 'Acausal Energy Ports' : 'Causal Signal Ports'})
-                            </span>
-                          </div>
-                        </section>
-
-                        <section>
-                          <h3 className="text-xs font-black text-gray-400 uppercase tracking-[0.2em] mb-4">
-                            Configurable Parameters
-                          </h3>
-                          <div className="space-y-2.5">
-                            {Object.entries(selectedBlock.params || {}).map(([key, p]: [string, any]) => (
-                              <div key={key} className="flex items-center justify-between p-3.5 bg-white/[0.02] border border-white/5 rounded-2xl hover:bg-white/[0.04] transition-colors">
-                                <div className="flex flex-col">
-                                  <span className="text-[11px] font-bold text-white">{p.label || key}</span>
-                                  <span className="text-[9px] text-gray-600 font-mono">{key}</span>
-                                </div>
-                                <div className="text-right">
-                                  <span className="text-xs font-bold text-orange-400 font-mono">{String(p.value ?? p.default ?? '0')}</span>
-                                  <span className="text-[9px] text-gray-500 ml-1.5 uppercase font-bold">{p.unit || ''}</span>
-                                </div>
-                              </div>
-                            ))}
-                            {Object.keys(selectedBlock.params || {}).length === 0 && (
-                              <div className="p-6 text-center text-xs text-gray-600 italic bg-white/[0.01] border border-dashed border-white/10 rounded-2xl">
-                                Standard ideal component with fixed internal characteristics.
-                              </div>
-                            )}
-                          </div>
-                        </section>
-                      </div>
-
-                      {/* Right Column: Execution, Equations, and How-To-Use */}
-                      <div className="space-y-8">
-                        <section>
-                          <h3 className="text-xs font-black text-gray-400 uppercase tracking-[0.2em] mb-4">
-                            Governing Physics & Transfer Equations
-                          </h3>
-                          <div className="bg-black/60 rounded-3xl border border-white/5 p-6">
-                            <p className="text-xs text-gray-400 leading-relaxed font-light mb-4">
-                              {selectedBlock.description || "This component participates in continuous simulation through simultaneous differential-algebraic equations solved by the numerical solver."}
-                            </p>
-                            <div className="bg-orange-500/5 p-5 rounded-2xl border border-orange-500/20">
-                              <h4 className="text-[9px] font-black text-orange-500 uppercase tracking-widest mb-2">Mathematical Formulation</h4>
-                              <div className="font-mono text-xs text-white/90 italic whitespace-pre-wrap leading-relaxed">
-                                {selectedBlock.equation || (selectedBlock.domain === 'Electrical' ? 'V_p - V_n = I * R' : selectedBlock.domain === 'Mechanical' ? 'F = m * dv/dt + B * v' : 'Y = f(U)')}
-                              </div>
-                            </div>
-                          </div>
-                        </section>
-
-                        <section>
-                          <h3 className="text-xs font-black text-gray-400 uppercase tracking-[0.2em] mb-4">
-                            How to Use & Button Steps in Canvas
-                          </h3>
-                          <div className="p-6 bg-gradient-to-br from-white/[0.03] to-transparent border border-white/10 rounded-3xl space-y-3 text-xs text-gray-300 font-light">
-                            <div className="flex items-start gap-2.5">
-                              <span className="w-5 h-5 rounded-full bg-orange-500/20 text-orange-400 flex items-center justify-center font-bold text-[10px] shrink-0">1</span>
-                              <span>Click and drag <b>{selectedBlock.name}</b> from the left component panel onto the canvas.</span>
-                            </div>
-                            <div className="flex items-start gap-2.5">
-                              <span className="w-5 h-5 rounded-full bg-orange-500/20 text-orange-400 flex items-center justify-center font-bold text-[10px] shrink-0">2</span>
-                              <span>Drag connection wires between terminal pins matching the <b>{selectedBlock.domain}</b> domain.</span>
-                            </div>
-                            <div className="flex items-start gap-2.5">
-                              <span className="w-5 h-5 rounded-full bg-orange-500/20 text-orange-400 flex items-center justify-center font-bold text-[10px] shrink-0">3</span>
-                              <span>Double-click the block on the canvas to open the sidebar parameters editor.</span>
-                            </div>
-                            <div className="flex items-start gap-2.5">
-                              <span className="w-5 h-5 rounded-full bg-orange-500/20 text-orange-400 flex items-center justify-center font-bold text-[10px] shrink-0">4</span>
-                              <span>Click <b>Start Simulation</b> in the top toolbar to execute real-time solver steps.</span>
-                            </div>
-                          </div>
-                        </section>
-
-                        <section>
-                          <button
-                            onClick={() => {
-                              setShowBlockRef(false);
-                              if (selectedBlock.source === 'V-Lab') {
-                                setActiveTopic('vlab-fundamentals');
-                              } else {
-                                setActiveTopic('xbridges-ref');
-                              }
-                            }}
-                            className="w-full py-3.5 bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 border border-orange-500/30 rounded-2xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all group"
-                          >
-                            <span>Read Full {selectedBlock.source} Theory Guide</span>
-                            <ChevronRight size={14} className="group-hover:translate-x-1 transition-transform" />
-                          </button>
-                        </section>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="h-[60vh] flex flex-col items-center justify-center text-center">
-                    <div className="w-20 h-20 bg-white/[0.03] rounded-full flex items-center justify-center mb-6 border border-white/5">
-                      <Search size={32} className="text-gray-600" />
-                    </div>
-                    <h2 className="text-2xl font-black text-white tracking-tight mb-2">Explore the Multi-Domain Block Catalog</h2>
-                    <p className="text-gray-500 max-w-md leading-relaxed text-xs font-light mb-6">
-                      Select any physical component or control block from the sidebar to inspect its electrical/mechanical pinouts, transfer equations, parameters, and step-by-step canvas usage.
-                    </p>
-                    <div className="flex flex-wrap gap-2 justify-center max-w-lg">
-                      {["Resistor", "Capacitor", "Inertia", "DC Voltage Source", "PID Controller", "Clarke Transform", "BLDC Motor"].map(sample => {
-                        const target = allBlocks.find(b => b.name.toLowerCase().includes(sample.toLowerCase()));
-                        return target ? (
-                          <button
-                            key={sample}
-                            onClick={() => setSelectedBlockId(target.id)}
-                            className="px-3 py-1.5 bg-white/5 hover:bg-orange-500/10 hover:text-orange-400 border border-white/10 rounded-xl text-[10px] font-bold text-gray-400 transition-colors"
-                          >
-                            {sample}
-                          </button>
-                        ) : null;
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </main>
-        </div>
-
-        {/* FOOTER */}
-        <footer className="h-14 border-t border-white/5 bg-[#111] flex items-center justify-between px-8 md:px-10 shrink-0">
-          <div className="flex items-center gap-6">
-            <span className="text-[9px] text-gray-600 font-black uppercase tracking-widest">ADIA Model-Based Design Engineering Suite</span>
-            <div className="h-4 w-[1px] bg-white/5"></div>
-            <div className="flex gap-4">
-              <span className="text-[9px] text-gray-500 font-bold uppercase">250+ Multi-Domain Blocks Verified</span>
-              <span className="text-[9px] text-gray-500 font-bold uppercase">HIL Real-Time Driver Ready</span>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="text-[9px] text-gray-600 font-bold">Press <kbd className="px-1.5 py-0.5 bg-white/10 rounded text-white font-mono text-[8px]">Esc</kbd> to exit</span>
-          </div>
-        </footer>
-      </div>
-    </div>
-  );
-};
 
 const ReportPreviewModal = ({
   isOpen,
@@ -5627,14 +5027,14 @@ const ReportPreviewModal = ({
           </div>
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-1 bg-[#1a1a1a] rounded-lg p-1 border border-[#333]">
-              <button
+              <button data-help-feature="app-report-layout" data-help-source="src/App.tsx"
                 onClick={() => setLayout('1-col')}
                 className={`p-1.5 rounded transition-colors ${layout === '1-col' ? 'bg-[#333] text-white' : 'text-gray-500 hover:text-gray-300'}`}
                 title="1 Column Layout"
               >
                 <Rows size={16} />
               </button>
-              <button
+              <button data-help-feature="app-report-layout" data-help-source="src/App.tsx"
                 onClick={() => setLayout('2-col')}
                 className={`p-1.5 rounded transition-colors ${layout === '2-col' ? 'bg-[#333] text-white' : 'text-gray-500 hover:text-gray-300'}`}
                 title="2 Columns Grid"
@@ -5643,13 +5043,13 @@ const ReportPreviewModal = ({
               </button>
             </div>
 
-            <Button size="sm" onClick={exportToPDF} className="bg-red-600 hover:bg-red-700 text-white border-0">
+            <Button data-help-feature="app-report-pdf" data-help-source="src/App.tsx" size="sm" onClick={exportToPDF} className="bg-red-600 hover:bg-red-700 text-white border-0">
               <Download size={14} className="mr-2" /> PDF
             </Button>
-            <Button size="sm" onClick={exportToWord} className="bg-orange-600 hover:bg-orange-700 text-white border-0">
+            <Button data-help-feature="app-report-word" data-help-source="src/App.tsx" size="sm" onClick={exportToWord} className="bg-orange-600 hover:bg-orange-700 text-white border-0">
               <Download size={14} className="mr-2" /> Word (.doc)
             </Button>
-            <button onClick={onClose} className="p-2 text-gray-400 hover:text-white rounded-full hover:bg-white/10 transition-colors">
+            <button data-help-feature="app-dialog-close" data-help-source="src/App.tsx" onClick={onClose} className="p-2 text-gray-400 hover:text-white rounded-full hover:bg-white/10 transition-colors">
               <X size={20} />
             </button>
           </div>
@@ -5858,14 +5258,14 @@ const GlobalReportPreviewModal = ({
           </div>
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-1 bg-[#1a1a1a] rounded-lg p-1 border border-[#333]">
-              <button
+              <button data-help-feature="app-report-layout" data-help-source="src/App.tsx"
                 onClick={() => setLayout('1-col')}
                 className={`p-1.5 rounded transition-colors ${layout === '1-col' ? 'bg-[#333] text-white' : 'text-gray-500 hover:text-gray-300'}`}
                 title="1 Column Layout"
               >
                 <Rows size={16} />
               </button>
-              <button
+              <button data-help-feature="app-report-layout" data-help-source="src/App.tsx"
                 onClick={() => setLayout('2-col')}
                 className={`p-1.5 rounded transition-colors ${layout === '2-col' ? 'bg-[#333] text-white' : 'text-gray-500 hover:text-gray-300'}`}
                 title="2 Columns Grid"
@@ -5874,13 +5274,13 @@ const GlobalReportPreviewModal = ({
               </button>
             </div>
 
-            <Button size="sm" onClick={exportToHTML} className="bg-emerald-600 hover:bg-emerald-700 text-white border-0">
+            <Button data-help-feature="app-report-html" data-help-source="src/App.tsx" size="sm" onClick={exportToHTML} className="bg-emerald-600 hover:bg-emerald-700 text-white border-0">
               <Download size={14} className="mr-2" /> HTML
             </Button>
-            <Button size="sm" onClick={exportToWord} className="bg-orange-600 hover:bg-orange-700 text-white border-0">
+            <Button data-help-feature="app-report-word" data-help-source="src/App.tsx" size="sm" onClick={exportToWord} className="bg-orange-600 hover:bg-orange-700 text-white border-0">
               <Download size={14} className="mr-2" /> Word (.doc)
             </Button>
-            <button onClick={onClose} className="p-2 text-gray-400 hover:text-white rounded-full hover:bg-white/10 transition-colors">
+            <button data-help-feature="app-dialog-close" data-help-source="src/App.tsx" onClick={onClose} className="p-2 text-gray-400 hover:text-white rounded-full hover:bg-white/10 transition-colors">
               <X size={20} />
             </button>
           </div>
@@ -6313,11 +5713,15 @@ const ADIA = () => {
 
 
   const [helpInitialTopic, setHelpInitialTopic] = useState<string>("getting-started");
+  const [helpInitialSection, setHelpInitialSection] = useState<string | undefined>();
 
-  const handleOpenHelp = useCallback((topic?: string) => {
-    setHelpInitialTopic(topic || (diagramMode === 'entropy' ? 'entropy-opm' : 'getting-started'));
+  const handleOpenHelp = useCallback((topic?: string, section?: string) => {
+    setHelpInitialTopic(topic || resolveModuleHelp(diagramMode));
+    setHelpInitialSection(section);
     setShowHelpModal(true);
   }, [diagramMode]);
+
+  useContextualHelp(diagramMode, handleOpenHelp);
 
   const [activePropTab, setActivePropTab] = useState<'general' | 'assign' | 'governance'>('general');
 
@@ -7585,7 +6989,7 @@ const ADIA = () => {
     return [
       {
         type: 'project_json',
-        fileName: `adia_project_${new Date().toISOString().slice(0, 10)}.json`,
+        fileName: `adia_project_${new Date().toISOString().slice(0, 10)}.adia`,
         label: 'ADIA Project JSON',
         content: projectJson,
         mimeType: 'application/json',
@@ -7594,7 +6998,7 @@ const ADIA = () => {
       },
       {
         type: 'xbridges_model',
-        fileName: `xbridges_model_${new Date().toISOString().slice(0, 10)}.json`,
+        fileName: `xbridges_model_${new Date().toISOString().slice(0, 10)}.adia`,
         label: 'X-Bridges Model',
         content: JSON.stringify({ nodes: globalXBridgesNodes, edges: globalXBridgesEdges }, null, 2),
         mimeType: 'application/json',
@@ -7603,7 +7007,7 @@ const ADIA = () => {
       },
       {
         type: 'vlab_model',
-        fileName: `vlab_model_${new Date().toISOString().slice(0, 10)}.json`,
+        fileName: `vlab_model_${new Date().toISOString().slice(0, 10)}.adia`,
         label: 'V-Lab Model',
         content: JSON.stringify({ nodes: vlabNodes, edges: vlabEdges }, null, 2),
         mimeType: 'application/json',
@@ -8058,37 +7462,37 @@ const ADIA = () => {
     });
 
     if (selectedKeys.includes('statemachine')) {
-      projectFiles['statemachine.json'] = { ...persistedStateMachine, view };
+      projectFiles['statemachine.adia'] = { ...persistedStateMachine, view };
     }
     if (selectedKeys.includes('bdd')) {
-      projectFiles['bdd.json'] = { blocks: blocks.filter(b => b.stereotype !== 'requirement'), relationships, customStereotypes };
+      projectFiles['bdd.adia'] = { blocks: blocks.filter(b => b.stereotype !== 'requirement'), relationships, customStereotypes };
     }
     if (selectedKeys.includes('ibd')) {
-      projectFiles['ibd.json'] = { parts, connectors, interfaceRealizations };
+      projectFiles['ibd.adia'] = { parts, connectors, interfaceRealizations };
     }
     if (selectedKeys.includes('requirements')) {
-      projectFiles['requirements.json'] = { blocks: blocks.filter(b => b.stereotype === 'requirement'), relationships };
+      projectFiles['requirements.adia'] = { blocks: blocks.filter(b => b.stereotype === 'requirement'), relationships };
     }
     if (selectedKeys.includes('xbridges')) {
-      projectFiles['xbridges.json'] = { globalXBridgesNodes, globalXBridgesEdges };
+      projectFiles['xbridges.adia'] = { globalXBridgesNodes, globalXBridgesEdges };
     }
     if (selectedKeys.includes('vlab')) {
-      projectFiles['vlab.json'] = { vlabNodes, vlabEdges };
+      projectFiles['vlab.adia'] = { vlabNodes, vlabEdges };
     }
     if (selectedKeys.includes('hmi')) {
-      projectFiles['hmi.json'] = { hmiComponents };
+      projectFiles['hmi.adia'] = { hmiComponents };
     }
     if (selectedKeys.includes('hil')) {
-      projectFiles['hil.json'] = hilConfig;
+      projectFiles['hil.adia'] = hilConfig;
     }
     if (selectedKeys.includes('doe')) {
-      projectFiles['doe.json'] = { schemaVersion: 1, headers, data, activeModel, taguchiConfig, results };
+      projectFiles['doe.adia'] = { schemaVersion: 1, headers, data, activeModel, taguchiConfig, results };
     }
     if (selectedKeys.includes('entropy')) {
-      projectFiles['entropy.json'] = { entropyNodes, entropyEdges, opmSimulationConfig };
+      projectFiles['entropy.adia'] = { entropyNodes, entropyEdges, opmSimulationConfig };
     }
     if (selectedKeys.includes('unified')) {
-      projectFiles['adia_project_unified.json'] = {
+      projectFiles['adia_project_unified.adia'] = {
         version: VERSION,
         timestamp: new Date().toISOString(),
         projectName: currentProjectName,
@@ -15844,7 +15248,7 @@ const ADIA = () => {
       const isSelected = selectedIds.includes(state.id);
       const hasSubLayer = states.some(s => s.parentId === state.id); // REQ-HSM-012
       return (
-        <g
+        <g data-help-feature="app-state-layer" data-help-source="src/App.tsx"
           key={state.id}
           transform={`translate(${state.x}, ${state.y})`}
           onMouseDown={(e) => handleStateMouseDown(e, state.id)}
@@ -15855,7 +15259,7 @@ const ADIA = () => {
             const hx = h.includes('e') ? state.width : 0;
             const hy = h.includes('s') ? state.height : 0;
             return (
-              <rect
+              <rect data-help-feature="live:App:70a9104101f7"
                 key={h}
                 x={hx - 4} y={hy - 4} width={8} height={8}
                 fill="#f97316" stroke="#0a0a0a" strokeWidth={1}
@@ -16027,7 +15431,7 @@ const ADIA = () => {
     return currentJunctions.map(junction => {
       const isSelected = selectedIds.includes(junction.id);
       return (
-        <g
+        <g data-help-feature="live:App:8dea4e38c6d5"
           key={junction.id}
           transform={`translate(${junction.x}, ${junction.y})`}
           onMouseDown={(e) => handleJunctionMouseDown(e, junction.id)}
@@ -16134,7 +15538,7 @@ const ADIA = () => {
       return (
         <g key={transition.id}>
           {/* Hit area - enlarged for free grabbing & smooth dragging */}
-          <path
+          <path data-help-feature="app-sm-curve" data-help-source="src/App.tsx"
             d={path}
             fill="none"
             stroke="transparent"
@@ -16206,7 +15610,7 @@ const ADIA = () => {
                 opacity={0.4}
                 style={{ pointerEvents: 'none' }}
               />
-              <circle
+              <circle data-help-feature="app-sm-curve" data-help-source="src/App.tsx"
                 cx={cp.x}
                 cy={cp.y}
                 r={handleRadius}
@@ -16242,7 +15646,7 @@ const ADIA = () => {
       const keyword = pkg.stereotype === 'modelLibrary' ? '«modelLibrary»' : '«package»';
       const tabWidth = Math.min(Math.max(72, keyword.length * 5.6 + 20, pkg.name.length * 7 + 20), pkg.width - 16);
       return (
-        <g
+        <g data-help-feature="app-diagram-open" data-help-source="src/App.tsx"
           key={pkg.id}
           data-semantic-id={pkg.id}
           data-presentation-kind="package"
@@ -16270,7 +15674,7 @@ const ADIA = () => {
           <text x={10} y={12} fill="var(--sysml-block-meta)" fontSize={9} fontFamily="monospace">{keyword}</text>
           <text x={10} y={34} fill="var(--sysml-block-text)" fontSize={12} fontWeight="bold">{pkg.name}</text>
           {isSelected && ['nw', 'ne', 'sw', 'se'].map(handle => (
-            <rect
+            <rect data-help-feature="live:App:85a80aef7d77"
               key={handle}
               data-resize-handle={handle}
               x={(handle.includes('e') ? pkg.width : 0) - 5}
@@ -16321,7 +15725,7 @@ const ADIA = () => {
   const renderDiagramShortcuts = useCallback((): React.ReactNode => diagramShortcuts.map(shortcut => {
     const isSelected = selectedIds.includes(shortcut.id);
     return (
-      <g
+      <g data-help-feature="app-diagram-open" data-help-source="src/App.tsx"
         key={shortcut.id}
         data-semantic-id={shortcut.id}
         data-presentation-kind="diagramShortcut"
@@ -16397,7 +15801,7 @@ const ADIA = () => {
                 const hx = h.includes('e') ? frame.x + frame.w : frame.x;
                 const hy = h.includes('s') ? frame.y + frame.h : frame.y;
                 return (
-                  <rect
+                  <rect data-help-feature="live:App:ddd9fcbcc7cb"
                     key={h}
                     x={hx - 4} y={hy - 4} width={8} height={8}
                     fill="#f97316" stroke="#0a0a0a" strokeWidth={1}
@@ -16489,7 +15893,7 @@ const ADIA = () => {
         : undefined;
 
       return (
-        <g
+        <g data-help-feature="app-diagram-open" data-help-source="src/App.tsx"
           key={block.id}
           data-semantic-id={block.id}
           transform={`translate(${block.x}, ${block.y})`}
@@ -16557,7 +15961,7 @@ const ADIA = () => {
               ) : (
                 <g transform="translate(5, 45)">
                   {block.properties.map((prop, i) => (
-                    <text
+                    <text data-help-feature="live:App:ee2c7e93de56"
                       key={prop.id}
                       data-property-id={prop.id}
                       y={i * 12}
@@ -16636,7 +16040,7 @@ const ADIA = () => {
                   <line x1={0} y1={bodyBottom - 25} x2={displayWidth} y2={bodyBottom - 25} stroke="#444" strokeWidth={1} />
                   <g transform={`translate(5, ${bodyBottom - 15})`}>
                     {block.operations.slice(0, 2).map((op, i) => (
-                      <text
+                      <text data-help-feature="live:App:9dbeffc76288"
                         key={`${op}-${i}`}
                         y={i * 12}
                         fill={bddFeatureDrag?.ownerId === block.id && bddFeatureDrag.kind === 'operation' && bddFeatureDrag.name === op ? '#f97316' : '#aaa'}
@@ -16720,7 +16124,7 @@ const ADIA = () => {
             const hx = h.includes('e') ? displayWidth : 0;
             const hy = h.includes('s') ? displayHeight : 0;
             return (
-              <rect
+              <rect data-help-feature="live:App:ddd9fcbcc7cb"
                 key={h}
                 x={hx - 4} y={hy - 4} width={8} height={8}
                 fill="#f97316" stroke="#0a0a0a" strokeWidth={1}
@@ -16903,7 +16307,7 @@ const ADIA = () => {
       const propertyLabel = `${propertyRole}${propertyMult}`.trim();
 
       return (
-        <g
+        <g data-help-feature="app-diagram-select-path" data-help-source="src/App.tsx"
           key={rel.id}
           data-semantic-id={rel.id}
           data-presentation-kind="relationship"
@@ -17037,7 +16441,7 @@ const ADIA = () => {
       const isNested = Boolean(part.parentPartId);
 
       return (
-        <g
+        <g data-help-feature="app-diagram-open" data-help-source="src/App.tsx"
           key={part.id}
           data-semantic-id={part.id}
           data-nested-part={isNested ? 'true' : undefined}
@@ -17111,7 +16515,7 @@ const ADIA = () => {
             const hx = h.includes('e') ? part.width : 0;
             const hy = h.includes('s') ? part.height : 0;
             return (
-              <rect
+              <rect data-help-feature="live:App:95532989216d"
                 key={h}
                 x={hx - 4} y={hy - 4} width={8} height={8}
                 fill="#f97316" stroke="#0a0a0a" strokeWidth={1}
@@ -17205,7 +16609,7 @@ const ADIA = () => {
       const isSelected = selectedIds.includes(conn.id);
 
       return (
-        <g
+        <g data-help-feature="app-diagram-select-path" data-help-source="src/App.tsx"
           key={conn.id}
           data-presentation-kind="connector"
           data-connector-id={conn.id}
@@ -17272,7 +16676,7 @@ const ADIA = () => {
       const strokeColor = isSelected ? '#f97316' : '#6c9ac6';
 
       return (
-        <g key={id} onClick={(e) => { e.stopPropagation(); setSelectedIds([id]); }}>
+        <g data-help-feature="app-diagram-select-path" data-help-source="src/App.tsx" key={id} onClick={(e) => { e.stopPropagation(); setSelectedIds([id]); }}>
           <line x1={sp.x} y1={sp.y} x2={tp.x} y2={tp.y} stroke={strokeColor} strokeWidth={1.5} strokeDasharray="4,2" />
           <circle cx={tp.x} cy={tp.y} r="3" fill="none" stroke={strokeColor} />
         </g>
@@ -17561,7 +16965,7 @@ const ADIA = () => {
       {showStandby && (
         <IntroStandbyOverlay mode="standby" onClose={() => setShowStandby(false)} />
       )}
-      <HelpModal isOpen={showHelpModal} onClose={() => setShowHelpModal(false)} initialTopic={helpInitialTopic} />
+      <HelpModal isOpen={showHelpModal} onClose={() => setShowHelpModal(false)} initialTopic={helpInitialTopic} initialSection={helpInitialSection} />
       <FactoryIOGateway
         isOpen={showFactoryIOGateway}
         onClose={() => setShowFactoryIOGateway(false)}
@@ -17630,7 +17034,7 @@ const ADIA = () => {
         />
       )}
       {importValidationError && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-[100] animate-in fade-in duration-200" onMouseDown={() => setImportValidationError(null)}>
+        <div data-help-feature="live:App:c5712d126c53" className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-[100] animate-in fade-in duration-200" onMouseDown={() => setImportValidationError(null)}>
           <div className="bg-[#121212] border-2 border-red-500/80 rounded-2xl w-[600px] max-h-[80vh] flex flex-col shadow-2xl overflow-hidden" onMouseDown={(e) => e.stopPropagation()}>
             <div className="px-6 py-4 bg-red-950/40 border-b border-red-500/30 flex justify-between items-center">
               <div className="flex items-center gap-3">
@@ -17640,7 +17044,7 @@ const ADIA = () => {
                   <p className="text-xs text-slate-400">File import refused to prevent application crash</p>
                 </div>
               </div>
-              <button onClick={() => setImportValidationError(null)} className="text-slate-400 hover:text-white text-lg">✕</button>
+              <button data-help-feature="app-error-dismiss" data-help-source="src/App.tsx" onClick={() => setImportValidationError(null)} className="text-slate-400 hover:text-white text-lg">✕</button>
             </div>
 
             <div className="p-6 overflow-y-auto space-y-3 font-mono text-xs">
@@ -17656,7 +17060,7 @@ const ADIA = () => {
             </div>
 
             <div className="px-6 py-4 bg-[#181818] border-t border-[#222] flex justify-end">
-              <button
+              <button data-help-feature="app-error-dismiss" data-help-source="src/App.tsx"
                 onClick={() => setImportValidationError(null)}
                 className="px-5 py-2 bg-red-600 hover:bg-red-500 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer"
               >
@@ -17677,13 +17081,13 @@ const ADIA = () => {
         }}
       >
         {/* Hidden input for project import */}
-        <input type="file" ref={projectImportRef} onChange={handleProjectFileChange} className="hidden" accept=".adia,.json" />
+        <input data-help-feature="app-open" data-help-source="src/App.tsx" type="file" ref={projectImportRef} onChange={handleProjectFileChange} className="hidden" accept=".adia,.json" />
 
         {/* Top Toolbar - Modernized & Unified Semantic Header */}
         <header className="h-14 ui-surface bg-[var(--surface-panel)] border-b border-[var(--border-default)] flex items-center px-4 gap-3 shrink-0 overflow-x-auto no-scrollbar">
           {/* Brand & Project Identity Group */}
           <div className="flex items-center gap-2.5 shrink-0">
-            <button
+            <button data-help-feature="app-asset-manager" data-help-source="src/App.tsx"
               onClick={() => setShowWorkspaceFileDialog(true)}
               className="p-1.5 hover:bg-[var(--surface-raised)] rounded-lg transition-colors cursor-pointer focus:outline-none focus:ring-1 focus:ring-[#f97316]/50 text-[#f97316] group"
               title="Create/Open Workspace Asset File"
@@ -17695,7 +17099,7 @@ const ADIA = () => {
             <div>
               <div className="font-bold text-lg tracking-tight text-[var(--text-primary)] flex items-center gap-2">
                 <span>ADIA</span>
-                <input
+                <input data-help-feature="app-project-name" data-help-source="src/App.tsx"
                   type="text"
                   value={currentProjectName}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCurrentProjectName(e.target.value)}
@@ -17722,7 +17126,7 @@ const ADIA = () => {
               <>
                 <Separator orientation="vertical" className="h-4" />
 
-                <Button
+                <Button data-help-feature="app-simulation-run" data-help-source="src/App.tsx"
                   size="sm"
                   onClick={isRunning ? pauseSimulation : startSimulation}
                   className={`h-7 px-2.5 text-xs font-semibold whitespace-nowrap rounded-md ${
@@ -17749,7 +17153,7 @@ const ADIA = () => {
                   )}
                 </Button>
 
-                <Button
+                <Button data-help-feature="app-simulation-step" data-help-source="src/App.tsx"
                   variant="ghost"
                   size="sm"
                   onClick={stepSimulation}
@@ -17763,7 +17167,7 @@ const ADIA = () => {
                   Step
                 </Button>
 
-                <Button
+                <Button data-help-feature="app-simulation-reset" data-help-source="src/App.tsx"
                   variant="ghost"
                   size="sm"
                   onClick={resetSimulation}
@@ -17779,7 +17183,7 @@ const ADIA = () => {
 
                 <Separator orientation="vertical" className="h-4" />
 
-                <Button
+                <Button data-help-feature="app-validate" data-help-source="src/App.tsx"
                   variant="ghost"
                   size="sm"
                   onClick={() => { if (validateModel()) addError('info', 'Model validation passed.'); }}
@@ -17793,7 +17197,7 @@ const ADIA = () => {
                   Validate
                 </Button>
 
-                <Button
+                <Button data-help-feature="app-validate-ai" data-help-source="src/App.tsx"
                   variant="ghost"
                   size="sm"
                   onClick={validateWithAI}
@@ -17821,7 +17225,7 @@ const ADIA = () => {
             <Separator orientation="vertical" className="h-4" />
 
             <div className="flex items-center gap-1.5 px-1.5 py-0.5">
-              <Checkbox
+              <Checkbox data-help-feature="app-safety-mode" data-help-source="src/App.tsx"
                 checked={safetyMode}
                 onCheckedChange={(c) => setSafetyMode(c as boolean)}
                 id="safety-mode"
@@ -17838,7 +17242,7 @@ const ADIA = () => {
           {/* CODE GENERATION & PROJECT I/O GROUP */}
           <div className="flex items-center gap-1 ui-card bg-[var(--surface-raised)] border border-[var(--border-default)] rounded-lg p-1 shrink-0">
             {/* Generate C/H Button - Primary Accent */}
-            <Button
+            <Button data-help-feature="app-generate-code" data-help-source="src/App.tsx"
               variant="outline"
               size="sm"
               onClick={generateCode}
@@ -17855,7 +17259,7 @@ const ADIA = () => {
 
             <Separator orientation="vertical" className="h-4" />
 
-            <Button
+            <Button data-help-feature="app-save" data-help-source="src/App.tsx"
               variant="ghost"
               size="sm"
               onClick={() => saveUnifiedProject(false)}
@@ -17867,7 +17271,7 @@ const ADIA = () => {
               Save
             </Button>
 
-            <Button
+            <Button data-help-feature="app-save" data-help-source="src/App.tsx"
               variant="ghost"
               size="sm"
               onClick={() => saveUnifiedProject(true)}
@@ -17878,7 +17282,7 @@ const ADIA = () => {
               Save As
             </Button>
 
-            <Button
+            <Button data-help-feature="app-open" data-help-source="src/App.tsx"
               variant="ghost"
               size="sm"
               onClick={handleOpenProjectDialog}
@@ -17889,17 +17293,17 @@ const ADIA = () => {
               Open
             </Button>
 
-            <Button
+            <Button data-help-feature="app-module-export" data-help-source="src/App.tsx"
               variant="ghost"
               size="sm"
               onClick={handleExportProject}
               className="h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors"
-              title="Export individual module files (.json)"
+              title="Choose which modules/files to save (.adia)"
             >
-              Export
+              Save Selected…
             </Button>
 
-            <Button
+            <Button data-help-feature="app-report-generate" data-help-source="src/App.tsx"
               variant="ghost"
               size="sm"
               onClick={() => setShowReportDialog(true)}
@@ -17914,7 +17318,7 @@ const ADIA = () => {
 
           {/* ENGINEERING TOOLS & GATEWAYS GROUP */}
           <div className="flex items-center gap-1 ui-card bg-[var(--surface-raised)] border border-[var(--border-default)] rounded-lg p-1 shrink-0">
-            <Button
+            <Button data-help-feature="app-panel-toggle" data-help-source="src/App.tsx"
               variant="ghost"
               size="sm"
               onClick={() => toggleWindow('hmi')}
@@ -17929,7 +17333,7 @@ const ADIA = () => {
               HMI Panel
             </Button>
 
-            <Button
+            <Button data-help-feature="app-panel-toggle" data-help-source="src/App.tsx"
               variant="ghost"
               size="sm"
               onClick={() => toggleWindow('pid')}
@@ -17944,7 +17348,7 @@ const ADIA = () => {
               PID Tuner
             </Button>
 
-            <Button
+            <Button data-help-feature="app-panel-toggle" data-help-source="src/App.tsx"
               variant="ghost"
               size="sm"
               onClick={() => toggleWindow('doe')}
@@ -17956,7 +17360,7 @@ const ADIA = () => {
 
             <Separator orientation="vertical" className="h-4" />
 
-            <Button
+            <Button data-help-feature="app-gateway-factory" data-help-source="src/App.tsx"
               variant="ghost"
               size="sm"
               onClick={() => setShowFactoryIOGateway(true)}
@@ -17974,7 +17378,7 @@ const ADIA = () => {
               {factoryIOEnabled && <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 ml-1"></span>}
             </Button>
 
-            <Button
+            <Button data-help-feature="app-gateway-3dx" data-help-source="src/App.tsx"
               id="3dx-toolbar-btn"
               variant="ghost"
               size="sm"
@@ -17986,7 +17390,7 @@ const ADIA = () => {
               3DEXPERIENCE
             </Button>
 
-            <Button
+            <Button data-help-feature="app-sysml-diagnostics" data-help-source="src/App.tsx"
               id="sysml-diagnostics-toolbar-btn"
               variant="ghost"
               size="sm"
@@ -18003,12 +17407,12 @@ const ADIA = () => {
 
           {/* HELP & STATUS GROUP */}
           <div className="flex items-center gap-2 shrink-0">
-            <Button
+            <Button data-help-feature="app-help-open" data-help-source="src/App.tsx"
               variant="ghost"
               size="sm"
               onClick={() => handleOpenHelp()}
               className="h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors"
-              title="Help & Documentation"
+              title="Help for this workspace (F1)"
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1 text-emerald-400">
                 <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
@@ -18019,7 +17423,7 @@ const ADIA = () => {
             </Button>
 
             {/* Theme Switcher Button */}
-            <button
+            <button data-help-feature="app-theme" data-help-source="src/App.tsx"
               id="adia-theme-toggle-btn"
               type="button"
               title={currentTheme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
@@ -18078,7 +17482,7 @@ const ADIA = () => {
               {moduleWorkspaceFiles.map(file => {
                 const isActive = activeWorkspaceTab.key === moduleWorkspaceTabKey(file.id);
                 return (
-                  <div
+                  <div data-help-feature="app-asset-open" data-help-source="src/App.tsx"
                     key={`module:${file.id}`}
                     role="tab"
                     aria-selected={isActive}
@@ -18091,7 +17495,7 @@ const ADIA = () => {
                     }`}
                   >
                     <span className="truncate max-w-[160px]">{file.name}</span>
-                    <button
+                    <button data-help-feature="app-asset-close" data-help-source="src/App.tsx"
                       onClick={(event) => {
                         event.stopPropagation();
                         closeTab(file.id);
@@ -18113,7 +17517,7 @@ const ADIA = () => {
                   : tab.mode;
                 const isActive = activeWorkspaceTab.key === diagramWorkspaceTabKey(tab);
                 return (
-                  <div
+                  <div data-help-feature="app-asset-open" data-help-source="src/App.tsx"
                     key={`${tab.kind}:${diagramId}`}
                     role="tab"
                     aria-selected={isActive}
@@ -18126,7 +17530,7 @@ const ADIA = () => {
                     }`}
                   >
                     <span className="truncate max-w-[160px]">{name}</span>
-                    <button
+                    <button data-help-feature="app-asset-close" data-help-source="src/App.tsx"
                       onClick={(e) => {
                         e.stopPropagation();
                         closeDiagramWorkspaceTab(diagramId);
@@ -18140,7 +17544,7 @@ const ADIA = () => {
                 );
               })}
             </div>
-            <button
+            <button data-help-feature="app-asset-manager" data-help-source="src/App.tsx"
               onClick={() => setShowWorkspaceFileDialog(true)}
               className="ui-control ui-focus-ring ml-4 p-1 rounded hover:bg-[var(--surface-raised)] text-[#f97316] transition-colors flex items-center justify-center"
               title="Open Workspace Asset Manager"
@@ -18151,7 +17555,7 @@ const ADIA = () => {
         )}
 
         {/* Main Content Area */}
-        <div className="flex flex-1 overflow-hidden" onMouseUp={() => setResizingPanel(null)}>
+        <div data-help-feature="live:App:eca48c76262c" className="flex flex-1 overflow-hidden" onMouseUp={() => setResizingPanel(null)}>
           {/* Left Sidebar - Hierarchy */}
           {![ 'hil', 'entropy'].includes(diagramMode) && (
             <aside style={{ width: isMobile ? '100%' : (isHierarchyCollapsed ? '48px' : `${hierarchyWidth}px`), display: isMobile && mobileTab !== 'hierarchy' ? 'none' : 'flex' }} className="ui-surface bg-[var(--surface-panel)] border-r border-[var(--border-default)] flex flex-col shrink-0 transition-all duration-300 overflow-hidden">
@@ -18166,7 +17570,7 @@ const ADIA = () => {
                     <span className="text-sm font-medium text-[var(--text-primary)]">Hierarchy</span>
                   </div>
                 )}
-                <button
+                <button data-help-feature="app-panel-collapse" data-help-source="src/App.tsx"
                   onClick={() => setIsHierarchyCollapsed(!isHierarchyCollapsed)}
                   className={`p-1.5 rounded hover:bg-[var(--surface-raised)] text-[#f97316] transition-all ${isHierarchyCollapsed ? 'w-full flex justify-center' : ''}`}
                 >
@@ -18225,7 +17629,7 @@ const ADIA = () => {
               )}
             </aside>
           )}
-          {!isMobile && !isHierarchyCollapsed && !['xbridges', 'vlab', 'hil', 'entropy'].includes(diagramMode) && <Resizer onMouseDown={(e) => handleResizeStart(e, 'hierarchy')} />}
+          {!isMobile && !isHierarchyCollapsed && !['xbridges', 'vlab', 'hil', 'entropy'].includes(diagramMode) && <Resizer data-help-feature="live:App:590d20381723" onMouseDown={(e) => handleResizeStart(e, 'hierarchy')} />}
 
           {/* Left Sidebar - Variables */}
           {!['xbridges', 'vlab', 'hil', 'entropy'].includes(diagramMode) && (
@@ -18241,7 +17645,7 @@ const ADIA = () => {
                     <span className="text-sm font-medium text-[#e0e0e0]">Variables</span>
                   </div>
                 )}
-                <button
+                <button data-help-feature="app-panel-collapse" data-help-source="src/App.tsx"
                   onClick={() => setIsVariablesCollapsed(!isVariablesCollapsed)}
                   className={`p-1.5 rounded hover:bg-[#222] text-[#f97316] transition-all ${isVariablesCollapsed ? 'w-full flex justify-center' : ''}`}
                 >
@@ -18258,13 +17662,13 @@ const ADIA = () => {
                         <span className="text-[10px] font-bold text-[#f97316] uppercase tracking-wider">New Variable</span>
                       </div>
                       <div className="flex gap-1.5 mb-1.5">
-                        <Input
+                        <Input data-help-feature="app-variable-name" data-help-source="src/App.tsx"
                           placeholder="Name"
                           value={newVarName}
                           onChange={(e) => setNewVarName(e.target.value)}
                           className="h-7 text-[11px] bg-[#0d0d0d] border-[#333] focus:border-[#f97316]/50"
                         />
-                        <select
+                        <select data-help-feature="app-variable-new-type" data-help-source="src/App.tsx"
                           value={newVarType}
                           onChange={(e) => {
                             const t = e.target.value as VariableType;
@@ -18277,13 +17681,13 @@ const ADIA = () => {
                         </select>
                       </div>
                       <div className="flex gap-1.5">
-                        <Input
+                        <Input data-help-feature="app-variable-new-initial" data-help-source="src/App.tsx"
                           placeholder="Init Value"
                           value={newVarValue}
                           onChange={(e) => setNewVarValue(e.target.value)}
                           className="h-7 text-[11px] bg-[#0d0d0d] border-[#333] focus:border-[#f97316]/50"
                         />
-                        <Button size="sm" onClick={addVariable} className="h-7 px-3 bg-[#f97316] text-[#0a0a0a] text-[10px] font-bold hover:bg-[#ea580c]">ADD</Button>
+                        <Button data-help-feature="app-variable-add" data-help-source="src/App.tsx" size="sm" onClick={addVariable} className="h-7 px-3 bg-[#f97316] text-[#0a0a0a] text-[10px] font-bold hover:bg-[#ea580c]">ADD</Button>
                       </div>
                     </div>
 
@@ -18301,7 +17705,7 @@ const ADIA = () => {
                           <div key={variable.id} className="group border-b border-[#1a1a1a] last:border-0">
                             <div className="flex items-center h-8 px-4 hover:bg-[#222] transition-colors">
                               <div className="flex items-center gap-2 flex-1 overflow-hidden">
-                                <Checkbox
+                                <Checkbox data-help-feature="app-scope-select" data-help-source="src/App.tsx"
                                   checked={variable.visibleInScope}
                                   onCheckedChange={() => toggleVariableVisibility(variable.id)}
                                   className="w-3.5 h-3.5 border-[#333] data-[state=checked]:bg-[#f97316] data-[state=checked]:border-[#f97316]"
@@ -18312,7 +17716,7 @@ const ADIA = () => {
                                   {variable.type.substring(0, 3)}
                                 </span>
                               </div>
-                              <button
+                              <button data-help-feature="app-variable-delete" data-help-source="src/App.tsx"
                                 onClick={() => removeVariable(variable.id)}
                                 className="ml-2 text-[#444] hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
                               >
@@ -18323,14 +17727,14 @@ const ADIA = () => {
                             </div>
 
                             <div className="px-4 pb-2 pt-0.5 grid grid-cols-2 gap-3 group-hover:bg-[#1a1a1a]/30 transition-colors">
-                              <select
+                              <select data-help-feature="app-variable-type" data-help-source="src/App.tsx"
                                 value={variable.type}
                                 onChange={(e) => updateVariableType(variable.id, e.target.value as VariableType)}
                                 className="h-6 text-[10px] font-mono bg-[#0d0d0d] border border-[#222] rounded px-1"
                               >
                                 {ALLOWED_TYPES.map(type => <option key={type} value={type}>{type}</option>)}
                               </select>
-                              <select
+                              <select data-help-feature="app-variable-overflow" data-help-source="src/App.tsx"
                                 value={variable.overflowPolicy ?? 'saturate'}
                                 onChange={(e) => updateVariableOverflowPolicy(variable.id, e.target.value as VariableOverflowPolicy)}
                                 className="h-6 text-[10px] font-mono bg-[#0d0d0d] border border-[#222] rounded px-1"
@@ -18340,7 +17744,7 @@ const ADIA = () => {
                               </select>
                               <div className="space-y-0.5">
                                 <span className="text-[8px] font-bold text-[#444] uppercase tracking-tighter">Initial</span>
-                                <Input
+                                <Input data-help-feature="app-variable-initial" data-help-source="src/App.tsx"
                                   value={variable.initialValue}
                                   onChange={(e) => updateVariableInitValue(variable.id, e.target.value)}
                                   disabled={isRunning}
@@ -18349,7 +17753,7 @@ const ADIA = () => {
                               </div>
                               <div className="space-y-0.5">
                                 <span className="text-[8px] font-bold text-[#444] uppercase tracking-tighter">Current</span>
-                                <Input
+                                <Input data-help-feature="app-variable-live" data-help-source="src/App.tsx"
                                   value={String(variable.currentValue)}
                                   onChange={(e) => updateVariableValue(variable.id, e.target.value)}
                                   className="h-6 text-[10px] font-mono bg-[#0d0d0d] border-[#222] text-emerald-400 focus:border-[#f97316]/30 px-1.5"
@@ -18371,7 +17775,7 @@ const ADIA = () => {
               )}
             </aside>
           )}
-          {!isMobile && !['xbridges', 'vlab', 'hil', 'entropy'].includes(diagramMode) && <Resizer onMouseDown={(e) => handleResizeStart(e, 'variables')} />}
+          {!isMobile && !['xbridges', 'vlab', 'hil', 'entropy'].includes(diagramMode) && <Resizer data-help-feature="live:App:76a83fd32464" onMouseDown={(e) => handleResizeStart(e, 'variables')} />}
 
           {/* Canvas Area */}
           <div style={{ display: isMobile && mobileTab !== 'canvas' ? 'none' : 'flex' }} className="flex-1 flex flex-col min-w-0">
@@ -18561,13 +17965,16 @@ const ADIA = () => {
                 <>
 
               {/* Canvas Toolbar */}
-              <div className="absolute top-3 left-3 z-10 flex items-center gap-2 bg-[#1a1a1a]/95 border border-[#333] rounded-lg px-2.5 py-1.5 text-xs">
+              <div
+                onWheel={handleHorizontalToolbarWheel}
+                className="absolute top-3 left-3 z-10 flex items-center gap-2 max-w-[calc(100%-1.5rem)] overflow-x-auto overflow-y-hidden adia-toolbar-scrollbar bg-[#1a1a1a]/95 border border-[#333] rounded-lg px-2.5 py-1.5 pb-2 text-xs select-none shadow-lg [&>*]:shrink-0"
+              >
                 {/* Layer Breadcrumb */}
                 {layerPath.length > 1 && (
                   <>
                     {layerPath.map((name, index) => ( // REQ-HSM-041 & 042
                       <React.Fragment key={index}>
-                        <button
+                        <button data-help-feature="app-layer-breadcrumb" data-help-source="src/App.tsx"
                           onClick={index < layerPath.length - 1 ? () => goToLayer(index) : undefined}
                           disabled={index === layerPath.length - 1}
                           className={`flex items-center gap-1 px-2 py-0.5 rounded ${index === layerPath.length - 1
@@ -18593,7 +18000,7 @@ const ADIA = () => {
 
                 {diagramMode === 'statemachine' && (
                   <>
-                    <Button
+                    <Button data-help-feature="app-sm-add-state" data-help-source="src/App.tsx"
                       variant="secondary"
                       size="sm"
                       onClick={() => {
@@ -18614,7 +18021,7 @@ const ADIA = () => {
                       State
                     </Button>
 
-                    <Button
+                    <Button data-help-feature="app-sm-add-junction" data-help-source="src/App.tsx"
                       variant="secondary"
                       size="sm"
                       onClick={() => {
@@ -18634,7 +18041,7 @@ const ADIA = () => {
                       Junction
                     </Button>
 
-                    <Button
+                    <Button data-help-feature="app-sm-add-xbridges" data-help-source="src/App.tsx"
                       variant="secondary"
                       size="sm"
                       onClick={() => {
@@ -18659,7 +18066,7 @@ const ADIA = () => {
                 )}
 
               {diagramBackTarget && canonicalSysmlRepository.diagrams[diagramBackTarget.diagramId] && (
-                <Button variant="secondary" size="sm" onClick={navigateDiagramBack}
+                <Button data-help-feature="app-diagram-return" data-help-source="src/App.tsx" variant="secondary" size="sm" onClick={navigateDiagramBack}
                   className="h-6 px-2 text-[#e0e0e0] hover:bg-[#222]"
                   title={`Return to ${sysmlObjectLabel(canonicalSysmlRepository.diagrams[diagramBackTarget.diagramId], 'Diagram')}`}>
                   ← {sysmlObjectLabel(canonicalSysmlRepository.diagrams[diagramBackTarget.diagramId], 'Diagram')}
@@ -18668,7 +18075,7 @@ const ADIA = () => {
 
               {(diagramMode === 'bdd' || diagramMode === 'package') && (
                   <>
-                    <Button
+                    <Button data-help-feature="app-sysml-create" data-help-source="src/App.tsx"
                       variant="secondary"
                       size="sm"
                       onClick={() => {
@@ -18680,7 +18087,7 @@ const ADIA = () => {
                       Package
                     </Button>
                     {diagramMode === 'package' && (
-                      <Button
+                      <Button data-help-feature="app-sysml-create" data-help-source="src/App.tsx"
                         variant="secondary"
                         size="sm"
                         onClick={() => {
@@ -18693,7 +18100,7 @@ const ADIA = () => {
                         Model Library
                       </Button>
                     )}
-                    <Button
+                    <Button data-help-feature="app-sysml-create" data-help-source="src/App.tsx"
                       variant="secondary"
                       size="sm"
                       onClick={() => {
@@ -18720,7 +18127,7 @@ const ADIA = () => {
                           'conform',
                           'expose',
                         ] as const).map(kind => (
-                          <Button key={kind} size="sm" variant={packageRelationshipTool === kind ? 'default' : 'secondary'}
+                          <Button data-help-feature="app-package-path-tool" data-help-source="src/App.tsx" key={kind} size="sm" variant={packageRelationshipTool === kind ? 'default' : 'secondary'}
                             onClick={() => { setPackageRelationshipTool(kind); setPackageRelationshipSourceId(null); }}
                             className="h-6 px-2 text-[10px]"
                             title={kind === 'containment'
@@ -18729,7 +18136,7 @@ const ADIA = () => {
                             {PACKAGE_TOOL_LABELS[kind]}
                           </Button>
                         ))}
-                        <Button size="sm" variant="secondary" onClick={displayPackagePaths}
+                        <Button data-help-feature="app-package-display-paths" data-help-source="src/App.tsx" size="sm" variant="secondary" onClick={displayPackagePaths}
                           className="h-6 px-2 text-[10px]" title="Show paths previously removed from this diagram (between the selected elements, or all)">
                           Display Paths
                         </Button>
@@ -18740,7 +18147,7 @@ const ADIA = () => {
 
               {diagramMode === 'requirements' && (
                   <>
-                    <Button
+                    <Button data-help-feature="app-sysml-create" data-help-source="src/App.tsx"
                       variant="secondary"
                       size="sm"
                       onClick={() => {
@@ -18751,7 +18158,7 @@ const ADIA = () => {
                     >
                       + Package
                     </Button>
-                    <Button
+                    <Button data-help-feature="app-sysml-create" data-help-source="src/App.tsx"
                       variant="secondary"
                       size="sm"
                       onClick={() => {
@@ -18762,7 +18169,7 @@ const ADIA = () => {
                     >
                       + Requirement
                     </Button>
-                    <Button
+                    <Button data-help-feature="app-sysml-create" data-help-source="src/App.tsx"
                       variant="secondary"
                       size="sm"
                       onClick={() => {
@@ -18773,7 +18180,7 @@ const ADIA = () => {
                     >
                       + Block
                     </Button>
-                    <Button
+                    <Button data-help-feature="app-sysml-create" data-help-source="src/App.tsx"
                       variant="secondary"
                       size="sm"
                       onClick={() => {
@@ -18784,7 +18191,7 @@ const ADIA = () => {
                     >
                       + Test Case
                     </Button>
-                    <Button
+                    <Button data-help-feature="app-panel-toggle" data-help-source="src/App.tsx"
                       variant="secondary"
                       size="sm"
                       onClick={() => toggleWindow('rtm')}
@@ -18792,7 +18199,7 @@ const ADIA = () => {
                     >
                       RTM
                     </Button>
-                    <Button
+                    <Button data-help-feature="app-panel-toggle" data-help-source="src/App.tsx"
                       variant="secondary"
                       size="sm"
                       onClick={() => toggleWindow('allocation')}
@@ -18800,7 +18207,7 @@ const ADIA = () => {
                     >
                       Allocations
                     </Button>
-                    <Button
+                    <Button data-help-feature="app-sysml-layout" data-help-source="src/App.tsx"
                       variant="secondary"
                       size="sm"
                       onClick={handleAutoLayout}
@@ -18813,7 +18220,7 @@ const ADIA = () => {
 
                 {diagramMode === 'ibd' && (
                   <>
-                    <Button
+                    <Button data-help-feature="app-ibd-add-part" data-help-source="src/App.tsx"
                       variant="secondary"
                       size="sm"
                       onClick={() => {
@@ -18825,12 +18232,12 @@ const ADIA = () => {
                       Part
                     </Button>
                     <div className="flex gap-0.5">
-                      <Button size="sm" onClick={() => handleAddPortToSelected('standard')} className="h-6 px-1 text-[10px] border" style={{ borderColor: semanticPresentationToken('standardPort'), color: semanticPresentationToken('standardPort'), backgroundColor: 'transparent' }} title="Add Standard Port">+Std</Button>
-                      <Button size="sm" onClick={() => handleAddPortToSelected('flow')} className="h-6 px-1 text-[10px] border" style={{ borderColor: semanticPresentationToken('flowPort'), color: semanticPresentationToken('flowPort'), backgroundColor: 'transparent' }} title="Add Flow Port">+Flow</Button>
-                      <Button size="sm" onClick={() => handleAddPortToSelected('proxy')} className="h-6 px-1 text-[10px] border" style={{ borderColor: semanticPresentationToken('proxyPort'), color: semanticPresentationToken('proxyPort'), backgroundColor: 'transparent' }} title="Add Proxy Port">+Prx</Button>
-                      <Button size="sm" onClick={() => handleAddPortToSelected('full')} className="h-6 px-1 text-[10px] border" style={{ borderColor: semanticPresentationToken('fullPort'), color: semanticPresentationToken('fullPort'), backgroundColor: 'transparent' }} title="Add Full Port">+Full</Button>
+                      <Button data-help-feature="app-port-add" data-help-source="src/App.tsx" size="sm" onClick={() => handleAddPortToSelected('standard')} className="h-6 px-1 text-[10px] border" style={{ borderColor: semanticPresentationToken('standardPort'), color: semanticPresentationToken('standardPort'), backgroundColor: 'transparent' }} title="Add Standard Port">+Std</Button>
+                      <Button data-help-feature="app-port-add" data-help-source="src/App.tsx" size="sm" onClick={() => handleAddPortToSelected('flow')} className="h-6 px-1 text-[10px] border" style={{ borderColor: semanticPresentationToken('flowPort'), color: semanticPresentationToken('flowPort'), backgroundColor: 'transparent' }} title="Add Flow Port">+Flow</Button>
+                      <Button data-help-feature="app-port-add" data-help-source="src/App.tsx" size="sm" onClick={() => handleAddPortToSelected('proxy')} className="h-6 px-1 text-[10px] border" style={{ borderColor: semanticPresentationToken('proxyPort'), color: semanticPresentationToken('proxyPort'), backgroundColor: 'transparent' }} title="Add Proxy Port">+Prx</Button>
+                      <Button data-help-feature="app-port-add" data-help-source="src/App.tsx" size="sm" onClick={() => handleAddPortToSelected('full')} className="h-6 px-1 text-[10px] border" style={{ borderColor: semanticPresentationToken('fullPort'), color: semanticPresentationToken('fullPort'), backgroundColor: 'transparent' }} title="Add Full Port">+Full</Button>
                     </div>
-                    <Button
+                    <Button data-help-feature="app-ibd-connector-tool" data-help-source="src/App.tsx"
                       variant="secondary"
                       size="sm"
                       onClick={() => {
@@ -18846,7 +18253,7 @@ const ADIA = () => {
                     >
                       {isCreatingConnector ? 'Cancel' : 'Connect'}
                     </Button>
-                    <Button
+                    <Button data-help-feature="app-ibd-depth" data-help-source="src/App.tsx"
                       variant="secondary"
                       size="sm"
                       aria-pressed={showNestedParts}
@@ -18857,7 +18264,7 @@ const ADIA = () => {
                       Nested parts
                     </Button>
                     {showNestedParts && (
-                      <select
+                      <select data-help-feature="app-ibd-depth" data-help-source="src/App.tsx"
                         aria-label="Levels of nested parts"
                         title="Levels of nested parts"
                         value={nestedPartDepth}
@@ -18874,7 +18281,7 @@ const ADIA = () => {
 
                 {/* Package Diagrams use the typed relationship tools above, not the BDD connect flow. */}
                 {diagramMode !== 'ibd' && diagramMode !== 'package' && (
-                  <Button
+                  <Button data-help-feature="app-sm-transition-tool" data-help-source="src/App.tsx"
                     variant="secondary"
                     size="sm"
                     onClick={() => {
@@ -18899,7 +18306,7 @@ const ADIA = () => {
 
                 <Separator orientation="vertical" className="h-3 bg-[#333] mx-1.5" />
 
-                <Button
+                <Button data-help-feature="app-grid" data-help-source="src/App.tsx"
                   variant="ghost"
                   size="icon"
                   onClick={() => setGridEnabled(!gridEnabled)}
@@ -18911,7 +18318,7 @@ const ADIA = () => {
                   </svg>
                 </Button>
 
-                <Button
+                <Button data-help-feature="app-snap" data-help-source="src/App.tsx"
                   variant="ghost"
                   size="icon"
                   onClick={() => setSnapEnabled(!snapEnabled)}
@@ -18926,7 +18333,7 @@ const ADIA = () => {
 
                 <Separator orientation="vertical" className="h-3 bg-[#333] mx-1.5" />
 
-                <Button
+                <Button data-help-feature="app-zoom" data-help-source="src/App.tsx"
                   variant="ghost"
                   size="icon"
                   onClick={() => setView(prev => ({ ...prev, scale: Math.min(MAX_SCALE, prev.scale * 1.2) }))}
@@ -18942,7 +18349,7 @@ const ADIA = () => {
                   {Math.round(view.scale * 100)}%
                 </span>
 
-                <Button
+                <Button data-help-feature="app-zoom" data-help-source="src/App.tsx"
                   variant="ghost"
                   size="icon"
                   onClick={() => setView(prev => ({ ...prev, scale: Math.max(MIN_SCALE, prev.scale / 1.2) }))}
@@ -18953,7 +18360,7 @@ const ADIA = () => {
                   </svg>
                 </Button>
 
-                <Button
+                <Button data-help-feature="app-zoom" data-help-source="src/App.tsx"
                   variant="ghost"
                   size="icon"
                   onClick={() => setView({ scale: 1, offsetX: 0, offsetY: 0 })}
@@ -18974,7 +18381,7 @@ const ADIA = () => {
               {diagramMode === 'package' && packageRelationshipTool && (
                 <div className="absolute top-3 right-3 z-10 px-4 py-2 bg-[#f97316] text-[#0a0a0a] rounded-lg text-xs">
                   {packageToolPrompt(packageRelationshipTool, Boolean(packageRelationshipSourceId))}
-                  <button className="ml-3 underline" onClick={() => { setPackageRelationshipTool(null); setPackageRelationshipSourceId(null); }}>Cancel</button>
+                  <button data-help-feature="app-package-path-tool" data-help-source="src/App.tsx" className="ml-3 underline" onClick={() => { setPackageRelationshipTool(null); setPackageRelationshipSourceId(null); }}>Cancel</button>
                 </div>
               )}
               {isCreatingConnector && (
@@ -19210,15 +18617,15 @@ const ADIA = () => {
             {!['xbridges', 'vlab', 'hil', 'entropy'].includes(diagramMode) && (
               <>
                 {/* Bottom Panel */}
-            {!isMobile && !isScopeCollapsed && <Resizer onMouseDown={(e) => handleResizeStart(e, 'scope')} orientation="horizontal" />}
+            {!isMobile && !isScopeCollapsed && <Resizer data-help-feature="live:App:ca067bd95989" onMouseDown={(e) => handleResizeStart(e, 'scope')} orientation="horizontal" />}
             <div style={{ height: isMobile ? '30%' : (isScopeCollapsed ? '40px' : `${scopeHeight}px`), display: isMobile && mobileTab !== 'canvas' ? 'none' : 'flex' }} className="bg-[#1a1a1a] border-t border-[#222] flex flex-col shrink-0 transition-all duration-300 overflow-hidden">
-              <div
+              <div data-help-feature="app-scope-dock" data-help-source="src/App.tsx"
                 onDoubleClick={() => setIsScopeDetached(!isScopeDetached)}
                 title="Double-click header to expand/dock Scope window"
                 className="flex items-center justify-between px-4 border-b border-[#222] h-10 shrink-0 select-none cursor-pointer"
               >
                 <div className="flex items-center gap-2">
-                  <button
+                  <button data-help-feature="app-scope-dock" data-help-source="src/App.tsx"
                     onClick={(e) => { e.stopPropagation(); setIsScopeCollapsed(!isScopeCollapsed); }}
                     className="p-1 hover:bg-[#222] rounded text-[#f97316] transition-colors"
                   >
@@ -19245,7 +18652,7 @@ const ADIA = () => {
                           <div className="text-xs text-[#666] p-2 text-center">No variables</div>
                         ) : (
                           variables.map(v => (
-                            <div
+                            <div data-help-feature="app-scope-select" data-help-source="src/App.tsx"
                               key={v.id}
                               className="flex items-center gap-2 p-1.5 hover:bg-[#222] rounded cursor-pointer"
                               onClick={(e) => {
@@ -19267,7 +18674,7 @@ const ADIA = () => {
 
                     <Separator orientation="vertical" className="h-4 bg-[#333] mx-2" />
 
-                    <Checkbox
+                    <Checkbox data-help-feature="app-scope-transition-sampling" data-help-source="src/App.tsx"
                       id="sampleOnTransition"
                       checked={sampleOnTransitionOnly}
                       onCheckedChange={(checked) => setSampleOnTransitionOnly(checked as boolean)}
@@ -19277,7 +18684,7 @@ const ADIA = () => {
                       Sample on transitions only
                     </Label>
                     <Separator orientation="vertical" className="h-4 bg-[#333] mx-2" />
-                    <Button
+                    <Button data-help-feature="app-scope-csv" data-help-source="src/App.tsx"
                       variant="ghost"
                       size="sm"
                       onClick={exportScopeCSV}
@@ -19290,7 +18697,7 @@ const ADIA = () => {
                       </svg>
                       Export CSV
                     </Button>
-                    <Button
+                    <Button data-help-feature="app-scope-clear" data-help-source="src/App.tsx"
                       variant="ghost"
                       size="sm"
                       onClick={clearScope}
@@ -19302,7 +18709,7 @@ const ADIA = () => {
                       </svg>
                       Clear
                     </Button>
-                    <Button
+                    <Button data-help-feature="app-scope-dock" data-help-source="src/App.tsx"
                       variant="ghost"
                       size="icon"
                       onClick={() => setIsScopeDetached(!isScopeDetached)}
@@ -19316,7 +18723,7 @@ const ADIA = () => {
               </div>
 
               {!isScopeCollapsed && (
-                <div
+                <div data-help-feature="app-scope-dock" data-help-source="src/App.tsx"
                   onDoubleClick={() => setIsScopeDetached(!isScopeDetached)}
                   className="flex-1 p-3 overflow-x-auto overflow-y-hidden cursor-pointer select-none"
                   title="Double-click to expand into detached window"
@@ -19414,7 +18821,7 @@ const ADIA = () => {
 
               </>
             )}          </div>
-          {!isMobile && !['xbridges', 'vlab', 'hil', 'entropy'].includes(diagramMode) && <Resizer onMouseDown={(e) => handleResizeStart(e, 'properties')} />}
+          {!isMobile && !['xbridges', 'vlab', 'hil', 'entropy'].includes(diagramMode) && <Resizer data-help-feature="live:App:1991d07ad9b1" onMouseDown={(e) => handleResizeStart(e, 'properties')} />}
 
           {!['xbridges', 'vlab', 'hil', 'entropy'].includes(diagramMode) && (
             <>
@@ -19431,7 +18838,7 @@ const ADIA = () => {
                   <span className="text-sm font-medium">Properties</span>
                 </div>
               )}
-              <button
+              <button data-help-feature="app-panel-collapse" data-help-source="src/App.tsx"
                 onClick={() => setIsPropertiesCollapsed(!isPropertiesCollapsed)}
                 className={`p-1.5 rounded hover:bg-[#222] text-[#f97316] transition-all ${isPropertiesCollapsed ? 'w-full flex justify-center' : ''}`}
               >
@@ -19452,7 +18859,7 @@ const ADIA = () => {
                   <>
                     <div>
                       <Label>State Name</Label>
-                      <Input
+                      <Input data-help-feature="app-state-name" data-help-source="src/App.tsx"
                         value={selectedState.name}
                         onChange={(e) => updateState(selectedState.id, { name: e.target.value })}
                         className={`mt-1 ${hasNameError ? 'border-red-500 ring-red-500 focus-visible:ring-red-500' : ''}`}
@@ -19471,7 +18878,7 @@ const ADIA = () => {
                         <p className="mb-2 leading-relaxed whitespace-pre-line">{err.message}</p>
                         {err.canAutoFix && (
                           <div className="flex gap-2 mt-2">
-                            <Button
+                            <Button data-help-feature="app-error-fix" data-help-source="src/App.tsx"
                               size="sm"
                               variant="outline"
                               onClick={() => handleAutoFix(err)}
@@ -19486,7 +18893,7 @@ const ADIA = () => {
 
                   <div>
                     <Label>Priority (lower = higher)</Label>
-                    <Input
+                    <Input data-help-feature="app-state-priority" data-help-source="src/App.tsx"
                       type="number"
                       value={selectedState.priority}
                       onChange={(e) => updateState(selectedState.id, { priority: parseInt(e.target.value) || 0 })}
@@ -19495,7 +18902,7 @@ const ADIA = () => {
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <Checkbox
+                    <Checkbox data-help-feature="app-state-isParallel" data-help-source="src/App.tsx"
                       checked={selectedState.isParallel}
                       onCheckedChange={(checked) => updateState(selectedState.id, { isParallel: checked as boolean })}
                       id="isParallel"
@@ -19506,7 +18913,7 @@ const ADIA = () => {
                   {selectedState.isParallel && (
                     <div>
                       <Label>Region ID</Label>
-                      <Input
+                      <Input data-help-feature="app-state-regionId" data-help-source="src/App.tsx"
                         value={selectedState.regionId || ''}
                         onChange={(e) => updateState(selectedState.id, { regionId: e.target.value || null })}
                         placeholder="e.g., main_region"
@@ -19516,7 +18923,7 @@ const ADIA = () => {
                   )}
 
                   <div className="flex items-center gap-2">
-                    <Checkbox
+                    <Checkbox data-help-feature="app-state-autostart" data-help-source="src/App.tsx"
                       checked={selectedState.autostart}
                       onCheckedChange={(checked) => updateState(selectedState.id, { autostart: checked as boolean })}
                       id="autostart"
@@ -19525,7 +18932,7 @@ const ADIA = () => {
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <Checkbox
+                    <Checkbox data-help-feature="app-state-isSafeState" data-help-source="src/App.tsx"
                       checked={selectedState.isSafeState || false}
                       onCheckedChange={(checked) => updateState(selectedState.id, { isSafeState: checked as boolean })}
                       id="isSafeState"
@@ -19534,7 +18941,7 @@ const ADIA = () => {
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <Checkbox
+                    <Checkbox data-help-feature="app-state-isTerminalState" data-help-source="src/App.tsx"
                       checked={selectedState.isTerminalState || false}
                       onCheckedChange={(checked) => updateState(selectedState.id, { isTerminalState: checked as boolean })}
                       id="isTerminalState"
@@ -19543,7 +18950,7 @@ const ADIA = () => {
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <Checkbox
+                    <Checkbox data-help-feature="app-state-isXBridges" data-help-source="src/App.tsx"
                       checked={selectedState.isXBridges || false}
                       onCheckedChange={(checked) => updateState(selectedState.id, { isXBridges: checked as boolean })}
                       id="isXBridges"
@@ -19560,7 +18967,7 @@ const ADIA = () => {
                             const targets = direction === 'in' ? selectedInputBoundaryTargets : selectedOutputBoundaryTargets;
                             const disabled = mappingVariables.length === 0 || targets.length === 0;
                             return (
-                              <Button
+                              <Button data-help-feature="app-xb-mapping-add" data-help-source="src/App.tsx"
                                 key={direction}
                                 size="sm"
                                 disabled={disabled}
@@ -19587,7 +18994,7 @@ const ADIA = () => {
                             <div className="grid grid-cols-2 gap-2">
                               <div className="flex flex-col gap-1">
                                 <Label className="text-[9px] uppercase tracking-wider text-gray-500">SM Variable</Label>
-                                <select
+                                <select data-help-feature="app-xb-mapping-variable" data-help-source="src/App.tsx"
                                   value={map.smVarId}
                                   onChange={(e) => {
                                     const newMaps = [...selectedState.xBridgesModel!.mappings!];
@@ -19619,7 +19026,7 @@ const ADIA = () => {
                                 const targets = map.direction === 'in' ? selectedInputBoundaryTargets : selectedOutputBoundaryTargets;
                                 const selectedTargetIndex = targets.findIndex(target => target.blockId === map.blockId && target.portId === map.portId);
                                 return (
-                                  <select
+                                  <select data-help-feature="app-xb-mapping-target" data-help-source="src/App.tsx"
                                     value={selectedTargetIndex >= 0 ? String(selectedTargetIndex) : ''}
                                     onChange={(e) => {
                                       const target = targets[Number(e.target.value)];
@@ -19647,7 +19054,7 @@ const ADIA = () => {
                                 );
                               })()}
                             </div>
-                            <button
+                            <button data-help-feature="app-xb-mapping-remove" data-help-source="src/App.tsx"
                               className="absolute -top-1 -right-1 w-4 h-4 bg-red-600 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10"
                               onClick={() => {
                                 const newMaps = selectedState.xBridgesModel!.mappings!.filter((_, i) => i !== idx);
@@ -19674,7 +19081,7 @@ const ADIA = () => {
 
                   <div>
                     <Label>History</Label>
-                    <select
+                    <select data-help-feature="app-state-historyType" data-help-source="src/App.tsx"
                       value={selectedState.historyType || 'none'}
                       onChange={(e) => {
                         const newType = e.target.value as 'none' | 'shallow' | 'deep';
@@ -19700,7 +19107,7 @@ const ADIA = () => {
                   <div className={`space-y-2 p-2 bg-[#1a1a1a] rounded border ${hasInternalError ? 'border-red-500' : 'border-[#333]'}`}>
                     <div className="flex justify-between items-center">
                       <Label className="text-[#f97316]">Internal Transitions</Label>
-                      <Button size="sm" className="h-5 text-[10px] px-2" onClick={() => {
+                      <Button data-help-feature="app-state-internalTransitions" data-help-source="src/App.tsx" size="sm" className="h-5 text-[10px] px-2" onClick={() => {
                         const current = selectedState.internalTransitions ? selectedState.internalTransitions + '\n' : '';
                         updateState(selectedState.id, { internalTransitions: current + '[condition] / action;' });
                       }}>+ Add</Button>
@@ -19736,7 +19143,7 @@ const ADIA = () => {
                         return (
                           <div key={idx} className="p-2 bg-[#0a0a0a] border border-[#333] rounded space-y-1">
                             <div className="flex gap-1">
-                              <select
+                              <select data-help-feature="app-state-internal-editor" data-help-source="src/App.tsx"
                                 value={type}
                                 onChange={e => updateLine(e.target.value, condition, afterTicks, action)}
                                 className="h-6 bg-[#1a1a1a] border border-[#333] rounded text-[10px] w-20 px-1 text-[#e0e0e0]"
@@ -19746,21 +19153,21 @@ const ADIA = () => {
                                 <option value="and">And</option>
                                 <option value="or">Or</option>
                               </select>
-                              <button onClick={() => {
+                              <button data-help-feature="app-state-internalTransitions" data-help-source="src/App.tsx" onClick={() => {
                                 const allLines = (selectedState.internalTransitions || '').split('\n').filter(l => l.trim());
                                 allLines.splice(idx, 1);
                                 updateState(selectedState.id, { internalTransitions: allLines.join('\n') });
                               }} className="ml-auto text-[#666] hover:text-red-400">×</button>
                             </div>
                             {(type !== 'after') && (
-                              <Input value={condition} onChange={e => updateLine(type, e.target.value, afterTicks, action)} placeholder="Condition" className="h-6 text-[10px]" />
+                              <Input data-help-feature="app-state-internal-editor" data-help-source="src/App.tsx" value={condition} onChange={e => updateLine(type, e.target.value, afterTicks, action)} placeholder="Condition" className="h-6 text-[10px]" />
                             )}
                             {(type !== 'condition') && (
-                              <Input value={afterTicks} onChange={e => updateLine(type, condition, e.target.value, action)} placeholder="Ticks" type="number" className="h-6 text-[10px]" />
+                              <Input data-help-feature="app-state-internal-editor" data-help-source="src/App.tsx" value={afterTicks} onChange={e => updateLine(type, condition, e.target.value, action)} placeholder="Ticks" type="number" className="h-6 text-[10px]" />
                             )}
                             <div className="flex items-center gap-1">
                               <span className="text-[#666] text-[10px]">/</span>
-                              <Input value={action.trim()} onChange={e => updateLine(type, condition, afterTicks, e.target.value)} placeholder="Action" className="h-6 text-[10px] flex-1" />
+                              <Input data-help-feature="app-state-internal-editor" data-help-source="src/App.tsx" value={action.trim()} onChange={e => updateLine(type, condition, afterTicks, e.target.value)} placeholder="Action" className="h-6 text-[10px] flex-1" />
                             </div>
                           </div>
                         );
@@ -19773,7 +19180,7 @@ const ADIA = () => {
 
                   <div>
                     <Label>Entry Action (C-like)</Label>
-                    <textarea
+                    <textarea data-help-feature="app-state-entry" data-help-source="src/App.tsx"
                       value={selectedState.entry}
                       onChange={(e) => updateState(selectedState.id, { entry: e.target.value })}
                       placeholder="/* Entry action */ counter = 0;"
@@ -19783,7 +19190,7 @@ const ADIA = () => {
 
                   <div>
                     <Label>During Action (C-like)</Label>
-                    <textarea
+                    <textarea data-help-feature="app-state-during" data-help-source="src/App.tsx"
                       value={selectedState.during}
                       onChange={(e) => updateState(selectedState.id, { during: e.target.value })}
                       placeholder="/* During action */ counter++;"
@@ -19794,12 +19201,12 @@ const ADIA = () => {
                   <div className={`space-y-2 p-2 bg-[#1a1a1a] rounded border ${hasInternalError ? 'border-red-500' : 'border-[#333]'}`}>
                     <div className="flex justify-between items-center">
                       <Label className="text-[#f97316]">Internal Transitions</Label>
-                      <Button size="sm" className="h-5 text-[10px] px-2" onClick={() => {
+                      <Button data-help-feature="app-state-internalTransitions" data-help-source="src/App.tsx" size="sm" className="h-5 text-[10px] px-2" onClick={() => {
                         const current = selectedState.internalTransitions ? selectedState.internalTransitions + '\n' : '';
                         updateState(selectedState.id, { internalTransitions: current + '[condition] / action;' });
                       }}>+ Add</Button>
                     </div>
-                    <textarea
+                    <textarea data-help-feature="app-state-internalTransitions" data-help-source="src/App.tsx"
                       value={selectedState.internalTransitions || ''}
                       onChange={(e) => updateState(selectedState.id, { internalTransitions: e.target.value })}
                       placeholder="[condition] / action"
@@ -19809,7 +19216,7 @@ const ADIA = () => {
 
                   <div>
                     <Label>Exit Action (C-like)</Label>
-                    <textarea
+                    <textarea data-help-feature="app-state-exit" data-help-source="src/App.tsx"
                       value={selectedState.exit}
                       onChange={(e) => updateState(selectedState.id, { exit: e.target.value })}
                       placeholder="/* Exit action */"
@@ -19829,7 +19236,7 @@ const ADIA = () => {
                     }}
                   />
 
-                  <Button
+                  <Button data-help-feature="app-state-layer" data-help-source="src/App.tsx"
                     variant="outline"
                     size="sm"
                     onClick={() => enterLayer(selectedState.id)}
@@ -19842,7 +19249,7 @@ const ADIA = () => {
                     Enter Layer
                   </Button>
 
-                  <Button
+                  <Button data-help-feature="app-state-delete" data-help-source="src/App.tsx"
                     variant="outline"
                     size="sm"
                     onClick={() => deleteState(selectedState.id)}
@@ -19860,7 +19267,7 @@ const ADIA = () => {
                 <>
                   <div>
                     <Label>Junction Name</Label>
-                    <Input
+                    <Input data-help-feature="app-junction-name" data-help-source="src/App.tsx"
                       value={selectedJunction.name}
                       onChange={(e) => updateJunction(selectedJunction.id, { name: e.target.value })}
                       className="mt-1"
@@ -19868,7 +19275,7 @@ const ADIA = () => {
                   </div>
 
                   <div className="flex items-center gap-2 mt-3">
-                    <Checkbox
+                    <Checkbox data-help-feature="app-junction-autostart" data-help-source="src/App.tsx"
                       checked={selectedJunction.autostart || false}
                       onCheckedChange={(checked) => updateJunction(selectedJunction.id, { autostart: checked as boolean })}
                       id="j-autostart"
@@ -19876,7 +19283,7 @@ const ADIA = () => {
                     <Label htmlFor="j-autostart">Default Transition (Auto-start)</Label>
                   </div>
 
-                  <Button
+                  <Button data-help-feature="app-junction-delete" data-help-source="src/App.tsx"
                     variant="outline"
                     size="sm"
                     onClick={() => deleteJunction(selectedJunction.id)}
@@ -19902,10 +19309,10 @@ const ADIA = () => {
                     <div className="pt-2 border-t border-[#333] space-y-2">
                       <div className="text-xs uppercase tracking-wide text-[#888]">Diagram Presentation</div>
                       <div className="text-xs text-[#888]">Position: {Math.round(selectedPackage.x)}, {Math.round(selectedPackage.y)}</div>
-                      <Button size="sm" variant="outline" className="w-full" onClick={() => removeFromDiagram(selectedPackage.id)}>
+                      <Button data-help-feature="app-remove-presentation" data-help-source="src/App.tsx" size="sm" variant="outline" className="w-full" onClick={() => removeFromDiagram(selectedPackage.id)}>
                         Remove from Diagram
                       </Button>
-                      <Button size="sm" variant="outline" className="w-full border-red-800 text-red-400 hover:bg-red-950/30"
+                      <Button data-help-feature="app-delete-definition" data-help-source="src/App.tsx" size="sm" variant="outline" className="w-full border-red-800 text-red-400 hover:bg-red-950/30"
                         onClick={() => deleteSemanticPackage(selectedPackage.id)}>
                         Delete from Model…
                       </Button>
@@ -19928,7 +19335,7 @@ const ADIA = () => {
                         {selectedBlock.stereotype === 'requirement' ? 'Requirement' : `«${selectedBlock.stereotype}»`} <span className="text-[10px] text-[#888]">(fixed by SysML {selectedBlock.stereotype === 'requirement' ? 'Requirements' : 'View/Viewpoint'} semantics)</span>
                       </div>
                     ) : (
-                      <select
+                      <select data-help-feature="app-block-stereotype" data-help-source="src/App.tsx"
                         value={selectedBlock.stereotype}
                         onChange={(e) => updateBlock(selectedBlock.id, { stereotype: e.target.value })}
                         className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1"
@@ -19951,7 +19358,7 @@ const ADIA = () => {
                     <>
                       {/* Tabs Header */}
                       <div className="flex border-b border-[#333] mb-4">
-                        <button
+                        <button data-help-feature="app-property-tab" data-help-source="src/App.tsx"
                           onClick={() => setActivePropTab('general')}
                           className={`flex-1 py-1.5 text-xs font-semibold border-b-2 transition-colors ${
                             activePropTab === 'general'
@@ -19961,7 +19368,7 @@ const ADIA = () => {
                         >
                           General
                         </button>
-                        <button
+                        <button data-help-feature="app-property-tab" data-help-source="src/App.tsx"
                           onClick={() => setActivePropTab('assign')}
                           className={`flex-1 py-1.5 text-xs font-semibold border-b-2 transition-colors ${
                             activePropTab === 'assign'
@@ -19971,7 +19378,7 @@ const ADIA = () => {
                         >
                           Assign
                         </button>
-                        <button
+                        <button data-help-feature="app-property-tab" data-help-source="src/App.tsx"
                           onClick={() => setActivePropTab('governance')}
                           className={`flex-1 py-1.5 text-xs font-semibold border-b-2 transition-colors ${
                             activePropTab === 'governance'
@@ -19985,9 +19392,9 @@ const ADIA = () => {
 
                       {activePropTab === 'general' && (
                         <>
-                          <div><Label>Req ID</Label><Input value={selectedBlock.reqId || ''} onChange={(e) => updateBlock(selectedBlock.id, { reqId: e.target.value })} className="mt-1" /></div>
+                          <div><Label>Req ID</Label><Input data-help-feature="app-block-reqId" data-help-source="src/App.tsx" value={selectedBlock.reqId || ''} onChange={(e) => updateBlock(selectedBlock.id, { reqId: e.target.value })} className="mt-1" /></div>
                           <div><Label>Status</Label>
-                            <select value={selectedBlock.status || ''} onChange={(e) => {
+                            <select data-help-feature="app-requirement-status" data-help-source="src/App.tsx" value={selectedBlock.status || ''} onChange={(e) => {
                               const validation = validateLegacyRequirementStatusTransition(blocks, relationships, selectedBlock.id, e.target.value);
                               if (!validation.valid) addError('error', `Invalid requirement status: ${validation.reason}`);
                               else updateBlock(selectedBlock.id, { status: e.target.value });
@@ -20002,17 +19409,17 @@ const ADIA = () => {
                             </select>
                           </div>
                           <div><Label>Priority</Label>
-                            <select value={selectedBlock.priority || ''} onChange={(e) => updateBlock(selectedBlock.id, { priority: e.target.value })} className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1">
+                            <select data-help-feature="app-block-priority" data-help-source="src/App.tsx" value={selectedBlock.priority || ''} onChange={(e) => updateBlock(selectedBlock.id, { priority: e.target.value })} className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1">
                               <option value="High">High</option>
                               <option value="Medium">Medium</option>
                               <option value="Low">Low</option>
                               <option value="Critical">Critical</option>
                             </select>
                           </div>
-                          <div><Label>Description</Label><textarea value={selectedBlock.description || ''} onChange={(e) => updateBlock(selectedBlock.id, { description: e.target.value })} className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#f97316]" /></div>
+                          <div><Label>Description</Label><textarea data-help-feature="app-block-description" data-help-source="src/App.tsx" value={selectedBlock.description || ''} onChange={(e) => updateBlock(selectedBlock.id, { description: e.target.value })} className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#f97316]" /></div>
                           <div>
                             <Label>Risk</Label>
-                            <select value={selectedBlock.risk || 'Medium'} onChange={(e) => updateBlock(selectedBlock.id, { risk: e.target.value })} className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1">
+                            <select data-help-feature="app-block-risk" data-help-source="src/App.tsx" value={selectedBlock.risk || 'Medium'} onChange={(e) => updateBlock(selectedBlock.id, { risk: e.target.value })} className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1">
                               <option value="High">High</option>
                               <option value="Medium">Medium</option>
                               <option value="Low">Low</option>
@@ -20021,17 +19428,17 @@ const ADIA = () => {
                           </div>
                           <div>
                             <Label>Verification Method</Label>
-                            <select value={selectedBlock.verificationMethod || 'Test'} onChange={(e) => updateBlock(selectedBlock.id, { verificationMethod: e.target.value })} className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1">
+                            <select data-help-feature="app-block-verificationMethod" data-help-source="src/App.tsx" value={selectedBlock.verificationMethod || 'Test'} onChange={(e) => updateBlock(selectedBlock.id, { verificationMethod: e.target.value })} className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1">
                               <option value="Test">Test</option>
                               <option value="Analysis">Analysis</option>
                               <option value="Inspection">Inspection</option>
                               <option value="Demonstration">Demonstration</option>
                             </select>
                           </div>
-                          <div><Label>Source</Label><Input value={selectedBlock.source || ''} onChange={(e) => updateBlock(selectedBlock.id, { source: e.target.value })} className="mt-1" /></div>
-                          <div><Label>Version</Label><Input value={selectedBlock.version || '1.0'} onChange={(e) => updateBlock(selectedBlock.id, { version: e.target.value })} className="mt-1" /></div>
-                          <div><Label>Rationale</Label><textarea value={selectedBlock.rationale || ''} onChange={(e) => updateBlock(selectedBlock.id, { rationale: e.target.value })} className="w-full h-16 bg-[#1a1a1a] border border-[#333] rounded text-sm text-[#e0e0e0] p-2 mt-1" /></div>
-                          <div><Label>Baseline ID</Label><Input value={selectedBlock.baselineId || ''} onChange={(e) => updateBlock(selectedBlock.id, { baselineId: e.target.value || undefined })} className="mt-1" /></div>
+                          <div><Label>Source</Label><Input data-help-feature="app-block-source" data-help-source="src/App.tsx" value={selectedBlock.source || ''} onChange={(e) => updateBlock(selectedBlock.id, { source: e.target.value })} className="mt-1" /></div>
+                          <div><Label>Version</Label><Input data-help-feature="app-block-version" data-help-source="src/App.tsx" value={selectedBlock.version || '1.0'} onChange={(e) => updateBlock(selectedBlock.id, { version: e.target.value })} className="mt-1" /></div>
+                          <div><Label>Rationale</Label><textarea data-help-feature="app-block-rationale" data-help-source="src/App.tsx" value={selectedBlock.rationale || ''} onChange={(e) => updateBlock(selectedBlock.id, { rationale: e.target.value })} className="w-full h-16 bg-[#1a1a1a] border border-[#333] rounded text-sm text-[#e0e0e0] p-2 mt-1" /></div>
+                          <div><Label>Baseline ID</Label><Input data-help-feature="app-block-baselineId" data-help-source="src/App.tsx" value={selectedBlock.baselineId || ''} onChange={(e) => updateBlock(selectedBlock.id, { baselineId: e.target.value || undefined })} className="mt-1" /></div>
 
                           <div className="mt-4 pt-3 border-t border-[#333]">
                             <Label className="flex items-center justify-between text-xs font-semibold text-[#aaa] mb-2">
@@ -20052,7 +19459,7 @@ const ADIA = () => {
                                       </span>
                                     </div>
                                     <div className="flex items-center gap-1 shrink-0">
-                                      <button
+                                      <button data-help-feature="app-requirement-pdf-view" data-help-source="src/App.tsx"
                                         onClick={() => {
                                           try {
                                             const base64Parts = file.content.split(',');
@@ -20076,7 +19483,7 @@ const ADIA = () => {
                                       >
                                         <Eye size={12} />
                                       </button>
-                                      <button
+                                      <button data-help-feature="app-requirement-pdf-download" data-help-source="src/App.tsx"
                                         onClick={() => {
                                           try {
                                             const base64Parts = file.content.split(',');
@@ -20104,7 +19511,7 @@ const ADIA = () => {
                                       >
                                         <Download size={12} />
                                       </button>
-                                      <button
+                                      <button data-help-feature="app-requirement-pdf-remove" data-help-source="src/App.tsx"
                                         onClick={() => {
                                           const currentFiles = selectedBlock.attachedFiles || [];
                                           const updatedFiles = currentFiles.filter((_, i) => i !== idx);
@@ -20123,7 +19530,7 @@ const ADIA = () => {
                             </div>
 
                             <div>
-                              <input
+                              <input data-help-feature="app-requirement-pdf-remove" data-help-source="src/App.tsx"
                                 type="file"
                                 id="req-pdf-upload"
                                 accept=".pdf"
@@ -20147,7 +19554,7 @@ const ADIA = () => {
                                   e.target.value = '';
                                 }}
                               />
-                              <Button
+                              <Button data-help-feature="app-requirement-pdf-attach" data-help-source="src/App.tsx"
                                 variant="outline"
                                 size="sm"
                                 onClick={() => document.getElementById('req-pdf-upload')?.click()}
@@ -20164,7 +19571,7 @@ const ADIA = () => {
                         <div className="space-y-4">
                           <div>
                             <Label>Assigned To</Label>
-                            <Input
+                            <Input data-help-feature="app-block-assignedTo" data-help-source="src/App.tsx"
                               value={selectedBlock.assignedTo || ''}
                               onChange={(e) => updateBlock(selectedBlock.id, { assignedTo: e.target.value })}
                               className="mt-1"
@@ -20176,7 +19583,7 @@ const ADIA = () => {
                             <span className="text-[10px] text-[#888] uppercase font-bold tracking-wider">Quick Team Assignment</span>
                             <div className="flex flex-wrap gap-1.5 mt-1.5">
                               {["Control Team", "Hardware Team", "Software Team", "Mechanical Design", "Safety Engineer", "QA Team", "System Architect"].map(team => (
-                                <button
+                                <button data-help-feature="app-block-assignedTo" data-help-source="src/App.tsx"
                                   key={team}
                                   onClick={() => updateBlock(selectedBlock.id, { assignedTo: team })}
                                   className={`px-2 py-1 rounded text-[10px] border transition-colors ${
@@ -20263,15 +19670,15 @@ const ADIA = () => {
                   )}
                   {selectedBlock.stereotype === 'verificationCase' && (
                     <div className="space-y-3 border-t border-[#333] pt-3">
-                      <div><Label>Verification Method</Label><Input value={selectedBlock.verificationMethod || 'Test'} onChange={(e) => updateBlock(selectedBlock.id, { verificationMethod: e.target.value })} className="mt-1" /></div>
+                      <div><Label>Verification Method</Label><Input data-help-feature="app-block-verificationMethod" data-help-source="src/App.tsx" value={selectedBlock.verificationMethod || 'Test'} onChange={(e) => updateBlock(selectedBlock.id, { verificationMethod: e.target.value })} className="mt-1" /></div>
                       <div><Label>Result</Label>
-                        <select value={selectedBlock.verificationResult || ''} onChange={(e) => updateBlock(selectedBlock.id, { verificationResult: e.target.value ? e.target.value as 'passed' | 'failed' : undefined, executedAt: e.target.value ? new Date().toISOString() : undefined })} className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1">
+                        <select data-help-feature="app-verification-result" data-help-source="src/App.tsx" value={selectedBlock.verificationResult || ''} onChange={(e) => updateBlock(selectedBlock.id, { verificationResult: e.target.value ? e.target.value as 'passed' | 'failed' : undefined, executedAt: e.target.value ? new Date().toISOString() : undefined })} className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1">
                           <option value="">Not Executed</option><option value="passed">Passed</option><option value="failed">Failed</option>
                         </select>
                       </div>
                       {canonicalSysmlRepository.verificationCases[selectedBlock.id] && (
                         <div><Label>Test procedure</Label>
-                          <select
+                          <select data-help-feature="app-verification-behavior" data-help-source="src/App.tsx"
                             aria-label="Test procedure" value={canonicalSysmlRepository.verificationCases[selectedBlock.id]?.behaviorId ?? ''}
                             onChange={(e) => {
                               const plan = buildSetVerificationBehaviorCommand(canonicalSysmlRepository, { verificationCaseId: selectedBlock.id, behaviorId: e.target.value || undefined });
@@ -20285,15 +19692,15 @@ const ADIA = () => {
                           </select>
                         </div>
                       )}
-                      <div><Label>Evidence Artifact URI</Label><Input value={selectedBlock.artifactUri || ''} onChange={(e) => updateBlock(selectedBlock.id, { artifactUri: e.target.value })} className="mt-1" /></div>
+                      <div><Label>Evidence Artifact URI</Label><Input data-help-feature="app-block-artifactUri" data-help-source="src/App.tsx" value={selectedBlock.artifactUri || ''} onChange={(e) => updateBlock(selectedBlock.id, { artifactUri: e.target.value })} className="mt-1" /></div>
                       {selectedBlock.executedAt && <div className="text-[10px] text-[#777]">Executed: {selectedBlock.executedAt}</div>}
                     </div>
                   )}
                   {selectedBlock.stereotype === 'block' && (
                     <div className="space-y-2 border-t border-[#333] pt-3">
-                      <div><Label>Namespace</Label><Input value={(selectedBlock.namespace || []).join('::')} onChange={(e) => updateBlock(selectedBlock.id, { namespace: e.target.value.split('::').map(value => value.trim()).filter(Boolean) })} className="mt-1" /></div>
-                      <label className="flex items-center gap-2 text-xs text-[#aaa]"><input type="checkbox" checked={Boolean(selectedBlock.isAbstract)} onChange={(e) => updateBlock(selectedBlock.id, { isAbstract: e.target.checked })} /> Abstract</label>
-                      <label className="flex items-center gap-2 text-xs text-[#aaa]"><input type="checkbox" checked={Boolean(selectedBlock.isLeaf)} onChange={(e) => updateBlock(selectedBlock.id, { isLeaf: e.target.checked })} /> Leaf</label>
+                      <div><Label>Namespace</Label><Input data-help-feature="app-block-namespace" data-help-source="src/App.tsx" value={(selectedBlock.namespace || []).join('::')} onChange={(e) => updateBlock(selectedBlock.id, { namespace: e.target.value.split('::').map(value => value.trim()).filter(Boolean) })} className="mt-1" /></div>
+                      <label className="flex items-center gap-2 text-xs text-[#aaa]"><input data-help-feature="app-block-isAbstract" data-help-source="src/App.tsx" type="checkbox" checked={Boolean(selectedBlock.isAbstract)} onChange={(e) => updateBlock(selectedBlock.id, { isAbstract: e.target.checked })} /> Abstract</label>
+                      <label className="flex items-center gap-2 text-xs text-[#aaa]"><input data-help-feature="app-block-isLeaf" data-help-source="src/App.tsx" type="checkbox" checked={Boolean(selectedBlock.isLeaf)} onChange={(e) => updateBlock(selectedBlock.id, { isLeaf: e.target.checked })} /> Leaf</label>
                     </div>
                   )}
                   <div>
@@ -20301,7 +19708,7 @@ const ADIA = () => {
                     <div className="space-y-1 mt-1 max-h-40 overflow-y-auto">
                       {selectedBlock.ports.map((port, i) => (
                         <div key={port.id} className="flex items-center gap-1 bg-[#0a0a0a] p-1 rounded border border-[#333]">
-                          <Input
+                          <Input data-help-feature="app-port-name" data-help-source="src/App.tsx"
                             value={port.name}
                             onChange={(e) => {
                               const newPorts = [...selectedBlock.ports];
@@ -20312,7 +19719,7 @@ const ADIA = () => {
                             placeholder="Name"
                           />
                           <span className="text-[#666] text-[10px]">:</span>
-                          <Input
+                          <Input data-help-feature="app-port-type" data-help-source="src/App.tsx"
                             value={port.type}
                             onChange={(e) => {
                               const newPorts = [...selectedBlock.ports];
@@ -20322,7 +19729,7 @@ const ADIA = () => {
                             className="w-16 h-6 text-[10px] px-1"
                             placeholder="Type"
                           />
-                          <select
+                          <select data-help-feature="app-port-kind" data-help-source="src/App.tsx"
                             value={port.kind || 'standard'}
                             onChange={(e) => {
                               const newPorts = [...selectedBlock.ports];
@@ -20337,7 +19744,7 @@ const ADIA = () => {
                             <option value="full">Full</option>
                           </select>
                           <>
-                              <select
+                              <select data-help-feature="app-port-direction" data-help-source="src/App.tsx"
                                 value={port.direction || 'in'}
                                 onChange={(e) => {
                                   const newPorts = [...selectedBlock.ports];
@@ -20350,7 +19757,7 @@ const ADIA = () => {
                                 <option value="out">Out</option>
                                 <option value="inout">I/O</option>
                               </select>
-                              {port.kind === 'flow' && <Input
+                              {port.kind === 'flow' && <Input data-help-feature="app-port-unit" data-help-source="src/App.tsx"
                                 value={port.unit || ''}
                                 onChange={(e) => {
                                   const newPorts = [...selectedBlock.ports];
@@ -20360,7 +19767,7 @@ const ADIA = () => {
                                 className="w-10 h-6 text-[10px] px-1" placeholder="Unit"
                               />}
                           </>
-                          <button
+                          <button data-help-feature="app-port-delete" data-help-source="src/App.tsx"
                             onClick={() => {
                               const newPorts = selectedBlock.ports.filter(p => p.id !== port.id);
                               updateBlock(selectedBlock.id, { ports: newPorts });
@@ -20373,15 +19780,15 @@ const ADIA = () => {
                       ))}
                     </div>
                     <div className="flex gap-1 mt-2">
-                      <Button size="sm" onClick={() => handleAddPortToSelected('standard')} className="h-6 text-[10px] px-2 border" style={{ borderColor: semanticPresentationToken('standardPort'), color: semanticPresentationToken('standardPort'), backgroundColor: 'transparent' }}>+ Std</Button>
-                      <Button size="sm" onClick={() => handleAddPortToSelected('flow')} className="h-6 text-[10px] px-2 border" style={{ borderColor: semanticPresentationToken('flowPort'), color: semanticPresentationToken('flowPort'), backgroundColor: 'transparent' }}>+ Flow</Button>
-                      <Button size="sm" onClick={() => handleAddPortToSelected('proxy')} className="h-6 text-[10px] px-2 border" style={{ borderColor: semanticPresentationToken('proxyPort'), color: semanticPresentationToken('proxyPort'), backgroundColor: 'transparent' }}>+ Proxy</Button>
-                      <Button size="sm" onClick={() => handleAddPortToSelected('full')} className="h-6 text-[10px] px-2 border" style={{ borderColor: semanticPresentationToken('fullPort'), color: semanticPresentationToken('fullPort'), backgroundColor: 'transparent' }}>+ Full</Button>
+                      <Button data-help-feature="app-port-add" data-help-source="src/App.tsx" size="sm" onClick={() => handleAddPortToSelected('standard')} className="h-6 text-[10px] px-2 border" style={{ borderColor: semanticPresentationToken('standardPort'), color: semanticPresentationToken('standardPort'), backgroundColor: 'transparent' }}>+ Std</Button>
+                      <Button data-help-feature="app-port-add" data-help-source="src/App.tsx" size="sm" onClick={() => handleAddPortToSelected('flow')} className="h-6 text-[10px] px-2 border" style={{ borderColor: semanticPresentationToken('flowPort'), color: semanticPresentationToken('flowPort'), backgroundColor: 'transparent' }}>+ Flow</Button>
+                      <Button data-help-feature="app-port-add" data-help-source="src/App.tsx" size="sm" onClick={() => handleAddPortToSelected('proxy')} className="h-6 text-[10px] px-2 border" style={{ borderColor: semanticPresentationToken('proxyPort'), color: semanticPresentationToken('proxyPort'), backgroundColor: 'transparent' }}>+ Proxy</Button>
+                      <Button data-help-feature="app-port-add" data-help-source="src/App.tsx" size="sm" onClick={() => handleAddPortToSelected('full')} className="h-6 text-[10px] px-2 border" style={{ borderColor: semanticPresentationToken('fullPort'), color: semanticPresentationToken('fullPort'), backgroundColor: 'transparent' }}>+ Full</Button>
                     </div>
                   </div>
                   <div>
                     <Label>Operations (one per line)</Label>
-                    <textarea
+                    <textarea data-help-feature="app-block-operations" data-help-source="src/App.tsx"
                       value={selectedBlock.operations.join('\n')}
                       onChange={(e) => updateBlock(selectedBlock.id, { operations: e.target.value.split('\n').filter(s => s) })}
                       className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#f97316]"
@@ -20399,7 +19806,7 @@ const ADIA = () => {
                         <div className="mt-1 flex flex-col gap-1">
                           {signals.map(signal => (
                             <label key={signal.id} className="flex items-center gap-2 text-xs text-[#ccc]">
-                              <input
+                              <input data-help-feature="app-definition-receptions" data-help-source="src/App.tsx"
                                 type="checkbox"
                                 checked={received.includes(signal.id)}
                                 onChange={(event) => {
@@ -20417,7 +19824,7 @@ const ADIA = () => {
                   })()}
                   <div>
                     <Label>Constraints (one per line)</Label>
-                    <textarea
+                    <textarea data-help-feature="app-block-constraints" data-help-source="src/App.tsx"
                       value={(selectedBlock.constraints || []).join('\n')}
                       onChange={(e) => updateBlock(selectedBlock.id, { constraints: e.target.value.split('\n').filter(s => s) })}
                       className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#f97316]"
@@ -20426,7 +19833,7 @@ const ADIA = () => {
                   </div>
                   <div>
                     <Label>Nested Classes / Parts</Label>
-                    <textarea
+                    <textarea data-help-feature="app-block-classes" data-help-source="src/App.tsx"
                       value={(selectedBlock.classes || []).join('\n')}
                       onChange={(e) => updateBlock(selectedBlock.id, { classes: e.target.value.split('\n').filter(s => s) })}
                       className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#f97316]"
@@ -20448,7 +19855,7 @@ const ADIA = () => {
                   </div>
                   <div>
                     <Label>Satisfied Requirements</Label>
-                    <select
+                    <select data-help-feature="app-block-satisfiedReqIds" data-help-source="src/App.tsx"
                       multiple
                       value={selectedBlock.satisfiedReqIds || []}
                       onChange={(e) => {
@@ -20465,7 +19872,7 @@ const ADIA = () => {
                   </div>
                   <div className="flex flex-col gap-2 mt-4">
                     {canonicalSysmlRepository.definitions[selectedBlock.id]?.kind === 'block' && (
-                      <Button
+                      <Button data-help-feature="app-sequence-create" data-help-source="src/App.tsx"
                         variant="outline"
                         size="sm"
                         onClick={() => createSequenceDiagramForBlock(selectedBlock.id)}
@@ -20483,7 +19890,7 @@ const ADIA = () => {
                           <Label>Shown in Sequence Diagrams</Label>
                           <div className="mt-1 flex flex-col gap-1">
                             {usages.map(usage => (
-                              <button
+                              <button data-help-feature="app-sequence-reveal" data-help-source="src/App.tsx"
                                 key={usage.interactionId} type="button"
                                 onClick={() => {
                                   // The sequence workspace remounts per diagram and reports its own (empty) selection, so hand it this one.
@@ -20501,7 +19908,7 @@ const ADIA = () => {
                         </div>
                       );
                     })()}
-                    <Button
+                    <Button data-help-feature="app-remove-presentation" data-help-source="src/App.tsx"
                       variant="outline"
                       size="sm"
                       onClick={() => removeFromDiagram(selectedBlock.id)}
@@ -20509,7 +19916,7 @@ const ADIA = () => {
                     >
                       Remove from Diagram
                     </Button>
-                    <Button
+                    <Button data-help-feature="app-delete-definition" data-help-source="src/App.tsx"
                       variant="outline"
                       size="sm"
                       onClick={() => deleteBlock(selectedBlock.id)}
@@ -20526,7 +19933,7 @@ const ADIA = () => {
                     onExecuteCommand={dispatchInspectorCommand}
                   />
                   {diagramMode === 'package' && (
-                    <Button size="sm" variant="outline" className="w-full" onClick={() => removeFromDiagram(selectedRelationship.id)}
+                    <Button data-help-feature="app-remove-presentation" data-help-source="src/App.tsx" size="sm" variant="outline" className="w-full" onClick={() => removeFromDiagram(selectedRelationship.id)}
                       title="Hide this path on this diagram only; use Display Paths to show it again">
                       Remove from Diagram
                     </Button>
@@ -20573,7 +19980,7 @@ const ADIA = () => {
                       } as any);
                     }}
                   />
-                  <Button variant="outline" size="sm" onClick={() => deleteRelationship(selectedRelationship.id)} className="w-full border-red-800 text-red-400 hover:bg-red-950/30">Delete Relation</Button>
+                  <Button data-help-feature="app-relation-delete" data-help-source="src/App.tsx" variant="outline" size="sm" onClick={() => deleteRelationship(selectedRelationship.id)} className="w-full border-red-800 text-red-400 hover:bg-red-950/30">Delete Relation</Button>
                 </>
               ) : selectedPart ? (
                 <>
@@ -20583,12 +19990,12 @@ const ADIA = () => {
                   />
                   <div>
                     <Label>Multiplicity</Label>
-                    <Input value={selectedPart.multiplicity || ''} onChange={(e) => updatePart(selectedPart.id, { multiplicity: e.target.value })} className="mt-1" placeholder="1" />
+                    <Input data-help-feature="app-part-multiplicity" data-help-source="src/App.tsx" value={selectedPart.multiplicity || ''} onChange={(e) => updatePart(selectedPart.id, { multiplicity: e.target.value })} className="mt-1" placeholder="1" />
                   </div>
                   <div>
                     <div className="flex items-center justify-between">
                       <Label>Block Type</Label>
-                      <button
+                      <button data-help-feature="app-part-new-definition" data-help-source="src/App.tsx"
                         type="button"
                         onClick={() => {
                           const defId = uuidv4();
@@ -20607,7 +20014,7 @@ const ADIA = () => {
                         + New Block Def
                       </button>
                     </div>
-                    <select
+                    <select data-help-feature="app-part-type" data-help-source="src/App.tsx"
                       value={selectedPart.typeId || ''}
                       onChange={(e) => updatePart(selectedPart.id, { typeId: e.target.value || null })}
                       className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1"
@@ -20620,7 +20027,7 @@ const ADIA = () => {
                   </div>
                   <div>
                     <Label>Property Semantics</Label>
-                    <select
+                    <select data-help-feature="app-part-aggregation" data-help-source="src/App.tsx"
                       value={selectedPart.aggregation === 'reference' ? 'reference' : 'composite'}
                       onChange={(e) => updatePart(selectedPart.id, { aggregation: e.target.value as 'composite' | 'reference' })}
                       className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1"
@@ -20640,7 +20047,7 @@ const ADIA = () => {
                           <div className="space-y-1 mt-1 max-h-40 overflow-y-auto">
                             {block.ports.map((port, i) => (
                               <div key={port.id} className="flex items-center gap-1 bg-[#0a0a0a] p-1 rounded border border-[#333]">
-                                <Input
+                                <Input data-help-feature="app-port-name" data-help-source="src/App.tsx"
                                   value={port.name}
                                   onChange={(e) => {
                                     const newPorts = [...block.ports];
@@ -20650,7 +20057,7 @@ const ADIA = () => {
                                   className="w-16 h-6 text-[10px] px-1"
                                 />
                                 <span className="text-[#666] text-[10px]">:</span>
-                                <Input
+                                <Input data-help-feature="app-port-type" data-help-source="src/App.tsx"
                                   value={port.type}
                                   onChange={(e) => {
                                     const newPorts = [...block.ports];
@@ -20659,7 +20066,7 @@ const ADIA = () => {
                                   }}
                                   className="w-16 h-6 text-[10px] px-1"
                                 />
-                                <select
+                                <select data-help-feature="app-port-kind" data-help-source="src/App.tsx"
                                   value={port.kind || 'standard'}
                                   onChange={(e) => {
                                     const newPorts = [...block.ports];
@@ -20673,7 +20080,7 @@ const ADIA = () => {
                                 <option value="proxy">Proxy</option>
                                 <option value="full">Full</option>
                                 </select>
-                                <select
+                                <select data-help-feature="app-port-direction" data-help-source="src/App.tsx"
                                   aria-label={`Direction for ${sysmlObjectLabel(port, 'Port')}`}
                                   value={port.direction || 'inout'}
                                   onChange={(e) => {
@@ -20687,7 +20094,7 @@ const ADIA = () => {
                                   <option value="out">Out</option>
                                   <option value="inout">I/O</option>
                                 </select>
-                                <button
+                                <button data-help-feature="app-port-delete" data-help-source="src/App.tsx"
                                   onClick={() => {
                                     const newPorts = block.ports.filter(p => p.id !== port.id);
                                     updateBlock(block.id, { ports: newPorts });
@@ -20700,10 +20107,10 @@ const ADIA = () => {
                             ))}
                           </div>
                           <div className="flex gap-1 mt-2">
-                            <Button size="sm" onClick={() => handleAddPortToSelected('standard')} className="h-6 text-[10px] px-2 border" style={{ borderColor: semanticPresentationToken('standardPort'), color: semanticPresentationToken('standardPort'), backgroundColor: 'transparent' }}>+ Std</Button>
-                            <Button size="sm" onClick={() => handleAddPortToSelected('flow')} className="h-6 text-[10px] px-2 border" style={{ borderColor: semanticPresentationToken('flowPort'), color: semanticPresentationToken('flowPort'), backgroundColor: 'transparent' }}>+ Flow</Button>
-                            <Button size="sm" onClick={() => handleAddPortToSelected('proxy')} className="h-6 text-[10px] px-2 border" style={{ borderColor: semanticPresentationToken('proxyPort'), color: semanticPresentationToken('proxyPort'), backgroundColor: 'transparent' }}>+ Proxy</Button>
-                            <Button size="sm" onClick={() => handleAddPortToSelected('full')} className="h-6 text-[10px] px-2 border" style={{ borderColor: semanticPresentationToken('fullPort'), color: semanticPresentationToken('fullPort'), backgroundColor: 'transparent' }}>+ Full</Button>
+                            <Button data-help-feature="app-port-add" data-help-source="src/App.tsx" size="sm" onClick={() => handleAddPortToSelected('standard')} className="h-6 text-[10px] px-2 border" style={{ borderColor: semanticPresentationToken('standardPort'), color: semanticPresentationToken('standardPort'), backgroundColor: 'transparent' }}>+ Std</Button>
+                            <Button data-help-feature="app-port-add" data-help-source="src/App.tsx" size="sm" onClick={() => handleAddPortToSelected('flow')} className="h-6 text-[10px] px-2 border" style={{ borderColor: semanticPresentationToken('flowPort'), color: semanticPresentationToken('flowPort'), backgroundColor: 'transparent' }}>+ Flow</Button>
+                            <Button data-help-feature="app-port-add" data-help-source="src/App.tsx" size="sm" onClick={() => handleAddPortToSelected('proxy')} className="h-6 text-[10px] px-2 border" style={{ borderColor: semanticPresentationToken('proxyPort'), color: semanticPresentationToken('proxyPort'), backgroundColor: 'transparent' }}>+ Proxy</Button>
+                            <Button data-help-feature="app-port-add" data-help-source="src/App.tsx" size="sm" onClick={() => handleAddPortToSelected('full')} className="h-6 text-[10px] px-2 border" style={{ borderColor: semanticPresentationToken('fullPort'), color: semanticPresentationToken('fullPort'), backgroundColor: 'transparent' }}>+ Full</Button>
                           </div>
                         </div>
                       );
@@ -20713,7 +20120,7 @@ const ADIA = () => {
 
                   <div>
                     <Label>Satisfied Requirements</Label>
-                    <select
+                    <select data-help-feature="app-part-satisfies" data-help-source="src/App.tsx"
                       multiple
                       value={selectedPart.satisfiedReqIds || []}
                       onChange={(e) => {
@@ -20728,7 +20135,7 @@ const ADIA = () => {
                     </select>
                     <div className="text-[10px] text-[#666] mt-1">Hold Ctrl to select multiple</div>
                   </div>
-                  <Button variant="outline" size="sm" onClick={() => deletePart(selectedPart.id)} className="w-full border-red-800 text-red-400 hover:bg-red-950/30">Delete Part</Button>
+                  <Button data-help-feature="app-part-delete" data-help-source="src/App.tsx" variant="outline" size="sm" onClick={() => deletePart(selectedPart.id)} className="w-full border-red-800 text-red-400 hover:bg-red-950/30">Delete Part</Button>
                 </>
               ) : selectedConnector ? (
                 <>
@@ -20781,9 +20188,9 @@ const ADIA = () => {
                   />
                   <div className="mt-2">
                     <Label>Label (Text)</Label>
-                    <Input value={selectedConnector.label || ''} onChange={(e) => updateConnector(selectedConnector.id, { label: e.target.value })} className="mt-1" placeholder="e.g., Control Link" />
+                    <Input data-help-feature="app-connector-label" data-help-source="src/App.tsx" value={selectedConnector.label || ''} onChange={(e) => updateConnector(selectedConnector.id, { label: e.target.value })} className="mt-1" placeholder="e.g., Control Link" />
                   </div>
-                  <Button variant="outline" size="sm" onClick={() => deleteConnector(selectedConnector.id)} className="w-full border-red-800 text-red-400 hover:bg-red-950/30">Delete Connector</Button>
+                  <Button data-help-feature="app-connector-delete" data-help-source="src/App.tsx" variant="outline" size="sm" onClick={() => deleteConnector(selectedConnector.id)} className="w-full border-red-800 text-red-400 hover:bg-red-950/30">Delete Connector</Button>
                 </>
               ) : selectedInterfaceRealization ? (
                 <>
@@ -20791,7 +20198,7 @@ const ADIA = () => {
                     <Label>Interface Connection</Label>
                     <p className="text-xs text-[#888] mt-1">Connects an interface to a part's port.</p>
                   </div>
-                  <Button variant="outline" size="sm" onClick={() => deleteInterfaceRealization(selectedInterfaceRealization.id)} className="w-full border-red-800 text-red-400 hover:bg-red-950/30">Delete Connection</Button>
+                  <Button data-help-feature="app-interface-delete" data-help-source="src/App.tsx" variant="outline" size="sm" onClick={() => deleteInterfaceRealization(selectedInterfaceRealization.id)} className="w-full border-red-800 text-red-400 hover:bg-red-950/30">Delete Connection</Button>
                 </>
               ) : selectedTransition ? (
                 <>
@@ -20819,7 +20226,7 @@ const ADIA = () => {
                         <div className="flex gap-2 mt-2">
                           {err.message.includes('unguarded and untimed') ? (
                             <>
-                              <Button
+                              <Button data-help-feature="app-transition-type" data-help-source="src/App.tsx"
                                 size="sm"
                                 variant="outline"
                                 onClick={() => {
@@ -20831,7 +20238,7 @@ const ADIA = () => {
                               >
                                 Add Guard
                               </Button>
-                              <Button
+                              <Button data-help-feature="app-transition-type" data-help-source="src/App.tsx"
                                 size="sm"
                                 variant="outline"
                                 onClick={() => {
@@ -20844,7 +20251,7 @@ const ADIA = () => {
                               </Button>
                             </>
                           ) : (
-                            <Button
+                            <Button data-help-feature="app-error-fix" data-help-source="src/App.tsx"
                               size="sm"
                               variant="outline"
                               onClick={() => handleAutoFix(err)}
@@ -20860,7 +20267,7 @@ const ADIA = () => {
 
                   <div>
                     <Label>Order (priority for same source)</Label>
-                    <Input
+                    <Input data-help-feature="app-transition-order" data-help-source="src/App.tsx"
                       type="number"
                       value={selectedTransition.order}
                       onChange={(e) => updateTransition(selectedTransition.id, { order: parseInt(e.target.value) || 0 })}
@@ -20869,7 +20276,7 @@ const ADIA = () => {
                   </div>
 
                   <div className="flex items-center gap-2 mt-3 mb-2">
-                    <Checkbox
+                    <Checkbox data-help-feature="app-transition-isInternal" data-help-source="src/App.tsx"
                       checked={!!selectedTransition.isInternal}
                       onCheckedChange={(checked) => updateTransition(selectedTransition.id, { isInternal: checked as boolean })}
                       id="isInternal"
@@ -20880,7 +20287,7 @@ const ADIA = () => {
                   <div className="space-y-3 p-3 bg-[#1a1a1a] rounded-lg border border-[#222]">
                     <Label className="text-[#f97316]">Trigger Logic</Label>
 
-                    <select
+                    <select data-help-feature="app-transition-type" data-help-source="src/App.tsx"
                       value={selectedTransition.type}
                       onChange={(e) => updateTransition(selectedTransition.id, { type: e.target.value as any })}
                       className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0]"
@@ -20894,7 +20301,7 @@ const ADIA = () => {
                     {(selectedTransition.type === 'condition' || selectedTransition.type === 'and' || selectedTransition.type === 'or') && (
                       <div>
                         <Label>Condition</Label>
-                        <textarea
+                        <textarea data-help-feature="app-transition-condition" data-help-source="src/App.tsx"
                           value={selectedTransition.condition}
                           onChange={(e) => updateTransition(selectedTransition.id, { condition: e.target.value as any })}
                           placeholder="e.g., x > 10"
@@ -20906,7 +20313,7 @@ const ADIA = () => {
                     {(selectedTransition.type === 'after' || selectedTransition.type === 'and' || selectedTransition.type === 'or') && (
                       <div>
                         <Label>After (ticks)</Label>
-                        <Input
+                        <Input data-help-feature="app-transition-afterTicks" data-help-source="src/App.tsx"
                           type="number"
                           value={selectedTransition.afterTicks ?? ''}
                           onChange={(e) => updateTransition(selectedTransition.id, {
@@ -20921,7 +20328,7 @@ const ADIA = () => {
 
                   <div>
                     <Label>Action (C-like code)</Label>
-                    <textarea
+                    <textarea data-help-feature="app-transition-action" data-help-source="src/App.tsx"
                       value={selectedTransition.action}
                       onChange={(e) => updateTransition(selectedTransition.id, { action: e.target.value })}
                       placeholder="/* Action on transition */ counter = 0; flag = false;"
@@ -20929,7 +20336,7 @@ const ADIA = () => {
                     />
                   </div>
 
-                  <Button
+                  <Button data-help-feature="app-transition-delete" data-help-source="src/App.tsx"
                     variant="outline"
                     size="sm"
                     onClick={() => deleteTransition(selectedTransition.id)}
@@ -20983,7 +20390,7 @@ const ADIA = () => {
         {/* Mobile Navigation Bar */}
         {isMobile && (
           <div className="h-14 bg-[#1a1a1a] border-t border-[#222] flex items-center justify-around shrink-0 pb-safe">
-            <button
+            <button data-help-feature="app-panel-collapse" data-help-source="src/App.tsx"
               onClick={() => setMobileTab('hierarchy')}
               className={`flex flex-col items-center justify-center w-full h-full ${mobileTab === 'hierarchy' ? 'text-[#f97316]' : 'text-[#666]'}`}
             >
@@ -20994,7 +20401,7 @@ const ADIA = () => {
               </svg>
               <span className="text-[10px] font-bold">Tree</span>
             </button>
-            <button
+            <button data-help-feature="app-panel-collapse" data-help-source="src/App.tsx"
               onClick={() => setMobileTab('variables')}
               className={`flex flex-col items-center justify-center w-full h-full ${mobileTab === 'variables' ? 'text-[#f97316]' : 'text-[#666]'}`}
             >
@@ -21005,7 +20412,7 @@ const ADIA = () => {
               </svg>
               <span className="text-[10px] font-bold">Vars</span>
             </button>
-            <button
+            <button data-help-feature="app-panel-collapse" data-help-source="src/App.tsx"
               onClick={() => setMobileTab('canvas')}
               className={`flex flex-col items-center justify-center w-full h-full ${mobileTab === 'canvas' ? 'text-[#f97316]' : 'text-[#666]'}`}
             >
@@ -21015,7 +20422,7 @@ const ADIA = () => {
               </svg>
               <span className="text-[10px] font-bold">Canvas</span>
             </button>
-            <button
+            <button data-help-feature="app-panel-collapse" data-help-source="src/App.tsx"
               onClick={() => setMobileTab('properties')}
               className={`flex flex-col items-center justify-center w-full h-full ${mobileTab === 'properties' ? 'text-[#f97316]' : 'text-[#666]'}`}
             >
@@ -21043,12 +20450,12 @@ const ADIA = () => {
               <div className="flex-1 overflow-y-auto p-5 space-y-5">
                 <div className="space-y-3 p-4 bg-[#1a1a1a] rounded-lg border border-[#222]">
                   <Label>Add Variable</Label>
-                  <Input
+                  <Input data-help-feature="app-variable-name" data-help-source="src/App.tsx"
                     placeholder="Name"
                     value={newVarName}
                     onChange={(e) => setNewVarName(e.target.value)}
                   />
-                  <select
+                  <select data-help-feature="app-variable-new-type" data-help-source="src/App.tsx"
                     value={newVarType}
                     onChange={(e) => {
                       setNewVarType(e.target.value as VariableType);
@@ -21060,13 +20467,13 @@ const ADIA = () => {
                       <option key={type} value={type}>{type}</option>
                     ))}
                   </select>
-                  <Input
+                  <Input data-help-feature="app-variable-new-initial" data-help-source="src/App.tsx"
                     placeholder="Initial value"
                     value={newVarValue}
                     onChange={(e) => setNewVarValue(e.target.value)}
                     className="mt-1"
                   />
-                  <Button
+                  <Button data-help-feature="app-variable-add" data-help-source="src/App.tsx"
                     size="sm"
                     onClick={addVariable}
                     className="w-full bg-[#f97316] text-[#0a0a0a] hover:bg-[#ea580c] mt-2 h-9"
@@ -21087,7 +20494,7 @@ const ADIA = () => {
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                          <Checkbox
+                          <Checkbox data-help-feature="app-scope-select" data-help-source="src/App.tsx"
                             checked={variable.visibleInScope}
                             onCheckedChange={() => toggleVariableVisibility(variable.id)}
                             id={`var-${variable.id}`}
@@ -21099,7 +20506,7 @@ const ADIA = () => {
                       <div className="grid grid-cols-2 gap-3">
                         <div>
                           <Label className="text-[11px]">Initial Value</Label>
-                          <Input
+                          <Input data-help-feature="app-variable-initial" data-help-source="src/App.tsx"
                             value={variable.initialValue}
                             onChange={(e) => updateVariableInitValue(variable.id, e.target.value)}
                             disabled={isRunning}
@@ -21115,7 +20522,7 @@ const ADIA = () => {
                               </svg>
                             )}
                           </Label>
-                          <Input
+                          <Input data-help-feature="app-variable-live" data-help-source="src/App.tsx"
                             value={String(variable.currentValue)}
                             onChange={(e) => updateVariableValue(variable.id, e.target.value)}
                             disabled={!isRunning}
@@ -21129,14 +20536,14 @@ const ADIA = () => {
               </div>
 
               <div className="h-14 flex items-center justify-end px-5 border-t border-[#222] gap-3">
-                <Button
+                <Button data-help-feature="app-dialog-close" data-help-source="src/App.tsx"
                   variant="outline"
                   onClick={() => setShowWorkspaceModal(false)}
                   className="border-[#333] text-[#a0a0a0] hover:text-[#e0e0e0] px-5"
                 >
                   Cancel
                 </Button>
-                <Button
+                <Button data-help-feature="app-variable-reset" data-help-source="src/App.tsx"
                   onClick={() => {
                     resetVariables();
                     setShowWorkspaceModal(false);
@@ -21156,7 +20563,7 @@ const ADIA = () => {
 
         {/* Code Generation Dialog - FULLY FUNCTIONAL */}
         {showCodegenDialog && (
-          <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50" onMouseDown={() => setShowCodegenDialog(false)}>
+          <div data-help-feature="live:App:5bc803ce8a54" className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50" onMouseDown={() => setShowCodegenDialog(false)}>
             <CodeGenerationDialog
               files={generatedFiles}
               codegenErrors={codegenErrors}
@@ -21200,14 +20607,14 @@ const ADIA = () => {
 
         {/* Delete State Confirmation Modal */}
         {deleteConfirmState && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in duration-150" onMouseDown={() => setDeleteConfirmState(null)}>
+          <div data-help-feature="live:App:de6bd9093918" className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in duration-150" onMouseDown={() => setDeleteConfirmState(null)}>
             <div className="bg-[#1a1a1a] border border-[#f97316]/60 rounded-xl w-[480px] max-h-[90vh] flex flex-col shadow-2xl overflow-hidden relative" onMouseDown={e => e.stopPropagation()}>
               <div className="h-14 flex items-center px-6 border-b border-[#2a2a2a] bg-[#141414]">
                 <Trash2 className="w-5 h-5 text-[#f97316] mr-3 shrink-0" />
                 <h2 className="text-base font-bold text-[#e0e0e0]">
                   {deleteConfirmState.totalStates > 1 ? 'Confirm Delete States' : 'Confirm Delete State'}
                 </h2>
-                <button
+                <button data-help-feature="app-dialog-cancel" data-help-source="src/App.tsx"
                   onClick={() => setDeleteConfirmState(null)}
                   className="ml-auto text-[#888] hover:text-[#fff] p-1 rounded transition-colors"
                 >
@@ -21244,14 +20651,14 @@ const ADIA = () => {
               </div>
 
               <div className="h-16 flex items-center justify-end px-6 border-t border-[#2a2a2a] bg-[#141414] gap-3">
-                <Button
+                <Button data-help-feature="app-dialog-cancel" data-help-source="src/App.tsx"
                   variant="outline"
                   onClick={() => setDeleteConfirmState(null)}
                   className="border-[#333] text-[#a0a0a0] hover:bg-[#252525] hover:text-white px-5 text-xs h-9"
                 >
                   Cancel
                 </Button>
-                <Button
+                <Button data-help-feature="app-state-delete" data-help-source="src/App.tsx"
                   onClick={() => executeDeleteState(deleteConfirmState.ids, deleteConfirmState.otherDeletedIds)}
                   className="bg-red-600 hover:bg-red-700 text-white px-5 text-xs h-9 font-medium shadow-md flex items-center gap-1.5"
                 >
@@ -21264,14 +20671,14 @@ const ADIA = () => {
         )}
         {/* SysML Deletion Confirmation Modal (BDD / Requirements / IBD) */}
         {sysmlDeleteConfirm && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in duration-150" onMouseDown={() => setSysmlDeleteConfirm(null)}>
+          <div data-help-feature="live:App:e74939a12e4a" className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in duration-150" onMouseDown={() => setSysmlDeleteConfirm(null)}>
             <div className="bg-[#1a1a1a] border border-red-900/60 rounded-xl w-[520px] max-h-[90vh] flex flex-col shadow-2xl overflow-hidden relative" onMouseDown={e => e.stopPropagation()}>
               <div className="h-14 flex items-center px-6 border-b border-[#2a2a2a] bg-[#141414]">
                 <AlertTriangle className={`w-5 h-5 ${sysmlDeleteConfirm.severity === 'blocked' ? 'text-red-500' : 'text-[#f97316]'} mr-3 shrink-0`} />
                 <h2 className="text-base font-bold text-[#e0e0e0]">
                   {sysmlDeleteConfirm.severity === 'blocked' ? 'Deletion Blocked' : `Confirm Delete ${sysmlDeleteConfirm.elementKind.charAt(0).toUpperCase() + sysmlDeleteConfirm.elementKind.slice(1)}`}
                 </h2>
-                <button
+                <button data-help-feature="app-dialog-cancel" data-help-source="src/App.tsx"
                   onClick={() => setSysmlDeleteConfirm(null)}
                   className="ml-auto text-[#888] hover:text-[#fff] p-1 rounded transition-colors"
                 >
@@ -21336,7 +20743,7 @@ const ADIA = () => {
               </div>
 
               <div className="h-16 flex items-center justify-end px-6 border-t border-[#2a2a2a] bg-[#141414] gap-3">
-                <Button
+                <Button data-help-feature="app-dialog-cancel" data-help-source="src/App.tsx"
                   variant="outline"
                   onClick={() => setSysmlDeleteConfirm(null)}
                   className="border-[#333] text-[#a0a0a0] hover:bg-[#252525] hover:text-white px-5 text-xs h-9"
@@ -21344,7 +20751,7 @@ const ADIA = () => {
                   {sysmlDeleteConfirm.severity === 'blocked' ? 'Dismiss' : 'Cancel'}
                 </Button>
                 {sysmlDeleteConfirm.severity !== 'blocked' && (
-                  <Button
+                  <Button data-help-feature="app-delete-confirm" data-help-source="src/App.tsx"
                     onClick={() => {
                       const fn = sysmlDeleteConfirm.onConfirm;
                       setSysmlDeleteConfirm(null);
@@ -21396,7 +20803,7 @@ const ADIA = () => {
 
         {/* Policy-filtered connection picker */}
         {requirementConnectionPicker && (
-          <div
+          <div data-help-feature="live:App:2312fd515dbd"
             className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4"
             onMouseDown={() => setRequirementConnectionPicker(null)}
           >
@@ -21434,7 +20841,7 @@ const ADIA = () => {
                 ).map(kind => {
                   const meta = RELATIONSHIP_DEFINITIONS[kind as RequirementRelationshipKind];
                   return (
-                    <Button
+                    <Button data-help-feature="app-relation-create" data-help-source="src/App.tsx"
                       key={kind}
                       onClick={() => {
                         createRelationship(requirementConnectionPicker.sourceId, requirementConnectionPicker.targetId, kind);
@@ -21464,7 +20871,7 @@ const ADIA = () => {
               </div>
 
               <div className="flex justify-end pt-2 border-t border-[#2a2a2a]">
-                <Button
+                <Button data-help-feature="app-dialog-cancel" data-help-source="src/App.tsx"
                   variant="outline"
                   onClick={() => setRequirementConnectionPicker(null)}
                   className="border-[#333] text-[#a0a0a0] hover:bg-[#222]"
@@ -21478,7 +20885,7 @@ const ADIA = () => {
 
         {/* Package diagram chooser */}
         {packageDiagramChooser && (
-          <div
+          <div data-help-feature="live:App:1748cf4e0199"
             className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4"
             onMouseDown={() => setPackageDiagramChooser(null)}
           >
@@ -21495,7 +20902,7 @@ const ADIA = () => {
                 {packageDiagramChooser.diagramIds.map(id => {
                   const diag = canonicalSysmlRepository.diagrams[id];
                   return (
-                    <Button
+                    <Button data-help-feature="app-diagram-open" data-help-source="src/App.tsx"
                       key={id}
                       onClick={() => {
                         setActivePackageDiagramId(id);
@@ -21511,7 +20918,7 @@ const ADIA = () => {
               </div>
 
               <div className="flex items-center justify-between pt-2 border-t border-[#333]">
-                <Button
+                <Button data-help-feature="app-diagram-open" data-help-source="src/App.tsx"
                   size="sm"
                   variant="outline"
                   onClick={() => {
@@ -21540,7 +20947,7 @@ const ADIA = () => {
                 >
                   Create New Diagram
                 </Button>
-                <Button size="sm" variant="ghost" onClick={() => setPackageDiagramChooser(null)}>
+                <Button data-help-feature="app-dialog-cancel" data-help-source="src/App.tsx" size="sm" variant="ghost" onClick={() => setPackageDiagramChooser(null)}>
                   Cancel
                 </Button>
               </div>
@@ -21567,7 +20974,7 @@ const ADIA = () => {
             'Element',
           ));
           return (
-            <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4" onMouseDown={revertDrop}>
+            <div data-help-feature="live:App:b446db02c0a0" className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4" onMouseDown={revertDrop}>
               <div
                 role="dialog"
                 aria-label="Move to Package"
@@ -21581,8 +20988,8 @@ const ADIA = () => {
                   </p>
                 </div>
                 <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#333]">
-                  <Button size="sm" variant="ghost" onClick={revertDrop}>Cancel</Button>
-                  <Button size="sm" onClick={() => {
+                  <Button data-help-feature="app-dialog-cancel" data-help-source="src/App.tsx" size="sm" variant="ghost" onClick={revertDrop}>Cancel</Button>
+                  <Button data-help-feature="app-package-move" data-help-source="src/App.tsx" size="sm" onClick={() => {
                     const result = handleExecuteSysmlCommand({
                       type: 'moveElements', elementIds: pendingPackageMove.elementIds, targetOwnerId: pendingPackageMove.targetOwnerId,
                     });
@@ -21603,7 +21010,7 @@ const ADIA = () => {
         })()}
 
         {diagramTargetChooser && (
-          <div
+          <div data-help-feature="live:App:3cd25ac7375b"
             className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4"
             onMouseDown={() => setDiagramTargetChooser(null)}
           >
@@ -21623,7 +21030,7 @@ const ADIA = () => {
                 {diagramTargetChooser.diagramIds.map(id => {
                   const diagram = canonicalSysmlRepository.diagrams[id];
                   return (
-                    <Button
+                    <Button data-help-feature="app-diagram-open" data-help-source="src/App.tsx"
                       key={id}
                       onClick={() => {
                         setDiagramTargetChooser(null);
@@ -21638,7 +21045,7 @@ const ADIA = () => {
                 })}
               </div>
               <div className="flex justify-end pt-2 border-t border-[#333]">
-                <Button size="sm" variant="ghost" onClick={() => setDiagramTargetChooser(null)}>Cancel</Button>
+                <Button data-help-feature="app-dialog-cancel" data-help-source="src/App.tsx" size="sm" variant="ghost" onClick={() => setDiagramTargetChooser(null)}>Cancel</Button>
               </div>
             </div>
           </div>
@@ -21657,7 +21064,7 @@ const ADIA = () => {
 
         {/* Error Dialog */}
         {showErrorDialog && currentError && (
-          <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50" onMouseDown={dismissErrorDialog}>
+          <div data-help-feature="live:App:782623a30ed7" className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50" onMouseDown={dismissErrorDialog}>
             <div role="alertdialog" aria-modal="true" aria-labelledby="error-dialog-title" className="bg-[#1a1a1a] border border-red-900 rounded-lg w-[550px] max-h-[90vh] flex flex-col relative" onMouseDown={e => e.stopPropagation()}>
               <div className="h-12 flex items-center px-5 border-b border-red-900/50">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ff6b6b" strokeWidth="2" className="mr-3">
@@ -21686,7 +21093,7 @@ const ADIA = () => {
               </div>
 
               <div className="h-14 flex items-center justify-end px-5 border-t border-[#222] gap-3">
-                <Button
+                <Button data-help-feature="app-error-jump" data-help-source="src/App.tsx"
                   variant="outline"
                   onClick={() => handleJumpToError(currentError)}
                   disabled={!currentError.elementId}
@@ -21697,7 +21104,7 @@ const ADIA = () => {
                 {currentError.canAutoFix && (
                   currentError.message.includes('unguarded and untimed') ? (
                     <>
-                      <Button
+                      <Button data-help-feature="app-transition-type" data-help-source="src/App.tsx"
                         onClick={() => {
                           const defaultGuard = variables.length > 0 ? `${variables[0].name} == 1U` : 'flag == true';
                           updateTransition(currentError.elementId!, { type: 'condition', condition: defaultGuard });
@@ -21709,7 +21116,7 @@ const ADIA = () => {
                       >
                         Add Guard
                       </Button>
-                      <Button
+                      <Button data-help-feature="app-transition-type" data-help-source="src/App.tsx"
                         onClick={() => {
                           updateTransition(currentError.elementId!, { type: 'after', afterTicks: 5 });
                           addError('info', `Added after-timer: after(5)`);
@@ -21722,7 +21129,7 @@ const ADIA = () => {
                       </Button>
                     </>
                   ) : (
-                    <Button
+                    <Button data-help-feature="app-error-fix" data-help-source="src/App.tsx"
                       onClick={() => handleAutoFix(currentError)}
                       className="bg-green-600 hover:bg-green-700 text-white px-5 mr-2"
                     >
@@ -21731,14 +21138,14 @@ const ADIA = () => {
                   )
                 )}
                 {errors.filter(e => e.canAutoFix).length > 1 && (
-                  <Button
+                  <Button data-help-feature="app-error-fix" data-help-source="src/App.tsx"
                     onClick={handleFixAll}
                     className="bg-green-700 hover:bg-green-800 text-white px-5 mr-2"
                   >
                     Fix All ({errors.filter(e => e.canAutoFix).length})
                   </Button>
                 )}
-                <Button
+                <Button data-help-feature="app-error-dismiss" data-help-source="src/App.tsx"
                   variant="outline"
                   ref={errorDismissButtonRef}
                   onClick={dismissErrorDialog}
@@ -21746,7 +21153,7 @@ const ADIA = () => {
                 >
                   Dismiss
                 </Button>
-                <Button
+                <Button data-help-feature="app-error-clear" data-help-source="src/App.tsx"
                   onClick={() => {
                     clearErrors();
                     dismissErrorDialog();
@@ -21892,7 +21299,7 @@ const ADIA = () => {
         {/* ── Detached Scope Floating Overlay Window ────────────────────────────── */}
         {isScopeDetached && (
           <div className="fixed inset-4 sm:inset-10 z-50 bg-[#121212]/95 border border-[#333] rounded-xl shadow-2xl flex flex-col backdrop-blur-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            <div
+            <div data-help-feature="app-scope-dock" data-help-source="src/App.tsx"
               onDoubleClick={() => setIsScopeDetached(false)}
               className="h-12 px-5 border-b border-[#222] flex items-center justify-between bg-[#1a1a1a] shrink-0 cursor-pointer select-none"
               title="Double-click header to dock back to bottom panel"
@@ -21905,7 +21312,7 @@ const ADIA = () => {
                 <span className="text-xs text-[#666] bg-[#222] px-2.5 py-0.5 rounded-full ml-2">Double-click header to dock back</span>
               </div>
               <div className="flex items-center gap-2">
-                <Button
+                <Button data-help-feature="app-scope-csv" data-help-source="src/App.tsx"
                   variant="ghost"
                   size="sm"
                   onClick={exportScopeCSV}
@@ -21913,7 +21320,7 @@ const ADIA = () => {
                 >
                   Export CSV
                 </Button>
-                <Button
+                <Button data-help-feature="app-scope-clear" data-help-source="src/App.tsx"
                   variant="ghost"
                   size="sm"
                   onClick={clearScope}
@@ -21921,7 +21328,7 @@ const ADIA = () => {
                 >
                   Clear
                 </Button>
-                <Button
+                <Button data-help-feature="app-scope-dock" data-help-source="src/App.tsx"
                   variant="ghost"
                   size="icon"
                   onClick={() => setIsScopeDetached(false)}
