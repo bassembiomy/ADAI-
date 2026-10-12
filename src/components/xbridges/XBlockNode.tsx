@@ -2066,7 +2066,7 @@ export const XBlockNode = React.memo(({ data, selected, id }: any) => {
     return (
       <div 
         ref={nodeRef}
-        className={`relative rounded-md transition-all duration-500 border-2 p-3 ${selected ? 'ring-4 ring-orange-500/20 scale-105 z-50' : 'hover:border-[#444]'}`}
+        className={`relative rounded-md transition-[border-color,box-shadow] duration-200 border-2 p-3 ${selected ? 'ring-4 ring-orange-500/20 z-50' : 'hover:border-[#444]'}`}
         onContextMenu={(e) => e.preventDefault()}
         onMouseDown={(e) => {
           if (workspaceContext?.onNodeMouseDown) workspaceContext.onNodeMouseDown(e, id);
@@ -2122,15 +2122,15 @@ export const XBlockNode = React.memo(({ data, selected, id }: any) => {
   return (
     <div 
       ref={nodeRef}
-      className={`relative rounded-md transition-all duration-500 border-2 ${selected ? 'ring-4 ring-orange-500/20 scale-105 z-50' : 'hover:border-[#444]'} ${isPulsing ? 'block-pulse-highlight' : ''}`}
+      className={`relative rounded-md transition-[border-color,box-shadow] duration-200 border-2 ${selected ? 'ring-4 ring-orange-500/20 z-50' : 'hover:border-[#444]'} ${isPulsing ? 'block-pulse-highlight' : ''}`}
       onContextMenu={(e) => e.preventDefault()}
       onMouseDown={(e) => {
         if (workspaceContext?.onNodeMouseDown) workspaceContext.onNodeMouseDown(e, id);
         else if (data.onNodeMouseDown) data.onNodeMouseDown(e);
       }}
       style={{ 
+        // No backdrop blur: the background is ~opaque, and blur forced a costly repaint on every drag frame.
         background: 'rgba(26, 26, 26, 0.95)',
-        backdropFilter: 'blur(20px)',
         borderColor: selected ? color : '#333333',
         minWidth: data.type === 'Scope' ? 260 : ['TRANSFER_FUNCTION', 'DISCRETE_TRANSFER_FUNCTION', 'ZERO_POLE_GAIN', 'ROOT_LOCUS', 'LAPLACE_TRANSFORM'].includes(data.type) ? 170 : 130,
         boxShadow: selected 

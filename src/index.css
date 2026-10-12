@@ -124,6 +124,13 @@ body {
   transition: stroke 0.25s ease;
 }
 
+/* X-Bridges: the dashed "flow" animation repaints every edge continuously;
+   only run it while the simulation is running. */
+.xb-static-edges .react-flow__edge.animated path {
+  animation: none;
+  stroke-dasharray: none;
+}
+
 .react-flow__controls {
   background: var(--bg-panel);
   border: 1px solid var(--border-dark);

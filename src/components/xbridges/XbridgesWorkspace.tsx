@@ -116,11 +116,13 @@ class XBlockErrorBoundary extends React.Component<{ children: React.ReactNode },
   }
 }
 
-const SafeXBlockNode: React.FC<any> = (props) => (
+// Memoized so React Flow only re-renders a block when its own props change
+// (not on every drag frame of an unrelated block).
+const SafeXBlockNode: React.FC<any> = React.memo((props) => (
   <XBlockErrorBoundary>
     <XBlockNode {...props} />
   </XBlockErrorBoundary>
-);
+));
 
 const nodeTypes = { xblock: SafeXBlockNode };
 const edgeTypes = {
@@ -1277,6 +1279,18 @@ const XBRIDGES_LEARNING_LAB_STEPS: Record<string, any[]> = {
   ]
 };
 
+// Stable defaults: a fresh `[]` per render re-triggered the effects below on every render,
+// which kept the workspace re-rendering continuously even when idle.
+const EMPTY_ARRAY: any[] = [];
+
+// The parent rebuilds these arrays on each of its renders; treat them as unchanged
+// when they hold the same items so we don't reset the canvas (blocks jumping mid-drag).
+const isSameItems = (a: readonly unknown[], b: readonly unknown[]) =>
+  a === b || (a.length === b.length && a.every((item, i) => item === b[i]));
+
+const isSameMappings = (a: readonly XBMappingV1[], b: readonly XBMappingV1[]) =>
+  isSameItems(a, b) || JSON.stringify(a) === JSON.stringify(b);
+
 export const XbridgesWorkspace: React.FC<{
   initialNodes?: any[];
   initialEdges?: any[];
@@ -1296,10 +1310,10 @@ export const XbridgesWorkspace: React.FC<{
   isSmSimulating?: boolean;
   simulationTime?: number;
 }> = ({
-  initialNodes = [],
-  initialEdges = [],
-  initialMappings = [],
-  availableVariables = [],
+  initialNodes = EMPTY_ARRAY,
+  initialEdges = EMPTY_ARRAY,
+  initialMappings: initialMappingsProp = EMPTY_ARRAY,
+  availableVariables = EMPTY_ARRAY,
   tickMs,
   onBack,
   onSave,
@@ -1314,6 +1328,11 @@ export const XbridgesWorkspace: React.FC<{
   isSmSimulating = false,
   simulationTime = 0
 }) => {
+  const stableMappingsRef = React.useRef<readonly XBMappingV1[]>(initialMappingsProp);
+  if (!isSameMappings(stableMappingsRef.current, initialMappingsProp)) {
+    stableMappingsRef.current = initialMappingsProp;
+  }
+  const initialMappings = stableMappingsRef.current;
   const initialNodesWithMappings = useMemo(
     () => syncXBBoundaryNodeMetadata(initialNodes, initialMappings),
     [initialNodes, initialMappings],
@@ -1372,7 +1391,10 @@ export const XbridgesWorkspace: React.FC<{
   useEffect(() => {
     initialMappingsRef.current = initialMappings;
     if (!isSavingRef.current) {
-      setNodes(currentNodes => syncXBBoundaryNodeMetadata(currentNodes, initialMappings));
+      setNodes(currentNodes => {
+        const synced = syncXBBoundaryNodeMetadata(currentNodes, initialMappings);
+        return isSameItems(synced, currentNodes) ? currentNodes : synced;
+      });
     }
   }, [initialMappings, setNodes]);
 
@@ -1380,6 +1402,8 @@ export const XbridgesWorkspace: React.FC<{
   useEffect(() => {
     // Don't start the timer while a copy-drag is in progress; we'll save manually on mouseup
     if (isDraggingCopyRef.current) return;
+    // Don't persist on every drag frame; the final position change (dragging=false) triggers the save
+    if (nodes.some(n => n.dragging)) return;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
       if (onSave) {
@@ -1395,7 +1419,7 @@ export const XbridgesWorkspace: React.FC<{
   // Inward sync: only apply when initialNodes/initialEdges change AND we didn't cause the change
   useEffect(() => {
     // Skip on first mount (initialNodesRef already holds this value)
-    if (initialNodes === initialNodesRef.current) return;
+    if (isSameItems(initialNodes, initialNodesRef.current)) return;
     initialNodesRef.current = initialNodes;
     // If we are currently saving, this change came from our own onSave callback — skip it
     if (isSavingRef.current) return;
@@ -1403,7 +1427,7 @@ export const XbridgesWorkspace: React.FC<{
   }, [initialNodes, setNodes]);
 
   useEffect(() => {
-    if (initialEdges === initialEdgesRef.current) return;
+    if (isSameItems(initialEdges, initialEdgesRef.current)) return;
     initialEdgesRef.current = initialEdges;
     if (isSavingRef.current) return;
     setEdges(initialEdges);
@@ -1646,14 +1670,16 @@ export const XbridgesWorkspace: React.FC<{
     if (initialSelectedNodeId && reactFlowInstance) {
       setSelectedNodeId(initialSelectedNodeId);
       setNodes(nds => nds.map(n => ({ ...n, selected: n.id === initialSelectedNodeId })));
-      const node = nodes.find(n => n.id === initialSelectedNodeId);
+      const node = nodesRef.current.find(n => n.id === initialSelectedNodeId);
       if (node) {
         setTimeout(() => {
           reactFlowInstance.setCenter(node.position.x + 70, node.position.y + 40, { zoom: 1.2, duration: 800 });
         }, 150);
       }
     }
-  }, [initialSelectedNodeId, reactFlowInstance, nodes]);
+    // nodes are read through nodesRef: depending on `nodes` here re-selected and re-centered
+    // the view on every drag frame, which made blocks jump while being moved.
+  }, [initialSelectedNodeId, reactFlowInstance, setNodes]);
 
   // Trigger window resize and fitView to handle initial container measurements,
   // tab transitions, or dimensions rendering as 0 initially.
@@ -2637,6 +2663,7 @@ export const XbridgesWorkspace: React.FC<{
 
   // --- Subsystem Port Synchronization ---
   useEffect(() => {
+    if (nodes.some(n => n.dragging)) return;
     let hasChanges = false;
     const nextNodes = nodes.map(node => {
       if (node.data.type === 'Subsystem') {
@@ -2725,6 +2752,36 @@ export const XbridgesWorkspace: React.FC<{
   }, [activeLabId, currentStepIndex, nodes, edges, isSimulating, openScopes, selectedNodeId, fixedStep, completedObjectives]);
 
   const selectedNode = nodes.find(n => n.id === selectedNodeId);
+
+  const visibleNodes = useMemo(
+    () => nodes.filter(n => (n.data.parentId || 'root') === currentParentId),
+    [nodes, currentParentId]
+  );
+  const visibleEdges = useMemo(() => {
+    const visibleIds = new Set(visibleNodes.map(n => n.id));
+    return edges.filter(e => visibleIds.has(e.source));
+  }, [edges, visibleNodes]);
+
+  // Stable context value: callbacks go through a ref so every block/edge doesn't
+  // re-render on each workspace render (e.g. every frame while dragging).
+  const contextHandlersRef = React.useRef({ saveHistory, updateBlock, handleNodeMouseDown, activeLabId, currentStepIndex });
+  contextHandlersRef.current = { saveHistory, updateBlock, handleNodeMouseDown, activeLabId, currentStepIndex };
+  const isSimulationRunning = isSimulating && !isPaused;
+  const workspaceContextValue = useMemo(() => ({
+    saveHistory: () => contextHandlersRef.current.saveHistory(),
+    updateBlock: (id: string, newData: any) => contextHandlersRef.current.updateBlock(id, newData),
+    onOpenScope: (blockId: string) => setOpenScopes(prev => prev.includes(blockId) ? prev : [...prev, blockId]),
+    onNodeMouseDown: (e: React.MouseEvent, n: any) => contextHandlersRef.current.handleNodeMouseDown(e, n),
+    isTargetBlock: (blockId: string) => {
+      const { activeLabId: labId, currentStepIndex: stepIndex } = contextHandlersRef.current;
+      const steps = labId ? XBRIDGES_LEARNING_LAB_STEPS[labId] : null;
+      const currentStep = steps ? steps[stepIndex] : null;
+      return !!(currentStep && currentStep.targetNodeId === blockId);
+    },
+    isSimulating: isSimulationRunning,
+    getColor: getColor
+    // activeLabId/currentStepIndex are listed so blocks re-render when the highlighted target changes
+  }), [isSimulationRunning, activeLabId, currentStepIndex]);
 
   const addBlockAtPos = (type: string, x: number, y: number) => {
     if (!reactFlowInstance || !BLOCK_LIBRARY[type]) return;
@@ -3295,28 +3352,14 @@ export const XbridgesWorkspace: React.FC<{
                 <span>⊕</span> Copying Block — Release Right Click to Place
               </div>
             )}
-            <WorkspaceContext.Provider value={{
-              saveHistory,
-              updateBlock: (id, newData) => updateBlock(id, newData),
-              onOpenScope: (blockId) => setOpenScopes(prev => prev.includes(blockId) ? prev : [...prev, blockId]),
-              onNodeMouseDown: (e, n) => handleNodeMouseDown(e, n),
-              isTargetBlock: (blockId) => {
-                const steps = activeLabId ? XBRIDGES_LEARNING_LAB_STEPS[activeLabId] : null;
-                const currentStep = steps ? steps[currentStepIndex] : null;
-                return !!(currentStep && currentStep.targetNodeId === blockId);
-              },
-              isSimulating: isSimulating && !isPaused,
-              getColor: getColor
-            }}>
+            <WorkspaceContext.Provider value={workspaceContextValue}>
               <ReactFlow
+              className={isSimulationRunning ? undefined : 'xb-static-edges'}
               deleteKeyCode={null}
               proOptions={{ hideAttribution: true }}
               onInit={setReactFlowInstance}
-              nodes={useMemo(() => nodes.filter(n => (n.data.parentId || 'root') === currentParentId), [nodes, currentParentId])}
-              edges={useMemo(() => edges.filter(e => {
-                const sourceNode = nodes.find(n => n.id === e.source);
-                return sourceNode && (sourceNode.data.parentId || 'root') === currentParentId;
-              }), [edges, nodes, currentParentId])}
+              nodes={visibleNodes}
+              edges={visibleEdges}
               onNodesChange={onNodesChange}
               onEdgesChange={onEdgesChange}
               onNodeDragStop={onNodeDragStop}
@@ -3367,7 +3410,7 @@ export const XbridgesWorkspace: React.FC<{
               }}
               elevateNodesOnSelect
             >
-              <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#2a2a2a" />
+              <Background variant={BackgroundVariant.Dots} gap={15} size={1} color="#2a2a2a" />
               <Controls className="bg-[#1a1a1a] border-[#333] fill-[#e0e0e0] shadow-md [&_button]:bg-[#1a1a1a] [&_button]:border-b-[#333] [&_path]:fill-[#e0e0e0] hover:[&_button]:bg-[#222]" />
               <MiniMap
                 nodeColor={(n) => n.data.selected ? '#10b981' : '#444'}

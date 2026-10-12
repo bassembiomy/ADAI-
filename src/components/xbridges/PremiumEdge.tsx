@@ -185,21 +185,23 @@ export const PremiumEdge = ({
         stroke={selected ? '#ff9100' : color}
         strokeWidth={selected ? 10 : 4}
         strokeOpacity={selected ? 0.6 : 0.2}
-        className="transition-all duration-300 pointer-events-none"
+        className="pointer-events-none"
         style={{
-          filter: `drop-shadow(0 0 6px ${selected ? '#ff9100' : color})`
+          transition: 'stroke 0.2s, stroke-width 0.2s, stroke-opacity 0.2s',
+          // drop-shadow on every wire is expensive to repaint while dragging; keep it for the selected one
+          filter: selected ? 'drop-shadow(0 0 6px #ff9100)' : undefined
         }}
       />
       {/* Main Connection Path */}
       <path
         id={id}
-        className="react-flow__edge-path transition-all duration-300"
+        className="react-flow__edge-path"
         d={edgePath}
         fill="none"
         stroke={selected ? '#ff9100' : color}
         strokeWidth={selected ? 4.5 : 2.5}
         markerEnd={markerEnd}
-        style={style}
+        style={{ transition: 'stroke 0.2s, stroke-width 0.2s', ...style }}
       />
       {/* Thick invisible interaction path to make clicking/hovering easy */}
       <path
