@@ -5,7 +5,10 @@ const { validateString, validateUrl, validateFilename, sanitizeShellArg, validat
 const { evaluateBuildRequest } = require('./security/hilBuildPolicy.cjs');
 const { evaluateFlashRequest } = require('./security/hilFlashPolicy.cjs');
 const { inspectElf } = require('./security/elfInspector.cjs');
+const { getFlashRecipe } = require('./security/hilFlashRecipes.cjs');
 const asarGuard = require('./security/asarGuard.cjs');
+const { resolveAppPaths } = require('./security/appPaths.cjs');
+const { computeHilEnvStatus } = require('./security/hilEnvironment.cjs');
 const { verifyToolchainHash } = require('./security/toolchainVerifier.cjs');
 
 // Allowlist of trusted hosts for toolchain download redirects
@@ -34,18 +37,29 @@ const {
   resolveToolExecutable,
 } = require('./security/toolchainManager.cjs');
 
-function getToolchainsDir() {
-  if (app.isPackaged && process.resourcesPath) {
-    const bundled = path.join(process.resourcesPath, 'toolchains');
-    if (fs.existsSync(bundled)) return bundled;
-    return path.join(app.getPath('userData'), 'toolchains');
+// Runtime paths: read-only assets come from resourcesPath (packaged) or the repo (dev);
+// everything the app writes lives under userData, never under the cwd or resourcesPath.
+let cachedAppPaths = null;
+function getAppPaths() {
+  if (!cachedAppPaths) {
+    cachedAppPaths = resolveAppPaths({
+      isPackaged: app.isPackaged,
+      resourcesPath: process.resourcesPath,
+      userDataPath: app.getPath('userData'),
+      cwd: process.cwd(),
+    });
   }
-  return path.join(process.cwd(), 'toolchains');
+  return cachedAppPaths;
 }
 
-// Ensure directory exists
-if (!fs.existsSync(getToolchainsDir())) {
-  fs.mkdirSync(getToolchainsDir(), { recursive: true });
+// Tool resolution order: bundled dir -> user dir -> system PATH.
+function getToolchainDirs() {
+  const p = getAppPaths();
+  return [p.bundledToolchainsDir, p.userToolchainsDir];
+}
+
+function getHilBuildDir() {
+  return getAppPaths().hilBuildDir;
 }
 
 function broadcastLog(msg) {
@@ -59,7 +73,7 @@ function broadcastLog(msg) {
 }
 
 function isCommandInPath(cmd) {
-  return resolveToolExecutable(cmd, getToolchainsDir()) !== null;
+  return resolveToolExecutable(cmd, getToolchainDirs()) !== null;
 }
 
 function getToolchainKeyForTarget(target) {
@@ -76,29 +90,36 @@ function isToolchainAvailable(target) {
   const tc = TOOLCHAINS[key];
   if (!tc) return true;
   if (isCommandInPath(tc.cmd)) return true;
-  if (isToolchainLocallyInstalled(key, getToolchainsDir())) return true;
+  if (isToolchainLocallyInstalled(key, getToolchainDirs())) return true;
   return false;
 }
 
 async function verifyAndPreInstallToolchains() {
-  configureToolchainPaths(getToolchainsDir());
-  
-  for (const key of Object.keys(TOOLCHAINS)) {
-    const tc = TOOLCHAINS[key];
-    const inPath = isCommandInPath(tc.cmd);
-    const inLocal = isToolchainLocallyInstalled(key, getToolchainsDir());
-    
-    if (!inPath && !inLocal) {
-      console.log('[STARTUP] Background installing missing toolchain for \'%s\'...', key);
-      downloadAndExtractToolchain(key, getToolchainsDir()).catch((err) => {
-        console.error('[STARTUP] Background toolchain install for \'%s\' failed: %s', key, err ? err.message : 'Unknown error');
-      });
+  configureToolchainPaths(getToolchainDirs());
+
+  // Only compilers shipped in the installer (bundle !== false) are required; ESP32 is not supported yet.
+  const required = Object.keys(TOOLCHAINS).filter((key) => TOOLCHAINS[key].bundle !== false);
+  const missing = required.filter((key) => !isCommandInPath(TOOLCHAINS[key].cmd)
+    && !isToolchainLocallyInstalled(key, getToolchainDirs()));
+  if (missing.length === 0) {
+    // Bundled toolchains are complete: never download anything in the background.
+    return;
+  }
+
+  // Repair path: download (SHA-256 verified against toolchains.lock.json) into the writable user dir only.
+  for (const key of missing) {
+    console.log('[STARTUP] Repair: downloading missing toolchain for \'%s\' into user directory...', key);
+    try {
+      await downloadAndExtractToolchain(key, getAppPaths().userToolchainsDir);
+      configureToolchainPaths(getToolchainDirs());
+    } catch (err) {
+      console.error('[STARTUP] Toolchain repair for \'%s\' failed: %s', key, err ? err.message : 'Unknown error');
     }
   }
 }
 
 // Initial path configuration on startup
-configureToolchainPaths(getToolchainsDir());
+configureToolchainPaths(getToolchainDirs());
 
 
 function createWindow() {
@@ -537,9 +558,8 @@ ipcMain.handle('hil-save-build-files', async (event, { files }) => {
       }
       seenNames.add(safeName);
     }
-    const buildDir = (currentHilWorkspace && currentHilWorkspace.buildDir)
-      ? currentHilWorkspace.buildDir
-      : path.join(process.cwd(), 'hil_build');
+    // Always the writable userData build dir; a fresh save starts a fresh workspace.
+    const buildDir = getHilBuildDir();
     if (!fs.existsSync(buildDir)) {
       fs.mkdirSync(buildDir, { recursive: true });
     }
@@ -666,7 +686,11 @@ ipcMain.handle('hil-run-compile', async (event, request = {}) => {
       return resolve({ success: false, error: 'Invalid compilation target' });
     }
 
-    const buildDir = path.join(process.cwd(), 'hil_build');
+    if (target === 'ESP32') {
+      return resolve({ success: false, code: 'TARGET_NOT_YET_SUPPORTED', error: 'ESP32 build/flash requires the ESP32 SDK, which is not bundled yet.' });
+    }
+
+    const buildDir = getHilBuildDir();
     if (!fs.existsSync(buildDir)) {
       return resolve({ success: false, error: 'Build directory not found. Save files first.' });
     }
@@ -674,6 +698,7 @@ ipcMain.handle('hil-run-compile', async (event, request = {}) => {
     const runCompilation = () => {
       let cmd = 'gcc';
       let args = [];
+      let stm32Cwd = null;
       const dbg = debugLevel === 'None' ? [] : [debugLevel || '-g'];
       const warningFlags = warningLevel ? warningLevel.split(/\s+/) : ['-Wall'];
       
@@ -753,37 +778,36 @@ ipcMain.handle('hil-run-compile', async (event, request = {}) => {
           'adia_hil.elf'
         ];
       } else if (target.startsWith('STM32')) {
-        cmd = 'arm-none-eabi-gcc';
-        const cpu = target === 'STM32F4' ? '-mcpu=cortex-m4' : '-mcpu=cortex-m3';
-        args = [
-          cpu,
-          '-mthumb',
-          '--specs=nosys.specs',
-          optimization || '-Os',
-          ...warningFlags,
-          ...dbg,
-          'hal_drivers.c',
-          'hil_interface.c',
-          'main_hil.c',
-          'sm_mapping.c',
-          'sm_core.c',
-          'sm_safety.c',
-          'sm_user_logic.c',
-          'mcal_dio_hil.c',
-          'adia_mcal.c',
-          'adia_component.c',
-          '-o',
-          'adia_hil.elf'
-        ];
+        // Real-HAL build (startup file, linker script, vendored STM32Cube HAL) is assembled by stm32FirmwareBuild.
+        try {
+          const { stm32CompileInvocation } = require('./security/stm32FirmwareBuild.cjs');
+          const appPaths = getAppPaths();
+          const invocation = stm32CompileInvocation({
+            target,
+            buildDir,
+            vendorDir: appPaths.vendorDir,
+            targetPacksDir: appPaths.targetPacksDir,
+            compiler: resolveToolExecutable('arm-none-eabi-gcc', getToolchainDirs()) || 'arm-none-eabi-gcc',
+          });
+          cmd = invocation.executable;
+          args = invocation.args;
+          stm32Cwd = invocation.cwd || buildDir;
+        } catch (e) {
+          const code = e && e.code ? e.code : 'STM32_BUILD_SETUP_FAILED';
+          event.sender.send('hil-compiler-log-line', `[ERROR] ${code}: ${e.message}\n`);
+          return resolve({ success: false, code, error: e.message });
+        }
       } else {
         return resolve({ success: false, code: 'TRUSTED_RECIPE_NOT_IMPLEMENTED', error: `Linked image recipe is not implemented for ${target}.` });
       }
 
       event.sender.send('hil-compiler-log-line', `> Executing compile command: ${cmd} ${args.join(' ')}\n`);
       
-      // Sanitize parameters to mitigate command injection
-      const sanitizedArgs = args.map(arg => sanitizeShellArg(String(arg)));
-      const proc = spawn(cmd, sanitizedArgs, { cwd: buildDir, shell: false });
+      // Sanitize parameters to mitigate command injection. STM32 argument lists are built by
+      // stm32FirmwareBuild from trusted paths (which may legitimately contain parentheses, e.g.
+      // "Program Files (x86)") and run with shell:false, so they are passed through unchanged.
+      const sanitizedArgs = stm32Cwd ? args.map(String) : args.map(arg => sanitizeShellArg(String(arg)));
+      const proc = spawn(cmd, sanitizedArgs, { cwd: stm32Cwd || buildDir, shell: false });
       
       proc.stdout.on('data', (data) => {
         event.sender.send('hil-compiler-log-line', data.toString());
@@ -807,7 +831,7 @@ ipcMain.handle('hil-run-compile', async (event, request = {}) => {
           const targetId = currentHilWorkspace.targetSelection?.targetId || (target === 'Arduino_Mega' ? 'atmega2560' : target === 'Arduino_Uno' ? 'atmega328p' : target === 'STM32F4' ? 'stm32f407vgt6' : target === 'STM32F1' ? 'stm32f103c8t6' : target === 'ESP32' ? 'esp32-wroom-32' : 'generic-host');
           
           try {
-            const inspection = await inspectElf(elfPath, targetId);
+            const inspection = await inspectElf(elfPath, targetId, { targetPacksDir: getAppPaths().targetPacksDir, toolchainsDirs: getToolchainDirs() });
             const linkedImageVerified = Boolean(inspection.valid);
             if (linkedImageVerified && inspection.memory) {
               event.sender.send('hil-compiler-log-line', `[VERIFY] Linked image verified. Flash: ${inspection.memory.flashUsed} / ${inspection.memory.flashTotal} B, RAM: ${inspection.memory.ramUsed} / ${inspection.memory.ramTotal} B.\n`);
@@ -879,8 +903,10 @@ ipcMain.handle('hil-run-compile', async (event, request = {}) => {
       event.sender.send('hil-compiler-log-line', `[SYSTEM] Required compiler toolchain for target '${target}' is missing.\n`);
       event.sender.send('hil-compiler-log-line', `[SYSTEM] Initiating automatic toolchain installation in background...\n`);
       
-      downloadAndExtractToolchain(tcKey, getToolchainsDir())
+      // Repair path: hash-verified download into the writable user dir, never the bundled dir.
+      downloadAndExtractToolchain(tcKey, getAppPaths().userToolchainsDir)
         .then(() => {
+          configureToolchainPaths(getToolchainDirs());
           broadcastLog(`[SYSTEM] Compiler toolchain for '${target}' ready. Resuming compilation.`);
           runCompilation();
         })
@@ -889,7 +915,7 @@ ipcMain.handle('hil-run-compile', async (event, request = {}) => {
           resolve({ success: false, error: `Missing toolchain and auto-installation failed: ${err.message}` });
         });
     } else {
-      configureToolchainPaths(getToolchainsDir());
+      configureToolchainPaths(getToolchainDirs());
       runCompilation();
     }
   });
@@ -906,6 +932,9 @@ ipcMain.handle('hil-run-flash', async (event, request = {}) => {
   }
 
   const target = request.target || 'Generic';
+  if (target === 'ESP32') {
+    return { success: false, code: 'TARGET_NOT_YET_SUPPORTED', error: 'ESP32 build/flash requires the ESP32 SDK, which is not bundled yet.' };
+  }
   const targetSelection = currentVerifiedHilBuild?.targetSelection || request.targetSelection || {
     targetId: target === 'Arduino_Mega' ? 'atmega2560' : target === 'Arduino_Uno' ? 'atmega328p' : target === 'STM32F4' ? 'stm32f407vgt6' : target === 'STM32F1' ? 'stm32f103c8t6' : target === 'ESP32' ? 'esp32-wroom-32' : 'generic-host',
     packVersion: '1.0.0',
@@ -962,12 +991,13 @@ ipcMain.handle('hil-run-flash', async (event, request = {}) => {
       }
     }
 
-    const buildDir = path.join(process.cwd(), 'hil_build');
+    const buildDir = getHilBuildDir();
+    configureToolchainPaths(getToolchainDirs());
     let cmd = '';
     let args = [];
 
     if (target === 'Arduino_Uno') {
-      cmd = resolveToolExecutable('avrdude', 'avrdude') || 'avrdude';
+      cmd = resolveToolExecutable('avrdude', getToolchainDirs()) || 'avrdude';
       args = [
         '-c', 'arduino',
         '-p', 'm328p',
@@ -976,7 +1006,7 @@ ipcMain.handle('hil-run-flash', async (event, request = {}) => {
         '-U', 'flash:w:adia_hil.elf:e'
       ];
     } else if (target === 'Arduino_Mega') {
-      cmd = resolveToolExecutable('avrdude', 'avrdude') || 'avrdude';
+      cmd = resolveToolExecutable('avrdude', getToolchainDirs()) || 'avrdude';
       args = [
         '-c', 'wiring',
         '-p', 'm2560',
@@ -995,13 +1025,10 @@ ipcMain.handle('hil-run-flash', async (event, request = {}) => {
         'adia_hil.bin'
       ];
     } else if (target.startsWith('STM32')) {
-      cmd = 'STM32_Programmer_CLI';
-      args = [
-        '-c', 'port=SWD', 'mode=UR',
-        '-w', 'adia_hil.elf',
-        flashAddress || '0x08000000',
-        '-v', '-rst'
-      ];
+      // Bundled OpenOCD + ST-Link (same recipe the flash policy models); STM32_Programmer_CLI is not shipped.
+      const flashRecipe = getFlashRecipe(target === 'STM32F4' ? 'stm32f407vgt6' : 'stm32f103c8t6', { artifactPath: 'adia_hil.elf' });
+      cmd = resolveToolExecutable('openocd', getToolchainDirs()) || flashRecipe.executable;
+      args = [...flashRecipe.args];
     } else {
       event.sender.send('hil-flasher-log-line', `[INFO] Host PC simulation target detected. Bypassing flash sector write.\n`);
       return resolve({ success: true, bypassed: true });
@@ -1040,6 +1067,22 @@ ipcMain.handle('hil-run-flash', async (event, request = {}) => {
 });
 
 // HIL Erase IPC handler
+// Per-target toolchain/flasher/HAL readiness for the HIL workspace status panel.
+ipcMain.handle('hil-env-status', async () => {
+  try {
+    const appPaths = getAppPaths();
+    configureToolchainPaths(getToolchainDirs());
+    const targets = await computeHilEnvStatus({
+      toolchainDirs: getToolchainDirs(),
+      targetPacksDir: appPaths.targetPacksDir,
+      vendorDir: appPaths.vendorDir,
+    });
+    return { success: true, targets };
+  } catch (error) {
+    return { success: false, error: error && error.message ? error.message : 'Environment check failed' };
+  }
+});
+
 ipcMain.handle('hil-run-erase', async (event) => {
   const role = await getCurrentRole();
   const permission = checkPermission(role, 'hil', 'erase');
@@ -1267,7 +1310,7 @@ try {
 
   // If target is Generic and no port is provided, fall back to running the compiled local executable
   if (target === 'Generic') {
-    const exePath = path.join(process.cwd(), 'hil_build', 'adia_hil.exe');
+    const exePath = path.join(getHilBuildDir(), 'adia_hil.exe');
     if (fs.existsSync(exePath)) {
       if (activeHilProcess) {
         try { activeHilProcess.kill(); } catch (e) {}

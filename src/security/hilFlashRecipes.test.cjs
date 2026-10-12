@@ -22,6 +22,12 @@ async function runTests() {
     /UNKNOWN_FLASH_RECIPE/
   );
 
+  // OpenOCD relocates ELF sections by the offset, so ELF images must not get one.
+  const elfProgram = getFlashRecipe('stm32f407vgt6', { artifactPath: 'adia_hil.elf' }).args.join(' ');
+  assert.ok(elfProgram.endsWith('program adia_hil.elf verify reset exit'), elfProgram);
+  const binProgram = getFlashRecipe('stm32f103c8t6', { artifactPath: 'fw.bin' }).args.join(' ');
+  assert.ok(binProgram.endsWith('program fw.bin verify reset exit 0x08000000'), binProgram);
+
   console.log('hilFlashRecipes tests passed!');
 }
 

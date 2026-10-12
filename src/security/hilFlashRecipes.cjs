@@ -1,5 +1,12 @@
 'use strict';
 
+// OpenOCD adds the offset to every section address; ELF/HEX images already carry absolute
+// addresses, so only raw .bin images get the 0x08000000 flash base.
+function openocdProgramCommand(artifactPath) {
+  const offset = /\.bin$/i.test(artifactPath) ? ' 0x08000000' : '';
+  return `program ${artifactPath} verify reset exit${offset}`;
+}
+
 const FLASH_RECIPES = Object.freeze({
   stm32f103c8t6: Object.freeze({
     recipeId: 'openocd-stm32f103-v1',
@@ -7,7 +14,7 @@ const FLASH_RECIPES = Object.freeze({
     args: (opts) => Object.freeze([
       '-f', 'interface/stlink.cfg',
       '-f', 'target/stm32f1x.cfg',
-      '-c', `program ${opts.artifactPath || 'firmware.elf'} verify reset exit 0x08000000`,
+      '-c', openocdProgramCommand(opts.artifactPath || 'firmware.elf'),
     ]),
   }),
 
@@ -17,7 +24,7 @@ const FLASH_RECIPES = Object.freeze({
     args: (opts) => Object.freeze([
       '-f', 'interface/stlink.cfg',
       '-f', 'target/stm32f4x.cfg',
-      '-c', `program ${opts.artifactPath || 'firmware.elf'} verify reset exit 0x08000000`,
+      '-c', openocdProgramCommand(opts.artifactPath || 'firmware.elf'),
     ]),
   }),
 

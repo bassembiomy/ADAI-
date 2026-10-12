@@ -1,0 +1,164 @@
+{
+  "schema": 1,
+  "description": "Single source of truth for bundled/downloadable toolchains. sha256 is the SHA-256 of the archive at url. Edit only with a freshly computed hash.",
+  "entries": {
+    "Generic": {
+      "kind": "toolchain",
+      "bundle": true,
+      "name": "Generic C/C++ Compiler (w64devkit)",
+      "version": "1.23.0",
+      "cmd": "gcc",
+      "url": "https://github.com/skeeto/w64devkit/releases/download/v1.23.0/w64devkit-1.23.0.zip",
+      "zipName": "w64devkit-1.23.0.zip",
+      "sha256": "5c7dce6762be3e0dba648a9317790444c0e2f1ef3e677315c115727d7a549539",
+      "extractSubdir": "w64devkit",
+      "archiveRoot": "w64devkit",
+      "binPathSegments": [
+        "w64devkit",
+        "w64devkit",
+        "bin"
+      ],
+      "checkFile": "gcc.exe"
+    },
+    "Arduino": {
+      "kind": "toolchain",
+      "bundle": true,
+      "name": "Arduino AVR Toolchain (avr-gcc)",
+      "version": "15.2.0-1",
+      "cmd": "avr-g++",
+      "url": "https://github.com/ZakKemble/avr-gcc-build/releases/download/v15.2.0-1/avr-gcc-15.2.0-x64-windows.zip",
+      "zipName": "avr-gcc-15.2.0-x64-windows.zip",
+      "sha256": "3bcfdbdbff6e3576ef0bef9e119b16f7012657d30f002d6d9d4848a7efd4f8b7",
+      "extractSubdir": "avr-gcc",
+      "archiveRoot": "avr-gcc-15.2.0-x64-windows",
+      "binPathSegments": [
+        "avr-gcc",
+        "avr-gcc-15.2.0-x64-windows",
+        "bin"
+      ],
+      "checkFile": "avr-g++.exe"
+    },
+    "STM32": {
+      "kind": "toolchain",
+      "bundle": true,
+      "name": "STM32 ARM Embedded Toolchain (xpack arm-none-eabi-gcc)",
+      "version": "13.3.1-1.1",
+      "cmd": "arm-none-eabi-gcc",
+      "url": "https://github.com/xpack-dev-tools/arm-none-eabi-gcc-xpack/releases/download/v13.3.1-1.1/xpack-arm-none-eabi-gcc-13.3.1-1.1-win32-x64.zip",
+      "zipName": "xpack-arm-none-eabi-gcc-13.3.1-1.1-win32-x64.zip",
+      "sha256": "49cda1bf01215f3df0613972d21f9fec3eb79dca82506365e7da2ff74b921733",
+      "extractSubdir": "arm-gcc",
+      "archiveRoot": "xpack-arm-none-eabi-gcc-13.3.1-1.1",
+      "binPathSegments": [
+        "arm-gcc",
+        "xpack-arm-none-eabi-gcc-13.3.1-1.1",
+        "bin"
+      ],
+      "checkFile": "arm-none-eabi-gcc.exe"
+    },
+    "ESP32": {
+      "kind": "toolchain",
+      "bundle": false,
+      "name": "ESP32 Xtensa Cross Compiler (esp-13.2.0)",
+      "version": "esp-13.2.0_20240530",
+      "cmd": "xtensa-esp32-elf-gcc",
+      "url": "https://github.com/espressif/crosstool-NG/releases/download/esp-13.2.0_20240530/xtensa-esp-elf-13.2.0_20240530-x86_64-w64-mingw32.zip",
+      "zipName": "xtensa-esp-elf-13.2.0_20240530-x86_64-w64-mingw32.zip",
+      "sha256": "fad96cffef900b4898bc89d5a11c16c581bddb88f25fc83eccbbc126cd9a4f41",
+      "extractSubdir": "xtensa-esp-elf",
+      "archiveRoot": "xtensa-esp-elf",
+      "binPathSegments": [
+        "xtensa-esp-elf",
+        "xtensa-esp-elf",
+        "bin"
+      ],
+      "checkFile": "xtensa-esp32-elf-gcc.exe",
+      "hashKey": "esp32-xtensa-gcc-13.2.0-win64"
+    },
+    "avrdude": {
+      "kind": "flasher",
+      "bundle": true,
+      "name": "AVRDUDE (AVR flasher)",
+      "version": "8.0",
+      "cmd": "avrdude",
+      "url": "https://github.com/avrdudes/avrdude/releases/download/v8.0/avrdude-v8.0-windows-x64.zip",
+      "zipName": "avrdude-v8.0-windows-x64.zip",
+      "sha256": "f4aa811042ef95b52c68531f6e5044c5b5a8711bcd4b495d6b9af20f9ac41325",
+      "extractSubdir": "flashers/avrdude",
+      "archiveRoot": "",
+      "binPathSegments": [
+        "flashers",
+        "avrdude"
+      ],
+      "checkFile": "avrdude.exe",
+      "hashKey": "avrdude-v8.0-windows-x64"
+    },
+    "openocd": {
+      "kind": "flasher",
+      "bundle": true,
+      "name": "OpenOCD (ST-Link flasher)",
+      "version": "0.12.0-3",
+      "cmd": "openocd",
+      "url": "https://github.com/xpack-dev-tools/openocd-xpack/releases/download/v0.12.0-3/xpack-openocd-0.12.0-3-win32-x64.zip",
+      "zipName": "xpack-openocd-0.12.0-3-win32-x64.zip",
+      "sha256": "94b51be5e5b38ac1c5814972eee9b062f0805bcd3ecc3bad5190fd659f6a3ab3",
+      "extractSubdir": "flashers",
+      "archiveRoot": "xpack-openocd-0.12.0-3",
+      "binPathSegments": [
+        "flashers",
+        "xpack-openocd-0.12.0-3",
+        "bin"
+      ],
+      "candidatePathSegments": [
+        [
+          "flashers",
+          "xpack-openocd-0.12.0-3",
+          "bin"
+        ],
+        [
+          "flashers",
+          "openocd",
+          "bin"
+        ],
+        [
+          "flashers",
+          "openocd"
+        ]
+      ],
+      "checkFile": "openocd.exe",
+      "hashKey": "xpack-openocd-0.12.0-3-win32-x64"
+    },
+    "esptool": {
+      "kind": "flasher",
+      "bundle": false,
+      "name": "esptool (ESP32 flasher)",
+      "version": "4.8.1",
+      "cmd": "esptool.py",
+      "url": "https://github.com/espressif/esptool/releases/download/v4.8.1/esptool-v4.8.1-win64.zip",
+      "zipName": "esptool-v4.8.1-win64.zip",
+      "sha256": "2483d409e241d8826ae0ff023eecf31a7d4de6c10ca5ee855b1420cdfd53aaf6",
+      "extractSubdir": "flashers",
+      "archiveRoot": "esptool-win64",
+      "binPathSegments": [
+        "flashers",
+        "esptool-win64"
+      ],
+      "candidatePathSegments": [
+        [
+          "flashers",
+          "esptool-win64"
+        ],
+        [
+          "flashers",
+          "esptool-v4.8.1-win64"
+        ],
+        [
+          "flashers",
+          "esptool"
+        ]
+      ],
+      "checkFile": "esptool.exe",
+      "hashKey": "esptool-v4.8.1-windows-amd64"
+    }
+  }
+}

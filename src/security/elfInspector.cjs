@@ -74,7 +74,7 @@ async function inspectElf(elfPath, packOrTargetId, opts = {}) {
   let sizeOutput = opts.mockSizeOutput || opts.sizeOutput;
   if (!sizeOutput) {
     try {
-      const { resolveToolExecutable } = require('./toolchainManager.cjs');
+      const { resolveToolExecutable, TOOLCHAINS } = require('./toolchainManager.cjs');
       const targetStr = typeof packOrTargetId === 'string' ? packOrTargetId : (packOrTargetId?.targetId || '');
       const toolchainKey = targetStr.startsWith('atmega')
         ? 'Arduino'
@@ -90,7 +90,16 @@ async function inspectElf(elfPath, packOrTargetId, opts = {}) {
         : targetStr.startsWith('esp32')
         ? 'xtensa-esp32-elf-size'
         : 'size';
-      const sizeExe = resolveToolExecutable(toolchainKey, sizeCmd);
+      // The size tool ships next to the toolchain's compiler; fall back to PATH.
+      const compilerExe = TOOLCHAINS[toolchainKey]
+        ? resolveToolExecutable(TOOLCHAINS[toolchainKey].cmd, opts.toolchainsDirs)
+        : null;
+      const sibling = compilerExe
+        ? path.join(path.dirname(compilerExe), process.platform === 'win32' ? `${sizeCmd}.exe` : sizeCmd)
+        : null;
+      const sizeExe = sibling && fs.existsSync(sibling)
+        ? sibling
+        : resolveToolExecutable(sizeCmd, opts.toolchainsDirs);
       if (sizeExe) {
         const { spawnSync } = require('node:child_process');
         const res = spawnSync(sizeExe, [elfPath], { encoding: 'utf8' });
@@ -104,7 +113,14 @@ async function inspectElf(elfPath, packOrTargetId, opts = {}) {
   }
 
   if (!sizeOutput) {
-    sizeOutput = '   text\t   data\t    bss\t    dec\t    hex\tfilename\n   1024\t    128\t     64\t   1216\t    4c0\tfirmware.elf\n';
+    // Never report invented memory usage: fail closed when the size tool is unavailable.
+    return {
+      valid: false,
+      code: 'SIZE_TOOL_UNAVAILABLE',
+      error: 'SIZE_TOOL_UNAVAILABLE',
+      message: 'Could not run the toolchain size utility to measure FLASH/RAM usage.',
+      hashes: { elf: elfHash, map: mapHash, bin: sha256File(binPath) || elfHash, hex: sha256File(hexPath) || elfHash },
+    };
   }
 
   const memory = parseMemoryUsage(sizeOutput, packOrTargetId, opts.targetPacksDir);

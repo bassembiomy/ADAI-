@@ -38,3 +38,8 @@ scratch-opm-probe/
 .codex-*
 test-results/
 playwright-report/
+
+# Installer payloads (fetched by `npm run fetch:toolchains`, never committed)
+vendor/
+drivers/*
+!drivers/README.md

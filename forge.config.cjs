@@ -8,17 +8,38 @@ if (!fs.existsSync(localTmp)) {
 process.env.TEMP = localTmp;
 process.env.TMP = localTmp;
 
+// Optional USB driver payload: only shipped when the release engineer placed .inf files under drivers/
+// (see drivers/README.md). The NSIS installer runs pnputil over them.
+function hasDriverInf(dir) {
+  try {
+    return fs.readdirSync(dir, { withFileTypes: true }).some((entry) => (
+      entry.isDirectory() ? hasDriverInf(path.join(dir, entry.name)) : /\.inf$/i.test(entry.name)
+    ));
+  } catch {
+    return false;
+  }
+}
+const driversDir = path.resolve(__dirname, 'drivers');
+
+// Read-only runtime assets land in <install>/resources (see src/security/appPaths.cjs).
+// toolchains/ and vendor/ are populated by `npm run fetch:toolchains`; packaging fails loudly if absent.
+const extraResource = [
+  path.resolve(__dirname, 'toolchains'),
+  path.resolve(__dirname, 'target-packs'),
+  path.resolve(__dirname, 'vendor'),
+  path.resolve(__dirname, 'icon.ico'),
+  ...(hasDriverInf(driversDir) ? [driversDir] : []),
+];
+
 module.exports = {
   packagerConfig: {
     executableName: 'ADIA',
-    asar: true,
+    // Native modules (serialport binding) must live outside app.asar to be loadable.
+    asar: { unpack: '**/*.node' },
     // ASAR integrity checking: embeds file hashes into the package for tamper detection
     asarIntegrity: true,
     icon: path.resolve(__dirname, 'icon.ico'),
-    extraResource: [
-      path.resolve(__dirname, 'toolchains'),
-      path.resolve(__dirname, 'icon.ico'),
-    ],
+    extraResource,
     fileAssociations: [
       {
         ext: 'adia',
@@ -52,7 +73,9 @@ module.exports = {
       // Exclude raw source code, scripts, docs, test specs, and scratch artifacts
       const excludePrefixes = [
         '/src', '/scripts', '/docs', '/.agents', '/.superpowers',
-        '/scratch', '/hil_build', '/toolchains', '/avr-gcc'
+        '/scratch', '/hil_build', '/toolchains', '/avr-gcc',
+        // Shipped via extraResource, must not be duplicated inside app.asar
+        '/target-packs', '/vendor', '/drivers', '/installer', '/toolchains.lock.json', '/stm32cube.lock.json'
       ];
       if (excludePrefixes.some((p) => filePath.startsWith(p))) return true;
       if (filePath.endsWith('.ts') || filePath.endsWith('.md') || filePath.endsWith('.m') || filePath.endsWith('.slx') || filePath.endsWith('.txt') || filePath.endsWith('.cjs')) return true;
@@ -85,13 +108,39 @@ module.exports = {
   },
   makers: [
     {
-      name: '@electron-forge/maker-squirrel',
+      // Per-machine NSIS installer (Program Files, UAC elevation, choose directory, shortcuts, .adia association).
+      // Windows-only: build on a Windows machine, see docs/RELEASE_BUILD.md.
+      name: '@felixrieseberg/electron-forge-maker-nsis',
       platforms: ['win32'],
       config: {
-        name: 'adia',
-        setupExe: 'ADIA Setup.exe',
-        exe: 'ADIA.exe',
-        setupIcon: path.resolve(__dirname, 'icon.ico'),
+        getAppBuilderConfig: async () => ({
+          appId: 'com.squirrel.adia.adia', // keep equal to app.setAppUserModelId() in src/main.cjs
+          productName: 'ADIA',
+          artifactName: 'ADIA Setup.${ext}',
+          win: { target: 'nsis', icon: path.resolve(__dirname, 'icon.ico') },
+          fileAssociations: [
+            {
+              ext: 'adia',
+              name: 'ADIA Project',
+              description: 'ADIA Project File',
+              icon: path.resolve(__dirname, 'icon.ico'),
+              role: 'Editor',
+            },
+          ],
+          nsis: {
+            oneClick: false,
+            perMachine: true,
+            allowElevation: true,
+            allowToChangeInstallationDirectory: true,
+            createDesktopShortcut: 'always',
+            createStartMenuShortcut: true,
+            shortcutName: 'ADIA',
+            installerIcon: path.resolve(__dirname, 'icon.ico'),
+            uninstallerIcon: path.resolve(__dirname, 'icon.ico'),
+            // customInstall macro: pnputil over resources/drivers/*.inf when present
+            include: path.resolve(__dirname, 'installer', 'installer.nsh'),
+          },
+        }),
       },
     },
     {

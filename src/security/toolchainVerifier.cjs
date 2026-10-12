@@ -2,26 +2,19 @@
 // SHA-256 Checksum verification for downloaded binary toolchains
 const crypto = require('crypto');
 
+const TOOLCHAIN_LOCK = require('../../toolchains.lock.json');
+
 /**
- * Expected SHA-256 hashes for allowed toolchain archives.
- * If set to null or empty, hash check requires explicit hash specification.
+ * Expected SHA-256 hashes for allowed toolchain archives, derived from
+ * toolchains.lock.json (single source of truth). Entries with a null sha256 are
+ * omitted, so they fail verification with UNKNOWN_TOOLCHAIN.
  */
-const TOOLCHAIN_SHA256_HASHES = {
-  // w64devkit v1.23.0 official release archive sha256 hash
-  Generic: '5c7dce6762be3e0dba648a9317790444c0e2f1ef3e677315c115727d7a549539',
-  // avr-gcc 15.2.0 official release archive sha256 hash
-  Arduino: '3bcfdbdbff6e3576ef0bef9e119b16f7012657d30f002d6d9d4848a7efd4f8b7',
-  // arm-none-eabi 10.3-2021.10 official release archive sha256 hash
-  STM32: 'd27f8372baf26bc6f62e843c080cb0c07c6f092780e8c057edc460d3d5786a51',
-  ESP32: 'fad96cffef900b4898bc89d5a11c16c581bddb88f25fc83eccbbc126cd9a4f41',
-  'esp32-xtensa-gcc-13.2.0-win64': 'fad96cffef900b4898bc89d5a11c16c581bddb88f25fc83eccbbc126cd9a4f41',
-  avrdude: 'f4aa811042ef95b52c68531f6e5044c5b5a8711bcd4b495d6b9af20f9ac41325',
-  'avrdude-v8.0-windows-x64': 'f4aa811042ef95b52c68531f6e5044c5b5a8711bcd4b495d6b9af20f9ac41325',
-  openocd: '94b51be5e5b38ac1c5814972eee9b062f0805bcd3ecc3bad5190fd659f6a3ab3',
-  'xpack-openocd-0.12.0-3-win32-x64': '94b51be5e5b38ac1c5814972eee9b062f0805bcd3ecc3bad5190fd659f6a3ab3',
-  esptool: '2483d409e241d8826ae0ff023eecf31a7d4de6c10ca5ee855b1420cdfd53aaf6',
-  'esptool-v4.8.1-windows-amd64': '2483d409e241d8826ae0ff023eecf31a7d4de6c10ca5ee855b1420cdfd53aaf6',
-};
+const TOOLCHAIN_SHA256_HASHES = {};
+for (const [key, entry] of Object.entries(TOOLCHAIN_LOCK.entries || {})) {
+  if (!entry.sha256) continue;
+  TOOLCHAIN_SHA256_HASHES[key] = entry.sha256;
+  if (entry.hashKey) TOOLCHAIN_SHA256_HASHES[entry.hashKey] = entry.sha256;
+}
 
 /**
  * Verifies that a buffer or file content matches the expected SHA-256 hash for a given toolchain key.

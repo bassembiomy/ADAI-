@@ -78,6 +78,18 @@ async function runTests() {
   assert.equal(validResult.memory.flashUsed, 5200);
   assert.equal(validResult.memory.ramUsed, 500);
 
+  // Test 7: no size tool available -> fail closed, never invent memory usage
+  const noToolResult = await inspectElf(fakeElf, 'atmega328p', {
+    toolchainsDirs: [path.join(tmpDir, 'no-toolchains')],
+  });
+  if (noToolResult.code !== 'SIZE_TOOL_UNAVAILABLE') {
+    // A system avr-size on PATH is acceptable; it must then report real numbers, not the old 1024/128/64 stub.
+    assert.notEqual(noToolResult.memory && noToolResult.memory.flashUsed, 1152);
+  } else {
+    assert.equal(noToolResult.valid, false);
+    assert.equal(noToolResult.memory, undefined);
+  }
+
   // Cleanup tmpDir
   fs.rmSync(tmpDir, { recursive: true, force: true });
 

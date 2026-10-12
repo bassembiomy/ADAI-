@@ -2,6 +2,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const crypto = require('node:crypto');
 const { spawn, execFileSync } = require('node:child_process');
 const { verifyToolchainHash } = require('./toolchainVerifier.cjs');
 
@@ -24,89 +25,69 @@ function validateRedirectUrl(url, allowedHosts) {
   } catch { return null; }
 }
 
-const TOOLCHAINS = Object.freeze({
-  Generic: Object.freeze({
-    cmd: 'gcc',
-    name: 'Generic C/C++ Compiler (w64devkit)',
-    url: 'https://github.com/skeeto/w64devkit/releases/download/v1.23.0/w64devkit-1.23.0.zip',
-    zipName: 'w64devkit-1.23.0.zip',
-    extractSubdir: 'w64devkit',
-    binPathSegments: ['w64devkit', 'w64devkit', 'bin'],
-    checkFile: 'gcc.exe',
-  }),
-  Arduino: Object.freeze({
-    cmd: 'avr-g++',
-    name: 'Arduino AVR Toolchain (avr-gcc)',
-    url: 'https://github.com/ZakKemble/avr-gcc-build/releases/download/v15.2.0-1/avr-gcc-15.2.0-x64-windows.zip',
-    zipName: 'avr-gcc-15.2.0-x64-windows.zip',
-    extractSubdir: 'avr-gcc',
-    binPathSegments: ['avr-gcc', 'avr-gcc-15.2.0-x64-windows', 'bin'],
-    checkFile: 'avr-g++.exe',
-  }),
-  STM32: Object.freeze({
-    cmd: 'arm-none-eabi-gcc',
-    name: 'STM32 ARM Embedded Toolchain (arm-none-eabi-gcc)',
-    url: 'https://developer.arm.com/-/media/Files/downloads/gnu-rm/10.3-2021.10/gcc-arm-none-eabi-10.3-2021.10-win32.zip',
-    zipName: 'gcc-arm-none-eabi-10.3-2021.10-win32.zip',
-    extractSubdir: 'arm-gcc',
-    binPathSegments: ['arm-gcc', 'gcc-arm-none-eabi-10.3-2021.10', 'bin'],
-    checkFile: 'arm-none-eabi-gcc.exe',
-  }),
-  ESP32: Object.freeze({
-    cmd: 'xtensa-esp32-elf-gcc',
-    name: 'ESP32 Xtensa Cross Compiler (esp-13.2.0)',
-    url: 'https://github.com/espressif/crosstool-NG/releases/download/esp-13.2.0_20240530/xtensa-esp-elf-13.2.0_20240530-x86_64-w64-mingw32.zip',
-    zipName: 'xtensa-esp-elf-13.2.0_20240530-x86_64-w64-mingw32.zip',
-    extractSubdir: 'xtensa-esp-elf',
-    binPathSegments: ['xtensa-esp-elf', 'xtensa-esp-elf', 'bin'],
-    checkFile: 'xtensa-esp32-elf-gcc.exe',
-    hashKey: 'esp32-xtensa-gcc-13.2.0-win64',
-  }),
-});
+// The lock file is the single source of truth for URLs, hashes and layouts.
+// A literal require() lets the esbuild main-process bundle inline it.
+const TOOLCHAIN_LOCK = require('../../toolchains.lock.json');
 
+function freezeSpec(spec) {
+  const copy = { ...spec };
+  if (copy.binPathSegments) copy.binPathSegments = Object.freeze([...copy.binPathSegments]);
+  if (copy.candidatePathSegments) {
+    copy.candidatePathSegments = Object.freeze(copy.candidatePathSegments.map((segs) => Object.freeze([...segs])));
+  }
+  return Object.freeze(copy);
+}
+
+function specsOfKind(kind) {
+  const out = {};
+  for (const [key, spec] of Object.entries(TOOLCHAIN_LOCK.entries || {})) {
+    if (spec.kind === kind) out[key] = freezeSpec(spec);
+  }
+  return Object.freeze(out);
+}
+
+const TOOLCHAINS = specsOfKind('toolchain');
 // Flasher tools
-const FLASH_TOOLS = Object.freeze({
-  avrdude: Object.freeze({
-    name: 'AVRDUDE (AVR flasher)',
-    cmd: 'avrdude',
-    url: 'https://github.com/avrdudes/avrdude/releases/download/v8.0/avrdude-v8.0-windows-x64.zip',
-    zipName: 'avrdude-v8.0-windows-x64.zip',
-    extractSubdir: 'flashers/avrdude',
-    binPathSegments: ['flashers', 'avrdude'],
-    checkFile: 'avrdude.exe',
-    hashKey: 'avrdude-v8.0-windows-x64',
-  }),
-  openocd: Object.freeze({
-    name: 'OpenOCD (ST-Link flasher)',
-    cmd: 'openocd',
-    url: 'https://github.com/xpack-dev-tools/openocd-xpack/releases/download/v0.12.0-3/xpack-openocd-0.12.0-3-win32-x64.zip',
-    zipName: 'xpack-openocd-0.12.0-3-win32-x64.zip',
-    extractSubdir: 'flashers',
-    binPathSegments: ['flashers', 'xpack-openocd-0.12.0-3', 'bin'],
-    candidatePathSegments: [
-      ['flashers', 'xpack-openocd-0.12.0-3', 'bin'],
-      ['flashers', 'openocd', 'bin'],
-      ['flashers', 'openocd'],
-    ],
-    checkFile: 'openocd.exe',
-    hashKey: 'xpack-openocd-0.12.0-3-win32-x64',
-  }),
-  esptool: Object.freeze({
-    name: 'esptool (ESP32 flasher)',
-    cmd: 'esptool.py',
-    url: 'https://github.com/espressif/esptool/releases/download/v4.8.1/esptool-v4.8.1-win64.zip',
-    zipName: 'esptool-v4.8.1-win64.zip',
-    extractSubdir: 'flashers',
-    binPathSegments: ['flashers', 'esptool-win64'],
-    candidatePathSegments: [
-      ['flashers', 'esptool-win64'],
-      ['flashers', 'esptool-v4.8.1-win64'],
-      ['flashers', 'esptool'],
-    ],
-    checkFile: 'esptool.exe',
-    hashKey: 'esptool-v4.8.1-windows-amd64',
-  }),
-});
+const FLASH_TOOLS = specsOfKind('flasher');
+
+/**
+ * Pure archive-hash decision against the lock file.
+ * An unpinned (null) entry is refused unless allowUnpinned is set explicitly.
+ */
+function evaluateArchiveHash(key, spec, actualHash, { allowUnpinned = false } = {}) {
+  if (!spec) return { valid: false, code: 'UNKNOWN_TOOLCHAIN', message: `No lock entry for ${key}` };
+  if (!spec.sha256) {
+    if (allowUnpinned) return { valid: true, unpinned: true, actualHash };
+    return { valid: false, code: 'UNPINNED_ARCHIVE', actualHash, message: `Lock entry '${key}' has no pinned SHA-256; refusing.` };
+  }
+  if (String(actualHash).toLowerCase() !== spec.sha256.toLowerCase()) {
+    return {
+      valid: false, code: 'HASH_MISMATCH', actualHash, expectedHash: spec.sha256,
+      message: `SHA-256 mismatch for '${key}'. Expected ${spec.sha256}, got ${actualHash}`,
+    };
+  }
+  return { valid: true, actualHash };
+}
+
+function checkArchiveHash(key, actualHash, opts = {}) {
+  return evaluateArchiveHash(key, TOOLCHAINS[key] || FLASH_TOOLS[key], actualHash, opts);
+}
+
+function sha256File(filePath) {
+  return new Promise((resolve, reject) => {
+    const hash = crypto.createHash('sha256');
+    const stream = fs.createReadStream(filePath);
+    stream.on('data', (chunk) => hash.update(chunk));
+    stream.on('error', reject);
+    stream.on('end', () => resolve(hash.digest('hex')));
+  });
+}
+
+/** Normalise a single dir or an ordered list of dirs (bundled -> user) to a list. */
+function toDirList(dirs) {
+  const list = Array.isArray(dirs) ? dirs : [dirs];
+  return list.filter((d) => typeof d === 'string' && d.length > 0);
+}
 
 function exeName(cmd) {
   return process.platform === 'win32' ? `${cmd}.exe` : cmd;
@@ -135,54 +116,75 @@ function defaultToolchainsDir() {
   return path.join(process.cwd(), 'toolchains');
 }
 
-function isToolchainLocallyInstalled(key, toolchainsDir = defaultToolchainsDir()) {
+function markerPath(spec, bin) {
+  return process.platform === 'win32'
+    ? path.join(bin, spec.checkFile || `${spec.cmd}.exe`)
+    : path.join(bin, spec.cmd);
+}
+
+/**
+ * Locate a tool's bin directory. `toolchainsDirs` is a dir or an ordered list
+ * (bundled first, then user); the first dir that holds the tool wins.
+ */
+function locateToolBin(spec, toolchainsDirs) {
+  for (const dir of toDirList(toolchainsDirs)) {
+    const bin = binPathFor(spec, dir);
+    if (fs.existsSync(markerPath(spec, bin))) return { dir, bin };
+  }
+  return null;
+}
+
+function isToolchainLocallyInstalled(key, toolchainsDirs = defaultToolchainsDir()) {
   const tc = TOOLCHAINS[key];
   if (!tc) return false;
-  const dir = toolchainsDir || defaultToolchainsDir();
-  const expected = process.platform === 'win32'
-    ? path.join(binPathFor(tc, dir), tc.checkFile)
-    : path.join(binPathFor(tc, dir), tc.cmd);
-  return fs.existsSync(expected);
+  return locateToolBin(tc, toolchainsDirs || defaultToolchainsDir()) !== null;
 }
 
-function isFlashToolLocallyInstalled(key, toolchainsDir = defaultToolchainsDir()) {
+function isFlashToolLocallyInstalled(key, toolchainsDirs = defaultToolchainsDir()) {
   const tc = FLASH_TOOLS[key];
   if (!tc) return false;
-  const dir = toolchainsDir || defaultToolchainsDir();
-  return fs.existsSync(path.join(binPathFor(tc, dir), tc.checkFile));
+  return locateToolBin(tc, toolchainsDirs || defaultToolchainsDir()) !== null;
 }
 
-function configureToolchainPaths(toolchainsDir = defaultToolchainsDir()) {
-  const dir = toolchainsDir || defaultToolchainsDir();
+function configureToolchainPaths(toolchainsDirs = defaultToolchainsDir()) {
+  const dirs = toDirList(toolchainsDirs || defaultToolchainsDir());
   const bins = [];
-  // Support legacy project workspace path first if it exists
+  for (const dir of dirs) { // resolution order: earlier dirs win
+    for (const spec of [...Object.values(TOOLCHAINS), ...Object.values(FLASH_TOOLS)]) {
+      const bin = binPathFor(spec, dir);
+      if (fs.existsSync(markerPath(spec, bin)) && !bins.includes(bin)) bins.push(bin);
+    }
+  }
+  // Support legacy project workspace path last (dev only)
   const legacyAvrBin = path.join(__dirname, '../../avr-gcc/avr-gcc-15.2.0-x64-windows/bin');
   if (fs.existsSync(legacyAvrBin)) {
     bins.push(legacyAvrBin);
   }
-
-  for (const spec of [...Object.values(TOOLCHAINS), ...Object.values(FLASH_TOOLS)]) {
-    const bin = binPathFor(spec, dir);
-    const marker = process.platform === 'win32'
-      ? path.join(bin, spec.checkFile || '')
-      : path.join(bin, spec.cmd);
-    if (fs.existsSync(marker)) bins.push(bin);
-  }
-  for (const bin of bins) {
-    if (!String(process.env.PATH || '').includes(bin)) {
-      process.env.PATH = bin + path.delimiter + process.env.PATH;
-    }
+  // Prepend in reverse so bins[0] ends up first on PATH.
+  const current = String(process.env.PATH || '');
+  const toAdd = bins.filter((bin) => !current.split(path.delimiter).includes(bin));
+  if (toAdd.length > 0) {
+    process.env.PATH = [...toAdd, current].filter(Boolean).join(path.delimiter);
   }
 }
 
-function resolveToolExecutable(name, toolchainsDir = defaultToolchainsDir()) {
-  const dir = toolchainsDir || defaultToolchainsDir();
-  // Check in known toolchain and flasher directories first
-  for (const spec of [...Object.values(TOOLCHAINS), ...Object.values(FLASH_TOOLS)]) {
-    const bin = binPathFor(spec, dir);
-    const candidate = path.join(bin, process.platform === 'win32' ? (spec.checkFile || `${name}.exe`) : name);
-    if (fs.existsSync(candidate) && (candidate.endsWith(name) || candidate.endsWith(`${name}.exe`))) {
-      return candidate;
+function specMatchesName(spec, name) {
+  const base = String(name).replace(/\.exe$/i, '');
+  return spec.cmd === base || spec.checkFile === name || spec.checkFile === `${base}.exe`;
+}
+
+/**
+ * Resolution order: bundled dir -> user dir -> system PATH.
+ * `toolchainsDirs` is a dir or an ordered list [bundled, user].
+ */
+function resolveToolExecutable(name, toolchainsDirs = defaultToolchainsDir()) {
+  const dirs = toDirList(toolchainsDirs || defaultToolchainsDir());
+  for (const dir of dirs) {
+    for (const spec of [...Object.values(TOOLCHAINS), ...Object.values(FLASH_TOOLS)]) {
+      if (!specMatchesName(spec, name)) continue;
+      const bin = binPathFor(spec, dir);
+      const candidate = markerPath(spec, bin);
+      if (fs.existsSync(candidate)) return candidate;
     }
   }
 
@@ -249,49 +251,57 @@ function extractZip(zipPath, destDir) {
   });
 }
 
+/**
+ * Downloads into `toolchainsDir` (callers pass the writable user dir, never the
+ * bundled resources dir), verifies the archive SHA-256 against the lock file,
+ * and only then extracts. A mismatching or unpinned archive is deleted and refused.
+ */
 async function downloadAndExtractToolchain(key, toolchainsDir = defaultToolchainsDir(), deps = {}) {
   const dir = toolchainsDir || defaultToolchainsDir();
   const spec = TOOLCHAINS[key] || FLASH_TOOLS[key];
   if (!spec || !spec.url) throw new Error(`UNKNOWN_TOOLCHAIN: ${key}`);
-  if (!deps.skipHashVerify && typeof verifyToolchainHash !== 'function') {
-    throw new Error('toolchainVerifier.cjs must export verifyToolchainHash(key, buffer)');
-  }
+  fs.mkdirSync(dir, { recursive: true });
   const zipPath = path.join(dir, spec.zipName);
   const doDownload = deps.downloadFile || downloadFile;
   await doDownload(spec.url, zipPath);
   if (!deps.skipHashVerify) {
-    const buf = fs.readFileSync(zipPath);
-    const res = verifyToolchainHash(deps.hashKey || spec.hashKey || key, buf);
-    if (!res || !res.valid) {
+    const res = checkArchiveHash(key, await sha256File(zipPath), { allowUnpinned: deps.allowUnpinned === true });
+    if (!res.valid) {
       fs.rmSync(zipPath, { force: true });
-      throw new Error(`HASH_MISMATCH: ${res?.message || res?.code || 'verification failed'}`);
+      throw new Error(`${res.code}: ${res.message || 'verification failed'}`);
     }
   }
   const extractDest = path.join(dir, spec.extractSubdir || '.');
   fs.mkdirSync(extractDest, { recursive: true });
   const doExtract = deps.extractZip || extractZip;
   await doExtract(zipPath, extractDest);
+  fs.rmSync(zipPath, { force: true });
   const binPath = binPathFor(spec, dir);
-  if (!fs.existsSync(path.join(binPath, process.platform === 'win32' ? (spec.checkFile || exeName(spec.cmd)) : spec.cmd))) {
+  if (!fs.existsSync(markerPath(spec, binPath))) {
     throw new Error(`EXTRACT_LAYOUT_UNEXPECTED: ${spec.name} -> ${binPath}`);
   }
   return { binPath };
 }
 
-async function ensureToolchain(key, toolchainsDir = defaultToolchainsDir()) {
-  const dir = toolchainsDir || defaultToolchainsDir();
+/**
+ * Ensure a tool is usable. Looks in `toolchainsDirs` (ordered, e.g. [bundled, user]);
+ * if missing, downloads (hash-verified) into `downloadDir` (default: last dir) only.
+ */
+async function ensureToolchain(key, toolchainsDirs = defaultToolchainsDir(), downloadDir) {
+  const dirs = toDirList(toolchainsDirs || defaultToolchainsDir());
   const isFlash = !TOOLCHAINS[key];
   const installed = isFlash
-    ? isFlashToolLocallyInstalled(key, dir)
-    : isToolchainLocallyInstalled(key, dir);
-  if (!installed) await downloadAndExtractToolchain(key, dir);
-  configureToolchainPaths(dir);
+    ? isFlashToolLocallyInstalled(key, dirs)
+    : isToolchainLocallyInstalled(key, dirs);
+  if (!installed) await downloadAndExtractToolchain(key, downloadDir || dirs[dirs.length - 1]);
+  configureToolchainPaths(dirs);
 }
 
 module.exports = {
-  TOOLCHAINS, FLASH_TOOLS,
-  defaultToolchainsDir,
+  TOOLCHAINS, FLASH_TOOLS, TOOLCHAIN_LOCK,
+  defaultToolchainsDir, locateToolBin,
   isToolchainLocallyInstalled, isFlashToolLocallyInstalled,
   configureToolchainPaths, resolveToolExecutable,
+  checkArchiveHash, evaluateArchiveHash, sha256File,
   downloadFile, extractZip, downloadAndExtractToolchain, ensureToolchain,
 };
