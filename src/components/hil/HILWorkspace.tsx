@@ -9,6 +9,7 @@ import { HILDriverPanel } from './HILDriverPanel';
 import { HILSignalMapper } from './HILSignalMapper';
 import { HILDashboard } from './HILDashboard';
 import { TargetPackSelector } from './TargetPackSelector';
+import { HILEnvironmentStatus, type HILEnvSummary } from './HILEnvironmentStatus';
 import {
   applyTargetSelection,
   HILConfig,
@@ -18,6 +19,14 @@ import {
 import { generateHALCode } from '../../engine/hil/hilCodeGenerator';
 import { generateMISRACCode } from '../../utils/stateMachineCodeGenerator';
 import { StateData, JunctionData, TransitionData, Layer, VariableDef } from '../../types/sm_types';
+
+/**
+ * Real-target builds (STM32 -> official STM32Cube HAL, Arduino -> register-level
+ * runtime, Generic -> host gcc) must NOT contain mock shims. Only ESP32, whose
+ * build/flash is not supported yet, keeps the host-test Arduino shim so its
+ * generated sources can still be previewed.
+ */
+const needsHostTestShims = (target: string | undefined): boolean => target === 'ESP32';
 
 interface HILWorkspaceProps {
   config: HILConfig;
@@ -88,6 +97,7 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
 
   // Build Status
   const [buildStatus, setBuildStatus] = useState<'idle' | 'building' | 'success' | 'error'>('idle');
+  const [envSummary, setEnvSummary] = useState<HILEnvSummary | null>(null);
   const [burnStatus, setBurnStatus] = useState<'idle' | 'burning' | 'success' | 'error'>('idle');
   const [consoleLogs, setConsoleLogs] = useState<string[]>([]);
   
@@ -163,7 +173,7 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
       layers,
       safetyMode,
       hilConfig: { ...config, enabled: true }
-    }, { includeTestShims: true });
+    }, { includeTestShims: needsHostTestShims(config.target) });
     return res.files || [];
   }, [config, variables, states, transitions, junctions, layers, safetyMode, tickMs]);
 
@@ -254,7 +264,7 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
       layers,
       safetyMode,
       hilConfig: { ...config, enabled: true }
-    }, { includeTestShims: true });
+    }, { includeTestShims: needsHostTestShims(config.target) });
 
     if (genRes.errors && genRes.errors.length > 0) {
       setConsoleLogs([
@@ -1051,11 +1061,17 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
                     <div ref={consoleEndRef} />
                   </div>
 
+                  {/* Toolchain / HAL readiness for the selected target */}
+                  <div className="mt-3 shrink-0">
+                    <HILEnvironmentStatus target={config.target || 'Generic'} onStatusChange={setEnvSummary} />
+                  </div>
+
                   {/* Action Buttons */}
                   <div className="flex gap-3 mt-3 shrink-0">
                     <button
                       onClick={handleBuild}
                       disabled={buildStatus === 'building' || config.channels.length === 0}
+                      title={envSummary?.compileBlockedReason}
                       className="flex-1 bg-[#f97316] hover:bg-[#ea580c] disabled:opacity-40 text-black text-xs font-bold py-2 rounded flex items-center justify-center gap-1.5 transition-colors"
                     >
                       <RefreshCcw size={14} className={buildStatus === 'building' ? 'animate-spin' : ''} />
@@ -1063,7 +1079,8 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
                     </button>
                     <button
                       onClick={handleBurn}
-                      disabled={buildStatus !== 'success' || burnStatus === 'burning'}
+                      disabled={buildStatus !== 'success' || burnStatus === 'burning' || Boolean(envSummary?.flashBlockedReason)}
+                      title={envSummary?.flashBlockedReason}
                       className="flex-1 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 disabled:opacity-40 text-black text-xs font-bold py-2 rounded flex items-center justify-center gap-1.5 transition-colors"
                     >
                       <Zap size={14} className={burnStatus === 'burning' ? 'animate-pulse' : ''} />
@@ -1071,7 +1088,8 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
                     </button>
                     <button
                       onClick={handleErase}
-                      disabled={burnStatus === 'burning'}
+                      disabled={burnStatus === 'burning' || Boolean(envSummary?.flashBlockedReason)}
+                      title={envSummary?.flashBlockedReason}
                       className="flex-1 bg-red-700 hover:bg-red-800 disabled:opacity-40 text-white text-xs font-bold py-2 rounded flex items-center justify-center gap-1.5 transition-colors"
                     >
                       <Trash2 size={14} className={burnStatus === 'burning' ? 'animate-pulse' : ''} />

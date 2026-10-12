@@ -4,6 +4,7 @@ import {
 } from '../types/sm_types';
 import { analyzeStateMachine } from './smAnalysisEngine';
 import { generateHALCode } from '../engine/hil/hilCodeGenerator';
+import { generateStm32HalConf } from '../engine/hil/stm32HalConf';
 import { generateCArtifacts } from './stateMachine/smCGenerator';
 import { migrateStateMachineModel } from './stateMachine/smModelMigration';
 import { buildSemanticModel } from './stateMachine/smSemanticBuilder';
@@ -2698,6 +2699,7 @@ typedef enum {
 #define ADC_CLOCK_SYNC_PCLK_DIV4 4
 #define ADC_RESOLUTION_12B 12
 #define ADC_SAMPLETIME_15CYCLES 15
+#define ADC_SAMPLETIME_13CYCLES_5 13
 #define DISABLE 0
 #define ENABLE 1
 #define ADC_DATAALIGN_RIGHT 0
@@ -2824,6 +2826,36 @@ static inline void HAL_TIM_PWM_Start(TIM_HandleTypeDef* htim, uint32_t Channel) 
 
 static inline void HAL_Delay(uint32_t Delay) { (void)Delay; }
 static inline uint32_t HAL_GetTick(void) { return 0; }
+static inline void HAL_IncTick(void) {}
+
+/* Clock tree (host-test mock of the HSI-only default used by HIL_SystemClock_Config) */
+typedef struct {
+    uint32_t OscillatorType;
+    uint32_t HSIState;
+    uint32_t HSICalibrationValue;
+    struct { uint32_t PLLState; } PLL;
+} RCC_OscInitTypeDef;
+typedef struct {
+    uint32_t ClockType;
+    uint32_t SYSCLKSource;
+    uint32_t AHBCLKDivider;
+    uint32_t APB1CLKDivider;
+    uint32_t APB2CLKDivider;
+} RCC_ClkInitTypeDef;
+#define RCC_OSCILLATORTYPE_HSI 1U
+#define RCC_HSI_ON 1U
+#define RCC_HSICALIBRATION_DEFAULT 16U
+#define RCC_PLL_NONE 0U
+#define RCC_CLOCKTYPE_SYSCLK 1U
+#define RCC_CLOCKTYPE_HCLK 2U
+#define RCC_CLOCKTYPE_PCLK1 4U
+#define RCC_CLOCKTYPE_PCLK2 8U
+#define RCC_SYSCLKSOURCE_HSI 0U
+#define RCC_SYSCLK_DIV1 0U
+#define RCC_HCLK_DIV1 0U
+#define FLASH_LATENCY_0 0U
+static inline int HAL_RCC_OscConfig(RCC_OscInitTypeDef* RCC_OscInitStruct) { (void)RCC_OscInitStruct; return HAL_OK; }
+static inline int HAL_RCC_ClockConfig(RCC_ClkInitTypeDef* RCC_ClkInitStruct, uint32_t FLatency) { (void)RCC_ClkInitStruct; (void)FLatency; return HAL_OK; }
 
 #endif\n`;
       pushTestShim(target === 'STM32F4' ? 'stm32f4xx_hal.h' : 'stm32f1xx_hal.h', stm32H);
@@ -2900,6 +2932,24 @@ const diagnosticToLegacyError = (
   elementId: diagnostic.elementId,
 });
 
+/**
+ * Register-level Arduino runtime that real AVR builds compile against
+ * (Arduino.h/.cpp talk to DDRx/PORTx/UCSR0x directly; they only fall back to
+ * host stubs when <avr/io.h> is absent). These are emitted for every Arduino
+ * HIL project, independent of `includeTestShims`.
+ * NOTE: SPI.h / Wire.h / SoftwareSerial.h are still placeholder classes
+ * (no bus traffic) - SPI/I2C/SoftwareSerial channels are not functional on
+ * Arduino hardware yet.
+ */
+const ARDUINO_RUNTIME_NAMES = new Set([
+  'Arduino.h',
+  'Arduino.cpp',
+  'SPI.h',
+  'Wire.h',
+  'SoftwareSerial.h',
+]);
+
+/** Mock HAL / host-only shims: emitted only when `includeTestShims` is true (host tests). */
 const HIL_TEST_SHIM_NAMES = new Set([
   'Arduino.h',
   'Arduino.cpp',
@@ -2979,13 +3029,23 @@ export const generateMISRACCode = (
   const hilFiles = chart.hilConfig?.enabled === true
     ? generateHALCode(chart.hilConfig, chart.variables, hilWarnings)
     : [];
+  const hilTarget = chart.hilConfig?.target ?? 'Generic';
+  const emitsArduinoRuntime = chart.hilConfig?.enabled === true
+    && (hilTarget === 'Arduino_Uno' || hilTarget === 'Arduino_Mega');
   const testShimFiles = chart.hilConfig?.enabled === true
-    && options.includeTestShims === true
+    && (options.includeTestShims === true || emitsArduinoRuntime)
     ? generateLegacyMISRACCode({
       ...chart,
       safetyMode: chart.safetyMode ?? false,
-    }, options).files.filter((file) =>
-      HIL_TEST_SHIM_NAMES.has(file.name))
+    }, { ...options, includeTestShims: true }).files.filter((file) =>
+      (options.includeTestShims === true ? HIL_TEST_SHIM_NAMES : ARDUINO_RUNTIME_NAMES).has(file.name))
+    : [];
+  /* Real STM32 builds link the official STM32Cube HAL, which needs its own
+   * stm32f?xx_hal_conf.h. Host tests (includeTestShims) use the mock HAL header instead. */
+  const realHalConfFiles = chart.hilConfig?.enabled === true
+    && options.includeTestShims !== true
+    && (hilTarget === 'STM32F4' || hilTarget === 'STM32F1')
+    ? [generateStm32HalConf(hilTarget)]
     : [];
   const includeVerificationPackage = options.legacyFlatLayout === true
     ? false
@@ -2994,7 +3054,7 @@ export const generateMISRACCode = (
     includeTestShims: options.includeTestShims === true
       && chart.hilConfig?.enabled !== true,
     includeHostHarness: options.includeHostHarness,
-    reportSourceFiles: [...hilFiles, ...testShimFiles],
+    reportSourceFiles: [...hilFiles, ...realHalConfFiles, ...testShimFiles],
     verificationEvidence: options.verificationEvidence,
     includeVerificationPackage,
   });
@@ -3013,7 +3073,7 @@ export const generateMISRACCode = (
 `,
     };
   });
-  const combinedFiles = [...files, ...hilFiles, ...testShimFiles];
+  const combinedFiles = [...files, ...hilFiles, ...realHalConfFiles, ...testShimFiles];
   const flatAliases = options.legacyFlatLayout === true
     ? []
     : files

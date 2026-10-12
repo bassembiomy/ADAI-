@@ -139,6 +139,31 @@ DAC_HandleTypeDef hdac;
 TIM_HandleTypeDef htim1;
 I2C_HandleTypeDef hi2c1;
 
+/* SysTick drives the HAL time base (HAL_GetTick / HAL_Delay / driver timeouts). */
+void SysTick_Handler(void) {
+    HAL_IncTick();
+}
+
+/* Default clock tree (documented v1 choice): internal HSI, no PLL, no HSE.
+ * STM32F4: SYSCLK = HCLK = PCLK1 = PCLK2 = 16 MHz (HSI), 0 flash wait states.
+ * HAL_RCC_ClockConfig() re-initialises the SysTick time base for this clock. */
+static void HIL_SystemClock_Config(void) {
+    RCC_OscInitTypeDef osc = {0};
+    osc.OscillatorType = RCC_OSCILLATORTYPE_HSI;
+    osc.HSIState = RCC_HSI_ON;
+    osc.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
+    osc.PLL.PLLState = RCC_PLL_NONE;
+    (void)HAL_RCC_OscConfig(&osc);
+
+    RCC_ClkInitTypeDef clk = {0};
+    clk.ClockType = RCC_CLOCKTYPE_SYSCLK | RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_PCLK1 | RCC_CLOCKTYPE_PCLK2;
+    clk.SYSCLKSource = RCC_SYSCLKSOURCE_HSI;
+    clk.AHBCLKDivider = RCC_SYSCLK_DIV1;
+    clk.APB1CLKDivider = RCC_HCLK_DIV1;
+    clk.APB2CLKDivider = RCC_HCLK_DIV1;
+    (void)HAL_RCC_ClockConfig(&clk, FLASH_LATENCY_0);
+}
+
 /* HIL Communication Buffers */
 #define RX_BUF_SIZE 128
 uint8_t rx_buffer[RX_BUF_SIZE];
@@ -249,7 +274,7 @@ static inline void HAL_SPI_WriteChannel(GPIO_TypeDef* csPort, uint16_t csPin, ui
 `,
     systemInit: `
   HAL_Init();
-  /* Configure System Clock here if needed */
+  HIL_SystemClock_Config();
 `,
     serialInit: (baudRate) => `
   /* USART2 GPIO Configuration */
@@ -561,6 +586,31 @@ ADC_HandleTypeDef hadc1;
 TIM_HandleTypeDef htim1;
 I2C_HandleTypeDef hi2c1;
 
+/* SysTick drives the HAL time base (HAL_GetTick / HAL_Delay / driver timeouts). */
+void SysTick_Handler(void) {
+    HAL_IncTick();
+}
+
+/* Default clock tree (documented v1 choice): internal HSI, no PLL, no HSE.
+ * STM32F1: SYSCLK = HCLK = PCLK1 = PCLK2 = 8 MHz (HSI), 0 flash wait states.
+ * HAL_RCC_ClockConfig() re-initialises the SysTick time base for this clock. */
+static void HIL_SystemClock_Config(void) {
+    RCC_OscInitTypeDef osc = {0};
+    osc.OscillatorType = RCC_OSCILLATORTYPE_HSI;
+    osc.HSIState = RCC_HSI_ON;
+    osc.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
+    osc.PLL.PLLState = RCC_PLL_NONE;
+    (void)HAL_RCC_OscConfig(&osc);
+
+    RCC_ClkInitTypeDef clk = {0};
+    clk.ClockType = RCC_CLOCKTYPE_SYSCLK | RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_PCLK1 | RCC_CLOCKTYPE_PCLK2;
+    clk.SYSCLKSource = RCC_SYSCLKSOURCE_HSI;
+    clk.AHBCLKDivider = RCC_SYSCLK_DIV1;
+    clk.APB1CLKDivider = RCC_HCLK_DIV1;
+    clk.APB2CLKDivider = RCC_HCLK_DIV1;
+    (void)HAL_RCC_ClockConfig(&clk, FLASH_LATENCY_0);
+}
+
 #define RX_BUF_SIZE 128
 uint8_t rx_buffer[RX_BUF_SIZE];
 uint8_t rx_index = 0;
@@ -625,7 +675,7 @@ static inline uint32_t HAL_ADC_ReadChannel(uint32_t channel) {
     ADC_ChannelConfTypeDef sConfig = {0};
     sConfig.Channel = channel;
     sConfig.Rank = 1;
-    sConfig.SamplingTime = ADC_SAMPLETIME_15CYCLES;
+    sConfig.SamplingTime = ADC_SAMPLETIME_13CYCLES_5;
     HAL_ADC_ConfigChannel(&hadc1, &sConfig);
 
     uint32_t val = 0U;
@@ -665,6 +715,7 @@ static inline void HAL_SPI_WriteChannel(GPIO_TypeDef* csPort, uint16_t csPin, ui
 `,
     systemInit: `
   HAL_Init();
+  HIL_SystemClock_Config();
 `,
     serialInit: (baudRate) => `
   __HAL_RCC_USART1_CLK_ENABLE();
@@ -912,7 +963,7 @@ void HIL_SendString(const char* str) {
                  `  GPIO_InitStruct_I2C_${name}.Pin = GPIO_PIN_${pinNum}|GPIO_PIN_${sdaPinNum};\n` +
                  `  GPIO_InitStruct_I2C_${name}.Mode = GPIO_MODE_AF_OD;\n` +
                  `  GPIO_InitStruct_I2C_${name}.Pull = GPIO_PULLUP;\n` +
-                 `  GPIO_InitStruct_I2C_${name}.Speed = GPIO_SPEED_FREQ_VERY_HIGH;\n` +
+                 `  GPIO_InitStruct_I2C_${name}.Speed = GPIO_SPEED_FREQ_HIGH;\n` +
                  `  HAL_GPIO_Init(GPIO${port}, &GPIO_InitStruct_I2C_${name});\n\n` +
                  `  __HAL_RCC_I2C1_CLK_ENABLE();\n` +
                  `  hi2c1.Instance = I2C1;\n` +

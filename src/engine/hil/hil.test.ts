@@ -142,10 +142,12 @@ describe('HIL Code Generator', () => {
     expect(result.errors).toHaveLength(0);
 
     // Default files (12, including both reports)
-    // + HIL files (14, including component, MCAL, driver stub, and manifest) = 26 files.
-    expect(result.files).toHaveLength(26);
+    // + HIL files (14, including component, MCAL, driver stub, and manifest)
+    // + stm32f4xx_hal_conf.h (required by the real STM32Cube HAL in production builds) = 27 files.
+    expect(result.files).toHaveLength(27);
     const names = result.files.map(f => f.name);
     expect(names).not.toContain('stm32f4xx_hal.h');
+    expect(names).toContain('stm32f4xx_hal_conf.h');
     expect(names).toContain('mcal_dio_hil.c');
     const measuredSourceCount = result.files.filter((file) =>
       /\.(?:c|h|cpp|ino)$/i.test(file.name)).length;

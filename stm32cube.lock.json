@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "description": "Pinned official STMicroelectronics STM32Cube sources (BSD-3-Clause HAL drivers, Apache-2.0 CMSIS core, Apache-2.0/BSD-3 CMSIS device). 'commit' is the commit the tag dereferences to; fetch_stm32cube.cjs refuses any checkout whose HEAD differs.",
+  "vendorSubdir": "vendor/stm32cube",
+  "repos": [
+    {
+      "name": "stm32f1xx-hal-driver",
+      "url": "https://github.com/STMicroelectronics/stm32f1xx-hal-driver.git",
+      "tag": "v1.1.10",
+      "commit": "77fbb30b7a1d02533980400083e48c559aae5a4f",
+      "keep": [
+        "Inc",
+        "Src",
+        "LICENSE.md"
+      ]
+    },
+    {
+      "name": "stm32f4xx-hal-driver",
+      "url": "https://github.com/STMicroelectronics/stm32f4xx-hal-driver.git",
+      "tag": "v1.8.5",
+      "commit": "b6f0ed3829f3829eb358a2e7417d80bba1a42db7",
+      "keep": [
+        "Inc",
+        "Src",
+        "LICENSE.md"
+      ]
+    },
+    {
+      "name": "cmsis-device-f1",
+      "url": "https://github.com/STMicroelectronics/cmsis-device-f1.git",
+      "tag": "v4.3.5",
+      "commit": "8a76309ed1250d817e9c888c4417171d2ba3ba63",
+      "keep": [
+        "Include",
+        "Source/Templates/system_stm32f1xx.c",
+        "License.md",
+        "LICENSE.md",
+        "LICENSE.txt"
+      ]
+    },
+    {
+      "name": "cmsis-device-f4",
+      "url": "https://github.com/STMicroelectronics/cmsis-device-f4.git",
+      "tag": "v2.6.11",
+      "commit": "0fa0e489e053fa1ca7790bb40b4d76458f64c55d",
+      "keep": [
+        "Include",
+        "Source/Templates/system_stm32f4xx.c",
+        "License.md",
+        "LICENSE.md",
+        "LICENSE.txt"
+      ]
+    },
+    {
+      "name": "cmsis_core",
+      "url": "https://github.com/STMicroelectronics/cmsis_core.git",
+      "tag": "v5.9.0_20250520",
+      "commit": "b7487de1303e2eb77c402432e368691e9dcfb5f0",
+      "keep": [
+        "Include",
+        "LICENSE.md",
+        "LICENSE",
+        "LICENSE.txt"
+      ]
+    }
+  ]
+}

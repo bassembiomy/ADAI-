@@ -32,7 +32,7 @@
   "pinnedToolchains": [
     {
       "name": "arm-none-eabi-gcc",
-      "version": "10.3.1"
+      "version": "13.3.1"
     }
   ],
   "recipes": {
@@ -44,12 +44,12 @@
     {
       "kind": "startup",
       "path": "startup/startup_stm32f103c8tx.c",
-      "sha256": "sha256:df9d52122a167e136bf0f1ca3b15b0629ef2eace551f5945ec78c6198f6bf735"
+      "sha256": "sha256:9c045b7b88dd55a74ef497db3caabef5b68bdcfe97e8ab5556a3799236951863"
     },
     {
       "kind": "linker",
       "path": "linker/stm32f103c8tx.ld",
-      "sha256": "sha256:2417849ff75c1f421b6403349d27fa73c0a2aca6034f6f30d295e0ce0876fb58"
+      "sha256": "sha256:a32bd9ee54dd8e79d31d350b7b985724dcdab927805c90500d79d50328ee0811"
     }
   ],
   "deviceIdentity": {
@@ -121,5 +121,5 @@
       "LINKED_IMAGE_VERIFIED"
     ]
   },
-  "contentHash": "sha256:6f13d329acc45ed7dc55e34a7a2f8eb75d0b93d9c476973b2d4e3f77fcee6687"
+  "contentHash": "sha256:45d8c2cfe706f752b461522d372fa307926bc5fff21f05f4979075679331a2b6"
 }
