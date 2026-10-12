@@ -833,8 +833,16 @@ const renderNoHistoryExitWrappers = (
   );
 }).join('\n');
 
+const minTickMs = (ir: SemanticModel): number => Math.max(
+  0,
+  ir.tickMs - (ir.verification.tickToleranceMs > 0
+    ? ir.verification.tickToleranceMs
+    : Math.max(1, Math.floor(ir.tickMs / 10))),
+);
+
 const cCommentText = (value: string): string => value
   .replaceAll('*/', '* /')
+  .replaceAll('/*', '/ *')
   .replace(/[\r\n]+/g, ' ');
 
 const stateTraceComment = (state: SemanticState): string =>
@@ -883,7 +891,7 @@ export const renderConfigHeader = (ir: SemanticModel): string => {
     '',
     `#define SM_TICK_MS ${ir.tickMs}U`,
     `#define SM_TICK_TOLERANCE_MS ${ir.verification.tickToleranceMs > 0 ? ir.verification.tickToleranceMs : Math.max(1, Math.floor(ir.tickMs / 10))}U`,
-    `#define SM_TICK_MIN_MS ${Math.max(0, ir.tickMs - (ir.verification.tickToleranceMs > 0 ? ir.verification.tickToleranceMs : Math.max(1, Math.floor(ir.tickMs / 10))))}U`,
+    `#define SM_TICK_MIN_MS ${minTickMs(ir)}U`,
     `#define SM_TICK_MAX_MS ${ir.tickMs + (ir.verification.tickToleranceMs > 0 ? ir.verification.tickToleranceMs : Math.max(1, Math.floor(ir.tickMs / 10)))}U`,
     `#define SM_NUM_STATES ${states.length}U`,
     `#define SM_NUM_LAYERS ${layers.length}U`,
@@ -999,6 +1007,9 @@ export const renderUserLogicHeader = (ir: SemanticModel): string => lines(
 );
 
 export const renderUserLogicSource = (ir: SemanticModel): string => lines(
+  '#include <math.h>',
+  '#include <stdlib.h>',
+  '',
   '#include "sm_core.h"',
   '#include "sm_user_logic.h"',
   '',
@@ -1621,7 +1632,9 @@ export const renderCoreSource = (ir: SemanticModel): string => {
     '        SM_Enter_Fault(instance);',
     '        return instance->error_status != SM_ERR_NONE ? instance->error_status : SM_ERR_SAFETY_VIOLATION;',
     '    }',
-    '    if ((delta_ms < SM_TICK_MIN_MS) || (delta_ms > SM_TICK_MAX_MS)) {',
+    ...(minTickMs(ir) === 0
+      ? ['    if (delta_ms > SM_TICK_MAX_MS) {']
+      : ['    if ((delta_ms < SM_TICK_MIN_MS) || (delta_ms > SM_TICK_MAX_MS)) {']),
     '        instance->error_status = SM_ERR_TIMING;',
     '        SM_Enter_Fault(instance);',
     '        return instance->error_status;',

@@ -23,7 +23,7 @@ import {
   verifyGeneratedCStructure,
 } from './smCGenerator';
 
-import { renderCExpression, unwrapTopLevelCondition } from './smCExpressions';
+import { renderCExpression, renderCType, unwrapTopLevelCondition } from './smCExpressions';
 
 const build = (model: ReturnType<typeof flatOrFixture>) => {
   const result = buildSemanticModel(model);
@@ -1383,6 +1383,159 @@ int main(void) {
       expect(fileNames).toContain('sm_testing_report.md');
       expect(fileNames).toContain('static_metrics_report.md');
       expect(fileNames.some((n) => n.startsWith('production/'))).toBe(false);
+    });
+  });
+});
+
+describe('generic C generator regression fixes (S1-S7)', { timeout: 60_000 }, () => {
+  const mkVar = (name: string, type: string, initialValue = '0') => ({
+    id: name,
+    name,
+    type: type as 'double',
+    initialValue,
+    currentValue: 0,
+    visibleInScope: true,
+  });
+
+  const modelWith = (
+    vars: ReturnType<typeof mkVar>[],
+    action: string,
+    mutate: (model: ReturnType<typeof flatOrFixture>) => void = () => {},
+  ) => {
+    const model = flatOrFixture();
+    model.variables = [mkVar('go', 'bool', 'false'), ...vars];
+    model.transitions[0].action = action;
+    mutate(model);
+    return model;
+  };
+
+  const compileStrict = (ir: SemanticModel, extraFlags: string[] = []): string => {
+    const workspace = createGeneratedCodeTestWorkspace('structured-regression');
+    try {
+      for (const file of generateCArtifacts(ir).files) {
+        if (file.name.endsWith('.c') || file.name.endsWith('.h')) {
+          writeFileSync(join(workspace.directory, file.name), file.content);
+        }
+      }
+      execFileSync('gcc', [
+        '-std=c99', '-pedantic-errors', '-Wall', '-Wextra', '-Werror', ...extraFlags,
+        '-I.', '-c', 'sm_core.c', 'sm_safety.c', 'sm_user_logic.c', 'sm_mapping.c',
+      ], { cwd: workspace.directory, stdio: 'pipe' });
+      return generatedFile(ir, 'sm_core.c');
+    } finally {
+      workspace.cleanup();
+    }
+  };
+
+  describe('S1 literals', () => {
+    it('compiles double 1e21 and float 1e21 literals', () => {
+      compileStrict(build(modelWith([mkVar('d', 'double')], 'd = 1e21;')));
+      compileStrict(build(modelWith([mkVar('f', 'float')], 'f = 1e21;')));
+    });
+
+    it('formats integer-valued floats and doubles with a decimal point', () => {
+      const f = generatedFile(build(modelWith([mkVar('f', 'float')], 'f = 2;')), 'sm_core.c');
+      expect(f).toContain('2.0f');
+    });
+
+    it('compiles a fractional factor applied to an unsigned variable', () => {
+      const ir = build(modelWith([mkVar('cnt', 'uint32', '4')], 'cnt = cnt * 0.5;'));
+      const user = generatedFile(ir, 'sm_core.c');
+      expect(user).not.toMatch(/0\.5U/);
+      compileStrict(ir);
+    });
+
+    it('compiles a fractional unsigned initial value', () => {
+      const ir = build(modelWith([mkVar('cnt', 'uint32', '1.5')], 'cnt = 1;'));
+      expect(generatedFile(ir, 'sm_core.c')).not.toMatch(/1\.5U/);
+      compileStrict(ir);
+    });
+  });
+
+  describe('S2 math calls', () => {
+    it('compiles sin/abs on float and double variables strictly', () => {
+      const ir = build(modelWith(
+        [mkVar('total', 'double'), mkVar('ratio', 'double'), mkVar('ft', 'float'), mkVar('fr', 'float')],
+        'ratio = sin(total) + abs(total); fr = sqrt(ft) + abs(ft);',
+      ));
+      const user = generatedFile(ir, 'sm_core.c');
+      expect(user).toContain('fabs(');
+      expect(user).toContain('fabsf(');
+      compileStrict(ir);
+    });
+
+    it('abs(-0.5) evaluates as 0.5 in a host run', () => {
+      const ir = build(modelWith(
+        [mkVar('ratio', 'double'), mkVar('neg', 'double', '-0.5')],
+        'ratio = abs(neg);',
+      ));
+      const out = compileAndRun(ir, `
+        #include <stdio.h>
+        #include "sm_core.h"
+        int main(void) {
+          ADIA_Instance_t inst;
+          SM_Init(&inst);
+          inst.data.go = true;
+          SM_Step(&inst, 10U);
+          SM_Step(&inst, 10U);
+          printf("%.3f\\n", inst.data.ratio);
+          return 0;
+        }`);
+      expect(out.trim()).toBe('0.500');
+    });
+  });
+
+  describe('S3 identifier collisions with _IDX', () => {
+    it('reports a collision between state a and state a_IDX', () => {
+      const model = flatOrFixture();
+      model.states[0].id = 'a';
+      model.states.push({ ...model.states[1], id: 'a_IDX', name: 'A idx', priority: 3 });
+      model.layers[0].stateIds.push('a_IDX');
+      const result = buildSemanticModel(model);
+      expect(result.diagnostics.some((d) => d.code === 'C_IDENTIFIER_COLLISION')).toBe(true);
+    });
+
+    it('reports a collision between layers l-1 and l_1', () => {
+      const model = nestedAndFixture();
+      const base = model.layers.find((item) => item.parentStateId !== null)!;
+      model.layers.push({ ...base, id: 'l-1', name: 'l-1', stateIds: [], transitionIds: [], parentStateId: null });
+      model.layers.push({ ...base, id: 'l_1', name: 'l_1', stateIds: [], transitionIds: [], parentStateId: null });
+      const result = buildSemanticModel(model);
+      expect(result.diagnostics.some((d) => d.code === 'C_IDENTIFIER_COLLISION')).toBe(true);
+    });
+  });
+
+  describe('S4 comment text', () => {
+    it('neutralises /* inside state names', () => {
+      const model = flatOrFixture();
+      model.states[0].name = 'a /* b';
+      compileStrict(build(model));
+    });
+  });
+
+  describe('S5 tick minimum', () => {
+    it('does not emit an always-false unsigned comparison when tickMs = 1', () => {
+      const model = flatOrFixture();
+      model.tickMs = 1;
+      const core = compileStrict(build(model));
+      expect(core).toContain('SM_TICK_MAX_MS');
+    });
+  });
+
+  describe('S6 temporal threshold', () => {
+    it('rejects thresholds beyond 32-bit milliseconds', () => {
+      const model = flatOrFixture();
+      model.transitions[0].type = 'after';
+      model.transitions[0].condition = '';
+      model.transitions[0].afterTicks = 0xFFFFFFFF;
+      const result = buildSemanticModel(model);
+      expect(result.diagnostics.some((d) => d.code === 'TEMPORAL_THRESHOLD_INVALID')).toBe(true);
+    });
+  });
+
+  describe('S7 unknown variable type', () => {
+    it('fails closed in renderCType', () => {
+      expect(() => renderCType('quad' as never)).toThrow(/Unsupported variable type 'quad'/);
     });
   });
 });

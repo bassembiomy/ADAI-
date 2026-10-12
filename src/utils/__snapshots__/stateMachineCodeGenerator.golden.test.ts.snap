@@ -1642,7 +1642,10 @@ void SM_ST_S2_Exit(ADIA_Instance_t *instance);
     "name": "sm_user_logic.h",
   },
   {
-    "content": "#include "sm_core.h"
+    "content": "#include <math.h>
+#include <stdlib.h>
+
+#include "sm_core.h"
 #include "sm_user_logic.h"
 
 /* State: A | Model ID: s1 | C enum: SM_ST_S1 */
@@ -1800,9 +1803,9 @@ Evidence labels describe only the checks actually recorded for this generated pa
 | Metric | Value |
 |---|---:|
 | Files measured | 10 |
-| Total lines | 852 |
-| Functional lines | 738 |
-| Comment/blank density | 13.4% |
+| Total lines | 855 |
+| Functional lines | 740 |
+| Comment/blank density | 13.5% |
 
 ## X-Bridges static code-generation metrics
 

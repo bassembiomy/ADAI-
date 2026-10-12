@@ -2787,6 +2787,14 @@ static inline void HAL_GPIO_WritePin(void* GPIOx, uint16_t GPIO_Pin, GPIO_PinSta
 
 static inline int HAL_UART_Init(UART_HandleTypeDef* huart) { (void)huart; return HAL_OK; }
 static inline int HAL_UART_Receive(UART_HandleTypeDef* huart, uint8_t* pData, uint16_t Size, uint32_t Timeout) { (void)huart; (void)pData; (void)Size; (void)Timeout; return HAL_ERROR; }
+static inline int HAL_UART_Receive_IT(UART_HandleTypeDef* huart, uint8_t* pData, uint16_t Size) { (void)huart; (void)pData; (void)Size; return HAL_OK; }
+static inline void HAL_UART_IRQHandler(UART_HandleTypeDef* huart) { (void)huart; }
+#define __HAL_UART_CLEAR_OREFLAG(__HANDLE__) ((void)(__HANDLE__))
+#define USART1_IRQn 37
+#define USART2_IRQn 38
+#define USART3_IRQn 39
+static inline void HAL_NVIC_SetPriority(int IRQn, uint32_t PreemptPriority, uint32_t SubPriority) { (void)IRQn; (void)PreemptPriority; (void)SubPriority; }
+static inline void HAL_NVIC_EnableIRQ(int IRQn) { (void)IRQn; }
 static inline int HAL_UART_Transmit(UART_HandleTypeDef* huart, uint8_t* pData, uint16_t Size, uint32_t Timeout) { (void)huart; (void)pData; (void)Size; (void)Timeout; return HAL_OK; }
 
 static inline int HAL_SPI_Init(SPI_HandleTypeDef* hspi) { (void)hspi; return HAL_OK; }

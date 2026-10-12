@@ -37,8 +37,30 @@ const stateType = (state: SemanticState): string =>
 const stateMember = (state: SemanticState): string =>
   `xb_${toCIdentifier(state.id).toLowerCase()}`;
 
+const assertFixedTypeBounds = (type: XBFixedType): void => {
+  if (
+    !Number.isInteger(type.wordLength)
+    || type.wordLength < 1
+    || type.wordLength > 32
+  ) {
+    throw new Error(
+      `X-Bridges fixed-point wordLength '${String(type.wordLength)}' must be an integer in 1..32`,
+    );
+  }
+  if (
+    !Number.isInteger(type.fractionLength)
+    || type.fractionLength < -32768
+    || type.fractionLength > 32767
+  ) {
+    throw new Error(
+      `X-Bridges fixed-point fractionLength '${String(type.fractionLength)}' must be an integer in -32768..32767`,
+    );
+  }
+};
+
 const numericCType = (type: XBNumericType): string => {
   if (type.kind === 'fixed') {
+    assertFixedTypeBounds(type);
     const width = type.wordLength <= 8 ? 8 : type.wordLength <= 16 ? 16 : 32;
     return `${type.signed ? 'int' : 'uint'}${width}_t`;
   }
@@ -85,6 +107,7 @@ interface XBStateLayout {
   readonly slotFields: ReadonlyMap<string, string>;
   readonly counterFields: ReadonlyMap<string, string>;
   readonly errorFields: ReadonlyMap<string, string>;
+  readonly simTimeField: string | null;
 }
 
 const stateLayout = (state: SemanticState): XBStateLayout => {
@@ -158,8 +181,10 @@ const stateLayout = (state: SemanticState): XBStateLayout => {
     }
   }
 
+  let simTimeField: string | null = null;
   if (Object.values(xb.operations).some((op) => op.type === 'Clock' || op.type === 'CLOCK')) {
-    declarations.push('    double sim_time;');
+    simTimeField = allocateName('sim_time', 'clock');
+    declarations.push(`    double ${simTimeField};`);
   }
 
   return {
@@ -172,6 +197,7 @@ const stateLayout = (state: SemanticState): XBStateLayout => {
     slotFields,
     counterFields,
     errorFields,
+    simTimeField,
   };
 };
 
@@ -337,6 +363,7 @@ const renderFixedCall = (
   operation: XBSemanticOperation,
 ): string => {
   const conversion = operation.conversion!;
+  assertFixedTypeBounds(type);
   return [
     'SM_XB_ConvertFixed(',
     'value, ',
@@ -387,7 +414,12 @@ const scalarParameter = (
 ): number | boolean => {
   for (const name of names) {
     const value = operation.parameters[name];
-    if (typeof value === 'number' || typeof value === 'boolean') return value;
+    if (value === undefined || value === null) continue;
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    throw new Error(
+      `X-Bridges operation '${operation.id}' parameter '${name}' must be a finite number or boolean`,
+    );
   }
   return fallback;
 };
@@ -477,6 +509,20 @@ const formatC2DArray = (
     rowStrs.push(`{ ${colStrs.join(', ')} }`);
   }
   return `{ ${rowStrs.join(', ')} }`;
+};
+
+const positiveCutoffFrequency = (operation: XBSemanticOperation): number => {
+  const cutoff = Number(scalarParameter(
+    operation,
+    ['cutoff_frequency', 'cutoffFrequency', 'fc'],
+    1,
+  ));
+  if (!(cutoff > 0)) {
+    throw new Error(
+      `X-Bridges operation '${operation.id}' requires a cutoff frequency greater than zero; received ${cutoff}`,
+    );
+  }
+  return cutoff;
 };
 
 const cNumber = (value: number | boolean): string => {
@@ -705,6 +751,7 @@ const defaultConversionCall = (
   operation: XBSemanticOperation | null = null,
 ): string => {
   if (type.kind === 'fixed') {
+    assertFixedTypeBounds(type);
     return [
       'SM_XB_ConvertFixed(',
       `${expression}, `,
@@ -983,8 +1030,8 @@ const emitClock: OperationEmitter = (state, operation, operationIndex, layout, m
   if (outputSignalId === undefined) return [];
   const dt = cNumber(state.xBridges!.solver.stepSeconds);
   return [
-    ...renderSignalWrite(state, operation, operationIndex, 0, outputSignalId, `instance->${member}.sim_time`, layout, member),
-    `    instance->${member}.sim_time += (${dt});`,
+    ...renderSignalWrite(state, operation, operationIndex, 0, outputSignalId, `instance->${member}.${layout.simTimeField ?? 'sim_time'}`, layout, member),
+    `    instance->${member}.${layout.simTimeField ?? 'sim_time'} += (${dt});`,
   ];
 };
 
@@ -998,7 +1045,7 @@ const emitWaveformGen: OperationEmitter = (state, operation, operationIndex, lay
   const bias = cNumber(scalarParameter(operation, ['bias', 'offset'], 0.0));
   const prefix = `wave_${operationIndex}`;
   const lines = [
-    `    double ${prefix}_t = instance->${member}.sim_time - (${cNumber(state.xBridges!.solver.stepSeconds)});`,
+    `    double ${prefix}_t = instance->${member}.${layout.simTimeField ?? 'sim_time'} - (${cNumber(state.xBridges!.solver.stepSeconds)});`,
     `    double ${prefix}_arg = 2.0 * 3.14159265358979323846 * (${freq}) * ${prefix}_t + (${phase});`,
     `    double ${prefix}_val = (${bias});`,
   ];
@@ -2002,6 +2049,89 @@ const nativeSignalCType = (type: XBNumericType): string | null => {
   return precision === 'float64' ? 'double' : 'float';
 };
 
+const SATURATING_INTEGER_TYPES: Readonly<Record<string, {
+  readonly name: string;
+  readonly cType: string;
+  readonly minimum: string;
+  readonly maximum: string;
+  readonly minimumMacro: string;
+  readonly maximumMacro: string;
+}>> = {
+  int8: { name: 'SM_XB_SatToI8', cType: 'int8_t', minimum: '-128.0', maximum: '127.0', minimumMacro: 'INT8_MIN', maximumMacro: 'INT8_MAX' },
+  uint8: { name: 'SM_XB_SatToU8', cType: 'uint8_t', minimum: '0.0', maximum: '255.0', minimumMacro: '0U', maximumMacro: 'UINT8_MAX' },
+  int16: { name: 'SM_XB_SatToI16', cType: 'int16_t', minimum: '-32768.0', maximum: '32767.0', minimumMacro: 'INT16_MIN', maximumMacro: 'INT16_MAX' },
+  uint16: { name: 'SM_XB_SatToU16', cType: 'uint16_t', minimum: '0.0', maximum: '65535.0', minimumMacro: '0U', maximumMacro: 'UINT16_MAX' },
+  int32: { name: 'SM_XB_SatToI32', cType: 'int32_t', minimum: '-2147483648.0', maximum: '2147483647.0', minimumMacro: 'INT32_MIN', maximumMacro: 'INT32_MAX' },
+  uint32: { name: 'SM_XB_SatToU32', cType: 'uint32_t', minimum: '0.0', maximum: '4294967295.0', minimumMacro: '0U', maximumMacro: 'UINT32_MAX' },
+};
+
+const mappedOutputSemanticType = (mapping: XBSemanticMapping): string =>
+  mapping.variable?.semanticType ?? mapping.numericType.kind;
+
+/**
+ * Returns the saturating-conversion helper used when a floating-point (or
+ * fixed-point real) source drives an integer or boolean state-machine
+ * variable, or null when a plain cast is exact.
+ */
+const mappedOutputHelper = (
+  state: SemanticState,
+  mapping: XBSemanticMapping,
+  signalId: string,
+): string | null => {
+  const signals = state.xBridges!.signals;
+  const requested = signals[signalId];
+  const source = requested === undefined
+    ? undefined
+    : signals[requested.sourceSignalId ?? requested.id];
+  if (source === undefined || source.numericType.kind === 'boolean') return null;
+  const destination = mappedOutputSemanticType(mapping);
+  if (destination === 'bool' || destination === 'boolean') return 'SM_XB_Truth';
+  return SATURATING_INTEGER_TYPES[destination]?.name ?? null;
+};
+
+const outputMappingTargetSignalId = (
+  state: SemanticState,
+  mapping: XBSemanticMapping,
+): string => {
+  const op = state.xBridges!.operations[mapping.blockId];
+  return (op?.type === 'Outport' && op.outputSignalIds[0])
+    ? op.outputSignalIds[0]
+    : mapping.signalId;
+};
+
+const renderSaturationHelpers = (ir: SemanticModel): string | null => {
+  const needed = new Set<string>();
+  for (const state of orderedXBStates(ir)) {
+    for (const mapping of state.xBridges!.mappings) {
+      if (mapping.direction !== 'out') continue;
+      const helper = mappedOutputHelper(
+        state,
+        mapping,
+        outputMappingTargetSignalId(state, mapping),
+      );
+      if (helper !== null && helper !== 'SM_XB_Truth') needed.add(helper);
+    }
+  }
+  const blocks = Object.values(SATURATING_INTEGER_TYPES)
+    .filter((type) => needed.has(type.name))
+    .map((type) => [
+      `static ${type.cType} ${type.name}(double value)`,
+      '{',
+      '    if (isnan(value)) {',
+      '        return (' + type.cType + ')0;',
+      '    }',
+      `    if (value <= ${type.minimum}) {`,
+      `        return (${type.cType})${type.minimumMacro};`,
+      '    }',
+      `    if (value >= ${type.maximum}) {`,
+      `        return (${type.cType})${type.maximumMacro};`,
+      '    }',
+      `    return (${type.cType})value;`,
+      '}',
+    ].join('\n'));
+  return blocks.length === 0 ? null : `${blocks.join('\n\n')}\n`;
+};
+
 const renderMappedOutputExpression = (
   state: SemanticState,
   mapping: XBSemanticMapping,
@@ -2010,19 +2140,16 @@ const renderMappedOutputExpression = (
   member: string,
 ): string => {
   const storage = signalStorageExpression(state, signalId, layout, member);
-  const destinationType = renderVariableCast(
-    mapping.variable?.semanticType ?? mapping.numericType.kind,
-  );
+  const destinationType = renderVariableCast(mappedOutputSemanticType(mapping));
+  const helper = mappedOutputHelper(state, mapping, signalId);
   const sourceType = nativeSignalCType(storage.signal.numericType);
-  if (sourceType !== null) {
-    return `(${destinationType})(${storage.expression})`;
+  const sourceExpression = sourceType !== null
+    ? storage.expression
+    : signalRealExpression(state, signalId, layout, member);
+  if (helper !== null) {
+    return `${helper}((double)(${sourceExpression}))`;
   }
-  return `(${destinationType})(${signalRealExpression(
-    state,
-    signalId,
-    layout,
-    member,
-  )})`;
+  return `(${destinationType})(${sourceExpression})`;
 };
 
 const BITWISE_OPERATION_TYPES = new Set([
@@ -2477,8 +2604,8 @@ const renderStateOutputs = (
     if (outputSignalId !== undefined) {
       const dt = cNumber(state.xBridges!.solver.stepSeconds);
       return [
-        ...renderSignalWrite(state, operation, operationIndex, 0, outputSignalId, `instance->${member}.sim_time`, layout, member),
-        `    instance->${member}.sim_time += (${dt});`,
+        ...renderSignalWrite(state, operation, operationIndex, 0, outputSignalId, `instance->${member}.${layout.simTimeField ?? 'sim_time'}`, layout, member),
+        `    instance->${member}.${layout.simTimeField ?? 'sim_time'} += (${dt});`,
       ];
     }
   }
@@ -2495,7 +2622,7 @@ const renderStateOutputs = (
         // Clock advances the shared simulation time before later direct
         // operations run. The interpreter evaluates WaveformGen at the
         // beginning of the substep, so compensate for that advance here.
-        `    double ${prefix}_t = instance->${member}.sim_time - (${cNumber(state.xBridges!.solver.stepSeconds)});`,
+        `    double ${prefix}_t = instance->${member}.${layout.simTimeField ?? 'sim_time'} - (${cNumber(state.xBridges!.solver.stepSeconds)});`,
         `    double ${prefix}_arg = 2.0 * 3.14159265358979323846 * (${freq}) * ${prefix}_t + (${phase});`,
         `    double ${prefix}_val = (${bias});`,
       ];
@@ -2537,7 +2664,7 @@ const renderStateOutputs = (
     if (prevYSlot !== undefined && outputSignalId !== undefined && inputSignalId !== undefined) {
       const u = signalElementRealExpression(state, inputSignalId, layout, member, '0U');
       const prev_y = stateSlotElementRealExpression(prevYSlot, layout, member, '0U');
-      const fc = cNumber(scalarParameter(operation, ['cutoff_frequency', 'cutoffFrequency', 'fc'], 1));
+      const fc = cNumber(positiveCutoffFrequency(operation));
       const dt = cNumber(scalarParameter(operation, ['sample_time', 'sampleTime', 'dt'], 0.1));
       const prefix = `lpf_${operationIndex}`;
       const lines: string[] = [
@@ -2561,7 +2688,7 @@ const renderStateOutputs = (
       const u = signalElementRealExpression(state, inputSignalId, layout, member, '0U');
       const prev_y = stateSlotElementRealExpression(prevYSlot, layout, member, '0U');
       const prev_u = stateSlotElementRealExpression(prevUSlot, layout, member, '0U');
-      const fc = cNumber(scalarParameter(operation, ['cutoff_frequency', 'cutoffFrequency', 'fc'], 1));
+      const fc = cNumber(positiveCutoffFrequency(operation));
       const dt = cNumber(scalarParameter(operation, ['sample_time', 'sampleTime', 'dt'], 0.1));
       const prefix = `hpf_${operationIndex}`;
       const lines: string[] = [
@@ -2585,10 +2712,15 @@ const renderStateOutputs = (
     if (bufferSlot !== undefined && indexSlot !== undefined && outputSignalId !== undefined && inputSignalId !== undefined) {
       const u = signalElementRealExpression(state, inputSignalId, layout, member, '0U');
       const indexExpr = stateSlotElementRealExpression(indexSlot, layout, member, '0U');
-      const windowSize = bufferSlot.shape.kind === 'vector' ? bufferSlot.shape.length : 4;
+      if (bufferSlot.shape.kind !== 'vector') {
+        throw new Error(
+          `X-Bridges MOVING_AVERAGE operation '${operation.id}' requires a vector buffer slot`,
+        );
+      }
+      const windowSize = bufferSlot.shape.length;
       const prefix = `ma_${operationIndex}`;
       const lines: string[] = [
-        `    const uint32_t ${prefix}_idx = (uint32_t)(${indexExpr});`,
+        `    const uint32_t ${prefix}_idx = (uint32_t)(${indexExpr}) % ${windowSize}U;`,
         `    const double ${prefix}_u = (${u});`,
         ...renderStateSlotElementAssignment(state, bufferSlot, `${prefix}_idx`, `${prefix}_u`, layout, member, `${operation.id}_buf_update`, layout.errorFields.get(operation.id), operation),
         `    double ${prefix}_sum = 0.0;`,
@@ -4039,10 +4171,7 @@ const renderScheduleAdvances = (
     return counter === undefined ? [] : [`    instance->${member}.${counter} = UINT32_C(0);`];
   }
   return [
-    `    instance->${member}.${counter} += ${operation.schedule.counterIncrement}U;`,
-    `    if (instance->${member}.${counter} >= ${effectiveSubsteps}U) {`,
-    `        instance->${member}.${counter} -= ${effectiveSubsteps}U;`,
-    '    }',
+    `    instance->${member}.${counter} = (instance->${member}.${counter} + ${operation.schedule.counterIncrement}U) % ${effectiveSubsteps}U;`,
   ];
 });
 
@@ -4225,10 +4354,7 @@ const renderStateLifecycle = (
   for (const mapping of xb.mappings) {
     if (mapping.direction !== 'out') continue;
     const varCId = ir.variables[mapping.variableId]?.cName ?? mapping.variable?.cIdentifier ?? toCIdentifier(mapping.variableId);
-    const op = xb.operations[mapping.blockId];
-    const targetSignalId = (op?.type === 'Outport' && op.outputSignalIds[0])
-      ? op.outputSignalIds[0]
-      : mapping.signalId;
+    const targetSignalId = outputMappingTargetSignalId(state, mapping);
     stepLines.push(
       `    instance->data.${varCId} = ${renderMappedOutputExpression(state, mapping, targetSignalId, layout, member)};`,
     );
@@ -4269,6 +4395,7 @@ export const renderXBLifecycleSource = (ir: SemanticModel): string =>
         )))
       ? BITWISE_HELPERS
       : null,
+    renderSaturationHelpers(ir),
     ...stateMemberEntries(ir)
       .map(({ state, member }) => renderStateLifecycle(ir, state, member)),
   ).trimEnd();

@@ -204,7 +204,12 @@ const validateIdentifierNamespaces = (
     generatedNames.set(generated, sourceId);
   };
   for (const state of model.states) {
-    register(`SM_ST_${toCIdentifier(state.id).toUpperCase()}`, state.id);
+    const stateMacro = `SM_ST_${toCIdentifier(state.id).toUpperCase()}`;
+    register(stateMacro, state.id);
+    register(`${stateMacro}_IDX`, state.id);
+  }
+  for (const layer of model.layers) {
+    register(`SM_LYR_${toCIdentifier(layer.id).toUpperCase()}_IDX`, layer.id);
   }
   for (const variable of model.variables) {
     const cName = toCIdentifier(variable.name);
@@ -588,6 +593,18 @@ const validateTransitionPaths = (
       diagnostics.push(diagnostic(
         'TEMPORAL_THRESHOLD_INVALID',
         `Transition '${transition.id}' has invalid afterTicks '${transition.afterTicks}'.`,
+        transition.id,
+      ));
+    } else if (
+      transition.afterTicks !== null
+      && (
+        !Number.isSafeInteger(transition.afterTicks * model.tickMs)
+        || transition.afterTicks * model.tickMs > 0xFFFFFFFF
+      )
+    ) {
+      diagnostics.push(diagnostic(
+        'TEMPORAL_THRESHOLD_INVALID',
+        `Transition '${transition.id}' threshold afterTicks '${transition.afterTicks}' x tickMs '${model.tickMs}' exceeds the 32-bit millisecond range.`,
         transition.id,
       ));
     }

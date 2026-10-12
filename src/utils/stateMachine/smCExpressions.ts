@@ -31,22 +31,61 @@ const variableType = (
   return undefined;
 };
 
+const renderFloatingText = (value: number): string => {
+  if (!Number.isFinite(value)) {
+    throw new Error(`Cannot render non-finite literal '${String(value)}' as C`);
+  }
+  const text = String(value);
+  return text.includes('.') || text.includes('e') ? text : `${text}.0`;
+};
+
+const UINT32_MAX = 0xFFFFFFFF;
+
 const renderLiteral = (
   value: number | boolean,
   expectedType?: VariableType,
 ): string => {
   if (typeof value === 'boolean') return value ? 'true' : 'false';
   if (FLOAT_TYPES.has(expectedType as VariableType)) {
-    const text = Number.isInteger(value) ? `${value}.0` : String(value);
-    return `${text}f`;
+    return `${renderFloatingText(value)}f`;
   }
   if (expectedType === 'double') {
-    return Number.isInteger(value) ? `${value}.0` : String(value);
+    return renderFloatingText(value);
   }
   if (UNSIGNED_TYPES.has(expectedType as VariableType) && value >= 0) {
+    if (!Number.isInteger(value)) return renderFloatingText(value);
+    if (value > UINT32_MAX) {
+      throw new Error(
+        `Unsigned literal '${String(value)}' is out of range for a 32-bit target`,
+      );
+    }
     return `${value}U`;
   }
-  return String(value);
+  return Number.isFinite(value) ? String(value) : renderFloatingText(value);
+};
+
+const SIGNED_SMALL_INT_TYPES = new Set<VariableType>([
+  'int', 'int8', 'int16', 'int32',
+]);
+
+const renderMathFunction = (
+  functionName: string,
+  argument: ExpressionNode,
+  argumentType: VariableType | undefined,
+): string => {
+  const isFloat = FLOAT_TYPES.has(argumentType as VariableType);
+  if (functionName === 'abs') {
+    // Interpreter parity: JS Math.abs is a floating-point absolute value.
+    // Integer abs() is only used for a bare signed variable of <= 32 bits.
+    if (
+      argument.kind === 'variable'
+      && SIGNED_SMALL_INT_TYPES.has(argumentType as VariableType)
+    ) {
+      return 'abs';
+    }
+    return isFloat ? 'fabsf' : 'fabs';
+  }
+  return isFloat ? `${functionName}f` : functionName;
 };
 
 const renderNode = (
@@ -75,13 +114,15 @@ const renderNode = (
         variableType(node.operand, variables) ?? expectedType,
         resolveVariable,
       )})`;
-    case 'call':
-      return `${node.functionName}(${renderNode(
+    case 'call': {
+      const argumentType = variableType(node.argument, variables) ?? expectedType;
+      return `${renderMathFunction(node.functionName, node.argument, argumentType)}(${renderNode(
         node.argument,
         variables,
-        variableType(node.argument, variables) ?? expectedType,
+        argumentType,
         resolveVariable,
       )})`;
+    }
   }
 };
 
@@ -110,6 +151,8 @@ const cType = (type: VariableType): string => {
     case 'float':
     case 'single': return 'float';
     case 'double': return 'double';
+    default:
+      throw new Error(`Unsupported variable type '${String(type)}'`);
   }
 };
 

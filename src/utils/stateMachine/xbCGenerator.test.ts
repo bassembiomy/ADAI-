@@ -3201,8 +3201,7 @@ describe('X-Bridges generated numeric helpers', { timeout: 60_000 }, () => {
     expect(cCode).not.toContain('(double)(instance->xb_controller.state_delay1_buffer_state)');
     expect(cCode).toContain('state_delay1_buffer_state[(uint32_t)instance->xb_controller.state_delay1_index_state * 1U + 0U]');
     expect(cCode).toContain('if (instance->xb_controller.schedule_delay1 == UINT32_C(0))');
-    expect(cCode).toContain('instance->xb_controller.schedule_delay1 += 1U;');
-    expect(cCode).toContain('if (instance->xb_controller.schedule_delay1 >= 10U)');
+    expect(cCode).toContain('instance->xb_controller.schedule_delay1 = (instance->xb_controller.schedule_delay1 + 1U) % 10U;');
   });
 
   it('verifies DELAY read-before-write sequence and Discrete Integrator 10U scheduler threshold', () => {
@@ -3254,8 +3253,8 @@ describe('X-Bridges generated numeric helpers', { timeout: 60_000 }, () => {
     const cCode = artifacts.files.map((f) => f.content).join('\n');
 
     // REQ-INT-001 & REQ-INT-002: Threshold must be 10U and NOT 100U
-    expect(cCode).toContain('if (instance->xb_controller.schedule_XB8_Discrete >= 10U)');
-    expect(cCode).not.toContain('if (instance->xb_controller.schedule_XB8_Discrete >= 100U)');
+    expect(cCode).toContain('schedule_XB8_Discrete + 1U) % 10U;');
+    expect(cCode).not.toContain('schedule_XB8_Discrete + 1U) % 100U;');
 
     // REQ-DELAY-001 & REQ-DELAY-006: DELAY output assigned to XB8_Delay_y from buffer before input buffer update
     expect(cCode).toContain('instance->xb_controller.XB8_Delay_y =');
@@ -3798,3 +3797,158 @@ describe('X-Bridges generated numeric helpers', { timeout: 60_000 }, () => {
 
 
 
+
+describe('XBridges generator regression fixes (X1-X3)', { timeout: 60_000 }, () => {
+  const compileC = (ir: SemanticModel, name: string): void => {
+    const workspace = createGeneratedCodeTestWorkspace(name);
+    try {
+      for (const file of generateCArtifacts(ir, { includeTestShims: true }).files) {
+        writeFileSync(join(workspace.directory, file.name), file.content);
+      }
+      execFileSync('gcc', [
+        '-std=c99', '-pedantic-errors', '-Wall', '-Wextra', '-Werror', '-I.', '-c',
+        'sm_core.c', 'sm_safety.c', 'sm_user_logic.c', 'sm_xbridges.c',
+      ], { cwd: workspace.directory, stdio: 'pipe' });
+    } finally {
+      workspace.cleanup();
+    }
+  };
+
+  it('X1: a signal named sim:time does not collide with the Clock sim_time field', () => {
+    const ir = semanticModel();
+    ir.states.controller.xBridges = {
+      ownerState: defaultOwnerState(),
+      stateId: 'controller',
+      executionOrder: ['clk'],
+      operations: { clk: scalarOperation('clk', 'Clock', [], ['sim:time']) },
+      signals: { 'sim:time': signal('sim:time', { kind: 'float64' }) },
+      mappings: [],
+      solver: { kind: 'euler', stepSeconds: 0.01, substepsPerTick: 1 },
+      policy: { memory: 'reset', numericFault: 'escalate' },
+    };
+    compileC(ir, 'xb-sim-time-collision');
+  });
+
+  it('X3: rejects non-numeric scalar parameters', () => {
+    const ir = semanticModel();
+    ir.states.controller.xBridges = {
+      ...ir.states.controller.xBridges!,
+      executionOrder: ['g'],
+      operations: { g: scalarOperation('g', 'GAIN', [], ['g:y'], { gain: '2' }) },
+      signals: { 'g:y': signal('g:y', float32) },
+    };
+    expect(() => generateCArtifacts(ir)).toThrow(/g.*gain/);
+  });
+
+  it('X3: rejects a fractional fixed-point wordLength', () => {
+    const ir = semanticModel();
+    const bridges = ir.states.controller.xBridges!;
+    ir.states.controller.xBridges = {
+      ...bridges,
+      signals: {
+        ...bridges.signals,
+        'quantize:y': signal(
+          'quantize:y',
+          { kind: 'fixed', signed: true, wordLength: 2.5, fractionLength: 0 },
+        ),
+      },
+    };
+    expect(() => generateCArtifacts(ir)).toThrow(/wordLength/);
+  });
+
+  it('X2: float to integer/bool output mappings saturate, map NaN to 0 and use SM_XB_Truth', () => {
+    const ir = semanticModel();
+    const f64 = { kind: 'float64' } as const;
+    const outMapping = (
+      variableId: string,
+      blockId: string,
+      semanticType: 'int16' | 'uint32' | 'boolean',
+    ): XBSemanticMapping => {
+      const base = mapping(variableId, `${blockId}:y`, blockId, 'y', 'out', f64);
+      return {
+        ...base,
+        variable: { ...base.variable!, semanticType, cType: semanticType === 'boolean' ? 'bool' : 'int32_t' },
+      };
+    };
+    const never = {
+      periodSubsteps: 1000000, offsetSubsteps: 1, initialCounter: 0, counterIncrement: 1, hold: 'none' as const,
+    };
+    ir.variables = {
+      v_big: { id: 'v_big', name: 'v_big', cName: 'v_big', type: 'int16', initialValue: 0 },
+      v_neg: { id: 'v_neg', name: 'v_neg', cName: 'v_neg', type: 'uint32', initialValue: 0 },
+      v_nan_i: { id: 'v_nan_i', name: 'v_nan_i', cName: 'v_nan_i', type: 'int16', initialValue: 0 },
+      v_nan_b: { id: 'v_nan_b', name: 'v_nan_b', cName: 'v_nan_b', type: 'bool', initialValue: 1 },
+    };
+    ir.states.controller.xBridges = {
+      ownerState: defaultOwnerState(),
+      stateId: 'controller',
+      executionOrder: ['big', 'neg', 'nan_i', 'nan_b'],
+      operations: {
+        big: scalarOperation('big', 'Constant', [], ['big:y'], { value: 1e10 }),
+        neg: scalarOperation('neg', 'Constant', [], ['neg:y'], { value: -1 }),
+        nan_i: { ...scalarOperation('nan_i', 'Constant', [], ['nan_i:y'], { value: 0 }), schedule: never },
+        nan_b: { ...scalarOperation('nan_b', 'Constant', [], ['nan_b:y'], { value: 0 }), schedule: never },
+      },
+      signals: {
+        'big:y': signal('big:y', f64), 'neg:y': signal('neg:y', f64),
+        'nan_i:y': signal('nan_i:y', f64), 'nan_b:y': signal('nan_b:y', f64),
+      },
+      mappings: [
+        outMapping('v_big', 'big', 'int16'),
+        outMapping('v_neg', 'neg', 'uint32'),
+        outMapping('v_nan_i', 'nan_i', 'int16'),
+        outMapping('v_nan_b', 'nan_b', 'boolean'),
+      ],
+      solver: { kind: 'euler', stepSeconds: 0.01, substepsPerTick: 1 },
+      policy: { memory: 'reset', numericFault: 'escalate' },
+    };
+    const source = generateCArtifacts(ir, { includeTestShims: true }).files
+      .map((file) => file.content).join('\n');
+    expect(source).toContain('SM_XB_SatToI16(');
+    expect(source).toContain('SM_XB_SatToU32(');
+    expect(source).toContain('SM_XB_Truth((double)(');
+    const workspace = createGeneratedCodeTestWorkspace('xb-saturating-output');
+    try {
+      for (const file of generateCArtifacts(ir, { includeTestShims: true }).files) {
+        writeFileSync(join(workspace.directory, file.name), file.content);
+      }
+      writeFileSync(join(workspace.directory, 'harness.c'), [
+        '#include "sm_core.h"', '#include <math.h>', '#include <stdio.h>',
+        'int main(void) { ADIA_Instance_t instance; if (SM_Init(&instance) != SM_ERR_NONE) return 1;',
+        'instance.xb_controller.nan_i_y = NAN; instance.xb_controller.nan_b_y = NAN;',
+        'SM_XB_CONTROLLER_Step(&instance);',
+        'printf("%d,%u,%d,%d\\n", (int)instance.data.v_big, (unsigned)instance.data.v_neg, (int)instance.data.v_nan_i, instance.data.v_nan_b ? 1 : 0);',
+        'return 0; }',
+      ].join('\n'));
+      const executable = join(workspace.directory, 'xb_sat.exe');
+      execFileSync('gcc', ['-std=c99', '-pedantic-errors', '-Wall', '-Wextra', '-Werror', '-I.', 'sm_mapping.c', 'sm_core.c', 'sm_safety.c', 'sm_user_logic.c', 'sm_xbridges.c', 'mcal_dio_test_stubs.c', 'harness.c', '-lm', '-o', executable], { cwd: workspace.directory, stdio: 'pipe' });
+      expect(execFileSync(executable, [], { cwd: workspace.directory, encoding: 'utf8' }).trim()).toBe('32767,0,0,0');
+    } finally { workspace.cleanup(); }
+  });
+
+  it('X4: LOW_PASS_FILTER rejects a non-positive cutoff and MOVING_AVERAGE rejects a non-vector buffer', () => {
+    const slot = (role: string, shape: XBShape) => ({
+      id: `op:${role}$state`, role, signalId: null, numericType: { kind: 'float64' } as const, shape, initialValues: [0],
+    });
+    const build1 = (type: string, parameters: XBSemanticOperation['parameters'], slots: ReturnType<typeof slot>[]) => {
+      const ir = semanticModel();
+      ir.states.controller.xBridges = {
+        ...ir.states.controller.xBridges!,
+        executionOrder: ['op'],
+        operations: {
+          op: {
+            ...scalarOperation('op', type, ['op:u'], ['op:y'], parameters),
+            stateful: true,
+            state: { outputPhase: 'read-before-update', updatePhase: 'after-direct-feedthrough', slots },
+          },
+        },
+        signals: { 'op:u': scalarInputSignal('op:u', 'op:y'), 'op:y': signal('op:y', float32) },
+      };
+      return ir;
+    };
+    expect(() => generateCArtifacts(build1('LOW_PASS_FILTER', { cutoff_frequency: 0 }, [slot('prev_y', scalar)])))
+      .toThrow(/cutoff/);
+    expect(() => generateCArtifacts(build1('MOVING_AVERAGE', {}, [slot('buffer', scalar), slot('index', scalar)])))
+      .toThrow(/vector buffer/);
+  });
+});

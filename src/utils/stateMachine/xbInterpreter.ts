@@ -94,6 +94,34 @@ const convertScalar = (
   return result;
 };
 
+const INTEGER_OUTPUT_RANGES: Readonly<Record<string, readonly [number, number]>> = {
+  int8: [-128, 127],
+  uint8: [0, 255],
+  int16: [-32768, 32767],
+  uint16: [0, 65535],
+  int32: [-2147483648, 2147483647],
+  uint32: [0, 4294967295],
+};
+
+/**
+ * Mirrors the generated C output mapping: floating results driving integer
+ * variables saturate (NaN -> 0, truncate toward zero) and boolean variables
+ * use SM_XB_Truth semantics.
+ */
+const coerceToVariableType = (
+  value: XBScalar,
+  semanticType: string | undefined,
+): XBScalar => {
+  if (typeof value === 'boolean' || semanticType === undefined) return value;
+  if (semanticType === 'boolean' || semanticType === 'bool') {
+    return !Number.isNaN(value) && value !== 0;
+  }
+  const range = INTEGER_OUTPUT_RANGES[semanticType];
+  if (range === undefined) return value;
+  if (Number.isNaN(value)) return 0;
+  return Math.trunc(Math.min(range[1], Math.max(range[0], value)));
+};
+
 export const convertValue = (
   value: XBScalar,
   type: XBNumericType,
@@ -2350,10 +2378,13 @@ export const stepXBState = (
         + 'must be scalar',
       );
     }
-    data[varId] = convertValue(
-      values[0],
-      mapping.numericType,
-      faults,
+    data[varId] = coerceToVariableType(
+      convertValue(
+        values[0],
+        mapping.numericType,
+        faults,
+      ),
+      mapping.variable?.semanticType,
     );
   }
   return faults;
