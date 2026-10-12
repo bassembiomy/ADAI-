@@ -22,7 +22,7 @@ export const PortKindActions: React.FC<PortKindActionsProps> = ({
       {PORT_ACTIONS.map(({ kind, label, role, title }) => {
         const token = semanticPresentationToken(role);
         return (
-          <button
+          <button data-help-feature="ui:sysml/PortKindActions:9a1ba08570fe" data-help-source="src/components/sysml/PortKindActions.tsx"
             key={kind}
             type="button"
             onClick={() => onAddPort(kind)}

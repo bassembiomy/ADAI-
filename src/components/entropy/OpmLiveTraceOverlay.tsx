@@ -44,7 +44,7 @@ export const OpmLiveTraceOverlay: React.FC<OpmLiveTraceOverlayProps> = ({
         </div>
         <div className="flex items-center gap-1">
           <span className="text-[9px] text-gray-500 font-normal">T: {timeMs}ms (#{stepIndex})</span>
-          <button
+          <button data-help-feature="opm:opmlivetraceoverlay:scope-trace:a479fc5b20" data-help-module="entropy"
             onClick={() => setCollapsed(!collapsed)}
             className="text-gray-400 hover:text-white p-0.5"
           >

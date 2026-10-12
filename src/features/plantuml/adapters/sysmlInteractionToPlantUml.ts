@@ -42,6 +42,8 @@ function groupKeyword(operator: CombinedFragment['operator']): string {
  * lose the model links). Participants are actors for Actor lifelines, messages keep their order and
  * arrow style, combined fragments become groups with their guards, ref frames become `ref over`
  * and state invariants become `hnote`. A fragment is assumed to span consecutive messages.
+ * This is a visual representation, not full model interchange: time/duration constraints,
+ * connector identity and traceability relationships are omitted.
  */
 export function interactionToPlantUml(repo: SysmlRepository, interactionId: string, endpoints?: SemanticEndpointContext): string {
   const interaction = repo.definitions[interactionId];

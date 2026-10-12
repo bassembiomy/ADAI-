@@ -41,13 +41,13 @@ export const VLabMigrationBanner: React.FC<{ nodes: { id: string; data?: any }[]
           <ul className="mt-1 max-h-40 list-disc space-y-0.5 overflow-y-auto pl-4" data-testid="vlab-migration-notices">
             {pending.map(n => (
               <li key={n.key}>
-                <button type="button" className="font-mono text-amber-300 underline-offset-2 hover:underline" onClick={() => onSelectBlock?.(n.nodeId)}>{n.block}</button>
+                <button data-help-feature="live:components/vlab/VLabMigrationBanner:632a1fb636d5" type="button" className="font-mono text-amber-300 underline-offset-2 hover:underline" onClick={() => onSelectBlock?.(n.nodeId)}>{n.block}</button>
                 {': '}{n.notice}
               </li>
             ))}
           </ul>
         </div>
-        <button type="button" aria-label="Dismiss migration notices" onClick={() => setDismissed(new Set(notices.map(n => n.key)))} className="shrink-0 text-amber-200/70 hover:text-white"><X size={12} /></button>
+        <button data-help-feature="live:components/vlab/VLabMigrationBanner:9923a59f6aa3" type="button" aria-label="Dismiss migration notices" onClick={() => setDismissed(new Set(notices.map(n => n.key)))} className="shrink-0 text-amber-200/70 hover:text-white"><X size={12} /></button>
       </div>
     </div>
   );

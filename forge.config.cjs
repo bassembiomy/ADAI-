@@ -18,6 +18,7 @@ module.exports = {
     icon: path.resolve(__dirname, 'icon.ico'),
     extraResource: [
       path.resolve(__dirname, 'toolchains'),
+      path.resolve(__dirname, 'target-packs'),
       path.resolve(__dirname, 'icon.ico'),
     ],
     fileAssociations: [
@@ -53,7 +54,7 @@ module.exports = {
       // Exclude raw source code, scripts, docs, test specs, and scratch artifacts
       const excludePrefixes = [
         '/src', '/scripts', '/docs', '/.agents', '/.superpowers',
-        '/scratch', '/hil_build', '/toolchains', '/avr-gcc'
+        '/scratch', '/hil_build', '/toolchains', '/target-packs', '/avr-gcc'
       ];
       if (excludePrefixes.some((p) => filePath.startsWith(p))) return true;
       if (filePath.endsWith('.ts') || filePath.endsWith('.md') || filePath.endsWith('.m') || filePath.endsWith('.slx') || filePath.endsWith('.txt') || filePath.endsWith('.cjs')) return true;
@@ -75,6 +76,10 @@ module.exports = {
         const packagedResources = path.join(rawOutDir, 'resources');
         execFileSync(process.execPath, [
           path.resolve(__dirname, 'scripts/verify_bundled_hil_toolchains.cjs'),
+          '--resources-path', packagedResources,
+        ], { stdio: 'inherit' });
+        execFileSync(process.execPath, [
+          path.resolve(__dirname, 'scripts/verify_hil_flash_tools.cjs'),
           '--resources-path', packagedResources,
         ], { stdio: 'inherit' });
         if (process.platform === 'win32' && fs.existsSync(rceditPath) && fs.existsSync(targetExe) && fs.existsSync(iconPath)) {

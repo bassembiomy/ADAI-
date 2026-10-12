@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import * as validation from '../engine/sysml/validation';
 import { createEmptyRepository, type InteractionDefinition } from '../engine/sysml/model';
 import { createSysmlGatewayState, executeSysmlCommand, isRejectingOnlyIntroducedErrors, setRejectOnlyIntroducedErrors } from './sysmlCommandGateway';
 import { ensureDefaultSysmlDiagrams } from './sysmlDiagramWorkspace';
@@ -46,6 +47,27 @@ describe('errors that already existed before a command', () => {
     expect(result.committed, JSON.stringify(result.diagnostics)).toBe(true);
     // They are still reported so the UI can show them.
     expect(result.diagnostics.map(d => d.code)).toContain('MISSING_LIFELINE_REPRESENTS');
+  });
+
+  it('retains old connection diagnostics across renames without repeated full scans', () => {
+    const spy = vi.spyOn(validation, 'validateSysmlRepository');
+    try {
+      const state = createSysmlGatewayState(brokenModel());
+      const first = executeSysmlCommand(state, { type: 'updateElement', elementId: 'ctrl', patch: { name: 'First' } });
+      const calls = spy.mock.calls.length;
+      const second = executeSysmlCommand(first, { type: 'updateElement', elementId: 'ctrl', patch: { name: 'Second' } });
+      expect(first.committed).toBe(true);
+      expect(second.committed).toBe(true);
+      expect(second.diagnostics.map(d => d.code)).toContain('MISSING_LIFELINE_REPRESENTS');
+      expect(spy.mock.calls.length).toBe(calls);
+      setRejectOnlyIntroducedErrors(false);
+      const strict = executeSysmlCommand(second, { type: 'updateElement', elementId: 'ctrl', patch: { name: 'Third' } });
+      expect(strict.committed).toBe(false);
+      expect(spy.mock.calls.length).toBe(calls);
+    } finally {
+      spy.mockRestore();
+      setRejectOnlyIntroducedErrors(true);
+    }
   });
 
   it('do not block an unrelated batch', () => {

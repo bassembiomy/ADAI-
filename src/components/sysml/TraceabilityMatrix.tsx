@@ -81,7 +81,7 @@ export function TraceabilityMatrix({ repository, externalElements = [], onNaviga
             <p className="text-[11px] text-neutral-400">Canonical revision {repository.revision} · {metrics.covered}/{metrics.total} covered · {metrics.verified} verified</p>
           </div>
           <div className="flex items-center gap-2">
-            <button
+            <button data-help-feature="ui:sysml/TraceabilityMatrix:f134e6116552" data-help-source="src/components/sysml/TraceabilityMatrix.tsx"
               type="button"
               onClick={() => setUseVirtualGrid(prev => !prev)}
               className={`rounded border px-2.5 py-1 text-xs transition-colors ${
@@ -90,28 +90,28 @@ export function TraceabilityMatrix({ repository, externalElements = [], onNaviga
             >
               {renderVirtualGrid ? 'Standard View' : 'Virtualized Grid'}
             </button>
-            <button type="button" onClick={exportCsv} className="rounded border border-orange-700 px-3 py-1 text-xs text-orange-300 hover:bg-orange-950">Export CSV</button>
+            <button data-help-feature="ui:sysml/TraceabilityMatrix:72c56515f6ca" data-help-source="src/components/sysml/TraceabilityMatrix.tsx" type="button" onClick={exportCsv} className="rounded border border-orange-700 px-3 py-1 text-xs text-orange-300 hover:bg-orange-950">Export CSV</button>
           </div>
         </div>
         <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-6">
-          <input aria-label="Search requirements" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search ID, name, or text" className="rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-xs" />
-          <select aria-label="Filter by traceability status" value={status} onChange={event => setStatus(event.target.value as RtmStatus | '')} className="rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-xs">
+          <input data-help-feature="ui:sysml/TraceabilityMatrix:2810b65ce815" data-help-source="src/components/sysml/TraceabilityMatrix.tsx" aria-label="Search requirements" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search ID, name, or text" className="rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-xs" />
+          <select data-help-feature="ui:sysml/TraceabilityMatrix:9805b2d032de" data-help-source="src/components/sysml/TraceabilityMatrix.tsx" aria-label="Filter by traceability status" value={status} onChange={event => setStatus(event.target.value as RtmStatus | '')} className="rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-xs">
             <option value="">All trace statuses</option>
             {['verified', 'covered', 'failed', 'stale', 'suspect', 'uncovered', 'orphan', 'unresolved', 'unsupported'].map(value => <option key={value} value={value}>{value}</option>)}
           </select>
-          <select aria-label="Filter by owner" value={owner} onChange={event => setOwner(event.target.value)} className="rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-xs">
+          <select data-help-feature="ui:sysml/TraceabilityMatrix:fa332070736f" data-help-source="src/components/sysml/TraceabilityMatrix.tsx" aria-label="Filter by owner" value={owner} onChange={event => setOwner(event.target.value)} className="rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-xs">
             <option value="">All owners</option>
             {owners.map(value => <option key={value}>{value}</option>)}
           </select>
-          <select aria-label="Filter by risk" value={risk} onChange={event => setRisk(event.target.value)} className="rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-xs">
+          <select data-help-feature="ui:sysml/TraceabilityMatrix:0c042ffb0396" data-help-source="src/components/sysml/TraceabilityMatrix.tsx" aria-label="Filter by risk" value={risk} onChange={event => setRisk(event.target.value)} className="rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-xs">
             <option value="">All risks</option>
             {['low', 'medium', 'high', 'critical'].map(value => <option key={value}>{value}</option>)}
           </select>
-          <select aria-label="Compare with baseline" value={compareBaselineId} onChange={event => setCompareBaselineId(event.target.value)} className="rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-xs">
+          <select data-help-feature="ui:sysml/TraceabilityMatrix:12194771847a" data-help-source="src/components/sysml/TraceabilityMatrix.tsx" aria-label="Compare with baseline" value={compareBaselineId} onChange={event => setCompareBaselineId(event.target.value)} className="rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-xs">
             <option value="">No baseline comparison</option>
             {baselines.map(b => <option key={b.id} value={b.id}>{sysmlObjectLabel(b, 'Baseline')}</option>)}
           </select>
-          <select aria-label="Filter by change type" value={changeType} onChange={event => setChangeType(event.target.value as any)} className="rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-xs">
+          <select data-help-feature="ui:sysml/TraceabilityMatrix:e4d5949ea50d" data-help-source="src/components/sysml/TraceabilityMatrix.tsx" aria-label="Filter by change type" value={changeType} onChange={event => setChangeType(event.target.value as any)} className="rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-xs">
             <option value="">All change types</option>
             <option value="added">Added</option>
             <option value="modified">Modified</option>
@@ -136,7 +136,7 @@ export function TraceabilityMatrix({ repository, externalElements = [], onNaviga
             </thead>
             <tbody>
               {matrix.rows.map((row, index) => (
-                <tr
+                <tr data-help-feature="ui:sysml/TraceabilityMatrix:8611f1af7af0" data-help-source="src/components/sysml/TraceabilityMatrix.tsx"
                   key={row.requirement.id}
                   ref={element => { rowRefs.current[index] = element; }}
                   tabIndex={index === 0 ? 0 : -1}
@@ -149,7 +149,7 @@ export function TraceabilityMatrix({ repository, externalElements = [], onNaviga
                     if (next !== index) { event.preventDefault(); rowRefs.current[next]?.focus(); }
                   }}
                 >
-                  <td className="p-2"><button type="button" onClick={() => onNavigate?.(row.requirement.id)} className="text-left"><span className="block font-mono text-orange-300">{row.requirement.requirementId}</span><span className="font-medium">{sysmlObjectLabel(row.requirement, 'Requirement')}</span><span className="block max-w-xs truncate text-neutral-500">{row.requirement.text}</span></button></td>
+                  <td className="p-2"><button data-help-feature="ui:sysml/TraceabilityMatrix:42bd19a061b8" data-help-source="src/components/sysml/TraceabilityMatrix.tsx" type="button" onClick={() => onNavigate?.(row.requirement.id)} className="text-left"><span className="block font-mono text-orange-300">{row.requirement.requirementId}</span><span className="font-medium">{sysmlObjectLabel(row.requirement, 'Requirement')}</span><span className="block max-w-xs truncate text-neutral-500">{row.requirement.text}</span></button></td>
                   <td className="p-2">
                     <div className="flex flex-col gap-1 max-w-xs">
                       {/* Containment Parents (Contained By) */}
@@ -157,7 +157,7 @@ export function TraceabilityMatrix({ repository, externalElements = [], onNaviga
                         <div className="flex flex-wrap items-center gap-1">
                           <span className="text-[10px] text-neutral-500 font-semibold uppercase">Contained By:</span>
                           {row.containmentParents.map(p => (
-                            <button
+                            <button data-help-feature="ui:sysml/TraceabilityMatrix:4f87d8044caf" data-help-source="src/components/sysml/TraceabilityMatrix.tsx"
                               key={p.id}
                               type="button"
                               onClick={() => onNavigate?.(p.id)}
@@ -173,7 +173,7 @@ export function TraceabilityMatrix({ repository, externalElements = [], onNaviga
                         <div className="flex flex-wrap items-center gap-1">
                           <span className="text-[10px] text-neutral-500 font-semibold uppercase">Parent:</span>
                           {row.parents.map(p => (
-                            <button
+                            <button data-help-feature="ui:sysml/TraceabilityMatrix:4f87d8044caf" data-help-source="src/components/sysml/TraceabilityMatrix.tsx"
                               key={p.id}
                               type="button"
                               onClick={() => onNavigate?.(p.id)}
@@ -192,7 +192,7 @@ export function TraceabilityMatrix({ repository, externalElements = [], onNaviga
                         <div className="flex flex-wrap items-center gap-1">
                           <span className="text-[10px] text-neutral-500 font-semibold uppercase">Contains:</span>
                           {row.containmentChildren.map(c => (
-                            <button
+                            <button data-help-feature="ui:sysml/TraceabilityMatrix:180eca11a611" data-help-source="src/components/sysml/TraceabilityMatrix.tsx"
                               key={c.id}
                               type="button"
                               onClick={() => onNavigate?.(c.id)}
@@ -208,7 +208,7 @@ export function TraceabilityMatrix({ repository, externalElements = [], onNaviga
                         <div className="flex flex-wrap items-center gap-1">
                           <span className="text-[10px] text-neutral-500 font-semibold uppercase">Child:</span>
                           {row.children.map(c => (
-                            <button
+                            <button data-help-feature="ui:sysml/TraceabilityMatrix:180eca11a611" data-help-source="src/components/sysml/TraceabilityMatrix.tsx"
                               key={c.id}
                               type="button"
                               onClick={() => onNavigate?.(c.id)}
@@ -227,7 +227,7 @@ export function TraceabilityMatrix({ repository, externalElements = [], onNaviga
                         <div className="flex flex-wrap items-center gap-1">
                           <span className="text-[10px] text-neutral-500 font-semibold uppercase">Derived From:</span>
                           {row.derivedFrom.map(d => (
-                            <button
+                            <button data-help-feature="ui:sysml/TraceabilityMatrix:3e20ca878d9f" data-help-source="src/components/sysml/TraceabilityMatrix.tsx"
                               key={d.id}
                               type="button"
                               onClick={() => onNavigate?.(d.id)}
@@ -246,7 +246,7 @@ export function TraceabilityMatrix({ repository, externalElements = [], onNaviga
                         <div className="flex flex-wrap items-center gap-1">
                           <span className="text-[10px] text-neutral-500 font-semibold uppercase">Derived Req:</span>
                           {row.derivedRequirements.map(d => (
-                            <button
+                            <button data-help-feature="ui:sysml/TraceabilityMatrix:3e20ca878d9f" data-help-source="src/components/sysml/TraceabilityMatrix.tsx"
                               key={d.id}
                               type="button"
                               onClick={() => onNavigate?.(d.id)}
@@ -265,7 +265,7 @@ export function TraceabilityMatrix({ repository, externalElements = [], onNaviga
                         <div className="flex flex-wrap items-center gap-1">
                           <span className="text-[10px] text-neutral-500 font-semibold uppercase">Copied From:</span>
                           {row.copiedFrom.map(cp => (
-                            <button
+                            <button data-help-feature="ui:sysml/TraceabilityMatrix:cff72136ed7d" data-help-source="src/components/sysml/TraceabilityMatrix.tsx"
                               key={cp.id}
                               type="button"
                               onClick={() => onNavigate?.(cp.id)}
@@ -284,7 +284,7 @@ export function TraceabilityMatrix({ repository, externalElements = [], onNaviga
                         <div className="flex flex-wrap items-center gap-1">
                           <span className="text-[10px] text-neutral-500 font-semibold uppercase">Copies:</span>
                           {row.copiedRequirements.map(cp => (
-                            <button
+                            <button data-help-feature="ui:sysml/TraceabilityMatrix:cff72136ed7d" data-help-source="src/components/sysml/TraceabilityMatrix.tsx"
                               key={cp.id}
                               type="button"
                               onClick={() => onNavigate?.(cp.id)}
@@ -303,7 +303,7 @@ export function TraceabilityMatrix({ repository, externalElements = [], onNaviga
                         <div className="flex flex-wrap items-center gap-1">
                           <span className="text-[10px] text-neutral-500 font-semibold uppercase">Refined By:</span>
                           {row.refinedBy.map(rf => (
-                            <button
+                            <button data-help-feature="ui:sysml/TraceabilityMatrix:7d8f13d97aed" data-help-source="src/components/sysml/TraceabilityMatrix.tsx"
                               key={rf.id}
                               type="button"
                               onClick={() => onNavigate?.(rf.id)}
@@ -321,7 +321,7 @@ export function TraceabilityMatrix({ repository, externalElements = [], onNaviga
                         <div className="flex flex-wrap items-center gap-1">
                           <span className="text-[10px] text-neutral-500 font-semibold uppercase">Traced:</span>
                           {row.tracedElements.map(tr => (
-                            <button
+                            <button data-help-feature="ui:sysml/TraceabilityMatrix:ba8bcb13eda0" data-help-source="src/components/sysml/TraceabilityMatrix.tsx"
                               key={tr.id}
                               type="button"
                               onClick={() => onNavigate?.(tr.id)}
@@ -361,7 +361,7 @@ export function TraceabilityMatrix({ repository, externalElements = [], onNaviga
                     {row.satisfiedBy && row.satisfiedBy.length > 0 ? (
                       <div className="flex flex-wrap gap-1">
                         {row.satisfiedBy.map(cb => (
-                          <button
+                          <button data-help-feature="ui:sysml/TraceabilityMatrix:13ed9ccf6056" data-help-source="src/components/sysml/TraceabilityMatrix.tsx"
                             key={cb.id}
                             type="button"
                             onClick={() => onNavigate?.(cb.id)}
@@ -375,7 +375,7 @@ export function TraceabilityMatrix({ repository, externalElements = [], onNaviga
                     ) : row.coveringBlocks && row.coveringBlocks.length > 0 ? (
                       <div className="flex flex-wrap gap-1">
                         {row.coveringBlocks.map(cb => (
-                          <button
+                          <button data-help-feature="ui:sysml/TraceabilityMatrix:13ed9ccf6056" data-help-source="src/components/sysml/TraceabilityMatrix.tsx"
                             key={cb.id}
                             type="button"
                             onClick={() => onNavigate?.(cb.id)}
@@ -395,7 +395,7 @@ export function TraceabilityMatrix({ repository, externalElements = [], onNaviga
                     {row.verifiedBy && row.verifiedBy.length > 0 ? (
                       <div className="flex flex-wrap gap-1">
                         {row.verifiedBy.map(v => (
-                          <button
+                          <button data-help-feature="ui:sysml/TraceabilityMatrix:83c07f52c87c" data-help-source="src/components/sysml/TraceabilityMatrix.tsx"
                             key={v.id}
                             type="button"
                             onClick={() => onNavigate?.(v.id)}
@@ -429,7 +429,7 @@ function StatusBadge({ status }: { status: RtmStatus }) {
 
 function ElementLinks({ ids, repository, onNavigate, empty }: { ids: string[]; repository: SysmlRepository; onNavigate?: (id: string) => void; empty: string }) {
   if (!ids.length) return <span className="text-neutral-600">{empty}</span>;
-  return <div className="flex flex-wrap gap-1">{ids.map(id => <button key={id} type="button" onClick={() => onNavigate?.(id)} className="rounded border border-neutral-700 bg-neutral-900 px-1.5 py-0.5 text-neutral-300 hover:border-orange-600">{elementName(repository, id)}</button>)}</div>;
+  return <div className="flex flex-wrap gap-1">{ids.map(id => <button data-help-feature="ui:sysml/TraceabilityMatrix:b294ca606485" data-help-source="src/components/sysml/TraceabilityMatrix.tsx" key={id} type="button" onClick={() => onNavigate?.(id)} className="rounded border border-neutral-700 bg-neutral-900 px-1.5 py-0.5 text-neutral-300 hover:border-orange-600">{elementName(repository, id)}</button>)}</div>;
 }
 
 function elementName(repository: SysmlRepository, id: string): string {

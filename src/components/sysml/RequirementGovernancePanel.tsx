@@ -82,7 +82,7 @@ export function RequirementGovernancePanel({
             <span className="text-gray-400">Current Baseline: </span>
             <span className="font-mono text-gray-200">{currentBaseline ? sysmlObjectLabel(currentBaseline, 'Baseline') : 'Working Draft (Unfrozen)'}</span>
           </div>
-          <button
+          <button data-help-feature="ui:sysml/RequirementGovernancePanel:b67b1e2d54ec" data-help-source="src/components/sysml/RequirementGovernancePanel.tsx"
             type="button"
             onClick={() => setShowNewBaseline(!showNewBaseline)}
             className="rounded border border-gray-600 px-2 py-0.5 text-[11px] text-gray-300 hover:bg-gray-800"
@@ -92,15 +92,15 @@ export function RequirementGovernancePanel({
         </div>
 
         {showNewBaseline && (
-          <form onSubmit={handleCreate} className="flex gap-2 pt-2 border-t border-gray-800">
-            <input
+          <form data-help-feature="ui:sysml/RequirementGovernancePanel:656ee6ce3ddc" data-help-source="src/components/sysml/RequirementGovernancePanel.tsx" onSubmit={handleCreate} className="flex gap-2 pt-2 border-t border-gray-800">
+            <input data-help-feature="ui:sysml/RequirementGovernancePanel:b45d2035e6b0" data-help-source="src/components/sysml/RequirementGovernancePanel.tsx"
               aria-label="Baseline name"
               value={newBaselineName}
               onChange={e => setNewBaselineName(e.target.value)}
               placeholder="e.g. Baseline 1.0"
               className="flex-1 rounded border border-gray-700 bg-transparent px-2 py-1 text-xs"
             />
-            <button
+            <button data-help-feature="ui:sysml/RequirementGovernancePanel:1f8f0faf7fee" data-help-source="src/components/sysml/RequirementGovernancePanel.tsx"
               type="submit"
               className="rounded bg-[#f97316] px-3 py-1 text-xs font-semibold text-white hover:bg-orange-600"
             >
@@ -137,7 +137,7 @@ export function RequirementGovernancePanel({
                     {unavailable && <span className="block text-amber-300 text-[10px]">Referenced element is unavailable</span>}
                   </div>
                   {onClearSuspect && (
-                    <button
+                    <button data-help-feature="ui:sysml/RequirementGovernancePanel:9ad38932cfd4" data-help-source="src/components/sysml/RequirementGovernancePanel.tsx"
                       type="button"
                       onClick={() => onClearSuspect(link.id)}
                       className="rounded border border-emerald-700 bg-emerald-950/40 px-2 py-0.5 text-[10px] font-semibold text-emerald-300 hover:bg-emerald-900/50"
@@ -186,7 +186,7 @@ export function RequirementGovernancePanel({
           )}
 
           {onSyncFromMaster && (
-            <button
+            <button data-help-feature="ui:sysml/RequirementGovernancePanel:e9644827b1c1" data-help-source="src/components/sysml/RequirementGovernancePanel.tsx"
               type="button"
               onClick={onSyncFromMaster}
               className="rounded border border-blue-700 bg-blue-950/40 px-2.5 py-1 text-xs font-semibold text-blue-300 hover:bg-blue-900/50"
@@ -234,7 +234,7 @@ export function RequirementGovernancePanel({
               </p>
               <div className="flex gap-2">
                 {onCloneBaseline && blockedBaselineIds.map(id => (
-                  <button
+                  <button data-help-feature="ui:sysml/RequirementGovernancePanel:082edbb45f91" data-help-source="src/components/sysml/RequirementGovernancePanel.tsx"
                     key={`clone-${id}`}
                     type="button"
                     onClick={() => onCloneBaseline(id)}
@@ -244,7 +244,7 @@ export function RequirementGovernancePanel({
                   </button>
                 ))}
                 {onAuthorizeBaseline && blockedBaselineIds.map(id => (
-                  <button
+                  <button data-help-feature="ui:sysml/RequirementGovernancePanel:eca2b79d710e" data-help-source="src/components/sysml/RequirementGovernancePanel.tsx"
                     key={`auth-${id}`}
                     type="button"
                     onClick={() => onAuthorizeBaseline(id)}

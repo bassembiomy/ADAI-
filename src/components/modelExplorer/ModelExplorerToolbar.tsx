@@ -46,7 +46,7 @@ export const ModelExplorerToolbar: React.FC<ModelExplorerToolbarProps> = ({
       {/* Top row: View Switcher tabs */}
       <div className="flex items-center justify-between gap-1">
         <div className="flex items-center gap-0.5 bg-[var(--surface-canvas)] p-0.5 rounded border border-[var(--border-default)]">
-          <button
+          <button data-help-feature="ui:modelExplorer/ModelExplorerToolbar:2023ee9e8087" data-help-source="src/components/modelExplorer/ModelExplorerToolbar.tsx"
             type="button"
             role="tab"
             aria-selected={viewMode === 'containment'}
@@ -62,7 +62,7 @@ export const ModelExplorerToolbar: React.FC<ModelExplorerToolbarProps> = ({
             <span>Containment</span>
           </button>
 
-          <button
+          <button data-help-feature="ui:modelExplorer/ModelExplorerToolbar:7abb1076a24c" data-help-source="src/components/modelExplorer/ModelExplorerToolbar.tsx"
             type="button"
             role="tab"
             aria-selected={viewMode === 'diagramContext'}
@@ -84,7 +84,7 @@ export const ModelExplorerToolbar: React.FC<ModelExplorerToolbarProps> = ({
             <span>Diagram</span>
           </button>
 
-          <button
+          <button data-help-feature="ui:modelExplorer/ModelExplorerToolbar:5efff69fabdc" data-help-source="src/components/modelExplorer/ModelExplorerToolbar.tsx"
             type="button"
             role="tab"
             aria-selected={viewMode === 'search'}
@@ -104,7 +104,7 @@ export const ModelExplorerToolbar: React.FC<ModelExplorerToolbarProps> = ({
         {/* Tree expand / collapse / favorites actions */}
         <div className="flex items-center gap-1">
           {onToggleFavoritesOnly && (
-            <button
+            <button data-help-feature="ui:modelExplorer/ModelExplorerToolbar:8f1006d4db61" data-help-source="src/components/modelExplorer/ModelExplorerToolbar.tsx"
               type="button"
               aria-label="Toggle Favorites"
               aria-pressed={showFavoritesOnly}
@@ -118,7 +118,7 @@ export const ModelExplorerToolbar: React.FC<ModelExplorerToolbarProps> = ({
             </button>
           )}
 
-          <button
+          <button data-help-feature="ui:modelExplorer/ModelExplorerToolbar:043fd36560e7" data-help-source="src/components/modelExplorer/ModelExplorerToolbar.tsx"
             type="button"
             aria-label="Expand All"
             onClick={onExpandAll}
@@ -128,7 +128,7 @@ export const ModelExplorerToolbar: React.FC<ModelExplorerToolbarProps> = ({
             <ChevronsDown size={13} />
           </button>
 
-          <button
+          <button data-help-feature="ui:modelExplorer/ModelExplorerToolbar:fb745143c6de" data-help-source="src/components/modelExplorer/ModelExplorerToolbar.tsx"
             type="button"
             aria-label="Collapse All"
             onClick={onCollapseAll}
@@ -143,7 +143,7 @@ export const ModelExplorerToolbar: React.FC<ModelExplorerToolbarProps> = ({
       {/* Bottom row: Search input */}
       <div className="relative flex items-center w-full">
         <Search size={12} className="absolute left-2 text-[var(--text-muted)] pointer-events-none" />
-        <input
+        <input data-help-feature="ui:modelExplorer/ModelExplorerToolbar:d790dd06eb97" data-help-source="src/components/modelExplorer/ModelExplorerToolbar.tsx"
           type="text"
           value={searchQuery}
           onChange={e => onSearchQueryChange(e.target.value)}
@@ -151,7 +151,7 @@ export const ModelExplorerToolbar: React.FC<ModelExplorerToolbarProps> = ({
           className="w-full bg-[var(--surface-canvas)] text-[var(--text-primary)] pl-7 pr-6 py-1 rounded border border-[var(--border-default)] text-[11px] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--focus-ring)] focus:ring-1 focus:ring-[var(--focus-ring)]"
         />
         {searchQuery && (
-          <button
+          <button data-help-feature="ui:modelExplorer/ModelExplorerToolbar:337cd0275348" data-help-source="src/components/modelExplorer/ModelExplorerToolbar.tsx"
             type="button"
             aria-label="Clear Search"
             onClick={() => onSearchQueryChange('')}

@@ -1,0 +1,40 @@
+{
+  "bound": 374,
+  "unmapped": [
+    {
+      "line": 3484,
+      "tag": "div",
+      "handlers": "{(e) => e.stopPropagation()}"
+    },
+    {
+      "line": 3841,
+      "tag": "div",
+      "handlers": "{e => e.stopPropagation()}"
+    },
+    {
+      "line": 4566,
+      "tag": "input",
+      "handlers": "{handleFileChange}"
+    },
+    {
+      "line": 15792,
+      "tag": "rect",
+      "handlers": "{(e) => { e.stopPropagation(); setSelectedIds([block.id]); }}"
+    },
+    {
+      "line": 18398,
+      "tag": "div",
+      "handlers": "{handleDoubleClick}"
+    },
+    {
+      "line": 18637,
+      "tag": "div",
+      "handlers": "{(e) => e.stopPropagation()}"
+    },
+    {
+      "line": 18659,
+      "tag": "Checkbox",
+      "handlers": "{() => { }}"
+    }
+  ]
+}

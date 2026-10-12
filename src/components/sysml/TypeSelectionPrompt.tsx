@@ -140,7 +140,7 @@ export const TypeSelectionPrompt: React.FC<TypeSelectionPromptProps> = ({
               {candidates.map(candidate => {
                 const isSelected = selectedId === candidate.id;
                 return (
-                  <button
+                  <button data-help-feature="ui:sysml/TypeSelectionPrompt:3b4c53e7721d" data-help-source="src/components/sysml/TypeSelectionPrompt.tsx"
                     key={candidate.id}
                     type="button"
                     onClick={() => setSelectedId(candidate.id)}
@@ -179,7 +179,7 @@ export const TypeSelectionPrompt: React.FC<TypeSelectionPromptProps> = ({
           }}
         >
           {onCreateNewType ? (
-            <button
+            <button data-help-feature="ui:sysml/TypeSelectionPrompt:eb09cc68229d" data-help-source="src/components/sysml/TypeSelectionPrompt.tsx"
               type="button"
               onClick={onCreateNewType}
               style={{
@@ -197,7 +197,7 @@ export const TypeSelectionPrompt: React.FC<TypeSelectionPromptProps> = ({
           ) : <div />}
 
           <div style={{ display: 'flex', gap: '8px' }}>
-            <button
+            <button data-help-feature="ui:sysml/TypeSelectionPrompt:ead1fdc019b2" data-help-source="src/components/sysml/TypeSelectionPrompt.tsx"
               type="button"
               onClick={onCancel}
               style={{
@@ -212,7 +212,7 @@ export const TypeSelectionPrompt: React.FC<TypeSelectionPromptProps> = ({
             >
               Cancel
             </button>
-            <button
+            <button data-help-feature="ui:sysml/TypeSelectionPrompt:cc6c71b2187c" data-help-source="src/components/sysml/TypeSelectionPrompt.tsx"
               type="button"
               disabled={!hasValidSelection}
               onClick={() => {

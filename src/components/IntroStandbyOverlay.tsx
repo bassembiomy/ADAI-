@@ -100,7 +100,7 @@ export const IntroStandbyOverlay: React.FC<IntroStandbyOverlayProps> = ({ mode, 
   }, [mode]);
 
   return (
-    <div
+    <div data-help-feature="ui:IntroStandbyOverlay:ea194a558a36" data-help-source="src/components/IntroStandbyOverlay.tsx"
       data-testid="welcome-overlay"
       aria-label={mode === 'intro' ? 'Welcome overlay' : 'Standby overlay'}
       onClick={handleExit}

@@ -1,0 +1,72 @@
+const {chromium}=require('@playwright/test');
+const fs=require('node:fs');
+(async()=>{
+  const browser=await chromium.launch({headless:true});
+  const page=await browser.newPage({viewport:{width:1440,height:1000}});
+  const errors=[];page.on('pageerror',error=>errors.push(error.message));
+  const saveDiagram=async(name,locator)=>{
+    const svg=await locator.evaluate(element=>{
+      const clone=element.cloneNode(true);
+      const originals=[element,...element.querySelectorAll('*')],copies=[clone,...clone.querySelectorAll('*')];
+      originals.forEach((original,i)=>{
+        const style=getComputedStyle(original);
+        for(const property of ['fill','stroke']) if(original.hasAttribute(property)) copies[i].setAttribute(property,style[property]);
+        if(original.hasAttribute('style')) copies[i].style.color=style.color;
+      });
+      clone.setAttribute('xmlns','http://www.w3.org/2000/svg');
+      const [, ,width,height]=element.getAttribute('viewBox').split(' ').map(Number);
+      clone.setAttribute('width',String(width));clone.setAttribute('height',String(height));
+      clone.setAttribute('style','background:#222;color:#e2e8f0;font-family:Arial,sans-serif;');
+      return clone.outerHTML;
+    });
+    fs.writeFileSync('docs/help/audit/'+name+'.svg',svg);
+    const preview=await browser.newPage({viewport:{width:1000,height:1200}});
+    await preview.setContent('<body style="margin:0;background:#222">'+svg+'</body>');
+    await preview.locator('svg').screenshot({path:'docs/help/audit/'+name+'.png'});
+    await preview.close();
+  };
+  try {
+    await page.goto('http://localhost:3000',{waitUntil:'domcontentloaded'});
+    const welcome=page.locator('[data-testid="welcome-overlay"]');
+    if(await welcome.isVisible()) await welcome.click({position:{x:10,y:10},force:true});
+    await page.keyboard.press('F1');
+    const dialog=page.getByRole('dialog',{name:'ADIA Help'});
+    await dialog.waitFor({state:'visible'});
+    const search=page.getByRole('searchbox',{name:'Search Help'});
+    await search.fill('Self call and guarded alternatives');
+    await page.getByRole('button',{name:/^Sequence Diagrams › Self call and guarded alternatives/}).click();
+    const sequence=page.locator('#help-section-guarded-example');
+    await sequence.scrollIntoViewIfNeeded();
+    await sequence.getByRole('img').waitFor({state:'visible'});
+    if(await sequence.locator('[data-notation="reply"]').count()!==5) throw new Error('Expected five matched replies in the advanced sequence example');
+    await saveDiagram('help-sequence-diagram',sequence.getByRole('img'));
+    await page.screenshot({path:'docs/help/audit/help-sequence-browser.png'});
+    await search.fill('Actor specialization');
+    await page.getByRole('button',{name:/^Use Case Diagrams › Actor specialization/}).click();
+    const usecase=page.locator('#help-section-specialization');await usecase.scrollIntoViewIfNeeded();
+    if(await usecase.locator('[data-notation="generalization"]').count()!==1) throw new Error('Missing specialization relationship');
+    if(await usecase.locator('[data-notation="generalization"] > line').count()!==1) throw new Error('Specialization must be a straight relationship between distinct actors');
+    await page.screenshot({path:'docs/help/audit/help-usecase-browser.png'});
+    await search.fill('fundamental_reluctance');
+    await page.getByRole('button',{name:'Block reference',exact:true}).click();
+    await page.getByRole('button',{name:/Fundamental Reluctance/}).first().click();
+    await page.getByRole('heading',{name:'Behavior',exact:true}).waitFor({state:'visible'});
+    const text=await dialog.innerText();
+    if(!text.includes('mu_r')||!text.includes('Minimum >')) throw new Error('Corrected component behavior/bounds missing');
+    await page.screenshot({path:'docs/help/audit/help-block-browser.png'});
+    await page.getByRole('button',{name:'Documentation',exact:true}).click();
+    await search.fill('One logical tick and execution order');
+    await page.getByRole('button',{name:/^State Machine Execution Semantics › One logical tick and execution order/}).click();
+    await saveDiagram('help-state-cycle-diagram',page.locator('#help-section-cycle').getByRole('img'));
+    await page.keyboard.press('Escape');await dialog.waitFor({state:'hidden'});
+    await page.setViewportSize({width:390,height:844});
+    await page.keyboard.press('F1');await dialog.waitFor({state:'visible'});
+    const main=await dialog.locator('main').boundingBox();
+    if(!main||main.width<300) throw new Error('Help content is squeezed by the sidebar on mobile');
+    await page.screenshot({path:'docs/help/audit/help-mobile-browser.png'});
+    await page.keyboard.press('Escape');
+    fs.writeFileSync('docs/help/audit/help-browser-verification.json',JSON.stringify({flows:['F1 launch','full-text section search','self call/reply and alt diagram','Actor specialization diagram','qualified block reference','parameter bounds','state execution branches','mobile layout','Escape close'],pageErrors:errors},null,2));
+    if(errors.length) throw new Error(errors.join('\n'));
+    console.log('Help browser flows passed; no page errors.');
+  } finally {await browser.close();}
+})().catch(error=>{console.error(error);process.exitCode=1;});

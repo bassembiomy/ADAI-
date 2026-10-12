@@ -135,7 +135,7 @@ export const LargeModelDiagnostics: React.FC<LargeModelDiagnosticsProps> = ({
             <Gauge className="w-5 h-5 text-orange-500" />
             <h2 className="text-sm font-semibold text-[#f0f0f0]">SysML Large Model Diagnostics & Limits</h2>
           </div>
-          <button
+          <button data-help-feature="ui:sysml/LargeModelDiagnostics:151ed7616191" data-help-source="src/components/sysml/LargeModelDiagnostics.tsx"
             onClick={onClose}
             className="text-xs text-[#888] hover:text-[#eee] px-2.5 py-1 rounded bg-[#242428] hover:bg-[#333] transition-colors"
           >
@@ -250,7 +250,7 @@ export const LargeModelDiagnostics: React.FC<LargeModelDiagnosticsProps> = ({
                 <div className="text-xs font-semibold text-[#eee]">Performance Mode Override</div>
                 <div className="text-[10px] text-[#888]">Omit complex node shadows & defer non-essential labels during pan</div>
               </div>
-              <input
+              <input data-help-feature="ui:sysml/LargeModelDiagnostics:6f0272015f0f" data-help-source="src/components/sysml/LargeModelDiagnostics.tsx"
                 type="checkbox"
                 checked={Boolean(limits.forcePerformanceMode)}
                 onChange={(e) => handleForcePerformanceToggle(e.target.checked)}

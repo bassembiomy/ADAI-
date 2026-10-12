@@ -86,7 +86,7 @@ export const StateMachineCanvasContextMenu: React.FC<StateMachineCanvasContextMe
         Add State Machine Element
       </div>
 
-      <button
+      <button data-help-feature="ui:statemachine/StateMachineCanvasContextMenu:2d1ffd64efba" data-help-source="src/components/statemachine/StateMachineCanvasContextMenu.tsx"
         role="menuitem"
         onClick={() => {
           onAddState(worldX, worldY);
@@ -103,7 +103,7 @@ export const StateMachineCanvasContextMenu: React.FC<StateMachineCanvasContextMe
         </div>
       </button>
 
-      <button
+      <button data-help-feature="ui:statemachine/StateMachineCanvasContextMenu:fcf62d176885" data-help-source="src/components/statemachine/StateMachineCanvasContextMenu.tsx"
         role="menuitem"
         onClick={() => {
           onAddJunction(worldX, worldY);
@@ -120,7 +120,7 @@ export const StateMachineCanvasContextMenu: React.FC<StateMachineCanvasContextMe
         </div>
       </button>
 
-      <button
+      <button data-help-feature="ui:statemachine/StateMachineCanvasContextMenu:f147a5050008" data-help-source="src/components/statemachine/StateMachineCanvasContextMenu.tsx"
         role="menuitem"
         onClick={() => {
           onAddXBridgesState(worldX, worldY);

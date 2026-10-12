@@ -1,0 +1,302 @@
+[
+  {
+    "source": "src/components/agent/AgentPanel.tsx",
+    "bound": 16,
+    "added": 16
+  },
+  {
+    "source": "src/components/AiArchitectSidebar.tsx",
+    "bound": 18,
+    "added": 18
+  },
+  {
+    "source": "src/components/ArchitectBrainSidebar.tsx",
+    "bound": 2,
+    "added": 2
+  },
+  {
+    "source": "src/components/common/ResizableSplitPane.tsx",
+    "bound": 1,
+    "added": 1
+  },
+  {
+    "source": "src/components/doe/DOEManager.tsx",
+    "bound": 11,
+    "added": 11
+  },
+  {
+    "source": "src/components/FactoryIOGateway.tsx",
+    "bound": 9,
+    "added": 9
+  },
+  {
+    "source": "src/components/GlobalErrorBoundary.tsx",
+    "bound": 2,
+    "added": 2
+  },
+  {
+    "source": "src/components/HardwareSyncModal.tsx",
+    "bound": 3,
+    "added": 3
+  },
+  {
+    "source": "src/components/help/SoftwareArchitectureExplorer.tsx",
+    "bound": 5,
+    "added": 5
+  },
+  {
+    "source": "src/components/hil/HILDashboard.tsx",
+    "bound": 8,
+    "added": 8
+  },
+  {
+    "source": "src/components/hil/HILDriverPanel.tsx",
+    "bound": 11,
+    "added": 11
+  },
+  {
+    "source": "src/components/hil/HILSignalMapper.tsx",
+    "bound": 7,
+    "added": 7
+  },
+  {
+    "source": "src/components/hil/HILWorkspace.tsx",
+    "bound": 24,
+    "added": 24
+  },
+  {
+    "source": "src/components/hil/TargetPackSelector.tsx",
+    "bound": 2,
+    "added": 2
+  },
+  {
+    "source": "src/components/IntroStandbyOverlay.tsx",
+    "bound": 1,
+    "added": 1
+  },
+  {
+    "source": "src/components/modelExplorer/ModelExplorer.tsx",
+    "bound": 1,
+    "added": 1
+  },
+  {
+    "source": "src/components/modelExplorer/ModelExplorerMenu.tsx",
+    "bound": 2,
+    "added": 2
+  },
+  {
+    "source": "src/components/modelExplorer/ModelExplorerToolbar.tsx",
+    "bound": 8,
+    "added": 8
+  },
+  {
+    "source": "src/components/modelExplorer/ModelTreeRow.tsx",
+    "bound": 3,
+    "added": 3
+  },
+  {
+    "source": "src/components/modelExplorer/MoveImpactDialog.tsx",
+    "bound": 3,
+    "added": 3
+  },
+  {
+    "source": "src/components/modelExplorer/RelationshipWizard.tsx",
+    "bound": 8,
+    "added": 8
+  },
+  {
+    "source": "src/components/plantuml/PlantUmlCanvas.tsx",
+    "bound": 1,
+    "added": 1
+  },
+  {
+    "source": "src/components/plantuml/PlantUmlPalette.tsx",
+    "bound": 1,
+    "added": 1
+  },
+  {
+    "source": "src/components/plantuml/PlantUmlPropertiesPanel.tsx",
+    "bound": 1,
+    "added": 1
+  },
+  {
+    "source": "src/components/plantuml/PlantUmlWorkspace.tsx",
+    "bound": 5,
+    "added": 5
+  },
+  {
+    "source": "src/components/reporting/ReportViewerModal.tsx",
+    "bound": 6,
+    "added": 6
+  },
+  {
+    "source": "src/components/statemachine/StateMachineCanvasContextMenu.tsx",
+    "bound": 3,
+    "added": 3
+  },
+  {
+    "source": "src/components/statemachine/StateRequirementTraceability.tsx",
+    "bound": 4,
+    "added": 4
+  },
+  {
+    "source": "src/components/sysml/ActivityWorkspace.tsx",
+    "bound": 26,
+    "added": 26
+  },
+  {
+    "source": "src/components/sysml/AllocationMatrix.tsx",
+    "bound": 8,
+    "added": 8
+  },
+  {
+    "source": "src/components/sysml/BlockFeatureEditor.tsx",
+    "bound": 25,
+    "added": 25
+  },
+  {
+    "source": "src/components/sysml/BlockPropertiesEditor.tsx",
+    "bound": 16,
+    "added": 16
+  },
+  {
+    "source": "src/components/sysml/CreateNewTypeActionPrompt.tsx",
+    "bound": 2,
+    "added": 2
+  },
+  {
+    "source": "src/components/sysml/IbdConnectorEditor.tsx",
+    "bound": 8,
+    "added": 8
+  },
+  {
+    "source": "src/components/sysml/IbdConnectorEndpoint.tsx",
+    "bound": 1,
+    "added": 1
+  },
+  {
+    "source": "src/components/sysml/InteractionElementInspector.tsx",
+    "bound": 9,
+    "added": 9
+  },
+  {
+    "source": "src/components/sysml/LargeModelDiagnostics.tsx",
+    "bound": 2,
+    "added": 2
+  },
+  {
+    "source": "src/components/sysml/PortKindActions.tsx",
+    "bound": 1,
+    "added": 1
+  },
+  {
+    "source": "src/components/sysml/RelationshipEndEditor.tsx",
+    "bound": 6,
+    "added": 6
+  },
+  {
+    "source": "src/components/sysml/RequirementGovernancePanel.tsx",
+    "bound": 8,
+    "added": 8
+  },
+  {
+    "source": "src/components/sysml/SequenceWorkspace.tsx",
+    "bound": 42,
+    "added": 42
+  },
+  {
+    "source": "src/components/sysml/SysmlPropertyPanel.tsx",
+    "bound": 6,
+    "added": 5
+  },
+  {
+    "source": "src/components/sysml/SysmlUpgradeReportDialog.tsx",
+    "bound": 1,
+    "added": 1
+  },
+  {
+    "source": "src/components/sysml/TraceabilityMatrix.tsx",
+    "bound": 24,
+    "added": 24
+  },
+  {
+    "source": "src/components/sysml/TypeSelectionPrompt.tsx",
+    "bound": 4,
+    "added": 4
+  },
+  {
+    "source": "src/components/sysml/UseCaseWorkspace.tsx",
+    "bound": 25,
+    "added": 25
+  },
+  {
+    "source": "src/components/sysml/VirtualizedTraceabilityGrid.tsx",
+    "bound": 16,
+    "added": 16
+  },
+  {
+    "source": "src/components/ThreeDXDashboardPanel.tsx",
+    "bound": 4,
+    "added": 4
+  },
+  {
+    "source": "src/components/ThreeDXGateway.tsx",
+    "bound": 32,
+    "added": 32
+  },
+  {
+    "source": "src/components/VibeDashboard.tsx",
+    "bound": 2,
+    "added": 2
+  },
+  {
+    "source": "src/components/VibeExplanationModal.tsx",
+    "bound": 2,
+    "added": 2
+  },
+  {
+    "source": "src/components/vlab/VLabNode.tsx",
+    "bound": 2,
+    "added": 2
+  },
+  {
+    "source": "src/components/vlab/VLabSimulinkScope.tsx",
+    "bound": 34,
+    "added": 34
+  },
+  {
+    "source": "src/components/vlab/VLabWorkspace.tsx",
+    "bound": 79,
+    "added": 79
+  },
+  {
+    "source": "src/components/xbridges/PremiumEdge.tsx",
+    "bound": 2,
+    "added": 2
+  },
+  {
+    "source": "src/components/xbridges/XBlockNode.tsx",
+    "bound": 4,
+    "added": 4
+  },
+  {
+    "source": "src/components/xbridges/XbridgesPropertiesPanel.tsx",
+    "bound": 38,
+    "added": 38
+  },
+  {
+    "source": "src/components/xbridges/XbridgesRootLocusWindow.tsx",
+    "bound": 7,
+    "added": 7
+  },
+  {
+    "source": "src/components/xbridges/XbridgesScopeWindow.tsx",
+    "bound": 15,
+    "added": 15
+  },
+  {
+    "source": "src/components/xbridges/XbridgesWorkspace.tsx",
+    "bound": 34,
+    "added": 34
+  }
+]

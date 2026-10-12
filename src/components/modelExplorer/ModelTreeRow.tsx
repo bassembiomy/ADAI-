@@ -115,6 +115,7 @@ export function getNodeKindIcon(kind: string, _domain: string): React.ReactEleme
     case 'model':
       return <Layers {...iconProps} />;
     case 'package':
+    case 'folder':
       return <Folder {...iconProps} />;
     case 'block':
     case 'part':
@@ -238,7 +239,7 @@ export const ModelTreeRow: React.FC<ModelTreeRowProps> = ({
   const indentPx = depth * 16 + 6;
 
   return (
-    <div
+    <div data-help-feature="ui:modelExplorer/ModelTreeRow:d6ca5f847c12" data-help-source="src/components/modelExplorer/ModelTreeRow.tsx"
       tabIndex={isFocused ? 0 : -1}
       onKeyDown={(e) => {
         if (e.key === 'F2' && !node.readOnly) {
@@ -269,7 +270,7 @@ export const ModelTreeRow: React.FC<ModelTreeRowProps> = ({
       {/* Expander toggle */}
       <span className="w-4 h-4 flex items-center justify-center shrink-0 mr-1">
         {node.hasChildren ? (
-          <button
+          <button data-help-feature="ui:modelExplorer/ModelTreeRow:91139e7ad725" data-help-source="src/components/modelExplorer/ModelTreeRow.tsx"
             type="button"
             aria-label={isExpanded ? 'Collapse' : 'Expand'}
             className="w-4 h-4 flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text-primary)] rounded focus:outline-none"
@@ -293,7 +294,7 @@ export const ModelTreeRow: React.FC<ModelTreeRowProps> = ({
       {/* Label or Inline Rename Input */}
       <div className="flex-1 min-w-0 flex items-center overflow-hidden">
         {isRenaming ? (
-          <input
+          <input data-help-feature="ui:modelExplorer/ModelTreeRow:a89757ca33df" data-help-source="src/components/modelExplorer/ModelTreeRow.tsx"
             ref={inputRef}
             type="text"
             className="w-full bg-[var(--surface-canvas)] text-[var(--text-primary)] px-1.5 py-0.5 rounded border border-[var(--focus-ring)] text-xs outline-none shadow-inner"

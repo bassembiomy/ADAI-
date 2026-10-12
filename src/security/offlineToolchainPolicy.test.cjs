@@ -21,7 +21,11 @@ assert.match(
   /OFFLINE_TOOLCHAIN_MISSING|npm run provision:hil/,
   'missing toolchains must point to explicit offline provisioning',
 );
-assert.match(mainSource, /searchedPaths/, 'missing-toolchain diagnostics must report every searched path');
+const { resolveRuntime } = require('./hilRuntime.cjs');
+const missingResources = path.join(require('node:os').tmpdir(), `adia-missing-runtime-${require('node:crypto').randomUUID()}`);
+assert.throws(() => resolveRuntime({ resourcesPath: missingResources }), error =>
+  error.message.includes(path.join(missingResources, 'toolchains', 'hil-runtime')) && error.message.includes('npm run provision:hil'),
+  'missing runtime diagnostics must identify the exact bundled resource path and provisioning command');
 assert.match(mainSource, /process\.env\.ADIA_DEV_SERVER_URL/);
 assert.doesNotMatch(
   mainSource,

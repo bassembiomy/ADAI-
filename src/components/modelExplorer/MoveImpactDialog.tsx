@@ -42,7 +42,7 @@ export const MoveImpactDialog: React.FC<MoveImpactDialogProps> = ({
               {operationTitle}
             </span>
           </div>
-          <button
+          <button data-help-feature="ui:modelExplorer/MoveImpactDialog:ead1fdc019b2" data-help-source="src/components/modelExplorer/MoveImpactDialog.tsx"
             type="button"
             aria-label="Close"
             onClick={onCancel}
@@ -129,14 +129,14 @@ export const MoveImpactDialog: React.FC<MoveImpactDialogProps> = ({
 
         {/* Footer actions */}
         <div className="flex items-center justify-end gap-2 px-4 py-3 bg-[var(--surface-canvas)] border-t border-[var(--border-default)]">
-          <button
+          <button data-help-feature="ui:modelExplorer/MoveImpactDialog:ead1fdc019b2" data-help-source="src/components/modelExplorer/MoveImpactDialog.tsx"
             type="button"
             onClick={onCancel}
             className="px-3.5 py-1.5 rounded bg-[var(--surface-raised)] text-[var(--text-primary)] border border-[var(--border-default)] hover:bg-[var(--surface-canvas)] transition-colors"
           >
             Cancel
           </button>
-          <button
+          <button data-help-feature="ui:modelExplorer/MoveImpactDialog:88981bf23579" data-help-source="src/components/modelExplorer/MoveImpactDialog.tsx"
             type="button"
             onClick={() => onConfirm(impactHash)}
             className="flex items-center gap-1.5 px-4 py-1.5 rounded bg-[var(--status-warning)] text-white font-medium hover:opacity-90 transition-colors shadow-sm"

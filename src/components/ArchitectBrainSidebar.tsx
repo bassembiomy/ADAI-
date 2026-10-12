@@ -11,7 +11,7 @@ export const ArchitectBrainSidebar: React.FC = () => {
     <div className={`flex flex-col border-l border-[#222] bg-[#0d0d0d] transition-all duration-300 ${isOpen ? 'w-80' : 'w-0'}`}>
       <div className="flex items-center justify-between p-4 border-b border-[#222]">
         <h2 className="font-bold text-sm text-gray-400 uppercase tracking-widest">Architect Brain</h2>
-        <button onClick={() => setIsOpen(!isOpen)} className="text-gray-500 hover:text-white">
+        <button data-help-feature="ui:ArchitectBrainSidebar:3c5732c3449d" data-help-source="src/components/ArchitectBrainSidebar.tsx" onClick={() => setIsOpen(!isOpen)} className="text-gray-500 hover:text-white">
           {isOpen ? '→' : '←'}
         </button>
       </div>
@@ -32,7 +32,7 @@ export const ArchitectBrainSidebar: React.FC = () => {
 
       <div className="p-4 border-t border-[#222]">
         <div className="relative">
-          <input 
+          <input data-help-feature="ui:ArchitectBrainSidebar:1b6611c28a13" data-help-source="src/components/ArchitectBrainSidebar.tsx"
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}

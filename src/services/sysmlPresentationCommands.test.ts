@@ -52,6 +52,10 @@ describe('diagram-scoped SysML presentation commands', () => {
       }],
       operations: [], constraints: [],
     };
+    repository.diagrams['vehicle-ibd'] = {
+      id: 'vehicle-ibd', kind: 'diagram', name: 'Vehicle IBD', diagramKind: 'ibd',
+      ownerId: 'vehicle', contextElementId: 'vehicle', namespace: ['model'],
+    };
     const originalRepository = structuredClone(repository);
     const state = createSysmlGatewayState(repository);
 

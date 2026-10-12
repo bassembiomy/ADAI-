@@ -98,7 +98,7 @@ export const PanelMaximizeButton: React.FC<PanelMaximizeButtonProps> = ({
   className = '',
 }) => {
   return (
-    <button
+    <button data-help-feature="ui:common/ResizableSplitPane:e660ac9d94ae" data-help-source="src/components/common/ResizableSplitPane.tsx"
       type="button"
       onClick={(e) => {
         e.stopPropagation();

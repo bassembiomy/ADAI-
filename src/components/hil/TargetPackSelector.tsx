@@ -73,7 +73,7 @@ export const TargetPackSelector: React.FC<TargetPackSelectorProps> = ({
         {/* Device Picker */}
         <div className="flex items-center gap-2">
           <label className="text-xs text-[#aaa] font-medium shrink-0">Device Pack:</label>
-          <select
+          <select data-help-feature="ui:hil/TargetPackSelector:bd7acc127893" data-help-source="src/components/hil/TargetPackSelector.tsx"
             value={currentManifest.targetId}
             onChange={(e) => handleTargetChange(e.target.value)}
             className="ui-control ui-focus-ring bg-[#1a1a1a] border border-[#333] text-xs font-mono text-white rounded-lg px-3 py-1.5 focus:outline-none focus:border-[#f97316] transition-colors cursor-pointer"
@@ -141,7 +141,7 @@ export const TargetPackSelector: React.FC<TargetPackSelectorProps> = ({
           </div>
           <div className="flex gap-1.5 mt-1">
             {currentManifest.supportedDriverModes.map((mode) => (
-              <button
+              <button data-help-feature="ui:hil/TargetPackSelector:e7fd177bffa1" data-help-source="src/components/hil/TargetPackSelector.tsx"
                 key={mode}
                 onClick={() => handleDriverModeChange(mode)}
                 className={`ui-control ui-focus-ring flex-1 py-1 px-2 text-[11px] font-mono font-semibold rounded border transition-colors ${

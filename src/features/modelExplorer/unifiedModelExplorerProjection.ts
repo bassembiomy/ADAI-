@@ -224,6 +224,44 @@ const requirementContainmentParents = (sysml: SysmlRepository) => {
   return parents;
 };
 
+function registerExternalModels(nodes: Record<string, ModelTreeNode>, input: UnifiedExplorerInput): void {
+  for (const [domain, label] of [['xbridges', 'X-Bridges'], ['vlab', 'V-Lab']] as const) {
+    const nodeId = `project:folder:${domain}`;
+    register(nodes, {
+      nodeId,
+      semanticId: nodeId,
+      domain: 'project',
+      kind: 'folder',
+      virtualKind: 'group',
+      label,
+      parentNodeId: 'project:pillar:parametric',
+      ownerSemanticId: null,
+      childNodeIds: [],
+      hasChildren: false,
+      readOnly: true,
+    });
+  }
+  for (const external of input.externalModels) {
+    const nodeId = `${external.domain}:model:${external.id}`;
+    const stateParent = external.ownerStateId && nodes[`sm:state:${external.ownerStateId}`];
+    const parentId = stateParent ? stateParent.nodeId : `project:folder:${external.domain}`;
+    register(nodes, {
+      nodeId,
+      semanticId: external.id,
+      domain: external.domain,
+      kind: `${external.domain}Model`,
+      label: external.name,
+      secondaryLabel: external.domain === 'xbridges' ? '[X-Bridges Model]' : '[V-Lab Model]',
+      parentNodeId: parentId,
+      ownerSemanticId: external.ownerStateId ?? null,
+      diagramId: external.diagramId,
+      childNodeIds: [],
+      hasChildren: false,
+    });
+  }
+
+}
+
 function buildLazyStoreProjection(
   input: UnifiedExplorerInput,
   store: NormalizedSysmlStore,
@@ -532,6 +570,8 @@ function buildLazyStoreProjection(
       projectLayer(rootLayer.id, machineId);
     }
   }
+
+  registerExternalModels(nodes, input);
 
   // 4. Diagram presentations & visual parents (if any)
   if (input.diagramPresentations && Object.keys(input.diagramPresentations).length > 0) {
@@ -994,24 +1034,7 @@ export function buildUnifiedModelProjection(input: UnifiedExplorerInput): ModelT
     });
   }
 
-  for (const external of input.externalModels) {
-    const nodeId = `${external.domain}:model:${external.id}`;
-    const stateParent = external.ownerStateId && nodes[`sm:state:${external.ownerStateId}`];
-    const parentId = stateParent ? stateParent.nodeId : 'project:pillar:parametric';
-    register(nodes, {
-      nodeId,
-      semanticId: external.id,
-      domain: external.domain,
-      kind: `${external.domain}Model`,
-      label: external.name,
-      secondaryLabel: external.domain === 'xbridges' ? '[X-Bridges Model]' : '[V-Lab Model]',
-      parentNodeId: parentId,
-      ownerSemanticId: external.ownerStateId ?? null,
-      diagramId: external.diagramId,
-      childNodeIds: [],
-      hasChildren: false,
-    });
-  }
+  registerExternalModels(nodes, input);
 
   applyDiagramVisualParents(nodes, visualParentBySemanticId);
   rebuildChildren(nodes, ownersWithChildren);

@@ -148,7 +148,7 @@ export const StateRequirementTraceability: React.FC<StateRequirementTraceability
                     )}
                   </div>
                 </div>
-                <button
+                <button data-help-feature="ui:statemachine/StateRequirementTraceability:6d5ddc639bf5" data-help-source="src/components/statemachine/StateRequirementTraceability.tsx"
                   type="button"
                   onClick={() => onUnlinkRelationship(link.relationshipId)}
                   className="text-[#666] hover:text-red-400 p-1 rounded transition-colors shrink-0"
@@ -199,7 +199,7 @@ export const StateRequirementTraceability: React.FC<StateRequirementTraceability
           <div className="space-y-2">
             <div>
               <label htmlFor="req-select" className="sr-only">Select Requirement</label>
-              <select
+              <select data-help-feature="ui:statemachine/StateRequirementTraceability:66da4f9548a0" data-help-source="src/components/statemachine/StateRequirementTraceability.tsx"
                 id="req-select"
                 aria-label="Select Requirement"
                 value={selectedReqId}
@@ -218,7 +218,7 @@ export const StateRequirementTraceability: React.FC<StateRequirementTraceability
             <div className="flex gap-2">
               <div className="flex-1">
                 <label htmlFor="kind-select" className="sr-only">Relationship Kind</label>
-                <select
+                <select data-help-feature="ui:statemachine/StateRequirementTraceability:04293696066f" data-help-source="src/components/statemachine/StateRequirementTraceability.tsx"
                   id="kind-select"
                   aria-label="Relationship Kind"
                   value={selectedKind}
@@ -232,7 +232,7 @@ export const StateRequirementTraceability: React.FC<StateRequirementTraceability
                 </select>
               </div>
 
-              <button
+              <button data-help-feature="ui:statemachine/StateRequirementTraceability:f30204dae50f" data-help-source="src/components/statemachine/StateRequirementTraceability.tsx"
                 type="button"
                 onClick={handleAddLink}
                 disabled={!selectedReqId}

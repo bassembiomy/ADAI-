@@ -456,6 +456,17 @@ export function checkInteractionMessage(
     const problem = connectorProblem(repo, existing, candidate.connectorId, candidate.sourceLifelineId, candidate.targetLifelineId);
     if (problem) return problem;
   }
+  const otherMessages = (existing.messages ?? []).filter(message => message.id !== candidate.id);
+  const created = firstCreateMessages({ messages: otherMessages });
+  if (candidate.sort === 'createMessage' && target) {
+    if (created.has(target.id)) return { code: 'MULTIPLE_CREATE_MESSAGES', message: 'A lifeline may be created only once.' };
+    if (otherMessages.some(message => message.order < candidate.order &&
+      (message.sourceLifelineId === target.id || message.targetLifelineId === target.id))) {
+      return { code: 'MESSAGE_BEFORE_CREATE', message: 'Creation must precede every other message sent or received by this lifeline.' };
+    }
+  }
+  const creation = creationProblem(candidate, created);
+  if (creation) return creation;
   const destroyed = destroyedAtOrder(existing, candidate.id);
   for (const lifeline of [source, target]) {
     if (!lifeline) continue;
@@ -482,6 +493,35 @@ function connectorProblem(
   // Not judgeable (no context Block, or a lifeline that is not one of its parts): accept it.
   if (between && !between.some(connector => connector.id === connectorId)) {
     return { code: 'MESSAGE_CONNECTOR_MISMATCH', message: 'That connector does not join the parts these lifelines represent.' };
+  }
+  return undefined;
+}
+
+/** First creation by semantic order, matching the renderer's ordered messages. */
+function firstCreateMessages(interaction: Pick<InteractionDefinition, 'messages'>): Map<string, InteractionMessage> {
+  const created = new Map<string, InteractionMessage>();
+  for (const message of orderedMessages(interaction)) {
+    if (message.sort === 'createMessage' && !created.has(message.targetLifelineId)) created.set(message.targetLifelineId, message);
+  }
+  return created;
+}
+
+function creationProblem(
+  message: Pick<InteractionMessage, 'sort' | 'sourceLifelineId' | 'targetLifelineId' | 'order'> & { id?: string },
+  created: ReadonlyMap<string, InteractionMessage>,
+): MessageCheck | undefined {
+  const first = created.get(message.targetLifelineId);
+  if (message.sort === 'createMessage' && first && message.id !== first.id) {
+    return { code: 'MULTIPLE_CREATE_MESSAGES', message: 'A lifeline may be created only once.' };
+  }
+  if (message.sort === 'createMessage' && message.sourceLifelineId === message.targetLifelineId) {
+    return { code: 'MESSAGE_BEFORE_CREATE', message: 'A lifeline cannot send its own creation message.' };
+  }
+  for (const id of new Set([message.sourceLifelineId, message.targetLifelineId])) {
+    const creation = created.get(id);
+    if (creation && message.order < creation.order) {
+      return { code: 'MESSAGE_BEFORE_CREATE', message: 'A message cannot be sent or received by a lifeline before its creation.' };
+    }
   }
   return undefined;
 }
@@ -531,12 +571,15 @@ export function validateInteraction(repo: SysmlRepository, interaction: Interact
 
   const orders = new Map<number, string>();
   const destroyed = destroyedAtOrder(interaction);
+  const created = firstCreateMessages(interaction);
   const pairing = pairReplies(interaction);
   messages.forEach((message, index) => {
     const path = `messages.${index}`;
     const label = messageLabel(message);
     const source = lifelineById.get(message.sourceLifelineId);
     const target = lifelineById.get(message.targetLifelineId);
+    const creation = creationProblem(message, created);
+    if (creation) diagnostics.push(error(creation.code, message.id, path, creation.message));
     if (isLostFoundEndpoint(message.sourceLifelineId) || isLostFoundEndpoint(message.targetLifelineId)) {
       const problem = lostFoundProblem(message, new Set(lifelineById.keys()));
       if (problem) diagnostics.push(error('LOST_FOUND_INVALID', message.id, path, `Message ${label} in ${name}: ${problem}`));

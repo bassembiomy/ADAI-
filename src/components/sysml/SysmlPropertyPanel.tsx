@@ -31,6 +31,8 @@ export const SysmlPropertyPanel: React.FC<SysmlPropertyPanelProps> = ({
   return (
     <div
       aria-label="SysML Property Inspector"
+      data-help-source="src/features/sysml/inspectorSchema.ts"
+      data-help-module="sysml"
       className={`sysml-property-panel flex flex-col h-full bg-[var(--surface-panel)] border-l border-[var(--border-default)] p-3 overflow-y-auto text-xs ${className}`}
     >
       <div className="panel-header mb-4 pb-2 border-b border-[var(--border-default)]">
@@ -58,6 +60,8 @@ export const SysmlPropertyPanel: React.FC<SysmlPropertyPanelProps> = ({
           {schema.actions.map((action) => (
             <button
               key={action.id}
+              data-help-topic="inspector-delete"
+              data-help-section="delete"
               disabled={!action.enabled}
               title={action.disabledReason}
               onClick={() => {
@@ -115,7 +119,7 @@ const PropertyFieldRow: React.FC<PropertyFieldRowProps> = ({ field, onCommit }) 
       : String(field.value ?? '');
 
   return (
-    <div className="flex flex-col gap-1">
+    <div className="flex flex-col gap-1" data-help-topic={`inspector-field-${field.key}`} data-help-section="edit">
       <div className="flex justify-between items-center">
         {field.mode === 'readOnly' ? (
           <span id={fieldLabelId} className="text-[11px] font-medium text-[var(--text-secondary)]">
@@ -146,7 +150,7 @@ const PropertyFieldRow: React.FC<PropertyFieldRowProps> = ({ field, onCommit }) 
           {readOnlyValue}
         </div>
       ) : field.valueType === 'select' && field.options ? (
-        <select
+        <select data-help-feature="ui:sysml/SysmlPropertyPanel:7f8a7f084dd2" data-help-source="src/components/sysml/SysmlPropertyPanel.tsx"
           id={`field-${field.key}`}
           aria-label={field.label}
           aria-describedby={warningId}
@@ -176,7 +180,7 @@ const PropertyFieldRow: React.FC<PropertyFieldRowProps> = ({ field, onCommit }) 
             const selected = Array.isArray(localVal) ? (localVal as unknown[]).map(String) : [];
             return (
               <label key={opt.value} className="flex items-center gap-2 cursor-pointer">
-                <input
+                <input data-help-feature="ui:sysml/SysmlPropertyPanel:ded7e237514a" data-help-source="src/components/sysml/SysmlPropertyPanel.tsx"
                   type="checkbox"
                   checked={selected.includes(opt.value)}
                   onChange={(e) => {
@@ -194,7 +198,7 @@ const PropertyFieldRow: React.FC<PropertyFieldRowProps> = ({ field, onCommit }) 
           })}
         </div>
       ) : field.valueType === 'stringList' ? (
-        <textarea
+        <textarea data-help-feature="ui:sysml/SysmlPropertyPanel:acc39b63ab10" data-help-source="src/components/sysml/SysmlPropertyPanel.tsx"
           id={`field-${field.key}`}
           aria-label={field.label}
           rows={3}
@@ -211,7 +215,7 @@ const PropertyFieldRow: React.FC<PropertyFieldRowProps> = ({ field, onCommit }) 
         />
       ) : field.valueType === 'boolean' ? (
         <label className="flex items-center gap-2 cursor-pointer">
-          <input
+          <input data-help-feature="ui:sysml/SysmlPropertyPanel:43cb13210500" data-help-source="src/components/sysml/SysmlPropertyPanel.tsx"
             id={`field-${field.key}`}
             type="checkbox"
             checked={Boolean(localVal)}
@@ -224,7 +228,7 @@ const PropertyFieldRow: React.FC<PropertyFieldRowProps> = ({ field, onCommit }) 
           <span className="text-xs text-[var(--text-primary)]">{field.label}</span>
         </label>
       ) : (
-        <input
+        <input data-help-feature="ui:sysml/SysmlPropertyPanel:2fd181fc364d" data-help-source="src/components/sysml/SysmlPropertyPanel.tsx"
           id={`field-${field.key}`}
           name={field.key}
           aria-label={field.key === 'name' ? 'Element Name' : field.label}

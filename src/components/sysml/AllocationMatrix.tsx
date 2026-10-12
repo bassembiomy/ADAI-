@@ -36,7 +36,7 @@ function KindFilter({ legend, selected, onToggle }: { legend: string; selected: 
       <span className="mr-1 font-semibold text-[var(--text-secondary)]">{legend}</span>
       {ALL_ALLOCATION_KINDS.map(kind => (
         <label key={kind} className={`cursor-pointer rounded border px-1.5 py-0.5 ${selected.includes(kind) ? 'border-orange-600 bg-orange-950/50 text-orange-200' : 'border-neutral-700 text-neutral-400'}`}>
-          <input type="checkbox" className="sr-only" checked={selected.includes(kind)} onChange={() => onToggle(kind)} aria-label={`${legend}: ${ALLOCATION_KIND_LABELS[kind]}`} />
+          <input data-help-feature="ui:sysml/AllocationMatrix:7b7b1db19250" data-help-source="src/components/sysml/AllocationMatrix.tsx" type="checkbox" className="sr-only" checked={selected.includes(kind)} onChange={() => onToggle(kind)} aria-label={`${legend}: ${ALLOCATION_KIND_LABELS[kind]}`} />
           {ALLOCATION_KIND_LABELS[kind]}
         </label>
       ))}
@@ -105,11 +105,11 @@ export function AllocationMatrix({ repository, onExecute, onNavigate, authorized
               {matrix.coverage.allocatedRowCount}/{matrix.coverage.rowCount} rows allocated · {matrix.coverage.unallocatedRowIds.length} unallocated
             </p>
           </div>
-          <input aria-label="Search rows" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search rows" className="rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-xs" />
+          <input data-help-feature="ui:sysml/AllocationMatrix:2810b65ce815" data-help-source="src/components/sysml/AllocationMatrix.tsx" aria-label="Search rows" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search rows" className="rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-xs" />
         </div>
         <div className="mt-2 flex flex-col gap-1">
-          <KindFilter legend="Rows" selected={rowKinds} onToggle={toggle(setRowKinds)} />
-          <KindFilter legend="Columns" selected={columnKinds} onToggle={toggle(setColumnKinds)} />
+          <KindFilter data-help-feature="live:components/sysml/AllocationMatrix:53d060b4f2ab" legend="Rows" selected={rowKinds} onToggle={toggle(setRowKinds)} />
+          <KindFilter data-help-feature="live:components/sysml/AllocationMatrix:e732cb4ac84c" legend="Columns" selected={columnKinds} onToggle={toggle(setColumnKinds)} />
         </div>
       </header>
 
@@ -120,7 +120,7 @@ export function AllocationMatrix({ repository, onExecute, onNavigate, authorized
               <th scope="col" className="sticky left-0 border-b border-[var(--border-default)] bg-[var(--table-header-bg)] p-2 font-medium">Allocated from \ to</th>
               {matrix.columns.map(column => (
                 <th key={column.id} scope="col" className="border-b border-[var(--border-default)] p-2 font-medium">
-                  <button type="button" className="text-left" onClick={() => onNavigate?.(column.id)} title={ALLOCATION_KIND_LABELS[column.kind]}>{column.name}</button>
+                  <button data-help-feature="ui:sysml/AllocationMatrix:1583f6bafcc5" data-help-source="src/components/sysml/AllocationMatrix.tsx" type="button" className="text-left" onClick={() => onNavigate?.(column.id)} title={ALLOCATION_KIND_LABELS[column.kind]}>{column.name}</button>
                   <span className="block text-[10px] font-normal text-neutral-500">{ALLOCATION_KIND_LABELS[column.kind]}</span>
                 </th>
               ))}
@@ -130,7 +130,7 @@ export function AllocationMatrix({ repository, onExecute, onNavigate, authorized
             {rows.map(row => (
               <tr key={row.id} className="border-b border-neutral-900" data-allocated={!matrix.coverage.unallocatedRowIds.includes(row.id)}>
                 <th scope="row" className="sticky left-0 bg-[var(--surface-canvas)] p-2 text-left font-medium">
-                  <button type="button" className="text-left" onClick={() => onNavigate?.(row.id)}>{row.name}</button>
+                  <button data-help-feature="ui:sysml/AllocationMatrix:a37dba97634f" data-help-source="src/components/sysml/AllocationMatrix.tsx" type="button" className="text-left" onClick={() => onNavigate?.(row.id)}>{row.name}</button>
                   <span className="block text-[10px] font-normal text-neutral-500">{ALLOCATION_KIND_LABELS[row.kind]}</span>
                 </th>
                 {matrix.columns.map(column => {
@@ -139,7 +139,7 @@ export function AllocationMatrix({ repository, onExecute, onNavigate, authorized
                   if (row.id === column.id) return <td key={column.id} className="p-1 text-center text-neutral-700" aria-label="An element cannot be allocated to itself">–</td>;
                   return (
                     <td key={column.id} className="p-1 text-center">
-                      <button
+                      <button data-help-feature="ui:sysml/AllocationMatrix:48325520fc8a" data-help-source="src/components/sysml/AllocationMatrix.tsx"
                         type="button"
                         aria-label={ids.length ? `Allocated: ${row.name} to ${column.name}` : `Allocate ${row.name} to ${column.name}`}
                         aria-pressed={ids.length ? isSelected : undefined}
@@ -162,7 +162,7 @@ export function AllocationMatrix({ repository, onExecute, onNavigate, authorized
         {selectedCell && selectedIds.length > 0 && !pending && (
           <div className="mb-1 flex flex-wrap items-center gap-2">
             <span>«allocate» {nameOf(selectedCell.rowId)} → {nameOf(selectedCell.columnId)}</span>
-            <button type="button" className="rounded border border-red-800 px-2 py-0.5 text-red-300 hover:bg-red-950" onClick={() => requestDeletion(selectedIds, `${nameOf(selectedCell.rowId)} → ${nameOf(selectedCell.columnId)}`)}>Delete allocation</button>
+            <button data-help-feature="ui:sysml/AllocationMatrix:2336e199cb57" data-help-source="src/components/sysml/AllocationMatrix.tsx" type="button" className="rounded border border-red-800 px-2 py-0.5 text-red-300 hover:bg-red-950" onClick={() => requestDeletion(selectedIds, `${nameOf(selectedCell.rowId)} → ${nameOf(selectedCell.columnId)}`)}>Delete allocation</button>
           </div>
         )}
         {pending && (
@@ -174,8 +174,8 @@ export function AllocationMatrix({ repository, onExecute, onNavigate, authorized
               {blocked ? ' This affects a protected baseline that has not been authorized.' : ''}
             </p>
             <div className="mt-1 flex gap-2">
-              <button type="button" disabled={blocked} className="rounded border border-red-700 px-2 py-0.5 text-red-200 hover:bg-red-950 disabled:opacity-40" onClick={confirmDeletion}>Confirm delete</button>
-              <button type="button" className="rounded border border-neutral-600 px-2 py-0.5" onClick={() => setPending(null)}>Cancel</button>
+              <button data-help-feature="ui:sysml/AllocationMatrix:e64616ec09b8" data-help-source="src/components/sysml/AllocationMatrix.tsx" type="button" disabled={blocked} className="rounded border border-red-700 px-2 py-0.5 text-red-200 hover:bg-red-950 disabled:opacity-40" onClick={confirmDeletion}>Confirm delete</button>
+              <button data-help-feature="ui:sysml/AllocationMatrix:478cf8c31367" data-help-source="src/components/sysml/AllocationMatrix.tsx" type="button" className="rounded border border-neutral-600 px-2 py-0.5" onClick={() => setPending(null)}>Cancel</button>
             </div>
           </div>
         )}

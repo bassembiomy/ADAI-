@@ -4,6 +4,16 @@ import type { LegacySysmlView } from './sysmlCommandGateway';
 import { applyCanonicalSysmlResult, projectDiagramScopedCanvasView } from './sysmlProjectionState';
 
 describe('applyCanonicalSysmlResult', () => {
+  it('applies boundary port layout only to its active IBD context frame', () => {
+    const complete: LegacySysmlView = {
+      packages: [], relationships: [], parts: [], connectors: [],
+      blocks: [{ id: 'vehicle', name: 'Vehicle', stereotype: 'block', x: 0, y: 0, width: 100, height: 100, properties: [], operations: [], constraints: [], classes: [], ports: [{ id: 'control', name: 'control', type: 'standard', side: 'left', offset: 0.2 }] }],
+    };
+    const diagrams = { ibd: { elementIds: [], presentations: { vehicle: { id: 'frame', diagramId: 'ibd', semanticElementId: 'vehicle', bounds: { x: 50, y: 50, width: 1200, height: 800 }, portLayouts: { control: { side: 'right' as const, offset: 0.75 } } } } } };
+    expect(projectDiagramScopedCanvasView(complete, 'ibd', diagrams, ['vehicle']).blocks[0].ports[0]).toMatchObject({ side: 'right', offset: 0.75 });
+    expect(projectDiagramScopedCanvasView(complete, 'other', diagrams, ['vehicle']).blocks[0].ports[0]).toMatchObject({ side: 'left', offset: 0.2 });
+    expect(complete.blocks[0].ports[0]).toMatchObject({ side: 'left', offset: 0.2 });
+  });
   it('applies only the view projected from the canonical gateway result', () => {
     const view: LegacySysmlView = { packages: [], blocks: [], relationships: [], parts: [], connectors: [] };
     const setProjection = vi.fn();

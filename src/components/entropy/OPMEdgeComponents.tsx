@@ -246,7 +246,7 @@ export const OPMEdge: React.FC<EdgeProps<AppEdge>> = ({
           </span>
           {selected && (
             <>
-              <select
+              <select data-help-feature="opm:opmedgecomponents:links:c0b76b3104" data-help-module="entropy"
                 value={linkType}
                 onChange={(e) => {
                   e.stopPropagation();
@@ -277,7 +277,7 @@ export const OPMEdge: React.FC<EdgeProps<AppEdge>> = ({
                 </optgroup>
               </select>
               {Boolean(data?.onDelete) && (
-                <button
+                <button data-help-feature="opm:opmedgecomponents:links:4a64608ecb" data-help-module="entropy"
                   onClick={(e) => {
                     e.stopPropagation();
                     (data?.onDelete as any)();

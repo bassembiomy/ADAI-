@@ -17,6 +17,13 @@ const resourcesPath = path.resolve(optionValue('--resources-path') || process.cw
 const isolatedFallback = path.join(os.tmpdir(), 'adia-bundle-verifier-no-fallback');
 const keys = ['Generic', ...new Set(Object.values(TARGET_ENVIRONMENTS).flatMap(item => [item.compiler, item.flasher]))];
 let ok = true;
+try {
+  require('../src/security/hilRuntime.cjs').verifyRuntimeBundle(path.join(resourcesPath, 'toolchains/hil-runtime'), { deep: true });
+  console.log('[ OK ] Complete vendor runtime bundle');
+} catch (error) {
+  ok = false;
+  console.error(error.message);
+}
 
 console.log(`Verifying packaged HIL resources under ${path.join(resourcesPath, 'toolchains')}`);
 for (const key of keys) {

@@ -150,7 +150,7 @@ export const HILDriverPanel: React.FC<HILDriverPanelProps> = ({ channels, onChan
         </div>
         <div className="flex items-center gap-2">
           {headerAction}
-          <button
+          <button data-help-feature="ui:hil/HILDriverPanel:31104cabfc1c" data-help-source="src/components/hil/HILDriverPanel.tsx"
             onClick={addChannel}
             className="ui-control ui-focus-ring flex items-center gap-1.5 px-3 py-1.5 bg-[#f97316] text-[#0a0a0a] text-xs font-semibold rounded hover:bg-[#ea580c] transition-colors"
           >
@@ -206,7 +206,7 @@ export const HILDriverPanel: React.FC<HILDriverPanelProps> = ({ channels, onChan
                     {/* Name */}
                     <div>
                       <label className="block text-[10px] text-[#888] font-medium mb-1">Channel Name</label>
-                      <input
+                      <input data-help-feature="ui:hil/HILDriverPanel:a63945b39f0f" data-help-source="src/components/hil/HILDriverPanel.tsx"
                         type="text"
                         value={ch.name}
                         onChange={(e) => updateChannel(ch.id, { name: e.target.value.trim().replace(/[^a-zA-Z0-9_]/g, '') })}
@@ -219,7 +219,7 @@ export const HILDriverPanel: React.FC<HILDriverPanelProps> = ({ channels, onChan
                       <label className="block text-[10px] text-[#888] font-medium mb-1">
                         Pin ({ch.peripheral} on {mcuTarget.replace('_', ' ')})
                       </label>
-                      <select
+                      <select data-help-feature="ui:hil/HILDriverPanel:794e53ed6a97" data-help-source="src/components/hil/HILDriverPanel.tsx"
                         value={currentPin}
                         onChange={(e) => updateChannel(ch.id, { pin: e.target.value })}
                         className={`ui-control ui-focus-ring w-full bg-[#0a0a0a] border rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-[#f97316] ${
@@ -244,7 +244,7 @@ export const HILDriverPanel: React.FC<HILDriverPanelProps> = ({ channels, onChan
                     {/* Peripheral */}
                     <div>
                       <label className="block text-[10px] text-[#888] font-medium mb-1">Peripheral</label>
-                      <select
+                      <select data-help-feature="ui:hil/HILDriverPanel:4a776fe6181e" data-help-source="src/components/hil/HILDriverPanel.tsx"
                         value={ch.peripheral}
                         onChange={(e) => {
                           const val = e.target.value as PeripheralType;
@@ -275,7 +275,7 @@ export const HILDriverPanel: React.FC<HILDriverPanelProps> = ({ channels, onChan
                     {/* Direction */}
                     <div>
                       <label className="block text-[10px] text-[#888] font-medium mb-1">Direction</label>
-                      <select
+                      <select data-help-feature="ui:hil/HILDriverPanel:af8ebf325d39" data-help-source="src/components/hil/HILDriverPanel.tsx"
                         value={ch.direction}
                         disabled={ch.peripheral === 'ADC' || ch.peripheral === 'DAC' || ch.peripheral === 'PWM'}
                         onChange={(e) => updateChannel(ch.id, { direction: e.target.value as 'In' | 'Out' })}
@@ -289,7 +289,7 @@ export const HILDriverPanel: React.FC<HILDriverPanelProps> = ({ channels, onChan
                     {/* Data Type */}
                     <div>
                       <label className="block text-[10px] text-[#888] font-medium mb-1">C Data Type</label>
-                      <select
+                      <select data-help-feature="ui:hil/HILDriverPanel:745ec88fd9d3" data-help-source="src/components/hil/HILDriverPanel.tsx"
                         value={ch.dataType}
                         onChange={(e) => updateChannel(ch.id, { dataType: e.target.value as any })}
                         className="ui-control ui-focus-ring w-full bg-[#0a0a0a] border border-[#2a2a2a] rounded px-1.5 py-1 text-xs text-white focus:outline-none focus:border-[#f97316]"
@@ -305,7 +305,7 @@ export const HILDriverPanel: React.FC<HILDriverPanelProps> = ({ channels, onChan
                   <div className="grid grid-cols-4 gap-2 border-t border-[#222]/80 pt-2">
                     <div>
                       <label className="block text-[9px] text-[#666] mb-0.5">Min Range</label>
-                      <input
+                      <input data-help-feature="ui:hil/HILDriverPanel:674d256ce967" data-help-source="src/components/hil/HILDriverPanel.tsx"
                         type="number"
                         value={ch.rangeMin}
                         onChange={(e) => updateChannel(ch.id, { rangeMin: parseFloat(e.target.value) || 0 })}
@@ -314,7 +314,7 @@ export const HILDriverPanel: React.FC<HILDriverPanelProps> = ({ channels, onChan
                     </div>
                     <div>
                       <label className="block text-[9px] text-[#666] mb-0.5">Max Range</label>
-                      <input
+                      <input data-help-feature="ui:hil/HILDriverPanel:b48a5ad1cd73" data-help-source="src/components/hil/HILDriverPanel.tsx"
                         type="number"
                         value={ch.rangeMax}
                         onChange={(e) => updateChannel(ch.id, { rangeMax: parseFloat(e.target.value) || 0 })}
@@ -323,7 +323,7 @@ export const HILDriverPanel: React.FC<HILDriverPanelProps> = ({ channels, onChan
                     </div>
                     <div>
                       <label className="block text-[9px] text-[#666] mb-0.5">Scale Coeff</label>
-                      <input
+                      <input data-help-feature="ui:hil/HILDriverPanel:c35274558914" data-help-source="src/components/hil/HILDriverPanel.tsx"
                         type="number"
                         step="any"
                         value={ch.scalingFactor}
@@ -333,7 +333,7 @@ export const HILDriverPanel: React.FC<HILDriverPanelProps> = ({ channels, onChan
                     </div>
                     <div>
                       <label className="block text-[9px] text-[#666] mb-0.5">Unit</label>
-                      <input
+                      <input data-help-feature="ui:hil/HILDriverPanel:43e1fffa0388" data-help-source="src/components/hil/HILDriverPanel.tsx"
                         type="text"
                         placeholder="e.g. V, Hz"
                         value={ch.unit}
@@ -343,7 +343,7 @@ export const HILDriverPanel: React.FC<HILDriverPanelProps> = ({ channels, onChan
                     </div>
                   </div>
 
-                  <button
+                  <button data-help-feature="ui:hil/HILDriverPanel:1a605bb51075" data-help-source="src/components/hil/HILDriverPanel.tsx"
                     onClick={() => removeChannel(ch.id)}
                     className="ui-control ui-focus-ring absolute bottom-2.5 right-2 px-1.5 py-1 text-red-500 hover:text-red-400 hover:bg-red-950/20 rounded transition-colors"
                     title="Delete Channel"

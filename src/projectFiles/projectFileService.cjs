@@ -104,7 +104,7 @@ function writeProjectFile(filePath, data, deps = {}) {
   }
 }
 
-const UPGRADE_BACKUP_SUFFIX = '.v3-backup.json';
+const UPGRADE_BACKUP_SUFFIX = '.v3-backup.adia';
 const CURRENT_SYSML_FORMAT = 5;
 
 /**
@@ -155,7 +155,7 @@ function upgradeBackupPathFor(filePath) {
 }
 
 /**
- * Keeps the original JSON of a project file next to it as `<name>.v3-backup.json`
+ * Keeps the original JSON of a project file next to it as `<name>.v3-backup.adia`
  * before the file is upgraded. An existing backup is never overwritten: the
  * first one is the original. Returns null when the data needs no upgrade.
  */

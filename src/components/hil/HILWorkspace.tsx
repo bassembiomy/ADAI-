@@ -165,7 +165,7 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
       layers,
       safetyMode,
       hilConfig: { ...config, enabled: true }
-    }, { includeTestShims: true });
+    }, { includeTestShims: false });
     return res.files || [];
   }, [config, variables, states, transitions, junctions, layers, safetyMode, tickMs]);
 
@@ -256,7 +256,7 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
       layers,
       safetyMode,
       hilConfig: { ...config, enabled: true }
-    }, { includeTestShims: true });
+    }, { includeTestShims: false });
 
     if (genRes.errors && genRes.errors.length > 0) {
       setConsoleLogs([
@@ -292,11 +292,7 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
           setConsoleLogs(prev => [
             ...prev,
             `[EXPORT] Code exported successfully to filesystem: [${res.path}]`,
-            `[AUDIT] Performing MISRA-C compliance audits & pre-processor checks...`,
-            `[AUDIT] MISRA Rule 20.1 (Include headers check): Passed.`,
-            `[AUDIT] MISRA Rule 8.4 (Function declarations check): Passed.`,
-            `[AUDIT] Checked 14 static variables. Violations: 0.`,
-            `[SYSTEM] Starting native toolchain compiler execution...`
+            `[SYSTEM] Building and inspecting the generated project with the bundled runtime...`
           ]);
 
           // Trigger the real compilation command on disk!
@@ -312,6 +308,13 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
               ...prev,
               `[SIZE] FLASH: ${compileRes.measuredFlashBytes} B; SRAM: ${compileRes.measuredRamBytes} B`,
               `[SYSTEM] NATIVE EMBEDDED TOOLCHAIN BUILD COMPLETED SUCCESSFULLY.`
+            ]);
+            setBuildStatus('success');
+          } else if (compileRes && compileRes.success && compileRes.hostSimulationVerified) {
+            setLastCompileResult(compileRes);
+            setConsoleLogs(prev => [...prev,
+              '[SYSTEM] Generic host simulation executable built and inspected successfully.',
+              '[SYSTEM] Host simulation does not permit hardware flashing.',
             ]);
             setBuildStatus('success');
           } else if (compileRes && compileRes.success) {
@@ -333,7 +336,7 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
             setConsoleLogs(prev => {
               const logs = [...prev, `[ERROR] Native compilation failed: ${errMsg}`];
               if (!isExitError) {
-                logs.push(`[ERROR] Make sure that the required compiler toolchain for '${target}' is installed and configured in your system's PATH environmental variable.`);
+                logs.push('[ERROR] Check the bundled runtime diagnostics above; release builds require the complete offline toolchain bundle.');
               }
               return logs;
             });
@@ -506,7 +509,7 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
     <div className="hil-workspace flex flex-col h-full bg-[#070707] text-[#e0e0e0] font-sans overflow-hidden select-none">
       
       {/* Header bar */}
-      <header
+      <header data-help-feature="live:components/hil/HILWorkspace:34ecff87bb82"
         onWheel={handleHorizontalToolbarWheel}
         className="hil-header hil-panel h-14 bg-[#0f0f0f] border-b border-[#222] flex items-center justify-between px-4 shrink-0 overflow-x-auto overflow-y-hidden adia-toolbar-scrollbar [&>*]:shrink-0"
       >

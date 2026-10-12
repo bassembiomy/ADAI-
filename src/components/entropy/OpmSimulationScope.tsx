@@ -199,7 +199,7 @@ export const OpmSimulationScope: React.FC<OpmSimulationScopeProps> = ({
           {/* Channel Search Filter */}
           <div className="relative flex items-center">
             <Search size={11} className="absolute left-2 text-gray-500" />
-            <input
+            <input data-help-feature="opm:opmsimulationscope:scope-trace:009893c934" data-help-module="entropy"
               type="text"
               value={filterText}
               onChange={(e) => setFilterText(e.target.value)}
@@ -211,7 +211,7 @@ export const OpmSimulationScope: React.FC<OpmSimulationScopeProps> = ({
           {/* Zoom Selector */}
           <div className="flex items-center gap-1 bg-[#0c0c0e] px-1.5 py-0.5 rounded border border-[#333]">
             <ZoomIn size={11} className="text-gray-400" />
-            <select
+            <select data-help-feature="opm:opmsimulationscope:scope-trace:1c060c5572" data-help-module="entropy"
               data-testid="opm-scope-zoom-select"
               value={zoom}
               onChange={(e) => setZoom(Number(e.target.value))}
@@ -225,7 +225,7 @@ export const OpmSimulationScope: React.FC<OpmSimulationScopeProps> = ({
           </div>
 
           {/* Export CSV Button */}
-          <button
+          <button data-help-feature="opm:opmsimulationscope:scope-trace:597a7962ea" data-help-module="entropy"
             onClick={handleExportCsv}
             disabled={samples.length === 0}
             title="Export scope trace to CSV"
@@ -235,7 +235,7 @@ export const OpmSimulationScope: React.FC<OpmSimulationScopeProps> = ({
           </button>
 
           {/* Clear Scope Button */}
-          <button
+          <button data-help-feature="opm:opmsimulationscope:scope-trace:ad4f0f12d2" data-help-module="entropy"
             data-testid="opm-scope-clear"
             onClick={handleClear}
             title="Clear scope history"

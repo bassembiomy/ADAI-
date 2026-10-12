@@ -1543,6 +1543,7 @@ export const XbridgesWorkspace: React.FC<{
 
   const [solverType, setSolverType] = useState<'euler' | 'ode2' | 'ode3' | 'rk4' | 'ode5' | 'ode23' | 'ode45'>('rk4');
   const [edgeType, setEdgeType] = useState<'default' | 'straight' | 'smoothstep'>('smoothstep');
+  const [snapEnabled, setSnapEnabled] = useState(false);
   const initialStep = tickMs ? tickMs / 1000 : 0.02;
   const [fixedStep, setFixedStep] = useState(initialStep);
   const [stepSizeInput, setStepSizeInput] = useState(String(initialStep));
@@ -3114,7 +3115,7 @@ export const XbridgesWorkspace: React.FC<{
       {/* Main Canvas Area */}
       <div className="flex-1 relative flex flex-col min-h-0">
         {/* Premium Top Toolbar */}
-        <div
+        <div data-help-feature="live:components/xbridges/XbridgesWorkspace:2baeda448e81"
           onWheel={handleHorizontalToolbarWheel}
           className="h-16 bg-[#1a1a1a]/90 backdrop-blur-2xl border-b border-[#333] flex items-center justify-between px-6 z-30 shadow-sm overflow-x-auto overflow-y-hidden adia-toolbar-scrollbar [&>*]:shrink-0"
         >
@@ -3202,6 +3203,22 @@ export const XbridgesWorkspace: React.FC<{
                     <option value="straight">Straight Line</option>
                   </select>
                 </div>
+              </div>
+
+              <div className="flex flex-col">
+                <span className="text-[8px] text-slate-400 font-black uppercase tracking-widest mb-1">Grid Snap</span>
+                <button data-help-feature="live:components/xbridges/XbridgesWorkspace:e25c5ed46212"
+                  type="button"
+                  onClick={() => setSnapEnabled(prev => !prev)}
+                  className={`border rounded-xl px-3 py-1.5 text-[10px] font-bold transition-all ${
+                    snapEnabled
+                      ? 'bg-[#c9a86c]/20 border-[#c9a86c]/60 text-[#c9a86c]'
+                      : 'bg-[#0a0a0a] border-[#333] text-slate-400 hover:text-white hover:bg-[#222]'
+                  }`}
+                  title={snapEnabled ? 'Grid snap enabled (15px)' : 'Smooth pixel precision (Grid snap off)'}
+                >
+                  {snapEnabled ? 'Snap: On' : 'Snap: Off'}
+                </button>
               </div>
 
               <div className="flex flex-col">
@@ -3450,7 +3467,7 @@ export const XbridgesWorkspace: React.FC<{
               className="engineering-canvas"
               minZoom={0.2}
               maxZoom={2.0}
-              snapToGrid
+              snapToGrid={snapEnabled}
               snapGrid={[15, 15]}
               fitView
               connectionLineStyle={{ stroke: '#4caf50', strokeWidth: 3 }}

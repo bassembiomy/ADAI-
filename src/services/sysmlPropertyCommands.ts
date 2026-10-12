@@ -1,8 +1,27 @@
-import { parseMultiplicity, type BlockDefinition, type PartUsage, type PropertyDefinition, type SysmlRelationship, type SysmlRepository } from '../engine/sysml/model';
+import { parseMultiplicity, type BlockDefinition, type PartUsage, type PortDefinition, type PropertyDefinition, type SysmlRelationship, type SysmlRepository } from '../engine/sysml/model';
+import { PORT_STEREOTYPES } from './sysmlOwnedFeatureCommands';
 import { findPortOwner, findPropertyOwner, isPartProperty, PATH_SEPARATOR, resolveOccurrenceKey, resolvePartLike } from '../engine/sysml/partOccurrences';
 import type { SysmlEditorCommand, SysmlMutationCommand } from './sysmlCommandGateway';
 
 type SysmlMutationPlan = SysmlMutationCommand | { type: 'batch'; commands: SysmlMutationCommand[]; coalesceKey?: string };
+
+/** Inspector ports use display type/multiplicity; retain the canonical feature metadata. */
+function normalizePort(port: Record<string, unknown>, previous?: PortDefinition): PortDefinition {
+  const kind = (port.kind ?? previous?.kind ?? 'standard') as PortDefinition['kind'];
+  const portKind = ({ standard: 'umlPort', proxy: 'proxyPort', full: 'fullPort', flow: 'flowPort' } as const)[kind];
+  const multiplicity = typeof port.multiplicity === 'string' ? { ...parseMultiplicity(port.multiplicity), ordered: previous?.multiplicity.ordered ?? false, unique: previous?.multiplicity.unique ?? true }
+    : port.multiplicity && typeof port.multiplicity === 'object' ? port.multiplicity as PortDefinition['multiplicity']
+    : previous?.multiplicity ?? parseMultiplicity('1');
+  return {
+    ...previous,
+    id: String(port.id), name: String(port.name ?? previous?.name ?? ''), kind, portKind,
+    appliedStereotypeIds: previous?.kind === kind ? previous.appliedStereotypeIds : PORT_STEREOTYPES[portKind],
+    typeId: String(port.typeId ?? port.type ?? previous?.typeId ?? ''),
+    direction: (port.direction ?? previous?.direction ?? 'inout') as PortDefinition['direction'],
+    isConjugated: typeof port.isConjugated === 'boolean' ? port.isConjugated : previous?.isConjugated ?? false,
+    multiplicity,
+  };
+}
 
 function normalizeProperty(property: Record<string, unknown>): PropertyDefinition {
   const multiplicityValue = property.multiplicity;
@@ -82,10 +101,13 @@ export function buildBlockPropertyUpdateCommand(
 ): SysmlMutationPlan {
   const definition = repository.definitions[elementId];
   const hasSatisfactionPatch = Array.isArray(patch.satisfiedReqIds);
-  if (!definition || definition.kind !== 'block' || (!Array.isArray(patch.properties) && !hasSatisfactionPatch)) {
+  if (!definition || definition.kind !== 'block' || (!Array.isArray(patch.properties) && !Array.isArray(patch.ports) && !hasSatisfactionPatch)) {
     return { type: 'updateElement', elementId, patch };
   }
   const semanticPatch = { ...patch };
+  if (Array.isArray(patch.ports)) {
+    semanticPatch.ports = patch.ports.map(port => normalizePort(port as Record<string, unknown>, definition.ports.find(previous => previous.id === port.id)));
+  }
   delete semanticPatch.satisfiedReqIds;
   const properties = Array.isArray(patch.properties)
     ? patch.properties.map(property => normalizeProperty(property as Record<string, unknown>))

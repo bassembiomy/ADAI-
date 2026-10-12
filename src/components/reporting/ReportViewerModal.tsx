@@ -49,7 +49,7 @@ export const ReportViewerModal: React.FC<ReportViewerModalProps> = ({ isOpen, on
         <div className="flex items-center gap-3">
           {/* Zoom controls */}
           <div className="flex items-center gap-1 rounded bg-slate-800 px-2 py-1 text-xs">
-            <button
+            <button data-help-feature="ui:reporting/ReportViewerModal:1a56bf86909e" data-help-source="src/components/reporting/ReportViewerModal.tsx"
               onClick={() => setZoom((z) => Math.max(50, z - 15))}
               className="p-1 hover:text-teal-400"
               title="Zoom out"
@@ -57,7 +57,7 @@ export const ReportViewerModal: React.FC<ReportViewerModalProps> = ({ isOpen, on
               <ZoomOut className="h-3.5 w-3.5" />
             </button>
             <span className="w-10 text-center font-mono">{zoom}%</span>
-            <button
+            <button data-help-feature="ui:reporting/ReportViewerModal:66edeeaa6e60" data-help-source="src/components/reporting/ReportViewerModal.tsx"
               onClick={() => setZoom((z) => Math.min(150, z + 15))}
               className="p-1 hover:text-teal-400"
               title="Zoom in"
@@ -66,7 +66,7 @@ export const ReportViewerModal: React.FC<ReportViewerModalProps> = ({ isOpen, on
             </button>
           </div>
 
-          <button
+          <button data-help-feature="ui:reporting/ReportViewerModal:9d04bee65b69" data-help-source="src/components/reporting/ReportViewerModal.tsx"
             onClick={handleExportPdf}
             className="flex items-center gap-1.5 rounded bg-teal-600 px-3 py-1.5 text-xs font-semibold hover:bg-teal-500 transition-colors"
           >
@@ -74,7 +74,7 @@ export const ReportViewerModal: React.FC<ReportViewerModalProps> = ({ isOpen, on
             Export PDF
           </button>
 
-          <button
+          <button data-help-feature="ui:reporting/ReportViewerModal:9bfc6efe0b02" data-help-source="src/components/reporting/ReportViewerModal.tsx"
             onClick={handleExportDocx}
             disabled={isExporting}
             className="flex items-center gap-1.5 rounded bg-blue-600 px-3 py-1.5 text-xs font-semibold hover:bg-blue-500 transition-colors disabled:opacity-50"
@@ -83,7 +83,7 @@ export const ReportViewerModal: React.FC<ReportViewerModalProps> = ({ isOpen, on
             {isExporting ? 'Generating...' : 'Export Word (.docx)'}
           </button>
 
-          <button
+          <button data-help-feature="ui:reporting/ReportViewerModal:8fee022d7a95" data-help-source="src/components/reporting/ReportViewerModal.tsx"
             onClick={handlePrint}
             className="flex items-center gap-1.5 rounded bg-slate-700 px-3 py-1.5 text-xs font-semibold hover:bg-slate-600 transition-colors"
           >
@@ -91,7 +91,7 @@ export const ReportViewerModal: React.FC<ReportViewerModalProps> = ({ isOpen, on
             Print
           </button>
 
-          <button
+          <button data-help-feature="ui:reporting/ReportViewerModal:151ed7616191" data-help-source="src/components/reporting/ReportViewerModal.tsx"
             onClick={onClose}
             className="ml-2 rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-white"
           >

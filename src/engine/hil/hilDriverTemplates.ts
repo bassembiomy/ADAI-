@@ -128,7 +128,7 @@ function getSTM32F1UARTConfig(pin: string) {
 export const hilDriverTemplates: Record<TargetMCU, MCUTemplate> = {
   STM32F4: {
     name: 'STM32F4xx HAL',
-    systemIncludes: `#include "stm32f4xx_hal.h"\n#include <string.h>`,
+    systemIncludes: `void SystemClock_Config(void);\n#include "stm32f4xx_hal.h"\n#include <string.h>`,
     globals: `
 UART_HandleTypeDef huart1;
 UART_HandleTypeDef huart2;
@@ -220,6 +220,7 @@ static inline void HAL_SPI_WriteChannel(GPIO_TypeDef* csPort, uint16_t csPin, ui
 `,
     systemInit: `
   HAL_Init();
+  SystemClock_Config();
   /* Configure System Clock here if needed */
 `,
     serialInit: (baudRate) => `
@@ -517,7 +518,7 @@ void HIL_SendString(const char* str) {
   },
   STM32F1: {
     name: 'STM32F1xx HAL',
-    systemIncludes: `#include "stm32f1xx_hal.h"\n#include <string.h>`,
+    systemIncludes: `void SystemClock_Config(void);\n#include "stm32f1xx_hal.h"\n#include <string.h>`,
     globals: `
 UART_HandleTypeDef huart1;
 UART_HandleTypeDef huart2;
@@ -561,7 +562,7 @@ static inline uint32_t HAL_ADC_ReadChannel(uint32_t channel) {
     ADC_ChannelConfTypeDef sConfig = {0};
     sConfig.Channel = channel;
     sConfig.Rank = 1;
-    sConfig.SamplingTime = ADC_SAMPLETIME_15CYCLES;
+    sConfig.SamplingTime = ADC_SAMPLETIME_71CYCLES_5;
     HAL_ADC_ConfigChannel(&hadc1, &sConfig);
 
     uint32_t val = 0U;
@@ -601,6 +602,7 @@ static inline void HAL_SPI_WriteChannel(GPIO_TypeDef* csPort, uint16_t csPin, ui
 `,
     systemInit: `
   HAL_Init();
+  SystemClock_Config();
 `,
     serialInit: (baudRate) => `
   __HAL_RCC_USART1_CLK_ENABLE();

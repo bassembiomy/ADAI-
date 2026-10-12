@@ -393,7 +393,7 @@ export function BlockFeatureEditor({
     <div className="sysml-editor space-y-4" aria-label="Block Feature Inspector">
       <div className="flex gap-4 text-xs">
         <label className="flex items-center gap-1">
-          <input
+          <input data-help-feature="ui:sysml/BlockFeatureEditor:2684fac77d9d" data-help-source="src/components/sysml/BlockFeatureEditor.tsx"
             type="checkbox"
             checked={Boolean(block.isAbstract)}
             onChange={e => update({ isAbstract: e.target.checked })}
@@ -401,7 +401,7 @@ export function BlockFeatureEditor({
           <span>Abstract</span>
         </label>
         <label className="flex items-center gap-1">
-          <input
+          <input data-help-feature="ui:sysml/BlockFeatureEditor:29a245de8dc7" data-help-source="src/components/sysml/BlockFeatureEditor.tsx"
             type="checkbox"
             checked={Boolean(block.isLeaf)}
             onChange={e => update({ isLeaf: e.target.checked })}
@@ -414,7 +414,7 @@ export function BlockFeatureEditor({
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <h4 className="text-xs font-semibold uppercase text-gray-400">Properties</h4>
-          <button
+          <button data-help-feature="ui:sysml/BlockFeatureEditor:cd271525ff93" data-help-source="src/components/sysml/BlockFeatureEditor.tsx"
             type="button"
             onClick={openPropertyPrompt}
             className="rounded border border-gray-600 px-2 py-0.5 text-xs text-gray-300 hover:bg-gray-800"
@@ -429,7 +429,7 @@ export function BlockFeatureEditor({
             <div className="grid grid-cols-2 gap-2">
               <label>
                 Name
-                <input
+                <input data-help-feature="ui:sysml/BlockFeatureEditor:2f2abd0912fa" data-help-source="src/components/sysml/BlockFeatureEditor.tsx"
                   aria-label={`Property ${index + 1} name`}
                   value={prop.name}
                   onChange={e => updateProperty(index, { name: e.target.value })}
@@ -438,7 +438,7 @@ export function BlockFeatureEditor({
               </label>
               <label>
                 Property kind
-                <select
+                <select data-help-feature="ui:sysml/BlockFeatureEditor:d6f3e1c639fc" data-help-source="src/components/sysml/BlockFeatureEditor.tsx"
                   aria-label={`Property ${index + 1} kind`}
                   value={prop.kind}
                   onChange={e => updateProperty(index, { kind: e.target.value as PropertyDefinition['kind'] })}
@@ -453,7 +453,7 @@ export function BlockFeatureEditor({
 
             <label className="block">
               Type
-              <select
+              <select data-help-feature="ui:sysml/BlockFeatureEditor:89c54d45f063" data-help-source="src/components/sysml/BlockFeatureEditor.tsx"
                 aria-label={`Property ${index + 1} type`}
                 value={prop.typeId}
                 onChange={e => updateProperty(index, { typeId: e.target.value })}
@@ -471,7 +471,7 @@ export function BlockFeatureEditor({
             <div className="grid grid-cols-2 gap-2">
               <label>
                 Multiplicity
-                <input
+                <input data-help-feature="ui:sysml/BlockFeatureEditor:96f86cd35d6c" data-help-source="src/components/sysml/BlockFeatureEditor.tsx"
                   aria-label={`Property ${index + 1} multiplicity`}
                   value={`${prop.multiplicity.lower}..${prop.multiplicity.upper}`}
                   onChange={e => {
@@ -486,7 +486,7 @@ export function BlockFeatureEditor({
               </label>
               <div className="flex flex-wrap items-center gap-2 pt-4">
                 <label className="flex items-center gap-1">
-                  <input
+                  <input data-help-feature="ui:sysml/BlockFeatureEditor:c7697f023534" data-help-source="src/components/sysml/BlockFeatureEditor.tsx"
                     type="checkbox"
                     checked={Boolean(prop.multiplicity.ordered)}
                     onChange={e => updateProperty(index, { multiplicity: { ...prop.multiplicity, ordered: e.target.checked } })}
@@ -494,7 +494,7 @@ export function BlockFeatureEditor({
                   ordered
                 </label>
                 <label className="flex items-center gap-1">
-                  <input
+                  <input data-help-feature="ui:sysml/BlockFeatureEditor:9d74c4ed4453" data-help-source="src/components/sysml/BlockFeatureEditor.tsx"
                     type="checkbox"
                     checked={!prop.multiplicity.unique}
                     onChange={e => updateProperty(index, { multiplicity: { ...prop.multiplicity, unique: !e.target.checked } })}
@@ -502,7 +502,7 @@ export function BlockFeatureEditor({
                   nonunique
                 </label>
                 <label className="flex items-center gap-1">
-                  <input
+                  <input data-help-feature="ui:sysml/BlockFeatureEditor:2e5cbe2cdae0" data-help-source="src/components/sysml/BlockFeatureEditor.tsx"
                     type="checkbox"
                     checked={Boolean(prop.isDerived)}
                     onChange={e => updateProperty(index, { isDerived: e.target.checked })}
@@ -515,7 +515,7 @@ export function BlockFeatureEditor({
             <div className="grid grid-cols-2 gap-2">
               <label>
                 Redefines
-                <select
+                <select data-help-feature="ui:sysml/BlockFeatureEditor:df875b613496" data-help-source="src/components/sysml/BlockFeatureEditor.tsx"
                   value={prop.redefinesId || ''}
                   onChange={e => updateProperty(index, { redefinesId: e.target.value || undefined })}
                   className="w-full rounded border border-gray-700 bg-[var(--surface-sunken)] px-2 py-1"
@@ -528,7 +528,7 @@ export function BlockFeatureEditor({
               </label>
               <label>
                 Subsets
-                <select
+                <select data-help-feature="ui:sysml/BlockFeatureEditor:de01c5d7e2cb" data-help-source="src/components/sysml/BlockFeatureEditor.tsx"
                   value={prop.subsetsId || ''}
                   onChange={e => updateProperty(index, { subsetsId: e.target.value || undefined })}
                   className="w-full rounded border border-gray-700 bg-[var(--surface-sunken)] px-2 py-1"
@@ -541,7 +541,7 @@ export function BlockFeatureEditor({
               </label>
             </div>
 
-            <button
+            <button data-help-feature="ui:sysml/BlockFeatureEditor:fcdc9edf2325" data-help-source="src/components/sysml/BlockFeatureEditor.tsx"
               type="button"
               onClick={() => removeProperty(index)}
               className="text-xs text-red-400 hover:underline"
@@ -566,7 +566,7 @@ export function BlockFeatureEditor({
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <h4 className="text-xs font-semibold uppercase text-gray-400">Ports</h4>
-          <button
+          <button data-help-feature="ui:sysml/BlockFeatureEditor:18e1a8b41fd8" data-help-source="src/components/sysml/BlockFeatureEditor.tsx"
             type="button"
             onClick={() => setPortKindOpen(true)}
             className="rounded border border-gray-600 px-2 py-0.5 text-xs text-gray-300 hover:bg-gray-800"
@@ -581,7 +581,7 @@ export function BlockFeatureEditor({
             <div className="grid grid-cols-3 gap-2">
               <label>
                 Name
-                <input
+                <input data-help-feature="ui:sysml/BlockFeatureEditor:493d74b392ca" data-help-source="src/components/sysml/BlockFeatureEditor.tsx"
                   aria-label={`Port ${index + 1} name`}
                   value={port.name}
                   onChange={e => updatePort(index, { name: e.target.value })}
@@ -590,7 +590,7 @@ export function BlockFeatureEditor({
               </label>
               <label>
                 Port kind
-                <select
+                <select data-help-feature="ui:sysml/BlockFeatureEditor:5002a6dcd303" data-help-source="src/components/sysml/BlockFeatureEditor.tsx"
                   aria-label={`Port ${index + 1} kind`}
                   value={port.kind}
                   onChange={e => updatePort(index, { kind: e.target.value as PortDefinition['kind'] })}
@@ -603,7 +603,7 @@ export function BlockFeatureEditor({
               </label>
               <label>
                 Direction
-                <select
+                <select data-help-feature="ui:sysml/BlockFeatureEditor:4c8b639f6ab4" data-help-source="src/components/sysml/BlockFeatureEditor.tsx"
                   aria-label={`Port ${index + 1} direction`}
                   value={port.direction}
                   onChange={e => updatePort(index, { direction: e.target.value as PortDefinition['direction'] })}
@@ -619,7 +619,7 @@ export function BlockFeatureEditor({
             <div className="grid grid-cols-2 gap-2">
               <label>
                 Type
-                <select
+                <select data-help-feature="ui:sysml/BlockFeatureEditor:c4b9f85a07c6" data-help-source="src/components/sysml/BlockFeatureEditor.tsx"
                   aria-label={`Port ${index + 1} type`}
                   value={port.typeId}
                   onChange={e => updatePort(index, { typeId: e.target.value })}
@@ -635,7 +635,7 @@ export function BlockFeatureEditor({
               </label>
               <div className="flex items-center pt-4">
                 <label className="flex items-center gap-1">
-                  <input
+                  <input data-help-feature="ui:sysml/BlockFeatureEditor:087cb3f107f7" data-help-source="src/components/sysml/BlockFeatureEditor.tsx"
                     type="checkbox"
                     checked={Boolean(port.isConjugated)}
                     onChange={e => updatePort(index, { isConjugated: e.target.checked })}
@@ -645,7 +645,7 @@ export function BlockFeatureEditor({
               </div>
             </div>
 
-            <button
+            <button data-help-feature="ui:sysml/BlockFeatureEditor:8a91eb2f41ec" data-help-source="src/components/sysml/BlockFeatureEditor.tsx"
               type="button"
               onClick={() => removePort(index)}
               className="text-xs text-red-400 hover:underline"
@@ -703,7 +703,7 @@ export function BlockFeatureEditor({
         ) : (
           <div role="list" aria-label="Inherited features">
             {visibleInherited.map(ip => (
-              <div
+              <div data-help-feature="live:components/sysml/BlockFeatureEditor:98264639931e"
                 key={ip.id}
                 role="listitem"
                 aria-readonly="true"
@@ -723,14 +723,14 @@ export function BlockFeatureEditor({
                   <div className="text-[10px] text-gray-500">Inherited from {ip.originName} ({ip.originId})</div>
                 </div>
                 <div className="flex gap-1">
-                  <button
+                  <button data-help-feature="ui:sysml/BlockFeatureEditor:a21b8549b553" data-help-source="src/components/sysml/BlockFeatureEditor.tsx"
                     type="button"
                     onClick={() => handleRedefine(ip)}
                     className="rounded border border-gray-700 px-1.5 py-0.5 text-[10px] text-gray-300 hover:bg-gray-800"
                   >
                     Redefine
                   </button>
-                  <button
+                  <button data-help-feature="ui:sysml/BlockFeatureEditor:bd5da0e2f1e7" data-help-source="src/components/sysml/BlockFeatureEditor.tsx"
                     type="button"
                     onClick={() => handleSubset(ip)}
                     className="rounded border border-gray-700 px-1.5 py-0.5 text-[10px] text-gray-300 hover:bg-gray-800"
@@ -755,7 +755,7 @@ export function BlockFeatureEditor({
         <div className="space-y-2 rounded border border-gray-700 p-2 text-xs">
           <label className="block text-gray-300">
             New property kind
-            <select
+            <select data-help-feature="ui:sysml/BlockFeatureEditor:0cd05acf0691" data-help-source="src/components/sysml/BlockFeatureEditor.tsx"
               aria-label="New property kind"
               value={propertyPrompt.propertyKind}
               onChange={e => openPropertyPromptForKind(e.target.value as InspectorPropertyKind)}
@@ -792,7 +792,7 @@ export function BlockFeatureEditor({
             </p>
             <div className="flex flex-col gap-2">
               {INSPECTOR_PORT_KINDS.map(({ kind, label, description }) => (
-                <button
+                <button data-help-feature="ui:sysml/BlockFeatureEditor:079ac336ece4" data-help-source="src/components/sysml/BlockFeatureEditor.tsx"
                   key={kind}
                   type="button"
                   onClick={() => choosePortKind(kind)}
@@ -804,7 +804,7 @@ export function BlockFeatureEditor({
               ))}
             </div>
             <div className="flex justify-end">
-              <button
+              <button data-help-feature="ui:sysml/BlockFeatureEditor:eeaed3188d35" data-help-source="src/components/sysml/BlockFeatureEditor.tsx"
                 type="button"
                 onClick={() => setPortKindOpen(false)}
                 className="rounded border border-gray-600 px-3 py-1 text-gray-300 hover:bg-gray-800"

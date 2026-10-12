@@ -66,6 +66,51 @@ describe('interaction helpers', () => {
 });
 
 describe('interaction rules: messages', () => {
+  it('rejects sending and receiving before creation regardless of array order', () => {
+    const { repo, interaction } = repoWith({ messages: [
+      msg('create', 3, 'createMessage', 'a', 'b'),
+      msg('receive', 1, 'asynchCall', 'a', 'b'),
+      msg('send', 2, 'asynchCall', 'b', 'c'),
+    ] });
+    expect(validateInteraction(repo, interaction).filter(d => d.code === 'MESSAGE_BEFORE_CREATE').map(d => d.elementId)).toEqual(['receive', 'send']);
+    expect(checkInteractionMessage(repo, interaction, interaction.messages[1])?.code).toBe('MESSAGE_BEFORE_CREATE');
+    expect(checkInteractionMessage(repo, interaction, interaction.messages[2])?.code).toBe('MESSAGE_BEFORE_CREATE');
+  });
+
+  it('rejects every additional creation of the same lifeline', () => {
+    const { repo, interaction } = repoWith({ messages: [
+      msg('second', 3, 'createMessage', 'c', 'b'),
+      msg('first', 1, 'createMessage', 'a', 'b'),
+      msg('third', 4, 'createMessage', 'a', 'b'),
+    ] });
+    expect(validateInteraction(repo, interaction).filter(d => d.code === 'MULTIPLE_CREATE_MESSAGES').map(d => d.elementId)).toEqual(['second', 'third']);
+    expect(checkInteractionMessage(repo, interaction, interaction.messages[0])?.code).toBe('MULTIPLE_CREATE_MESSAGES');
+  });
+
+  it('accepts initial lifelines, creation, later traffic and editing the creation itself', () => {
+    const { repo, interaction } = repoWith({ messages: [
+      msg('initial', 1, 'asynchCall', 'a', 'c'),
+      msg('create', 2, 'createMessage', 'a', 'b'),
+      msg('receive', 3, 'asynchCall', 'a', 'b'),
+      msg('send', 4, 'asynchCall', 'b', 'c'),
+    ] });
+    expect(codes(repo, interaction)).toEqual([]);
+    expect(checkInteractionMessage(repo, interaction, interaction.messages[1])).toBeUndefined();
+  });
+
+  it('rejects inserting or moving creation after existing traffic', () => {
+    const { repo, interaction } = repoWith({ messages: [msg('early', 1, 'asynchCall', 'b', 'a')] });
+    expect(checkInteractionMessage(repo, interaction, msg('create', 2, 'createMessage', 'a', 'b'))?.code).toBe('MESSAGE_BEFORE_CREATE');
+    interaction.messages.push(msg('create', 0, 'createMessage', 'a', 'b'));
+    expect(checkInteractionMessage(repo, interaction, msg('create', 2, 'createMessage', 'a', 'b'))?.code).toBe('MESSAGE_BEFORE_CREATE');
+  });
+
+  it('rejects a lifeline creating itself', () => {
+    const { repo, interaction } = repoWith({ messages: [msg('self', 1, 'createMessage', 'b', 'b')] });
+    expect(codes(repo, interaction)).toContain('MESSAGE_BEFORE_CREATE');
+    expect(checkInteractionMessage(repo, interaction, interaction.messages[0])?.code).toBe('MESSAGE_BEFORE_CREATE');
+  });
+
   it('requires both message ends to exist and positions to be unique', () => {
     const { repo, interaction } = repoWith({
       messages: [msg('m1', 1, 'asynchCall', 'a', 'ghost'), msg('m2', 2, 'asynchCall', 'a', 'b'), msg('m3', 2, 'asynchCall', 'b', 'a')],

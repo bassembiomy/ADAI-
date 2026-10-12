@@ -104,7 +104,7 @@ describe('Dependency-scoped validation differential tests', () => {
     expect(scopedReport!.valid).toBe(fullReport.valid);
   });
 
-  it('detects inheritance cycle during supertype update identically to full validator', () => {
+  it('uses the full validator for supertype changes, including inheritance cycles and connector endpoints', () => {
     const fixture = generateSysmlModel({ targetElementCount: 200, seed: 42 });
     const repo = fixture.repository;
     const blocks = Object.values(repo.definitions).filter(d => d.kind === 'block');
@@ -122,10 +122,9 @@ describe('Dependency-scoped validation differential tests', () => {
       changedProperties: ['supertypeIds'],
     });
 
-    expect(scopedReport).not.toBeNull();
-    expect(scopedReport!.valid).toBe(false);
+    expect(scopedReport).toBeNull();
     expect(fullReport.valid).toBe(false);
-    const cycleDiag = scopedReport!.diagnostics.find(d => d.code === 'INHERITANCE_CYCLE');
+    const cycleDiag = fullReport.diagnostics.find(d => d.code === 'INHERITANCE_CYCLE' && d.elementId === a.id);
     expect(cycleDiag).toBeDefined();
     expect(cycleDiag?.elementId).toBe(a.id);
   });

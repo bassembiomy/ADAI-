@@ -128,7 +128,7 @@ export const RelationshipWizard: React.FC<RelationshipWizardProps> = ({
               Create Relationship
             </span>
           </div>
-          <button
+          <button data-help-feature="ui:modelExplorer/RelationshipWizard:151ed7616191" data-help-source="src/components/modelExplorer/RelationshipWizard.tsx"
             type="button"
             aria-label="Close"
             onClick={onClose}
@@ -153,13 +153,13 @@ export const RelationshipWizard: React.FC<RelationshipWizardProps> = ({
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-4 flex flex-col gap-4">
+        <form data-help-feature="ui:modelExplorer/RelationshipWizard:b8b4acc662f9" data-help-source="src/components/modelExplorer/RelationshipWizard.tsx" onSubmit={handleSubmit} className="p-4 flex flex-col gap-4">
           {/* Relationship Kind selection */}
           <div className="flex flex-col gap-1.5">
             <label className="text-[var(--text-secondary)] font-medium">Relationship Kind</label>
             <div className="grid grid-cols-2 gap-1.5 max-h-36 overflow-y-auto p-1 bg-[var(--surface-canvas)] rounded border border-[var(--border-default)]">
               {allowedRelationshipKinds.map(kind => (
-                <button
+                <button data-help-feature="ui:modelExplorer/RelationshipWizard:0351544d62a2" data-help-source="src/components/modelExplorer/RelationshipWizard.tsx"
                   key={kind}
                   type="button"
                   onClick={() => setSelectedKind(kind)}
@@ -188,7 +188,7 @@ export const RelationshipWizard: React.FC<RelationshipWizardProps> = ({
             {/* Target Filter Search */}
             <div className="relative flex items-center">
               <Search size={12} className="absolute left-2.5 text-[var(--text-muted)] pointer-events-none" />
-              <input
+              <input data-help-feature="ui:modelExplorer/RelationshipWizard:4067a218820a" data-help-source="src/components/modelExplorer/RelationshipWizard.tsx"
                 type="text"
                 value={searchTargetQuery}
                 onChange={e => setSearchTargetQuery(e.target.value)}
@@ -204,7 +204,7 @@ export const RelationshipWizard: React.FC<RelationshipWizardProps> = ({
                 </div>
               ) : (
                 filteredCandidates.map(candidate => (
-                  <button
+                  <button data-help-feature="ui:modelExplorer/RelationshipWizard:3be622cc200b" data-help-source="src/components/modelExplorer/RelationshipWizard.tsx"
                     key={candidate.semanticId}
                     type="button"
                     onClick={() => setSelectedTargetId(candidate.semanticId)}
@@ -235,7 +235,7 @@ export const RelationshipWizard: React.FC<RelationshipWizardProps> = ({
           {/* Optional Name */}
           <div className="flex flex-col gap-1">
             <label className="text-[var(--text-secondary)] font-medium">Name (optional)</label>
-            <input
+            <input data-help-feature="ui:modelExplorer/RelationshipWizard:a9b046cde9ae" data-help-source="src/components/modelExplorer/RelationshipWizard.tsx"
               type="text"
               value={relationshipName}
               onChange={e => setRelationshipName(e.target.value)}
@@ -246,14 +246,14 @@ export const RelationshipWizard: React.FC<RelationshipWizardProps> = ({
 
           {/* Footer Actions */}
           <div className="flex items-center justify-end gap-2 pt-2 border-t border-[var(--border-default)]">
-            <button
+            <button data-help-feature="ui:modelExplorer/RelationshipWizard:151ed7616191" data-help-source="src/components/modelExplorer/RelationshipWizard.tsx"
               type="button"
               onClick={onClose}
               className="px-3 py-1.5 rounded bg-[var(--surface-raised)] text-[var(--text-primary)] border border-[var(--border-default)] hover:bg-[var(--surface-canvas)] transition-colors"
             >
               Cancel
             </button>
-            <button
+            <button data-help-feature="ui:modelExplorer/RelationshipWizard:1f8f0faf7fee" data-help-source="src/components/modelExplorer/RelationshipWizard.tsx"
               type="submit"
               disabled={!selectedKind || !selectedTargetId}
               className="px-3.5 py-1.5 rounded bg-[var(--diagram-node-selected)] text-white font-medium hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"

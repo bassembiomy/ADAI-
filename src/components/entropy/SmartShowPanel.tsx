@@ -38,7 +38,7 @@ const StructureTree: React.FC<{
   <div style={{ paddingLeft: depth * 14 }}>
     {nodes.map(n => (
       <div key={n.id} className="py-0.5">
-        <button
+        <button data-help-feature="opm:smartshowpanel:smart-show:cd15ca7c90" data-help-module="entropy"
           onClick={() => onSelect?.(n.id)}
           className={`text-left text-[11px] font-mono hover:underline ${
             n.kind === 'requirement' ? 'text-purple-400' : n.physical ? 'text-emerald-300' : 'text-[#ccc]'
@@ -99,7 +99,7 @@ export const SmartShowPanel: React.FC<SmartShowPanelProps> = ({
 
       <div className="flex flex-wrap gap-1 py-1.5">
         {tabs.map(t => (
-          <button
+          <button data-help-feature="opm:smartshowpanel:smart-show:748a0b6472" data-help-module="entropy"
             key={t.id}
             onClick={() => setTab(t.id)}
             title={t.hint}
@@ -123,7 +123,7 @@ export const SmartShowPanel: React.FC<SmartShowPanelProps> = ({
                   <AlertTriangle size={11} /> BDD Diagnostics ({structure.diagnostics.length})
                 </div>
                 {structure.diagnostics.map((d, i) => (
-                  <button
+                  <button data-help-feature="opm:smartshowpanel:smart-show:d1aa8d11a7" data-help-module="entropy"
                     key={i}
                     onClick={() => d.elementId && handleSelect(d.elementId)}
                     className="block text-left text-[9px] font-mono text-red-300/90 hover:underline"
@@ -139,7 +139,7 @@ export const SmartShowPanel: React.FC<SmartShowPanelProps> = ({
 
         {tab === 'internal' && (
           <div className="space-y-2">
-            <select
+            <select data-help-feature="opm:smartshowpanel:smart-show:a1b83fc3c8" data-help-module="entropy"
               value={internalProcessId ?? ''}
               onChange={(e) => setInternalProcessId(e.target.value || null)}
               className="w-full bg-[#0f0f0f] border border-[#333] rounded text-[10px] py-1 px-1.5 text-[#ccc]"
@@ -169,7 +169,7 @@ export const SmartShowPanel: React.FC<SmartShowPanelProps> = ({
                   <div>
                     <div className="text-[9px] uppercase font-bold text-[#777] mb-1">In</div>
                     {internal.inputs.map((p, i) => (
-                      <button
+                      <button data-help-feature="opm:smartshowpanel:smart-show:f0c2b2a264" data-help-module="entropy"
                         key={i}
                         onClick={() => handleSelect(p.peerId)}
                         className="w-full text-left bg-[#1a1a1a] hover:bg-[#252525] rounded px-1.5 py-0.5 mb-0.5 font-mono text-[10px] transition-colors"
@@ -181,7 +181,7 @@ export const SmartShowPanel: React.FC<SmartShowPanelProps> = ({
                   <div>
                     <div className="text-[9px] uppercase font-bold text-[#777] mb-1">Out</div>
                     {internal.outputs.map((p, i) => (
-                      <button
+                      <button data-help-feature="opm:smartshowpanel:smart-show:dc29636b98" data-help-module="entropy"
                         key={i}
                         onClick={() => handleSelect(p.peerId)}
                         className="w-full text-left bg-[#1a1a1a] hover:bg-[#252525] rounded px-1.5 py-0.5 mb-0.5 font-mono text-[10px] transition-colors"
@@ -198,7 +198,7 @@ export const SmartShowPanel: React.FC<SmartShowPanelProps> = ({
 
         {tab === 'behavior' && behavior.map(b => (
           <div key={b.objectId} className="mb-2">
-            <button
+            <button data-help-feature="opm:smartshowpanel:smart-show:1d17b57e3a" data-help-module="entropy"
               onClick={() => handleSelect(b.objectId)}
               className="text-[10px] font-bold text-orange-400 mb-0.5 hover:underline text-left block"
             >
@@ -210,7 +210,7 @@ export const SmartShowPanel: React.FC<SmartShowPanelProps> = ({
               const fromName = t.fromStateId ? nodes.find(n => n.id === t.fromStateId)?.data.name : '•';
               const active = t.toStateId ? simState.objectActiveState[b.objectId] === t.toStateId : false;
               return (
-                <button
+                <button data-help-feature="opm:smartshowpanel:smart-show:04a4955093" data-help-module="entropy"
                   key={i}
                   onClick={() => handleSelect(t.processId)}
                   className={`w-full text-left font-mono text-[10px] px-1.5 py-0.5 rounded mb-0.5 ${
@@ -232,7 +232,7 @@ export const SmartShowPanel: React.FC<SmartShowPanelProps> = ({
             {requirements.map(r => (
               <div key={r.requirementId} className="border border-[#2d2d2d] rounded p-1.5">
                 <div className="flex items-center justify-between gap-1 mb-0.5">
-                  <button
+                  <button data-help-feature="opm:smartshowpanel:smart-show:b290418c64" data-help-module="entropy"
                     onClick={() => handleSelect(r.requirementId)}
                     className="text-[10px] font-bold text-purple-400 hover:underline text-left"
                   >
@@ -251,7 +251,7 @@ export const SmartShowPanel: React.FC<SmartShowPanelProps> = ({
                     <div className="flex flex-wrap gap-1 items-center">
                       <span>trace:</span>
                       {r.satisfiedBy.map(s => (
-                        <button
+                        <button data-help-feature="opm:smartshowpanel:smart-show:82a2c42f41" data-help-module="entropy"
                           key={s.id}
                           onClick={() => handleSelect(s.id)}
                           className="text-sky-300 hover:underline"

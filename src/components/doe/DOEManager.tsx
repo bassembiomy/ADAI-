@@ -259,7 +259,7 @@ export const DOEManager: React.FC<DOEManagerProps> = (props) => {
           {/* Model Tabs */}
           <div className="flex bg-[var(--surface-sunken)] rounded-lg p-1 border border-[var(--border-default)] ml-4">
             {(['RSM', 'GMDH', 'Taguchi'] as const).map((m) => (
-              <button
+              <button data-help-feature="ui:doe/DOEManager:d34a5f6b4cbb" data-help-source="src/components/doe/DOEManager.tsx"
                 key={m}
                 data-testid={`tab-${m.toLowerCase()}`}
                 onClick={() => setActiveModel(m)}
@@ -277,21 +277,21 @@ export const DOEManager: React.FC<DOEManagerProps> = (props) => {
 
         {/* Actions */}
         <div className="flex items-center gap-2">
-          <button
+          <button data-help-feature="ui:doe/DOEManager:734b8a375523" data-help-source="src/components/doe/DOEManager.tsx"
             data-testid="add-factor-btn"
             onClick={handleAddFactor}
             className="px-3 py-1.5 text-xs bg-[var(--surface-panel)] hover:bg-[var(--surface-raised)] text-[var(--text-primary)] border border-[var(--border-default)] rounded-lg font-medium"
           >
             + Add Factor
           </button>
-          <button
+          <button data-help-feature="ui:doe/DOEManager:eeba914153c1" data-help-source="src/components/doe/DOEManager.tsx"
             data-testid="add-run-btn"
             onClick={handleAddRun}
             className="px-3 py-1.5 text-xs bg-[var(--surface-panel)] hover:bg-[var(--surface-raised)] text-[var(--text-primary)] border border-[var(--border-default)] rounded-lg font-medium"
           >
             + Add Run
           </button>
-          <button
+          <button data-help-feature="ui:doe/DOEManager:fe8a1aac44fa" data-help-source="src/components/doe/DOEManager.tsx"
             data-testid="solve-btn"
             disabled={isSolving}
             onClick={handleSolve}
@@ -301,7 +301,7 @@ export const DOEManager: React.FC<DOEManagerProps> = (props) => {
           >
             {isSolving ? 'Solving...' : 'Analyze / Solve'}
           </button>
-          <button
+          <button data-help-feature="ui:doe/DOEManager:601e40df28ec" data-help-source="src/components/doe/DOEManager.tsx"
             data-testid="export-xbridges-btn"
             disabled={!hasExportableModel}
             onClick={handleExportXBridges}
@@ -313,7 +313,7 @@ export const DOEManager: React.FC<DOEManagerProps> = (props) => {
           >
             Export to X-Bridges
           </button>
-          <button
+          <button data-help-feature="ui:doe/DOEManager:76af39de1430" data-help-source="src/components/doe/DOEManager.tsx"
             data-testid="export-vlab-btn"
             disabled={!hasExportableModel}
             onClick={handleExportVLab}
@@ -326,7 +326,7 @@ export const DOEManager: React.FC<DOEManagerProps> = (props) => {
             Export to V-Lab
           </button>
           {props.onClose && (
-            <button
+            <button data-help-feature="ui:doe/DOEManager:304d590fdb9c" data-help-source="src/components/doe/DOEManager.tsx"
               onClick={props.onClose}
               className="ml-2 p-1.5 text-[var(--text-secondary)] hover:text-[var(--text-primary)] rounded-lg"
             >
@@ -384,7 +384,7 @@ export const DOEManager: React.FC<DOEManagerProps> = (props) => {
                           {h}
                         </span>
                         {colIdx < headers.length - 1 && headers.length > 2 && (
-                          <button
+                          <button data-help-feature="ui:doe/DOEManager:fc532245236e" data-help-source="src/components/doe/DOEManager.tsx"
                             data-testid={`remove-factor-${colIdx}`}
                             onClick={() => handleRemoveFactor(colIdx)}
                             className="text-[var(--text-muted)] hover:text-red-400 text-[10px] px-1 rounded"
@@ -405,7 +405,7 @@ export const DOEManager: React.FC<DOEManagerProps> = (props) => {
                     <td className="p-2 text-center text-[var(--text-muted)] font-mono text-[11px]">{rowIdx + 1}</td>
                     {row.map((val, colIdx) => (
                       <td key={colIdx} className="p-1">
-                        <input
+                        <input data-help-feature="ui:doe/DOEManager:6518b77f016e" data-help-source="src/components/doe/DOEManager.tsx"
                           data-testid={`cell-${rowIdx}-${colIdx}`}
                           type="number"
                           value={val}
@@ -418,7 +418,7 @@ export const DOEManager: React.FC<DOEManagerProps> = (props) => {
                     ))}
                     <td className="p-1 text-center">
                       {data.length > 1 && (
-                        <button
+                        <button data-help-feature="ui:doe/DOEManager:830a8d020a17" data-help-source="src/components/doe/DOEManager.tsx"
                           data-testid={`remove-run-${rowIdx}`}
                           onClick={() => handleRemoveRun(rowIdx)}
                           className="text-[var(--text-muted)] hover:text-red-400 text-xs px-1"
@@ -442,7 +442,7 @@ export const DOEManager: React.FC<DOEManagerProps> = (props) => {
             <span className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider">Model Analysis & Graphs</span>
             <div className="flex items-center gap-2">
               <label className="text-[11px] text-[var(--text-muted)]">View:</label>
-              <select
+              <select data-help-feature="ui:doe/DOEManager:73bc7223195f" data-help-source="src/components/doe/DOEManager.tsx"
                 data-testid="plot-type-select"
                 value={plotType}
                 onChange={(e) => setPlotType(e.target.value as PlotType)}

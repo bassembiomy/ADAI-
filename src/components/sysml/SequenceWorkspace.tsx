@@ -545,7 +545,7 @@ export function SequenceWorkspace({ repository, diagramId, onExecute, onNavigate
 
   return (
     <section className="flex h-full min-h-0 w-full flex-col bg-[var(--surface-canvas)] text-[var(--text-primary)]" aria-label="Sequence Diagram workspace" data-testid="sequence-workspace">
-      <header
+      <header data-help-feature="live:components/sysml/SequenceWorkspace:34ecff87bb82"
         onWheel={handleHorizontalToolbarWheel}
         className="flex items-center gap-2 overflow-x-auto overflow-y-hidden adia-toolbar-scrollbar border-b border-[var(--border-default)] bg-[var(--surface-panel)] p-2 shrink-0 [&>*]:shrink-0"
       >

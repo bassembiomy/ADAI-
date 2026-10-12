@@ -170,7 +170,7 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
                 {selectedNode.data.type || 'Object'}
               </span>
             </div>
-            <button
+            <button data-help-feature="opm:opmrightpanelcontent:node-properties:311319a854" data-help-module="entropy"
               onClick={onCloseInspector}
               aria-label="Close Element Inspector"
               data-testid="opm-close-node-inspector"
@@ -187,7 +187,7 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
               <label htmlFor="opm-node-name-input" className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">
                 Name
               </label>
-              <input
+              <input data-help-feature="opm:opmrightpanelcontent:node-properties:6806c5726c" data-help-module="entropy"
                 id="opm-node-name-input"
                 data-testid="opm-node-name-input"
                 aria-label="Element Name"
@@ -203,7 +203,7 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
                 <label className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">
                   Element Type
                 </label>
-                <select
+                <select data-help-feature="opm:opmrightpanelcontent:node-properties:709d229510" data-help-module="entropy"
                   value={selectedNode.type}
                   onChange={(e) => onConvertNodeType(e.target.value as OpmNodeKind)}
                   className="bg-[#0e0e11] border border-white/10 rounded-lg px-2.5 py-1.5 outline-none focus:border-orange-500 text-white font-medium"
@@ -219,7 +219,7 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
               <label className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">
                 Physical Entity
               </label>
-              <input
+              <input data-help-feature="opm:opmrightpanelcontent:node-properties:ee898d888d" data-help-module="entropy"
                 type="checkbox"
                 checked={selectedNode.data.physical}
                 onChange={(e) => onUpdateNodeProp('physical', e.target.checked)}
@@ -274,7 +274,7 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
                 <div className="space-y-3 pt-2 border-t border-white/10">
                   <div className="flex items-center gap-4">
                     <label className="flex items-center gap-1.5 cursor-pointer text-xs text-gray-200">
-                      <input
+                      <input data-help-feature="opm:opmrightpanelcontent:states:40e0e865d8" data-help-module="entropy"
                         data-testid="state-initial-checkbox"
                         aria-label="Initial state"
                         data-opm-path="stateExecution.initial"
@@ -286,7 +286,7 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
                       <span className="font-semibold">Initial State</span>
                     </label>
                     <label className="flex items-center gap-1.5 cursor-pointer text-xs text-gray-200">
-                      <input
+                      <input data-help-feature="opm:opmrightpanelcontent:states:d46bfffdcb" data-help-module="entropy"
                         data-testid="state-terminal-checkbox"
                         aria-label="Terminal state"
                         data-opm-path="stateExecution.terminal"
@@ -304,7 +304,7 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
                       <label className="text-[10px] text-gray-400 font-bold block mb-0.5" htmlFor="state-timeout">
                         Timeout (ms)
                       </label>
-                      <input
+                      <input data-help-feature="opm:opmrightpanelcontent:states:32059ab5f5" data-help-module="entropy"
                         id="state-timeout"
                         data-testid="state-timeout-input"
                         data-opm-path="stateExecution.timeoutMs"
@@ -323,7 +323,7 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
                       <label className="text-[10px] text-gray-400 font-bold block mb-0.5" htmlFor="state-timeout-ev">
                         Timeout Event
                       </label>
-                      <select
+                      <select data-help-feature="opm:opmrightpanelcontent:states:f4278be795" data-help-module="entropy"
                         id="state-timeout-ev"
                         data-testid="state-timeout-event-select"
                         data-opm-path="stateExecution.timeoutEventId"
@@ -346,7 +346,7 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
                   <div className="pt-2 border-t border-white/10">
                     <div className="flex items-center justify-between mb-1.5">
                       <span className="text-[10px] font-bold uppercase text-amber-400">Entry Actions</span>
-                      <button
+                      <button data-help-feature="opm:opmrightpanelcontent:states:11351ac8dc" data-help-module="entropy"
                         data-testid="add-entry-assignment-btn"
                         aria-label="Add entry assignment"
                         onClick={handleAddEntry}
@@ -367,7 +367,7 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
                   <div className="pt-2 border-t border-white/10">
                     <div className="flex items-center justify-between mb-1.5">
                       <span className="text-[10px] font-bold uppercase text-amber-400">Exit Actions</span>
-                      <button
+                      <button data-help-feature="opm:opmrightpanelcontent:states:54bed5e726" data-help-module="entropy"
                         data-testid="add-exit-assignment-btn"
                         aria-label="Add exit assignment"
                         onClick={handleAddExit}
@@ -429,7 +429,7 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
                     <label htmlFor="proc-activation" className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">
                       Activation Mode
                     </label>
-                    <select
+                    <select data-help-feature="opm:opmrightpanelcontent:processes:68ccbbcb94" data-help-module="entropy"
                       id="proc-activation"
                       data-testid="process-activation-select"
                       data-opm-path="processExecution.activation"
@@ -448,7 +448,7 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
                       <label className="text-[10px] text-gray-400 font-bold block mb-0.5" htmlFor="proc-period">
                         Period (ms)
                       </label>
-                      <input
+                      <input data-help-feature="opm:opmrightpanelcontent:processes:85f51a93e9" data-help-module="entropy"
                         id="proc-period"
                         data-testid="process-period-input"
                         data-opm-path="processExecution.periodMs"
@@ -467,7 +467,7 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
                       <label className="text-[10px] text-gray-400 font-bold block mb-0.5" htmlFor="proc-priority">
                         Priority
                       </label>
-                      <input
+                      <input data-help-feature="opm:opmrightpanelcontent:processes:dd77793b21" data-help-module="entropy"
                         id="proc-priority"
                         data-testid="process-priority-input"
                         data-opm-path="processExecution.priority"
@@ -483,7 +483,7 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
                     <label className="text-[10px] text-gray-400 font-bold block mb-0.5" htmlFor="proc-guard">
                       Guard Expression
                     </label>
-                    <input
+                    <input data-help-feature="opm:opmrightpanelcontent:processes:8ded53cebb" data-help-module="entropy"
                       id="proc-guard"
                       data-testid="guard-expr-input"
                       data-opm-path="processExecution.guard"
@@ -499,7 +499,7 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
                       <span className="text-[10px] font-bold uppercase text-sky-400">
                         Action Assignments
                       </span>
-                      <button
+                      <button data-help-feature="opm:opmrightpanelcontent:processes:79978cc9fe" data-help-module="entropy"
                         data-testid="add-assignment-btn"
                         aria-label="Add assignment"
                         onClick={handleAddAssignment}
@@ -523,7 +523,7 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
           {/* Collapsible States Section (for Objects) */}
           {selectedNode.data.type === 'object' && (
             <div className="border border-white/5 rounded-lg bg-[#111115] overflow-hidden">
-              <button
+              <button data-help-feature="opm:opmrightpanelcontent:states:90462d3fe3" data-help-module="entropy"
                 type="button"
                 onClick={() => setStatesExpanded(!statesExpanded)}
                 className="w-full flex items-center justify-between px-2.5 py-2 bg-white/[0.02] hover:bg-white/[0.05] transition-colors"
@@ -567,7 +567,7 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
                           )}
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
-                          <button
+                          <button data-help-feature="opm:opmrightpanelcontent:states:d8854d70e8" data-help-module="entropy"
                             onClick={() => onManualActivateState(st.id, selectedNode.id)}
                             className={`text-[8.5px] px-2 py-0.5 rounded font-bold uppercase transition-colors ${
                               st.isActive
@@ -577,7 +577,7 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
                           >
                             {st.isActive ? 'Active' : 'Set'}
                           </button>
-                          <button
+                          <button data-help-feature="opm:opmrightpanelcontent:states:075840310b" data-help-module="entropy"
                             onClick={() => onDeleteState(st.id, selectedNode.id)}
                             className="text-gray-500 hover:text-red-400 p-1 rounded transition-colors"
                             title="Delete State"
@@ -591,7 +591,7 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
 
                   {/* Quick Add State */}
                   <div className="flex gap-1.5 pt-1">
-                    <input
+                    <input data-help-feature="opm:opmrightpanelcontent:states:08da47b48b" data-help-module="entropy"
                       placeholder="New state name..."
                       id="new-state-name-input"
                       className="bg-[#0a0a0d] border border-white/10 rounded px-2 py-1 outline-none flex-1 text-xs text-white focus:border-orange-500"
@@ -602,7 +602,7 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
                         }
                       }}
                     />
-                    <button
+                    <button data-help-feature="opm:opmrightpanelcontent:states:0f86e8f132" data-help-module="entropy"
                       onClick={() => {
                         const inputEl = document.getElementById('new-state-name-input') as HTMLInputElement;
                         if (inputEl && inputEl.value.trim()) {
@@ -666,7 +666,7 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
 
             return (
               <div className="border border-white/5 rounded-lg bg-[#111115] overflow-hidden">
-                <button
+                <button data-help-feature="opm:opmrightpanelcontent:attributes:b49e6a00ab" data-help-module="entropy"
                   type="button"
                   onClick={() => setAttributesExpanded(!attributesExpanded)}
                   className="w-full flex items-center justify-between px-2.5 py-2 bg-white/[0.02] hover:bg-white/[0.05] transition-colors"
@@ -676,7 +676,7 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
                     <span>Variables & Attributes ({totalCount})</span>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <button
+                    <button data-help-feature="opm:opmrightpanelcontent:attributes:aaeb379ff0" data-help-module="entropy"
                       type="button"
                       data-testid="add-attr-btn"
                       aria-label="Add attribute"
@@ -712,7 +712,7 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
                             className="p-2 bg-black/40 border border-white/10 rounded-lg flex flex-col gap-1.5"
                           >
                             <div className="flex items-center justify-between gap-1">
-                              <input
+                              <input data-help-feature="opm:opmrightpanelcontent:attributes:2841abe0ac" data-help-module="entropy"
                                 data-testid="attr-name-input"
                                 aria-label={`Attribute ${idx + 1} display name`}
                                 data-opm-path={`objectExecution.attributes[${idx}].displayName`}
@@ -726,7 +726,7 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
                                 placeholder="Attribute name"
                                 className="bg-[#0e0e11] border border-white/10 rounded px-1.5 py-0.5 text-xs text-white font-mono flex-1 focus:border-emerald-500 focus:outline-none"
                               />
-                              <select
+                              <select data-help-feature="opm:opmrightpanelcontent:attributes:1f011dac80" data-help-module="entropy"
                                 data-testid="attr-type-select"
                                 aria-label={`Attribute ${idx + 1} type`}
                                 data-opm-path={`objectExecution.attributes[${idx}].type`}
@@ -758,7 +758,7 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
                                   </option>
                                 ))}
                               </select>
-                              <button
+                              <button data-help-feature="opm:opmrightpanelcontent:attributes:c6dca773e7" data-help-module="entropy"
                                 data-testid="attr-delete-btn"
                                 aria-label={`Delete attribute ${idx + 1}`}
                                 onClick={() => handleDeleteTypedAttr(idx)}
@@ -798,7 +798,7 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
                       </div>
 
                       <div className="flex gap-1.5 pt-1">
-                        <input
+                        <input data-help-feature="opm:opmrightpanelcontent:attributes:9a6e1c1066" data-help-module="entropy"
                           placeholder="Key"
                           id="new-attr-key"
                           className="bg-[#0a0a0d] border border-white/10 rounded px-2 py-1 outline-none w-1/2 text-xs text-white"
@@ -813,7 +813,7 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
                             }
                           }}
                         />
-                        <input
+                        <input data-help-feature="opm:opmrightpanelcontent:attributes:cec45d1dc2" data-help-module="entropy"
                           placeholder="Val"
                           id="new-attr-val"
                           className="bg-[#0a0a0d] border border-white/10 rounded px-2 py-1 outline-none w-1/2 text-xs text-white"
@@ -829,7 +829,7 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
           {/* Collapsible Ports Manager Section */}
           {(selectedNode.data.type === 'object' || selectedNode.data.type === 'process') && (
             <div className="border border-white/5 rounded-lg bg-[#111115] overflow-hidden">
-              <button
+              <button data-help-feature="opm:opmrightpanelcontent:ports:f23b95c309" data-help-module="entropy"
                 type="button"
                 onClick={() => setPortsExpanded(!portsExpanded)}
                 className="w-full flex items-center justify-between px-2.5 py-2 bg-white/[0.02] hover:bg-white/[0.05] transition-colors"
@@ -862,7 +862,7 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
                             <span className="text-[7.5px] px-1 bg-white/5 text-gray-400 rounded font-mono">
                               {port.type}
                             </span>
-                            <button
+                            <button data-help-feature="opm:opmrightpanelcontent:ports:9983a533cb" data-help-module="entropy"
                               onClick={() => onRemovePort(port.id, 'input')}
                               className="text-gray-500 hover:text-red-400 transition-colors"
                               title="Remove Port"
@@ -890,7 +890,7 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
                             <span className="text-[7.5px] px-1 bg-white/5 text-gray-400 rounded font-mono">
                               {port.type}
                             </span>
-                            <button
+                            <button data-help-feature="opm:opmrightpanelcontent:ports:c13f67f526" data-help-module="entropy"
                               onClick={() => onRemovePort(port.id, 'output')}
                               className="text-gray-500 hover:text-red-400 transition-colors"
                               title="Remove Port"
@@ -909,13 +909,13 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
                       Add Custom Port
                     </span>
                     <div className="flex gap-1.5">
-                      <input
+                      <input data-help-feature="opm:opmrightpanelcontent:ports:863b1aa77c" data-help-module="entropy"
                         placeholder="Port Label"
                         value={newPortName}
                         onChange={(e) => setNewPortName(e.target.value)}
                         className="bg-[#0a0a0d] border border-white/10 rounded px-2 py-1 outline-none text-[10px] flex-1 text-white"
                       />
-                      <select
+                      <select data-help-feature="opm:opmrightpanelcontent:ports:6031b80a99" data-help-module="entropy"
                         value={newPortDir}
                         onChange={(e: any) => setNewPortDir(e.target.value)}
                         className="bg-[#0a0a0d] border border-white/10 rounded px-1.5 text-[10px] text-gray-300 outline-none"
@@ -926,7 +926,7 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
                     </div>
 
                     <div className="flex gap-1.5">
-                      <select
+                      <select data-help-feature="opm:opmrightpanelcontent:ports:6ed5b148ce" data-help-module="entropy"
                         value={newPortPos}
                         onChange={(e: any) => setNewPortPos(e.target.value)}
                         className="bg-[#0a0a0d] border border-white/10 rounded px-1.5 py-1 text-[9.5px] text-gray-300 outline-none w-1/2"
@@ -937,7 +937,7 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
                         <option value="bottom">Bottom</option>
                       </select>
 
-                      <select
+                      <select data-help-feature="opm:opmrightpanelcontent:ports:f81be9b1ce" data-help-module="entropy"
                         value={newPortType}
                         onChange={(e: any) => setNewPortType(e.target.value)}
                         className="bg-[#0a0a0d] border border-white/10 rounded px-1.5 py-1 text-[9.5px] text-gray-300 outline-none w-1/2"
@@ -953,7 +953,7 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
                       </select>
                     </div>
 
-                    <button
+                    <button data-help-feature="opm:opmrightpanelcontent:ports:cd6ab25210" data-help-module="entropy"
                       onClick={() => {
                         if (newPortName.trim()) {
                           onAddPort(newPortName.trim(), newPortDir, newPortPos, newPortType);
@@ -973,7 +973,7 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
           {/* Inspector Actions */}
           <div className="pt-2 border-t border-white/10 flex flex-col gap-1.5">
             {selectedNode.data.type !== 'state' && (
-              <button
+              <button data-help-feature="opm:opmrightpanelcontent:layout-panels:d84742ed0d" data-help-module="entropy"
                 onClick={() => onZoomInNode(selectedNode.id)}
                 className="py-1.5 bg-sky-950/60 text-sky-300 border border-sky-800/80 hover:bg-sky-900/60 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1.5"
               >
@@ -1004,14 +1004,14 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
                   )}
                 </ul>
                 <div className="flex gap-2 pt-1">
-                  <button
+                  <button data-help-feature="opm:opmrightpanelcontent:layout-panels:6764a3aad2" data-help-module="entropy"
                     data-testid="cancel-delete-btn"
                     onClick={() => setConfirmDelete(false)}
                     className="flex-1 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded text-xs font-semibold transition-colors"
                   >
                     Cancel
                   </button>
-                  <button
+                  <button data-help-feature="opm:opmrightpanelcontent:deletion:60f15d2e07" data-help-module="entropy"
                     data-testid="confirm-delete-btn"
                     onClick={() => {
                       setConfirmDelete(false);
@@ -1024,7 +1024,7 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
                 </div>
               </div>
             ) : (
-              <button
+              <button data-help-feature="opm:opmrightpanelcontent:deletion:5438991d85" data-help-module="entropy"
                 onClick={() => {
                   if (deleteImpact?.isHighImpact) {
                     setConfirmDelete(true);
@@ -1082,7 +1082,7 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
               <span className="text-xs uppercase font-extrabold tracking-wider text-sky-400">
                 Link Inspector
               </span>
-              <button
+              <button data-help-feature="opm:opmrightpanelcontent:node-properties:6874f32073" data-help-module="entropy"
                 onClick={onCloseInspector}
                 aria-label="Close Link Inspector"
                 data-testid="opm-close-edge-inspector"
@@ -1103,7 +1103,7 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
                 <label htmlFor="opm-convert-edge-type" className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">
                   Link Role
                 </label>
-                <select
+                <select data-help-feature="opm:opmrightpanelcontent:links:528cc86a77" data-help-module="entropy"
                   id="opm-convert-edge-type"
                   aria-label="Link Role"
                   value={(selectedEdge.data?.linkType ?? (selectedEdge.data?.type || 'effect')) as string}
@@ -1130,7 +1130,7 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
                 <label className="text-[10px] text-gray-400 font-bold block mb-0.5" htmlFor="link-event">
                   Event Trigger
                 </label>
-                <select
+                <select data-help-feature="opm:opmrightpanelcontent:link-execution:f9188bdd8f" data-help-module="entropy"
                   id="link-event"
                   data-testid="link-event-select"
                   data-opm-path="linkExecution.eventId"
@@ -1151,7 +1151,7 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
                 <label className="text-[10px] text-gray-400 font-bold block mb-0.5" htmlFor="link-guard">
                   Guard Expression
                 </label>
-                <input
+                <input data-help-feature="opm:opmrightpanelcontent:link-execution:105cb7af0c" data-help-module="entropy"
                   id="link-guard"
                   data-testid="guard-expr-input"
                   data-opm-path="linkExecution.guard"
@@ -1167,7 +1167,7 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
                   <label className="text-[10px] text-gray-400 font-bold block mb-0.5" htmlFor="link-prio">
                     Priority
                   </label>
-                  <input
+                  <input data-help-feature="opm:opmrightpanelcontent:link-execution:eaad8e229f" data-help-module="entropy"
                     id="link-prio"
                     data-testid="link-priority-input"
                     data-opm-path="linkExecution.priority"
@@ -1181,7 +1181,7 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
                   <label className="text-[10px] text-gray-400 font-bold block mb-0.5" htmlFor="link-delay">
                     Delay (ms)
                   </label>
-                  <input
+                  <input data-help-feature="opm:opmrightpanelcontent:link-execution:598d27c928" data-help-module="entropy"
                     id="link-delay"
                     data-testid="link-delay-input"
                     data-opm-path="linkExecution.delayMs"
@@ -1201,7 +1201,7 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
                   <label className="text-[10px] text-gray-400 font-bold block mb-0.5" htmlFor="link-trans-owner">
                     Owner Object ID
                   </label>
-                  <input
+                  <input data-help-feature="opm:opmrightpanelcontent:link-execution:df72b3eaf7" data-help-module="entropy"
                     id="link-trans-owner"
                     data-testid="link-transition-owner-input"
                     data-opm-path="linkExecution.transition.ownerObjectId"
@@ -1224,7 +1224,7 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
                     <label className="text-[10px] text-gray-400 font-bold block mb-0.5" htmlFor="link-trans-src">
                       Source State ID
                     </label>
-                    <input
+                    <input data-help-feature="opm:opmrightpanelcontent:link-execution:1f2e44165e" data-help-module="entropy"
                       id="link-trans-src"
                       data-testid="link-transition-source-input"
                       data-opm-path="linkExecution.transition.sourceStateId"
@@ -1246,7 +1246,7 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
                     <label className="text-[10px] text-gray-400 font-bold block mb-0.5" htmlFor="link-trans-tgt">
                       Target State ID
                     </label>
-                    <input
+                    <input data-help-feature="opm:opmrightpanelcontent:link-execution:2a845491d6" data-help-module="entropy"
                       id="link-trans-tgt"
                       data-testid="link-transition-target-input"
                       data-opm-path="linkExecution.transition.targetStateId"
@@ -1272,7 +1272,7 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
                   <span className="text-[10px] font-bold uppercase text-gray-400">
                     Action Assignments
                   </span>
-                  <button
+                  <button data-help-feature="opm:opmrightpanelcontent:link-execution:79978cc9fe" data-help-module="entropy"
                     data-testid="add-assignment-btn"
                     aria-label="Add assignment"
                     onClick={handleAddAssignment}
@@ -1299,7 +1299,7 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
       >
         {/* Tab Headers */}
         <div className="h-11 border-b border-white/10 flex shrink-0 bg-[#16161c]">
-          <button
+          <button data-help-feature="opm:opmrightpanelcontent:scope-trace:430b1bcea2" data-help-module="entropy"
             onClick={() => onRightTabChange('simControl')}
             className={`flex-1 flex items-center justify-center gap-1 text-[11px] font-bold uppercase tracking-wider transition-all border-b-2 ${
               rightTab === 'simControl'
@@ -1309,7 +1309,7 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
           >
             ⚡ Sim
           </button>
-          <button
+          <button data-help-feature="opm:opmrightpanelcontent:scope-trace:90cd6ccad8" data-help-module="entropy"
             data-testid="opm-scope-tab-btn"
             onClick={() => onRightTabChange('scope')}
             className={`flex-1 flex items-center justify-center gap-1 text-[11px] font-bold uppercase tracking-wider transition-all border-b-2 ${
@@ -1320,7 +1320,7 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
           >
             📈 Scope
           </button>
-          <button
+          <button data-help-feature="opm:opmrightpanelcontent:scope-trace:b700cdfbfb" data-help-module="entropy"
             onClick={() => onRightTabChange('opl')}
             className={`flex-1 flex items-center justify-center gap-1 text-[11px] font-bold uppercase tracking-wider transition-all border-b-2 ${
               rightTab === 'opl'
@@ -1330,7 +1330,7 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
           >
             📝 OPL
           </button>
-          <button
+          <button data-help-feature="opm:opmrightpanelcontent:scope-trace:20039af896" data-help-module="entropy"
             onClick={() => onRightTabChange('smartShow')}
             className={`flex-1 flex items-center justify-center gap-1 text-[11px] font-bold uppercase tracking-wider transition-all border-b-2 ${
               rightTab === 'smartShow'
@@ -1340,7 +1340,7 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
           >
             🌐 Show
           </button>
-          <button
+          <button data-help-feature="opm:opmrightpanelcontent:scope-trace:1e53c4c2bf" data-help-module="entropy"
             onClick={() => onRightTabChange('opmCodegen')}
             className={`flex-1 flex items-center justify-center gap-1 text-[11px] font-bold uppercase tracking-wider transition-all border-b-2 ${
               rightTab === 'opmCodegen'
@@ -1385,7 +1385,7 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
                 </div>
 
                 <div className="flex gap-1.5 bg-black/40 p-1.5 rounded-lg border border-white/5">
-                  <button
+                  <button data-help-feature="opm:opmrightpanelcontent:simulation:21611cbf4e" data-help-module="entropy"
                     data-testid="opm-sim-toggle"
                     aria-label={simRunning ? "Pause Simulation" : "Start Simulation"}
                     onClick={onToggleSimulation}
@@ -1398,7 +1398,7 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
                   >
                     {simRunning ? <Pause size={13} /> : <Play size={13} />}
                   </button>
-                  <button
+                  <button data-help-feature="opm:opmrightpanelcontent:simulation:339a163d7e" data-help-module="entropy"
                     data-testid="opm-sim-step"
                     onClick={onRunSimTick}
                     className="p-2 text-sky-400 hover:bg-sky-500/20 rounded-md transition-all border border-transparent hover:border-sky-500/30"
@@ -1406,7 +1406,7 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
                   >
                     <ArrowRight size={13} />
                   </button>
-                  <button
+                  <button data-help-feature="opm:opmrightpanelcontent:simulation:0b510b0df2" data-help-module="entropy"
                     data-testid="opm-sim-reset"
                     onClick={onResetSimulation}
                     className="p-2 text-amber-400 hover:bg-amber-500/20 rounded-md transition-all border border-transparent hover:border-amber-500/30"
@@ -1431,7 +1431,7 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
                     <label className="text-[9.5px] text-gray-400 uppercase font-semibold">
                       Tick Resolution
                     </label>
-                    <select
+                    <select data-help-feature="opm:opmrightpanelcontent:simulation:45abd8a41f" data-help-module="entropy"
                       value={activeOpmConfig.tickMs}
                       onChange={(e) =>
                         onOpmConfigChange((prev: any) => ({
@@ -1452,7 +1452,7 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
                     <label className="text-[9.5px] text-gray-400 uppercase font-semibold">
                       Execution Mode
                     </label>
-                    <select
+                    <select data-help-feature="opm:opmrightpanelcontent:simulation:6143e650bd" data-help-module="entropy"
                       value={activeOpmConfig.executionMode}
                       onChange={(e) =>
                         onOpmConfigChange((prev: any) => ({

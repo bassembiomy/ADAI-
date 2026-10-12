@@ -82,10 +82,36 @@ describe('buildUnifiedModelProjection', () => {
     ]);
     expect(projection.nodes['project:pillar:structural'].childNodeIds).toContain('sysml:element:block-1');
     expect(projection.nodes['project:pillar:behavior'].childNodeIds).toContain('sm:machine:main');
-    expect(projection.nodes['project:pillar:parametric'].childNodeIds).toContain('xbridges:model:global-xb');
+    expect(projection.nodes['project:pillar:parametric'].childNodeIds).toEqual([
+      'project:folder:xbridges', 'project:folder:vlab',
+    ]);
+    expect(projection.nodes['project:folder:xbridges'].label).toBe('X-Bridges');
+    expect(projection.nodes['project:folder:vlab'].label).toBe('V-Lab');
+    expect(projection.nodes['project:folder:xbridges'].childNodeIds).toContain('xbridges:model:global-xb');
     expect(projection.nodes['sm:state:run'].childNodeIds).toContain('vlab:model:state-vlab');
     expect(projection.nodes['project:pillar:parametric'].childNodeIds).not.toContain('vlab:model:state-vlab');
     expect(projection.nodes['project:pillar:requirements'].childNodeIds).toContain('sysml:element:req-1');
+  });
+
+  it('groups external models in Parametric folders in the lazy store projection', () => {
+    const repository = createEmptyRepository();
+    const projection = buildUnifiedModelProjection({
+      sysml: repository,
+      sysmlStore: fromRepository(repository, {}, {}),
+      stateMachine: emptyStateMachine(),
+      externalModels: [
+        { id: 'xb', name: 'Controller', domain: 'xbridges', diagramId: 'xb-diagram' },
+        { id: 'vl', name: 'Plant', domain: 'vlab', diagramId: 'vl-diagram' },
+      ],
+      expandedNodeIds: new Set(['project:model', 'project:pillar:parametric', 'project:folder:xbridges', 'project:folder:vlab']),
+      revision: 1,
+    });
+    expect(projection.nodes['project:pillar:parametric'].childNodeIds).toEqual([
+      'project:folder:xbridges', 'project:folder:vlab',
+    ]);
+    expect(projection.nodes['project:folder:xbridges'].childNodeIds).toEqual(['xbridges:model:xb']);
+    expect(projection.nodes['project:folder:vlab'].childNodeIds).toEqual(['vlab:model:vl']);
+    expect(projection.nodes['vlab:model:vl'].diagramId).toBe('vl-diagram');
   });
 
   it('nests requirements according to requirement containment relationships', () => {
@@ -689,4 +715,3 @@ describe('buildUnifiedModelProjection', () => {
     }
   });
 });
-

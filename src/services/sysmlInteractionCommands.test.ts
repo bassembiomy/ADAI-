@@ -88,6 +88,23 @@ const addMessage = (ctx: Ctx, input: Omit<Parameters<typeof buildAddInteractionM
 
 const orderOf = (ctx: Ctx) => orderedMessages(interaction(ctx)).map(message => message.id);
 
+describe('creation lifecycle command checks', () => {
+  it('refuses duplicate creation and moving traffic before creation without changing the repository', () => {
+    const ctx = setup();
+    withLifelines(ctx);
+    addMessage(ctx, { sort: 'createMessage', sourceLifelineId: 'a', targetLifelineId: 'b', id: 'create' });
+    addMessage(ctx, { sort: 'asynchCall', sourceLifelineId: 'b', targetLifelineId: 'a', id: 'send' });
+    const before = JSON.stringify(ctx.state.repository);
+    expect(refusal(buildAddInteractionMessageCommand(ctx.state.repository, {
+      interactionId: INTERACTION, sort: 'createMessage', sourceLifelineId: 'c', targetLifelineId: 'b', id: 'duplicate',
+    }))).toBe('MULTIPLE_CREATE_MESSAGES');
+    expect(refusal(buildMoveInteractionMessageCommand(ctx.state.repository, {
+      interactionId: INTERACTION, messageId: 'send', toIndex: 0,
+    }))).toBe('MESSAGE_BEFORE_CREATE');
+    expect(JSON.stringify(ctx.state.repository)).toBe(before);
+  });
+});
+
 describe('Interaction as a definition kind', () => {
   it('is created under the Model, a Package and a Block, and refused under a Requirement or an Interaction', () => {
     const ctx = setup(repo => {
@@ -414,8 +431,8 @@ describe('deletion and persistence', () => {
     const ctx = setup();
     withLifelines(ctx);
     addMessage(ctx, { sort: 'synchCall', sourceLifelineId: 'a', targetLifelineId: 'b', id: 'call', signatureId: 'start()', arguments: 'fast', withReply: true, replyId: 'rep' });
-    addMessage(ctx, { sort: 'asynchSignal', sourceLifelineId: 'a', targetLifelineId: 'c', id: 'sig', signatureId: 'Ignite' });
     addMessage(ctx, { sort: 'createMessage', sourceLifelineId: 'a', targetLifelineId: 'c', id: 'mk' });
+    addMessage(ctx, { sort: 'asynchSignal', sourceLifelineId: 'a', targetLifelineId: 'c', id: 'sig', signatureId: 'Ignite' });
     apply(ctx, buildAddFragmentCommand(ctx.state.repository, { interactionId: INTERACTION, operator: 'alt', messageIds: ['call', 'rep'], guard: 'ok', id: 'f' }));
     expect(run(ctx, buildCreateAllocationCommand(ctx.state.repository, 'call', 'Vehicle')).committed).toBe(true);
 

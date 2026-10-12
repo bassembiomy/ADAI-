@@ -31,7 +31,7 @@ assert.strictEqual(detectSysmlRepositoryFormat({ version: '1.0' }), null);
 assert.strictEqual(detectSysmlRepositoryFormat({ sysmlRepository: 'not json' }), null);
 assert.strictEqual(detectSysmlRepositoryFormat(null), null);
 
-assert.strictEqual(path.basename(upgradeBackupPathFor('C:\\work\\Pump.adia')), 'Pump.v3-backup.json');
+assert.strictEqual(path.basename(upgradeBackupPathFor('C:\\work\\Pump.adia')), 'Pump.v3-backup.adia');
 
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'adia-upgrade-backup-'));
 try {
@@ -40,11 +40,11 @@ try {
   fs.writeFileSync(target, original, 'utf8');
   const data = JSON.parse(original);
 
-  // The original bytes are kept next to the project as <name>.v3-backup.json.
+  // The original bytes are kept next to the project as <name>.v3-backup.adia.
   const first = ensureUpgradeBackup(target, data);
   assert.strictEqual(first.formatVersion, 3);
   assert.strictEqual(first.backupCreated, true);
-  assert.strictEqual(path.basename(first.backupPath), 'Pump.v3-backup.json');
+  assert.strictEqual(path.basename(first.backupPath), 'Pump.v3-backup.adia');
   assert.strictEqual(fs.readFileSync(first.backupPath, 'utf8'), original);
 
   // The first backup is the original: a later call never overwrites it.
@@ -102,7 +102,7 @@ try {
     }).openFromDialog();
     assert.strictEqual(openedCurrent.status, 'opened');
     assert.strictEqual(openedCurrent.upgrade, undefined);
-    assert.strictEqual(fs.existsSync(path.join(tempDir, 'Current.v3-backup.json')), false);
+    assert.strictEqual(fs.existsSync(path.join(tempDir, 'Current.v3-backup.adia')), false);
 
     // Saving over an old file keeps its original first, and the save carries on.
     fs.writeFileSync(target, original, 'utf8');

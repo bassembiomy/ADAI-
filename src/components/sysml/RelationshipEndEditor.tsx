@@ -113,7 +113,7 @@ function DraftTextInput({ value, onCommit, ...rest }: {
     onCommit(draft);
   };
   return (
-    <input
+    <input data-help-feature="ui:sysml/RelationshipEndEditor:87c283f6d992" data-help-source="src/components/sysml/RelationshipEndEditor.tsx"
       {...rest}
       value={draft}
       onChange={e => { committedDraft.current = null; setDraft(e.target.value); }}
@@ -229,7 +229,7 @@ export function RelationshipEndEditor({
       <div>
         <label className="block text-gray-300 font-semibold mb-1">
           Relationship Kind
-          <select
+          <select data-help-feature="ui:sysml/RelationshipEndEditor:e757f97288f8" data-help-source="src/components/sysml/RelationshipEndEditor.tsx"
             aria-label="Relationship kind"
             value={relationship.kind}
             onChange={e => update({ kind: e.target.value as any })}
@@ -293,7 +293,7 @@ export function RelationshipEndEditor({
         <div className="grid grid-cols-2 gap-2">
           <label>
             Role name {isContainment && <span className="text-gray-400 font-normal">(Container (parent))</span>}
-            <DraftTextInput
+            <DraftTextInput data-help-feature="live:components/sysml/RelationshipEndEditor:7671d33c8134"
               aria-label="Source role name"
               value={relationship.sourceRole || ''}
               onCommit={text => update({ sourceRole: text.trim() || undefined })}
@@ -303,7 +303,7 @@ export function RelationshipEndEditor({
           </label>
           <label>
             Multiplicity
-            <DraftTextInput
+            <DraftTextInput data-help-feature="live:components/sysml/RelationshipEndEditor:5ee497dad944"
               aria-label="Source multiplicity"
               value={formatMult(relationship.sourceMultiplicity)}
               onCommit={text => update({ sourceMultiplicity: parseMult(text, relationship.sourceMultiplicity) })}
@@ -314,7 +314,7 @@ export function RelationshipEndEditor({
         </div>
         <div className="grid grid-cols-2 gap-2 pt-1">
           <label className="flex items-center gap-1">
-            <input
+            <input data-help-feature="ui:sysml/RelationshipEndEditor:44860e0bf4f2" data-help-source="src/components/sysml/RelationshipEndEditor.tsx"
               type="checkbox"
               checked={relationship.sourceNavigable !== false}
               onChange={e => update({ sourceNavigable: e.target.checked })}
@@ -323,7 +323,7 @@ export function RelationshipEndEditor({
           </label>
           <label>
             Aggregation
-            <select
+            <select data-help-feature="ui:sysml/RelationshipEndEditor:79f180ce514f" data-help-source="src/components/sysml/RelationshipEndEditor.tsx"
               value={relationship.sourceAggregation || (relationship.kind === 'composition' ? 'composite' : relationship.kind === 'sharedAggregation' ? 'shared' : 'none')}
               onChange={e => update({ sourceAggregation: e.target.value as any })}
               className="w-full rounded border border-gray-700 bg-[var(--surface-sunken)] px-2 py-1"
@@ -344,7 +344,7 @@ export function RelationshipEndEditor({
         <div className="grid grid-cols-2 gap-2">
           <label>
             Role name {isContainment && <span className="text-gray-400 font-normal">(Nested (child))</span>}
-            <DraftTextInput
+            <DraftTextInput data-help-feature="live:components/sysml/RelationshipEndEditor:77a8376c621e"
               aria-label="Target role name"
               value={relationship.targetRole || ''}
               onCommit={text => update({ targetRole: text.trim() || undefined })}
@@ -354,7 +354,7 @@ export function RelationshipEndEditor({
           </label>
           <label>
             Multiplicity
-            <DraftTextInput
+            <DraftTextInput data-help-feature="live:components/sysml/RelationshipEndEditor:522f5056d593"
               aria-label="Target multiplicity"
               value={formatMult(relationship.targetMultiplicity)}
               onCommit={text => update({ targetMultiplicity: parseMult(text, relationship.targetMultiplicity) })}
@@ -365,7 +365,7 @@ export function RelationshipEndEditor({
         </div>
         <div className="grid grid-cols-2 gap-2 pt-1">
           <label className="flex items-center gap-1">
-            <input
+            <input data-help-feature="ui:sysml/RelationshipEndEditor:642424def396" data-help-source="src/components/sysml/RelationshipEndEditor.tsx"
               type="checkbox"
               checked={relationship.targetNavigable !== false}
               onChange={e => update({ targetNavigable: e.target.checked })}
@@ -374,7 +374,7 @@ export function RelationshipEndEditor({
           </label>
           <label>
             Aggregation
-            <select
+            <select data-help-feature="ui:sysml/RelationshipEndEditor:17ffa3580eda" data-help-source="src/components/sysml/RelationshipEndEditor.tsx"
               value={relationship.targetAggregation || 'none'}
               onChange={e => update({ targetAggregation: e.target.value as any })}
               className="w-full rounded border border-gray-700 bg-[var(--surface-sunken)] px-2 py-1"

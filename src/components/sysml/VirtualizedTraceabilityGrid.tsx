@@ -183,7 +183,7 @@ export function VirtualizedTraceabilityGrid({
       </div>
 
       {/* Virtual Scroll Area */}
-      <div
+      <div data-help-feature="live:components/sysml/VirtualizedTraceabilityGrid:9f410c2dcf23"
         ref={containerRef}
         onScroll={handleScroll}
         className="flex-1 overflow-y-auto overflow-x-hidden relative focus:outline-none"
@@ -209,7 +209,7 @@ export function VirtualizedTraceabilityGrid({
               const changeInfo = row.changeKind ? changeBadges[row.changeKind] : undefined;
 
               return (
-                <div
+                <div data-help-feature="ui:sysml/VirtualizedTraceabilityGrid:76f07b051462" data-help-source="src/components/sysml/VirtualizedTraceabilityGrid.tsx"
                   key={row.requirement.id}
                   ref={el => { rowRefs.current[absoluteIdx] = el; }}
                   role="row"
@@ -255,7 +255,7 @@ export function VirtualizedTraceabilityGrid({
                         <div className="flex items-center gap-1 truncate">
                           <span className="text-[9px] text-neutral-500 uppercase shrink-0">Contained:</span>
                           {row.containmentParents.map(p => (
-                            <button
+                            <button data-help-feature="ui:sysml/VirtualizedTraceabilityGrid:6441f08f4a3f" data-help-source="src/components/sysml/VirtualizedTraceabilityGrid.tsx"
                               key={p.id}
                               type="button"
                               onClick={(e) => { e.stopPropagation(); onNavigate?.(p.id); }}
@@ -271,7 +271,7 @@ export function VirtualizedTraceabilityGrid({
                         <div className="flex items-center gap-1 truncate">
                           <span className="text-[9px] text-neutral-500 uppercase shrink-0">P:</span>
                           {row.parents.map(p => (
-                            <button
+                            <button data-help-feature="ui:sysml/VirtualizedTraceabilityGrid:6441f08f4a3f" data-help-source="src/components/sysml/VirtualizedTraceabilityGrid.tsx"
                               key={p.id}
                               type="button"
                               onClick={(e) => { e.stopPropagation(); onNavigate?.(p.id); }}
@@ -290,7 +290,7 @@ export function VirtualizedTraceabilityGrid({
                         <div className="flex items-center gap-1 truncate">
                           <span className="text-[9px] text-neutral-500 uppercase shrink-0">Contains:</span>
                           {row.containmentChildren.map(c => (
-                            <button
+                            <button data-help-feature="ui:sysml/VirtualizedTraceabilityGrid:3367894a7935" data-help-source="src/components/sysml/VirtualizedTraceabilityGrid.tsx"
                               key={c.id}
                               type="button"
                               onClick={(e) => { e.stopPropagation(); onNavigate?.(c.id); }}
@@ -306,7 +306,7 @@ export function VirtualizedTraceabilityGrid({
                         <div className="flex items-center gap-1 truncate">
                           <span className="text-[9px] text-neutral-500 uppercase shrink-0">C:</span>
                           {row.children.map(c => (
-                            <button
+                            <button data-help-feature="ui:sysml/VirtualizedTraceabilityGrid:3367894a7935" data-help-source="src/components/sysml/VirtualizedTraceabilityGrid.tsx"
                               key={c.id}
                               type="button"
                               onClick={(e) => { e.stopPropagation(); onNavigate?.(c.id); }}
@@ -325,7 +325,7 @@ export function VirtualizedTraceabilityGrid({
                         <div className="flex items-center gap-1 truncate">
                           <span className="text-[9px] text-neutral-500 uppercase shrink-0">Derived:</span>
                           {row.derivedFrom.map(d => (
-                            <button
+                            <button data-help-feature="ui:sysml/VirtualizedTraceabilityGrid:880ab36c5c69" data-help-source="src/components/sysml/VirtualizedTraceabilityGrid.tsx"
                               key={d.id}
                               type="button"
                               onClick={(e) => { e.stopPropagation(); onNavigate?.(d.id); }}
@@ -344,7 +344,7 @@ export function VirtualizedTraceabilityGrid({
                         <div className="flex items-center gap-1 truncate">
                           <span className="text-[9px] text-neutral-500 uppercase shrink-0">DerivedReq:</span>
                           {row.derivedRequirements.map(d => (
-                            <button
+                            <button data-help-feature="ui:sysml/VirtualizedTraceabilityGrid:880ab36c5c69" data-help-source="src/components/sysml/VirtualizedTraceabilityGrid.tsx"
                               key={d.id}
                               type="button"
                               onClick={(e) => { e.stopPropagation(); onNavigate?.(d.id); }}
@@ -363,7 +363,7 @@ export function VirtualizedTraceabilityGrid({
                         <div className="flex items-center gap-1 truncate">
                           <span className="text-[9px] text-neutral-500 uppercase shrink-0">Copied:</span>
                           {row.copiedFrom.map(cp => (
-                            <button
+                            <button data-help-feature="ui:sysml/VirtualizedTraceabilityGrid:b16838464ec3" data-help-source="src/components/sysml/VirtualizedTraceabilityGrid.tsx"
                               key={cp.id}
                               type="button"
                               onClick={(e) => { e.stopPropagation(); onNavigate?.(cp.id); }}
@@ -382,7 +382,7 @@ export function VirtualizedTraceabilityGrid({
                         <div className="flex items-center gap-1 truncate">
                           <span className="text-[9px] text-neutral-500 uppercase shrink-0">Copies:</span>
                           {row.copiedRequirements.map(cp => (
-                            <button
+                            <button data-help-feature="ui:sysml/VirtualizedTraceabilityGrid:b16838464ec3" data-help-source="src/components/sysml/VirtualizedTraceabilityGrid.tsx"
                               key={cp.id}
                               type="button"
                               onClick={(e) => { e.stopPropagation(); onNavigate?.(cp.id); }}
@@ -401,7 +401,7 @@ export function VirtualizedTraceabilityGrid({
                         <div className="flex items-center gap-1 truncate">
                           <span className="text-[9px] text-neutral-500 uppercase shrink-0">Refined:</span>
                           {row.refinedBy.map(rf => (
-                            <button
+                            <button data-help-feature="ui:sysml/VirtualizedTraceabilityGrid:c40929791e7e" data-help-source="src/components/sysml/VirtualizedTraceabilityGrid.tsx"
                               key={rf.id}
                               type="button"
                               onClick={(e) => { e.stopPropagation(); onNavigate?.(rf.id); }}
@@ -420,7 +420,7 @@ export function VirtualizedTraceabilityGrid({
                         <div className="flex items-center gap-1 truncate">
                           <span className="text-[9px] text-neutral-500 uppercase shrink-0">Traced:</span>
                           {row.tracedElements.map(tr => (
-                            <button
+                            <button data-help-feature="ui:sysml/VirtualizedTraceabilityGrid:5314802ebbb0" data-help-source="src/components/sysml/VirtualizedTraceabilityGrid.tsx"
                               key={tr.id}
                               type="button"
                               onClick={(e) => { e.stopPropagation(); onNavigate?.(tr.id); }}
@@ -494,7 +494,7 @@ export function VirtualizedTraceabilityGrid({
                     {row.satisfiedBy && row.satisfiedBy.length > 0 ? (
                       <div className="flex flex-wrap gap-1 truncate">
                         {row.satisfiedBy.map(cb => (
-                          <button
+                          <button data-help-feature="ui:sysml/VirtualizedTraceabilityGrid:7ebfd9c08959" data-help-source="src/components/sysml/VirtualizedTraceabilityGrid.tsx"
                             key={cb.id}
                             type="button"
                             onClick={e => { e.stopPropagation(); onNavigate?.(cb.id); }}
@@ -508,7 +508,7 @@ export function VirtualizedTraceabilityGrid({
                     ) : row.coveringBlocks && row.coveringBlocks.length > 0 ? (
                       <div className="flex flex-wrap gap-1 truncate">
                         {row.coveringBlocks.map(cb => (
-                          <button
+                          <button data-help-feature="ui:sysml/VirtualizedTraceabilityGrid:7ebfd9c08959" data-help-source="src/components/sysml/VirtualizedTraceabilityGrid.tsx"
                             key={cb.id}
                             type="button"
                             onClick={e => { e.stopPropagation(); onNavigate?.(cb.id); }}
@@ -521,7 +521,7 @@ export function VirtualizedTraceabilityGrid({
                       </div>
                     ) : row.blocks.length > 0 ? (
                       row.blocks.map(id => (
-                        <button
+                        <button data-help-feature="ui:sysml/VirtualizedTraceabilityGrid:330586d4cc6c" data-help-source="src/components/sysml/VirtualizedTraceabilityGrid.tsx"
                           key={id}
                           type="button"
                           onClick={e => { e.stopPropagation(); onNavigate?.(id); }}
@@ -561,7 +561,7 @@ export function VirtualizedTraceabilityGrid({
                   >
                     {row.verifiedBy && row.verifiedBy.length > 0 ? (
                       row.verifiedBy.map(v => (
-                        <button
+                        <button data-help-feature="ui:sysml/VirtualizedTraceabilityGrid:ca7a2fbb6655" data-help-source="src/components/sysml/VirtualizedTraceabilityGrid.tsx"
                           key={v.id}
                           type="button"
                           onClick={e => { e.stopPropagation(); onNavigate?.(v.id); }}
@@ -573,7 +573,7 @@ export function VirtualizedTraceabilityGrid({
                       ))
                     ) : row.verificationCases.length > 0 ? (
                       row.verificationCases.map(vc => (
-                        <button
+                        <button data-help-feature="ui:sysml/VirtualizedTraceabilityGrid:cbe04bf06916" data-help-source="src/components/sysml/VirtualizedTraceabilityGrid.tsx"
                           key={vc}
                           type="button"
                           onClick={e => { e.stopPropagation(); onNavigate?.(vc); }}

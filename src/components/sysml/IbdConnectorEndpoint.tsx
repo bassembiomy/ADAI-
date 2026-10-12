@@ -118,7 +118,7 @@ export const IbdConnectorEndpoint: React.FC<IbdConnectorEndpointProps> = ({
   };
 
   return (
-    <g
+    <g data-help-feature="ui:sysml/IbdConnectorEndpoint:551095899f09" data-help-source="src/components/sysml/IbdConnectorEndpoint.tsx"
       data-testid="ibd-connector-endpoint"
       data-definition-id={definitionId}
       data-occurrence-id={ownerOccurrenceId ?? 'boundary'}

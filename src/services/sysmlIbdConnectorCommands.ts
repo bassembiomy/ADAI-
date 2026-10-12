@@ -31,6 +31,8 @@ export interface IbdEndpointSpec {
 
 export interface CreateIbdConnectorIntent {
   contextId: string;
+  /** Presentation identity; distinct from the connector's owning Block. */
+  diagramId?: string;
   source: IbdEndpointSpec;
   target: IbdEndpointSpec;
   kind?: ConnectorUsage['kind'];
@@ -88,6 +90,12 @@ export function buildCreatePathIbdConnectorCommand(
   repo: SysmlRepository,
   intent: CreateIbdConnectorIntent,
 ): CreateIbdConnectorCommandPlan {
+  if (intent.diagramId && intent.diagramId !== intent.contextId) {
+    const diagram = repo.diagrams[intent.diagramId];
+    if (diagram?.diagramKind !== 'ibd' || (diagram.contextElementId ?? diagram.ownerId) !== intent.contextId) {
+      return { ok: false, diagnostics: [{ code: 'INVALID_CONNECTOR_CONTEXT', severity: 'error', elementId: intent.diagramId, message: 'The connector must be presented in an IBD of its owning Block.' }] };
+    }
+  }
   const sourceSpec = toPathSpec(repo, intent.contextId, intent.source);
   if (!sourceSpec.ok) return { ok: false, diagnostics: sourceSpec.diagnostics };
   const targetSpec = toPathSpec(repo, intent.contextId, intent.target);
@@ -126,7 +134,7 @@ export function buildCreatePathIbdConnectorCommand(
   return {
     ok: true,
     connector: validation.connector,
-    command: { type: 'createAndPresent', diagramId: intent.contextId, element: validation.connector, presentation: {} },
+    command: { type: 'createAndPresent', diagramId: intent.diagramId ?? intent.contextId, element: validation.connector, presentation: {} },
     diagnostics: [],
   };
 }

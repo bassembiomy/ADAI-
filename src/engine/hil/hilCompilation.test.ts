@@ -47,7 +47,7 @@ function ensureDir(dir: string) {
   }
 }
 
-describe('HIL Driver Target Compilation Verification', () => {
+describe('HIL simulation-shim compilation checks', () => {
   const mockVariables: VariableDef[] = [
     { id: 'v1', name: 'v_gpio_in', type: 'bool', initialValue: 'false', currentValue: false, visibleInScope: true },
     { id: 'v2', name: 'v_gpio_out', type: 'bool', initialValue: 'false', currentValue: false, visibleInScope: true },

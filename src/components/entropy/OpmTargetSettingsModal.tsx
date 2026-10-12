@@ -58,7 +58,7 @@ export const OpmTargetSettingsModal: React.FC<OpmTargetSettingsModalProps> = ({
             <Cpu size={18} />
             <span>OPM Embedded C Target Settings</span>
           </div>
-          <button
+          <button data-help-feature="opm:opmtargetsettingsmodal:targets:030623f421" data-help-module="entropy"
             data-testid="close-settings-btn"
             onClick={onClose}
             className="text-gray-400 hover:text-white p-1"
@@ -72,7 +72,7 @@ export const OpmTargetSettingsModal: React.FC<OpmTargetSettingsModalProps> = ({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-[10px] text-gray-400 font-bold block mb-1">C Standard</label>
-              <select
+              <select data-help-feature="opm:opmtargetsettingsmodal:targets:b8d39703a5" data-help-module="entropy"
                 data-testid="target-c-standard-select"
                 value={form.cStandard}
                 onChange={(e) => setForm({ ...form, cStandard: e.target.value as any })}
@@ -85,7 +85,7 @@ export const OpmTargetSettingsModal: React.FC<OpmTargetSettingsModalProps> = ({
 
             <div>
               <label className="text-[10px] text-gray-400 font-bold block mb-1">Base Tick Period (ms)</label>
-              <input
+              <input data-help-feature="opm:opmtargetsettingsmodal:targets:d4e7bbb1d6" data-help-module="entropy"
                 data-testid="settings-tick-ms-input"
                 data-opm-path="settings.tickMs"
                 aria-label="Base tick period in milliseconds"
@@ -101,7 +101,7 @@ export const OpmTargetSettingsModal: React.FC<OpmTargetSettingsModalProps> = ({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-[10px] text-gray-400 font-bold block mb-1">Event Queue Capacity</label>
-              <input
+              <input data-help-feature="opm:opmtargetsettingsmodal:targets:22bc0d6ce0" data-help-module="entropy"
                 data-testid="settings-queue-capacity-input"
                 data-opm-path="settings.eventQueueCapacity"
                 aria-label="Event queue capacity"
@@ -115,7 +115,7 @@ export const OpmTargetSettingsModal: React.FC<OpmTargetSettingsModalProps> = ({
 
             <div>
               <label className="text-[10px] text-gray-400 font-bold block mb-1">Queue Overflow Policy</label>
-              <select
+              <select data-help-feature="opm:opmtargetsettingsmodal:targets:a95fc1226d" data-help-module="entropy"
                 data-testid="settings-overflow-policy-select"
                 value={form.eventOverflow}
                 onChange={(e) => setForm({ ...form, eventOverflow: e.target.value as any })}
@@ -130,7 +130,7 @@ export const OpmTargetSettingsModal: React.FC<OpmTargetSettingsModalProps> = ({
           <div className="grid grid-cols-3 gap-2">
             <div>
               <label className="text-[10px] text-gray-400 font-bold block mb-1">Max Staged Writes</label>
-              <input
+              <input data-help-feature="opm:opmtargetsettingsmodal:targets:6713f1f35a" data-help-module="entropy"
                 data-testid="settings-max-writes-input"
                 data-opm-path="settings.maxStagedWrites"
                 aria-label="Max staged writes"
@@ -144,7 +144,7 @@ export const OpmTargetSettingsModal: React.FC<OpmTargetSettingsModalProps> = ({
 
             <div>
               <label className="text-[10px] text-gray-400 font-bold block mb-1">Max Transitions</label>
-              <input
+              <input data-help-feature="opm:opmtargetsettingsmodal:targets:5e7ad07276" data-help-module="entropy"
                 data-testid="settings-max-transitions-input"
                 data-opm-path="settings.maxTransitions"
                 aria-label="Max transitions"
@@ -158,7 +158,7 @@ export const OpmTargetSettingsModal: React.FC<OpmTargetSettingsModalProps> = ({
 
             <div>
               <label className="text-[10px] text-gray-400 font-bold block mb-1">Trace Capacity</label>
-              <input
+              <input data-help-feature="opm:opmtargetsettingsmodal:targets:5633f13418" data-help-module="entropy"
                 data-testid="settings-trace-capacity-input"
                 data-opm-path="settings.traceCapacity"
                 aria-label="Trace capacity"
@@ -173,7 +173,7 @@ export const OpmTargetSettingsModal: React.FC<OpmTargetSettingsModalProps> = ({
 
           <div>
             <label className="text-[10px] text-gray-400 font-bold block mb-1">MISRA Compliance Profile</label>
-            <select
+            <select data-help-feature="opm:opmtargetsettingsmodal:targets:b416d01b3a" data-help-module="entropy"
               data-testid="settings-misra-select"
               value={form.misraProfile}
               onChange={(e) => setForm({ ...form, misraProfile: e.target.value as any })}
@@ -190,7 +190,7 @@ export const OpmTargetSettingsModal: React.FC<OpmTargetSettingsModalProps> = ({
         <div className="h-14 bg-[#202020] border-t border-[#333] px-4 flex items-center justify-between">
           <div>
             {onExportZip && (
-              <button
+              <button data-help-feature="opm:opmtargetsettingsmodal:targets:5d8689b5ff" data-help-module="entropy"
                 data-testid="export-zip-btn"
                 onClick={onExportZip}
                 disabled={hasErrors}
@@ -203,13 +203,13 @@ export const OpmTargetSettingsModal: React.FC<OpmTargetSettingsModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
-            <button
+            <button data-help-feature="opm:opmtargetsettingsmodal:targets:9193e00d6f" data-help-module="entropy"
               onClick={onClose}
               className="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded text-xs"
             >
               Cancel
             </button>
-            <button
+            <button data-help-feature="opm:opmtargetsettingsmodal:targets:bc6f6a60cb" data-help-module="entropy"
               data-testid="save-settings-btn"
               onClick={() => {
                 const checked = validateTargetSettings(form);

@@ -96,26 +96,26 @@ function minSize(kind: UseCaseNodeView['kind'], extensionPoints: number): { widt
   }
 }
 
-function resizedRect(drag: DragState, id: string): Rect {
+function resizedRect(drag: DragState, id: string, snapToGrid = false): Rect {
   const origin = drag.origins[id];
   const min = minSize(drag.resizeKind ?? 'useCase', drag.resizeExtensionPoints ?? 0);
   return {
     x: origin.x,
     y: origin.y,
-    width: Math.max(min.width, snap(origin.width + drag.delta.x)),
-    height: Math.max(min.height, snap(origin.height + drag.delta.y)),
+    width: Math.max(min.width, snapToGrid ? snap(origin.width + drag.delta.x) : origin.width + drag.delta.x),
+    height: Math.max(min.height, snapToGrid ? snap(origin.height + drag.delta.y) : origin.height + drag.delta.y),
   };
 }
 
-function dragOverrides(drag: DragState): Record<string, Rect> {
+function dragOverrides(drag: DragState, snapToGrid = false): Record<string, Rect> {
   if (drag.mode === 'pan') return {};
   if (drag.mode === 'resize') {
     const id = Object.keys(drag.origins)[0];
-    return id ? { [id]: resizedRect(drag, id) } : {};
+    return id ? { [id]: resizedRect(drag, id, snapToGrid) } : {};
   }
   return Object.fromEntries(Object.entries(drag.origins).map(([id, origin]) => [
     id,
-    { ...origin, x: snap(origin.x + drag.delta.x), y: snap(origin.y + drag.delta.y) },
+    { ...origin, x: snapToGrid ? snap(origin.x + drag.delta.x) : origin.x + drag.delta.x, y: snapToGrid ? snap(origin.y + drag.delta.y) : origin.y + drag.delta.y },
   ]));
 }
 
@@ -226,8 +226,9 @@ export function UseCaseWorkspace({
   const [extensionPointDraft, setExtensionPointDraft] = useState('');
 
   const presentation = diagramPresentations[diagramId];
+  const [snapEnabled, setSnapEnabled] = useState(false);
   const baseView = useMemo(() => buildUseCaseDiagramView(repository, presentation), [repository, presentation]);
-  const overrides = useMemo(() => (drag && drag.moved ? dragOverrides(drag) : {}), [drag]);
+  const overrides = useMemo(() => (drag && drag.moved ? dragOverrides(drag, snapEnabled) : {}), [drag, snapEnabled]);
   const view = useMemo(
     () => (Object.keys(overrides).length > 0 ? buildUseCaseDiagramView(repository, withBoundsOverrides(presentation, overrides, diagramId)) : baseView),
     [repository, presentation, overrides, baseView, diagramId],
@@ -460,7 +461,7 @@ export function UseCaseWorkspace({
     const finished = drag;
     setDrag(null);
     if (finished.mode === 'pan' || !finished.moved) return;
-    const finalOverrides = dragOverrides(finished);
+    const finalOverrides = dragOverrides(finished, snapEnabled);
     const commands = Object.entries(finalOverrides).map(([elementId, rect]) => ({
       type: 'updatePresentation' as const, diagramId, elementId,
       presentation: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
@@ -604,7 +605,7 @@ export function UseCaseWorkspace({
 
   return (
     <section className="flex h-full min-h-0 w-full flex-col bg-[var(--surface-canvas)] text-[var(--text-primary)]" aria-label="Use Case Diagram workspace" data-testid="usecase-workspace">
-      <header
+      <header data-help-feature="live:components/sysml/UseCaseWorkspace:34ecff87bb82"
         onWheel={handleHorizontalToolbarWheel}
         className="flex items-center gap-2 overflow-x-auto overflow-y-hidden adia-toolbar-scrollbar border-b border-[var(--border-default)] bg-[var(--surface-panel)] p-2 shrink-0 [&>*]:shrink-0"
       >
@@ -638,6 +639,16 @@ export function UseCaseWorkspace({
           <span className="w-10 text-center text-[11px] text-neutral-400">{Math.round(viewport.k * 100)}%</span>
           <button data-help-feature="ui:sysml/UseCaseWorkspace:80d4cf789d4c" data-help-source="src/components/sysml/UseCaseWorkspace.tsx" type="button" aria-label="Zoom in" className="rounded border border-neutral-700 px-2 py-1 text-xs" onClick={() => zoomBy(1.2)}>+</button>
           <button data-help-feature="ui:sysml/UseCaseWorkspace:cbf1e02b9a2c" data-help-source="src/components/sysml/UseCaseWorkspace.tsx" type="button" className="rounded border border-neutral-700 px-2 py-1 text-xs" onClick={fitToContent}>Fit</button>
+        </div>
+        <div className="flex items-center gap-1" role="toolbar" aria-label="Snap">
+          <button data-help-feature="ui:sysml/UseCaseWorkspace:snapToggle" data-help-source="src/components/sysml/UseCaseWorkspace.tsx"
+            type="button" aria-label="Toggle snap to grid" onClick={() => setSnapEnabled(!snapEnabled)}
+            className={`rounded border px-2 py-1 text-xs transition-colors ${snapEnabled ? 'border-orange-500 bg-orange-500/20 text-orange-400 font-semibold' : 'border-neutral-700 text-neutral-300 hover:border-neutral-500'}`}
+            title="Toggle Grid Snapping"
+            data-testid="usecase-snap-toggle"
+          >
+            Snap: {snapEnabled ? 'On' : 'Off'}
+          </button>
         </div>
       </header>
 

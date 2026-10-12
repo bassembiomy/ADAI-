@@ -87,6 +87,7 @@ export function projectDiagramScopedCanvasView(
         const effectiveIbdH = drafts?.height ?? bounds?.height ?? block.ibdHeight ?? 800;
         return {
           ...block,
+          ports: block.ports.map(port => ({ ...port, ...(diagram?.presentations[block.id]?.portLayouts?.[port.id] ?? {}) })),
           ibdX: effectiveIbdX,
           ibdY: effectiveIbdY,
           ibdWidth: effectiveIbdW,

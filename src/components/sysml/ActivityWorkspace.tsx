@@ -84,17 +84,28 @@ function fit(text: string, widthPx: number, fontSize: number): string {
   return text.length <= maxChars ? text : `${text.slice(0, Math.max(1, maxChars - 1))}…`;
 }
 
-function dragOverrides(drag: DragState): Record<string, Rect> {
+function dragOverrides(drag: DragState, snapToGrid = false): Record<string, Rect> {
   if (drag.mode === 'pan') return {};
   if (drag.mode === 'resize') {
     const id = Object.keys(drag.origins)[0];
     if (!id) return {};
     const origin = drag.origins[id];
     const min = MIN_SIZE[drag.resizeKind ?? 'action'] ?? { width: 20, height: 20 };
-    return { [id]: { x: origin.x, y: origin.y, width: Math.max(min.width, snap(origin.width + drag.delta.x)), height: Math.max(min.height, snap(origin.height + drag.delta.y)) } };
+    return {
+      [id]: {
+        x: origin.x,
+        y: origin.y,
+        width: Math.max(min.width, snapToGrid ? snap(origin.width + drag.delta.x) : origin.width + drag.delta.x),
+        height: Math.max(min.height, snapToGrid ? snap(origin.height + drag.delta.y) : origin.height + drag.delta.y),
+      },
+    };
   }
   return Object.fromEntries(Object.entries(drag.origins).map(([id, origin]) => [
-    id, { ...origin, x: snap(origin.x + drag.delta.x), y: snap(origin.y + drag.delta.y) },
+    id, {
+      ...origin,
+      x: snapToGrid ? snap(origin.x + drag.delta.x) : origin.x + drag.delta.x,
+      y: snapToGrid ? snap(origin.y + drag.delta.y) : origin.y + drag.delta.y,
+    },
   ]));
 }
 
@@ -232,7 +243,8 @@ export function ActivityWorkspace({
   const activity = repository.definitions[activityId]?.kind === 'activity' ? repository.definitions[activityId] : undefined;
 
   const baseView = useMemo(() => buildActivityDiagramView(repository, diagramId, presentation), [repository, diagramId, presentation]);
-  const overrides = useMemo(() => (drag && drag.moved ? dragOverrides(drag) : {}), [drag]);
+  const [snapEnabled, setSnapEnabled] = useState(false);
+  const overrides = useMemo(() => (drag && drag.moved ? dragOverrides(drag, snapEnabled) : {}), [drag, snapEnabled]);
   const view = useMemo(
     () => (Object.keys(overrides).length > 0 ? buildActivityDiagramView(repository, diagramId, withBoundsOverrides(presentation, overrides, diagramId)) : baseView),
     [repository, diagramId, presentation, overrides, baseView],
@@ -448,7 +460,7 @@ export function ActivityWorkspace({
     const finished = drag;
     setDrag(null);
     if (finished.mode === 'pan' || !finished.moved) return;
-    const finalOverrides = dragOverrides(finished);
+    const finalOverrides = dragOverrides(finished, snapEnabled);
     const command = buildMoveActivityNodesCommand(diagramId, Object.fromEntries(
       Object.entries(finalOverrides).map(([id, rect]) => [id, { x: rect.x, y: rect.y, width: rect.width, height: rect.height }]),
     ));
@@ -639,7 +651,7 @@ export function ActivityWorkspace({
 
   return (
     <section className="flex h-full min-h-0 w-full flex-col bg-[var(--surface-canvas)] text-[var(--text-primary)]" aria-label="Activity Diagram workspace" data-testid="activity-workspace">
-      <header
+      <header data-help-feature="live:components/sysml/ActivityWorkspace:34ecff87bb82"
         onWheel={handleHorizontalToolbarWheel}
         className="flex items-center gap-2 overflow-x-auto overflow-y-hidden adia-toolbar-scrollbar border-b border-[var(--border-default)] bg-[var(--surface-panel)] p-2 shrink-0 [&>*]:shrink-0"
       >
@@ -665,6 +677,16 @@ export function ActivityWorkspace({
           <span className="w-10 text-center text-[11px] text-neutral-400">{Math.round(viewport.k * 100)}%</span>
           <button data-help-feature="ui:sysml/ActivityWorkspace:80d4cf789d4c" data-help-source="src/components/sysml/ActivityWorkspace.tsx" type="button" aria-label="Zoom in" className="rounded border border-neutral-700 px-2 py-1 text-xs" onClick={() => zoomBy(1.2)}>+</button>
           <button data-help-feature="ui:sysml/ActivityWorkspace:cbf1e02b9a2c" data-help-source="src/components/sysml/ActivityWorkspace.tsx" type="button" className="rounded border border-neutral-700 px-2 py-1 text-xs" onClick={fitToContent}>Fit</button>
+        </div>
+        <div className="flex items-center gap-1" role="toolbar" aria-label="Snap">
+          <button data-help-feature="ui:sysml/ActivityWorkspace:snapToggle" data-help-source="src/components/sysml/ActivityWorkspace.tsx"
+            type="button" aria-label="Toggle snap to grid" onClick={() => setSnapEnabled(!snapEnabled)}
+            className={`rounded border px-2 py-1 text-xs transition-colors ${snapEnabled ? 'border-orange-500 bg-orange-500/20 text-orange-400 font-semibold' : 'border-neutral-700 text-neutral-300 hover:border-neutral-500'}`}
+            title="Toggle Grid Snapping"
+            data-testid="activity-snap-toggle"
+          >
+            Snap: {snapEnabled ? 'On' : 'Off'}
+          </button>
         </div>
       </header>
 

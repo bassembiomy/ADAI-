@@ -67,3 +67,22 @@ export function getDefaultControlPoint(
     y: (sp.y + tp.y) / 2 + (sp.x - tp.x) * 0.3
   };
 }
+
+/**
+ * Accumulates mouse delta into a tracked raw position and computes the snapped position.
+ * Preserves sub-grid precision so that small continuous movements accumulate and never freeze.
+ */
+export function accumulateDragPosition(
+  currentRaw: Point,
+  dx: number,
+  dy: number,
+  snapEnabled: boolean = false,
+  gridSize: number = 20
+): { raw: Point; snapped: Point } {
+  const nextRaw = { x: currentRaw.x + dx, y: currentRaw.y + dy };
+  const snapped = {
+    x: snapEnabled ? Math.round(nextRaw.x / gridSize) * gridSize : nextRaw.x,
+    y: snapEnabled ? Math.round(nextRaw.y / gridSize) * gridSize : nextRaw.y
+  };
+  return { raw: nextRaw, snapped };
+}

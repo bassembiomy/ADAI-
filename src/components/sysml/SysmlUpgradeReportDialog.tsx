@@ -95,7 +95,7 @@ export function SysmlUpgradeReportDialog({ report, backupPath, backupError, onCl
         </div>
 
         <footer className="flex justify-end border-t border-[#2a2a2a] px-5 py-3">
-          <button type="button" onClick={onClose} className="rounded bg-orange-600 px-4 py-2 text-sm font-medium text-white">
+          <button data-help-feature="ui:sysml/SysmlUpgradeReportDialog:151ed7616191" data-help-source="src/components/sysml/SysmlUpgradeReportDialog.tsx" type="button" onClick={onClose} className="rounded bg-orange-600 px-4 py-2 text-sm font-medium text-white">
             Continue
           </button>
         </footer>

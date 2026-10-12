@@ -1,0 +1,2038 @@
+[
+  {
+    "source": "src/App.tsx",
+    "signature": "div|onMouseDown:{()=>!isMobile&&onUpdate(windowState.id,{zIndex:Date.now()})}",
+    "id": "live:App:135ca98065b6",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:App:135ca98065b6"
+    ]
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "div|onMouseDown:{(e)=>{if(isMobile||windowState.isMaximized)return;e.stopPropagation();setIsDragging(true);setDragOffset({x:e.clientX-windowState.pos.x,y:e.clientY-windowState.pos.y});}}",
+    "id": "live:App:2e5d580ebc83",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:App:2e5d580ebc83"
+    ]
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "div|onMouseDown:{(e)=>e.stopPropagation()}",
+    "id": "live:App:de5bf51d4efb",
+    "status": "excluded",
+    "reason": "Propagation/prevent-default wrapper performs no independent model or UI command.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "div|onMouseDown:{(e)=>{e.stopPropagation();e.preventDefault();setIsResizing(true);setResizeStart({w:windowState.size.width,h:windowState.size.height,x:e.clientX,y:e.clientY});}}",
+    "id": "live:App:2aa4cff8d03c",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:App:2aa4cff8d03c"
+    ]
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "div|onMouseDown:{e=>e.stopPropagation()}",
+    "id": "live:App:206ef69c57e5",
+    "status": "excluded",
+    "reason": "Propagation/prevent-default wrapper performs no independent model or UI command.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "div|onMouseDown:{handleModalResizeStart}",
+    "id": "live:App:313080de4e96",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:App:313080de4e96"
+    ]
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "div|onMouseDown:{handleMouseDown}|onMouseLeave:{handleMouseLeave}|onMouseUp:{handleMouseUp}",
+    "id": "live:App:9b48b1e073d6",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:App:9b48b1e073d6"
+    ]
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "div|onMouseDown:{onMouseDown}",
+    "id": "live:App:faada355b359",
+    "status": "excluded",
+    "reason": "Reusable layout/presentation primitive forwards its caller-provided pointer handler; caller gestures are audited separately.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "div|onMouseDown:{(e)=>handleResizeMouseDown(e,h,comp.id)}",
+    "id": "live:App:b506e73bb85a",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:App:b506e73bb85a"
+    ]
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "div|onMouseDown:{handleRotaryMouseDown}",
+    "id": "live:App:a4a06cc0bbf5",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:App:a4a06cc0bbf5"
+    ]
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "div|onMouseDown:{handleRotaryMouseDown}",
+    "id": "live:App:a4a06cc0bbf5",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:App:a4a06cc0bbf5"
+    ]
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "div|onMouseMove:{handleMouseMove}|onMouseUp:{handleMouseUp}",
+    "id": "live:App:675a8d507f4c",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:App:675a8d507f4c"
+    ]
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "div|onMouseDown:{onClose}",
+    "id": "live:App:345b43c4fed5",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:App:345b43c4fed5"
+    ]
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "div|onMouseDown:{e=>e.stopPropagation()}",
+    "id": "live:App:206ef69c57e5",
+    "status": "excluded",
+    "reason": "Propagation/prevent-default wrapper performs no independent model or UI command.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "div|onMouseDown:{onClose}",
+    "id": "live:App:345b43c4fed5",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:App:345b43c4fed5"
+    ]
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "div|onMouseDown:{(e:React.MouseEvent)=>e.stopPropagation()}",
+    "id": "live:App:bdfccbd7a34f",
+    "status": "excluded",
+    "reason": "Propagation/prevent-default wrapper performs no independent model or UI command.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "div|onMouseDown:{onClose}",
+    "id": "live:App:345b43c4fed5",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:App:345b43c4fed5"
+    ]
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "div|onMouseDown:{(e)=>e.stopPropagation()}",
+    "id": "live:App:de5bf51d4efb",
+    "status": "excluded",
+    "reason": "Propagation/prevent-default wrapper performs no independent model or UI command.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "div|onMouseDown:{onClose}",
+    "id": "live:App:345b43c4fed5",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:App:345b43c4fed5"
+    ]
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "div|onMouseDown:{(e:React.MouseEvent)=>e.stopPropagation()}",
+    "id": "live:App:bdfccbd7a34f",
+    "status": "excluded",
+    "reason": "Propagation/prevent-default wrapper performs no independent model or UI command.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "div|onPaste:{handlePaste}",
+    "id": "live:App:f197a9653268",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:App:f197a9653268"
+    ]
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "rect|onMouseDown:{(e)=>handleResizeMouseDown(e,h,state.id)}",
+    "id": "live:App:70a9104101f7",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:App:70a9104101f7"
+    ]
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "g|onMouseDown:{(e)=>handleJunctionMouseDown(e,junction.id)}",
+    "id": "live:App:8dea4e38c6d5",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:App:8dea4e38c6d5"
+    ]
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "rect|onMouseDown:{event=>handleResizeMouseDown(event,handle,pkg.id)}",
+    "id": "live:App:85a80aef7d77",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:App:85a80aef7d77"
+    ]
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "rect|onMouseDown:{(e)=>handleResizeMouseDown(e,h,block.id)}",
+    "id": "live:App:ddd9fcbcc7cb",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:App:ddd9fcbcc7cb"
+    ]
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "text|onMouseDown:{(e)=>{e.stopPropagation();if(isCreatingTransition){e.stopPropagation();if(transitionSourceId){if(transitionSourceId!==prop.id){constresolveEntity=(id:string)=>{constdirect=blocks.find(b=>b.id===id)??states.find(s=>s.id===id)??parts.find(p=>p.id===id);if(direct)returndirect;returnblocks.flatMap(b=>b.properties??[]).find(p=>p.id===id);};constsource=resolveEntity(transitionSourceId);if(!source)return;constlegalKinds=getCanvasRelationshipKinds({blocks,parts,relationships,states},transitionSourceId,prop.id,diagramMode==='ibd'?'ibd':diagramMode==='requirements'?'requirements':'bdd');if(legalKinds.length>0){setRequirementConnectionPicker({sourceId:transitionSourceId,targetId:prop.id});}else{constreversedKinds=getCanvasRelationshipKinds({blocks,parts,relationships,states},prop.id,transitionSourceId,diagramMode==='ibd'?'ibd':diagramMode==='requirements'?'requirements':'bdd');if(reversedKinds.length>0){setRequirementConnectionPicker({sourceId:prop.id,targetId:transitionSourceId,reversedKinds});}else{showConnectionPolicyError({relationshipKind:'relationship',source:classifyLegacyEndpoint(source),target:classifyLegacyEndpoint(prop),diagnostic:{code:'NO_LEGAL_RELATIONSHIP',message:`Noavailablerelationshipcanconnect${source.name}to${prop.name}onthisdiagram.`,correctiveAction:'Choosecompatibleendpointsortheappropriatediagram.',},});}}setIsCreatingTransition(false);setTransitionSourceId(null);}}else{setTransitionSourceId(prop.id);}return;}startBddFeatureDrag(e,{kind:'property',ownerId:block.id,featureId:prop.id,name:prop.name,typeId:prop.typeId,typeName:blocks.find(candidate=>candidate.id===prop.typeId)?.name??prop.type,multiplicity:prop.multiplicity??'1',});}}",
+    "id": "live:App:ee2c7e93de56",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:App:ee2c7e93de56"
+    ]
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "text|onMouseDown:{(e)=>startBddFeatureDrag(e,{kind:'operation',ownerId:block.id,name:op})}",
+    "id": "live:App:9dbeffc76288",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:App:9dbeffc76288"
+    ]
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "rect|onMouseDown:{(e)=>handleResizeMouseDown(e,h,block.id)}",
+    "id": "live:App:ddd9fcbcc7cb",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:App:ddd9fcbcc7cb"
+    ]
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "rect|onMouseDown:{(e)=>handleResizeMouseDown(e,h,part.id)}",
+    "id": "live:App:95532989216d",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:App:95532989216d"
+    ]
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "IntroStandbyOverlay|onClose:{()=>setShowWelcome(false)}",
+    "id": "live:App:1b3526b9ba82",
+    "status": "excluded",
+    "reason": "IntroStandbyOverlay callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "IntroStandbyOverlay|onClose:{()=>setShowStandby(false)}",
+    "id": "live:App:7ecbf2902c30",
+    "status": "excluded",
+    "reason": "IntroStandbyOverlay callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "HelpModal|onClose:{()=>setShowHelpModal(false)}",
+    "id": "live:App:e4f4b2ad5021",
+    "status": "excluded",
+    "reason": "HelpModal callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "FactoryIOGateway|onClose:{()=>setShowFactoryIOGateway(false)}",
+    "id": "live:App:1b158cc94548",
+    "status": "excluded",
+    "reason": "FactoryIOGateway callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "AiArchitectSidebar|onExecuteActions:{handleExecuteAiActions}|onToggle:{()=>setIsAiSidebarOpen(!isAiSidebarOpen)}",
+    "id": "live:App:fcebcaa8b32e",
+    "status": "excluded",
+    "reason": "AiArchitectSidebar callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "AgentPanel|onClose:{()=>setIsAgentPanelOpen(false)}|onToggle:{()=>setIsAgentPanelOpen(prev=>!prev)}",
+    "id": "live:App:5175650a404e",
+    "status": "excluded",
+    "reason": "AgentPanel callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "GlobalReportPreviewModal|onClose:{()=>setShowGlobalReportPreview(false)}",
+    "id": "live:App:66fa26361e07",
+    "status": "excluded",
+    "reason": "GlobalReportPreviewModal callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "ReportPreviewModal|onClose:{()=>setShowReportPreview(false)}",
+    "id": "live:App:7d33cecddd98",
+    "status": "excluded",
+    "reason": "ReportPreviewModal callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "LargeModelDiagnostics|onClose:{()=>setShowSysmlDiagnostics(false)}",
+    "id": "live:App:a6d7a226e128",
+    "status": "excluded",
+    "reason": "LargeModelDiagnostics callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "SysmlUpgradeReportDialog|onClose:{()=>setSysmlUpgrade(null)}",
+    "id": "live:App:9259c1a92535",
+    "status": "excluded",
+    "reason": "SysmlUpgradeReportDialog callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "div|onMouseDown:{()=>setImportValidationError(null)}",
+    "id": "live:App:c5712d126c53",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:App:c5712d126c53"
+    ]
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "div|onMouseDown:{(e)=>e.stopPropagation()}",
+    "id": "live:App:de5bf51d4efb",
+    "status": "excluded",
+    "reason": "Propagation/prevent-default wrapper performs no independent model or UI command.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "Profiler|onRender:{(_,phase,actualDuration)=>recordRenderCommit('workspace',phase,actualDuration)}",
+    "id": "live:App:4bd4baf952ff",
+    "status": "excluded",
+    "reason": "React render profiler callback records performance and is not an interactive command.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "div|onMouseUp:{()=>setResizingPanel(null)}",
+    "id": "live:App:eca48c76262c",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:App:eca48c76262c"
+    ]
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "Profiler|onRender:{(_,phase,actualDuration)=>recordRenderCommit('explorer',phase,actualDuration)}",
+    "id": "live:App:f1fc941c58a5",
+    "status": "excluded",
+    "reason": "React render profiler callback records performance and is not an interactive command.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "Resizer|onMouseDown:{(e)=>handleResizeStart(e,'hierarchy')}",
+    "id": "live:App:590d20381723",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:App:590d20381723"
+    ]
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "Resizer|onMouseDown:{(e)=>handleResizeStart(e,'variables')}",
+    "id": "live:App:76a83fd32464",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:App:76a83fd32464"
+    ]
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "XbridgesWorkspace|onBack:{()=>{if(xBridgesStateId)setXBridgesStateId(null);elsesetDiagramMode('statemachine');}}|onClipboardChange:{setSharedClipboard}|onLaunchDoe:{()=>toggleWindow('doe')}|onSave:{handleXBridgesSave}|onSaveAll:{handleExportProject}",
+    "id": "live:App:a0d544b2d7af",
+    "status": "excluded",
+    "reason": "XbridgesWorkspace callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "VLabWorkspace|onBack:{()=>setDiagramMode('statemachine')}|onEdgesChange:{(edges)=>setVlabEdges(edges)}|onNavigateToXbridges:{(nodeId?:string)=>{constfindMatchingNode=(targetNodes:any[],sourceNodeId?:string):any=>{if(!sourceNodeId)returnnull;constsrcLower=sourceNodeId.toLowerCase();constgroups=[['pid','controller','ctrl','ps_pid_ctrl','pid_basic','pid_controller'],['motor','plant','ac_motor','ac_induction_motor','induction','engine'],['inverter','pwm','gate','pwm_3ph_2level','three_phase_inverter','commutation'],['error','subtract','sub','error_calc','error_sub','ps_subtract','vectorsub'],['ref','constant','gen','signal','ref_speed','ref_signal','ps_constant','waveformgen']];letmatch=targetNodes.find((n:any)=>n.id===sourceNodeId);if(match)returnmatch;for(constgroupofgroups){constisSourceInGroup=group.some(keyword=>srcLower.includes(keyword));if(isSourceInGroup){match=targetNodes.find((n:any)=>{constid=n.id.toLowerCase();consttype=(n.data?.type||n.type||'').toLowerCase();returngroup.some(keyword=>id.includes(keyword)||type.includes(keyword));});if(match)returnmatch;}}constcleanId=srcLower.replace(/_[0-9]+$/,'');returntargetNodes.find((n:any)=>{constid=n.id.toLowerCase();consttype=(n.data?.type||n.type||'').toLowerCase();returnid.includes(cleanId)||type.includes(cleanId)||cleanId.includes(id)||cleanId.includes(type);});};consttargetNodes=xBridgesStateId?Array.from(states.find(s=>s.id===xBridgesStateId)?.xBridgesModel?.nodes||[]):globalXBridgesNodes;consttargetNode=findMatchingNode(targetNodes,nodeId);if(targetNode){setXBridgesSelectedNodeId(targetNode.id);}else{setXBridgesSelectedNodeId(null);}setDiagramMode('xbridges');setTimeout(()=>setXBridgesSelectedNodeId(null),1000);}}|onNodesChange:{(nodes)=>setVlabNodes(nodes)}|onResult:{(res)=>console.log('V-LabResult:',res)}|onSendToDOE:{(data)=>{toggleWindow('doe');}}",
+    "id": "live:App:3d5a7c596af4",
+    "status": "excluded",
+    "reason": "VLabWorkspace callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "HILWorkspace|onBack:{()=>setDiagramMode('statemachine')}|onChangeConfig:{setHilConfig}|onChangeSessionState:{setHilSessionState}",
+    "id": "live:App:aef6a5623f18",
+    "status": "excluded",
+    "reason": "HILWorkspace callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "EntropyWorkspace|onAddError:{addError}|onBack:{()=>setDiagramMode('statemachine')}|onOpenHelp:{(topic)=>handleOpenHelp(topic||'entropy-opm')}|onOpmSimulationConfigChange:{setOpmSimulationConfig}|onSave:{(nodes,edges)=>{setEntropyNodes(nodes);setEntropyEdges(edges);}}|onTickMsChange:{setTickMs}|onVariablesChange:{setVariables}",
+    "id": "live:App:639cdb671b08",
+    "status": "excluded",
+    "reason": "EntropyWorkspace callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "PortKindActions|onAddPort:{handleAddPortToSelected}",
+    "id": "live:App:c2e5a935c40a",
+    "status": "excluded",
+    "reason": "PortKindActions callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "Profiler|onRender:{(_,phase,actualDuration)=>recordRenderCommit('canvas',phase,actualDuration)}",
+    "id": "live:App:4aad614bf438",
+    "status": "excluded",
+    "reason": "React render profiler callback records performance and is not an interactive command.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "Resizer|onMouseDown:{(e)=>handleResizeStart(e,'scope')}",
+    "id": "live:App:ca067bd95989",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:App:ca067bd95989"
+    ]
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "StateMachineCanvasContextMenu|onAddJunction:{(wx,wy)=>createJunction(wx,wy)}|onAddState:{(wx,wy)=>createState(wx,wy)}|onAddXBridgesState:{(wx,wy)=>createXBridgesState(wx,wy)}|onClose:{()=>setSmCanvasContextMenu(null)}",
+    "id": "live:App:c83eea26a047",
+    "status": "excluded",
+    "reason": "StateMachineCanvasContextMenu callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "Resizer|onMouseDown:{(e)=>handleResizeStart(e,'properties')}",
+    "id": "live:App:1991d07ad9b1",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:App:1991d07ad9b1"
+    ]
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "Profiler|onRender:{(_,phase,actualDuration)=>recordRenderCommit('inspector',phase,actualDuration)}",
+    "id": "live:App:5d2f1551c8f4",
+    "status": "excluded",
+    "reason": "React render profiler callback records performance and is not an interactive command.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "StateRequirementTraceability|onLinkRequirement:{(requirementId,kind)=>{createRelationship(selectedState.id,requirementId,kind);}}|onUnlinkRelationship:{(relationshipId)=>{deleteRelationship(relationshipId);}}",
+    "id": "live:App:ade98a718491",
+    "status": "excluded",
+    "reason": "StateRequirementTraceability callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "SysmlPropertyPanel|onExecuteCommand:{dispatchInspectorCommand}",
+    "id": "live:App:3feca441f131",
+    "status": "excluded",
+    "reason": "SysmlPropertyPanel callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "SysmlPropertyPanel|onExecuteCommand:{dispatchInspectorCommand}",
+    "id": "live:App:3feca441f131",
+    "status": "excluded",
+    "reason": "SysmlPropertyPanel callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "RequirementGovernancePanel|onAuthorizeBaseline:{(baselineId)=>{setAuthorizedBaselineIds(prev=>prev.includes(baselineId)?prev:[...prev,baselineId]);addError('info',`Recordedexplicitdeletionauthorizationforprotectedbaseline${sysmlObjectLabel(canonicalSysmlRepository.baselines[baselineId],'Baseline')}`);}}|onClearSuspect:{(relId)=>{constres=handleExecuteSysmlCommand({type:'clearSuspectLink',relationshipId:relId});if(!res.committed)return;addError('info',`Clearedsuspectflagonlink:${resolveSysmlReferenceLabel(canonicalSysmlRepository,relId,'Relationship')}`);}}|onCloneBaseline:{(baselineId)=>{constres=handleExecuteSysmlCommand({type:'cloneBaselineAsWorkingCopy',baselineId,name:`Workingcopyof${sysmlObjectLabel(canonicalSysmlRepository.baselines[baselineId],'Baseline')}`});if(!res.committed)return;addError('info',`Clonedprotectedbaseline${sysmlObjectLabel(canonicalSysmlRepository.baselines[baselineId],'Baseline')}intounprotectedworkingcopy${sysmlObjectLabel(res.baseline,'Baseline')}`);}}|onCreateBaseline:{(name)=>{constres=handleExecuteSysmlCommand({type:'createModelBaseline',name});if(!res.committed)return;addError('info',`Createdbaseline:${name}`);}}|onSyncFromMaster:{()=>{constres=handleExecuteSysmlCommand({type:'synchronizeRequirementCopy',requirementId:selectedBlock.id});if(!res.committed)return;addError('info','Synchronizedcopyrequirementfrommaster');}}",
+    "id": "live:App:b65819adafa9",
+    "status": "excluded",
+    "reason": "RequirementGovernancePanel callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "SysmlPropertyPanel|onExecuteCommand:{dispatchInspectorCommand}",
+    "id": "live:App:3feca441f131",
+    "status": "excluded",
+    "reason": "SysmlPropertyPanel callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "SysmlPropertyPanel|onExecuteCommand:{dispatchInspectorCommand}",
+    "id": "live:App:3feca441f131",
+    "status": "excluded",
+    "reason": "SysmlPropertyPanel callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "InteractionElementInspector|onExecute:{handleExecuteSysmlCommand}",
+    "id": "live:App:8c9ee2486017",
+    "status": "excluded",
+    "reason": "InteractionElementInspector callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "SysmlPropertyPanel|onExecuteCommand:{dispatchInspectorCommand}",
+    "id": "live:App:3feca441f131",
+    "status": "excluded",
+    "reason": "SysmlPropertyPanel callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "div|onMouseDown:{()=>setShowCodegenDialog(false)}",
+    "id": "live:App:5bc803ce8a54",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:App:5bc803ce8a54"
+    ]
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "CodeGenerationDialog|onClose:{()=>setShowCodegenDialog(false)}",
+    "id": "live:App:d7b2f46af050",
+    "status": "excluded",
+    "reason": "CodeGenerationDialog callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "ReportDialog|onClose:{()=>setShowReportDialog(false)}|onGenerate:{handleGenerateReport}",
+    "id": "live:App:4b90bf371cdb",
+    "status": "excluded",
+    "reason": "ReportDialog callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "WorkspaceFileDialog|onClose:{()=>setShowWorkspaceFileDialog(false)}|onCreateFile:{createNewFile}|onCreateProject:{(name)=>{setShowWorkspaceFileDialog(false);constnewUrl=`${window.location.origin}${window.location.pathname}?projectName=${encodeURIComponent(name)}`;window.open(newUrl,'_blank');}}|onDeleteFile:{(id)=>{setWorkspaceFiles(prev=>prev.filter(f=>f.id!==id));setOpenTabIds(prev=>prev.filter(tid=>tid!==id));}}|onImportFile:{handleImportFile}|onOpenFile:{openFileInTab}|onValidationError:{setImportValidationError}",
+    "id": "live:App:0f20e5ff9a0b",
+    "status": "excluded",
+    "reason": "WorkspaceFileDialog callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "div|onMouseDown:{()=>setDeleteConfirmState(null)}",
+    "id": "live:App:de6bd9093918",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:App:de6bd9093918"
+    ]
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "div|onMouseDown:{e=>e.stopPropagation()}",
+    "id": "live:App:206ef69c57e5",
+    "status": "excluded",
+    "reason": "Propagation/prevent-default wrapper performs no independent model or UI command.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "div|onMouseDown:{()=>setSysmlDeleteConfirm(null)}",
+    "id": "live:App:e74939a12e4a",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:App:e74939a12e4a"
+    ]
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "div|onMouseDown:{e=>e.stopPropagation()}",
+    "id": "live:App:206ef69c57e5",
+    "status": "excluded",
+    "reason": "Propagation/prevent-default wrapper performs no independent model or UI command.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "CreateNewTypeActionPrompt|onCreate:{handleCreateNewTypeAction}|onDismiss:{()=>setPendingCreateNewTypeAction(null)}",
+    "id": "live:App:5ff896a2381e",
+    "status": "excluded",
+    "reason": "CreateNewTypeActionPrompt callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "TypeSelectionPrompt|onCancel:{()=>setPortTypePrompt(null)}|onCreateNewType:{handleCreateNewTypeForPort}|onSelectType:{handlePortTypeSelected}",
+    "id": "live:App:2d8a451739dd",
+    "status": "excluded",
+    "reason": "TypeSelectionPrompt callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "TypeSelectionPrompt|onCancel:{()=>setPropertyTypePrompt(null)}|onCreateNewType:{handleCreateNewTypeForProperty}|onSelectType:{handlePropertyTypeSelected}",
+    "id": "live:App:7966f3c9caf7",
+    "status": "excluded",
+    "reason": "TypeSelectionPrompt callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "div|onMouseDown:{()=>setRequirementConnectionPicker(null)}",
+    "id": "live:App:2312fd515dbd",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:App:2312fd515dbd"
+    ]
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "div|onMouseDown:{(e)=>e.stopPropagation()}",
+    "id": "live:App:de5bf51d4efb",
+    "status": "excluded",
+    "reason": "Propagation/prevent-default wrapper performs no independent model or UI command.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "div|onMouseDown:{()=>setPackageDiagramChooser(null)}",
+    "id": "live:App:1748cf4e0199",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:App:1748cf4e0199"
+    ]
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "div|onMouseDown:{(e)=>e.stopPropagation()}",
+    "id": "live:App:de5bf51d4efb",
+    "status": "excluded",
+    "reason": "Propagation/prevent-default wrapper performs no independent model or UI command.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "div|onMouseDown:{revertDrop}",
+    "id": "live:App:b446db02c0a0",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:App:b446db02c0a0"
+    ]
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "div|onMouseDown:{(e)=>e.stopPropagation()}",
+    "id": "live:App:de5bf51d4efb",
+    "status": "excluded",
+    "reason": "Propagation/prevent-default wrapper performs no independent model or UI command.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "div|onMouseDown:{()=>setDiagramTargetChooser(null)}",
+    "id": "live:App:3cd25ac7375b",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:App:3cd25ac7375b"
+    ]
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "div|onMouseDown:{(e)=>e.stopPropagation()}",
+    "id": "live:App:de5bf51d4efb",
+    "status": "excluded",
+    "reason": "Propagation/prevent-default wrapper performs no independent model or UI command.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "SaveSelectionDialog|onClose:{()=>setShowSaveSelectionModal(false)}|onSave:{(selectedKeys)=>{setShowSaveSelectionModal(false);executeExportProject(selectedKeys);}}",
+    "id": "live:App:c8add953b868",
+    "status": "excluded",
+    "reason": "SaveSelectionDialog callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "div|onMouseDown:{dismissErrorDialog}",
+    "id": "live:App:782623a30ed7",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:App:782623a30ed7"
+    ]
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "div|onMouseDown:{e=>e.stopPropagation()}",
+    "id": "live:App:206ef69c57e5",
+    "status": "excluded",
+    "reason": "Propagation/prevent-default wrapper performs no independent model or UI command.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "FloatingWindow|onClose:{()=>toggleWindow('pid')}|onUpdate:{updateManagedWindow}",
+    "id": "live:App:d22f68cdf3ae",
+    "status": "excluded",
+    "reason": "FloatingWindow callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "PidWorkspaceDialog|onClose:{()=>toggleWindow('pid')}",
+    "id": "live:App:266e31ccb0ee",
+    "status": "excluded",
+    "reason": "PidWorkspaceDialog callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "FloatingWindow|onClose:{()=>toggleWindow('rtm')}|onUpdate:{updateManagedWindow}",
+    "id": "live:App:c8a7c41a5983",
+    "status": "excluded",
+    "reason": "FloatingWindow callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "CanonicalTraceabilityMatrix|onNavigate:{(elementId)=>{setSelectedIds([elementId]);if(blocks.some(block=>block.id===elementId&&block.stereotype==='requirement'))setDiagramMode('requirements');elseif(blocks.some(block=>block.id===elementId))setDiagramMode('bdd');elseif(parts.some(part=>part.id===elementId)||connectors.some(connector=>connector.id===elementId))setDiagramMode('ibd');}}",
+    "id": "live:App:c51230d26c98",
+    "status": "excluded",
+    "reason": "CanonicalTraceabilityMatrix callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "FloatingWindow|onClose:{()=>toggleWindow('allocation')}|onUpdate:{updateManagedWindow}",
+    "id": "live:App:ebdd5c3a14f4",
+    "status": "excluded",
+    "reason": "FloatingWindow callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "CanonicalAllocationMatrix|onExecute:{handleExecuteSysmlCommand}|onNavigate:{(elementId)=>setSelectedIds([elementId])}",
+    "id": "live:App:9204b4fd0372",
+    "status": "excluded",
+    "reason": "CanonicalAllocationMatrix callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "FloatingWindow|onClose:{()=>toggleWindow('hmi')}|onUpdate:{updateManagedWindow}",
+    "id": "live:App:b8053d1ad55c",
+    "status": "excluded",
+    "reason": "FloatingWindow callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "HmiDashboardContent|onClose:{()=>toggleWindow('hmi')}",
+    "id": "live:App:5d51963599d9",
+    "status": "excluded",
+    "reason": "HmiDashboardContent callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "FloatingWindow|onClose:{()=>toggleWindow('doe')}|onUpdate:{updateManagedWindow}",
+    "id": "live:App:4c1b15f8647e",
+    "status": "excluded",
+    "reason": "FloatingWindow callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "DoeWorkspace|onClose:{()=>toggleWindow('doe')}|onExportToVLab:{onExportToVLab}|onExportToXBridges:{onExportToXBridges}",
+    "id": "live:App:c17c42d64d16",
+    "status": "excluded",
+    "reason": "DoeWorkspace callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "ThreeDXGateway|onClose:{()=>setShow3DXGateway(false)}|onImportJson:{(jsonStr)=>{try{constparsed=JSON.parse(jsonStr);if(parsed&&typeofparsed==='object'){hydrateProject(parsed);addError('info','3DEXPERIENCE:Projectimportedsuccessfully.');}}catch{addError('error','3DEXPERIENCE:DownloadedfileisnotvalidJSON.');}setShow3DXGateway(false);}}",
+    "id": "live:App:5da8c711728c",
+    "status": "excluded",
+    "reason": "ThreeDXGateway callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/ThreeDXGateway.tsx",
+    "signature": "ThreeDXDashboardPanel|onClose:{()=>setIsLivePanelOpen(false)}",
+    "id": "live:components/ThreeDXGateway:65a48160038c",
+    "status": "excluded",
+    "reason": "ThreeDXDashboardPanel callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/VibeDashboard.tsx",
+    "signature": "VibeExplanationModal|onClose:{()=>setShowExplain(false)}",
+    "id": "live:components/VibeDashboard:59232f972a4a",
+    "status": "excluded",
+    "reason": "VibeExplanationModal callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/VibeDashboard.tsx",
+    "signature": "HardwareSyncModal|onClose:{()=>setShowSync(false)}|onSave:{onHardwareSync}",
+    "id": "live:components/VibeDashboard:1b8bbb896c0f",
+    "status": "excluded",
+    "reason": "HardwareSyncModal callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/entropy/EntropyWorkspace.tsx",
+    "signature": "OpmRightPanelContent|onAddAttribute:{handleAddAttribute}|onAddPort:{handleAddPort}|onAddStateToObject:{handleAddStateToObject}|onCloseInspector:{()=>{setSelectedNode(null);setSelectedEdge(null);}}|onConvertEdgeType:{handleConvertEdgeType}|onConvertNodeType:{handleConvertNodeType}|onDeleteSelectedNode:{handleDeleteSelectedNode}|onDeleteState:{handleDeleteState}|onManualActivateState:{handleManualActivateState}|onOpmConfigChange:{(updater:any)=>{if(typeofupdater==='function'){constnext=updater(activeOpmConfig);if(next&&next.tickMs!==undefined)handleConfigFieldChange('tickMs',next.tickMs);}elseif(updater&&updater.tickMs!==undefined){handleConfigFieldChange('tickMs',updater.tickMs);}}}|onRemovePort:{handleRemovePort}|onResetSimulation:{resetSimulation}|onRightTabChange:{(t)=>setRightTab(tasany)}|onRunSimTick:{runSimTick}|onToggleSimulation:{toggleSimulation}|onUpdateNodeProp:{handleUpdateNodeProp}|onUpdateSelectionExecution:{handleUpdateSelectionExecution}|onZoomInNode:{handleZoomInNode}",
+    "id": "live:components/entropy/EntropyWorkspace:e6179ce9664f",
+    "status": "excluded",
+    "reason": "OpmRightPanelContent callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/entropy/EntropyWorkspace.tsx",
+    "signature": "OpmSimulationScope|onReset:{resetSimulation}",
+    "id": "live:components/entropy/EntropyWorkspace:fff8a5229d49",
+    "status": "excluded",
+    "reason": "OpmSimulationScope callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/entropy/EntropyWorkspace.tsx",
+    "signature": "SmartShowPanel|onSelectElement:{(elemId)=>{constnode=nodes.find(n=>n.id===elemId);if(node){setSelectedNode(node);setSelectedEdge(null);return;}constedge=edges.find(e=>e.id===elemId);if(edge){setSelectedEdge(edge);setSelectedNode(null);return;}for(constnofnodes){consthasPort=(n.data?.inputs||[]).some(p=>p.id===elemId)||(n.data?.outputs||[]).some(p=>p.id===elemId);if(hasPort){setSelectedNode(n);setSelectedEdge(null);return;}}}}|onSelectProcess:{(pid)=>{constp=nodes.find(n=>n.id===pid);if(p){setSelectedNode(p);setSelectedEdge(null);}}}",
+    "id": "live:components/entropy/EntropyWorkspace:a81e3cff33a3",
+    "status": "excluded",
+    "reason": "SmartShowPanel callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/entropy/EntropyWorkspace.tsx",
+    "signature": "OpmCodeGenerationWorkspace|onDownload:{(files)=>{onAddError?.('info',`VerifiedOPMbundleready:${files.length}files.`,'OPM');}}|onNavigateToDiagnostic:{(src)=>{if(src.elementId){constnode=nodes.find(n=>n.id===src.elementId);if(node){setSelectedNode(node);setSelectedEdge(null);return;}constedge=edges.find(e=>e.id===src.elementId);if(edge){setSelectedEdge(edge);setSelectedNode(null);return;}}onAddError?.('info',`Diagnosticreference:${src.elementId||src.propertyPath||'unknownsource'}`,'OPM');}}|onRunHil:{(files)=>{onAddError?.('info',`VerifiedOPMbundlesenttoHIL:${files.length}files.`,'OPM');}}|onStateChange:{setOpmArtifactState}",
+    "id": "live:components/entropy/EntropyWorkspace:de094ac835fb",
+    "status": "excluded",
+    "reason": "OpmCodeGenerationWorkspace callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/entropy/EntropyWorkspace.tsx",
+    "signature": "OpmDockShell|onDocksChange:{(nextDocks)=>{if(isRightFloating&&nextDocks.right){setIsRightFloating(false);}handleDocksChange(nextDocks);}}",
+    "id": "live:components/entropy/EntropyWorkspace:72813b503ece",
+    "status": "excluded",
+    "reason": "OpmDockShell callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/entropy/EntropyWorkspace.tsx",
+    "signature": "ReactFlow|onConnect:{onConnect}|onConnectEnd:{()=>setConnectSourceId(null)}|onConnectStart:{(_,p)=>setConnectSourceId(p.nodeId??null)}|onEdgeClick:{(_,edge)=>{setSelectedEdge(edge);setSelectedNode(null);}}|onEdgesChange:{onEdgesChange}|onEdgesDelete:{(deleted)=>{executeDeletion({edgeIds:deleted.map(e=>e.id)});}}|onInit:{(inst)=>{reactFlowInstanceRef.current=inst;}}|onNodeClick:{handleNodeClick}|onNodeDragStop:{handleNodeDragStop}|onNodesChange:{onNodesChange}|onNodesDelete:{(deleted)=>{executeDeletion({nodeIds:deleted.map(n=>n.id)});}}|onPaneClick:{handlePaneClick}",
+    "id": "live:components/entropy/EntropyWorkspace:7f1236c98c39",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/entropy/EntropyWorkspace:7f1236c98c39"
+    ]
+  },
+  {
+    "source": "src/components/entropy/EntropyWorkspace.tsx",
+    "signature": "OpmLegend|onOpenHelp:{onOpenHelp?()=>onOpenHelp('entropy-opm'):undefined}",
+    "id": "live:components/entropy/EntropyWorkspace:58284b6df786",
+    "status": "excluded",
+    "reason": "OpmLegend callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/entropy/EntropyWorkspace.tsx",
+    "signature": "OpmDiagnosticsBadge|onNavigateToDiagnostic:{handleNavigateToDiagnostic}",
+    "id": "live:components/entropy/EntropyWorkspace:907f0498a48f",
+    "status": "excluded",
+    "reason": "OpmDiagnosticsBadge callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/entropy/EntropyWorkspace.tsx",
+    "signature": "OpmFloatingWindow|onClose:{()=>setIsRightFloating(false)}|onDock:{()=>setIsRightFloating(false)}",
+    "id": "live:components/entropy/EntropyWorkspace:80ad74722b3c",
+    "status": "excluded",
+    "reason": "OpmFloatingWindow callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/entropy/OpmFloatingWindow.tsx",
+    "signature": "div|onMouseDown:{handleResizeMouseDown}",
+    "id": "live:components/entropy/OpmFloatingWindow:fd416c586621",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/entropy/OpmFloatingWindow:fd416c586621"
+    ]
+  },
+  {
+    "source": "src/components/help/HelpModal.tsx",
+    "signature": "div|onMouseDown:{event=>{if(event.target===event.currentTarget)onClose();}}",
+    "id": "live:components/help/HelpModal:84e4feee74c2",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/help/HelpModal:84e4feee74c2"
+    ]
+  },
+  {
+    "source": "src/components/help/HelpModal.tsx",
+    "signature": "div|onKeyDown:{event=>{if(event.key==='Escape'){event.stopPropagation();onClose();}if(event.key==='Tab'){constcontrols=Array.from(dialogRef.current?.querySelectorAll<HTMLElement>('button:not([disabled]),input,select,a[href],[tabindex=\"0\"]')??[]);constfirst=controls[0],last=controls.at(-1);if(event.shiftKey&&document.activeElement===first){event.preventDefault();last?.focus();}elseif(!event.shiftKey&&document.activeElement===last){event.preventDefault();first?.focus();}}}}",
+    "id": "live:components/help/HelpModal:17f503c89b06",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/help/HelpModal:17f503c89b06"
+    ]
+  },
+  {
+    "source": "src/components/help/HelpModal.tsx",
+    "signature": "input|onChange:{event=>setQuery(event.target.value)}",
+    "id": "live:components/help/HelpModal:992a4d2572d1",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/help/HelpModal:992a4d2572d1"
+    ]
+  },
+  {
+    "source": "src/components/help/HelpModal.tsx",
+    "signature": "button|onClick:{()=>setBlockMode(false)}",
+    "id": "live:components/help/HelpModal:115e89d9b5ea",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/help/HelpModal:115e89d9b5ea"
+    ]
+  },
+  {
+    "source": "src/components/help/HelpModal.tsx",
+    "signature": "button|onClick:{()=>{setBlockMode(true);setArchitecture(false);}}",
+    "id": "live:components/help/HelpModal:67f9dc166de3",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/help/HelpModal:67f9dc166de3"
+    ]
+  },
+  {
+    "source": "src/components/help/HelpModal.tsx",
+    "signature": "button|onClick:{onClose}",
+    "id": "live:components/help/HelpModal:09c5dbfae3b8",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/help/HelpModal:09c5dbfae3b8"
+    ]
+  },
+  {
+    "source": "src/components/help/HelpModal.tsx",
+    "signature": "select|onChange:{event=>{setSourceFilter(event.target.value);setCategoryFilter('All');}}",
+    "id": "live:components/help/HelpModal:b7d960843f6e",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/help/HelpModal:b7d960843f6e"
+    ]
+  },
+  {
+    "source": "src/components/help/HelpModal.tsx",
+    "signature": "select|onChange:{event=>setCategoryFilter(event.target.value)}",
+    "id": "live:components/help/HelpModal:22e21793ae47",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/help/HelpModal:22e21793ae47"
+    ]
+  },
+  {
+    "source": "src/components/help/HelpModal.tsx",
+    "signature": "button|onClick:{()=>{setSelectedBlockId(block.id);contentRef.current?.scrollTo?.({top:0});}}",
+    "id": "live:components/help/HelpModal:963004dc3b8c",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/help/HelpModal:963004dc3b8c"
+    ]
+  },
+  {
+    "source": "src/components/help/HelpModal.tsx",
+    "signature": "button|onClick:{()=>openTopic(result.topicId,result.sectionId)}",
+    "id": "live:components/help/HelpModal:6b21118f7870",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/help/HelpModal:6b21118f7870"
+    ]
+  },
+  {
+    "source": "src/components/help/HelpModal.tsx",
+    "signature": "button|onClick:{()=>openTopic(id)}",
+    "id": "live:components/help/HelpModal:f627721dbe61",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/help/HelpModal:f627721dbe61"
+    ]
+  },
+  {
+    "source": "src/components/help/HelpModal.tsx",
+    "signature": "button|onClick:{()=>openTopic(selectedBlock.source==='V-Lab'?'vlab-fundamentals':'xbridges-ref')}",
+    "id": "live:components/help/HelpModal:f18426c65bd3",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/help/HelpModal:f18426c65bd3"
+    ]
+  },
+  {
+    "source": "src/components/help/HelpModal.tsx",
+    "signature": "SoftwareArchitectureExplorer|onClose:{()=>setArchitecture(false)}",
+    "id": "live:components/help/HelpModal:daf01041eac7",
+    "status": "excluded",
+    "reason": "SoftwareArchitectureExplorer callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/help/HelpModal.tsx",
+    "signature": "button|onClick:{()=>setArchitecture(true)}",
+    "id": "live:components/help/HelpModal:6aaab003a445",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/help/HelpModal:6aaab003a445"
+    ]
+  },
+  {
+    "source": "src/components/help/HelpModal.tsx",
+    "signature": "button|onClick:{()=>scrollToSection(helpSectionId(section,index))}",
+    "id": "live:components/help/HelpModal:324900354f85",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/help/HelpModal:324900354f85"
+    ]
+  },
+  {
+    "source": "src/components/help/HelpModal.tsx",
+    "signature": "button|onClick:{()=>openTopic(id)}",
+    "id": "live:components/help/HelpModal:f627721dbe61",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/help/HelpModal:f627721dbe61"
+    ]
+  },
+  {
+    "source": "src/components/help/HelpModal.tsx",
+    "signature": "button|onClick:{()=>openTopic(adjacent.previous!)}",
+    "id": "live:components/help/HelpModal:c46385b163b0",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/help/HelpModal:c46385b163b0"
+    ]
+  },
+  {
+    "source": "src/components/help/HelpModal.tsx",
+    "signature": "button|onClick:{()=>openTopic(adjacent.next!)}",
+    "id": "live:components/help/HelpModal:04ac6564bcbc",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/help/HelpModal:04ac6564bcbc"
+    ]
+  },
+  {
+    "source": "src/components/hil/HILDashboard.tsx",
+    "signature": "ResizableSplitPaneGroup|onRestore:{()=>setDashboardMaximized(null)}",
+    "id": "live:components/hil/HILDashboard:610f6fc43fd4",
+    "status": "excluded",
+    "reason": "ResizableSplitPaneGroup callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/hil/HILDashboard.tsx",
+    "signature": "PanelMaximizeButton|onToggle:{()=>setDashboardMaximized(dashboardMaximized===0?null:0)}",
+    "id": "live:components/hil/HILDashboard:ab8c65b05134",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/hil/HILDashboard:ab8c65b05134"
+    ]
+  },
+  {
+    "source": "src/components/hil/HILDashboard.tsx",
+    "signature": "PanelMaximizeButton|onToggle:{()=>setDashboardMaximized(dashboardMaximized===1?null:1)}",
+    "id": "live:components/hil/HILDashboard:dc50009040c8",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/hil/HILDashboard:dc50009040c8"
+    ]
+  },
+  {
+    "source": "src/components/hil/HILWorkspace.tsx",
+    "signature": "TargetPackSelector|onSelectTarget:{(targetId,mode,manifest)=>{onChangeConfig(applyTargetSelection(config,{targetId,packVersion:manifest.packVersion,driverMode:mode,boardRevision:manifest.deviceRevision,}));}}",
+    "id": "live:components/hil/HILWorkspace:2dc49710c9e7",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/hil/HILWorkspace:2dc49710c9e7"
+    ]
+  },
+  {
+    "source": "src/components/hil/HILWorkspace.tsx",
+    "signature": "ResizableSplitPaneGroup|onRestore:{()=>setTab1Maximized(null)}",
+    "id": "live:components/hil/HILWorkspace:aa4c66b88501",
+    "status": "excluded",
+    "reason": "ResizableSplitPaneGroup callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/hil/HILWorkspace.tsx",
+    "signature": "PanelMaximizeButton|onToggle:{()=>setTab1Maximized(tab1Maximized===0?null:0)}",
+    "id": "live:components/hil/HILWorkspace:fe20b5a08b06",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/hil/HILWorkspace:fe20b5a08b06"
+    ]
+  },
+  {
+    "source": "src/components/hil/HILWorkspace.tsx",
+    "signature": "PanelMaximizeButton|onToggle:{()=>setTab1Maximized(tab1Maximized===1?null:1)}",
+    "id": "live:components/hil/HILWorkspace:ad6d4f303c32",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/hil/HILWorkspace:ad6d4f303c32"
+    ]
+  },
+  {
+    "source": "src/components/hil/HILWorkspace.tsx",
+    "signature": "PanelMaximizeButton|onToggle:{()=>setTab1Maximized(tab1Maximized===2?null:2)}",
+    "id": "live:components/hil/HILWorkspace:2542b20156da",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/hil/HILWorkspace:2542b20156da"
+    ]
+  },
+  {
+    "source": "src/components/hil/HILWorkspace.tsx",
+    "signature": "ResizableSplitPaneGroup|onRestore:{()=>setTab2Maximized(null)}",
+    "id": "live:components/hil/HILWorkspace:d423509a08b6",
+    "status": "excluded",
+    "reason": "ResizableSplitPaneGroup callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/hil/HILWorkspace.tsx",
+    "signature": "PanelMaximizeButton|onToggle:{()=>setTab2Maximized(tab2Maximized===0?null:0)}",
+    "id": "live:components/hil/HILWorkspace:d0f64e4f6ca1",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/hil/HILWorkspace:d0f64e4f6ca1"
+    ]
+  },
+  {
+    "source": "src/components/hil/HILWorkspace.tsx",
+    "signature": "PanelMaximizeButton|onToggle:{()=>setTab2Maximized(tab2Maximized===1?null:1)}",
+    "id": "live:components/hil/HILWorkspace:84b56bb5e1d6",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/hil/HILWorkspace:84b56bb5e1d6"
+    ]
+  },
+  {
+    "source": "src/components/hil/HILWorkspace.tsx",
+    "signature": "HILDashboard|onChangeBaudRate:{(baudRate)=>onChangeConfig({...config,baudRate})}|onChangeCommPort:{(commPort)=>onChangeConfig({...config,commPort})}|onChangeSessionState:{onChangeSessionState}",
+    "id": "live:components/hil/HILWorkspace:47c7adb802e5",
+    "status": "excluded",
+    "reason": "HILDashboard callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/modelExplorer/AppModelExplorer.tsx",
+    "signature": "ModelExplorer|onActivateNode:{handleActivateNode}|onExecuteCapability:{handleExecuteCapability}|onExpandedNodeIdsChange:{setExpandedNodeIds}|onMoveNode:{handleMoveNode}|onRenameCommit:{(nodeId,newName)=>{constnode=projection.nodes[nodeId];if(!node)return;constbus=createModelExplorerCommandBus(explorerAdapterDomain(node)==='stateMachine'?smAdapter:sysmlAdapter);constres=bus.dispatch({type:'rename',elementId:node.semanticId,name:newName,});acceptResult(res,{type:'rename',elementId:node.semanticId,name:newName,});}}|onSelectNode:{handleSelectNode}",
+    "id": "live:components/modelExplorer/AppModelExplorer:1d442671cecc",
+    "status": "excluded",
+    "reason": "ModelExplorer callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/modelExplorer/AppModelExplorer.tsx",
+    "signature": "MoveImpactDialog|onCancel:{()=>setPendingImpact(null)}|onConfirm:{handleConfirmImpact}",
+    "id": "live:components/modelExplorer/AppModelExplorer:f8b04e9f17df",
+    "status": "excluded",
+    "reason": "MoveImpactDialog callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/modelExplorer/AppModelExplorer.tsx",
+    "signature": "TypeSelectionPrompt|onCancel:{()=>setPendingType(null)}|onCreateNewType:{handleCreateNewType}|onSelectType:{handleSelectType}",
+    "id": "live:components/modelExplorer/AppModelExplorer:56d039332edf",
+    "status": "excluded",
+    "reason": "TypeSelectionPrompt callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/modelExplorer/AppModelExplorer.tsx",
+    "signature": "RelationshipWizard|onClose:{()=>setRelationshipWizardState(null)}|onCreateRelationship:{(kind,targetSemanticId)=>{constisIncoming=relationshipWizardState.direction==='incoming';constsourceId=isIncoming?targetSemanticId:relationshipWizardState.sourceNode.semanticId;consttargetId=isIncoming?relationshipWizardState.sourceNode.semanticId:targetSemanticId;constcmd:ModelExplorerCommand={type:'createRelationship',relationshipKind:kind,sourceId,targetId,};constbus=createModelExplorerCommandBus(activeAdapter);constres=bus.dispatch(cmd);acceptResult(res);setRelationshipWizardState(null);}}",
+    "id": "live:components/modelExplorer/AppModelExplorer:9828e639537c",
+    "status": "excluded",
+    "reason": "RelationshipWizard callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/modelExplorer/ModelExplorer.tsx",
+    "signature": "div|onKeyDown:{(e)=>{if(e.key==='F2'){constfocusedRow=visibleRows[focusedIndex];if(focusedRow&&!focusedRow.node.readOnly){e.preventDefault();setLocalRenamingNodeId(focusedRow.node.nodeId);}}}}",
+    "id": "live:components/modelExplorer/ModelExplorer:d0ef54c166ea",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/modelExplorer/ModelExplorer:d0ef54c166ea"
+    ]
+  },
+  {
+    "source": "src/components/modelExplorer/ModelExplorer.tsx",
+    "signature": "ModelExplorerToolbar|onCollapseAll:{handleCollapseAll}|onExpandAll:{handleExpandAll}|onSearchQueryChange:{setSearchQuery}|onToggleFavoritesOnly:{()=>setShowFavoritesOnly(prev=>!prev)}|onViewModeChange:{setViewMode}",
+    "id": "live:components/modelExplorer/ModelExplorer:7a80792b383f",
+    "status": "excluded",
+    "reason": "ModelExplorerToolbar callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/modelExplorer/ModelExplorer.tsx",
+    "signature": "VirtualTree|onActivateRow:{(row)=>{if(!row.node.readOnly){setLocalRenamingNodeId(row.node.nodeId);}onActivateNode?.(row.node);}}|onFocusIndex:{setFocusedIndex}|onToggleExpand:{handleToggleExpand}",
+    "id": "live:components/modelExplorer/ModelExplorer:1b34e373eb9a",
+    "status": "excluded",
+    "reason": "VirtualTree callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/modelExplorer/ModelExplorer.tsx",
+    "signature": "ModelExplorerMenu|onClose:{()=>setContextMenu(null)}|onSelectCapability:{handleSelectCapability}",
+    "id": "live:components/modelExplorer/ModelExplorer:9fe4fa880f3c",
+    "status": "excluded",
+    "reason": "ModelExplorerMenu callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/modelExplorer/VirtualTree.tsx",
+    "signature": "div|onKeyDown:{handleKeyDown}|onScroll:{handleScroll}",
+    "id": "live:components/modelExplorer/VirtualTree:cf751344f73e",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/modelExplorer/VirtualTree:cf751344f73e"
+    ]
+  },
+  {
+    "source": "src/components/plantuml/PlantUmlCanvas.tsx",
+    "signature": "main|onDragOver:{(event)=>event.preventDefault()}|onDrop:{(event)=>{constkind=event.dataTransfer.getData('application/x-adia-plantuml-kind');if(kind)onDrop(kind,{x:event.nativeEvent.offsetX,y:event.nativeEvent.offsetY});}}",
+    "id": "live:components/plantuml/PlantUmlCanvas:7f600af7db2f",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/plantuml/PlantUmlCanvas:7f600af7db2f"
+    ]
+  },
+  {
+    "source": "src/components/plantuml/PlantUmlWorkspace.tsx",
+    "signature": "PlantUmlPalette|onAdd:{add}",
+    "id": "live:components/plantuml/PlantUmlWorkspace:a066f4396b96",
+    "status": "excluded",
+    "reason": "PlantUmlPalette callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/sysml/ActivityWorkspace.tsx",
+    "signature": "div|onKeyDown:{onKeyDown}",
+    "id": "live:components/sysml/ActivityWorkspace:5038e2c00767",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/sysml/ActivityWorkspace:5038e2c00767"
+    ]
+  },
+  {
+    "source": "src/components/sysml/ActivityWorkspace.tsx",
+    "signature": "svg|onPointerDown:{onBackgroundPointerDown}",
+    "id": "live:components/sysml/ActivityWorkspace:e5ae7eaf6a04",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/sysml/ActivityWorkspace:e5ae7eaf6a04"
+    ]
+  },
+  {
+    "source": "src/components/sysml/ActivityWorkspace.tsx",
+    "signature": "g|onPointerDown:{event=>onLanePointerDown(event,lane)}",
+    "id": "live:components/sysml/ActivityWorkspace:3b835de5baad",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/sysml/ActivityWorkspace:3b835de5baad"
+    ]
+  },
+  {
+    "source": "src/components/sysml/ActivityWorkspace.tsx",
+    "signature": "g|onPointerDown:{event=>onEdgePointerDown(event,edge)}",
+    "id": "live:components/sysml/ActivityWorkspace:4234c0b1a716",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/sysml/ActivityWorkspace:4234c0b1a716"
+    ]
+  },
+  {
+    "source": "src/components/sysml/ActivityWorkspace.tsx",
+    "signature": "g|onPointerDown:{event=>onPinPointerDown(event,pin.id)}",
+    "id": "live:components/sysml/ActivityWorkspace:b8e817d967e7",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/sysml/ActivityWorkspace:b8e817d967e7"
+    ]
+  },
+  {
+    "source": "src/components/sysml/ActivityWorkspace.tsx",
+    "signature": "rect|onPointerDown:{event=>onResizePointerDown(event,singleNode)}",
+    "id": "live:components/sysml/ActivityWorkspace:98dd6f69b073",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/sysml/ActivityWorkspace:98dd6f69b073"
+    ]
+  },
+  {
+    "source": "src/components/sysml/AllocationMatrix.tsx",
+    "signature": "KindFilter|onToggle:{toggle(setRowKinds)}",
+    "id": "live:components/sysml/AllocationMatrix:53d060b4f2ab",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/sysml/AllocationMatrix:53d060b4f2ab"
+    ]
+  },
+  {
+    "source": "src/components/sysml/AllocationMatrix.tsx",
+    "signature": "KindFilter|onToggle:{toggle(setColumnKinds)}",
+    "id": "live:components/sysml/AllocationMatrix:e732cb4ac84c",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/sysml/AllocationMatrix:e732cb4ac84c"
+    ]
+  },
+  {
+    "source": "src/components/sysml/BlockFeatureEditor.tsx",
+    "signature": "div|onKeyDown:{event=>{if(event.key==='Enter'||event.key===''){event.preventDefault();handleRedefine(ip);}}}",
+    "id": "live:components/sysml/BlockFeatureEditor:98264639931e",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/sysml/BlockFeatureEditor:98264639931e"
+    ]
+  },
+  {
+    "source": "src/components/sysml/BlockFeatureEditor.tsx",
+    "signature": "TypeSelectionPrompt|onCancel:{()=>setPropertyPrompt(null)}|onCreateNewType:{onCreateNewType?createNewPropertyType:undefined}|onSelectType:{confirmPropertyType}",
+    "id": "live:components/sysml/BlockFeatureEditor:bd45293aee80",
+    "status": "excluded",
+    "reason": "TypeSelectionPrompt callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/sysml/BlockFeatureEditor.tsx",
+    "signature": "TypeSelectionPrompt|onCancel:{()=>setPortPrompt(null)}|onCreateNewType:{onCreateNewType?createNewPortType:undefined}|onSelectType:{confirmPortType}",
+    "id": "live:components/sysml/BlockFeatureEditor:20d798861576",
+    "status": "excluded",
+    "reason": "TypeSelectionPrompt callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/sysml/BlockPropertiesEditor.tsx",
+    "signature": "div|onKeyDown:{event=>{if(event.key==='Enter'||event.key===''){event.preventDefault();handleRedefine(inherited);}}}",
+    "id": "live:components/sysml/BlockPropertiesEditor:42bdf4f49b6f",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/sysml/BlockPropertiesEditor:42bdf4f49b6f"
+    ]
+  },
+  {
+    "source": "src/components/sysml/RelationshipEndEditor.tsx",
+    "signature": "DraftTextInput|onCommit:{text=>update({sourceRole:text.trim()||undefined})}",
+    "id": "live:components/sysml/RelationshipEndEditor:7671d33c8134",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/sysml/RelationshipEndEditor:7671d33c8134"
+    ]
+  },
+  {
+    "source": "src/components/sysml/RelationshipEndEditor.tsx",
+    "signature": "DraftTextInput|onCommit:{text=>update({sourceMultiplicity:parseMult(text,relationship.sourceMultiplicity)})}",
+    "id": "live:components/sysml/RelationshipEndEditor:5ee497dad944",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/sysml/RelationshipEndEditor:5ee497dad944"
+    ]
+  },
+  {
+    "source": "src/components/sysml/RelationshipEndEditor.tsx",
+    "signature": "DraftTextInput|onCommit:{text=>update({targetRole:text.trim()||undefined})}",
+    "id": "live:components/sysml/RelationshipEndEditor:77a8376c621e",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/sysml/RelationshipEndEditor:77a8376c621e"
+    ]
+  },
+  {
+    "source": "src/components/sysml/RelationshipEndEditor.tsx",
+    "signature": "DraftTextInput|onCommit:{text=>update({targetMultiplicity:parseMult(text,relationship.targetMultiplicity)})}",
+    "id": "live:components/sysml/RelationshipEndEditor:522f5056d593",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/sysml/RelationshipEndEditor:522f5056d593"
+    ]
+  },
+  {
+    "source": "src/components/sysml/SequenceWorkspace.tsx",
+    "signature": "div|onKeyDown:{onKeyDown}",
+    "id": "live:components/sysml/SequenceWorkspace:5038e2c00767",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/sysml/SequenceWorkspace:5038e2c00767"
+    ]
+  },
+  {
+    "source": "src/components/sysml/SequenceWorkspace.tsx",
+    "signature": "svg|onPointerDown:{onBackgroundPointerDown}",
+    "id": "live:components/sysml/SequenceWorkspace:e5ae7eaf6a04",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/sysml/SequenceWorkspace:e5ae7eaf6a04"
+    ]
+  },
+  {
+    "source": "src/components/sysml/SequenceWorkspace.tsx",
+    "signature": "g|onPointerDown:{event=>onFragmentPointerDown(event,fragment)}",
+    "id": "live:components/sysml/SequenceWorkspace:575187c21f8f",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/sysml/SequenceWorkspace:575187c21f8f"
+    ]
+  },
+  {
+    "source": "src/components/sysml/SequenceWorkspace.tsx",
+    "signature": "g|onPointerDown:{event=>onLifelinePointerDown(event,lifeline,false)}",
+    "id": "live:components/sysml/SequenceWorkspace:3e6c88b6d3d8",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/sysml/SequenceWorkspace:3e6c88b6d3d8"
+    ]
+  },
+  {
+    "source": "src/components/sysml/SequenceWorkspace.tsx",
+    "signature": "rect|onPointerDown:{event=>onLifelinePointerDown(event,lifeline,true)}",
+    "id": "live:components/sysml/SequenceWorkspace:149dbca2d188",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/sysml/SequenceWorkspace:149dbca2d188"
+    ]
+  },
+  {
+    "source": "src/components/sysml/SequenceWorkspace.tsx",
+    "signature": "g|onPointerDown:{event=>onConstraintPointerDown(event,constraint)}",
+    "id": "live:components/sysml/SequenceWorkspace:6fbc52684016",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/sysml/SequenceWorkspace:6fbc52684016"
+    ]
+  },
+  {
+    "source": "src/components/sysml/SequenceWorkspace.tsx",
+    "signature": "g|onPointerDown:{event=>onInvariantPointerDown(event,invariant)}",
+    "id": "live:components/sysml/SequenceWorkspace:bf8a1d8a7f7c",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/sysml/SequenceWorkspace:bf8a1d8a7f7c"
+    ]
+  },
+  {
+    "source": "src/components/sysml/SysmlPropertyPanel.tsx",
+    "signature": "PropertyFieldRow|onCommit:{(val)=>{if(field.toCommand&&onExecuteCommand){constcmd=field.toCommand(val);onExecuteCommand(cmd);}}}",
+    "id": "live:components/sysml/SysmlPropertyPanel:70d3b6f0f62c",
+    "status": "excluded",
+    "reason": "PropertyFieldRow callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/sysml/TraceabilityMatrix.tsx",
+    "signature": "VirtualizedTraceabilityGrid|onNavigate:{onNavigate}",
+    "id": "live:components/sysml/TraceabilityMatrix:ed265e432c28",
+    "status": "excluded",
+    "reason": "VirtualizedTraceabilityGrid callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/sysml/TraceabilityMatrix.tsx",
+    "signature": "ElementLinks|onNavigate:{onNavigate}",
+    "id": "live:components/sysml/TraceabilityMatrix:98407bdd16e9",
+    "status": "excluded",
+    "reason": "ElementLinks callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/sysml/TraceabilityMatrix.tsx",
+    "signature": "ElementLinks|onNavigate:{onNavigate}",
+    "id": "live:components/sysml/TraceabilityMatrix:98407bdd16e9",
+    "status": "excluded",
+    "reason": "ElementLinks callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/sysml/TraceabilityMatrix.tsx",
+    "signature": "ElementLinks|onNavigate:{onNavigate}",
+    "id": "live:components/sysml/TraceabilityMatrix:98407bdd16e9",
+    "status": "excluded",
+    "reason": "ElementLinks callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/sysml/TraceabilityMatrix.tsx",
+    "signature": "ElementLinks|onNavigate:{onNavigate}",
+    "id": "live:components/sysml/TraceabilityMatrix:98407bdd16e9",
+    "status": "excluded",
+    "reason": "ElementLinks callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/sysml/UseCaseWorkspace.tsx",
+    "signature": "div|onKeyDown:{onKeyDown}",
+    "id": "live:components/sysml/UseCaseWorkspace:5038e2c00767",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/sysml/UseCaseWorkspace:5038e2c00767"
+    ]
+  },
+  {
+    "source": "src/components/sysml/UseCaseWorkspace.tsx",
+    "signature": "svg|onPointerDown:{onBackgroundPointerDown}",
+    "id": "live:components/sysml/UseCaseWorkspace:e5ae7eaf6a04",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/sysml/UseCaseWorkspace:e5ae7eaf6a04"
+    ]
+  },
+  {
+    "source": "src/components/sysml/UseCaseWorkspace.tsx",
+    "signature": "g|onPointerDown:{event=>onEdgePointerDown(event,edge)}",
+    "id": "live:components/sysml/UseCaseWorkspace:4234c0b1a716",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/sysml/UseCaseWorkspace:4234c0b1a716"
+    ]
+  },
+  {
+    "source": "src/components/sysml/UseCaseWorkspace.tsx",
+    "signature": "rect|onPointerDown:{event=>onResizePointerDown(event,singleNode)}",
+    "id": "live:components/sysml/UseCaseWorkspace:98dd6f69b073",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/sysml/UseCaseWorkspace:98dd6f69b073"
+    ]
+  },
+  {
+    "source": "src/components/sysml/VirtualizedTraceabilityGrid.tsx",
+    "signature": "div|onScroll:{handleScroll}",
+    "id": "live:components/sysml/VirtualizedTraceabilityGrid:9f410c2dcf23",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/sysml/VirtualizedTraceabilityGrid:9f410c2dcf23"
+    ]
+  },
+  {
+    "source": "src/components/ui/EngineeringPrimitives.tsx",
+    "signature": "div|onMouseDown:{onMouseDown}",
+    "id": "live:components/ui/EngineeringPrimitives:faada355b359",
+    "status": "excluded",
+    "reason": "Reusable layout/presentation primitive forwards its caller-provided pointer handler; caller gestures are audited separately.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/vlab/VLabWorkspace.tsx",
+    "signature": "ReactFlow|onConnect:{onConnect}|onConnectEnd:{onConnectEnd}|onConnectStart:{onConnectStart}|onEdgesChange:{onLocalEdgesChange}|onInit:{setReactFlowInstance}|onNodeClick:{onNodeClick}|onNodeDoubleClick:{onNodeDoubleClick}|onNodeDragStop:{onNodeDragStop}|onNodesChange:{onLocalNodesChange}|onPaneClick:{onPaneClick}",
+    "id": "live:components/vlab/VLabWorkspace:99dea21cf220",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/vlab/VLabWorkspace:99dea21cf220"
+    ]
+  },
+  {
+    "source": "src/components/vlab/VLabWorkspace.tsx",
+    "signature": "ScopeView|onExpand:{()=>setOpenScopes(prev=>prev.includes(selectedNode.id)?prev:[...prev,selectedNode.id])}",
+    "id": "live:components/vlab/VLabWorkspace:ed4f04501661",
+    "status": "excluded",
+    "reason": "ScopeView callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/vlab/VLabWorkspace.tsx",
+    "signature": "VLabSimulinkScope|onClear:{()=>{setPerScopeData(prev=>({...prev,[scopeId]:[]}));setScopeData([]);}}|onClose:{()=>setOpenScopes(prev=>prev.filter(id=>id!==scopeId))}|onSpeedChange:{setSimSpeed}|onUpdate:{(newData)=>{setNodes(nds=>nds.map(n=>{if(n.id===scopeId){constupdatedParams={...n.data.params,...newData};constupdatedData:Record<string,any>={...n.data,params:updatedParams};if(newData.numSignals){constnum=Math.max(1,Math.min(8,Number(newData.numSignals.value)||1));updatedData.ports=Array.from({length:num},(_,i)=>({id:`in${i+1}`,pos:'left',label:`${i+1}`,domain:'Physical',direction:'in'}));//PruneanyincomingedgestochannelsexceedingnewcapacitysetEdges(eds=>eds.filter(e=>{if(e.target!==scopeId)returntrue;//exactscopechannelid(sameportIdFromHandlepathastheassembler),notasuffixstrip+digitscrapeconstportId=portIdFromHandle({id:scopeId,data:{type:'scope'}},e.targetHandle)??'in1';constch=Number(portId.match(/^in(\\d+)$/)?.[1]??1);returnch<=num;}));}return{...n,data:updatedData};}returnn;}));}}",
+    "id": "live:components/vlab/VLabWorkspace:5d0e03b1b348",
+    "status": "excluded",
+    "reason": "VLabSimulinkScope callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/vlab/VLabWorkspace.tsx",
+    "signature": "div|onMouseDown:{()=>setShowConfirmClear(false)}",
+    "id": "live:components/vlab/VLabWorkspace:f329ee58e245",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/vlab/VLabWorkspace:f329ee58e245"
+    ]
+  },
+  {
+    "source": "src/components/vlab/VLabWorkspace.tsx",
+    "signature": "div|onMouseDown:{e=>e.stopPropagation()}",
+    "id": "live:components/vlab/VLabWorkspace:206ef69c57e5",
+    "status": "excluded",
+    "reason": "Propagation/prevent-default wrapper performs no independent model or UI command.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/xbridges/XbridgesPropertiesPanel.tsx",
+    "signature": "div|onMouseDown:{handleMouseDown}|onMouseLeave:{handleMouseLeave}|onMouseMove:{handleMouseMove}|onMouseUp:{handleMouseUp}",
+    "id": "live:components/xbridges/XbridgesPropertiesPanel:e722b62485a3",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/xbridges/XbridgesPropertiesPanel:e722b62485a3"
+    ]
+  },
+  {
+    "source": "src/components/xbridges/XbridgesRootLocusWindow.tsx",
+    "signature": "Dialog.Root|onOpenChange:{(open)=>!open&&onClose()}",
+    "id": "live:components/xbridges/XbridgesRootLocusWindow:361cb11d2e96",
+    "status": "excluded",
+    "reason": "Dialog.Root callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/xbridges/XbridgesScopeWindow.tsx",
+    "signature": "Dialog.Root|onOpenChange:{(open)=>!open&&onClose()}",
+    "id": "live:components/xbridges/XbridgesScopeWindow:361cb11d2e96",
+    "status": "excluded",
+    "reason": "Dialog.Root callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/xbridges/XbridgesScopeWindow.tsx",
+    "signature": "canvas|onMouseDown:{handleMouseDown}|onMouseLeave:{handleMouseUp}|onMouseMove:{handleMouseMove}|onMouseUp:{handleMouseUp}|onWheel:{handleWheel}",
+    "id": "live:components/xbridges/XbridgesScopeWindow:5a8b726980e9",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/xbridges/XbridgesScopeWindow:5a8b726980e9"
+    ]
+  },
+  {
+    "source": "src/components/xbridges/XbridgesScopeWindow.tsx",
+    "signature": "Dialog.Root|onOpenChange:{(open)=>!open&&onClose()}",
+    "id": "live:components/xbridges/XbridgesScopeWindow:361cb11d2e96",
+    "status": "excluded",
+    "reason": "Dialog.Root callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/xbridges/XbridgesWorkspace.tsx",
+    "signature": "div|onDragStart:{(e)=>onDragStart(e,b.type)}",
+    "id": "live:components/xbridges/XbridgesWorkspace:c5274d9f5f13",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/xbridges/XbridgesWorkspace:c5274d9f5f13"
+    ]
+  },
+  {
+    "source": "src/components/xbridges/XbridgesWorkspace.tsx",
+    "signature": "ReactFlow|onConnect:{onConnect}|onDragOver:{(e)=>e.preventDefault()}|onDrop:{onDrop}|onEdgesChange:{onEdgesChange}|onInit:{setReactFlowInstance}|onNodeClick:{onNodeClick}|onNodeDoubleClick:{onNodeDoubleClick}|onNodeDragStop:{onNodeDragStop}|onNodesChange:{onNodesChange}|onNodesDelete:{onNodesDelete}|onPaneClick:{(e)=>{if(e.detail===2){setSearchMenuPos({x:e.clientX,y:e.clientY});}else{setSearchMenuPos(null);setSearchTerm('');}setSelectedNodeId(null);}}|onSelectionChange:{({nodes:selectedNodes})=>{if(selectedNodes.length===1){setSelectedNodeId(selectedNodes[0].id);}elseif(selectedNodes.length===0){setSelectedNodeId(null);}}}",
+    "id": "live:components/xbridges/XbridgesWorkspace:7abe5836c52e",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/xbridges/XbridgesWorkspace:7abe5836c52e"
+    ]
+  },
+  {
+    "source": "src/components/xbridges/XbridgesWorkspace.tsx",
+    "signature": "XbridgesPropertiesPanel|onClose:{()=>setSelectedNodeId(null)}|onCollapseToggle:{setIsPropsCollapsed}|onLaunchDoe:{onLaunchDoe}|onUpdate:{updateBlock}",
+    "id": "live:components/xbridges/XbridgesWorkspace:d461405e94e9",
+    "status": "excluded",
+    "reason": "XbridgesPropertiesPanel callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/xbridges/XbridgesWorkspace.tsx",
+    "signature": "XbridgesRootLocusWindow|onClose:{()=>setOpenScopes(prev=>prev.filter(id=>id!==scopeId))}|onUpdate:{(newData)=>updateBlock(scopeId,{params:{...scopeNode.data.params,...newData}})}",
+    "id": "live:components/xbridges/XbridgesWorkspace:e414ace955ff",
+    "status": "excluded",
+    "reason": "XbridgesRootLocusWindow callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/xbridges/XbridgesWorkspace.tsx",
+    "signature": "XbridgesScopeWindow|onClose:{()=>setOpenScopes(prev=>prev.filter(id=>id!==scopeId))}|onUpdate:{(newData)=>updateBlock(scopeId,{params:{...scopeNode.data.params,...newData}})}",
+    "id": "live:components/xbridges/XbridgesWorkspace:4df8bcb12a43",
+    "status": "excluded",
+    "reason": "XbridgesScopeWindow callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/xbridges/XbridgesWorkspace.tsx",
+    "signature": "div|onMouseDown:{()=>setShowConfirmClear(false)}",
+    "id": "live:components/xbridges/XbridgesWorkspace:f329ee58e245",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/xbridges/XbridgesWorkspace:f329ee58e245"
+    ]
+  },
+  {
+    "source": "src/components/xbridges/XbridgesWorkspace.tsx",
+    "signature": "div|onMouseDown:{e=>e.stopPropagation()}",
+    "id": "live:components/xbridges/XbridgesWorkspace:206ef69c57e5",
+    "status": "excluded",
+    "reason": "Propagation/prevent-default wrapper performs no independent model or UI command.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "div|onWheel:{handleHorizontalToolbarWheel}",
+    "id": "live:App:2baeda448e81",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:App:2baeda448e81"
+    ]
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "div|onContextMenu:{(e)=>{e.preventDefault();if(diagramMode==='statemachine'){constrect=canvasRef.current?.getBoundingClientRect();if(!rect)return;constworldX=((e.clientX-rect.left)/uiZoom-view.offsetX)/view.scale;constworldY=((e.clientY-rect.top)/uiZoom-view.offsetY)/view.scale;setSmCanvasContextMenu({x:e.clientX,y:e.clientY,worldX,worldY,});}}}|onDoubleClick:{handleDoubleClick}|onDragOver:{(e)=>{if(e.dataTransfer.types.includes('application/x-adia-model-element')){e.preventDefault();e.dataTransfer.dropEffect='copy';}}}|onDrop:{(e)=>{constpayload=parseModelExplorerDragData(e.dataTransfer);if(!payload)return;e.preventDefault();constrect=canvasRef.current?.getBoundingClientRect();if(!rect)return;constworldPoint={x:((e.clientX-rect.left)/uiZoom-view.offsetX)/view.scale,y:((e.clientY-rect.top)/uiZoom-view.offsetY)/view.scale,};constactiveDiagId=resolveActiveSysmlDiagramTarget({diagramMode,activeDiagramId:activeSysmlDiagramId,currentLayerId,});constelemIds=payload.semanticIds??[payload.semanticId];handleExecuteSysmlCommand({type:'addToDiagram',diagramId:activeDiagId,elementIds:elemIds,coordinates:{[payload.semanticId]:worldPoint,},});}}|onMouseDown:{handleMouseDown}|onMouseLeave:{(e)=>{if(pendingBddBlockGestureRef.current||isDraggingRef.current)return;handleMouseUp(e);}}|onMouseMove:{handleMouseMove}|onMouseUp:{handleMouseUp}|onWheel:{handleWheel}",
+    "id": "live:App:2fb96905afb4",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:App:2fb96905afb4"
+    ]
+  },
+  {
+    "source": "src/components/hil/HILWorkspace.tsx",
+    "signature": "header|onWheel:{handleHorizontalToolbarWheel}",
+    "id": "live:components/hil/HILWorkspace:34ecff87bb82",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/hil/HILWorkspace:34ecff87bb82"
+    ]
+  },
+  {
+    "source": "src/components/plantuml/PlantUmlWorkspace.tsx",
+    "signature": "header|onWheel:{handleHorizontalToolbarWheel}",
+    "id": "live:components/plantuml/PlantUmlWorkspace:34ecff87bb82",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/plantuml/PlantUmlWorkspace:34ecff87bb82"
+    ]
+  },
+  {
+    "source": "src/components/sysml/ActivityWorkspace.tsx",
+    "signature": "header|onWheel:{handleHorizontalToolbarWheel}",
+    "id": "live:components/sysml/ActivityWorkspace:34ecff87bb82",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/sysml/ActivityWorkspace:34ecff87bb82"
+    ]
+  },
+  {
+    "source": "src/components/sysml/ActivityWorkspace.tsx",
+    "signature": "button|onClick:{()=>setSnapEnabled(!snapEnabled)}",
+    "id": "live:components/sysml/ActivityWorkspace:77ac9941f976",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/sysml/ActivityWorkspace:77ac9941f976"
+    ]
+  },
+  {
+    "source": "src/components/sysml/SequenceWorkspace.tsx",
+    "signature": "header|onWheel:{handleHorizontalToolbarWheel}",
+    "id": "live:components/sysml/SequenceWorkspace:34ecff87bb82",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/sysml/SequenceWorkspace:34ecff87bb82"
+    ]
+  },
+  {
+    "source": "src/components/sysml/UseCaseWorkspace.tsx",
+    "signature": "header|onWheel:{handleHorizontalToolbarWheel}",
+    "id": "live:components/sysml/UseCaseWorkspace:34ecff87bb82",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/sysml/UseCaseWorkspace:34ecff87bb82"
+    ]
+  },
+  {
+    "source": "src/components/sysml/UseCaseWorkspace.tsx",
+    "signature": "button|onClick:{()=>setSnapEnabled(!snapEnabled)}",
+    "id": "live:components/sysml/UseCaseWorkspace:77ac9941f976",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/sysml/UseCaseWorkspace:77ac9941f976"
+    ]
+  },
+  {
+    "source": "src/components/vlab/VLabDiagnosticsPanel.tsx",
+    "signature": "button|onClick:{()=>onSelectBlock?.(blockId)}",
+    "id": "live:components/vlab/VLabDiagnosticsPanel:e23988501f96",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/vlab/VLabDiagnosticsPanel:e23988501f96"
+    ]
+  },
+  {
+    "source": "src/components/vlab/VLabDiagnosticsPanel.tsx",
+    "signature": "button|onClick:{onDismiss}",
+    "id": "live:components/vlab/VLabDiagnosticsPanel:e6bed41841c3",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/vlab/VLabDiagnosticsPanel:e6bed41841c3"
+    ]
+  },
+  {
+    "source": "src/components/vlab/VLabMigrationBanner.tsx",
+    "signature": "button|onClick:{()=>onSelectBlock?.(n.nodeId)}",
+    "id": "live:components/vlab/VLabMigrationBanner:632a1fb636d5",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/vlab/VLabMigrationBanner:632a1fb636d5"
+    ]
+  },
+  {
+    "source": "src/components/vlab/VLabMigrationBanner.tsx",
+    "signature": "button|onClick:{()=>setDismissed(newSet(notices.map(n=>n.key)))}",
+    "id": "live:components/vlab/VLabMigrationBanner:9923a59f6aa3",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/vlab/VLabMigrationBanner:9923a59f6aa3"
+    ]
+  },
+  {
+    "source": "src/components/vlab/VLabWorkspace.tsx",
+    "signature": "div|onWheel:{handleHorizontalToolbarWheel}",
+    "id": "live:components/vlab/VLabWorkspace:2baeda448e81",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/vlab/VLabWorkspace:2baeda448e81"
+    ]
+  },
+  {
+    "source": "src/components/vlab/VLabWorkspace.tsx",
+    "signature": "button|onClick:{()=>setSnapEnabled(prev=>!prev)}",
+    "id": "live:components/vlab/VLabWorkspace:e25c5ed46212",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/vlab/VLabWorkspace:e25c5ed46212"
+    ]
+  },
+  {
+    "source": "src/components/vlab/VLabWorkspace.tsx",
+    "signature": "VLabDiagnosticsPanel|onDismiss:{()=>setRunDiagnostic(null)}|onSelectBlock:{(blockId)=>setSelectedNodeId(blockId)}",
+    "id": "live:components/vlab/VLabWorkspace:7c3be7d080e1",
+    "status": "excluded",
+    "reason": "VLabDiagnosticsPanel callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/vlab/VLabWorkspace.tsx",
+    "signature": "VLabMigrationBanner|onSelectBlock:{(blockId)=>setSelectedNodeId(blockId)}",
+    "id": "live:components/vlab/VLabWorkspace:b350483a3ca6",
+    "status": "excluded",
+    "reason": "VLabMigrationBanner callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/vlab/VLabWorkspace.tsx",
+    "signature": "VLabParamField|onCommit:{(val)=>updateParameter(key,val)}",
+    "id": "live:components/vlab/VLabWorkspace:bbc7e581db80",
+    "status": "excluded",
+    "reason": "VLabParamField callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/xbridges/XbridgesWorkspace.tsx",
+    "signature": "div|onWheel:{handleHorizontalToolbarWheel}",
+    "id": "live:components/xbridges/XbridgesWorkspace:2baeda448e81",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/xbridges/XbridgesWorkspace:2baeda448e81"
+    ]
+  },
+  {
+    "source": "src/components/xbridges/XbridgesWorkspace.tsx",
+    "signature": "button|onClick:{()=>setSnapEnabled(prev=>!prev)}",
+    "id": "live:components/xbridges/XbridgesWorkspace:e25c5ed46212",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/xbridges/XbridgesWorkspace:e25c5ed46212"
+    ]
+  },
+  {
+    "source": "src/components/sysml/ActivityWorkspace.tsx",
+    "signature": "button|onClick:{()=>setSnapEnabled(!snapEnabled)}",
+    "id": "ui:sysml/ActivityWorkspace:snapToggle",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "ui:sysml/ActivityWorkspace:snapToggle"
+    ]
+  },
+  {
+    "source": "src/components/sysml/UseCaseWorkspace.tsx",
+    "signature": "button|onClick:{()=>setSnapEnabled(!snapEnabled)}",
+    "id": "ui:sysml/UseCaseWorkspace:snapToggle",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "ui:sysml/UseCaseWorkspace:snapToggle"
+    ]
+  }
+]

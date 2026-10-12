@@ -121,7 +121,7 @@ export const HILSignalMapper: React.FC<HILSignalMapperProps> = ({
           {/* ADIA Variable Selection */}
           <div>
             <label className="block text-[10px] text-[#888] font-medium mb-1">ADIA Variable</label>
-            <select
+            <select data-help-feature="ui:hil/HILSignalMapper:21c33709dd13" data-help-source="src/components/hil/HILSignalMapper.tsx"
               value={selectedVar}
               onChange={(e) => setSelectedVar(e.target.value)}
               className="ui-control ui-focus-ring w-full bg-[#0a0a0a] border border-[#2a2a2a] rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-[#f97316]"
@@ -138,7 +138,7 @@ export const HILSignalMapper: React.FC<HILSignalMapperProps> = ({
           {/* Driver Channel Selection */}
           <div>
             <label className="block text-[10px] text-[#888] font-medium mb-1">Hardware Channel</label>
-            <select
+            <select data-help-feature="ui:hil/HILSignalMapper:2b47561058c3" data-help-source="src/components/hil/HILSignalMapper.tsx"
               value={selectedChannel}
               onChange={(e) => {
                 setSelectedChannel(e.target.value);
@@ -165,7 +165,7 @@ export const HILSignalMapper: React.FC<HILSignalMapperProps> = ({
           {/* Direction toggle */}
           <div className="w-1/3">
             <label className="block text-[10px] text-[#888] font-medium mb-1">Direction</label>
-            <select
+            <select data-help-feature="ui:hil/HILSignalMapper:ac76ab9eb11f" data-help-source="src/components/hil/HILSignalMapper.tsx"
               value={direction}
               onChange={(e) => {
                 setDirection(e.target.value as 'read' | 'write');
@@ -186,7 +186,7 @@ export const HILSignalMapper: React.FC<HILSignalMapperProps> = ({
                 <HelpCircle size={12} />
               </span>
             </label>
-            <input
+            <input data-help-feature="ui:hil/HILSignalMapper:d502dad3d9fa" data-help-source="src/components/hil/HILSignalMapper.tsx"
               type="text"
               placeholder="e.g. x * 3.3 / 4095"
               value={conversionExpr}
@@ -198,7 +198,7 @@ export const HILSignalMapper: React.FC<HILSignalMapperProps> = ({
           {direction === 'write' && (
             <div className="w-24">
               <label className="block text-[10px] text-[#888] font-medium mb-1">Safe Value</label>
-              <input
+              <input data-help-feature="ui:hil/HILSignalMapper:66c990d9c2e0" data-help-source="src/components/hil/HILSignalMapper.tsx"
                 type="text"
                 placeholder="0 / false"
                 value={safeValue}
@@ -209,7 +209,7 @@ export const HILSignalMapper: React.FC<HILSignalMapperProps> = ({
             </div>
           )}
 
-          <button
+          <button data-help-feature="ui:hil/HILSignalMapper:3b41b9a4eb4c" data-help-source="src/components/hil/HILSignalMapper.tsx"
             onClick={addMapping}
             disabled={!selectedVar || !selectedChannel}
             className="ui-control ui-focus-ring px-3.5 py-1.5 bg-[#f97316] text-[#0a0a0a] text-xs font-semibold rounded hover:bg-[#ea580c] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -256,7 +256,7 @@ export const HILSignalMapper: React.FC<HILSignalMapperProps> = ({
                         safe: {String(map.safeValue)}
                       </span>
                     )}
-                    <button
+                    <button data-help-feature="ui:hil/HILSignalMapper:30dba43e9be8" data-help-source="src/components/hil/HILSignalMapper.tsx"
                       onClick={() => removeMapping(map.id)}
                       className="ui-control ui-focus-ring text-[#666] hover:text-red-400 p-1 rounded transition-colors"
                       title="Delete Mapping"

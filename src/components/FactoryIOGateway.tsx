@@ -79,7 +79,7 @@ export const FactoryIOGateway: React.FC<FactoryIOGatewayProps> = ({
               </div>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-[#222] rounded-full text-gray-400 transition-colors">
+          <button data-help-feature="ui:FactoryIOGateway:151ed7616191" data-help-source="src/components/FactoryIOGateway.tsx" onClick={onClose} className="p-2 hover:bg-[#222] rounded-full text-gray-400 transition-colors">
             <X size={20} />
           </button>
         </div>
@@ -92,7 +92,7 @@ export const FactoryIOGateway: React.FC<FactoryIOGatewayProps> = ({
               <h3 className="text-sm font-semibold text-white">Enable Real-Time Synchronization</h3>
               <p className="text-xs text-gray-500 font-medium">Link ADIA variables to Factory I/O tags over the Web API.</p>
             </div>
-            <button
+            <button data-help-feature="ui:FactoryIOGateway:a051ba52a40e" data-help-source="src/components/FactoryIOGateway.tsx"
               onClick={() => setIsEnabled(!isEnabled)}
               className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${isEnabled ? 'bg-indigo-600' : 'bg-gray-700'}`}
             >
@@ -104,7 +104,7 @@ export const FactoryIOGateway: React.FC<FactoryIOGatewayProps> = ({
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest">Active I/O Mappings</h3>
-              <button 
+              <button data-help-feature="ui:FactoryIOGateway:4b6c1a5d83e3" data-help-source="src/components/FactoryIOGateway.tsx"
                 onClick={fetchTags}
                 disabled={isFetching}
                 className="flex items-center gap-1.5 text-[11px] text-indigo-400 hover:text-indigo-300 font-bold uppercase"
@@ -140,7 +140,7 @@ export const FactoryIOGateway: React.FC<FactoryIOGatewayProps> = ({
                         <div className="text-[10px] text-gray-500 font-bold uppercase mb-1">Factory I/O Tag</div>
                         <div className="text-sm text-white font-medium">{factoryTag?.name || `Tag ID: ${m.factoryTagId}`}</div>
                       </div>
-                      <button 
+                      <button data-help-feature="ui:FactoryIOGateway:3938450c0e08" data-help-source="src/components/FactoryIOGateway.tsx"
                         onClick={() => removeMapping(i)}
                         className="p-2 text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
                       >
@@ -159,25 +159,25 @@ export const FactoryIOGateway: React.FC<FactoryIOGatewayProps> = ({
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-1.5">
                 <label className="text-[10px] font-bold text-gray-500 uppercase px-1">Source Variable</label>
-                <select className="w-full bg-[#0a0a0a] border border-[#333] rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-indigo-500/50" id="adia-var">
+                <select data-help-feature="ui:FactoryIOGateway:d870dc961157" data-help-source="src/components/FactoryIOGateway.tsx" className="w-full bg-[#0a0a0a] border border-[#333] rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-indigo-500/50" id="adia-var">
                   {variables.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
                 </select>
               </div>
               <div className="space-y-1.5">
                 <label className="text-[10px] font-bold text-gray-500 uppercase px-1">Target Tag</label>
-                <select className="w-full bg-[#0a0a0a] border border-[#333] rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-indigo-500/50" id="factory-tag">
+                <select data-help-feature="ui:FactoryIOGateway:d870dc961157" data-help-source="src/components/FactoryIOGateway.tsx" className="w-full bg-[#0a0a0a] border border-[#333] rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-indigo-500/50" id="factory-tag">
                   {availableTags.map(t => <option key={t.id} value={t.id}>{t.name} (ID: {t.id})</option>)}
                 </select>
               </div>
               <div className="space-y-1.5">
                 <label className="text-[10px] font-bold text-gray-500 uppercase px-1">Direction</label>
-                <select className="w-full bg-[#0a0a0a] border border-[#333] rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-indigo-500/50" id="link-type">
+                <select data-help-feature="ui:FactoryIOGateway:d870dc961157" data-help-source="src/components/FactoryIOGateway.tsx" className="w-full bg-[#0a0a0a] border border-[#333] rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-indigo-500/50" id="link-type">
                   <option value="sensor">Sensor (ADIA ← Factory I/O)</option>
                   <option value="actuator">Actuator (ADIA → Factory I/O)</option>
                 </select>
               </div>
             </div>
-            <button 
+            <button data-help-feature="ui:FactoryIOGateway:05aeda245ab2" data-help-source="src/components/FactoryIOGateway.tsx"
               onClick={() => {
                 const varId = (document.getElementById('adia-var') as HTMLSelectElement).value;
                 const tagId = (document.getElementById('factory-tag') as HTMLSelectElement).value;
@@ -194,7 +194,7 @@ export const FactoryIOGateway: React.FC<FactoryIOGatewayProps> = ({
 
         {/* Footer */}
         <div className="h-14 bg-[#0a0a0a] border-t border-[#222] flex items-center justify-end px-6">
-          <button 
+          <button data-help-feature="ui:FactoryIOGateway:151ed7616191" data-help-source="src/components/FactoryIOGateway.tsx"
             onClick={onClose}
             className="px-6 h-9 bg-[#222] hover:bg-[#333] text-white text-xs font-bold rounded-lg transition-colors"
           >

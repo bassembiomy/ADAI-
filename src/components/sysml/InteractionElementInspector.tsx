@@ -65,7 +65,7 @@ export function InteractionElementInspector({ repository, elementId, onExecute }
     return (
       <div>
         <label className={labelClass}>{label}</label>
-        <input
+        <input data-help-feature="ui:sysml/InteractionElementInspector:aa07d21c0cb3" data-help-source="src/components/sysml/InteractionElementInspector.tsx"
           aria-label={label} className={fieldClass} value={value}
           onChange={event => setDraft({ key, value: event.target.value })}
           onBlur={() => { if (draft?.key !== key) return; const next = draft.value; setDraft(null); if (next.trim() !== stored.trim()) commit(next); }}
@@ -75,7 +75,7 @@ export function InteractionElementInspector({ repository, elementId, onExecute }
     );
   };
   const deleteButton = (plan: InteractionCommandPlan, label: string) => (
-    <button
+    <button data-help-feature="ui:sysml/InteractionElementInspector:67e236c03dd8" data-help-source="src/components/sysml/InteractionElementInspector.tsx"
       type="button" onClick={() => run(plan, 'It could not be deleted.')}
       className="w-full rounded border border-red-800 px-2 py-1.5 text-sm text-red-400 hover:bg-red-950/30"
     >{label}</button>
@@ -95,7 +95,7 @@ export function InteractionElementInspector({ repository, elementId, onExecute }
         {text('name', lifeline.name ?? '', value => run(buildRenameInteractionElementCommand(repository, { interactionId, elementId, name: value }), 'The name could not be changed.'), 'Name')}
         <div>
           <label className={labelClass}>Represents</label>
-          <select
+          <select data-help-feature="ui:sysml/InteractionElementInspector:59a58910a4fa" data-help-source="src/components/sysml/InteractionElementInspector.tsx"
             aria-label="Lifeline represents" className={fieldClass} value={lifeline.representsId ?? ''}
             onChange={event => run(buildSetLifelineRepresentsCommand(repository, { interactionId, lifelineId: elementId, representsId: event.target.value || undefined }), 'The lifeline could not be changed.')}
           >
@@ -125,7 +125,7 @@ export function InteractionElementInspector({ repository, elementId, onExecute }
         {text('name', stored.name ?? '', value => run(buildRenameInteractionElementCommand(repository, { interactionId, elementId, name: value }), 'The name could not be changed.'), 'Name')}
         <div>
           <label className={labelClass}>Kind</label>
-          <select
+          <select data-help-feature="ui:sysml/InteractionElementInspector:eab56495c599" data-help-source="src/components/sysml/InteractionElementInspector.tsx"
             aria-label="Message kind" className={fieldClass} value={stored.sort}
             onChange={event => run(buildUpdateInteractionMessageCommand(repository, { interactionId, messageId: elementId, sort: event.target.value as InteractionMessageSort }), 'The message kind was rejected.')}
           >
@@ -135,7 +135,7 @@ export function InteractionElementInspector({ repository, elementId, onExecute }
         {stored.sort === 'asynchSignal' && (
           <div>
             <label className={labelClass}>Signal</label>
-            <select
+            <select data-help-feature="ui:sysml/InteractionElementInspector:c7acf60d57c4" data-help-source="src/components/sysml/InteractionElementInspector.tsx"
               aria-label="Signal" className={fieldClass} value={stored.signatureId ?? ''}
               onChange={event => run(buildUpdateInteractionMessageCommand(repository, { interactionId, messageId: elementId, signatureId: event.target.value || null }), 'The signal was rejected.')}
             >
@@ -148,7 +148,7 @@ export function InteractionElementInspector({ repository, elementId, onExecute }
         {connectors.length > 0 && (
           <div>
             <label className={labelClass}>Connector</label>
-            <select
+            <select data-help-feature="ui:sysml/InteractionElementInspector:b1afa1ee98b0" data-help-source="src/components/sysml/InteractionElementInspector.tsx"
               aria-label="Connector" className={fieldClass} value={stored.connectorId ?? ''}
               onChange={event => run(buildUpdateInteractionMessageCommand(repository, { interactionId, messageId: elementId, connectorId: event.target.value || null }), 'The connector was rejected.')}
             >
@@ -168,7 +168,7 @@ export function InteractionElementInspector({ repository, elementId, onExecute }
       <>
         <div>
           <label className={labelClass}>Operator</label>
-          <select
+          <select data-help-feature="ui:sysml/InteractionElementInspector:9bae558dec3c" data-help-source="src/components/sysml/InteractionElementInspector.tsx"
             aria-label="Fragment operator" className={fieldClass} value={fragment.operator}
             onChange={event => run(buildSetFragmentOperatorCommand(repository, { interactionId, fragmentId: elementId, operator: event.target.value as CombinedFragmentOperator }), 'The operator was rejected.')}
           >
@@ -191,7 +191,7 @@ export function InteractionElementInspector({ repository, elementId, onExecute }
       <>
         <div>
           <label className={labelClass}>Refers to</label>
-          <select
+          <select data-help-feature="ui:sysml/InteractionElementInspector:f7d85fbb4671" data-help-source="src/components/sysml/InteractionElementInspector.tsx"
             aria-label="Refers to" className={fieldClass} value={use.refersToId}
             onChange={event => run(buildUpdateInteractionUseCommand(repository, { interactionId, useId: elementId, refersToId: event.target.value }), 'The ref frame was rejected.')}
           >
@@ -201,7 +201,7 @@ export function InteractionElementInspector({ repository, elementId, onExecute }
         </div>
         <div>
           <label className={labelClass}>After</label>
-          <select
+          <select data-help-feature="ui:sysml/InteractionElementInspector:54f98f61b315" data-help-source="src/components/sysml/InteractionElementInspector.tsx"
             aria-label="Follows message" className={fieldClass} value={use.afterMessageId ?? ''}
             onChange={event => run(buildUpdateInteractionUseCommand(repository, { interactionId, useId: elementId, afterMessageId: event.target.value || null }), 'The ref frame could not be moved.')}
           >

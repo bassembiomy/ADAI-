@@ -452,7 +452,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   return (
     <>
       {!isOpen && (
-        <button
+        <button data-help-feature="ui:agent/AgentPanel:1406b486fdc7" data-help-source="src/components/agent/AgentPanel.tsx"
           className="adia-agent-toggle-tab"
           onClick={handleToggle}
           title="Open ADIA Engineering Agent"
@@ -485,7 +485,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
               <span className="adia-agent-badge-mode" style={{ marginLeft: '6px', fontSize: '11px', color: '#94a3b8' }}>
                 Deterministic inspection-only mode
               </span>
-              <button
+              <button data-help-feature="ui:agent/AgentPanel:8eaa7c7428b4" data-help-source="src/components/agent/AgentPanel.tsx"
                 type="button"
                 className="adia-agent-new-chat-btn"
                 onClick={handleNewChat}
@@ -514,7 +514,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
             </div>
             <div className="adia-agent-ollama-bar" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px', fontSize: '12px' }}>
               <label htmlFor="adia-ollama-model-select" style={{ color: '#94a3b8' }}>Model:</label>
-              <select
+              <select data-help-feature="ui:agent/AgentPanel:d817c57d3d51" data-help-source="src/components/agent/AgentPanel.tsx"
                 id="adia-ollama-model-select"
                 aria-label="Select Ollama Model"
                 value={selectedModel}
@@ -539,7 +539,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                   </>
                 )}
               </select>
-              <button
+              <button data-help-feature="ui:agent/AgentPanel:946efddcf6b8" data-help-source="src/components/agent/AgentPanel.tsx"
                 type="button"
                 className="adia-agent-test-btn"
                 onClick={handleTestConnection}
@@ -559,7 +559,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
               </button>
             </div>
           </div>
-          <button className="adia-agent-close-btn" onClick={handleToggle} title="Close Panel">
+          <button data-help-feature="ui:agent/AgentPanel:1406b486fdc7" data-help-source="src/components/agent/AgentPanel.tsx" className="adia-agent-close-btn" onClick={handleToggle} title="Close Panel">
             ✕
           </button>
         </div>
@@ -568,7 +568,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
           <span className="adia-agent-history-label">Chats:</span>
           <div className="adia-agent-history-list">
             {[...sessions].sort((a, b) => b.updatedAt - a.updatedAt).map(s => (
-              <button
+              <button data-help-feature="ui:agent/AgentPanel:d9e91411ebc0" data-help-source="src/components/agent/AgentPanel.tsx"
                 key={s.id}
                 type="button"
                 className={`adia-agent-history-item ${s.id === activeSessionId ? 'active' : ''}`}
@@ -587,25 +587,25 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
         </div>
 
         <div className="adia-agent-tabs">
-          <button
+          <button data-help-feature="ui:agent/AgentPanel:1a9869810d5f" data-help-source="src/components/agent/AgentPanel.tsx"
             className={`adia-agent-tab-btn ${activeTab === 'chat' ? 'active' : ''}`}
             onClick={() => setActiveTab('chat')}
           >
             Workflow & Chat
           </button>
-          <button
+          <button data-help-feature="ui:agent/AgentPanel:9a8f0c634086" data-help-source="src/components/agent/AgentPanel.tsx"
             className={`adia-agent-tab-btn ${activeTab === 'spec' ? 'active' : ''}`}
             onClick={() => setActiveTab('spec')}
           >
             Specification
           </button>
-          <button
+          <button data-help-feature="ui:agent/AgentPanel:84de6ffe3cf8" data-help-source="src/components/agent/AgentPanel.tsx"
             className={`adia-agent-tab-btn ${activeTab === 'blocks' ? 'active' : ''}`}
             onClick={() => setActiveTab('blocks')}
           >
             ADIA Blocks
           </button>
-          <button
+          <button data-help-feature="ui:agent/AgentPanel:e0d2e35e0c96" data-help-source="src/components/agent/AgentPanel.tsx"
             className={`adia-agent-tab-btn ${activeTab === 'audit' ? 'active' : ''}`}
             onClick={() => setActiveTab('audit')}
           >
@@ -865,7 +865,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                   )}
 
                   <div className="adia-agent-btn-row" style={{ marginTop: '10px' }}>
-                    <button
+                    <button data-help-feature="ui:agent/AgentPanel:477fdba8c501" data-help-source="src/components/agent/AgentPanel.tsx"
                       className="adia-agent-btn-approve"
                       onClick={() => handleApprove(pendingApproval.id)}
                       disabled={isApprovalDisabled}
@@ -876,7 +876,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                         ? 'Approve Execution Plan'
                         : 'Approve Change'}
                     </button>
-                    <button
+                    <button data-help-feature="ui:agent/AgentPanel:801672aa4232" data-help-source="src/components/agent/AgentPanel.tsx"
                       className="adia-agent-btn-reject"
                       onClick={() => handleReject(pendingApproval.id)}
                       disabled={isBusy}
@@ -967,7 +967,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
         </div>
 
         <div className="adia-agent-input-container">
-          <input
+          <input data-help-feature="ui:agent/AgentPanel:51423684e028" data-help-source="src/components/agent/AgentPanel.tsx"
             type="text"
             className="adia-agent-input"
             placeholder={
@@ -981,7 +981,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
             disabled={isBusy}
           />
           {isBusy && (
-            <button
+            <button data-help-feature="ui:agent/AgentPanel:1ef4cea926a2" data-help-source="src/components/agent/AgentPanel.tsx"
               type="button"
               className="adia-agent-btn-stop"
               onClick={handleCancel}
@@ -991,7 +991,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
             </button>
           )}
           {canUndo && (
-            <button
+            <button data-help-feature="ui:agent/AgentPanel:493f56b6ec2a" data-help-source="src/components/agent/AgentPanel.tsx"
               type="button"
               className="adia-agent-btn-undo"
               onClick={handleUndo}
@@ -1001,7 +1001,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
               ↶ Undo
             </button>
           )}
-          <button
+          <button data-help-feature="ui:agent/AgentPanel:ef22ab2d764b" data-help-source="src/components/agent/AgentPanel.tsx"
             className="adia-agent-send-btn"
             onClick={handleSend}
             disabled={isBusy || !inputText.trim()}

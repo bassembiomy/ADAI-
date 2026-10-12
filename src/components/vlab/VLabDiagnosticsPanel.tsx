@@ -92,7 +92,7 @@ export const VLabDiagnosticsPanel: React.FC<VLabDiagnosticsPanelProps> = ({ diag
           {targets.size > 0 && (
             <div className="mt-1 flex flex-wrap gap-1" data-testid="vlab-diagnostic-blocks">
               {[...targets.entries()].map(([blockId, ports]) => (
-                <button key={blockId} type="button" onClick={() => onSelectBlock?.(blockId)} data-block-id={blockId}
+                <button data-help-feature="live:components/vlab/VLabDiagnosticsPanel:e23988501f96" key={blockId} type="button" onClick={() => onSelectBlock?.(blockId)} data-block-id={blockId}
                   className="rounded border border-red-500/40 bg-red-500/10 px-1.5 py-0.5 font-mono text-[10px] hover:bg-red-500/20">
                   {label(blockId)}{ports.size ? ` (${[...ports].join(', ')})` : ''}
                 </button>
@@ -101,7 +101,7 @@ export const VLabDiagnosticsPanel: React.FC<VLabDiagnosticsPanelProps> = ({ diag
           )}
         </div>
         {onDismiss && (
-          <button type="button" aria-label="Dismiss diagnostic" onClick={onDismiss} className="shrink-0 text-red-300/70 hover:text-white"><X size={12} /></button>
+          <button data-help-feature="live:components/vlab/VLabDiagnosticsPanel:e6bed41841c3" type="button" aria-label="Dismiss diagnostic" onClick={onDismiss} className="shrink-0 text-red-300/70 hover:text-white"><X size={12} /></button>
         )}
       </div>
     </div>

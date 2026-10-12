@@ -21,8 +21,8 @@ export function CreateNewTypeActionPrompt({ action, candidates, onCreate, onDism
           </ul>
         )}
         <div className="mt-5 flex justify-end gap-2">
-          <button type="button" onClick={onDismiss} className="rounded border border-[#444] px-3 py-2 text-sm">Cancel</button>
-          <button type="button" onClick={() => onCreate(action)} className="rounded bg-orange-600 px-3 py-2 text-sm font-medium text-white">
+          <button data-help-feature="ui:sysml/CreateNewTypeActionPrompt:0731c0cfc513" data-help-source="src/components/sysml/CreateNewTypeActionPrompt.tsx" type="button" onClick={onDismiss} className="rounded border border-[#444] px-3 py-2 text-sm">Cancel</button>
+          <button data-help-feature="ui:sysml/CreateNewTypeActionPrompt:a9c0b345b224" data-help-source="src/components/sysml/CreateNewTypeActionPrompt.tsx" type="button" onClick={() => onCreate(action)} className="rounded bg-orange-600 px-3 py-2 text-sm font-medium text-white">
             Create New Type
           </button>
         </div>

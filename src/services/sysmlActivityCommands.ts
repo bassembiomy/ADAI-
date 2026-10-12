@@ -4,7 +4,7 @@ import type {
 } from '../engine/sysml/model';
 import type { DiagramPresentation } from '../engine/sysml/presentationState';
 import {
-  ACTIVITY_NODE_KIND_LABELS, activityNestedIds, checkActivityEdge, findInActivity, isObjectEndpoint, nodeLabel,
+  ACTIVITY_NODE_KIND_LABELS, activityNestedIds, checkActivityEdge, findInActivity, isObjectEndpoint, isObjectFlowRouter, nodeLabel,
   resolveActivityEndpoint, resolvesAsPartitionOwner, validateActivity, withActivity,
 } from '../engine/sysml/activity';
 import { interactionNestedIds } from '../engine/sysml/interaction';
@@ -315,6 +315,9 @@ export function inferEdgeKind(activity: ActivityDefinition, sourceId: string, ta
   const source = resolveActivityEndpoint(activity, sourceId);
   const target = resolveActivityEndpoint(activity, targetId);
   if (source && target && (isObjectEndpoint(source) || isObjectEndpoint(target))) return 'objectFlow';
+  if (source && target && isObjectFlowRouter(source) && isObjectFlowRouter(target)
+    && activity.edges.some(edge => edge.kind === 'objectFlow'
+      && [edge.sourceId, edge.targetId].some(id => id === sourceId || id === targetId))) return 'objectFlow';
   return 'controlFlow';
 }
 

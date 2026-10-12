@@ -96,7 +96,7 @@ export function IbdConnectorEditor({
         </div>
         <label className="block">
           Connector kind
-          <select
+          <select data-help-feature="ui:sysml/IbdConnectorEditor:35091a39140a" data-help-source="src/components/sysml/IbdConnectorEditor.tsx"
             aria-label="Connector kind"
             value={connector.kind}
             onChange={e => update({ kind: e.target.value as ConnectorUsage['kind'] })}
@@ -112,7 +112,7 @@ export function IbdConnectorEditor({
         <div className="grid grid-cols-2 gap-2">
           <label>
             Source Port
-            <select
+            <select data-help-feature="ui:sysml/IbdConnectorEditor:6f905df9be91" data-help-source="src/components/sysml/IbdConnectorEditor.tsx"
               aria-label="Source port"
               value={connector.sourcePortId}
               onChange={e => update({ sourcePortId: e.target.value })}
@@ -128,7 +128,7 @@ export function IbdConnectorEditor({
           </label>
           <label>
             Target Port
-            <select
+            <select data-help-feature="ui:sysml/IbdConnectorEditor:aa8a35f0105a" data-help-source="src/components/sysml/IbdConnectorEditor.tsx"
               aria-label="Target port"
               value={connector.targetPortId}
               onChange={e => update({ targetPortId: e.target.value })}
@@ -158,7 +158,7 @@ export function IbdConnectorEditor({
           <div className="grid grid-cols-2 gap-2 pt-2 border-t border-gray-700">
             <label>
               Source Parameter / Property ID
-              <input
+              <input data-help-feature="ui:sysml/IbdConnectorEditor:951e22bc795d" data-help-source="src/components/sysml/IbdConnectorEditor.tsx"
                 aria-label="Source parameter ID"
                 value={connector.sourceParameterId || ''}
                 onChange={e => update({ sourceParameterId: e.target.value || undefined })}
@@ -168,7 +168,7 @@ export function IbdConnectorEditor({
             </label>
             <label>
               Target Parameter / Property ID
-              <input
+              <input data-help-feature="ui:sysml/IbdConnectorEditor:8abe6efc070e" data-help-source="src/components/sysml/IbdConnectorEditor.tsx"
                 aria-label="Target parameter ID"
                 value={connector.targetParameterId || ''}
                 onChange={e => update({ targetParameterId: e.target.value || undefined })}
@@ -185,7 +185,7 @@ export function IbdConnectorEditor({
         <legend className="px-1 font-semibold text-gray-300">Item Flow Specification</legend>
         <label className="block">
           Conveyed Classifier
-          <select
+          <select data-help-feature="ui:sysml/IbdConnectorEditor:9b7cf534c537" data-help-source="src/components/sysml/IbdConnectorEditor.tsx"
             aria-label="Conveyed classifier"
             value={connector.itemFlowId || ''}
             onChange={e => update({ itemFlowId: e.target.value || undefined })}
@@ -203,7 +203,7 @@ export function IbdConnectorEditor({
         <div className="grid grid-cols-2 gap-2">
           <label>
             Item Property Name
-            <input
+            <input data-help-feature="ui:sysml/IbdConnectorEditor:3be8702ac54e" data-help-source="src/components/sysml/IbdConnectorEditor.tsx"
               aria-label="Item property name"
               value={connector.itemProperty || ''}
               onChange={e => update({ itemProperty: e.target.value || undefined })}
@@ -213,7 +213,7 @@ export function IbdConnectorEditor({
           </label>
           <label>
             Unit
-            <input
+            <input data-help-feature="ui:sysml/IbdConnectorEditor:6a8f31522756" data-help-source="src/components/sysml/IbdConnectorEditor.tsx"
               aria-label="Item unit"
               value={connector.itemUnit || ''}
               onChange={e => update({ itemUnit: e.target.value || undefined })}

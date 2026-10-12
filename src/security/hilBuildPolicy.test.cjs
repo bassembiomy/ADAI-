@@ -43,3 +43,8 @@ assert.equal(allowed.recipeId, 'arm-none-eabi-stm32f407vg-v1');
 assert.deepEqual(allowed.compilerFlags, ['-mcpu=cortex-m4', '-mthumb', '-Os', '-Wall', '-Wextra', '-Werror']);
 assert.equal(allowed.sourceFiles.includes('sm_mapping.c'), true);
 process.stdout.write('  ✓ returns an application-owned fixed recipe\n');
+const avrSelection = { ...selection, targetId: 'atmega328p' };
+assert.equal(evaluateBuildRequest({ ...request, targetSelection: avrSelection }, { ...workspace, targetSelection: avrSelection, files: workspace.files.map(n => n === 'main_hil.c' ? 'main_hil.ino' : n) }).allowed, true, 'real Arduino core must not require a shim');
+
+const hostSelection={...selection,targetId:'generic-host'};
+assert.equal(evaluateBuildRequest({...request,targetSelection:hostSelection},{...workspace,targetSelection:hostSelection,flashBlocked:true}).allowed,true,'host simulation may compile while physical flash stays blocked');

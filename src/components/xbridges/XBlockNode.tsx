@@ -2020,7 +2020,7 @@ export const XBlockNode = React.memo(({ data, selected, id }: any) => {
           margin: isVertical ? '0 10px' : '5px 0'
         }}
       >
-        <Handle
+        <Handle data-help-feature="ui:xbridges/XBlockNode:f43fa12ef7fb" data-help-source="src/components/xbridges/XBlockNode.tsx"
           type={isInput ? 'target' : 'source'}
           position={position}
           id={port.id}
@@ -2100,7 +2100,7 @@ export const XBlockNode = React.memo(({ data, selected, id }: any) => {
         
         {/* Note Editor Area */}
         <div className="flex-1 min-h-0 relative z-10">
-          <textarea
+          <textarea data-help-feature="ui:xbridges/XBlockNode:3524288df7a4" data-help-source="src/components/xbridges/XBlockNode.tsx"
             className="nodrag nopan nowheel w-full h-full bg-transparent text-[var(--text-primary)] placeholder-[var(--text-muted)] border-none outline-none resize-none font-sans text-xs leading-relaxed"
             value={data.params?.text ?? ''}
             placeholder="Type your notes here..."
@@ -2122,6 +2122,7 @@ export const XBlockNode = React.memo(({ data, selected, id }: any) => {
   return (
     <div 
       ref={nodeRef}
+      data-help-topic={`xbridges:${data.type}`}
       className={`relative rounded-md transition-all duration-500 border-2 xbridges-node ui-card ${selected ? 'ring-4 ring-orange-500/20 scale-105 z-50' : 'hover:border-[var(--border-strong)]'} ${isPulsing ? 'block-pulse-highlight' : ''}`}
       onContextMenu={(e) => e.preventDefault()}
       onMouseDown={(e) => {
@@ -2169,7 +2170,7 @@ export const XBlockNode = React.memo(({ data, selected, id }: any) => {
 
           {['Scope', 'ROOT_LOCUS'].includes(data.type) && (
             <div className="flex bg-[#222] p-0.5 rounded-lg border border-[#333]">
-              <button 
+              <button data-help-feature="ui:xbridges/XBlockNode:55df02f9d2ed" data-help-source="src/components/xbridges/XBlockNode.tsx"
                 onClick={(e) => { 
                   e.stopPropagation(); 
                   if (workspaceContext?.onOpenScope) workspaceContext.onOpenScope(id);
@@ -2181,7 +2182,7 @@ export const XBlockNode = React.memo(({ data, selected, id }: any) => {
                 <Maximize2 size={12} />
               </button>
               {data.type === 'Scope' && (
-                <button 
+                <button data-help-feature="ui:xbridges/XBlockNode:4b441782049c" data-help-source="src/components/xbridges/XBlockNode.tsx"
                   onClick={(e) => { e.stopPropagation(); downloadCSV(); }}
                   className="p-1.5 hover:bg-[#333] rounded-md transition-all text-emerald-400 hover:text-emerald-500"
                   title="Export Data"

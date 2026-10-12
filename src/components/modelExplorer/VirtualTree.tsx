@@ -254,7 +254,7 @@ export const VirtualTree: React.FC<VirtualTreeProps> = ({
   }, [focusedIndex, rowHeight, height, rows.length]);
 
   return (
-    <div
+    <div data-help-feature="live:components/modelExplorer/VirtualTree:cf751344f73e"
       ref={containerRef}
       role="tree"
       aria-label={ariaLabel}

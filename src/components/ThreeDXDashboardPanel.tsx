@@ -77,7 +77,7 @@ export const ThreeDXDashboardPanel: React.FC<ThreeDXDashboardPanelProps> = ({
           <Compass size={16} className="text-[#4da6ff] animate-spin-slow" />
           <span className="text-xs font-bold text-white uppercase tracking-wider">3DEXPERIENCE Live Panel</span>
         </div>
-        <button
+        <button data-help-feature="ui:ThreeDXDashboardPanel:151ed7616191" data-help-source="src/components/ThreeDXDashboardPanel.tsx"
           onClick={onClose}
           className="text-gray-400 hover:text-white p-1 hover:bg-white/5 rounded-md transition-colors"
         >
@@ -88,7 +88,7 @@ export const ThreeDXDashboardPanel: React.FC<ThreeDXDashboardPanelProps> = ({
       {/* Widget Tabs */}
       <div className="flex items-center border-b border-[#1a2133] bg-[#0a0d14]/50 px-2 py-1.5 gap-1">
         {(['compass', 'projects', 'tasks'] as const).map((tab) => (
-          <button
+          <button data-help-feature="ui:ThreeDXDashboardPanel:bd807ff7ec3f" data-help-source="src/components/ThreeDXDashboardPanel.tsx"
             key={tab}
             onClick={() => setActiveWidget(tab)}
             className={`px-3 py-1 text-[10px] font-bold uppercase rounded-md tracking-wider transition-all ${
@@ -101,7 +101,7 @@ export const ThreeDXDashboardPanel: React.FC<ThreeDXDashboardPanelProps> = ({
           </button>
         ))}
         <div className="flex-1" />
-        <button
+        <button data-help-feature="ui:ThreeDXDashboardPanel:2498ce8f91af" data-help-source="src/components/ThreeDXDashboardPanel.tsx"
           onClick={() => {
             const electron = (window as any).require?.('electron');
             if (electron) {
@@ -133,7 +133,7 @@ export const ThreeDXDashboardPanel: React.FC<ThreeDXDashboardPanelProps> = ({
                 The native 3DEXPERIENCE browser layer is currently active and rendered directly over this side panel.
               </p>
             </div>
-            <button
+            <button data-help-feature="ui:ThreeDXDashboardPanel:bb62f030bbee" data-help-source="src/components/ThreeDXDashboardPanel.tsx"
               onClick={() => window.open(getWidgetUrl(), '_blank')}
               className="inline-flex items-center gap-1.5 text-[10px] font-bold text-gray-400 hover:text-white transition-colors"
             >

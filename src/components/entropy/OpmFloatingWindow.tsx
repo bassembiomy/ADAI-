@@ -155,7 +155,7 @@ export const OpmFloatingWindow: React.FC<OpmFloatingWindowProps> = ({
       <div className="h-0.5 w-full bg-gradient-to-r from-orange-500 via-amber-500 to-sky-500 shrink-0" />
 
       {/* Title Bar */}
-      <div
+      <div data-help-feature="opm:opmfloatingwindow:layout-panels:1f5be2d049" data-help-module="entropy"
         data-testid="opm-floating-titlebar"
         onMouseDown={handleTitleMouseDown}
         onDoubleClick={() => {
@@ -181,7 +181,7 @@ export const OpmFloatingWindow: React.FC<OpmFloatingWindowProps> = ({
 
         {/* Window Controls */}
         <div className="flex items-center gap-1 shrink-0">
-          <button
+          <button data-help-feature="opm:opmfloatingwindow:layout-panels:ccaffa4f32" data-help-module="entropy"
             data-testid="opm-floating-dock-btn"
             onClick={onDock}
             className="p-1.5 text-gray-400 hover:text-orange-400 hover:bg-orange-500/10 rounded transition-colors"
@@ -190,7 +190,7 @@ export const OpmFloatingWindow: React.FC<OpmFloatingWindowProps> = ({
             <ArrowRightFromLine size={13} />
           </button>
 
-          <button
+          <button data-help-feature="opm:opmfloatingwindow:layout-panels:c758db2172" data-help-module="entropy"
             data-testid="opm-floating-minimize-btn"
             onClick={() => setIsMinimized((prev) => !prev)}
             className="p-1.5 text-gray-400 hover:text-white hover:bg-white/5 rounded transition-colors"
@@ -199,7 +199,7 @@ export const OpmFloatingWindow: React.FC<OpmFloatingWindowProps> = ({
             <Minus size={13} />
           </button>
 
-          <button
+          <button data-help-feature="opm:opmfloatingwindow:layout-panels:89288fc942" data-help-module="entropy"
             data-testid="opm-floating-maximize-btn"
             onClick={() => {
               setIsMaximized((prev) => !prev);
@@ -211,7 +211,7 @@ export const OpmFloatingWindow: React.FC<OpmFloatingWindowProps> = ({
             {isMaximized ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
           </button>
 
-          <button
+          <button data-help-feature="opm:opmfloatingwindow:layout-panels:16a5bd6098" data-help-module="entropy"
             data-testid="opm-floating-close-btn"
             onClick={onClose}
             className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors ml-0.5"
@@ -229,7 +229,7 @@ export const OpmFloatingWindow: React.FC<OpmFloatingWindowProps> = ({
 
           {/* Corner Resize Grip */}
           {!isMaximized && (
-            <div
+            <div data-help-feature="live:components/entropy/OpmFloatingWindow:fd416c586621"
               data-testid="opm-floating-resizer"
               onMouseDown={handleResizeMouseDown}
               className="absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize flex items-end justify-end p-0.5 z-20 group"

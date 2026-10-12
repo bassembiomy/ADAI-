@@ -1,0 +1,54 @@
+'use strict';
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { resolveRuntime, runtimeLocation, validateProductionSources, validateProductionConfigurationFiles, TARGETS, verifyRuntimeBundle, getFlashCommand, stageProductionProject, ensureMapArtifact } = require('./hilRuntime.cjs');
+const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'adia-runtime-test-'));
+try {
+  assert.throws(() => resolveRuntime({ resourcesPath: dir }), /HIL_RUNTIME_MISSING/);
+  const oldResources = process.resourcesPath;
+  process.resourcesPath = dir;
+  try { assert.equal(runtimeLocation(), path.resolve(__dirname, '../../toolchains/hil-runtime'), 'development Electron resources must not shadow the repository bundle'); }
+  finally { if (oldResources === undefined) delete process.resourcesPath; else process.resourcesPath = oldResources; }
+  assert.equal(Object.keys(TARGETS).length, 5);
+  fs.writeFileSync(path.join(dir, 'Arduino.h'), 'inline void digitalWrite(int a,int b){}');
+  assert.throws(() => validateProductionSources(dir), /TEST_SHIM/);
+  fs.unlinkSync(path.join(dir, 'Arduino.h'));
+  fs.writeFileSync(path.join(dir, 'platformio.ini'), '[env:uno]\nplatform = atmelavr@5.1.0\n');
+  assert.doesNotThrow(() => validateProductionSources(dir));
+  assert.throws(() => verifyRuntimeBundle(dir), /HIL_RUNTIME/);
+  fs.writeFileSync(path.join(dir, 'bundle-manifest.json'), JSON.stringify({ schemaVersion: 1, platformioVersion: '6.1.18', targets: ['atmelavr@5.1.0','ststm32@19.0.0','espressif32@6.9.0'], files: [{ path: 'missing.exe', sha256: `sha256:${'a'.repeat(64)}`, required: false }] }));
+  assert.throws(() => verifyRuntimeBundle(dir), /HIL_RUNTIME_ASSET_MISSING/, 'bundle must contain the offline guard and vendor frameworks even if its manifest omits required flags');
+  assert.throws(() => validateProductionConfigurationFiles([{ name: 'platformio.ini', content: '[env:uno]\nplatform = atmelavr@5.1.0\nextra_scripts = evil.py\n' }], 'atmega328p'), /UNTRUSTED_BUILD_CONFIGURATION/);
+  assert.throws(() => validateProductionConfigurationFiles([{ name: 'platformio.ini', content: '[platformio]\ncore_dir = C:/other\n' }], 'atmega328p'), /UNTRUSTED_BUILD_CONFIGURATION/);
+  fs.writeFileSync(path.join(dir, 'main_hil.ino'), 'void setup(){} void loop(){}');
+  fs.writeFileSync(path.join(dir, 'main_hil.ino.cpp'), 'malicious stale conversion');
+  const staged = stageProductionProject(dir, ['main_hil.ino', 'main_hil.ino.cpp'], path.join(dir, 'cache'));
+  assert.equal(fs.readFileSync(path.join(staged, 'main_hil.ino'), 'utf8'), 'void setup(){} void loop(){}');
+  assert.equal(fs.existsSync(path.join(staged, 'main_hil.ino.cpp')), false);
+  assert.equal(fs.readFileSync(path.join(dir, 'main_hil.ino.cpp'), 'utf8'), 'malicious stale conversion');
+  assert.throws(() => stageProductionProject(dir, ['../evil.c'], path.join(dir, 'cache')), /UNSAFE_BUILD_SOURCE/);
+  fs.writeFileSync(path.join(staged, 'firmware.map'), 'Actual ESP32 framework link map');
+  assert.doesNotThrow(() => ensureMapArtifact(path.join(dir, 'cache'), staged), 'ESP32 supplies its map in the build output rather than project root');
+  assert.throws(() => ensureMapArtifact(path.join(dir, 'missing-project'), path.join(dir, 'missing-output')), /MAP_FILE_NOT_FOUND/);
+  const tools = { avrdude: 'C:/bundle/bin/avrdude.exe', openocd: 'C:/bundle/bin/openocd.exe', esptool: 'C:/bundle/bin/esptool.exe' };
+  const options = { port: 'COM7', baudRate: 115200, resolveTool: key => tools[key] };
+  const uno = getFlashCommand('atmega328p', [{ path: 'C:/build/firmware.hex' }], options);
+  assert.equal(uno.executable, tools.avrdude);
+  assert.equal(uno.args[uno.args.indexOf('-P') + 1], 'COM7');
+  assert.ok(uno.args.includes('flash:w:C:/build/firmware.hex:i'));
+  const slowTelemetry = getFlashCommand('atmega328p', [{ path: 'C:/build/firmware.hex' }], { ...options, baudRate: 9600 });
+  assert.equal(slowTelemetry.args[slowTelemetry.args.indexOf('-b') + 1], '115200', 'monitor baud must not change the pinned Uno bootloader protocol');
+  const esp = getFlashCommand('esp32-wroom-32', [{ path: 'C:/build/bootloader.bin', address: '0x1000' }, { path: 'C:/build/firmware.bin', address: '0x10000' }], options);
+  assert.deepEqual(esp.args.slice(-4), ['0x1000', 'C:/build/bootloader.bin', '0x10000', 'C:/build/firmware.bin']);
+  const fakeOpenocd = path.join(dir, 'xpack/bin/openocd.exe');
+  const scriptDir = path.join(dir, 'xpack/openocd/scripts');
+  fs.mkdirSync(path.join(scriptDir, 'interface'), { recursive: true });
+  fs.mkdirSync(path.join(scriptDir, 'target'), { recursive: true });
+  for (const file of ['interface/stlink.cfg','target/stm32f1x.cfg','target/stm32f4x.cfg']) fs.writeFileSync(path.join(scriptDir,file),'# vendor config');
+  const stm = getFlashCommand('stm32f103c8t6', [{ path: 'C:/build/firmware.elf' }], { resolveTool: () => fakeOpenocd });
+  assert.equal(stm.args[stm.args.indexOf('-s') + 1], scriptDir, 'xPack stores its configuration files under openocd/scripts');
+  assert.throws(() => getFlashCommand('atmega328p', [], { ...options, port: 'bad port' }), /INVALID_FLASH_PORT/);
+  console.log('hilRuntime tests passed');
+} finally { fs.rmSync(dir, { recursive: true, force: true }); }

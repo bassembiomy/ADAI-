@@ -266,7 +266,7 @@ export const ModelExplorer: React.FC<ModelExplorerProps> = ({
       }
       return next;
     });
-  }, []);
+  }, [setExpandedNodeIds]);
 
   const handleExpandAll = useCallback(() => {
     const allParentIds = new Set<string>();
@@ -277,11 +277,11 @@ export const ModelExplorer: React.FC<ModelExplorerProps> = ({
       }
     });
     setExpandedNodeIds(allParentIds);
-  }, [nodesById]);
+  }, [nodesById, setExpandedNodeIds]);
 
   const handleCollapseAll = useCallback(() => {
     setExpandedNodeIds(new Set());
-  }, []);
+  }, [setExpandedNodeIds]);
 
   const isRowExpanded = useCallback(
     (row: VisibleTreeRow) => expandedNodeIds.has(row.node.nodeId),
@@ -342,7 +342,7 @@ export const ModelExplorer: React.FC<ModelExplorerProps> = ({
       onExecuteCapability?.(capability, targetNode);
       setContextMenu(null);
     },
-    [contextMenu, onExecuteCapability]
+    [contextMenu, onExecuteCapability, setExpandedNodeIds]
   );
 
   const handleRenameCommit = useCallback(
@@ -373,7 +373,7 @@ export const ModelExplorer: React.FC<ModelExplorerProps> = ({
   }, [visibleRows, focusedIndex]);
 
   return (
-    <div
+    <div data-help-feature="live:components/modelExplorer/ModelExplorer:d0ef54c166ea"
       className={`model-explorer-container flex flex-col h-full w-full bg-[var(--surface-panel)] border-r border-[var(--border-default)] ${className}`}
       onKeyDown={(e) => {
         if (e.key === 'F2') {
@@ -428,7 +428,7 @@ export const ModelExplorer: React.FC<ModelExplorerProps> = ({
               onActivateNode?.(row.node);
             }}
             renderRow={(row, idx) => (
-              <ModelTreeRow
+              <ModelTreeRow data-help-feature="ui:modelExplorer/ModelExplorer:92c6517721f4" data-help-source="src/components/modelExplorer/ModelExplorer.tsx"
                 node={row.node}
                 depth={row.depth}
                 index={idx}

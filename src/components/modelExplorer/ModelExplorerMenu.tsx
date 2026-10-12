@@ -230,7 +230,7 @@ export const ModelExplorerMenu: React.FC<ModelExplorerMenuProps> = ({
       {capabilities.length > 5 && (
         <div className="px-2 py-1.5 border-b border-[var(--border-default)] bg-[var(--surface-canvas)] flex items-center gap-1.5">
           <Search size={12} className="text-[var(--text-muted)] shrink-0" />
-          <input
+          <input data-help-feature="ui:modelExplorer/ModelExplorerMenu:f316f965e6c6" data-help-source="src/components/modelExplorer/ModelExplorerMenu.tsx"
             ref={searchInputRef}
             type="text"
             value={filterQuery}
@@ -263,7 +263,7 @@ export const ModelExplorerMenu: React.FC<ModelExplorerMenuProps> = ({
                 const shortcut = getCapabilityShortcut(cap.kind);
 
                 return (
-                  <button
+                  <button data-help-feature="ui:modelExplorer/ModelExplorerMenu:962a952fba5e" data-help-source="src/components/modelExplorer/ModelExplorerMenu.tsx"
                     key={cap.id}
                     type="button"
                     role="menuitem"

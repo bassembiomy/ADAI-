@@ -159,6 +159,12 @@ console.log('Running projectFileController tests...');
   assert(receipt.modelFingerprint && receipt.modelFingerprint.length === 64, 'modelFingerprint must be a 64-char sha256 hex string');
   assert.strictEqual(receipt.revision, 3);
 
+  const legacyReceipt = await controller.saveSnapshot(sampleSnapshot, {
+    targetPath: 'C:\\work\\legacy_snapshot.json'
+  });
+  assert.strictEqual(legacyReceipt.filePath, 'C:\\work\\legacy_snapshot.adia');
+  assert.strictEqual((await controller.reloadSnapshot(legacyReceipt)).revision, 3);
+
   // Reload snapshot
   const reloaded = await handlers['project-reload-snapshot']({}, receipt, {
     allowedBaseDir: 'C:\\work'

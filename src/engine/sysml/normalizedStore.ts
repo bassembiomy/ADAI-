@@ -697,6 +697,7 @@ function getEntityProjectionCache(store: NormalizedSysmlStore): EntityProjection
 export function projectNormalizedDiagram(
   store: NormalizedSysmlStore,
   diagramId?: string,
+  semanticElementIds?: readonly string[],
 ): LegacySysmlView {
   const packages: PackageData[] = [];
   const blocks: BlockData[] = [];
@@ -707,8 +708,16 @@ export function projectNormalizedDiagram(
   const entityCache = getEntityProjectionCache(store);
   const presentation = diagramId ? store.diagramPresentations.get(diagramId) : undefined;
   const rawElementIds: readonly string[] | string[] | undefined = presentation?.elementIds ?? (diagramId ? (store.diagrams.get(diagramId) as any)?.elementIds : undefined);
-  const visibleFilter: Set<string> | null = diagramId ? new Set<string>(rawElementIds ?? []) : null;
+  // Semantic lookups (for example a Part's type) do not create diagram symbols.
+  const visibleFilter: Set<string> | null = semanticElementIds
+    ? new Set(semanticElementIds)
+    : diagramId ? new Set<string>(rawElementIds ?? []) : null;
   const hiddenFilter = presentation ? new Set(presentation.hiddenElementIds ?? []) : null;
+  const activeDiagram = diagramId ? store.diagrams.get(diagramId) : undefined;
+  if (!semanticElementIds && activeDiagram?.diagramKind === 'ibd') {
+    const contextId = activeDiagram.contextElementId ?? activeDiagram.ownerId;
+    if (contextId && store.definitions.get(contextId)?.kind === 'block') visibleFilter?.add(contextId);
+  }
 
   const satisfiedReqIdsBySource = new Map<string, string[]>();
   if (visibleFilter) {
@@ -763,7 +772,7 @@ export function projectNormalizedDiagram(
   };
 
   // Helper to project a definition
-  const projectDef = (def: SysmlDefinition) => {
+  const projectDef = (def: SysmlDefinition | ActorDefinition | SubjectDefinition | UseCaseDefinition) => {
     const coords = coordinatesFor(def.id);
     const dependencyKey = def.kind === 'block'
       ? `${(def.properties ?? []).map(property => `${property.typeId}:${store.definitions.get(property.typeId)?.name ?? property.typeId}`).join('|')}::satisfies:${(satisfiedReqIdsBySource.get(def.id) ?? []).slice().sort().join('|')}`
@@ -1004,6 +1013,10 @@ export function projectNormalizedDiagram(
     let legacyType: RelationshipData['type'] = 'trace';
     if (rel.kind === 'deriveReqt') legacyType = 'derive';
     else if (rel.kind === 'sharedAggregation') legacyType = 'aggregation';
+    else if (rel.kind === 'useCaseSatisfy') legacyType = 'satisfy';
+    else if (rel.kind === 'useCaseRefine') legacyType = 'refine';
+    else if (rel.kind === 'useCaseGeneralization') legacyType = 'generalization';
+    else if (rel.kind === 'useCaseAssociation') legacyType = 'association';
     else if (
       rel.kind === 'association' ||
       rel.kind === 'composition' ||
@@ -1015,6 +1028,11 @@ export function projectNormalizedDiagram(
       rel.kind === 'refine' ||
       rel.kind === 'trace' ||
       rel.kind === 'copy' ||
+      rel.kind === 'packageImport' ||
+      rel.kind === 'elementImport' ||
+      rel.kind === 'packageMerge' ||
+      rel.kind === 'conform' ||
+      rel.kind === 'expose' ||
       rel.kind === 'requirementContainment'
     ) {
       legacyType = rel.kind;
@@ -1050,6 +1068,21 @@ export function projectNormalizedDiagram(
         case 'definitions': {
           const def = store.definitions.get(elemId);
           if (def) projectDef(def);
+          break;
+        }
+        case 'actors': {
+          const actor = store.actors.get(elemId);
+          if (actor) projectDef(actor);
+          break;
+        }
+        case 'subjects': {
+          const subject = store.subjects.get(elemId);
+          if (subject) projectDef(subject);
+          break;
+        }
+        case 'useCases': {
+          const useCase = store.useCases.get(elemId);
+          if (useCase) projectDef(useCase);
           break;
         }
         case 'requirements': {
@@ -1115,6 +1148,9 @@ export function projectNormalizedDiagram(
     // FULL MODEL PATH
     for (const pkg of store.packages.values()) projectPackage(pkg);
     for (const def of store.definitions.values()) projectDef(def);
+    for (const actor of store.actors.values()) projectDef(actor);
+    for (const subject of store.subjects.values()) projectDef(subject);
+    for (const useCase of store.useCases.values()) projectDef(useCase);
     for (const req of store.requirements.values()) projectReq(req);
     for (const vc of store.verificationCases.values()) projectVc(vc);
     for (const usage of store.usages.values()) projectPart(usage);

@@ -113,8 +113,20 @@ const chart = {
   hilConfig,
 };
 
+if (args.includes('--all-peripherals') && target !== 'Generic') {
+  const pwmPins: Record<string, string> = { Arduino_Uno: '3', Arduino_Mega: '6', STM32F1: 'PA8', STM32F4: 'PA8', ESP32: '18' };
+  const gpioPins: Record<string, string> = { Arduino_Uno: '4', Arduino_Mega: '22', STM32F1: 'PB0', STM32F4: 'PD13', ESP32: '19' };
+  const addChannel = (name: string, peripheral: 'GPIO' | 'PWM' | 'DAC', pin: string, direction: 'In' | 'Out') => {
+    hilConfig.channels.push({ id: name, name, peripheral, pin, direction, dataType: peripheral === 'GPIO' ? 'bool' : 'uint32_t', rangeMin: 0, rangeMax: peripheral === 'GPIO' ? 1 : 255, scalingFactor: 1, unit: '' });
+    hilConfig.mappings.push({ id: `map_${name}`, adiaVarId: name, channelId: name, direction: direction === 'In' ? 'read' : 'write' });
+    chart.variables.push({ id: `var_${name}`, name, type: peripheral === 'GPIO' ? 'bool' : 'float', initialValue: peripheral === 'GPIO' ? 'false' : '127.0', currentValue: peripheral === 'GPIO' ? false : 127, visibleInScope: true });
+  };
+  addChannel('pwm_output', 'PWM', pwmPins[target], 'Out');
+  addChannel('gpio_input', 'GPIO', gpioPins[target], 'In');
+  if (target === 'STM32F4' || target === 'ESP32') addChannel('dac_output', 'DAC', target === 'STM32F4' ? 'PA4' : '25', 'Out');
+}
 fs.mkdirSync(outDir, { recursive: true });
-const genRes = generateMISRACCode(chart as any, { includeTestShims: true });
+const genRes = generateMISRACCode(chart as any, { includeTestShims: args.includes('--test-shims') });
 
 if (genRes.errors && genRes.errors.length > 0) {
   console.error('[EMIT_ERROR]', genRes.errors);

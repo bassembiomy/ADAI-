@@ -115,6 +115,10 @@ export function isObjectEndpoint(endpoint: ActivityEndpoint): boolean {
   return Boolean(endpoint.pin) || OBJECT_NODE_KINDS.has(endpoint.node.kind);
 }
 
+export function isObjectFlowRouter(endpoint: ActivityEndpoint): boolean {
+  return ['decision', 'merge', 'fork', 'join'].includes(endpoint.node.kind);
+}
+
 /** The type carried by an object endpoint: the pin's, an object node's, or a bound parameter's. */
 export function endpointTypeId(activity: ActivityDefinition, endpoint: ActivityEndpoint): string | undefined {
   if (endpoint.pin) return endpoint.pin.typeId || undefined;
@@ -144,8 +148,8 @@ export function checkActivityEdge(
   if (edge.kind === 'controlFlow') {
     if (source.pin || target.pin) return { code: 'CONTROL_FLOW_INTO_PIN', message: 'A control flow cannot start or end at a pin; use an object flow.' };
   } else {
-    if (!isObjectEndpoint(source) || !isObjectEndpoint(target)) {
-      return { code: 'OBJECT_FLOW_ENDPOINT', message: 'An object flow connects object nodes, activity parameter nodes or action pins; use a control flow for other nodes.' };
+    if ((!isObjectEndpoint(source) && !isObjectFlowRouter(source)) || (!isObjectEndpoint(target) && !isObjectFlowRouter(target))) {
+      return { code: 'OBJECT_FLOW_ENDPOINT', message: 'An object flow connects object nodes, activity parameter nodes, action pins or decision/merge/fork/join nodes; use a control flow for other nodes.' };
     }
     if (source.pin && source.pin.direction !== 'out') return { code: 'OBJECT_FLOW_PIN_DIRECTION', message: 'An object flow can only leave an output pin.' };
     if (target.pin && target.pin.direction !== 'in') return { code: 'OBJECT_FLOW_PIN_DIRECTION', message: 'An object flow can only enter an input pin.' };

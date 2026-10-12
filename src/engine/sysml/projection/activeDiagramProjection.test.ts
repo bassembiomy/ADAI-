@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createEmptyRepository } from '../model';
-import { fromRepository, type NormalizedSysmlStore } from '../normalizedStore';
+import { fromRepository, projectNormalizedDiagram, type NormalizedSysmlStore } from '../normalizedStore';
 import { projectActiveDiagram } from './activeDiagramProjection';
 import type { BlockDefinition, SysmlRelationship, ModelDiagramDefinition } from '../model';
 import type { DiagramPresentationInput } from '../presentationState';
@@ -103,6 +103,39 @@ describe('projectActiveDiagram', () => {
     return fromRepository(repo, coordinates, diagramPresentations);
   }
 
+  it('looks up referenced block types by identity without projecting unrelated definitions', () => {
+    const store = createTwoDiagramStore();
+    const lookup = projectNormalizedDiagram(store, undefined, ['blk_C']);
+    expect(lookup.blocks.map(block => block.id)).toEqual(['blk_C']);
+    expect(projectActiveDiagram(store, 'diag_1').blocks.map(block => block.id)).toEqual(['blk_A', 'blk_B']);
+  });
+  it.each(['packageImport', 'elementImport', 'packageMerge', 'conform', 'expose'] as const)('keeps the %s relationship kind in the active canvas projection', kind => {
+    const repo = createEmptyRepository();
+    repo.packages.source = { id: 'source', name: 'Source', kind: 'package', ownerId: 'model', namespace: [] };
+    repo.packages.target = { id: 'target', name: 'Target', kind: 'package', ownerId: 'model', namespace: [] };
+    repo.relationships.link = { id: 'link', kind, sourceId: 'source', targetId: 'target' };
+    const store = fromRepository(repo, {}, { packageDiagram: { elementIds: ['source', 'target', 'link'], presentations: {} } });
+    expect(projectActiveDiagram(store, 'packageDiagram').relationships[0].type).toBe(kind);
+  });
+  it('includes the owning Block frame of an IBD without displaying the Part type as a Block', () => {
+    const repo = createEmptyRepository();
+    repo.definitions.system = createTestBlock('system', 'System');
+    repo.definitions.component = createTestBlock('component', 'Component');
+    repo.diagrams.ibd = { id: 'ibd', name: 'IBD', kind: 'diagram', diagramKind: 'ibd', ownerId: 'system', contextElementId: 'system', namespace: [] };
+    const store = fromRepository(repo, {}, { ibd: { elementIds: [], presentations: {} } });
+    expect(projectActiveDiagram(store, 'ibd').blocks.map(block => block.id)).toEqual(['system']);
+  });
+
+  it('projects a presented Use Case and preserves its Satisfy relation on Requirements', () => {
+    const repo = createEmptyRepository();
+    repo.useCases.drive = { id: 'drive', name: 'Drive', kind: 'useCase', ownerId: 'model', namespace: [], extensionPointIds: [], behaviorArtifactIds: [] };
+    repo.requirements.req = { id: 'req', name: 'Requirement', kind: 'requirement', namespace: [], ownerId: 'model', requirementId: 'REQ-1', text: 'Drive', status: 'draft', version: '1' };
+    repo.relationships.satisfy = { id: 'satisfy', kind: 'useCaseSatisfy', sourceId: 'drive', targetId: 'req' };
+    const store = fromRepository(repo, {}, { reqDiagram: { elementIds: ['drive', 'req', 'satisfy'], presentations: {} } });
+    const view = projectActiveDiagram(store, 'reqDiagram');
+    expect(view.blocks.find(block => block.id === 'drive')).toMatchObject({ stereotype: 'useCase', name: 'Drive' });
+    expect(view.relationships.find(link => link.id === 'satisfy')).toMatchObject({ type: 'satisfy' });
+  });
   it('projects only the active diagram elements, links, and presentations', () => {
     const store = createTwoDiagramStore();
 

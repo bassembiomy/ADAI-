@@ -1448,7 +1448,7 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, nodes, 
                   </div>
                 </div>
               </div>
-              <button 
+              <button data-help-feature="ui:xbridges/XbridgesScopeWindow:151ed7616191" data-help-source="src/components/xbridges/XbridgesScopeWindow.tsx"
                 onClick={onClose}
                 className="p-2 hover:bg-white/5 rounded-lg text-gray-400 hover:text-white transition-all"
               >
@@ -1471,27 +1471,27 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, nodes, 
 
                 {/* Control Panel in Top Right */}
                 <div className="absolute top-4 right-4 flex gap-2 z-10">
-                  <button 
+                  <button data-help-feature="ui:xbridges/XbridgesScopeWindow:9a6587a7a946" data-help-source="src/components/xbridges/XbridgesScopeWindow.tsx"
                     onClick={() => setViewMode(prev => prev === '3d' ? '2d' : '3d')}
                     className="px-2.5 py-1 rounded-md bg-white/5 hover:bg-white/10 border border-white/10 text-[9px] font-black uppercase text-gray-300 transition-all"
                   >
                     Mode: {viewMode.toUpperCase()}
                   </button>
                   {viewMode === '3d' && (
-                    <button 
+                    <button data-help-feature="ui:xbridges/XbridgesScopeWindow:32d0a523676d" data-help-source="src/components/xbridges/XbridgesScopeWindow.tsx"
                       onClick={() => setTrackRobot(prev => !prev)}
                       className={`px-2.5 py-1 rounded-md border text-[9px] font-black uppercase transition-all ${trackRobot ? 'bg-emerald-500/10 border-emerald-500/35 text-emerald-400' : 'bg-white/5 border-white/10 text-gray-300'}`}
                     >
                       Track: {trackRobot ? 'ON' : 'OFF'}
                     </button>
                   )}
-                  <button 
+                  <button data-help-feature="ui:xbridges/XbridgesScopeWindow:1b5c68e1bde9" data-help-source="src/components/xbridges/XbridgesScopeWindow.tsx"
                     onClick={() => setShowLidar(prev => !prev)}
                     className={`px-2.5 py-1 rounded-md border text-[9px] font-black uppercase transition-all ${showLidar ? 'bg-red-50 border-red-200 text-red-600' : 'bg-slate-100 border-slate-200 text-slate-600 hover:bg-slate-200'}`}
                   >
                     LiDAR: {showLidar ? 'SHOW' : 'HIDE'}
                   </button>
-                  <button 
+                  <button data-help-feature="ui:xbridges/XbridgesScopeWindow:8a3aa4e9a079" data-help-source="src/components/xbridges/XbridgesScopeWindow.tsx"
                     onClick={() => setShowSlam(prev => !prev)}
                     className={`px-2.5 py-1 rounded-md border text-[9px] font-black uppercase transition-all ${showSlam ? 'bg-blue-50 border-blue-200 text-blue-600' : 'bg-slate-100 border-slate-200 text-slate-600 hover:bg-slate-200'}`}
                   >
@@ -1499,7 +1499,7 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, nodes, 
                   </button>
                 </div>
                 
-                <canvas 
+                <canvas data-help-feature="live:components/xbridges/XbridgesScopeWindow:5a8b726980e9"
                   ref={canvasRef} 
                   width={460} 
                   height={460} 
@@ -1716,7 +1716,7 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, nodes, 
             </div>
 
             <div className="flex items-center gap-2">
-              <button 
+              <button data-help-feature="ui:xbridges/XbridgesScopeWindow:6049025dcb12" data-help-source="src/components/xbridges/XbridgesScopeWindow.tsx"
                 onClick={downloadCSV}
                 className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-900/20 text-emerald-400 hover:bg-emerald-900/30 border border-emerald-800/30 transition-all text-xs font-bold"
               >
@@ -1724,7 +1724,7 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, nodes, 
                 Export CSV
               </button>
               {onUpdate && (
-                <button 
+                <button data-help-feature="ui:xbridges/XbridgesScopeWindow:c59d52419a6a" data-help-source="src/components/xbridges/XbridgesScopeWindow.tsx"
                   onClick={() => setShowSettings(!showSettings)}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border transition-all text-xs font-bold ${
                     showSettings 
@@ -1737,7 +1737,7 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, nodes, 
                   Settings
                 </button>
               )}
-              <button 
+              <button data-help-feature="ui:xbridges/XbridgesScopeWindow:151ed7616191" data-help-source="src/components/xbridges/XbridgesScopeWindow.tsx"
                 onClick={onClose}
                 className="p-2 hover:bg-[#333] rounded-lg text-slate-500 hover:text-slate-200 transition-all"
               >
@@ -1755,7 +1755,7 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, nodes, 
                 {/* Time Range */}
                 <div className="space-y-1">
                   <label className="block text-[9px] font-bold text-slate-500 uppercase">Time Range</label>
-                  <select
+                  <select data-help-feature="ui:xbridges/XbridgesScopeWindow:292cb96a9930" data-help-source="src/components/xbridges/XbridgesScopeWindow.tsx"
                     value={String(block.params?.timeRange || 'auto')}
                     onChange={(e) => onUpdate({ ...block.params, timeRange: e.target.value })}
                     className="w-full text-xs px-2 py-1.5 border border-[#333] bg-[#0a0a0a] text-[#e0e0e0] focus:border-[#c9a86c] outline-none cursor-pointer"
@@ -1773,7 +1773,7 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, nodes, 
                 {/* Limit Data Points */}
                 <div className="space-y-1">
                   <label className="block text-[9px] font-bold text-slate-500 uppercase">Limit Data Points</label>
-                  <select
+                  <select data-help-feature="ui:xbridges/XbridgesScopeWindow:29ce47703faf" data-help-source="src/components/xbridges/XbridgesScopeWindow.tsx"
                     value={String(block.params?.limitDataPoints !== false)}
                     onChange={(e) => onUpdate({ ...block.params, limitDataPoints: e.target.value === 'true' })}
                     className="w-full text-xs px-2 py-1.5 border border-[#333] bg-[#0a0a0a] text-[#e0e0e0] focus:border-[#c9a86c] outline-none cursor-pointer"
@@ -1786,7 +1786,7 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, nodes, 
                 {/* Buffer Size */}
                 <div className="space-y-1">
                   <label className="block text-[9px] font-bold text-slate-500 uppercase">Max Points (Buffer)</label>
-                  <input
+                  <input data-help-feature="ui:xbridges/XbridgesScopeWindow:ba50393815ef" data-help-source="src/components/xbridges/XbridgesScopeWindow.tsx"
                     type="number"
                     value={block.params?.bufferSize || 1000}
                     onChange={(e) => onUpdate({ ...block.params, bufferSize: parseInt(e.target.value) || 1000 })}
@@ -1797,7 +1797,7 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, nodes, 
                 {/* Decimation */}
                 <div className="space-y-1">
                   <label className="block text-[9px] font-bold text-slate-500 uppercase">Decimation</label>
-                  <input
+                  <input data-help-feature="ui:xbridges/XbridgesScopeWindow:1f590fb5742c" data-help-source="src/components/xbridges/XbridgesScopeWindow.tsx"
                     type="number"
                     min="1"
                     value={block.params?.decimation || 1}
@@ -1809,7 +1809,7 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, nodes, 
                 {/* Sample Time */}
                 <div className="space-y-1">
                   <label className="block text-[9px] font-bold text-slate-500 uppercase">Sample Time (s)</label>
-                  <input
+                  <input data-help-feature="ui:xbridges/XbridgesScopeWindow:2cca1fa80a91" data-help-source="src/components/xbridges/XbridgesScopeWindow.tsx"
                     type="number"
                     step="any"
                     value={block.params?.sampleTime ?? -1}
@@ -1821,7 +1821,7 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, nodes, 
                 {/* Show Grid */}
                 <div className="space-y-1">
                   <label className="block text-[9px] font-bold text-slate-500 uppercase">Grid</label>
-                  <select
+                  <select data-help-feature="ui:xbridges/XbridgesScopeWindow:db1a9de697fe" data-help-source="src/components/xbridges/XbridgesScopeWindow.tsx"
                     value={String(block.params?.showGrid !== false)}
                     onChange={(e) => onUpdate({ ...block.params, showGrid: e.target.value === 'true' })}
                     className="w-full text-xs px-2 py-1.5 border border-[#333] bg-[#0a0a0a] text-[#e0e0e0] focus:border-[#c9a86c] outline-none cursor-pointer"
@@ -1834,7 +1834,7 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, nodes, 
                 {/* Show Legend */}
                 <div className="space-y-1">
                   <label className="block text-[9px] font-bold text-slate-500 uppercase">Legend</label>
-                  <select
+                  <select data-help-feature="ui:xbridges/XbridgesScopeWindow:a0ef930d9546" data-help-source="src/components/xbridges/XbridgesScopeWindow.tsx"
                     value={String(block.params?.showLegend !== false)}
                     onChange={(e) => onUpdate({ ...block.params, showLegend: e.target.value === 'true' })}
                     className="w-full text-xs px-2 py-1.5 border border-[#333] bg-[#0a0a0a] text-[#e0e0e0] focus:border-[#c9a86c] outline-none cursor-pointer"

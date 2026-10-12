@@ -94,7 +94,7 @@ export const TypedValueEditor: React.FC<TypedValueEditorProps> = ({
   if (type.kind === 'bool') {
     const checked = value === true;
     return (
-      <input
+      <input data-help-feature="opm:opmexecutionpropertiespanel:events-enums:bdb9f73e78" data-help-module="entropy"
         data-testid={testId}
         type="checkbox"
         checked={checked}
@@ -110,7 +110,7 @@ export const TypedValueEditor: React.FC<TypedValueEditorProps> = ({
     const currentMemberId =
       typeof value === 'object' && value !== null ? (value as { memberId: string }).memberId : String(value ?? '');
     return (
-      <select
+      <select data-help-feature="opm:opmexecutionpropertiespanel:events-enums:09c2e433da" data-help-module="entropy"
         data-testid={testId}
         value={currentMemberId}
         onChange={(e) => {
@@ -137,7 +137,7 @@ export const TypedValueEditor: React.FC<TypedValueEditorProps> = ({
   const numericValue =
     typeof value === 'number' ? value : typeof value === 'boolean' ? Number(value) : Number(value);
   return (
-    <input
+    <input data-help-feature="opm:opmexecutionpropertiespanel:events-enums:2c504f94aa" data-help-module="entropy"
       data-testid={testId}
       type="number"
       value={Number.isFinite(numericValue) ? numericValue : 0}
@@ -199,7 +199,7 @@ export const AssignmentRows: React.FC<AssignmentRowsProps> = ({
           key={asgn.id}
           className="p-1.5 bg-black/40 border border-[#2d2d2d] rounded flex items-center gap-1"
         >
-          <select
+          <select data-help-feature="opm:opmexecutionpropertiespanel:assignments:2b9865d71c" data-help-module="entropy"
             data-testid="target-attr-select"
             aria-label={`Assignment ${idx + 1} target attribute`}
             data-opm-path={`${basePath}[${idx}].targetAttributeId`}
@@ -214,7 +214,7 @@ export const AssignmentRows: React.FC<AssignmentRowsProps> = ({
               </option>
             ))}
           </select>
-          <select
+          <select data-help-feature="opm:opmexecutionpropertiespanel:assignments:c43e6f14b8" data-help-module="entropy"
             data-testid="assignment-op-select"
             aria-label={`Assignment ${idx + 1} operator`}
             data-opm-path={`${basePath}[${idx}].operator`}
@@ -228,7 +228,7 @@ export const AssignmentRows: React.FC<AssignmentRowsProps> = ({
             <option value="*=">*=</option>
             <option value="/=">/=</option>
           </select>
-          <input
+          <input data-help-feature="opm:opmexecutionpropertiespanel:assignments:1672653bd1" data-help-module="entropy"
             data-testid="assignment-expr-input"
             aria-label={`Assignment ${idx + 1} expression`}
             data-opm-path={`${basePath}[${idx}].expression`}
@@ -238,7 +238,7 @@ export const AssignmentRows: React.FC<AssignmentRowsProps> = ({
             className="bg-[#111] border border-[#333] rounded px-1.5 py-0.5 text-xs text-white font-mono flex-1"
           />
           <label className="flex items-center gap-0.5 text-[9px] text-gray-400" title="Enabled">
-            <input
+            <input data-help-feature="opm:opmexecutionpropertiespanel:assignments:b699192b5e" data-help-module="entropy"
               data-testid={`${testIdPrefix}-enabled-checkbox`}
               aria-label={`Assignment ${idx + 1} enabled`}
               data-opm-path={`${basePath}[${idx}].enabled`}
@@ -247,7 +247,7 @@ export const AssignmentRows: React.FC<AssignmentRowsProps> = ({
               onChange={(e) => patch(idx, { enabled: e.target.checked })}
             />
           </label>
-          <button
+          <button data-help-feature="opm:opmexecutionpropertiespanel:assignments:0a49b0d96e" data-help-module="entropy"
             data-testid={`${testIdPrefix}-move-up-btn`}
             aria-label={`Move assignment ${idx + 1} up`}
             data-opm-path={`${basePath}[${idx}].order`}
@@ -257,7 +257,7 @@ export const AssignmentRows: React.FC<AssignmentRowsProps> = ({
           >
             <ArrowUp size={12} />
           </button>
-          <button
+          <button data-help-feature="opm:opmexecutionpropertiespanel:assignments:fd703cffaa" data-help-module="entropy"
             data-testid={`${testIdPrefix}-move-down-btn`}
             aria-label={`Move assignment ${idx + 1} down`}
             data-opm-path={`${basePath}[${idx}].order`}
@@ -267,7 +267,7 @@ export const AssignmentRows: React.FC<AssignmentRowsProps> = ({
           >
             <ArrowDown size={12} />
           </button>
-          <button
+          <button data-help-feature="opm:opmexecutionpropertiespanel:assignments:54d21c1520" data-help-module="entropy"
             data-testid="delete-assignment-btn"
             aria-label={`Delete assignment ${idx + 1}`}
             onClick={() => remove(idx)}
@@ -390,7 +390,7 @@ export const OpmExecutionPropertiesPanel: React.FC<OpmExecutionPropertiesPanelPr
             <span className="text-[10px] font-bold uppercase text-gray-400">
               Events ({events.length})
             </span>
-            <button
+            <button data-help-feature="opm:opmexecutionpropertiespanel:events-enums:cc84748d86" data-help-module="entropy"
               data-testid="add-event-btn"
               aria-label="Add event"
               onClick={addEvent}
@@ -402,7 +402,7 @@ export const OpmExecutionPropertiesPanel: React.FC<OpmExecutionPropertiesPanelPr
           <div className="space-y-1">
             {executionConfig.events.map((ev, idx) => (
               <div key={ev.id} className="flex items-center gap-1">
-                <input
+                <input data-help-feature="opm:opmexecutionpropertiespanel:events-enums:77f92fbb35" data-help-module="entropy"
                   data-testid="event-name-input"
                   aria-label={`Event ${idx + 1} display name`}
                   data-opm-path={`events[${idx}].displayName`}
@@ -415,7 +415,7 @@ export const OpmExecutionPropertiesPanel: React.FC<OpmExecutionPropertiesPanelPr
                   }
                   className="bg-[#111] border border-[#333] rounded px-1.5 py-0.5 text-[10px] text-white font-mono flex-1"
                 />
-                <button
+                <button data-help-feature="opm:opmexecutionpropertiespanel:events-enums:f945fd6b36" data-help-module="entropy"
                   data-testid="delete-event-btn"
                   aria-label={`Delete event ${idx + 1}`}
                   onClick={() => deleteEvent(idx)}
@@ -433,7 +433,7 @@ export const OpmExecutionPropertiesPanel: React.FC<OpmExecutionPropertiesPanelPr
             <span className="text-[10px] font-bold uppercase text-gray-400">
               Enums ({executionConfig.enums.length})
             </span>
-            <button
+            <button data-help-feature="opm:opmexecutionpropertiespanel:events-enums:097e7b3357" data-help-module="entropy"
               data-testid="add-enum-btn"
               aria-label="Add enum"
               onClick={addEnum}
@@ -445,7 +445,7 @@ export const OpmExecutionPropertiesPanel: React.FC<OpmExecutionPropertiesPanelPr
           <div className="space-y-1">
             {executionConfig.enums.map((en, idx) => (
               <div key={en.id} className="flex items-center gap-1">
-                <input
+                <input data-help-feature="opm:opmexecutionpropertiespanel:events-enums:cd71bc0d6c" data-help-module="entropy"
                   data-testid="enum-name-input"
                   aria-label={`Enum ${idx + 1} display name`}
                   data-opm-path={`enums[${idx}].displayName`}
@@ -461,7 +461,7 @@ export const OpmExecutionPropertiesPanel: React.FC<OpmExecutionPropertiesPanelPr
                 <span className="text-[9px] text-gray-500 font-mono">
                   {en.members.length} members
                 </span>
-                <button
+                <button data-help-feature="opm:opmexecutionpropertiespanel:events-enums:5d3af7b55c" data-help-module="entropy"
                   data-testid="delete-enum-btn"
                   aria-label={`Delete enum ${idx + 1}`}
                   onClick={() => deleteEnum(idx)}
@@ -485,7 +485,7 @@ export const OpmExecutionPropertiesPanel: React.FC<OpmExecutionPropertiesPanelPr
             Model Settings
           </span>
           {onOpenSettings && (
-            <button
+            <button data-help-feature="opm:opmexecutionpropertiespanel:targets:2e5cf35266" data-help-module="entropy"
               data-testid="open-settings-btn"
               onClick={onOpenSettings}
               className="flex items-center gap-1 text-[10px] px-2 py-1 bg-sky-950 text-sky-400 border border-sky-800 rounded hover:bg-sky-900"
@@ -552,7 +552,7 @@ export const OpmExecutionPropertiesPanel: React.FC<OpmExecutionPropertiesPanelPr
           <span className="font-extrabold uppercase text-emerald-400 tracking-wider">
             Object: {selection.name}
           </span>
-          <button
+          <button data-help-feature="opm:opmexecutionpropertiespanel:attributes:00ee160660" data-help-module="entropy"
             data-testid="add-attr-btn"
             aria-label="Add attribute"
             onClick={handleAddAttribute}
@@ -572,7 +572,7 @@ export const OpmExecutionPropertiesPanel: React.FC<OpmExecutionPropertiesPanelPr
                 className="p-2 bg-black/40 border border-[#2d2d2d] rounded flex flex-col gap-1.5"
               >
                 <div className="flex items-center justify-between gap-1">
-                  <input
+                  <input data-help-feature="opm:opmexecutionpropertiespanel:attributes:d5d821127f" data-help-module="entropy"
                     data-testid="attr-name-input"
                     aria-label={`Attribute ${idx + 1} display name`}
                     data-opm-path={`objectExecution.attributes[${idx}].displayName`}
@@ -586,7 +586,7 @@ export const OpmExecutionPropertiesPanel: React.FC<OpmExecutionPropertiesPanelPr
                     placeholder="Attribute name"
                     className="bg-[#111] border border-[#333] rounded px-1.5 py-0.5 text-xs text-white font-mono flex-1"
                   />
-                  <button
+                  <button data-help-feature="opm:opmexecutionpropertiespanel:attributes:10825b16b9" data-help-module="entropy"
                     data-testid="attr-move-up-btn"
                     aria-label={`Move attribute ${idx + 1} up`}
                     data-opm-path={`objectExecution.attributes[${idx}].order`}
@@ -596,7 +596,7 @@ export const OpmExecutionPropertiesPanel: React.FC<OpmExecutionPropertiesPanelPr
                   >
                     <ArrowUp size={12} />
                   </button>
-                  <button
+                  <button data-help-feature="opm:opmexecutionpropertiespanel:attributes:66862948c2" data-help-module="entropy"
                     data-testid="attr-move-down-btn"
                     aria-label={`Move attribute ${idx + 1} down`}
                     data-opm-path={`objectExecution.attributes[${idx}].order`}
@@ -606,7 +606,7 @@ export const OpmExecutionPropertiesPanel: React.FC<OpmExecutionPropertiesPanelPr
                   >
                     <ArrowDown size={12} />
                   </button>
-                  <button
+                  <button data-help-feature="opm:opmexecutionpropertiespanel:attributes:05682c9ffe" data-help-module="entropy"
                     data-testid="delete-attr-btn"
                     aria-label={`Delete attribute ${idx + 1}`}
                     onClick={() => handleDeleteAttribute(idx)}
@@ -617,7 +617,7 @@ export const OpmExecutionPropertiesPanel: React.FC<OpmExecutionPropertiesPanelPr
                 </div>
 
                 <div className="flex items-center gap-1">
-                  <select
+                  <select data-help-feature="opm:opmexecutionpropertiespanel:attributes:fab81ae353" data-help-module="entropy"
                     data-testid="attr-type-select"
                     aria-label={`Attribute ${idx + 1} type`}
                     data-opm-path={`objectExecution.attributes[${idx}].type`}
@@ -663,7 +663,7 @@ export const OpmExecutionPropertiesPanel: React.FC<OpmExecutionPropertiesPanelPr
                 <div className="flex items-center gap-2 text-[9px] text-gray-400">
                   <label className="flex items-center gap-1">
                     Access:
-                    <select
+                    <select data-help-feature="opm:opmexecutionpropertiespanel:attributes:02ee5a3094" data-help-module="entropy"
                       data-testid="attr-access-select"
                       aria-label={`Attribute ${idx + 1} access mode`}
                       data-opm-path={`objectExecution.attributes[${idx}].access`}
@@ -679,7 +679,7 @@ export const OpmExecutionPropertiesPanel: React.FC<OpmExecutionPropertiesPanelPr
                   </label>
                   <label className="flex items-center gap-1">
                     Persistent:
-                    <input
+                    <input data-help-feature="opm:opmexecutionpropertiespanel:attributes:114af4fa0d" data-help-module="entropy"
                       data-testid="attr-persistent-checkbox"
                       aria-label={`Attribute ${idx + 1} persistent`}
                       data-opm-path={`objectExecution.attributes[${idx}].persistent`}
@@ -746,7 +746,7 @@ export const OpmExecutionPropertiesPanel: React.FC<OpmExecutionPropertiesPanelPr
             <label className="text-[10px] text-gray-400 font-bold block mb-0.5" htmlFor="proc-activation">
               Activation Mode
             </label>
-            <select
+            <select data-help-feature="opm:opmexecutionpropertiespanel:processes:9dd645f168" data-help-module="entropy"
               id="proc-activation"
               data-testid="process-activation-select"
               data-opm-path="processExecution.activation"
@@ -767,7 +767,7 @@ export const OpmExecutionPropertiesPanel: React.FC<OpmExecutionPropertiesPanelPr
               <label className="text-[10px] text-gray-400 font-bold block mb-0.5" htmlFor="proc-period">
                 Period (ms)
               </label>
-              <input
+              <input data-help-feature="opm:opmexecutionpropertiespanel:processes:81db4962bb" data-help-module="entropy"
                 id="proc-period"
                 data-testid="process-period-input"
                 data-opm-path="processExecution.periodMs"
@@ -787,7 +787,7 @@ export const OpmExecutionPropertiesPanel: React.FC<OpmExecutionPropertiesPanelPr
               <label className="text-[10px] text-gray-400 font-bold block mb-0.5" htmlFor="proc-priority">
                 Priority
               </label>
-              <input
+              <input data-help-feature="opm:opmexecutionpropertiespanel:processes:60a1e00cf8" data-help-module="entropy"
                 id="proc-priority"
                 data-testid="process-priority-input"
                 data-opm-path="processExecution.priority"
@@ -805,7 +805,7 @@ export const OpmExecutionPropertiesPanel: React.FC<OpmExecutionPropertiesPanelPr
             <label className="text-[10px] text-gray-400 font-bold block mb-0.5" htmlFor="proc-guard">
               Guard Expression
             </label>
-            <input
+            <input data-help-feature="opm:opmexecutionpropertiespanel:processes:40fd59a3b7" data-help-module="entropy"
               id="proc-guard"
               data-testid="guard-expr-input"
               data-opm-path="processExecution.guard"
@@ -821,7 +821,7 @@ export const OpmExecutionPropertiesPanel: React.FC<OpmExecutionPropertiesPanelPr
               <span className="text-[10px] font-bold uppercase text-gray-400">
                 Action Assignments
               </span>
-              <button
+              <button data-help-feature="opm:opmexecutionpropertiespanel:processes:534e7488bb" data-help-module="entropy"
                 data-testid="add-assignment-btn"
                 aria-label="Add assignment"
                 onClick={handleAddAssignment}
@@ -892,7 +892,7 @@ export const OpmExecutionPropertiesPanel: React.FC<OpmExecutionPropertiesPanelPr
         <div className="space-y-2">
           <div className="flex items-center gap-4">
             <label className="flex items-center gap-1.5 cursor-pointer">
-              <input
+              <input data-help-feature="opm:opmexecutionpropertiespanel:states:cae531c9fd" data-help-module="entropy"
                 data-testid="state-initial-checkbox"
                 aria-label="Initial state"
                 data-opm-path="stateExecution.initial"
@@ -903,7 +903,7 @@ export const OpmExecutionPropertiesPanel: React.FC<OpmExecutionPropertiesPanelPr
               Initial State
             </label>
             <label className="flex items-center gap-1.5 cursor-pointer">
-              <input
+              <input data-help-feature="opm:opmexecutionpropertiespanel:states:b1d65e62dc" data-help-module="entropy"
                 data-testid="state-terminal-checkbox"
                 aria-label="Terminal state"
                 data-opm-path="stateExecution.terminal"
@@ -921,7 +921,7 @@ export const OpmExecutionPropertiesPanel: React.FC<OpmExecutionPropertiesPanelPr
             <label className="text-[10px] text-gray-400 font-bold block mb-0.5" htmlFor="state-timeout">
               Timeout Duration (ms)
             </label>
-            <input
+            <input data-help-feature="opm:opmexecutionpropertiespanel:states:e0a079a11d" data-help-module="entropy"
               id="state-timeout"
               data-testid="state-timeout-input"
               data-opm-path="stateExecution.timeoutMs"
@@ -942,7 +942,7 @@ export const OpmExecutionPropertiesPanel: React.FC<OpmExecutionPropertiesPanelPr
             <label className="text-[10px] text-gray-400 font-bold block mb-0.5" htmlFor="state-timeout-ev">
               Timeout Event
             </label>
-            <select
+            <select data-help-feature="opm:opmexecutionpropertiespanel:states:89744f46f7" data-help-module="entropy"
               id="state-timeout-ev"
               data-testid="state-timeout-event-select"
               data-opm-path="stateExecution.timeoutEventId"
@@ -964,7 +964,7 @@ export const OpmExecutionPropertiesPanel: React.FC<OpmExecutionPropertiesPanelPr
           <div className="pt-2 border-t border-[#2d2d2d]">
             <div className="flex items-center justify-between mb-1.5">
               <span className="text-[10px] font-bold uppercase text-gray-400">Entry Actions</span>
-              <button
+              <button data-help-feature="opm:opmexecutionpropertiespanel:states:0f9fb87652" data-help-module="entropy"
                 data-testid="add-entry-assignment-btn"
                 aria-label="Add entry assignment"
                 onClick={handleAddEntry}
@@ -985,7 +985,7 @@ export const OpmExecutionPropertiesPanel: React.FC<OpmExecutionPropertiesPanelPr
           <div className="pt-2 border-t border-[#2d2d2d]">
             <div className="flex items-center justify-between mb-1.5">
               <span className="text-[10px] font-bold uppercase text-gray-400">Exit Actions</span>
-              <button
+              <button data-help-feature="opm:opmexecutionpropertiespanel:states:fb772d7d3e" data-help-module="entropy"
                 data-testid="add-exit-assignment-btn"
                 aria-label="Add exit assignment"
                 onClick={handleAddExit}
@@ -1047,7 +1047,7 @@ export const OpmExecutionPropertiesPanel: React.FC<OpmExecutionPropertiesPanelPr
             <label className="text-[10px] text-gray-400 font-bold block mb-0.5" htmlFor="link-event">
               Event Trigger
             </label>
-            <select
+            <select data-help-feature="opm:opmexecutionpropertiespanel:link-execution:1f1da0ddc2" data-help-module="entropy"
               id="link-event"
               data-testid="link-event-select"
               data-opm-path="linkExecution.eventId"
@@ -1070,7 +1070,7 @@ export const OpmExecutionPropertiesPanel: React.FC<OpmExecutionPropertiesPanelPr
             <label className="text-[10px] text-gray-400 font-bold block mb-0.5" htmlFor="link-guard">
               Guard Expression
             </label>
-            <input
+            <input data-help-feature="opm:opmexecutionpropertiespanel:link-execution:cc91ad5d58" data-help-module="entropy"
               id="link-guard"
               data-testid="guard-expr-input"
               data-opm-path="linkExecution.guard"
@@ -1086,7 +1086,7 @@ export const OpmExecutionPropertiesPanel: React.FC<OpmExecutionPropertiesPanelPr
               <label className="text-[10px] text-gray-400 font-bold block mb-0.5" htmlFor="link-prio">
                 Priority
               </label>
-              <input
+              <input data-help-feature="opm:opmexecutionpropertiespanel:link-execution:6935d89b40" data-help-module="entropy"
                 id="link-prio"
                 data-testid="link-priority-input"
                 data-opm-path="linkExecution.priority"
@@ -1102,7 +1102,7 @@ export const OpmExecutionPropertiesPanel: React.FC<OpmExecutionPropertiesPanelPr
               <label className="text-[10px] text-gray-400 font-bold block mb-0.5" htmlFor="link-delay">
                 Delay (ms)
               </label>
-              <input
+              <input data-help-feature="opm:opmexecutionpropertiespanel:link-execution:d820608c16" data-help-module="entropy"
                 id="link-delay"
                 data-testid="link-delay-input"
                 data-opm-path="linkExecution.delayMs"
@@ -1124,7 +1124,7 @@ export const OpmExecutionPropertiesPanel: React.FC<OpmExecutionPropertiesPanelPr
               <label className="text-[10px] text-gray-400 font-bold block mb-0.5" htmlFor="link-trans-owner">
                 Owner Object ID
               </label>
-              <input
+              <input data-help-feature="opm:opmexecutionpropertiespanel:link-execution:8c011839aa" data-help-module="entropy"
                 id="link-trans-owner"
                 data-testid="link-transition-owner-input"
                 data-opm-path="linkExecution.transition.ownerObjectId"
@@ -1148,7 +1148,7 @@ export const OpmExecutionPropertiesPanel: React.FC<OpmExecutionPropertiesPanelPr
                 <label className="text-[10px] text-gray-400 font-bold block mb-0.5" htmlFor="link-trans-src">
                   Source State ID
                 </label>
-                <input
+                <input data-help-feature="opm:opmexecutionpropertiespanel:link-execution:69b1d5bf82" data-help-module="entropy"
                   id="link-trans-src"
                   data-testid="link-transition-source-input"
                   data-opm-path="linkExecution.transition.sourceStateId"
@@ -1171,7 +1171,7 @@ export const OpmExecutionPropertiesPanel: React.FC<OpmExecutionPropertiesPanelPr
                 <label className="text-[10px] text-gray-400 font-bold block mb-0.5" htmlFor="link-trans-tgt">
                   Target State ID
                 </label>
-                <input
+                <input data-help-feature="opm:opmexecutionpropertiespanel:link-execution:42688bca5c" data-help-module="entropy"
                   id="link-trans-tgt"
                   data-testid="link-transition-target-input"
                   data-opm-path="linkExecution.transition.targetStateId"
@@ -1192,7 +1192,7 @@ export const OpmExecutionPropertiesPanel: React.FC<OpmExecutionPropertiesPanelPr
               </div>
             </div>
             {(exec.transition?.targetStateId || exec.transition?.ownerObjectId) && (
-              <button
+              <button data-help-feature="opm:opmexecutionpropertiespanel:link-execution:a4b082dd05" data-help-module="entropy"
                 data-testid="link-transition-clear-btn"
                 aria-label="Clear transition"
                 data-opm-path="linkExecution.transition"
@@ -1211,7 +1211,7 @@ export const OpmExecutionPropertiesPanel: React.FC<OpmExecutionPropertiesPanelPr
               <span className="text-[10px] font-bold uppercase text-gray-400">
                 Link Assignments
               </span>
-              <button
+              <button data-help-feature="opm:opmexecutionpropertiespanel:link-execution:afdfed823c" data-help-module="entropy"
                 data-testid="add-assignment-btn"
                 aria-label="Add link assignment"
                 onClick={handleAddAssignment}

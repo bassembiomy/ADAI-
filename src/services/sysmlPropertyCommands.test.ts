@@ -5,6 +5,18 @@ import { buildBlockPropertyUpdateCommand, buildCreatePartDefinitionCommand, buil
 import { buildCreateOwnedPropertyCommand } from './sysmlOwnedFeatureCommands';
 
 describe('BDD property-end associations', () => {
+  it('edits projected port fields without losing canonical multiplicity and typing', () => {
+    const repository = createEmptyRepository();
+    const block = (id: string, name: string): import('../engine/sysml/model').BlockDefinition => ({ id, name, kind: 'block', namespace: ['model'], ownerId: 'model', isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [] });
+    repository.definitions.component = block('component', 'Component');
+    repository.definitions.target = block('target', 'Target');
+    const component = repository.definitions.component as import('../engine/sysml/model').BlockDefinition;
+    component.ports = [{ id: 'p', name: 'old', kind: 'standard', portKind: 'umlPort', typeId: 'target', direction: 'inout', isConjugated: true, multiplicity: { lower: 0, upper: '*', ordered: true, unique: false } }];
+    const projected = projectLegacyDiagram(repository).blocks.find(b => b.id === 'component')!.ports;
+    const result = executeSysmlCommand(createSysmlGatewayState(repository), buildBlockPropertyUpdateCommand(repository, 'component', { ports: projected.map(p => ({ ...p, name: 'command' })) }));
+    expect(result.committed, JSON.stringify(result.diagnostics)).toBe(true);
+    expect((result.repository.definitions.component as import('../engine/sysml/model').BlockDefinition).ports[0]).toMatchObject({ name: 'command', typeId: 'target', isConjugated: true, multiplicity: component.ports[0].multiplicity });
+  });
   it('persists and projects an Association whose member end is a typed Block property', () => {
     const repository = createEmptyRepository();
     repository.definitions.vehicle = {

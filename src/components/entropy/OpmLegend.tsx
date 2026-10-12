@@ -74,7 +74,7 @@ export const OpmLegend: React.FC<{ onOpenHelp?: () => void }> = ({ onOpenHelp })
   if (!open) {
     return (
       <div className="absolute bottom-3 left-3 z-10 flex items-center gap-2">
-        <button
+        <button data-help-feature="opm:opmlegend:notation-help:b6883686eb" data-help-module="entropy"
           onClick={() => setOpen(true)}
           className="flex items-center gap-1.5 bg-[#161616]/90 border border-[#2d2d2d] rounded-md px-2 py-1 text-[10px] text-[#999] hover:text-white shadow-lg"
           title="ISO 19450 OPD notation legend"
@@ -82,7 +82,7 @@ export const OpmLegend: React.FC<{ onOpenHelp?: () => void }> = ({ onOpenHelp })
           <BookOpen size={11} /> ISO 19450 Notation
         </button>
         {onOpenHelp && (
-          <button
+          <button data-help-feature="opm:opmlegend:notation-help:be0c4f9a6d" data-help-module="entropy"
             onClick={onOpenHelp}
             className="flex items-center gap-1.5 bg-[#161616]/90 border border-orange-500/40 text-orange-400 hover:text-orange-300 hover:border-orange-500/80 rounded-md px-2 py-1 text-[10px] font-semibold shadow-lg transition-colors"
             title="Open OPM & ENTROPY Embedded C Guide"
@@ -96,7 +96,7 @@ export const OpmLegend: React.FC<{ onOpenHelp?: () => void }> = ({ onOpenHelp })
 
   return (
     <div className="absolute bottom-3 left-3 z-10 w-56 bg-[#141414]/95 backdrop-blur-md border border-[#2d2d2d] rounded-lg p-2.5 shadow-xl">
-      <button
+      <button data-help-feature="opm:opmlegend:notation-help:e5f61feda5" data-help-module="entropy"
         onClick={() => setOpen(false)}
         className="w-full flex items-center justify-between text-[10px] uppercase font-extrabold tracking-wider text-orange-400 mb-1.5"
       >
@@ -147,7 +147,7 @@ export const OpmLegend: React.FC<{ onOpenHelp?: () => void }> = ({ onOpenHelp })
         </div>
       ))}
       {onOpenHelp && (
-        <button
+        <button data-help-feature="opm:opmlegend:notation-help:60aeb8f68d" data-help-module="entropy"
           onClick={onOpenHelp}
           className="w-full mt-2 pt-1.5 border-t border-[#2d2d2d] flex items-center justify-center gap-1.5 text-[9px] font-bold text-orange-400 hover:text-orange-300 transition-colors"
         >

@@ -152,15 +152,15 @@ export function BlockPropertiesEditor({
     {properties.map((property, index) => <fieldset key={property.id} className="w-full min-w-0 rounded border border-gray-700 p-3 space-y-2">
       <legend className="px-1 text-xs">Property {index + 1}</legend>
       <label className="block text-xs">Name
-        <input aria-label={`Property ${index + 1} name`} value={property.name} onChange={event => update(index, { name: event.target.value })} className="box-border block h-8 w-full min-w-0 rounded border bg-transparent px-2 py-1 text-xs" />
+        <input data-help-feature="ui:sysml/BlockPropertiesEditor:ce1fc0f1a295" data-help-source="src/components/sysml/BlockPropertiesEditor.tsx" aria-label={`Property ${index + 1} name`} value={property.name} onChange={event => update(index, { name: event.target.value })} className="box-border block h-8 w-full min-w-0 rounded border bg-transparent px-2 py-1 text-xs" />
       </label>
       <label className="block text-xs">Property kind
-        <select aria-label={`Property ${index + 1} kind`} value={property.kind || 'value'} onChange={event => update(index, { kind: event.target.value as ValuePropertyData['kind'] })} className="box-border block h-8 w-full min-w-0 rounded border bg-transparent px-2 py-1 text-xs">
+        <select data-help-feature="ui:sysml/BlockPropertiesEditor:55e452c39b94" data-help-source="src/components/sysml/BlockPropertiesEditor.tsx" aria-label={`Property ${index + 1} kind`} value={property.kind || 'value'} onChange={event => update(index, { kind: event.target.value as ValuePropertyData['kind'] })} className="box-border block h-8 w-full min-w-0 rounded border bg-transparent px-2 py-1 text-xs">
           {PROPERTY_KINDS.map(kind => <option key={kind} value={kind}>{kind}</option>)}
         </select>
       </label>
       <label className="block text-xs">Type
-        <select aria-label={`Property ${index + 1} type`} value={property.typeId || property.type} onChange={event => {
+        <select data-help-feature="ui:sysml/BlockPropertiesEditor:ccb59fe7ed51" data-help-source="src/components/sysml/BlockPropertiesEditor.tsx" aria-label={`Property ${index + 1} type`} value={property.typeId || property.type} onChange={event => {
           const selected = typeOptions.find(option => option.id === event.target.value);
           const nextKind = adaptPropertyKindForType(property.kind, selected?.stereotype);
           update(index, { typeId: event.target.value, type: selected?.name || event.target.value, kind: nextKind });
@@ -170,7 +170,7 @@ export function BlockPropertiesEditor({
         </select>
       </label>
       <label className="block text-xs">Multiplicity
-        <input aria-label={`Property ${index + 1} multiplicity`} value={property.multiplicity || '1'} onChange={event => update(index, { multiplicity: event.target.value })} className="box-border block h-8 w-full min-w-0 rounded border bg-transparent px-2 py-1 text-xs" />
+        <input data-help-feature="ui:sysml/BlockPropertiesEditor:9344d65941cf" data-help-source="src/components/sysml/BlockPropertiesEditor.tsx" aria-label={`Property ${index + 1} multiplicity`} value={property.multiplicity || '1'} onChange={event => update(index, { multiplicity: event.target.value })} className="box-border block h-8 w-full min-w-0 rounded border bg-transparent px-2 py-1 text-xs" />
       </label>
       {(property.kind === 'part' || property.kind === 'reference') && (
         <div className="rounded border border-sky-900/60 bg-sky-950/20 px-2 py-1.5 text-[11px] text-sky-300">
@@ -178,32 +178,32 @@ export function BlockPropertiesEditor({
         </div>
       )}
       <div className="flex flex-wrap gap-3 text-xs">
-        <label><input type="checkbox" checked={!!property.ordered} onChange={event => update(index, { ordered: event.target.checked })} /> ordered</label>
-        <label><input type="checkbox" checked={property.unique === false} onChange={event => update(index, { unique: !event.target.checked })} /> nonunique</label>
-        <label><input type="checkbox" checked={!!property.isDerived} onChange={event => update(index, { isDerived: event.target.checked })} /> derived</label>
+        <label><input data-help-feature="ui:sysml/BlockPropertiesEditor:28d899a7b7ad" data-help-source="src/components/sysml/BlockPropertiesEditor.tsx" type="checkbox" checked={!!property.ordered} onChange={event => update(index, { ordered: event.target.checked })} /> ordered</label>
+        <label><input data-help-feature="ui:sysml/BlockPropertiesEditor:73435a53d2c6" data-help-source="src/components/sysml/BlockPropertiesEditor.tsx" type="checkbox" checked={property.unique === false} onChange={event => update(index, { unique: !event.target.checked })} /> nonunique</label>
+        <label><input data-help-feature="ui:sysml/BlockPropertiesEditor:cb560b5d611c" data-help-source="src/components/sysml/BlockPropertiesEditor.tsx" type="checkbox" checked={!!property.isDerived} onChange={event => update(index, { isDerived: event.target.checked })} /> derived</label>
       </div>
       {property.kind !== 'part' && property.kind !== 'reference' && <>
         <label className="block text-xs">Default value
-          <input value={property.defaultValue || ''} onChange={event => update(index, { defaultValue: event.target.value || undefined })} className="box-border block h-8 w-full min-w-0 rounded border bg-transparent px-2 py-1 text-xs" />
+          <input data-help-feature="ui:sysml/BlockPropertiesEditor:ef3d31738d09" data-help-source="src/components/sysml/BlockPropertiesEditor.tsx" value={property.defaultValue || ''} onChange={event => update(index, { defaultValue: event.target.value || undefined })} className="box-border block h-8 w-full min-w-0 rounded border bg-transparent px-2 py-1 text-xs" />
         </label>
         <label className="block text-xs">Unit
-          <input value={property.unit || ''} onChange={event => update(index, { unit: event.target.value || undefined })} className="box-border block h-8 w-full min-w-0 rounded border bg-transparent px-2 py-1 text-xs" />
+          <input data-help-feature="ui:sysml/BlockPropertiesEditor:2b358396d015" data-help-source="src/components/sysml/BlockPropertiesEditor.tsx" value={property.unit || ''} onChange={event => update(index, { unit: event.target.value || undefined })} className="box-border block h-8 w-full min-w-0 rounded border bg-transparent px-2 py-1 text-xs" />
         </label>
         <label className="block text-xs">Dimension
-          <input value={property.dimension || ''} onChange={event => update(index, { dimension: event.target.value || undefined })} className="box-border block h-8 w-full min-w-0 rounded border bg-transparent px-2 py-1 text-xs" />
+          <input data-help-feature="ui:sysml/BlockPropertiesEditor:1550609b29d4" data-help-source="src/components/sysml/BlockPropertiesEditor.tsx" value={property.dimension || ''} onChange={event => update(index, { dimension: event.target.value || undefined })} className="box-border block h-8 w-full min-w-0 rounded border bg-transparent px-2 py-1 text-xs" />
         </label>
       </>}
       <details className="rounded border border-gray-800 bg-black/10 px-2 py-1 text-xs">
         <summary className="cursor-pointer text-gray-400">Advanced inheritance</summary>
         <div className="mt-2 space-y-2">
           <label className="block text-xs">Redefines
-            <select value={property.redefinesId || ''} onChange={event => update(index, { redefinesId: event.target.value || undefined })} className="box-border block h-8 w-full min-w-0 rounded border bg-transparent px-2 py-1 text-xs">
+            <select data-help-feature="ui:sysml/BlockPropertiesEditor:fd2ff34b6d4b" data-help-source="src/components/sysml/BlockPropertiesEditor.tsx" value={property.redefinesId || ''} onChange={event => update(index, { redefinesId: event.target.value || undefined })} className="box-border block h-8 w-full min-w-0 rounded border bg-transparent px-2 py-1 text-xs">
               <option value="">None</option>
               {inheritedProperties.map(option => <option key={option.id} value={option.id}>{option.name}</option>)}
             </select>
           </label>
           <label className="block text-xs">Subsets
-            <select value={property.subsetsId || ''} onChange={event => update(index, { subsetsId: event.target.value || undefined })} className="box-border block h-8 w-full min-w-0 rounded border bg-transparent px-2 py-1 text-xs">
+            <select data-help-feature="ui:sysml/BlockPropertiesEditor:0393f0ecc15d" data-help-source="src/components/sysml/BlockPropertiesEditor.tsx" value={property.subsetsId || ''} onChange={event => update(index, { subsetsId: event.target.value || undefined })} className="box-border block h-8 w-full min-w-0 rounded border bg-transparent px-2 py-1 text-xs">
               <option value="">None</option>
               {inheritedProperties.map(option => <option key={option.id} value={option.id}>{option.name}</option>)}
             </select>
@@ -220,9 +220,9 @@ export function BlockPropertiesEditor({
           ))}
         </div>
       )}
-      <button type="button" onClick={() => remove(index)} className="rounded border px-2 py-1 text-xs">Remove property</button>
+      <button data-help-feature="ui:sysml/BlockPropertiesEditor:2ab8fef85e96" data-help-source="src/components/sysml/BlockPropertiesEditor.tsx" type="button" onClick={() => remove(index)} className="rounded border px-2 py-1 text-xs">Remove property</button>
     </fieldset>)}
-    <button type="button" onClick={add} className="rounded border px-2 py-1 text-xs">Add property</button>
+    <button data-help-feature="ui:sysml/BlockPropertiesEditor:c836e02e46eb" data-help-source="src/components/sysml/BlockPropertiesEditor.tsx" type="button" onClick={add} className="rounded border px-2 py-1 text-xs">Add property</button>
 
     <details className="space-y-2 rounded border border-gray-800 bg-[var(--surface-sunken)] p-2 text-xs" aria-label="Inheritance panel">
       <summary className="cursor-pointer font-semibold uppercase text-gray-400">Inheritance panel</summary>
@@ -259,7 +259,7 @@ export function BlockPropertiesEditor({
       ) : (
         <div role="list" aria-label="Inherited features">
           {visibleInherited.map(inherited => (
-            <div
+            <div data-help-feature="live:components/sysml/BlockPropertiesEditor:42bdf4f49b6f"
               key={inherited.id}
               role="listitem"
               aria-readonly="true"
@@ -279,14 +279,14 @@ export function BlockPropertiesEditor({
                 <div className="text-[10px] text-gray-500">Inherited from {inherited.originName} ({inherited.originId})</div>
               </div>
               <div className="flex gap-1">
-                <button
+                <button data-help-feature="ui:sysml/BlockPropertiesEditor:9ba9a4e49ac0" data-help-source="src/components/sysml/BlockPropertiesEditor.tsx"
                   type="button"
                   onClick={() => handleRedefine(inherited)}
                   className="rounded border border-gray-700 px-1.5 py-0.5 text-[10px] text-gray-300 hover:bg-gray-800"
                 >
                   Redefine
                 </button>
-                <button
+                <button data-help-feature="ui:sysml/BlockPropertiesEditor:2bca301cf110" data-help-source="src/components/sysml/BlockPropertiesEditor.tsx"
                   type="button"
                   onClick={() => handleSubset(inherited)}
                   className="rounded border border-gray-700 px-1.5 py-0.5 text-[10px] text-gray-300 hover:bg-gray-800"

@@ -114,7 +114,7 @@ function createProjectFileController(deps = {}) {
     if (saveAs || !targetPath) {
       const result = await dialog.showSaveDialog(targetWindow || undefined, {
         title: 'Save ADIA Project',
-        defaultPath: activeProjectPath || 'adia_project.adia',
+        defaultPath: (activeProjectPath ? normalizeAdiaPath(activeProjectPath) : null) || 'adia_project.adia',
         filters: [{ name: 'ADIA Project', extensions: ['adia'] }],
       });
 
@@ -165,7 +165,7 @@ function createProjectFileController(deps = {}) {
       ? path.resolve(options.targetPath)
       : (activeProjectPath || path.join(snapshotBaseDir, `project_${projectId}.adia`));
 
-    const resolvedPath = path.resolve(targetPath);
+    const resolvedPath = normalizeAdiaPath(path.resolve(targetPath));
     assertSnapshotPathAllowed(resolvedPath);
 
     const now = Date.now();

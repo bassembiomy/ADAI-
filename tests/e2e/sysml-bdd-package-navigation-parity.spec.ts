@@ -240,10 +240,11 @@ test.describe('SysML BDD, Package Diagram, and Navigation Parity E2E Gate', () =
 
   test('BDD block selects on release, but starts moving only after a held pointer drag', async ({ page }) => {
     await page.locator('[data-diagram-id="adia-default-bdd"], [data-diagram-id="bdd"]').first().click();
+    await expect.poll(() => page.evaluate(() => (window as any).__adiaTestHooks?.getDiagramMode?.())).toBe('bdd');
     await page.evaluate(() => {
       (window as any).__sysmlExecuteCommand({
         type: 'createAndPresent',
-        diagramId: 'bdd',
+        diagramId: (window as any).__adiaTestHooks.getActiveDiagramId(),
         element: {
           id: 'blk-click-drag',
           name: 'ClickDragBlock',
@@ -273,7 +274,7 @@ test.describe('SysML BDD, Package Diagram, and Navigation Parity E2E Gate', () =
     await page.mouse.up();
     await expect(selectionOutline).toHaveCount(1);
 
-    const beforeDrag = await page.evaluate(() => (window as any).__adiaTestHooks?.getDiagramPresentations?.().bdd?.presentations?.['blk-click-drag']?.bounds?.x);
+    const beforeDrag = await page.evaluate(() => (window as any).__adiaTestHooks?.getDiagramPresentations?.()[(window as any).__adiaTestHooks.getActiveDiagramId()]?.presentations?.['blk-click-drag']?.bounds?.x);
     const transformBeforeDrag = await block.getAttribute('transform');
     await page.mouse.move(box!.x + 80, box!.y + 50);
     await page.mouse.down();
@@ -283,7 +284,7 @@ test.describe('SysML BDD, Package Diagram, and Navigation Parity E2E Gate', () =
     await page.mouse.up();
     await page.mouse.move(box!.x + 220, box!.y + 100);
     await expect.poll(() => block.getAttribute('transform')).toBe(transformWhileHeld);
-    await expect.poll(async () => page.evaluate(() => (window as any).__adiaTestHooks?.getDiagramPresentations?.().bdd?.presentations?.['blk-click-drag']?.bounds?.x)).toBeGreaterThan(beforeDrag);
+    await expect.poll(async () => page.evaluate(() => (window as any).__adiaTestHooks?.getDiagramPresentations?.()[(window as any).__adiaTestHooks.getActiveDiagramId()]?.presentations?.['blk-click-drag']?.bounds?.x)).toBeGreaterThan(beforeDrag);
   });
 
   test('2. Part creation inside active Block context without owner chooser and Root returns to origin BDD', async ({ page }) => {

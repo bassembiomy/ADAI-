@@ -369,13 +369,40 @@ export function setRejectOnlyIntroducedErrors(enabled: boolean): void { rejectOn
 export function isRejectingOnlyIntroducedErrors(): boolean { return rejectOnlyIntroducedErrors; }
 
 const baselineErrorKeys = new WeakMap<SysmlRepository, Set<string>>();
+const baselineDiagnostics = new WeakMap<SysmlRepository, { context: SemanticEndpointContext | undefined; diagnostics: SysmlDiagnostic[] }>();
 // Array indices are dropped from the path (`messages.2.signatureId` -> `messages.signatureId`) so an
 // error that already existed is not mistaken for a new one when an earlier item is removed.
 const diagnosticKey = (d: SysmlDiagnostic) => `${d.code}|${d.elementId ?? ''}|${(d.propertyPath ?? '').replace(/(^|\.)\d+(?=\.|$)/g, '')}`;
 
 /** Remembers the errors of a repository that was just validated so the next command need not re-validate it. */
-function seedBaselineErrors(repository: SysmlRepository, diagnostics: SysmlDiagnostic[]): void {
+function seedBaselineErrors(repository: SysmlRepository, diagnostics: SysmlDiagnostic[], context?: SemanticEndpointContext): void {
   baselineErrorKeys.set(repository, new Set(diagnostics.filter(d => d.severity === 'error').map(diagnosticKey)));
+  baselineDiagnostics.set(repository, { context, diagnostics });
+}
+
+/** A scoped report cannot erase unrelated diagnostics from an earlier full audit. */
+function completeScopedValidation(
+  before: SysmlRepository,
+  candidate: SysmlRepository,
+  scoped: ReturnType<typeof validateScopedSysmlRepository>,
+  context: SemanticEndpointContext | undefined,
+  isSimpleRename = false,
+): ReturnType<typeof validateSysmlRepository> {
+  if (!scoped) return validateSysmlRepository(candidate, context);
+  let baseline = baselineDiagnostics.get(before);
+  if (!baseline || baseline.context !== context) {
+    const report = validateSysmlRepository(before, context);
+    seedBaselineErrors(before, report.diagnostics, context);
+    baseline = baselineDiagnostics.get(before)!;
+  }
+  // An edit can repair old errors. Only proven attribute edits may carry them
+  // forward; duplicate names can involve both sides of the renamed pair.
+  if (baseline.diagnostics.length && (!isSimpleRename || baseline.diagnostics.some(d => d.code === 'DUPLICATE_QUALIFIED_NAME'))) {
+    return validateSysmlRepository(candidate, context);
+  }
+  const diagnostics = [...baseline.diagnostics, ...scoped.diagnostics];
+  const valid = !diagnostics.some(d => d.severity === 'error');
+  return { ...scoped, diagnostics, valid, canSimulate: valid, canExport: valid, canReport: valid, canVerify: valid };
 }
 
 /** The staged errors that the repository did not already have before the command. */
@@ -386,10 +413,10 @@ function introducedErrors(
 ): SysmlDiagnostic[] {
   const errors = stagedDiagnostics.filter(d => d.severity === 'error');
   if (!rejectOnlyIntroducedErrors || errors.length === 0) return errors;
-  let known = baselineErrorKeys.get(before);
+  let known = baselineDiagnostics.get(before)?.context === context ? baselineErrorKeys.get(before) : undefined;
   if (!known) {
-    known = new Set(validateSysmlRepository(before, context).diagnostics.filter(d => d.severity === 'error').map(diagnosticKey));
-    baselineErrorKeys.set(before, known);
+    seedBaselineErrors(before, validateSysmlRepository(before, context).diagnostics, context);
+    known = baselineErrorKeys.get(before)!;
   }
   return errors.filter(d => !known!.has(diagnosticKey(d)));
 }
@@ -1502,7 +1529,7 @@ function executeSysmlCommandCore(
       inverse: oldValue ? [{ op: 'replace', collection, id, oldValue: value, value: oldValue }] : [{ op: 'remove', collection, id, oldValue: value }],
     });
     pushPatch(patchHistory, patch, store);
-    seedBaselineErrors(nextRepo, validation.diagnostics);
+    seedBaselineErrors(nextRepo, validation.diagnostics, endpointContext);
     return {
       repository: nextRepo, store, patchHistory, committed: true, diagnostics: validation.diagnostics,
       ...(collection === 'baselines' ? { baseline: value as ModelBaseline } : {}),
@@ -2143,12 +2170,14 @@ function executeSysmlCommandCore(
     // Pure presentation staging: no store/history mutation yet.
     const nextCoordinates = { ...coordinates };
     let nextDiagramPresentations = { ...diagramPresentations };
+    const featureDiagram = command.diagramId ? state.repository.diagrams[command.diagramId] : undefined;
+    const isIbdBlockContext = Boolean(command.diagramId && (
+      state.repository.definitions[command.diagramId]?.kind === 'block'
+      || (featureDiagram?.diagramKind === 'ibd' && (featureDiagram.contextElementId ?? featureDiagram.ownerId) === owner.id)
+    ));
 
     if (command.presentation) {
       nextCoordinates[featureId] = { ...command.presentation };
-      const isIbdBlockContext = Boolean(
-        command.diagramId && state.repository.definitions[command.diagramId]?.kind === 'block',
-      );
       if (command.diagramId) {
         const diagPres = nextDiagramPresentations[command.diagramId] ?? {
           elementIds: [owner.id],
@@ -2167,7 +2196,6 @@ function executeSysmlCommandCore(
             [featureId]: { ...command.presentation },
           },
         };
-        const isIbdBlockContext = state.repository.definitions[command.diagramId]?.kind === 'block';
         // The IBD presents the part under its property id (the depth-1 path key).
         const nextElementIds = isStructuralFeature && isIbdBlockContext
           ? [...new Set([...diagPres.elementIds, featureId])]
@@ -2247,7 +2275,6 @@ function executeSysmlCommandCore(
       store.coordinates.set(featureId, { ...command.presentation });
       if (command.diagramId) {
         store.diagramPresentations.set(command.diagramId, nextDiagramPresentations[command.diagramId]);
-        const isIbdBlockContext = state.repository.definitions[command.diagramId]?.kind === 'block';
         if (isStructuralFeature && isIbdBlockContext) {
           store.indexes.diagramId.set(command.diagramId, new Set(nextDiagramPresentations[command.diagramId].elementIds));
         }
@@ -2407,7 +2434,7 @@ function executeSysmlCommandCore(
       commandType: 'createElement',
       affectedIds: [command.element.id],
     }, store, endpointContext);
-    const stagedValidation = scopedVal ?? validateSysmlRepository(nextRepo, endpointContext);
+    const stagedValidation = completeScopedValidation(state.repository, nextRepo, scopedVal, endpointContext);
     const stagedErrors = introducedErrors(state.repository, stagedValidation.diagnostics, endpointContext);
     if (stagedErrors.length > 0) {
       const view = getView(state.repository, coordinates, diagramPresentations);
@@ -2429,7 +2456,7 @@ function executeSysmlCommandCore(
 
     // Single atomic transaction: store projection, persistence records, and
     // exactly one history entry.
-    seedBaselineErrors(nextRepo, stagedValidation.diagnostics);
+    seedBaselineErrors(nextRepo, stagedValidation.diagnostics, endpointContext);
     upsertEntity(store, collection, command.element as any);
     if (command.presentation) {
       store.coordinates.set(command.element.id, { ...command.presentation });
@@ -2567,7 +2594,8 @@ function executeSysmlCommandCore(
       affectedIds: [command.elementId],
       changedProperties: Object.keys(command.patch),
     }, store, endpointContext);
-    const stagedValidation = scopedVal ?? validateSysmlRepository(nextRepo, endpointContext);
+    const stagedValidation = completeScopedValidation(state.repository, nextRepo, scopedVal, endpointContext,
+      Object.keys(command.patch).every(key => ['name', 'description'].includes(key)));
     const stagedErrors = introducedErrors(state.repository, stagedValidation.diagnostics, endpointContext);
     if (stagedErrors.length > 0) {
       const view = getView(state.repository, coordinates, diagramPresentations);
@@ -2589,7 +2617,7 @@ function executeSysmlCommandCore(
 
     // Single atomic transaction: store projection, persistence records, and
     // exactly one history entry.
-    seedBaselineErrors(nextRepo, stagedValidation.diagnostics);
+    seedBaselineErrors(nextRepo, stagedValidation.diagnostics, endpointContext);
     upsertEntity(store, collection, nextElement);
     for (const { after } of rewrittenInteractions) upsertEntity(store, 'definitions', after);
     const patch = createSysmlPatch({
@@ -3073,7 +3101,7 @@ function executeSysmlCommandCore(
 
     // Single atomic transaction: store projection, persistence records, and
     // exactly one history entry.
-    seedBaselineErrors(nextRepo, stagedValidation.diagnostics);
+    seedBaselineErrors(nextRepo, stagedValidation.diagnostics, endpointContext);
     for (const elemId of command.elementIds) {
       if (nextRepo.definitions[elemId]) upsertEntity(store, 'definitions', nextRepo.definitions[elemId]);
       else if (nextRepo.packages[elemId]) upsertEntity(store, 'packages', nextRepo.packages[elemId]);
@@ -3189,7 +3217,7 @@ function executeSysmlCommandCore(
 
     // Single atomic transaction: store projection, persistence records, and
     // exactly one history entry.
-    seedBaselineErrors(nextRepo, stagedValidation.diagnostics);
+    seedBaselineErrors(nextRepo, stagedValidation.diagnostics, endpointContext);
     upsertEntity(store, 'diagrams', diagram);
     store.diagramPresentations.set(diagram.id, { elementIds: [], presentations: {} });
     store.indexes.diagramId.set(diagram.id, new Set());

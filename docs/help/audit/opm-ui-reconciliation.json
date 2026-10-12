@@ -1,0 +1,2218 @@
+[
+  {
+    "candidateId": "src/components/entropy/EntropyWorkspace.tsx:1892",
+    "status": "mapped",
+    "featureIds": [
+      "opm:entropyworkspace:simulation:4dbb1a7f85"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/EntropyWorkspace.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/EntropyWorkspace.tsx:1933",
+    "status": "mapped",
+    "featureIds": [
+      "opm:entropyworkspace:states:798963eaae"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/EntropyWorkspace.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/EntropyWorkspace.tsx:1990",
+    "status": "mapped",
+    "featureIds": [
+      "opm:entropyworkspace:simulation:1b939e6775"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/EntropyWorkspace.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/EntropyWorkspace.tsx:2064",
+    "status": "mapped",
+    "featureIds": [
+      "opm:entropyworkspace:opl:70e0a4e255"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/EntropyWorkspace.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/EntropyWorkspace.tsx:2071",
+    "status": "mapped",
+    "featureIds": [
+      "opm:entropyworkspace:opl:a374e71beb"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/EntropyWorkspace.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/EntropyWorkspace.tsx:2092",
+    "status": "mapped",
+    "featureIds": [
+      "opm:entropyworkspace:opl:224fcf5d00"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/EntropyWorkspace.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/EntropyWorkspace.tsx:2225",
+    "status": "mapped",
+    "featureIds": [
+      "opm:entropyworkspace:tools:f413e7f8c2"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/EntropyWorkspace.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/EntropyWorkspace.tsx:2236",
+    "status": "mapped",
+    "featureIds": [
+      "opm:entropyworkspace:tools:d261e41270"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/EntropyWorkspace.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/EntropyWorkspace.tsx:2247",
+    "status": "mapped",
+    "featureIds": [
+      "opm:entropyworkspace:tools:88e3a9dcbb"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/EntropyWorkspace.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/EntropyWorkspace.tsx:2258",
+    "status": "mapped",
+    "featureIds": [
+      "opm:entropyworkspace:tools:3635742a78"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/EntropyWorkspace.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/EntropyWorkspace.tsx:2269",
+    "status": "mapped",
+    "featureIds": [
+      "opm:entropyworkspace:tools:9ef4d739b2"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/EntropyWorkspace.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/EntropyWorkspace.tsx:2284",
+    "status": "mapped",
+    "featureIds": [
+      "opm:entropyworkspace:links:c8bd9519f3"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/EntropyWorkspace.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/EntropyWorkspace.tsx:2318",
+    "status": "mapped",
+    "featureIds": [
+      "opm:entropyworkspace:layout-panels:0a754d795f"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/EntropyWorkspace.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/EntropyWorkspace.tsx:2343",
+    "status": "mapped",
+    "featureIds": [
+      "opm:entropyworkspace:layout-panels:a1108c5a92"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/EntropyWorkspace.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/EntropyWorkspace.tsx:2357",
+    "status": "mapped",
+    "featureIds": [
+      "opm:entropyworkspace:layout-panels:0a754d795f"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/EntropyWorkspace.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/EntropyWorkspace.tsx:2368",
+    "status": "mapped",
+    "featureIds": [
+      "opm:entropyworkspace:opl:453dfe06bf"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/EntropyWorkspace.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/EntropyWorkspace.tsx:2395",
+    "status": "mapped",
+    "featureIds": [
+      "opm:entropyworkspace:opl:cc0b98f7fe"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/EntropyWorkspace.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/EntropyWorkspace.tsx:2428",
+    "status": "mapped",
+    "featureIds": [
+      "opm:entropyworkspace:simulation:154563eacf"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/EntropyWorkspace.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/EntropyWorkspace.tsx:2436",
+    "status": "mapped",
+    "featureIds": [
+      "opm:entropyworkspace:simulation:0db1006f1f"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/EntropyWorkspace.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/EntropyWorkspace.tsx:2444",
+    "status": "mapped",
+    "featureIds": [
+      "opm:entropyworkspace:simulation:adb0691432"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/EntropyWorkspace.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/EntropyWorkspace.tsx:2466",
+    "status": "mapped",
+    "featureIds": [
+      "opm:entropyworkspace:simulation:f431c998f8"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/EntropyWorkspace.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/EntropyWorkspace.tsx:2483",
+    "status": "mapped",
+    "featureIds": [
+      "opm:entropyworkspace:scope-trace:bdee2667db"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/EntropyWorkspace.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/EntropyWorkspace.tsx:2500",
+    "status": "mapped",
+    "featureIds": [
+      "opm:entropyworkspace:layout-panels:9d727f7f91"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/EntropyWorkspace.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/EntropyWorkspace.tsx:2508",
+    "status": "mapped",
+    "featureIds": [
+      "opm:entropyworkspace:layout-panels:f2587f3cff"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/EntropyWorkspace.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/EntropyWorkspace.tsx:2518",
+    "status": "mapped",
+    "featureIds": [
+      "opm:entropyworkspace:layout-panels:1bd8a07349"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/EntropyWorkspace.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/EntropyWorkspace.tsx:2525",
+    "status": "mapped",
+    "featureIds": [
+      "opm:entropyworkspace:layout-panels:7b94aa100c"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/EntropyWorkspace.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/EntropyWorkspace.tsx:2533",
+    "status": "mapped",
+    "featureIds": [
+      "opm:entropyworkspace:notation-help:d6e26b47c3"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/EntropyWorkspace.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/EntropyWorkspace.tsx:2609",
+    "status": "mapped",
+    "featureIds": [
+      "opm:entropyworkspace:diagnostics:232c75839d"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/EntropyWorkspace.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/EntropyWorkspace.tsx:2620",
+    "status": "mapped",
+    "featureIds": [
+      "opm:entropyworkspace:layout-panels:8503142304"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/EntropyWorkspace.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/EntropyWorkspace.tsx:2631",
+    "status": "mapped",
+    "featureIds": [
+      "opm:entropyworkspace:layout-panels:7e134914ab"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/EntropyWorkspace.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/EntropyWorkspace.tsx:2652",
+    "status": "mapped",
+    "featureIds": [
+      "opm:entropyworkspace:simulation:5889b8e8ad"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/EntropyWorkspace.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/EntropyWorkspace.tsx:2698",
+    "status": "mapped",
+    "featureIds": [
+      "opm:entropyworkspace:notation-help:53d6a44df7"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/EntropyWorkspace.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/EntropyWorkspace.tsx:2703",
+    "status": "excluded",
+    "featureIds": [],
+    "reason": "Event-propagation boundary/backdrop only; no independent engineering action or configurable property.",
+    "sourceEvidence": [
+      "src/components/entropy/EntropyWorkspace.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/EntropyWorkspace.tsx:2712",
+    "status": "mapped",
+    "featureIds": [
+      "opm:entropyworkspace:notation-help:81c9b10caa"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/EntropyWorkspace.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/EntropyWorkspace.tsx:2803",
+    "status": "mapped",
+    "featureIds": [
+      "opm:entropyworkspace:notation-help:728f66783a"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/EntropyWorkspace.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmCodeGenerationWorkspace.tsx:414",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmcodegenerationworkspace:codegen:0a5f509857"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmCodeGenerationWorkspace.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmCodeGenerationWorkspace.tsx:421",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmcodegenerationworkspace:codegen:bbf99f23c2"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmCodeGenerationWorkspace.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmCodeGenerationWorkspace.tsx:430",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmcodegenerationworkspace:codegen:d91e8a27cd"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmCodeGenerationWorkspace.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmCodeGenerationWorkspace.tsx:439",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmcodegenerationworkspace:codegen:f967bb7126"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmCodeGenerationWorkspace.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmCodeGenerationWorkspace.tsx:448",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmcodegenerationworkspace:codegen:0842bf7f0b"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmCodeGenerationWorkspace.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmCodeGenerationWorkspace.tsx:511",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmcodegenerationworkspace:codegen:98ac0818af"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmCodeGenerationWorkspace.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmCodeGenerationWorkspace.tsx:539",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmcodegenerationworkspace:codegen:e3f47e2758"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmCodeGenerationWorkspace.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmDiagnosticsBadge.tsx:62",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmdiagnosticsbadge:diagnostics:3c1359131f"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmDiagnosticsBadge.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmDiagnosticsBadge.tsx:78",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmdiagnosticsbadge:diagnostics:8708d9c8ef"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmDiagnosticsBadge.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmDiagnosticsBadge.tsx:90",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmdiagnosticsbadge:diagnostics:1d2e414912"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmDiagnosticsBadge.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmDockShell.tsx:112",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmdockshell:layout-panels:66f81baea6"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmDockShell.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmDockShell.tsx:141",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmdockshell:layout-panels:e30c36a643"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmDockShell.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmDockShell.tsx:159",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmdockshell:layout-panels:92c5d2b14c"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmDockShell.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmDockShell.tsx:182",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmdockshell:layout-panels:a36eb7066b"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmDockShell.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OPMEdgeComponents.tsx:249",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmedgecomponents:links:c0b76b3104"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OPMEdgeComponents.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OPMEdgeComponents.tsx:280",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmedgecomponents:links:4a64608ecb"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OPMEdgeComponents.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmExecutionPropertiesPanel.tsx:97",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmexecutionpropertiespanel:events-enums:bdb9f73e78"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmExecutionPropertiesPanel.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmExecutionPropertiesPanel.tsx:113",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmexecutionpropertiespanel:events-enums:09c2e433da"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmExecutionPropertiesPanel.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmExecutionPropertiesPanel.tsx:140",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmexecutionpropertiespanel:events-enums:2c504f94aa"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmExecutionPropertiesPanel.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmExecutionPropertiesPanel.tsx:202",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmexecutionpropertiespanel:assignments:2b9865d71c"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmExecutionPropertiesPanel.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmExecutionPropertiesPanel.tsx:217",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmexecutionpropertiespanel:assignments:c43e6f14b8"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmExecutionPropertiesPanel.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmExecutionPropertiesPanel.tsx:231",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmexecutionpropertiespanel:assignments:1672653bd1"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmExecutionPropertiesPanel.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmExecutionPropertiesPanel.tsx:241",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmexecutionpropertiespanel:assignments:b699192b5e"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmExecutionPropertiesPanel.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmExecutionPropertiesPanel.tsx:250",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmexecutionpropertiespanel:assignments:0a49b0d96e"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmExecutionPropertiesPanel.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmExecutionPropertiesPanel.tsx:260",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmexecutionpropertiespanel:assignments:fd703cffaa"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmExecutionPropertiesPanel.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmExecutionPropertiesPanel.tsx:270",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmexecutionpropertiespanel:assignments:54d21c1520"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmExecutionPropertiesPanel.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmExecutionPropertiesPanel.tsx:393",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmexecutionpropertiespanel:events-enums:cc84748d86"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmExecutionPropertiesPanel.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmExecutionPropertiesPanel.tsx:405",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmexecutionpropertiespanel:events-enums:77f92fbb35"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmExecutionPropertiesPanel.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmExecutionPropertiesPanel.tsx:418",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmexecutionpropertiespanel:events-enums:f945fd6b36"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmExecutionPropertiesPanel.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmExecutionPropertiesPanel.tsx:436",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmexecutionpropertiespanel:events-enums:097e7b3357"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmExecutionPropertiesPanel.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmExecutionPropertiesPanel.tsx:448",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmexecutionpropertiespanel:events-enums:cd71bc0d6c"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmExecutionPropertiesPanel.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmExecutionPropertiesPanel.tsx:464",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmexecutionpropertiespanel:events-enums:5d3af7b55c"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmExecutionPropertiesPanel.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmExecutionPropertiesPanel.tsx:488",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmexecutionpropertiespanel:targets:2e5cf35266"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmExecutionPropertiesPanel.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmExecutionPropertiesPanel.tsx:555",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmexecutionpropertiespanel:attributes:00ee160660"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmExecutionPropertiesPanel.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmExecutionPropertiesPanel.tsx:575",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmexecutionpropertiespanel:attributes:d5d821127f"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmExecutionPropertiesPanel.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmExecutionPropertiesPanel.tsx:589",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmexecutionpropertiespanel:attributes:10825b16b9"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmExecutionPropertiesPanel.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmExecutionPropertiesPanel.tsx:599",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmexecutionpropertiespanel:attributes:66862948c2"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmExecutionPropertiesPanel.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmExecutionPropertiesPanel.tsx:609",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmexecutionpropertiespanel:attributes:05682c9ffe"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmExecutionPropertiesPanel.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmExecutionPropertiesPanel.tsx:620",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmexecutionpropertiespanel:attributes:fab81ae353"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmExecutionPropertiesPanel.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmExecutionPropertiesPanel.tsx:652",
+    "status": "excluded",
+    "featureIds": [],
+    "reason": "Pass-through editor wrapper; its actual inner inputs and buttons are separately inventoried and documented.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmExecutionPropertiesPanel.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmExecutionPropertiesPanel.tsx:666",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmexecutionpropertiespanel:attributes:02ee5a3094"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmExecutionPropertiesPanel.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmExecutionPropertiesPanel.tsx:682",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmexecutionpropertiespanel:attributes:114af4fa0d"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmExecutionPropertiesPanel.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmExecutionPropertiesPanel.tsx:749",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmexecutionpropertiespanel:processes:9dd645f168"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmExecutionPropertiesPanel.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmExecutionPropertiesPanel.tsx:770",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmexecutionpropertiespanel:processes:81db4962bb"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmExecutionPropertiesPanel.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmExecutionPropertiesPanel.tsx:790",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmexecutionpropertiespanel:processes:60a1e00cf8"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmExecutionPropertiesPanel.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmExecutionPropertiesPanel.tsx:808",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmexecutionpropertiespanel:processes:40fd59a3b7"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmExecutionPropertiesPanel.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmExecutionPropertiesPanel.tsx:824",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmexecutionpropertiespanel:processes:534e7488bb"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmExecutionPropertiesPanel.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmExecutionPropertiesPanel.tsx:834",
+    "status": "excluded",
+    "featureIds": [],
+    "reason": "Pass-through editor wrapper; its actual inner inputs and buttons are separately inventoried and documented.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmExecutionPropertiesPanel.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmExecutionPropertiesPanel.tsx:895",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmexecutionpropertiespanel:states:cae531c9fd"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmExecutionPropertiesPanel.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmExecutionPropertiesPanel.tsx:906",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmexecutionpropertiespanel:states:b1d65e62dc"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmExecutionPropertiesPanel.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmExecutionPropertiesPanel.tsx:924",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmexecutionpropertiespanel:states:e0a079a11d"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmExecutionPropertiesPanel.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmExecutionPropertiesPanel.tsx:945",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmexecutionpropertiespanel:states:89744f46f7"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmExecutionPropertiesPanel.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmExecutionPropertiesPanel.tsx:967",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmexecutionpropertiespanel:states:0f9fb87652"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmExecutionPropertiesPanel.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmExecutionPropertiesPanel.tsx:976",
+    "status": "excluded",
+    "featureIds": [],
+    "reason": "Pass-through editor wrapper; its actual inner inputs and buttons are separately inventoried and documented.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmExecutionPropertiesPanel.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmExecutionPropertiesPanel.tsx:988",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmexecutionpropertiespanel:states:fb772d7d3e"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmExecutionPropertiesPanel.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmExecutionPropertiesPanel.tsx:997",
+    "status": "excluded",
+    "featureIds": [],
+    "reason": "Pass-through editor wrapper; its actual inner inputs and buttons are separately inventoried and documented.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmExecutionPropertiesPanel.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmExecutionPropertiesPanel.tsx:1050",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmexecutionpropertiespanel:link-execution:1f1da0ddc2"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmExecutionPropertiesPanel.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmExecutionPropertiesPanel.tsx:1073",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmexecutionpropertiespanel:link-execution:cc91ad5d58"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmExecutionPropertiesPanel.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmExecutionPropertiesPanel.tsx:1089",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmexecutionpropertiespanel:link-execution:6935d89b40"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmExecutionPropertiesPanel.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmExecutionPropertiesPanel.tsx:1105",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmexecutionpropertiespanel:link-execution:d820608c16"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmExecutionPropertiesPanel.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmExecutionPropertiesPanel.tsx:1127",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmexecutionpropertiespanel:link-execution:8c011839aa"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmExecutionPropertiesPanel.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmExecutionPropertiesPanel.tsx:1151",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmexecutionpropertiespanel:link-execution:69b1d5bf82"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmExecutionPropertiesPanel.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmExecutionPropertiesPanel.tsx:1174",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmexecutionpropertiespanel:link-execution:42688bca5c"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmExecutionPropertiesPanel.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmExecutionPropertiesPanel.tsx:1195",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmexecutionpropertiespanel:link-execution:a4b082dd05"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmExecutionPropertiesPanel.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmExecutionPropertiesPanel.tsx:1214",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmexecutionpropertiespanel:link-execution:afdfed823c"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmExecutionPropertiesPanel.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmExecutionPropertiesPanel.tsx:1223",
+    "status": "excluded",
+    "featureIds": [],
+    "reason": "Pass-through editor wrapper; its actual inner inputs and buttons are separately inventoried and documented.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmExecutionPropertiesPanel.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmFloatingWindow.tsx:141",
+    "status": "excluded",
+    "featureIds": [],
+    "reason": "Event-propagation boundary/backdrop only; no independent engineering action or configurable property.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmFloatingWindow.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmFloatingWindow.tsx:158",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmfloatingwindow:layout-panels:1f5be2d049"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmFloatingWindow.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmFloatingWindow.tsx:184",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmfloatingwindow:layout-panels:ccaffa4f32"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmFloatingWindow.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmFloatingWindow.tsx:193",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmfloatingwindow:layout-panels:c758db2172"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmFloatingWindow.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmFloatingWindow.tsx:202",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmfloatingwindow:layout-panels:89288fc942"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmFloatingWindow.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmFloatingWindow.tsx:214",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmfloatingwindow:layout-panels:16a5bd6098"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmFloatingWindow.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmLegend.tsx:77",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmlegend:notation-help:b6883686eb"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmLegend.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmLegend.tsx:85",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmlegend:notation-help:be0c4f9a6d"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmLegend.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmLegend.tsx:99",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmlegend:notation-help:e5f61feda5"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmLegend.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmLegend.tsx:150",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmlegend:notation-help:60aeb8f68d"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmLegend.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmLiveTraceOverlay.tsx:47",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmlivetraceoverlay:scope-trace:a479fc5b20"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmLiveTraceOverlay.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:173",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmrightpanelcontent:node-properties:311319a854"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:190",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmrightpanelcontent:node-properties:6806c5726c"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:206",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmrightpanelcontent:node-properties:709d229510"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:222",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmrightpanelcontent:node-properties:ee898d888d"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:277",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmrightpanelcontent:states:40e0e865d8"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:289",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmrightpanelcontent:states:d46bfffdcb"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:307",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmrightpanelcontent:states:32059ab5f5"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:326",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmrightpanelcontent:states:f4278be795"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:349",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmrightpanelcontent:states:11351ac8dc"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:358",
+    "status": "excluded",
+    "featureIds": [],
+    "reason": "Pass-through editor wrapper; its actual inner inputs and buttons are separately inventoried and documented.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:370",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmrightpanelcontent:states:54bed5e726"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:379",
+    "status": "excluded",
+    "featureIds": [],
+    "reason": "Pass-through editor wrapper; its actual inner inputs and buttons are separately inventoried and documented.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:432",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmrightpanelcontent:processes:68ccbbcb94"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:451",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmrightpanelcontent:processes:85f51a93e9"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:470",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmrightpanelcontent:processes:dd77793b21"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:486",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmrightpanelcontent:processes:8ded53cebb"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:502",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmrightpanelcontent:processes:79978cc9fe"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:511",
+    "status": "excluded",
+    "featureIds": [],
+    "reason": "Pass-through editor wrapper; its actual inner inputs and buttons are separately inventoried and documented.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:526",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmrightpanelcontent:states:90462d3fe3"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:570",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmrightpanelcontent:states:d8854d70e8"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:580",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmrightpanelcontent:states:075840310b"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:594",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmrightpanelcontent:states:08da47b48b"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:605",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmrightpanelcontent:states:0f86e8f132"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:669",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmrightpanelcontent:attributes:b49e6a00ab"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:679",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmrightpanelcontent:attributes:aaeb379ff0"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:715",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmrightpanelcontent:attributes:2841abe0ac"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:729",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmrightpanelcontent:attributes:1f011dac80"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:761",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmrightpanelcontent:attributes:c6dca773e7"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:773",
+    "status": "excluded",
+    "featureIds": [],
+    "reason": "Pass-through editor wrapper; its actual inner inputs and buttons are separately inventoried and documented.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:801",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmrightpanelcontent:attributes:9a6e1c1066"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:816",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmrightpanelcontent:attributes:cec45d1dc2"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:832",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmrightpanelcontent:ports:f23b95c309"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:865",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmrightpanelcontent:ports:9983a533cb"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:893",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmrightpanelcontent:ports:c13f67f526"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:912",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmrightpanelcontent:ports:863b1aa77c"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:918",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmrightpanelcontent:ports:6031b80a99"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:929",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmrightpanelcontent:ports:6ed5b148ce"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:940",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmrightpanelcontent:ports:f81be9b1ce"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:956",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmrightpanelcontent:ports:cd6ab25210"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:976",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmrightpanelcontent:layout-panels:d84742ed0d"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:1007",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmrightpanelcontent:layout-panels:6764a3aad2"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:1014",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmrightpanelcontent:deletion:60f15d2e07"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:1027",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmrightpanelcontent:deletion:5438991d85"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:1085",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmrightpanelcontent:node-properties:6874f32073"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:1106",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmrightpanelcontent:links:528cc86a77"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:1133",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmrightpanelcontent:link-execution:f9188bdd8f"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:1154",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmrightpanelcontent:link-execution:105cb7af0c"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:1170",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmrightpanelcontent:link-execution:eaad8e229f"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:1184",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmrightpanelcontent:link-execution:598d27c928"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:1204",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmrightpanelcontent:link-execution:df72b3eaf7"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:1227",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmrightpanelcontent:link-execution:1f2e44165e"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:1249",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmrightpanelcontent:link-execution:2a845491d6"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:1275",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmrightpanelcontent:link-execution:79978cc9fe"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:1284",
+    "status": "excluded",
+    "featureIds": [],
+    "reason": "Pass-through editor wrapper; its actual inner inputs and buttons are separately inventoried and documented.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:1302",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmrightpanelcontent:scope-trace:430b1bcea2"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:1312",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmrightpanelcontent:scope-trace:90cd6ccad8"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:1323",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmrightpanelcontent:scope-trace:b700cdfbfb"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:1333",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmrightpanelcontent:scope-trace:20039af896"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:1343",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmrightpanelcontent:scope-trace:1e53c4c2bf"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:1388",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmrightpanelcontent:simulation:21611cbf4e"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:1401",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmrightpanelcontent:simulation:339a163d7e"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:1409",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmrightpanelcontent:simulation:0b510b0df2"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:1434",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmrightpanelcontent:simulation:45abd8a41f"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmRightPanelContent.tsx:1455",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmrightpanelcontent:simulation:6143e650bd"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmRightPanelContent.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmSimulationScope.tsx:202",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmsimulationscope:scope-trace:009893c934"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmSimulationScope.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmSimulationScope.tsx:214",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmsimulationscope:scope-trace:1c060c5572"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmSimulationScope.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmSimulationScope.tsx:228",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmsimulationscope:scope-trace:597a7962ea"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmSimulationScope.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmSimulationScope.tsx:238",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmsimulationscope:scope-trace:ad4f0f12d2"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmSimulationScope.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmTargetSettingsModal.tsx:61",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmtargetsettingsmodal:targets:030623f421"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmTargetSettingsModal.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmTargetSettingsModal.tsx:75",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmtargetsettingsmodal:targets:b8d39703a5"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmTargetSettingsModal.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmTargetSettingsModal.tsx:88",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmtargetsettingsmodal:targets:d4e7bbb1d6"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmTargetSettingsModal.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmTargetSettingsModal.tsx:104",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmtargetsettingsmodal:targets:22bc0d6ce0"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmTargetSettingsModal.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmTargetSettingsModal.tsx:118",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmtargetsettingsmodal:targets:a95fc1226d"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmTargetSettingsModal.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmTargetSettingsModal.tsx:133",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmtargetsettingsmodal:targets:6713f1f35a"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmTargetSettingsModal.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmTargetSettingsModal.tsx:147",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmtargetsettingsmodal:targets:5e7ad07276"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmTargetSettingsModal.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmTargetSettingsModal.tsx:161",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmtargetsettingsmodal:targets:5633f13418"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmTargetSettingsModal.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmTargetSettingsModal.tsx:176",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmtargetsettingsmodal:targets:b416d01b3a"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmTargetSettingsModal.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmTargetSettingsModal.tsx:193",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmtargetsettingsmodal:targets:5d8689b5ff"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmTargetSettingsModal.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmTargetSettingsModal.tsx:206",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmtargetsettingsmodal:targets:9193e00d6f"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmTargetSettingsModal.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/OpmTargetSettingsModal.tsx:212",
+    "status": "mapped",
+    "featureIds": [
+      "opm:opmtargetsettingsmodal:targets:bc6f6a60cb"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/OpmTargetSettingsModal.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/SmartShowPanel.tsx:41",
+    "status": "mapped",
+    "featureIds": [
+      "opm:smartshowpanel:smart-show:cd15ca7c90"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/SmartShowPanel.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/SmartShowPanel.tsx:50",
+    "status": "excluded",
+    "featureIds": [],
+    "reason": "Pass-through editor wrapper; its actual inner inputs and buttons are separately inventoried and documented.",
+    "sourceEvidence": [
+      "src/components/entropy/SmartShowPanel.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/SmartShowPanel.tsx:102",
+    "status": "mapped",
+    "featureIds": [
+      "opm:smartshowpanel:smart-show:748a0b6472"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/SmartShowPanel.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/SmartShowPanel.tsx:126",
+    "status": "mapped",
+    "featureIds": [
+      "opm:smartshowpanel:smart-show:d1aa8d11a7"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/SmartShowPanel.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/SmartShowPanel.tsx:136",
+    "status": "excluded",
+    "featureIds": [],
+    "reason": "Pass-through editor wrapper; its actual inner inputs and buttons are separately inventoried and documented.",
+    "sourceEvidence": [
+      "src/components/entropy/SmartShowPanel.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/SmartShowPanel.tsx:142",
+    "status": "mapped",
+    "featureIds": [
+      "opm:smartshowpanel:smart-show:a1b83fc3c8"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/SmartShowPanel.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/SmartShowPanel.tsx:172",
+    "status": "mapped",
+    "featureIds": [
+      "opm:smartshowpanel:smart-show:f0c2b2a264"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/SmartShowPanel.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/SmartShowPanel.tsx:184",
+    "status": "mapped",
+    "featureIds": [
+      "opm:smartshowpanel:smart-show:dc29636b98"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/SmartShowPanel.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/SmartShowPanel.tsx:201",
+    "status": "mapped",
+    "featureIds": [
+      "opm:smartshowpanel:smart-show:1d17b57e3a"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/SmartShowPanel.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/SmartShowPanel.tsx:213",
+    "status": "mapped",
+    "featureIds": [
+      "opm:smartshowpanel:smart-show:04a4955093"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/SmartShowPanel.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/SmartShowPanel.tsx:235",
+    "status": "mapped",
+    "featureIds": [
+      "opm:smartshowpanel:smart-show:b290418c64"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/SmartShowPanel.tsx"
+    ]
+  },
+  {
+    "candidateId": "src/components/entropy/SmartShowPanel.tsx:254",
+    "status": "mapped",
+    "featureIds": [
+      "opm:smartshowpanel:smart-show:82a2c42f41"
+    ],
+    "reason": "Reviewed control callback and containing OPM inspector/workflow; mapped to the authored operation/property section.",
+    "sourceEvidence": [
+      "src/components/entropy/SmartShowPanel.tsx"
+    ]
+  }
+]

@@ -202,7 +202,7 @@ export const PremiumEdge = ({
         style={style}
       />
       {/* Thick invisible interaction path to make clicking/hovering easy */}
-      <path
+      <path data-help-feature="ui:xbridges/PremiumEdge:5abd53cd4b34" data-help-source="src/components/xbridges/PremiumEdge.tsx"
         d={edgePath}
         fill="none"
         stroke="transparent"
@@ -226,7 +226,7 @@ export const PremiumEdge = ({
         vertices.map((v: any, idx: number) => (
           <g key={idx} className="group cursor-move">
             {/* Thicker invisible grab-area */}
-            <circle
+            <circle data-help-feature="ui:xbridges/PremiumEdge:a333dac41e56" data-help-source="src/components/xbridges/PremiumEdge.tsx"
               cx={v.x}
               cy={v.y}
               r={12}

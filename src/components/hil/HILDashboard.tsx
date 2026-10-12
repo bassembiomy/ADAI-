@@ -446,7 +446,7 @@ export const HILDashboard: React.FC<HILDashboardProps> = ({
           {/* COM port selector */}
           <div>
             <label className="block text-[9px] text-[#888] uppercase font-bold mb-1">COM Port</label>
-            <select
+            <select data-help-feature="ui:hil/HILDashboard:288533755639" data-help-source="src/components/hil/HILDashboard.tsx"
               value={commPort}
               disabled={sessionState.status === 'connected' || sessionState.status === 'connecting'}
               onChange={async (e) => {
@@ -487,7 +487,7 @@ export const HILDashboard: React.FC<HILDashboardProps> = ({
           {/* Baud rate selector */}
           <div>
             <label className="block text-[9px] text-[#888] uppercase font-bold mb-1">Baud Rate</label>
-            <select
+            <select data-help-feature="ui:hil/HILDashboard:e81eb55309fb" data-help-source="src/components/hil/HILDashboard.tsx"
               value={baudRate}
               disabled={sessionState.status === 'connected' || sessionState.status === 'connecting'}
               onChange={(e) => onChangeBaudRate(parseInt(e.target.value))}
@@ -502,7 +502,7 @@ export const HILDashboard: React.FC<HILDashboardProps> = ({
           {/* Start/Stop Session Buttons */}
           <div className="flex gap-2">
             {sessionState.status !== 'connected' ? (
-              <button
+              <button data-help-feature="ui:hil/HILDashboard:17d511c70100" data-help-source="src/components/hil/HILDashboard.tsx"
                 onClick={handleConnect}
                 disabled={!commPort || sessionState.status === 'connecting'}
                 className="ui-control ui-focus-ring flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-black font-semibold text-xs rounded transition-colors disabled:opacity-50"
@@ -510,7 +510,7 @@ export const HILDashboard: React.FC<HILDashboardProps> = ({
                 <Play size={14} /> Connect
               </button>
             ) : (
-              <button
+              <button data-help-feature="ui:hil/HILDashboard:d980bf49a578" data-help-source="src/components/hil/HILDashboard.tsx"
                 onClick={handleDisconnect}
                 className="ui-control ui-focus-ring flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white font-semibold text-xs rounded transition-colors"
               >
@@ -560,7 +560,7 @@ export const HILDashboard: React.FC<HILDashboardProps> = ({
                 <p className="text-[10px] text-[#666]">Live telemetry feed from MCU</p>
               </div>
               <div className="flex gap-2 items-center">
-                <button
+                <button data-help-feature="ui:hil/HILDashboard:8219279ae7b0" data-help-source="src/components/hil/HILDashboard.tsx"
                   onClick={() => {
                     setIsRecording(!isRecording);
                     if (!isRecording) {
@@ -578,14 +578,14 @@ export const HILDashboard: React.FC<HILDashboardProps> = ({
                 >
                   {isRecording ? 'Stop Rec' : 'Start Rec'}
                 </button>
-                <button
+                <button data-help-feature="ui:hil/HILDashboard:cd51b5f0aa23" data-help-source="src/components/hil/HILDashboard.tsx"
                   disabled={recordedData.length === 0}
                   onClick={handleExportTrace}
                   className="ui-control ui-focus-ring flex items-center gap-1 px-2.5 py-1 text-[10px] font-semibold bg-[#222] hover:bg-[#333] border border-[#333] text-gray-300 rounded transition-colors disabled:opacity-40"
                 >
                   <FileDown size={12} /> Export CSV
                 </button>
-                <PanelMaximizeButton
+                <PanelMaximizeButton data-help-feature="live:components/hil/HILDashboard:ab8c65b05134"
                   isMaximized={dashboardMaximized === 0}
                   onToggle={() => setDashboardMaximized(dashboardMaximized === 0 ? null : 0)}
                 />
@@ -629,7 +629,7 @@ export const HILDashboard: React.FC<HILDashboardProps> = ({
                   <ShieldAlert size={14} className="text-yellow-600" />
                   Fault Injection / Overrides
                 </h3>
-                <PanelMaximizeButton
+                <PanelMaximizeButton data-help-feature="live:components/hil/HILDashboard:dc50009040c8"
                   isMaximized={dashboardMaximized === 1}
                   onToggle={() => setDashboardMaximized(dashboardMaximized === 1 ? null : 1)}
                 />
@@ -642,7 +642,7 @@ export const HILDashboard: React.FC<HILDashboardProps> = ({
                     <div key={ch.id} className="hil-target-card ui-card bg-[#181818] p-2 rounded border border-[#222] text-xs">
                       <div className="flex justify-between items-center mb-1.5">
                         <span className="font-semibold text-white">{ch.name} <span className="text-[10px] text-[#666]">({ch.pin})</span></span>
-                        <button
+                        <button data-help-feature="ui:hil/HILDashboard:4490a932544f" data-help-source="src/components/hil/HILDashboard.tsx"
                           onClick={() => toggleFault(ch.id, 'override', fault.value)}
                           className={`ui-control ui-focus-ring px-2 py-0.5 text-[9px] rounded font-bold transition-all ${
                             fault.active 
@@ -656,7 +656,7 @@ export const HILDashboard: React.FC<HILDashboardProps> = ({
                       
                       {fault.active && (
                         <div className="flex items-center gap-2 mt-1">
-                          <input
+                          <input data-help-feature="ui:hil/HILDashboard:922f822493d0" data-help-source="src/components/hil/HILDashboard.tsx"
                             type="range"
                             min={ch.rangeMin}
                             max={ch.rangeMax}

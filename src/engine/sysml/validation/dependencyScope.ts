@@ -264,6 +264,10 @@ export function validateScopedSysmlRepository(
 
     if (target) {
       const changed = change.changedProperties ?? [];
+      // Retyping/redefining a property can invalidate nested connector paths,
+      // port endpoints, multiplicities and composite containment. The local
+      // type-existence check alone cannot prove those rules.
+      if (changed.includes('properties') || changed.includes('supertypeIds')) return null;
       const isSimpleAttributeUpdate = changed.length > 0 && changed.every(p => ['name', 'isAbstract', 'isLeaf', 'description'].includes(p));
 
       const diagnostics: SysmlDiagnostic[] = [];
@@ -274,27 +278,7 @@ export function validateScopedSysmlRepository(
         if (nameDiagnostic) diagnostics.push(nameDiagnostic);
       }
 
-      if (def && def.kind === 'block') {
-        if (changed.includes('supertypeIds')) {
-          const cycle = checkInheritanceCycleForBlock(repo, elementId);
-          if (cycle) diagnostics.push(cycle);
-        }
-        if (changed.includes('properties')) {
-          for (const prop of def.properties ?? []) {
-            if ((prop.kind === 'part' || prop.kind === 'reference') && prop.typeId && repo.definitions[prop.typeId]?.kind !== 'block') {
-              diagnostics.push({
-                code: 'MISSING_PROPERTY_TYPE',
-                severity: 'error',
-                elementId: prop.id,
-                propertyPath: 'typeId',
-                message: `Block type ${prop.typeId} of part ${prop.name} does not exist`,
-              });
-            }
-          }
-        }
-      }
-
-      if (!isSimpleAttributeUpdate && !changed.includes('properties') && !changed.includes('supertypeIds')) {
+      if (!isSimpleAttributeUpdate) {
         // Fallback to full validator for other complex changes
         return null;
       }

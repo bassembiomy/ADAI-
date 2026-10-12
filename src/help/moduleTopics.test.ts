@@ -1,9 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { ADDITIONAL_HELP_TOPICS, HELP_TOPIC_CORRECTIONS } from './moduleTopics';
+import { SEQUENCE_DIAGNOSTIC_GUIDANCE, USE_CASE_DIAGNOSTIC_GUIDANCE } from './diagnosticGuidance';
+import { readFileSync } from 'node:fs';
 import { existsSync } from 'node:fs';
 import { MESSAGE_SORTS, FRAGMENT_OPERATORS } from '../engine/sysml/interaction';
 
 describe('source verified Help chapters', () => {
+  it('uses the complete actual diagnostic code vocabulary rather than invented names', () => {
+    const sequence = readFileSync('src/engine/sysml/interaction.ts','utf8');
+    const codes = new Set([...sequence.matchAll(/(?:error|warning)\('([A-Z_]+)'|code:\s*'([A-Z_]+)'/g)].map(m => m[1] ?? m[2]));
+    expect(Object.keys(SEQUENCE_DIAGNOSTIC_GUIDANCE).sort()).toEqual([...codes].sort());
+    const usecase = readFileSync('src/engine/sysml/useCases.ts','utf8')+readFileSync('src/services/sysmlUseCaseCommands.ts','utf8');
+    expect(Object.keys(USE_CASE_DIAGNOSTIC_GUIDANCE).sort()).toEqual([...new Set([...usecase.matchAll(/code:\s*'([A-Z_]+)'/g)].map(m=>m[1]))].sort());
+  });
   it('provides actionable chapters with stable section IDs and source references', () => {
     for (const id of ['sequence-diagrams', 'use-case-diagrams', 'model-browser', 'activity-diagrams', 'parametric-diagrams', 'package-diagrams', 'ai-assistant', 'project-files', 'settings-guide', 'reports-guide']) {
       const topic = ADDITIONAL_HELP_TOPICS[id];
@@ -74,7 +83,7 @@ describe('source verified Help chapters', () => {
     }
     const errors = topic.sections?.find(s => s.id === 'errors');
     expect(errors).toBeDefined();
-    for (const code of ['DUPLICATE_RELATIONSHIP', 'INVALID_ENDPOINT_KIND', 'INVALID_DIRECTION', 'MISSING_EXTENSION_POINT', 'GENERALIZATION_CYCLE', 'INCLUDE_CYCLE']) {
+    for (const code of Object.keys(USE_CASE_DIAGNOSTIC_GUIDANCE)) {
       expect(errors!.body).toContain(code);
     }
   });
@@ -99,28 +108,7 @@ describe('source verified Help chapters', () => {
     }
     const errors = topic.sections?.find(s => s.id === 'errors');
     expect(errors).toBeDefined();
-    for (const code of [
-      'MISSING_LIFELINE_REPRESENTS',
-      'DUPLICATE_LIFELINE_NAME',
-      'SCENARIO_ACTOR_NOT_ASSOCIATED',
-      'LIFELINE_OUTSIDE_CONTEXT',
-      'MESSAGE_ENDPOINT_MISSING',
-      'LOST_FOUND_INVALID',
-      'INVALID_MESSAGE_ORDER',
-      'DUPLICATE_MESSAGE_ORDER',
-      'MESSAGE_BEFORE_CREATE',
-      'MULTIPLE_CREATE_MESSAGES',
-      'MESSAGE_AFTER_DELETE',
-      'REPLY_WITHOUT_CALL',
-      'SIGNAL_MESSAGE_WITHOUT_SIGNAL',
-      'UNKNOWN_MESSAGE_OPERATION',
-      'MESSAGE_CONNECTOR_MISSING',
-      'MESSAGE_CONNECTOR_MISMATCH',
-      'UNKNOWN_FRAGMENT_OPERATOR',
-      'OPERAND_WITHOUT_GUARD',
-      'OPT_LOOP_SINGLE_OPERAND',
-      'USE_CYCLE',
-    ]) {
+    for (const code of Object.keys(SEQUENCE_DIAGNOSTIC_GUIDANCE)) {
       expect(errors!.body).toContain(code);
     }
   });

@@ -24,7 +24,6 @@ import { buildCreateInteractionFromContextCommand } from './services/sysmlIntera
 import { buildSetVerificationBehaviorCommand, listTestProcedures } from './services/sysmlVerificationCommands';
 import { InteractionElementInspector } from './components/sysml/InteractionElementInspector';
 import { whereUsedInInteractions } from './engine/sysml/services/interactionQueries';
-import { renderScenariosSection } from './features/reporting/scenariosSection';
 import { findInteractionElement } from './engine/sysml/interaction';
 import { createVisualDiagram, type VisualDiagramModel } from './features/plantuml/model/visualDiagramModel';
 import { readPlantUmlDiagrams } from './features/plantuml/persistence/plantUmlProjectState';
@@ -109,6 +108,10 @@ import type { SemanticTraceFrame } from './utils/stateMachine/smTrace';
 import { STATE_MACHINE_RUNTIME_BUNDLE } from './generated/stateMachineRuntimeBundle';
 import { analyzeStateMachine } from './utils/smAnalysisEngine';
 import { HelpModal } from './components/help/HelpModal';
+import { HmiWorkspace } from './components/hmi/HmiWorkspace';
+import { normalizeHmiComponents, parseHmiVariableValue, validateHmiInput, type HmiInputCommand, type HmiInputResult } from './features/hmi/hmiModel';
+import { createHmiInputQueue, getPortableHmiInputQueueScript } from './features/hmi/hmiInputQueue';
+import { renderHmiWidgetSvg, renderPortableHmiMarkup, getPortableHmiScript, resolveHmiReportComponents } from './features/hmi/hmiReport';
 import { resolveModuleHelp } from './help/helpNavigation';
 import { useContextualHelp } from './help/helpContext';
 import { AppModelExplorer } from './components/modelExplorer/AppModelExplorer';
@@ -118,14 +121,10 @@ import { VLAB_LIBRARY } from './utils/vlabLibrary';
 import { BLOCK_LIBRARY as XBRIDGES_LIBRARY } from './engine/xbridges/BlockDefinitions';
 import JSZip from 'jszip';
 import {
-  buildReportHierarchy,
-  generateDiagramScript,
   createReportSnapshot,
   toHierarchySource,
-  renderRequirementsDiagram,
-  renderBddDiagram,
-  renderInteractiveDiagramHierarchy,
-  renderStateMachineDiagrams,
+  buildSystemReport,
+  renderStateMachineAnalysisHtml,
 } from './features/reporting';
 import { TraceabilityMatrix as CanonicalTraceabilityMatrix } from './components/sysml/TraceabilityMatrix';
 import { BlockPropertiesEditor } from './components/sysml/BlockPropertiesEditor';
@@ -185,6 +184,7 @@ import { getCanvasRelationshipKinds, getDirectBddPropertyRelationshipKind, rejec
 import { formatLegacyProperty, inheritedProperties, introducesNewValidationCodes, removePartProperty, validateLegacyBlockEdit, validateLegacyBlockProperties } from './services/sysmlPropertyRules';
 import { projectDiagramScopedCanvasView } from './services/sysmlProjectionState';
 import { projectActiveDiagram } from './engine/sysml/projection/activeDiagramProjection';
+import { projectNormalizedDiagram } from './engine/sysml/normalizedStore';
 import { CreateNewTypeActionPrompt } from './components/sysml/CreateNewTypeActionPrompt';
 import { PortKindActions } from './components/sysml/PortKindActions';
 import { TypeSelectionPrompt } from './components/sysml/TypeSelectionPrompt';
@@ -3367,841 +3367,6 @@ const EmojiPicker = ({
   );
 };
 
-const HmiDashboardContent = ({
-  variables,
-  components,
-  setComponents,
-  updateVariable,
-  onClose
-}: {
-  variables: VariableDef[];
-  components: HmiComponent[];
-  setComponents: React.Dispatch<React.SetStateAction<HmiComponent[]>>;
-  updateVariable: (id: string, value: string) => void;
-  onClose: () => void;
-}) => {
-  const [editMode, setEditMode] = useState(true);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
-  const [isResizing, setIsResizing] = useState(false);
-  const [resizeHandle, setResizeHandle] = useState<string | null>(null);
-  const [resizeStart, setResizeStart] = useState<{ x: number, y: number, w: number, h: number, mx: number, my: number } | null>(null);
-
-  const addComponent = (type: HmiComponentType) => {
-    const newComp: HmiComponent = {
-      id: uuidv4(),
-      type,
-      name: `${type}_${components.length + 1}`,
-      x: 50 + (components.length * 20) % 300,
-      y: 50 + (components.length * 20) % 300,
-      width: type === 'slider' ? 150 : type === 'lcd' ? 120 : (type === 'rotary' || type === 'gauge' || type === 'hybrid-rotary' || type === 'buzzer') ? 80 : type === 'oled' ? 240 : type === 'encoder' ? 120 : type === 'mode-selector' ? 320 : type === 'mode-icon' ? 55 : 80,
-      height: type === 'slider' ? 40 : (type === 'rotary' || type === 'gauge' || type === 'hybrid-rotary' || type === 'buzzer') ? 80 : type === 'oled' ? 180 : type === 'encoder' ? 150 : type === 'mode-selector' ? 90 : type === 'mode-icon' ? 55 : 60,
-      variableId: null,
-      min: 0,
-      max: 100,
-      variableIds: type === 'rotary' ? [] : undefined,
-      hybridValues: type === 'hybrid-rotary' ? ['0', '1', '2'] : undefined,
-      icon: type === 'button' ? 'none' : undefined,
-      color: (type === 'button' || type === 'led' || type === 'lamp') ? 'orange' : undefined,
-      iconEmoji: type === 'mode-icon' ? '🍟' : undefined,
-      targetValue: type === 'mode-icon' ? '0' : undefined
-    };
-    setComponents(prev => [...prev, newComp]);
-    setSelectedId(newComp.id);
-  };
-
-  const handleMouseDown = (e: React.MouseEvent, id: string) => {
-    if (!editMode) return;
-    e.stopPropagation();
-    setSelectedId(id);
-    setIsDragging(true);
-    const comp = components.find(c => c.id === id);
-    if (comp) {
-      setDragOffset({ x: e.clientX - comp.x, y: e.clientY - comp.y });
-    }
-  };
-
-  const handleResizeMouseDown = (e: React.MouseEvent, handle: string, id: string) => {
-    e.stopPropagation();
-    const comp = components.find(c => c.id === id);
-    if (comp) {
-      setIsResizing(true);
-      setResizeHandle(handle);
-      setResizeStart({ x: comp.x, y: comp.y, w: comp.width, h: comp.height, mx: e.clientX, my: e.clientY });
-    }
-  };
-
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (isResizing && resizeStart && resizeHandle && selectedId) {
-      const dx = e.clientX - resizeStart.mx;
-      const dy = e.clientY - resizeStart.my;
-
-      let newX = resizeStart.x;
-      let newY = resizeStart.y;
-      let newW = resizeStart.w;
-      let newH = resizeStart.h;
-
-      if (resizeHandle.includes('e')) newW = Math.max(20, resizeStart.w + dx);
-      if (resizeHandle.includes('s')) newH = Math.max(20, resizeStart.h + dy);
-      if (resizeHandle.includes('w')) {
-        const delta = Math.min(resizeStart.w - 20, dx);
-        newX = resizeStart.x + delta;
-        newW = resizeStart.w - delta;
-      }
-      if (resizeHandle.includes('n')) {
-        const delta = Math.min(resizeStart.h - 20, dy);
-        newY = resizeStart.y + delta;
-        newH = resizeStart.h - delta;
-      }
-
-      setComponents(prev => prev.map(c => c.id === selectedId ? { ...c, x: newX, y: newY, width: newW, height: newH } : c));
-      return;
-    }
-
-    if (isDragging && selectedId && editMode) {
-      const newX = e.clientX - dragOffset.x;
-      const newY = e.clientY - dragOffset.y;
-      setComponents(prev => prev.map(c => c.id === selectedId ? { ...c, x: newX, y: newY } : c));
-    }
-  };
-
-  const handleMouseUp = () => {
-    setIsDragging(false);
-    setIsResizing(false);
-    setResizeHandle(null);
-    setResizeStart(null);
-  };
-
-  const renderComponent = (comp: HmiComponent) => {
-    const variable = variables.find(v => v.id === comp.variableId);
-    const value = variable ? variable.currentValue : 0;
-    const numValue = typeof value === 'number' ? value : (value ? 1 : 0);
-    const boolValue = !!value;
-
-    const commonStyle = `absolute border ${selectedId === comp.id && editMode ? 'border-[#f97316] z-10' : 'border-[#333]'} bg-[#1a1a1a] rounded flex flex-col items-center justify-center overflow-hidden select-none`;
-
-    return (
-      <div
-        key={comp.id}
-        style={{ left: comp.x, top: comp.y, width: comp.width, height: comp.height }}
-        className={commonStyle}
-        onMouseDown={(e) => handleMouseDown(e, comp.id)}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {selectedId === comp.id && editMode && (
-          <>
-            {['nw', 'ne', 'sw', 'se'].map(h => (
-              <div data-help-feature="live:App:b506e73bb85a"
-                key={h}
-                className={`absolute w-2 h-2 bg-[#f97316] border border-black z-20 ${h === 'nw' ? 'top-0 left-0 cursor-nw-resize' : h === 'ne' ? 'top-0 right-0 cursor-ne-resize' : h === 'sw' ? 'bottom-0 left-0 cursor-sw-resize' : 'bottom-0 right-0 cursor-se-resize'}`}
-                onMouseDown={(e) => handleResizeMouseDown(e, h, comp.id)}
-              />
-            ))}
-          </>
-        )}
-        {/* Component Content */}
-        <div className="flex-1 flex items-center justify-center w-full p-2">
-          {comp.type === 'toggle' && (
-            <div data-help-feature="app-hmi-drive" data-help-source="src/App.tsx"
-              className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors ${boolValue ? 'bg-[#f97316]' : 'bg-[#333]'}`}
-              onClick={() => !editMode && variable && updateVariable(variable.id, (!boolValue).toString())}
-            >
-              <div className={`w-4 h-4 rounded-full bg-white shadow-md transform transition-transform ${boolValue ? 'translate-x-6' : 'translate-x-0'}`} />
-            </div>
-          )}
-          {comp.type === 'button' && (() => {
-            const btnTheme = comp.color || 'orange';
-            const colorMap = {
-              orange: { bg: 'bg-[#ea580c]/20 hover:bg-[#ea580c]/30 text-[#f97316] border-[#ea580c]/50 active:bg-[#ea580c]/40', activeBg: 'bg-[#ea580c] text-white border-[#f97316] shadow-[0_0_12px_rgba(249,115,22,0.4)]' },
-              green: { bg: 'bg-[#166534]/20 hover:bg-[#166534]/30 text-[#22c55e] border-[#166534]/50 active:bg-[#166534]/40', activeBg: 'bg-[#22c55e] text-black border-[#4ade80] shadow-[0_0_12px_rgba(34,197,94,0.4)]' },
-              red: { bg: 'bg-[#991b1b]/20 hover:bg-[#991b1b]/30 text-[#ef4444] border-[#991b1b]/50 active:bg-[#991b1b]/40', activeBg: 'bg-[#ef4444] text-white border-[#f87171] shadow-[0_0_12px_rgba(239,68,68,0.4)]' },
-              blue: { bg: 'bg-[#075985]/20 hover:bg-[#075985]/30 text-[#38bdf8] border-[#075985]/50 active:bg-[#075985]/40', activeBg: 'bg-[#0284c7] text-white border-[#38bdf8] shadow-[0_0_12px_rgba(56,189,248,0.4)]' },
-              yellow: { bg: 'bg-[#854d0e]/20 hover:bg-[#854d0e]/30 text-[#eab308] border-[#854d0e]/50 active:bg-[#854d0e]/40', activeBg: 'bg-[#eab308] text-black border-[#facc15] shadow-[0_0_12px_rgba(234,179,8,0.4)]' },
-              grey: { bg: 'bg-[#333]/40 hover:bg-[#444]/40 text-[#ccc] border-[#444] active:bg-[#555]/40', activeBg: 'bg-[#555] text-white border-[#666] shadow-[0_0_12px_rgba(255,255,255,0.1)]' }
-            };
-            const currentTheme = colorMap[btnTheme] || colorMap.orange;
-
-            const renderButtonIcon = () => {
-              if (comp.icon === 'power') return <span className="mr-1">⏻</span>;
-              if (comp.icon === 'play') return <span className="mr-1">▶</span>;
-              if (comp.icon === 'light') return <span className="mr-1">💡</span>;
-              return null;
-            };
-
-            return (
-              <button
-                className={`w-full h-full rounded border font-bold text-[10px] tracking-wider uppercase transition-all duration-150 flex items-center justify-center ${
-                  boolValue ? currentTheme.activeBg : currentTheme.bg
-                }`}
-                onMouseDown={() => !editMode && variable && updateVariable(variable.id, 'true')}
-                onMouseUp={() => !editMode && variable && updateVariable(variable.id, 'false')}
-                onMouseLeave={() => !editMode && variable && updateVariable(variable.id, 'false')}
-              >
-                {renderButtonIcon()}
-                {comp.name}
-              </button>
-            );
-          })()}
-          {comp.type === 'lamp' && (() => {
-            const lampColor = comp.color || 'green';
-            const colorClasses = {
-              red: boolValue ? 'bg-red-500/20 border-red-500 shadow-[inset_0_0_10px_rgba(239,68,68,0.5),0_0_15px_rgba(239,68,68,0.6)]' : 'bg-[#222] border-[#444]',
-              green: boolValue ? 'bg-green-500/20 border-green-500 shadow-[inset_0_0_10px_rgba(34,197,94,0.5),0_0_15px_rgba(34,197,94,0.6)]' : 'bg-[#222] border-[#444]',
-              blue: boolValue ? 'bg-[#4db8ff]/20 border-[#4db8ff] shadow-[inset_0_0_10px_rgba(77,184,255,0.5),0_0_15px_rgba(77,184,255,0.6)]' : 'bg-[#222] border-[#444]',
-              yellow: boolValue ? 'bg-[#e8a020]/20 border-[#e8a020] shadow-[inset_0_0_10px_rgba(232,160,32,0.5),0_0_15px_rgba(232,160,32,0.6)]' : 'bg-[#222] border-[#444]',
-              orange: boolValue ? 'bg-[#f97316]/20 border-[#f97316] shadow-[inset_0_0_10px_rgba(249,115,22,0.5),0_0_15px_rgba(249,115,22,0.6)]' : 'bg-[#222] border-[#444]',
-              grey: boolValue ? 'bg-white/20 border-white shadow-[inset_0_0_10px_rgba(255,255,255,0.5),0_0_15px_rgba(255,255,255,0.6)]' : 'bg-[#222] border-[#444]'
-            };
-            return <div className={`w-10 h-10 rounded-full border-2 transition-all duration-200 ${colorClasses[lampColor] || colorClasses.green}`} />;
-          })()}
-          {comp.type === 'led' && (() => {
-            const ledColor = comp.color || 'red';
-            const colorClasses = {
-              red: boolValue ? 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.8)]' : 'bg-[#333]',
-              green: boolValue ? 'bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.8)]' : 'bg-[#333]',
-              blue: boolValue ? 'bg-[#4db8ff] shadow-[0_0_10px_rgba(77,184,255,0.8)]' : 'bg-[#333]',
-              yellow: boolValue ? 'bg-[#e8a020] shadow-[0_0_10px_rgba(232,160,32,0.8)]' : 'bg-[#333]',
-              orange: boolValue ? 'bg-[#f97316] shadow-[0_0_10px_rgba(249,115,22,0.8)]' : 'bg-[#333]',
-              grey: boolValue ? 'bg-white shadow-[0_0_10px_rgba(255,255,255,0.8)]' : 'bg-[#333]'
-            };
-            return <div className={`w-4 h-4 rounded-full transition-all duration-200 ${colorClasses[ledColor] || colorClasses.red}`} />;
-          })()}
-          {comp.type === 'slider' && (
-            <input data-help-feature="app-hmi-drive" data-help-source="src/App.tsx"
-              type="range"
-              min={comp.min ?? 0}
-              max={comp.max ?? 100}
-              value={numValue}
-              onChange={(e) => !editMode && variable && updateVariable(variable.id, e.target.value)}
-              className="w-full accent-[#f97316]"
-              disabled={editMode}
-            />
-          )}
-          {comp.type === 'input' && (
-            <input data-help-feature="app-hmi-drive" data-help-source="src/App.tsx"
-              type="number"
-              value={numValue}
-              onChange={(e) => !editMode && variable && updateVariable(variable.id, e.target.value)}
-              className="w-full bg-[#0a0a0a] border border-[#333] rounded px-2 py-1 text-right text-[#f97316] font-mono"
-              disabled={editMode}
-            />
-          )}
-          {comp.type === 'lcd' && (
-            <div className="w-full h-full bg-[#0a0a0a] border border-[#333] flex items-center justify-end px-2 font-mono text-green-500 text-lg">
-              {typeof value === 'number' ? value.toFixed(2) : String(value)}
-            </div>
-          )}
-          {comp.type === 'gauge' && (
-            <div className="relative w-full h-full flex items-center justify-center">
-              <svg viewBox="0 0 100 50" className="w-full h-full">
-                <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="#333" strokeWidth="10" />
-                <path
-                  d="M 10 50 A 40 40 0 0 1 90 50"
-                  fill="none"
-                  stroke="#f97316"
-                  strokeWidth="10"
-                  strokeDasharray={`${((numValue - (comp.min || 0)) / ((comp.max || 100) - (comp.min || 0))) * 126} 126`}
-                />
-                <text x="50" y="45" textAnchor="middle" fill="#fff" fontSize="12">{numValue.toFixed(0)}</text>
-              </svg>
-            </div>
-          )}
-          {comp.type === 'rotary' && (() => {
-            const isMultiVar = comp.variableIds && comp.variableIds.length > 0;
-
-            if (isMultiVar) {
-              const positions = comp.variableIds!.length;
-              const stepAngle = 270 / (Math.max(1, positions - 1));
-
-              // Determine current index based on variables
-              let currentIndex = 0;
-              comp.variableIds!.forEach((vid, idx) => {
-                if (!vid) return;
-                const v = variables.find(v => v.id === vid);
-                // Check for truthy value (true or > 0)
-                if (v && (v.currentValue === true || Number(v.currentValue) > 0)) {
-                  currentIndex = idx;
-                }
-              });
-
-              const angle = -135 + currentIndex * stepAngle;
-
-              const handleRotaryMouseDown = (e: React.MouseEvent) => {
-                if (editMode) return;
-                e.stopPropagation();
-
-                const rect = e.currentTarget.getBoundingClientRect();
-                const centerX = rect.left + rect.width / 2;
-                const centerY = rect.top + rect.height / 2;
-
-                const updateFromEvent = (ev: { clientX: number, clientY: number }) => {
-                  const angleRad = Math.atan2(ev.clientY - centerY, ev.clientX - centerX);
-                  let deg = angleRad * 180 / Math.PI;
-
-                  // Rotate so -135 becomes 0.
-                  let effectiveAngle = deg + 135;
-                  if (effectiveAngle < 0) effectiveAngle += 360;
-
-                  // Clamping to 0-270 range
-                  if (effectiveAngle > 270) {
-                    if (effectiveAngle > 315) effectiveAngle = 0;
-                    else effectiveAngle = 270;
-                  }
-
-                  const index = Math.round(effectiveAngle / stepAngle);
-                  const clampedIndex = Math.max(0, Math.min(positions - 1, index));
-
-                  if (clampedIndex !== currentIndex) {
-                    // Update variables
-                    comp.variableIds!.forEach((vid, idx) => {
-                      if (!vid) return;
-                      updateVariable(vid, idx === clampedIndex ? '1' : '0');
-                    });
-                  }
-                };
-
-                updateFromEvent(e);
-
-                const handleMouseMove = (moveEvent: globalThis.MouseEvent) => {
-                  updateFromEvent(moveEvent);
-                };
-
-                const handleMouseUp = () => {
-                  document.body.style.cursor = 'default';
-                  document.removeEventListener('mousemove', handleMouseMove);
-                  document.removeEventListener('mouseup', handleMouseUp);
-                };
-
-                document.body.style.cursor = 'grabbing';
-                document.addEventListener('mousemove', handleMouseMove);
-                document.addEventListener('mouseup', handleMouseUp);
-              };
-
-              const posText = `Pos ${currentIndex + 1}`;
-
-              return (
-                <div data-help-feature="live:App:a4a06cc0bbf5" className="relative w-full h-full flex items-center justify-center" onMouseDown={handleRotaryMouseDown} style={{ cursor: editMode ? 'default' : 'pointer' }}>
-                  <svg viewBox="0 0 100 100" className="w-full h-full">
-                    <defs><radialGradient id="grad-rotary"><stop offset="0%" stopColor="#555" /><stop offset="90%" stopColor="#222" /><stop offset="100%" stopColor="#1a1a1a" /></radialGradient></defs>
-                    <circle cx="50" cy="50" r="40" fill="url(#grad-rotary)" stroke="#1a1a1a" strokeWidth="2" />
-                    {/* Ticks */}
-                    {Array.from({ length: positions }).map((_, i) => (
-                      <line key={i} x1="50" y1="10" x2="50" y2="15" stroke={i === currentIndex ? "#f97316" : "#888"} strokeWidth={i === currentIndex ? 3 : 2} transform={`rotate(${-135 + i * stepAngle} 50 50)`} />
-                    ))}
-                    <g transform={`rotate(${angle} 50 50)`}>
-                      <circle cx="50" cy="20" r="4" fill="#f97316" />
-                      <line x1="50" y1="20" x2="50" y2="50" stroke="#f97316" strokeWidth="2" />
-                    </g>
-                  </svg>
-                  <div className="absolute bottom-1 text-[9px] text-white font-mono select-none">{posText}</div>
-                </div>
-              );
-            }
-
-            const min = comp.min ?? 0;
-            const max = comp.max ?? 100;
-            const range = max - min;
-            const value = Math.max(min, Math.min(max, numValue));
-            const percentage = range === 0 ? 0 : (value - min) / range;
-            const angle = -135 + percentage * 270; // from -135 to 135 degrees
-
-            const handleRotaryMouseDown = (e: React.MouseEvent) => {
-              if (editMode || !variable) return;
-              e.stopPropagation();
-
-              const rect = e.currentTarget.getBoundingClientRect();
-              const centerX = rect.left + rect.width / 2;
-              const centerY = rect.top + rect.height / 2;
-              const startAngleRad = Math.atan2(e.clientY - centerY, e.clientX - centerX);
-
-              const startValue = value;
-              document.body.style.cursor = 'grabbing';
-
-              const handleMouseMove = (moveEvent: globalThis.MouseEvent) => {
-                const currentAngleRad = Math.atan2(moveEvent.clientY - centerY, moveEvent.clientX - centerX);
-                let angleDiff = currentAngleRad - startAngleRad;
-
-                if (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
-                if (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
-
-                const valueChange = (angleDiff / (270 * Math.PI / 180)) * range;
-                let newValue = startValue + valueChange;
-                newValue = Math.max(min, Math.min(max, newValue));
-
-                updateVariable(variable.id, newValue.toString());
-              };
-
-              const handleMouseUp = () => {
-                document.body.style.cursor = 'default';
-                document.removeEventListener('mousemove', handleMouseMove);
-                document.removeEventListener('mouseup', handleMouseUp);
-              };
-
-              document.addEventListener('mousemove', handleMouseMove);
-              document.addEventListener('mouseup', handleMouseUp);
-            };
-
-            return (
-              <div data-help-feature="live:App:a4a06cc0bbf5" className="relative w-full h-full flex items-center justify-center" onMouseDown={handleRotaryMouseDown} style={{ cursor: editMode ? 'default' : 'grab' }}>
-                <svg viewBox="0 0 100 100" className="w-full h-full">
-                  <defs><radialGradient id="grad-rotary"><stop offset="0%" stopColor="#555" /><stop offset="90%" stopColor="#222" /><stop offset="100%" stopColor="#1a1a1a" /></radialGradient></defs>
-                  <circle cx="50" cy="50" r="40" fill="url(#grad-rotary)" stroke="#1a1a1a" strokeWidth="2" />
-                  {Array.from({ length: 11 }).map((_, i) => <line key={i} x1="50" y1="10" x2="50" y2="15" stroke="#888" strokeWidth="2" transform={`rotate(${-135 + i * 27} 50 50)`} />)}
-                  <g transform={`rotate(${angle} 50 50)`}><circle cx="50" cy="20" r="4" fill="#f97316" /></g>
-                </svg>
-                <div className="absolute text-xs text-white font-mono select-none">{value.toFixed(1)}</div>
-              </div>
-            );
-          })()}
-          {comp.type === 'hybrid-rotary' && (
-            <HybridRotary
-              comp={comp}
-              variable={variable}
-              updateVariable={updateVariable}
-              editMode={editMode}
-            />
-          )}
-          {comp.type === 'buzzer' && (
-            <Buzzer comp={comp} variable={variable} editMode={editMode} />
-          )}
-          {comp.type === 'oled' && (
-            <OledDisplay
-              comp={comp}
-              variables={variables}
-              editMode={editMode}
-            />
-          )}
-          {comp.type === 'encoder' && (
-            <Encoder
-              comp={comp}
-              variables={variables}
-              updateVariable={updateVariable}
-              editMode={editMode}
-            />
-          )}
-          {comp.type === 'mode-selector' && (
-            <ModeSelector
-              comp={comp}
-              variables={variables}
-              updateVariable={updateVariable}
-              editMode={editMode}
-            />
-          )}
-          {comp.type === 'mode-icon' && (() => {
-            const isSelected = variable && String(variable.currentValue) === String(comp.targetValue);
-            let borderClass = 'border-[#222]';
-            let bgClass = 'bg-[#1a1a20]';
-            let glowStyle = {};
-
-            if (isSelected) {
-              borderClass = 'border-[#f97316]';
-              bgClass = 'bg-[#f97316]/10';
-              glowStyle = { boxShadow: '0 0 8px rgba(249,115,22,0.4)' };
-            }
-
-            const handleClick = () => {
-              if (editMode || !variable) return;
-              updateVariable(variable.id, (comp.targetValue ?? '0').toString());
-            };
-
-            return (
-              <div data-help-feature="app-hmi-select" data-help-source="src/App.tsx"
-                onClick={handleClick}
-                style={glowStyle}
-                className={`w-full h-full border rounded flex flex-col items-center justify-center cursor-pointer p-1 transition-all active:scale-95 ${borderClass} ${bgClass}`}
-              >
-                <span className="text-xl leading-none">{comp.iconEmoji || '✨'}</span>
-                <span className="text-[8px] text-[#ccc] font-medium truncate w-full text-center mt-1">{comp.name}</span>
-              </div>
-            );
-          })()}
-        </div>
-        {/* Label */}
-        <div className="w-full bg-[#1a1a1a] text-[9px] text-center text-[#888] py-0.5 truncate px-1">
-          {comp.name} {variable ? `(${variable.name})` : '(unbound)'}
-        </div>
-      </div>
-    );
-  };
-
-  return (
-    <div data-help-feature="live:App:675a8d507f4c" className="flex flex-col h-full w-full bg-[#1a1a1a]" onMouseUp={handleMouseUp} onMouseMove={handleMouseMove}>
-      <div className="h-10 flex items-center px-4 border-b border-[#222] justify-between bg-[#1a1a1a] shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="flex bg-[#0a0a0a] rounded p-0.5 border border-[#333]">
-            <button data-help-feature="app-hmi-edit" data-help-source="src/App.tsx" onClick={() => setEditMode(true)} className={"px-3 py-1 text-xs rounded " + (editMode ? "bg-[#333] text-white" : "text-[#888]")}>Edit</button>
-            <button data-help-feature="app-hmi-run" data-help-source="src/App.tsx" onClick={() => { setEditMode(false); setSelectedId(null); }} className={"px-3 py-1 text-xs rounded " + (!editMode ? "bg-[#f97316] text-black font-bold" : "text-[#888]")}>Run</button>
-          </div>
-        </div>
-      </div>
-
-      <div className="flex-1 flex overflow-hidden">
-        {/* Sidebar (Edit Mode Only) */}
-        {editMode && (
-          <div
-            className="w-48 bg-[#1a1a1a] border-r border-[#222] p-3 flex flex-col gap-3 overflow-y-auto"
-            onMouseDown={e => e.stopPropagation()}
-            onClick={e => e.stopPropagation()}
-          >
-            <Label>Components</Label>
-            <div className="grid grid-cols-2 gap-2">
-              {['toggle', 'button', 'slider', 'input', 'lamp', 'led', 'lcd', 'gauge', 'rotary', 'hybrid-rotary', 'buzzer', 'oled', 'encoder', 'mode-selector', 'mode-icon'].map(t => (
-                <button data-help-feature="app-hmi-add" data-help-source="src/App.tsx" key={t} onClick={() => addComponent(t as HmiComponentType)} className="flex flex-col items-center justify-center p-2 bg-[#1a1a1a] border border-[#333] rounded hover:bg-[#222] hover:border-[#f97316]">
-                  <span className="text-[10px] capitalize text-[#ccc]">{t}</span>
-                </button>
-              ))}
-            </div>
-
-            <Separator />
-
-            {selectedId ? (
-              <div className="space-y-3">
-                <Label>Properties</Label>
-                {(() => {
-                  const comp = components.find(c => c.id === selectedId);
-                  if (!comp) return null;
-                  return (
-                    <>
-                      <div><Label>Name</Label><Input data-help-feature="app-hmi-name" data-help-source="src/App.tsx" value={comp.name} onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, name: e.target.value } : c))} /></div>
-                      <div>
-                        <Label>Variable</Label>
-                        <select data-help-feature="app-hmi-variableId" data-help-source="src/App.tsx"
-                          value={comp.variableId || ''}
-                          onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, variableId: e.target.value || null } : c))}
-                          className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-xs text-[#e0e0e0] mt-1"
-                        >
-                          <option value="">-- Unbound --</option>
-                          {variables.map(v => <option key={v.id} value={v.id}>{v.name} ({v.type})</option>)}
-                        </select>
-                      </div>
-
-                      {(comp.type === 'button' || comp.type === 'led' || comp.type === 'lamp') && (
-                        <div className="space-y-2 mt-2">
-                          <div>
-                            <Label>Color / Theme</Label>
-                            <select data-help-feature="app-hmi-color" data-help-source="src/App.tsx"
-                              value={comp.color || 'orange'}
-                              onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, color: e.target.value as any } : c))}
-                              className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-xs text-[#e0e0e0] mt-1"
-                            >
-                              <option value="orange">Orange</option>
-                              <option value="green">Green</option>
-                              <option value="red">Red</option>
-                              <option value="blue">Blue</option>
-                              <option value="yellow">Yellow</option>
-                              <option value="grey">Grey</option>
-                            </select>
-                          </div>
-                          {comp.type === 'button' && (
-                            <div>
-                              <Label>Button Icon</Label>
-                              <select data-help-feature="app-hmi-icon" data-help-source="src/App.tsx"
-                                value={comp.icon || 'none'}
-                                onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, icon: e.target.value as any } : c))}
-                                className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-xs text-[#e0e0e0] mt-1"
-                              >
-                                <option value="none">None</option>
-                                <option value="power">Power (⏻)</option>
-                                <option value="play">Play/Pause (▶)</option>
-                                <option value="light">Light (💡)</option>
-                              </select>
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {comp.type === 'encoder' && (
-                        <div className="space-y-2 mt-2">
-                          <div>
-                            <Label>Button Press Bind (GPIO)</Label>
-                            <select data-help-feature="app-hmi-pressVariableId" data-help-source="src/App.tsx"
-                              value={comp.pressVariableId || ''}
-                              onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, pressVariableId: e.target.value || null } : c))}
-                              className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-xs text-[#e0e0e0] mt-1"
-                            >
-                              <option value="">-- Unbound --</option>
-                              {variables.map(v => <option key={v.id} value={v.id}>{v.name} ({v.type})</option>)}
-                            </select>
-                          </div>
-                          <div className="space-y-2 border-t border-[#333] pt-2 mt-2">
-                            <Label>Encoder Values (Discrete Mode)</Label>
-                            {(comp.encoderValues || []).map((val, idx) => (
-                              <div key={idx} className="flex gap-1">
-                                <Input data-help-feature="app-hmi-encoderValues" data-help-source="src/App.tsx"
-                                  value={val}
-                                  onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, encoderValues: (c.encoderValues || []).map((v, i) => i === idx ? e.target.value : v) } : c))}
-                                  className="flex-1 h-6 text-[10px]"
-                                />
-                                <button data-help-feature="app-hmi-encoderValues" data-help-source="src/App.tsx"
-                                  type="button"
-                                  onClick={() => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, encoderValues: (c.encoderValues || []).filter((_, i) => i !== idx) } : c))}
-                                  className="text-[#666] hover:text-red-400 px-1"
-                                >×</button>
-                              </div>
-                            ))}
-                            <Button data-help-feature="app-hmi-encoderValues" data-help-source="src/App.tsx" size="sm" variant="secondary" className="w-full h-6 text-[10px]" onClick={() => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, encoderValues: [...(c.encoderValues || []), '0'] } : c))}>+ Add Value</Button>
-                          </div>
-                        </div>
-                      )}
-
-                      {comp.type === 'mode-selector' && (
-                        <div className="space-y-2 mt-2">
-                          <Label>Cursor Variable (Index)</Label>
-                          <select data-help-feature="app-hmi-cursorVariableId" data-help-source="src/App.tsx"
-                            value={comp.cursorVariableId || ''}
-                            onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, cursorVariableId: e.target.value || null } : c))}
-                            className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-xs text-[#e0e0e0] mt-1"
-                          >
-                            <option value="">-- Unbound --</option>
-                            {variables.map(v => <option key={v.id} value={v.id}>{v.name} ({v.type})</option>)}
-                          </select>
-                        </div>
-                      )}
-
-                      {comp.type === 'mode-icon' && (
-                        <div className="space-y-2 mt-2">
-                          <div>
-                            <Label>Icon (Emoji)</Label>
-                            <Input data-help-feature="app-hmi-iconEmoji" data-help-source="src/App.tsx"
-                              value={comp.iconEmoji || ''}
-                              onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, iconEmoji: e.target.value } : c))}
-                              placeholder="e.g. 🍟"
-                              className="mt-1"
-                            />
-                            <EmojiPicker
-                              currentValue={comp.iconEmoji || ''}
-                              onSelect={emoji => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, iconEmoji: emoji } : c))}
-                            />
-                          </div>
-                          <div>
-                            <Label>Target Value</Label>
-                            <Input data-help-feature="app-hmi-targetValue" data-help-source="src/App.tsx"
-                              value={comp.targetValue || ''}
-                              onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, targetValue: e.target.value } : c))}
-                              placeholder="e.g. 0, 1, or Air Fry"
-                              className="mt-1"
-                            />
-                          </div>
-                        </div>
-                      )}
-
-                      {comp.type === 'oled' && (
-                        <div className="space-y-2 mt-2 border-t border-[#333] pt-2 max-h-60 overflow-y-auto pr-1">
-                          <Label>Display Variable Mapping</Label>
-                          {[
-                            { label: 'Mode Index/Text', key: 'oledModeVarId' },
-                            { label: 'Temp', key: 'oledTempVarId' },
-                            { label: 'Time', key: 'oledTimeVarId' },
-                            { label: 'State (e.g. HOME)', key: 'oledStateVarId' },
-                            { label: 'Steam Active (Bool)', key: 'oledSteamVarId' },
-                            { label: 'Heat Active (Bool)', key: 'oledHeatVarId' },
-                            { label: 'Fan Active (Bool)', key: 'oledFanVarId' },
-                            { label: 'Light Active (Bool)', key: 'oledLightVarId' },
-                            { label: 'Duo Active (Bool)', key: 'oledDuoVarId' },
-                            { label: 'Progress (0-100)', key: 'oledProgressVarId' }
-                          ].map(mapping => (
-                            <div key={mapping.key} className="mt-1">
-                              <span className="text-[10px] text-gray-400">{mapping.label}</span>
-                              <select data-help-feature="app-hmi-oled-mapping" data-help-source="src/App.tsx"
-                                value={(comp as any)[mapping.key] || ''}
-                                onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, [mapping.key]: e.target.value || null } : c))}
-                                className="w-full h-7 bg-[#0a0a0a] border border-[#333] rounded px-1.5 text-[10px] text-[#e0e0e0] mt-0.5"
-                              >
-                                <option value="">-- Unbound --</option>
-                                {variables.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-                              </select>
-                            </div>
-                          ))}
-                          <div className="mt-2 border-t border-[#222] pt-2">
-                            <Label>Screen Title</Label>
-                            <Input data-help-feature="app-hmi-oledTitle" data-help-source="src/App.tsx"
-                              value={comp.oledTitle || ''}
-                              onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, oledTitle: e.target.value } : c))}
-                              placeholder="e.g. MAIN PANEL"
-                              className="mt-1"
-                            />
-                          </div>
-                          <div className="mt-2 border-t border-[#222] pt-2">
-                            <Label>Mode Names (comma-separated)</Label>
-                            <textarea data-help-feature="app-hmi-oledModeNames" data-help-source="src/App.tsx"
-                              value={comp.oledModeNames || ''}
-                              onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, oledModeNames: e.target.value } : c))}
-                              placeholder="AIR FRYER, STEAMER, OVEN, ..."
-                              className="w-full min-h-[50px] bg-[#0a0a0a] border border-[#333] rounded p-1.5 text-xs text-[#e0e0e0] font-mono mt-1"
-                            />
-                          </div>
-                          <div className="space-y-2 mt-2 pt-2 border-t border-[#222]">
-                            <Label>Custom Status Indicators (Max 8)</Label>
-                            {(comp.oledIndicatorEmojis || []).map((emoji, idx) => (
-                              <div key={idx} className="flex flex-col gap-1 p-1.5 bg-[#111] border border-[#222] rounded mt-1">
-                                <div className="flex gap-1 items-center justify-between">
-                                  <span className="text-[10px] text-gray-400 font-bold">Indicator #{idx + 1}</span>
-                                  <button data-help-feature="app-hmi-oledIndicatorEmojis" data-help-source="src/App.tsx"
-                                    onClick={() => setComponents(prev => prev.map(c => c.id === comp.id ? {
-                                      ...c,
-                                      oledIndicatorEmojis: (c.oledIndicatorEmojis || []).filter((_, i) => i !== idx),
-                                      oledIndicatorVarIds: (c.oledIndicatorVarIds || []).filter((_, i) => i !== idx),
-                                      oledIndicatorLabels: (c.oledIndicatorLabels || []).filter((_, i) => i !== idx)
-                                    } : c))}
-                                    className="text-[#888] hover:text-red-400 text-xs px-1"
-                                  >
-                                    Remove
-                                  </button>
-                                </div>
-                                <div className="grid grid-cols-2 gap-1 mt-1">
-                                  <div>
-                                    <span className="text-[8px] text-gray-500">Emoji/Icon</span>
-                                    <Input data-help-feature="app-hmi-oledIndicatorEmojis" data-help-source="src/App.tsx"
-                                      value={emoji}
-                                      onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? {
-                                        ...c,
-                                        oledIndicatorEmojis: (c.oledIndicatorEmojis || []).map((v, i) => i === idx ? e.target.value : v)
-                                      } : c))}
-                                      className="h-6 text-[10px] px-1"
-                                    />
-                                    <EmojiPicker
-                                      currentValue={emoji}
-                                      onSelect={emojiVal => setComponents(prev => prev.map(c => c.id === comp.id ? {
-                                        ...c,
-                                        oledIndicatorEmojis: (c.oledIndicatorEmojis || []).map((v, i) => i === idx ? emojiVal : v)
-                                      } : c))}
-                                    />
-                                  </div>
-                                  <div>
-                                    <span className="text-[8px] text-gray-500">Label</span>
-                                    <Input data-help-feature="app-hmi-oledIndicatorLabels" data-help-source="src/App.tsx"
-                                      value={comp.oledIndicatorLabels?.[idx] || ''}
-                                      onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? {
-                                        ...c,
-                                        oledIndicatorLabels: Array.from({ length: Math.max(c.oledIndicatorLabels?.length || 0, idx + 1) }, (_, i) => i === idx ? e.target.value : (c.oledIndicatorLabels?.[i] || ''))
-                                      } : c))}
-                                      className="h-6 text-[10px] px-1"
-                                      placeholder="e.g. Steam"
-                                    />
-                                  </div>
-                                </div>
-                                <div className="mt-1">
-                                  <span className="text-[8px] text-gray-500">Bind Variable</span>
-                                  <select data-help-feature="app-hmi-oledIndicatorVarIds" data-help-source="src/App.tsx"
-                                    value={comp.oledIndicatorVarIds?.[idx] || ''}
-                                    onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? {
-                                      ...c,
-                                      oledIndicatorVarIds: Array.from({ length: Math.max(c.oledIndicatorVarIds?.length || 0, idx + 1) }, (_, i) => i === idx ? (e.target.value || null) : (c.oledIndicatorVarIds?.[i] || null))
-                                    } : c))}
-                                    className="w-full h-6 bg-[#0a0a0a] border border-[#333] rounded px-1 text-[10px] text-[#e0e0e0]"
-                                  >
-                                    <option value="">-- Unbound --</option>
-                                    {variables.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-                                  </select>
-                                </div>
-                              </div>
-                            ))}
-                            {((comp.oledIndicatorEmojis || []).length < 8) && (
-                              <Button data-help-feature="app-hmi-oledIndicatorEmojis" data-help-source="src/App.tsx"
-                                size="sm"
-                                variant="secondary"
-                                className="w-full h-6 text-[10px] mt-1"
-                                onClick={() => setComponents(prev => prev.map(c => c.id === comp.id ? {
-                                  ...c,
-                                  oledIndicatorEmojis: [...(c.oledIndicatorEmojis || []), '💡'],
-                                  oledIndicatorVarIds: [...(c.oledIndicatorVarIds || []), null],
-                                  oledIndicatorLabels: [...(c.oledIndicatorLabels || []), 'Status']
-                                } : c))}
-                              >
-                                + Add Custom Indicator
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                      )}
-
-                      {comp.type === 'rotary' && (
-                        <div className="space-y-2 border-t border-[#333] pt-2 mt-2">
-                          <Label>Multi-Variable Mode (Max 5)</Label>
-                          {(comp.variableIds || []).map((vid, idx) => (
-                            <div key={idx} className="flex gap-1">
-                              <select data-help-feature="app-hmi-variableIds" data-help-source="src/App.tsx"
-                                value={vid || ''}
-                                onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, variableIds: (c.variableIds || []).map((v, i) => i === idx ? e.target.value : v) } : c))}
-                                className="flex-1 h-6 bg-[#0a0a0a] border border-[#333] rounded px-1 text-[10px] text-[#e0e0e0]"
-                              >
-                                <option value="">-- Select --</option>
-                                {variables.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-                              </select>
-                              <button data-help-feature="app-hmi-variableIds" data-help-source="src/App.tsx"
-                                onClick={() => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, variableIds: (c.variableIds || []).filter((_, i) => i !== idx) } : c))}
-                                className="text-[#666] hover:text-red-400 px-1"
-                              >×</button>
-                            </div>
-                          ))}
-                          {(comp.variableIds?.length || 0) < 5 && (
-                            <Button data-help-feature="app-hmi-variableIds" data-help-source="src/App.tsx" size="sm" variant="secondary" className="w-full h-6 text-[10px]" onClick={() => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, variableIds: [...(c.variableIds || []), ''] } : c))}>+ Add Position</Button>
-                          )}
-                        </div>
-                      )}
-
-                      {comp.type === 'hybrid-rotary' && (
-                        <div className="space-y-2 border-t border-[#333] pt-2 mt-2">
-                          <Label>Hybrid Values</Label>
-                          {(comp.hybridValues || []).map((val, idx) => (
-                            <div key={idx} className="flex gap-1">
-                              <Input data-help-feature="app-hmi-hybridValues" data-help-source="src/App.tsx"
-                                value={val}
-                                onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, hybridValues: (c.hybridValues || []).map((v, i) => i === idx ? e.target.value : v) } : c))}
-                                className="flex-1 h-6 text-[10px]"
-                              />
-                              <button data-help-feature="app-hmi-hybridValues" data-help-source="src/App.tsx"
-                                onClick={() => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, hybridValues: (c.hybridValues || []).filter((_, i) => i !== idx) } : c))}
-                                className="text-[#666] hover:text-red-400 px-1"
-                              >×</button>
-                            </div>
-                          ))}
-                          <Button data-help-feature="app-hmi-hybridValues" data-help-source="src/App.tsx" size="sm" variant="secondary" className="w-full h-6 text-[10px]" onClick={() => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, hybridValues: [...(c.hybridValues || []), '0'] } : c))}>+ Add Value</Button>
-                        </div>
-                      )}
-
-                      {(comp.type === 'slider' || comp.type === 'gauge') && (
-                        <div className="grid grid-cols-2 gap-2">
-                          <div><Label>Min</Label><Input data-help-feature="app-hmi-min" data-help-source="src/App.tsx" type="number" value={comp.min ?? 0} onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, min: parseFloat(e.target.value) } : c))} /></div>
-                          <div><Label>Max</Label><Input data-help-feature="app-hmi-max" data-help-source="src/App.tsx" type="number" value={comp.max ?? 0} onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, max: parseFloat(e.target.value) } : c))} /></div>
-                        </div>
-                      )}
-
-                      {comp.type === 'buzzer' && (
-                        <div className="mt-2">
-                          <Label>Sound Type</Label>
-                          <select data-help-feature="app-hmi-soundType" data-help-source="src/App.tsx"
-                            value={comp.soundType || 'square'}
-                            onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, soundType: e.target.value as any } : c))}
-                            className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-xs text-[#e0e0e0] mt-1"
-                          >
-                            <option value="sine">Sine</option>
-                            <option value="square">Square</option>
-                            <option value="sawtooth">Sawtooth</option>
-                            <option value="triangle">Triangle</option>
-                          </select>
-                        </div>
-                      )}
-                      <Button data-help-feature="app-hmi-delete" data-help-source="src/App.tsx" variant="destructive" size="sm" onClick={() => { setComponents(prev => prev.filter(c => c.id !== comp.id)); setSelectedId(null); }} className="w-full mt-2">Delete</Button>
-                    </>
-                  );
-                })()}
-              </div>
-            ) : <div className="text-xs text-[#666] text-center mt-4">Select a component to edit</div>}
-          </div>
-        )}
-
-        {/* Canvas */}
-        <div data-help-feature="app-dialog-close" data-help-source="src/App.tsx" className="flex-1 bg-[#0a0a0a] relative overflow-hidden" onClick={() => setSelectedId(null)}>
-          <div className="absolute inset-0 opacity-20 pointer-events-none" style={{ backgroundImage: 'radial-gradient(#333 1px, transparent 1px)', backgroundSize: '20px 20px' }}></div>
-          {components.map(renderComponent)}
-        </div>
-      </div>
-    </div>
-  );
-};
-
 const ReportDialog = ({
   onClose,
   onGenerate
@@ -5608,7 +4773,7 @@ const ADIA = () => {
   const [transitions, setTransitions] = useState<TransitionData[]>([]);
   const [view, setView] = useState({ scale: 1, offsetX: 0, offsetY: 0 });
   const [gridEnabled, setGridEnabled] = useState(true);
-  const [snapEnabled, setSnapEnabled] = useState(true);
+  const [snapEnabled, setSnapEnabled] = useState(false);
 
   // Selection state (supports multiple items)
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -5621,6 +4786,11 @@ const ADIA = () => {
     startWorldY: number;
     ctrlKey: boolean;
     moved: boolean;
+    dragIds: string[];
+    anchor: Point;
+    appliedDelta: Point;
+    lastClientX: number;
+    lastClientY: number;
   } | null>(null);
   const [hoveredTransitionId, setHoveredTransitionId] = useState<string | null>(null);
 
@@ -5633,8 +4803,19 @@ const ADIA = () => {
   const [isPanning, setIsPanning] = useState(false);
   const dragOffsetRef = useRef<Point>({ x: 0, y: 0 });
   const dragRawPositionsRef = useRef<Record<string, Point>>({});
+  const dragRafRef = useRef<number | null>(null);
+  const pendingDragPointRef = useRef<Point | null>(null);
+  const performDragMoveRef = useRef<((worldX: number, worldY: number) => void) | null>(null);
   const setDiagramDragOffset = useCallback((point: Point) => {
     dragOffsetRef.current = point;
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (dragRafRef.current !== null) {
+        cancelAnimationFrame(dragRafRef.current);
+      }
+    };
   }, []);
   const [mousePos, setMousePos] = useState<Point>({ x: 0, y: 0 });
   const [showZoomIndicator, setShowZoomIndicator] = useState(false);
@@ -5659,6 +4840,10 @@ const ADIA = () => {
   const [firedTransitions, setFiredTransitions] = useState<Record<string, number>>({});
   const simulationSessionRef = useRef<AppSimulationSession | null>(null);
   const simulationLifecycleRef = useRef(createAppSimulationLifecycle());
+  const hmiInputQueueRef = useRef(createHmiInputQueue());
+  const [hmiResetVersion, setHmiResetVersion] = useState(0);
+  const [simulationStartVersion, setSimulationStartVersion] = useState(0);
+  const [hmiSamples, setHmiSamples] = useState<Array<{ time: number; values: Record<string, number | boolean> }>>([]);
 
   // Code generation state
   const [showCodegenDialog, setShowCodegenDialog] = useState(false);
@@ -6156,6 +5341,15 @@ const ADIA = () => {
 
   const blocksById = useMemo(() => {
     const map = new Map<string, BlockData>();
+    if (diagramMode === 'ibd') {
+      const typeIds = new Set([currentLayerId]);
+      for (const part of sysmlCanvasView.parts) {
+        if (part.typeId) typeIds.add(part.typeId);
+      }
+      for (const block of projectNormalizedDiagram(sysmlStore, undefined, [...typeIds]).blocks) {
+        map.set(block.id, block);
+      }
+    }
     for (const b of blocks) {
       map.set(b.id, b);
     }
@@ -6163,7 +5357,7 @@ const ADIA = () => {
       map.set(b.id, b);
     }
     return map;
-  }, [blocks, sysmlCanvasView.blocks]);
+  }, [blocks, sysmlCanvasView.blocks, sysmlCanvasView.parts, sysmlStore, diagramMode, currentLayerId]);
 
   const partsById = useMemo(() => {
     const map = new Map<string, PartData>();
@@ -6509,7 +5703,7 @@ const ADIA = () => {
         setOpmSimulationConfig(d.opmSimulationConfig || DEFAULT_OPM_SIMULATION_CONFIG);
         break;
       case 'hmi':
-        setHmiComponents(d.hmiComponents || []);
+        setHmiComponents(normalizeHmiComponents(d.hmiComponents));
         break;
       case 'doe':
         if (d.headers) setHeaders(d.headers);
@@ -6794,6 +5988,23 @@ const ADIA = () => {
       setDiagramModeState('vlab');
       loadStateForFile(newFile);
     } else {
+      // Repeated exports must not stack on one spot or reuse an id: offset the new block and de-duplicate its id against
+      // the nodes already in the target diagram (the active diagram's live nodes when it is the target).
+      const existingNodes: any[] = activeFileId === target.id
+        ? vlabNodes
+        : (workspaceFiles.find(f => f.id === target.id)?.data?.vlabNodes || []);
+      if (existingNodes.length > 0 && newNode && typeof newNode === 'object') {
+        const taken = new Set(existingNodes.map((n: any) => n.id));
+        let uniqueId = newNode.id;
+        for (let k = 2; taken.has(uniqueId); k++) uniqueId = `${newNode.id}_${k}`;
+        const offset = existingNodes.filter((n: any) => n?.data?.type === 'doe_custom').length * 40;
+        newNode = {
+          ...newNode,
+          id: uniqueId,
+          position: { x: (newNode.position?.x ?? 400) + offset, y: (newNode.position?.y ?? 300) + offset },
+          data: newNode.data ? { ...newNode.data, id: uniqueId } : newNode.data
+        };
+      }
       setWorkspaceFiles(prev => {
         let updated = prev;
         if (activeFileId) {
@@ -6815,23 +6026,6 @@ const ADIA = () => {
         });
       });
 
-      // Repeated exports must not stack on one spot or reuse an id: offset the new block and de-duplicate its id against
-      // the nodes already in the target diagram (the active diagram's live nodes when it is the target).
-      const existingNodes: any[] = activeFileId === target.id
-        ? vlabNodes
-        : (workspaceFiles.find(f => f.id === target.id)?.data?.vlabNodes || []);
-      if (existingNodes.length > 0 && newNode && typeof newNode === 'object') {
-        const taken = new Set(existingNodes.map((n: any) => n.id));
-        let uniqueId = newNode.id;
-        for (let k = 2; taken.has(uniqueId); k++) uniqueId = `${newNode.id}_${k}`;
-        const offset = existingNodes.filter((n: any) => n?.data?.type === 'doe_custom').length * 40;
-        newNode = {
-          ...newNode,
-          id: uniqueId,
-          position: { x: (newNode.position?.x ?? 400) + offset, y: (newNode.position?.y ?? 300) + offset },
-          data: newNode.data ? { ...newNode.data, id: uniqueId } : newNode.data
-        };
-      }
       if (activeFileId === target.id) {
         setVlabNodes(prev => [...prev, newNode]);
       }
@@ -7675,7 +6869,7 @@ const ADIA = () => {
       if (importedData.customStereotypes) setCustomStereotypes(importedData.customStereotypes);
 
       // HMI Dashboard
-      if (importedData.hmiComponents) setHmiComponents(importedData.hmiComponents);
+      if (importedData.hmiComponents) setHmiComponents(normalizeHmiComponents(importedData.hmiComponents));
 
       // V-Lab Physical Modeling
       if (importedData.vlabNodes) setVlabNodes(importedData.vlabNodes);
@@ -8391,22 +7585,33 @@ const ADIA = () => {
   }, [variables, addError]);
 
   const updateVariableValue = useCallback((idOrName: string, value: string) => {
-    setVariables(prev => prev.map(v => {
-      if (v.id === idOrName || v.name === idOrName) {
-        const result = coerceTypedValue(Number(value), v.type, v.overflowPolicy ?? 'saturate');
-        if (result.error !== undefined) {
-          addError('error', `${v.name}: ${result.error}`, 'Variable Runtime');
-          return v;
-        }
-        const parsed = result.value;
-        if (simulationSessionRef.current) {
-          setSessionVariableValue(simulationSessionRef.current, v.id, parsed);
-        }
-        return { ...v, currentValue: parsed };
-      }
-      return v;
-    }));
-  }, [addError]);
+    const variable = variables.find(v => v.id === idOrName || v.name === idOrName);
+    if (!variable) return;
+    const result = parseHmiVariableValue(variable, value);
+    if (!result.accepted) {
+      addError('error', `${variable.name}: ${result.error}`, 'Variable Runtime');
+      return;
+    }
+    if (factoryIOEnabled && factoryIOMapping.some(m => m.type === 'sensor' && m.adiaVarId === variable.id)) {
+      addError('error', `${variable.name} is driven by external I/O.`, 'Variable Runtime');
+      return;
+    }
+    if (!hmiInputQueueRef.current.enqueue({ sourceId: 'variable-panel', variableId: variable.id, value: result.value })) {
+      addError('error', 'Operator input queue is full.', 'Variable Runtime');
+    }
+  }, [addError, variables, factoryIOEnabled, factoryIOMapping]);
+
+  const handleHmiInput = useCallback((command: HmiInputCommand): HmiInputResult => {
+    const externalIds = factoryIOEnabled
+      ? factoryIOMapping.filter(m => m.type === 'sensor').map(m => m.adiaVarId) : [];
+    const result = validateHmiInput(command, variables, externalIds);
+    if (!result.accepted) return result;
+    const variable = variables.find(v => v.id === command.variableId)!;
+    const release = command.releaseValue === undefined ? undefined : parseHmiVariableValue(variable, command.releaseValue);
+    const accepted = hmiInputQueueRef.current.enqueue({ ...command, value: result.value,
+      releaseValue: release?.accepted ? release.value : undefined });
+    return accepted ? { accepted: true } : { accepted: false, error: 'Operator input queue is full.' };
+  }, [variables, factoryIOEnabled, factoryIOMapping]);
 
   const updateVariableType = useCallback((id: string, type: VariableType) => {
     setVariables(prev => prev.map(v => {
@@ -9030,6 +8235,9 @@ const ADIA = () => {
     previousSimulationModelKeyRef.current = simulationModelKey;
     simulationLifecycleRef.current.invalidate();
     simulationSessionRef.current = null;
+    hmiInputQueueRef.current.clear();
+    setHmiResetVersion(version => version + 1);
+    setHmiSamples([]);
     setIsRunning(false);
     setActiveStates({});
     setStateTimers({});
@@ -9118,6 +8326,9 @@ const ADIA = () => {
   ) => {
     const update = traceFrameToAppUpdate(frame, session.ir);
     const activeIds = new Set(Object.values(update.activeStates));
+    if (sampleScope) setHmiSamples(prev => [...prev, {
+      time: timeSeconds, values: { ...update.variableValues },
+    }].slice(-600));
 
     setVariables(prev => prev.map(variable => {
       if (!Object.prototype.hasOwnProperty.call(update.variableValues, variable.id)) {
@@ -9200,6 +8411,14 @@ const ADIA = () => {
       const frame = await runAppSimulationTick(session, tickMs, {
         readInputs: readFactoryInputs,
         isCurrent: () => lifecycle.isCurrent(operation),
+        beforeStep: () => {
+          for (const [id, value] of Object.entries(hmiInputQueueRef.current.drain())) {
+            const variable = variables.find(v => v.id === id);
+            if (!variable || session.ioMappings.some(m => m.variableId === id && m.direction === 'read')) continue;
+            const parsed = parseHmiVariableValue(variable, value);
+            if (parsed.accepted) setSessionVariableValue(session, id, parsed.value);
+          }
+        },
         applyFrame: nextFrame => {
           setSimulationTime(newTime);
           applySimulationFrameToReact(session, nextFrame, newTime, true);
@@ -9228,7 +8447,7 @@ const ADIA = () => {
   }, [
     addError, applySimulationFrameToReact, createSimulationSession,
     readFactoryInputs, simulationTime, tickMs,
-    writeFactoryOutputs
+    writeFactoryOutputs, variables
   ]);
 
   const startSimulation = useCallback(async () => {
@@ -9238,7 +8457,7 @@ const ADIA = () => {
       return;
     }
     if (!validateModel()) return;
-
+    setIsRunning(false);
     const lifecycle = simulationLifecycleRef.current;
     lifecycle.invalidate();
     const generation = lifecycle.currentGeneration();
@@ -9250,6 +8469,7 @@ const ADIA = () => {
       simulationSessionRef.current = session;
       setSimulationTime(0);
       setScopeData([]);
+      setHmiSamples([]);
       setTraceHistory([]);
       setFiredTransitions({});
       applySimulationFrameToReact(session, session.initialFrame, 0, false);
@@ -9258,6 +8478,7 @@ const ADIA = () => {
         return;
       }
       setIsRunning(true);
+      setSimulationStartVersion(version => version + 1);
       addError('info', 'Simulation started');
     } catch (error: any) {
       simulationSessionRef.current = null;
@@ -9276,6 +8497,9 @@ const ADIA = () => {
 
   const resetSimulation = useCallback(async () => {
     setIsRunning(false);
+    hmiInputQueueRef.current.clear();
+    setHmiResetVersion(version => version + 1);
+    setHmiSamples([]);
     const lifecycle = simulationLifecycleRef.current;
     lifecycle.invalidate();
     const generation = lifecycle.currentGeneration();
@@ -9297,6 +8521,7 @@ const ADIA = () => {
         }
       );
       if (!lifecycle.isCurrent(operation)) return;
+      hmiInputQueueRef.current.clear();
 
       setSimulationTime(0);
       setScopeData([]);
@@ -9371,7 +8596,7 @@ const ADIA = () => {
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [isRunning, tickMs]);
+  }, [isRunning, tickMs, simulationStartVersion]);
 
   // LAYER / NESTED STATE OPERATIONS
   const enterLayer = useCallback((stateId: string) => {
@@ -10195,7 +9420,7 @@ const ADIA = () => {
   const removeFromDiagram = useCallback((ids: string | string[]) => {
     const rawIds = Array.isArray(ids) ? ids : [ids];
     if (rawIds.length === 0) return;
-    const currentDiagramId = diagramMode === 'ibd' ? currentLayerId : activeSysmlDiagramId;
+    const currentDiagramId = activeSysmlDiagramId;
     const result = handleExecuteSysmlCommand({
       type: 'removeFromDiagram',
       diagramId: currentDiagramId,
@@ -10522,7 +9747,7 @@ const ADIA = () => {
       propertyKind: 'part',
       typeId,
       name,
-      diagramId: currentLayerId,
+      diagramId: activeSysmlDiagramId,
       presentation: {
         x: initialX,
         y: initialY,
@@ -10549,11 +9774,11 @@ const ADIA = () => {
       result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
       setPropertyTypePrompt(prev => prev ? { ...prev, error: result.diagnostics[0]?.message } : null);
     }
-  }, [canonicalSysmlRepository, currentLayerId, sysmlCanvasView, snapEnabled, handleExecuteSysmlCommand, addError]);
+  }, [canonicalSysmlRepository, currentLayerId, activeSysmlDiagramId, sysmlCanvasView, snapEnabled, handleExecuteSysmlCommand, addError]);
 
   const createPart = useCallback((x: number, y: number) => {
     const ownerRes = resolveSysmlCreationOwner(canonicalSysmlRepository, {
-      diagramId: currentLayerId,
+      diagramId: activeSysmlDiagramId,
       diagramKind: 'ibd',
       contextElementId: currentLayerId,
     });
@@ -10571,7 +9796,7 @@ const ADIA = () => {
       ? selectedDefinition.id
       : undefined;
     commitIbdPartAt(typeId, activeBlockId, x, y, `part_${parts.length + 1}`);
-  }, [canonicalSysmlRepository, currentLayerId, selectedIds, parts.length, addError, commitIbdPartAt]);
+  }, [canonicalSysmlRepository, currentLayerId, activeSysmlDiagramId, selectedIds, parts.length, addError, commitIbdPartAt]);
 
   const handlePropertyTypeSelected = useCallback((typeId: string) => {
     if (!propertyTypePrompt) return;
@@ -11000,6 +10225,7 @@ const ADIA = () => {
     });
     const plan = buildCreatePathIbdConnectorCommand(canonicalSysmlRepository, {
       contextId: currentLayerId,
+      diagramId: activeSysmlDiagramId,
       source: endOf(activeSource.partId, activeSource.portId),
       target: endOf(partId, portId),
     });
@@ -11017,7 +10243,7 @@ const ADIA = () => {
     setIsCreatingConnector(false);
     setConnectorSource(null);
     connectorSourceRef.current = null;
-  }, [currentLayerId, canonicalSysmlRepository, addError, handleExecuteSysmlCommand]);
+  }, [currentLayerId, activeSysmlDiagramId, canonicalSysmlRepository, addError, handleExecuteSysmlCommand]);
 
   const handlePortClick = useCallback((e: MouseEvent<SVGRectElement>, partId: string, portId: string) => {
     e.stopPropagation();
@@ -11199,12 +10425,241 @@ const ADIA = () => {
     }
   }, [isCreatingTransition, isCreatingConnector, setIsCreatingTransition, setTransitionSourceId, setIsCreatingConnector, setConnectorSource, setSelectedIds, canvasRef, isSpacePressed, setIsPanning, rightDown, midDown, lastMousePos]);
 
+  const performDragMove = useCallback((worldX: number, worldY: number) => {
+    const gesture = pendingBddBlockGestureRef.current;
+    const desiredDelta = gesture ? {
+      x: snapEnabled ? snapToGrid(gesture.anchor.x + worldX - gesture.startWorldX, GRID_SIZE) - gesture.anchor.x : worldX - gesture.startWorldX,
+      y: snapEnabled ? snapToGrid(gesture.anchor.y + worldY - gesture.startWorldY, GRID_SIZE) - gesture.anchor.y : worldY - gesture.startWorldY,
+    } : undefined;
+    let dx = gesture ? desiredDelta!.x - gesture.appliedDelta.x : worldX - dragOffsetRef.current.x;
+    let dy = gesture ? desiredDelta!.y - gesture.appliedDelta.y : worldY - dragOffsetRef.current.y;
+    if (gesture && diagramMode === 'ibd' && !gesture.dragIds.includes(currentLayerId)) {
+      const context = blocksById.get(currentLayerId);
+      if (context) {
+        const frame = {
+          x: presentationDraftsRef.current[context.id]?.x ?? context.ibdX ?? 50,
+          y: presentationDraftsRef.current[context.id]?.y ?? context.ibdY ?? 50,
+          width: context.ibdWidth ?? 1200, height: context.ibdHeight ?? 800,
+        };
+        let minDx = -Infinity, maxDx = Infinity, minDy = -Infinity, maxDy = Infinity;
+        for (const id of gesture.dragIds) {
+          const part = partsById.get(id);
+          if (!part) continue;
+          const x = presentationDraftsRef.current[id]?.x ?? part.x;
+          const y = presentationDraftsRef.current[id]?.y ?? part.y;
+          minDx = Math.max(minDx, frame.x - x);
+          maxDx = Math.min(maxDx, frame.x + frame.width - part.width - x);
+          minDy = Math.max(minDy, frame.y - y);
+          maxDy = Math.min(maxDy, frame.y + frame.height - part.height - y);
+        }
+        if (minDx <= maxDx) dx = Math.max(minDx, Math.min(dx, maxDx));
+        if (minDy <= maxDy) dy = Math.max(minDy, Math.min(dy, maxDy));
+      }
+    }
+    if (dx === 0 && dy === 0) return;
+    if (gesture) gesture.appliedDelta = { x: gesture.appliedDelta.x + dx, y: gesture.appliedDelta.y + dy };
+    // Snap the pressed element once and carry its group by the same delta.
+    const snapIndividually = snapEnabled && !gesture;
+
+    // The first animation frame can run before React commits the new selection.
+    const dragIds = gesture?.moved ? gesture.dragIds : selectedIds;
+    const idsToMove = new Set(dragIds);
+    if (diagramMode === 'package') {
+      // A Package symbol carries the elements drawn nested inside it.
+      dragIds.forEach(id => {
+        if (packageNestingNodes.some(node => node.id === id && node.isPackage)) {
+          nestedDescendantIds(id, packageNestingNodes).forEach(nestedId => idsToMove.add(nestedId));
+        }
+      });
+    }
+    dragIds.forEach(id => {
+      const state = states.find(s => s.id === id);
+      if (state) {
+        const childLayer = layers.find(l => l.parentStateId === id);
+        if (childLayer) {
+          childLayer.stateIds.forEach(childId => idsToMove.add(childId));
+          childLayer.junctionIds.forEach(childId => idsToMove.add(childId));
+        }
+        currentJunctions.forEach(j => {
+          if (j.x >= state.x && j.x <= state.x + state.width &&
+            j.y >= state.y && j.y <= state.y + state.height &&
+            !idsToMove.has(j.id)) {
+            idsToMove.add(j.id);
+          }
+        });
+      }
+    });
+
+    // Move all selected items
+    idsToMove.forEach(id => {
+      const state = states.find(s => s.id === id);
+      if (state) {
+        const rawPosition = dragRawPositionsRef.current[id] ?? { x: state.x, y: state.y };
+        const nextRawPosition = { x: rawPosition.x + dx, y: rawPosition.y + dy };
+        dragRawPositionsRef.current[id] = nextRawPosition;
+
+        const snappedX = snapIndividually ? snapToGrid(nextRawPosition.x, GRID_SIZE) : nextRawPosition.x;
+        const snappedY = snapIndividually ? snapToGrid(nextRawPosition.y, GRID_SIZE) : nextRawPosition.y;
+
+        updateState(id, { x: snappedX, y: snappedY });
+
+        // Move child junctions
+        junctions.forEach(j => {
+          if (j.parentId === id && !idsToMove.has(j.id)) { // Ensure child junctions are not already selected
+            const childRaw = dragRawPositionsRef.current[j.id] ?? { x: j.x, y: j.y };
+            const nextChildRaw = { x: childRaw.x + dx, y: childRaw.y + dy };
+            dragRawPositionsRef.current[j.id] = nextChildRaw;
+            updateJunction(j.id, { x: nextChildRaw.x, y: nextChildRaw.y });
+          }
+        });
+      }
+      const junction = junctions.find(j => j.id === id);
+      if (junction) {
+        const rawPosition = dragRawPositionsRef.current[id] ?? { x: junction.x, y: junction.y };
+        const nextRawPosition = { x: rawPosition.x + dx, y: rawPosition.y + dy };
+        dragRawPositionsRef.current[id] = nextRawPosition;
+
+        let finalX = snapIndividually ? snapToGrid(nextRawPosition.x, GRID_SIZE) : nextRawPosition.x;
+        let finalY = snapIndividually ? snapToGrid(nextRawPosition.y, GRID_SIZE) : nextRawPosition.y;
+
+        const parentState = states.find(s => s.id === junction.parentId);
+        if (parentState) {
+          // junction radius is 8, rect size is 16x16
+          finalX = Math.max(parentState.x, Math.min(finalX, parentState.x + parentState.width - 16));
+          finalY = Math.max(parentState.y, Math.min(finalY, parentState.y + parentState.height - 16));
+        }
+
+        updateJunction(id, { x: finalX, y: finalY });
+      }
+
+      // BDD Blocks
+      const block = sysmlCanvasView.blocks.find(b => b.id === id);
+      if (block) {
+        const isContextBlock = diagramMode === 'ibd' && block.id === currentLayerId;
+        if (isContextBlock) {
+          const currentBlockX = presentationDraftsRef.current[id]?.x ?? block.ibdX ?? 50;
+          const currentBlockY = presentationDraftsRef.current[id]?.y ?? block.ibdY ?? 50;
+          const rawPosition = dragRawPositionsRef.current[id] ?? { x: currentBlockX, y: currentBlockY };
+          const nextRawPosition = { x: rawPosition.x + dx, y: rawPosition.y + dy };
+          dragRawPositionsRef.current[id] = nextRawPosition;
+
+          const snappedX = snapIndividually ? snapToGrid(nextRawPosition.x, GRID_SIZE) : nextRawPosition.x;
+          const snappedY = snapIndividually ? snapToGrid(nextRawPosition.y, GRID_SIZE) : nextRawPosition.y;
+
+          updateBlock(id, {
+            ibdX: snappedX,
+            ibdY: snappedY,
+          });
+
+          // Make all parts in this context follow the context block boundary in lockstep
+          const contextParts = sysmlCanvasView.parts.filter(p => p.blockId === id || !p.blockId || p.blockId === currentLayerId);
+          contextParts.forEach(p => {
+            if (!idsToMove.has(p.id)) {
+              const currentPartX = presentationDraftsRef.current[p.id]?.x ?? p.x;
+              const currentPartY = presentationDraftsRef.current[p.id]?.y ?? p.y;
+              const partRaw = dragRawPositionsRef.current[p.id] ?? { x: currentPartX, y: currentPartY };
+              const nextPartRaw = { x: partRaw.x + dx, y: partRaw.y + dy };
+              dragRawPositionsRef.current[p.id] = nextPartRaw;
+
+              const snappedPartX = snapIndividually ? snapToGrid(nextPartRaw.x, GRID_SIZE) : nextPartRaw.x;
+              const snappedPartY = snapIndividually ? snapToGrid(nextPartRaw.y, GRID_SIZE) : nextPartRaw.y;
+
+              updatePart(p.id, {
+                x: snappedPartX,
+                y: snappedPartY,
+              });
+            }
+          });
+        } else {
+          const currentBlock = { ...block, ...(presentationDraftsRef.current[id] ?? {}) };
+          const rawPosition = dragRawPositionsRef.current[id] ?? { x: currentBlock.x, y: currentBlock.y };
+          const nextRawPosition = { x: rawPosition.x + dx, y: rawPosition.y + dy };
+          dragRawPositionsRef.current[id] = nextRawPosition;
+          const newX = nextRawPosition.x;
+          const newY = nextRawPosition.y;
+          updateBlock(id, {
+            x: snapIndividually ? snapToGrid(newX, GRID_SIZE) : newX,
+            y: snapIndividually ? snapToGrid(newY, GRID_SIZE) : newY,
+          });
+        }
+      }
+
+      // UML Package presentations use the same diagram-scoped movement
+      // command as every other semantic element. Moving the notation never
+      // changes package ownership or creates a Block surrogate.
+      const packageNode = sysmlCanvasView.packages.find(pkg => pkg.id === id);
+      if (packageNode) {
+        const currentPackage = { ...packageNode, ...(presentationDraftsRef.current[id] ?? {}) };
+        const rawPosition = dragRawPositionsRef.current[id] ?? { x: currentPackage.x, y: currentPackage.y };
+        const nextRawPosition = { x: rawPosition.x + dx, y: rawPosition.y + dy };
+        dragRawPositionsRef.current[id] = nextRawPosition;
+        updateBlock(id, {
+          x: snapIndividually ? snapToGrid(nextRawPosition.x, GRID_SIZE) : nextRawPosition.x,
+          y: snapIndividually ? snapToGrid(nextRawPosition.y, GRID_SIZE) : nextRawPosition.y,
+        });
+      }
+
+      const shortcut = diagramShortcuts.find(candidate => candidate.id === id);
+      if (shortcut) {
+        const rawPosition = dragRawPositionsRef.current[id] ?? { x: shortcut.x, y: shortcut.y };
+        const nextRawPosition = { x: rawPosition.x + dx, y: rawPosition.y + dy };
+        dragRawPositionsRef.current[id] = nextRawPosition;
+        updateBlock(id, {
+          x: snapIndividually ? snapToGrid(nextRawPosition.x, GRID_SIZE) : nextRawPosition.x,
+          y: snapIndividually ? snapToGrid(nextRawPosition.y, GRID_SIZE) : nextRawPosition.y,
+        });
+      }
+
+      // IBD Parts
+      const part = sysmlCanvasView.parts.find(p => p.id === id);
+      if (part) {
+        const currentPart = { ...part, ...(presentationDraftsRef.current[id] ?? {}) };
+        const rawPosition = dragRawPositionsRef.current[id] ?? { x: currentPart.x, y: currentPart.y };
+        const nextRawPosition = { x: rawPosition.x + dx, y: rawPosition.y + dy };
+        dragRawPositionsRef.current[id] = nextRawPosition;
+        const newX = nextRawPosition.x;
+        const newY = nextRawPosition.y;
+
+        // REQ-LAYOUT-003: Prevent Parts from being moved outside the Context Block diagram boundary
+        let finalX = snapIndividually ? snapToGrid(newX, GRID_SIZE) : newX;
+        let finalY = snapIndividually ? snapToGrid(newY, GRID_SIZE) : newY;
+
+        if (diagramMode === 'ibd') {
+          const contextBlock = sysmlCanvasView.blocks.find(b => b.id === currentLayerId) ?? blocks.find(b => b.id === currentLayerId);
+          if (contextBlock) {
+            const cx = presentationDraftsRef.current[contextBlock.id]?.x ?? contextBlock.ibdX ?? 50;
+            const cy = presentationDraftsRef.current[contextBlock.id]?.y ?? contextBlock.ibdY ?? 50;
+            const cw = presentationDraftsRef.current[contextBlock.id]?.width ?? contextBlock.ibdWidth ?? 1200;
+            const ch = presentationDraftsRef.current[contextBlock.id]?.height ?? contextBlock.ibdHeight ?? 800;
+            finalX = Math.max(cx, Math.min(finalX, cx + cw - part.width));
+            finalY = Math.max(cy, Math.min(finalY, cy + ch - part.height));
+          }
+        }
+
+        updatePart(id, {
+          x: finalX,
+          y: finalY
+        });
+      }
+    });
+
+    // Update drag offset to current position for next frame
+    setDiagramDragOffset({ x: worldX, y: worldY });
+  }, [selectedIds, diagramMode, packageNestingNodes, states, layers, currentJunctions, junctions, snapEnabled, updateState, updateJunction, sysmlCanvasView, currentLayerId, updateBlock, diagramShortcuts, blocks, updatePart, setDiagramDragOffset, blocksById, partsById]);
+
+  performDragMoveRef.current = performDragMove;
+
   const handleMouseMove = useCallback((e: MouseEvent<HTMLDivElement>) => {
+    const liveGesture = pendingBddBlockGestureRef.current;
+    if (liveGesture) {
+      liveGesture.lastClientX = e.clientX;
+      liveGesture.lastClientY = e.clientY;
+    }
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect) return;
     const worldX = ((e.clientX - rect.left) / uiZoom - view.offsetX) / view.scale;
     const worldY = ((e.clientY - rect.top) / uiZoom - view.offsetY) / view.scale;
-    setMousePos({ x: worldX, y: worldY });
+    if (!isDragging) setMousePos({ x: worldX, y: worldY });
 
     if (rightDragCopyRef.current) {
       rightDragCopyRef.current = moveRightDragCopy(rightDragCopyRef.current, {
@@ -11215,21 +10670,29 @@ const ADIA = () => {
     }
 
     const pendingBlockGesture = pendingBddBlockGestureRef.current;
-    if (diagramMode === 'bdd' && pendingBlockGesture && !pendingBlockGesture.moved) {
+    if (pendingBlockGesture && !pendingBlockGesture.moved) {
       const distance = Math.hypot(
         e.clientX - pendingBlockGesture.startClientX,
         e.clientY - pendingBlockGesture.startClientY,
       );
-      if (distance < 4) return;
+      if (distance === 0) return;
 
       pendingBlockGesture.moved = true;
       setPendingBddBlockId(null);
-      setSelectedIds(previous => pendingBlockGesture.ctrlKey
-        ? (previous.includes(pendingBlockGesture.blockId) ? previous : [...previous, pendingBlockGesture.blockId])
-        : [pendingBlockGesture.blockId]);
-      addToHistory();
+      setSelectedIds(pendingBlockGesture.dragIds);
+      if (diagramMode === 'statemachine') addToHistory();
+      isDraggingRef.current = true;
       setIsDragging(true);
       setDiagramDragOffset({ x: pendingBlockGesture.startWorldX, y: pendingBlockGesture.startWorldY });
+      pendingDragPointRef.current = { x: worldX, y: worldY };
+      if (dragRafRef.current === null) {
+        dragRafRef.current = requestAnimationFrame(() => {
+          dragRafRef.current = null;
+          const target = pendingDragPointRef.current;
+          pendingDragPointRef.current = null;
+          if (target) performDragMoveRef.current?.(target.x, target.y);
+        });
+      }
       return;
     }
 
@@ -11355,203 +10818,35 @@ const ADIA = () => {
         else { side = 'right'; offset = Math.max(0, Math.min(1, relY / elH)); }
 
         if (isContext && block) {
-          const presentationExists = sysmlDiagramPresentations[currentLayerId]?.elementIds.includes(elementId) ?? false;
-          const result = handleExecuteSysmlCommand(buildPortLayoutCommand(currentLayerId, elementId, portId, side, offset, {
+          const presentationExists = sysmlDiagramPresentations[activeSysmlDiagramId]?.elementIds.includes(elementId) ?? false;
+          const result = handleExecuteSysmlCommand(buildPortLayoutCommand(activeSysmlDiagramId, elementId, portId, side, offset, {
             presentationExists,
             bounds: { x: elX, y: elY, width: elW, height: elH },
           }));
           if (!result.committed) result.diagnostics.forEach(diagnostic => addError(diagnostic.severity, diagnostic.message, 'SysML', diagnostic.elementId));
         } else if (part) {
-          const presentationExists = sysmlDiagramPresentations[currentLayerId]?.elementIds.includes(elementId) ?? false;
-          const result = handleExecuteSysmlCommand(buildPortLayoutCommand(currentLayerId, elementId, portId, side, offset, { presentationExists }));
+          const presentationExists = sysmlDiagramPresentations[activeSysmlDiagramId]?.elementIds.includes(elementId) ?? false;
+          const result = handleExecuteSysmlCommand(buildPortLayoutCommand(activeSysmlDiagramId, elementId, portId, side, offset, { presentationExists }));
           if (!result.committed) result.diagnostics.forEach(diagnostic => addError(diagnostic.severity, diagnostic.message, 'SysML', diagnostic.elementId));
         }
       }
       return;
     }
 
-    if (isDragging) {
-      // Calculate delta
-      const dx = worldX - dragOffsetRef.current.x;
-      const dy = worldY - dragOffsetRef.current.y;
-
-      const idsToMove = new Set(selectedIds);
-      if (diagramMode === 'package') {
-        // A Package symbol carries the elements drawn nested inside it.
-        selectedIds.forEach(id => {
-          if (packageNestingNodes.some(node => node.id === id && node.isPackage)) {
-            nestedDescendantIds(id, packageNestingNodes).forEach(nestedId => idsToMove.add(nestedId));
+    if (isDragging || pendingBlockGesture?.moved) {
+      pendingDragPointRef.current = { x: worldX, y: worldY };
+      if (dragRafRef.current === null) {
+        dragRafRef.current = requestAnimationFrame(() => {
+          dragRafRef.current = null;
+          const target = pendingDragPointRef.current;
+          pendingDragPointRef.current = null;
+          if (target) {
+            setMousePos(target);
+            performDragMoveRef.current?.(target.x, target.y);
           }
         });
       }
-      selectedIds.forEach(id => {
-        const state = states.find(s => s.id === id);
-        if (state) {
-          const childLayer = layers.find(l => l.parentStateId === id);
-          if (childLayer) {
-            childLayer.stateIds.forEach(childId => idsToMove.add(childId));
-            childLayer.junctionIds.forEach(childId => idsToMove.add(childId));
-          }
-          currentJunctions.forEach(j => {
-            if (j.x >= state.x && j.x <= state.x + state.width &&
-              j.y >= state.y && j.y <= state.y + state.height &&
-              !idsToMove.has(j.id)) {
-              idsToMove.add(j.id);
-            }
-          });
-        }
-      });
-
-      // Move all selected items
-      idsToMove.forEach(id => {
-        const state = states.find(s => s.id === id);
-        if (state) {
-          const newX = state.x + dx;
-          const newY = state.y + dy;
-          const snappedX = snapEnabled ? snapToGrid(newX, GRID_SIZE) : newX;
-          const snappedY = snapEnabled ? snapToGrid(newY, GRID_SIZE) : newY;
-
-
-          updateState(id, { x: snappedX, y: snappedY });
-
-          // Move child junctions
-          junctions.forEach(j => {
-            if (j.parentId === id && !idsToMove.has(j.id)) { // Ensure child junctions are not already selected
-              updateJunction(j.id, { x: j.x + dx, y: j.y + dy });
-            }
-          });
-        }
-        const junction = junctions.find(j => j.id === id);
-        if (junction) {
-          const newX = junction.x + dx;
-          const newY = junction.y + dy;
-
-          let finalX = snapEnabled ? snapToGrid(newX, GRID_SIZE) : newX;
-          let finalY = snapEnabled ? snapToGrid(newY, GRID_SIZE) : newY;
-
-          const parentState = states.find(s => s.id === junction.parentId);
-          if (parentState) {
-            // junction radius is 8, rect size is 16x16
-            finalX = Math.max(parentState.x, Math.min(finalX, parentState.x + parentState.width - 16));
-            finalY = Math.max(parentState.y, Math.min(finalY, parentState.y + parentState.height - 16));
-          }
-
-          updateJunction(id, { x: finalX, y: finalY });
-        }
-
-        // BDD Blocks
-        const block = sysmlCanvasView.blocks.find(b => b.id === id);
-        if (block) {
-          const isContextBlock = diagramMode === 'ibd' && block.id === currentLayerId;
-          if (isContextBlock) {
-            const currentBlockX = presentationDraftsRef.current[id]?.x ?? block.ibdX ?? 50;
-            const currentBlockY = presentationDraftsRef.current[id]?.y ?? block.ibdY ?? 50;
-            const rawPosition = dragRawPositionsRef.current[id] ?? { x: currentBlockX, y: currentBlockY };
-            const nextRawPosition = { x: rawPosition.x + dx, y: rawPosition.y + dy };
-            dragRawPositionsRef.current[id] = nextRawPosition;
-
-            const snappedX = snapEnabled ? snapToGrid(nextRawPosition.x, GRID_SIZE) : nextRawPosition.x;
-            const snappedY = snapEnabled ? snapToGrid(nextRawPosition.y, GRID_SIZE) : nextRawPosition.y;
-
-            updateBlock(id, {
-              ibdX: snappedX,
-              ibdY: snappedY,
-            });
-
-            // Make all parts in this context follow the context block boundary in lockstep
-            const contextParts = sysmlCanvasView.parts.filter(p => p.blockId === id || !p.blockId || p.blockId === currentLayerId);
-            contextParts.forEach(p => {
-              if (!idsToMove.has(p.id)) {
-                const currentPartX = presentationDraftsRef.current[p.id]?.x ?? p.x;
-                const currentPartY = presentationDraftsRef.current[p.id]?.y ?? p.y;
-                const partRaw = dragRawPositionsRef.current[p.id] ?? { x: currentPartX, y: currentPartY };
-                const nextPartRaw = { x: partRaw.x + dx, y: partRaw.y + dy };
-                dragRawPositionsRef.current[p.id] = nextPartRaw;
-
-                const snappedPartX = snapEnabled ? snapToGrid(nextPartRaw.x, GRID_SIZE) : nextPartRaw.x;
-                const snappedPartY = snapEnabled ? snapToGrid(nextPartRaw.y, GRID_SIZE) : nextPartRaw.y;
-
-                updatePart(p.id, {
-                  x: snappedPartX,
-                  y: snappedPartY,
-                });
-              }
-            });
-          } else {
-            const currentBlock = { ...block, ...(presentationDraftsRef.current[id] ?? {}) };
-            const rawPosition = dragRawPositionsRef.current[id] ?? { x: currentBlock.x, y: currentBlock.y };
-            const nextRawPosition = { x: rawPosition.x + dx, y: rawPosition.y + dy };
-            dragRawPositionsRef.current[id] = nextRawPosition;
-            const newX = nextRawPosition.x;
-            const newY = nextRawPosition.y;
-            updateBlock(id, {
-              x: snapEnabled ? snapToGrid(newX, GRID_SIZE) : newX,
-              y: snapEnabled ? snapToGrid(newY, GRID_SIZE) : newY,
-            });
-          }
-        }
-
-        // UML Package presentations use the same diagram-scoped movement
-        // command as every other semantic element. Moving the notation never
-        // changes package ownership or creates a Block surrogate.
-        const packageNode = sysmlCanvasView.packages.find(pkg => pkg.id === id);
-        if (packageNode) {
-          const currentPackage = { ...packageNode, ...(presentationDraftsRef.current[id] ?? {}) };
-          const rawPosition = dragRawPositionsRef.current[id] ?? { x: currentPackage.x, y: currentPackage.y };
-          const nextRawPosition = { x: rawPosition.x + dx, y: rawPosition.y + dy };
-          dragRawPositionsRef.current[id] = nextRawPosition;
-          updateBlock(id, {
-            x: snapEnabled ? snapToGrid(nextRawPosition.x, GRID_SIZE) : nextRawPosition.x,
-            y: snapEnabled ? snapToGrid(nextRawPosition.y, GRID_SIZE) : nextRawPosition.y,
-          });
-        }
-
-        const shortcut = diagramShortcuts.find(candidate => candidate.id === id);
-        if (shortcut) {
-          const rawPosition = dragRawPositionsRef.current[id] ?? { x: shortcut.x, y: shortcut.y };
-          const nextRawPosition = { x: rawPosition.x + dx, y: rawPosition.y + dy };
-          dragRawPositionsRef.current[id] = nextRawPosition;
-          updateBlock(id, {
-            x: snapEnabled ? snapToGrid(nextRawPosition.x, GRID_SIZE) : nextRawPosition.x,
-            y: snapEnabled ? snapToGrid(nextRawPosition.y, GRID_SIZE) : nextRawPosition.y,
-          });
-        }
-
-        // IBD Parts
-        const part = sysmlCanvasView.parts.find(p => p.id === id);
-        if (part) {
-          const currentPart = { ...part, ...(presentationDraftsRef.current[id] ?? {}) };
-          const rawPosition = dragRawPositionsRef.current[id] ?? { x: currentPart.x, y: currentPart.y };
-          const nextRawPosition = { x: rawPosition.x + dx, y: rawPosition.y + dy };
-          dragRawPositionsRef.current[id] = nextRawPosition;
-          const newX = nextRawPosition.x;
-          const newY = nextRawPosition.y;
-
-          // REQ-LAYOUT-003: Prevent Parts from being moved outside the Context Block diagram boundary
-          let finalX = snapEnabled ? snapToGrid(newX, GRID_SIZE) : newX;
-          let finalY = snapEnabled ? snapToGrid(newY, GRID_SIZE) : newY;
-
-          if (diagramMode === 'ibd') {
-            const contextBlock = sysmlCanvasView.blocks.find(b => b.id === currentLayerId) ?? blocks.find(b => b.id === currentLayerId);
-            if (contextBlock) {
-              const cx = presentationDraftsRef.current[contextBlock.id]?.x ?? contextBlock.ibdX ?? 50;
-              const cy = presentationDraftsRef.current[contextBlock.id]?.y ?? contextBlock.ibdY ?? 50;
-              const cw = presentationDraftsRef.current[contextBlock.id]?.width ?? contextBlock.ibdWidth ?? 1200;
-              const ch = presentationDraftsRef.current[contextBlock.id]?.height ?? contextBlock.ibdHeight ?? 800;
-              finalX = Math.max(cx, Math.min(finalX, cx + cw - part.width));
-              finalY = Math.max(cy, Math.min(finalY, cy + ch - part.height));
-            }
-          }
-
-          updatePart(id, {
-            x: finalX,
-            y: finalY
-          });
-        }
-      });
-
-      // Update drag offset to current position for next frame
-      setDiagramDragOffset({ x: worldX, y: worldY });
+      return;
     }
   }, [isPanning, isDragging, draggedPort, selectedIds, states, junctions, blocks, parts, sysmlCanvasView, view, snapEnabled, updateState, updateJunction, updateBlock, updatePart, diagramMode, currentLayerId, activeSysmlDiagramId, sysmlDiagramPresentations, isResizing, resizeStart, resizeHandle, layers, handleExecuteSysmlCommand, addError, setDiagramDragOffset, addToHistory, packageNestingNodes, diagramShortcuts]);
 
@@ -11584,7 +10879,7 @@ const ADIA = () => {
             setSelectedIds(clones.map(clone => clone.id));
             return;
           }
-          const diagramId = diagramMode === 'ibd' ? currentLayerId : activeSysmlDiagramId;
+          const diagramId = activeSysmlDiagramId;
           try {
             const copiedIds: string[] = [];
             const result = handleExecuteSysmlCommand(buildSysmlCloneElementsCommand({
@@ -11635,7 +10930,6 @@ const ADIA = () => {
     }
     const pendingBlockGesture = pendingBddBlockGestureRef.current;
     if (pendingBlockGesture) {
-      pendingBddBlockGestureRef.current = null;
       setPendingBddBlockId(null);
       if (!pendingBlockGesture.moved) {
         setSelectedIds(previous => pendingBlockGesture.ctrlKey
@@ -11656,12 +10950,29 @@ const ADIA = () => {
       setResizeHandle(null);
       setResizeStart(null);
     }
-    if (isDragging) {
+    if (dragRafRef.current !== null) {
+      cancelAnimationFrame(dragRafRef.current);
+      dragRafRef.current = null;
+    }
+    if ((isDragging || pendingBlockGesture?.moved) && !draggedPort) {
+      const rect = canvasRef.current?.getBoundingClientRect();
+      if (rect) {
+        performDragMoveRef.current?.(
+          ((e.clientX - rect.left) / uiZoom - view.offsetX) / view.scale,
+          ((e.clientY - rect.top) / uiZoom - view.offsetY) / view.scale,
+        );
+      }
+    }
+    pendingDragPointRef.current = null;
+    pendingBddBlockGestureRef.current = null;
+    if (isDragging || pendingBlockGesture?.moved) {
+      isDraggingRef.current = false;
       setIsDragging(false);
       setDraggedPort(null);
+      dragRawPositionsRef.current = {};
     }
     if (pendingPresentationUpdatesRef.current.size > 0) {
-      const activeDiagramId = diagramMode === 'ibd' ? currentLayerId : activeSysmlDiagramId;
+      const activeDiagramId = activeSysmlDiagramId;
       // Package Diagram: dropping into / out of a Package symbol implies an
       // ownership move (UML nesting). Positions commit now; the move is
       // confirmed separately and the drop is reverted if it is declined.
@@ -11692,15 +11003,26 @@ const ADIA = () => {
         }
       }
       if (ownershipDrop) requestPackageOwnershipMove(ownershipDrop.elementIds, ownershipDrop.targetOwnerId, revertBounds);
-      for (const [elemId, pres] of pendingPresentationUpdatesRef.current.entries()) {
-        handleExecuteSysmlCommand({
-          type: 'updatePresentation',
-          diagramId: activeDiagramId,
-          elementId: elemId,
-          presentation: pres,
-          coalesceKey: `drag-${elemId}`,
-        });
+      const commands: Extract<SysmlEditorCommand, { type: 'batch' }>['commands'] = Array.from(pendingPresentationUpdatesRef.current, ([elementId, presentation]) => ({
+        type: 'updatePresentation' as const, diagramId: activeDiagramId, elementId, presentation,
+      }));
+      // Named IBDs render their owning frame implicitly until it is laid out.
+      // Present that frame within the same transaction as its first movement.
+      if (diagramMode === 'ibd' && pendingPresentationUpdatesRef.current.has(currentLayerId)
+        && !sysmlDiagramPresentations[activeDiagramId]?.elementIds.includes(currentLayerId)) {
+        const context = sysmlCanvasView.blocks.find(block => block.id === currentLayerId);
+        commands.unshift({ type: 'addToDiagram', diagramId: activeDiagramId, elementIds: [currentLayerId], coordinates: {
+          [currentLayerId]: {
+            x: context?.ibdX ?? 50, y: context?.ibdY ?? 50,
+            width: context?.ibdWidth ?? 1200, height: context?.ibdHeight ?? 800,
+          },
+        } });
       }
+      const result = handleExecuteSysmlCommand({
+        type: 'batch',
+        commands,
+      });
+      if (!result.committed) result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
       pendingPresentationUpdatesRef.current.clear();
       presentationDraftsRef.current = {};
       setPresentationDrafts({});
@@ -11709,25 +11031,54 @@ const ADIA = () => {
     if (isPanning) {
       setIsPanning(false);
     }
-  }, [bddFeatureDrag, dropBddFeatureOnBlock, sysmlCanvasView, uiZoom, view, isDragging, isPanning, draggedPort, isResizing, selectedIds, diagramMode, currentLayerId, activeSysmlDiagramId, handleExecuteSysmlCommand, sysmlDiagramPresentations, canonicalSysmlRepository, packageNestingNodes, requestPackageOwnershipMove]);
+  }, [bddFeatureDrag, dropBddFeatureOnBlock, sysmlCanvasView, uiZoom, view, isDragging, isPanning, draggedPort, isResizing, selectedIds, diagramMode, currentLayerId, activeSysmlDiagramId, handleExecuteSysmlCommand, sysmlDiagramPresentations, canonicalSysmlRepository, packageNestingNodes, requestPackageOwnershipMove, addError]);
 
+  const diagramMouseHandlersRef = useRef({ move: handleMouseMove, up: handleMouseUp });
+  diagramMouseHandlersRef.current = { move: handleMouseMove, up: handleMouseUp };
   useEffect(() => {
-    if (!pendingBddBlockId && !isDragging) return;
     const handleWindowMouseMove = (event: globalThis.MouseEvent) => {
+      if (!pendingBddBlockGestureRef.current && !isDraggingRef.current) return;
       if (canvasRef.current?.contains(event.target as Node)) return;
-      handleMouseMove(event as unknown as MouseEvent<HTMLDivElement>);
+      diagramMouseHandlersRef.current.move(event as unknown as MouseEvent<HTMLDivElement>);
     };
     const handleWindowMouseUp = (event: globalThis.MouseEvent) => {
+      if (!pendingBddBlockGestureRef.current && !isDraggingRef.current) return;
       if (canvasRef.current?.contains(event.target as Node)) return;
-      handleMouseUp(event as unknown as MouseEvent<HTMLDivElement>);
+      diagramMouseHandlersRef.current.up(event as unknown as MouseEvent<HTMLDivElement>);
+    };
+    const finishOnBlur = () => {
+      const gesture = pendingBddBlockGestureRef.current;
+      if (!gesture) {
+        if (!isDraggingRef.current) return;
+        isDraggingRef.current = false;
+        setIsDragging(false);
+        setDraggedPort(null);
+        pendingDragPointRef.current = null;
+        dragRawPositionsRef.current = {};
+        if (dragRafRef.current !== null) {
+          cancelAnimationFrame(dragRafRef.current);
+          dragRafRef.current = null;
+        }
+        return;
+      }
+      if (!gesture.moved) {
+        pendingBddBlockGestureRef.current = null;
+        setPendingBddBlockId(null);
+        return;
+      }
+      diagramMouseHandlersRef.current.up(new globalThis.MouseEvent('mouseup', {
+        button: 0, clientX: gesture.lastClientX, clientY: gesture.lastClientY,
+      }) as unknown as MouseEvent<HTMLDivElement>);
     };
     window.addEventListener('mousemove', handleWindowMouseMove);
     window.addEventListener('mouseup', handleWindowMouseUp);
+    window.addEventListener('blur', finishOnBlur);
     return () => {
       window.removeEventListener('mousemove', handleWindowMouseMove);
       window.removeEventListener('mouseup', handleWindowMouseUp);
+      window.removeEventListener('blur', finishOnBlur);
     };
-  }, [pendingBddBlockId, isDragging, handleMouseMove, handleMouseUp]);
+  }, []);
 
   const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -11754,6 +11105,23 @@ const ADIA = () => {
     setShowZoomIndicator(true);
     setTimeout(() => setShowZoomIndicator(false), 500);
   }, [view, uiZoom]);
+
+  const beginElementDrag = useCallback((e: MouseEvent<SVGElement>, elementId: string, worldX: number, worldY: number) => {
+    const dragIds = selectedIds.includes(elementId) ? [...selectedIds]
+      : e.ctrlKey ? [...selectedIds, elementId] : [elementId];
+    const block = blocksById.get(elementId);
+    const node = partsById.get(elementId) ?? block ?? sysmlCanvasView.packages.find(pkg => pkg.id === elementId) ?? diagramShortcuts.find(shortcut => shortcut.id === elementId);
+    const anchor = diagramMode === 'ibd' && elementId === currentLayerId
+      ? { x: block?.ibdX ?? 50, y: block?.ibdY ?? 50 }
+      : { x: node?.x ?? worldX, y: node?.y ?? worldY };
+    pendingBddBlockGestureRef.current = {
+      blockId: elementId, startClientX: e.clientX, startClientY: e.clientY,
+      startWorldX: worldX, startWorldY: worldY, ctrlKey: e.ctrlKey, moved: false, dragIds, anchor, appliedDelta: { x: 0, y: 0 },
+      lastClientX: e.clientX, lastClientY: e.clientY,
+    };
+    dragRawPositionsRef.current = {};
+    setPendingBddBlockId(elementId);
+  }, [selectedIds, blocksById, partsById, sysmlCanvasView.packages, diagramShortcuts, diagramMode, currentLayerId]);
 
   const handleStateMouseDown = useCallback((e: MouseEvent<SVGGElement>, stateId: string) => {
     e.stopPropagation();
@@ -11966,29 +11334,9 @@ const ADIA = () => {
       return;
     }
 
-    if (diagramMode === 'bdd' && e.button === 0) {
-      pendingBddBlockGestureRef.current = {
-        blockId,
-        startClientX: e.clientX,
-        startClientY: e.clientY,
-        startWorldX: worldX,
-        startWorldY: worldY,
-        ctrlKey: e.ctrlKey,
-        moved: false,
-      };
-      setPendingBddBlockId(blockId);
-      return;
-    }
-
-    if (e.ctrlKey) {
-      setSelectedIds(prev => prev.includes(blockId) ? prev.filter(id => id !== blockId) : [...prev, blockId]);
-    } else {
-      if (!selectedIds.includes(blockId)) setSelectedIds([blockId]);
-    }
-    addToHistory();
-    setIsDragging(true);
-    setDiagramDragOffset({ x: worldX, y: worldY });
-  }, [isCreatingTransition, transitionSourceId, createRelationship, view, selectedIds, addToHistory, isCreatingConnector, uiZoom, blocks, parts, relationships, diagramMode, showConnectionPolicyError, handleExecuteSysmlCommand, activeSysmlDiagramId, canonicalSysmlRepository, packageRelationshipTool, packageRelationshipSourceId, addError, requestPackageOwnershipMove]);
+    if (e.button !== 0) return;
+    beginElementDrag(e, blockId, worldX, worldY);
+  }, [isCreatingTransition, transitionSourceId, createRelationship, view, selectedIds, isCreatingConnector, uiZoom, blocks, parts, relationships, diagramMode, showConnectionPolicyError, handleExecuteSysmlCommand, activeSysmlDiagramId, canonicalSysmlRepository, packageRelationshipTool, packageRelationshipSourceId, addError, requestPackageOwnershipMove, beginElementDrag]);
 
   const handlePartMouseDown = useCallback((e: MouseEvent<SVGGElement>, partId: string) => {
     e.stopPropagation();
@@ -12013,15 +11361,9 @@ const ADIA = () => {
       return;
     }
 
-    if (e.ctrlKey) {
-      setSelectedIds(prev => prev.includes(partId) ? prev.filter(id => id !== partId) : [...prev, partId]);
-    } else {
-      if (!selectedIds.includes(partId)) setSelectedIds([partId]);
-    }
-    addToHistory();
-    setIsDragging(true);
-    setDiagramDragOffset({ x: worldX, y: worldY });
-  }, [isCreatingConnector, view, selectedIds, addToHistory, uiZoom, parts, selectConnectorEnd]);
+    if (e.button !== 0) return;
+    beginElementDrag(e, partId, worldX, worldY);
+  }, [isCreatingConnector, view, selectedIds, uiZoom, parts, selectConnectorEnd, beginElementDrag]);
 
   // A nested part is laid out inside its parent: it can be selected or picked as a connector end, but not dragged.
   const handleNestedPartMouseDown = useCallback((e: MouseEvent<SVGGElement>, partId: string) => {
@@ -12262,1253 +11604,10 @@ const ADIA = () => {
     );
     const traceabilityMetrics = computeCoverageMetrics(traceabilityMatrix);
 
-    const style = `
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #fff; color: #333; padding: 40px; line-height: 1.6; max-width: 900px; margin: 0 auto; }
-        h1 { color: #f97316; border-bottom: 2px solid #f97316; padding-bottom: 10px; margin-bottom: 20px; }
-        h2 { color: #222; border-bottom: 1px solid #eee; margin-top: 40px; padding-bottom: 5px; page-break-after: avoid; }
-        h3 { color: #444; margin-top: 25px; font-size: 1.1em; page-break-after: avoid; }
-        .meta { color: #666; font-size: 0.9em; margin-bottom: 40px; }
-        .tree { margin-left: 20px; border-left: 1px solid #ddd; padding-left: 15px; }
-        .item { margin-bottom: 15px; }
-        .item-header { font-weight: bold; color: #000; }
-        .props { font-size: 0.9em; color: #555; margin-left: 10px; }
-        .tag { background: #eee; padding: 2px 6px; border-radius: 4px; font-size: 0.8em; }
-        .diagram-container { margin: 16px 0; }
-        .diagram-cell { break-inside: avoid; page-break-inside: avoid; margin-bottom: 16px; }
-        .diagram-card { margin: 20px 0; border: 1px solid #e2e8f0; border-radius: 8px; background: #ffffff; box-shadow: 0 2px 8px rgba(0,0,0,0.04); overflow: hidden; page-break-inside: avoid; }
-        .diagram-header { display: flex; justify-content: space-between; align-items: center; padding: 10px 16px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; font-size: 12px; font-weight: 600; color: #334155; }
-        .diagram-link-btn { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; background: #fff; color: #ea580c; border: 1px solid #fed7aa; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer; text-decoration: none; transition: all 0.15s ease; }
-        .diagram-link-btn:hover { background: #ea580c; color: #ffffff; border-color: #ea580c; box-shadow: 0 2px 6px rgba(234, 88, 12, 0.25); }
-        .diagram-preview-body { padding: 16px; display: flex; justify-content: center; align-items: center; cursor: zoom-in; background: #fafafa; overflow-x: auto; transition: background 0.15s ease; }
-        .diagram-preview-body:hover { background: #f1f5f9; }
-        .diagram-hint { text-align: center; padding: 6px; font-size: 11px; color: #94a3b8; border-top: 1px dashed #e2e8f0; background: #ffffff; }
-        #diagram-modal { display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(4px); z-index: 999999; flex-direction: column; }
-        #diagram-modal.active { display: flex; }
-        #diagram-modal-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 24px; background: #0f172a; border-bottom: 1px solid #334155; color: #f8fafc; }
-        #diagram-modal-body { flex: 1; overflow: auto; display: flex; justify-content: center; align-items: center; padding: 24px; background: #1e293b; cursor: grab; }
-        #diagram-modal-body:active { cursor: grabbing; }
-        .modal-ctrl-btn { background: #334155; color: #f8fafc; border: 1px solid #475569; border-radius: 4px; padding: 6px 12px; font-size: 12px; font-weight: bold; cursor: pointer; margin-left: 8px; transition: all 0.15s; }
-        .modal-ctrl-btn:hover { background: #ea580c; border-color: #ea580c; }
-        svg { max-width: 100%; height: auto; }
-        table { width: 100%; border-collapse: collapse; margin-top: 15px; margin-bottom: 15px; font-size: 0.9em; }
-        th, td { padding: 10px; border: 1px solid #ddd; text-align: left; }
-        th { background-color: #f5f5f5; color: #333; }
-        .badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 0.8em; font-weight: bold; }
-        .badge-critical { background-color: #fee2e2; color: #991b1b; }
-        .badge-warning { background-color: #fef3c7; color: #92400e; }
-        .badge-info { background-color: #e0f2fe; color: #075985; }
-        @media print {
-          .diagram-link-btn, .diagram-hint, #diagram-modal { display: none !important; }
-          .diagram-cell { page-break-inside: avoid; }
-          .diagram-card { border: 1px solid #ddd; box-shadow: none; }
-          svg { max-width: 100% !important; height: auto !important; }
-        }
-    `;
+    // Sections the report builder numbers after the standard ones (9, 10, ...).
+    const extraSections: { id: string; title: string; html: string }[] = [];
 
-    let html = `<html><head><title>${escapeHtml(projectName)} Report</title><style>${style}</style></head><body>`;
-    html += `<h1>${escapeHtml(projectName)}</h1>`;
-    html += `<div class="meta"><strong>Author:</strong> ${escapeHtml(author)} &bull; <strong>Date:</strong> ${escapeHtml(new Date().toLocaleString())} &bull; <strong>Engine:</strong> ${escapeHtml(VERSION)}</div>`;
-
-    if (snapshot.diagnostics) {
-      const removedRelCount = snapshot.diagnostics.removedRelationshipIds?.length || 0;
-      const removedConnCount = snapshot.diagnostics.removedConnectorIds?.length || 0;
-      const totalRemoved = removedRelCount + removedConnCount;
-      const errorCount = snapshot.diagnostics.errors?.length || 0;
-
-      html += `<div class="consistency-summary" style="background: #eff6ff; border: 1px solid #bfdbfe; color: #1e3a8a; padding: 12px 16px; border-radius: 6px; margin-bottom: 24px; font-size: 0.9em;">
-        <strong>Model Consistency Summary:</strong> revision: ${escapeHtml(snapshot.revision)} &bull; removed connections: ${totalRemoved} (relationships: ${removedRelCount}, connectors: ${removedConnCount}) &bull; errors: ${errorCount}
-      </div>`;
-    }
-
-    html += `<h2>Traceability Matrix</h2>`;
-    html += `<div class="consistency-summary"><strong>Canonical revision:</strong> ${escapeHtml(String(traceabilitySnapshot.repositoryRevision))} &bull; <strong>Model hash:</strong> ${escapeHtml(traceabilitySnapshot.modelHash)} &bull; <strong>Coverage:</strong> ${traceabilityMetrics.coveragePercent.toFixed(1)}% &bull; <strong>Verification:</strong> ${traceabilityMetrics.verificationPercent.toFixed(1)}%</div>`;
-    html += `<table><tr><th>Requirement</th><th>Status</th><th>Change</th><th>Owner / Risk</th><th>Covering Elements</th><th>Verification / Evidence</th><th>Unresolved</th></tr>`;
-    for (const row of traceabilityMatrix.rows) {
-      const links = [
-        ...row.coveringBlocks.map(item => sysmlObjectLabel({ name: item.name }, item.type || 'Element')),
-        ...row.blocks.map(id => resolveSysmlReferenceLabel(canonicalSysmlRepository, id, 'Block')),
-        ...row.parts.map(id => resolveSysmlReferenceLabel(canonicalSysmlRepository, id, 'Part')),
-      ].join('; ');
-      const unresolved = row.unresolvedEndpointIds.length > 0
-        ? row.unresolvedEndpointIds.map(() => 'Referenced element is unavailable').join('; ')
-        : 'None';
-      html += `<tr><td>${escapeHtml(row.requirement.requirementId)} · ${escapeHtml(sysmlObjectLabel(row.requirement, 'Requirement'))}</td><td>${escapeHtml(row.status)}</td><td>${escapeHtml(row.changeKind ?? 'unchanged')}</td><td>${escapeHtml(`${row.requirement.owner ?? 'Unassigned'} / ${row.requirement.risk ?? 'unspecified'}`)}</td><td>${escapeHtml(links || 'None')}</td><td>${escapeHtml(`${row.verificationCases.length} cases / ${row.evidence.length} evidence`)}</td><td>${escapeHtml(unresolved)}</td></tr>`;
-    }
-    html += `</table>`;
-    if (traceabilitySnapshot.diagnostics.length > 0) {
-      html += `<h3>Traceability Diagnostics</h3><ul>${traceabilitySnapshot.diagnostics.map(item => `<li>${escapeHtml(item.code)}: ${escapeHtml(item.message)}</li>`).join('')}</ul>`;
-    }
-
-    html += renderScenariosSection(canonicalSysmlRepository, escapeHtml);
-
-    // ═══════════════════════════════════════════════════════════════════
-    // AUTO-LAYOUT ENGINE FOR REPORT DIAGRAMS
-    // Repositions nodes into readable arrangements for report output
-    // without modifying the user's actual canvas positions.
-    // ═══════════════════════════════════════════════════════════════════
-    const autoLayoutForReport = (
-      nodes: any[],
-      edges: any[],
-      type: 'req' | 'bdd' | 'ibd' | 'statemachine' | 'xbridges'
-    ): any[] => {
-      if (nodes.length <= 1) return nodes;
-
-      const NODE_GAP_X = 60;
-      const NODE_GAP_Y = 80;
-      const MAX_ROW_WIDTH = 780; // A4 target width
-
-      // Build adjacency for hierarchical layout
-      const buildAdjacency = () => {
-        const children = new Map<string, string[]>();
-        const parents = new Set<string>();
-        const nodeIds = new Set(nodes.map(n => n.id));
-
-        edges.forEach((e: any) => {
-          let srcId = e.sourceId || e.sourcePartId;
-          let tgtId = e.targetId || e.targetPartId;
-
-          if (type === 'bdd' && e.type === 'generalization') {
-            const temp = srcId;
-            srcId = tgtId;
-            tgtId = temp;
-          }
-
-          if (!nodeIds.has(srcId) || !nodeIds.has(tgtId)) return;
-          if (srcId === tgtId) return;
-
-          if (!children.has(srcId)) children.set(srcId, []);
-          children.get(srcId)!.push(tgtId);
-          parents.add(tgtId);
-        });
-
-        // Find root nodes (nodes with no incoming edges)
-        const roots = nodes.filter(n => !parents.has(n.id));
-        if (roots.length === 0) return { children, roots: [nodes[0]] }; // fallback
-        return { children, roots };
-      };
-
-      if (type === 'statemachine') {
-        // ── Hierarchical / layered layout (top-to-bottom) ──
-        // BFS from start states to assign layers
-        const { children, roots } = buildAdjacency();
-
-        // Prioritize autostart states as roots
-        const autostartRoots = roots.filter(n => n.autostart || n.nodeType === 'parentState');
-        const effectiveRoots = autostartRoots.length > 0 ? autostartRoots : roots;
-
-        const layerMap = new Map<string, number>();
-        const queue: { id: string, layer: number }[] = effectiveRoots.map(r => ({ id: r.id, layer: 0 }));
-        const visited = new Set<string>();
-
-        while (queue.length > 0) {
-          const { id, layer } = queue.shift()!;
-          if (visited.has(id)) continue;
-          visited.add(id);
-          layerMap.set(id, Math.max(layerMap.get(id) || 0, layer));
-
-          const kids = children.get(id) || [];
-          kids.forEach(kid => {
-            if (!visited.has(kid)) {
-              queue.push({ id: kid, layer: layer + 1 });
-            }
-          });
-        }
-
-        // Place unvisited nodes into next layer
-        nodes.forEach(n => {
-          if (!layerMap.has(n.id)) {
-            layerMap.set(n.id, (Math.max(...Array.from(layerMap.values()), 0)) + 1);
-          }
-        });
-
-        // Group nodes by layer
-        const layerGroups = new Map<number, any[]>();
-        nodes.forEach(n => {
-          const layer = layerMap.get(n.id) || 0;
-          if (!layerGroups.has(layer)) layerGroups.set(layer, []);
-          layerGroups.get(layer)!.push(n);
-        });
-
-        const sortedLayers = Array.from(layerGroups.keys()).sort((a, b) => a - b);
-        let currentY = 0;
-
-        sortedLayers.forEach(layerIdx => {
-          const layerNodes = layerGroups.get(layerIdx)!;
-          let currentX = 0;
-          const maxH = Math.max(...layerNodes.map(n => n.height || 80));
-
-          // Center the row
-          const totalWidth = layerNodes.reduce((sum, n) => sum + (n.width || 160) + NODE_GAP_X, -NODE_GAP_X);
-          const startX = Math.max(0, (MAX_ROW_WIDTH - totalWidth) / 2);
-          currentX = startX;
-
-          layerNodes.forEach(n => {
-            const w = n.width || 160;
-            n.displayX = currentX;
-            n.displayY = currentY;
-            currentX += w + NODE_GAP_X;
-          });
-
-          currentY += maxH + NODE_GAP_Y;
-        });
-
-      } else if (type === 'bdd' || type === 'req') {
-        // ── Hierarchical Layered Tree Layout for BDD / Requirements ──
-        const { children, roots } = buildAdjacency();
-
-        // Assign levels via BFS
-        const levelMap = new Map<string, number>();
-        const bfsQueue: { id: string, level: number }[] = roots.map(r => ({ id: r.id, level: 0 }));
-        const bfsVisited = new Set<string>();
-
-        while (bfsQueue.length > 0) {
-          const { id, level } = bfsQueue.shift()!;
-          if (bfsVisited.has(id)) continue;
-          bfsVisited.add(id);
-          levelMap.set(id, level);
-
-          const kids = children.get(id) || [];
-          kids.forEach(kid => {
-            if (!bfsVisited.has(kid)) {
-              bfsQueue.push({ id: kid, level: level + 1 });
-            }
-          });
-        }
-
-        // Place unvisited nodes at the next single level
-        const maxLevel = Math.max(...Array.from(levelMap.values()), -1);
-        nodes.forEach(n => {
-          if (!levelMap.has(n.id)) {
-            levelMap.set(n.id, maxLevel + 1);
-          }
-        });
-
-        // Group by level
-        const levelGroups = new Map<number, any[]>();
-        nodes.forEach(n => {
-          const level = levelMap.get(n.id) || 0;
-          if (!levelGroups.has(level)) levelGroups.set(level, []);
-          levelGroups.get(level)!.push(n);
-        });
-
-        const sortedLevels = Array.from(levelGroups.keys()).sort((a, b) => a - b);
-        let curY = 0;
-
-        // Order nodes within level using parent position to minimize crossings
-        const nodeXPos = new Map<string, number>();
-
-        sortedLevels.forEach(level => {
-          const levelNodes = levelGroups.get(level)!;
-
-          if (level > 0) {
-            // Sort by average parent X position
-            levelNodes.sort((a, b) => {
-              const parentsA = edges.filter((e: any) => (e.targetId || e.targetPartId) === a.id).map((e: any) => nodeXPos.get(e.sourceId || e.sourcePartId) ?? 0);
-              const parentsB = edges.filter((e: any) => (e.targetId || e.targetPartId) === b.id).map((e: any) => nodeXPos.get(e.sourceId || e.sourcePartId) ?? 0);
-              const avgA = parentsA.length ? parentsA.reduce((s, v) => s + v, 0) / parentsA.length : 0;
-              const avgB = parentsB.length ? parentsB.reduce((s, v) => s + v, 0) / parentsB.length : 0;
-              return avgA - avgB;
-            });
-          }
-
-          const nodeW = type === 'req' ? 160 : 140;
-          const totalWidth = levelNodes.reduce((sum, n) => sum + (n.width || nodeW) + NODE_GAP_X, -NODE_GAP_X);
-          const startX = Math.max(0, (MAX_ROW_WIDTH - totalWidth) / 2);
-          let curX = startX;
-          const maxH = Math.max(...levelNodes.map(n => n.height || 80));
-
-          levelNodes.forEach(n => {
-            n.displayX = curX;
-            n.displayY = curY;
-            nodeXPos.set(n.id, curX + (n.width || nodeW) / 2);
-            curX += (n.width || nodeW) + NODE_GAP_X;
-          });
-
-          curY += maxH + NODE_GAP_Y + 24;
-        });
-
-      } else if (type === 'ibd') {
-        // ── Grid layout for IBD parts ──
-        const nodeW = 180;
-        const nodeH = 100;
-        const cols = Math.max(2, Math.floor(MAX_ROW_WIDTH / (nodeW + NODE_GAP_X)));
-
-        nodes.forEach((n, i) => {
-          const col = i % cols;
-          const row = Math.floor(i / cols);
-          n.displayX = col * (nodeW + NODE_GAP_X);
-          n.displayY = row * (nodeH + NODE_GAP_Y);
-          if (!n.width || n.width < 100) n.width = nodeW;
-          if (!n.height || n.height < 60) n.height = nodeH;
-        });
-
-      } else {
-        // ── Fallback: grid layout ──
-        const cols = Math.max(2, Math.floor(MAX_ROW_WIDTH / 200));
-        nodes.forEach((n, i) => {
-          const col = i % cols;
-          const row = Math.floor(i / cols);
-          n.displayX = col * 200;
-          n.displayY = row * 150;
-        });
-      }
-
-      return nodes;
-    };
-
-    const reportHierarchy = buildReportHierarchy(hierarchySource);
-
-    // Helper to generate SVG for report
-    const renderDiagramSVG = (nodes: any[], edges: any[], type: 'req' | 'bdd' | 'ibd' | 'statemachine' | 'xbridges', contextId?: string) => {
-      if (nodes.length === 0) return '';
-
-      // Deep-copy edges to avoid mutating actual state data
-      const edgesCopy = edges.map((e: any) => ({ ...e }));
-
-      // Prepare Nodes: Use fixed size for BDD blocks to match App, use instance size for IBD/Req
-      const displayNodes = nodes.map(n => {
-        const isBdd = type === 'bdd';
-        const isReq = type === 'req';
-        const width = isBdd ? (n.width || 140) : isReq ? (n.width || 160) : n.width;
-        const height = isBdd ? (n.height || 70) : isReq ? (n.height || 80) : n.height;
-        return { ...n, width, height, displayX: n.x || 0, displayY: n.y || 0 };
-      });
-
-      const displayNodesMap = new Map<string, any>();
-      displayNodes.forEach(n => displayNodesMap.set(n.id, n));
-
-      // Ensure all edge sources and targets are in displayNodes for statemachine
-      if (type === 'statemachine') {
-        edgesCopy.forEach((e: any) => {
-          [e.sourceId, e.targetId].forEach(id => {
-            if (!displayNodesMap.has(id)) {
-              const globalState = states.find(s => s.id === id);
-              const globalJunc = junctions.find(j => j.id === id);
-              if (globalState) {
-                const node = { ...globalState, nodeType: 'externalState', width: globalState.width, height: globalState.height, displayX: globalState.x, displayY: globalState.y };
-                displayNodes.push(node);
-                displayNodesMap.set(id, node);
-              } else if (globalJunc) {
-                const node = { ...globalJunc, nodeType: 'junction', width: 20, height: 20, displayX: globalJunc.x - 10, displayY: globalJunc.y - 10 };
-                displayNodes.push(node);
-                displayNodesMap.set(id, node);
-              }
-            }
-          });
-        });
-      }
-
-      // ── AUTO-LAYOUT: reposition nodes for report readability ──
-      autoLayoutForReport(displayNodes, edgesCopy, type);
-
-      // Rebuild the map after layout (positions changed)
-      displayNodes.forEach(n => displayNodesMap.set(n.id, n));
-
-      // Clear any user-defined control points (they won't match new positions)
-      if (type === 'statemachine') {
-        edgesCopy.forEach((e: any) => {
-          e.controlPoint = undefined;
-          e.hasControlPoint = false;
-        });
-      }
-
-      // Calculate bounds from new layout
-      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-      displayNodes.forEach(n => {
-        minX = Math.min(minX, n.displayX);
-        minY = Math.min(minY, n.displayY);
-        maxX = Math.max(maxX, n.displayX + n.width);
-        maxY = Math.max(maxY, n.displayY + n.height);
-      });
-
-      const contextBlock = contextId ? blocks.find(b => b.id === contextId) : null;
-      const contextFrame = (type === 'ibd' && contextBlock) ? {
-        x: contextBlock.ibdX ?? 50,
-        y: contextBlock.ibdY ?? 50,
-        w: contextBlock.ibdWidth ?? 1200,
-        h: contextBlock.ibdHeight ?? 800
-      } : (type === 'ibd' ? {
-        x: minX - 80,
-        y: minY - 80,
-        w: maxX - minX + 160,
-        h: maxY - minY + 160
-      } : { x: minX, y: minY, w: maxX - minX, h: maxY - minY });
-
-      // Update min/max X/Y based on the contextFrame
-      if (type === 'ibd') {
-        minX = contextFrame.x;
-        minY = contextFrame.y;
-        maxX = contextFrame.x + contextFrame.w;
-        maxY = contextFrame.y + contextFrame.h;
-      }
-
-      const padding = 60;
-      const rawWidth = Math.max(200, maxX - minX + padding * 2);
-      const rawHeight = Math.max(150, maxY - minY + padding * 2);
-
-      // Cap SVG display width for A4 readability
-      const MAX_SVG_WIDTH = 780;
-      const scaleFactor = rawWidth > MAX_SVG_WIDTH ? MAX_SVG_WIDTH / rawWidth : 1;
-      const displayWidth = Math.min(rawWidth, MAX_SVG_WIDTH);
-      const displayHeight = rawHeight * scaleFactor;
-
-      const viewBox = `${minX - padding} ${minY - padding} ${rawWidth} ${rawHeight}`;
-
-      const title = type === 'req' ? 'Requirements Traceability Diagram' :
-                    type === 'bdd' ? 'Block Definition Diagram (BDD)' :
-                    type === 'ibd' ? `Internal Block Diagram (IBD) · ${contextBlock?.name || 'System'}` :
-                    type === 'statemachine' ? 'State Machine Architecture' : 'System Diagram';
-
-      const diagId = `diag-${Math.random().toString(36).substring(2, 9)}`;
-
-      // Render root SVG
-      const rootSvg = renderSingleSVG(displayNodes, edgesCopy, type, viewBox, displayWidth, displayHeight, displayNodesMap, contextId, diagId);
-
-      // Render child drill-down layers if any element inside has sub-layers
-      let childLayersHtml = '';
-      displayNodes.forEach(node => {
-        if (reportHierarchy.hasChildLayer(node.id)) {
-          const childInfo = reportHierarchy.getChildLayerInfo(node.id)!;
-          if (childInfo.type === 'ibd') {
-            const targetBlockId = node.typeId || node.id;
-            const targetBlock = blocks.find(b => b.id === targetBlockId);
-            const childParts = parts.filter(p => p.blockId === targetBlockId);
-            const childConns = connectors.filter(c => {
-              const s = parts.find(p => p.id === c.sourcePartId);
-              const t = parts.find(p => p.id === c.targetPartId);
-              return (s && s.blockId === targetBlockId) || (t && t.blockId === targetBlockId);
-            });
-
-            if (childParts.length > 0) {
-              const childDisplayNodes = childParts.map(p => ({ ...p, displayX: p.x || 0, displayY: p.y || 0 }));
-              const childEdgesCopy = childConns.map(c => ({ ...c }));
-              autoLayoutForReport(childDisplayNodes, childEdgesCopy, 'ibd');
-
-              let cMinX = Infinity, cMinY = Infinity, cMaxX = -Infinity, cMaxY = -Infinity;
-              childDisplayNodes.forEach(n => {
-                cMinX = Math.min(cMinX, n.displayX);
-                cMinY = Math.min(cMinY, n.displayY);
-                cMaxX = Math.max(cMaxX, n.displayX + n.width);
-                cMaxY = Math.max(cMaxY, n.displayY + n.height);
-              });
-              const cPad = 60;
-              const cRawW = Math.max(200, cMaxX - cMinX + cPad * 2 + 160);
-              const cRawH = Math.max(150, cMaxY - cMinY + cPad * 2 + 160);
-              const cScale = cRawW > MAX_SVG_WIDTH ? MAX_SVG_WIDTH / cRawW : 1;
-              const cDispW = Math.min(cRawW, MAX_SVG_WIDTH);
-              const cDispH = cRawH * cScale;
-              const cViewBox = `${cMinX - cPad - 80} ${cMinY - cPad - 80} ${cRawW} ${cRawH}`;
-              const cMap = new Map<string, any>();
-              childDisplayNodes.forEach(n => cMap.set(n.id, n));
-
-              const childSvg = renderSingleSVG(childDisplayNodes, childEdgesCopy, 'ibd', cViewBox, cDispW, cDispH, cMap, targetBlockId, diagId);
-              childLayersHtml += `<div id="layer-${childInfo.layerId}" class="diagram-layer-view" style="display:none; width:100%;">${childSvg}</div>`;
-            }
-          } else if (childInfo.type === 'statemachine') {
-            const childLayer = layers.find(l => l.parentStateId === node.id);
-            if (childLayer) {
-              const childStates = states.filter(s => childLayer.stateIds.includes(s.id));
-              const childJuncs = junctions.filter(j => childLayer.junctionIds.includes(j.id));
-              const childTrans = transitions.filter(t => childLayer.transitionIds.includes(t.id));
-
-              const childNodes: any[] = [
-                ...childStates.map(s => ({ ...s, nodeType: 'state' })),
-                ...childJuncs.map(j => ({ ...j, nodeType: 'junction', width: 20, height: 20, x: j.x - 10, y: j.y - 10 }))
-              ];
-              const childDisplayNodes = childNodes.map(n => ({ ...n, displayX: n.x || 0, displayY: n.y || 0 }));
-              const childEdgesCopy = childTrans.map(t => ({ ...t }));
-              autoLayoutForReport(childDisplayNodes, childEdgesCopy, 'statemachine');
-
-              let cMinX = Infinity, cMinY = Infinity, cMaxX = -Infinity, cMaxY = -Infinity;
-              childDisplayNodes.forEach(n => {
-                cMinX = Math.min(cMinX, n.displayX);
-                cMinY = Math.min(cMinY, n.displayY);
-                cMaxX = Math.max(cMaxX, n.displayX + n.width);
-                cMaxY = Math.max(cMaxY, n.displayY + n.height);
-              });
-              const cPad = 60;
-              const cRawW = Math.max(200, cMaxX - cMinX + cPad * 2);
-              const cRawH = Math.max(150, cMaxY - cMinY + cPad * 2);
-              const cScale = cRawW > MAX_SVG_WIDTH ? MAX_SVG_WIDTH / cRawW : 1;
-              const cDispW = Math.min(cRawW, MAX_SVG_WIDTH);
-              const cDispH = cRawH * cScale;
-              const cViewBox = `${cMinX - cPad} ${cMinY - cPad} ${cRawW} ${cRawH}`;
-              const cMap = new Map<string, any>();
-              childDisplayNodes.forEach(n => cMap.set(n.id, n));
-
-              const childSvg = renderSingleSVG(childDisplayNodes, childEdgesCopy, 'statemachine', cViewBox, cDispW, cDispH, cMap, undefined, diagId);
-              childLayersHtml += `<div id="layer-${childInfo.layerId}" class="diagram-layer-view" style="display:none; width:100%;">${childSvg}</div>`;
-            }
-          }
-        }
-      });
-
-      let svgResult = `<div class="diagram-card">`;
-      svgResult += `<div class="diagram-header">`;
-      svgResult += `<div id="bc-${diagId}" class="diagram-breadcrumbs"></div>`;
-      svgResult += `<div class="diagram-controls">`;
-      svgResult += `<button class="modal-ctrl-btn" onclick="window.ADIA_DIAGRAM_NAV.zoom('${diagId}', 1.25)">➕ Zoom In</button>`;
-      svgResult += `<button class="modal-ctrl-btn" onclick="window.ADIA_DIAGRAM_NAV.zoom('${diagId}', 0.8)">➖ Zoom Out</button>`;
-      svgResult += `<button class="modal-ctrl-btn" onclick="window.ADIA_DIAGRAM_NAV.resetZoom('${diagId}')">↺ Reset</button>`;
-      svgResult += `<button class="diagram-link-btn" onclick="openDiagramModal('${diagId}', '${escapeHtml(title)}')">🔍 Fullscreen</button>`;
-      svgResult += `</div>`;
-      svgResult += `</div>`;
-      svgResult += `<div id="${diagId}" class="diagram-preview-body">`;
-      svgResult += `<div id="layer-root-${diagId}" class="diagram-layer-view" style="display:block; width:100%;">`;
-      svgResult += rootSvg;
-      svgResult += `</div>`;
-      svgResult += childLayersHtml;
-      svgResult += `</div>`;
-      svgResult += `<div class="diagram-hint">💡 <b>Interactive Diagram:</b> Double-click any element marked with ⧉ to explore its nested architecture layer. Use breadcrumbs above to navigate back.</div>`;
-      svgResult += `</div>`;
-      svgResult += `<script>window.ADIA_DIAGRAM_NAV.initContainer('${diagId}', 'root-${diagId}', '${escapeHtml(title)}');</script>`;
-      return svgResult;
-    };
-
-    // Single SVG rendering helper (used by renderDiagramSVG)
-    const renderSingleSVG = (
-      displayNodes: any[],
-      edges: any[],
-      type: string,
-      viewBox: string,
-      svgWidth: number,
-      svgHeight: number,
-      displayNodesMap: Map<string, any>,
-      contextId?: string,
-      diagId?: string
-    ) => {
-      const contextBlock = contextId ? blocksById.get(contextId) : null;
-
-      // Calculate bounds for this page's nodes to render local context frame
-      let minX_ = Infinity, minY_ = Infinity, maxX_ = -Infinity, maxY_ = -Infinity;
-      displayNodes.forEach(n => {
-        minX_ = Math.min(minX_, n.displayX);
-        minY_ = Math.min(minY_, n.displayY);
-        maxX_ = Math.max(maxX_, n.displayX + n.width);
-        maxY_ = Math.max(maxY_, n.displayY + n.height);
-      });
-      const framePadding = type === 'ibd' ? 80 : 0;
-      const contextFrame = {
-        x: minX_ - framePadding,
-        y: minY_ - framePadding,
-        w: maxX_ - minX_ + framePadding * 2,
-        h: maxY_ - minY_ + framePadding * 2
-      };
-
-      // Helper for Port Position
-      const getPortPos = (nodeOrId: any, portId: string) => {
-        const isString = typeof nodeOrId === 'string';
-        const id = isString ? nodeOrId : nodeOrId?.id;
-
-        if (type === 'ibd' && id === contextId) {
-          const block = contextBlock;
-          const port = block?.ports?.find((p: any) => p.id === portId);
-          const presentationLayout = sysmlDiagramPresentations[currentLayerId]?.presentations[id]?.portLayouts?.[portId];
-          const side = presentationLayout?.side || port?.side || 'left';
-          const offset = presentationLayout?.offset ?? port?.offset ?? 0.5;
-
-          let x = 0, y = 0;
-          if (side === 'top') { x = contextFrame.x + contextFrame.w * offset; y = contextFrame.y; }
-          else if (side === 'bottom') { x = contextFrame.x + contextFrame.w * offset; y = contextFrame.y + contextFrame.h; }
-          else if (side === 'left') { x = contextFrame.x; y = contextFrame.y + contextFrame.h * offset; }
-          else { x = contextFrame.x + contextFrame.w; y = contextFrame.y + contextFrame.h * offset; }
-          return { x, y };
-        }
-
-        const node = isString ? displayNodes.find(n => n.id === id) : nodeOrId;
-        if (!node) return { x: 0, y: 0 };
-
-        let block = type === 'ibd' ? blocksById.get(node.typeId) : node;
-        if (!block) return { x: node.displayX + (node.width || 120) / 2, y: node.displayY + (node.height || 80) / 2 };
-
-        const port = block.ports?.find((p: any) => p.id === portId);
-        const portIndex = block.ports?.findIndex((p: any) => p.id === portId) ?? 0;
-
-        const layout = type === 'ibd' ? node.portLayouts?.[portId] : null;
-        const side = layout?.side || port?.side;
-        const offset = layout?.offset ?? port?.offset;
-
-        let x = 0, y = 0;
-        if (side && offset != null) {
-          if (side === 'top') { x = node.displayX + node.width * offset; y = node.displayY; }
-          else if (side === 'bottom') { x = node.displayX + node.width * offset; y = node.displayY + node.height; }
-          else if (side === 'left') { x = node.displayX; y = node.displayY + node.height * offset; }
-          else { x = node.displayX + node.width; y = node.displayY + node.height * offset; }
-        } else {
-          const isLeft = portIndex % 2 === 0;
-          if (type === 'ibd') {
-            x = node.displayX + (isLeft ? 0 : node.width);
-            y = node.displayY + 20 + Math.floor(portIndex / 2) * 20 + 5;
-          } else {
-            x = node.displayX + (isLeft ? 0 : node.width);
-            y = node.displayY + 60 + Math.floor(portIndex / 2) * 40;
-          }
-        }
-        return { x, y };
-      };
-
-      const getBox = (n: any) => ({ x: n.displayX, y: n.displayY, width: n.width, height: n.height });
-      const getCenter = (n: any) => ({ x: n.displayX + n.width / 2, y: n.displayY + n.height / 2 });
-
-      let svg = `<svg width="${svgWidth}" height="${svgHeight}" viewBox="${viewBox}" xmlns="http://www.w3.org/2000/svg" style="font-family: 'Segoe UI', Tahoma, sans-serif; max-width: 100%; height: auto;">`;
-
-      // Defs for markers
-      svg += `<defs>
-          <marker id="m-arrow-${type}" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10" fill="none" stroke="#546e7a" stroke-width="1.2" /></marker>
-          <marker id="m-arrow-filled-${type}" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 Z" fill="#333" stroke="#333" /></marker>
-          <marker id="m-diamond-${type}" markerWidth="16" markerHeight="10" refX="1" refY="5" orient="auto"><path d="M1,5 L8,1 L15,5 L8,9 Z" fill="#fff" stroke="#333" stroke-width="1.2" /></marker>
-          <marker id="m-diamond-fill-${type}" markerWidth="16" markerHeight="10" refX="1" refY="5" orient="auto"><path d="M1,5 L8,1 L15,5 L8,9 Z" fill="#333" stroke="#333" /></marker>
-          <marker id="m-triangle-${type}" markerWidth="14" markerHeight="12" refX="13" refY="6" orient="auto"><path d="M1,1 L13,6 L1,11 Z" fill="#fff" stroke="#333" stroke-width="1.2" /></marker>
-          <marker id="requirement-containment-crosshair" markerWidth="14" markerHeight="14" refX="7" refY="7" orient="auto"><circle cx="7" cy="7" r="5.5" fill="#ffffff" stroke="#333333" stroke-width="1.2" /><path d="M 7 1.5 L 7 12.5 M 1.5 7 L 12.5 7" stroke="#333333" stroke-width="1.2" stroke-linecap="round" /></marker>
-          <marker id="m-containment-${type}" markerWidth="14" markerHeight="14" refX="7" refY="7" orient="auto"><circle cx="7" cy="7" r="5.5" fill="#ffffff" stroke="#333333" stroke-width="1.2" /><path d="M 7 1.5 L 7 12.5 M 1.5 7 L 12.5 7" stroke="#333333" stroke-width="1.2" stroke-linecap="round" /></marker>
-        </defs>`;
-
-      // If IBD, render the outer context block boundary and its ports
-      if (type === 'ibd') {
-        const ctxBlockName = contextBlock ? contextBlock.name : 'System';
-        svg += `<rect x="${contextFrame.x}" y="${contextFrame.y}" width="${contextFrame.w}" height="${contextFrame.h}" fill="none" stroke="#666" stroke-width="1.5" stroke-dasharray="4,4" rx="6" />`;
-        svg += `<text x="${contextFrame.x + 10}" y="${contextFrame.y + 20}" fill="#666" font-size="12" font-weight="bold">ibd [Block] ${escapeHtml(ctxBlockName)}</text>`;
-
-        if (contextBlock && contextBlock.ports) {
-          contextBlock.ports.forEach((p: any) => {
-            const portPos = getPortPos(contextId, p.id);
-            svg += `<rect x="${portPos.x - 4}" y="${portPos.y - 4}" width="8" height="8" fill="#333" stroke="#f97316" stroke-width="1" />`;
-
-            const side = p.side || 'left';
-            let tx = portPos.x, ty = portPos.y;
-            let anchor = "middle";
-            if (side === 'left') { tx -= 6; anchor = "end"; ty += 3; }
-            else if (side === 'right') { tx += 6; anchor = "start"; ty += 3; }
-            else if (side === 'top') { ty -= 6; }
-            else if (side === 'bottom') { ty += 10; }
-
-            svg += `<text x="${tx}" y="${ty}" text-anchor="${anchor}" font-size="8" fill="#666">${escapeHtml(p.name)}</text>`;
-          });
-        }
-      }
-
-      // Render Nodes
-      displayNodes.forEach(n => {
-        const fill = type === 'req' ? '#fff' : '#f0f0f0';
-        const stroke = type === 'req' ? '#f97316' : '#333';
-        const hasChild = reportHierarchy.hasChildLayer(n.id);
-        const childInfo = hasChild ? reportHierarchy.getChildLayerInfo(n.id) : undefined;
-        const dblClickAttr = (hasChild && childInfo && diagId)
-          ? `ondblclick="window.ADIA_DIAGRAM_NAV.drillDown('${diagId}', '${childInfo.layerId}', '${escapeHtml(childInfo.title)}'); event.stopPropagation();"`
-          : '';
-        const nodeClass = `diagram-node${hasChild ? ' has-child-layer' : ''}`;
-
-        if (type === 'statemachine') {
-          if (n.nodeType === 'junction') {
-            svg += `<g transform="translate(${n.displayX + n.width / 2}, ${n.displayY + n.height / 2})">`;
-            svg += `<circle r="8" fill="#333" stroke="#ff9900" stroke-width="2" />`;
-            if (n.type === 'history') svg += `<text x="0" y="4" text-anchor="middle" fill="#fff" font-size="11" font-weight="bold">H</text>`;
-            if (n.type === 'deep-history') svg += `<text x="0" y="4" text-anchor="middle" fill="#fff" font-size="11" font-weight="bold">H*</text>`;
-            svg += `<text x="0" y="-18" text-anchor="middle" fill="#ff9900" font-size="12" font-weight="bold">${escapeHtml(n.name)}</text>`;
-            svg += `</g>`;
-          } else {
-            // State
-            svg += `<g class="${nodeClass}" transform="translate(${n.displayX}, ${n.displayY})" ${dblClickAttr}>`;
-            svg += `<rect width="${n.width}" height="${n.height}" rx="8" fill="#fcfcfc" stroke="#333" stroke-width="2" />`;
-            svg += `<path d="M0 26 h${n.width}" stroke="#ddd" stroke-width="1" />`;
-            svg += `<text x="${n.width / 2}" y="18" text-anchor="middle" font-size="13" font-weight="bold" fill="#000" font-family="sans-serif">${escapeHtml(n.name)}</text>`;
-
-            if (hasChild) {
-              svg += `<g class="diagram-drill-badge"><rect x="${n.width - 24}" y="5" width="18" height="15" rx="3" fill="#ea580c" /><text x="${n.width - 15}" y="16" text-anchor="middle" font-size="9" fill="#fff" font-weight="bold">⧉</text></g>`;
-            }
-
-            if (n.entry || n.during || n.exit) {
-              let yTxt = 36;
-              if (n.entry) { svg += `<text x="6" y="${yTxt}" font-size="10" fill="#555" font-family="monospace">entry/</text>`; yTxt += 12; }
-              if (n.during) { svg += `<text x="6" y="${yTxt}" font-size="10" fill="#555" font-family="monospace">during/</text>`; yTxt += 12; }
-              if (n.exit) { svg += `<text x="6" y="${yTxt}" font-size="10" fill="#555" font-family="monospace">exit/</text>`; }
-            }
-            if (n.internalTransitions) {
-              const lines = n.internalTransitions.split('\n').filter((l: string) => l.trim());
-              if (lines.length > 0) {
-                const startY = n.height - 15 - (lines.length * 10);
-                svg += `<g transform="translate(8, ${startY})">`;
-                svg += `<line x1="-8" y1="-5" x2="${n.width - 8}" y2="-5" stroke="#eee" stroke-width="1" />`;
-                lines.slice(0, 3).forEach((line: string, i: number) => {
-                  const txt = line.length > 25 ? line.slice(0, 25) + '...' : line;
-                  const safeTxt = escapeHtml(txt);
-                  svg += `<text y="${i * 10}" fill="#888" font-size="9" font-family="monospace">${safeTxt}</text>`;
-                });
-                svg += `</g>`;
-              }
-            }
-            if (n.autostart) {
-              svg += `<circle cx="10" cy="-5" r="3" fill="#333" />`;
-            }
-            svg += `</g>`;
-          }
-          return;
-        }
-
-        svg += `<g class="${nodeClass}" transform="translate(${n.displayX}, ${n.displayY})" ${dblClickAttr}>`;
-        svg += `<rect width="${n.width}" height="${n.height}" fill="${fill}" stroke="${stroke}" stroke-width="1" rx="4" />`;
-
-        if (type === 'req') {
-          svg += `<text x="${n.width / 2}" y="22" text-anchor="middle" font-size="13" font-weight="bold" fill="#000" font-family="sans-serif">${escapeHtml(n.reqId)}</text>`;
-          const displayName = n.name.length > 22 ? n.name.substring(0, 20) + '...' : n.name;
-          svg += `<text x="${n.width / 2}" y="40" text-anchor="middle" font-size="11" fill="#333" font-family="sans-serif">${escapeHtml(displayName)}</text>`;
-          if (n.description) {
-            const desc = n.description.length > 30 ? n.description.substring(0, 28) + '...' : n.description;
-            svg += `<text x="6" y="58" font-size="10" fill="#555" font-family="sans-serif">${escapeHtml(desc)}</text>`;
-          }
-        } else {
-          svg += `<text x="${n.width / 2}" y="17" text-anchor="middle" font-size="10" fill="#666" font-family="monospace">«${escapeHtml(n.stereotype || (type === 'ibd' ? 'part' : 'block'))}»</text>`;
-          svg += `<text x="${n.width / 2}" y="34" text-anchor="middle" font-size="13" font-weight="bold" fill="#000" font-family="sans-serif">${escapeHtml(n.name)}</text>`;
-          svg += `<line x1="0" y1="38" x2="${n.width}" y2="38" stroke="#888" stroke-width="0.5" />`;
-        }
-
-        if (hasChild) {
-          svg += `<g class="diagram-drill-badge"><rect x="${n.width - 24}" y="5" width="18" height="15" rx="3" fill="#ea580c" /><text x="${n.width - 15}" y="16" text-anchor="middle" font-size="9" fill="#fff" font-weight="bold">⧉</text></g>`;
-        }
-
-        if (type === 'bdd' && n.properties?.length > 0) {
-          n.properties.slice(0, 3).forEach((p: any, i: number) => {
-            svg += `<text x="5" y="${48 + i * 12}" font-size="9" font-family="monospace" fill="#555">${escapeHtml(p.name)}:${escapeHtml(p.type)}</text>`;
-          });
-        }
-
-        // Render Ports
-        let block = type === 'ibd' ? blocks.find(b => b.id === n.typeId) : n;
-        if (block && block.ports && type === 'ibd') {
-          block.ports.forEach((p: any) => {
-            const portPos = getPortPos(n, p.id);
-            const px = portPos.x - n.displayX;
-            const py = portPos.y - n.displayY;
-            svg += `<rect x="${px - 4}" y="${py - 4}" width="8" height="8" fill="#333" stroke="#f97316" stroke-width="1" />`;
-
-            const isLeft = px <= 0;
-            const isRight = px >= n.width;
-            const isTop = py <= 0;
-            const isBottom = py >= n.height;
-            let tx = px, ty = py;
-            let anchor = "middle";
-            if (isLeft) { tx -= 6; anchor = "end"; ty += 3; }
-            else if (isRight) { tx += 6; anchor = "start"; ty += 3; }
-            else if (isTop) { ty -= 6; }
-            else if (isBottom) { ty += 10; }
-
-            svg += `<text x="${tx}" y="${ty}" text-anchor="${anchor}" font-size="8" fill="#666">${escapeHtml(p.name)}</text>`;
-          });
-        }
-
-        svg += `</g>`;
-      });
-
-      // Precompute incoming and outgoing edge counts per node to spread ports
-      const outEdgeMap = new Map<string, any[]>();
-      const inEdgeMap = new Map<string, any[]>();
-      edges.forEach((e: any) => {
-        const sId = e.sourceId || e.sourcePartId;
-        const tId = e.targetId || e.targetPartId;
-        if (!outEdgeMap.has(sId)) outEdgeMap.set(sId, []);
-        outEdgeMap.get(sId)!.push(e);
-        if (!inEdgeMap.has(tId)) inEdgeMap.set(tId, []);
-        inEdgeMap.get(tId)!.push(e);
-      });
-
-      // Render Edges
-      edges.forEach((e: any) => {
-        let sp, tp;
-        let source = type === 'ibd' ? displayNodes.find(n => n.id === e.sourcePartId) : displayNodes.find(n => n.id === e.sourceId);
-        let target = type === 'ibd' ? displayNodes.find(n => n.id === e.targetPartId) : displayNodes.find(n => n.id === e.targetId);
-
-        if (type === 'ibd') {
-          const isSourceCtx = e.sourcePartId === contextId || !e.sourcePartId;
-          const isTargetCtx = e.targetPartId === contextId || !e.targetPartId;
-
-          const sRef = source || (isSourceCtx ? contextId : null);
-          const tRef = target || (isTargetCtx ? contextId : null);
-
-          if (sRef && tRef) {
-            sp = getPortPos(sRef, e.sourcePortId);
-            tp = getPortPos(tRef, e.targetPortId);
-          }
-        } else if (type === 'statemachine') {
-          if (source && target) {
-            if (source.id === target.id) {
-              sp = { x: source.displayX + source.width / 2 - 15, y: source.displayY };
-              tp = { x: source.displayX + source.width / 2 + 15, y: source.displayY };
-            } else if (source.nodeType === 'junction' && target.nodeType !== 'junction') {
-              sp = getJunctionEdgePoint(getCenter(source), getCenter(target));
-              tp = getEdgePoint(getBox(target), getBox(source));
-            } else if (source.nodeType !== 'junction' && target.nodeType === 'junction') {
-              sp = getEdgePoint(getBox(source), getBox(target));
-              tp = getJunctionEdgePoint(getCenter(target), getCenter(source));
-            } else if (source.nodeType === 'junction' && target.nodeType === 'junction') {
-              sp = getJunctionEdgePoint(getCenter(source), getCenter(target));
-              tp = getJunctionEdgePoint(getCenter(target), getCenter(source));
-            } else {
-              sp = getEdgePoint(getBox(source), getBox(target));
-              tp = getEdgePoint(getBox(target), getBox(source));
-            }
-          }
-        } else if (type === 'req' || type === 'bdd') {
-          if (source && target) {
-            const outList = outEdgeMap.get(source.id) || [e];
-            const inList = inEdgeMap.get(target.id) || [e];
-            const outIdx = Math.max(0, outList.indexOf(e));
-            const inIdx = Math.max(0, inList.indexOf(e));
-
-            if (target.displayY >= source.displayY + source.height) {
-              // Top-to-bottom hierarchy: spread ports along source bottom and target top
-              const spX = source.displayX + (source.width / (outList.length + 1)) * (outIdx + 1);
-              const spY = source.displayY + source.height;
-              const tpX = target.displayX + (target.width / (inList.length + 1)) * (inIdx + 1);
-              const tpY = target.displayY;
-              sp = { x: spX, y: spY };
-              tp = { x: tpX, y: tpY };
-            } else {
-              sp = getEdgePoint(getBox(source), getBox(target));
-              tp = getEdgePoint(getBox(target), getBox(source));
-            }
-          }
-        } else {
-          if (source && target) {
-            sp = getEdgePoint(getBox(source), getBox(target));
-            tp = getEdgePoint(getBox(target), getBox(source));
-          }
-        }
-
-        if (sp && tp) {
-          let strokeColor = '#333';
-          let strokeDash = '';
-          let middleLabel = '';
-          let markerStart = '';
-          let markerEnd = '';
-
-          let cp: Point | undefined = undefined;
-
-          if (type === 'ibd') {
-            if (e.itemFlow) middleLabel = `«${e.itemFlow}»`;
-            strokeColor = '#333';
-            markerEnd = `url(#m-arrow-filled-${type})`;
-          } else if (type === 'statemachine') {
-            markerEnd = `url(#m-arrow-filled-${type})`;
-            strokeColor = '#333';
-            if (e.isInternal) middleLabel = `«local» `;
-            if (e.condition && e.condition !== 'true') middleLabel += `[${e.condition}]`;
-            else if (e.afterTicks) middleLabel += `after(${e.afterTicks})`;
-
-            if (e.action) middleLabel += (middleLabel ? ` / ` : ``) + e.action;
-
-            cp = e.controlPoint || {
-              x: (sp.x + tp.x) / 2 + (tp.y - sp.y) * 0.3,
-              y: (sp.y + tp.y) / 2 + (sp.x - tp.x) * 0.3,
-            };
-          } else {
-            const relType = e.type;
-            if (relType === 'composition') {
-              markerStart = `url(#m-diamond-fill-${type})`;
-            } else if (relType === 'requirementContainment') {
-              markerStart = `url(#requirement-containment-crosshair)`;
-              middleLabel = '«contains»';
-              strokeColor = '#546e7a';
-            } else if (relType === 'aggregation') {
-              markerStart = `url(#m-diamond-${type})`;
-            } else if (relType === 'generalization') {
-              markerEnd = `url(#m-triangle-${type})`;
-            } else if (['derive', 'deriveReqt', 'refine', 'satisfy', 'verify', 'trace', 'copy'].includes(relType)) {
-              strokeDash = '4,2';
-              middleLabel = `«${relType}»`;
-              markerEnd = `url(#m-arrow-${type})`;
-              strokeColor = '#546e7a';
-            } else if (relType === 'allocation') {
-              strokeDash = '5,5';
-              middleLabel = '«allocate»';
-              markerEnd = `url(#m-arrow-${type})`;
-              strokeColor = '#546e7a';
-            }
-          }
-
-          if (type === 'statemachine' && cp) {
-            const dPath = `M ${sp.x} ${sp.y} Q ${cp.x} ${cp.y} ${tp.x} ${tp.y}`;
-            svg += `<path d="${dPath}" fill="none" stroke="${strokeColor}" stroke-width="1.5" stroke-dasharray="${strokeDash}" marker-end="${markerEnd}" />`;
-          } else if (type === 'ibd') {
-            // Manhattan orthogonal path
-            const midX = (sp.x + tp.x) / 2;
-            const dPath = `M ${sp.x} ${sp.y} L ${midX} ${sp.y} L ${midX} ${tp.y} L ${tp.x} ${tp.y}`;
-            svg += `<path d="${dPath}" fill="none" stroke="${strokeColor}" stroke-width="1.5" marker-end="${markerEnd}" />`;
-          } else if ((type === 'req' || type === 'bdd') && target && source && target.displayY >= source.displayY + source.height) {
-            // Smooth vertical S-curve avoiding crossing through middle nodes
-            const midY = (sp.y + tp.y) / 2;
-            const dPath = `M ${sp.x} ${sp.y} C ${sp.x} ${midY}, ${tp.x} ${midY}, ${tp.x} ${tp.y}`;
-            svg += `<path d="${dPath}" fill="none" stroke="${strokeColor}" stroke-width="1.5" stroke-dasharray="${strokeDash}" marker-start="${markerStart}" marker-end="${markerEnd}" />`;
-          } else {
-            svg += `<line x1="${sp.x}" y1="${sp.y}" x2="${tp.x}" y2="${tp.y}" stroke="${strokeColor}" stroke-width="1.5" stroke-dasharray="${strokeDash}" marker-start="${markerStart}" marker-end="${markerEnd}" />`;
-          }
-
-          if (middleLabel || e.label) {
-            let midX = (sp.x + tp.x) / 2;
-            let midY = (sp.y + tp.y) / 2;
-
-            if (type === 'statemachine' && cp) {
-              midX = cp.x;
-              midY = cp.y - 5;
-            } else if ((type === 'req' || type === 'bdd') && target && source && target.displayY >= source.displayY + source.height) {
-              midX = tp.x;
-              midY = tp.y - 14;
-            }
-
-            const txt = (middleLabel ? middleLabel + ' ' : '') + (e.label || '');
-            const txtW = txt.length * 6.5 + 14;
-            svg += `<rect x="${midX - txtW / 2}" y="${midY - 8}" width="${txtW}" height="15" fill="#ffffff" stroke="#ddd" stroke-width="0.8" rx="3" />`;
-            svg += `<text x="${midX}" y="${midY + 3}" text-anchor="middle" font-size="9" font-weight="600" fill="#f97316" font-family="sans-serif">${escapeHtml(txt)}</text>`;
-          }
-
-          if (type === 'bdd' && (e.sourceMultiplicity || e.targetMultiplicity)) {
-            if (e.sourceMultiplicity) svg += `<text x="${sp.x + (tp.x > sp.x ? 15 : -15)}" y="${sp.y + (tp.y > sp.y ? 15 : -15)}" font-size="10" fill="#000">${escapeHtml(e.sourceMultiplicity)}</text>`;
-            if (e.targetMultiplicity) svg += `<text x="${tp.x + (sp.x > tp.x ? 15 : -15)}" y="${tp.y + (sp.y > tp.y ? 15 : -15)}" font-size="10" fill="#000">${escapeHtml(e.targetMultiplicity)}</text>`;
-          }
-        }
-      });
-
-      svg += `</svg>`;
-      return svg;
-    };
-
-
-    // Helper to generate SVG for HMI
-    const renderHmiSVG = (components: HmiComponent[]) => {
-      if (components.length === 0) return '';
-
-      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-      components.forEach(c => {
-        minX = Math.min(minX, c.x);
-        minY = Math.min(minY, c.y);
-        maxX = Math.max(maxX, c.x + c.width);
-        maxY = Math.max(maxY, c.y + c.height);
-      });
-
-      const padding = 20;
-      const width = Math.max(100, maxX - minX + padding * 2);
-      const height = Math.max(100, maxY - minY + padding * 2);
-      const viewBox = `${minX - padding} ${minY - padding} ${width} ${height}`;
-
-      let svg = `<div style="margin: 20px 0; border: 1px solid #333; padding: 10px; overflow: auto; background: #1a1a1a;">`;
-      svg += `<h3 style="margin-top:0; color:#f97316; font-size:14px;">HMI Visual Design</h3>`;
-      svg += `<svg width="${width}" height="${height}" viewBox="${viewBox}" xmlns="http://www.w3.org/2000/svg" style="font-family: sans-serif; background: #0a0a0a;">`;
-
-      components.forEach(c => {
-        const cx = c.width / 2;
-        const cy = c.height / 2;
-        const highlight = '#f97316';
-
-        svg += `<g transform="translate(${c.x}, ${c.y})">`;
-        svg += `<rect width="${c.width}" height="${c.height}" fill="#1a1a1a" stroke="#333" stroke-width="1" rx="4" />`;
-
-        const themeColors = {
-          orange: '#f97316',
-          green: '#22c55e',
-          red: '#ef4444',
-          blue: '#0284c7',
-          yellow: '#eab308',
-          grey: '#555'
-        };
-
-        if (c.type === 'toggle') {
-          svg += `<rect x="${cx - 20}" y="${cy - 10}" width="40" height="20" rx="10" fill="#333" />`;
-          svg += `<circle cx="${cx - 10}" cy="${cy}" r="8" fill="#fff" />`;
-        } else if (c.type === 'button') {
-          const btnColor = themeColors[c.color || 'orange'] || themeColors.orange;
-          const iconSym = c.icon === 'power' ? '⏻ ' : c.icon === 'play' ? '▶ ' : c.icon === 'light' ? '💡 ' : '';
-          svg += `<rect x="4" y="4" width="${c.width - 8}" height="${c.height - 8}" rx="4" fill="#222" stroke="${btnColor}" stroke-width="1" />`;
-          svg += `<text x="${cx}" y="${cy}" text-anchor="middle" dominant-baseline="middle" fill="${btnColor}" font-size="10">${iconSym}${escapeHtml(c.name)}</text>`;
-        } else if (c.type === 'lamp') {
-          const lampColor = themeColors[c.color || 'green'] || themeColors.green;
-          svg += `<circle cx="${cx}" cy="${cy}" r="15" fill="#222" stroke="${lampColor}" stroke-width="2" />`;
-        } else if (c.type === 'led') {
-          const ledColor = themeColors[c.color || 'red'] || themeColors.red;
-          svg += `<circle cx="${cx}" cy="${cy}" r="6" fill="${ledColor}" />`;
-        } else if (c.type === 'slider') {
-          svg += `<line x1="10" y1="${cy}" x2="${c.width - 10}" y2="${cy}" stroke="#555" stroke-width="4" stroke-linecap="round" />`;
-          svg += `<circle cx="${cx}" cy="${cy}" r="8" fill="${highlight}" />`;
-        } else if (c.type === 'input') {
-          svg += `<rect x="4" y="${cy - 10}" width="${c.width - 8}" height="20" fill="#0a0a0a" stroke="#333" />`;
-          svg += `<text x="${c.width - 10}" y="${cy}" text-anchor="end" dominant-baseline="middle" fill="${highlight}" font-family="monospace" font-size="10">0</text>`;
-        } else if (c.type === 'lcd') {
-          svg += `<rect x="4" y="4" width="${c.width - 8}" height="${c.height - 8}" fill="#0a0a0a" stroke="#333" />`;
-          svg += `<text x="${c.width - 10}" y="${cy}" text-anchor="end" dominant-baseline="middle" fill="#4ade80" font-family="monospace" font-size="14">0.00</text>`;
-        } else if (c.type === 'gauge') {
-          svg += `<path d="M 10 ${c.height - 10} A ${c.width / 2 - 10} ${c.width / 2 - 10} 0 0 1 ${c.width - 10} ${c.height - 10}" fill="none" stroke="#333" stroke-width="6" />`;
-        } else if (c.type === 'rotary' || c.type === 'hybrid-rotary') {
-          svg += `<circle cx="${cx}" cy="${cy}" r="${Math.min(c.width, c.height) / 2 - 10}" fill="#222" stroke="#1a1a1a" stroke-width="2" />`;
-          svg += `<line x1="${cx}" y1="${cy}" x2="${cx}" y2="${cy - (Math.min(c.width, c.height) / 2 - 15)}" stroke="${highlight}" stroke-width="2" transform="rotate(-135, ${cx}, ${cy})" />`;
-        } else if (c.type === 'buzzer') {
-          svg += `<path d="M${cx - 8} ${cy - 8} h4 l4 -4 v24 l-4 -4 h-4 z" fill="#444" />`;
-        } else if (c.type === 'oled') {
-          const customModeList = c.oledModeNames
-            ? c.oledModeNames.split(',').map(s => s.trim())
-            : [
-                'AIR FRYER', 'STEAMER', 'OVEN', 'RAPID STEAM', 'BROIL', 'REHEAT',
-                'KEEP WARM', 'FERMENT', 'DEFROST', 'SLOW COOK', 'DEHYDRATE', 'DUO COOK'
-              ];
-          const modeText = customModeList[0] || 'READY';
-          let indicatorsStr = '💧 🔥 🌀 💡 ⚡';
-          if (Array.isArray(c.oledIndicatorEmojis) && c.oledIndicatorEmojis.length > 0) {
-            indicatorsStr = c.oledIndicatorEmojis.join(' ');
-          }
-          const titleText = (c.oledTitle || c.name).toUpperCase();
-
-          svg += `<rect x="4" y="4" width="${c.width - 8}" height="${c.height - 8}" fill="#000" stroke="#222" stroke-width="2" rx="6" />`;
-          svg += `<text x="12" y="20" fill="#4d7aaa" font-size="8" font-family="monospace">${escapeHtml(titleText)}</text>`;
-          svg += `<text x="${c.width - 12}" y="20" text-anchor="end" fill="#3de88a" font-size="8" font-family="monospace" font-weight="bold">${escapeHtml(modeText)}</text>`;
-          svg += `<text x="12" y="45" fill="#4db8ff" font-size="18" font-family="monospace" font-weight="bold">200°C</text>`;
-          svg += `<rect x="12" y="55" width="${c.width - 24}" height="3" fill="#111" rx="1" />`;
-          svg += `<rect x="12" y="55" width="${(c.width - 24) * 0.4}" height="3" fill="#3de88a" rx="1" />`;
-          svg += `<text x="12" y="75" fill="#4db8ff" font-size="10" font-family="monospace">30:00</text>`;
-          svg += `<text x="${c.width - 12}" y="75" text-anchor="end" fill="#3de88a" font-size="8" font-family="monospace">HOME</text>`;
-          svg += `<text x="12" y="95" fill="#335577" font-size="7" font-family="monospace">${escapeHtml(indicatorsStr)}</text>`;
-        } else if (c.type === 'mode-icon') {
-          svg += `<rect x="4" y="4" width="${c.width - 8}" height="${c.height - 8}" fill="#1a1a20" stroke="#333" rx="4" />`;
-          svg += `<text x="${cx}" y="${cy - 4}" text-anchor="middle" font-size="14">${escapeHtml(c.iconEmoji || '✨')}</text>`;
-          svg += `<text x="${cx}" y="${cy + 12}" text-anchor="middle" font-size="7" fill="#ccc">${escapeHtml(c.name)}</text>`;
-        } else if (c.type === 'encoder') {
-          const isHybrid = Array.isArray(c.encoderValues) && c.encoderValues.length > 0;
-          const displayVal = isHybrid ? (c.encoderValues?.[0] || '0') : '0';
-
-          svg += `<circle cx="${cx}" cy="${cy - 15}" r="30" fill="#2a2a36" stroke="#333340" stroke-width="2" />`;
-          svg += `<circle cx="${cx}" cy="${cy - 35}" r="3.5" fill="#f97316" />`;
-          svg += `<circle cx="${cx}" cy="${cy - 15}" r="15" fill="#0d0d10" stroke="#222230" />`;
-          svg += `<rect x="${cx - 25}" y="${c.height - 25}" width="20" height="12" rx="2" fill="#222" stroke="#333" />`;
-          svg += `<text x="${cx - 15}" y="${c.height - 17}" text-anchor="middle" fill="#888" font-size="8">↺</text>`;
-          svg += `<rect x="${cx + 5}" y="${c.height - 25}" width="20" height="12" rx="2" fill="#222" stroke="#333" />`;
-          svg += `<text x="${cx + 15}" y="${c.height - 17}" text-anchor="middle" fill="#888" font-size="8">↻</text>`;
-          svg += `<text x="${cx}" y="${cy + 25}" text-anchor="middle" fill="#555" font-family="monospace" font-size="7">${escapeHtml(displayVal)}</text>`;
-        } else if (c.type === 'mode-selector') {
-          svg += `<rect x="4" y="4" width="${c.width - 8}" height="${c.height - 8}" fill="#111" stroke="#222" rx="4" />`;
-          svg += `<text x="10" y="16" fill="#555" font-size="7" font-family="sans-serif" font-weight="bold">COOKING MODES</text>`;
-          svg += `<rect x="10" y="24" width="24" height="24" rx="2" fill="#f97316" fill-opacity="0.1" stroke="#f97316" stroke-width="1" />`;
-          svg += `<text x="22" y="40" text-anchor="middle" font-size="12">🍟</text>`;
-          svg += `<rect x="40" y="24" width="24" height="24" rx="2" fill="#1a1a20" stroke="#222" stroke-width="1" />`;
-          svg += `<text x="52" y="40" text-anchor="middle" font-size="12">💧</text>`;
-          svg += `<rect x="70" y="24" width="24" height="24" rx="2" fill="#1a1a20" stroke="#222" stroke-width="1" />`;
-          svg += `<text x="82" y="40" text-anchor="middle" font-size="12">🍞</text>`;
-          svg += `<rect x="100" y="24" width="24" height="24" rx="2" fill="#4db8ff" fill-opacity="0.1" stroke="#4db8ff" stroke-width="1" />`;
-          svg += `<text x="112" y="40" text-anchor="middle" font-size="12">♨️</text>`;
-          svg += `<text x="135" y="40" fill="#444" font-size="10">...</text>`;
-        }
-
-        svg += `<text x="${cx}" y="${c.height - 4}" text-anchor="middle" font-size="8" fill="#888">${escapeHtml(c.name)}</text>`;
-        svg += `</g>`;
-      });
-
-      svg += `</svg></div>`;
-      return svg;
-    };
-
-    // 1. Requirements
-    const reqs = hierarchySource.blocks.filter(b => b.stereotype === 'requirement');
-    if (reqs.length > 0) {
-      html += `<h2>1. Requirements</h2>`;
-      html += renderRequirementsDiagram({ blocks: hierarchySource.blocks, relationships: hierarchySource.relationships });
-
-      html += `<table style="width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 0.9em;">`;
-      html += `<tr style="background-color: #f5f5f5; text-align: left; color: #333;">
-                <th style="padding: 10px; border: 1px solid #ddd;">ID</th>
-                <th style="padding: 10px; border: 1px solid #ddd;">Name</th>
-                <th style="padding: 10px; border: 1px solid #ddd;">Status</th>
-                <th style="padding: 10px; border: 1px solid #ddd;">Priority</th>
-                <th style="padding: 10px; border: 1px solid #ddd;">Assigned To</th>
-                <th style="padding: 10px; border: 1px solid #ddd;">Description</th>
-              </tr>`;
-
-      // Build hierarchy map
-      const childrenMap = new Map<string, string[]>();
-      const parentSet = new Set<string>();
-
-      hierarchySource.relationships.forEach(rel => {
-        const source = hierarchySource.blocks.find(b => b.id === rel.sourceId);
-        const target = hierarchySource.blocks.find(b => b.id === rel.targetId);
-        if (source?.stereotype === 'requirement' && target?.stereotype === 'requirement') {
-          // Only use specific SysML relationships for parent-child nesting, matching the Traceability Matrix
-          if (rel.type === 'requirementContainment' || rel.type === 'composition' || rel.type === 'derive' || rel.type === 'deriveReqt') {
-            if (!childrenMap.has(rel.sourceId)) childrenMap.set(rel.sourceId, []);
-            childrenMap.get(rel.sourceId)!.push(rel.targetId);
-            parentSet.add(rel.targetId);
-          }
-        }
-      });
-
-      // Roots are requirements that are not children of any other requirement
-      const roots = reqs.filter(r => !parentSet.has(r.id));
-
-      // Recursive render function for table rows
-      const renderReqRow = (r: BlockData, level: number) => {
-        const prefix = '&nbsp;&nbsp;&nbsp;&nbsp;'.repeat(level) + (level > 0 ? '└ ' : '');
-        let rowHtml = `<tr>
-          <td style="padding: 10px; border: 1px solid #ddd; font-family: monospace; color: #888;">${escapeHtml(r.reqId || '')}</td>
-          <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">${prefix}${escapeHtml(r.name)}</td>
-          <td style="padding: 10px; border: 1px solid #ddd;">${escapeHtml(r.status || 'Draft')}</td>
-          <td style="padding: 10px; border: 1px solid #ddd;">${escapeHtml(r.priority || 'Medium')}</td>
-          <td style="padding: 10px; border: 1px solid #ddd;">${escapeHtml(r.assignedTo || 'Unassigned')}</td>
-          <td style="padding: 10px; border: 1px solid #ddd;">${escapeHtml(r.description || '')}</td>
-        </tr>`;
-
-        const children = childrenMap.get(r.id) || [];
-        children.forEach(childId => {
-          const child = reqs.find(x => x.id === childId);
-          if (child) {
-            rowHtml += renderReqRow(child, level + 1);
-          }
-        });
-        return rowHtml;
-      };
-
-      if (roots.length === 0 && reqs.length > 0) {
-        // Fallback if circular or no explicit roots found
-        reqs.forEach((r) => {
-          html += renderReqRow(r, 0);
-        });
-      } else {
-        roots.forEach((r) => {
-          html += renderReqRow(r, 0);
-        });
-      }
-
-      html += `</table>`;
-    }
-
-    // 2. BDD
-    const bddBlocks = hierarchySource.blocks.filter(b => {
-      if (b.stereotype === 'requirement') return false;
-      return true;
-    });
-
-    if (bddBlocks.length > 0) {
-      html += `<h2>2. System Architecture (BDD)</h2>`;
-      html += renderBddDiagram({
-        blocks: hierarchySource.blocks,
-        relationships: hierarchySource.relationships,
-        parts: hierarchySource.parts,
-        containerId: 'adia-diagram-hierarchy',
-      });
-      html += `<div class="tree">`;
-      bddBlocks.forEach(b => {
-        html += `<div class="item">
-                <div class="item-header">«${escapeHtml(b.stereotype)}» ${escapeHtml(b.name)}</div>`;
-        if (b.properties && b.properties.length > 0) {
-          html += `<div class="props"><strong>Properties:</strong><ul>`;
-          b.properties.forEach(p => html += `<li>${escapeHtml(p.name)}: ${escapeHtml(p.type)} ${p.defaultValue ? '= ' + escapeHtml(p.defaultValue) : ''}</li>`);
-          html += `</ul></div>`;
-        }
-        if (b.ports && b.ports.length > 0) {
-          html += `<div class="props"><strong>Ports:</strong><ul>`;
-          b.ports.forEach(p => html += `<li>${escapeHtml(p.name)} : ${escapeHtml(p.type)} (${escapeHtml(p.kind || 'standard')})</li>`);
-          html += `</ul></div>`;
-        }
-        html += `</div>`;
-      });
-      html += `</div>`;
-    }
-
-    // 3. IBD
-    // 3. IBD
-    if (hierarchySource.parts.length > 0) {
-      html += `<h2>3. Internal Structure (IBD)</h2>`;
-      html += renderInteractiveDiagramHierarchy(hierarchySource, { title: projectName });
-
-      // Generate context listings
-      const contextIds = Array.from(new Set(hierarchySource.parts.map(p => p.blockId).filter(id => id !== null))) as string[];
-      contextIds.forEach(ctxId => {
-        const ctxBlock = hierarchySource.blocks.find(b => b.id === ctxId);
-        const ctxName = ctxBlock ? ctxBlock.name : (ctxId === 'root' ? 'Root' : 'Unknown');
-        const ctxParts = hierarchySource.parts.filter(p => p.blockId === ctxId);
-        const ctxConns = hierarchySource.connectors.filter(c => {
-          const s = hierarchySource.parts.find(p => p.id === c.sourcePartId);
-          const t = hierarchySource.parts.find(p => p.id === c.targetPartId);
-
-          // Connectors in this context block
-          const sInCtx = s && s.blockId === ctxId;
-          const tInCtx = t && t.blockId === ctxId;
-
-          // Or environment connectors linked to this context block ports
-          const isEnvSource = !c.sourcePartId && t && t.blockId === ctxId;
-          const isEnvTarget = !c.targetPartId && s && s.blockId === ctxId;
-
-          return sInCtx || tInCtx || isEnvSource || isEnvTarget;
-        });
-
-        if (ctxParts.length > 0) {
-          html += `<div class="tree" style="margin-bottom: 30px;">`;
-          html += `<h3>Context: ${escapeHtml(ctxName)}</h3>`;
-
-          // Parts list for this context
-          html += `<div class="props"><strong>Parts:</strong><ul>`;
-          ctxParts.forEach(p => {
-            const typeName = hierarchySource.blocks.find(b => b.id === p.typeId)?.name || 'Unknown';
-            html += `<li>${escapeHtml(p.name)} : ${escapeHtml(typeName)}</li>`;
-          });
-          html += `</ul></div>`;
-
-          // Connectors list for this context
-          if (ctxConns.length > 0) {
-            html += `<div class="props"><strong>Connections:</strong><ul>`;
-            ctxConns.forEach(c => {
-              const sPart = hierarchySource.parts.find(p => p.id === c.sourcePartId)?.name || 'Env';
-              const tPart = hierarchySource.parts.find(p => p.id === c.targetPartId)?.name || 'Env';
-
-              const sBlock = hierarchySource.parts.find(p => p.id === c.sourcePartId)
-                ? hierarchySource.blocks.find(b => b.id === (hierarchySource.parts.find(p => p.id === c.sourcePartId)?.typeId))
-                : ctxBlock;
-              const tBlock = hierarchySource.parts.find(p => p.id === c.targetPartId)
-                ? hierarchySource.blocks.find(b => b.id === (hierarchySource.parts.find(p => p.id === c.targetPartId)?.typeId))
-                : ctxBlock;
-
-              const sPortName = c.sourcePortId ? sysmlObjectLabel(sBlock?.ports?.find((p: any) => p.id === c.sourcePortId), 'Port') : '';
-              const tPortName = c.targetPortId ? sysmlObjectLabel(tBlock?.ports?.find((p: any) => p.id === c.targetPortId), 'Port') : '';
-
-              const sDesc = sPart + (sPortName ? `.${sPortName}` : '');
-              const tDesc = tPart + (tPortName ? `.${tPortName}` : '');
-
-              html += `<li><span class="tag">Conn</span> ${escapeHtml(sDesc)} &harr; ${escapeHtml(tDesc)} ${c.itemFlow ? '(' + escapeHtml(c.itemFlow) + ')' : ''}</li>`;
-            });
-            html += `</ul></div>`;
-          }
-          html += `</div>`;
-        }
-      });
-    }
-
-    // 4. State Machine
     if (hierarchySource.states.length > 0) {
-      html += `<h2>4. State Machine</h2><div class="tree">`;
-
-      const smFigures = renderStateMachineDiagrams({
-        layers: hierarchySource.layers,
-        states: hierarchySource.states,
-        junctions: hierarchySource.junctions,
-        transitions: hierarchySource.transitions,
-      });
-      smFigures.forEach(fig => {
-        html += fig;
-      });
-
-      hierarchySource.states.forEach(s => {
-        html += `<div class="item"><div class="item-header">${escapeHtml(s.name)} <span class="tag">State</span></div>`;
-        const outgoing = hierarchySource.transitions.filter(t => t.sourceId === s.id);
-        const internal = (s.internalTransitions || '').split('\n').filter(l => l.trim());
-        if (outgoing.length > 0 || internal.length > 0) {
-          html += `<div class="props"><strong>Transitions:</strong><ul>`;
-          outgoing.forEach(t => {
-            const target = hierarchySource.states.find(st => st.id === t.targetId)?.name || hierarchySource.junctions.find(j => j.id === t.targetId)?.name || 'Unknown';
-            html += `<li>To <strong>${escapeHtml(target)}</strong>: [${escapeHtml(t.condition || 'true')}]${t.action ? ' / ' + escapeHtml(t.action) : ''}</li>`;
-          });
-          internal.forEach(i => {
-            const safeI = escapeHtml(i);
-            html += `<li><strong>Internal:</strong> ${safeI}</li>`;
-          });
-          html += `</ul></div>`;
-        }
-        html += `</div>`;
-      });
-      html += `</div>`;
-
-      // 4.1 Critical Path Analysis (Critical Batches)
       const analysis = analyzeStateMachine({
         tickMs,
         states: hierarchySource.states as StateData[],
@@ -13518,137 +11617,44 @@ const ADIA = () => {
         layers: hierarchySource.layers as Layer[],
         safetyMode,
       });
-      const analysisErrors = analysis.diagnostics.filter(
-        diagnostic => diagnostic.severity === 'error',
-      );
-
-      if (analysisErrors.length > 0) {
-        html += `<h2>4.0 Semantic Analysis Diagnostics</h2><div class="tree">`;
-        html += `<p style="color: #b91c1c; font-weight: bold;">Semantic analysis was not completed because the model is invalid. The sections below are not verification evidence.</p><ul>`;
-        analysisErrors.forEach(diagnostic => {
-          html += `<li><strong>${escapeHtml(diagnostic.code)}</strong>: ${escapeHtml(diagnostic.message)}</li>`;
-        });
-        html += `</ul></div>`;
-      }
-
-      html += `<h2>4.1 Critical Path Analysis</h2><div class="tree">`;
-      html += `<p>The execution path analysis evaluates the longest and most complex functional routes (critical batches) through the state machine.</p>`;
-      if (analysis.criticalPaths.length > 0) {
-        html += `<table>
-                  <tr style="background-color: #f5f5f5; text-align: left; color: #333;">
-                    <th style="padding: 10px; border: 1px solid #ddd;">ID</th>
-                    <th style="padding: 10px; border: 1px solid #ddd;">Name</th>
-                    <th style="padding: 10px; border: 1px solid #ddd;">Execution Sequence</th>
-                    <th style="padding: 10px; border: 1px solid #ddd; text-align: center;">Complexity</th>
-                  </tr>`;
-        analysis.criticalPaths.forEach(cp => {
-          html += `<tr>
-                    <td style="padding: 10px; border: 1px solid #ddd; font-family: monospace; font-weight: bold; color: #f97316;">${escapeHtml(cp.id)}</td>
-                    <td style="padding: 10px; border: 1px solid #ddd;"><strong>${escapeHtml(cp.name)}</strong><br/><small style="color: #666;">${escapeHtml(cp.description)}</small></td>
-                    <td style="padding: 10px; border: 1px solid #ddd; font-family: monospace; font-size: 0.95em;">${cp.states.map(s => `<span class="tag">${escapeHtml(s)}</span>`).join(' &rarr; ')}</td>
-                    <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold; text-align: center;">${escapeHtml(cp.complexity)}</td>
-                  </tr>`;
-        });
-        html += `</table>`;
-      } else if (analysisErrors.length > 0) {
-        html += `<p><em>Critical-path analysis was not run because semantic validation failed.</em></p>`;
-      } else {
-        html += `<p><em>No critical paths identified. Check if an autostart state is configured.</em></p>`;
-      }
-      html += `</div>`;
-
-      // 4.2 Corner Case & Behavior Analysis
-      html += `<h2>4.2 Corner Case & Behavior Analysis</h2><div class="tree">`;
-      html += `<p>Systematic audit of risk-prone states, deadlock conditions, race risks, and boundaries in the designed logic.</p>`;
-      if (analysis.cornerCases.length > 0) {
-        html += `<table>
-                  <tr style="background-color: #f5f5f5; text-align: left; color: #333;">
-                    <th style="padding: 10px; border: 1px solid #ddd;">ID</th>
-                    <th style="padding: 10px; border: 1px solid #ddd;">Category</th>
-                    <th style="padding: 10px; border: 1px solid #ddd;">Severity</th>
-                    <th style="padding: 10px; border: 1px solid #ddd;">Element</th>
-                    <th style="padding: 10px; border: 1px solid #ddd;">Description</th>
-                    <th style="padding: 10px; border: 1px solid #ddd;">Recommendation</th>
-                  </tr>`;
-        analysis.cornerCases.forEach(cc => {
-          const badgeClass = cc.severity === 'critical' ? 'badge-critical' : cc.severity === 'warning' ? 'badge-warning' : 'badge-info';
-          html += `<tr>
-                    <td style="padding: 10px; border: 1px solid #ddd; font-family: monospace; font-weight: bold;">${escapeHtml(cc.id)}</td>
-                    <td style="padding: 10px; border: 1px solid #ddd; font-family: monospace; font-weight: bold;">${escapeHtml(cc.category)}</td>
-                    <td style="padding: 10px; border: 1px solid #ddd;"><span class="badge ${badgeClass}">${escapeHtml(cc.severity.toUpperCase())}</span></td>
-                    <td style="padding: 10px; border: 1px solid #ddd;"><strong>${escapeHtml(cc.elementName)}</strong></td>
-                    <td style="padding: 10px; border: 1px solid #ddd;">${escapeHtml(cc.description)}</td>
-                    <td style="padding: 10px; border: 1px solid #ddd;"><span style="color: #3b82f6; font-weight: 500;">${escapeHtml(cc.recommendation)}</span></td>
-                  </tr>`;
-        });
-        html += `</table>`;
-      } else if (analysisErrors.length > 0) {
-        html += `<p style="color: #b91c1c; font-weight: bold;">Corner-case analysis was not run because semantic validation failed.</p>`;
-      } else {
-        html += `<p style="color: #15803d; font-weight: bold;">&check; The validated semantic model has no structurally detected deadlocks, unreachable states, or unconditional loops. Runtime and target verification remain separate evidence gates.</p>`;
-      }
-      html += `</div>`;
-
-      // 4.3 Test Scenario Matrix
-      html += `<h2>4.3 Test Scenario Matrix</h2><div class="tree">`;
-      html += analysisErrors.length > 0
-        ? `<p style="color: #b91c1c; font-weight: bold;">No test scenarios were derived because semantic validation failed.</p>`
-        : `<p>Structurally derived test scenarios for critical paths and detected corner cases. Execute them in host, differential, embedded, and target-hardware gates before treating them as runtime evidence.</p>`;
-
-      analysis.testScenarios.forEach(ts => {
-        html += `<div class="item" style="border: 1px solid #e5e7eb; border-radius: 6px; padding: 15px; margin-bottom: 20px; background-color: #fafafa;">
-                  <div class="item-header" style="font-size: 1.1em; color: #1e293b; border-bottom: 1px solid #e5e7eb; padding-bottom: 6px; margin-bottom: 10px;">
-                    <span class="tag" style="background-color: #f97316; color: #fff;">${escapeHtml(ts.category.toUpperCase())}</span> ${escapeHtml(ts.name)} <span style="font-family: monospace; font-size: 0.9em; color: #64748b; float: right;">${escapeHtml(ts.id)}</span>
-                  </div>`;
-
-        if (ts.preconditions.length > 0) {
-          html += `<div class="props" style="margin-bottom: 10px;">
-                    <strong>Preconditions:</strong>
-                    <ul style="margin: 4px 0; padding-left: 20px; font-size: 0.95em;">
-                      ${ts.preconditions.map(p => `<li>${escapeHtml(p)}</li>`).join('')}
-                    </ul>
-                  </div>`;
-        }
-
-        html += `<strong>Steps:</strong>
-                <table style="width: 100%; border-collapse: collapse; margin-top: 8px; margin-bottom: 10px; font-size: 0.85em; background-color: #fff;">
-                  <tr style="background-color: #f1f5f9; text-align: left;">
-                    <th style="width: 8%; padding: 6px; border: 1px solid #cbd5e1; text-align: center;">Step</th>
-                    <th style="width: 52%; padding: 6px; border: 1px solid #cbd5e1;">Action / Input Stimulus</th>
-                    <th style="width: 40%; padding: 6px; border: 1px solid #cbd5e1;">Expected Transition / Output State</th>
-                  </tr>`;
-        ts.steps.forEach((step, index) => {
-          html += `<tr>
-                    <td style="padding: 6px; border: 1px solid #cbd5e1; text-align: center; font-weight: bold;">${index + 1}</td>
-                    <td style="padding: 6px; border: 1px solid #cbd5e1; font-family: monospace;">${escapeHtml(step.action)}</td>
-                    <td style="padding: 6px; border: 1px solid #cbd5e1;">${escapeHtml(step.expected)}</td>
-                  </tr>`;
-        });
-        html += `</table>`;
-
-        html += `<div class="props" style="background-color: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; padding: 8px; border-radius: 4px; font-size: 0.9em;">
-                  <strong>Expected Outcome:</strong> ${escapeHtml(ts.expectedResult)}
-                </div>`;
-        html += `</div>`;
-      });
-      html += `</div>`;
+      extraSections.push({ id: 'state-machine-analysis', title: 'State Machine Analysis', html: renderStateMachineAnalysisHtml(analysis) });
     }
 
-    // 5. HMI
+    // Helper to generate SVG for HMI
+    const renderHmiSVG = (components: HmiComponent[]) => {
+      if (components.length === 0) return '';
+
+      const positioned = resolveHmiReportComponents(components);
+      const minX = Math.min(0, ...positioned.map(c => c.x));
+      const minY = Math.min(0, ...positioned.map(c => c.y));
+      const width = Math.max(100, ...positioned.map(c => c.x + c.width)) - minX + 40;
+      const height = Math.max(100, ...positioned.map(c => c.y + c.height)) - minY + 40;
+      let svg = `<div class="hmi-reference"><svg width="${width}" height="${height}" viewBox="${minX - 20} ${minY - 20} ${width} ${height}" xmlns="http://www.w3.org/2000/svg" style="color:var(--text-primary,#182231);font-family: sans-serif;">`;
+      const values = Object.fromEntries(variables.map(v => [v.id, v.currentValue]));
+      positioned.forEach(c => {
+        svg += `<g transform="translate(${c.x}, ${c.y})">${renderHmiWidgetSvg(c, values, { activeStateIds: Object.values(activeStates) })}</g>`;
+      });
+
+      svg += `</svg></div>`;
+      return svg;
+    };
+
+    // HMI design (static picture of the configured components)
     if (hmiComponents.length > 0) {
-      html += `<h2>5. HMI Design</h2><div class="tree">`;
-      html += renderHmiSVG(hmiComponents);
+      let hmiHtml = `<div class="hmi-design">`;
+      hmiHtml += renderHmiSVG(hmiComponents);
       hmiComponents.forEach(c => {
         const boundVariableName = variables.find(v => v.id === c.variableId)?.name || 'Unbound';
-        html += `<div class="item"><div class="item-header">${escapeHtml(c.name)} <span class="tag">${escapeHtml(c.type)}</span></div><div class="props">Bound to: <strong>${escapeHtml(boundVariableName)}</strong></div></div>`;
+        hmiHtml += `<div class="item"><div class="item-header">${escapeHtml(c.name)} <span class="tag">${escapeHtml(c.type)}</span></div><div class="props">Bound to: <strong>${escapeHtml(boundVariableName)}</strong></div></div>`;
       });
-      html += `</div>`;
+      hmiHtml += `</div>`;
+      extraSections.push({ id: 'hmi-design', title: 'HMI Design', html: hmiHtml });
     }
 
     // 6. Interactive System Prototype
     if (hmiComponents.length > 0) {
-      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-      hmiComponents.forEach(c => {
+      let minX = 0, minY = 0, maxX = 0, maxY = 0;
+      resolveHmiReportComponents(hmiComponents).forEach(c => {
         minX = Math.min(minX, c.x);
         minY = Math.min(minY, c.y);
         maxX = Math.max(maxX, c.x + c.width);
@@ -13671,6 +11677,7 @@ const ADIA = () => {
 
       // Serialize presentation data separately from the authoritative model.
       const serializedVariables = variables.map(v => ({
+        ...v,
         id: v.id,
         name: v.name,
         type: v.type,
@@ -13684,186 +11691,10 @@ const ADIA = () => {
         parentId: s.parentId
       }));
 
-      const serializedHmiComponents = hmiComponents.map(c => ({
-        id: c.id,
-        name: c.name,
-        type: c.type,
-        variableId: c.variableId,
-        pressVariableId: c.pressVariableId,
-        color: c.color,
-        icon: c.icon,
-        encoderValues: c.encoderValues,
-        cursorVariableId: c.cursorVariableId,
-        iconEmoji: c.iconEmoji,
-        targetValue: c.targetValue,
-        oledTitle: c.oledTitle,
-        oledModeNames: c.oledModeNames,
-        oledModeVarId: c.oledModeVarId,
-        oledTempVarId: c.oledTempVarId,
-        oledTimeVarId: c.oledTimeVarId,
-        oledStateVarId: c.oledStateVarId,
-        oledProgressVarId: c.oledProgressVarId,
-        oledIndicatorEmojis: c.oledIndicatorEmojis,
-        oledIndicatorVarIds: c.oledIndicatorVarIds,
-        oledIndicatorLabels: c.oledIndicatorLabels,
-        min: c.min,
-        max: c.max,
-        x: c.x,
-        y: c.y,
-        width: c.width,
-        height: c.height
-      }));
+      const serializedHmiComponents = normalizeHmiComponents(hmiComponents);
+      const componentsHtml = renderPortableHmiMarkup(serializedHmiComponents, variables);
 
-      let componentsHtml = '';
-      hmiComponents.forEach(c => {
-        const cx = c.x - (minX - padding);
-        const cy = c.y - (minY - padding);
-        const cw = c.width;
-        const ch = c.height;
-
-        componentsHtml += `<div class="hmi-comp-container" style="left: ${cx}px; top: ${cy}px; width: ${cw}px; height: ${ch}px;" data-id="${c.id}" data-type="${c.type}">`;
-
-        if (c.type === 'toggle') {
-          componentsHtml += `
-            <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%;">
-              <div class="hmi-toggle-track" id="track-${c.id}" onclick="window.ADIA_SIM.toggleClick('${c.id}')">
-                <div class="hmi-toggle-thumb"></div>
-              </div>
-              <span style="font-size: 8px; color: #888; margin-top: 4px; text-align: center; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${c.name}</span>
-            </div>`;
-        } else if (c.type === 'button') {
-          const btnColor = c.color === 'green' ? '#22c55e' : c.color === 'red' ? '#ef4444' : c.color === 'blue' ? '#0284c7' : c.color === 'yellow' ? '#eab308' : c.color === 'grey' ? '#555' : '#f97316';
-          const iconSym = c.icon === 'power' ? '⏻ ' : c.icon === 'play' ? '▶ ' : c.icon === 'light' ? '💡 ' : '';
-          componentsHtml += `
-            <button class="hmi-btn" id="btn-${c.id}" onmousedown="window.ADIA_SIM.buttonPress('${c.id}', true)" onmouseup="window.ADIA_SIM.buttonPress('${c.id}', false)" onmouseleave="window.ADIA_SIM.buttonPress('${c.id}', false)" style="--btn-color: ${btnColor}">
-              ${iconSym}${c.name}
-            </button>`;
-        } else if (c.type === 'lamp') {
-          const lampColor = c.color === 'green' ? '#22c55e' : c.color === 'red' ? '#ef4444' : c.color === 'blue' ? '#0284c7' : c.color === 'yellow' ? '#eab308' : c.color === 'grey' ? '#555' : '#22c55e';
-          componentsHtml += `
-            <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%;">
-              <div class="hmi-lamp-circle" id="lamp-${c.id}" style="--glow-color: ${lampColor}; border-color: ${lampColor}"></div>
-              <span style="font-size: 8px; color: #888; margin-top: 4px; text-align: center; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${c.name}</span>
-            </div>`;
-        } else if (c.type === 'led') {
-          const ledColor = c.color === 'green' ? '#22c55e' : c.color === 'red' ? '#ef4444' : c.color === 'blue' ? '#0284c7' : c.color === 'yellow' ? '#eab308' : c.color === 'grey' ? '#555' : '#ef4444';
-          componentsHtml += `
-            <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%;">
-              <div class="hmi-led-circle" id="led-${c.id}" style="--led-color: ${ledColor}"></div>
-              <span style="font-size: 8px; color: #888; margin-top: 4px; text-align: center; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${c.name}</span>
-            </div>`;
-        } else if (c.type === 'slider') {
-          componentsHtml += `
-            <div style="display: flex; flex-direction: column; justify-content: center; height: 100%; padding: 0 4px;">
-              <input type="range" id="slider-${c.id}" min="${c.min ?? 0}" max="${c.max ?? 100}" oninput="window.ADIA_SIM.sliderChange('${c.id}', this.value)" style="width: 100%; accent-color: #f97316;" />
-              <span style="font-size: 8px; color: #888; text-align: center; margin-top: 2px; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${c.name}</span>
-            </div>`;
-        } else if (c.type === 'input') {
-          componentsHtml += `
-            <div style="display: flex; flex-direction: column; justify-content: center; height: 100%; padding: 2px;">
-              <input type="number" id="input-${c.id}" min="${c.min ?? 0}" max="${c.max ?? 100}" onchange="window.ADIA_SIM.inputChange('${c.id}', this.value)" style="width: 100%; background: #0a0a0a; border: 1px solid #333; color: #f97316; font-family: monospace; font-size: 10px; text-align: center; border-radius: 4px; padding: 2px;" />
-              <span style="font-size: 8px; color: #888; text-align: center; margin-top: 2px; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${c.name}</span>
-            </div>`;
-        } else if (c.type === 'lcd') {
-          componentsHtml += `
-            <div style="display: flex; flex-direction: column; justify-content: center; height: 100%; background: #0a0a0a; border: 1px solid #333; border-radius: 6px; padding: 4px; box-sizing: border-box;">
-              <div id="lcd-${c.id}" style="font-family: monospace; font-size: 14px; color: #4ade80; text-align: right; text-shadow: 0 0 6px rgba(74,222,128,0.4); overflow: hidden; white-space: nowrap;">0.00</div>
-              <span style="font-size: 7px; color: #555; text-align: left; margin-top: 1px; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${c.name}</span>
-            </div>`;
-        } else if (c.type === 'gauge') {
-          componentsHtml += `
-            <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%;">
-              <svg viewBox="0 0 100 50" style="width: 80%; height: auto;">
-                <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="#333" stroke-width="8" />
-                <path id="gauge-path-${c.id}" d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="#f97316" stroke-width="8" stroke-dasharray="0 126" />
-                <text id="gauge-text-${c.id}" x="50" y="45" text-anchor="middle" fill="#fff" font-size="11" font-family="monospace">0</text>
-              </svg>
-              <span style="font-size: 7px; color: #888; margin-top: 2px; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${c.name}</span>
-            </div>`;
-        } else if (c.type === 'rotary' || c.type === 'hybrid-rotary' || c.type === 'encoder') {
-          const isEncoder = c.type === 'encoder';
-          const innerIcon = isEncoder ? '✦' : '⚙️';
-          componentsHtml += `
-            <div style="display: flex; flex-direction: column; align-items: center; justify-content: space-between; height: 100%; padding: 2px 0;">
-              <div style="display: flex; gap: 4px; margin-bottom: 2px;">
-                <button onclick="window.ADIA_SIM.rotateKnob('${c.id}', -1)" style="width: 20px; height: 14px; background: #222; border: 1px solid #333; border-radius: 4px; color: #888; font-size: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; outline: none;">↺</button>
-                <button onclick="window.ADIA_SIM.rotateKnob('${c.id}', 1)" style="width: 20px; height: 14px; background: #222; border: 1px solid #333; border-radius: 4px; color: #888; font-size: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; outline: none;">↻</button>
-              </div>
-              <div style="position: relative; width: ${ch - 24}px; height: ${ch - 24}px; cursor: pointer;"
-                   onmousedown="window.ADIA_SIM.knobPress('${c.id}', true)"
-                   onmouseup="window.ADIA_SIM.knobPress('${c.id}', false)"
-                   onmouseleave="window.ADIA_SIM.knobPress('${c.id}', false)">
-                <div class="hmi-knob-circle" id="knob-${c.id}">
-                  <div class="hmi-knob-dot"></div>
-                  <div class="hmi-knob-inner">${innerIcon}</div>
-                </div>
-                <div class="knob-lp-ring" id="knob-lp-${c.id}"></div>
-              </div>
-              <div id="knob-val-${c.id}" style="font-family: monospace; font-size: 8px; color: #ccc; margin-top: 1px; width: 100%; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">0</div>
-            </div>`;
-        } else if (c.type === 'oled') {
-          componentsHtml += `
-            <div class="hmi-comp oled" id="oled-${c.id}" style="width: 100%; height: 100%; background: black; border: 1px solid #1a1a22; border-radius: 8px; padding: 6px; flex-direction: column; justify-content: space-between; font-family: monospace; color: #4db8ff; box-shadow: inset 0 0 10px rgba(0,0,0,0.9); display: flex; box-sizing: border-box;">
-              <div style="font-size: 7px; color: #4d7aaa; display: flex; justify-content: space-between; border-bottom: 1px solid #111; padding-bottom: 2px;">
-                <span class="oled-title" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60%;">${c.oledTitle || c.name}</span>
-                <span class="oled-mode" style="color: #3de88a; font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 40%;">READY</span>
-              </div>
-              <div class="oled-temp" style="font-size: 16px; font-weight: bold; color: #4db8ff; margin: 1px 0;">200°C</div>
-              <div style="width: 100%; height: 3px; background: #111; border: 1px solid #222; border-radius: 2px; overflow: hidden; margin: 1px 0;">
-                <div class="oled-progress-bar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #e8a020, #3de88a); transition: width 0.3s;"></div>
-              </div>
-              <div style="display: flex; justify-content: space-between; align-items: center; font-size: 9px; margin: 1px 0;">
-                <span class="oled-time">30:00</span>
-                <span class="oled-state" style="color: #3de88a; border: 1px solid rgba(61,232,138,0.2); border-radius: 2px; padding: 0 3px; font-size: 7px;">HOME</span>
-              </div>
-              <div class="oled-indicators" style="display: flex; gap: 3px; font-size: 10px; border-top: 1px solid #111; padding-top: 2px; height: 14px; overflow: hidden;"></div>
-              <div class="oled-context" style="font-size: 6px; color: #335577; border-top: 1px solid #111; padding-top: 2px; text-align: left; height: 9px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;">Ready to cook</div>
-            </div>`;
-        } else if (c.type === 'mode-icon') {
-          componentsHtml += `
-            <div class="hmi-mode-card" id="modeicon-${c.id}" onclick="window.ADIA_SIM.modeIconClick('${c.id}')" style="width: 100%; height: 100%;">
-              <span style="font-size: 14px;">${c.iconEmoji || '✨'}</span>
-              <span style="font-size: 7px; color: #ccc; margin-top: 2px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 100%;">${c.name}</span>
-            </div>`;
-        } else if (c.type === 'mode-selector') {
-          componentsHtml += `
-            <div class="hmi-comp mode-selector" style="width: 100%; height: 100%; background: #111; border: 1px solid #222; border-radius: 6px; padding: 4px; display: flex; flex-direction: column; justify-content: space-between; box-sizing: border-box;">
-              <div style="font-size: 7px; color: #555; font-weight: bold; text-transform: uppercase;">Cooking Modes</div>
-              <div class="modes-grid" style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 2px; margin-top: 1px;">
-                ${[
-                  { name: 'Air Fry', emoji: '🍟' },
-                  { name: 'Steam', emoji: '💧' },
-                  { name: 'Oven', emoji: '🍞' },
-                  { name: 'Rapid Stm', emoji: '♨️' },
-                  { name: 'Broil', emoji: '🔥' },
-                  { name: 'Reheat', emoji: '🍲' },
-                  { name: 'Warm', emoji: '☕' },
-                  { name: 'Ferment', emoji: '🧫' },
-                  { name: 'Defrost', emoji: '❄️' },
-                  { name: 'Slow Cook', emoji: '🥘' },
-                  { name: 'Dehydrate', emoji: '🌿' },
-                  { name: 'Duo Cook', emoji: '⚡' }
-                ].map((m, idx) => `
-                  <div class="selector-mode-card" id="modeselect-${c.id}-${idx}" onclick="window.ADIA_SIM.modeSelectorClick('${c.id}', ${idx})" style="border: 1px solid #222; background: #1a1a20; border-radius: 3px; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; padding: 1px; transition: all 0.1s;">
-                    <span style="font-size: 8px;">${m.emoji}</span>
-                    <span style="font-size: 5px; color: #888; text-align: center; margin-top: 0.5px; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${m.name.split(' ')[0]}</span>
-                  </div>
-                `).join('')}
-              </div>
-            </div>`;
-        } else if (c.type === 'buzzer') {
-          componentsHtml += `
-            <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%;">
-              <div id="buzzer-${c.id}" style="font-size: 18px; color: #444; transition: all 0.1s;">🔊</div>
-              <span style="font-size: 8px; color: #888; margin-top: 2px; text-align: center; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${c.name}</span>
-            </div>`;
-        }
-
-        componentsHtml += `</div>`;
-      });
-
-      html += `
-        <h2>6. Interactive System Prototype</h2>
+      const prototypeHtml = `
         <div class="hmi-sim-container">
           <style>
             .hmi-sim-container {
@@ -14111,7 +11942,7 @@ const ADIA = () => {
             </div>
           </div>
 
-          <div class="hmi-canvas-wrapper" style="width: ${width}px; height: ${height}px;">
+          <div id="portable-hmi-canvas" class="hmi-canvas-wrapper" style="width: ${width}px; height: ${height}px;">
             ${componentsHtml}
           </div>
 
@@ -14131,7 +11962,9 @@ const ADIA = () => {
 
         <script>
           ${STATE_MACHINE_RUNTIME_BUNDLE}
+          ${getPortableHmiScript()}
           (function() {
+            ${getPortableHmiInputQueueScript()}
             const PROJECT_DATA = {
               model: ${serializeInlineScriptJson(standaloneMigration.model)},
               modelDiagnostics: ${serializeInlineScriptJson(standaloneMigration.diagnostics)},
@@ -14152,6 +11985,38 @@ const ADIA = () => {
             let simTime = 0;
             let lpTimers = {};
             let audioCtx = null;
+            const hmiInputQueue = createHmiInputQueue();
+            let committedSamples = [];
+            let hmiResetVersion = 0;
+            function queueHmiInput(command) {
+              const v = PROJECT_DATA.variables.find(v => v.id === command.variableId);
+              if (!v) return { accepted: false, error: "Missing variable binding." };
+              const parsed = window.ADIAStateMachineRuntime.parseHmiVariableValue(v, command.value);
+              if (!parsed.accepted) return parsed;
+              const component = PROJECT_DATA.hmiComponents.find(c => c.id === command.sourceId);
+              if (component && command.mode !== "release" && ["input", "slider", "vertical-slider", "knob", "encoder", "hybrid-rotary"].includes(component.type)
+                && !(component.encoderValues?.length || component.hybridValues?.length) && v.type !== "bool"
+                && (Number(parsed.value) < (component.min ?? 0) || Number(parsed.value) > (component.max ?? 100))) {
+                return { accepted: false, error: "Input is outside the configured component range." };
+              }
+              const released = command.releaseValue === undefined ? undefined
+                : window.ADIAStateMachineRuntime.parseHmiVariableValue(v, command.releaseValue);
+              if (released && !released.accepted) return released;
+              const accepted = hmiInputQueue.enqueue({ ...command, value: parsed.value, releaseValue: released?.value });
+              return accepted ? { accepted: true } : { accepted: false, error: "Operator input queue is full." };
+            }
+            const portableHmi = window.ADIA_HMI.mount(document.getElementById("portable-hmi-canvas"), PROJECT_DATA.hmiComponents, {
+              onInput: queueHmiInput,
+              onCommand: command => {
+                if (command === "step") { simRunning = false; window.ADIA_SIM.step(); }
+                else if (command === "reset") window.ADIA_SIM.reset();
+                else {
+                  if (command === "start") window.ADIA_SIM.reset();
+                  simRunning = command !== "pause";
+                  updateUi();
+                }
+              }
+            });
 
             function escapeHtml(str) {
               return String(str || '')
@@ -14203,24 +12068,7 @@ const ADIA = () => {
             }
 
             function updateVariableById(id, value) {
-              const v = PROJECT_DATA.variables.find(x => x.id === id);
-              if (!v || !semanticRuntime) return;
-              let val = value;
-              if (varTypes[v.name] === "bool") {
-                val = value === "true" || value === true || value === "1" || value === 1;
-              } else if (varTypes[v.name] === "int" || varTypes[v.name] === "float") {
-                val = Number(value) || 0;
-              }
-              const oldVal = varValues[v.name];
-              if (oldVal !== val) {
-                window.ADIAStateMachineRuntime.applyInputs(
-                  semanticRuntime,
-                  { [v.id]: val }
-                );
-                varValues[v.name] = semanticRuntime.data[v.id];
-                logEvent("Variable Change", v.name + ": " + oldVal + " → " + val);
-                updateUi();
-              }
+              return queueHmiInput({ sourceId: "legacy-report", variableId: id, value });
             }
 
             function beepBuzzer() {
@@ -14288,12 +12136,15 @@ const ADIA = () => {
 
             function stepSimulation() {
               if (!semanticRuntime) return;
+              window.ADIAStateMachineRuntime.applyInputs(semanticRuntime, hmiInputQueue.drain());
               const elapsedMs = PROJECT_DATA.tickMs || 100;
               const frame = window.ADIAStateMachineRuntime.stepRuntime(
                 semanticRuntime,
                 elapsedMs
               );
               simTime += elapsedMs / 1000;
+              committedSamples.push({ time: simTime, values: { ...frame.data } });
+              if (committedSamples.length > 600) committedSamples.shift();
               applySemanticFrame(frame);
               updateUi();
               if (frame.error) {
@@ -14381,198 +12232,8 @@ const ADIA = () => {
             }
 
             function updateUi() {
-              PROJECT_DATA.hmiComponents.forEach(c => {
-                const val = c.variableId ? getVarValById(c.variableId) : null;
-                if (c.type === "toggle") {
-                  const track = document.getElementById("track-" + c.id);
-                  if (track) {
-                    if (val === true || val === "true" || val === 1) track.classList.add("active");
-                    else track.classList.remove("active");
-                  }
-                } else if (c.type === "button") {
-                  const btn = document.getElementById("btn-" + c.id);
-                  if (btn) {
-                    const isPress = c.pressVariableId ? getVarValById(c.pressVariableId) : null;
-                    const active = (val === true || val === "true" || val === 1 || isPress === true || isPress === "true" || isPress === 1);
-                    if (active) btn.classList.add("active");
-                    else btn.classList.remove("active");
-                  }
-                } else if (c.type === "lamp") {
-                  const lamp = document.getElementById("lamp-" + c.id);
-                  if (lamp) {
-                    if (val === true || val === "true" || val === 1) lamp.classList.add("active");
-                    else lamp.classList.remove("active");
-                  }
-                } else if (c.type === "led") {
-                  const led = document.getElementById("led-" + c.id);
-                  if (led) {
-                    if (val === true || val === "true" || val === 1) led.classList.add("active");
-                    else led.classList.remove("active");
-                  }
-                } else if (c.type === "slider") {
-                  const slider = document.getElementById("slider-" + c.id);
-                  if (slider) slider.value = Number(val) || 0;
-                } else if (c.type === "input") {
-                  const input = document.getElementById("input-" + c.id);
-                  if (input) input.value = val !== null ? val : "";
-                } else if (c.type === "lcd") {
-                  const lcd = document.getElementById("lcd-" + c.id);
-                  if (lcd) {
-                    const num = Number(val);
-                    lcd.textContent = isNaN(num) ? String(val ?? "") : num.toFixed(2);
-                  }
-                } else if (c.type === "gauge") {
-                  const path = document.getElementById("gauge-path-" + c.id);
-                  const text = document.getElementById("gauge-text-" + c.id);
-                  if (path && text) {
-                    const minVal = c.min ?? 0;
-                    const maxVal = c.max ?? 100;
-                    const range = maxVal - minVal;
-                    const currentVal = Number(val) || 0;
-                    const percent = range === 0 ? 0 : Math.max(0, Math.min(1, (currentVal - minVal) / range));
-                    path.setAttribute("stroke-dasharray", (percent * 126) + " 126");
-                    text.textContent = Math.round(currentVal);
-                  }
-                } else if (c.type === "rotary" || c.type === "hybrid-rotary" || c.type === "encoder") {
-                  const knob = document.getElementById("knob-" + c.id);
-                  const valText = document.getElementById("knob-val-" + c.id);
-                  if (knob) {
-                    let angle = 0;
-                    let displayVal = "0";
-                    if (c.type === "encoder") {
-                      const isHybrid = Array.isArray(c.encoderValues) && c.encoderValues.length > 0;
-                      const encoderValues = c.encoderValues || [];
-                      if (isHybrid) {
-                        const idx = encoderValues.findIndex(x => String(x) === String(val));
-                        const currentIndex = idx !== -1 ? idx : 0;
-                        angle = currentIndex * (360 / Math.max(1, encoderValues.length));
-                        displayVal = String(encoderValues[currentIndex] || "");
-                      } else {
-                        const rotVal = Number(val) || 0;
-                        angle = rotVal * 18;
-                        displayVal = String(rotVal);
-                      }
-                    } else if (c.type === "hybrid-rotary") {
-                      const values = c.hybridValues || [];
-                      const idx = values.findIndex(v => String(v) === String(val));
-                      const currentIndex = idx !== -1 ? idx : 0;
-                      angle = -135 + currentIndex * (270 / Math.max(1, values.length - 1));
-                      displayVal = String(values[currentIndex] || "");
-                    } else {
-                      const minVal = c.min ?? 0;
-                      const maxVal = c.max ?? 100;
-                      const range = maxVal - minVal;
-                      const currentVal = Number(val) || 0;
-                      angle = -135 + (range === 0 ? 0 : (currentVal - minVal) / range) * 270;
-                      displayVal = currentVal.toFixed(1);
-                    }
-                    knob.style.transform = "rotate(" + angle + "deg)";
-                    if (valText) valText.textContent = displayVal;
-                  }
-                } else if (c.type === "oled") {
-                  const oled = document.getElementById("oled-" + c.id);
-                  if (oled) {
-                    const modeTextEl = oled.querySelector(".oled-mode");
-                    const tempEl = oled.querySelector(".oled-temp");
-                    const progressEl = oled.querySelector(".oled-progress-bar");
-                    const timeEl = oled.querySelector(".oled-time");
-                    const stateEl = oled.querySelector(".oled-state");
-                    const indicatorsEl = oled.querySelector(".oled-indicators");
-                    const contextEl = oled.querySelector(".oled-context");
-
-                    if (modeTextEl) {
-                      const modeIdx = c.oledModeVarId ? Number(getVarValById(c.oledModeVarId)) || 0 : 0;
-                      const modeNames = c.oledModeNames ? c.oledModeNames.split(",").map(s => s.trim()) : [
-                        "AIR FRYER", "STEAMER", "OVEN", "RAPID STEAM", "BROIL", "REHEAT",
-                        "KEEP WARM", "FERMENT", "DEFROST", "SLOW COOK", "DEHYDRATE", "DUO COOK"
-                      ];
-                      modeTextEl.textContent = modeNames[modeIdx] || "READY";
-                    }
-                    if (tempEl) {
-                      const tempVal = c.oledTempVarId ? getVarValById(c.oledTempVarId) : "";
-                      tempEl.textContent = tempVal !== undefined && tempVal !== null && tempVal !== "" ? tempVal + "°C" : "";
-                    }
-                    if (progressEl) {
-                      const progressVal = c.oledProgressVarId ? Number(getVarValById(c.oledProgressVarId)) || 0 : 0;
-                      progressEl.style.width = Math.max(0, Math.min(100, progressVal)) + "%";
-                    }
-                    if (timeEl) {
-                      const timeVal = c.oledTimeVarId ? getVarValById(c.oledTimeVarId) : "";
-                      const timeNum = Number(timeVal);
-                      if (!isNaN(timeNum) && timeVal !== "" && timeVal !== null) {
-                        const m = Math.floor(timeNum / 60);
-                        const s = Math.round(timeNum % 60);
-                        if (timeNum < 180 && String(c.oledTitle).toLowerCase().includes("fryer")) {
-                          timeEl.textContent = String(Math.floor(timeNum)).padStart(2, "0") + ":00";
-                        } else {
-                          timeEl.textContent = String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
-                        }
-                      } else {
-                        timeEl.textContent = String(timeVal ?? "");
-                      }
-                    }
-                    if (stateEl) {
-                      const stateVal = c.oledStateVarId ? String(getVarValById(c.oledStateVarId)) : "";
-                      if (stateVal) stateEl.textContent = stateVal;
-                      else {
-                        const rootActiveStateId = activeStates["root"];
-                        const rootActiveState = PROJECT_DATA.states.find(s => s.id === rootActiveStateId);
-                        stateEl.textContent = rootActiveState ? rootActiveState.name : "HOME";
-                      }
-                    }
-                    if (indicatorsEl && Array.isArray(c.oledIndicatorEmojis)) {
-                      indicatorsEl.textContent = "";
-                      c.oledIndicatorEmojis.forEach((emoji, idx) => {
-                        const varId = c.oledIndicatorVarIds?.[idx];
-                        const iVal = varId ? !!getVarValById(varId) : false;
-                        const label = c.oledIndicatorLabels?.[idx] || "";
-                        const isSpin = emoji === "🌀" || emoji === "⚙️" || emoji === "🎡" || label.toLowerCase().includes("fan") || label.toLowerCase().includes("spin");
-                        const span = document.createElement("span");
-                        span.title = label;
-                        span.textContent = emoji;
-                        span.style.transition = "opacity 0.2s";
-                        span.style.opacity = iVal ? "1" : "0.2";
-                        span.style.display = "inline-block";
-                        if (iVal && isSpin) {
-                          span.style.animation = "sim-spin 2s linear infinite";
-                        }
-                        indicatorsEl.appendChild(span);
-                      });
-                    }
-                    if (contextEl) {
-                      contextEl.textContent = "System OK";
-                    }
-                  }
-                } else if (c.type === "mode-icon") {
-                  const card = document.getElementById("modeicon-" + c.id);
-                  if (card) {
-                    if (String(val) === String(c.targetValue)) card.classList.add("active");
-                    else card.classList.remove("active");
-                  }
-                } else if (c.type === "mode-selector") {
-                  const selVarVal = val;
-                  const curVarVal = c.cursorVariableId ? getVarValById(c.cursorVariableId) : null;
-                  for (let idx = 0; idx < 12; idx++) {
-                    const item = document.getElementById("modeselect-" + c.id + "-" + idx);
-                    if (item) {
-                      item.className = "selector-mode-card";
-                      if (Number(selVarVal) === idx) item.classList.add("active");
-                      else if (Number(curVarVal) === idx) item.classList.add("cursor");
-                    }
-                  }
-                } else if (c.type === "buzzer") {
-                  const buzzer = document.getElementById("buzzer-" + c.id);
-                  if (buzzer) {
-                    if (val === true || val === "true" || val === 1) {
-                      buzzer.style.color = "#ef4444";
-                      buzzer.style.transform = stepCount % 2 === 0 ? "scale(1.2)" : "scale(1.0)";
-                      beepBuzzer();
-                    } else {
-                      buzzer.style.color = "#444";
-                      buzzer.style.transform = "scale(1.0)";
-                    }
-                  }
-                }
+              portableHmi.update(Object.fromEntries(PROJECT_DATA.variables.map(v => [v.id, getVarValById(v.id)])), {
+                activeStateIds: Object.values(activeStates), time: simTime, samples: committedSamples, resetVersion: hmiResetVersion
               });
               updateDashboard();
             }
@@ -14656,6 +12317,10 @@ const ADIA = () => {
               },
               reset() {
                 if (!semanticRuntime) return;
+                simRunning = false;
+                hmiInputQueue.clear();
+                hmiResetVersion++;
+                committedSamples = [];
                 simTime = 0;
                 applySemanticFrame(
                   window.ADIAStateMachineRuntime.resetRuntime(semanticRuntime)
@@ -14768,134 +12433,31 @@ const ADIA = () => {
           })();
         </script>
       `;
+      extraSections.push({ id: 'interactive-prototype', title: 'Interactive System Prototype', html: prototypeHtml });
     }
 
-    html += `
-      <!-- High-Resolution Interactive Diagram Modal Viewer -->
-      <div id="diagram-modal" onclick="closeDiagramModal()">
-        <div id="diagram-modal-header" onclick="event.stopPropagation()">
-          <div id="diagram-modal-title" style="font-weight:bold; font-size:14px; color:#f97316;">📊 SysML Diagram Viewer</div>
-          <div>
-            <button class="modal-ctrl-btn" onclick="zoomDiagram(1.25)">➕ Zoom In</button>
-            <button class="modal-ctrl-btn" onclick="zoomDiagram(0.8)">➖ Zoom Out</button>
-            <button class="modal-ctrl-btn" onclick="resetDiagramZoom()">↺ Reset 100%</button>
-            <button class="modal-ctrl-btn" onclick="openDiagramInNewTab()">⧉ Open in New Tab</button>
-            <button class="modal-ctrl-btn" style="background:#dc2626;border-color:#dc2626;" onclick="closeDiagramModal()">✕ Close</button>
-          </div>
-        </div>
-        <div id="diagram-modal-body" onclick="event.stopPropagation()">
-          <div id="diagram-modal-content" style="transform-origin: center center; transition: transform 0.08s ease-out; width: 100%; display: flex; justify-content: center; align-items: center;"></div>
-        </div>
-      </div>
-      <script>
-        let currentZoom = 1;
-        let currentSvgHtml = '';
-        let isPanning = false;
-        let startX = 0, startY = 0;
-        let panX = 0, panY = 0;
-
-        function openDiagramModal(diagId, title) {
-          const container = document.getElementById(diagId);
-          if (!container) return;
-          const svgEl = container.querySelector('svg');
-          if (!svgEl) return;
-
-          currentSvgHtml = svgEl.outerHTML;
-          const modal = document.getElementById('diagram-modal');
-          const modalTitle = document.getElementById('diagram-modal-title');
-          const modalContent = document.getElementById('diagram-modal-content');
-
-          if (modalTitle) modalTitle.textContent = '📊 ' + (title || 'SysML Diagram Viewer');
-          if (modalContent) {
-            modalContent.replaceChildren(svgEl.cloneNode(true));
-            const newSvg = modalContent.querySelector('svg');
-            if (newSvg) {
-              newSvg.style.maxWidth = 'none';
-              newSvg.style.width = '100%';
-              newSvg.style.height = 'auto';
-              newSvg.style.display = 'block';
-              newSvg.style.background = '#ffffff';
-              newSvg.style.borderRadius = '8px';
-              newSvg.style.padding = '20px';
-              newSvg.style.boxShadow = '0 10px 30px rgba(0,0,0,0.5)';
-            }
-          }
-          currentZoom = 1;
-          panX = 0;
-          panY = 0;
-          updateModalTransform();
-          if (modal) modal.classList.add('active');
-        }
-
-        function closeDiagramModal() {
-          const modal = document.getElementById('diagram-modal');
-          if (modal) modal.classList.remove('active');
-        }
-
-        function zoomDiagram(factor) {
-          currentZoom = Math.max(0.2, Math.min(5, currentZoom * factor));
-          updateModalTransform();
-        }
-
-        function resetDiagramZoom() {
-          currentZoom = 1;
-          panX = 0;
-          panY = 0;
-          updateModalTransform();
-        }
-
-        function updateModalTransform() {
-          const content = document.getElementById('diagram-modal-content');
-          if (content) {
-            content.style.transform = "translate(" + panX + "px, " + panY + "px) scale(" + currentZoom + ")";
-          }
-        }
-
-        function openDiagramInNewTab() {
-          if (!currentSvgHtml) return;
-          const blob = new Blob([currentSvgHtml], { type: 'image/svg+xml' });
-          const url = URL.createObjectURL(blob);
-          window.open(url, '_blank');
-        }
-
-        // Modal Pan & Mouse Wheel Zoom
-        document.addEventListener('DOMContentLoaded', () => {
-          const modalBody = document.getElementById('diagram-modal-body');
-          if (modalBody) {
-            modalBody.addEventListener('mousedown', (e) => {
-              isPanning = true;
-              startX = e.clientX - panX;
-              startY = e.clientY - panY;
-            });
-            window.addEventListener('mousemove', (e) => {
-              if (!isPanning) return;
-              panX = e.clientX - startX;
-              panY = e.clientY - startY;
-              updateModalTransform();
-            });
-            window.addEventListener('mouseup', () => {
-              isPanning = false;
-            });
-            modalBody.addEventListener('wheel', (e) => {
-              e.preventDefault();
-              const factor = e.deltaY < 0 ? 1.15 : 0.85;
-              zoomDiagram(factor);
-            }, { passive: false });
-          }
-        });
-
-        window.addEventListener('keydown', (e) => {
-          if (e.key === 'Escape') closeDiagramModal();
-        });
-      </script>
-      ${generateDiagramScript(reportHierarchy)}
-    </body></html>`;
-
+    const html = buildSystemReport({
+      projectName,
+      author,
+      engineVersion: VERSION,
+      generatedAt: new Date(),
+      repository: canonicalSysmlRepository,
+      hierarchy: hierarchySource,
+      diagnostics: snapshot.diagnostics,
+      traceability: {
+        matrix: traceabilityMatrix,
+        metrics: traceabilityMetrics,
+        modelHash: traceabilitySnapshot.modelHash,
+        repositoryRevision: traceabilitySnapshot.repositoryRevision,
+        diagnostics: traceabilitySnapshot.diagnostics.map(item => ({ code: item.code, message: item.message })),
+      },
+      extraSections,
+    });
     setGlobalReportData({ html, projectName });
     setShowGlobalReportPreview(true);
     setShowReportDialog(false);
     addError('info', 'Report preview ready');
-  }, [blocks, parts, connectors, relationships, states, transitions, junctions, hmiComponents, variables, addError, setShowReportDialog, layers, tickMs, safetyMode, canonicalSysmlRepository]);
+  }, [blocks, parts, connectors, relationships, states, transitions, junctions, hmiComponents, variables, activeStates, addError, setShowReportDialog, layers, tickMs, safetyMode, canonicalSysmlRepository]);
 
   // KEYBOARD SHORTCUTS
   useEffect(() => {
@@ -15051,7 +12613,7 @@ const ADIA = () => {
             setSelectedIds(result.pastedTopLevelIds);
             addError('info', 'Pasted items');
           } else if (diagramMode !== 'statemachine' && sysmlClipboardRef.current.length > 0) {
-            const diagramId = diagramMode === 'ibd' ? currentLayerId : activeSysmlDiagramId;
+            const diagramId = activeSysmlDiagramId;
             const plan = buildSysmlPastePlan(
               canonicalSysmlRepository,
               sysmlDiagramPresentations,
@@ -15793,7 +13355,7 @@ const ADIA = () => {
     );
   }, [diagramMode, canonicalSysmlRepository, activeSysmlDiagramId, packageNestingNodes, diagramShortcuts]);
 
-  const renderBlocks = useCallback((): React.ReactNode => {
+  const renderBlocks = useCallback((ibdContextLayer: 'all' | 'frame' | 'ports' = 'all'): React.ReactNode => {
     // In BDD mode, always treat as root level (ignore currentLayerId from IBD navigation)
     const effectiveLayerId = diagramMode === 'bdd' ? 'root' : currentLayerId;
     const targetBlocks = culledDiagram ? culledDiagram.visibleBlocks : sysmlCanvasView.blocks;
@@ -15806,6 +13368,7 @@ const ADIA = () => {
           const isSelected = selectedIds.includes(block.id);
           return (
             <g key={block.id}>
+              {ibdContextLayer !== 'ports' && <>
               <rect x={frame.x} y={frame.y} width={frame.w} height={frame.h} fill="none" stroke="#444" strokeWidth={2} strokeDasharray="10,5"
                 onMouseDown={(e) => handleBlockMouseDown(e, block.id)}
                 onClick={(e) => { e.stopPropagation(); setSelectedIds([block.id]); }}
@@ -15826,8 +13389,9 @@ const ADIA = () => {
                   />
                 );
               })}
+              </>}
 
-              {block.ports.map((port, i) => {
+              {ibdContextLayer !== 'frame' && block.ports.map((port, i) => {
                 let x = 0, y = 0;
                 let isLeft = false;
                 if (port.side && port.offset != null) {
@@ -15846,7 +13410,7 @@ const ADIA = () => {
                     <IbdConnectorEndpoint
                       isBoundary={true}
                       portKind={port.kind}
-                      overrideColor={sysmlDiagramPresentations[currentLayerId]?.presentations[port.id]?.style?.color}
+                      overrideColor={sysmlDiagramPresentations[activeSysmlDiagramId]?.presentations[port.id]?.style?.color}
                       definitionId={port.id}
                       ownerOccurrenceId={null}
                       name={port.name}
@@ -15865,6 +13429,7 @@ const ADIA = () => {
             </g>
           );
         }
+        if (ibdContextLayer === 'ports') return null;
         if (block.stereotype !== 'interface' && block.stereotype !== 'interfaceBlock') return null;
 
         // Only show interface blocks / interfaces in IBD if they are realized by a part in the current layer,
@@ -16502,7 +14067,7 @@ const ADIA = () => {
                 <IbdConnectorEndpoint
                   isBoundary={false}
                   portKind={port.kind}
-                  overrideColor={sysmlDiagramPresentations[currentLayerId]?.presentations[port.id]?.style?.color}
+                  overrideColor={sysmlDiagramPresentations[activeSysmlDiagramId]?.presentations[port.id]?.style?.color}
                   definitionId={port.id}
                   ownerOccurrenceId={part.id}
                   name={port.name}
@@ -16543,7 +14108,7 @@ const ADIA = () => {
         </g>
       );
     });
-  }, [parts, sysmlCanvasView, blocksById, culledDiagram, selectedIds, isCreatingConnector, connectorSource, handlePortClick, handlePartMouseDown, handleNestedPartMouseDown, handlePortMouseDown, diagramMode, currentLayerId, sysmlDiagramPresentations, openCanvasSymbolDiagram]);
+  }, [parts, sysmlCanvasView, blocksById, culledDiagram, selectedIds, isCreatingConnector, connectorSource, handlePortClick, handlePartMouseDown, handleNestedPartMouseDown, handlePortMouseDown, diagramMode, currentLayerId, activeSysmlDiagramId, sysmlDiagramPresentations, openCanvasSymbolDiagram]);
 
   const renderConnectors = useCallback((): React.ReactNode => {
     // Only render connectors in IBD mode
@@ -17981,7 +15546,7 @@ const ADIA = () => {
                 <>
 
               {/* Canvas Toolbar */}
-              <div
+              <div data-help-feature="live:App:2baeda448e81"
                 onWheel={handleHorizontalToolbarWheel}
                 className="absolute top-3 left-3 z-10 flex items-center gap-2 max-w-[calc(100%-1.5rem)] overflow-x-auto overflow-y-hidden adia-toolbar-scrollbar bg-[#1a1a1a]/95 border border-[#333] rounded-lg px-2.5 py-1.5 pb-2 text-xs select-none shadow-lg [&>*]:shrink-0"
               >
@@ -18415,7 +15980,7 @@ const ADIA = () => {
 
 
               <Profiler id="canvas" onRender={(_, phase, actualDuration) => recordRenderCommit('canvas', phase, actualDuration)}>
-                <div
+                <div data-help-feature="live:App:2fb96905afb4"
                   ref={canvasRef}
                   id="adia-diagram-canvas"
                 className="absolute inset-0"
@@ -18423,7 +15988,7 @@ const ADIA = () => {
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}
                 onMouseLeave={(e) => {
-                  if (pendingBddBlockGestureRef.current) return;
+                  if (pendingBddBlockGestureRef.current || isDraggingRef.current) return;
                   handleMouseUp(e);
                 }}
                 onDoubleClick={handleDoubleClick}
@@ -18579,7 +16144,7 @@ const ADIA = () => {
                       diagramMode === 'ibd' ? (
                         <>
                           <g style={{ pointerEvents: 'all' }}>
-                            {renderBlocks()}
+                            {renderBlocks('frame')}
                           </g>
                           <g style={{ pointerEvents: 'all' }}>
                             {renderConnectors()}
@@ -18589,6 +16154,9 @@ const ADIA = () => {
                           </g>
                           <g style={{ pointerEvents: 'all' }}>
                             {renderParts()}
+                          </g>
+                          <g style={{ pointerEvents: 'all' }}>
+                            {renderBlocks('ports')}
                           </g>
                         </>
                       ) : null
@@ -20055,7 +17623,7 @@ const ADIA = () => {
 
                   {/* Ports Editor for the underlying Block */}
                   {(() => {
-                    const block = blocks.find(b => b.id === selectedPart.typeId);
+                    const block = selectedPart.typeId ? blocksById.get(selectedPart.typeId) : undefined;
                     if (block) {
                       return (
                         <div className="p-2 bg-[#1a1a1a] border border-[#333] rounded mt-2">
@@ -20169,13 +17737,13 @@ const ADIA = () => {
                       itemUnit: (selectedConnector as any).itemUnit,
                     }}
                     availablePorts={[
-                      ...((blocks.find(block => block.id === currentLayerId)?.ports ?? []).map(port => ({
+                      ...((blocksById.get(currentLayerId)?.ports ?? []).map(port => ({
                         id: `${currentLayerId}::${port.id}`,
                         name: port.name,
-                        ownerName: blocks.find(block => block.id === currentLayerId)?.name,
+                        ownerName: blocksById.get(currentLayerId)?.name,
                       }))),
                       ...parts.filter(p => p.blockId === currentLayerId).flatMap(p => {
-                        const b = blocks.find(b => b.id === p.typeId);
+                        const b = p.typeId ? blocksById.get(p.typeId) : undefined;
                         return (b?.ports || []).map(port => ({
                           id: `${p.id}::${port.id}`,
                           name: port.name,
@@ -21242,11 +18810,24 @@ const ADIA = () => {
             onClose={() => toggleWindow('hmi')}
             onUpdate={updateManagedWindow}
           >
-            <HmiDashboardContent
+            <HmiWorkspace data-help-topic="hmi_dashboard"
               variables={variables}
               components={hmiComponents}
               setComponents={setHmiComponents}
-              updateVariable={(id, val) => updateVariableValue(id, val)}
+              onInput={handleHmiInput}
+              externalOwnedVariableIds={factoryIOEnabled ? factoryIOMapping.filter(m => m.type === 'sensor').map(m => m.adiaVarId) : []}
+              runtime={{ running: isRunning, time: simulationTime, activeStateIds: Object.values(activeStates),
+                states: states.map(s => ({ id: s.id, name: s.name })), samples: hmiSamples, resetVersion: hmiResetVersion }}
+              onSimulationCommand={command => {
+                if (command === 'pause') pauseSimulation();
+                else if (command === 'reset') void resetSimulation();
+                else if (command === 'step') void stepSimulation();
+                else if (command === 'resume' && simulationSessionRef.current) {
+                  if (simulationSessionRef.current.runtime.error) addError('error', 'Reset the failed simulation before resuming.', 'HMI');
+                  else setIsRunning(true);
+                }
+                else void startSimulation();
+              }}
               onClose={() => toggleWindow('hmi')}
             />
           </FloatingWindow>

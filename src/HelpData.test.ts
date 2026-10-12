@@ -80,43 +80,16 @@ describe('HELP_DATA catalog completeness and integrity', () => {
     expect(smBody).toContain('Exit Action');
   });
 
-  it('verifies OPM & ENTROPY Embedded C guide topic integrity, drawing, and sections', () => {
-    const opmTopic = HELP_DATA['entropy-opm'];
-    expect(opmTopic).toBeDefined();
-    expect(opmTopic.title).toContain('OPM (ISO 19450)');
-    expect(opmTopic.category).toBe('Architecture');
-    expect(opmTopic.image).toBeTruthy();
-    expect(opmTopic.sections).toBeDefined();
-    expect(opmTopic.sections?.length).toBeGreaterThanOrEqual(6);
-
-    const fullText = JSON.stringify(opmTopic);
-    // Section 1: Dual layers
-    expect(fullText).toContain('Conceptual OPM');
-    expect(fullText).toContain('Executable OPM');
-    // Section 2: Pipeline drawing & 10-phase tick
-    expect(fullText).toContain('Deterministic Normalization');
-    expect(fullText).toContain('10-phase tick cycle');
-    expect(fullText).toContain('C99 Code Generator');
-    // Section 3: Block types & port catalogues
-    expect(fullText).toContain('Object');
-    expect(fullText).toContain('Process');
-    expect(fullText).toContain('State');
-    expect(fullText).toContain('Requirement');
-    // Section 4: Link types
-    expect(fullText).toContain('Agent');
-    expect(fullText).toContain('Instrument');
-    expect(fullText).toContain('Consumption');
-    expect(fullText).toContain('Result');
-    expect(fullText).toContain('Effect');
-    expect(fullText).toContain('Trigger');
-    expect(fullText).toContain('Condition');
-    // Section 5: Step-by-step
-    expect(fullText).toContain('Open ENTROPY OPM');
-    expect(fullText).toContain('Target Settings');
-    // Section 6: Connection mechanics & wiring patterns
-    expect(fullText).toContain('Pick Link Type First');
-    expect(fullText).toContain('Hover Source Port');
-    expect(fullText).toContain('X does Y');
+  it('documents OPM phases, controls and compliance boundaries from the current implementation', () => {
+    const topic=HELP_DATA['entropy-opm'];
+    expect(topic.title).toContain('OPM (ISO 19450)');
+    expect(topic.sections!.length).toBeGreaterThanOrEqual(6);
+    const text=JSON.stringify(topic);
+    for(const phase of ['sampleInputs','advanceTimers','activate','evaluate','stage','resolveConflicts','commit','stateActions','publishOutputs']) expect(text).toContain(phase);
+    expect(text).not.toContain('10-phase');
+    expect(text).toContain('do not certify MISRA');
+    expect(topic.sections!.some(section=>section.diagram)).toBe(true);
+    for(const item of ['Object','Process','State','Requirement','Target Settings']) expect(text).toContain(item);
   });
 
   it('verifies all VLAB_LIBRARY blocks transform with valid properties for HelpModal', () => {

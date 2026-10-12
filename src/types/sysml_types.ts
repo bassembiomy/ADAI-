@@ -193,7 +193,10 @@ export interface ValidationResult {
   reason?: string;
 }
 
-export type HmiComponentType = 'toggle' | 'button' | 'slider' | 'input' | 'lamp' | 'led' | 'lcd' | 'gauge' | 'rotary' | 'hybrid-rotary' | 'buzzer' | 'oled' | 'encoder' | 'mode-selector' | 'mode-icon';
+export type HmiComponentType = 'toggle' | 'button' | 'slider' | 'input' | 'lamp' | 'led' | 'lcd' | 'gauge' | 'rotary' | 'hybrid-rotary' | 'buzzer' | 'oled' | 'encoder' | 'mode-selector' | 'mode-icon'
+  | 'checkbox' | 'combo-box' | 'radio-group' | 'rocker-switch' | 'slide-switch' | 'knob' | 'vertical-slider' | 'latching-button' | 'pulse-button' | 'simulation-command'
+  | 'half-gauge' | 'quarter-gauge' | 'linear-gauge' | 'vertical-gauge' | 'dashboard-scope' | 'xy-plot' | 'multi-state-image' | 'active-state-indicator' | 'alarm-list' | 'progress-bar' | 'thermometer' | 'tank-level' | 'seven-segment'
+  | 'label' | 'image' | 'panel' | 'tabs';
 
 export interface HmiComponent {
   id: string;
@@ -231,4 +234,19 @@ export interface HmiComponent {
   oledIndicatorLabels?: string[];
   oledTitle?: string;
   encoderValues?: string[];
+  step?: number;
+  precision?: number;
+  unit?: string;
+  text?: string;
+  imageUrl?: string;
+  options?: { label: string; value: number | boolean; imageUrl?: string }[];
+  stateId?: string;
+  command?: 'start' | 'pause' | 'resume' | 'step' | 'reset';
+  alarmThreshold?: number;
+  writable?: boolean;
+  parentId?: string;
+  tabId?: string;
+  tabs?: { id: string; label: string }[];
+  activeValue?: number | boolean;
+  inactiveValue?: number | boolean;
 }

@@ -112,6 +112,16 @@ describe('activity rules: object flows, pins and types', () => {
     expect(codes(repo, activity, 'error')).toEqual(['CONTROL_FLOW_INTO_PIN']);
   });
 
+  it.each(['decision', 'merge', 'fork', 'join'] as const)('allows object flow through a %s node while retaining pin direction rules', kind => {
+    const { repo, activity } = repoWith({ nodes: [
+      pinsAction('producer', [{ id: 'output', name: 'output', direction: 'out', typeId: 'Vehicle' }]),
+      node('router', kind),
+      pinsAction('consumer', [{ id: 'input', name: 'input', direction: 'in', typeId: 'Vehicle' }]),
+    ] });
+    expect(checkActivityEdge(repo, activity, { kind: 'objectFlow', sourceId: 'output', targetId: 'router' })).toBeUndefined();
+    expect(checkActivityEdge(repo, activity, { kind: 'objectFlow', sourceId: 'router', targetId: 'input' })).toBeUndefined();
+    expect(checkActivityEdge(repo, activity, { kind: 'objectFlow', sourceId: 'input', targetId: 'router' })?.code).toBe('OBJECT_FLOW_PIN_DIRECTION');
+  });
   it('pin direction: flows leave output pins and enter input pins', () => {
     const { repo, activity } = repoWith({
       nodes: [

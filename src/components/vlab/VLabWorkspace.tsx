@@ -2830,7 +2830,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
   return (
     <div id="vlab-workspace-container" className="vlab-workspace flex h-full w-full bg-[var(--surface-canvas)] text-[var(--text-primary)] overflow-hidden">
       {/* Top Bar */}
-      <div
+      <div data-help-feature="live:components/vlab/VLabWorkspace:2baeda448e81"
         onWheel={handleHorizontalToolbarWheel}
         className="vlab-panel absolute top-0 left-0 right-0 h-12 bg-[var(--surface-panel)] border-b border-[var(--border-default)] flex items-center justify-between px-4 z-10 overflow-x-auto overflow-y-hidden adia-toolbar-scrollbar [&>*]:shrink-0"
       >
@@ -3223,7 +3223,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                   <span>Fit View</span>
                 </button>
                 <div className="w-px h-4 bg-white/10 mx-0.5" />
-                <button
+                <button data-help-feature="live:components/vlab/VLabWorkspace:e25c5ed46212"
                   type="button"
                   onClick={() => setSnapEnabled(prev => !prev)}
                   className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold transition-all active:scale-95 ${
