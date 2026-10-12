@@ -1,4 +1,18 @@
-import { decodeBinaryFrame, decodeTextFrame, encodeBinaryFrame } from './hilProtocol';
+import {
+  decodeBinaryFrame,
+  decodeTextFrame,
+  encodeBinaryFrame,
+  HIL_CHANNEL_NAME_PATTERN,
+  MIN_BINARY_FRAME_LENGTH,
+} from './hilProtocol';
+
+const MAX_TEXT_BUFFER = 4096;
+
+function assertChannelName(name: string): void {
+  if (typeof name !== 'string' || !HIL_CHANNEL_NAME_PATTERN.test(name)) {
+    throw new Error(`Invalid HIL channel name '${String(name)}': must be a C identifier`);
+  }
+}
 
 export interface VariableUpdate {
   variable: string;
@@ -28,6 +42,7 @@ export class HILSerialSession {
   private transport: SerialTransport;
   private running = false;
   private textBuffer = '';
+  private discardingText = false;
   private binaryBuffer = Buffer.alloc(0);
 
   private variableListeners: Array<(update: VariableUpdate) => void> = [];
@@ -52,6 +67,7 @@ export class HILSerialSession {
     await this.transport.open(this.port, this.baudRate);
     this.running = true;
     this.textBuffer = '';
+    this.discardingText = false;
     this.binaryBuffer = Buffer.alloc(0);
   }
 
@@ -62,8 +78,12 @@ export class HILSerialSession {
   }
 
   public async setOverride(channelName: string, value: number): Promise<void> {
+    assertChannelName(channelName);
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      throw new Error(`Invalid override value for '${channelName}': must be a finite number`);
+    }
     if (this.format === 'text') {
-      await this.transport.write(`SET ${channelName}=${value}\n`);
+      await this.transport.write(`${channelName}=${value}\n`);
     } else {
       const frame = encodeBinaryFrame(channelName, value, 'float');
       await this.transport.write(Buffer.from(frame));
@@ -71,8 +91,9 @@ export class HILSerialSession {
   }
 
   public async releaseOverride(channelName: string): Promise<void> {
+    assertChannelName(channelName);
     if (this.format === 'text') {
-      await this.transport.write(`RELEASE ${channelName}\n`);
+      await this.transport.write(`${channelName}_release=1\n`);
     } else {
       // In binary, special NaN or sentinel value indicates release
       const frame = encodeBinaryFrame(`${channelName}_release`, 0, 'uint8_t');
@@ -95,8 +116,16 @@ export class HILSerialSession {
   }
 
   private handleIncomingData(chunk: Buffer | string): void {
+    if (!this.running) return;
+
     if (this.format === 'text') {
-      const text = typeof chunk === 'string' ? chunk : chunk.toString('utf8');
+      let text = typeof chunk === 'string' ? chunk : chunk.toString('utf8');
+      if (this.discardingText) {
+        const nl = text.indexOf('\n');
+        if (nl === -1) return;
+        text = text.slice(nl + 1);
+        this.discardingText = false;
+      }
       this.textBuffer += text;
 
       let newlineIndex: number;
@@ -108,11 +137,17 @@ export class HILSerialSession {
           this.parseTextTelemetryLine(line);
         }
       }
+
+      if (this.textBuffer.length > MAX_TEXT_BUFFER) {
+        // Unterminated flood: drop it and skip to the next line boundary.
+        this.textBuffer = '';
+        this.discardingText = true;
+      }
     } else {
       const buf = typeof chunk === 'string' ? Buffer.from(chunk, 'binary') : chunk;
       this.binaryBuffer = Buffer.concat([this.binaryBuffer, buf]);
 
-      while (this.binaryBuffer.length >= 10) {
+      while (this.binaryBuffer.length >= MIN_BINARY_FRAME_LENGTH) {
         const startIdx = this.binaryBuffer.indexOf(0xAA);
         if (startIdx === -1) {
           this.binaryBuffer = Buffer.alloc(0);
@@ -121,12 +156,20 @@ export class HILSerialSession {
         if (startIdx > 0) {
           this.binaryBuffer = this.binaryBuffer.subarray(startIdx);
         }
-        if (this.binaryBuffer.length < 10) break;
+        if (this.binaryBuffer.length < MIN_BINARY_FRAME_LENGTH) break;
 
-        const decoded = decodeBinaryFrame(new Uint8Array(this.binaryBuffer));
+        const frameLength = this.binaryBuffer[1];
+        if (frameLength < MIN_BINARY_FRAME_LENGTH) {
+          // Not a plausible frame start; resync.
+          this.binaryBuffer = this.binaryBuffer.subarray(1);
+          continue;
+        }
+        if (frameLength > this.binaryBuffer.length) break; // wait for more data
+
+        const decoded = decodeBinaryFrame(new Uint8Array(this.binaryBuffer.subarray(0, frameLength)));
         if (decoded) {
           this.notifyVariableUpdate(decoded.channelId, decoded.value);
-          this.binaryBuffer = this.binaryBuffer.subarray(10);
+          this.binaryBuffer = this.binaryBuffer.subarray(decoded.length);
         } else {
           this.binaryBuffer = this.binaryBuffer.subarray(1);
         }

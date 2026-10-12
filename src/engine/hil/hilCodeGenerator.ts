@@ -4,8 +4,30 @@ import { resolveTargetSelection } from './hilTypes';
 import { generateEmbeddedLayers } from '../embedded/embeddedLayerGenerator';
 import { validatePinAssignments } from './pinValidator';
 import { defaultTargetPackFor } from '../targetPacks/defaultTargetPacks';
+import { HIL_CHANNEL_NAME_PATTERN } from './hilProtocol';
 
 const sanitize = (n: string) => n.replace(/[^a-zA-Z0-9_]/g, '_');
+
+export { HIL_CHANNEL_NAME_PATTERN };
+
+/** Render a finite number as a valid C float literal (e.g. 2 -> 2.0f, 1e21 -> 1e+21f). */
+export const cFloatLiteral = (n: number): string => {
+  if (!Number.isFinite(n)) {
+    throw new Error(`[HIL] Cannot emit non-finite number '${String(n)}' as a C literal`);
+  }
+  const text = String(n);
+  return `${text}${/[.eE]/.test(text) ? '' : '.0'}f`;
+};
+
+/** Render a finite safe value for a C expression (integers stay integers). */
+const cSafeValue = (v: number | boolean | undefined): string => {
+  if (typeof v === 'boolean') return v ? '1' : '0';
+  const n = v ?? 0;
+  if (!Number.isFinite(n)) {
+    throw new Error(`[HIL] Cannot emit non-finite safeValue '${String(n)}'`);
+  }
+  return Number.isInteger(n) ? String(n) : cFloatLiteral(n);
+};
 
 export function generateHALCode(
   config: HILConfig,
@@ -38,6 +60,42 @@ export function generateHALCode(
     }
   }
   if (errors && errors.length > 0) {
+    return [];
+  }
+
+  // Channel name / numeric validation (fail closed: nothing is generated).
+  let invalidConfig = false;
+  const reportInvalid = (line: string) => {
+    invalidConfig = true;
+    if (errors) {
+      errors.push(line);
+    } else {
+      warnings?.push(line);
+    }
+  };
+  const seenNames = new Map<string, string>();
+  for (const ch of config.channels) {
+    if (typeof ch.name !== 'string' || !HIL_CHANNEL_NAME_PATTERN.test(ch.name)) {
+      reportInvalid(`[HIL] Channel '${ch.id}': name '${String(ch.name)}' must be a C identifier`);
+      continue;
+    }
+    const folded = sanitize(ch.name).toUpperCase();
+    const previous = seenNames.get(folded);
+    if (previous !== undefined) {
+      reportInvalid(`[HIL] Channel '${ch.id}': name '${ch.name}' collides with channel name '${previous}' (PIN_${folded})`);
+    } else {
+      seenNames.set(folded, ch.name);
+    }
+    if (ch.scalingFactor !== undefined && !Number.isFinite(ch.scalingFactor)) {
+      reportInvalid(`[HIL] Channel '${ch.id}': scalingFactor must be a finite number`);
+    }
+  }
+  for (const m of config.mappings) {
+    if (typeof m.safeValue === 'number' && !Number.isFinite(m.safeValue)) {
+      reportInvalid(`[HIL] Mapping '${m.id ?? m.channelId}': safeValue must be a finite number`);
+    }
+  }
+  if (invalidConfig) {
     return [];
   }
 
@@ -122,7 +180,8 @@ void HIL_Receive_Poll(void);
   const i2cReadChannels = config.channels.filter(ch => ch.peripheral === 'I2C' && ch.direction === 'In');
   const i2cWriteChannels = config.channels.filter(ch => ch.peripheral === 'I2C' && ch.direction === 'Out');
 
-  const halDriversC = `${disclaimer}#include "hal_drivers.h"
+  const posixDefine = target === 'Generic' ? '#ifndef _WIN32\n#ifndef _POSIX_C_SOURCE\n#define _POSIX_C_SOURCE 200809L\n#endif\n#endif\n' : '';
+  const halDriversC = `${disclaimer}${posixDefine}#include "hal_drivers.h"
 #include "hal_config.h"
 #include "hil_interface.h"
 #include <string.h>
@@ -296,7 +355,7 @@ void HIL_SendTelemetry(ADIA_Instance_t* instance);
 
       let expr = readCall;
       if (ch.scalingFactor && ch.scalingFactor !== 1) {
-        expr = `((float)(${readCall}) * ${ch.scalingFactor}f)`;
+        expr = `((float)(${readCall}) * ${cFloatLiteral(ch.scalingFactor)})`;
       }
 
       if (m.conversionExpr) {
@@ -329,7 +388,7 @@ void HIL_SendTelemetry(ADIA_Instance_t* instance);
 
       let valExpr = `instance->data.${smVar.name}`;
       if (ch.scalingFactor && ch.scalingFactor !== 1) {
-        valExpr = `((float)(${valExpr}) * ${ch.scalingFactor}f)`;
+        valExpr = `((float)(${valExpr}) * ${cFloatLiteral(ch.scalingFactor)})`;
       }
 
       if (m.conversionExpr) {
@@ -360,9 +419,7 @@ void HIL_SendTelemetry(ADIA_Instance_t* instance);
     .map(m => {
       const ch = config.channels.find(c => c.id === m.channelId);
       if (!ch) return '';
-      const safeValue = typeof m.safeValue === 'boolean'
-        ? (m.safeValue ? '1' : '0')
-        : String(m.safeValue ?? 0);
+      const safeValue = cSafeValue(m.safeValue);
       const pinMacro = `PIN_${sanitize(ch.name).toUpperCase()}`;
       if (ch.peripheral === 'GPIO') {
         return `        HAL_GPIO_Write(${pinMacro}, "${ch.name}", ${safeValue});`;
@@ -387,7 +444,11 @@ void HIL_SendTelemetry(ADIA_Instance_t* instance);
     .map((ch, idx) => {
       const mapping = config.mappings.find(m => m.channelId === ch.id);
       let valExpr = '0.0f';
-      if (mapping) {
+      const mappedVarExists = mapping !== undefined && smVariables.some(v => v.name === mapping.adiaVarId);
+      if (mapping && !mappedVarExists) {
+        warnings?.push(`[HIL] Mapping '${mapping.id ?? mapping.channelId}': variable '${mapping.adiaVarId}' does not exist; telemetry for channel '${ch.name}' falls back to the peripheral read`);
+      }
+      if (mapping && mappedVarExists) {
         valExpr = `instance->data.${mapping.adiaVarId}`;
       } else {
         const pinMacro = `PIN_${sanitize(ch.name).toUpperCase()}`;
@@ -486,12 +547,12 @@ ${telemetryCompositions || '    len += snprintf(buf + len, sizeof(buf) - (size_t
 `;
 
   // 6. main_hil.c
-  const mainHilC = `${disclaimer}#include "sm_core.h"
+  const mainHilC = `${disclaimer}${posixDefine}#include "sm_core.h"
 #include "hal_drivers.h"
 #include "hil_interface.h"
 ${target.startsWith('Arduino') || target === 'ESP32' ? '#include "Arduino.h"\n' : ''}
 ${target.startsWith('STM32') ? `#include "${target === 'STM32F4' ? 'stm32f4xx_hal.h' : 'stm32f1xx_hal.h'}"\n` : ''}
-${target === 'Generic' ? '#ifdef _WIN32\n#include <windows.h>\n#else\n#include <unistd.h>\n#endif\n' : ''}
+${target === 'Generic' ? '#ifdef _WIN32\n#include <windows.h>\n#else\n#include <time.h>\n#endif\n' : ''}
 ADIA_Instance_t sm_instance;
 
 ${target.startsWith('Arduino') || target === 'ESP32'

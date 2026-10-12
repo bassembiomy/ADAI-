@@ -144,6 +144,35 @@ I2C_HandleTypeDef hi2c1;
 uint8_t rx_buffer[RX_BUF_SIZE];
 uint8_t rx_index = 0;
 
+/* Interrupt-driven receive: one byte at a time into a single-producer/single-consumer ring buffer */
+#define HIL_RX_RING_SIZE 256U
+static volatile uint8_t hil_rx_ring[HIL_RX_RING_SIZE];
+static volatile uint16_t hil_rx_head = 0U;
+static volatile uint16_t hil_rx_tail = 0U;
+static uint8_t hil_rx_byte = 0U;
+
+void USART2_IRQHandler(void) {
+    HAL_UART_IRQHandler(&huart2);
+}
+
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef* huart) {
+    if (huart == &huart2) {
+        uint16_t next = (uint16_t)((hil_rx_head + 1U) & (HIL_RX_RING_SIZE - 1U));
+        if (next != hil_rx_tail) {
+            hil_rx_ring[hil_rx_head] = hil_rx_byte;
+            hil_rx_head = next;
+        }
+        (void)HAL_UART_Receive_IT(&huart2, &hil_rx_byte, 1U);
+    }
+}
+
+void HAL_UART_ErrorCallback(UART_HandleTypeDef* huart) {
+    if (huart == &huart2) {
+        __HAL_UART_CLEAR_OREFLAG(huart);
+        (void)HAL_UART_Receive_IT(&huart2, &hil_rx_byte, 1U);
+    }
+}
+
 static inline uint32_t GetADCChannel(const char* pin) {
     if (strcmp(pin, "PA0") == 0 || strcmp(pin, "pa0") == 0) return ADC_CHANNEL_0;
     if (strcmp(pin, "PA1") == 0 || strcmp(pin, "pa1") == 0) return ADC_CHANNEL_1;
@@ -245,11 +274,17 @@ static inline void HAL_SPI_WriteChannel(GPIO_TypeDef* csPort, uint16_t csPin, ui
   huart2.Init.HwFlowCtl = UART_HWCONTROL_NONE;
   huart2.Init.OverSampling = UART_OVERSAMPLING_16;
   HAL_UART_Init(&huart2);
+
+  /* Start interrupt-driven receive */
+  HAL_NVIC_SetPriority(USART2_IRQn, 5, 0);
+  HAL_NVIC_EnableIRQ(USART2_IRQn);
+  (void)HAL_UART_Receive_IT(&huart2, &hil_rx_byte, 1U);
 `,
     serialReceive: `
-  /* Read available bytes from UART2 */
-  uint8_t byte;
-  while (HAL_UART_Receive(&huart2, &byte, 1, 1) == HAL_OK) {
+  /* Drain bytes received by the UART interrupt */
+  while (hil_rx_tail != hil_rx_head) {
+      uint8_t byte = hil_rx_ring[hil_rx_tail];
+      hil_rx_tail = (uint16_t)((hil_rx_tail + 1U) & (HIL_RX_RING_SIZE - 1U));
       if (rx_index < RX_BUF_SIZE - 1) {
           rx_buffer[rx_index++] = byte;
           if (byte == '\\n') {
@@ -530,6 +565,35 @@ I2C_HandleTypeDef hi2c1;
 uint8_t rx_buffer[RX_BUF_SIZE];
 uint8_t rx_index = 0;
 
+/* Interrupt-driven receive: one byte at a time into a single-producer/single-consumer ring buffer */
+#define HIL_RX_RING_SIZE 256U
+static volatile uint8_t hil_rx_ring[HIL_RX_RING_SIZE];
+static volatile uint16_t hil_rx_head = 0U;
+static volatile uint16_t hil_rx_tail = 0U;
+static uint8_t hil_rx_byte = 0U;
+
+void USART1_IRQHandler(void) {
+    HAL_UART_IRQHandler(&huart1);
+}
+
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef* huart) {
+    if (huart == &huart1) {
+        uint16_t next = (uint16_t)((hil_rx_head + 1U) & (HIL_RX_RING_SIZE - 1U));
+        if (next != hil_rx_tail) {
+            hil_rx_ring[hil_rx_head] = hil_rx_byte;
+            hil_rx_head = next;
+        }
+        (void)HAL_UART_Receive_IT(&huart1, &hil_rx_byte, 1U);
+    }
+}
+
+void HAL_UART_ErrorCallback(UART_HandleTypeDef* huart) {
+    if (huart == &huart1) {
+        __HAL_UART_CLEAR_OREFLAG(huart);
+        (void)HAL_UART_Receive_IT(&huart1, &hil_rx_byte, 1U);
+    }
+}
+
 static inline uint32_t GetADCChannel(const char* pin) {
     if (strcmp(pin, "PA0") == 0 || strcmp(pin, "pa0") == 0) return ADC_CHANNEL_0;
     if (strcmp(pin, "PA1") == 0 || strcmp(pin, "pa1") == 0) return ADC_CHANNEL_1;
@@ -626,10 +690,17 @@ static inline void HAL_SPI_WriteChannel(GPIO_TypeDef* csPort, uint16_t csPin, ui
   huart1.Init.HwFlowCtl = UART_HWCONTROL_NONE;
   huart1.Init.OverSampling = UART_OVERSAMPLING_16;
   HAL_UART_Init(&huart1);
+
+  /* Start interrupt-driven receive */
+  HAL_NVIC_SetPriority(USART1_IRQn, 5, 0);
+  HAL_NVIC_EnableIRQ(USART1_IRQn);
+  (void)HAL_UART_Receive_IT(&huart1, &hil_rx_byte, 1U);
 `,
     serialReceive: `
-  uint8_t byte;
-  while (HAL_UART_Receive(&huart1, &byte, 1, 1) == HAL_OK) {
+  /* Drain bytes received by the UART interrupt */
+  while (hil_rx_tail != hil_rx_head) {
+      uint8_t byte = hil_rx_ring[hil_rx_tail];
+      hil_rx_tail = (uint16_t)((hil_rx_tail + 1U) & (HIL_RX_RING_SIZE - 1U));
       if (rx_index < RX_BUF_SIZE - 1) {
           rx_buffer[rx_index++] = byte;
           if (byte == '\\n') {
@@ -1211,13 +1282,44 @@ void HIL_SendString(const char* str) {
   },
   Generic: {
     name: 'Generic C / Linux Platform',
-    systemIncludes: `#include <stdio.h>\n#include <string.h>\n#include <stdlib.h>`,
+    systemIncludes: `#include <stdio.h>\n#include <string.h>\n#include <stdlib.h>\n#ifdef _WIN32\n#include <windows.h>\n#else\n#include <poll.h>\n#include <unistd.h>\n#endif`,
     globals: `
 /* Generic software simulations */
 static int simulated_inputs[100] = {0};
 static int simulated_outputs[100] = {0};
-char rx_buffer[256];
-int rx_index = 0;
+#define HIL_GENERIC_RX_SIZE 256
+static char rx_buffer[HIL_GENERIC_RX_SIZE];
+static int rx_index = 0;
+static int rx_discard = 0;
+
+/* Non-blocking single byte read from stdin.
+ * Returns 1 when a byte was stored in *out, 0 when nothing is available. */
+static int HIL_StdinReadByte(char* out) {
+#ifdef _WIN32
+    HANDLE h = GetStdHandle(STD_INPUT_HANDLE);
+    DWORD avail = 0;
+    DWORD got = 0;
+    if (!PeekNamedPipe(h, NULL, 0, NULL, &avail, NULL) || (avail == 0)) {
+        return 0;
+    }
+    if (!ReadFile(h, out, 1, &got, NULL) || (got != 1)) {
+        return 0;
+    }
+    return 1;
+#else
+    struct pollfd pfd;
+    pfd.fd = 0;
+    pfd.events = POLLIN;
+    pfd.revents = 0;
+    if (poll(&pfd, 1, 0) <= 0) {
+        return 0;
+    }
+    if ((pfd.revents & POLLIN) == 0) {
+        return 0;
+    }
+    return (read(0, out, 1) == 1) ? 1 : 0;
+#endif
+}
 
 static inline int HIL_GetPinIndex(const char* pin) {
     if (pin == NULL || pin[0] == '\\0') return 0;
@@ -1254,17 +1356,27 @@ static inline void HAL_SPI_WriteChannel(uint32_t val) {
   printf("HIL: Serial link initialized at %u baud\\n", (uint32_t)HIL_BAUDRATE);
 `,
     serialReceive: `
-  /* Stub receive from stdin or simulated file descriptor */
-  int c;
-  while ((c = getchar()) != EOF && c != '\\n') {
-      if (rx_index < 255) {
+  /* Non-blocking receive: partial lines persist in rx_buffer across calls */
+  char c = '\\0';
+  int budget = 512;
+  while ((budget-- > 0) && (HIL_StdinReadByte(&c) != 0)) {
+      if (c == '\\r') {
+          /* ignore CR */
+      } else if (c == '\\n') {
+          if ((rx_discard == 0) && (rx_index > 0)) {
+              rx_buffer[rx_index] = '\\0';
+              HIL_ProcessMessage(rx_buffer);
+          }
+          rx_index = 0;
+          rx_discard = 0;
+      } else if (rx_discard != 0) {
+          /* drop remainder of an over-long line */
+      } else if (rx_index < (HIL_GENERIC_RX_SIZE - 1)) {
           rx_buffer[rx_index++] = c;
+      } else {
+          rx_discard = 1;
+          rx_index = 0;
       }
-  }
-  if (rx_index > 0) {
-      rx_buffer[rx_index] = '\\0';
-      HIL_ProcessMessage(rx_buffer);
-      rx_index = 0;
   }
 `,
     serialTransmit: `
@@ -1273,7 +1385,7 @@ void HIL_SendString(const char* str) {
     fflush(stdout);
 }
 `,
-    tickDelay: `/* Sleep for 10ms simulation tick */\n#ifdef _WIN32\n    Sleep(10);\n#else\n    usleep(10000);\n#endif`,
+    tickDelay: `/* Sleep for 10ms simulation tick */\n#ifdef _WIN32\n    Sleep(10);\n#else\n    {\n        struct timespec hil_ts;\n        hil_ts.tv_sec = 0;\n        hil_ts.tv_nsec = 10000000L;\n        (void)nanosleep(&hil_ts, NULL);\n    }\n#endif`,
     peripherals: {
       GPIO: {
         init: (pin, name, dir) => `  printf("HIL: GPIO %s on Pin %s configured as %s\\n", "${name}", "${pin}", "${dir}");`,

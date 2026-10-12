@@ -232,7 +232,7 @@ describe('HIL Code Generator', () => {
     expect(f1Files).toHaveLength(14);
     const f1DriversC = f1Files.find(f => f.name === 'hal_drivers.c')?.content || '';
     expect(f1DriversC).toContain('#include "stm32f1xx_hal.h"');
-    expect(f1DriversC).toContain('HAL_UART_Receive(&huart1');
+    expect(f1DriversC).toContain('HAL_UART_Receive_IT(&huart1');
 
     // ESP32
     const espConfig = { ...mockConfig, target: 'ESP32' as const };

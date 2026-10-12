@@ -17,6 +17,26 @@ interface HILDashboardProps {
   target: string;
 }
 
+/** Append one telemetry frame to the plot buffers; channels missing from the frame become gaps (null), not 0. */
+export function buildPlotFrame(
+  prev: Record<string, Array<number | null>>,
+  channels: Array<{ name: string }>,
+  values: Record<string, number>,
+  historyLength: number
+): Record<string, Array<number | null>> {
+  const updated = { ...prev };
+  channels.forEach(ch => {
+    const val = values[ch.name] !== undefined ? values[ch.name] : null;
+    updated[ch.name] = [...(updated[ch.name] || []).slice(-historyLength), val];
+  });
+  return updated;
+}
+
+/** The firmware only understands `name=value` overrides; noise/clamp are simulation-only. */
+export function isFaultSupportedByTarget(type: 'override' | 'noise' | 'clamp'): boolean {
+  return type === 'override';
+}
+
 export const HILDashboard: React.FC<HILDashboardProps> = ({
   channels,
   mappings,
@@ -32,7 +52,7 @@ export const HILDashboard: React.FC<HILDashboardProps> = ({
   const [isRecording, setIsRecording] = useState(false);
   const [recordedData, setRecordedData] = useState<Array<{ timestamp: number; values: Record<string, number> }>>([]);
   const [historyLength, setHistoryLength] = useState(50); // limit graph points
-  const [plotData, setPlotData] = useState<Record<string, number[]>>({});
+  const [plotData, setPlotData] = useState<Record<string, Array<number | null>>>({});
   const [timestamps, setTimestamps] = useState<number[]>([]);
   const [dashboardMaximized, setDashboardMaximized] = useState<number | null>(null);
   
@@ -44,6 +64,14 @@ export const HILDashboard: React.FC<HILDashboardProps> = ({
 
   const samplesCountRef = useRef(0);
   const bytesCountRef = useRef(0);
+
+  // Long-lived listeners (IPC, Web Serial reader loop) must see current values.
+  const isRecordingRef = useRef(isRecording);
+  const channelsRef = useRef(channels);
+  useEffect(() => {
+    isRecordingRef.current = isRecording;
+    channelsRef.current = channels;
+  }, [isRecording, channels]);
 
   // List available ports
   useEffect(() => {
@@ -127,9 +155,21 @@ export const HILDashboard: React.FC<HILDashboardProps> = ({
       handleIncomingValues(values);
     };
 
+    const handleError = (_event: any, message: string) => {
+      addLog('error', `Serial port error: ${message}`);
+    };
+    const handleDisconnect = () => {
+      onChangeSessionState(prev => ({ ...prev, status: 'disconnected' }));
+      addLog('error', 'Serial port closed by the target or OS.');
+    };
+
     ipcRenderer.on('hil-on-data', handleData);
+    ipcRenderer.on('hil-on-error', handleError);
+    ipcRenderer.on('hil-on-disconnect', handleDisconnect);
     return () => {
       ipcRenderer.removeListener('hil-on-data', handleData);
+      ipcRenderer.removeListener('hil-on-error', handleError);
+      ipcRenderer.removeListener('hil-on-disconnect', handleDisconnect);
     };
   }, [sessionState.status, channels]);
 
@@ -139,12 +179,7 @@ export const HILDashboard: React.FC<HILDashboardProps> = ({
     
     // Update Plotly chart buffers
     setPlotData(prev => {
-      const updated = { ...prev };
-      channels.forEach(ch => {
-        const val = values[ch.name] !== undefined ? values[ch.name] : 0;
-        updated[ch.name] = [...(updated[ch.name] || []).slice(-historyLength), val];
-      });
-      return updated;
+      return buildPlotFrame(prev, channelsRef.current, values, historyLength);
     });
 
     // Save state
@@ -155,7 +190,7 @@ export const HILDashboard: React.FC<HILDashboardProps> = ({
     }));
 
     // Save record trace if recording
-    if (isRecording) {
+    if (isRecordingRef.current) {
       setRecordedData(prev => [...prev, { timestamp: time, values }]);
     }
   };
@@ -251,7 +286,7 @@ export const HILDashboard: React.FC<HILDashboardProps> = ({
               while (true) {
                 const { value, done } = await reader.read();
                 if (done) break;
-                buffer += decoder.decode(value);
+                buffer += decoder.decode(value, { stream: true });
                 const parts = buffer.split('\n');
                 buffer = parts.pop() || '';
                 parts.forEach(line => {
@@ -313,19 +348,26 @@ export const HILDashboard: React.FC<HILDashboardProps> = ({
   };
 
   const toggleFault = (channelId: string, type: 'override' | 'noise' | 'clamp', value: number) => {
-    onChangeSessionState(prev => {
-      const active = !prev.faultInjections[channelId]?.active;
-      const updatedFaults = {
+    const active = !sessionState.faultInjections[channelId]?.active;
+    onChangeSessionState(prev => ({
+      ...prev,
+      faultInjections: {
         ...prev.faultInjections,
         [channelId]: { type, value, active }
-      };
+      }
+    }));
 
-      // If connected, notify target
-      if (prev.status === 'connected') {
-        const ch = channels.find(c => c.id === channelId);
-        if (ch) {
-          const payload = active 
-            ? `${ch.name}=${value}\n` 
+    // If connected, notify target (side effects stay outside the state updater)
+    if (sessionState.status === 'connected') {
+      const ch = channels.find(c => c.id === channelId);
+      if (ch) {
+        if (!isFaultSupportedByTarget(type)) {
+          addLog('warn', `${type} fault is simulation-only; not sent to target`);
+        } else if (active && !Number.isFinite(value)) {
+          addLog('error', `Override value for ${ch.name} is not a finite number; not sent to target`);
+        } else {
+          const payload = active
+            ? `${ch.name}=${value}\n`
             : `${ch.name}_release=1\n`;
           if ((window as any).require) {
             const { ipcRenderer } = (window as any).require('electron');
@@ -345,13 +387,10 @@ export const HILDashboard: React.FC<HILDashboardProps> = ({
           }
         }
       }
-
-      return { ...prev, faultInjections: updatedFaults };
-    });
+    }
 
     const ch = channels.find(c => c.id === channelId);
     if (ch) {
-      const active = !sessionState.faultInjections[channelId]?.active;
       addLog(active ? 'warn' : 'info', 
         active ? `Injected ${type} fault into ${ch.name}` : `Released fault on ${ch.name}`
       );

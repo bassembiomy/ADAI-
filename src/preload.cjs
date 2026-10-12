@@ -19,7 +19,7 @@ const ALLOWED_INVOKE_CHANNELS = [
 
 const ALLOWED_ON_CHANNELS = [
   '3dx-oauth-complete', '3dx-browser-state-update',
-  'hil-on-data', 'hil-compiler-log-line', 'hil-flasher-log-line',
+  'hil-on-data', 'hil-on-error', 'hil-on-disconnect', 'hil-compiler-log-line', 'hil-flasher-log-line',
   'project-open-requested',
 ];
 

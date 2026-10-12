@@ -465,9 +465,26 @@ ipcMain.handle('sync-factory-io', async (event, { actuators }) => {
 // HIL HARDWARE-IN-THE-LOOP IPC HANDLERS
 // =============================================================================
 const { execFileSync, spawn } = require('child_process');
+const { normalizeHilPayload, createLineSplitter, HIL_MAX_LINE } = require('./security/hilSerialHelpers.cjs');
 let serialPort = null;
 let virtualInterval = null;
 let activePsProcess = null;
+
+/** Detach listeners from and close the current native serial port, if any. */
+function closeNativeSerialPort() {
+  const previous = serialPort;
+  serialPort = null;
+  if (!previous) return;
+  try {
+    previous.removeAllListeners();
+    previous.on('error', () => {});
+    if (previous.isOpen) {
+      previous.close(() => {});
+    }
+  } catch (e) {
+    console.warn('Failed to close previous serial port:', e);
+  }
+}
 
 async function getRealPorts() {
   if (process.platform === 'win32') {
@@ -1070,25 +1087,74 @@ ipcMain.handle('hil-connect', async (event, { port, baudRate, target }) => {
   // If a physical port is provided, always do a real serial connection
   if (cleanPort && !cleanPort.includes('(Virtual)')) {
     // 1. Try native serialport package first
+    let SerialPortCtor = null;
     try {
-      const { SerialPort } = require('serialport');
-      serialPort = new SerialPort({ path: cleanPort, baudRate: cleanBaud });
-      
-      let buffer = '';
-      serialPort.on('data', (data) => {
-        buffer += data.toString();
-        let parts = buffer.split('\n');
-        buffer = parts.pop();
-        parts.forEach(line => {
-          if (line.trim()) {
-            event.sender.send('hil-on-data', line + '\n');
+      ({ SerialPort: SerialPortCtor } = require('serialport'));
+    } catch (e) {
+      SerialPortCtor = null;
+      console.warn('Native serialport module unavailable:', e && e.message);
+    }
+
+    if (SerialPortCtor) {
+      // Release any previous native port before opening a new one.
+      closeNativeSerialPort();
+
+      const sender = event.sender;
+      const notify = (channel, message) => {
+        try {
+          if (!sender.isDestroyed()) sender.send(channel, message);
+        } catch (err) {
+          console.warn('HIL notify failed:', err);
+        }
+      };
+
+      let nativePort;
+      try {
+        nativePort = new SerialPortCtor({ path: cleanPort, baudRate: cleanBaud, autoOpen: false });
+      } catch (e) {
+        console.error('Failed to create serial port:', e);
+        return false;
+      }
+      serialPort = nativePort;
+
+      const splitter = createLineSplitter(HIL_MAX_LINE);
+      nativePort.on('data', (data) => {
+        for (const line of splitter.push(data.toString())) {
+          notify('hil-on-data', line + '\n');
+        }
+      });
+      nativePort.on('error', (err) => {
+        console.error('HIL serial port error:', err);
+        notify('hil-on-error', String((err && err.message) || err));
+      });
+      nativePort.on('close', () => {
+        if (serialPort === nativePort) {
+          serialPort = null;
+        }
+        notify('hil-on-disconnect', cleanPort);
+      });
+
+      const opened = await new Promise((resolve) => {
+        nativePort.open((err) => {
+          if (err) {
+            console.error('Failed to open serial port:', err);
+            resolve(false);
+          } else {
+            resolve(true);
           }
         });
       });
-
+      if (!opened) {
+        if (serialPort === nativePort) serialPort = null;
+        nativePort.removeAllListeners();
+        nativePort.on('error', () => {});
+        return false;
+      }
       return true;
-    } catch (e) {
-      console.warn('Native serialport connection failed, attempting PowerShell bridge fallback...', e);
+    }
+
+    {
+      console.warn('Native serialport unavailable, attempting PowerShell bridge fallback...');
 
       // 2. Fall back to PowerShell serial bridge (Windows only)
       if (process.platform === 'win32') {
@@ -1143,12 +1209,10 @@ try {
             });
 
             let resolved = false;
-            let buffer = '';
+            const psSplitter = createLineSplitter(HIL_MAX_LINE);
 
             activePsProcess.stdout.on('data', (data) => {
-              buffer += data.toString();
-              const parts = buffer.split('\n');
-              buffer = parts.pop() || '';
+              const parts = psSplitter.push(data.toString());
 
               for (const part of parts) {
                 const cleaned = part.trim();
@@ -1211,16 +1275,11 @@ try {
       
       activeHilProcess = spawn(exePath, [], { cwd: path.dirname(exePath) });
       
-      let buffer = '';
+      const exeSplitter = createLineSplitter(HIL_MAX_LINE);
       activeHilProcess.stdout.on('data', (data) => {
-        buffer += data.toString();
-        let parts = buffer.split('\n');
-        buffer = parts.pop() || '';
-        parts.forEach(line => {
-          if (line.trim()) {
-            event.sender.send('hil-on-data', line + '\n');
-          }
-        });
+        for (const line of exeSplitter.push(data.toString())) {
+          event.sender.send('hil-on-data', line + '\n');
+        }
       });
 
       activeHilProcess.stderr.on('data', (data) => {
@@ -1260,20 +1319,27 @@ ipcMain.handle('hil-disconnect', async () => {
   }
 
   if (serialPort && serialPort.isOpen) {
+    const closing = serialPort;
     return new Promise((resolve) => {
-      serialPort.close((err) => {
-        serialPort = null;
+      closing.close((err) => {
+        if (serialPort === closing) serialPort = null;
         resolve(!err);
       });
     });
   }
+  serialPort = null;
   return true;
 });
 
 ipcMain.handle('hil-send', async (event, payload) => {
+  const line = normalizeHilPayload(payload);
+  if (line === null) {
+    return false;
+  }
+
   if (activeHilProcess) {
     try {
-      activeHilProcess.stdin.write(payload.trim() + '\n');
+      activeHilProcess.stdin.write(line + '\n');
       return true;
     } catch (e) {
       return false;
@@ -1282,7 +1348,7 @@ ipcMain.handle('hil-send', async (event, payload) => {
 
   if (activePsProcess) {
     try {
-      activePsProcess.stdin.write(payload.trim() + '\n');
+      activePsProcess.stdin.write(line + '\n');
       return true;
     } catch (e) {
       return false;
@@ -1290,13 +1356,15 @@ ipcMain.handle('hil-send', async (event, payload) => {
   }
 
   if (serialPort && serialPort.isOpen) {
+    const target = serialPort;
     return new Promise((resolve) => {
-      serialPort.write(payload, (err) => {
+      target.write(line + '\n', (err) => {
         resolve(!err);
       });
     });
   }
-  return true;
+  // No transport connected.
+  return false;
 });
 
 // =============================================================================

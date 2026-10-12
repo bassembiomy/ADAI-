@@ -13,6 +13,7 @@
  *    - VALUE_TYPE: Type discriminator (0x01: BOOL, 0x02: INT, 0x03: FLOAT, 0x04: DOUBLE).
  *    - VALUE_BYTES: Binary payload (1 byte for BOOL, 4 bytes for INT/FLOAT, 8 bytes for DOUBLE).
  *    - CHECKSUM: Simple 8-bit sum modulo 256 of all bytes starting from LENGTH up to VALUE_BYTES (skips START_BYTE).
+ *    - A frame is exactly 5 + CHANNEL_ID_LEN + sizeof(VALUE) bytes; LENGTH must match.
  * 
  * 2. Text mode fallback:
  *    "CH_NAME=VALUE;CH_NAME2=VALUE2\n"
@@ -21,6 +22,14 @@
 export const START_BYTE = 0xAA;
 export const PROTO_MAGIC = 0x4144; // "AD"
 export const PROTO_VERSION = 0x01;
+
+/** Channel names travel in C strings and in the `name=value;` wire protocol, so they must be C identifiers. */
+export const HIL_CHANNEL_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]{0,47}$/;
+
+/** Maximum total size of a binary frame (the LENGTH field is a single byte). */
+export const MAX_BINARY_FRAME_LENGTH = 255;
+/** Smallest possible frame: START, LENGTH, ID_LEN, TYPE, 1B BOOL value, CHECKSUM. */
+export const MIN_BINARY_FRAME_LENGTH = 6;
 
 export enum ValueType {
   BOOL = 0x01,
@@ -49,6 +58,13 @@ export function getProtoType(cType: string): ValueType {
 /**
  * Calculates simple checksum (sum of bytes modulo 256)
  */
+function valueSizeOf(type: number): number | null {
+  if (type === ValueType.BOOL) return 1;
+  if (type === ValueType.INT || type === ValueType.FLOAT) return 4;
+  if (type === ValueType.DOUBLE) return 8;
+  return null;
+}
+
 function calculateChecksum(bytes: Uint8Array, start: number, end: number): number {
   let sum = 0;
   for (let i = start; i < end; i++) {
@@ -68,6 +84,9 @@ export function encodeBinaryFrame(channelId: string, value: number, dataType: st
   // Header: START(1B) + LENGTH(1B) + ID_LEN(1B) + ID_BYTES + TYPE(1B) + VAL_BYTES + CHECKSUM(1B)
   const valSize = type === ValueType.DOUBLE ? 8 : (type === ValueType.BOOL ? 1 : 4);
   const length = 1 + 1 + 1 + idBytes.length + 1 + valSize + 1;
+  if (length > MAX_BINARY_FRAME_LENGTH) {
+    throw new Error(`Binary frame too long: ${length} bytes exceeds ${MAX_BINARY_FRAME_LENGTH}`);
+  }
   const buffer = new Uint8Array(length);
   
   let offset = 0;
@@ -104,43 +123,43 @@ export function encodeBinaryFrame(channelId: string, value: number, dataType: st
 /**
  * Decodes a binary frame into its components
  */
-export function decodeBinaryFrame(buffer: Uint8Array): { channelId: string; value: number } | null {
-  if (buffer.length < 7) return null;
+export function decodeBinaryFrame(buffer: Uint8Array): { channelId: string; value: number; length: number } | null {
+  if (buffer.length < MIN_BINARY_FRAME_LENGTH) return null;
   if (buffer[0] !== START_BYTE) return null;
-  
+
   const length = buffer[1];
-  if (buffer.length < length) return null;
-  
+  if (length < MIN_BINARY_FRAME_LENGTH || buffer.length < length) return null;
+
   const idLen = buffer[2];
-  if (3 + idLen + 2 > length) return null;
-  
-  const idBytes = buffer.subarray(3, 3 + idLen);
-  const channelId = new TextDecoder().decode(idBytes);
-  
-  let offset = 3 + idLen;
-  const type = buffer[offset++];
-  
+  const typeOffset = 3 + idLen;
+  if (typeOffset >= length) return null;
+
+  const type = buffer[typeOffset];
+  const valSize = valueSizeOf(type);
+  if (valSize === null) return null;
+  if (length !== 3 + idLen + 1 + valSize + 1) return null;
+
   const checksumOffset = length - 1;
-  const calcChecksum = calculateChecksum(buffer, 1, checksumOffset);
-  if (buffer[checksumOffset] !== calcChecksum) {
-    // Checksum mismatch
+  if (buffer[checksumOffset] !== calculateChecksum(buffer, 1, checksumOffset)) {
     return null;
   }
-  
+
+  const channelId = new TextDecoder().decode(buffer.subarray(3, 3 + idLen));
+  const valueOffset = typeOffset + 1;
   const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
   let value = 0;
-  
+
   if (type === ValueType.BOOL) {
-    value = view.getUint8(offset);
+    value = view.getUint8(valueOffset);
   } else if (type === ValueType.INT) {
-    value = view.getInt32(offset, true);
+    value = view.getInt32(valueOffset, true);
   } else if (type === ValueType.FLOAT) {
-    value = view.getFloat32(offset, true);
-  } else if (type === ValueType.DOUBLE) {
-    value = view.getFloat64(offset, true);
+    value = view.getFloat32(valueOffset, true);
+  } else {
+    value = view.getFloat64(valueOffset, true);
   }
-  
-  return { channelId, value };
+
+  return { channelId, value, length };
 }
 
 /**
