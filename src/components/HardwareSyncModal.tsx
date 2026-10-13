@@ -20,15 +20,15 @@ export const HardwareSyncModal: React.FC<HardwareSyncModalProps> = ({ onSave, on
         <p className="text-xs text-slate-400 mb-4">
           Paste physical MCU DIO channel mappings. Engine core files are strictly protected and remain immutable.
         </p>
-        <textarea
+        <textarea data-help-feature="ui:HardwareSyncModal:86153956a4d9" data-help-source="src/components/HardwareSyncModal.tsx"
           value={content}
           onChange={e => setContent(e.target.value)}
           className="w-full h-48 bg-slate-950 p-3 rounded text-xs font-mono text-slate-200 border border-slate-800 focus:outline-none focus:border-indigo-500"
           placeholder="/* USER CODE BEGIN MCAL_DIO */\n#define IN_SENSOR_PIN (0U)\n/* USER CODE END MCAL_DIO */"
         />
         <div className="flex justify-end gap-2 mt-4">
-          <button onClick={onClose} className="px-4 py-2 text-slate-400 hover:text-slate-200 text-sm">Cancel</button>
-          <button
+          <button data-help-feature="ui:HardwareSyncModal:151ed7616191" data-help-source="src/components/HardwareSyncModal.tsx" onClick={onClose} className="px-4 py-2 text-slate-400 hover:text-slate-200 text-sm">Cancel</button>
+          <button data-help-feature="ui:HardwareSyncModal:e74a16f3f360" data-help-source="src/components/HardwareSyncModal.tsx"
             onClick={() => {
               onSave(content);
               onClose();

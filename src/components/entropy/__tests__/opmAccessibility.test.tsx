@@ -216,4 +216,20 @@ describe('OPM Accessibility & Stability Suite', () => {
       expect(updatedNodes[0].data.name).toBe('RenamedPump');
     });
   });
+
+  describe('Semantic Workspace Classes', () => {
+    it('provides semantic classes for code surface and console', () => {
+      const state = createInitialArtifactState();
+      const html = renderToStaticMarkup(
+        <OpmCodeGenerationWorkspace
+          nodes={sampleNodes as never}
+          edges={sampleEdges as never}
+          state={state}
+          onStateChange={() => {}}
+        />
+      );
+      expect(html).toContain('opm-code-surface');
+      expect(html).toContain('opm-console');
+    });
+  });
 });

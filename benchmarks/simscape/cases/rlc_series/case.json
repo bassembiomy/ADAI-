@@ -1,0 +1,10 @@
+{
+  "id": "rlc_series",
+  "class": "linear_smooth",
+  "stopTime": 0.01,
+  "dt": 2e-6,
+  "signals": [
+    { "name": "v_c", "unit": "V", "vlabProbe": { "nodeId": "sensor", "handle": "v_s", "variableName": "v_c" } }
+  ],
+  "analytic": { "type": "rlc_series_underdamped", "V": 10, "R": 10, "L": 0.01, "C": 1e-5 }
+}

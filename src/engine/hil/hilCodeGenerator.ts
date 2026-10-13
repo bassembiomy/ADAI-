@@ -21,6 +21,35 @@ export function generateHALCode(
   const targetSelection = resolveTargetSelection(config);
   const mcu = hilDriverTemplates[target] || hilDriverTemplates.Generic;
 
+  // Complete pinned vendor runtimes implement scalar adapters. Buffered buses
+  // require configuration and MCAL contracts not present in the legacy schema.
+  const supported = target === 'Generic' ? ['GPIO','ADC','DAC','PWM','UART','SPI','I2C','Timer'] : ['GPIO','ADC','PWM', ...(target === 'STM32F4' || target === 'ESP32' ? ['DAC'] : [])];
+  for (const channel of config.channels) {
+    if (!supported.includes(channel.peripheral)) {
+      const message = `[HIL] Unsupported production peripheral '${channel.peripheral}' on ${target} (channel '${channel.name}').`;
+      if (errors) errors.push(message); else warnings?.push(message);
+    }
+  }
+
+  const reservedPins: Record<string, readonly string[]> = { STM32F4:['PA2','PA3'], STM32F1:['PA9','PA10'], Arduino_Uno:['0','1'], Arduino_Mega:['0','1'], ESP32:['1','3','6','7','8','9','10','11'] };
+  const peripheralPins: Record<string, Partial<Record<string, readonly string[]>>> = {
+    STM32F4: { ADC:['PA0','PA1','PA2','PA3','PA4','PA5','PA6','PA7','PB0','PB1','PC0','PC1','PC2','PC3','PC4','PC5'], DAC:['PA4','PA5'], PWM:['PA8','PA9','PA10','PA11','PE9','PE11','PE13','PE14'] },
+    STM32F1: { ADC:['PA0','PA1','PA2','PA3','PA4','PA5','PA6','PA7','PB0','PB1'], PWM:['PA8','PA9','PA10','PA11'] },
+    Arduino_Uno: { ADC:['A0','A1','A2','A3','A4','A5'], PWM:['3','5','6','9','10','11'] },
+    Arduino_Mega: { ADC:Array.from({length:16}, (_,i) => `A${i}`), PWM:['2','3','4','5','6','7','8','9','10','11','12','13','44','45','46'] },
+    ESP32: { ADC:['0','2','4','12','13','14','15','25','26','27','32','33','34','35','36','39'], DAC:['25','26'], PWM:['2','4','12','13','14','15','16','17','18','19','21','22','23','25','26','27'] },
+  };
+  for (const channel of config.channels) {
+    const pin = channel.pin.trim().toUpperCase();
+    const validPins = peripheralPins[target]?.[channel.peripheral];
+    const wrongDirection = (channel.peripheral === 'ADC' && channel.direction !== 'In') || (['DAC','PWM'].includes(channel.peripheral) && channel.direction !== 'Out');
+    const unavailable = target === 'ESP32' && ['20','24','28','29','30','31','37','38'].includes(pin);
+    if (wrongDirection || unavailable || reservedPins[target]?.includes(pin) || (validPins && !validPins.includes(pin))) {
+      const message = `[HIL] Channel '${channel.name}': unsupported production ${channel.peripheral} pin/direction '${pin}' (${channel.direction}), or pin reserved for HIL/runtime.`;
+      if (errors) errors.push(message); else warnings?.push(message);
+    }
+  }
+
   const pinIssues = validatePinAssignments(config.channels, {
     targetLegacy: target,
     pack: defaultTargetPackFor(targetSelection?.targetId ?? ''),
@@ -55,7 +84,7 @@ export function generateHALCode(
 
 #define TARGET_MCU_${target.toUpperCase()}
 #define HIL_BAUDRATE ${config.baudRate || 115200}U
-#define SYSTEM_CLOCK_MHZ ${config.clockSpeed || 16}U
+#define SYSTEM_CLOCK_MHZ ${target === 'STM32F4' ? 16 : target === 'STM32F1' ? 8 : config.clockSpeed || 16}U
 
 /* Channels Pin Mappings */
 ${config.channels
@@ -72,24 +101,8 @@ ${config.channels
 #include <stdbool.h>
 #include "hal_config.h"
 
-#ifdef TARGET_MCU_STM32F4
-#include "stm32f4xx_hal.h"
-extern UART_HandleTypeDef huart1;
-extern UART_HandleTypeDef huart2;
-extern UART_HandleTypeDef huart3;
-extern SPI_HandleTypeDef hspi1;
-extern ADC_HandleTypeDef hadc1;
-extern DAC_HandleTypeDef hdac;
-extern TIM_HandleTypeDef htim1;
-extern I2C_HandleTypeDef hi2c1;
-#elif defined(TARGET_MCU_STM32F1)
-#include "stm32f1xx_hal.h"
-extern UART_HandleTypeDef huart1;
-extern UART_HandleTypeDef huart2;
-extern SPI_HandleTypeDef hspi1;
-extern ADC_HandleTypeDef hadc1;
-extern TIM_HandleTypeDef htim1;
-extern I2C_HandleTypeDef hi2c1;
+#ifdef __cplusplus
+extern "C" {
 #endif
 
 void HAL_Drivers_Init(void);
@@ -107,6 +120,9 @@ void HAL_I2C_Write(const char* pin, const char* name, uint32_t value);
 void HIL_SendString(const char* str);
 void HIL_Receive_Poll(void);
 
+#ifdef __cplusplus
+}
+#endif
 #endif /* HAL_DRIVERS_H */`;
 
   // 3. hal_drivers.c
@@ -256,11 +272,18 @@ void HIL_Receive_Poll(void) {
 
 #include "sm_config.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 void HIL_Sync_Inputs(ADIA_Instance_t* instance);
+void HIL_ApplyOverrides(ADIA_Instance_t* instance);
 void HIL_Sync_Outputs(ADIA_Instance_t* instance);
 void HIL_ProcessMessage(const char* msg);
 void HIL_SendTelemetry(ADIA_Instance_t* instance);
 
+#ifdef __cplusplus
+}
+#endif
 #endif /* HIL_INTERFACE_H */`;
 
   // 5. hil_interface.c
@@ -318,6 +341,15 @@ void HIL_SendTelemetry(ADIA_Instance_t* instance);
     })
     .filter(Boolean)
     .join('\n');
+
+  const overrideAssignments = config.mappings.filter(mapping => mapping.direction === 'read').map(mapping => {
+    const channel = config.channels.find(item => item.id === mapping.channelId && item.direction === 'In');
+    const variable = smVariables.find(item => item.name === mapping.adiaVarId);
+    if (!channel || !variable) return '';
+    const types: Record<string, string> = {uint8:'uint8_t',int8:'int8_t',uint16:'uint16_t',int16:'int16_t',uint32:'uint32_t',uint:'uint32_t',int32:'int32_t',int:'int32_t',single:'float'};
+    const type = types[variable.type] ?? variable.type ?? 'float';
+    return `    if (override_active_${sanitize(channel.name)}) {\n        instance->data.${variable.name} = (${type})(override_val_${sanitize(channel.name)});\n    }`;
+  }).filter(Boolean).join('\n');
 
   // Output synchronization logic
   const outputSyncs = config.mappings
@@ -417,8 +449,15 @@ void HIL_SendTelemetry(ADIA_Instance_t* instance);
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <ctype.h>
+#include <math.h>
 
 ${overrideGlobals}
+
+void HIL_ApplyOverrides(ADIA_Instance_t* instance) {
+    if (instance == NULL) { return; }
+${overrideAssignments || '    (void)instance;'}
+}
 
 void HIL_Sync_Inputs(ADIA_Instance_t* instance) {
 ${inputSyncs || '    (void)instance;'}
@@ -438,6 +477,7 @@ ${outputSyncs || '    (void)instance;'}
 
 void HIL_ProcessMessage(const char* msg) {
     char temp[256];
+    if (msg == NULL) { return; }
     strncpy(temp, msg, sizeof(temp));
     temp[sizeof(temp)-1] = '\\0';
     
@@ -453,8 +493,18 @@ void HIL_ProcessMessage(const char* msg) {
         }
         
         char name[64];
-        float val = 0.0f;
-        if (sscanf(token, "%63[^=]=%f", name, &val) == 2) {
+        char* separator = strchr(token, '=');
+        if (separator == NULL) { continue; }
+        size_t nameLength = (size_t)(separator - token);
+        if (nameLength == 0U || nameLength >= sizeof(name)) { continue; }
+        memcpy(name, token, nameLength);
+        name[nameLength] = '\\0';
+        char* end = NULL;
+        float val = (float)strtod(separator + 1, &end);
+        if (end == separator + 1) { continue; }
+        while (*end != '\\0' && isspace((unsigned char)*end)) { ++end; }
+        (void)val;
+        if (*end == '\\0' && isfinite(val)) {
             ${inputChannels.length > 0 ? inputChannels
               .map(
                 ch => `if (strcmp(name, "${ch.name}") == 0) {\n                override_val_${sanitize(ch.name)} = val;\n                override_active_${sanitize(ch.name)} = true;\n            } else if (strcmp(name, "${ch.name}_release") == 0) {\n                override_active_${sanitize(ch.name)} = false;\n            }`
@@ -486,9 +536,15 @@ ${telemetryCompositions || '    len += snprintf(buf + len, sizeof(buf) - (size_t
 `;
 
   // 6. main_hil.c
-  const mainHilC = `${disclaimer}#include "sm_core.h"
+  const mainHilC = `${disclaimer}#ifdef __cplusplus
+extern "C" {
+#endif
+#include "sm_core.h"
 #include "hal_drivers.h"
 #include "hil_interface.h"
+#ifdef __cplusplus
+}
+#endif
 ${target.startsWith('Arduino') || target === 'ESP32' ? '#include "Arduino.h"\n' : ''}
 ${target.startsWith('STM32') ? `#include "${target === 'STM32F4' ? 'stm32f4xx_hal.h' : 'stm32f1xx_hal.h'}"\n` : ''}
 ${target === 'Generic' ? '#ifdef _WIN32\n#include <windows.h>\n#else\n#include <unistd.h>\n#endif\n' : ''}
@@ -509,6 +565,7 @@ void loop(void) {
 
     /* Read explicitly mapped hardware inputs into the State Machine */
     (void)SM_ReadInputs(&sm_instance);
+    HIL_ApplyOverrides(&sm_instance);
 
     /* Tick the State Machine */
     (void)SM_Step(&sm_instance, SM_TICK_MS);
@@ -537,6 +594,7 @@ void loop(void) {
 
         /* Read explicitly mapped hardware inputs into the State Machine */
         (void)SM_ReadInputs(&sm_instance);
+    HIL_ApplyOverrides(&sm_instance);
 
         /* Tick the State Machine */
         (void)SM_Step(&sm_instance, SM_TICK_MS);
@@ -560,21 +618,54 @@ void loop(void) {
   platformioIni += `;  Target MCU: ${target}\n`;
   platformioIni += `; =============================================================\n\n`;
 
+  platformioIni += `[platformio]\nsrc_dir = .\ninclude_dir = .\n\n`;
   if (target === 'Arduino_Mega') {
-    platformioIni += `[env:megaatmega2560]\nplatform = atmelavr\nboard = megaatmega2560\nframework = arduino\nmonitor_speed = ${config.baudRate || 115200}\nbuild_flags =\n    -I. -std=c99\n`;
+    platformioIni += `[env:megaatmega2560]\nplatform = atmelavr@5.1.0\nboard = megaatmega2560\nframework = arduino\nmonitor_speed = ${config.baudRate || 115200}\nbuild_flags =\n    -I.\n    -Wl,-Map,firmware.map\n`;
   } else if (target === 'Arduino_Uno') {
-    platformioIni += `[env:uno]\nplatform = atmelavr\nboard = uno\nframework = arduino\nmonitor_speed = ${config.baudRate || 115200}\nbuild_flags =\n    -I. -std=c99\n`;
+    platformioIni += `[env:uno]\nplatform = atmelavr@5.1.0\nboard = uno\nframework = arduino\nmonitor_speed = ${config.baudRate || 115200}\nbuild_flags =\n    -I.\n    -Wl,-Map,firmware.map\n`;
   } else if (target === 'STM32F4') {
-    platformioIni += `[env:stm32f407vg]\nplatform = ststm32\nboard = discovery_f407vg\nframework = stm32cube\nmonitor_speed = ${config.baudRate || 115200}\nbuild_flags =\n    -I. -std=c99\n`;
+    platformioIni += `[env:stm32f407vg]\nplatform = ststm32@19.0.0\nboard = disco_f407vg\nframework = stm32cube\nmonitor_speed = ${config.baudRate || 115200}\nbuild_flags =\n    -I.\n    -Wl,-Map,firmware.map\n`;
   } else if (target === 'STM32F1') {
-    platformioIni += `[env:bluepill_f103c8]\nplatform = ststm32\nboard = bluepill_f103c8\nframework = stm32cube\nmonitor_speed = ${config.baudRate || 115200}\nbuild_flags =\n    -I. -std=c99\n`;
+    platformioIni += `[env:bluepill_f103c8]\nplatform = ststm32@19.0.0\nboard = bluepill_f103c8\nframework = stm32cube\nmonitor_speed = ${config.baudRate || 115200}\nbuild_flags =\n    -I.\n    -Wl,-Map,firmware.map\n`;
   } else if (target === 'ESP32') {
-    platformioIni += `[env:esp32dev]\nplatform = espressif32\nboard = esp32dev\nframework = arduino\nmonitor_speed = ${config.baudRate || 115200}\nbuild_flags =\n    -I. -std=c99\n`;
+    platformioIni += `[env:esp32dev]\nplatform = espressif32@6.9.0\nboard = esp32dev\nframework = arduino\nmonitor_speed = ${config.baudRate || 115200}\nbuild_flags =\n    -I.\n    -Wl,-Map,firmware.map\n`;
   } else {
-    platformioIni += `[env:generic]\nplatform = native\nbuild_flags =\n    -I. -std=c99\n`;
+    platformioIni += `[env:generic]\nplatform = native\nbuild_flags =\n    -I.\n    -Wl,-Map,firmware.map\n`;
   }
 
   const mainFileName = target.startsWith('Arduino') || target === 'ESP32' ? 'main_hil.ino' : 'main_hil.c';
+
+  if (target.startsWith('STM32')) platformioIni += '    -Wl,-u,_printf_float\n';
+  if (target.startsWith('Arduino')) platformioIni += '    -Wl,-u,vfprintf\n    -lprintf_flt\n    -lm\n';
+  const arduino = target.startsWith('Arduino') || target === 'ESP32';
+  const sourceNames = ['sm_core.c', 'sm_mapping.c', 'sm_user_logic.c', 'sm_safety.c', 'adia_mcal.c', 'adia_component.c', arduino ? 'hal_drivers.cpp' : 'hal_drivers.c', 'hil_interface.c', 'mcal_dio_hil.c', mainFileName];
+  if (arduino) sourceNames.push('main_hil.ino.cpp');
+  if (target.startsWith('STM32')) sourceNames.push('stm32_runtime.c');
+  platformioIni += `build_src_filter = -<*> ${sourceNames.map(name => `+<${name}>`).join(' ')}\n`;
+  if (arduino) platformioIni += 'extra_scripts = pre:adia_cpp.py\n';
+  const cppScript = `Import("env")
+from pathlib import Path
+root = Path(env.subst("$PROJECT_DIR"))
+(root / "hal_drivers.cpp").write_text((root / "hal_drivers.c").read_text(), encoding="utf-8")
+`;
+  const stm32Runtime = `#include "${target === 'STM32F4' ? 'stm32f4xx_hal.h' : 'stm32f1xx_hal.h'}"
+void SystemClock_Config(void) {
+    RCC_OscInitTypeDef osc = {0};
+    RCC_ClkInitTypeDef clk = {0};
+    osc.OscillatorType = RCC_OSCILLATORTYPE_HSI;
+    osc.HSIState = RCC_HSI_ON;
+    osc.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
+    osc.PLL.PLLState = RCC_PLL_NONE;
+    if (HAL_RCC_OscConfig(&osc) != HAL_OK) { while (1) {} }
+    clk.ClockType = RCC_CLOCKTYPE_SYSCLK | RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_PCLK1 | RCC_CLOCKTYPE_PCLK2;
+    clk.SYSCLKSource = RCC_SYSCLKSOURCE_HSI;
+    clk.AHBCLKDivider = RCC_SYSCLK_DIV1;
+    clk.APB1CLKDivider = RCC_HCLK_DIV1;
+    clk.APB2CLKDivider = RCC_HCLK_DIV1;
+    if (HAL_RCC_ClockConfig(&clk, FLASH_LATENCY_0) != HAL_OK) { while (1) {} }
+}
+void SysTick_Handler(void) { HAL_IncTick(); HAL_SYSTICK_IRQHandler(); }
+`;
 
   const mcalChannelIds = [...new Set(config.mappings.map((mapping) => mapping.channelId))]
     .sort((left, right) => left.localeCompare(right));
@@ -657,7 +748,7 @@ void MCAL_Watchdog_Kick(void) { }
   ${target.startsWith('Arduino') || target === 'ESP32' ? '- Arduino framework expects \`setup()\` and \`loop()\` (already generated).' : '- Standard C application with \`int main(void)\`.'}
 
 ## HAL/BSP Integration
-- The application layer is decoupled from the target MCU.
+${target.startsWith('STM32') ? '- STM32 uses the internal HSI oscillator at ' + (target === 'STM32F4' ? '16' : '8') + ' MHz; the configured clock request is overridden by this portable runtime.\n' : ''}- The application layer is decoupled from the target MCU.
 - Implement the hooks in \`hal_drivers.c\` only if the generated template does not match your board.
 - Do **not** modify \`sm_core.c\`, \`sm_user_logic.c\`, or the state machine logic; only map the HAL functions.
 
@@ -665,7 +756,7 @@ void MCAL_Watchdog_Kick(void) { }
 This project is configured for PlatformIO (see \`platformio.ini\`). Open the folder in VS Code with the PlatformIO extension or run \`pio run\` to build and upload.
 `;
 
-  const embeddedConfig = targetSelection ? config : {
+  const embeddedConfig = targetSelection ? { ...config, targetSelection: { ...targetSelection, driverMode: 'vendor' as const } } : {
     ...config,
     targetSelection: {
       targetId: 'generic-host',
@@ -678,6 +769,8 @@ This project is configured for PlatformIO (see \`platformio.ini\`). Open the fol
 
   return [
     ...embeddedFiles,
+    ...(arduino ? [{ name: 'adia_cpp.py', content: cppScript }] : []),
+    ...(target.startsWith('STM32') ? [{ name: 'stm32_runtime.c', content: stm32Runtime }] : []),
     { name: 'hal_config.h', content: halConfigH },
     { name: 'hal_drivers.h', content: halDriversH },
     { name: 'hal_drivers.c', content: halDriversC },

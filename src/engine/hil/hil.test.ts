@@ -92,7 +92,7 @@ describe('HIL Code Generator', () => {
 
   it('should generate all HIL driver files for STM32F4', () => {
     const files = generateHALCode(mockConfig, smVariables);
-    expect(files).toHaveLength(14);
+    expect(files).toHaveLength(15);
 
 
     const names = files.map(f => f.name);
@@ -143,7 +143,7 @@ describe('HIL Code Generator', () => {
 
     // Default files (12, including both reports)
     // + HIL files (14, including component, MCAL, driver stub, and manifest) = 26 files.
-    expect(result.files).toHaveLength(26);
+    expect(result.files).toHaveLength(27);
     const names = result.files.map(f => f.name);
     expect(names).not.toContain('stm32f4xx_hal.h');
     expect(names).toContain('mcal_dio_hil.c');
@@ -165,7 +165,7 @@ describe('HIL Code Generator', () => {
 
     // Default files (12 after excluding the generic MCAL stub)
     // + HIL files (14) + STM32 shim (1) = 27 files.
-    expect(result.files).toHaveLength(27);
+    expect(result.files).toHaveLength(28);
     const names = result.files.map(f => f.name);
     expect(names).toContain('stm32f4xx_hal.h');
     expect(names).toContain('mcal_dio_hil.c');
@@ -229,7 +229,7 @@ describe('HIL Code Generator', () => {
     // STM32F1
     const f1Config = { ...mockConfig, target: 'STM32F1' as const };
     const f1Files = generateHALCode(f1Config, smVariables);
-    expect(f1Files).toHaveLength(14);
+    expect(f1Files).toHaveLength(15);
     const f1DriversC = f1Files.find(f => f.name === 'hal_drivers.c')?.content || '';
     expect(f1DriversC).toContain('#include "stm32f1xx_hal.h"');
     expect(f1DriversC).toContain('HAL_UART_Receive(&huart1');
@@ -237,12 +237,12 @@ describe('HIL Code Generator', () => {
     // ESP32
     const espConfig = { ...mockConfig, target: 'ESP32' as const };
     const espFiles = generateHALCode(espConfig, smVariables);
-    expect(espFiles).toHaveLength(14);
+    expect(espFiles).toHaveLength(15);
 
     // Arduino_Uno
     const unoConfig = { ...mockConfig, target: 'Arduino_Uno' as const };
     const unoFiles = generateHALCode(unoConfig, smVariables);
-    expect(unoFiles).toHaveLength(14);
+    expect(unoFiles).toHaveLength(15);
 
     const mainUno = unoFiles.find(f => f.name.startsWith('main_hil'))?.content || '';
     expect(mainUno).toContain('#include "Arduino.h"');
@@ -368,7 +368,7 @@ describe('HIL Code Generator', () => {
     ];
 
     const files = generateHALCode(uartSpiConfig, smVars);
-    expect(files).toHaveLength(14);
+    expect(files).toHaveLength(15);
 
 
     const driversH = files.find(f => f.name === 'hal_drivers.h')?.content || '';
@@ -608,9 +608,10 @@ describe('HIL Code Generator', () => {
     expect(mcalHeader).toContain('Target: stm32f407vgt6');
     expect(mcalHeader).toContain('adia_mcal_gpio_channel_t');
     const manifest = JSON.parse(manifestText);
-    expect(manifest.targetSelection).toEqual(exactConfig.targetSelection);
-    expect(manifest.flashBlocked).toBe(true);
-    expect(manifest.blockReasons).toContain('TARGET_DRIVER_PROVIDER_NOT_GENERATED');
+    expect(manifest.targetSelection).toEqual({ ...exactConfig.targetSelection, driverMode: 'vendor' });
+    expect(manifest.flashBlocked).toBe(false);
+    expect(manifest.stubbedPeripherals).toEqual([]);
+    expect(manifest.blockReasons).toEqual([]);
   });
 
   it('should suppress unused parameter warnings in mcal_dio_hil.c when only input channels are mapped', () => {

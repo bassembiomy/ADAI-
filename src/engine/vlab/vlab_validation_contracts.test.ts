@@ -13,13 +13,16 @@ describe('V-Lab Validation Contract Registry', () => {
     expect(coverage.missingContracts).toEqual([]);
     expect(coverage.orphanContracts).toEqual([]);
     expect(coverage.missingEquationFactories).toEqual([]);
-    expect(coverage.totalBlocks).toBe(246);
+    // VLAB_LIBRARY is the single source of truth for the block count (it was a stale hard-coded 247, WP-03).
+    expect(coverage.totalBlocks).toBe(VLAB_LIBRARY.flatMap((domain) => domain.blocks).length);
     expect(coverage.isComplete).toBe(true);
   });
 
   it('retrieves valid validation contract for any block in VLAB_LIBRARY', () => {
     const allBlocks = VLAB_LIBRARY.flatMap((domain) => domain.blocks);
-    expect(allBlocks.length).toBe(246);
+    expect(allBlocks.length).toBeGreaterThan(0);
+    expect(new Set(allBlocks.map((b) => b.id)).size).toBe(allBlocks.length);
+    expect(Object.keys(VLAB_VALIDATION_CONTRACTS).length).toBe(allBlocks.length);
 
     for (const block of allBlocks) {
       const contract = getValidationContract(block.id);

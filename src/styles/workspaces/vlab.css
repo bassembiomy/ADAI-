@@ -1,0 +1,87 @@
+/* Scoped theme rules for V-Lab Workspace */
+
+.vlab-workspace {
+  background-color: var(--surface-canvas);
+  color: var(--text-primary);
+}
+
+.vlab-workspace .vlab-panel,
+.vlab-panel {
+  background-color: var(--surface-panel);
+  border-color: var(--border-default);
+  color: var(--text-primary);
+}
+
+.vlab-workspace .vlab-node,
+.vlab-node {
+  background-color: var(--diagram-node);
+  border-color: var(--border-default);
+  color: var(--text-primary);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.vlab-workspace .vlab-node:hover,
+.vlab-node:hover {
+  border-color: var(--border-strong);
+}
+
+.vlab-workspace .vlab-node.selected,
+.vlab-workspace .vlab-node[data-selected="true"],
+.vlab-node[data-selected="true"] {
+  border-color: var(--diagram-node-selected);
+  box-shadow: 0 0 0 1px var(--diagram-node-selected);
+}
+
+.vlab-workspace .react-flow__background {
+  background-color: var(--surface-canvas);
+}
+
+.vlab-workspace .react-flow__controls {
+  background-color: var(--surface-panel);
+  border-color: var(--border-default);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.vlab-workspace .react-flow__controls-button {
+  background-color: var(--surface-panel);
+  border-color: var(--border-default);
+  color: var(--text-secondary);
+}
+
+.vlab-workspace .react-flow__controls-button:hover {
+  background-color: var(--surface-raised);
+  color: var(--text-primary);
+}
+
+.vlab-workspace .react-flow__minimap {
+  background-color: var(--surface-panel);
+  border-color: var(--border-default);
+}
+
+/* V-Lab still contains legacy dark utility classes in its dense inspector UI.
+   Keep those classes for dark mode, but remap their surfaces when the app is light. */
+:root[data-theme="light"] .vlab-workspace [class*="bg-[#0d0d0d"],
+:root[data-theme="light"] .vlab-workspace [class*="bg-[#111"],
+:root[data-theme="light"] .vlab-workspace [class*="bg-[#141414"],
+:root[data-theme="light"] .vlab-workspace [class*="bg-[#151515"],
+:root[data-theme="light"] .vlab-workspace [class*="bg-[#181818"],
+:root[data-theme="light"] .vlab-workspace [class*="bg-[#1a1a1a"],
+.light .vlab-workspace [class*="bg-[#0d0d0d"],
+.light .vlab-workspace [class*="bg-[#111"],
+.light .vlab-workspace [class*="bg-[#141414"],
+.light .vlab-workspace [class*="bg-[#151515"],
+.light .vlab-workspace [class*="bg-[#181818"],
+.light .vlab-workspace [class*="bg-[#1a1a1a"] {
+  background-color: var(--surface-panel) !important;
+  color: var(--text-primary);
+  border-color: var(--border-default) !important;
+}
+
+:root[data-theme="light"] .vlab-workspace [class*="border-[#222"],
+:root[data-theme="light"] .vlab-workspace [class*="border-[#2d2d2d"],
+:root[data-theme="light"] .vlab-workspace [class*="border-[#333"],
+.light .vlab-workspace [class*="border-[#222"],
+.light .vlab-workspace [class*="border-[#2d2d2d"],
+.light .vlab-workspace [class*="border-[#333"] {
+  border-color: var(--border-default) !important;
+}

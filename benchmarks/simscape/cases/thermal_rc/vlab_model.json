@@ -1,0 +1,18 @@
+{
+  "name": "thermal_rc",
+  "nodes": [
+    { "id": "hot", "type": "default", "position": { "x": 0, "y": 0 }, "data": { "type": "temp_src", "params": { "T": 353.15 } } },
+    { "id": "link", "type": "default", "position": { "x": 0, "y": 0 }, "data": { "type": "conductive_heat", "params": { "k": 2 } } },
+    { "id": "mass", "type": "default", "position": { "x": 0, "y": 0 }, "data": { "type": "thermal_mass", "params": { "C": 100, "T0": 293.15 } } },
+    { "id": "amb", "type": "default", "position": { "x": 0, "y": 0 }, "data": { "type": "temp_src", "params": { "T": 293.15 } } },
+    { "id": "sensor", "type": "default", "position": { "x": 0, "y": 0 }, "data": { "type": "temp_sensor", "params": {} } },
+    { "id": "scope", "type": "default", "position": { "x": 0, "y": 0 }, "data": { "type": "scope", "params": {} } }
+  ],
+  "edges": [
+    { "id": "hot-link", "source": "hot", "sourceHandle": "a_s", "target": "link", "targetHandle": "a_t" },
+    { "id": "link-mass", "source": "link", "sourceHandle": "b_s", "target": "mass", "targetHandle": "a_t" },
+    { "id": "mass-sensor", "source": "mass", "sourceHandle": "a_s", "target": "sensor", "targetHandle": "a_t" },
+    { "id": "amb-sensor", "source": "amb", "sourceHandle": "a_s", "target": "sensor", "targetHandle": "b_t" },
+    { "id": "sensor-scope", "source": "sensor", "sourceHandle": "t_s", "target": "scope", "targetHandle": "in1_t" }
+  ]
+}

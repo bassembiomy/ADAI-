@@ -3,7 +3,7 @@ import { DAEAssembler } from './DAEAssembler';
 import { ImplicitSolver } from './ImplicitSolver';
 import { VLabPhysicsEngine } from './vlabPhysics';
 import { PhysicalNetworkExtractor } from './kernel/PhysicalNetworkExtractor';
-import { validateConnection } from '../../components/vlab/vlabConnectionValidation.test';
+import { validateConnection } from './vlabConnectionRules';
 import {
   convertPressureToSI,
   convertPressureFromSI,
@@ -120,14 +120,19 @@ describe('Hydraulic Reference (IL) Verification & Acceptance Test Suite', () => 
 
   // 8. Connection rejection for incompatible domains
   it('8. rejects connection to incompatible physical domains', () => {
-    const ilRef = { data: { type: 'hydraulic_reference_il', domain: 'isothermal_liquid', label: 'Ref' } };
-    const electrical = { data: { type: 'ground', domain: 'electrical', label: 'Ground' } };
-    const thermal = { data: { type: 'thermal_mass', domain: 'thermal', label: 'Thermal Mass' } };
-    const gas = { data: { type: 'gas_chamber', domain: 'gas', label: 'Gas Chamber' } };
+    // real rules module (F-027): exact port ids, not a test-local copy
+    const nodes = [
+      { id: 'ref', data: { type: 'hydraulic_reference_il', label: 'Ref' } },
+      { id: 'gnd', data: { type: 'ground', label: 'Ground' } },
+      { id: 'tm', data: { type: 'thermal_mass', label: 'Thermal Mass' } },
+      { id: 'gc', data: { type: 'gas_chamber', label: 'Gas Chamber' } },
+    ];
+    const wire = (target: string, port: string) =>
+      validateConnection(nodes, [], { source: 'ref', sourceHandle: 'ref-a', target, targetHandle: `${target}-${port}` });
 
-    expect(validateConnection(ilRef as any, electrical as any).valid).toBe(false);
-    expect(validateConnection(ilRef as any, thermal as any).valid).toBe(false);
-    expect(validateConnection(ilRef as any, gas as any).valid).toBe(false);
+    expect(wire('gnd', 'a').valid).toBe(false);
+    expect(wire('tm', 'a').valid).toBe(false);
+    expect(wire('gc', 'a').valid).toBe(false);
   });
 
   // 9. Detection of a network without a reference

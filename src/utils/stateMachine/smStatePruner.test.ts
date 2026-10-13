@@ -120,4 +120,30 @@ describe('smStatePruner', () => {
     expect(retainedState).toEqual(retainedSnapshot);
     expect(result.states).not.toContain(deletedState);
   });
+
+  it('analyzes move rejecting self-descendant region and classifying transitions', async () => {
+    const { analyzeStateMove, moveStateMachineElements } = await import('./smStatePruner');
+    const snapshot = {
+      states: [s1, s2, s1_sub1],
+      layers: [rootLayer, childLayer],
+      junctions: [j1],
+      transitions: [t1, t2],
+    };
+
+    // Moving s1 into its child layer l_child must fail
+    const circularMove = analyzeStateMove(snapshot, ['s1'], 'l_child');
+    expect(circularMove.valid).toBe(false);
+    expect(circularMove.reason).toMatch(/descendant/i);
+
+    // Moving s2 into l_child causes t1 to cross region boundaries (invalid)
+    const validMove = analyzeStateMove(snapshot, ['s2'], 'l_child');
+    expect(validMove.valid).toBe(true);
+    expect(validMove.invalid).toContain('t1');
+
+    // Executing move with invalid transitions pruned
+    const movedSnapshot = moveStateMachineElements(snapshot, ['s2'], 'l_child', ['t1']);
+    expect(movedSnapshot.layers.find(l => l.id === 'l_child')?.stateIds).toContain('s2');
+    expect(movedSnapshot.layers.find(l => l.id === 'root')?.stateIds).not.toContain('s2');
+    expect(movedSnapshot.transitions.map(t => t.id)).not.toContain('t1');
+  });
 });

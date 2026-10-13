@@ -1,109 +1,42 @@
 'use strict';
-
 const fs = require('node:fs');
 const path = require('node:path');
-const os = require('node:os');
-const { spawn } = require('node:child_process');
+const crypto = require('node:crypto');
 const { evaluateBuildRequest } = require('./hilBuildPolicy.cjs');
-const { getBuildRecipe } = require('./hilBuildRecipes.cjs');
-const { inspectElf } = require('./elfInspector.cjs');
-
 class HilBuildServiceError extends Error {
-  constructor(code, message) {
-    super(message);
-    this.name = 'HilBuildServiceError';
-    this.code = code;
-  }
+  constructor(code, message) { super(message); this.name = 'HilBuildServiceError'; this.code = code; }
 }
-
+function verifyWorkspaceSources(workspace) {
+  const dir = workspace.buildDir;
+  if (!dir || !fs.existsSync(dir)) throw new HilBuildServiceError('NO_SAVED_WORKSPACE', 'Saved project directory is missing');
+  const canonical = [...workspace.files].sort((a,b) => a.localeCompare(b)).map(name => {
+    const file = path.resolve(dir,name);
+    if (path.dirname(file) !== path.resolve(dir) || !fs.existsSync(file) || !fs.lstatSync(file).isFile()) throw new HilBuildServiceError('STALE_SOURCE_MANIFEST', 'Saved source is missing or unsafe: '+name);
+    const content = fs.readFileSync(file,'utf8');
+    return `${name}\0${content.length}\0${content}`;
+  }).join('\0');
+  const hash = 'sha256:'+crypto.createHash('sha256').update(canonical,'utf8').digest('hex');
+  if (hash !== workspace.sourceManifestHash) throw new HilBuildServiceError('STALE_SOURCE_MANIFEST','Saved sources changed; save and rebuild the project');
+}
 class HilBuildService {
-  constructor(opts = {}) {
-    this.activeBuilds = new Set();
-    this.mockSpawn = opts.mockSpawn || null;
-  }
-
+  constructor(opts = {}) { this.activeBuilds = new Set(); this.productionBuilder = opts.buildProductionProject; this.hostBuilder = opts.buildHostSimulation; }
   async build(request, savedWorkspace, opts = {}) {
-    const evaluation = evaluateBuildRequest(request, savedWorkspace);
-    if (!evaluation.allowed) {
-      throw new HilBuildServiceError(evaluation.code, evaluation.error);
-    }
-
-    const buildKey = `${request.buildId}:${request.targetSelection.targetId}`;
-    if (this.activeBuilds.has(buildKey)) {
-      throw new HilBuildServiceError('CONCURRENT_BUILD', 'A build for this ID is already in progress');
-    }
-
+    const evaluation = evaluateBuildRequest(request,savedWorkspace);
+    if (!evaluation.allowed) throw new HilBuildServiceError(evaluation.code,evaluation.error);
+    const buildKey = path.resolve(savedWorkspace.buildDir || '.');
+    if (this.activeBuilds.has(buildKey)) throw new HilBuildServiceError('CONCURRENT_BUILD','A build for this project is already in progress');
+    verifyWorkspaceSources(savedWorkspace);
     this.activeBuilds.add(buildKey);
-
     try {
-      const buildDir = fs.mkdtempSync(path.join(os.tmpdir(), 'adia-build-'));
-
-      // Copy source files and headers from savedWorkspace if workspace directory exists
-      if (savedWorkspace && savedWorkspace.dir && fs.existsSync(savedWorkspace.dir)) {
-        const workspaceFiles = fs.readdirSync(savedWorkspace.dir);
-        for (const fileName of workspaceFiles) {
-          const srcFile = path.join(savedWorkspace.dir, fileName);
-          if (fs.statSync(srcFile).isFile()) {
-            fs.copyFileSync(srcFile, path.join(buildDir, fileName));
-          }
-        }
-      }
-
-      const recipe = getBuildRecipe(request.targetSelection.targetId, {
-        sources: evaluation.sourceFiles,
-        linkerScript: opts.linkerScript,
-        startupFile: opts.startupFile,
-      });
-
-      // Execute build command with shell: false
-      let spawnResult = { exitCode: 0, stdout: '', stderr: '' };
-      if (this.mockSpawn) {
-        spawnResult = await this.mockSpawn(recipe.executable, recipe.args, { cwd: buildDir, shell: false });
-      } else if (opts.skipSpawnForTest) {
-        spawnResult = { exitCode: 0, stdout: 'Build successful', stderr: '' };
-      } else {
-        spawnResult = await new Promise((resolve) => {
-          const child = spawn(recipe.executable, recipe.args, { cwd: buildDir, shell: false });
-          let stdout = '';
-          let stderr = '';
-          child.stdout.on('data', chunk => { stdout += chunk.toString(); });
-          child.stderr.on('data', chunk => { stderr += chunk.toString(); });
-          child.on('close', code => resolve({ exitCode: code, stdout, stderr }));
-          child.on('error', err => resolve({ exitCode: 1, stdout, stderr: err.message }));
-        });
-      }
-
-      const elfPath = path.join(buildDir, 'firmware.elf');
-      const inspection = await inspectElf(elfPath, request.targetSelection.targetId, opts);
-
-      const status = (spawnResult.exitCode === 0 && inspection.valid)
-        ? 'LINKED_IMAGE_VERIFIED'
-        : 'BUILD_FAILED';
-
-      const buildRecord = Object.freeze({
-        buildId: request.buildId,
-        targetSelection: Object.freeze({ ...request.targetSelection }),
-        recipeId: recipe.recipeId,
-        sourceManifestHash: request.sourceManifestHash,
-        status,
-        buildDir,
-        artifacts: Object.freeze({
-          elfPath,
-          hashes: inspection.hashes,
-        }),
-        memory: inspection.memory,
-        logs: Object.freeze({
-          stdout: spawnResult.stdout.slice(0, 4096),
-          stderr: spawnResult.stderr.slice(0, 4096),
-        }),
-        timestamp: Date.now(),
-      });
-
-      return buildRecord;
-    } finally {
-      this.activeBuilds.delete(buildKey);
-    }
+      const host = request.targetSelection.targetId === 'generic-host';
+      const builder = host ? this.hostBuilder || require('./hilRuntime.cjs').buildHostSimulation : this.productionBuilder || require('./hilRuntime.cjs').buildProductionProject;
+      const result = await builder({targetId:request.targetSelection.targetId,projectDir:savedWorkspace.buildDir,files:[...savedWorkspace.files],onLog:opts.onLog,resourcesPath:opts.resourcesPath,repoRoot:opts.repoRoot,cacheDir:opts.cacheDir});
+      verifyWorkspaceSources(savedWorkspace);
+      const inspection = result.inspection;
+      const verified = result.success && inspection?.valid && inspection.evidence === 'tool-output';
+      const status = host ? verified && result.hostSimulationVerified && result.exePath ? 'HOST_SIMULATION_VERIFIED' : 'BUILD_FAILED' : verified && result.elfPath && result.flashImages?.length ? 'LINKED_IMAGE_VERIFIED' : 'BUILD_FAILED';
+      return Object.freeze({buildId:request.buildId,targetSelection:Object.freeze({...request.targetSelection}),recipeId:evaluation.recipeId,sourceManifestHash:request.sourceManifestHash,status,buildDir:savedWorkspace.buildDir,flashBlocked:status !== 'LINKED_IMAGE_VERIFIED' || savedWorkspace.flashBlocked,artifactHash:inspection?.hashes?.elf || null,artifacts:Object.freeze({exePath:result.exePath || null,elfPath:result.elfPath || null,hexPath:result.hexPath || null,binPath:result.binPath || null,flashImages:Object.freeze((result.flashImages || []).map(image => Object.freeze({...image}))),hashes:inspection?.hashes || null}),memory:inspection?.memory || null,inspection,logs:result.logs || [],code:result.code,error:result.error,timestamp:Date.now()});
+    } finally { this.activeBuilds.delete(buildKey); }
   }
 }
-
-module.exports = { HilBuildService, HilBuildServiceError };
+module.exports = {HilBuildService,HilBuildServiceError,verifyWorkspaceSources};

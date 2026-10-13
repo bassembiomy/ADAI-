@@ -1,0 +1,1725 @@
+{
+  "wps": [
+    {
+      "id": "WP-00",
+      "title": "Baseline",
+      "phase": "P0",
+      "deps": [],
+      "blocks": [],
+      "status": "done",
+      "attempts": 1,
+      "acceptance": "git status --porcelain; see docs/vlab-review/baseline.md",
+      "evidence": [],
+      "findings": []
+    },
+    {
+      "id": "WP-04",
+      "title": "Baseline failure root-cause triage (F-001, F-003, F-004, F-002, F-005, F-007/F-008)",
+      "phase": "P0",
+      "deps": [
+        "WP-00"
+      ],
+      "blocks": [
+        "mass",
+        "spring",
+        "damper",
+        "inertia",
+        "rotational_damper",
+        "thermal_mass",
+        "conduction",
+        "gas_pipe",
+        "gas_reservoir",
+        "pid_ac_motor"
+      ],
+      "status": "done",
+      "attempts": 1,
+      "acceptance": "npx vitest run src/engine/vlab/vlab.test.ts src/engine/vlab/whitebox_benchmarks --reporter=dot; all-blocks suite completes with per-block timeout",
+      "evidence": [
+        "vlab.test+whitebox+all-blocks 270/270; test:vlab 20/20; all-blocks 22s (was hang)",
+        "Planner fix: step budget counts rejected attempts only (vlabPhysics.ts)"
+      ],
+      "findings": [
+        "F-001",
+        "F-002",
+        "F-003",
+        "F-004",
+        "F-005",
+        "F-007",
+        "F-008"
+      ]
+    },
+    {
+      "id": "WP-05",
+      "title": "Systemic unwired-input fix + all-blocks fixtures must assert",
+      "phase": "P0",
+      "deps": [
+        "WP-04"
+      ],
+      "blocks": [],
+      "status": "done",
+      "attempts": 1,
+      "acceptance": "npm run test:vlab:all-blocks (errors = failures) ; npm run test:vlab ; npx vitest run src/engine/vlab --reporter=dot",
+      "evidence": [
+        "planner re-run: 347 pass / 5 expected-fail / 1 skip; test:vlab 20/20; tsc 0 errors",
+        "Most WP-05 edits landed in commit c4cdc6f1 (made by the concurrent session)"
+      ],
+      "findings": [
+        "F-010",
+        "F-012",
+        "F-014"
+      ]
+    },
+    {
+      "id": "WP-01",
+      "title": "Inventory & cross-reference script",
+      "phase": "P0",
+      "deps": [
+        "WP-00"
+      ],
+      "blocks": [],
+      "status": "done",
+      "attempts": 1,
+      "acceptance": "npx tsx scripts/vlab_review/inventory.ts",
+      "evidence": [
+        "inventory.ts deterministic (hash-verified by planner); gaps in docs/vlab-review/inventory-gaps.md",
+        "package.json vlab:inventory line left uncommitted (file has user changes)"
+      ],
+      "findings": []
+    },
+    {
+      "id": "WP-02",
+      "title": "Simscape environment probe + harness skeleton",
+      "phase": "P0",
+      "deps": [
+        "WP-01"
+      ],
+      "blocks": [],
+      "status": "done",
+      "attempts": 1,
+      "acceptance": "npm run test:vlab:simscape",
+      "evidence": [
+        "harness 11 pass / 1 skip (golden); RC vs analytic NRMSE 0.0117%, final err 0.0027%",
+        "planner verified: MATLAB R2024b is a 577 MB partial install, no matlab.exe, no toolboxes"
+      ],
+      "findings": []
+    },
+    {
+      "id": "WP-03",
+      "title": "Canonical block contract certification (bidirectional) + utility allow-list + explain 246 vs 248",
+      "phase": "P0",
+      "deps": [
+        "WP-01",
+        "WP-05"
+      ],
+      "blocks": [],
+      "status": "done",
+      "attempts": 1,
+      "acceptance": "npx vitest run src/engine/vlab/review/contract.test.ts --reporter=dot (failures allowed only as it.fails tied to a later WP)",
+      "evidence": [
+        "planner re-run: 1913 pass / 404 it.fails (ratchet map, regenerate via scripts/vlab_review/genContractExpectedFailures.ts)",
+        "246 = test_all_blocks skips scope+ground; GATE-01 246 and contracts 247 were stale snapshots; live 248 (+gas_pressure_sensor, gas_flow_sensor, transform_sensor; -gas_properties)"
+      ],
+      "findings": []
+    },
+    {
+      "id": "WP-06a",
+      "title": "Port domains: Electrical, Magnetic, Thermal, Physical-signal groups (explicit, physics-derived)",
+      "phase": "R2",
+      "deps": [
+        "WP-03"
+      ],
+      "blocks": [],
+      "status": "done",
+      "attempts": 1,
+      "acceptance": "contract.test port-domain checks green for these groups",
+      "evidence": [
+        "296 ports given explicit domains (Electrical 59, Magnetic 21, Physical 216); planner verified there are no id/label changes",
+        "all-blocks 241 + 5 expected-fail; only remaining failure is vlabSymbols (pre-existing, F-006)"
+      ],
+      "findings": []
+    },
+    {
+      "id": "WP-06b",
+      "title": "Port domains: Mechanical, Fluid, Steam, Gas, Isothermal liquid, Multibody/Frame, Belt, appliances/DOE/utilities",
+      "phase": "R2",
+      "deps": [
+        "WP-06a"
+      ],
+      "blocks": [],
+      "status": "done",
+      "attempts": 1,
+      "acceptance": "contract.test port-domain checks green for all blocks",
+      "evidence": [
+        "90 ports given domains; missing-domain ports now 0 catalog-wide; planner verified the diff is domain-only",
+        "review+all-blocks+multibody 2377 pass / 264 expected-fail; test:vlab 20/20"
+      ],
+      "findings": []
+    },
+    {
+      "id": "WP-07",
+      "title": "Connection validation: both drag directions, fan-out rules, exact-port-id diagnostics, scope accepts only measurable outputs",
+      "phase": "R2",
+      "deps": [
+        "WP-06b"
+      ],
+      "blocks": [],
+      "status": "done",
+      "attempts": 1,
+      "acceptance": "npx vitest run src/engine/vlab/review/connections.test.ts src/components/vlab --reporter=dot",
+      "evidence": [
+        "single rules module vlabConnectionRules.ts used by UI onConnect + Run + engine pre-solve; 404 signal ports directed (207 in / 197 out)",
+        "planner re-run: 2429 pass / 268 expected-fail / 1 known (vlabSymbols); test:vlab 20/20; library 248 blocks / 751 ports unchanged"
+      ],
+      "findings": []
+    },
+    {
+      "id": "WP-08",
+      "title": "Numeric parameter parsing: replace || fallbacks, numericParam, alias canonicalisation with backward compat, boundary tests",
+      "phase": "R2",
+      "deps": [
+        "WP-07"
+      ],
+      "blocks": [],
+      "status": "done",
+      "attempts": 2,
+      "acceptance": "npx vitest run src/engine/vlab/review/params.test.ts src/engine/vlab --reporter=dot",
+      "evidence": [
+        "|| numeric fallbacks 169 -> 0; vlabParams.ts canonical parser + bounds (min/max/exclusive/nonZero); 67 alias renames with load migration; 49 params exposed, 12 removed, 42 re-mapped to domain WPs",
+        "planner re-run: 3015 pass / 206 expected-fail / 1 known; test:vlab 20/20; rework: steam_generator tank_vol/boil_temp restored -> WP-17"
+      ],
+      "findings": []
+    },
+    {
+      "id": "WP-09a",
+      "title": "DAE structural mapping: direction-driven signal branches, exact handle parsing, residual/allocation agreement, structural rank",
+      "phase": "R2",
+      "deps": [
+        "WP-08"
+      ],
+      "blocks": [],
+      "status": "done",
+      "attempts": 1,
+      "acceptance": "npx vitest run src/engine/vlab/review/dae_structure.test.ts src/engine/vlab/review/scope_routing.test.ts --reporter=dot",
+      "evidence": [
+        "dae-allocation 44 -> 0, scope-routing 11 -> 0; branches from port.direction; exact handle ids; DAEStructureError + structural rank check pre-solve",
+        "planner re-run (after npm install repair): 3600 pass / 186 expected-fail / 1 known; test:vlab 20/20",
+        "21 blocks now explicit unsupported (vlabStructure.ts UNSUPPORTED_BLOCKS): WP-10 phase_splitter; WP-14 lever; WP-17 6 ma_*; WP-20 13 controllers/transforms. Domain WPs MUST implement them (mandate: equations are stated)"
+      ],
+      "findings": []
+    },
+    {
+      "id": "WP-09b",
+      "title": "Scope/probe routing by exact port id with quantity+unit; vector/Frame never silently scalar; scope channels survive save/open",
+      "phase": "R2",
+      "deps": [
+        "WP-09a"
+      ],
+      "blocks": [],
+      "status": "done",
+      "attempts": 1,
+      "acceptance": "npx vitest run src/engine/vlab/review/scope_routing.test.ts src/components/vlab --reporter=dot",
+      "evidence": [
+        "silent-zero/NaN masks removed (NonFiniteResidualError, BlockEquationError, ScopeReadError); 197 signal-out ports have quantity+unit; scope reads by exact port id; .adia round-trip of scope channels passes",
+        "planner re-run: 4068 pass / 192 expected-fail / 1 known; test:vlab 20/20; planner fixed a WP-08 regression in src/utils/vlabLibrary.test.ts (23 exact param-spec asserts -> toMatchObject)"
+      ],
+      "findings": []
+    },
+    {
+      "id": "WP-19a",
+      "title": "Multibody joints: revolute, prismatic, spherical, universal, weld (DOF, Frame ports, reactions, outputs, reference tests)",
+      "phase": "R2",
+      "deps": [
+        "WP-09b"
+      ],
+      "blocks": [],
+      "status": "done",
+      "attempts": 1,
+      "acceptance": "npx vitest run src/engine/vlab/review/multibody_joints.test.ts src/engine/vlab/vlab_multibody_frames.test.ts src/engine/vlab/vlab_constraint_reactions.test.ts src/engine/vlab/vlab_spherical_joint.test.ts --reporter=dot",
+      "evidence": [
+        "shared vlabJointCore.ts: relative pose B->F, DOF mask, multipliers along the constraint gradient; 5 joints with Frame ports, SI outputs, reactions on the true axis",
+        "76 tests vs analytic references: revolute/prismatic/weld <1e-7 %, spherical 3e-14 %, Cardan ratio 0.073 % (quasi-static: there is no body inertia yet)",
+        "planner re-run: 4219 pass / 180 expected-fail / 1 known; test:vlab 20/20"
+      ],
+      "findings": []
+    },
+    {
+      "id": "WP-13b",
+      "title": "Gears and converters: common_gear, rack_pinion, electromechanical converters, belt/cable, multibody interfaces",
+      "phase": "R2",
+      "deps": [
+        "WP-19a"
+      ],
+      "blocks": [],
+      "status": "done",
+      "attempts": 1,
+      "acceptance": "npx vitest run src/engine/vlab/review/gears_converters.test.ts --reporter=dot",
+      "evidence": [
+        "50 gears/converter tests; ideal power balance within 1e-9; lever implemented (removed from unsupported); sign fixes for em_converter (negative inductance), gas_*_conv (non-conserving), belt_end (tension, spec 2.4)",
+        "multibody interfaces redesigned as the only scalar<->Frame bridges; the removed t/f ports give an unknown-port diagnostic on load (planner tested)",
+        "planner re-run: 4237 pass / 171 expected-fail / 1 known; test:vlab 20/20"
+      ],
+      "findings": []
+    },
+    {
+      "id": "WP-09c",
+      "title": "Vector/composite port infrastructure: signal vectors (abc, dq0, ab0, seq) and Simscape-style composite three-phase electrical ports",
+      "phase": "R2",
+      "deps": [
+        "WP-13b"
+      ],
+      "blocks": [],
+      "status": "done",
+      "attempts": 1,
+      "acceptance": "npx vitest run src/engine/vlab/review/vector_ports.test.ts src/engine/vlab/review src/components/vlab src/utils/vlabLibrary.test.ts --reporter=dot",
+      "evidence": [
+        "VLabPort width/channelNames/composite three_phase; exact width rules; vector scope traces; 15 ports marked; phase_splitter, clarke, inv_clarke, park, inv_park, sym_comp, inv_sym_comp, ps_sine_3phase, ps_demux_3 implemented",
+        "35 controller/inverter vector ports planned in review/vectorPortPlan.ts (WP-12: pwm vabc; WP-20: the rest); a test enforces the backlog",
+        "planner re-run: 4261 pass / 154 expected-fail / 1 known; labs_sim passes alone (timeout flake under load, F-049)"
+      ],
+      "findings": [
+        "F-046"
+      ]
+    },
+    {
+      "id": "WP-10",
+      "title": "Electrical passive, sources, sensors, reference",
+      "phase": "P2",
+      "deps": [
+        "WP-09c"
+      ],
+      "blocks": [],
+      "status": "done",
+      "attempts": 2,
+      "acceptance": "npx vitest run src/engine/vlab/review --reporter=dot; published-equation reference tests + connected model for the group; generic equation labels replaced",
+      "evidence": [
+        "24 electrical blocks certified vs Simscape Foundation/Electrical equations, 51 analytic tests; 22 equation texts with units; capacitor v0 and inductor i0; opamp Vsat param; transformer fixed to N12 = N1/N2 with a value migration of legacy N (rework)",
+        "F-064 electrical: name-based grounding removed; floating-network diagnostic; rlc_series Simscape case (golden pending)",
+        "planner re-run: 4326 pass / 154 expected-fail / 1 known; test:vlab 20/20"
+      ],
+      "findings": []
+    },
+    {
+      "id": "WP-31a",
+      "title": "Integrator order: BDF2 stencil for all derivative terms (dAcross/dBranch), consistent SDIRK stage dt (F-067, F-058)",
+      "phase": "R2",
+      "deps": [
+        "WP-10"
+      ],
+      "blocks": [],
+      "status": "done",
+      "attempts": 1,
+      "acceptance": "convergence-order test: halving h quarters the RC/RLC error under BDF2",
+      "evidence": [
+        "single stencil helper vlabDiscretization.ts for all dAcross/dBranch/dState; history for all variables; BDF1 restart after events",
+        "observed order RC/RL/RLC/MSD 1.0 -> 1.9-2.0; RC error at default dt 125x smaller; variable-step order 2",
+        "planner re-run: 4384 pass / 154 expected-fail; only failures are vlabSymbols + 5 s timeouts under load (M-01 1.8 s alone, pid_ac_motor)"
+      ],
+      "findings": [
+        "F-067",
+        "F-058"
+      ]
+    },
+    {
+      "id": "WP-11",
+      "title": "Semiconductors & switches",
+      "phase": "P2",
+      "deps": [
+        "WP-31a"
+      ],
+      "blocks": [],
+      "status": "done",
+      "attempts": 1,
+      "acceptance": "npx vitest run src/engine/vlab/review --reporter=dot; published-equation reference tests + connected model for the group; generic equation labels replaced",
+      "evidence": [
+        "diode (Simscape PWL, continuous at Vf), nmos (exact Shichman-Hodges, C0/C1 boundaries, Vds<0 swap), igbt (ideal switching, hard gate + zero-crossing), switch; 55 analytic tests; halfwave_rectifier case (golden pending)",
+        "ENGINE: zero-crossing stall fixed (no 0.01 clamp, no re-trigger on the event surface, accept at the step floor in the new mode); <=12 cuts/event (was budget exhaustion)",
+        "planner re-run (30 s timeout): 4450 pass / 154 expected-fail / 1 known; test:vlab 20/20"
+      ],
+      "findings": []
+    },
+    {
+      "id": "WP-12a",
+      "title": "Electrical machines (DC, induction, PMSM, BLDC) + three-phase source",
+      "phase": "P2",
+      "deps": [
+        "WP-31a"
+      ],
+      "blocks": [],
+      "status": "done",
+      "attempts": 1,
+      "acceptance": "npx vitest run src/engine/vlab/review --reporter=dot; published-equation reference tests + connected model for the group; generic equation labels replaced",
+      "evidence": [
+        "dc_motor single k (migration + notice if Kt != Ke); ac_motor Krause rotor-flux model (Lls, Llr), star point real; pmsm dq + L0, star point carries current; bldc single Ke (Pillay-Krishnan); three_phase_source composite abc + n, phase default 0, migration inserts a phase splitter + reference",
+        "35 analytic tests: DC exact, IM torque 0.09-2.3 % at default LTE, PMSM 0.1-0.8 %, source 1e-9; F-013 machine side: 0 convergence dumps (was 75)",
+        "planner re-run (30 s timeout): 4441 pass / 154 expected-fail / 1 known; test:vlab 20/20 but 64 s (was ~15 s)"
+      ],
+      "findings": []
+    },
+    {
+      "id": "WP-12b",
+      "title": "Power electronics: inverters (2/3-level, Vienna), PWM, rectifier bridges (6/12-pulse), DC-DC converters",
+      "phase": "R2",
+      "deps": [
+        "WP-12a"
+      ],
+      "blocks": [],
+      "status": "done",
+      "attempts": 1,
+      "acceptance": "npx vitest run src/engine/vlab/review/power_electronics.test.ts ...",
+      "evidence": [
+        "pwm 2-level (averaged + switched, M Vdc/2, 0.05 %), 3-level PD carriers, vienna per spec, thyristor 6/12-pulse gates, microwave_inverter loss-free (was creating energy); machines + inverters on composite abc with phase-splitter migration",
+        "F-080 fixed: lab zero-sequence current 1642 A -> 2e-14 A (star point floating); F-013 inverter side: 0 convergence dumps in labs",
+        "planner FULL suite: 4834 pass / 149 expected-fail / 1 known (vlabSymbols), 100 files, 367 s"
+      ],
+      "findings": [
+        "F-013"
+      ]
+    },
+    {
+      "id": "WP-13",
+      "title": "Mechanical rotational + translational (merged WP-13+14): inertia, mass, springs, dampers, friction, hard stops, sources, sensors, belts",
+      "phase": "P2",
+      "deps": [
+        "WP-31a"
+      ],
+      "blocks": [],
+      "status": "done",
+      "attempts": 1,
+      "acceptance": "npx vitest run src/engine/vlab/review --reporter=dot; published-equation reference tests + connected model for the group; generic equation labels replaced",
+      "evidence": [
+        "rot+trans certified: Simscape Stribeck friction, hard stops (damped rebound, transition region, events), belt_end tension-only + damping, mass/inertia hidden damping removed (migration keeps old behaviour), spring initial deformation",
+        "mechanical name-based grounding removed: explicit rot_ref/trans_ref, floating-network diagnostic; labs gained rot_ref",
+        "41 analytic tests (1e-10 % .. 0.5 %); mass_spring_damper case NRMSE 0.009 %; planner re-run: 4583 pass / 146 expected-fail / 1 known"
+      ],
+      "findings": []
+    },
+    {
+      "id": "WP-14",
+      "title": "Translational mechanical",
+      "phase": "P2",
+      "deps": [
+        "WP-31a"
+      ],
+      "blocks": [],
+      "status": "merged-into-WP-13",
+      "attempts": 0,
+      "acceptance": "npx vitest run src/engine/vlab/review --reporter=dot; published-equation reference tests + connected model for the group; generic equation labels replaced",
+      "evidence": [],
+      "findings": []
+    },
+    {
+      "id": "WP-15",
+      "title": "Thermal + magnetic (merged WP-15+16)",
+      "phase": "P2",
+      "deps": [
+        "WP-31a"
+      ],
+      "blocks": [],
+      "status": "done",
+      "attempts": 2,
+      "acceptance": "npx vitest run src/engine/vlab/review --reporter=dot; published-equation reference tests + connected model for the group; generic equation labels replaced",
+      "evidence": [
+        "thermal_ref 0 K (Simscape), sensors absolute K, whitebox T-01/T-02 probe sensors again; thermal/magnetic name grounding removed + floating diagnostics; heater energy conserved (F-044)",
+        "physics bugs fixed: permanent magnet negative reluctance, reluctance_force used velocity as position, mmf sensor shorted the path, fundamental_reluctance ignored l/(mu A); sigma CODATA",
+        "rework: 2 full-suite failures fixed; new sensor-in-series diagnostic for the MMF sensor; planner full suite before rework 4944 pass; after rework targeted 4375 pass / 126 expected-fail / 1 known"
+      ],
+      "findings": []
+    },
+    {
+      "id": "WP-16",
+      "title": "Magnetic",
+      "phase": "P2",
+      "deps": [
+        "WP-31a"
+      ],
+      "blocks": [],
+      "status": "merged-into-WP-15",
+      "attempts": 0,
+      "acceptance": "npx vitest run src/engine/vlab/review --reporter=dot; published-equation reference tests + connected model for the group; generic equation labels replaced",
+      "evidence": [],
+      "findings": []
+    },
+    {
+      "id": "WP-17",
+      "title": "Fluid / isothermal liquid / steam + gas (merged WP-17+18)",
+      "phase": "P2",
+      "deps": [
+        "WP-31a"
+      ],
+      "blocks": [],
+      "status": "done",
+      "attempts": 1,
+      "acceptance": "npx vitest run src/engine/vlab/review --reporter=dot; published-equation reference tests + connected model for the group; generic equation labels replaced",
+      "evidence": [
+        "fluid/IL/steam/gas/moist-air certified: smooth laminar-turbulent orifice, isentropic choked gas restriction, Darcy-Weisbach gas pipe, IF97 steam h_fg, choked steam nozzle, cracking-pressure valves, steam generator energy balance (tank_vol, boil_temp), moist-air chamber/pipe/converters/sensors",
+        "sign fixes: gas_flow_sensor, mass_flow_source, ma_moisture_source; open fluid ports capped (Simscape) + floating-fluid diagnostic; vlabSymbols finally passes (2 gas sensor glyphs)",
+        "planner re-run: 4577 pass / 110 expected-fail / 0 failed (vlabSymbols green); ma_separator/ma_selector explicitly unsupported (no spec)"
+      ],
+      "findings": []
+    },
+    {
+      "id": "WP-18",
+      "title": "Gas",
+      "phase": "P2",
+      "deps": [
+        "WP-31a"
+      ],
+      "blocks": [],
+      "status": "merged-into-WP-17",
+      "attempts": 0,
+      "acceptance": "npx vitest run src/engine/vlab/review --reporter=dot; published-equation reference tests + connected model for the group; generic equation labels replaced",
+      "evidence": [],
+      "findings": []
+    },
+    {
+      "id": "WP-19",
+      "title": "WP-19b Multibody remainder (bodies, forces, sensors, frames) beyond joints",
+      "phase": "P2",
+      "deps": [
+        "WP-31a"
+      ],
+      "blocks": [],
+      "status": "deferred",
+      "attempts": 0,
+      "acceptance": "npx vitest run src/engine/vlab/review --reporter=dot; published-equation reference tests + connected model for the group; generic equation labels replaced",
+      "evidence": [
+        "User decision 2026-10-06 (token budget): rigid-body inertia dynamics (F-055) and other WP-19b items are deferred and listed as a gap in the final report"
+      ],
+      "findings": []
+    },
+    {
+      "id": "WP-20a",
+      "title": "Physical signal: sources, math, nonlinear, logic, routing (40 blocks)",
+      "phase": "P2",
+      "deps": [
+        "WP-31a"
+      ],
+      "blocks": [],
+      "status": "done",
+      "attempts": 1,
+      "acceptance": "npx vitest run src/engine/vlab/review --reporter=dot; published-equation reference tests + connected model for the group; generic equation labels replaced",
+      "evidence": [
+        "40 blocks vs Simulink/Simscape docs: dead zone, max/min, switch threshold, sequence analyzer (one-period Fourier), delay/RMS/moving average (new vlabHistory), flip-flop, sample-hold, integrator reset, stair, 2-D lookup, sine 3-phase m/ang; 49 tests",
+        "planner FULL suite: 5134 pass / 83 expected-fail / 1 fail = steam_generator boundary NaN (WP-17 regression, rework sent)"
+      ],
+      "findings": []
+    },
+    {
+      "id": "WP-20b",
+      "title": "Control, estimators, motor/converter controllers, learning blocks (+ remaining vector-port backlog, 13 unsupported)",
+      "phase": "R2",
+      "deps": [
+        "WP-20a"
+      ],
+      "blocks": [],
+      "status": "done",
+      "attempts": 2,
+      "acceptance": "controllers.test.ts",
+      "evidence": [
+        "controllers/estimators/motor+converter controllers/learning blocks on published algorithms (new vlabControllers.ts + controllers.test.ts); 13 unsupported implemented; vector-port backlog empty; no WP-20 expected failures remain",
+        "agent stopped by the Sonnet WEEKLY limit before reporting; planner verified the tree: no stripped interpolations, tsc clean, review+all-blocks+certification+components 4895 pass / 16 expected-fail (pmsm_foc all-blocks failure = 3 s wall-clock under load, passes alone), labs/comprehensive 67/67"
+      ],
+      "findings": [
+        "F-073"
+      ]
+    },
+    {
+      "id": "WP-21",
+      "title": "Composite / appliance / DOE / microwave / utilities",
+      "phase": "P2",
+      "deps": [
+        "WP-31a"
+      ],
+      "blocks": [],
+      "status": "done",
+      "attempts": 1,
+      "acceptance": "npx vitest run src/engine/vlab/review --reporter=dot; published-equation reference tests + connected model for the group; generic equation labels replaced",
+      "evidence": [
+        "appliances energy-consistent: magnetron (current sign/Joule law), microwave_cavity (CODATA sigma, degC params, ambient seed), washing_basket (torque, not speed); lab energy within 1 % over 5 mains cycles",
+        "orphan types aliased via LEGACY_TYPE_ALIASES; doe_custom emits Physical + direction (special case removed); conn_label/vlab_probe documented; remaining expected failures are only WP-19 (deferred) labels",
+        "planner re-run green apart from the known load timeout"
+      ],
+      "findings": []
+    },
+    {
+      "id": "WP-30",
+      "title": "Cross-domain connected reference models (published/analytical references; Simscape goldens optional)",
+      "phase": "P4",
+      "deps": [
+        "WP-10",
+        "WP-11",
+        "WP-12b",
+        "WP-13",
+        "WP-14",
+        "WP-15",
+        "WP-16",
+        "WP-17",
+        "WP-18",
+        "WP-19",
+        "WP-20b",
+        "WP-21"
+      ],
+      "blocks": [],
+      "status": "done",
+      "attempts": 1,
+      "acceptance": "npm run test:vlab:simscape",
+      "evidence": [
+        "8 cross-domain models vs independent references: PI motor 0.0085 %, heater 0.0002 %, hydraulic 0.13 %, choked gas 0 %, winding 0.03 %, inverter+IM V/f 0.014 % (slip 0.35 %), drivetrain+hard stop 0.009 %, sat-sine RC 0.008 %; direct solve vs simulateStep < 1e-6",
+        "engine: end-of-interval sliver step fixed; F-041 benchmarks now assert closed forms (3 inverted wirings fixed); F-090 fixture and belt_properties damping",
+        "planner FULL suite: 5346 pass / 16 expected-fail / 1 = pmsm_foc 3 s wall clock under load (passes alone)"
+      ],
+      "findings": []
+    },
+    {
+      "id": "WP-41",
+      "title": "UI numeric editor + .adia save/open round-trip (types, params, units, handles, connections, scope channels)",
+      "phase": "P5",
+      "deps": [
+        "WP-30"
+      ],
+      "blocks": [],
+      "status": "merged-into-WP-40",
+      "attempts": 0,
+      "acceptance": "npx vitest run src/components/vlab --reporter=dot",
+      "evidence": [],
+      "findings": []
+    },
+    {
+      "id": "WP-31b",
+      "title": "Engine correctness: hang guard, no stale acceptance, full LTE coverage, event localisation, singular diagnostics, kernel numerics",
+      "phase": "P4",
+      "deps": [
+        "WP-41"
+      ],
+      "blocks": [],
+      "status": "done",
+      "attempts": 3,
+      "acceptance": "npx vitest run src/engine/vlab/kernel src/engine/vlab/review/engine_robustness.test.ts --reporter=dot",
+      "evidence": [
+        "F-095 total work + 60 s wall-clock guard with VLabSolverDiagnosticError; F-050 no stale acceptance; F-103 LTE on all differentiated vars + first-step estimate (2 it.fails removed); F-084/F-101 Illinois event location (buck 20 kHz OK); F-051 singular diagnostics, no silent regularization; step controller Richardson fix (rejects 230 -> 5); kernel numerics via vlabParams + v0/i0 (kernel unused by the app); F-098 scaled probe points",
+        "frame seeds made coordinate-distinct (fixes the trilateration singular start point)",
+        "started on Opus (session limit), finished on Sonnet; test budgets raised (all-blocks 3 -> 20 s, semiconductors step bounds) because correct error control takes more steps",
+        "planner FULL suite: 109/109 files green, 5364 pass / 14 expected-fail / 0 fail"
+      ],
+      "findings": []
+    },
+    {
+      "id": "WP-31c",
+      "title": "Engine performance (better BDF2 error estimator, sparse/analytic Jacobian, Jacobian reuse) + worker/runtime + diagnostics surfaced in the UI",
+      "phase": "R2",
+      "deps": [
+        "WP-31b"
+      ],
+      "blocks": [],
+      "status": "done",
+      "attempts": 2,
+      "acceptance": "perf budgets + labs + worker tests",
+      "evidence": [
+        "coloured sparse FD Jacobian, modified Newton with cached LU + exact fallback, Gilbert-Peierls sparse LU, residual hot-path plans, DD3 BDF2 LTE (conservative margin 64)",
+        "speed: FOC test 123 s -> 6.8 s, IM lab window 8.9 -> 0.65 s, pmsm_foc 17.5 -> 1.0 s, 30-block 11.7 -> 0.39 s; WP-31b test budgets reverted",
+        "worker: typed VLabDiagnostic contract (old error string kept), cancel, progress, onDiagnostics API, deterministic; F-104 belt injection no longer mutates node.data",
+        "planner FULL suite at DEFAULT 5 s timeout: 111/111 files, 5400 pass / 14 expected-fail / 0 fail; tsc clean"
+      ],
+      "findings": [
+        "F-079",
+        "F-049",
+        "F-104"
+      ]
+    },
+    {
+      "id": "WP-32",
+      "title": "Worker / runtime",
+      "phase": "P4",
+      "deps": [
+        "WP-31c"
+      ],
+      "blocks": [],
+      "status": "merged-into-WP-31c",
+      "attempts": 0,
+      "acceptance": "npx vitest run src/services/vlabWorkerClient.test.ts --reporter=dot",
+      "evidence": [],
+      "findings": []
+    },
+    {
+      "id": "WP-40",
+      "title": "UI (merged WP-40/41/42/43): palette-node parity, numeric editor, .adia round-trip, scope UI, migration notices, 1-2 E2E smoke tests",
+      "phase": "P5",
+      "deps": [
+        "WP-31c"
+      ],
+      "blocks": [],
+      "status": "done",
+      "attempts": 1,
+      "acceptance": "npx vitest run src/components/vlab --reporter=dot",
+      "evidence": [
+        "param editor via the WP-08 schema only (was clamping to positive): 0/negatives/sci-notation, inline errors, persists; diagnostics panel from the typed worker contract with block/port highlight (removed a constant-0 fallback on typed errors); migration notice banner; palette/node parity (105 nodes drew a generic box) + composite/vector port rings and tooltips; scope label tests; save/open round trip for 14 domain models; e2e vlab-smoke passed (11.7 s)",
+        "planner re-run: 4792 pass / 12 expected-fail; 0 data-help annotations removed; tsc clean",
+        "commit includes the other session's uncommitted data-help-* annotations in VLabNode/VLabSimulinkScope/VLabWorkspace (preserved, harmless)"
+      ],
+      "findings": []
+    },
+    {
+      "id": "WP-42",
+      "title": "Results & persistence",
+      "phase": "P5",
+      "deps": [
+        "WP-40"
+      ],
+      "blocks": [],
+      "status": "merged-into-WP-40",
+      "attempts": 0,
+      "acceptance": "npx vitest run src/components/vlab --reporter=dot",
+      "evidence": [],
+      "findings": []
+    },
+    {
+      "id": "WP-43",
+      "title": "E2E smoke (Playwright)",
+      "phase": "P5",
+      "deps": [
+        "WP-42"
+      ],
+      "blocks": [],
+      "status": "merged-into-WP-40",
+      "attempts": 0,
+      "acceptance": "npx playwright test tests/e2e/vlab-smoke.spec.ts",
+      "evidence": [],
+      "findings": []
+    },
+    {
+      "id": "WP-50",
+      "title": "Final certification + tsc + production build + report with section-15 before/after statistics",
+      "phase": "P6",
+      "deps": [
+        "WP-00",
+        "WP-04",
+        "WP-05",
+        "WP-01",
+        "WP-02",
+        "WP-03",
+        "WP-06a",
+        "WP-06b",
+        "WP-07",
+        "WP-08",
+        "WP-09b",
+        "WP-19a",
+        "WP-13b",
+        "WP-10",
+        "WP-11",
+        "WP-12b",
+        "WP-13",
+        "WP-14",
+        "WP-15",
+        "WP-16",
+        "WP-17",
+        "WP-18",
+        "WP-19",
+        "WP-20b",
+        "WP-21",
+        "WP-30",
+        "WP-41",
+        "WP-31c",
+        "WP-32",
+        "WP-40",
+        "WP-42",
+        "WP-43"
+      ],
+      "blocks": [],
+      "status": "done",
+      "attempts": 1,
+      "acceptance": "npm run test:vlab:certify",
+      "evidence": [
+        "certify.ts PASS (planner re-run): 116 files, 5467 pass / 14 expected-fail / 0 fail; tsc 0; inventory 248 blocks",
+        "npm run build exit 0 (renderer + Electron); e2e vlab-smoke 2/2 passed",
+        "report docs/vlab-review/certification-report.md; CI .github/workflows/vlab-certification.yml; proposed npm script test:vlab:certify (package.json holds the other session's changes)"
+      ],
+      "findings": []
+    }
+  ],
+  "findings": [
+    {
+      "id": "F-001",
+      "severity": "high",
+      "block": "mass_spring_damper / translational mass",
+      "layer": "eq",
+      "summary": "Mass-spring-damper step response stays at x=0 (expected 0.1 m): vlab.test.ts, M-01, whitebox master mechanical.",
+      "wp": "WP-14",
+      "status": "resolved-WP-04"
+    },
+    {
+      "id": "F-002",
+      "severity": "med",
+      "block": "pid_ac_motor lab",
+      "layer": "solver",
+      "summary": "pid_ac_motor lab: repeated ImplicitSolver convergence failures and timeout (5 s) in labs_sim.test.ts.",
+      "wp": "WP-31",
+      "status": "resolved (induction labs converge: WP-12a/12b, WP-31c)"
+    },
+    {
+      "id": "F-003",
+      "severity": "high",
+      "block": "rotational inertia/damper",
+      "layer": "eq",
+      "summary": "M-02 rotational spin-up: signal J remains zero for the whole run.",
+      "wp": "WP-13",
+      "status": "resolved-WP-04"
+    },
+    {
+      "id": "F-004",
+      "severity": "high",
+      "block": "thermal mass / conduction",
+      "layer": "eq",
+      "summary": "Thermal whitebox T-01 fails the judge and T-02 initial T = 0.057 K instead of about 293 K (initial condition handling).",
+      "wp": "WP-15",
+      "status": "resolved-WP-04"
+    },
+    {
+      "id": "F-005",
+      "severity": "med",
+      "block": "gas resistance",
+      "layer": "eq",
+      "summary": "Fluid whitebox F-01 gas flow resistance fails the oracle judge.",
+      "wp": "WP-18",
+      "status": "resolved/decided-WP-17"
+    },
+    {
+      "id": "F-006",
+      "severity": "med",
+      "block": "unknown (at least one library icon)",
+      "layer": "ui",
+      "summary": "gas_flow_sensor and gas_pressure_sensor have no symbol (fall back to UnknownSymbolGlyph)",
+      "wp": "WP-18",
+      "status": "resolved/decided-WP-17"
+    },
+    {
+      "id": "F-007",
+      "severity": "high",
+      "block": "gas_pipe",
+      "layer": "solver",
+      "summary": "test:vlab:all-blocks hangs forever on gas_pipe (infinite loop, over 90 s in isolation).",
+      "wp": "WP-18",
+      "status": "resolved-WP-04"
+    },
+    {
+      "id": "F-008",
+      "severity": "high",
+      "block": "gas domain (near gas_reservoir)",
+      "layer": "solver",
+      "summary": "test:vlab:all-blocks hangs again after gas_reservoir output with gas_pipe excluded. Block unconfirmed.",
+      "wp": "WP-18",
+      "status": "resolved-WP-04"
+    },
+    {
+      "id": "F-009",
+      "severity": "low",
+      "block": "n/a (sysmlCommandGateway)",
+      "layer": "integration",
+      "summary": "tsc: 2 TS2339 errors in src/services/sysmlCommandGateway.ts lines 1483 and 1602 (not V-Lab).",
+      "wp": ""
+    },
+    {
+      "layer": "eq",
+      "id": "F-010",
+      "block": "SYSTEMIC",
+      "wp": "WP-05",
+      "summary": "Unwired optional physical inputs read 0, not undefined, so the param fallback never fires. Fixed only for force/torque/ang_vel/gas_pressure sources. Remaining: vlabEquations ~L142,180,291,755,1393,1402,1650,2160 (R_ctrl, gas_restriction area, Q_in...). Fix centrally in the assembler.",
+      "severity": "high",
+      "status": "resolved-WP-05 (residual it.fails routed to domain WPs)"
+    },
+    {
+      "layer": "eq",
+      "id": "F-011",
+      "block": "thermal_ref/temp_sensor",
+      "wp": "WP-15",
+      "summary": "thermal_ref is pinned at 293.15 K (DAEAssembler ~L1034). Simscape thermal reference = 0 K, so temp_sensor reads T-293.15. WP-04 made the whitebox T-01/T-02 probes read the absolute node instead; WP-15 must fix the reference and RESTORE the sensor probes.",
+      "severity": "med",
+      "status": "resolved-WP-15"
+    },
+    {
+      "layer": "integration",
+      "id": "F-012",
+      "block": "all-blocks fixtures",
+      "wp": "WP-05",
+      "summary": "test_all_blocks_scope passes by design even when the solver errors (16 blocks). The fixtures are ill-posed for force/torque_source, motion sensors, belt_spool, luenberger_observer. Also failing: opamp, three_phase_source, gas_reservoir, gas_rotational_conv, gas_translational_conv, reluctance_force, ma_pressure_source, dist_constraint, microwave_inverter, mass_flow_source. Make fixtures well-posed and turn errors into failures.",
+      "severity": "med",
+      "status": "resolved-WP-05 (residual it.fails routed to domain WPs)"
+    },
+    {
+      "layer": "solver",
+      "id": "F-013",
+      "block": "ac_motor/pwm_3ph_2level",
+      "wp": "WP-12",
+      "summary": "ImplicitSolver fails to converge on the induction motor + inverter, so steps keep halving. pid_ac_motor and vlab_comprehensive L3-001..003 can time out.",
+      "severity": "med",
+      "status": "resolved-WP-12b"
+    },
+    {
+      "layer": "integration",
+      "id": "F-014",
+      "block": "tests",
+      "wp": "WP-05",
+      "summary": "Not in baseline and failing at HEAD: test_pressure_sensor gas mass flow, vlab_comprehensive L6-004, vlab_readiness_gate GATE-01, vlab_validation_contracts (2).",
+      "severity": "low",
+      "status": "resolved-WP-05 (residual it.fails routed to domain WPs)"
+    },
+    {
+      "layer": "eq",
+      "id": "F-015",
+      "wp": "WP-10..21",
+      "severity": "med",
+      "block": "73 blocks",
+      "summary": "Dead params: shown in the UI but never read by the equation. The user edits them with no effect. Triage per domain WP (inventory-gaps.md)."
+    },
+    {
+      "layer": "eq",
+      "id": "F-016",
+      "wp": "WP-10..21",
+      "severity": "low",
+      "block": "45 blocks",
+      "summary": "Equation reads params the library does not expose (some are aliases). Triage per domain WP."
+    },
+    {
+      "layer": "port",
+      "id": "F-017",
+      "wp": "WP-03",
+      "severity": "med",
+      "block": "146 blocks",
+      "summary": "Ports without a domain field (132 blocks have no port domain at all). Fix in WP-03."
+    },
+    {
+      "layer": "port",
+      "id": "F-018",
+      "wp": "WP-03",
+      "severity": "med",
+      "block": "153 blocks",
+      "summary": "Library ports never read by the equation. This is a candidate list: many are signal outputs written through DAE branches. Verify in WP-03 and the domain WPs."
+    },
+    {
+      "layer": "integration",
+      "id": "F-019",
+      "wp": "WP-21",
+      "severity": "low",
+      "block": "Inport,Outport,Subsystem,heat_sensor,reservoir_il,vfd_controller",
+      "summary": "Orphan equation keys (aliases or legacy). Confirm whether old models need them, else remove.",
+      "status": "resolved-WP-21"
+    },
+    {
+      "layer": "ui",
+      "id": "F-020",
+      "wp": "WP-40",
+      "severity": "low",
+      "block": "217 blocks",
+      "summary": "No per-block help: HELP_DATA has 25 topic entries. 23 blocks have no component definition."
+    },
+    {
+      "id": "F-021",
+      "severity": "high",
+      "block": "ALL",
+      "layer": "integration",
+      "summary": "No usable MATLAB/Simscape on this machine. Golden CSVs cannot be generated. build_rc_charging.m has never been executed (library paths and param names are unverified). The simscape column stays pending until goldens arrive.",
+      "wp": "USER"
+    },
+    {
+      "id": "F-022",
+      "severity": "med",
+      "block": "gas_reservoir, ma_pressure_source, mass_flow_source, dist_constraint, luenberger_observer",
+      "layer": "integration",
+      "summary": "Expected failures (it.fails) in all-blocks: gas_reservoir stalls at P/2 -> WP-18; ma_pressure_source floating -> WP-17; mass_flow_source needs a sink -> WP-17; dist_constraint frames unconnected -> WP-19a; luenberger_observer ignores matrix A -> WP-20",
+      "wp": "WP-17/18/19a/20",
+      "status": "resolved-WP-20b"
+    },
+    {
+      "id": "F-023",
+      "severity": "low",
+      "block": "catalog-count tests",
+      "layer": "integration",
+      "summary": "vlab_readiness_gate GATE-01 and vlab_validation_contracts hard-code 246/247 blocks vs the live 248 -> WP-03",
+      "wp": "WP-03"
+    },
+    {
+      "id": "F-024",
+      "severity": "med",
+      "block": "universal_joint",
+      "layer": "eq",
+      "summary": "vlab_full_certification universal_joint axis1 INVALID_JOINT_PARAMETER (seen in a dir-wide run). The concurrent session is changing universal_joint -> WP-19a",
+      "wp": "WP-19a",
+      "status": "resolved-WP-19a"
+    },
+    {
+      "id": "F-025",
+      "severity": "high",
+      "block": "46 blocks (busbar, lever, ps_demux_3, ma_*_sensor, hysteresis_ctrl_3ph, pmsm_foc, ps_integrator_gen...)",
+      "layer": "solver",
+      "summary": "Equation residual count does not match the DAE-allocated unknowns. Extra rows are silently dropped and missing rows zero-filled.",
+      "wp": "WP-09",
+      "status": "resolved-WP-09a (unsupported remainder routed)"
+    },
+    {
+      "id": "F-026",
+      "severity": "high",
+      "block": "bldc_pwm_ctrl, dcdc_ctrl, im_foc_ctrl, im_dtc_ctrl, cycloconverter_ctrl, dc_voltage_ctrl, pmsm_foc, ac_motor_pid_control",
+      "layer": "port",
+      "summary": "Output ports named g/ctrl/p match the isPhysicalOutputPort input-name list, so no signal branch is allocated and the scope reads a silent 0.",
+      "wp": "WP-09",
+      "status": "resolved-WP-09a (unsupported remainder routed)"
+    },
+    {
+      "id": "F-027",
+      "severity": "med",
+      "block": "vlabConnectionValidation.test.ts",
+      "layer": "ui",
+      "summary": "The test carries its own copy of validateConnection, so the real VLabWorkspace.onConnect is untested.",
+      "wp": "WP-07",
+      "status": "resolved-WP-07"
+    },
+    {
+      "id": "F-028",
+      "severity": "med",
+      "block": "vlabValidationHarness",
+      "layer": "integration",
+      "summary": "The default topology wires dc_voltage.p to every DUT p handle, giving cross-domain edges that bypass validation. It also uses the type thermal_reference, but the library id is thermal_ref (also in vlab_connected_benchmarks).",
+      "wp": "WP-07",
+      "status": "resolved-WP-07"
+    },
+    {
+      "id": "F-029",
+      "severity": "low",
+      "block": "busbar",
+      "layer": "port",
+      "summary": "Param nodes=4 but only 2 ports.",
+      "wp": "WP-09",
+      "status": "resolved-WP-09a (unsupported remainder routed)"
+    },
+    {
+      "id": "F-030",
+      "severity": "low",
+      "block": "physical-signal ports",
+      "layer": "port",
+      "summary": "VLabPort has no direction field. Signal in/out is not declared.",
+      "wp": "WP-07",
+      "status": "resolved-WP-07"
+    },
+    {
+      "id": "F-031",
+      "severity": "high",
+      "block": "revolute_joint, prismatic_joint, weld_joint",
+      "layer": "eq",
+      "summary": "Ports are now Frame (6-vector across), but the legacy scalar equations compute across[0]-across[1], which is NaN on arrays. Interim: unusable with Frame blocks until WP-19a rewrites them.",
+      "wp": "WP-19a",
+      "status": "resolved-WP-19a"
+    },
+    {
+      "id": "F-032",
+      "severity": "med",
+      "block": "mech_config",
+      "layer": "port",
+      "summary": "Simscape port C is a Frame, but it is classified utility and so Physical. The validator rejects Frame links. Decide the classification.",
+      "wp": "WP-19a",
+      "status": "resolved-WP-19a"
+    },
+    {
+      "id": "F-033",
+      "severity": "med",
+      "block": "common_gear, rack_pinion",
+      "layer": "port",
+      "summary": "Rotational/Translational, not Frame. Decide versus Simscape Multibody.",
+      "wp": "WP-13b",
+      "status": "resolved-WP-13b: gears stay scalar (Driveline style)"
+    },
+    {
+      "id": "F-034",
+      "severity": "low",
+      "block": "Fluid / Steam group",
+      "layer": "port",
+      "summary": "There is no distinct steam/two-phase domain, so the whole group is Fluid. Steam and liquid can be wired together without an error.",
+      "wp": "WP-17",
+      "status": "decided WP-17: option (b) deviation, steam shares the Fluid domain"
+    },
+    {
+      "id": "F-035",
+      "severity": "med",
+      "block": "ma_pipe, ma_rot_conv, ma_trans_conv, ma_selector, ma_separator",
+      "layer": "eq",
+      "summary": "Explicit Physical ports allocate signal branches that the stub MA equations never drive.",
+      "wp": "WP-09",
+      "status": "resolved/decided-WP-17"
+    },
+    {
+      "id": "F-036",
+      "severity": "high",
+      "block": "DAEAssembler isPhysicalOutputPort",
+      "layer": "solver",
+      "summary": "18 inputs get spurious signal branches (switch.v, gas_flow_source.m, clarke/park/sym_comp abc...). 2 outputs and 13 unimplemented outputs get none. The assembler must use port.direction. clarke_transform and inv_sym_comp_transform are it.fails.",
+      "wp": "WP-09",
+      "status": "resolved-WP-09a (unsupported remainder routed)"
+    },
+    {
+      "id": "F-037",
+      "severity": "med",
+      "block": "DAEAssembler handle parsing",
+      "layer": "port",
+      "summary": "Strips /_[st]$/ from handles, so ports ending in _s/_t (pmsm_foc.vdc_s, iabc_s, w_s, th_s) are mis-parsed.",
+      "wp": "WP-09",
+      "status": "resolved-WP-09a (unsupported remainder routed)"
+    },
+    {
+      "id": "F-038",
+      "severity": "med",
+      "block": "ps_step + ps_pid_ctrl + ps_saturation",
+      "layer": "solver",
+      "summary": "A step input into a PID with an active saturation clamp collapses the step to 1e-6 and exhausts the budget. Needs discontinuity/event handling.",
+      "wp": "WP-31",
+      "status": "resolved-WP-20a"
+    },
+    {
+      "id": "F-039",
+      "severity": "med",
+      "block": "vlabValidationHarness",
+      "layer": "integration",
+      "summary": "Still swallows solver non-convergence, so GATE-02 is largely vacuous on solver failures.",
+      "wp": "WP-31"
+    },
+    {
+      "id": "F-040",
+      "severity": "low",
+      "block": "doe_custom (engine/doe/integration.ts)",
+      "layer": "port",
+      "summary": "Emits the domain General. The producer should emit Physical + direction.",
+      "wp": "WP-21",
+      "status": "resolved-WP-21"
+    },
+    {
+      "id": "F-041",
+      "severity": "low",
+      "block": "vlab_connected_benchmarks",
+      "layer": "integration",
+      "summary": "Benchmarks 1-6 and 8-10 only assert finite state (they did before too). Add independent reference values.",
+      "wp": "WP-30",
+      "status": "resolved-WP-30"
+    },
+    {
+      "id": "F-042",
+      "severity": "med",
+      "block": "ps_dead_zone",
+      "layer": "eq",
+      "summary": "Outside the band it outputs u unchanged. Simulink Dead Zone gives y = u - upper (u > upper) and y = u - lower (u < lower), so the output is continuous.",
+      "wp": "WP-20",
+      "status": "resolved-WP-20a"
+    },
+    {
+      "id": "F-043",
+      "severity": "med",
+      "block": "solver_config (kernel/PhysicalNetworkExtractor positiveNumber)",
+      "layer": "solver",
+      "summary": "Still falls back silently and accepts alias keys. Only the pre-solve bounds protect it.",
+      "wp": "WP-31",
+      "status": "resolved-WP-31b"
+    },
+    {
+      "id": "F-044",
+      "severity": "low",
+      "block": "thermal_resistor (air-fryer lab)",
+      "layer": "integration",
+      "summary": "The lab used the dead param Rth=35, so the heater ran on the default R (about 5.3 kW). Now R=35, about 1.5 kW (realistic). Behaviour change in the shipped lab.",
+      "wp": "WP-21",
+      "status": "resolved-WP-15"
+    },
+    {
+      "id": "F-045",
+      "severity": "high",
+      "block": "DAEAssembler.residual",
+      "layer": "solver",
+      "summary": "Per-eval catch returns zeros(equationCount) on exceptions, and compRes[i] || 0 turns NaN into 0. Silent-zero/NaN masking violates the mandate.",
+      "wp": "WP-09b",
+      "status": "resolved-WP-09b"
+    },
+    {
+      "id": "F-046",
+      "severity": "med",
+      "block": "abc/dq0/seq/ab0 vector ports",
+      "layer": "eq",
+      "summary": "A scalar solver port carries one channel. clarke, inv_clarke, inv_sym_comp, im/pmsm_curr_ctrl and ps_sine_3phase carry channel 1 only. Needs vector signal ports.",
+      "wp": "WP-20",
+      "status": "resolved-WP-20b"
+    },
+    {
+      "id": "F-047",
+      "severity": "high",
+      "block": "frame blocks",
+      "layer": "eq",
+      "summary": "Frame mapping assigns coords by branch NAME (force->X, torque->Rx). revolute torque->Rx and prismatic force->Px regardless of axis. weld has a single force->Px. Frame pose unknowns are exempt from the structural check.",
+      "wp": "WP-19a",
+      "status": "resolved-WP-19a"
+    },
+    {
+      "id": "F-048",
+      "severity": "low",
+      "block": "whitebox SimulationHarness.ts:36",
+      "layer": "port",
+      "summary": "Still strips /_[st]$/ from probe handles.",
+      "wp": "WP-09b",
+      "status": "resolved-WP-09b"
+    },
+    {
+      "id": "F-049",
+      "severity": "med",
+      "block": "test infra",
+      "layer": "integration",
+      "summary": "labs_sim / vlab_comprehensive / airfryer time out at 5 s under full parallel load. Set per-file timeouts or speed them up. Now also whitebox M-01 and pid_ac_motor; it repeatedly pollutes the gates.",
+      "wp": "WP-31",
+      "status": "resolved-WP-31c"
+    },
+    {
+      "id": "F-050",
+      "severity": "high",
+      "block": "vlabPhysics",
+      "layer": "solver",
+      "summary": "Non-convergence at minimumStep still silently accepts the stale xCurrent, so the result is wrong but looks valid.",
+      "wp": "WP-31",
+      "status": "resolved-WP-31b"
+    },
+    {
+      "id": "F-051",
+      "severity": "med",
+      "block": "SparseLinearSolver",
+      "layer": "solver",
+      "summary": "Singular pivots are regularized to 1e-12, and diag<1e-15 gives 0 silently.",
+      "wp": "WP-31",
+      "status": "resolved-WP-31b"
+    },
+    {
+      "id": "F-052",
+      "severity": "med",
+      "block": "ps_lpf",
+      "layer": "eq",
+      "summary": "prevY is found by ctx.states.indexOf(value), a value lookup, so the index is wrong when values coincide.",
+      "wp": "WP-20",
+      "status": "resolved-WP-20a"
+    },
+    {
+      "id": "F-053",
+      "severity": "low",
+      "block": "transform_sensor rx/ry/rz, angle_constraint.ang",
+      "layer": "eq",
+      "summary": "Outputs are in degrees, not SI rad.",
+      "wp": "WP-19a",
+      "status": "resolved-WP-19a"
+    },
+    {
+      "id": "F-054",
+      "severity": "low",
+      "block": "kernel/PhysicalSystemCompiler",
+      "layer": "integration",
+      "summary": "Number(val)||0 masks a NaN param in the separate kernel pipeline.",
+      "wp": "WP-31",
+      "status": "resolved-WP-31b"
+    },
+    {
+      "id": "F-055",
+      "severity": "high",
+      "block": "Frame/multibody domain",
+      "layer": "eq",
+      "summary": "There are no rigid-body inertia dynamics: pendulum period, energy and sliding acceleration cannot be simulated. Joint tests are quasi-static only. Rigid body mass/inertia (Newton-Euler) is needed for real multibody dynamics.",
+      "wp": "WP-19b"
+    },
+    {
+      "id": "F-056",
+      "severity": "med",
+      "block": "rigid_transform",
+      "layer": "eq",
+      "summary": "Adds Euler angles componentwise and passes no lever-arm moment.",
+      "wp": "WP-19b"
+    },
+    {
+      "id": "F-057",
+      "severity": "low",
+      "block": "transform_sensor",
+      "layer": "eq",
+      "summary": "Reports an Euler difference, not the relative rotation.",
+      "wp": "WP-19b"
+    },
+    {
+      "id": "F-058",
+      "severity": "low",
+      "block": "joints",
+      "layer": "solver",
+      "summary": "Joint rates assume a backward difference, but the SDIRK stage dt differs from the step.",
+      "wp": "WP-31"
+    },
+    {
+      "id": "F-059",
+      "severity": "low",
+      "block": "dc_motor",
+      "layer": "eq",
+      "summary": "Kt and Ke are separate params. Kt != Ke creates or destroys energy (documented). Consider tying them in SI or warning.",
+      "wp": "WP-12",
+      "status": "resolved-WP-12a (F-013 machine side)"
+    },
+    {
+      "id": "F-060",
+      "severity": "med",
+      "block": "hydraulic converters",
+      "layer": "eq",
+      "summary": "No hydraulic pump/motor/cylinder with a shaft or rod port exists (pump_il is an ideal pressure source).",
+      "wp": "WP-17",
+      "status": "resolved/decided-WP-17"
+    },
+    {
+      "id": "F-061",
+      "severity": "low",
+      "block": "belt_end",
+      "layer": "eq",
+      "summary": "No slack (tension-only) condition and no damping term c(dx_e - dx_r) as spec 2.4 requires.",
+      "wp": "WP-13",
+      "status": "resolved-WP-13"
+    },
+    {
+      "id": "F-062",
+      "severity": "low",
+      "block": "rot/trans_multibody_interface",
+      "layer": "port",
+      "summary": "Old t/f ports removed. Saved models get an unknown-port diagnostic. Consider a migration that drops those edges with a notice.",
+      "wp": "WP-41",
+      "status": "addressed-WP-40 (F-093 help file untracked: left to its owner)"
+    },
+    {
+      "id": "F-063",
+      "severity": "med",
+      "block": "sym_comp_transform, inv_sym_comp_transform",
+      "layer": "eq",
+      "summary": "WP-09c used the phasor magnitude via dx/dt (ripple, first step wrong). Planner did NOT sign off: implement the Simscape Sequence Analyzer method (running one-fundamental-period Fourier at f0), output magnitude and phase per the library.",
+      "wp": "WP-20",
+      "status": "resolved-WP-20a"
+    },
+    {
+      "id": "F-064",
+      "severity": "med",
+      "block": "DAEAssembler",
+      "layer": "solver",
+      "summary": "Unconnected electrical ports named b/c/n/ref/gnd are pinned to ground by NAME (only phase_splitter is exempt). Replace with explicit reference semantics. Check three_phase_source, machines and inverters.",
+      "wp": "WP-10/WP-12",
+      "status": "resolved (electrical WP-10, mechanical WP-13, thermal/magnetic WP-15; fluid/gas WP-17)"
+    },
+    {
+      "id": "F-065",
+      "severity": "low",
+      "block": "ps_sine_3phase",
+      "layer": "eq",
+      "summary": "Inputs m and ang are unread.",
+      "wp": "WP-20",
+      "status": "resolved-WP-20a"
+    },
+    {
+      "id": "F-066",
+      "severity": "med",
+      "block": "environment",
+      "layer": "integration",
+      "summary": "node_modules lost the same 92 packages twice (incl. @babel/runtime, @alloc/quick-lru, the .bin shims), the second time during a full src/utils test run at 00:34. Find which test/script prunes it.",
+      "wp": "WP-31"
+    },
+    {
+      "id": "F-067",
+      "severity": "high",
+      "block": "capacitor/inductor (all dAcross/dBranch derivatives)",
+      "layer": "solver",
+      "summary": "Backward Euler is used even with BDF2 on (only isDifferentialState vars get the BDF2 stencil, vlabPhysics ~l.376), so RC/RLC are first order (err ~ h/(2tau)). Hurts every Simscape comparison.",
+      "wp": "WP-31",
+      "status": "resolved-WP-31a"
+    },
+    {
+      "id": "F-068",
+      "severity": "med",
+      "block": "three_phase_source",
+      "layer": "eq",
+      "summary": "Hard-coded +pi/4 phase shift, absolute potentials to ground with no return; listed in IMPLICIT_ABSOLUTE_POTENTIAL_BLOCKS. Decide on a composite port.",
+      "wp": "WP-12",
+      "status": "resolved-WP-12a (F-013 machine side)"
+    },
+    {
+      "id": "F-069",
+      "severity": "low",
+      "block": "ac_voltage",
+      "layer": "params",
+      "summary": "Default phase pi/4 (Simscape 0) is locked by ac_voltage_parameters.test.ts. Sources also have a non-ideal R_int (dev).",
+      "wp": "WP-10 dev"
+    },
+    {
+      "id": "F-070",
+      "severity": "low",
+      "block": "kernel PhysicalSystemCompiler",
+      "layer": "integration",
+      "summary": "Does not honour capacitor v0 / inductor i0.",
+      "wp": "WP-31",
+      "status": "resolved-WP-31b"
+    },
+    {
+      "id": "F-071",
+      "severity": "low",
+      "block": "memristor, opamp",
+      "layer": "eq",
+      "summary": "Memristor uses a simplified unvalidated drift model; the opamp clamp is C0 (consider smooth).",
+      "wp": "WP-10 dev"
+    },
+    {
+      "id": "F-072",
+      "severity": "med",
+      "block": "multibody frames/joints",
+      "layer": "solver",
+      "summary": "Frame-pose variables are pinned to BDF1 (system.firstOrderOnly). Joint rates w = dangle/dt assume a backward difference, so mechanisms stay first order. BDF2 there gave spurious velocities on held DOFs.",
+      "wp": "WP-19b"
+    },
+    {
+      "id": "F-073",
+      "severity": "low",
+      "block": "lms_adaptive_filter",
+      "layer": "eq",
+      "summary": "Hard-coded (x - x_prev)/0.01 derivative ignores the step.",
+      "wp": "WP-20",
+      "status": "resolved-WP-20b"
+    },
+    {
+      "id": "F-074",
+      "severity": "low",
+      "block": "mass",
+      "layer": "params",
+      "summary": "Default b=0.1 adds viscous damping that F = m dv/dt does not state (Simscape Mass has none).",
+      "wp": "WP-14",
+      "status": "resolved-WP-13"
+    },
+    {
+      "id": "F-075",
+      "severity": "med",
+      "block": "rot_hard_stop",
+      "layer": "eq",
+      "summary": "The c*w term is discontinuous at the stop threshold. Fragile for Newton; passes only via the SDIRK fallback. Use the Simscape hard-stop formulation (smooth or event-based).",
+      "wp": "WP-13",
+      "note": "event handling improved in WP-11; hard-stop formulation still WP-13",
+      "status": "resolved-WP-13"
+    },
+    {
+      "id": "F-076",
+      "severity": "med",
+      "block": "library",
+      "layer": "port",
+      "summary": "No zener, PMOS, BJT, thyristor/SCR, triac, GTO or relay blocks exist (only diode, nmos, igbt, switch). Coverage gap versus Simscape Electrical; user decision needed on whether to add them.",
+      "wp": "USER"
+    },
+    {
+      "id": "F-077",
+      "severity": "low",
+      "block": "ps_switch",
+      "layer": "eq",
+      "summary": "detectZeroCrossings defaults the threshold to 0.5 while the library default is 0.",
+      "wp": "WP-20",
+      "status": "resolved-WP-20a"
+    },
+    {
+      "id": "F-078",
+      "severity": "low",
+      "block": "igbt",
+      "layer": "eq",
+      "summary": "No anti-parallel diode and no switching times (ideal switching only).",
+      "wp": "WP-11 dev"
+    },
+    {
+      "id": "F-079",
+      "severity": "high",
+      "block": "engine performance",
+      "layer": "solver",
+      "summary": "With real 50 Hz induction dynamics the labs take 16-22 s each (dense numeric Jacobian ~50 us/residual, h ~0.1 ms by LTE). test:vlab went from 15 s to 64 s; per-test 240 s timeouts were added to 8 lab tests. Needs a sparse/analytic Jacobian, Jacobian reuse, and checks on UI interactivity.",
+      "wp": "WP-31",
+      "status": "resolved-WP-31c"
+    },
+    {
+      "id": "F-080",
+      "severity": "high",
+      "block": "labs (pid_ac_motor, vfd_inverter_drive, smart_washing_machine) + pwm_3ph_2level",
+      "layer": "integration",
+      "summary": "The labs ground the motor star point while the inverter output has a 0.5 Vdc common mode, giving a non-physical kA DC zero-sequence current (pre-existing, now visible). Float the star point or reference the inverter midpoint.",
+      "wp": "WP-12b",
+      "status": "resolved-WP-12b"
+    },
+    {
+      "id": "F-081",
+      "severity": "low",
+      "block": "machines",
+      "layer": "port",
+      "summary": "DEVIATION: machine shafts have only R with a library-declared internal mechanical reference (no Simscape-style C case port). Adding C needs an instance-port migration.",
+      "wp": "USER/WP-41"
+    },
+    {
+      "id": "F-082",
+      "severity": "low",
+      "block": "dc_motor/bldc_motor",
+      "layer": "ui",
+      "summary": "migrationNotices (Kt != Ke) are stored in node.data but not shown in the UI.",
+      "wp": "WP-41",
+      "status": "addressed-WP-40 (F-093 help file untracked: left to its owner)"
+    },
+    {
+      "id": "F-084",
+      "severity": "med",
+      "block": "VLabPhysicsEngine events",
+      "layer": "solver",
+      "summary": "A located switching edge is accepted up to minimumStep (1 us) late, so at 20 kHz the duty drifts ~2 % (buck Vo +1.4 %). Needs proper event-time interpolation; minimumStep 1e-9 stalls.",
+      "wp": "WP-31",
+      "status": "resolved-WP-31b"
+    },
+    {
+      "id": "F-085",
+      "severity": "med",
+      "block": "thyristor bridge (algebraic)",
+      "layer": "solver",
+      "summary": "The algebraic Newton does not converge at some steps for the 12-switch bridge; bridge tests take 10-30 s each.",
+      "wp": "WP-31",
+      "status": "resolved-WP-31b"
+    },
+    {
+      "id": "F-083",
+      "severity": "low",
+      "block": "thyristor_6pulse/12pulse",
+      "layer": "port",
+      "summary": "theta semantics differ (absolute deg vs rad offset + ramp).",
+      "wp": "WP-20",
+      "status": "documented WP-20a (conventions locked by tests)"
+    },
+    {
+      "id": "F-086",
+      "severity": "low",
+      "block": "ps_max",
+      "layer": "eq",
+      "summary": "Placeholder: returns u1 only.",
+      "wp": "WP-20",
+      "status": "resolved-WP-20a"
+    },
+    {
+      "id": "F-087",
+      "severity": "low",
+      "block": "library",
+      "layer": "port",
+      "summary": "No diode/thyristor bridge, DC-DC, NPC or Vienna POWER-stage blocks (only gate generators). They are built from discrete parts (same gap as F-076).",
+      "wp": "USER"
+    },
+    {
+      "id": "F-088",
+      "severity": "low",
+      "block": "rot/trans_friction",
+      "layer": "eq",
+      "summary": "Stribeck smoothing constant 4 is from memory of the Simscape doc. Verify on the first licensed MATLAB run.",
+      "wp": "USER (golden)"
+    },
+    {
+      "id": "F-089",
+      "severity": "med",
+      "block": "library",
+      "layer": "port",
+      "summary": "There is no translational velocity source block (Simscape has an Ideal Translational Velocity Source).",
+      "wp": "USER"
+    },
+    {
+      "id": "F-090",
+      "severity": "low",
+      "block": "belt_properties / whitebox MechanicalFixtures",
+      "layer": "eq",
+      "summary": "belt_damping from belt_properties is not applied (belt_end has a local damping param). The whitebox MechanicalFixtures torque source wiring inverts the sign.",
+      "wp": "WP-30",
+      "status": "resolved-WP-30"
+    },
+    {
+      "id": "F-091",
+      "severity": "med",
+      "block": "magnetron, upper_heater (appliances)",
+      "layer": "port",
+      "summary": "An open thermal h port is now a topology error (was silently pinned to 293.15 K). Saved appliance models may need a thermal_ref or ambient.",
+      "wp": "WP-21",
+      "status": "resolved-WP-21"
+    },
+    {
+      "id": "F-092",
+      "severity": "low",
+      "block": "steam_generator, microwave_cavity, ma_chamber",
+      "layer": "eq",
+      "summary": "Internal ambient params; microwave_cavity uses the old 5.67e-8.",
+      "wp": "WP-17/WP-21",
+      "status": "resolved-WP-21"
+    },
+    {
+      "id": "F-093",
+      "severity": "low",
+      "block": "src/help/blockGuidance.ts (untracked, other session)",
+      "layer": "ui",
+      "summary": "Says fundamental_reluctance ignores l/A/mu, which is now wrong.",
+      "wp": "WP-40",
+      "status": "addressed-WP-40 (F-093 help file untracked: left to its owner)"
+    },
+    {
+      "id": "F-094",
+      "severity": "low",
+      "block": "thermal migration",
+      "layer": "ui",
+      "summary": "Old models: scope temperature readings shift +293.15 K (correct physics); a migration notice is stored but not shown in the UI.",
+      "wp": "WP-40",
+      "status": "addressed-WP-40 (F-093 help file untracked: left to its owner)"
+    },
+    {
+      "id": "F-095",
+      "severity": "high",
+      "block": "ma_chamber H wired to thermal_ref (and any similar case)",
+      "layer": "solver",
+      "summary": "The solver loops forever (synchronous, no timeout) despite the WP-04 rejected-step budget: accepted tiny steps or an inner loop are not bounded. In the app this freezes the worker. Needs a total step/wall-clock guard.",
+      "wp": "WP-31",
+      "status": "resolved-WP-31b"
+    },
+    {
+      "id": "F-096",
+      "severity": "med",
+      "block": "ma_separator, ma_selector",
+      "layer": "eq",
+      "summary": "Remain explicitly unsupported: no stated meaning/units for the separator w/d outputs, and the selector composite layout is undefined.",
+      "wp": "USER (spec needed)"
+    },
+    {
+      "id": "F-097",
+      "severity": "med",
+      "block": "all ma_*",
+      "layer": "port",
+      "summary": "Moist air carries only p and mdot; T and phi are block params, so ma_pt_sensor.t reports its param, not a measured value (deviation).",
+      "wp": "dev"
+    },
+    {
+      "id": "F-098",
+      "severity": "med",
+      "block": "vlabStructure.detectJacobianPattern",
+      "layer": "solver",
+      "summary": "The structural probe uses non-physical points (p ~ 1 Pa); the dependence threshold lowered to 1e-13 to see stiff gas rows. Consider physically scaled probe points.",
+      "wp": "WP-31",
+      "status": "resolved-WP-31b"
+    },
+    {
+      "id": "F-099",
+      "severity": "low",
+      "block": "VLabNode/VLabSimulinkScope/VLabWorkspace",
+      "layer": "ui",
+      "summary": "The other session is adding data-help-feature attributes to V-Lab UI files (uncommitted, not ours). WP-40 must coordinate to avoid conflicts.",
+      "wp": "WP-40",
+      "status": "addressed-WP-40 (F-093 help file untracked: left to its owner)"
+    },
+    {
+      "id": "F-100",
+      "severity": "high",
+      "block": "steam_generator",
+      "layer": "eq",
+      "summary": "WP-17 regression: vlab_full_certification boundary case 2 returns a non-finite residual.",
+      "wp": "WP-17 rework",
+      "status": "resolved (boil_temp bounded 0..370 degC, h_fg clamp)"
+    },
+    {
+      "id": "F-101",
+      "severity": "low",
+      "block": "events",
+      "layer": "solver",
+      "summary": "Threshold events end a cut step just after the jump, so backward Euler integrates the post-jump value over that sub-step (~1e-4 error). Land just before the root.",
+      "wp": "WP-31",
+      "status": "resolved-WP-31b"
+    },
+    {
+      "id": "F-102",
+      "severity": "med",
+      "block": "library",
+      "layer": "port",
+      "summary": "Missing Simulink/Simscape signal blocks: derivative, relay, quantizer, rate limiter, compare, counter, ZOH, clock, chirp, pulse, mux, scalar-to-vector; ps_sum has a scalar port only.",
+      "wp": "USER"
+    },
+    {
+      "id": "F-103",
+      "severity": "high",
+      "block": "engine (no Solver Configuration)",
+      "layer": "solver",
+      "summary": "The LTE norm covers only _state_ variables, so across/branch derivatives (C dv/dt, L di/dt, J dw/dt, C dT/dt) are never error-controlled, and the first BDF1 step has no estimate. RLC at 100 us 1.9 %, locked rotor 4.4 %. 2 it.fails in vlab_connected_benchmarks.",
+      "wp": "WP-31",
+      "status": "resolved-WP-31b"
+    },
+    {
+      "id": "F-104",
+      "severity": "low",
+      "block": "belt_end/spool/pulley",
+      "layer": "integration",
+      "summary": "Injected belt_density/youngs persist in node.data after unlinking; a model-wide ctx broadcast overrides unlinked blocks (spec 2.5); belt_damping is not persisted.",
+      "wp": "WP-31",
+      "status": "resolved-WP-31c"
+    },
+    {
+      "id": "F-105",
+      "severity": "low",
+      "block": "library",
+      "layer": "port",
+      "summary": "No PS-controlled current source block (Simscape Controlled Current Source).",
+      "wp": "USER"
+    },
+    {
+      "id": "F-106",
+      "severity": "high",
+      "block": "engine performance",
+      "layer": "solver",
+      "summary": "With full error control, pmsm_foc takes ~500 steps for 0.05 s and the FOC test takes 123 s alone. The BDF2-BDF1 estimator overestimates; use a 3rd-divided-difference BDF2 LTE (needs x(n-2)). Combine with a sparse Jacobian and Jacobian reuse (F-079).",
+      "wp": "WP-31c",
+      "status": "resolved-WP-31c"
+    },
+    {
+      "id": "F-107",
+      "severity": "low",
+      "block": "worker",
+      "layer": "integration",
+      "summary": "Mid-step cancel needs SharedArrayBuffer (cross-origin isolation); otherwise the worker is terminated/restarted. Check Electron COOP/COEP.",
+      "wp": "WP-40",
+      "status": "addressed-WP-40 (F-093 help file untracked: left to its owner)"
+    },
+    {
+      "id": "F-108",
+      "severity": "low",
+      "block": "engine",
+      "layer": "solver",
+      "summary": "An RLC step in a single 50 ms call fails at minimumStep during BDF1 startup (atol 1e-5); probably pre-existing.",
+      "wp": "open"
+    }
+  ],
+  "reference": "published-equations (Simscape goldens optional, F-021)",
+  "mandate": "docs/superpowers/plans/2026-10-05-vlab-simscape-review.md section 0 (user, 2026-10-05)",
+  "ownership": "The loop owns V-Lab exclusively from 2026-10-05 (user paused the concurrent Antigravity session)",
+  "stats_before": {
+    "date": "2026-10-05",
+    "live_blocks": 248,
+    "ports": 751,
+    "missing_domain_ports": 386,
+    "affected_blocks": 145,
+    "generic_equation_labels": 101,
+    "unsafe_numeric_fallbacks": 169,
+    "fully_certified": 45,
+    "classification": "physical 110, signal 73, measurement 20, source 33, utility 12",
+    "dae_allocation_mismatch_blocks": 46,
+    "note": "after WP-06b: missing_domain_ports=0, expected failures 264"
+  },
+  "standard_acceptance_extra": "Always include src/utils/vlabLibrary.test.ts src/utils/scopeUtils.test.ts (missed in WP-08)",
+  "budget_plan": {
+    "decided": "2026-10-06 by user",
+    "merges": "13+14, 15+16, 17+18, 32->31, 41/42/43->40",
+    "deferred": "WP-19b rigid-body dynamics",
+    "full_suite": "planner runs the full V-Lab suite every ~3 WPs; executors run targeted tests only",
+    "priority": "WP-12b > WP-13 > WP-15 > WP-17 > WP-20 > WP-21 > WP-30 > WP-31 > WP-50 > WP-40",
+    "executor_model_change": "2026-10-07: Sonnet weekly limit hit (resets Oct 10 21:00). WP-21, WP-30, WP-31b ran on Opus executors. USER DECISION (2026-10-07 ~11:00): Sonnet executes, Opus only reviews. Remaining WP-31c, WP-50, WP-40 MUST use Sonnet: wait for the reset, then resume with /vlab-review-loop."
+  },
+  "stats_after": {
+    "date": "2026-10-07",
+    "live_blocks": 248,
+    "ports": 782,
+    "missing_domain_ports": 0,
+    "affected_blocks": 0,
+    "generic_equation_labels": 9,
+    "unsafe_numeric_fallbacks": 0,
+    "fully_certified": 237,
+    "unsupported": 2,
+    "expected_failures": 12,
+    "dae_allocation_mismatch_blocks": 0
+  },
+  "status": "COMPLETE 2026-10-07 (WP-19b deferred by user decision)"
+}

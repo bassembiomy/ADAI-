@@ -2823,7 +2823,40 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     }
   }),
 
-  // --- DC-AC Inverters ---
+  // --- DC-AC Inverters & Power Components ---
+  'DC_VOLTAGE_SOURCE': (id, params) => ({
+    id, type: 'DC_VOLTAGE_SOURCE',
+    params: { voltage: params?.voltage !== undefined ? Number(params.voltage) : 400 },
+    inputs: [],
+    outputs: [
+      createPort('v_pos', 'Vdc+', 'output', params?.voltage !== undefined ? Number(params.voltage) : 400, 'right', 'power'),
+      createPort('v_neg', 'Vdc-', 'output', 0, 'right', 'power')
+    ],
+    execute: (_, p) => {
+      const v = Number(p?.voltage !== undefined ? p.voltage : 400);
+      return { outputs: [v, 0] };
+    }
+  }),
+
+  'THREE_PHASE_LOAD': (id, params) => ({
+    id, type: 'THREE_PHASE_LOAD',
+    params: { R: params?.R !== undefined ? Number(params.R) : 10 },
+    inputs: [
+      createPort('va', 'Va', 'input', 0, 'left', 'power'),
+      createPort('vb', 'Vb', 'input', 0, 'left', 'power'),
+      createPort('vc', 'Vc', 'input', 0, 'left', 'power')
+    ],
+    outputs: [
+      createPort('ia', 'Ia', 'output', 0, 'right', 'power'),
+      createPort('ib', 'Ib', 'output', 0, 'right', 'power'),
+      createPort('ic', 'Ic', 'output', 0, 'right', 'power')
+    ],
+    execute: (ins, p) => {
+      const r = Math.max(0.001, Number(p?.R) || 10);
+      return { outputs: [Number(ins[0] || 0) / r, Number(ins[1] || 0) / r, Number(ins[2] || 0) / r] };
+    }
+  }),
+
   'THREE_PHASE_INVERTER': (id, params) => ({
     id, type: 'THREE_PHASE_INVERTER',
     params: { Ron: params.Ron || 0.01, Vf: params.Vf || 0.7 },
@@ -3132,27 +3165,33 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     const modelType = (typeof params.modelType === 'object' && params.modelType !== null && 'value' in params.modelType)
       ? params.modelType.value : (params.modelType || 'RSM');
 
+    // Resolve the canonical deployment payload ({label,value} wrapper and/or JSON string both accepted).
+    const resolveDeployment = (raw: any): any => {
+      let d = raw;
+      if (typeof d === 'object' && d !== null && 'value' in d) d = d.value;
+      if (typeof d === 'string') {
+        try { d = JSON.parse(d); } catch { d = null; }
+      }
+      return d;
+    };
+    const factoryDeployment = resolveDeployment(params.deploymentModel);
+    // Port order is the canonical factorOrder; never let stale inputNames desync ports from the model.
+    const portNames: string[] = (factoryDeployment && factoryDeployment.schemaVersion === 1
+      && Array.isArray(factoryDeployment.factorOrder) && factoryDeployment.factorOrder.length > 0
+      && factoryDeployment.factorOrder.length !== inputNames.length)
+      ? factoryDeployment.factorOrder : inputNames;
+
     return {
       id, type: 'DOE_MODEL',
       params: { ...params, inputNames, outputName, modelType },
-      inputs: inputNames.map((name: string, i: number) => createPort(`in${i + 1}`, name, 'input')),
+      inputs: portNames.map((name: string, i: number) => createPort(`in${i + 1}`, name, 'input')),
       outputs: [createPort('out', outputName, 'output')],
       execute: (ins, p, state) => {
         try {
           const rawInputs = ins.map(Number);
 
           // 1. Prefer canonical DOEDeploymentModel if available
-          let deployment = p.deploymentModel || (p.params && p.params.deploymentModel);
-          if (typeof deployment === 'object' && deployment !== null && 'value' in deployment) {
-            deployment = deployment.value;
-          }
-          if (typeof deployment === 'string') {
-            try {
-              deployment = JSON.parse(deployment);
-            } catch {
-              deployment = null;
-            }
-          }
+          const deployment = resolveDeployment(p.deploymentModel || (p.params && p.params.deploymentModel));
 
           if (deployment && deployment.schemaVersion === 1) {
             const res = evaluateDOEModelDetailed(deployment, rawInputs);
@@ -3204,62 +3243,49 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
               }
             }
 
-            let currentVals = [...rawInputs];
-            for (const layer of (layers as any[])) {
-              currentVals = layer.map((neuron: any) => {
-                const xi = currentVals[neuron.inputs[0]];
-                const xj = currentVals[neuron.inputs[1]];
-                let vals: number[];
-                if (polyOrder === 3) {
-                  vals = [1, xi, xj, xi * xi, xj * xj, xi * xj, xi * xi * xi, xj * xj * xj, xi * xi * xj, xi * xj * xj];
-                } else {
-                  vals = [1, xi, xj, xi * xi, xj * xj, xi * xj];
-                }
-                const coeffs = neuron.coeffs || neuron.weights || [];
-                return vals.reduce((sum, v, cIdx) => sum + v * (coeffs[cIdx] || 0), 0);
-              });
+            // Delegate to the canonical evaluator (single source of truth for GMDH polynomial term order).
+            const legacyGmdh: any = {
+              schemaVersion: 1, modelType: 'GMDH',
+              factorOrder: inputNamesArr, responseName: 'Y', trainingRowCount: 0, metrics: { rSquared: 0 },
+              gmdh: {
+                polyOrder: Number(polyOrder) === 3 ? 3 : 2,
+                layers: (layers as any[]).map((layer: any) => Array.isArray(layer)
+                  ? layer.map((neuron: any) => ({ inputs: neuron?.inputs, coeffs: neuron?.coeffs || neuron?.weights || [] }))
+                  : layer)
+              }
+            };
+            const gres = evaluateDOEModelDetailed(legacyGmdh, rawInputs);
+            if (!gres.success) {
+              return { outputs: [NaN], error: gres.diagnostic?.message || 'Legacy GMDH evaluation failed.', nextState: { ...(state || {}), lastFault: gres.diagnostic } };
             }
-            const outVal = Number(currentVals[0]);
-            if (!Number.isFinite(outVal)) {
-              const diag = { code: 'NUMERICAL_OVERFLOW', message: 'GMDH execution produced non-finite output.', severity: 'error' as const };
-              return { outputs: [NaN], error: diag.message, nextState: { ...(state || {}), lastFault: diag } };
-            }
-            return { outputs: [outVal], nextState: { ...(state || {}), lastFault: null } };
+            return { outputs: [gres.value], nextState: { ...(state || {}), lastFault: null } };
           } else if (mType === 'Taguchi') {
-            const grandMean = (typeof p.grandMean === 'object') ? p.grandMean.value : (p.grandMean || 0);
-            const factorLevels = (typeof p.factorLevels === 'object' && !Array.isArray(p.factorLevels)) ? p.factorLevels.value : (p.factorLevels || []);
+            const grandMean = (typeof p.grandMean === 'object' && p.grandMean !== null) ? p.grandMean.value : (p.grandMean || 0);
+            const factorLevels = (typeof p.factorLevels === 'object' && p.factorLevels !== null && !Array.isArray(p.factorLevels)) ? p.factorLevels.value : (p.factorLevels || []);
 
             if (!Array.isArray(factorLevels) || factorLevels.length === 0) {
               const diag = { code: 'INVALID_TAGUCHI_LEVELS', message: 'Taguchi factorLevels missing or empty.', severity: 'error' as const };
               return { outputs: [NaN], error: diag.message, nextState: { ...(state || {}), lastFault: diag } };
             }
 
-            for (let i = 0; i < rawInputs.length; i++) {
-              if (!Number.isFinite(rawInputs[i])) {
-                const diag = { code: 'NON_FINITE_INPUT', message: `Non-finite input at index ${i}.`, severity: 'error' as const };
-                return { outputs: [NaN], error: diag.message, nextState: { ...(state || {}), lastFault: diag } };
+            const legacyTaguchi: any = {
+              schemaVersion: 1, modelType: 'Taguchi',
+              factorOrder: factorLevels.map((f: any, i: number) => f?.factorName || f?.factor || inputNamesArr[i] || `X${i + 1}`),
+              responseName: 'Y', trainingRowCount: 0, metrics: { rSquared: 0 },
+              taguchi: {
+                grandMean: Number(grandMean),
+                factorLevels: factorLevels.map((f: any, i: number) => ({
+                  factorName: f?.factorName || f?.factor || inputNamesArr[i] || `X${i + 1}`,
+                  levels: (f?.means || f?.levels || []).map((m: any) => ({ level: m.level, meanY: m.meanY, snr: m.meanSN ?? m.snr ?? 0 }))
+                }))
               }
+            };
+            const tres = evaluateDOEModelDetailed(legacyTaguchi, rawInputs);
+            if (!tres.success) {
+              return { outputs: [NaN], error: tres.diagnostic?.message || 'Legacy Taguchi evaluation failed.', nextState: { ...(state || {}), lastFault: tres.diagnostic } };
             }
-
-            let prediction = Number(grandMean);
-            factorLevels.forEach((f: any, i: number) => {
-              const val = rawInputs[i];
-              if (f.means && Array.isArray(f.means)) {
-                const sortedMeans = [...f.means].sort((a: any, b: any) => Math.abs(a.level - val) - Math.abs(b.level - val));
-                const nearest = sortedMeans[0];
-                if (nearest) {
-                  prediction += (nearest.meanY - grandMean);
-                }
-              }
-            });
-
-            if (!Number.isFinite(prediction)) {
-              const diag = { code: 'NUMERICAL_OVERFLOW', message: 'Taguchi execution produced non-finite output.', severity: 'error' as const };
-              return { outputs: [NaN], error: diag.message, nextState: { ...(state || {}), lastFault: diag } };
-            }
-            return { outputs: [prediction], nextState: { ...(state || {}), lastFault: null } };
+            return { outputs: [tres.value], nextState: { ...(state || {}), lastFault: null } };
           }
-
           const noModelDiag = { code: 'NO_MODEL_CONFIGURED', message: 'No valid DOE model configured on block.', severity: 'error' as const };
           return { outputs: [NaN], error: noModelDiag.message, nextState: { ...(state || {}), lastFault: noModelDiag } };
         } catch (err: any) {

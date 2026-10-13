@@ -28,6 +28,7 @@ const blenderLab = {
     { id: 'mixture_drag', blockId: 'rot_damper', position: { x: 450, y: 200 }, label: 'Mixture Viscosity', params: { b: 0.001 } },
     { id: 'blade_inertia', blockId: 'inertia', position: { x: 450, y: 350 }, label: 'Blade Inertia', params: { J: 0.0002 } },
     { id: 'speed_sensor', blockId: 'rot_motion_sensor', position: { x: 650, y: 200 }, label: 'Speed Sensor' },
+    { id: 'mech_ref', blockId: 'rot_ref', position: { x: 650, y: 450 }, label: 'Rotational Reference' },
     { id: 'blender_scope', blockId: 'scope', position: { x: 850, y: 150 }, label: 'Performance Monitor', params: { time_range: 5 } },
     { id: 'gnd', blockId: 'ground', position: { x: 150, y: 400 }, label: 'Common' }
   ],
@@ -38,7 +39,10 @@ const blenderLab = {
     { id: 'be2', source: 'blender_motor', target: 'mixture_drag', sourceHandle: 'r_s', targetHandle: 'r_t' },
     { id: 'be3', source: 'mixture_drag', target: 'blade_inertia', sourceHandle: 'r_s', targetHandle: 'r_t' },
     { id: 'be4', source: 'mixture_drag', target: 'speed_sensor', sourceHandle: 'r_s', targetHandle: 'r_t' },
-    { id: 'be5', source: 'speed_sensor', target: 'blender_scope', sourceHandle: 'w_s', targetHandle: 'in1_t' }
+    { id: 'be5', source: 'speed_sensor', target: 'blender_scope', sourceHandle: 'w_s', targetHandle: 'in1_t' },
+    { id: 'be5_sref', source: 'speed_sensor', target: 'mech_ref', sourceHandle: 'c_s', targetHandle: 'r_t' },
+    { id: 'be_mref', source: 'blender_motor', target: 'mech_ref', sourceHandle: 'c_s', targetHandle: 'r_t' },
+    { id: 'be_dref', source: 'mixture_drag', target: 'mech_ref', sourceHandle: 'c_s', targetHandle: 'r_t' }
   ]
 };
 
@@ -74,10 +78,12 @@ describe('Debug Blender Mixer', () => {
     const lab = {
       nodes: [
         { id: 'dc_link', blockId: 'dc_voltage', position: { x: 50, y: 300 }, label: 'DC Link (600V)', params: { V: 600 } },
-        { id: 'inverter', blockId: 'pwm_3ph_2level', position: { x: 300, y: 300 }, label: '3-Phase Inverter' },
+        { id: 'inverter', blockId: 'pwm_3ph_2level', position: { x: 300, y: 300 }, label: '3-Phase Inverter', params: { control_mode: 'sinusoidal_modulation' } },
         { id: 'vfd_controller', blockId: 'im_foc_ctrl', position: { x: 300, y: 100 }, label: 'VFD Controller', params: { mode: 1 } },
         { id: 'im_motor', blockId: 'ac_motor', position: { x: 550, y: 300 }, label: 'Induction Motor' },
         { id: 'ref_speed', blockId: 'ps_step', position: { x: 50, y: 100 }, label: 'Speed Reference', params: { time: 1, initial: 500, final: 1500 } },
+        { id: 'speed_sensor', blockId: 'rot_motion_sensor', position: { x: 700, y: 300 }, label: 'Speed Sensor' },
+        { id: 'mech_ref', blockId: 'rot_ref', position: { x: 650, y: 450 }, label: 'Rotational Reference' },
         { id: 'vfd_scope', blockId: 'scope', position: { x: 800, y: 200 }, label: 'VFD Performance', params: { time_range: 5 } },
         { id: 'gnd', blockId: 'ground', position: { x: 300, y: 500 }, label: 'Common Ground' }
       ],
@@ -86,12 +92,11 @@ describe('Debug Blender Mixer', () => {
         { id: 've2', source: 'dc_link', target: 'inverter', sourceHandle: 'p_s', targetHandle: 'p_t' },
         { id: 've2_ret', source: 'dc_link', target: 'gnd', sourceHandle: 'n_s', targetHandle: 'a_t' },
         { id: 've2_inv', source: 'inverter', target: 'gnd', sourceHandle: 'n_s', targetHandle: 'a_t' },
-        { id: 've3', source: 'vfd_controller', target: 'inverter', sourceHandle: 'vabc_s', targetHandle: 'vabc_t' },
-        { id: 've4_a', source: 'inverter', target: 'im_motor', sourceHandle: 'a_s', targetHandle: 'a_t' },
-        { id: 've4_b', source: 'inverter', target: 'im_motor', sourceHandle: 'b_s', targetHandle: 'b_t' },
-        { id: 've4_c', source: 'inverter', target: 'im_motor', sourceHandle: 'c_s', targetHandle: 'c_t' },
-        { id: 've4_n', source: 'im_motor', target: 'gnd', sourceHandle: 'n_s', targetHandle: 'a_t' },
-        { id: 've5', source: 'im_motor', target: 'vfd_scope', sourceHandle: 'r_s', targetHandle: 'in1_t' }
+        { id: 've3', source: 'vfd_controller', target: 'inverter', sourceHandle: 'vabc_s', targetHandle: 'amp_t' },
+        { id: 've4', source: 'inverter', target: 'im_motor', sourceHandle: 'abc_s', targetHandle: 'abc_t' }, // F-080: floating star point
+        { id: 've5', source: 'im_motor', target: 'speed_sensor', sourceHandle: 'r_s', targetHandle: 'r_t' },
+        { id: 've6', source: 'speed_sensor', target: 'vfd_scope', sourceHandle: 'w_s', targetHandle: 'in1_t' },
+        { id: 've6_sref', source: 'speed_sensor', target: 'mech_ref', sourceHandle: 'c_s', targetHandle: 'r_t' }
       ]
     };
     const nodes = reconstructLabNodes(lab.nodes);
@@ -105,13 +110,13 @@ describe('Debug Blender Mixer', () => {
         console.log(`  [${idx}] ${name}: ${state.x[idx]}`);
       });
     }
-  });
+  }, 30000); // WP-12b: 240 s (real 50 Hz induction-machine dynamics, ~30 s); WP-31c: 30 s
 
   it('debugs air_fryer_thermal', () => {
     const lab = {
       nodes: [
         { id: 'ac_supply', blockId: 'ac_voltage', position: { x: 50, y: 200 }, label: '230V AC Supply', params: { Vpk: 325, f: 50 } },
-        { id: 'heating_element', blockId: 'thermal_resistor', position: { x: 250, y: 200 }, label: 'Heating Element', params: { Rth: 35 } },
+        { id: 'heating_element', blockId: 'thermal_resistor', position: { x: 250, y: 200 }, label: 'Heating Element', params: { R: 35 } },
         { id: 'convection_link', blockId: 'convective_heat', position: { x: 450, y: 100 }, label: 'Convection Interface', params: { h: 80, A: 0.15 } },
         { id: 'air_chamber', blockId: 'ma_chamber', position: { x: 650, y: 200 }, label: 'Cooking Basket (Air)', params: { V: 0.005 } },
         { id: 'circulation_fan', blockId: 'ma_pressure_source', position: { x: 650, y: 400 }, label: 'Air Circulation Fan', params: { P: 150 } },

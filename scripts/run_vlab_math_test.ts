@@ -113,13 +113,14 @@ console.log('[2/3] Simulating Mechanical Mass-Spring-Damper System...');
   const dt = 0.01;
   const totalSteps = 100;
 
+  // a translational reference (an electrical `ground` is the wrong domain; WP-07 topology validation rejects it)
   const nodes: Node[] = [
-    makeNode('gnd', 'ground'),
+    makeNode('gnd', 'trans_ref'),
     makeNode('mass', 'mass', { m, b }),
   ];
 
   const edges: Edge[] = [
-    makeEdge('e1', 'mass', 'gnd', 'p', 'a_t')
+    makeEdge('e1', 'mass', 'gnd', 'p', 'p')
   ];
 
   let state: any = null;
@@ -153,13 +154,14 @@ console.log('[3/3] Simulating Thermal Conduction Network...');
   const dt = 0.01;
   const totalSteps = 100;
 
+  // a thermal reference (an electrical `ground` is the wrong domain; WP-07 topology validation rejects it)
   const nodes: Node[] = [
-    makeNode('gnd', 'ground'),
+    makeNode('gnd', 'thermal_ref'),
     makeNode('heat', 'conductive_heat', { k }),
   ];
 
   const edges: Edge[] = [
-    makeEdge('e1', 'heat', 'gnd', 'a', 'a_t')
+    makeEdge('e1', 'heat', 'gnd', 'a', 'a')
   ];
 
   let state: any = null;

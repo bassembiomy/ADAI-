@@ -1,4 +1,4 @@
-import type { VariableType } from '../../types/sm_types';
+import type { VariableOverflowPolicy, VariableType } from '../../types/sm_types';
 import type { ActionNode, ExpressionNode } from './smExpressions';
 import type {
   ModelDiagnostic,
@@ -108,6 +108,7 @@ export interface SemanticVariable {
   name: string;
   cName: string;
   type: VariableType;
+  overflowPolicy?: VariableOverflowPolicy;
   initialValue: number | boolean;
 }
 
@@ -175,5 +176,58 @@ export interface SemanticBuildResult {
   diagnostics: ModelDiagnostic[];
   variableSymbols?: ReadonlyMap<string, SemanticVariableSymbol>;
   stateSymbols?: ReadonlyMap<string, XBOwnerState>;
+}
+
+export function toSysmlTransitionRelationship(
+  transition: SemanticTransition,
+  ownerId?: string | null
+): {
+  id: string;
+  name?: string;
+  metaclass: 'Transition';
+  ownerId?: string | null;
+  sourceId: string;
+  targetId: string;
+  customProperties?: Record<string, unknown>;
+} {
+  return {
+    id: transition.id,
+    name: transition.guardSource || transition.actionSource || undefined,
+    metaclass: 'Transition',
+    ownerId: ownerId ?? null,
+    sourceId: transition.sourceStateId,
+    targetId: transition.destinationStateId,
+    customProperties: {
+      guard: transition.guardSource,
+      action: transition.actionSource,
+      transitionKind: transition.transitionKind,
+      triggerMode: transition.triggerMode,
+      afterTicks: transition.afterTicks,
+      priority: transition.priority,
+    },
+  };
+}
+
+export function fromSysmlTransitionRelationship(
+  rel: {
+    id: string;
+    name?: string;
+    sourceId: string;
+    targetId: string;
+    customProperties?: Record<string, unknown>;
+  }
+): Partial<SemanticTransition> {
+  const custom = rel.customProperties || {};
+  return {
+    id: rel.id,
+    sourceStateId: rel.sourceId,
+    destinationStateId: rel.targetId,
+    guardSource: typeof custom.guard === 'string' ? custom.guard : (rel.name || ''),
+    actionSource: typeof custom.action === 'string' ? custom.action : '',
+    transitionKind: (custom.transitionKind as any) || 'external',
+    triggerMode: (custom.triggerMode as any) || 'condition',
+    afterTicks: typeof custom.afterTicks === 'number' ? custom.afterTicks : null,
+    priority: typeof custom.priority === 'number' ? custom.priority : 0,
+  };
 }
 

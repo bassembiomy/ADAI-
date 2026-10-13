@@ -1,0 +1,10 @@
+{
+  "id": "dc_motor_load",
+  "class": "linear_smooth",
+  "stopTime": 1.0,
+  "dt": 0.001,
+  "signals": [
+    { "name": "omega", "unit": "rad/s", "vlabProbe": { "nodeId": "sensor", "handle": "w_s", "variableName": "omega" } }
+  ],
+  "analytic": { "type": "dc_motor_load_step", "V": 24, "Ra": 1, "La": 0.01, "k": 0.1, "J": 0.011, "B": 0.021 }
+}

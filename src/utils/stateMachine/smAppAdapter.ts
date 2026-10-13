@@ -466,6 +466,8 @@ export const readMappedOutputs = (
 };
 
 export interface AppSimulationTickCallbacks {
+  /** Apply staged operator input after successful external reads, before stepping. */
+  beforeStep?: () => void;
   readInputs(): Promise<Readonly<Record<string, AppSimulationValue>>>;
   isCurrent(): boolean;
   applyFrame(frame: SemanticTraceFrame): void;
@@ -487,6 +489,7 @@ export const runAppSimulationTick = async (
   if (!callbacks.isCurrent()) return null;
 
   applyMappedInputs(session, inputs);
+  callbacks.beforeStep?.();
   const frame = stepAppSimulationSession(session, elapsedMs);
   if (!callbacks.isCurrent()) return null;
 

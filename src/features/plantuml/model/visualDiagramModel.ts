@@ -1,4 +1,4 @@
-export type VisualDiagramType = 'sequence' | 'use-case';
+export type VisualDiagramType = 'sequence';
 
 export interface DiagramPoint { x: number; y: number; }
 export interface DiagramSize { width: number; height: number; }
@@ -30,7 +30,7 @@ export interface VisualDiagramModel {
   [key: string]: unknown;
 }
 
-const isType = (value: unknown): value is VisualDiagramType => value === 'sequence' || value === 'use-case';
+const isType = (value: unknown): value is VisualDiagramType => value === 'sequence';
 const id = () => `diagram-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
 export const createVisualDiagram = (type: VisualDiagramType, title = ''): VisualDiagramModel => {

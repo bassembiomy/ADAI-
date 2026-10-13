@@ -1,5 +1,8 @@
-import { Node, Edge } from '@xyflow/react';
 import { VLabPhysicsEngine } from './vlabPhysics';
+import { VLAB_LIBRARY } from '../../utils/vlabLibrary';
+import { buildDomainFixture } from './vlabDomainFixture';
+import { TopologyValidationError } from './vlabTopologyValidation';
+import { DAEStructureError } from './vlabStructure';
 import { VLabValidationContract } from './vlabValidationContracts';
 
 export interface VLabValidationResult {
@@ -18,43 +21,23 @@ export const runBlockValidationHarness = (
   contract: VLabValidationContract
 ): VLabValidationResult => {
   const engine = new VLabPhysicsEngine();
+  // A non-convergent block must fail fast and cheaply (a 248-block sweep cannot afford step-halving cascades).
+  engine.setStepBudget({ maxStepAttempts: 1000, wallClockMs: 1500 });
   const diagnostics: string[] = [];
 
-  // Construct supporting network according to domain
-  const nodes: Node[] = [];
-  const edges: Edge[] = [];
-
   const blockId = contract.blockId;
-  const domain = contract.domain;
 
-  if (domain === 'Electrical' || domain === 'PowerElectronics') {
-    nodes.push({ id: 'src', type: 'default', position: { x: 0, y: 0 }, data: { type: 'dc_voltage', params: { V: 10 } } } as any);
-    nodes.push({ id: 'dut', type: 'default', position: { x: 100, y: 0 }, data: { type: blockId, params: contract.nominalParameters } } as any);
-    nodes.push({ id: 'ref', type: 'default', position: { x: 200, y: 0 }, data: { type: 'resistor', params: { R: 1000 } } } as any);
-    nodes.push({ id: 'gnd', type: 'default', position: { x: 300, y: 0 }, data: { type: 'ground', params: {} } } as any);
-
-    edges.push({ id: 'e1', source: 'src', target: 'dut', sourceHandle: 'p', targetHandle: 'p' });
-    edges.push({ id: 'e2', source: 'dut', target: 'ref', sourceHandle: 'n', targetHandle: 'p' });
-    edges.push({ id: 'e3', source: 'ref', target: 'gnd', sourceHandle: 'n', targetHandle: 'gnd' });
-    edges.push({ id: 'e4', source: 'src', target: 'gnd', sourceHandle: 'n', targetHandle: 'gnd' });
-  } else if (domain === 'Thermal') {
-    nodes.push({ id: 'src', type: 'default', position: { x: 0, y: 0 }, data: { type: 'temperature_source', params: { T: 350 } } } as any);
-    nodes.push({ id: 'dut', type: 'default', position: { x: 100, y: 0 }, data: { type: blockId, params: contract.nominalParameters } } as any);
-    nodes.push({ id: 'gnd', type: 'default', position: { x: 200, y: 0 }, data: { type: 'thermal_reference', params: {} } } as any);
-
-    edges.push({ id: 'e1', source: 'src', target: 'dut', sourceHandle: 'a', targetHandle: 'a' });
-    edges.push({ id: 'e2', source: 'dut', target: 'gnd', sourceHandle: 'b', targetHandle: 'a' });
-  } else {
-    // Default physical network topology
-    nodes.push({ id: 'src', type: 'default', position: { x: 0, y: 0 }, data: { type: 'dc_voltage', params: { V: 5 } } } as any);
-    nodes.push({ id: 'dut', type: 'default', position: { x: 100, y: 0 }, data: { type: blockId, params: contract.nominalParameters } } as any);
-    nodes.push({ id: 'gnd', type: 'default', position: { x: 200, y: 0 }, data: { type: 'ground', params: {} } } as any);
-
-    edges.push({ id: 'e1', source: 'src', target: 'dut', sourceHandle: 'p', targetHandle: 'p' });
-    edges.push({ id: 'e2', source: 'dut', target: 'gnd', sourceHandle: 'n', targetHandle: 'gnd' });
-    edges.push({ id: 'e3', source: 'src', target: 'gnd', sourceHandle: 'n', targetHandle: 'gnd' });
+  // Domain-correct network (F-028): every DUT port is wired to a block of its own domain by exact port id.
+  // The previous harness wired `dc_voltage.p` into every DUT's `p` regardless of domain and used the
+  // non-existent block type `thermal_reference` (the library id is `thermal_ref`).
+  const libraryBlock = VLAB_LIBRARY.flatMap(d => d.blocks).find(b => b.id === blockId);
+  if (!libraryBlock) {
+    return {
+      success: false, blockId, maxResidualNorm: Infinity, maxAbsError: 0, maxRelError: 0, conservationError: 0,
+      observedConvergenceRate: 0, iterations: [], diagnostics: [`block "${blockId}" is not in VLAB_LIBRARY`],
+    };
   }
-
+  const { nodes, edges } = buildDomainFixture(libraryBlock, contract.nominalParameters);
   // Lightweight gate check: single trajectory, 5 steps only.
   // The convergence study (h, h/2, h/4 × 50 steps) is too expensive for a
   // 241-block sweep — blocks that hit DAE convergence failures trigger
@@ -72,16 +55,22 @@ export const runBlockValidationHarness = (
         diagnostics.push(`Non-finite state value detected at step ${s}`);
       }
       finalVal = state?.x?.[0] ?? 0;
-    } catch {
-      // DAE convergence failures are expected for blocks wired into
-      // incompatible topologies — not a gate-blocking issue.
+    } catch (err) {
+      // An invalid topology is a harness/fixture defect and must never pass silently. The one exception is a block the
+      // engine explicitly rejects as unsupported (WP-09a): that diagnostic names the missing spec, nothing is hidden.
+      if (err instanceof TopologyValidationError) {
+        if (err.diagnostics.some(d => d.code !== 'unsupported-block')) diagnostics.push(err.message);
+      } else if (err instanceof DAEStructureError) {
+        // a structurally singular or mis-sized network is a block/fixture defect, never a solver hiccup
+        diagnostics.push(err.message);
+      }
+      // Solver non-convergence on a minimal single-block network is not a gate-blocking issue (F-012);
+      // it is reported by test_all_blocks_scope.test.ts, which fails on any new solver error.
       break;
     }
   }
 
-  const success =
-    !diagnostics.some((d) => d.includes('Non-finite')) &&
-    Number.isFinite(finalVal);
+  const success = diagnostics.length === 0 && Number.isFinite(finalVal);
 
   return {
     success,

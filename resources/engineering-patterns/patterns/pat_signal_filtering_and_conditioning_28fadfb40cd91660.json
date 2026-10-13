@@ -1,0 +1,75 @@
+{
+  "version": 1,
+  "id": "pat_signal_filtering_and_conditioning_28fadfb40cd91660",
+  "name": "Signal Filtering and Conditioning",
+  "description": "Second-order lowpass signal filtering for sensor noise attenuation",
+  "domain": "signal_processing",
+  "provenance": {
+    "source": "reviewed_corpus",
+    "author": "ADIA Core Engineering",
+    "license": "Apache-2.0",
+    "licenseApproved": true,
+    "ingestedAt": 1710000000000
+  },
+  "lifecycle": "verified",
+  "requirements": {
+    "targetSystem": "signal_filter",
+    "targetBehaviors": [
+      "harmonic_attenuation",
+      "noise_filtering"
+    ],
+    "requiredInputs": [
+      "raw_signal"
+    ],
+    "requiredOutputs": [
+      "filtered_signal"
+    ]
+  },
+  "topology": {
+    "blocks": [
+      {
+        "blockId": "WaveformGen",
+        "role": "signal_generator",
+        "defaultParams": {
+          "waveform": "sine",
+          "frequency": 50,
+          "amplitude": 1
+        }
+      },
+      {
+        "blockId": "LOW_PASS_FILTER",
+        "role": "lowpass_filter",
+        "defaultParams": {
+          "cutoff_frequency": 100
+        }
+      }
+    ],
+    "connections": [
+      {
+        "sourceBlockRole": "signal_generator",
+        "sourcePort": "out",
+        "targetBlockRole": "lowpass_filter",
+        "targetPort": "u"
+      }
+    ]
+  },
+  "exactMappings": {
+    "signal_generator": "WaveformGen",
+    "lowpass_filter": "LOW_PASS_FILTER"
+  },
+  "simulationContract": {
+    "minDuration": 0.2,
+    "stepSize": 0.0001,
+    "expectedObservables": [
+      "filtered_signal"
+    ]
+  },
+  "evidence": {
+    "proofStatus": "proved",
+    "catalogFingerprint": "xbridges_cat_verified_seed",
+    "engineRunId": "xbr_seed_run_003",
+    "measuredAt": 1710000000000,
+    "qualityScore": 0.96
+  },
+  "contentHash": "28fadfb40cd9166001c281ddcfa33cbedd4a2c3cb423613b7a1cd1b6a81ab73a"
+}

@@ -26,16 +26,13 @@ function parseMemoryUsage(sizeOutput, packOrTargetId, targetPacksDir) {
     ramTotal = ramRegion ? ramRegion.size : 20480;
   }
 
-  const lines = sizeOutput.trim().split(/\r?\n/);
-  let text = 0;
-  let data = 0;
-  let bss = 0;
-
-  if (lines.length >= 2) {
-    const dataLine = lines[1].trim().split(/\s+/);
-    text = parseInt(dataLine[0], 10) || 0;
-    data = parseInt(dataLine[1], 10) || 0;
-    bss = parseInt(dataLine[2], 10) || 0;
+  const lines = typeof sizeOutput === 'string' ? sizeOutput.trim().split(/\r?\n/) : [];
+  const row = lines.length === 2 && /^\s*text\s+data\s+bss\s+dec\s+hex\s+filename\s*$/.test(lines[0])
+    ? lines[1].match(/^\s*(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+([\da-fA-F]+)\s+(.+)$/) : null;
+  if (!row) throw new Error('INVALID_SIZE_OUTPUT');
+  const [text, data, bss, dec] = row.slice(1, 5).map(Number);
+  if (![text, data, bss, dec].every(Number.isSafeInteger) || text + data + bss !== dec || parseInt(row[5], 16) !== dec) {
+    throw new Error('INVALID_SIZE_OUTPUT');
   }
 
   const flashUsed = text + data;
@@ -71,43 +68,45 @@ async function inspectElf(elfPath, packOrTargetId, opts = {}) {
   const binPath = path.join(path.dirname(elfPath), 'firmware.bin');
   const hexPath = path.join(path.dirname(elfPath), 'firmware.hex');
 
-  let sizeOutput = opts.mockSizeOutput || opts.sizeOutput;
-  if (!sizeOutput) {
-    try {
+  const hashes = { elf: elfHash, map: mapHash, bin: sha256File(binPath), hex: sha256File(hexPath) };
+  const fail = code => ({ valid: false, code, error: code, hashes });
+  const targetId = require('./targetPackLoader.cjs').normalizeTargetId(typeof packOrTargetId === 'string' ? packOrTargetId : packOrTargetId?.targetId);
+  const prefix = targetId.startsWith('atmega') ? 'avr-' : targetId.startsWith('stm32') ? 'arm-none-eabi-' : targetId.startsWith('esp32') ? 'xtensa-esp32-elf-' : '';
+  function runTool(kind, args) {
+    let executable = opts[`${kind}Executable`];
+    if (!executable) {
       const { resolveToolExecutable } = require('./toolchainManager.cjs');
-      const targetStr = typeof packOrTargetId === 'string' ? packOrTargetId : (packOrTargetId?.targetId || '');
-      const toolchainKey = targetStr.startsWith('atmega')
-        ? 'Arduino'
-        : targetStr.startsWith('stm32')
-        ? 'STM32'
-        : targetStr.startsWith('esp32')
-        ? 'ESP32'
-        : 'Generic';
-      const sizeCmd = targetStr.startsWith('atmega')
-        ? 'avr-size'
-        : targetStr.startsWith('stm32')
-        ? 'arm-none-eabi-size'
-        : targetStr.startsWith('esp32')
-        ? 'xtensa-esp32-elf-size'
-        : 'size';
-      const sizeExe = resolveToolExecutable(toolchainKey, sizeCmd);
-      if (sizeExe) {
-        const { spawnSync } = require('node:child_process');
-        const res = spawnSync(sizeExe, [elfPath], { encoding: 'utf8' });
-        if (res.status === 0 && res.stdout) {
-          sizeOutput = res.stdout;
-        }
-      }
-    } catch (_) {
-      // Fallback
+      const compiler = resolveToolExecutable(prefix === 'avr-' ? 'avr-g++' : `${prefix}gcc`, opts.toolchainsDir);
+      const companion = compiler && path.join(path.dirname(compiler), `${prefix}${kind}${process.platform === 'win32' ? '.exe' : ''}`);
+      executable = companion && fs.existsSync(companion) ? companion : resolveToolExecutable(`${prefix}${kind}`, opts.toolchainsDir);
     }
+    if (!executable) throw new Error(`${kind.toUpperCase()}_TOOL_NOT_FOUND`);
+    const result = require('node:child_process').spawnSync(executable, args, { encoding: 'utf8', timeout: 30000, windowsHide: true });
+    if (result.error || result.status !== 0 || !result.stdout) throw new Error(`${kind.toUpperCase()}_TOOL_FAILED`);
+    return result.stdout;
   }
-
-  if (!sizeOutput) {
-    sizeOutput = '   text\t   data\t    bss\t    dec\t    hex\tfilename\n   1024\t    128\t     64\t   1216\t    4c0\tfirmware.elf\n';
+  const injected = opts.mockSizeOutput !== undefined || opts.sizeOutput !== undefined;
+  let sizeOutput = opts.mockSizeOutput ?? opts.sizeOutput;
+  if (!injected) {
+    try { sizeOutput = runTool('size', [elfPath]); }
+    catch (error) { return fail(error.message); }
   }
-
-  const memory = parseMemoryUsage(sizeOutput, packOrTargetId, opts.targetPacksDir);
+  let memory;
+  try { memory = parseMemoryUsage(sizeOutput, packOrTargetId, opts.targetPacksDir); }
+  catch { return fail('INVALID_SIZE_OUTPUT'); }
+  // Injected measurements support simulation fixtures; production always verifies architecture.
+  if (!injected || opts.objdumpOutput !== undefined || opts.objdumpExecutable !== undefined) {
+    let output;
+    try { output = opts.objdumpOutput ?? runTool('objdump', ['-f', elfPath]); }
+    catch (error) { return fail(error.message); }
+    const architecture = output.match(/architecture:\s*([^,\r\n]+)/)?.[1].trim();
+    const format = output.match(/file format\s+(\S+)/)?.[1];
+    const matches = targetId.startsWith('atmega') ? /^avr(?::|$)/.test(architecture || '') && /^elf\d+-avr$/.test(format || '')
+      : targetId.startsWith('stm32') ? /^arm(?:v[\w-]+)?(?::|$)/.test(architecture || '') && /^elf\d+-littlearm$/.test(format || '')
+      : targetId.startsWith('esp32') ? /^xtensa(?::|$)/.test(architecture || '') && /^elf\d+-xtensa-le$/.test(format || '')
+      : Boolean(architecture && format);
+    if (!matches) return fail('ELF_ARCHITECTURE_MISMATCH');
+  }
   if (memory.overflow) {
     const code = memory.flashOverflow ? 'FLASH_OVERFLOW' : 'RAM_OVERFLOW';
     const detail = memory.flashOverflow
@@ -118,14 +117,15 @@ async function inspectElf(elfPath, packOrTargetId, opts = {}) {
       code,
       error: code,
       message: detail,
-      hashes: { elf: elfHash, map: mapHash, bin: sha256File(binPath) || elfHash, hex: sha256File(hexPath) || elfHash },
+      hashes: { elf: elfHash, map: mapHash, bin: sha256File(binPath), hex: sha256File(hexPath) },
       memory,
     };
   }
 
   return {
     valid: true,
-    hashes: { elf: elfHash, map: mapHash, bin: sha256File(binPath) || elfHash, hex: sha256File(hexPath) || elfHash },
+    hashes: { elf: elfHash, map: mapHash, bin: sha256File(binPath), hex: sha256File(hexPath) },
+    evidence: opts.mockSizeOutput !== undefined || opts.sizeOutput !== undefined ? 'injected' : 'tool-output',
     memory,
   };
 }

@@ -1434,8 +1434,6 @@ export const RawSymbolRenderer = ({ type, color }: { type: string, color?: strin
       return <SymGlyph w={60} h={60} color={color} text="G-SRC" sub="FLOW" />;
     case 'gas_pressure_source':
       return <SymGlyph w={60} h={60} color={color} text="G-SRC" sub="PRESS" />;
-    case 'gas_properties':
-      return <SymGlyph w={60} h={60} color={color} text="GAS" sub="PROPS" />;
     // Magnetic
     case 'fundamental_reluctance':
       return <SymGlyph w={60} h={60} color={color} text="REL" sub="FUNDAMENTAL" />;
@@ -1468,6 +1466,10 @@ export const RawSymbolRenderer = ({ type, color }: { type: string, color?: strin
       return <SymGlyph w={60} h={60} color={color} text="P" sub="SENSOR" />;
     case 'flow_sensor':
       return <SymGlyph w={60} h={60} color={color} text="ṁ" sub="SENSOR" />;
+    case 'gas_pressure_sensor':
+      return <SymGlyph w={60} h={60} color={color} text="P" sub="GAS" />;
+    case 'gas_flow_sensor':
+      return <SymGlyph w={60} h={60} color={color} text="ṁ" sub="GAS" />;
     // Interfaces
     case 'rot_multibody_interface':
       return <SymGlyph w={60} h={60} color={color} text="R-MB" sub="IFACE" />;
@@ -1575,6 +1577,8 @@ export const RawSymbolRenderer = ({ type, color }: { type: string, color?: strin
       return <SymGlyph w={60} h={60} color={color} text="BELT" />;
     case 'rigid_transform':
       return <SymGlyph w={60} h={60} color={color} text="RIGID" />;
+    case 'transform_sensor':
+      return <SymGlyph w={60} h={60} color={color} text="TRANS" sub="SENS" />;
     case 'dist_constraint':
       return <SymGlyph w={60} h={60} color={color} text="DIST" sub="CONST" />;
     case 'angle_constraint':

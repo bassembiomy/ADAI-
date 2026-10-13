@@ -1,0 +1,403 @@
+import { test, expect } from '@playwright/test';
+
+async function openModeler(page: import('@playwright/test').Page) {
+  await page.goto('/');
+  await page.waitForLoadState('domcontentloaded');
+
+  const intro = page.locator('[data-testid="welcome-overlay"]');
+  if (await intro.count() > 0) {
+    await intro.first().click({ position: { x: 10, y: 10 }, force: true }).catch(() => {});
+    await intro.first().waitFor({ state: 'detached', timeout: 10000 }).catch(() => {});
+  }
+}
+
+async function semanticIdsInTree(page: import('@playwright/test').Page): Promise<string[]> {
+  return page.locator('.model-tree-row[data-semantic-id]').evaluateAll(rows =>
+    rows.map(row => row.getAttribute('data-semantic-id')).filter((id): id is string => Boolean(id))
+  );
+}
+
+async function filterTree(page: import('@playwright/test').Page, query: string) {
+  await page.locator('input[placeholder^="Filter model"]').fill(query);
+}
+
+function typeSelectionPrompt(page: import('@playwright/test').Page) {
+  return page.locator('[role="dialog"][aria-labelledby="type-selection-title"]');
+}
+
+function impactDialog(page: import('@playwright/test').Page) {
+  return page.locator('[role="dialog"][aria-labelledby="move-impact-dialog-title"]');
+}
+
+async function movePresentation(
+  page: import('@playwright/test').Page,
+  node: import('@playwright/test').Locator,
+  dx: number,
+  dy: number,
+) {
+  const bounds = await node.boundingBox();
+  if (!bounds) throw new Error('Block presentation has no browser bounds');
+  const x = bounds.x + bounds.width / 2;
+  const y = bounds.y + bounds.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x + dx, y + dy, { steps: 5 });
+  await page.mouse.up();
+}
+
+test.describe('Cameo-style repository presentation and tree workflows', () => {
+  test('creates a repository-backed BDD from the Structural tree pillar', async ({ page }) => {
+    await openModeler(page);
+    const structural = page.locator('.model-tree-row[data-node-id="project:pillar:structural"]');
+    await structural.click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Block Definition Diagram (BDD)', exact: true }).click();
+
+    await filterTree(page, 'BDD');
+    const diagram = page.locator('.model-tree-row[data-kind="diagram"]');
+    await expect(diagram).toHaveCount(1);
+    await expect(diagram).toContainText('[BDD]');
+  });
+
+  test('creates and opens a repository-backed Package Diagram from the Model tree', async ({ page }) => {
+    await openModeler(page);
+    await page.locator('.model-tree-row[data-semantic-id="model"]').click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Package Diagram', exact: true }).click();
+
+    await filterTree(page, 'Package');
+    const packageDiagram = page.locator('.model-tree-row[data-kind="diagram"][data-semantic-id]');
+    await expect(packageDiagram).toHaveCount(1);
+    const diagramId = await packageDiagram.getAttribute('data-semantic-id');
+    if (!diagramId) throw new Error('Package Diagram has no persisted semantic ID');
+    await expect(page.locator('#adia-diagram-canvas')).toBeVisible();
+    await expect(page.getByRole('button', { name: '+Std' })).toHaveCount(0);
+
+    const idsBefore = new Set(await semanticIdsInTree(page));
+    await page.getByRole('button', { name: 'Package', exact: true }).click();
+    await expect.poll(async () => (await semanticIdsInTree(page)).filter(id => !idsBefore.has(id)).length).toBe(1);
+    const packageId = (await semanticIdsInTree(page)).find(id => !idsBefore.has(id))!;
+    const packagePresentation = page.locator(`#adia-diagram-canvas [data-semantic-id="${packageId}"][data-presentation-kind="package"]`);
+    await expect(packagePresentation).toBeVisible();
+
+    await packagePresentation.click();
+    await page.getByLabel('Package Name').fill('RenamedPackage');
+    await expect(packagePresentation).toContainText('RenamedPackage');
+    await expect(page.locator(`.model-tree-row[data-semantic-id="${packageId}"]`)).toContainText('RenamedPackage');
+
+    const originalTransform = await packagePresentation.getAttribute('transform');
+    await movePresentation(page, packagePresentation, -95, -35);
+    await expect(packagePresentation).not.toHaveAttribute('transform', originalTransform ?? '');
+
+    await packagePresentation.click();
+    const folderPath = packagePresentation.locator('path').first();
+    const originalOutline = await folderPath.getAttribute('d');
+    await movePresentation(page, packagePresentation.locator('[data-resize-handle="se"]'), 40, 30);
+    await expect(folderPath).not.toHaveAttribute('d', originalOutline ?? '');
+
+    await page.getByRole('button', { name: 'SysML BDD' }).click();
+    await page.getByRole('button', { name: 'Package Diagram' }).click();
+    await expect(packagePresentation).toBeVisible();
+    await expect(packagePresentation).not.toHaveAttribute('transform', originalTransform ?? '');
+    await expect(folderPath).not.toHaveAttribute('d', originalOutline ?? '');
+
+    await packagePresentation.click();
+    await page.keyboard.press('Delete');
+    await expect(packagePresentation).toHaveCount(0);
+    await expect(page.locator(`.model-tree-row[data-semantic-id="${packageId}"]`)).toHaveCount(1);
+
+    await packageDiagram.dblclick();
+    await expect(packagePresentation).toHaveCount(0);
+    await expect(packageDiagram).toContainText('[PACKAGE]');
+  });
+
+  test('canvas creation in a Package Diagram uses the diagram Package as semantic owner', async ({ page }) => {
+    await openModeler(page);
+    const model = page.locator('.model-tree-row[data-semantic-id="model"]');
+    await model.click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Package', exact: true }).first().click();
+    await filterTree(page, 'Package');
+    const ownerPackage = page.locator('.model-tree-row[data-kind="package"][data-semantic-id]:not([data-semantic-id="model"])');
+    await expect(ownerPackage).toHaveCount(1);
+    const ownerPackageId = await ownerPackage.getAttribute('data-semantic-id');
+    if (!ownerPackageId) throw new Error('Owner Package has no semantic ID');
+
+    await ownerPackage.click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Package Diagram', exact: true }).click();
+    await expect(page.locator('.model-tree-row[data-kind="diagram"]')).toHaveCount(1);
+    await filterTree(page, '');
+    const idsBefore = new Set(await semanticIdsInTree(page));
+    await page.getByRole('button', { name: 'Block', exact: true }).click();
+    await expect.poll(async () => (await semanticIdsInTree(page)).filter(id => !idsBefore.has(id)).length).toBe(1);
+    const blockId = (await semanticIdsInTree(page)).find(id => !idsBefore.has(id))!;
+    const ownerLevel = Number(await page.locator(`[role="treeitem"][data-semantic-id="${ownerPackageId}"]`).getAttribute('aria-level'));
+    const blockLevel = Number(await page.locator(`[role="treeitem"][data-semantic-id="${blockId}"]`).getAttribute('aria-level'));
+    expect(blockLevel).toBe(ownerLevel + 1);
+  });
+
+  test('Show Contents presents an owned Block without creating another semantic Block', async ({ page }) => {
+    await openModeler(page);
+    const model = page.locator('.model-tree-row[data-semantic-id="model"]');
+    await model.click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Package', exact: true }).first().click();
+    await filterTree(page, 'Package');
+    const owner = page.locator('.model-tree-row[data-kind="package"][data-semantic-id]:not([data-semantic-id="model"])');
+    await expect(owner).toHaveCount(1);
+    const packageId = await owner.getAttribute('data-semantic-id');
+    await owner.click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Block', exact: true }).first().click();
+    await filterTree(page, '');
+    const block = page.locator('.model-tree-row[data-kind="block"][data-semantic-id]');
+    await expect(block).toHaveCount(1);
+    const blockId = await block.getAttribute('data-semantic-id');
+    await owner.click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Package Diagram', exact: true }).click();
+    await expect(page.locator(`#adia-diagram-canvas [data-semantic-id="${blockId}"]`)).toHaveCount(0);
+    await owner.click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Show Contents', exact: true }).click();
+    await expect(page.locator(`#adia-diagram-canvas [data-semantic-id="${blockId}"]`)).toBeVisible();
+    await expect(page.locator(`.model-tree-row[data-semantic-id="${blockId}"]`)).toHaveCount(1);
+    expect(packageId).toBeTruthy();
+  });
+
+  test('creates and renders a persisted Package Import between existing Packages', async ({ page }) => {
+    await page.setViewportSize({ width: 1600, height: 900 });
+    await openModeler(page);
+    await page.locator('.model-tree-row[data-semantic-id="model"]').click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Package Diagram', exact: true }).click();
+    const packages = page.locator('#adia-diagram-canvas [data-presentation-kind="package"]');
+    await page.getByRole('button', { name: 'Package', exact: true }).click();
+    await expect(packages).toHaveCount(1);
+    await movePresentation(page, packages.first(), -250, 0);
+    await page.getByRole('button', { name: 'Package', exact: true }).click();
+    await expect(packages).toHaveCount(2);
+    await page.getByRole('button', { name: 'Package Import', exact: true }).click();
+    await packages.first().click();
+    await packages.nth(1).click();
+    const importLine = page.locator('#adia-diagram-canvas [data-presentation-kind="relationship"]');
+    await expect(importLine).toHaveCount(1);
+    await expect(importLine).toContainText('«import»');
+    await page.getByRole('button', { name: 'SysML BDD' }).click();
+    await page.getByRole('button', { name: 'Package Diagram' }).click();
+    await expect(importLine).toHaveCount(1);
+  });
+
+  test('dragging a newly presented Block continues from its active diagram position', async ({ page }) => {
+    await openModeler(page);
+    await page.getByRole('button', { name: 'Requirements', exact: true }).click();
+
+    const idsBeforeCreation = new Set(await semanticIdsInTree(page));
+    await page.getByRole('button', { name: '+ Block', exact: true }).click();
+    await expect.poll(async () => (await semanticIdsInTree(page)).filter(id => !idsBeforeCreation.has(id)).length)
+      .toBe(1);
+    const blockId = (await semanticIdsInTree(page)).find(id => !idsBeforeCreation.has(id))!;
+    const node = page.locator(`#adia-diagram-canvas [data-semantic-id="${blockId}"]`);
+    await expect(node).toBeVisible();
+
+    const beforeDrag = await node.boundingBox();
+    if (!beforeDrag) throw new Error('Block presentation has no browser bounds before drag');
+    await movePresentation(page, node, 60, 40);
+    const afterDrag = await node.boundingBox();
+    if (!afterDrag) throw new Error('Block presentation has no browser bounds after drag');
+    expect(afterDrag.x - beforeDrag.x).toBeGreaterThanOrEqual(55);
+    expect(afterDrag.x - beforeDrag.x).toBeLessThanOrEqual(65);
+    expect(afterDrag.y - beforeDrag.y).toBeGreaterThanOrEqual(35);
+    expect(afterDrag.y - beforeDrag.y).toBeLessThanOrEqual(45);
+  });
+
+  test('dragging an existing Part Property follows the pointer in its IBD presentation', async ({ page }) => {
+    await openModeler(page);
+    await page.getByRole('button', { name: 'Requirements', exact: true }).click();
+
+    const idsBeforeCreation = new Set(await semanticIdsInTree(page));
+    await page.getByRole('button', { name: '+ Block', exact: true }).click();
+    await expect.poll(async () => (await semanticIdsInTree(page)).filter(id => !idsBeforeCreation.has(id)).length)
+      .toBe(1);
+    const vehicleId = (await semanticIdsInTree(page)).find(id => !idsBeforeCreation.has(id))!;
+    const vehicleCanvasNode = page.locator(`#adia-diagram-canvas [data-semantic-id="${vehicleId}"]`);
+    const vehicleTreeNode = page.locator(`.model-tree-row[data-semantic-id="${vehicleId}"]`);
+
+    await page.getByRole('button', { name: 'SysML BDD' }).click();
+    await filterTree(page, 'Block');
+    await vehicleTreeNode.click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Add to Diagram', exact: true }).click();
+    await expect(vehicleCanvasNode).toBeVisible();
+
+    await vehicleTreeNode.click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Part Property', exact: true }).click();
+    // Typed Part creation requires explicit type selection: choose the Vehicle
+    // Block itself as the part type through the shared chooser, then confirm.
+    const partPrompt = typeSelectionPrompt(page);
+    await expect(partPrompt).toBeVisible();
+    await expect(partPrompt).toContainText(/Select Type for Part Property/i);
+    await partPrompt.getByRole('button').filter({ hasText: vehicleId }).first().click();
+    await partPrompt.getByRole('button', { name: 'Confirm' }).click();
+    await expect(partPrompt).toHaveCount(0);
+    await filterTree(page, 'part');
+    const partTreeNode = page.locator('.model-tree-row[data-kind="part"][data-semantic-id]');
+    await expect(partTreeNode).toHaveCount(1);
+    const partId = await partTreeNode.getAttribute('data-semantic-id');
+    if (!partId) throw new Error('Created Part Property is missing its semantic identity');
+    const partName = (await partTreeNode.textContent())?.trim();
+    if (!partName) throw new Error('Created Part Property is missing its repository name');
+
+    // On a BDD the same semantic PartProperty is an owned feature row of its
+    // Block, not a second standalone part box.
+    await filterTree(page, '');
+    await expect(vehicleCanvasNode.getByText(new RegExp(partName))).toBeVisible();
+
+    await vehicleCanvasNode.dblclick();
+    await expect(page.locator('#adia-diagram-canvas').getByText(/ibd \[Block\]/)).toBeVisible();
+    await filterTree(page, 'part');
+    await partTreeNode.click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Add to Diagram', exact: true }).click();
+    const partCanvasNode = page.locator(`#adia-diagram-canvas [data-semantic-id="${partId}"]`);
+    await expect(partCanvasNode).toBeVisible();
+
+    const beforeDrag = await partCanvasNode.boundingBox();
+    if (!beforeDrag) throw new Error('Part presentation has no browser bounds before drag');
+    await movePresentation(page, partCanvasNode, 40, 40);
+    const afterDrag = await partCanvasNode.boundingBox();
+    if (!afterDrag) throw new Error('Part presentation has no browser bounds after drag');
+    expect(afterDrag.x - beforeDrag.x).toBeGreaterThanOrEqual(35);
+    expect(afterDrag.x - beforeDrag.x).toBeLessThanOrEqual(45);
+    expect(afterDrag.y - beforeDrag.y).toBeGreaterThanOrEqual(35);
+    expect(afterDrag.y - beforeDrag.y).toBeLessThanOrEqual(45);
+  });
+
+  test('adds and moves a repository Package as a Package presentation, not a Block', async ({ page }) => {
+    await openModeler(page);
+    await page.getByRole('button', { name: 'SysML BDD' }).click();
+
+    const model = page.locator('.model-tree-row[data-semantic-id="model"]');
+    await model.click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Package', exact: true }).first().click();
+
+    await filterTree(page, 'Package');
+    const packageTreeNode = page.locator('.model-tree-row[data-kind="package"][data-semantic-id]:not([data-semantic-id="model"])');
+    await expect(packageTreeNode).toHaveCount(1);
+    const packageId = await packageTreeNode.getAttribute('data-semantic-id');
+    if (!packageId) throw new Error('Created Package is missing its semantic identity');
+
+    await packageTreeNode.click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Add to Diagram', exact: true }).click();
+    const packageCanvasNode = page.locator(`#adia-diagram-canvas [data-semantic-id="${packageId}"][data-presentation-kind="package"]`);
+    await expect(packageCanvasNode).toBeVisible();
+    await expect(packageCanvasNode.getByText('«package»', { exact: true })).toBeVisible();
+
+    const beforeDrag = await packageCanvasNode.boundingBox();
+    if (!beforeDrag) throw new Error('Package presentation has no browser bounds before drag');
+    await movePresentation(page, packageCanvasNode, 60, 40);
+    const afterDrag = await packageCanvasNode.boundingBox();
+    if (!afterDrag) throw new Error('Package presentation has no browser bounds after drag');
+    expect(afterDrag.x - beforeDrag.x).toBeGreaterThanOrEqual(55);
+    expect(afterDrag.y - beforeDrag.y).toBeGreaterThanOrEqual(35);
+
+    // Canvas creation traverses the same repository-first command path.
+    await page.getByRole('button', { name: 'Package', exact: true }).click();
+    await expect(packageTreeNode).toHaveCount(2);
+    await expect(page.locator('#adia-diagram-canvas [data-presentation-kind="package"]')).toHaveCount(2);
+  });
+
+  test('one semantic Block keeps independent Requirements and BDD positions', async ({ page }) => {
+    await openModeler(page);
+    await page.getByRole('button', { name: 'Requirements', exact: true }).click();
+
+    const idsBeforeCreation = new Set(await semanticIdsInTree(page));
+    await page.getByRole('button', { name: '+ Block', exact: true }).click();
+    await expect.poll(async () => (await semanticIdsInTree(page)).filter(id => !idsBeforeCreation.has(id)).length)
+      .toBe(1);
+    const blockId = (await semanticIdsInTree(page)).find(id => !idsBeforeCreation.has(id))!;
+    const treeBlock = page.locator(`.model-tree-row[data-semantic-id="${blockId}"]`);
+    const requirementsNode = page.locator(`#adia-diagram-canvas [data-semantic-id="${blockId}"]`);
+    await expect(requirementsNode).toBeVisible();
+    await movePresentation(page, requirementsNode, 145, 95);
+    const requirementsPosition = await requirementsNode.getAttribute('transform');
+
+    await page.getByRole('button', { name: 'SysML BDD' }).click();
+    const bddNode = page.locator(`#adia-diagram-canvas [data-semantic-id="${blockId}"]`);
+    await expect(bddNode).toHaveCount(0);
+    await filterTree(page, 'Block');
+    await treeBlock.click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Add to Diagram', exact: true }).click();
+    await expect(bddNode).toBeVisible();
+    await movePresentation(page, bddNode, 205, 125);
+    const bddPosition = await bddNode.getAttribute('transform');
+    expect(bddPosition).not.toBe(requirementsPosition);
+
+    await page.getByRole('button', { name: 'Requirements', exact: true }).click();
+    await filterTree(page, 'Block');
+    await expect(page.locator(`#adia-diagram-canvas [data-semantic-id="${blockId}"]`))
+      .toHaveAttribute('transform', requirementsPosition!);
+    await expect(treeBlock).toHaveCount(1);
+  });
+
+  test('remove from Requirements preserves the Block and its BDD presentation', async ({ page }) => {
+    await openModeler(page);
+    await page.getByRole('button', { name: 'Requirements', exact: true }).click();
+
+    const idsBeforeCreation = new Set(await semanticIdsInTree(page));
+    await page.getByRole('button', { name: '+ Block', exact: true }).click();
+    await expect.poll(async () => (await semanticIdsInTree(page)).filter(id => !idsBeforeCreation.has(id)).length)
+      .toBe(1);
+    const blockId = (await semanticIdsInTree(page)).find(id => !idsBeforeCreation.has(id))!;
+    const treeBlock = page.locator(`.model-tree-row[data-semantic-id="${blockId}"]`);
+    const requirementsNode = page.locator(`#adia-diagram-canvas [data-semantic-id="${blockId}"]`);
+    await expect(requirementsNode).toBeVisible();
+
+    await page.getByRole('button', { name: 'SysML BDD' }).click();
+    const bddNode = page.locator(`#adia-diagram-canvas [data-semantic-id="${blockId}"]`);
+    await expect(bddNode).toHaveCount(0);
+    await filterTree(page, 'Block');
+    await treeBlock.click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Add to Diagram', exact: true }).click();
+    await expect(bddNode).toBeVisible();
+
+    await page.getByRole('button', { name: 'Requirements', exact: true }).click();
+    await filterTree(page, 'Block');
+    await treeBlock.click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Remove from Diagram', exact: true }).click();
+    await expect(requirementsNode).toHaveCount(0);
+    await expect(treeBlock).toHaveCount(1);
+
+    await page.getByRole('button', { name: 'SysML BDD' }).click();
+    await expect(bddNode).toBeVisible();
+    await expect(treeBlock).toHaveCount(1);
+  });
+
+  test('one Block is presented across Requirements and BDD with functional tree actions', async ({ page }) => {
+    await openModeler(page);
+
+    await page.getByRole('button', { name: 'Requirements', exact: true }).click();
+    await page.getByRole('button', { name: '+ Block', exact: true }).click();
+    const motor = page.locator('[role="treeitem"]:has-text("Block")');
+    await expect(motor).toHaveCount(1);
+
+    await page.getByRole('button', { name: 'SysML BDD' }).click();
+    await motor.first().click({ button: 'right' });
+    await page.getByText('Add to Diagram', { exact: true }).click();
+    await expect(page.locator('#adia-diagram-canvas').getByText('Block', { exact: true })).toBeVisible();
+
+    await motor.first().click({ button: 'right' });
+    await page.getByText('Rename', { exact: true }).click();
+    await page.getByRole('treeitem').getByRole('textbox').fill('BLDCMotor');
+    await page.getByRole('treeitem').getByRole('textbox').press('Enter');
+    await expect(page.locator('#adia-diagram-canvas').getByText('BLDCMotor', { exact: true })).toBeVisible();
+
+    await page.getByRole('treeitem', { name: 'BLDCMotor', exact: true }).first().click({ button: 'right' });
+    await page.getByText('Copy', { exact: true }).click();
+    await page.locator('[role="treeitem"]:has-text("Model")').first().click({ button: 'right' });
+    await page.getByText('Paste', { exact: true }).click();
+    await expect(page.getByRole('treeitem', { name: 'BLDCMotor_1', exact: true })).toHaveCount(1);
+
+    await page.getByRole('treeitem', { name: 'BLDCMotor', exact: true }).first().click({ button: 'right' });
+    await page.getByRole('menuitem', { name: /^Delete from Model/ }).click();
+    // The Block carries a BDD presentation, so deletion requires impact
+    // confirmation even with zero owned elements or relationships:
+    // presentations always force review.
+    const dialog = impactDialog(page);
+    await expect(dialog).toBeVisible({ timeout: 10000 });
+    await expect(dialog).toContainText(/Affected Diagram Presentations/);
+    await dialog.getByRole('button', { name: 'Confirm', exact: true }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(page.getByRole('treeitem', { name: 'BLDCMotor', exact: true })).toHaveCount(0);
+  });
+});

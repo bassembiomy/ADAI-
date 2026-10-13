@@ -3,6 +3,53 @@ export interface VLabPort {
   pos: 'left' | 'right' | 'top' | 'bottom';
   label?: string;
   domain?: string;
+  /**
+   * Signal direction. Only meaningful on Physical (signal) ports; conserving ports are bidirectional.
+   * `in`  = the block reads the port as an across value.
+   * `out` = the block drives the port (signal branch) or writes it.
+   * Derived from the equation trace, see src/engine/vlab/review/portDirections.ts.
+   */
+  direction?: 'in' | 'out';
+  /**
+   * Measured quantity of a signal output (`direction: 'out'`), e.g. `angular velocity`. Shown on Scope channels.
+   * Reviewed table: src/engine/vlab/review/portQuantities.ts (WP-09b). Absent on inputs and conserving ports.
+   */
+  quantity?: string;
+  /** SI unit of the signal (`rad/s`, `N*m`, `1` dimensionless, `*` = same as the wired input). */
+  unit?: string;
+  /**
+   * Physical-signal vector width (WP-09c, default 1). A width-N signal port carries N channels (Simscape "physical signal
+   * vector"): the solver allocates N variables for the net, the equation receives an N-element array for the port, and
+   * a wire connects only ports of exactly the same width (no broadcast, no truncation). Scopes show N traces.
+   */
+  width?: number;
+  /** Names of the N channels of a vector / composite port (`a b c`, `d q 0`, `alpha beta 0`, `pos neg zero`). Scope traces are `<port>[<name>]`. */
+  channelNames?: string[];
+  /**
+   * Composite three-phase electrical port (Simscape "Electrical, three-phase"): an Electrical port that expands into the
+   * three scalar nodes a, b, c (KCL per phase). It connects only to another composite port; a Phase Splitter bridges to
+   * the scalar phases. Implies width 3, channelNames a b c.
+   */
+  composite?: 'three_phase';
+}
+
+/**
+ * One block parameter. The optional bound fields are PHYSICAL validity limits (R > 0, damping >= 0, ratio != 0),
+ * checked by the engine before assembly (src/engine/vlab/vlabParams.ts). Absent = any finite number is legal
+ * (offsets, initial conditions, signed sources). Only numeric parameters carry bounds.
+ */
+export interface VLabParamSpec {
+  value: number | string;
+  unit: string;
+  label: string;
+  min?: number;
+  max?: number;
+  /** the `min` bound itself is not allowed (value > min) */
+  exclusiveMin?: boolean;
+  /** the `max` bound itself is not allowed (value < max) */
+  exclusiveMax?: boolean;
+  /** zero is not allowed (e.g. a gear or turns ratio); the sign stays free */
+  nonZero?: boolean;
 }
 
 export interface VLabBlock {
@@ -10,7 +57,7 @@ export interface VLabBlock {
   name: string;
   color: string;
   icon: string;
-  params: Record<string, { value: number | string; unit: string; label: string }>;
+  params: Record<string, VLabParamSpec>;
   category?: string;
   ports: VLabPort[];
   equation?: string;
@@ -36,22 +83,26 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "R": {
             "value": 100,
             "unit": "Ω",
-            "label": "Resistance"
+            "label": "Resistance",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
           {
             "id": "p",
             "pos": "left",
-            "label": "+"
+            "label": "+",
+            "domain": "Electrical"
           },
           {
             "id": "n",
             "pos": "right",
-            "label": "-"
+            "label": "-",
+            "domain": "Electrical"
           }
         ],
-        "equation": "V = I * R",
+        "equation": "v = i * R   [V = A·Ω], v = v_p − v_n, i: p → n",
         "description": "Linear resistor obeying Ohm's law relating terminal voltage drop to electric current."
       },
       {
@@ -62,9 +113,10 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "category": "Passive",
         "params": {
           "R_min": {
-            "value": 0,
+            "value": 0.001,
             "unit": "Ω",
-            "label": "Min Resistance"
+            "label": "Min Resistance",
+            "min": 0
           }
         },
         "ports": [
@@ -84,10 +136,11 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "id": "r",
             "pos": "top",
             "label": "R",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "in"
           }
         ],
-        "equation": "V = I * R(t)",
+        "equation": "v = i * max(R(t), R_min)   [V = A·Ω], R(t) = signal r [Ω]",
         "description": "A resistor whose value is controlled by an external physical signal. Useful for modeling sensors or variable loads."
       },
       {
@@ -101,15 +154,17 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "p",
             "pos": "left",
-            "label": "+"
+            "label": "+",
+            "domain": "Electrical"
           },
           {
             "id": "n",
             "pos": "right",
-            "label": "-"
+            "label": "-",
+            "domain": "Electrical"
           }
         ],
-        "equation": "I = 0 (R -> ∞)",
+        "equation": "i = 0 A   (R → ∞, v free)",
         "description": "Models an ideal open branch with zero electrical conductance (infinite resistance)."
       },
       {
@@ -122,22 +177,31 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "C": {
             "value": 0.000001,
             "unit": "F",
-            "label": "Capacitance"
+            "label": "Capacitance",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "v0": {
+            "value": 0,
+            "unit": "V",
+            "label": "Initial Voltage"
           }
         },
         "ports": [
           {
             "id": "p",
             "pos": "left",
-            "label": "+"
+            "label": "+",
+            "domain": "Electrical"
           },
           {
             "id": "n",
             "pos": "right",
-            "label": "-"
+            "label": "-",
+            "domain": "Electrical"
           }
         ],
-        "equation": "I = C * dV/dt",
+        "equation": "i = C * dv/dt   [A = F·V/s], v(0) = v0",
         "description": "Electrostatic charge storage element with through current proportional to voltage derivative."
       },
       {
@@ -150,22 +214,31 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "L": {
             "value": 0.001,
             "unit": "H",
-            "label": "Inductance"
+            "label": "Inductance",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "i0": {
+            "value": 0,
+            "unit": "A",
+            "label": "Initial Current"
           }
         },
         "ports": [
           {
             "id": "p",
             "pos": "left",
-            "label": "+"
+            "label": "+",
+            "domain": "Electrical"
           },
           {
             "id": "n",
             "pos": "right",
-            "label": "-"
+            "label": "-",
+            "domain": "Electrical"
           }
         ],
-        "equation": "V = L * dI/dt",
+        "equation": "v = L * di/dt   [V = H·A/s], i(0) = i0",
         "description": "Magnetic energy storage inductor with branch voltage proportional to current rate of change."
       },
       {
@@ -178,22 +251,26 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "M0": {
             "value": 100,
             "unit": "Ω",
-            "label": "Initial Memristance"
+            "label": "Initial Memristance",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
           {
             "id": "p",
             "pos": "left",
-            "label": "+"
+            "label": "+",
+            "domain": "Electrical"
           },
           {
             "id": "n",
             "pos": "right",
-            "label": "-"
+            "label": "-",
+            "domain": "Electrical"
           }
         ],
-        "equation": "V(t) = M(q) * I(t)\ndM/dt = f(I, M)",
+        "equation": "v = M(w) * i   [V], M = M0 + 10·w [Ω]\ndw/dt = i   [A]",
         "description": "Two-terminal non-volatile memory resistor whose resistance varies with past charge flow."
       },
       {
@@ -206,32 +283,37 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "g": {
             "value": 0.01,
             "unit": "S",
-            "label": "Gyration Conductance"
+            "label": "Gyration Conductance",
+            "nonZero": true
           }
         },
         "ports": [
           {
             "id": "p1",
             "pos": "left",
-            "label": "1+"
+            "label": "1+",
+            "domain": "Electrical"
           },
           {
             "id": "n1",
             "pos": "left",
-            "label": "1-"
+            "label": "1-",
+            "domain": "Electrical"
           },
           {
             "id": "p2",
             "pos": "right",
-            "label": "2+"
+            "label": "2+",
+            "domain": "Electrical"
           },
           {
             "id": "n2",
             "pos": "right",
-            "label": "2-"
+            "label": "2-",
+            "domain": "Electrical"
           }
         ],
-        "equation": "i1 = g * v2\ni2 = -g * v1",
+        "equation": "i1 = g * v2   [A = S·V]\ni2 = -g * v1   [A = S·V]",
         "description": "Ideal non-reciprocal two-port network that inverts voltage and current characteristics."
       },
       {
@@ -241,35 +323,40 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "icon": "transformer",
         "category": "Passive",
         "params": {
-          "N": {
-            "value": 10,
+          "N12": {
+            "value": 0.1,
             "unit": "1",
-            "label": "Turns Ratio"
+            "label": "Winding ratio N1/N2",
+            "nonZero": true
           }
         },
         "ports": [
           {
             "id": "p1",
             "pos": "left",
-            "label": "1+"
+            "label": "1+",
+            "domain": "Electrical"
           },
           {
             "id": "n1",
             "pos": "left",
-            "label": "1-"
+            "label": "1-",
+            "domain": "Electrical"
           },
           {
             "id": "p2",
             "pos": "right",
-            "label": "2+"
+            "label": "2+",
+            "domain": "Electrical"
           },
           {
             "id": "n2",
             "pos": "right",
-            "label": "2-"
+            "label": "2-",
+            "domain": "Electrical"
           }
         ],
-        "equation": "V2 = N * V1\\nI1 = N * I2",
+        "equation": "v1 = N12 * v2   [V]\ni2 = -N12 * i1   [A],  N12 = N1/N2",
         "description": "An ideal transformer that scales voltage and current according to the turns ratio N. It preserves power (V1*I1 = V2*I2)."
       },
       {
@@ -282,27 +369,39 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "Gain": {
             "value": 100000,
             "unit": "1",
-            "label": "Open-Loop Gain"
+            "label": "Open-Loop Gain",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "Vsat": {
+            "value": 15,
+            "unit": "V",
+            "label": "Output Saturation",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
           {
             "id": "in_p",
             "pos": "left",
-            "label": "+"
+            "label": "+",
+            "domain": "Electrical"
           },
           {
             "id": "in_n",
             "pos": "left",
-            "label": "-"
+            "label": "-",
+            "domain": "Electrical"
           },
           {
             "id": "out",
             "pos": "right",
-            "label": "Out"
+            "label": "Out",
+            "domain": "Electrical"
           }
         ],
-        "equation": "Vout = A * (V+ - V-)\\n(Ideal: V+ = V-)",
+        "equation": "Vout = clamp(A * (V+ − V−), ±Vsat)   [V]\n(linear region: V+ ≈ V− for large A)",
         "description": "High-gain differential operational amplifier with negative feedback virtual short behavior."
       },
       {
@@ -315,12 +414,16 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "Ron": {
             "value": 0.01,
             "unit": "Ω",
-            "label": "On Resistance"
+            "label": "On Resistance",
+            "min": 0,
+            "exclusiveMin": true
           },
           "Roff": {
             "value": 1000000,
             "unit": "Ω",
-            "label": "Off Resistance"
+            "label": "Off Resistance",
+            "min": 0,
+            "exclusiveMin": true
           },
           "threshold": {
             "value": 0.5,
@@ -345,11 +448,12 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "id": "v",
             "pos": "top",
             "label": "v",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "in"
           }
         ],
-        "equation": "V = I * R_sw\\nR_sw = (v > threshold) ? Ron : Roff",
-        "description": "An ideal switch controlled by a physical signal. When the control signal exceeds threshold, the switch is closed with low resistance Ron; otherwise it opens with high resistance Roff."
+        "equation": "V = I * R_sw   [V]\nR_sw = (v > threshold) ? Ron : Roff   [Ω]",
+        "description": "An ideal switch controlled by a physical signal (Simscape Foundation Switch). When the control signal v exceeds threshold [V], the switch is closed with low resistance Ron [Ω]; otherwise it opens with high resistance Roff = 1/Gopen [Ω]."
       },
       {
         "id": "diode",
@@ -361,33 +465,40 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "Ron": {
             "value": 0.01,
             "unit": "Ω",
-            "label": "On Resistance"
+            "label": "On Resistance",
+            "min": 0,
+            "exclusiveMin": true
           },
           "Roff": {
             "value": 1000000,
             "unit": "Ω",
-            "label": "Off Resistance"
+            "label": "Off Resistance",
+            "min": 0,
+            "exclusiveMin": true
           },
           "Vf": {
             "value": 0.7,
             "unit": "V",
-            "label": "Forward Voltage"
+            "label": "Forward Voltage",
+            "min": 0
           }
         },
         "ports": [
           {
             "id": "p",
             "pos": "left",
-            "label": "A"
+            "label": "A",
+            "domain": "Electrical"
           },
           {
             "id": "n",
             "pos": "right",
-            "label": "K"
+            "label": "K",
+            "domain": "Electrical"
           }
         ],
-        "equation": "V = I * Ron + Vf",
-        "description": "An ideal diode with piecewise-linear behavior and forward voltage drop."
+        "equation": "On (V > Vf): I = (V − Vf)/Ron + Vf/Roff   [A]\nOff (V ≤ Vf): I = V/Roff   [A]",
+        "description": "Piecewise-linear diode (Simscape Electrical Diode, piecewise linear model): forward voltage Vf [V], on resistance Ron [Ω], off resistance Roff = 1/Goff [Ω]. V = v_A − v_K, current positive A → K; I(V) is continuous at V = Vf."
       },
       {
         "id": "nmos",
@@ -399,7 +510,9 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "kn": {
             "value": 0.5,
             "unit": "A/V²",
-            "label": "Transconductance"
+            "label": "Transconductance",
+            "min": 0,
+            "exclusiveMin": true
           },
           "Vth": {
             "value": 2,
@@ -409,29 +522,33 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "lambda": {
             "value": 0.01,
             "unit": "1/V",
-            "label": "Channel Mod."
+            "label": "Channel Mod.",
+            "min": 0
           }
         },
         "ports": [
           {
             "id": "d",
             "pos": "top",
-            "label": "D"
+            "label": "D",
+            "domain": "Electrical"
           },
           {
             "id": "s",
             "pos": "bottom",
-            "label": "S"
+            "label": "S",
+            "domain": "Electrical"
           },
           {
             "id": "g",
             "pos": "left",
             "label": "G",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "in"
           }
         ],
-        "equation": "Id = f(Vgs, Vds)",
-        "description": "N-channel MOSFET Level-1 model with physical signal gate input."
+        "equation": "Vov = Vgs − Vth   [V]\nCut-off (Vov ≤ 0): Id = 0\nLinear (0 < Vds < Vov): Id = kn·(Vov·Vds − Vds²/2)·(1 + λ·Vds)   [A]\nSaturation (Vds ≥ Vov > 0): Id = kn/2·Vov²·(1 + λ·Vds)   [A]",
+        "description": "N-channel MOSFET, Shichman–Hodges (SPICE level 1) model with a physical signal gate input (gate current 0). kn = μCox·W/L [A/V²], λ [1/V]. Symmetric: drain and source swap roles for Vds < 0."
       },
       {
         "id": "igbt",
@@ -448,34 +565,47 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "Vce_sat": {
             "value": 1.5,
             "unit": "V",
-            "label": "Saturation Vce"
+            "label": "Saturation Vce",
+            "min": 0
           },
           "Rd": {
             "value": 0.05,
             "unit": "Ω",
-            "label": "On Resistance"
+            "label": "On Resistance",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "Roff": {
+            "value": 1000000,
+            "unit": "Ω",
+            "label": "Off Resistance",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
           {
             "id": "c",
             "pos": "top",
-            "label": "C"
+            "label": "C",
+            "domain": "Electrical"
           },
           {
             "id": "e",
             "pos": "bottom",
-            "label": "E"
+            "label": "E",
+            "domain": "Electrical"
           },
           {
             "id": "g",
             "pos": "left",
             "label": "G",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "in"
           }
         ],
-        "equation": "Ic = (Vce - Vce_sat)/Rd",
-        "description": "Insulated Gate Bipolar Transistor modeled as a voltage-controlled switch with Saturation Voltage."
+        "equation": "On (Vge ≥ Vge_th and Vce ≥ Vce_sat): Ic = (Vce − Vce_sat)/Rd + Vce_sat/Roff   [A]\nOtherwise: Ic = Vce/Roff   [A]",
+        "description": "Ideal switching IGBT (Simscape Electrical IGBT, Ideal Switching): voltage-controlled switch with gate threshold Vge_th [V], saturation voltage Vce_sat [V], on resistance Rd [Ω] and off resistance Roff [Ω]. Conducts C → E only."
       },
       {
         "id": "rotational_electromechanical_converter",
@@ -492,7 +622,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "R": {
             "value": 1,
             "unit": "Ω",
-            "label": "Armature Res"
+            "label": "Armature Res",
+            "min": 0
           }
         },
         "ports": [
@@ -521,8 +652,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Rotational"
           }
         ],
-        "equation": "V = K * ω\\nτ = K * I",
-        "description": "Converts electrical power to mechanical rotational power based on back-EMF and motor constant K."
+        "equation": "V = R·I + K·ω [V],  ω = ω_R − ω_C [rad/s]\nτ = K·I [N·m]  (torque delivered at R, reaction at C)\nV·I = R·I² + τ·ω",
+        "description": "Ideal rotational electromechanical converter (DC machine without armature inductance) between the Electrical port pair + / − and the Rotational port pair R / C. K (V·s/rad) is the back-EMF constant and, in SI, equal to the torque constant. The armature resistance R is the only loss: the electrical input V·I equals R·I² plus the mechanical power K·I·ω, so with R = 0 the conversion is lossless. K may be negative (reversed polarity)."
       },
       {
         "id": "translational_electromechanical_converter",
@@ -534,7 +665,13 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "Bl": {
             "value": 1,
             "unit": "N/A",
-            "label": "Magnetic Flux"
+            "label": "Force Constant (Bl)"
+          },
+          "R": {
+            "value": 1,
+            "unit": "Ω",
+            "label": "Winding Resistance",
+            "min": 0
           }
         },
         "ports": [
@@ -563,8 +700,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Translational"
           }
         ],
-        "equation": "V = Bl * v\nF = Bl * I",
-        "description": "Converts electrical power to mechanical linear force via Lorentz force (Bl product)."
+        "equation": "V = R·I + Bl·v [V],  v = v_R − v_C [m/s]\nF = Bl·I [N]  (force delivered at R, reaction at C)\nV·I = R·I² + F·v",
+        "description": "Ideal translational electromechanical converter (voice coil / Lorentz actuator without coil inductance) between the Electrical port pair + / − and the Translational port pair R / C. Bl (N/A = V·s/m) is the force constant and equals the back-EMF constant. The winding resistance R is the only loss: V·I = R·I² + Bl·I·v, so with R = 0 the conversion is lossless. Bl may be negative (reversed polarity)."
       },
       {
         "id": "pmsm",
@@ -576,36 +713,61 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "pole_pairs": {
             "value": 4,
             "unit": "",
-            "label": "Pole Pairs"
+            "label": "Pole Pairs",
+            "min": 1
           },
           "Rs": {
             "value": 0.1,
             "unit": "Ω",
-            "label": "Stator Res"
+            "label": "Stator Res",
+            "min": 0
           },
-          "Kt": {
-            "value": 0.2,
-            "unit": "N-m/A",
-            "label": "Torque Const"
+          "Ld": {
+            "value": 0.005,
+            "unit": "H",
+            "label": "D-axis Inductance",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "Lq": {
+            "value": 0.005,
+            "unit": "H",
+            "label": "Q-axis Inductance",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "L0": {
+            "value": 0.005,
+            "unit": "H",
+            "label": "Zero-Sequence Inductance",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "flux": {
+            "value": 0.1,
+            "unit": "Wb",
+            "label": "PM Flux"
+          },
+          "J": {
+            "value": 0.02,
+            "unit": "kg-m^2",
+            "label": "Inertia",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "B": {
+            "value": 0.002,
+            "unit": "N-m-s/rad",
+            "label": "Viscous Damping",
+            "min": 0
           }
         },
         "ports": [
           {
-            "id": "a",
+            "id": "abc",
+            "composite": "three_phase",
             "pos": "left",
-            "label": "A",
-            "domain": "Electrical"
-          },
-          {
-            "id": "b",
-            "pos": "left",
-            "label": "B",
-            "domain": "Electrical"
-          },
-          {
-            "id": "c",
-            "pos": "left",
-            "label": "C",
+            "label": "ABC",
             "domain": "Electrical"
           },
           {
@@ -621,8 +783,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Rotational"
           }
         ],
-        "equation": "Vdq = Rs*Idq + Ldq*dIdq/dt + ω*Ψdq\\nτ_e = 1.5*P*(Ψf*Iq + (Ld-Lq)*Id*Iq)",
-        "description": "Permanent Magnet Synchronous Motor model with sinusoidal back-EMF and d-q coordinate equations."
+        "equation": "v_d = Rs·i_d + Ld·di_d/dt − ω_e·Lq·i_q [V]\nv_q = Rs·i_q + Lq·di_q/dt + ω_e·(Ld·i_d + λm) [V]\nv_0 = Rs·i_0 + L0·di_0/dt [V]\nτ_e = (3/2)·p·(λm·i_q + (Ld − Lq)·i_d·i_q) [N·m],  ω_e = p·ω [rad/s]\nJ·dω/dt = τ_e − B·ω − τ_shaft [N·m]",
+        "description": "Permanent Magnet Synchronous Motor in the rotor-fixed dq frame (amplitude-invariant Clarke/Park transform, d axis on phase a at θ = 0). The stator terminals are the composite three-phase port ABC (wire it to an inverter / source ABC port, or through a Phase Splitter to scalar phases). Wye stator: the phase currents flow from A, B, C through the windings to the star point N, so an open N forces i_a + i_b + i_c = 0 and a connected N carries the zero-sequence current (inductance L0). The shaft is the scalar Rotational port R (speed relative to the inertial frame, the machine case is fixed to it); the torque delivered at R is τ_e − J·dω/dt − B·ω. Phase back-EMF amplitude is λm·ω_e."
       },
       {
         "id": "dc_motor",
@@ -634,22 +796,33 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "Ra": {
             "value": 2,
             "unit": "Ω",
-            "label": "Armature Res"
+            "label": "Armature Res",
+            "min": 0
           },
           "La": {
             "value": 0.01,
             "unit": "H",
-            "label": "Armature Ind"
+            "label": "Armature Ind",
+            "min": 0,
+            "exclusiveMin": true
           },
           "Ke": {
             "value": 0.05,
-            "unit": "V/rad/s",
-            "label": "Back EMF Const"
+            "unit": "V*s/rad",
+            "label": "Back-EMF / Torque Constant k"
           },
           "J": {
             "value": 0.001,
             "unit": "kg-m^2",
-            "label": "Inertia"
+            "label": "Inertia",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "B": {
+            "value": 0.001,
+            "unit": "N-m-s/rad",
+            "label": "Viscous Damping",
+            "min": 0
           }
         },
         "ports": [
@@ -672,8 +845,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Rotational"
           }
         ],
-        "equation": "V = Ra*I + La*dI/dt + Ke*ω\\nT = Ke*I = J*dω/dt + B*ω",
-        "description": "DC motor coupling armature electrical circuit with rotor shaft mechanics."
+        "equation": "V = Ra·I + La·dI/dt + k·ω [V]\nτ_e = k·I = J·dω/dt + B·ω + τ_shaft [N·m]   (τ_shaft = torque delivered to the load)\nV·I = Ra·I² + d(½La·I²)/dt + B·ω² + d(½J·ω²)/dt + τ_shaft·ω",
+        "description": "Permanent-magnet DC motor (Simscape DC Motor): armature circuit (Ra, La) and one electromechanical constant k [V·s/rad = N·m/A] coupled to a rotor with inertia J and viscous damping B. In SI the torque constant equals the back-EMF constant, so the conversion is lossless apart from Ra·I² and B·ω²: there is a single constant (parameter Ke). A saved model with a different Kt keeps its Ke as k and gets a migration notice. The rotor shaft is the scalar Rotational port R (speed relative to the inertial frame, the machine case is fixed to it); the torque delivered to the load is k·I minus the rotor inertia and damping terms."
       },
       {
         "id": "ac_motor",
@@ -685,41 +858,60 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "Rs": {
             "value": 0.1,
             "unit": "Ω",
-            "label": "Stator Res"
+            "label": "Stator Res",
+            "min": 0
           },
           "Rr": {
             "value": 0.08,
             "unit": "Ω",
-            "label": "Rotor Res"
+            "label": "Rotor Res",
+            "min": 0
           },
           "Lm": {
             "value": 0.05,
             "unit": "H",
-            "label": "Mutual Ind"
+            "label": "Magnetizing Inductance",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "Lls": {
+            "value": 0.01,
+            "unit": "H",
+            "label": "Stator Leakage Inductance",
+            "min": 0
+          },
+          "Llr": {
+            "value": 0.01,
+            "unit": "H",
+            "label": "Rotor Leakage Inductance (stator referred)",
+            "min": 0
           },
           "P": {
             "value": 2,
             "unit": "",
-            "label": "Pole Pairs"
+            "label": "Pole Pairs",
+            "min": 1
+          },
+          "J": {
+            "value": 0.05,
+            "unit": "kg-m^2",
+            "label": "Inertia",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "B": {
+            "value": 0.005,
+            "unit": "N-m-s/rad",
+            "label": "Viscous Damping",
+            "min": 0
           }
         },
         "ports": [
           {
-            "id": "a",
+            "id": "abc",
+            "composite": "three_phase",
             "pos": "left",
-            "label": "A",
-            "domain": "Electrical"
-          },
-          {
-            "id": "b",
-            "pos": "left",
-            "label": "B",
-            "domain": "Electrical"
-          },
-          {
-            "id": "c",
-            "pos": "left",
-            "label": "C",
+            "label": "ABC",
             "domain": "Electrical"
           },
           {
@@ -735,8 +927,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Rotational"
           }
         ],
-        "equation": "Vs = Rs*Is + dΨs/dt\\n0 = Rr*Ir + dΨr/dt - j*ω*Ψr\\nτ = 1.5*P*Im(Ψs* · Is)",
-        "description": "Three-phase induction motor modeled with stator/rotor flux linkages and slip torque generation."
+        "equation": "v_s = Rs·i_s + dψ_s/dt [V]\n0 = Rr·i_r + dψ_r/dt − j·P·ω·ψ_r [V]\nψ_s = (Lls + Lm)·i_s + Lm·i_r,  ψ_r = (Llr + Lm)·i_r + Lm·i_s [Wb]\nτ_e = (3/2)·P·(ψ_sα·i_sβ − ψ_sβ·i_sα) [N·m]\nJ·dω/dt = τ_e − B·ω − τ_shaft [N·m]",
+        "description": "Three-phase squirrel-cage induction motor (Krause dq0 model in the stationary αβ frame, amplitude-invariant Clarke transform, rotor referred to the stator; same T-equivalent as Simscape Asynchronous Machine Squirrel Cage). Parameters: stator/rotor resistance Rs, Rr, leakage Lls, Llr, magnetizing Lm, pole pairs P. The stator terminals are the composite three-phase port ABC (wire it to an inverter / source ABC port, or through a Phase Splitter to scalar phases). Wye stator: the phase currents flow from A, B, C through the windings to the star point N (an open N forces i_a + i_b + i_c = 0). The shaft is the scalar Rotational port R (speed relative to the inertial frame, the machine case is fixed to it)."
       },
       {
         "id": "bldc_motor",
@@ -748,41 +940,47 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "Rs": {
             "value": 0.2,
             "unit": "Ω",
-            "label": "Phase Res"
+            "label": "Phase Res",
+            "min": 0
           },
           "Ls": {
             "value": 0.002,
             "unit": "H",
-            "label": "Phase Ind"
+            "label": "Phase Ind",
+            "min": 0,
+            "exclusiveMin": true
           },
           "Ke": {
             "value": 0.1,
-            "unit": "V/rad/s",
-            "label": "Back EMF Const"
+            "unit": "V*s/rad",
+            "label": "Back-EMF / Torque Constant"
           },
           "P": {
             "value": 4,
             "unit": "",
-            "label": "Pole Pairs"
+            "label": "Pole Pairs",
+            "min": 1
+          },
+          "J": {
+            "value": 0.02,
+            "unit": "kg-m^2",
+            "label": "Inertia",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "B": {
+            "value": 0.002,
+            "unit": "N-m-s/rad",
+            "label": "Viscous Damping",
+            "min": 0
           }
         },
         "ports": [
           {
-            "id": "a",
+            "id": "abc",
+            "composite": "three_phase",
             "pos": "left",
-            "label": "A",
-            "domain": "Electrical"
-          },
-          {
-            "id": "b",
-            "pos": "left",
-            "label": "B",
-            "domain": "Electrical"
-          },
-          {
-            "id": "c",
-            "pos": "left",
-            "label": "C",
+            "label": "ABC",
             "domain": "Electrical"
           },
           {
@@ -798,8 +996,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Rotational"
           }
         ],
-        "equation": "V_ph = Rs*I_ph + Ls*dI_ph/dt + e_ph(θ)\\nτ = (e_a*i_a + e_b*i_b + e_c*i_c) / ω",
-        "description": "Brushless DC motor with trapezoidal back-EMF profile and electronic rotor commutation."
+        "equation": "v_x − v_g = Rs·i_x + Ls·di_x/dt + e_x [V],  e_x = Ke·ω·f(P·θ − φ_x),  φ = 0, 2π/3, −2π/3\nτ_e = (e_a·i_a + e_b·i_b + e_c·i_c)/ω = Ke·(f_a·i_a + f_b·i_b + f_c·i_c) [N·m]\nJ·dω/dt = τ_e − B·ω − τ_shaft [N·m]",
+        "description": "Brushless DC motor with trapezoidal back-EMF (unit trapezoid f: ±1 over 120°, 60° ramps; Pillay and Krishnan, IEEE Trans. Ind. Appl. 1989). The stator terminals are the composite three-phase port ABC (wire it to an inverter / source ABC port, or through a Phase Splitter to scalar phases). Wye stator: the phase currents flow from A, B, C through the windings to the star point G (an open G forces i_a + i_b + i_c = 0). One constant Ke [V·s/rad = N·m/A] is both the back-EMF and the torque constant, so the conversion is lossless apart from Rs·i² and B·ω². Needs an external commutation bridge. The shaft is the scalar Rotational port R (speed relative to the inertial frame, the machine case is fixed to it)."
       },
       {
         "id": "thermal_resistor",
@@ -808,10 +1006,12 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "icon": "thermal_resistor",
         "category": "Thermal",
         "params": {
-          "Rth": {
+          "R": {
             "value": 10,
-            "unit": "K/W",
-            "label": "Thermal Resistance"
+            "unit": "Ω",
+            "label": "Electrical Resistance",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -834,8 +1034,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Thermal"
           }
         ],
-        "equation": "V = I * R(T)\nR(T) = R0 * (1 + α * (T - T0))\nQ_gen = I² * R(T)",
-        "description": "Temperature-dependent electrical resistor dissipating Joule heating into the thermal domain."
+        "equation": "V = I * R\nQ_gen = I² * R = V² / R",
+        "description": "Electrical resistor (constant R, no temperature coefficient) whose whole dissipated power P = V·I = I²R = V²/R is delivered as a heat flow into the thermal port H (electrical power in = heat out). Port H must be wired into a thermal network (an open H has nowhere to deliver the heat)."
       },
       {
         "id": "scope",
@@ -890,7 +1090,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "id": "in1",
             "pos": "left",
             "label": "1",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "in"
           }
         ],
         "equation": "y(t) = u(t)",
@@ -906,7 +1107,9 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "R_int": {
             "value": 100000000,
             "unit": "Ω",
-            "label": "Internal Res"
+            "label": "Internal Res",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -926,10 +1129,13 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "id": "v",
             "pos": "right",
             "label": "V",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "voltage",
+            "unit": "V"
           }
         ],
-        "equation": "V_out = V_p - V_n",
+        "equation": "V_out = V_p − V_n   [V]  (i_leak = V/R_int, R_int → ∞ ideal)",
         "description": "Measures the potential difference between two electrical nodes and outputs it as a physical signal."
       },
       {
@@ -942,7 +1148,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "R_int": {
             "value": 0.000001,
             "unit": "Ω",
-            "label": "Internal Res"
+            "label": "Internal Res",
+            "min": 0
           }
         },
         "ports": [
@@ -962,10 +1169,13 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "id": "i",
             "pos": "top",
             "label": "I",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "current",
+            "unit": "A"
           }
         ],
-        "equation": "I_out = I_branch\n(V_p - V_n = 0)",
+        "equation": "I_out = i_p→n   [A]\nV_p − V_n = R_int * i  (R_int = 0 ideal)",
         "description": "Measures through electric current with zero insertion impedance and outputs a physical signal."
       },
       {
@@ -983,7 +1193,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "R_int": {
             "value": 0.001,
             "unit": "Ω",
-            "label": "Internal Res"
+            "label": "Internal Res",
+            "min": 0
           }
         },
         "ports": [
@@ -1000,7 +1211,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Electrical"
           }
         ],
-        "equation": "V = V_source - I * R_int",
+        "equation": "V_p − V_n = V + I * R_int   [V]  (I: p → n, R_int = 0 ideal)",
         "description": "Constant DC voltage source with series internal source resistance."
       },
       {
@@ -1018,7 +1229,19 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "f": {
             "value": 50,
             "unit": "Hz",
-            "label": "Frequency"
+            "label": "Frequency",
+            "min": 0
+          },
+          "phase": {
+            "value": 0.7853981633974483,
+            "unit": "rad",
+            "label": "Phase"
+          },
+          "R_int": {
+            "value": 0.001,
+            "unit": "Ω",
+            "label": "Internal Resistance",
+            "min": 0
           }
         },
         "ports": [
@@ -1035,7 +1258,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Electrical"
           }
         ],
-        "equation": "V(t) = Vpk * sin(2*π*f*t + φ)",
+        "equation": "V(t) = Vpk * sin(2*π*f*t + phase); Vp - Vn = V(t) + I * R_int",
         "description": "Sinusoidal AC voltage source generating harmonic electrical potential."
       },
       {
@@ -1048,33 +1271,38 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "Vrms": {
             "value": 400,
             "unit": "V",
-            "label": "Line Voltage"
+            "label": "Line Voltage",
+            "min": 0
           },
           "f": {
             "value": 50,
             "unit": "Hz",
-            "label": "Frequency"
+            "label": "Frequency",
+            "min": 0
+          },
+          "phase": {
+            "value": 0,
+            "unit": "deg",
+            "label": "Phase Angle of Phase A"
           }
         },
         "ports": [
           {
-            "id": "a",
+            "id": "abc",
+            "composite": "three_phase",
             "pos": "right",
-            "label": "A"
+            "label": "abc",
+            "domain": "Electrical"
           },
           {
-            "id": "b",
-            "pos": "right",
-            "label": "B"
-          },
-          {
-            "id": "c",
-            "pos": "right",
-            "label": "C"
+            "id": "n",
+            "pos": "bottom",
+            "label": "N",
+            "domain": "Electrical"
           }
         ],
-        "equation": "Va = Vpk*sin(ωt)\nVb = Vpk*sin(ωt - 2π/3)\nVc = Vpk*sin(ωt + 2π/3)",
-        "description": "Balanced 3-phase AC voltage source with 120-degree phase separation."
+        "equation": "v_a = √(2/3)·V_LL·sin(2π·f·t + φ)\nv_b = √(2/3)·V_LL·sin(2π·f·t + φ − 2π/3)\nv_c = √(2/3)·V_LL·sin(2π·f·t + φ + 2π/3)   [V], phase to neutral n\ni_n = −(i_a + i_b + i_c)   [A]",
+        "description": "Balanced wye three-phase voltage source (Simscape Three-Phase Source): V_LL = phase-to-phase RMS voltage, frequency f, phase angle φ of phase A (default 0 deg), positive a-b-c sequence. The composite port abc carries the three phase terminals (connect a Phase Splitter for the scalar phases) and the star point N is a real terminal: reference it with an Electrical Reference block. A balanced load returns zero current in N."
       },
       {
         "id": "controlled_voltage",
@@ -1082,7 +1310,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "color": "#ef4444",
         "icon": "controlled_voltage",
         "category": "Sources",
-        "params": {},
+        "params": {
+          "R_int": {
+            "value": 0.001,
+            "unit": "Ω",
+            "label": "Internal Resistance",
+            "min": 0
+          }
+        },
         "ports": [
           {
             "id": "p",
@@ -1100,10 +1335,11 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "id": "s",
             "pos": "left",
             "label": "S",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "in"
           }
         ],
-        "equation": "V_p - V_n = s(t)",
+        "equation": "V_p − V_n = s(t) + I * R_int   [V]",
         "description": "Voltage source whose output terminal potential is commanded by a physical signal s(t)."
       },
       {
@@ -1123,15 +1359,17 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "p",
             "pos": "top",
-            "label": "+"
+            "label": "+",
+            "domain": "Electrical"
           },
           {
             "id": "n",
             "pos": "bottom",
-            "label": "-"
+            "label": "-",
+            "domain": "Electrical"
           }
         ],
-        "equation": "I = I_source",
+        "equation": "I (p → n) = I_src   [A]",
         "description": "Ideal DC current source delivering constant through current independent of voltage."
       },
       {
@@ -1151,25 +1389,29 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "p",
             "pos": "top",
-            "label": "+"
+            "label": "+",
+            "domain": "Electrical"
           },
           {
             "id": "n",
             "pos": "bottom",
-            "label": "-"
+            "label": "-",
+            "domain": "Electrical"
           },
           {
             "id": "cp",
             "pos": "left",
-            "label": "C+"
+            "label": "C+",
+            "domain": "Electrical"
           },
           {
             "id": "cn",
             "pos": "left",
-            "label": "C-"
+            "label": "C-",
+            "domain": "Electrical"
           }
         ],
-        "equation": "V_out = Gain * (V_cp - V_cn)",
+        "equation": "V_p − V_n = Gain * (V_cp − V_cn)   [V], i_ctrl = 0",
         "description": "Voltage-Controlled Voltage Source producing an output voltage proportional to control voltage."
       },
       {
@@ -1189,25 +1431,29 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "p",
             "pos": "top",
-            "label": "+"
+            "label": "+",
+            "domain": "Electrical"
           },
           {
             "id": "n",
             "pos": "bottom",
-            "label": "-"
+            "label": "-",
+            "domain": "Electrical"
           },
           {
             "id": "cp",
             "pos": "left",
-            "label": "C+"
+            "label": "C+",
+            "domain": "Electrical"
           },
           {
             "id": "cn",
             "pos": "left",
-            "label": "C-"
+            "label": "C-",
+            "domain": "Electrical"
           }
         ],
-        "equation": "I_out = Gm * (V_cp - V_cn)",
+        "equation": "I (p → n) = Gm * (V_cp − V_cn)   [A = S·V], i_ctrl = 0",
         "description": "Voltage-Controlled Current Source producing an output current proportional to control voltage."
       },
       {
@@ -1221,31 +1467,41 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 1,
             "unit": "1",
             "label": "Current Gain"
+          },
+          "R_in": {
+            "value": 0,
+            "unit": "Ω",
+            "label": "Control Input Resistance",
+            "min": 0
           }
         },
         "ports": [
           {
             "id": "p",
             "pos": "top",
-            "label": "+"
+            "label": "+",
+            "domain": "Electrical"
           },
           {
             "id": "n",
             "pos": "bottom",
-            "label": "-"
+            "label": "-",
+            "domain": "Electrical"
           },
           {
             "id": "cp",
             "pos": "left",
-            "label": "C+"
+            "label": "C+",
+            "domain": "Electrical"
           },
           {
             "id": "cn",
             "pos": "left",
-            "label": "C-"
+            "label": "C-",
+            "domain": "Electrical"
           }
         ],
-        "equation": "I_out = Gain * I_control",
+        "equation": "I_out (p → n) = Gain * I_ctrl   [A]\nV_cp − V_cn = R_in * I_ctrl",
         "description": "Current-Controlled Current Source producing an output current proportional to input current."
       },
       {
@@ -1259,31 +1515,47 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 1,
             "unit": "Ω",
             "label": "Transresistance"
+          },
+          "R_in": {
+            "value": 0,
+            "unit": "Ω",
+            "label": "Control Input Resistance",
+            "min": 0
+          },
+          "R_out": {
+            "value": 0,
+            "unit": "Ω",
+            "label": "Output Resistance",
+            "min": 0
           }
         },
         "ports": [
           {
             "id": "p",
             "pos": "top",
-            "label": "+"
+            "label": "+",
+            "domain": "Electrical"
           },
           {
             "id": "n",
             "pos": "bottom",
-            "label": "-"
+            "label": "-",
+            "domain": "Electrical"
           },
           {
             "id": "cp",
             "pos": "left",
-            "label": "C+"
+            "label": "C+",
+            "domain": "Electrical"
           },
           {
             "id": "cn",
             "pos": "left",
-            "label": "C-"
+            "label": "C-",
+            "domain": "Electrical"
           }
         ],
-        "equation": "V_out = Rm * I_control",
+        "equation": "V_p − V_n = Rm * I_ctrl + R_out * I_out   [V = Ω·A]\nV_cp − V_cn = R_in * I_ctrl",
         "description": "Current-Controlled Voltage Source producing an output voltage proportional to input current."
       },
       {
@@ -1297,10 +1569,11 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "top",
-            "label": "A"
+            "label": "A",
+            "domain": "Electrical"
           }
         ],
-        "equation": "V = 0",
+        "equation": "V = 0 V   (electrical reference)",
         "description": "The zero-potential reference for the electrical circuit. All voltage measurements are relative to this node."
       },
       {
@@ -1309,26 +1582,22 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "color": "#3b82f6",
         "icon": "busbar",
         "category": "Connections",
-        "params": {
-          "nodes": {
-            "value": 4,
-            "unit": "",
-            "label": "Terminals"
-          }
-        },
+        "params": {},
         "ports": [
           {
             "id": "1",
             "pos": "left",
-            "label": "1"
+            "label": "1",
+            "domain": "Electrical"
           },
           {
             "id": "2",
             "pos": "right",
-            "label": "2"
+            "label": "2",
+            "domain": "Electrical"
           }
         ],
-        "equation": "V_1 = V_2 = ... = V_n\nΣ I_k = 0",
+        "equation": "V_1 = V_2 = … = V_n   [V]\nΣ I_k = 0   [A]",
         "description": "Ideal electrical distribution busbar maintaining equipotential connection across all attached nodes."
       },
       {
@@ -1341,27 +1610,32 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "ports": [
           {
             "id": "abc",
+            "composite": "three_phase",
             "pos": "left",
-            "label": "abc"
+            "label": "abc",
+            "domain": "Electrical"
           },
           {
             "id": "a",
             "pos": "right",
-            "label": "a"
+            "label": "a",
+            "domain": "Electrical"
           },
           {
             "id": "b",
             "pos": "right",
-            "label": "b"
+            "label": "b",
+            "domain": "Electrical"
           },
           {
             "id": "c",
             "pos": "right",
-            "label": "c"
+            "label": "c",
+            "domain": "Electrical"
           }
         ],
-        "equation": "Va = Vabc[0], Vb = Vabc[1], Vc = Vabc[2]",
-        "description": "Splits a multiplexed 3-phase bus into individual phase lines A, B, and C."
+        "equation": "V_a = V_abc[a], V_b = V_abc[b], V_c = V_abc[c]\nKCL per phase: I_abc,k = I_k",
+        "description": "Splits the composite three-phase port abc into its scalar phase ports a, b and c (Simscape Phase Splitter). The phases are independent: each phase k of abc is tied to scalar port k only."
       },
       {
         "id": "delta_ref",
@@ -1374,10 +1648,11 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "top",
-            "label": "A"
+            "label": "A",
+            "domain": "Electrical"
           }
         ],
-        "equation": "Va + Vb + Vc = 0",
+        "equation": "V_a = 0 V   (reference node of the delta network)",
         "description": "Reference node for balanced delta-connected electrical topologies."
       },
       {
@@ -1391,10 +1666,11 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "top",
-            "label": "A"
+            "label": "A",
+            "domain": "Electrical"
           }
         ],
-        "equation": "I = 0 A",
+        "equation": "I = 0 A   (open terminal)",
         "description": "Maintains open-circuit condition with zero current flow at the connected port."
       },
       {
@@ -1407,23 +1683,39 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "ports": [
           {
             "id": "in",
+            "width": 3,
+            "channelNames": ["a", "b", "c"],
             "pos": "left",
-            "label": "abc"
+            "label": "abc",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "a",
             "pos": "right",
-            "label": "a"
+            "label": "a",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "demux component 1",
+            "unit": "*"
           },
           {
             "id": "b",
             "pos": "right",
-            "label": "b"
+            "label": "b",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "demux component 2",
+            "unit": "*"
           },
           {
             "id": "c",
             "pos": "right",
-            "label": "c"
+            "label": "c",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "demux component 3",
+            "unit": "*"
           }
         ],
         "equation": "y1 = u[0], y2 = u[1], y3 = u[2]",
@@ -1445,7 +1737,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "g",
             "pos": "bottom",
-            "label": "G"
+            "label": "G",
+            "domain": "Gas"
           }
         ],
         "equation": "P = 101325 Pa (1 atm)\nT = 293.15 K",
@@ -1462,7 +1755,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "bottom",
-            "label": "A"
+            "label": "A",
+            "domain": "Gas"
           }
         ],
         "equation": "mdot = 0 kg/s",
@@ -1478,23 +1772,40 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "V": {
             "value": 0.01,
             "unit": "m^3",
-            "label": "Volume"
+            "label": "Volume",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "T": {
+            "value": 293.15,
+            "unit": "K",
+            "label": "Gas Temperature",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "P0": {
+            "value": 101325,
+            "unit": "Pa",
+            "label": "Initial Pressure",
+            "min": 0
           }
         },
         "ports": [
           {
             "id": "a",
             "pos": "top",
-            "label": "A"
+            "label": "A",
+            "domain": "Gas"
           },
           {
             "id": "b",
             "pos": "top",
-            "label": "B"
+            "label": "B",
+            "domain": "Gas"
           }
         ],
-        "equation": "dP/dt = (R*T/V) * Σ(mdot_in)",
-        "description": "A rigid container that stores gas. The pressure changes according to the net mass flow rate into the chamber."
+        "equation": "dp/dt = (R*T/V) * (mdot_a + mdot_b),  p(0) = P0   (ideal gas p = rho*R*T, isothermal, R = 287 J/(kg K))",
+        "description": "A rigid container that stores gas at the fixed temperature T. Mass conservation dm/dt = mdot_a + mdot_b with m = p V / (R T) gives the pressure rise from the net mass flow into the two ports (both ports are the chamber node). An unconnected port is closed (no flow)."
       },
       {
         "id": "gas_reservoir",
@@ -1506,19 +1817,24 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "P": {
             "value": 101325,
             "unit": "Pa",
-            "label": "Pressure"
+            "label": "Pressure",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
           {
             "id": "a",
             "pos": "bottom",
-            "label": "A"
+            "label": "A",
+            "domain": "Gas"
           },
           {
             "id": "s",
             "pos": "left",
-            "label": "S"
+            "label": "S",
+            "domain": "Physical",
+            "direction": "in"
           }
         ],
         "equation": "P_node = P_param (or P_ctrl)",
@@ -1534,19 +1850,23 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "k": {
             "value": 1,
             "unit": "kg/s/Pa",
-            "label": "Conductance"
+            "label": "Conductance",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
           {
             "id": "a",
             "pos": "left",
-            "label": "A"
+            "label": "A",
+            "domain": "Gas"
           },
           {
             "id": "b",
             "pos": "right",
-            "label": "B"
+            "label": "B",
+            "domain": "Gas"
           }
         ],
         "equation": "mdot = k * (Pa - Pb)",
@@ -1563,12 +1883,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "left",
-            "label": "A"
+            "label": "A",
+            "domain": "Gas"
           },
           {
             "id": "b",
             "pos": "right",
-            "label": "B"
+            "label": "B",
+            "domain": "Gas"
           }
         ],
         "equation": "mdot = 0 (R_gas -> ∞)",
@@ -1584,28 +1906,56 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "area": {
             "value": 0.0001,
             "unit": "m^2",
-            "label": "Area"
+            "label": "Area",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "Cd": {
+            "value": 0.62,
+            "unit": "1",
+            "label": "Discharge Coefficient",
+            "min": 0,
+            "exclusiveMin": true,
+            "max": 1
+          },
+          "T": {
+            "value": 293.15,
+            "unit": "K",
+            "label": "Gas Temperature",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "gamma": {
+            "value": 1.4,
+            "unit": "1",
+            "label": "Specific Heat Ratio",
+            "min": 1,
+            "exclusiveMin": true
           }
         },
         "ports": [
           {
             "id": "a",
             "pos": "left",
-            "label": "A"
+            "label": "A",
+            "domain": "Gas"
           },
           {
             "id": "b",
             "pos": "right",
-            "label": "B"
+            "label": "B",
+            "domain": "Gas"
           },
           {
             "id": "ar",
             "pos": "top",
-            "label": "AR"
+            "label": "AR",
+            "domain": "Physical",
+            "direction": "in"
           }
         ],
-        "equation": "mdot = Cd * A * √(2*ρ*|ΔP|) * sign(ΔP)",
-        "description": "Orifice restriction calculating compressible gas flow from discharge coefficient and opening area."
+        "equation": "mdot = Cd*A*p_up*sqrt(2*gamma/((gamma-1)*R*T)) * sqrt(r^(2/gamma) - r^((gamma+1)/gamma)),  r = max(p_dn/p_up, r*),  r* = (2/(gamma+1))^(gamma/(gamma-1))  (choked: mdot = Cd*A*p_up*sqrt(gamma/(R*T))*(2/(gamma+1))^((gamma+1)/(2(gamma-1))))",
+        "description": "Compressible gas orifice (Simscape Local Restriction (G)): isentropic Saint-Venant & Wantzel flow of an ideal gas (R = 287 J/(kg K)) at the fixed upstream temperature T, from the higher-pressure port to the lower one. The flow chokes at the critical pressure ratio r* (0.528 for air) and stays constant below it; above the laminar pressure ratio 0.999 it is linear in the pressure difference, so it has a finite slope at zero. The area comes from the AR input when wired, else from the area parameter."
       },
       {
         "id": "gas_pipe",
@@ -1617,33 +1967,54 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "L": {
             "value": 1,
             "unit": "m",
-            "label": "Length"
+            "label": "Length",
+            "min": 0,
+            "exclusiveMin": true
           },
           "D": {
             "value": 0.05,
             "unit": "m",
-            "label": "Diameter"
+            "label": "Diameter",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "f": {
+            "value": 0.02,
+            "unit": "1",
+            "label": "Friction Factor",
+            "min": 0
+          },
+          "T": {
+            "value": 293.15,
+            "unit": "K",
+            "label": "Gas Temperature",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "mu": {
+            "value": 0.0000181,
+            "unit": "Pa·s",
+            "label": "Dynamic Viscosity",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
           {
             "id": "a",
             "pos": "left",
-            "label": "A"
+            "label": "A",
+            "domain": "Gas"
           },
           {
             "id": "b",
             "pos": "right",
-            "label": "B"
+            "label": "B",
+            "domain": "Gas"
           },
-          {
-            "id": "h",
-            "pos": "top",
-            "label": "H"
-          }
         ],
-        "equation": "ΔP = f * (L/D) * (ρv²/2)",
-        "description": "Models gas flow through a cylindrical conduit, accounting for friction-induced pressure drop and heat transfer."
+        "equation": "p_a - p_b = f_eff * (L/D) * rho * v^2/2,  rho = p_mean/(R*T),  v = mdot/(rho*S),  f_eff = max(f, 64/Re),  Re = 4*|mdot|/(pi*D*mu)",
+        "description": "Darcy-Weisbach friction in a straight circular pipe for an isothermal ideal gas (R = 287 J/(kg K)): f is the turbulent friction factor, and below it the laminar Hagen-Poiseuille law f = 64/Re applies so the pressure drop is linear in the flow near zero. mdot is positive from A to B. Heat transfer is not represented."
       },
       {
         "id": "gas_fixed_res",
@@ -1655,14 +2026,17 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "P": {
             "value": 101325,
             "unit": "Pa",
-            "label": "Pressure"
+            "label": "Pressure",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
           {
             "id": "a",
             "pos": "top",
-            "label": "A"
+            "label": "A",
+            "domain": "Gas"
           }
         ],
         "equation": "P = P_fixed, T = T_ambient",
@@ -1678,33 +2052,45 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "D": {
             "value": 0.01,
             "unit": "m^3/rad",
-            "label": "Displacement"
+            "label": "Displacement",
+            "nonZero": true
+          },
+          "T": {
+            "value": 293.15,
+            "unit": "K",
+            "label": "Gas Temperature",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
           {
             "id": "a",
             "pos": "left",
-            "label": "A"
+            "label": "A",
+            "domain": "Gas"
           },
           {
             "id": "h",
             "pos": "left",
-            "label": "H"
+            "label": "H",
+            "domain": "Gas"
           },
           {
             "id": "r",
             "pos": "right",
-            "label": "R"
+            "label": "R",
+            "domain": "Rotational"
           },
           {
             "id": "c",
             "pos": "right",
-            "label": "C"
+            "label": "C",
+            "domain": "Rotational"
           }
         ],
-        "equation": "mdot = D * ω * ρ\nτ = D * (Pa - Pb)",
-        "description": "Pneumatic rotary motor/compressor converting gas pressure differentials into shaft torque."
+        "equation": "ṁ(A→H) = ρ_A·D·ω [kg/s],  ρ_A = P_A/(R_gas·T),  ω = ω_R − ω_C [rad/s]\nτ = D·(P_A − P_H) [N·m]  (torque delivered at R, reaction at C)\n(P_A − P_H)·ṁ/ρ_A = −τ_in·ω",
+        "description": "Ideal positive-displacement rotary machine (vane or piston motor / compressor) between the gas ports A and H and the Rotational ports R / C. D (m³/rad) is the displacement: the volumetric flow at A is D·ω and the shaft torque is D·(P_A − P_H), so the shaft power τ·ω equals the pressure power (P_A − P_H)·V̇ and no power is lost. The gas is ideal at the fixed temperature T (R_gas = 287 J/(kg·K), air). Positive ω pumps gas from A to H."
       },
       {
         "id": "gas_translational_conv",
@@ -1716,33 +2102,75 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "A": {
             "value": 0.001,
             "unit": "m^2",
-            "label": "Piston Area"
+            "label": "Piston Area",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "T": {
+            "value": 293.15,
+            "unit": "K",
+            "label": "Gas Temperature",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
           {
             "id": "a",
             "pos": "left",
-            "label": "A"
+            "label": "A",
+            "domain": "Gas"
           },
           {
             "id": "h",
             "pos": "left",
-            "label": "H"
+            "label": "H",
+            "domain": "Gas"
           },
           {
             "id": "r",
             "pos": "right",
-            "label": "R"
+            "label": "R",
+            "domain": "Translational"
           },
           {
             "id": "c",
             "pos": "right",
-            "label": "C"
+            "label": "C",
+            "domain": "Translational"
           }
         ],
-        "equation": "mdot = A * v * ρ\nF = A * (Pa - Pb)",
-        "description": "Pneumatic cylinder converting differential gas pressure into translational piston force."
+        "equation": "ṁ(A→H) = ρ_A·A·v [kg/s],  ρ_A = P_A/(R_gas·T),  v = v_R − v_C [m/s]\nF = A·(P_A − P_H) [N]  (force delivered at R, reaction at C)\n(P_A − P_H)·ṁ/ρ_A = −F_in·v",
+        "description": "Ideal double-acting pneumatic cylinder between the gas ports A and H and the Translational ports R / C. A (m²) is the piston area: the volumetric flow at A is A·v and the piston force is A·(P_A − P_H), so the mechanical power F·v equals the pressure power (P_A − P_H)·V̇ and no power is lost. The gas is ideal at the fixed temperature T (R_gas = 287 J/(kg·K), air). Positive v pumps gas from A to H."
+      },
+      {
+        "id": "gas_pressure_sensor",
+        "name": "Pressure Sensor (G)",
+        "color": "#f59e0b",
+        "icon": "gas_pressure_sensor",
+        "category": "Sensors",
+        "params": {},
+        "ports": [
+          { "id": "p", "pos": "left", "label": "P", "domain": "Gas" },
+          { "id": "out", "pos": "right", "label": "OUT", "domain": "Physical", "direction": "out", "quantity": "pressure", "unit": "Pa" }
+        ],
+        "equation": "mass_flow = 0\nout = P(p)",
+        "description": "Measures gas pressure at a node without drawing mass flow; connect OUT to a Scope for Pa."
+      },
+      {
+        "id": "gas_flow_sensor",
+        "name": "Flow Sensor (G)",
+        "color": "#f59e0b",
+        "icon": "gas_flow_sensor",
+        "category": "Sensors",
+        "params": {},
+        "ports": [
+          { "id": "p", "pos": "left", "label": "P", "domain": "Gas" },
+          { "id": "n", "pos": "left", "label": "N", "domain": "Gas" },
+          { "id": "out", "pos": "right", "label": "OUT", "domain": "Physical", "direction": "out", "quantity": "mass flow rate", "unit": "kg/s" }
+        ],
+        "equation": "P(p) = P(n)\nout = mdot",
+        "description": "Ideal gas flow sensor that passes the line without pressure loss; connect OUT to a Scope for kg/s."
       },
       {
         "id": "gas_flow_source",
@@ -1761,17 +2189,21 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "left",
-            "label": "A"
+            "label": "A",
+            "domain": "Gas"
           },
           {
             "id": "b",
             "pos": "right",
-            "label": "B"
+            "label": "B",
+            "domain": "Gas"
           },
           {
             "id": "m",
             "pos": "top",
-            "label": "M"
+            "label": "M",
+            "domain": "Physical",
+            "direction": "in"
           }
         ],
         "equation": "mdot = mdot_cmd",
@@ -1787,51 +2219,35 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "P": {
             "value": 200000,
             "unit": "Pa",
-            "label": "Pressure"
+            "label": "Pressure",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
           {
             "id": "a",
             "pos": "left",
-            "label": "A"
+            "label": "A",
+            "domain": "Gas"
           },
           {
             "id": "b",
             "pos": "right",
-            "label": "B"
+            "label": "B",
+            "domain": "Gas"
           },
           {
             "id": "p",
             "pos": "top",
-            "label": "P"
+            "label": "P",
+            "domain": "Physical",
+            "direction": "in"
           }
         ],
         "equation": "Pb - Pa = P_source",
         "description": "Ideal pneumatic pressure source maintaining a specified pressure differential across ports."
       },
-      {
-        "id": "gas_properties",
-        "name": "Gas Properties (G)",
-        "color": "#d946ef",
-        "icon": "gas_props",
-        "category": "Utilities",
-        "params": {
-          "R": {
-            "value": 287,
-            "unit": "J/kg/K",
-            "label": "Gas Constant"
-          },
-          "gamma": {
-            "value": 1.4,
-            "unit": "1",
-            "label": "Specific Heat Ratio"
-          }
-        },
-        "ports": [],
-        "equation": "P = ρ * R * T\\nγ = Cp / Cv",
-        "description": "Defines working gas thermodynamic parameters including specific gas constant R and specific heat ratio γ."
-      }
     ]
   },
   {
@@ -1848,7 +2264,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "n",
             "pos": "bottom",
-            "label": "N"
+            "label": "N",
+            "domain": "Magnetic"
           }
         ],
         "equation": "MMF = 0 A-t",
@@ -1864,19 +2281,23 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "R": {
             "value": 1000000,
             "unit": "A-t/Wb",
-            "label": "Reluctance"
+            "label": "Reluctance",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
           {
             "id": "n",
             "pos": "left",
-            "label": "N"
+            "label": "N",
+            "domain": "Magnetic"
           },
           {
             "id": "s",
             "pos": "right",
-            "label": "S"
+            "label": "S",
+            "domain": "Magnetic"
           }
         ],
         "equation": "MMF = Φ * R",
@@ -1889,26 +2310,44 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "icon": "reluctance_f",
         "category": "Elements",
         "params": {
-          "R": {
-            "value": 1000000,
-            "unit": "A-t/Wb",
-            "label": "Reluctance"
+          "l": {
+            "value": 0.1,
+            "unit": "m",
+            "label": "Core Length",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "A": {
+            "value": 0.0001,
+            "unit": "m^2",
+            "label": "Cross-Section Area",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "mu_r": {
+            "value": 1000,
+            "unit": "1",
+            "label": "Relative Permeability",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
           {
             "id": "n",
             "pos": "left",
-            "label": "N"
+            "label": "N",
+            "domain": "Magnetic"
           },
           {
             "id": "s",
             "pos": "right",
-            "label": "S"
+            "label": "S",
+            "domain": "Magnetic"
           }
         ],
-        "equation": "MMF = Φ * (l / (μ * A))",
-        "description": "Reluctance of a magnetic core segment calculated from length l, area A, and permeability μ."
+        "equation": "MMF = Φ * R,  R = l / (μ0 * μr * A)",
+        "description": "Reluctance of a uniform magnetic core segment from its length l [m], cross-section A [m²] and relative permeability μr (μ0 = 4π·10⁻⁷ H/m), then Hopkinson's law MMF = R·Φ."
       },
       {
         "id": "variable_reluctance",
@@ -1920,28 +2359,41 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "Rmin": {
             "value": 100000,
             "unit": "A-t/Wb",
-            "label": "Min Reluctance"
+            "label": "Min Reluctance",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "R": {
+            "value": 1000000,
+            "unit": "A-t/Wb",
+            "label": "Reluctance When Control Port Unwired",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
           {
             "id": "n",
             "pos": "left",
-            "label": "N"
+            "label": "N",
+            "domain": "Magnetic"
           },
           {
             "id": "s",
             "pos": "right",
-            "label": "S"
+            "label": "S",
+            "domain": "Magnetic"
           },
           {
             "id": "ctrl",
+            "domain": "Physical",
+            "direction": "in",
             "pos": "top",
             "label": "C"
           }
         ],
-        "equation": "MMF = Φ * R(ctrl)",
-        "description": "Magnetic reluctance modulated dynamically by an external physical control signal."
+        "equation": "MMF = Φ * max(Rmin, ctrl)",
+        "description": "Variable reluctance: the reluctance R [A-t/Wb] is the physical signal wired to port C, bounded below by Rmin so it never becomes a short; when C is unwired the parameter R is used. Hopkinson's law MMF = R·Φ."
       },
       {
         "id": "permanent_magnet",
@@ -1953,23 +2405,39 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "Hc": {
             "value": 1000,
             "unit": "A/m",
-            "label": "Coercivity"
+            "label": "Coercivity",
+            "min": 0
+          },
+          "Lm": {
+            "value": 0.05,
+            "unit": "m",
+            "label": "Magnet Length",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "Rm": {
+            "value": 0,
+            "unit": "A-t/Wb",
+            "label": "Internal Reluctance",
+            "min": 0
           }
         },
         "ports": [
           {
             "id": "n",
             "pos": "left",
-            "label": "N"
+            "label": "N",
+            "domain": "Magnetic"
           },
           {
             "id": "s",
             "pos": "right",
-            "label": "S"
+            "label": "S",
+            "domain": "Magnetic"
           }
         ],
         "equation": "MMF = Hc * Lm - Φ * Rm",
-        "description": "Permanent magnet source modeled with coercive force Hc, length Lm, and internal reluctance Rm."
+        "description": "Permanent magnet modeled as an mmf source Hc·Lm in series with its internal reluctance Rm (Thevenin): the mmf rise from S to N is Hc·Lm - Rm·Φ, with Φ the flux delivered into the circuit at N."
       },
       {
         "id": "em_converter",
@@ -1981,29 +2449,35 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "N": {
             "value": 100,
             "unit": "1",
-            "label": "Number of Turns"
+            "label": "Number of Turns",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
           {
             "id": "p",
             "pos": "left",
-            "label": "+"
+            "label": "+",
+            "domain": "Electrical"
           },
           {
             "id": "n",
             "pos": "left",
-            "label": "-"
+            "label": "-",
+            "domain": "Electrical"
           },
           {
             "id": "mag_n",
             "pos": "right",
-            "label": "N"
+            "label": "N",
+            "domain": "Magnetic"
           },
           {
             "id": "mag_s",
             "pos": "right",
-            "label": "S"
+            "label": "S",
+            "domain": "Magnetic"
           }
         ],
         "equation": "MMF = N * I\nV = N * dΦ/dt",
@@ -2016,36 +2490,47 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "icon": "rel_force",
         "category": "Couplings",
         "params": {
+          "R0": {
+            "value": 1000000,
+            "unit": "A-t/Wb",
+            "label": "Initial Reluctance",
+            "min": 0,
+            "exclusiveMin": true
+          },
           "K": {
-            "value": 1,
-            "unit": "N-m/Wb^2",
-            "label": "Force Constant"
+            "value": 10000000,
+            "unit": "A-t/(Wb-m)",
+            "label": "Reluctance Gradient (dR/dx)"
           }
         },
         "ports": [
           {
             "id": "n",
+            "domain": "Magnetic",
             "pos": "left",
             "label": "N"
           },
           {
             "id": "s",
+            "domain": "Magnetic",
             "pos": "left",
             "label": "S"
           },
           {
             "id": "r",
+            "domain": "Translational",
             "pos": "right",
             "label": "R"
           },
           {
             "id": "c",
+            "domain": "Translational",
             "pos": "right",
             "label": "C"
           }
         ],
-        "equation": "F = 0.5 * Φ² * (dR/dx)",
-        "description": "Calculates electromagnetic Maxwell attraction force generated by spatial reluctance variation."
+        "equation": "R = R0 + K * x,  x = ∫(v_R - v_C) dt\nMMF = Φ * R\nF_R = -½ Φ² dR/dx = -½ Φ² K",
+        "description": "Reluctance force actuator (Maxwell force at fixed flux, F = -dW/dx with W = Φ²R/2). The air-gap position x is the integral of the relative velocity v_R - v_C (x = 0 where R = R0); the force F_R acts on the body at port R and is directed toward lower reluctance (attraction for K > 0)."
       },
       {
         "id": "mag_flux_sensor",
@@ -2058,15 +2543,21 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "n",
             "pos": "left",
-            "label": "N"
+            "label": "N",
+            "domain": "Magnetic"
           },
           {
             "id": "s",
             "pos": "right",
-            "label": "S"
+            "label": "S",
+            "domain": "Magnetic"
           },
           {
             "id": "phi",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "magnetic flux",
+            "unit": "Wb",
             "pos": "top",
             "label": "Φ"
           }
@@ -2085,21 +2576,27 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "n",
             "pos": "top",
-            "label": "N"
+            "label": "N",
+            "domain": "Magnetic"
           },
           {
             "id": "s",
             "pos": "bottom",
-            "label": "S"
+            "label": "S",
+            "domain": "Magnetic"
           },
           {
             "id": "f",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "magnetomotive force",
+            "unit": "A",
             "pos": "right",
             "label": "F"
           }
         ],
         "equation": "MMF_out = MMF_n - MMF_s",
-        "description": "Measures magnetomotive force potential difference across two magnetic terminals."
+        "description": "Ideal across sensor: measures the magnetomotive force difference MMF_N - MMF_S between two magnetic terminals and draws no flux (wire it in parallel with the element, like a voltmeter)."
       },
       {
         "id": "mag_mmf_source",
@@ -2118,16 +2615,18 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "n",
             "pos": "top",
-            "label": "N"
+            "label": "N",
+            "domain": "Magnetic"
           },
           {
             "id": "s",
             "pos": "bottom",
-            "label": "S"
+            "label": "S",
+            "domain": "Magnetic"
           }
         ],
-        "equation": "MMF = N * I",
-        "description": "An ideal source of magnetomotive force. Drives magnetic flux through a reluctant circuit."
+        "equation": "MMF_N - MMF_S = MMF",
+        "description": "Ideal source of magnetomotive force: holds the MMF rise from S to N at the parameter MMF [A-t] whatever flux the circuit draws (flux Φ = MMF / R_total through a reluctance R)."
       },
       {
         "id": "mag_flux_source",
@@ -2146,12 +2645,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "n",
             "pos": "top",
-            "label": "N"
+            "label": "N",
+            "domain": "Magnetic"
           },
           {
             "id": "s",
             "pos": "bottom",
-            "label": "S"
+            "label": "S",
+            "domain": "Magnetic"
           }
         ],
         "equation": "Φ = Φ_source",
@@ -2163,26 +2664,36 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "color": "#ec4899",
         "icon": "ctrl_mmf",
         "category": "Sources",
-        "params": {},
+        "params": {
+          "MMF": {
+            "value": 0,
+            "unit": "A-t",
+            "label": "MMF When Control Port Unwired"
+          }
+        },
         "ports": [
           {
             "id": "n",
             "pos": "top",
-            "label": "N"
+            "label": "N",
+            "domain": "Magnetic"
           },
           {
             "id": "s",
             "pos": "bottom",
-            "label": "S"
+            "label": "S",
+            "domain": "Magnetic"
           },
           {
             "id": "src",
+            "domain": "Physical",
+            "direction": "in",
             "pos": "left",
             "label": "S"
           }
         ],
-        "equation": "Controlled MMF Source governing physical equation",
-        "description": "Physical component model for Controlled MMF Source."
+        "equation": "MMF_N - MMF_S = S",
+        "description": "Controlled MMF source: holds the MMF rise from S to N [A-t] equal to the physical signal wired to port S; when that port is unwired the parameter MMF is used."
       }
     ]
   },
@@ -2195,13 +2706,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "color": "#10b981",
         "icon": "force_sensor",
         "category": "Sensors",
-        "params": {
-          "k": {
-            "value": 100000000,
-            "unit": "N/m",
-            "label": "Stiffness"
-          }
-        },
+        "params": {},
         "ports": [
           {
             "id": "a",
@@ -2219,7 +2724,10 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "id": "f",
             "pos": "top",
             "label": "F",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "force",
+            "unit": "N"
           }
         ],
         "equation": "f_out = F_branch",
@@ -2231,13 +2739,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "color": "#10b981",
         "icon": "rot_motion",
         "category": "Sensors",
-        "params": {
-          "b": {
-            "value": 0,
-            "unit": "N-m-s/rad",
-            "label": "Damping"
-          }
-        },
+        "params": {},
         "ports": [
           {
             "id": "r",
@@ -2255,16 +2757,22 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "id": "w",
             "pos": "top",
             "label": "W",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "angular velocity",
+            "unit": "rad/s"
           },
           {
             "id": "a",
             "pos": "top",
             "label": "A",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "angle",
+            "unit": "rad"
           }
         ],
-        "equation": "w_out = ω, a_out = θ",
+        "equation": "w_out = ω, a_out = θ; dθ/dt = ω",
         "description": "Ideal rotational sensor measuring angular velocity ω and angular position θ."
       },
       {
@@ -2273,13 +2781,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "color": "#10b981",
         "icon": "torque_sensor",
         "category": "Sensors",
-        "params": {
-          "k": {
-            "value": 100000000,
-            "unit": "N-m/rad",
-            "label": "Stiffness"
-          }
-        },
+        "params": {},
         "ports": [
           {
             "id": "r",
@@ -2297,7 +2799,10 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "id": "t",
             "pos": "top",
             "label": "T",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "torque",
+            "unit": "N*m"
           }
         ],
         "equation": "t_out = τ_branch",
@@ -2309,13 +2814,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "color": "#10b981",
         "icon": "trans_motion",
         "category": "Sensors",
-        "params": {
-          "b": {
-            "value": 0,
-            "unit": "N-s/m",
-            "label": "Damping"
-          }
-        },
+        "params": {},
         "ports": [
           {
             "id": "r",
@@ -2333,13 +2832,19 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "id": "v",
             "pos": "top",
             "label": "V",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "velocity",
+            "unit": "m/s"
           },
           {
             "id": "p",
             "pos": "top",
             "label": "P",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "position",
+            "unit": "m"
           }
         ],
         "equation": "v = dx/dt",
@@ -2375,7 +2880,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "id": "s",
             "pos": "top",
             "label": "S",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "in"
           }
         ],
         "equation": "F = F_param (or F_cmd)",
@@ -2411,7 +2917,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "id": "s",
             "pos": "top",
             "label": "S",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "in"
           }
         ],
         "equation": "τ = τ_param (or τ_cmd)",
@@ -2447,7 +2954,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "id": "s",
             "pos": "top",
             "label": "S",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "in"
           }
         ],
         "equation": "ω = ω_input",
@@ -2463,7 +2971,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "ratio": {
             "value": 2,
             "unit": "1",
-            "label": "Gear Ratio"
+            "label": "Gear Ratio",
+            "nonZero": true
           }
         },
         "ports": [
@@ -2480,8 +2989,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Rotational"
           }
         ],
-        "equation": "ω1 = ratio * ω2\\nτ2 = ratio * τ1",
-        "description": "An ideal mechanical gear transmission that scales angular velocity and torque."
+        "equation": "ω1 = ratio·ω2 [rad/s]\nτ1,in·ratio + τ2,in = 0 [N·m]   (delivered τ2 = ratio·τ1; P = τ1·ω1 + τ2·ω2 = 0)",
+        "description": "Ideal (lossless, massless, backlash-free) simple gear between shaft S1 (input / follower side, faster) and shaft S2 (output / base side); both shafts are scalar Rotational ports referenced to the inertial frame. ratio = ω1/ω2 (dimensionless, nonzero; a ratio of 0 is rejected). A positive ratio makes both shafts rotate in the same direction and a negative ratio reverses the direction (the Simscape Simple Gear 'output shaft rotates in the opposite direction' setting); the magnitude is the teeth ratio. The torque delivered to S2 is the torque into S1 multiplied by the ratio, so the transmitted power is zero for either sign."
       },
       {
         "id": "lever",
@@ -2493,12 +3002,16 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "L1": {
             "value": 0.5,
             "unit": "m",
-            "label": "Length 1"
+            "label": "Length 1",
+            "min": 0,
+            "exclusiveMin": true
           },
           "L2": {
             "value": 0.5,
             "unit": "m",
-            "label": "Length 2"
+            "label": "Length 2",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -2521,8 +3034,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Translational"
           }
         ],
-        "equation": "F1 * L1 = F2 * L2\nv1 / L1 = v2 / L2",
-        "description": "Ideal mechanical lever transforming displacement and force according to leverage arm lengths."
+        "equation": "(v_A − v_C)·L2 + (v_B − v_C)·L1 = 0 [m/s·m]   (opposite sides of the pivot: v_A − v_C = −(L1/L2)·(v_B − v_C))\nF_A·L1 − F_B·L2 = 0,  F_A + F_B + F_C = 0 [N]   (forces into the block; P = F_A·v_A + F_B·v_B + F_C·v_C = 0)",
+        "description": "Ideal massless rigid lever pivoting about port C, with port A at arm length L1 on one side of the pivot and port B at arm length L2 on the opposite side (small-angle, translational ports). Port C is the pivot (fulcrum) and carries the reaction force F_C = −(F_A + F_B); the pivot may move (v_C) or be tied to a Translational reference. A positive velocity at A gives a negative velocity at B relative to the pivot, with v_A/v_B = −L1/L2; the moment balance about the pivot is F_A·L1 = F_B·L2. Lossless: the three port powers sum to zero."
       },
       {
         "id": "wheel_axle",
@@ -2534,12 +3047,9 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "Rw": {
             "value": 0.3,
             "unit": "m",
-            "label": "Wheel Radius"
-          },
-          "Ra": {
-            "value": 0.05,
-            "unit": "m",
-            "label": "Axle Radius"
+            "label": "Wheel Radius",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -2556,8 +3066,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Translational"
           }
         ],
-        "equation": "v_trans = R * ω_rot\nτ_rot = R * F_trans",
-        "description": "Wheel and axle mechanism coupling vehicle linear road speed to axle rotational velocity."
+        "equation": "v_P = Rw·ω_A [m/s]\nτ_A,in + Rw·F_P,in = 0 [N·m]   (P = τ_A·ω_A + F_P·v_P = 0)",
+        "description": "Ideal wheel and axle (rolling without slip, lossless): the Translational port P moves at v = Rw·ω of the Rotational axle A (both referenced to the inertial frame) and the axle torque is the wheel radius times the force, τ = Rw·F, so the transmitted power is zero. Rw > 0 (m)."
       },
       {
         "id": "rot_multibody_interface",
@@ -2565,31 +3075,50 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "color": "#10b981",
         "icon": "rot_multibody",
         "category": "Multibody Interfaces",
-        "params": {},
+        "params": {
+          "axis": {
+            "value": "[0 0 1]",
+            "unit": "",
+            "label": "Rotation axis (B-local, normalized)"
+          }
+        },
         "ports": [
           {
-            "id": "t",
+            "id": "b",
             "pos": "left",
-            "label": "T"
+            "label": "B",
+            "domain": "Frame"
           },
           {
-            "id": "c",
+            "id": "f",
             "pos": "left",
-            "label": "C"
-          },
-          {
-            "id": "w",
-            "pos": "right",
-            "label": "W"
+            "label": "F",
+            "domain": "Frame"
           },
           {
             "id": "r",
             "pos": "right",
-            "label": "R"
+            "label": "R",
+            "domain": "Rotational"
+          },
+          {
+            "id": "c",
+            "pos": "right",
+            "label": "C",
+            "domain": "Rotational"
+          },
+          {
+            "id": "w",
+            "pos": "right",
+            "label": "W",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "angular velocity",
+            "unit": "rad/s"
           }
         ],
-        "equation": "Rotational Multibody Interface governing physical equation",
-        "description": "Physical component model for Rotational Multibody Interface."
+        "equation": "ω_R − ω_C = ω_rel = a·(ω_F − ω_B)  [rad/s],  a = R_B·axis (world)\nτ_F = T·a,  τ_B = −T·a  [N·m]   (T = torque from R to C; P = T·ω_rel)",
+        "description": "Scalar-to-Frame bridge for a Rotational network (one of the only two allowed scalar/Frame connections). Wire B and F in parallel with the Frames of a joint (for example a Revolute Joint) that has the same axis: the angular velocity of F relative to B about the normalized B-local axis parameter is imposed on the Rotational port pair R-C (ω_R − ω_C = ω_rel), and the torque T of the Rotational network is applied as a pure couple T·a on F with the reaction −T·a on B, about the configured axis (never a fixed X or Z axis). Ideal and lossless: T·ω_rel is handed from the network to the Frames. Output w is ω_rel (rad/s)."
       },
       {
         "id": "trans_multibody_interface",
@@ -2597,31 +3126,50 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "color": "#10b981",
         "icon": "trans_multibody",
         "category": "Multibody Interfaces",
-        "params": {},
+        "params": {
+          "axis": {
+            "value": "[0 0 1]",
+            "unit": "",
+            "label": "Slide axis (B-local, normalized)"
+          }
+        },
         "ports": [
+          {
+            "id": "b",
+            "pos": "left",
+            "label": "B",
+            "domain": "Frame"
+          },
           {
             "id": "f",
             "pos": "left",
-            "label": "F"
-          },
-          {
-            "id": "c",
-            "pos": "left",
-            "label": "C"
-          },
-          {
-            "id": "v",
-            "pos": "right",
-            "label": "V"
+            "label": "F",
+            "domain": "Frame"
           },
           {
             "id": "r",
             "pos": "right",
-            "label": "R"
+            "label": "R",
+            "domain": "Translational"
+          },
+          {
+            "id": "c",
+            "pos": "right",
+            "label": "C",
+            "domain": "Translational"
+          },
+          {
+            "id": "v",
+            "pos": "right",
+            "label": "V",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "velocity",
+            "unit": "m/s"
           }
         ],
-        "equation": "Translational Multibody Interface governing physical equation",
-        "description": "Physical component model for Translational Multibody Interface."
+        "equation": "v_R − v_C = v_rel = d/dt (a·(P_F − P_B))  [m/s],  a = R_B·axis (world)\nf_F = F·a,  f_B = −F·a,  τ_B = −(P_F − P_B) × F·a   (F = force from R to C; P = F·v_rel)",
+        "description": "Scalar-to-Frame bridge for a Translational network (one of the only two allowed scalar/Frame connections). Wire B and F in parallel with the Frames of a joint (for example a Prismatic Joint) that has the same axis: the slide rate of F relative to B along the normalized B-local axis parameter is imposed on the Translational port pair R-C (v_R − v_C = v_rel), and the force F of the Translational network is applied along that axis on F with the reaction on B (including the moment of the lever arm P_F − P_B), never along a fixed X axis. Ideal and lossless: F·v_rel is handed from the network to the Frames. Output v is v_rel (m/s)."
       },
       {
         "id": "inertia",
@@ -2633,7 +3181,15 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "J": {
             "value": 0.01,
             "unit": "kg-m^2",
-            "label": "Inertia"
+            "label": "Inertia",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "B": {
+            "value": 0,
+            "unit": "N-m-s/rad",
+            "label": "Viscous Drag to Inertial Frame (extension, 0 = Simscape)",
+            "min": 0
           }
         },
         "ports": [
@@ -2644,8 +3200,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Rotational"
           }
         ],
-        "equation": "τ = J * dω/dt",
-        "description": "Rotational flywheel inertia relating net torque to angular acceleration via moment of inertia J."
+        "equation": "τ = J * dω/dt  (ω = speed of port R relative to the inertial frame; optional drag τ += B ω, default B = 0)",
+        "description": "Rotational flywheel inertia relating net torque to angular acceleration via moment of inertia J (Simscape Inertia). B is an optional viscous drag against the inertial frame, 0 by default; add a Rotational Damper to a Rotational Reference for a physical drag."
       },
       {
         "id": "rot_ref",
@@ -2675,23 +3231,31 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "k": {
             "value": 100,
             "unit": "N-m/rad",
-            "label": "Spring Rate"
+            "label": "Spring Rate",
+            "min": 0
+          },
+          "theta0": {
+            "value": 0,
+            "unit": "rad",
+            "label": "Initial Deformation"
           }
         },
         "ports": [
           {
             "id": "r",
             "pos": "left",
-            "label": "R"
+            "label": "R",
+            "domain": "Rotational"
           },
           {
             "id": "c",
             "pos": "right",
-            "label": "C"
+            "label": "C",
+            "domain": "Rotational"
           }
         ],
-        "equation": "τ = k * (θ - θ0)",
-        "description": "Torsional spring resisting angular twist with restoring torque proportional to relative angle."
+        "equation": "τ = k * φ,  φ = θ0 + ∫(ω_R − ω_C) dt",
+        "description": "Torsional spring (Simscape Rotational Spring) with restoring torque proportional to the relative angle φ; θ0 is the initial deformation."
       },
       {
         "id": "rot_damper",
@@ -2703,7 +3267,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "b": {
             "value": 0.1,
             "unit": "N-m/rad/s",
-            "label": "Damping Coefficient"
+            "label": "Damping Coefficient",
+            "min": 0
           }
         },
         "ports": [
@@ -2720,8 +3285,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Rotational"
           }
         ],
-        "equation": "τ = c * (ω1 - ω2)",
-        "description": "Rotational viscous damper generating resistive torque proportional to relative angular velocity."
+        "equation": "τ = b * (ω_R − ω_C)",
+        "description": "Rotational viscous damper (Simscape Rotational Damper) generating resistive torque proportional to relative angular velocity; b in N-m-s/rad."
       },
       {
         "id": "rot_friction",
@@ -2730,10 +3295,36 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "icon": "rot_friction",
         "category": "Rotational Elements",
         "params": {
-          "Ts": {
+          "Tbrk": {
+            "value": 0.6,
+            "unit": "N-m",
+            "label": "Breakaway Friction Torque (>= Coulomb)",
+            "min": 0
+          },
+          "Tc": {
             "value": 0.5,
             "unit": "N-m",
-            "label": "Static Friction"
+            "label": "Coulomb Friction Torque",
+            "min": 0
+          },
+          "Tv": {
+            "value": 0.1,
+            "unit": "N-m-s/rad",
+            "label": "Viscous Friction Coefficient",
+            "min": 0
+          },
+          "cv": {
+            "value": 10,
+            "unit": "s/rad",
+            "label": "Transition Approximation Coefficient",
+            "min": 0
+          },
+          "wthr": {
+            "value": 0.01,
+            "unit": "rad/s",
+            "label": "Linear Region Velocity Threshold",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -2750,8 +3341,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Rotational"
           }
         ],
-        "equation": "Rotational Friction governing physical equation",
-        "description": "Physical component model for Rotational Friction."
+        "equation": "τ = [Tc + (Tbrk − Tc)·exp(−cv·|ω|)]·tanh(4ω/ω_thr) + Tv·ω,  ω = ω_R − ω_C",
+        "description": "Rotational friction (Simscape Rotational Friction): Stribeck + Coulomb + viscous torque between ports R and C. The sign of the velocity is smoothed by tanh(4ω/ω_thr), so below breakaway the shafts creep at a tiny speed instead of switching state."
       },
       {
         "id": "rot_hard_stop",
@@ -2769,6 +3360,26 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": -1,
             "unit": "rad",
             "label": "Lower Limit"
+          },
+          "k": {
+            "value": 1000,
+            "unit": "N-m/rad",
+            "label": "Contact Stiffness",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "c": {
+            "value": 0.1,
+            "unit": "N-m-s/rad",
+            "label": "Contact Damping",
+            "min": 0
+          },
+          "transition": {
+            "value": 0.0001,
+            "unit": "rad",
+            "label": "Transition Region",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -2785,8 +3396,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Rotational"
           }
         ],
-        "equation": "τ_stop = k_c * (θ - θ_limit) + c_c * ω",
-        "description": "Rotational mechanical stop limiting angular travel with contact stiffness and damping."
+        "equation": "θ = ∫(ω_R − ω_C) dt;  p = θ − upper (θ > upper) or lower − θ (θ < lower);  τ_stop = ±max(0, k·p + c·ω_out·S(p/w)),  S = cubic smooth step (0 → 1)",
+        "description": "Rotational hard stop (Simscape Rotational Hard Stop, continuous damped-rebound contact): zero torque inside [lower, upper]; outside, contact stiffness k plus contact damping c that fades in over the transition region w, so the torque is continuous at contact entry and the stop never pulls. Contact entry and exit are solver events."
       },
       {
         "id": "mass",
@@ -2798,7 +3409,15 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "m": {
             "value": 1,
             "unit": "kg",
-            "label": "Mass"
+            "label": "Mass",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "b": {
+            "value": 0,
+            "unit": "N-s/m",
+            "label": "Viscous Drag to Inertial Frame (extension, 0 = Simscape)",
+            "min": 0
           }
         },
         "ports": [
@@ -2809,8 +3428,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Translational"
           }
         ],
-        "equation": "F = m * dv/dt",
-        "description": "Translational rigid mass governed by Newton's second law relating net force to acceleration."
+        "equation": "F = m * dv/dt  (v = speed of port P relative to the inertial frame; optional drag F += b v, default b = 0)",
+        "description": "Translational rigid mass governed by Newton's second law relating net force to acceleration (Simscape Mass). b is an optional viscous drag against the inertial frame, 0 by default; add a Translational Damper to a Translational Reference for a physical drag."
       },
       {
         "id": "trans_ref",
@@ -2840,7 +3459,13 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "k": {
             "value": 1000,
             "unit": "N/m",
-            "label": "Spring Rate"
+            "label": "Spring Rate",
+            "min": 0
+          },
+          "x0": {
+            "value": 0,
+            "unit": "m",
+            "label": "Initial Deformation"
           }
         },
         "ports": [
@@ -2857,8 +3482,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Translational"
           }
         ],
-        "equation": "F = k * (x_r - x_c)",
-        "description": "Physical component model for Translational Spring."
+        "equation": "F = k * x,  x = x0 + ∫(v_R − v_C) dt",
+        "description": "Translational spring (Simscape Translational Spring) with force proportional to the relative displacement x; x0 is the initial deformation."
       },
       {
         "id": "trans_damper",
@@ -2870,7 +3495,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "b": {
             "value": 10,
             "unit": "N/m/s",
-            "label": "Damping Coefficient"
+            "label": "Damping Coefficient",
+            "min": 0
           }
         },
         "ports": [
@@ -2887,8 +3513,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Translational"
           }
         ],
-        "equation": "Translational Damper governing physical equation",
-        "description": "Physical component model for Translational Damper."
+        "equation": "F = b * (v_R − v_C)",
+        "description": "Translational viscous damper (Simscape Translational Damper): force proportional to the relative velocity of ports R and C; b in N-s/m."
       },
       {
         "id": "trans_friction",
@@ -2897,10 +3523,36 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "icon": "trans_friction",
         "category": "Translational Elements",
         "params": {
-          "Fs": {
+          "Fbrk": {
+            "value": 6,
+            "unit": "N",
+            "label": "Breakaway Friction Force (>= Coulomb)",
+            "min": 0
+          },
+          "Fc": {
             "value": 5,
             "unit": "N",
-            "label": "Static Friction"
+            "label": "Coulomb Friction Force",
+            "min": 0
+          },
+          "Fv": {
+            "value": 2,
+            "unit": "N-s/m",
+            "label": "Viscous Friction Coefficient",
+            "min": 0
+          },
+          "cv": {
+            "value": 10,
+            "unit": "s/m",
+            "label": "Transition Approximation Coefficient",
+            "min": 0
+          },
+          "vthr": {
+            "value": 0.01,
+            "unit": "m/s",
+            "label": "Linear Region Velocity Threshold",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -2917,8 +3569,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Translational"
           }
         ],
-        "equation": "Translational Friction governing physical equation",
-        "description": "Physical component model for Translational Friction."
+        "equation": "F = [Fc + (Fbrk − Fc)·exp(−cv·|v|)]·tanh(4v/v_thr) + Fv·v,  v = v_R − v_C",
+        "description": "Translational friction (Simscape Translational Friction): Stribeck + Coulomb + viscous force between ports R and C. The sign of the velocity is smoothed by tanh(4v/v_thr), so below breakaway the bodies creep at a tiny speed instead of switching state."
       },
       {
         "id": "trans_hard_stop",
@@ -2936,6 +3588,26 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": -0.1,
             "unit": "m",
             "label": "Lower Limit"
+          },
+          "k": {
+            "value": 10000,
+            "unit": "N/m",
+            "label": "Contact Stiffness",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "c": {
+            "value": 10,
+            "unit": "N-s/m",
+            "label": "Contact Damping",
+            "min": 0
+          },
+          "transition": {
+            "value": 0.0001,
+            "unit": "m",
+            "label": "Transition Region",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -2952,8 +3624,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Translational"
           }
         ],
-        "equation": "F_stop = k_c * (x - x_limit) + c_c * v",
-        "description": "Translational mechanical stop with contact stiffness and damping at stroke limits."
+        "equation": "x = ∫(v_R − v_C) dt;  p = x − upper (x > upper) or lower − x (x < lower);  F_stop = ±max(0, k·p + c·v_out·S(p/w)),  S = cubic smooth step (0 → 1)",
+        "description": "Translational hard stop (Simscape Translational Hard Stop, continuous damped-rebound contact): zero force inside [lower, upper]; outside, contact stiffness k plus contact damping c that fades in over the transition region w, so the force is continuous at contact entry and the stop never pulls. Contact entry and exit are solver events."
       }
     ]
   },
@@ -2971,11 +3643,12 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "g",
             "pos": "bottom",
-            "label": "G"
+            "label": "G",
+            "domain": "Fluid"
           }
         ],
-        "equation": "Absolute Reference (MA) governing physical equation",
-        "description": "Physical component model for Absolute Reference (MA)."
+        "equation": "p = 0 Pa (absolute pressure zero)",
+        "description": "Absolute pressure reference of a Moist Air network (the analogue of the Thermal Reference at 0 K): pins the connected node at 0 Pa absolute and absorbs any mass flow. The Moist Air ports carry total pressure and mass flow only; the psychrometric state (temperature, relative humidity) is a parameter of each block."
       },
       {
         "id": "ma_chamber",
@@ -2987,7 +3660,68 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "V": {
             "value": 0.1,
             "unit": "m^3",
-            "label": "Volume"
+            "label": "Volume",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "ambient_temp": {
+            "value": 25,
+            "unit": "C",
+            "label": "Ambient Temperature",
+            "min": -273.15,
+            "exclusiveMin": true
+          },
+          "wall_mass": {
+            "value": 2,
+            "unit": "kg",
+            "label": "Wall Mass",
+            "min": 0
+          },
+          "wall_cp": {
+            "value": 460,
+            "unit": "J/(kg*K)",
+            "label": "Wall Specific Heat",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "food_mass": {
+            "value": 0.5,
+            "unit": "kg",
+            "label": "Load Mass",
+            "min": 0
+          },
+          "food_cp": {
+            "value": 4184,
+            "unit": "J/(kg*K)",
+            "label": "Load Specific Heat",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "k_loss": {
+            "value": 8.5,
+            "unit": "W/K",
+            "label": "Heat Loss Coefficient",
+            "min": 0
+          },
+          "max_temp": {
+            "value": 220,
+            "unit": "C",
+            "label": "Safety Cutout Temperature",
+            "min": -273.15,
+            "exclusiveMin": true
+          },
+          "P0": {
+            "value": 101325,
+            "unit": "Pa",
+            "label": "Initial Pressure",
+            "min": 0
+          },
+          "phi": {
+            "value": 0.5,
+            "unit": "1",
+            "label": "Initial Relative Humidity",
+            "min": 0,
+            "max": 1
           }
         },
         "ports": [
@@ -3010,8 +3744,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Thermal"
           }
         ],
-        "equation": "dP/dt = (R*T/V) * (mdot_in - mdot_out)",
-        "description": "Represents a constant volume of moist air. Calculates pressure and temperature based on mass and energy balance."
+        "equation": "dm/dt = mdot_a + mdot_b, m = p*V/(R*T)  ->  dp/dt = (R*T/V)*(mdot_a + mdot_b) + (p/T)*dT/dt\nC dT/dt = Q_H - k_loss*(T - T_amb),  C = m*c_v + m_wall*c_wall + m_load*c_load,  R = (R_a + w*R_v)/(1 + w)",
+        "description": "Constant-volume chamber of moist air (ideal mixture, Dalton's law): mass conservation of the rigid volume gives the pressure from the net inflow at A and B and from the temperature change; the humidity ratio w is fixed by the initial relative humidity phi at P0 and the ambient temperature (no condensation). The ports carry no enthalpy, so the energy balance uses only the heat flow Q_H at port H, the loss to the ambient and the lumped air + wall + load heat capacity, with a safety cutout above max_temp. Unconnected A / B ports are closed."
       },
       {
         "id": "ma_pipe",
@@ -3024,18 +3758,59 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 2,
             "unit": "m",
             "label": "Length"
+          },
+          "resistance": {
+            "value": 1,
+            "unit": "Pa/(kg/s)",
+            "label": "Local Resistance",
+            "min": 0
+          },
+          "D": {
+            "value": 0.05,
+            "unit": "m",
+            "label": "Diameter",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "roughness": {
+            "value": 0.0000015,
+            "unit": "m",
+            "label": "Surface Roughness",
+            "min": 0
+          },
+          "T": {
+            "value": 293.15,
+            "unit": "K",
+            "label": "Gas Temperature",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "phi": {
+            "value": 0.5,
+            "unit": "1",
+            "label": "Relative Humidity",
+            "min": 0,
+            "max": 1
+          },
+          "UA": {
+            "value": 5,
+            "unit": "W/K",
+            "label": "Wall Heat Transfer Conductance",
+            "min": 0
           }
         },
         "ports": [
           {
             "id": "a",
             "pos": "left",
-            "label": "A"
+            "label": "A",
+            "domain": "Fluid"
           },
           {
             "id": "b",
             "pos": "right",
-            "label": "B"
+            "label": "B",
+            "domain": "Fluid"
           },
           {
             "id": "h",
@@ -3046,11 +3821,15 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "wd",
             "pos": "bottom",
-            "label": "WD"
+            "label": "WD",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "friction power dissipated",
+            "unit": "W"
           }
         ],
-        "equation": "ΔP = f(L, D, Re) * (ρv²/2)",
-        "description": "Models the pressure drop and heat transfer of moist air flowing through a pipe."
+        "equation": "p_a - p_b = f*(L/D)*rho*v^2/2 + resistance*mdot,  rho = p_mean/(R*T),  v = mdot/(rho*S),  f = max(64/Re, Haaland(Re, e/D));  Q_H = UA*(T_H - T);  wd = (p_a - p_b)*mdot/rho",
+        "description": "Straight circular pipe for moist air: Darcy-Weisbach friction with laminar f = 64/Re and the explicit Haaland turbulent friction factor for the relative roughness e/D, plus an optional lumped local resistance. The mixture density comes from (p_mean, T, phi) by Dalton's law and the ideal gas law, the viscosity from Sutherland's law. The wall at port H exchanges heat Q = UA (T_H - T) with the gas; wd is the friction power dissipated. Condensation is not modelled."
       },
       {
         "id": "ma_separator",
@@ -3069,26 +3848,36 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "left",
-            "label": "A"
+            "label": "A",
+            "domain": "Fluid"
           },
           {
             "id": "b",
             "pos": "right",
-            "label": "B"
+            "label": "B",
+            "domain": "Fluid"
           },
           {
             "id": "w",
             "pos": "top",
-            "label": "W"
+            "label": "W",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "unspecified (block unsupported)",
+            "unit": "*"
           },
           {
             "id": "d",
             "pos": "top",
-            "label": "D"
+            "label": "D",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "unspecified (block unsupported)",
+            "unit": "*"
           }
         ],
-        "equation": "Moisture Separator (MA) governing physical equation",
-        "description": "Physical component model for Moisture Separator (MA)."
+        "equation": "(not simulated) mdot_removed = efficiency * mdot_liquid  -  see the missing-specification diagnostic",
+        "description": "Moisture Separator (MA) is explicitly unsupported: the library defines only the efficiency parameter and the `w` and `d` outputs without meaning or unit, and the Moist Air ports carry no liquid-water fraction to separate. The solver rejects a model that contains it and names the missing specification."
       },
       {
         "id": "ma_rot_conv",
@@ -3101,37 +3890,91 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 0.001,
             "unit": "m^3/rad",
             "label": "Displacement"
+          },
+          "h0": {
+            "value": 5,
+            "unit": "W/K",
+            "label": "Stationary Heat Transfer",
+            "min": 0
+          },
+          "k": {
+            "value": 0.1,
+            "unit": "W/K/(rad/s)",
+            "label": "Speed-Dependent Heat Transfer",
+            "min": 0
+          },
+          "V0": {
+            "value": 0.001,
+            "unit": "m^3",
+            "label": "Dead Volume",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "T": {
+            "value": 293.15,
+            "unit": "K",
+            "label": "Initial Gas Temperature",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "P0": {
+            "value": 101325,
+            "unit": "Pa",
+            "label": "Initial Pressure",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "p_env": {
+            "value": 101325,
+            "unit": "Pa",
+            "label": "Environment Pressure",
+            "min": 0
+          },
+          "phi": {
+            "value": 0.5,
+            "unit": "1",
+            "label": "Initial Relative Humidity",
+            "min": 0,
+            "max": 1
           }
         },
         "ports": [
           {
             "id": "a",
             "pos": "left",
-            "label": "A"
+            "label": "A",
+            "domain": "Fluid"
           },
           {
             "id": "h",
             "pos": "left",
-            "label": "H"
+            "label": "H",
+            "domain": "Thermal"
           },
           {
             "id": "r",
             "pos": "right",
-            "label": "R"
+            "label": "R",
+            "domain": "Rotational"
           },
           {
             "id": "c",
             "pos": "right",
-            "label": "C"
+            "label": "C",
+            "domain": "Rotational"
           },
           {
             "id": "wd",
             "pos": "bottom",
-            "label": "WD"
+            "label": "WD",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "mechanical power delivered by the gas",
+            "unit": "W"
           }
         ],
-        "equation": "Rotational Mechanical Converter (MA) governing physical equation",
-        "description": "Physical component model for Rotational Mechanical Converter (MA)."
+        "equation": "V = V0 + D*theta, theta = integral(w_R - w_C) dt;  dm/dt = mdot_A, m = p*V/(R*T)\nm*c_v dT/dt = mdot_A*R*T - p*dV/dt + Q_H,  Q_H = (h0 + k*|w|)*(T_H - T)\ntau = D*(p - p_env) (delivered at R, reaction at C);  wd = tau*w",
+        "description": "Single-acting moist-air vane / piston chamber driven through the rotational ports R and C: the chamber volume follows the shaft angle, V = V0 + D theta (D in m^3/rad). Ideal-gas mass and energy balance of the closed chamber (flow through A enters at the gas temperature), heat exchange with the wall at H through a stationary plus speed-dependent conductance, and the shaft torque D (p - p_env) against the environment pressure. wd is the mechanical power delivered by the gas (W). Humidity ratio is frozen at the initial relative humidity; no condensation."
       },
       {
         "id": "ma_trans_conv",
@@ -3144,13 +3987,60 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 0.01,
             "unit": "m^2",
             "label": "Area"
+          },
+          "h0": {
+            "value": 5,
+            "unit": "W/K",
+            "label": "Stationary Heat Transfer",
+            "min": 0
+          },
+          "k": {
+            "value": 0.1,
+            "unit": "W/K/(m/s)",
+            "label": "Speed-Dependent Heat Transfer",
+            "min": 0
+          },
+          "V0": {
+            "value": 0.001,
+            "unit": "m^3",
+            "label": "Dead Volume",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "T": {
+            "value": 293.15,
+            "unit": "K",
+            "label": "Initial Gas Temperature",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "P0": {
+            "value": 101325,
+            "unit": "Pa",
+            "label": "Initial Pressure",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "p_env": {
+            "value": 101325,
+            "unit": "Pa",
+            "label": "Environment Pressure",
+            "min": 0
+          },
+          "phi": {
+            "value": 0.5,
+            "unit": "1",
+            "label": "Initial Relative Humidity",
+            "min": 0,
+            "max": 1
           }
         },
         "ports": [
           {
             "id": "a",
             "pos": "left",
-            "label": "A"
+            "label": "A",
+            "domain": "Fluid"
           },
           {
             "id": "h",
@@ -3173,11 +4063,15 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "wd",
             "pos": "bottom",
-            "label": "WD"
+            "label": "WD",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "mechanical power delivered by the gas",
+            "unit": "W"
           }
         ],
-        "equation": "Translational Mechanical Converter (MA) governing physical equation",
-        "description": "Physical component model for Translational Mechanical Converter (MA)."
+        "equation": "V = V0 + A*x, x = integral(v_R - v_C) dt;  dm/dt = mdot_A, m = p*V/(R*T)\nm*c_v dT/dt = mdot_A*R*T - p*dV/dt + Q_H,  Q_H = (h0 + k*|v|)*(T_H - T)\nF = A*(p - p_env) (delivered at R, reaction at C);  wd = F*v",
+        "description": "Single-acting moist-air piston chamber driven through the translational ports R and C: the chamber volume follows the piston position, V = V0 + A x. Ideal-gas mass and energy balance of the closed chamber (flow through A enters at the gas temperature), heat exchange with the wall at H through a stationary plus speed-dependent conductance, and the piston force A (p - p_env) against the environment pressure. wd is the mechanical power delivered by the gas (W). Humidity ratio is frozen at the initial relative humidity; no condensation."
       },
       {
         "id": "ma_flow_sensor",
@@ -3190,21 +4084,27 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "left",
-            "label": "A"
+            "label": "A",
+            "domain": "Fluid"
           },
           {
             "id": "b",
             "pos": "right",
-            "label": "B"
+            "label": "B",
+            "domain": "Fluid"
           },
           {
             "id": "m",
             "pos": "top",
-            "label": "M"
+            "label": "M",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "mass flow rate",
+            "unit": "kg/s"
           }
         ],
-        "equation": "Flow Rate Sensor (MA) governing physical equation",
-        "description": "Physical component model for Flow Rate Sensor (MA)."
+        "equation": "p_a = p_b,  m = mdot   [kg/s, positive from A to B]",
+        "description": "Ideal mass flow rate sensor in series with a Moist Air line: no pressure drop (p_a = p_b), the output is the total mass flow rate of the mixture through it, positive from A to B."
       },
       {
         "id": "ma_selector",
@@ -3217,26 +4117,40 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "in",
             "pos": "left",
-            "label": "F"
+            "label": "F",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "t",
             "pos": "right",
-            "label": "T"
+            "label": "T",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "temperature",
+            "unit": "K"
           },
           {
             "id": "p",
             "pos": "right",
-            "label": "P"
+            "label": "P",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "pressure",
+            "unit": "Pa"
           },
           {
             "id": "w",
             "pos": "right",
-            "label": "W"
+            "label": "W",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "moisture mass fraction",
+            "unit": "1"
           }
         ],
-        "equation": "Measurement Selector (MA) governing physical equation",
-        "description": "Physical component model for Measurement Selector (MA)."
+        "equation": "(not simulated) [t, p, w] = select(in)  -  see the missing-specification diagnostic",
+        "description": "Measurement Selector (MA) is explicitly unsupported: it selects temperature, pressure and humidity from a composite measurement vector whose layout and width are not defined, and no sensor in the library produces such a vector. The solver rejects a model that contains it and names the missing specification."
       },
       {
         "id": "ma_moisture_sensor",
@@ -3244,21 +4158,41 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "color": "#8b5cf6",
         "icon": "ma_moisture",
         "category": "Sensors",
-        "params": {},
+        "params": {
+          "T": {
+            "value": 293.15,
+            "unit": "K",
+            "label": "Gas Temperature",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "phi": {
+            "value": 0.5,
+            "unit": "1",
+            "label": "Relative Humidity",
+            "min": 0,
+            "max": 1
+          }
+        },
         "ports": [
           {
             "id": "a",
             "pos": "left",
-            "label": "A"
+            "label": "A",
+            "domain": "Fluid"
           },
           {
             "id": "w",
             "pos": "right",
-            "label": "W"
+            "label": "W",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "moisture mass fraction",
+            "unit": "1"
           }
         ],
-        "equation": "Moisture & Trace Gas Sensor (MA) governing physical equation",
-        "description": "Physical component model for Moisture & Trace Gas Sensor (MA)."
+        "equation": "w = x_v = w_h/(1 + w_h),  w_h = 0.622*p_v/(p - p_v),  p_v = phi*p_sat(T)   [kg water vapour / kg moist air]",
+        "description": "Ideal moisture sensor: outputs the water-vapour mass fraction of the moist air at the node pressure p for the block's gas temperature T and relative humidity phi (saturation pressure from the IAPWS-IF97 line, humidity ratio from Dalton's law, ASHRAE ch. 1). The Moist Air ports carry only total pressure and mass flow, so T and phi are parameters of the sensor, not measured. Draws no flow."
       },
       {
         "id": "ma_pt_sensor",
@@ -3266,21 +4200,43 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "color": "#8b5cf6",
         "icon": "ma_pt_sensor",
         "category": "Sensors",
-        "params": {},
+        "params": {
+          "T": {
+            "value": 293.15,
+            "unit": "K",
+            "label": "Gas Temperature",
+            "min": 0,
+            "exclusiveMin": true
+          }
+        },
         "ports": [
           {
             "id": "a",
             "pos": "left",
-            "label": "A"
+            "label": "A",
+            "domain": "Fluid"
           },
           {
             "id": "p",
             "pos": "right",
-            "label": "Pa"
+            "label": "Pa",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "pressure",
+            "unit": "Pa"
+          },
+          {
+            "id": "t",
+            "pos": "right",
+            "label": "T",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "temperature",
+            "unit": "K"
           }
         ],
-        "equation": "Pressure & Temperature Sensor (MA) governing physical equation",
-        "description": "Physical component model for Pressure & Temperature Sensor (MA)."
+        "equation": "p_out = p_a   [Pa, total pressure of the node],  t_out = T   [K, gas temperature of the isothermal network]",
+        "description": "Ideal pressure and temperature sensor: p is the total pressure of the Moist Air node, t the temperature of the network. The Moist Air ports carry only total pressure and mass flow, so the temperature is the sensor's T parameter (set it to the temperature of the chamber or pipe it measures), not a measured node variable. Draws no flow."
       },
       {
         "id": "ma_thermo_sensor",
@@ -3288,21 +4244,41 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "color": "#8b5cf6",
         "icon": "ma_thermo",
         "category": "Sensors",
-        "params": {},
+        "params": {
+          "T": {
+            "value": 293.15,
+            "unit": "K",
+            "label": "Gas Temperature",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "phi": {
+            "value": 0.5,
+            "unit": "1",
+            "label": "Relative Humidity",
+            "min": 0,
+            "max": 1
+          }
+        },
         "ports": [
           {
             "id": "a",
             "pos": "left",
-            "label": "A"
+            "label": "A",
+            "domain": "Fluid"
           },
           {
             "id": "rho",
             "pos": "right",
-            "label": "ρ"
+            "label": "ρ",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "density",
+            "unit": "kg/m^3"
           }
         ],
-        "equation": "Thermodynamic Properties Sensor (MA) governing physical equation",
-        "description": "Physical component model for Thermodynamic Properties Sensor (MA)."
+        "equation": "rho = (p - p_v)/(R_a*T) + p_v/(R_v*T) = p/(R*T),  p_v = phi*p_sat(T),  R = (R_a + w*R_v)/(1 + w)   [kg/m^3]",
+        "description": "Ideal thermodynamic properties sensor: outputs the mixture density of the moist air at the node pressure p for the block's gas temperature T and relative humidity phi (Dalton's law, ideal gas law, saturation pressure from the IAPWS-IF97 line; R_a = 287.058, R_v = 461.52 J/(kg K)). T and phi are parameters of the sensor because the ports carry only total pressure and mass flow. Draws no flow."
       },
       {
         "id": "ma_moisture_source",
@@ -3321,17 +4297,19 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "bottom",
-            "label": "A"
+            "label": "A",
+            "domain": "Fluid"
           },
           {
             "id": "s",
             "pos": "top",
             "label": "S",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "in"
           }
         ],
-        "equation": "Moisture Source (MA) governing physical equation",
-        "description": "Physical component model for Moisture Source (MA)."
+        "equation": "mdot_added = rate * S   [kg/s of water vapour delivered INTO the node; S = 1 when the S input is unwired]",
+        "description": "Ideal moisture source: delivers water vapour into the Moist Air node at `rate` kg/s, scaled by the S input signal when wired. A single-ended source: it needs a network that can take the flow (a chamber or a path to a pressure datum). The ports carry total mass flow, so the added vapour is counted in the total flow."
       },
       {
         "id": "ma_flow_source",
@@ -3350,22 +4328,25 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "left",
-            "label": "A"
+            "label": "A",
+            "domain": "Fluid"
           },
           {
             "id": "b",
             "pos": "right",
-            "label": "B"
+            "label": "B",
+            "domain": "Fluid"
           },
           {
             "id": "s",
             "pos": "top",
             "label": "S",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "in"
           }
         ],
-        "equation": "Flow Rate Source (MA) governing physical equation",
-        "description": "Physical component model for Flow Rate Source (MA)."
+        "equation": "mdot = rate * S   [kg/s from A through the source to B; S = 1 when the S input is unwired]",
+        "description": "Ideal mass flow rate source for the moist-air mixture (Simscape Mass Flow Rate Source): the flow rate is imposed whatever the pressure difference; positive flow runs from A through the block to B. It needs a path for the flow on both sides (a chamber or a connection to a pressure datum)."
       },
       {
         "id": "ma_pressure_source",
@@ -3397,11 +4378,12 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "id": "s",
             "pos": "top",
             "label": "S",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "in"
           }
         ],
-        "equation": "Pressure Source (MA) governing physical equation",
-        "description": "Physical component model for Pressure Source (MA)."
+        "equation": "p_b - p_a = P * S   [Pa; S = 1 when the S input is unwired]",
+        "description": "Ideal pressure difference source (fan / blower head): holds p_B - p_A at P times the S input signal (P when S is unwired) and passes whatever mass flow the network demands. It fixes only a difference, so its network needs a pressure datum (a chamber, a reference or an absolute source)."
       },
       {
         "id": "ma_properties",
@@ -3413,12 +4395,16 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "P_std": {
             "value": 101325,
             "unit": "Pa",
-            "label": "Std Pressure"
+            "label": "Std Pressure",
+            "min": 0,
+            "exclusiveMin": true
           },
           "T_std": {
             "value": 293.15,
             "unit": "K",
-            "label": "Std Temperature"
+            "label": "Std Temperature",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [],
@@ -3440,23 +4426,35 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "delay": {
             "value": 1,
             "unit": "s",
-            "label": "Delay"
+            "label": "Delay",
+            "min": 0
+          },
+          "initial": {
+            "value": 0,
+            "unit": "",
+            "label": "Initial output"
           }
         },
         "ports": [
           {
             "id": "u",
             "pos": "left",
-            "label": "U"
+            "label": "U",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "y",
             "pos": "right",
-            "label": "Y"
+            "label": "Y",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "delayed signal",
+            "unit": "*"
           }
         ],
-        "equation": "PS Constant Delay governing physical equation",
-        "description": "Physical component model for PS Constant Delay."
+        "equation": "y(t) = u(t - delay) for t >= delay\ny(t) = initial for t < delay",
+        "description": "Constant (transport) delay of a physical signal: the output is the input delay seconds ago and `initial` before the delay has elapsed. The input history of the accepted solver steps is interpolated linearly."
       },
       {
         "id": "ps_add",
@@ -3469,21 +4467,29 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "u1",
             "pos": "left",
-            "label": "+"
+            "label": "+",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "u2",
             "pos": "left",
-            "label": "+"
+            "label": "+",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "y",
             "pos": "right",
-            "label": "Y"
+            "label": "Y",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "sum",
+            "unit": "*"
           }
         ],
-        "equation": "PS Add governing physical equation",
-        "description": "Physical component model for PS Add."
+        "equation": "y = u1 + u2",
+        "description": "Adds the two input signals: y = u1 + u2."
       },
       {
         "id": "ps_subtract",
@@ -3496,17 +4502,25 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "u1",
             "pos": "left",
-            "label": "+"
+            "label": "+",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "u2",
             "pos": "left",
-            "label": "-"
+            "label": "-",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "y",
             "pos": "right",
-            "label": "Y"
+            "label": "Y",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "difference",
+            "unit": "*"
           }
         ],
         "equation": "y = u1 - u2",
@@ -3529,12 +4543,18 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "u",
             "pos": "left",
-            "label": "U"
+            "label": "U",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "y",
             "pos": "right",
-            "label": "Y"
+            "label": "Y",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "scaled signal",
+            "unit": "*"
           }
         ],
         "equation": "Y = Gain * U",
@@ -3551,17 +4571,25 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "u1",
             "pos": "left",
-            "label": "*"
+            "label": "*",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "u2",
             "pos": "left",
-            "label": "*"
+            "label": "*",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "y",
             "pos": "right",
-            "label": "Y"
+            "label": "Y",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "product",
+            "unit": "*"
           }
         ],
         "equation": "y = u1 * u2",
@@ -3578,17 +4606,25 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "u1",
             "pos": "left",
-            "label": "num"
+            "label": "num",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "u2",
             "pos": "left",
-            "label": "den"
+            "label": "den",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "y",
             "pos": "right",
-            "label": "Y"
+            "label": "Y",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "quotient",
+            "unit": "*"
           }
         ],
         "equation": "y = u1 / (u2 != 0 ? u2 : ε)",
@@ -3611,16 +4647,22 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "u",
             "pos": "left",
-            "label": "U"
+            "label": "U",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "y",
             "pos": "right",
-            "label": "Y"
+            "label": "Y",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "function value",
+            "unit": "*"
           }
         ],
-        "equation": "PS Math Function governing physical equation",
-        "description": "Physical component model for PS Math Function."
+        "equation": "y = f(u),  f = sin | cos | tan | exp | log | sqrt | square (parameter func)\nlog(max(u, 1e-15)) and sqrt(max(u, 0)) are domain-guarded",
+        "description": "Applies the elementary function selected by func (sin, cos, tan, exp, log, sqrt, square) to the input signal. log and sqrt are guarded against a non-positive argument."
       },
       {
         "id": "ps_sum",
@@ -3633,16 +4675,22 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "u",
             "pos": "left",
-            "label": "U"
+            "label": "U",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "y",
             "pos": "right",
-            "label": "Σ"
+            "label": "Σ",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "sum",
+            "unit": "*"
           }
         ],
-        "equation": "y = u1 + u2",
-        "description": "Adds two physical signals together to produce their algebraic sum."
+        "equation": "y = sum_k u_k   (Sum of Elements; the port is scalar, so y = u)",
+        "description": "Sum of the elements of the input signal (Simulink Sum of Elements). The input port has width 1, so the sum over its single element equals the input."
       },
       {
         "id": "ps_integrator",
@@ -3661,12 +4709,18 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "u",
             "pos": "left",
-            "label": "U"
+            "label": "U",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "y",
             "pos": "right",
-            "label": "Y"
+            "label": "Y",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "time integral",
+            "unit": "*"
           }
         ],
         "equation": "y(t) = ∫u(τ)dτ + y(0)",
@@ -3682,23 +4736,31 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "T": {
             "value": 1,
             "unit": "s",
-            "label": "Time Constant"
+            "label": "Time Constant",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
           {
             "id": "u",
             "pos": "left",
-            "label": "U"
+            "label": "U",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "y",
             "pos": "right",
-            "label": "Y"
+            "label": "Y",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "filtered signal",
+            "unit": "*"
           }
         ],
-        "equation": "PS Transfer Function governing physical equation",
-        "description": "Physical component model for PS Transfer Function."
+        "equation": "T*dy/dt + y = u\nG(s) = 1/(T*s + 1)",
+        "description": "First-order lag G(s) = 1/(T s + 1) with time constant T: T dy/dt + y = u (unit DC gain)."
       },
       {
         "id": "ps_lookup_1d",
@@ -3706,21 +4768,38 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "color": "#92400e",
         "icon": "ps_lookup_1d",
         "category": "Lookup Tables",
-        "params": {},
+        "params": {
+          "table_x": {
+            "value": "[0 1 2]",
+            "unit": "",
+            "label": "Breakpoints (x)"
+          },
+          "table_y": {
+            "value": "[0 1 4]",
+            "unit": "",
+            "label": "Table Values (y)"
+          }
+        },
         "ports": [
           {
             "id": "u",
             "pos": "left",
-            "label": "U"
+            "label": "U",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "y",
             "pos": "right",
-            "label": "Y"
+            "label": "Y",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "table value",
+            "unit": "*"
           }
         ],
-        "equation": "PS Lookup Table (1D) governing physical equation",
-        "description": "Physical component model for PS Lookup Table (1D)."
+        "equation": "y = interp1(table_x, table_y, u)\npiecewise linear, nearest (clamped) extrapolation, table_x strictly increasing",
+        "description": "One-dimensional lookup table: piecewise-linear interpolation of (table_x, table_y) with nearest (clamped) extrapolation beyond the end breakpoints."
       },
       {
         "id": "ps_lookup_2d",
@@ -3728,26 +4807,50 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "color": "#92400e",
         "icon": "ps_lookup_2d",
         "category": "Lookup Tables",
-        "params": {},
+        "params": {
+          "table_x": {
+            "value": "[0 1]",
+            "unit": "",
+            "label": "Breakpoints of u1 (rows)"
+          },
+          "table_y": {
+            "value": "[0 1]",
+            "unit": "",
+            "label": "Breakpoints of u2 (columns)"
+          },
+          "table_z": {
+            "value": "[0 0; 0 1]",
+            "unit": "",
+            "label": "Table values (rows follow u1)"
+          }
+        },
         "ports": [
           {
             "id": "u1",
             "pos": "left",
-            "label": "U1"
+            "label": "U1",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "u2",
             "pos": "left",
-            "label": "U2"
+            "label": "U2",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "y",
             "pos": "right",
-            "label": "Y"
+            "label": "Y",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "table value",
+            "unit": "*"
           }
         ],
-        "equation": "PS Lookup Table (2D) governing physical equation",
-        "description": "Physical component model for PS Lookup Table (2D)."
+        "equation": "y = interp2(table_x, table_y, table_z, u1, u2)\nbilinear, nearest (clamped) extrapolation; the rows of table_z follow table_x, its columns follow table_y",
+        "description": "Two-dimensional lookup table with bilinear interpolation. The default table [0 0; 0 1] on [0 1] x [0 1] is y = u1*u2 there; edit table_x, table_y and table_z for your own data."
       },
       {
         "id": "ps_abs",
@@ -3760,12 +4863,18 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "u",
             "pos": "left",
-            "label": "U"
+            "label": "U",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "y",
             "pos": "right",
-            "label": "Y"
+            "label": "Y",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "absolute value",
+            "unit": "*"
           }
         ],
         "equation": "y = |u|",
@@ -3793,12 +4902,18 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "u",
             "pos": "left",
-            "label": "U"
+            "label": "U",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "y",
             "pos": "right",
-            "label": "Y"
+            "label": "Y",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "limited signal",
+            "unit": "*"
           }
         ],
         "equation": "y = min(upper, max(lower, u))",
@@ -3811,31 +4926,37 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "icon": "ps_dead",
         "category": "Nonlinear Operators",
         "params": {
-          "start": {
+          "upper": {
             "value": 0.5,
-            "unit": "",
-            "label": "Start"
+            "unit": "1",
+            "label": "Dead Zone Upper Bound"
           },
-          "end": {
+          "lower": {
             "value": -0.5,
-            "unit": "",
-            "label": "End"
+            "unit": "1",
+            "label": "Dead Zone Lower Bound"
           }
         },
         "ports": [
           {
             "id": "u",
             "pos": "left",
-            "label": "U"
+            "label": "U",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "y",
             "pos": "right",
-            "label": "Y"
+            "label": "Y",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "dead-zone output",
+            "unit": "*"
           }
         ],
-        "equation": "PS Dead Zone governing physical equation",
-        "description": "Physical component model for PS Dead Zone."
+        "equation": "y = u - upper   (u > upper)\ny = 0   (lower <= u <= upper)\ny = u - lower   (u < lower)",
+        "description": "Dead zone (Simulink Dead Zone): zero output while lower <= u <= upper, and the input measured from the nearest zone edge outside it (u - upper above, u - lower below), so the output is continuous."
       },
       {
         "id": "ps_switch",
@@ -3854,26 +4975,36 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "u1",
             "pos": "left",
-            "label": "1"
+            "label": "1",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "ctrl",
             "pos": "left",
-            "label": "C"
+            "label": "C",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "u2",
             "pos": "left",
-            "label": "2"
+            "label": "2",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "y",
             "pos": "right",
-            "label": "Y"
+            "label": "Y",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "selected signal",
+            "unit": "*"
           }
         ],
-        "equation": "PS Switch governing physical equation",
-        "description": "Physical component model for PS Switch."
+        "equation": "y = u1 if ctrl > threshold, else u2",
+        "description": "Passes u1 while the control input ctrl is above the threshold, otherwise u2. The switching instant is located by the solver (zero-crossing event of ctrl - threshold)."
       },
       {
         "id": "ps_min",
@@ -3892,21 +5023,29 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "u1",
             "pos": "left",
-            "label": "1"
+            "label": "1",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "u2",
             "pos": "left",
-            "label": "2"
+            "label": "2",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "y",
             "pos": "right",
-            "label": "MIN"
+            "label": "MIN",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "minimum",
+            "unit": "*"
           }
         ],
-        "equation": "y = min(u1, u2)",
-        "description": "Selects the minimum value among the input physical signals."
+        "equation": "y = min(u1, u2, limit)",
+        "description": "Selects the minimum of the two input signals and of the saturation value limit (Simulink MinMax, min): the output never exceeds limit."
       },
       {
         "id": "ps_max",
@@ -3925,21 +5064,29 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "u1",
             "pos": "left",
-            "label": "1"
+            "label": "1",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "u2",
             "pos": "left",
-            "label": "2"
+            "label": "2",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "y",
             "pos": "right",
-            "label": "MAX"
+            "label": "MAX",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "maximum",
+            "unit": "*"
           }
         ],
-        "equation": "y = max(u1, u2)",
-        "description": "Selects the maximum value among the input physical signals."
+        "equation": "y = max(u1, u2, limit)",
+        "description": "Selects the maximum of the two input signals and of the saturation value limit (Simulink MinMax, max): the output never falls below limit."
       },
       {
         "id": "ps_rms",
@@ -3951,23 +5098,31 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "window": {
             "value": 0.02,
             "unit": "s",
-            "label": "Window"
+            "label": "Window",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
           {
             "id": "u",
             "pos": "left",
-            "label": "U"
+            "label": "U",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "y",
             "pos": "right",
-            "label": "RMS"
+            "label": "RMS",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "rms value",
+            "unit": "*"
           }
         ],
-        "equation": "PS RMS Estimator governing physical equation",
-        "description": "Physical component model for PS RMS Estimator."
+        "equation": "y = sqrt( (1/W) * integral from t-W to t of u(tau)^2 dtau ),  W = window\nthe signal before t = 0 counts as 0",
+        "description": "Sliding-window RMS: the square root of the mean of u^2 over the last window seconds. The signal before t = 0 counts as 0, so a periodic signal reads exactly after one window."
       },
       {
         "id": "bldc_commutation",
@@ -3980,21 +5135,35 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "hall",
             "pos": "left",
-            "label": "Hall"
+            "label": "Hall",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "dir",
             "pos": "left",
-            "label": "Direction"
+            "label": "Direction",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "abc",
             "pos": "right",
-            "label": "abc"
+            "label": "abc",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "phase commutation pattern",
+            "unit": "1",
+            "width": 3,
+            "channelNames": [
+              "a",
+              "b",
+              "c"
+            ]
           }
         ],
-        "equation": "BLDC Commutation Logic governing physical equation",
-        "description": "Physical component model for BLDC Commutation Logic."
+        "equation": "Hall code H = 4*Ha + 2*Hb + Hc:  5: A+B-,  4: A+C-,  6: B+C-,  2: B+A-,  3: C+A-,  1: C+B-,  0 / 7: all floating\nabc = [+1 upper, -1 lower, 0 floating],  dir < 0 reverses the polarity",
+        "description": "Six-step (120 degree) commutation logic: decodes the three Hall sensors (code 4*Ha + 2*Hb + Hc) into the energised pair of phases. Direction input below zero reverses the torque. The table matches the trapezoidal back-EMF of the BLDC motor block (Hall A high over 30 to 210 electrical degrees)."
       },
       {
         "id": "bldc_current_ctrl",
@@ -4012,42 +5181,69 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 10,
             "unit": "",
             "label": "Int Gain"
+          },
+          "v_max": {
+            "value": 24,
+            "unit": "V",
+            "label": "Voltage limit",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
           {
             "id": "is_ref",
             "pos": "left",
-            "label": "IsRef"
+            "label": "IsRef",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "is",
             "pos": "left",
-            "label": "Is"
+            "label": "Is",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "reset",
             "pos": "left",
-            "label": "Reset"
+            "label": "Reset",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "hall",
             "pos": "left",
-            "label": "Hall"
+            "label": "Hall",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "dir",
             "pos": "left",
-            "label": "Direction"
+            "label": "Direction",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "vabc",
             "pos": "right",
-            "label": "vabcRef"
+            "label": "vabcRef",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "phase voltage reference",
+            "unit": "V",
+            "width": 3,
+            "channelNames": [
+              "a",
+              "b",
+              "c"
+            ]
           }
         ],
-        "equation": "BLDC Current Controller governing physical equation",
-        "description": "Physical component model for BLDC Current Controller."
+        "equation": "e = is_ref - is,  v = Kp*e + I,  u = clamp(v, -v_max, +v_max),  dI/dt = Ki*e + (Ki/Kp)*(u - v)\nvabc = pattern(hall, dir)*u   (pattern = +1 / -1 / 0 of the six-step table)",
+        "description": "BLDC current controller: PI on the DC-link current error with output limit and back-calculation anti-windup, the voltage is applied to the pair of phases selected by the Hall code and direction (six-step commutation)."
       },
       {
         "id": "bldc_pwm_ctrl",
@@ -4060,42 +5256,74 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 20000,
             "unit": "Hz",
             "label": "PWM Freq"
+          },
+          "Kp": {
+            "value": 0.1,
+            "unit": "1/A",
+            "label": "Prop Gain",
+            "min": 0
+          },
+          "Ki": {
+            "value": 10,
+            "unit": "1/(A*s)",
+            "label": "Int Gain",
+            "min": 0
           }
         },
         "ports": [
           {
             "id": "is_ref",
             "pos": "left",
-            "label": "IsRef"
+            "label": "IsRef",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "is",
             "pos": "left",
-            "label": "Is"
+            "label": "Is",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "reset",
             "pos": "left",
-            "label": "Reset"
+            "label": "Reset",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "hall",
             "pos": "left",
-            "label": "Hall"
+            "label": "Hall",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "dir",
             "pos": "left",
-            "label": "Direction"
+            "label": "Direction",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "g",
             "pos": "right",
-            "label": "G"
+            "label": "G",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "gate signal",
+            "unit": "1",
+            "width": 3,
+            "channelNames": [
+              "a",
+              "b",
+              "c"
+            ]
           }
         ],
-        "equation": "BLDC Current Controller with PWM governing physical equation",
-        "description": "Physical component model for BLDC Current Controller with PWM."
+        "equation": "e = is_ref - is,  u = clamp(Kp*e + I, -1, 1) (back-calculation anti-windup)\nduty d_k = (1 + pattern_k(hall, dir)*u)/2,  g_k = +1 if d_k >= carrier(freq*t) else -1",
+        "description": "BLDC current controller with PWM: the current PI output is the modulation of the energised pair (six-step pattern from Hall and direction; the floating phase sits at mid-rail) compared with a triangular carrier of frequency freq. g is the leg-state vector (+1 upper switch on) for the inverter m_abc input."
       },
       {
         "id": "dcdc_ctrl",
@@ -4108,37 +5336,61 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 48,
             "unit": "V",
             "label": "Ref Voltage"
+          },
+          "Kp": {
+            "value": 0.01,
+            "unit": "1/V",
+            "label": "Prop Gain",
+            "min": 0
+          },
+          "Ki": {
+            "value": 1,
+            "unit": "1/(V*s)",
+            "label": "Int Gain",
+            "min": 0
           }
         },
         "ports": [
           {
             "id": "v_ref",
             "pos": "left",
-            "label": "vRef"
+            "label": "vRef",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "v",
             "pos": "left",
-            "label": "v"
+            "label": "v",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "ff",
             "pos": "left",
-            "label": "FF"
+            "label": "FF",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "reset",
             "pos": "left",
-            "label": "Reset"
+            "label": "Reset",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "ctrl",
             "pos": "right",
-            "label": "Control"
+            "label": "Control",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "duty cycle",
+            "unit": "1"
           }
         ],
-        "equation": "DC-DC Voltage Controller governing physical equation",
-        "description": "Physical component model for DC-DC Voltage Controller."
+        "equation": "e = vRef - v,  duty = clamp(FF + Kp*e + I, 0, 1),  dI/dt = Ki*e + (Ki/Kp)*(duty - (FF + Kp*e + I))",
+        "description": "DC-DC voltage controller: PI on the output voltage error plus a duty-cycle feed-forward FF, duty limited to [0, 1] with back-calculation anti-windup. An open vRef uses the v_ref parameter."
       },
       {
         "id": "pfc_rectifier_ctrl",
@@ -4167,41 +5419,77 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "vdc_ref",
             "pos": "left",
-            "label": "VdcRef (V)"
+            "label": "VdcRef (V)",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "q_ref",
             "pos": "left",
-            "label": "QRef (pu)"
+            "label": "QRef (pu)",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "vdc_sens",
             "pos": "left",
-            "label": "VdcSens (V)"
+            "label": "VdcSens (V)",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "vabc_sens",
             "pos": "left",
-            "label": "VabcSens (pu)"
+            "label": "VabcSens (pu)",
+            "domain": "Physical",
+            "direction": "in",
+            "width": 3,
+            "channelNames": [
+              "a",
+              "b",
+              "c"
+            ]
           },
           {
             "id": "iabc_sens",
             "pos": "left",
-            "label": "IabcSens (pu)"
+            "label": "IabcSens (pu)",
+            "domain": "Physical",
+            "direction": "in",
+            "width": 3,
+            "channelNames": [
+              "a",
+              "b",
+              "c"
+            ]
           },
           {
             "id": "vabc_ref",
             "pos": "right",
-            "label": "VabcRef (pu)"
+            "label": "VabcRef (pu)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "modulation reference",
+            "unit": "1",
+            "width": 3,
+            "channelNames": [
+              "a",
+              "b",
+              "c"
+            ]
           },
           {
             "id": "vis",
             "pos": "right",
-            "label": "Visualization"
+            "label": "Visualization",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "visualization signal",
+            "unit": "*"
           }
         ],
-        "equation": "PFC Rectifier Controller governing physical equation",
-        "description": "Physical component model for PFC Rectifier Controller."
+        "equation": "theta = atan2(v_beta, v_alpha) of VabcSens,  (vd, vq), (id, iq) = Park(Clarke(.), theta)\nid* = Kp_v*(VdcRef - VdcSens) + I,  dI/dt = Ki_v*(VdcRef - VdcSens),  iq* = -QRef\nv_conv,dq = v_dq - Kp_i*(i*_dq - i_dq),  VabcRef = clamp(InvPark(v_conv,dq, theta), -1, 1),  vis = id*",
+        "description": "PFC (active front-end) rectifier controller in per unit of the modulator range: DC-voltage PI sets the in-phase current reference, QRef the reactive one, a proportional dq current loop with grid-voltage feed-forward produces the modulation reference VabcRef. The grid angle is taken from the sensed voltage vector. An open QRef means unity power factor."
       },
       {
         "id": "cycloconverter_ctrl",
@@ -4219,47 +5507,76 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 0.1,
             "unit": "s",
             "label": "Bank Delay"
+          },
+          "phase_deg": {
+            "value": 0,
+            "unit": "deg",
+            "label": "Output phase offset"
           }
         },
         "ports": [
           {
             "id": "v_ref",
             "pos": "left",
-            "label": "VRef"
+            "label": "VRef",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "f_ref",
             "pos": "left",
-            "label": "fRef"
+            "label": "fRef",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "vabc",
             "pos": "left",
-            "label": "vabc"
+            "label": "vabc",
+            "domain": "Physical",
+            "direction": "in",
+            "width": 3,
+            "channelNames": [
+              "a",
+              "b",
+              "c"
+            ]
           },
           {
             "id": "vcyc",
             "pos": "left",
-            "label": "Vcyc"
+            "label": "Vcyc",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "icyc",
             "pos": "left",
-            "label": "Icyc"
+            "label": "Icyc",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "p",
             "pos": "right",
-            "label": "P"
+            "label": "P",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "firing angle",
+            "unit": "rad"
           },
           {
             "id": "vis",
             "pos": "right",
-            "label": "Visualization"
+            "label": "Visualization",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "visualization signal",
+            "unit": "*"
           }
         ],
-        "equation": "Cycloconverter Controller governing physical equation",
-        "description": "Physical component model for Cycloconverter Controller."
+        "equation": "d theta_o/dt = 2*pi*fRef,  r = m*clamp(VRef, 0, 1)\ncos(alpha) = r*sin(theta_o + phase)   (cosine-wave crossing),  P = alpha [rad]\nbank = sign(icyc), blocked for bank_limit seconds at a polarity change (vis = +1 / -1 / 0)",
+        "description": "Cycloconverter controller, cosine-wave crossing method: outputs the firing angle in radians (multiply by 180/pi for the degree input alpha of the thyristor 6-pulse generator) that makes the converter output follow r*sin(2*pi*fRef*t), and the bank selection from the output current polarity with a blocking time between banks. Use one controller per output phase (phase offset 0, -120, +120 degrees). Vabc and Vcyc are not used by this open-loop law."
       },
       {
         "id": "ps_pi_ctrl",
@@ -4281,28 +5598,44 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "limit": {
             "value": 1,
             "unit": "",
-            "label": "Saturation"
+            "label": "Saturation",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "Kb": {
+            "value": 10,
+            "unit": "1/s",
+            "label": "Anti-windup gain Kb",
+            "min": 0
           }
         },
         "ports": [
           {
             "id": "e",
             "pos": "left",
-            "label": "e"
+            "label": "e",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "reset",
             "pos": "left",
-            "label": "Reset"
+            "label": "Reset",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "u",
             "pos": "right",
-            "label": "u"
+            "label": "u",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "controller output",
+            "unit": "*"
           }
         ],
-        "equation": "Discrete PI Controller governing physical equation",
-        "description": "Physical component model for Discrete PI Controller."
+        "equation": "v = Kp*e + I,  u = clamp(v, -limit, +limit)\ndI/dt = Ki*e + Kb*(u - v)   (back-calculation anti-windup; Kb = 0: none, Simulink default Kb = Ki/Kp)\nReset > 0.5: I = 0",
+        "description": "Parallel-form PI controller with output saturation and back-calculation anti-windup (Simulink PID Controller). The integral state is the integral term, so it stops growing when the output saturates; Kb sets how fast it unwinds. A high Reset input clears the integrator."
       },
       {
         "id": "ps_pid_ctrl",
@@ -4329,33 +5662,51 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "N": {
             "value": 100,
             "unit": "",
-            "label": "Filter Coeff"
+            "label": "Filter Coeff",
+            "min": 0,
+            "exclusiveMin": true
           },
           "limit": {
             "value": 240,
             "unit": "",
-            "label": "Saturation"
+            "label": "Saturation",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "Kb": {
+            "value": 2,
+            "unit": "1/s",
+            "label": "Anti-windup gain Kb",
+            "min": 0
           }
         },
         "ports": [
           {
             "id": "e",
             "pos": "left",
-            "label": "e"
+            "label": "e",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "reset",
             "pos": "left",
-            "label": "Reset"
+            "label": "Reset",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "u",
             "pos": "right",
-            "label": "u"
+            "label": "u",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "controller output",
+            "unit": "*"
           }
         ],
-        "equation": "u = PI + D",
-        "description": "Standard discrete-time PID controller with derivative filtering and saturation limits."
+        "equation": "F: dF/dt = N*(e - F),  D = Kd*N*(e - F)   (derivative filter, U(s) = (Kp + Ki/s + Kd*N*s/(s + N))*E(s))\nv = Kp*e + I + D,  u = clamp(v, -limit, +limit)\ndI/dt = Ki*e + Kb*(u - v)   (back-calculation anti-windup)\nReset > 0.5: I = 0, F = e",
+        "description": "Parallel-form PID controller with first-order derivative filter (coefficient N), output saturation and back-calculation anti-windup (Simulink PID Controller). A high Reset input clears the integrator and the filter."
       },
       {
         "id": "ps_lpf",
@@ -4367,23 +5718,31 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "f_cut": {
             "value": 100,
             "unit": "Hz",
-            "label": "Cutoff Freq"
+            "label": "Cutoff Freq",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
           {
             "id": "u",
             "pos": "left",
-            "label": "u"
+            "label": "u",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "y",
             "pos": "right",
-            "label": "y"
+            "label": "y",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "filtered signal",
+            "unit": "*"
           }
         ],
-        "equation": "Low-Pass Filter governing physical equation",
-        "description": "Physical component model for Low-Pass Filter."
+        "equation": "T*dy/dt + y = u,  T = 1/(2*pi*f_cut)\ny(k) = alpha*u(k) + (1 - alpha)*y(k-1),  alpha = dt/(T + dt)  (backward Euler)",
+        "description": "First-order low-pass filter with cutoff frequency f_cut (T = 1/(2 pi f_cut)): -3 dB at f_cut, unit DC gain. Attenuates high-frequency noise from sensors and control signals."
       },
       {
         "id": "ps_integrator_gen",
@@ -4402,21 +5761,29 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "u",
             "pos": "left",
-            "label": "u"
+            "label": "u",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "reset",
             "pos": "left",
-            "label": "Reset"
+            "label": "Reset",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "y",
             "pos": "right",
-            "label": "y"
+            "label": "y",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "time integral",
+            "unit": "*"
           }
         ],
-        "equation": "Integrator governing physical equation",
-        "description": "Physical component model for Integrator."
+        "equation": "dy/dt = u,  y(0) = initial\nwhile reset > 0.5: y = initial (level reset)",
+        "description": "Integrator with an initial condition and a level reset: dy/dt = u with y(0) = initial; while the reset input is above 0.5 the output is held at the initial condition."
       },
       {
         "id": "ps_moving_avg",
@@ -4428,23 +5795,37 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "window": {
             "value": 10,
             "unit": "samples",
-            "label": "Window"
+            "label": "Window",
+            "min": 1
+          },
+          "ts": {
+            "value": 0.01,
+            "unit": "s",
+            "label": "Sample time",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
           {
             "id": "u",
             "pos": "left",
-            "label": "u"
+            "label": "u",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "y",
             "pos": "right",
-            "label": "Mean"
+            "label": "Mean",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "moving average",
+            "unit": "*"
           }
         ],
-        "equation": "Moving Average governing physical equation",
-        "description": "Physical component model for Moving Average."
+        "equation": "y(k) = (1/N) * sum_{i=0..N-1} u(k-i),  N = window samples,  u(k) = u(k*ts)\ny is held between samples; samples before t = 0 are 0",
+        "description": "Mean of the last window samples of the input, sampled every ts seconds and held between samples. Samples before t = 0 are 0."
       },
       {
         "id": "ps_sr_flipflop",
@@ -4457,26 +5838,38 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "s",
             "pos": "left",
-            "label": "Set"
+            "label": "Set",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "r",
             "pos": "left",
-            "label": "Reset"
+            "label": "Reset",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "q",
             "pos": "right",
-            "label": "Q"
+            "label": "Q",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "logic state Q",
+            "unit": "1"
           },
           {
             "id": "nq",
             "pos": "right",
-            "label": "!Q"
+            "label": "!Q",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "logic state not-Q",
+            "unit": "1"
           }
         ],
-        "equation": "SR Flip-Flop governing physical equation",
-        "description": "Physical component model for SR Flip-Flop."
+        "equation": "Q = S or (Q and not R)   (set dominant)\nnQ = 1 - Q\nS, R are high when > 0.5",
+        "description": "Set-reset latch, set dominant: S above 0.5 sets Q to 1, R above 0.5 resets it to 0, otherwise Q keeps its value; the second output is not-Q = 1 - Q."
       },
       {
         "id": "ps_sample_hold",
@@ -4489,21 +5882,29 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "u",
             "pos": "left",
-            "label": "u"
+            "label": "u",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "s",
             "pos": "left",
-            "label": "S"
+            "label": "S",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "y",
             "pos": "right",
-            "label": "y"
+            "label": "y",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "held signal",
+            "unit": "*"
           }
         ],
-        "equation": "Sample and Hold governing physical equation",
-        "description": "Physical component model for Sample and Hold."
+        "equation": "y = u if S > 0.5 else y_prev\n(tracks u while S is high, holds the last value while S is low)",
+        "description": "Tracks the input u while the sample input S is above 0.5 and holds the last value while S is at or below 0.5; the falling edge of S is located by the solver."
       },
       {
         "id": "ps_smith_predictor",
@@ -4515,28 +5916,61 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "tau": {
             "value": 0.1,
             "unit": "s",
-            "label": "Dead Time"
+            "label": "Dead Time",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "theta": {
+            "value": 0.1,
+            "unit": "s",
+            "label": "Model dead time",
+            "min": 0
+          },
+          "Km": {
+            "value": 1,
+            "unit": "1",
+            "label": "Model gain"
+          },
+          "Kp": {
+            "value": 1,
+            "unit": "1",
+            "label": "PI proportional gain",
+            "min": 0
+          },
+          "Ki": {
+            "value": 10,
+            "unit": "1/s",
+            "label": "PI integral gain",
+            "min": 0
           }
         },
         "ports": [
           {
             "id": "r",
             "pos": "left",
-            "label": "r"
+            "label": "r",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "y",
             "pos": "left",
-            "label": "y"
+            "label": "y",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "u",
             "pos": "right",
-            "label": "u"
+            "label": "u",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "controller output",
+            "unit": "*"
           }
         ],
-        "equation": "Smith Predictor governing physical equation",
-        "description": "Physical component model for Smith Predictor."
+        "equation": "tau*dym/dt + ym = Km*u   (delay-free model)\ne_c = r - (y + ym - ym(t - theta))\nu = Kp*e_c + I,  dI/dt = Ki*e_c",
+        "description": "Smith predictor (O. J. M. Smith, 1957) around a PI controller: the internal model (gain Km, lag tau, dead time theta) predicts the plant output without delay, so the controller closes its loop on y + ym - ym(t - theta). With an exact model the loop behaves as the delay-free loop and y is its response shifted by theta."
       },
       {
         "id": "ps_sine_3phase",
@@ -4545,12 +5979,12 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "icon": "sine_3ph",
         "category": "General Control",
         "params": {
-          "amp": {
-            "value": 1,
-            "unit": "pu",
-            "label": "Amplitude"
+          "Vpk": {
+            "value": 325,
+            "unit": "V",
+            "label": "Peak Phase Voltage"
           },
-          "freq": {
+          "f": {
             "value": 50,
             "unit": "Hz",
             "label": "Frequency"
@@ -4560,26 +5994,40 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "m",
             "pos": "left",
-            "label": "m"
+            "label": "m",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "ang",
             "pos": "left",
-            "label": "ang"
+            "label": "ang",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "abc",
+            "width": 3,
+            "channelNames": ["a", "b", "c"],
             "pos": "right",
-            "label": "abc"
+            "label": "abc",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "three-phase sine voltage",
+            "unit": "V"
           },
           {
             "id": "wt",
             "pos": "right",
-            "label": "wt"
+            "label": "wt",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "electrical angle",
+            "unit": "rad"
           }
         ],
-        "equation": "Sine Generator (3-Phase) governing physical equation",
-        "description": "Physical component model for Sine Generator (3-Phase)."
+        "equation": "a = m*Vpk*sin(wt)\nb = m*Vpk*sin(wt - 2*pi/3)\nc = m*Vpk*sin(wt + 2*pi/3)\nwt = 2*pi*f*t + ang   (m = 1 and ang = 0 when unwired)",
+        "description": "Balanced positive-sequence three-phase sine set on the width-3 output abc, plus the instantaneous angle wt of phase a. Input m scales the amplitude (1 when unwired), input ang adds a phase offset in radians to every phase and to wt (0 when unwired)."
       },
       {
         "id": "ps_second_order_filter",
@@ -4591,24 +6039,33 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "zeta": {
             "value": 0.707,
             "unit": "",
-            "label": "Damping"
+            "label": "Damping",
+            "min": 0
           },
           "wn": {
             "value": 100,
             "unit": "rad/s",
-            "label": "Nat Freq"
+            "label": "Nat Freq",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
           {
             "id": "u",
             "pos": "left",
-            "label": "u"
+            "label": "u",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "y",
             "pos": "right",
-            "label": "y"
+            "label": "y",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "filtered signal",
+            "unit": "*"
           }
         ],
         "equation": "d²y/dt² + 2*ζ*ωn*dy/dt + ωn²*y = ωn²*u",
@@ -4625,32 +6082,52 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": "[1 2]",
             "unit": "",
             "label": "Gain K"
+          },
+          "Nr": {
+            "value": 1,
+            "unit": "1",
+            "label": "Reference gain Nr"
           }
         },
         "ports": [
           {
             "id": "r",
             "pos": "left",
-            "label": "r"
+            "label": "r",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "x",
             "pos": "left",
-            "label": "x"
+            "label": "x",
+            "domain": "Physical",
+            "direction": "in",
+            "width": 2,
+            "channelNames": [
+              "x1",
+              "x2"
+            ]
           },
           {
             "id": "u",
             "pos": "right",
-            "label": "u"
+            "label": "u",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "controller output",
+            "unit": "*"
           },
           {
             "id": "reset",
             "pos": "left",
-            "label": "Reset"
+            "label": "Reset",
+            "domain": "Physical",
+            "direction": "in"
           }
         ],
-        "equation": "State-Feedback Controller governing physical equation",
-        "description": "Physical component model for State-Feedback Controller."
+        "equation": "u = Nr*r - K*x,   K = [k1 k2], x = [x1; x2]",
+        "description": "Full-state feedback u = Nr*r - K*x on the 2-element state vector x (the gain list K must have 2 entries) with a reference gain Nr. The law has no memory, so the Reset input has no effect. Feed x from the Luenberger Observer estimate."
       },
       {
         "id": "ps_sliding_mode",
@@ -4668,27 +6145,42 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 10,
             "unit": "",
             "label": "Gain K"
+          },
+          "boundary_layer": {
+            "value": 0.05,
+            "unit": "1",
+            "label": "Boundary Layer Thickness",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
           {
             "id": "r",
             "pos": "left",
-            "label": "r"
+            "label": "r",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "y",
             "pos": "left",
-            "label": "y"
+            "label": "y",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "u",
             "pos": "right",
-            "label": "u"
+            "label": "u",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "controller output",
+            "unit": "*"
           }
         ],
-        "equation": "Sliding Mode Controller governing physical equation",
-        "description": "Physical component model for Sliding Mode Controller."
+        "equation": "e = y - r,  s = de/dt + lambda*e\nu = -k*sat(s/phi),  sat = clamp(., -1, 1)   (phi = boundary_layer; phi = 0: u = -k*sign(s))",
+        "description": "Boundary-layer sliding-mode controller for a relative-degree-2 plant (Slotine and Li): the surface s = de/dt + lambda*e is driven to zero by u = -k*sat(s/phi); inside the layer |s| < phi the law is linear (no chattering)."
       },
       {
         "id": "ps_stair_gen",
@@ -4705,18 +6197,24 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "ts": {
             "value": 0.1,
             "unit": "s",
-            "label": "Sample"
+            "label": "Sample",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
           {
             "id": "y",
             "pos": "right",
-            "label": "y"
+            "label": "y",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "staircase value",
+            "unit": "*"
           }
         ],
-        "equation": "Stair Generator governing physical equation",
-        "description": "Physical component model for Stair Generator."
+        "equation": "y = steps[floor(t/ts) mod N]",
+        "description": "Periodic staircase: the output is the level list steps indexed by floor(t/ts) mod N, so it changes level every ts seconds."
       },
       {
         "id": "ps_washout",
@@ -4728,23 +6226,31 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "T": {
             "value": 0.1,
             "unit": "s",
-            "label": "Time Const"
+            "label": "Time Const",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
           {
             "id": "u",
             "pos": "left",
-            "label": "u"
+            "label": "u",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "y",
             "pos": "right",
-            "label": "y"
+            "label": "y",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "washout output",
+            "unit": "*"
           }
         ],
-        "equation": "Washout Filter governing physical equation",
-        "description": "Physical component model for Washout Filter."
+        "equation": "Y(s) = T*s/(T*s + 1) * U(s)\nT*ds/dt + s = u,  y = u - s",
+        "description": "Washout (high-pass) filter T s/(T s + 1): passes transients and removes the steady-state component; T is the time constant."
       },
       {
         "id": "dc_current_ctrl",
@@ -4773,31 +6279,43 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "i_ref",
             "pos": "left",
-            "label": "iRef"
+            "label": "iRef",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "i",
             "pos": "left",
-            "label": "i"
+            "label": "i",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "v_max",
             "pos": "left",
-            "label": "vMax"
+            "label": "vMax",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "reset",
             "pos": "left",
-            "label": "Reset"
+            "label": "Reset",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "v_ref",
             "pos": "right",
-            "label": "vRef"
+            "label": "vRef",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "voltage reference",
+            "unit": "V"
           }
         ],
-        "equation": "DC Current Controller governing physical equation",
-        "description": "Physical component model for DC Current Controller."
+        "equation": "e = iRef - i,  vRef = clamp(Kp*e + I, -vMax, +vMax),  dI/dt = Ki*e + (Ki/Kp)*(vRef - (Kp*e + I)),  Reset > 0.5: I = 0",
+        "description": "DC (armature) current controller: PI on the current error, voltage reference limited to +-vMax (port when wired, else the v_max parameter) with back-calculation anti-windup."
       },
       {
         "id": "dc_voltage_ctrl",
@@ -4821,26 +6339,36 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "v_ref",
             "pos": "left",
-            "label": "vRef"
+            "label": "vRef",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "v",
             "pos": "left",
-            "label": "v"
+            "label": "v",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "reset",
             "pos": "left",
-            "label": "Reset"
+            "label": "Reset",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "ctrl",
             "pos": "right",
-            "label": "Control"
+            "label": "Control",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "duty cycle",
+            "unit": "1"
           }
         ],
-        "equation": "DC Voltage Controller governing physical equation",
-        "description": "Physical component model for DC Voltage Controller."
+        "equation": "e = vRef - v,  duty = clamp(Kp*e + I, 0, 1),  dI/dt = Ki*e + (Ki/Kp)*(duty - (Kp*e + I)),  Reset > 0.5: I = 0",
+        "description": "DC voltage controller: PI on the voltage error, duty cycle limited to [0, 1] with back-calculation anti-windup."
       },
       {
         "id": "hysteresis_ctrl_3ph",
@@ -4853,27 +6381,60 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 0.1,
             "unit": "A",
             "label": "Hyst Band"
+          },
+          "ts": {
+            "value": 0.00002,
+            "unit": "s",
+            "label": "Sample time",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
           {
             "id": "iabc_ref",
             "pos": "left",
-            "label": "iabc*"
+            "label": "iabc*",
+            "domain": "Physical",
+            "direction": "in",
+            "width": 3,
+            "channelNames": [
+              "a",
+              "b",
+              "c"
+            ]
           },
           {
             "id": "iabc",
             "pos": "left",
-            "label": "iabc"
+            "label": "iabc",
+            "domain": "Physical",
+            "direction": "in",
+            "width": 3,
+            "channelNames": [
+              "a",
+              "b",
+              "c"
+            ]
           },
           {
             "id": "s",
             "pos": "right",
-            "label": "S"
+            "label": "S",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "switching state",
+            "unit": "1",
+            "width": 3,
+            "channelNames": [
+              "a",
+              "b",
+              "c"
+            ]
           }
         ],
-        "equation": "Hysteresis Current Controller (3-Ph) governing physical equation",
-        "description": "Physical component model for Hysteresis Current Controller (3-Ph)."
+        "equation": "every ts, per phase k: e = iabc*_k - iabc_k;  s_k = +1 if e > band/2,  -1 if e < -band/2,  else s_k (previous, initially -1)",
+        "description": "Three-phase hysteresis current controller: each phase is a relay with memory and total band `band`, evaluated on the sample grid ts. s is the leg-state vector (+1 upper switch on) for the inverter m_abc input; the phase current stays within iabc* +- band/2 up to the overshoot of one sample."
       },
       {
         "id": "velocity_ctrl",
@@ -4897,31 +6458,43 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "w_ref",
             "pos": "left",
-            "label": "wRef"
+            "label": "wRef",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "w_mech",
             "pos": "left",
-            "label": "wMechanical"
+            "label": "wMechanical",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "tq_sat",
             "pos": "left",
-            "label": "TqRefSat"
+            "label": "TqRefSat",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "reset",
             "pos": "left",
-            "label": "Reset"
+            "label": "Reset",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "tq_unsat",
             "pos": "right",
-            "label": "TqRefUnsat"
+            "label": "TqRefUnsat",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "torque reference",
+            "unit": "N*m"
           }
         ],
-        "equation": "Velocity Controller governing physical equation",
-        "description": "Physical component model for Velocity Controller."
+        "equation": "e = wRef - wMech,  TqRefUnsat = Kp*e + I,  dI/dt = Ki*e + (Ki/Kp)*(TqRefSat - TqRefUnsat)  (anti-windup when TqRefSat is wired),  Reset > 0.5: I = 0",
+        "description": "Velocity controller: PI on the speed error producing the unsaturated torque reference; the saturated torque fed back on TqRefSat closes the back-calculation anti-windup loop."
       },
       {
         "id": "im_scalar_ctrl",
@@ -4934,22 +6507,47 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 4.4,
             "unit": "",
             "label": "V/f Ratio"
+          },
+          "f_rated": {
+            "value": 50,
+            "unit": "Hz",
+            "label": "Rated frequency",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "v_boost": {
+            "value": 0,
+            "unit": "V",
+            "label": "Low-frequency voltage boost",
+            "min": 0
           }
         },
         "ports": [
           {
             "id": "f_ref",
             "pos": "left",
-            "label": "fRef"
+            "label": "fRef",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "vabc",
             "pos": "right",
-            "label": "Vabc"
+            "label": "Vabc",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "phase voltage reference",
+            "unit": "V",
+            "width": 3,
+            "channelNames": [
+              "a",
+              "b",
+              "c"
+            ]
           }
         ],
-        "equation": "Induction Machine Scalar Control governing physical equation",
-        "description": "Physical component model for Induction Machine Scalar Control."
+        "equation": "V(f) = v_boost + (V_rated - v_boost)*|f|/f_rated for |f| < f_rated, V_rated above,  V_rated = v_f_ratio*f_rated\nd theta/dt = 2*pi*f,  vabc = V(f)*[sin(th), sin(th - 2*pi/3), sin(th + 2*pi/3)]",
+        "description": "Scalar (constant volts-per-hertz) control of an induction machine: the three-phase voltage reference rises linearly with the frequency from the boost voltage to the rated voltage at the rated frequency and stays at the rated voltage above it (field weakening). v_f_ratio is V per Hz of the peak phase voltage."
       },
       {
         "id": "im_foc_ctrl",
@@ -4964,14 +6562,18 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "label": "Mutual Ind"
           },
           "Rr": {
-            "value": 0.1,
+            "value": 0.08,
             "unit": "Ohm",
-            "label": "Rotor Res"
+            "label": "Rotor resistance",
+            "min": 0,
+            "exclusiveMin": true
           },
           "mode": {
             "value": 1,
             "unit": "",
-            "label": "Mode (0:V/f, 1:FOC)"
+            "label": "Mode (0 = V/f, 1 = FOC)",
+            "min": 0,
+            "max": 1
           },
           "v_f_ratio": {
             "value": 4.4,
@@ -4982,6 +6584,70 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 1500,
             "unit": "RPM",
             "label": "Target Speed"
+          },
+          "Lr": {
+            "value": 0.06,
+            "unit": "H",
+            "label": "Rotor inductance",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "Ls": {
+            "value": 0.06,
+            "unit": "H",
+            "label": "Stator inductance",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "P": {
+            "value": 2,
+            "unit": "1",
+            "label": "Pole pairs",
+            "min": 1
+          },
+          "v_dc": {
+            "value": 600,
+            "unit": "V",
+            "label": "DC link voltage (Vdc open)",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "imr_ref": {
+            "value": 10,
+            "unit": "A",
+            "label": "Magnetizing current (imrRef open)",
+            "min": 0
+          },
+          "Kp_w": {
+            "value": 0.5,
+            "unit": "N*m*s/rad",
+            "label": "Speed loop Kp",
+            "min": 0
+          },
+          "Ki_w": {
+            "value": 2,
+            "unit": "N*m/rad",
+            "label": "Speed loop Ki",
+            "min": 0
+          },
+          "T_max": {
+            "value": 20,
+            "unit": "N*m",
+            "label": "Torque limit",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "Kp_i": {
+            "value": 5,
+            "unit": "V/A",
+            "label": "Current loop Kp",
+            "min": 0
+          },
+          "Ki_i": {
+            "value": 100,
+            "unit": "V/(A*s)",
+            "label": "Current loop Ki",
+            "min": 0
           }
         },
         "ports": [
@@ -4989,53 +6655,79 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "id": "imr_ref",
             "pos": "left",
             "label": "imrRef",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "wr_ref",
             "pos": "left",
             "label": "wrRef",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "iabc",
             "pos": "left",
             "label": "iabc",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "in",
+            "width": 3,
+            "channelNames": [
+              "a",
+              "b",
+              "c"
+            ]
           },
           {
             "id": "wr",
             "pos": "left",
             "label": "wr",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "vdc",
             "pos": "left",
             "label": "Vdc",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "g",
             "pos": "right",
             "label": "G",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "modulation reference",
+            "unit": "1",
+            "width": 3,
+            "channelNames": [
+              "a",
+              "b",
+              "c"
+            ]
           },
           {
             "id": "vabc",
             "pos": "right",
             "label": "Vabc",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "phase voltage reference amplitude",
+            "unit": "V"
           },
           {
             "id": "vis",
             "pos": "right",
             "label": "Visualization",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "visualization signal",
+            "unit": "*"
           }
         ],
-        "equation": "Is_d = Ψr_ref / Lm\\nIs_q = (2/3)*(2/P)*(Lr/Lm)*(τ_ref/Ψr_ref)",
-        "description": "Rotor flux-oriented Field Oriented Control (FOC) decoupled torque and flux regulator for Induction Machines."
+        "equation": "psi_r* = Lm*imr*,  Tq* = clamp(Kp_w*(w* - wr) + I_w, +-T_max),  id* = imr*,  iq* = (2/3)*(1/P)*(Lr/Lm)*Tq*/psi_r*\nslip w_sl = (Rr/Lr)*iq*/id*,  d theta_f/dt = P*wr + w_sl\nvd = Kp_i*ed + Id - we*sigma*Ls*iq,  vq = Kp_i*eq + Iq + we*(sigma*Ls*id + (Lm/Lr)*psi_r*),  |v| <= vdc/2\nmode 0 (V/f): we = P*w*, |v| = v_f_ratio*|we|/(2*pi)",
+        "description": "Indirect rotor-flux-oriented control of an induction machine (Vas): speed PI -> torque -> iq*, id* from the magnetizing current, slip-based field angle, dq PI current loops with decoupling, circular voltage limit vdc/2. g is the three-phase modulation vector for the inverter (m_abc), Vabc is the amplitude of the phase voltage reference set, vis is the torque command. Mode 0 is open-loop V/f (v_f_ratio, no feedback). An open wrRef uses target_rpm, an open iabc / wr reads 0, an open Vdc uses v_dc."
       },
       {
         "id": "im_dtc_ctrl",
@@ -5048,37 +6740,99 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 0.8,
             "unit": "Wb",
             "label": "Flux Ref"
+          },
+          "Rs": {
+            "value": 0.1,
+            "unit": "Ohm",
+            "label": "Stator resistance",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "P": {
+            "value": 2,
+            "unit": "1",
+            "label": "Pole pairs",
+            "min": 1
+          },
+          "flux_band": {
+            "value": 0.02,
+            "unit": "Wb",
+            "label": "Flux hysteresis band",
+            "min": 0
+          },
+          "tq_band": {
+            "value": 1,
+            "unit": "N*m",
+            "label": "Torque hysteresis band",
+            "min": 0
+          },
+          "ts": {
+            "value": 0.00005,
+            "unit": "s",
+            "label": "Sample time",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
           {
             "id": "flux_ref",
             "pos": "left",
-            "label": "FluxRef"
+            "label": "FluxRef",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "tq_ref",
             "pos": "left",
-            "label": "TqRef"
+            "label": "TqRef",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "vabc",
             "pos": "left",
-            "label": "vabc"
+            "label": "vabc",
+            "domain": "Physical",
+            "direction": "in",
+            "width": 3,
+            "channelNames": [
+              "a",
+              "b",
+              "c"
+            ]
           },
           {
             "id": "iabc",
             "pos": "left",
-            "label": "iabc"
+            "label": "iabc",
+            "domain": "Physical",
+            "direction": "in",
+            "width": 3,
+            "channelNames": [
+              "a",
+              "b",
+              "c"
+            ]
           },
           {
             "id": "g",
             "pos": "right",
-            "label": "G"
+            "label": "G",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "gate signal",
+            "unit": "1",
+            "width": 3,
+            "channelNames": [
+              "a",
+              "b",
+              "c"
+            ]
           }
         ],
-        "equation": "Induction Machine DTC governing physical equation",
-        "description": "Physical component model for Induction Machine DTC."
+        "equation": "dpsi_s/dt = v_s - Rs*i_s,  Tq = 1.5*P*(psi_a*i_b - psi_b*i_a)   (estimators from vabc, iabc)\nflux up / down and torque up / hold / down comparators (hysteresis bands), flux sector k from the angle of psi_s\nTakahashi table: flux up: V(k+1) / zero / V(k-1);  flux down: V(k+2) / zero / V(k-2)   (evaluated every ts)\ng = 2*S - 1 in {-1, +1} per leg",
+        "description": "Direct torque control of an induction machine (Takahashi and Noguchi): stator-flux and torque estimators, hysteresis comparators and the optimal switching table select one of the six active voltage vectors or the zero vector every sample time. g is the leg-state vector (+1 upper switch on) for the inverter m_abc input. An open FluxRef uses the flux_ref parameter."
       },
       {
         "id": "im_curr_ctrl",
@@ -5091,42 +6845,82 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 1,
             "unit": "",
             "label": "Prop Gain"
+          },
+          "Ki": {
+            "value": 100,
+            "unit": "V/(A*s)",
+            "label": "Integral gain",
+            "min": 0
           }
         },
         "ports": [
           {
             "id": "idq_ref",
             "pos": "left",
-            "label": "idqRef"
+            "label": "idqRef",
+            "domain": "Physical",
+            "direction": "in",
+            "width": 2,
+            "channelNames": [
+              "d",
+              "q"
+            ]
           },
           {
             "id": "idq",
             "pos": "left",
-            "label": "idq"
+            "label": "idq",
+            "domain": "Physical",
+            "direction": "in",
+            "width": 2,
+            "channelNames": [
+              "d",
+              "q"
+            ]
           },
           {
             "id": "vdq_ff",
             "pos": "left",
-            "label": "vdqFF"
+            "label": "vdqFF",
+            "domain": "Physical",
+            "direction": "in",
+            "width": 2,
+            "channelNames": [
+              "d",
+              "q"
+            ]
           },
           {
             "id": "v_max",
             "pos": "left",
-            "label": "VphMax"
+            "label": "VphMax",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "reset",
             "pos": "left",
-            "label": "Reset"
+            "label": "Reset",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "vdq_ref",
             "pos": "right",
-            "label": "vdqRef"
+            "label": "vdqRef",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "dq voltage reference",
+            "unit": "V",
+            "width": 2,
+            "channelNames": [
+              "d",
+              "q"
+            ]
           }
         ],
-        "equation": "Induction Machine Current Controller governing physical equation",
-        "description": "Physical component model for Induction Machine Current Controller."
+        "equation": "v = Kp*(idq* - idq) + I + vdq_ff,  |v| <= VphMax (circle)\ndI/dt = Ki*e + (Ki/Kp)*(v_lim - v),  Reset > 0.5: I = 0\nvdq_ref = v_lim",
+        "description": "dq-axis current regulator of an induction machine (field frame): PI on each axis plus the decoupling feed-forward input vdq_ff, circular voltage limit VphMax (when wired) and back-calculation anti-windup."
       },
       {
         "id": "clarke_transform",
@@ -5144,17 +6938,27 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "ports": [
           {
             "id": "abc",
+            "width": 3,
+            "channelNames": ["a", "b", "c"],
             "pos": "left",
-            "label": "abc"
+            "label": "abc",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "ab0",
+            "width": 3,
+            "channelNames": ["alpha", "beta", "0"],
             "pos": "right",
-            "label": "ab0"
+            "label": "ab0",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "alpha-beta-zero components",
+            "unit": "*"
           }
         ],
-        "equation": "I_alpha = I_a\nI_beta = (I_a + 2*I_b) / √3",
-        "description": "Converts 3-phase stationary coordinates (abc) to 2-phase stationary frame (αβ)."
+        "equation": "alpha = (2/3)*(a - b/2 - c/2)\nbeta = (b - c)/√3\nzero = (a + b + c)/3",
+        "description": "Clarke transform: abc (width 3) to alpha-beta-zero (width 3). Convention Peak Amp Preserved (above) or Power Preserved (sqrt(2/3) scaling, orthogonal)."
       },
       {
         "id": "inv_clarke_transform",
@@ -5172,17 +6976,27 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "ports": [
           {
             "id": "ab0",
+            "width": 3,
+            "channelNames": ["alpha", "beta", "0"],
             "pos": "left",
-            "label": "ab0"
+            "label": "ab0",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "abc",
+            "width": 3,
+            "channelNames": ["a", "b", "c"],
             "pos": "right",
-            "label": "abc"
+            "label": "abc",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "abc components",
+            "unit": "*"
           }
         ],
-        "equation": "I_a = I_alpha\nI_b = -0.5*I_alpha + (√3/2)*I_beta\nI_c = -0.5*I_alpha - (√3/2)*I_beta",
-        "description": "Converts 2-phase stationary coordinates (αβ) back to 3-phase frame (abc)."
+        "equation": "a = alpha + zero\nb = -alpha/2 + (√3/2)*beta + zero\nc = -alpha/2 - (√3/2)*beta + zero",
+        "description": "Inverse Clarke transform: alpha-beta-zero (width 3) to abc (width 3), same convention as the forward block."
       },
       {
         "id": "park_transform",
@@ -5200,22 +7014,34 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "ports": [
           {
             "id": "abc",
+            "width": 3,
+            "channelNames": ["a", "b", "c"],
             "pos": "left",
-            "label": "abc"
+            "label": "abc",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "theta",
             "pos": "left",
-            "label": "theta"
+            "label": "theta",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "dq0",
+            "width": 3,
+            "channelNames": ["d", "q", "0"],
             "pos": "right",
-            "label": "dq0"
+            "label": "dq0",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "dq0 components",
+            "unit": "*"
           }
         ],
-        "equation": "I_d = I_alpha*cos(θ) + I_beta*sin(θ)\nI_q = -I_alpha*sin(θ) + I_beta*cos(θ)",
-        "description": "Transforms stationary 2-phase frame (αβ) into rotating rotor reference frame (dq)."
+        "equation": "d = alpha*cos(θ) + beta*sin(θ)\nq = -alpha*sin(θ) + beta*cos(θ)\nzero = (a + b + c)/3\n(90 deg behind A: θ -> θ - π/2, i.e. d = alpha*sin(θ) - beta*cos(θ), q = alpha*cos(θ) + beta*sin(θ))",
+        "description": "Park transform: abc (width 3) and angle theta to the rotating dq0 frame (width 3), alpha-beta from the amplitude-invariant Clarke transform."
       },
       {
         "id": "inv_park_transform",
@@ -5233,22 +7059,34 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "ports": [
           {
             "id": "dq0",
+            "width": 3,
+            "channelNames": ["d", "q", "0"],
             "pos": "left",
-            "label": "dq0"
+            "label": "dq0",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "theta",
             "pos": "left",
-            "label": "theta"
+            "label": "theta",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "abc",
+            "width": 3,
+            "channelNames": ["a", "b", "c"],
             "pos": "right",
-            "label": "abc"
+            "label": "abc",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "abc components",
+            "unit": "*"
           }
         ],
-        "equation": "I_alpha = I_d*cos(θ) - I_q*sin(θ)\nI_beta = I_d*sin(θ) + I_q*cos(θ)",
-        "description": "Transforms rotating reference frame (dq) back into stationary 2-phase frame (αβ)."
+        "equation": "alpha = d*cos(θ) - q*sin(θ)\nbeta = d*sin(θ) + q*cos(θ)\n(90 deg behind A: alpha = d*sin(θ) + q*cos(θ), beta = -d*cos(θ) + q*sin(θ))\na = alpha + zero, b = -alpha/2 + (√3/2)*beta + zero, c = -alpha/2 - (√3/2)*beta + zero",
+        "description": "Inverse Park transform: dq0 (width 3) and angle theta back to the stationary abc frame (width 3)."
       },
       {
         "id": "sym_comp_transform",
@@ -5260,23 +7098,35 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "freq": {
             "value": 50,
             "unit": "Hz",
-            "label": "Base Freq"
+            "label": "Base Freq",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
           {
             "id": "abc",
+            "width": 3,
+            "channelNames": ["a", "b", "c"],
             "pos": "left",
-            "label": "abc"
+            "label": "abc",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "seq",
+            "width": 3,
+            "channelNames": ["pos", "neg", "zero"],
             "pos": "right",
-            "label": "+-0"
+            "label": "+-0",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "sequence components",
+            "unit": "*"
           }
         ],
-        "equation": "Symmetrical-Components governing physical equation",
-        "description": "Physical component model for Symmetrical-Components."
+        "equation": "V1 = (A + a*B + a^2*C)/3\nV2 = (A + a^2*B + a*C)/3\nV0 = (A + B + C)/3,   a = exp(j*2*pi/3)\nA = (2/T) * integral from t-T to t of x_a(tau)*exp(-j*w*tau) dtau,   w = 2*pi*freq, T = 1/freq\nseq = [|V1|, |V2|, |V0|]",
+        "description": "Simscape Sequence Analyzer method: Fortescue symmetrical components of the fundamental of the abc signals, computed with a running one-cycle Fourier analysis at the base frequency (no derivative estimate, no ripple). The width-3 output seq carries the peak magnitudes of the positive, negative and zero sequence. The signal before t = 0 counts as 0, so the output is exact one period after the start."
       },
       {
         "id": "inv_sym_comp_transform",
@@ -5288,23 +7138,35 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "freq": {
             "value": 50,
             "unit": "Hz",
-            "label": "Base Freq"
+            "label": "Base Freq",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
           {
             "id": "seq",
+            "width": 3,
+            "channelNames": ["pos", "neg", "zero"],
             "pos": "left",
-            "label": "+-0"
+            "label": "+-0",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "abc",
+            "width": 3,
+            "channelNames": ["a", "b", "c"],
             "pos": "right",
-            "label": "abc"
+            "label": "abc",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "abc components",
+            "unit": "*"
           }
         ],
-        "equation": "Inverse Symmetrical-Components governing physical equation",
-        "description": "Physical component model for Inverse Symmetrical-Components."
+        "equation": "a = (V1 + V2 + V0)*cos(wt)\nb = V1*cos(wt - 2*pi/3) + V2*cos(wt + 2*pi/3) + V0*cos(wt)\nc = V1*cos(wt + 2*pi/3) + V2*cos(wt - 2*pi/3) + V0*cos(wt)\nwt = 2*pi*freq*t",
+        "description": "Inverse Fortescue synthesis: positive, negative and zero sequence magnitudes (width 3) to the abc time signals at the base frequency, phase a as cos(wt) reference."
       },
       {
         "id": "im_flux_observer",
@@ -5313,51 +7175,93 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "icon": "flux_obs",
         "category": "Observers & Sensors",
         "params": {
-          "Rs": {
-            "value": 0.1,
-            "unit": "Ohm",
-            "label": "Stator Res"
-          },
           "Lm": {
             "value": 0.05,
             "unit": "H",
             "label": "Mutual Ind"
+          },
+          "Lr": {
+            "value": 0.06,
+            "unit": "H",
+            "label": "Rotor Inductance"
+          },
+          "Rr": {
+            "value": 0.08,
+            "unit": "Ohm",
+            "label": "Rotor Resistance"
+          },
+          "P": {
+            "value": 2,
+            "unit": "1",
+            "label": "Pole pairs",
+            "min": 1
           }
         },
         "ports": [
           {
             "id": "iabc",
             "pos": "left",
-            "label": "iabc"
+            "label": "iabc",
+            "domain": "Physical",
+            "direction": "in",
+            "width": 3,
+            "channelNames": [
+              "a",
+              "b",
+              "c"
+            ]
           },
           {
             "id": "wr",
             "pos": "left",
-            "label": "wr"
+            "label": "wr",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "idqsef",
             "pos": "right",
-            "label": "idqseF"
+            "label": "idqseF",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "stator current in field frame",
+            "unit": "A",
+            "width": 2,
+            "channelNames": [
+              "d",
+              "q"
+            ]
           },
           {
             "id": "imr",
             "pos": "right",
-            "label": "imr"
+            "label": "imr",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "rotor magnetizing current",
+            "unit": "A"
           },
           {
             "id": "theta",
             "pos": "right",
-            "label": "theta"
+            "label": "theta",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "rotor flux angle",
+            "unit": "rad"
           },
           {
             "id": "we",
             "pos": "right",
-            "label": "we"
+            "label": "we",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "synchronous speed",
+            "unit": "rad/s"
           }
         ],
-        "equation": "Induction Machine Flux Observer governing physical equation",
-        "description": "Physical component model for Induction Machine Flux Observer."
+        "equation": "Tr = Lr/Rr,  w_e = P*wr,  i_s = Clarke(iabc)\ndpsi_r/dt = -psi_r/Tr + j*w_e*psi_r + (Lm/Tr)*i_s   (psi_r = psi_alpha + j*psi_beta)\nimr = |psi_r|/Lm,  theta = atan2(psi_beta, psi_alpha),  idqseF = Park(i_s, theta)\nwe = w_e + (Lm/Tr)*i_sq/|psi_r|",
+        "description": "Rotor-flux observer of an induction machine, current model in the stationary frame (Krause; Vas). From the stator currents iabc and the rotor speed wr (mechanical, rad/s) it outputs the rotor magnetizing current imr, the flux angle theta, the synchronous speed we and the stator current in field coordinates (d on the rotor flux). The stator resistance does not enter the current model."
       },
       {
         "id": "luenberger_observer",
@@ -5375,27 +7279,50 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": "[10; 10]",
             "unit": "",
             "label": "Gain L"
+          },
+          "B": {
+            "value": "[0; 1]",
+            "unit": "",
+            "label": "Input matrix B"
+          },
+          "C": {
+            "value": "[1 0]",
+            "unit": "",
+            "label": "Output matrix C"
           }
         },
         "ports": [
           {
             "id": "u",
             "pos": "left",
-            "label": "u"
+            "label": "u",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "y",
             "pos": "left",
-            "label": "y"
+            "label": "y",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "xhat",
             "pos": "right",
-            "label": "xhat"
+            "label": "xhat",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "state estimate",
+            "unit": "*",
+            "width": 2,
+            "channelNames": [
+              "x1",
+              "x2"
+            ]
           }
         ],
-        "equation": "Luenberger Observer governing physical equation",
-        "description": "Physical component model for Luenberger Observer."
+        "equation": "dx^/dt = A*x^ + B*u + L*(y - C*x^),   x^ = [x1; x2]\nestimation error e = x - x^ obeys de/dt = (A - L*C)*e",
+        "description": "Luenberger state observer of a 2-state single-input single-output plant with the library matrices A (2x2), B (2x1), C (1x2) and the gain L (2x1). The estimate error decays at the eigenvalues of A - L*C."
       },
       {
         "id": "quad_decoder",
@@ -5408,37 +7335,58 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 1024,
             "unit": "",
             "label": "Pulses/Rev"
+          },
+          "ts": {
+            "value": 0.001,
+            "unit": "s",
+            "label": "Velocity sample time",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
           {
             "id": "a",
             "pos": "left",
-            "label": "A"
+            "label": "A",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "b",
             "pos": "left",
-            "label": "B"
+            "label": "B",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "z",
             "pos": "left",
-            "label": "Z"
+            "label": "Z",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "vel",
             "pos": "right",
-            "label": "Velocity"
+            "label": "Velocity",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "angular velocity",
+            "unit": "rad/s"
           },
           {
             "id": "pos",
             "pos": "right",
-            "label": "Position"
+            "label": "Position",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "angular position",
+            "unit": "rad"
           }
         ],
-        "equation": "Quadrature Shaft Decoder governing physical equation",
-        "description": "Physical component model for Quadrature Shaft Decoder."
+        "equation": "4x counting along 00 -> 10 -> 11 -> 01 (A leads B: +1, reverse: -1);  Z rising edge: count = 0\npos = 2*pi*count/(4*ppr),  vel = 2*pi*dcount/(4*ppr*ts) (M method over ts)",
+        "description": "Quadrature (incremental encoder) decoder: counts every edge of A and B (4x), the index Z clears the count. Position is the count in radians, velocity the count change per sample time ts."
       },
       {
         "id": "resolver_to_digital",
@@ -5451,37 +7399,65 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 10000,
             "unit": "Hz",
             "label": "Excitation"
+          },
+          "bandwidth": {
+            "value": 100,
+            "unit": "Hz",
+            "label": "Tracking loop bandwidth",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "vp_pk": {
+            "value": 1,
+            "unit": "V",
+            "label": "Excitation amplitude",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
           {
             "id": "vp",
             "pos": "left",
-            "label": "Vp"
+            "label": "Vp",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "vx",
             "pos": "left",
-            "label": "Vx"
+            "label": "Vx",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "vy",
             "pos": "left",
-            "label": "Vy"
+            "label": "Vy",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "vel",
             "pos": "right",
-            "label": "Velocity"
+            "label": "Velocity",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "angular velocity",
+            "unit": "rad/s"
           },
           {
             "id": "ang",
             "pos": "right",
-            "label": "Angle"
+            "label": "Angle",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "angle",
+            "unit": "rad"
           }
         ],
-        "equation": "Resolver-to-Digital Converter governing physical equation",
-        "description": "Physical component model for Resolver-to-Digital Converter."
+        "equation": "eps = 2*(Vx*cos(phi) - Vy*sin(phi))*Vp/vp_pk^2 (mean sin(theta - phi)),  d ef/dt = 2*pi*(freq/5)*(eps - ef)\nd w/dt = wn^2*ef,  d phi/dt = w + 2*zeta*wn*ef,  wn = 2*pi*bandwidth, zeta = 0.707   (type II)\nAngle = phi, Velocity = w",
+        "description": "Resolver-to-digital converter with a type II tracking loop: synchronous demodulation of Vx = Vp*sin(theta), Vy = Vp*cos(theta) on the carrier Vp, low pass at one fifth of the carrier frequency and a PI + integrator loop; zero steady-state error for a ramp angle."
       },
       {
         "id": "pmsm_curr_ctrl",
@@ -5494,42 +7470,82 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 2,
             "unit": "",
             "label": "Prop Gain"
+          },
+          "Ki": {
+            "value": 100,
+            "unit": "V/(A*s)",
+            "label": "Integral gain",
+            "min": 0
           }
         },
         "ports": [
           {
             "id": "idq_ref",
             "pos": "left",
-            "label": "idqRef"
+            "label": "idqRef",
+            "domain": "Physical",
+            "direction": "in",
+            "width": 2,
+            "channelNames": [
+              "d",
+              "q"
+            ]
           },
           {
             "id": "idq",
             "pos": "left",
-            "label": "idq"
+            "label": "idq",
+            "domain": "Physical",
+            "direction": "in",
+            "width": 2,
+            "channelNames": [
+              "d",
+              "q"
+            ]
           },
           {
             "id": "vdq_ff",
             "pos": "left",
-            "label": "vdqFF"
+            "label": "vdqFF",
+            "domain": "Physical",
+            "direction": "in",
+            "width": 2,
+            "channelNames": [
+              "d",
+              "q"
+            ]
           },
           {
             "id": "v_max",
             "pos": "left",
-            "label": "VphMax"
+            "label": "VphMax",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "reset",
             "pos": "left",
-            "label": "Reset"
+            "label": "Reset",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "vdq_ref",
             "pos": "right",
-            "label": "vdqRef"
+            "label": "vdqRef",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "dq voltage reference",
+            "unit": "V",
+            "width": 2,
+            "channelNames": [
+              "d",
+              "q"
+            ]
           }
         ],
-        "equation": "PMSM Current Controller governing physical equation",
-        "description": "Physical component model for PMSM Current Controller."
+        "equation": "v = Kp*(idq* - idq) + I + vdq_ff,  |v| <= VphMax (circle)\ndI/dt = Ki*e + (Ki/Kp)*(v_lim - v),  Reset > 0.5: I = 0\nvdq_ref = v_lim",
+        "description": "dq-axis current regulator of a PMSM: PI on each axis plus the decoupling / back-EMF feed-forward input vdq_ff, circular voltage limit VphMax (when wired) and back-calculation anti-windup."
       },
       {
         "id": "pmsm_ref_gen",
@@ -5552,42 +7568,78 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 0.1,
             "unit": "Wb",
             "label": "PM Flux"
+          },
+          "pole_pairs": {
+            "value": 4,
+            "unit": "1",
+            "label": "Pole pairs",
+            "min": 1
+          },
+          "i_max": {
+            "value": 30,
+            "unit": "A",
+            "label": "Current limit",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
           {
             "id": "tq_ref",
             "pos": "left",
-            "label": "TqRef"
+            "label": "TqRef",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "w_mech",
             "pos": "left",
-            "label": "wMechanical"
+            "label": "wMechanical",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "vdc",
             "pos": "left",
-            "label": "Vdc"
+            "label": "Vdc",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "idq_ref",
             "pos": "right",
-            "label": "idqRef"
+            "label": "idqRef",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "dq current reference",
+            "unit": "A",
+            "width": 2,
+            "channelNames": [
+              "d",
+              "q"
+            ]
           },
           {
             "id": "tq_ref_sat",
             "pos": "right",
-            "label": "TqRefSat"
+            "label": "TqRefSat",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "limited torque reference",
+            "unit": "N*m"
           },
           {
             "id": "tq_lim",
             "pos": "right",
-            "label": "TqLim"
+            "label": "TqLim",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "torque limit",
+            "unit": "N*m"
           }
         ],
-        "equation": "PMSM Current Reference Generator governing physical equation",
-        "description": "Physical component model for PMSM Current Reference Generator."
+        "equation": "minimise id^2 + iq^2 subject to Tq = 1.5*p*iq*(flux + (Ld - Lq)*id),  id^2 + iq^2 <= i_max^2,\n  we^2*((Ld*id + flux)^2 + (Lq*iq)^2) <= (vdc/2)^2,  we = p*|w|\n(MTPA below base speed, field weakening above; Tq limited to the largest feasible torque = TqLim)",
+        "description": "Torque-to-current map of a PMSM: maximum torque per ampere inside the current limit and the voltage limit of the DC link (field weakening above base speed). Outputs the dq current reference, the limited torque reference and the torque limit at the present speed and DC voltage. An open Vdc means no voltage limit."
       },
       {
         "id": "pmsm_foc",
@@ -5610,47 +7662,104 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 100,
             "unit": "",
             "label": "Integral Gain (Ki)"
+          },
+          "pole_pairs": {
+            "value": 4,
+            "unit": "1",
+            "label": "Pole pairs",
+            "min": 1
+          },
+          "Ld": {
+            "value": 0.005,
+            "unit": "H",
+            "label": "d-axis inductance",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "Lq": {
+            "value": 0.005,
+            "unit": "H",
+            "label": "q-axis inductance",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "flux": {
+            "value": 0.1,
+            "unit": "Wb",
+            "label": "PM flux linkage",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
           {
             "id": "ref",
             "pos": "left",
-            "label": "Reference"
+            "label": "Reference",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "iabc_s",
             "pos": "left",
-            "label": "iabcSens"
+            "label": "iabcSens",
+            "domain": "Physical",
+            "direction": "in",
+            "width": 3,
+            "channelNames": [
+              "a",
+              "b",
+              "c"
+            ]
           },
           {
             "id": "w_s",
             "pos": "left",
-            "label": "wSens"
+            "label": "wSens",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "th_s",
             "pos": "left",
-            "label": "thSens"
+            "label": "thSens",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "vdc_s",
             "pos": "left",
-            "label": "vdcSens"
+            "label": "vdcSens",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "g",
             "pos": "right",
-            "label": "G"
+            "label": "G",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "modulation reference",
+            "unit": "1",
+            "width": 3,
+            "channelNames": [
+              "a",
+              "b",
+              "c"
+            ]
           },
           {
             "id": "vis",
             "pos": "right",
-            "label": "Visualization"
+            "label": "Visualization",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "visualization signal",
+            "unit": "*"
           }
         ],
-        "equation": "Id_ref = 0 (or MTPA)\\nIq_ref = τ_ref / (1.5 * P * Ψf)",
-        "description": "Field Oriented Control vector current regulator for Permanent Magnet Synchronous Motors."
+        "equation": "id* = 0,  iq* = Tq*/(1.5*p*(flux + (Ld - Lq)*id*)),  (id, iq) = Park(Clarke(iabc), p*theta)\nvd = Kp*ed + Id + Rs*id* - we*Lq*iq,  vq = Kp*eq + Iq + Rs*iq* + we*(Ld*id + flux),  we = p*w\n|v| <= vdc/2,  dI/dt = Ki*e + (Ki/Kp)*(v_lim - v)\ng = m_abc = clamp(InvPark(v)/(vdc/2), -1, 1)",
+        "description": "Field-oriented control of a PMSM: torque reference -> q-axis current, dq PI current loops with decoupling and resistive feed-forward, circular voltage limit at vdc/2, inverse Park to the three-phase modulation vector g (wire it to the m_abc input of the two-level inverter). th_s and w_s are the mechanical rotor angle and speed; vis is the commanded iq*."
       },
       {
         "id": "pmsm_field_weakening",
@@ -5663,32 +7772,75 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 0.95,
             "unit": "",
             "label": "Volt Margin"
+          },
+          "Kp": {
+            "value": 0.5,
+            "unit": "A/V",
+            "label": "Proportional gain",
+            "min": 0
+          },
+          "Ki": {
+            "value": 50,
+            "unit": "A/(V*s)",
+            "label": "Integral gain",
+            "min": 0
+          },
+          "id_fw_max": {
+            "value": 20,
+            "unit": "A",
+            "label": "Maximum d-axis injection",
+            "min": 0
           }
         },
         "ports": [
           {
             "id": "idq_ref",
             "pos": "left",
-            "label": "idqRef"
+            "label": "idqRef",
+            "domain": "Physical",
+            "direction": "in",
+            "width": 2,
+            "channelNames": [
+              "d",
+              "q"
+            ]
           },
           {
             "id": "vdq",
             "pos": "left",
-            "label": "vdq"
+            "label": "vdq",
+            "domain": "Physical",
+            "direction": "in",
+            "width": 2,
+            "channelNames": [
+              "d",
+              "q"
+            ]
           },
           {
             "id": "v_max",
             "pos": "left",
-            "label": "VphMax"
+            "label": "VphMax",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "idq_ref_fw",
             "pos": "right",
-            "label": "idqRefFW"
+            "label": "idqRefFW",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "field-weakened dq current reference",
+            "unit": "A",
+            "width": 2,
+            "channelNames": [
+              "d",
+              "q"
+            ]
           }
         ],
-        "equation": "PMSM Field-Weakening Controller governing physical equation",
-        "description": "Physical component model for PMSM Field-Weakening Controller."
+        "equation": "e = v_margin*VphMax - |vdq|,  d = clamp(Kp*e + I, -id_fw_max, 0),  dI/dt = Ki*e + (Ki/Kp)*(d - (Kp*e + I))\nidq_ref_fw = [id* + d, iq*]",
+        "description": "Voltage-feedback field weakening of a PMSM: when the stator voltage magnitude exceeds v_margin times the limit the d-axis current reference is reduced (negative id opposes the magnet flux). An open VphMax disables the loop."
       },
       {
         "id": "pmsm_tq_est",
@@ -5701,22 +7853,54 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 4,
             "unit": "",
             "label": "Pole Pairs"
+          },
+          "flux": {
+            "value": 0.1,
+            "unit": "Wb",
+            "label": "PM flux linkage",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "Ld": {
+            "value": 0.005,
+            "unit": "H",
+            "label": "d-axis inductance",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "Lq": {
+            "value": 0.005,
+            "unit": "H",
+            "label": "q-axis inductance",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
           {
             "id": "idq",
             "pos": "left",
-            "label": "idq"
+            "label": "idq",
+            "domain": "Physical",
+            "direction": "in",
+            "width": 2,
+            "channelNames": [
+              "d",
+              "q"
+            ]
           },
           {
             "id": "tq_est",
             "pos": "right",
-            "label": "TqEst"
+            "label": "TqEst",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "estimated torque",
+            "unit": "N*m"
           }
         ],
-        "equation": "PMSM Torque Estimator governing physical equation",
-        "description": "Physical component model for PMSM Torque Estimator."
+        "equation": "Tq = 1.5*p*(flux*iq + (Ld - Lq)*id*iq)",
+        "description": "Electromagnetic torque of a PMSM from the measured dq currents (amplitude-invariant Park): permanent-magnet torque plus reluctance torque."
       },
       {
         "id": "pwm_3ph_2level",
@@ -5725,18 +7909,80 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "icon": "pwm_3ph",
         "category": "Power Electronics",
         "params": {
+          "model_mode": {
+            "value": "averaged",
+            "unit": "",
+            "label": "Model Mode"
+          },
+          "control_mode": {
+            "value": "three_phase_modulation",
+            "unit": "",
+            "label": "Control Mode"
+          },
+          "output_frequency_hz": {
+            "value": 50,
+            "unit": "Hz",
+            "label": "Output Frequency",
+            "min": 0
+          },
           "f_sw": {
             "value": 5000,
             "unit": "Hz",
-            "label": "Switch Freq"
+            "label": "Switch Freq",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "output_resistance_ohm": {
+            "value": 0.001,
+            "unit": "ohm",
+            "label": "Output Resistance",
+            "min": 0
+          },
+          "modulation_index": {
+            "value": 0.8,
+            "unit": "",
+            "label": "Modulation Index M (V/f generator)",
+            "min": 0,
+            "max": 1
           }
         },
         "ports": [
           {
             "id": "vabc",
+            "width": 3,
+            "channelNames": ["a", "b", "c"],
             "pos": "left",
-            "label": "Vabc",
-            "domain": "Physical"
+            "label": "m_abc",
+            "domain": "Physical",
+            "direction": "in"
+          },
+          {
+            "id": "amp",
+            "pos": "left",
+            "label": "M",
+            "domain": "Physical",
+            "direction": "in"
+          },
+          {
+            "id": "ma",
+            "pos": "left",
+            "label": "d_a",
+            "domain": "Physical",
+            "direction": "in"
+          },
+          {
+            "id": "mb",
+            "pos": "left",
+            "label": "d_b",
+            "domain": "Physical",
+            "direction": "in"
+          },
+          {
+            "id": "mc",
+            "pos": "left",
+            "label": "d_c",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "p",
@@ -5751,26 +7997,15 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Electrical"
           },
           {
-            "id": "a",
+            "id": "abc",
+            "composite": "three_phase",
             "pos": "right",
-            "label": "A",
-            "domain": "Electrical"
-          },
-          {
-            "id": "b",
-            "pos": "right",
-            "label": "B",
-            "domain": "Electrical"
-          },
-          {
-            "id": "c",
-            "pos": "right",
-            "label": "C",
+            "label": "ABC",
             "domain": "Electrical"
           }
         ],
-        "equation": "3-Phase Inverter Bridge governing physical equation",
-        "description": "Physical component model for 3-Phase Inverter Bridge."
+        "equation": "v_k − v_n = d_k·Vdc − R_out·i_k,out  [V],  k = a, b, c  (Vdc = v_DC+ − v_DC−)\ni_dc = Σ d_k·i_k,out  [A]  (P_dc = Σ v_k·i_k,out + R_out·Σ i_k,out²)\nd_k = (1 + m_k)/2,  m_k = M·sin(2π·f_out·t − k·2π/3)  or the vabc / duty inputs  → fundamental pole amplitude = M·Vdc/2",
+        "description": "Two-level three-phase voltage-source inverter. Model mode 'averaged' (default) is the Simscape Average-Value Inverter: continuous duty d_k, no switching ripple. Model mode 'switching' is the ideal-switch model: each leg switches at f_sw when the duty reference crosses a triangular carrier (anti-parallel diodes, no dead time), and the crossing instants are located by the solver's zero-crossing events. AC terminals are the composite three-phase port ABC (connect it to a machine ABC port directly, or through a Phase Splitter to scalar phases); DC+ / DC− are the DC link. References: input vabc = (m_a, m_b, m_c) in [−1, 1] (control mode three_phase_modulation; legacy scalar duties d_a, d_b, d_c in [0, 1] when vabc is unwired, an unwired duty means the lower switch is on), or, in control mode sinusoidal_modulation, an internal balanced V/f generator at the output frequency with amplitude M (input M, or the Modulation Index parameter). Linear range M ≤ 1: line-to-line fundamental rms = (√3/(2√2))·M·Vdc; over-modulation saturates at the rails. The AC side is a voltage source behind R_out, so a floating (wye, open star point) load sees no zero-sequence current."
       },
       {
         "id": "pwm_3ph_3level",
@@ -5782,38 +8017,97 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "f_sw": {
             "value": 2000,
             "unit": "Hz",
-            "label": "Switch Freq"
+            "label": "Switch Freq",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "neutral_balance_gain": {
+            "value": 0.1,
+            "unit": "1/V",
+            "label": "Neutral Balance Gain"
           }
         },
         "ports": [
           {
             "id": "vabc",
+            "width": 3,
+            "channelNames": ["a", "b", "c"],
             "pos": "left",
-            "label": "Vabc"
+            "label": "m_abc",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "vdc",
             "pos": "left",
-            "label": "Vdc"
+            "label": "Vdc",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "vneut",
             "pos": "left",
-            "label": "vNeutral"
+            "label": "vNeutral",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
-            "id": "g",
+            "id": "ga",
             "pos": "right",
-            "label": "g"
+            "label": "Gate A",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "gate signal A",
+            "unit": "1"
           },
           {
-            "id": "mod",
+            "id": "gb",
             "pos": "right",
-            "label": "ModWave"
+            "label": "Gate B",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "gate signal B",
+            "unit": "1"
+          },
+          {
+            "id": "gc",
+            "pos": "right",
+            "label": "Gate C",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "gate signal C",
+            "unit": "1"
+          },
+          {
+            "id": "ma",
+            "pos": "right",
+            "label": "Mod A",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "modulation index A",
+            "unit": "1"
+          },
+          {
+            "id": "mb",
+            "pos": "right",
+            "label": "Mod B",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "modulation index B",
+            "unit": "1"
+          },
+          {
+            "id": "mc",
+            "pos": "right",
+            "label": "Mod C",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "modulation index C",
+            "unit": "1"
           }
         ],
-        "equation": "PWM Generator (3-Phase, 3-Level) governing physical equation",
-        "description": "Physical component model for PWM Generator (3-Phase, 3-Level)."
+        "equation": "r_k = clamp(m_k + Δ_neut, −1, 1),  Δ_neut = clamp(k_neut·v_neut/max(|v_dc|, 1), −0.15, 0.15)\nc_u = tri(f_sw·t) ∈ [0, 1],  c_l = c_u − 1\ng_k = +1 if r_k ≥ c_u,  −1 if r_k ≤ c_l,  0 otherwise  → v_k = g_k·Vdc/2 ∈ {−Vdc/2, 0, +Vdc/2}\n⟨g_k⟩ over a carrier period = r_k  (fundamental phase voltage = m·Vdc/2)",
+        "description": "Three-level (neutral-point-clamped) phase-disposition PWM generator (Simscape PWM Generator (Three-Level)). Input m_abc = (m_a, m_b, m_c) is the reference vector in [−1, 1] (unit = Vdc/2); two in-phase triangular carriers at f_sw (upper in [0, 1], lower in [−1, 0]) turn it into the level commands ga, gb, gc ∈ {−1, 0, +1} (+Vdc/2 / neutral / −Vdc/2 at the phase output of an NPC leg); ma, mb, mc echo the clamped references. The carrier average of the level equals the reference for every |m| ≤ 1, so the fundamental phase voltage is m·Vdc/2 and the line-to-line rms fundamental (√3/(2√2))·m·Vdc. vdc and vneut (DC-link total and neutral-point unbalance) add a bounded zero-sequence offset Δ_neut that steers the neutral point. This is a signal generator (it computes gate levels, not a power stage): connect the levels to switch / IGBT commands of an NPC leg."
       },
       {
         "id": "pwm_vienna",
@@ -5825,38 +8119,141 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "f_sw": {
             "value": 10000,
             "unit": "Hz",
-            "label": "Switch Freq"
+            "label": "Switch Freq",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "vdc_ref": {
+            "value": 800,
+            "unit": "V",
+            "label": "Vdc Ref",
+            "min": 0
+          },
+          "kp_v": {
+            "value": 0.1,
+            "unit": "A/V",
+            "label": "Voltage Prop Gain"
+          },
+          "neutral_balance_gain": {
+            "value": 0.1,
+            "unit": "1/V",
+            "label": "Neutral Balance Gain"
           }
         },
         "ports": [
           {
-            "id": "vabc",
+            "id": "va",
             "pos": "left",
-            "label": "Vabc"
+            "label": "Va",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
-            "id": "iabc",
+            "id": "vb",
             "pos": "left",
-            "label": "Iabc"
+            "label": "Vb",
+            "domain": "Physical",
+            "direction": "in"
+          },
+          {
+            "id": "vc",
+            "pos": "left",
+            "label": "Vc",
+            "domain": "Physical",
+            "direction": "in"
+          },
+          {
+            "id": "ia",
+            "pos": "left",
+            "label": "Ia",
+            "domain": "Physical",
+            "direction": "in"
+          },
+          {
+            "id": "ib",
+            "pos": "left",
+            "label": "Ib",
+            "domain": "Physical",
+            "direction": "in"
+          },
+          {
+            "id": "ic",
+            "pos": "left",
+            "label": "Ic",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "vdc",
             "pos": "left",
-            "label": "Vdc"
+            "label": "Vdc",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "vneut",
             "pos": "left",
-            "label": "vNeutral"
+            "label": "vNeutral",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
-            "id": "g",
+            "id": "ga",
             "pos": "right",
-            "label": "g"
+            "label": "Gate A",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "gate signal A",
+            "unit": "1"
+          },
+          {
+            "id": "gb",
+            "pos": "right",
+            "label": "Gate B",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "gate signal B",
+            "unit": "1"
+          },
+          {
+            "id": "gc",
+            "pos": "right",
+            "label": "Gate C",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "gate signal C",
+            "unit": "1"
+          },
+          {
+            "id": "ma",
+            "pos": "right",
+            "label": "Mod A",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "modulation index A",
+            "unit": "1"
+          },
+          {
+            "id": "mb",
+            "pos": "right",
+            "label": "Mod B",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "modulation index B",
+            "unit": "1"
+          },
+          {
+            "id": "mc",
+            "pos": "right",
+            "label": "Mod C",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "modulation index C",
+            "unit": "1"
           }
         ],
-        "equation": "PWM Generator (Vienna Rectifier) governing physical equation",
-        "description": "Physical component model for PWM Generator (Vienna Rectifier)."
+        "equation": "I* = max(0, kp_v·(vdc_ref − vdc))  [A]\nΔ_neut = clamp(k_neut·v_neut/max(|vdc|, 1), −0.2, 0.2)\nm_x = clamp(2·v_x/max(|vdc|, 1) + 0.05·(I*·v_x/max(√(v_a²+v_b²+v_c²), 1) − i_x) + Δ_neut, −1, 1)\ng_x = 1 if C_tri(f_sw·t) < 1 − |m_x| else 0   (switch on = phase clamped to the neutral)",
+        "description": "Carrier-based PWM generator of a three-phase three-level Vienna rectifier (spec docs/superpowers/specs/2026-09-30-vienna-rectifier-pwm-design.md). The phase-switch duty is 1 − |m_x|, so with the diode legs the average pole voltage is sign(i_x)·|m_x|·Vdc/2 = v_x at unity power factor (m_x = 2·v_x/Vdc is the feed-forward term). An outer proportional DC-link loop (kp_v, vdc_ref) scales the in-phase current reference I*, a fixed 0.05 V/A current-error gain corrects the modulation, and vneut adds a bounded zero-sequence term that balances the neutral point. Outputs ga, gb, gc ∈ {0, 1} are the switch gates, ma, mb, mc the modulation indices. Signal generator only (no power stage): wire the gates to the bidirectional phase switches of a Vienna bridge built from diodes and IGBT / switch blocks. The scalar ports are kept as in the spec (one phase per port)."
       },
       {
         "id": "thyristor_6pulse",
@@ -5868,28 +8265,90 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "freq": {
             "value": 50,
             "unit": "Hz",
-            "label": "Freq"
+            "label": "Freq",
+            "min": 0
+          },
+          "pulse_width_deg": {
+            "value": 20,
+            "unit": "deg",
+            "label": "Pulse Width",
+            "min": 0,
+            "exclusiveMin": true,
+            "max": 60
           }
         },
         "ports": [
           {
             "id": "theta",
             "pos": "left",
-            "label": "theta"
+            "label": "theta",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "alpha",
             "pos": "left",
-            "label": "alpha"
+            "label": "alpha",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
-            "id": "p",
+            "id": "g1",
             "pos": "right",
-            "label": "P"
+            "label": "G1",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "gate signal 1",
+            "unit": "1"
+          },
+          {
+            "id": "g2",
+            "pos": "right",
+            "label": "G2",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "gate signal 2",
+            "unit": "1"
+          },
+          {
+            "id": "g3",
+            "pos": "right",
+            "label": "G3",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "gate signal 3",
+            "unit": "1"
+          },
+          {
+            "id": "g4",
+            "pos": "right",
+            "label": "G4",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "gate signal 4",
+            "unit": "1"
+          },
+          {
+            "id": "g5",
+            "pos": "right",
+            "label": "G5",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "gate signal 5",
+            "unit": "1"
+          },
+          {
+            "id": "g6",
+            "pos": "right",
+            "label": "G6",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "gate signal 6",
+            "unit": "1"
           }
         ],
-        "equation": "Thyristor 6-Pulse Generator governing physical equation",
-        "description": "Physical component model for Thyristor 6-Pulse Generator."
+        "equation": "g_k = 1 if wrap360(θ − (α + 60·(k − 1))) < pulse_width,  else 0   [θ, α in deg],  k = 1…6\nθ = 360·freq·t when the θ port is unwired\nDiode / thyristor bridge: Vdc,avg = (3√2/π)·V_LL·cos α  (ripple at 6·f)",
+        "description": "Six-pulse firing generator for a thyristor (Graetz) bridge (Simscape Synchronized 6-Pulse Generator). Gate k = 1…6 is high for pulse_width degrees starting at the firing angle α + 60·(k − 1), α counted from the natural commutation point of thyristor 1 (with v_a = V·sin ωt and positive a-b-c sequence that is θ = ωt − 30°). θ is the synchronisation angle in degrees (absolute: wired, it replaces the internal ramp); unwired, the block uses its own ramp 360·freq·t. (thyristor_12pulse differs on purpose: its θ is a phase offset in radians added to its own ramp 2π·freq·t.) A six-pulse bridge with firing angle α has the mean DC voltage (3√2/π)·V_LL·cos α. Signal generator only; the library has no thyristor device, so the gates drive controlled switches."
       },
       {
         "id": "thyristor_12pulse",
@@ -5901,33 +8360,144 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "freq": {
             "value": 50,
             "unit": "Hz",
-            "label": "Freq"
+            "label": "Freq",
+            "min": 0
+          },
+          "pulse_width_deg": {
+            "value": 5,
+            "unit": "deg",
+            "label": "Pulse Width",
+            "min": 0,
+            "exclusiveMin": true,
+            "max": 60
           }
         },
         "ports": [
           {
             "id": "theta",
             "pos": "left",
-            "label": "theta"
+            "label": "theta",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "alpha",
             "pos": "left",
-            "label": "alpha"
+            "label": "alpha",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
-            "id": "pdelta",
+            "id": "delta_g1",
             "pos": "right",
-            "label": "Pdelta"
+            "label": "Delta G1",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "delta bridge gate signal 1",
+            "unit": "1"
           },
           {
-            "id": "pwye",
+            "id": "delta_g2",
             "pos": "right",
-            "label": "Pwye"
+            "label": "Delta G2",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "delta bridge gate signal 2",
+            "unit": "1"
+          },
+          {
+            "id": "delta_g3",
+            "pos": "right",
+            "label": "Delta G3",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "delta bridge gate signal 3",
+            "unit": "1"
+          },
+          {
+            "id": "delta_g4",
+            "pos": "right",
+            "label": "Delta G4",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "delta bridge gate signal 4",
+            "unit": "1"
+          },
+          {
+            "id": "delta_g5",
+            "pos": "right",
+            "label": "Delta G5",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "delta bridge gate signal 5",
+            "unit": "1"
+          },
+          {
+            "id": "delta_g6",
+            "pos": "right",
+            "label": "Delta G6",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "delta bridge gate signal 6",
+            "unit": "1"
+          },
+          {
+            "id": "wye_g1",
+            "pos": "right",
+            "label": "Wye G1",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "wye bridge gate signal 1",
+            "unit": "1"
+          },
+          {
+            "id": "wye_g2",
+            "pos": "right",
+            "label": "Wye G2",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "wye bridge gate signal 2",
+            "unit": "1"
+          },
+          {
+            "id": "wye_g3",
+            "pos": "right",
+            "label": "Wye G3",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "wye bridge gate signal 3",
+            "unit": "1"
+          },
+          {
+            "id": "wye_g4",
+            "pos": "right",
+            "label": "Wye G4",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "wye bridge gate signal 4",
+            "unit": "1"
+          },
+          {
+            "id": "wye_g5",
+            "pos": "right",
+            "label": "Wye G5",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "wye bridge gate signal 5",
+            "unit": "1"
+          },
+          {
+            "id": "wye_g6",
+            "pos": "right",
+            "label": "Wye G6",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "wye bridge gate signal 6",
+            "unit": "1"
           }
         ],
-        "equation": "Thyristor 12-Pulse Generator governing physical equation",
-        "description": "Physical component model for Thyristor 12-Pulse Generator."
+        "equation": "φ = θ + 2π·freq·t  [rad]\ndelta_g_k = 1 if wrap2π(φ − (α + 60·(k − 1))) < pulse_width,  else 0\nwye_g_k = 1 if wrap2π(φ − (α + 30 + 60·(k − 1))) < pulse_width,  else 0   [α, pulse_width in deg],  k = 1…6\n12-pulse bridge pair in series: Vdc,avg = 2·(3√2/π)·V_LL·cos α  (ripple at 12·f)",
+        "description": "Twelve-pulse firing generator (Simscape Synchronized 12-Pulse Generator): two six-pulse sequences, the wye (star) bridge 30° behind the delta bridge, each gate 60° after the previous one. θ is a phase offset in radians that is added to the internal ramp 2π·freq·t (the six-pulse block takes an absolute angle in degrees instead), α is the firing angle in degrees. Two six-pulse bridges fed 30° apart and connected in series give twice the six-pulse mean DC voltage with the ripple at 12 times the line frequency. Signal generator only; the library has no thyristor device, so the gates drive controlled switches."
       },
       {
         "id": "belt_properties",
@@ -5939,23 +8509,33 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "density": {
             "value": 1.1,
             "unit": "kg/m",
-            "label": "Linear Dens"
+            "label": "Linear Dens",
+            "min": 0
           },
           "youngs": {
             "value": 1000000000,
             "unit": "Pa",
-            "label": "Young Mod"
+            "label": "Young Mod",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "damping": {
+            "value": 0,
+            "unit": "N-s/m",
+            "label": "Belt Damping",
+            "min": 0
           }
         },
         "ports": [
           {
             "id": "p",
-            "pos": "left",
-            "label": "P"
+            "pos": "right",
+            "label": "P",
+            "domain": "BeltProperty"
           }
         ],
-        "equation": "Belt-Cable Properties governing physical equation",
-        "description": "Physical component model for Belt-Cable Properties."
+        "equation": "ρ = linear density [kg/m],  E = Young modulus [Pa],  c = belt damping [N·s/m]\nk = E·A/L [N/m],  f = max(0, k·x + c·dx/dt) (Belt-Cable End),  J_belt = 2π·ρ·R³ [kg·m²] (spool, pulley)",
+        "description": "Property link: publishes the linear density ρ (kg/m), the Young modulus E (Pa) and the belt damping c (N·s/m) to every Belt-Cable End, Spool and Pulley wired to its BeltProperty port P. It has no mechanical ports and exchanges no power; a belt block that is not wired to it uses its own stiffness / damping / inertia parameters."
       },
       {
         "id": "belt_end",
@@ -5967,23 +8547,62 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "stiffness": {
             "value": 1000000,
             "unit": "N/m",
-            "label": "Stiffness"
+            "label": "Stiffness",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "length": {
+            "value": 1,
+            "unit": "m",
+            "label": "Belt Length",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "area": {
+            "value": 0.001,
+            "unit": "m2",
+            "label": "Section Area",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "damping": {
+            "value": 0,
+            "unit": "N-s/m",
+            "label": "Internal Damping",
+            "min": 0
           }
         },
         "ports": [
           {
             "id": "r",
             "pos": "left",
-            "label": "R"
+            "label": "R",
+            "domain": "Translational"
           },
           {
             "id": "e",
             "pos": "right",
-            "label": "E"
+            "label": "E",
+            "domain": "Translational"
+          },
+          {
+            "id": "p",
+            "pos": "top",
+            "label": "P",
+            "domain": "BeltProperty"
+          },
+          {
+            "id": "f",
+            "pos": "bottom",
+            "label": "F",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "belt tension",
+            "unit": "N"
           }
         ],
-        "equation": "Belt-Cable End governing physical equation",
-        "description": "Physical component model for Belt-Cable End."
+        "equation": "dx/dt = v_E − v_R [m/s]  (x = x_E − x_R, extension)\nf = max(0, k·x + c·dx/dt) [N]  (belt tension, tension-only: a slack belt carries nothing)\nF_R→E = −f,  k = E·A/L (linked Belt-Cable Properties) or stiffness [N/m],  c = damping [N·s/m]",
+        "description": "Elastic, tension-only end of a belt or cable between two Translational ports R and E, k = E·A/L from a wired Belt-Cable Properties block (Young modulus E, section A, length L), otherwise the stiffness parameter, plus an internal damping c (default 0). The tension is k·(x_E − x_R) + c·(v_E − v_R) and is clipped at 0 when the belt goes slack; the taut / slack switch is a solver event. Output f is the belt tension, positive when the belt is stretched (E moves away from R)."
       },
       {
         "id": "belt_spool",
@@ -5995,23 +8614,48 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "radius": {
             "value": 0.1,
             "unit": "m",
-            "label": "Radius"
+            "label": "Radius",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "inertia": {
+            "value": 0,
+            "unit": "kg-m2",
+            "label": "Spool Inertia",
+            "min": 0
           }
         },
         "ports": [
           {
             "id": "r",
             "pos": "left",
-            "label": "R"
+            "label": "R",
+            "domain": "Rotational"
           },
           {
             "id": "a",
             "pos": "right",
-            "label": "A"
+            "label": "A",
+            "domain": "Translational"
+          },
+          {
+            "id": "p",
+            "pos": "top",
+            "label": "P",
+            "domain": "BeltProperty"
+          },
+          {
+            "id": "t",
+            "pos": "bottom",
+            "label": "T",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "torque",
+            "unit": "N*m"
           }
         ],
-        "equation": "Belt-Cable Spool governing physical equation",
-        "description": "Physical component model for Belt-Cable Spool."
+        "equation": "v_A = R·ω_R [m/s]\nτ_R,in + R·F_A,in = J·dω/dt [N·m],  J = inertia + 2π·ρ·R³ (wrapped belt)\nt = τ_R,in",
+        "description": "Ideal spool (winch) that reels a belt or cable: the belt end at Translational port A moves at v = R·ω of the Rotational shaft R (both referenced to the inertial frame). The torque balance includes the spool inertia plus the inertia of one wrapped circumference of belt, ρ·2π·R·R², with ρ the linear density of a wired Belt-Cable Properties block. Power balance: τ·ω + F·v = d(½·J·ω²)/dt. Output t is the torque the shaft delivers into the spool (N·m)."
       },
       {
         "id": "pulley",
@@ -6023,33 +8667,54 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "radius": {
             "value": 0.1,
             "unit": "m",
-            "label": "Radius"
+            "label": "Radius",
+            "min": 0,
+            "exclusiveMin": true
           },
           "inertia": {
             "value": 0.01,
             "unit": "kg-m2",
-            "label": "Inertia"
+            "label": "Inertia",
+            "min": 0
           }
         },
         "ports": [
           {
             "id": "r",
             "pos": "left",
-            "label": "R"
+            "label": "R",
+            "domain": "Rotational"
           },
           {
             "id": "a",
             "pos": "right",
-            "label": "A"
+            "label": "A",
+            "domain": "Translational"
           },
           {
             "id": "b",
             "pos": "right",
-            "label": "B"
+            "label": "B",
+            "domain": "Translational"
+          },
+          {
+            "id": "p",
+            "pos": "top",
+            "label": "P",
+            "domain": "BeltProperty"
+          },
+          {
+            "id": "t",
+            "pos": "bottom",
+            "label": "T",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "torque",
+            "unit": "N*m"
           }
         ],
-        "equation": "Pulley governing physical equation",
-        "description": "Physical component model for Pulley."
+        "equation": "v_A = R·ω [m/s],  v_B = −R·ω [m/s]\nτ_R,in + R·(F_A,in − F_B,in) = J·dω/dt [N·m],  J = inertia + 2π·ρ·R³\nt = τ_R,in",
+        "description": "Ideal pulley carrying a belt over a wheel of radius R: the two belt segments A and B (Translational ports) move in opposite directions at ±R·ω of the Rotational hub R. The torque balance includes the hub inertia plus the wrapped-belt inertia 2π·ρ·R³ (linear density ρ from a wired Belt-Cable Properties block). Power balance: τ·ω + F_A·v_A + F_B·v_B = d(½·J·ω²)/dt. Output t is the torque the hub delivers into the pulley (N·m)."
       },
       {
         "id": "world_frame",
@@ -6062,7 +8727,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "w",
             "pos": "right",
-            "label": "W"
+            "label": "W",
+            "domain": "Frame"
           }
         ],
         "equation": "World Frame governing physical equation",
@@ -6079,7 +8745,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "r",
             "pos": "right",
-            "label": "R"
+            "label": "R",
+            "domain": "Frame"
           }
         ],
         "equation": "Reference Frame governing physical equation",
@@ -6107,16 +8774,96 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "b",
             "pos": "left",
-            "label": "B"
+            "label": "B",
+            "domain": "Frame"
           },
           {
             "id": "f",
             "pos": "right",
-            "label": "F"
+            "label": "F",
+            "domain": "Frame"
           }
         ],
         "equation": "Rigid Transform governing physical equation",
         "description": "Physical component model for Rigid Transform."
+      },
+      {
+        "id": "transform_sensor",
+        "name": "Transform Sensor",
+        "color": "#4b5563",
+        "icon": "rigid_trans",
+        "category": "Frames & Transforms",
+        "params": {},
+        "ports": [
+          {
+            "id": "b",
+            "pos": "left",
+            "label": "B",
+            "domain": "Frame"
+          },
+          {
+            "id": "f",
+            "pos": "left",
+            "label": "F",
+            "domain": "Frame"
+          },
+          {
+            "id": "x",
+            "pos": "right",
+            "label": "X",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "relative position x",
+            "unit": "m"
+          },
+          {
+            "id": "y",
+            "pos": "right",
+            "label": "Y",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "relative position y",
+            "unit": "m"
+          },
+          {
+            "id": "z",
+            "pos": "right",
+            "label": "Z",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "relative position z",
+            "unit": "m"
+          },
+          {
+            "id": "rx",
+            "pos": "right",
+            "label": "Rx",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "relative rotation about x",
+            "unit": "rad"
+          },
+          {
+            "id": "ry",
+            "pos": "right",
+            "label": "Ry",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "relative rotation about y",
+            "unit": "rad"
+          },
+          {
+            "id": "rz",
+            "pos": "right",
+            "label": "Rz",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "relative rotation about z",
+            "unit": "rad"
+          }
+        ],
+        "equation": "Transform Sensor governing physical equation",
+        "description": "Physical component model for Transform Sensor."
       },
       {
         "id": "dist_constraint",
@@ -6128,19 +8875,40 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "dist": {
             "value": 1,
             "unit": "m",
-            "label": "Distance"
+            "label": "Distance",
+            "min": 0
           }
         },
         "ports": [
           {
             "id": "b",
             "pos": "left",
-            "label": "B"
+            "label": "B",
+            "domain": "Frame"
           },
           {
             "id": "f",
             "pos": "right",
-            "label": "F"
+            "label": "F",
+            "domain": "Frame"
+          },
+          {
+            "id": "d",
+            "pos": "right",
+            "label": "d",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "distance",
+            "unit": "m"
+          },
+          {
+            "id": "f_reac",
+            "pos": "right",
+            "label": "F",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "constraint reaction force",
+            "unit": "N"
           }
         ],
         "equation": "Distance Constraint governing physical equation",
@@ -6163,12 +8931,32 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "b",
             "pos": "left",
-            "label": "B"
+            "label": "B",
+            "domain": "Frame"
           },
           {
             "id": "f",
             "pos": "right",
-            "label": "F"
+            "label": "F",
+            "domain": "Frame"
+          },
+          {
+            "id": "ang",
+            "pos": "right",
+            "label": "θ",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "angle",
+            "unit": "rad"
+          },
+          {
+            "id": "t_reac",
+            "pos": "right",
+            "label": "T",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "constraint reaction torque",
+            "unit": "N*m"
           }
         ],
         "equation": "Angle Constraint governing physical equation",
@@ -6185,18 +8973,40 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": 9.81,
             "unit": "m/s2",
             "label": "Gravity"
+          },
+          "mass": {
+            "value": 1,
+            "unit": "kg",
+            "label": "Mass",
+            "min": 0
+          },
+          "direction": {
+            "value": "[0 0 -1]",
+            "unit": "1",
+            "label": "Direction"
           }
         },
         "ports": [
           {
             "id": "b",
             "pos": "left",
-            "label": "B"
+            "label": "B",
+            "domain": "Frame"
           },
           {
             "id": "f",
             "pos": "right",
-            "label": "F"
+            "label": "F",
+            "domain": "Frame"
+          },
+          {
+            "id": "fm",
+            "pos": "right",
+            "label": "|F|",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "gravity force magnitude",
+            "unit": "N"
           }
         ],
         "equation": "Gravitational Field governing physical equation",
@@ -6212,24 +9022,60 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "k": {
             "value": 1000,
             "unit": "N/m",
-            "label": "Stiffness"
+            "label": "Stiffness",
+            "min": 0
           },
           "b": {
             "value": 10,
             "unit": "N-s/m",
-            "label": "Damping"
+            "label": "Damping",
+            "min": 0
+          },
+          "x0": {
+            "value": 0,
+            "unit": "m",
+            "label": "Natural Length"
           }
         },
         "ports": [
           {
             "id": "b",
             "pos": "left",
-            "label": "B"
+            "label": "B",
+            "domain": "Frame"
           },
           {
             "id": "f",
             "pos": "right",
-            "label": "F"
+            "label": "F",
+            "domain": "Frame"
+          },
+          {
+            "id": "x",
+            "pos": "right",
+            "label": "x",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "spring length",
+            "unit": "m"
+          },
+          {
+            "id": "v",
+            "pos": "right",
+            "label": "v",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "relative velocity",
+            "unit": "m/s"
+          },
+          {
+            "id": "fm",
+            "pos": "right",
+            "label": "F",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "force magnitude",
+            "unit": "N"
           }
         ],
         "equation": "Spring and Damper Force governing physical equation",
@@ -6255,14 +9101,76 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         },
         "ports": [
           {
-            "id": "f",
+            "id": "in_fx",
             "pos": "left",
-            "label": "F"
+            "label": "Fx",
+            "domain": "Physical",
+            "direction": "in"
+          },
+          {
+            "id": "in_fy",
+            "pos": "left",
+            "label": "Fy",
+            "domain": "Physical",
+            "direction": "in"
+          },
+          {
+            "id": "in_fz",
+            "pos": "left",
+            "label": "Fz",
+            "domain": "Physical",
+            "direction": "in"
+          },
+          {
+            "id": "in_tx",
+            "pos": "left",
+            "label": "Tx",
+            "domain": "Physical",
+            "direction": "in"
+          },
+          {
+            "id": "in_ty",
+            "pos": "left",
+            "label": "Ty",
+            "domain": "Physical",
+            "direction": "in"
+          },
+          {
+            "id": "in_tz",
+            "pos": "left",
+            "label": "Tz",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "b",
+            "pos": "left",
+            "label": "B",
+            "domain": "Frame"
+          },
+          {
+            "id": "f",
             "pos": "right",
-            "label": "B"
+            "label": "F",
+            "domain": "Frame"
+          },
+          {
+            "id": "fm",
+            "pos": "right",
+            "label": "|F|",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "force magnitude",
+            "unit": "N"
+          },
+          {
+            "id": "tm",
+            "pos": "right",
+            "label": "|T|",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "torque magnitude",
+            "unit": "N*m"
           }
         ],
         "equation": "External Force and Torque governing physical equation",
@@ -6275,26 +9183,124 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "icon": "rev_joint",
         "category": "Joints",
         "params": {
+          "axis": {
+            "value": "[0 0 1]",
+            "unit": "",
+            "label": "Rotation axis (B-local, normalized)"
+          },
           "damping": {
             "value": 0.1,
             "unit": "N-m-s/rad",
-            "label": "Damping"
+            "label": "Damping (free DOF only)",
+            "min": 0
           }
         },
         "ports": [
           {
             "id": "b",
             "pos": "left",
-            "label": "B"
+            "label": "B",
+            "domain": "Frame"
           },
           {
             "id": "f",
             "pos": "right",
-            "label": "F"
+            "label": "F",
+            "domain": "Frame"
+          },
+          {
+            "id": "q",
+            "pos": "right",
+            "label": "q (rad)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "joint angle",
+            "unit": "rad"
+          },
+          {
+            "id": "w",
+            "pos": "right",
+            "label": "w (rad/s)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "joint angular velocity",
+            "unit": "rad/s"
+          },
+          {
+            "id": "fx",
+            "pos": "right",
+            "label": "fx (N)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "joint reaction force x",
+            "unit": "N"
+          },
+          {
+            "id": "fy",
+            "pos": "right",
+            "label": "fy (N)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "joint reaction force y",
+            "unit": "N"
+          },
+          {
+            "id": "fz",
+            "pos": "right",
+            "label": "fz (N)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "joint reaction force z",
+            "unit": "N"
+          },
+          {
+            "id": "f_reac",
+            "pos": "right",
+            "label": "f_reac (N)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "constraint force magnitude",
+            "unit": "N"
+          },
+          {
+            "id": "tx",
+            "pos": "right",
+            "label": "tx (N*m)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "joint reaction torque x",
+            "unit": "N*m"
+          },
+          {
+            "id": "ty",
+            "pos": "right",
+            "label": "ty (N*m)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "joint reaction torque y",
+            "unit": "N*m"
+          },
+          {
+            "id": "tz",
+            "pos": "right",
+            "label": "tz (N*m)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "joint reaction torque z",
+            "unit": "N*m"
+          },
+          {
+            "id": "t_reac",
+            "pos": "right",
+            "label": "t_reac (N*m)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "constrained reaction torque magnitude",
+            "unit": "N*m"
           }
         ],
-        "equation": "Revolute Joint governing physical equation",
-        "description": "Physical component model for Revolute Joint."
+        "equation": "Pf = Pb; (Rb t_j) . (Rf a) = 0 for t_j perpendicular to a (j = 1, 2); Ff = -Fb; Tf = sum_j lambda_j ((Rf a) x (Rb t_j)) - c w (Rb a); Tb = -Tf",
+        "description": "1-DOF revolute joint: rotation about the normalized B-local axis a (a is also the F-local axis at q = 0). Constrains the 3 relative translations and the 2 rotations perpendicular to a. Reactions are the Lagrange multipliers of those 5 constraints: force Ff on F (equal and opposite on B) and the constrained torque, always perpendicular to a. Damping c [N*m*s/rad] acts only on the free rotation about a (0 is allowed). Outputs: q [rad] and w [rad/s] about the axis, reaction force (fx, fy, fz, f_reac) and torque (tx, ty, tz total on F including damping; t_reac is the constrained part only)."
       },
       {
         "id": "prismatic_joint",
@@ -6303,26 +9309,151 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "icon": "prism_joint",
         "category": "Joints",
         "params": {
+          "axis": {
+            "value": "[0 0 1]",
+            "unit": "",
+            "label": "Slide axis (B-local, normalized)"
+          },
           "damping": {
             "value": 1,
             "unit": "N-s/m",
-            "label": "Damping"
+            "label": "Damping (free DOF only)",
+            "min": 0
           }
         },
         "ports": [
           {
             "id": "b",
             "pos": "left",
-            "label": "B"
+            "label": "B",
+            "domain": "Frame"
           },
           {
             "id": "f",
             "pos": "right",
-            "label": "F"
+            "label": "F",
+            "domain": "Frame"
+          },
+          {
+            "id": "x",
+            "pos": "right",
+            "label": "x (m)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "joint displacement",
+            "unit": "m"
+          },
+          {
+            "id": "v",
+            "pos": "right",
+            "label": "v (m/s)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "joint velocity",
+            "unit": "m/s"
+          },
+          {
+            "id": "fx",
+            "pos": "right",
+            "label": "fx (N)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "joint reaction force x",
+            "unit": "N"
+          },
+          {
+            "id": "fy",
+            "pos": "right",
+            "label": "fy (N)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "joint reaction force y",
+            "unit": "N"
+          },
+          {
+            "id": "fz",
+            "pos": "right",
+            "label": "fz (N)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "joint reaction force z",
+            "unit": "N"
+          },
+          {
+            "id": "f_reac",
+            "pos": "right",
+            "label": "f_reac (N)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "constraint force magnitude",
+            "unit": "N"
+          },
+          {
+            "id": "tx",
+            "pos": "right",
+            "label": "tx (N*m)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "joint reaction torque x",
+            "unit": "N*m"
+          },
+          {
+            "id": "ty",
+            "pos": "right",
+            "label": "ty (N*m)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "joint reaction torque y",
+            "unit": "N*m"
+          },
+          {
+            "id": "tz",
+            "pos": "right",
+            "label": "tz (N*m)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "joint reaction torque z",
+            "unit": "N*m"
+          },
+          {
+            "id": "tbx",
+            "pos": "right",
+            "label": "tbx (N*m)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "reaction torque on B x",
+            "unit": "N*m"
+          },
+          {
+            "id": "tby",
+            "pos": "right",
+            "label": "tby (N*m)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "reaction torque on B y",
+            "unit": "N*m"
+          },
+          {
+            "id": "tbz",
+            "pos": "right",
+            "label": "tbz (N*m)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "reaction torque on B z",
+            "unit": "N*m"
+          },
+          {
+            "id": "t_reac",
+            "pos": "right",
+            "label": "t_reac (N*m)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "constrained reaction torque magnitude",
+            "unit": "N*m"
           }
         ],
-        "equation": "Prismatic Joint governing physical equation",
-        "description": "Physical component model for Prismatic Joint."
+        "equation": "(Rb c_j) . (Pf - Pb) = 0 for c_j perpendicular to a (j = 1, 2); Rf = Rb; Ff = sum_j lambda_j (Rb c_j) - c v (Rb a); Tb = -Tf - (Pf - Pb) x Ff",
+        "description": "1-DOF prismatic joint: translation along the normalized B-local axis a. Constrains the 2 translations perpendicular to a and all 3 rotations. Reactions are the Lagrange multipliers of those 5 constraints: constraint force perpendicular to a (f_reac) plus the viscous force c v along a (fx, fy, fz are the total force on F), and the 3 constrained torques (tx, ty, tz on F about F; tbx, tby, tbz on B about B, which include the lever arm of the displacement). Damping c [N*s/m] acts only on the slide (0 is allowed). Outputs: displacement x [m] and velocity v [m/s]."
       },
       {
         "id": "spherical_joint",
@@ -6330,27 +9461,86 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "color": "#4b5563",
         "icon": "sphere_joint",
         "category": "Joints",
-        "params": {
-          "damping": {
-            "value": 0.05,
-            "unit": "N-m-s/rad",
-            "label": "Damping"
-          }
-        },
+        "params": {},
         "ports": [
           {
             "id": "b",
             "pos": "left",
-            "label": "B"
+            "label": "B",
+            "domain": "Frame"
           },
           {
             "id": "f",
             "pos": "right",
-            "label": "F"
+            "label": "F",
+            "domain": "Frame"
+          },
+          {
+            "id": "fx",
+            "pos": "right",
+            "label": "fx (N)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "constraint force x",
+            "unit": "N"
+          },
+          {
+            "id": "fy",
+            "pos": "right",
+            "label": "fy (N)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "constraint force y",
+            "unit": "N"
+          },
+          {
+            "id": "fz",
+            "pos": "right",
+            "label": "fz (N)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "constraint force z",
+            "unit": "N"
+          },
+          {
+            "id": "f_reac",
+            "pos": "right",
+            "label": "f_reac (N)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "constraint force magnitude",
+            "unit": "N"
+          },
+          {
+            "id": "rx",
+            "pos": "right",
+            "label": "rx (rad)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "rotation about x",
+            "unit": "rad"
+          },
+          {
+            "id": "ry",
+            "pos": "right",
+            "label": "ry (rad)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "rotation about y",
+            "unit": "rad"
+          },
+          {
+            "id": "rz",
+            "pos": "right",
+            "label": "rz (rad)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "rotation about z",
+            "unit": "rad"
           }
         ],
-        "equation": "Spherical Joint governing physical equation",
-        "description": "Physical component model for Spherical Joint."
+        "equation": "Pf - Pb = 0; Ff = -Fb (3 multipliers); Tf = Tb = 0",
+        "description": "Ideal 3-DOF ball-and-socket joint: locks the relative X/Y/Z translation and leaves every rotation free, so it transmits no torque (there is no rotational damping or friction model). Reactions are the 3 force multipliers (fx, fy, fz, f_reac) in N. Outputs rx, ry, rz are the relative rotation vector (angle times axis of Rb^T Rf) in rad."
       },
       {
         "id": "universal_joint",
@@ -6359,26 +9549,120 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "icon": "univ_joint",
         "category": "Joints",
         "params": {
+          "axis1": {
+            "value": "[1 0 0]",
+            "unit": "",
+            "label": "Axis 1 (B-local, normalized)"
+          },
+          "axis2": {
+            "value": "[0 1 0]",
+            "unit": "",
+            "label": "Axis 2 (F-local, orthogonalized to axis 1)"
+          },
           "damping": {
             "value": 0.05,
-            "unit": "N-m-s/rad",
-            "label": "Damping"
+            "unit": "N*m*s/rad",
+            "label": "Damping on permitted axes",
+            "min": 0
           }
         },
         "ports": [
           {
             "id": "b",
             "pos": "left",
-            "label": "B"
+            "label": "B",
+            "domain": "Frame"
           },
           {
             "id": "f",
             "pos": "right",
-            "label": "F"
+            "label": "F",
+            "domain": "Frame"
+          },
+          {
+            "id": "angle1",
+            "pos": "right",
+            "label": "angle1 (rad)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "joint angle 1",
+            "unit": "rad"
+          },
+          {
+            "id": "angle2",
+            "pos": "right",
+            "label": "angle2 (rad)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "joint angle 2",
+            "unit": "rad"
+          },
+          {
+            "id": "w1",
+            "pos": "right",
+            "label": "w1 (rad/s)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "angular velocity 1",
+            "unit": "rad/s"
+          },
+          {
+            "id": "w2",
+            "pos": "right",
+            "label": "w2 (rad/s)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "angular velocity 2",
+            "unit": "rad/s"
+          },
+          {
+            "id": "fx",
+            "pos": "right",
+            "label": "fx (N)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "constraint force x",
+            "unit": "N"
+          },
+          {
+            "id": "fy",
+            "pos": "right",
+            "label": "fy (N)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "constraint force y",
+            "unit": "N"
+          },
+          {
+            "id": "fz",
+            "pos": "right",
+            "label": "fz (N)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "constraint force z",
+            "unit": "N"
+          },
+          {
+            "id": "f_reac",
+            "pos": "right",
+            "label": "f_reac (N)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "constraint force magnitude",
+            "unit": "N"
+          },
+          {
+            "id": "t_reac",
+            "pos": "right",
+            "label": "t_reac (N*m)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "constraint torque magnitude",
+            "unit": "N*m"
           }
         ],
-        "equation": "Universal Joint governing physical equation",
-        "description": "Physical component model for Universal Joint."
+        "equation": "Pf = Pb; (Rb axis1) dot (Rf axis2) = 0; equal/opposite reactions",
+        "description": "Two-axis universal joint. axis1 belongs to B and axis2 to F; nonparallel reference axes are orthonormalized. Angles are signed principal values in rad; t_reac is signed constrained torque on F. Damping opposes permitted-axis angular velocity only."
       },
       {
         "id": "weld_joint",
@@ -6387,26 +9671,150 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "icon": "weld_joint",
         "category": "Joints",
         "params": {
-          "stiffness": {
-            "value": 1000000000,
-            "unit": "N/m",
-            "label": "Stiffness"
+          "offset": {
+            "value": "[0 0 0]",
+            "unit": "m",
+            "label": "Reference offset of F in B (B-local)"
+          },
+          "rotation": {
+            "value": "[0 0 0]",
+            "unit": "deg",
+            "label": "Reference rotation of F relative to B"
           }
         },
         "ports": [
           {
             "id": "b",
             "pos": "left",
-            "label": "B"
+            "label": "B",
+            "domain": "Frame"
           },
           {
             "id": "f",
             "pos": "right",
-            "label": "F"
+            "label": "F",
+            "domain": "Frame"
+          },
+          {
+            "id": "fx",
+            "pos": "right",
+            "label": "fx (N)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "joint reaction force x",
+            "unit": "N"
+          },
+          {
+            "id": "fy",
+            "pos": "right",
+            "label": "fy (N)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "joint reaction force y",
+            "unit": "N"
+          },
+          {
+            "id": "fz",
+            "pos": "right",
+            "label": "fz (N)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "joint reaction force z",
+            "unit": "N"
+          },
+          {
+            "id": "f_reac",
+            "pos": "right",
+            "label": "f_reac (N)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "constraint force magnitude",
+            "unit": "N"
+          },
+          {
+            "id": "tx",
+            "pos": "right",
+            "label": "tx (N*m)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "joint reaction torque x",
+            "unit": "N*m"
+          },
+          {
+            "id": "ty",
+            "pos": "right",
+            "label": "ty (N*m)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "joint reaction torque y",
+            "unit": "N*m"
+          },
+          {
+            "id": "tz",
+            "pos": "right",
+            "label": "tz (N*m)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "joint reaction torque z",
+            "unit": "N*m"
+          },
+          {
+            "id": "tbx",
+            "pos": "right",
+            "label": "tbx (N*m)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "reaction torque on B x",
+            "unit": "N*m"
+          },
+          {
+            "id": "tby",
+            "pos": "right",
+            "label": "tby (N*m)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "reaction torque on B y",
+            "unit": "N*m"
+          },
+          {
+            "id": "tbz",
+            "pos": "right",
+            "label": "tbz (N*m)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "reaction torque on B z",
+            "unit": "N*m"
+          },
+          {
+            "id": "t_reac",
+            "pos": "right",
+            "label": "t_reac (N*m)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "constrained reaction torque magnitude",
+            "unit": "N*m"
+          },
+          {
+            "id": "pos_err",
+            "pos": "right",
+            "label": "pos_err (m)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "relative position error",
+            "unit": "m"
+          },
+          {
+            "id": "rot_err",
+            "pos": "right",
+            "label": "rot_err (rad)",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "relative rotation error",
+            "unit": "rad"
           }
         ],
-        "equation": "Weld Joint governing physical equation",
-        "description": "Physical component model for Weld Joint."
+        "equation": "Pf - Pb - Rb p0 = 0; Rf = Rb R0; Ff = -Fb; Tb = -Tf - (Pf - Pb) x Ff (6 multipliers)",
+        "description": "0-DOF weld: locks all 6 relative coordinates to the fixed reference pose given by offset p0 (B-local, m) and rotation R0 (deg, Z-Y-X Euler like Rigid Transform); the default is coincident, aligned frames. Reactions are the 6 multipliers: force fx, fy, fz and torque tx, ty, tz exerted on F, plus the torque on B about B (tbx, tby, tbz = -t - d x f, which carries the moment of an offset load). pos_err [m] and rot_err [rad] report the residual relative pose error. There is no stiffness: the constraint is ideal."
       },
       {
         "id": "common_gear",
@@ -6418,23 +9826,26 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "ratio": {
             "value": 2,
             "unit": "",
-            "label": "Ratio"
+            "label": "Ratio",
+            "nonZero": true
           }
         },
         "ports": [
           {
             "id": "b",
             "pos": "left",
-            "label": "B"
+            "label": "B",
+            "domain": "Rotational"
           },
           {
             "id": "f",
             "pos": "right",
-            "label": "F"
+            "label": "F",
+            "domain": "Rotational"
           }
         ],
-        "equation": "Common Gear Constraint governing physical equation",
-        "description": "Physical component model for Common Gear Constraint."
+        "equation": "ω_F = ratio·ω_B [rad/s]\nτ_B,in + ratio·τ_F,in = 0 [N·m]  (P = τ_B·ω_B + τ_F·ω_F = 0)",
+        "description": "Ideal (lossless, massless, backlash-free) gear pair between two scalar Rotational shafts B (base) and F (follower), each referenced to the inertial frame. ratio = ω_F/ω_B (dimensionless, nonzero); a negative ratio is an external mesh that reverses the direction. The constraint forces τ_F = -τ_B/ratio on the follower, so the transmitted power is zero. Both ports are scalar Rotational ports (the Simscape Driveline style): attach a body through a Rotational Multibody Interface, never wire a Frame to this block."
       },
       {
         "id": "rack_pinion",
@@ -6446,23 +9857,27 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "radius": {
             "value": 0.1,
             "unit": "m",
-            "label": "Radius"
+            "label": "Radius",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
           {
             "id": "b",
             "pos": "left",
-            "label": "B"
+            "label": "B",
+            "domain": "Rotational"
           },
           {
             "id": "f",
             "pos": "right",
-            "label": "F"
+            "label": "F",
+            "domain": "Translational"
           }
         ],
-        "equation": "v = r * ω\nτ = r * F",
-        "description": "Converts rotary motion and torque into linear velocity and force via pinion radius r."
+        "equation": "v_F = r·ω_B [m/s]\nτ_B,in + r·F_F,in = 0 [N·m]  (P = τ_B·ω_B + F_F·v_F = 0)",
+        "description": "Ideal rack and pinion between a scalar Rotational pinion shaft B and a scalar Translational rack F, both referenced to the inertial frame. Positive pinion rotation drives the rack in the positive direction (v = r·ω); the rack force reacts on the pinion as τ = r·F, so the transmitted power is zero. Pinion pitch radius r > 0 (m). Scalar Rotational/Translational ports (Simscape Driveline style); a Frame must be attached through a Multibody Interface block."
       },
       {
         "id": "mech_config",
@@ -6481,11 +9896,12 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "c",
             "pos": "right",
-            "label": "C"
+            "label": "C",
+            "domain": "Frame"
           }
         ],
-        "equation": "Mechanism Configuration governing physical equation",
-        "description": "Physical component model for Mechanism Configuration."
+        "equation": "g = [gx gy gz] attached to the Frame network it is wired to; no wrench, no constraint",
+        "description": "Mechanism Configuration (Simscape Multibody): its single port C is a Frame connection that attaches the uniform gravity vector g [m/s2] to the mechanism it is wired to. It contributes no wrench and no constraint equation. Gravity is applied by the Gravitational Field block (this block records the mechanism gravity and rejects a malformed vector)."
       },
       {
         "id": "ps_terminator",
@@ -6498,7 +9914,9 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "u",
             "pos": "left",
-            "label": "U"
+            "label": "U",
+            "domain": "Physical",
+            "direction": "in"
           }
         ],
         "equation": "Terminal unconnected (sink)",
@@ -6522,7 +9940,10 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "id": "y",
             "pos": "right",
             "label": "C",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "constant value",
+            "unit": "*"
           }
         ],
         "equation": "y(t) = Value",
@@ -6546,7 +9967,10 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "id": "y",
             "pos": "right",
             "label": "C",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "constant value",
+            "unit": "*"
           }
         ],
         "equation": "y(t) = Value",
@@ -6574,11 +9998,15 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "y",
             "pos": "right",
-            "label": "y"
+            "label": "y",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "sine value",
+            "unit": "*"
           }
         ],
-        "equation": "PS Sine Wave governing physical equation",
-        "description": "Physical component model for PS Sine Wave."
+        "equation": "y = amp * sin(2*pi*freq*t)",
+        "description": "Sinusoidal source y = amp sin(2 pi freq t)."
       },
       {
         "id": "ps_step",
@@ -6607,10 +10035,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "y",
             "pos": "right",
-            "label": "y"
+            "label": "y",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "step value",
+            "unit": "*"
           }
         ],
-        "equation": "y(t) = (t >= StepTime) ? (InitialValue + StepSize) : InitialValue",
+        "equation": "y(t) = initial for t < time\ny(t) = final for t >= time",
         "description": "Heaviside step input transitioning abruptly at the specified step time."
       },
       {
@@ -6635,10 +10067,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "y",
             "pos": "right",
-            "label": "y"
+            "label": "y",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "ramp value",
+            "unit": "*"
           }
         ],
-        "equation": "y(t) = (t >= StartTime) ? Slope * (t - StartTime) + Offset : Offset",
+        "equation": "y(t) = 0 for t < start\ny(t) = slope * (t - start) for t >= start",
         "description": "Linear ramp generator increasing signal value at constant slope rate."
       },
       {
@@ -6651,7 +10087,15 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "lr": {
             "value": 0.05,
             "unit": "1",
-            "label": "Learning Rate"
+            "label": "Learning Rate",
+            "min": 0
+          },
+          "ts": {
+            "value": 0.01,
+            "unit": "s",
+            "label": "Sample time",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -6659,47 +10103,62 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "id": "x",
             "pos": "left",
             "label": "x",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "d",
             "pos": "left",
             "label": "d",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "lr",
             "pos": "bottom",
             "label": "lr",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "y",
             "pos": "right",
             "label": "y",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "filter output",
+            "unit": "*"
           },
           {
             "id": "err",
             "pos": "right",
             "label": "err",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "estimation error",
+            "unit": "*"
           },
           {
             "id": "w1",
             "pos": "right",
             "label": "w1",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "filter weight 1",
+            "unit": "1"
           },
           {
             "id": "w2",
             "pos": "right",
             "label": "w2",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "filter weight 2",
+            "unit": "1"
           }
         ],
-        "equation": "y = w1*x + w2*x_prev\\nerr = d - y\\nw = w + lr*err*x_vec",
-        "description": "A 2-tap Least Mean Squares (LMS) Adaptive Filter. Automatically learns to predict a target signal d from an input x by updating filter weights w1 and w2."
+        "equation": "every ts:  y(k) = w1*x(k) + w2*x(k-1),  err = d - y,  w = w + lr*err*[x(k), x(k-1)]   (LMS, outputs held between samples)",
+        "description": "A 2-tap Least Mean Squares adaptive filter (Widrow-Hoff) updated once per sample time ts: it learns to predict the target d from x by adapting the weights w1, w2 (shown after the update)."
       },
       {
         "id": "neural_neuron_learning",
@@ -6711,7 +10170,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "lr": {
             "value": 0.1,
             "unit": "1",
-            "label": "Learning Rate"
+            "label": "Learning Rate",
+            "min": 0
           },
           "initW1": {
             "value": 0.5,
@@ -6734,55 +10194,74 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "id": "x1",
             "pos": "left",
             "label": "x1",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "x2",
             "pos": "left",
             "label": "x2",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "target",
             "pos": "left",
             "label": "target",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "lr",
             "pos": "bottom",
             "label": "lr",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "y",
             "pos": "right",
             "label": "y",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "neuron output",
+            "unit": "1"
           },
           {
             "id": "err",
             "pos": "right",
             "label": "err",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "output error",
+            "unit": "*"
           },
           {
             "id": "w1",
             "pos": "right",
             "label": "w1",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "weight 1",
+            "unit": "1"
           },
           {
             "id": "w2",
             "pos": "right",
             "label": "w2",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "weight 2",
+            "unit": "1"
           },
           {
             "id": "bias",
             "pos": "right",
             "label": "bias",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "bias",
+            "unit": "1"
           }
         ],
         "equation": "y = tanh(w1*x1 + w2*x2 + bias)\\nerr = target - y\\ndw = lr*err*(1-y^2)*x",
@@ -6798,27 +10277,48 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "alpha": {
             "value": 0.1,
             "unit": "1",
-            "label": "Alpha (Learning Rate)"
+            "label": "Alpha (Learning Rate)",
+            "min": 0,
+            "exclusiveMin": true,
+            "max": 1
           },
           "gamma": {
             "value": 0.9,
             "unit": "1",
-            "label": "Gamma (Discount Factor)"
+            "label": "Gamma (Discount Factor)",
+            "min": 0,
+            "max": 1
           },
           "epsilon": {
             "value": 0.1,
             "unit": "1",
-            "label": "Epsilon (Exploration Rate)"
+            "label": "Epsilon (Exploration Rate)",
+            "min": 0,
+            "max": 1
           },
           "numStates": {
             "value": 5,
             "unit": "1",
-            "label": "Number of States"
+            "label": "Number of States",
+            "min": 1
           },
           "numActions": {
             "value": 3,
             "unit": "1",
-            "label": "Number of Actions"
+            "label": "Number of Actions",
+            "min": 1
+          },
+          "ts": {
+            "value": 0.05,
+            "unit": "s",
+            "label": "Sample time",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "seed": {
+            "value": 1,
+            "unit": "1",
+            "label": "Random seed"
           }
         },
         "ports": [
@@ -6826,35 +10326,44 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "id": "error",
             "pos": "left",
             "label": "error",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "reward",
             "pos": "left",
             "label": "reward",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "reset",
             "pos": "bottom",
             "label": "reset",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "action",
             "pos": "right",
             "label": "action",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "selected action",
+            "unit": "*"
           },
           {
             "id": "max_q",
             "pos": "right",
             "label": "max_q",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "maximum Q value",
+            "unit": "1"
           }
         ],
-        "equation": "Q(s,a) += α*(R + γ*max_q(s') - Q(s,a))",
-        "description": "Discrete Q-learning control agent. Maps continuous system error into a configurable number of state bins, selects control actions spaced between [-1, 1], and updates Q-values online."
+        "equation": "every ts: s = bin(error);  Q(s_prev, a_prev) += alpha*(R + gamma*max_a Q(s, a) - Q(s_prev, a_prev))\na = random action with probability epsilon (seeded PRNG) else argmax_a Q(s, a)",
+        "description": "Tabular epsilon-greedy Q-learning agent (Watkins): maps the error into numStates bins, selects one of numActions actions evenly spaced in [-1, 1] and updates the Q-table every sample time. Deterministic for a given seed; the Q-table is part of the simulation state and is cleared by Reset."
       },
       {
         "id": "ac_motor_pid_control",
@@ -6891,47 +10400,62 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "Rs": {
             "value": 0.5,
             "unit": "Ω",
-            "label": "Stator Res"
+            "label": "Stator Res",
+            "min": 0
           },
           "Ls": {
             "value": 0.1,
             "unit": "H",
-            "label": "Stator Ind"
+            "label": "Stator Ind",
+            "min": 0,
+            "exclusiveMin": true
           },
           "Rr": {
             "value": 0.4,
             "unit": "Ω",
-            "label": "Rotor Res"
+            "label": "Rotor Res",
+            "min": 0,
+            "exclusiveMin": true
           },
           "Lr": {
             "value": 0.1,
             "unit": "H",
-            "label": "Rotor Ind"
+            "label": "Rotor Ind",
+            "min": 0,
+            "exclusiveMin": true
           },
           "Lm": {
             "value": 0.09,
             "unit": "H",
-            "label": "Mutual Ind"
+            "label": "Mutual Ind",
+            "min": 0,
+            "exclusiveMin": true
           },
           "P": {
             "value": 2,
             "unit": "1",
-            "label": "Pole Pairs"
+            "label": "Pole Pairs",
+            "min": 1
           },
           "J": {
             "value": 0.01,
             "unit": "kg-m^2",
-            "label": "Inertia"
+            "label": "Inertia",
+            "min": 0,
+            "exclusiveMin": true
           },
           "B": {
             "value": 0.001,
             "unit": "N-m-s/rad",
-            "label": "Damping"
+            "label": "Damping",
+            "min": 0
           },
           "N": {
             "value": 100,
             "unit": "1",
-            "label": "Filter Coeff"
+            "label": "Filter Coeff",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -6939,31 +10463,42 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "id": "w_ref",
             "pos": "left",
             "label": "w_ref",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "tl",
             "pos": "bottom",
             "label": "tl",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "omega",
             "pos": "right",
             "label": "omega",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "angular velocity",
+            "unit": "rad/s"
           },
           {
             "id": "error",
             "pos": "right",
             "label": "error",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "speed error",
+            "unit": "rad/s"
           },
           {
             "id": "te",
             "pos": "right",
             "label": "te",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "electromagnetic torque",
+            "unit": "N*m"
           }
         ],
         "equation": "Pedagogical model for PID Speed Control of an Induction Motor.",
@@ -6984,23 +10519,26 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "k": {
             "value": 1,
             "unit": "W/K",
-            "label": "Conductance"
+            "label": "Conductance",
+            "min": 0
           }
         },
         "ports": [
           {
             "id": "a",
             "pos": "left",
-            "label": "A"
+            "label": "A",
+            "domain": "Thermal"
           },
           {
             "id": "b",
             "pos": "right",
-            "label": "B"
+            "label": "B",
+            "domain": "Thermal"
           }
         ],
-        "equation": "Q = (k * A / L) * (T1 - T2)",
-        "description": "Fourier conductive heat transfer through a solid medium with conductivity k and area A."
+        "equation": "Q = k * (T1 - T2)",
+        "description": "Fourier conductive heat transfer with thermal conductance k."
       },
       {
         "id": "convective_heat",
@@ -7012,24 +10550,28 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "h": {
             "value": 10,
             "unit": "W/m^2/K",
-            "label": "Heat Coeff"
+            "label": "Heat Coeff",
+            "min": 0
           },
           "A": {
             "value": 1,
             "unit": "m^2",
-            "label": "Area"
+            "label": "Area",
+            "min": 0
           }
         },
         "ports": [
           {
             "id": "a",
             "pos": "left",
-            "label": "A"
+            "label": "A",
+            "domain": "Thermal"
           },
           {
             "id": "b",
             "pos": "right",
-            "label": "B"
+            "label": "B",
+            "domain": "Thermal"
           }
         ],
         "equation": "Q = h * A * (T_solid - T_fluid)",
@@ -7045,24 +10587,29 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "eps": {
             "value": 0.9,
             "unit": "1",
-            "label": "Emissivity"
+            "label": "Emissivity",
+            "min": 0,
+            "max": 1
           },
           "A": {
             "value": 1,
             "unit": "m^2",
-            "label": "Area"
+            "label": "Area",
+            "min": 0
           }
         },
         "ports": [
           {
             "id": "a",
             "pos": "left",
-            "label": "A"
+            "label": "A",
+            "domain": "Thermal"
           },
           {
             "id": "b",
             "pos": "right",
-            "label": "B"
+            "label": "B",
+            "domain": "Thermal"
           }
         ],
         "equation": "Q = ε * σ * A * (T1⁴ - T2⁴)",
@@ -7078,18 +10625,27 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "C": {
             "value": 1000,
             "unit": "J/K",
-            "label": "Thermal Capacity"
+            "label": "Thermal Capacity",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "T0": {
+            "value": 293.15,
+            "unit": "K",
+            "label": "Initial Temperature",
+            "min": 0
           }
         },
         "ports": [
           {
             "id": "a",
             "pos": "top",
-            "label": "A"
+            "label": "A",
+            "domain": "Thermal"
           }
         ],
-        "equation": "Q = m * c_p * dT/dt",
-        "description": "Lumped heat capacity element storing thermal energy proportional to temperature derivative."
+        "equation": "Q = C * dT/dt   (C = m * c_p, T(0) = T0)",
+        "description": "Simscape Thermal Mass: lumped heat capacity C = m·c_p [J/K]. Q is the heat flow into port A and T is the absolute temperature (K, measured against the 0 K Thermal Reference); the temperature starts at the Initial Temperature T0 (default 293.15 K)."
       },
       {
         "id": "thermal_ref",
@@ -7102,11 +10658,12 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "top",
-            "label": "A"
+            "label": "A",
+            "domain": "Thermal"
           }
         ],
-        "equation": "T = 293.15 K (20 °C)",
-        "description": "Ambient temperature thermal reference representing fixed-temperature environment boundary."
+        "equation": "T = 0 K (absolute zero)",
+        "description": "Simscape Thermal Reference: absolute zero (0 K), the datum of every thermal network. All thermal temperatures in V-Lab are absolute (K); a Temperature Sensor with B on the reference reads the absolute temperature. It is NOT an ambient temperature: use a Temperature Source for a fixed-temperature environment."
       },
       {
         "id": "heat_flow_sensor",
@@ -7119,18 +10676,23 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "left",
-            "label": "A"
+            "label": "A",
+            "domain": "Thermal"
           },
           {
             "id": "b",
             "pos": "right",
-            "label": "B"
+            "label": "B",
+            "domain": "Thermal"
           },
           {
             "id": "h",
             "pos": "top",
             "label": "H",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "heat flow rate",
+            "unit": "W"
           }
         ],
         "equation": "Q_out = Q_branch",
@@ -7147,22 +10709,27 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "left",
-            "label": "A"
+            "label": "A",
+            "domain": "Thermal"
           },
           {
             "id": "b",
             "pos": "right",
-            "label": "B"
+            "label": "B",
+            "domain": "Thermal"
           },
           {
             "id": "t",
             "pos": "top",
             "label": "T",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "temperature difference",
+            "unit": "K"
           }
         ],
         "equation": "T_out = T_a - T_b",
-        "description": "Measures temperature difference between two thermal nodes and outputs a physical signal."
+        "description": "Simscape Temperature Sensor: outputs T_A - T_B (K) as a physical signal and draws no heat. Temperatures are absolute, so with B on the Thermal Reference (or left open, which reads against 0 K) the output is the absolute temperature in kelvin."
       },
       {
         "id": "heat_src",
@@ -7181,16 +10748,18 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "bottom",
-            "label": "A"
+            "label": "A",
+            "domain": "Thermal"
           },
           {
             "id": "b",
             "pos": "top",
-            "label": "B"
+            "label": "B",
+            "domain": "Thermal"
           }
         ],
-        "equation": "Heat Flow Rate Source governing physical equation",
-        "description": "Physical component model for Heat Flow Rate Source."
+        "equation": "Q = Q_src (heat flow from A to B through the source)",
+        "description": "Simscape Heat Flow Rate Source: ideal source forcing the heat flow rate Q [W] from port A to port B regardless of the temperature difference (Q < 0 reverses it). Both ports must be wired into the thermal network, otherwise the heat has nowhere to go."
       },
       {
         "id": "temp_src",
@@ -7202,18 +10771,21 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "T": {
             "value": 293.15,
             "unit": "K",
-            "label": "Temperature"
+            "label": "Temperature",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
           {
             "id": "a",
             "pos": "top",
-            "label": "A"
+            "label": "A",
+            "domain": "Thermal"
           }
         ],
-        "equation": "T_node = T_param (or T_cmd)",
-        "description": "Ideal temperature source maintaining commanded temperature at its thermal port."
+        "equation": "T_A = T (absolute, against the 0 K Thermal Reference)",
+        "description": "Ideal temperature source holding its single thermal port A at the absolute temperature T [K] (the other terminal is the 0 K Thermal Reference); it supplies whatever heat flow the network demands. Use it as the ambient or a fixed-temperature boundary."
       },
       {
         "id": "ctrl_heat_src",
@@ -7239,11 +10811,12 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "id": "s",
             "pos": "left",
             "label": "S",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "in"
           }
         ],
-        "equation": "Controlled Heat Flow Rate Source governing physical equation",
-        "description": "Physical component model for Controlled Heat Flow Rate Source."
+        "equation": "Q = S (heat flow from A to B through the source)",
+        "description": "Simscape Controlled Heat Flow Rate Source: ideal source whose heat flow rate Q [W] from port A to port B equals the physical signal S wired to port S. Both thermal ports must be wired into the network."
       },
       {
         "id": "ctrl_temp_src",
@@ -7256,22 +10829,25 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "bottom",
-            "label": "A"
+            "label": "A",
+            "domain": "Thermal"
           },
           {
             "id": "b",
             "pos": "top",
-            "label": "B"
+            "label": "B",
+            "domain": "Thermal"
           },
           {
             "id": "s",
             "pos": "left",
             "label": "S",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "in"
           }
         ],
-        "equation": "Controlled Temperature Source governing physical equation",
-        "description": "Physical component model for Controlled Temperature Source."
+        "equation": "T_A - T_B = S",
+        "description": "Controlled Temperature Source: holds the temperature difference T_A - T_B (K) equal to the physical signal S wired to port S. With B on the Thermal Reference (or left open, which reads against 0 K) it sets the absolute temperature of A."
       }
     ]
   },
@@ -7288,22 +10864,34 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "J_basket": {
             "value": 0.1,
             "unit": "kg-m^2",
-            "label": "Basket Inertia"
+            "label": "Basket Inertia",
+            "min": 0,
+            "exclusiveMin": true
           },
           "load_mass": {
             "value": 5,
             "unit": "kg",
-            "label": "Clothes Mass"
+            "label": "Clothes Mass",
+            "min": 0
           },
           "unbalance": {
             "value": 0.5,
             "unit": "kg",
-            "label": "Unbalance Mass"
+            "label": "Unbalance Mass",
+            "min": 0
           },
           "radius": {
             "value": 0.25,
             "unit": "m",
-            "label": "Radius"
+            "label": "Radius",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "damping": {
+            "value": 0.02,
+            "unit": "N-m-s/rad",
+            "label": "Viscous Damping",
+            "min": 0
           }
         },
         "ports": [
@@ -7317,11 +10905,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "id": "vis",
             "pos": "right",
             "label": "Vis",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "load torque",
+            "unit": "N*m"
           }
         ],
-        "equation": "τ = J_drum * dω/dt + b_visc * ω + τ_unbalance",
-        "description": "Rotational inertia and eccentric mass dynamics of washing machine drum during spin cycles."
+        "equation": "J_total = J_basket + (load_mass + unbalance)·radius²  [kg·m²]\nτ = J_total·dω/dt + b·ω  [N·m]  (torque drawn from R)\nvis = τ  [N·m]",
+        "description": "Washing-machine drum on a vertical axis: the basket inertia plus the laundry and the eccentric (unbalance) mass as point masses on the drum wall, with viscous bearing damping b. The Vis output is the load torque. Energy: τ·ω = d/dt(½·J_total·ω²) + b·ω². The eccentric mass adds inertia only; its centrifugal force m_u·r·ω² is radial (bearing load) and does no work about the axis."
       },
       {
         "id": "washing_fluid",
@@ -7333,17 +10924,20 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "water_level": {
             "value": 10,
             "unit": "L",
-            "label": "Water Level"
+            "label": "Water Level",
+            "min": 0
           },
           "detergent": {
             "value": 1,
             "unit": "%",
-            "label": "Detergent Conc"
+            "label": "Detergent Conc",
+            "min": 0
           },
           "drag_coeff": {
             "value": 0.05,
             "unit": "N-m-s/rad",
-            "label": "Slosh Drag"
+            "label": "Slosh Drag",
+            "min": 0
           }
         },
         "ports": [
@@ -7354,8 +10948,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Rotational"
           }
         ],
-        "equation": "dT_water/dt = (Q_heater - Q_loss) / (m_water * Cp_water)",
-        "description": "Thermal and fluid load dynamics representing wash tub water volume, detergent mixing, and heating."
+        "equation": "τ = (drag_coeff + 0.02·detergent + 0.005·water_level)·ω + 0.01·ω·|ω|  [N·m]\n(0.02 N·m·s/rad per %, 0.005 N·m·s/rad per L, 0.01 N·m·s²/rad²)",
+        "description": "Drag load of the wash liquor on the drum: a viscous term that grows with the water level and the detergent concentration plus a quadratic slosh (turbulent) term. Purely dissipative: the absorbed power τ·ω ≥ 0 is turned into heat in the water."
       }
     ]
   },
@@ -7372,17 +10966,22 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "power_rating": {
             "value": 900,
             "unit": "W",
-            "label": "Nominal Power"
+            "label": "Nominal Power",
+            "min": 0
           },
           "efficiency": {
             "value": 65,
             "unit": "%",
-            "label": "Efficiency"
+            "label": "Efficiency",
+            "min": 0,
+            "max": 100
           },
-          "freq": {
-            "value": 2.45,
-            "unit": "GHz",
-            "label": "Frequency"
+          "v_nominal": {
+            "value": 4000,
+            "unit": "V",
+            "label": "Nominal Anode Voltage",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -7405,8 +11004,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Thermal"
           }
         ],
-        "equation": "P_out = P_elec * η\\nλ = c / f",
-        "description": "Converts high-voltage electrical energy into microwave radiation (thermal energy). Typical efficiency is around 65%."
+        "equation": "i = P_rated·v/V_nom²,  P_elec = v·i = P_rated·(v/V_nom)²  [W]\nQ_H = η·P_elec,  η = efficiency/100  [W]  (RF power absorbed by the load, into H)\nP_loss = (1 − η)·P_elec  [W]  (anode loss, to ambient)",
+        "description": "Lumped magnetron: a square-law anode characteristic (equivalent anode resistance V_nom²/P_rated) draws the rated power at the nominal anode voltage. The RF output η·P_elec is absorbed by the load in the cavity and delivered as heat through H; the anode loss (1 − η)·P_elec is rejected to ambient by the magnetron's own cooling. Energy: v·i = Q_H + P_loss. Typical efficiency is around 65%."
       },
       {
         "id": "upper_heater",
@@ -7418,12 +11017,16 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "resistance": {
             "value": 40,
             "unit": "Ohm",
-            "label": "Resistance"
+            "label": "Resistance",
+            "min": 0,
+            "exclusiveMin": true
           },
-          "surface_area": {
-            "value": 0.05,
-            "unit": "m^2",
-            "label": "Surface Area"
+          "efficiency": {
+            "value": 0.9,
+            "unit": "1",
+            "label": "Heating Efficiency",
+            "min": 0,
+            "max": 1
           }
         },
         "ports": [
@@ -7446,8 +11049,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Thermal"
           }
         ],
-        "equation": "Q = V²/R\\nQ_rad = ε*σ*A*(T⁴ - T_amb⁴)",
-        "description": "A resistive heating element that provides radiant heat to the cavity. It models both Joule heating and Stefan-Boltzmann radiation."
+        "equation": "i = v/R,  P_el = v²/R  [W]\nQ_H = efficiency·P_el  [W]  (radiant heat into H)\nQ_loss = (1 − efficiency)·P_el  [W]  (to the housing)",
+        "description": "A resistive (Joule) heating element that radiates into the cavity. The element has negligible heat capacity, so its Stefan-Boltzmann radiant output equals the absorbed Joule power at every instant (quasi-static); the fraction 'efficiency' reaches the cavity through H and the rest is lost to the housing. Energy: v·i = Q_H + Q_loss."
       },
       {
         "id": "steam_generator",
@@ -7459,17 +11062,49 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "power": {
             "value": 800,
             "unit": "W",
-            "label": "Heating Power"
+            "label": "Heating Power",
+            "min": 0
           },
           "tank_vol": {
             "value": 0.5,
             "unit": "L",
-            "label": "Tank Volume"
+            "label": "Tank Volume",
+            "min": 0,
+            "exclusiveMin": true
           },
           "boil_temp": {
             "value": 100,
             "unit": "C",
-            "label": "Boiling Temp"
+            "label": "Boiling Temp",
+            "min": 0,
+            "max": 370
+          },
+          "v_rated": {
+            "value": 230,
+            "unit": "V",
+            "label": "Rated Voltage",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "eta": {
+            "value": 0.95,
+            "unit": "1",
+            "label": "Thermal Efficiency",
+            "min": 0,
+            "max": 1
+          },
+          "k_loss": {
+            "value": 1,
+            "unit": "W/K",
+            "label": "Tank Heat Loss Coefficient",
+            "min": 0
+          },
+          "ambient_temp": {
+            "value": 25,
+            "unit": "C",
+            "label": "Ambient Temperature",
+            "min": -273.15,
+            "exclusiveMin": true
           }
         },
         "ports": [
@@ -7492,8 +11127,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Thermal"
           }
         ],
-        "equation": "Q = P_elec * η_thermal\\nmdot_steam = Q / h_fg",
-        "description": "High-power electric boiler producing saturated steam at rate proportional to heating element power."
+        "equation": "R = v_rated^2/power, i = (v_p - v_n)/R, P_el = v*i\nm_w c_w dT_w/dt = eta*P_el - k_loss*(T_w - T_amb) - Q_s\nT_w >= T_boil: Q_s = max(0, eta*P_el - k_loss*(T_w - T_amb)), mdot_steam = Q_s/h_fg, dm_w/dt = -mdot_steam",
+        "description": "Electric boiler: a resistive element (rated power at the rated voltage) heats a water tank of tank_vol litres (initially full, at the ambient temperature). The water warms with the first-law balance above until it reaches the boiling temperature boil_temp; the net heat then evaporates water, mdot_steam = Q_s / h_fg (h_fg from the IF97 saturation line), the tank inventory falls, and the latent heat Q_s is delivered through the thermal port S (the steam condensing on the load). Below boil_temp no heat leaves through S. Dry-out stops steam production."
       },
       {
         "id": "microwave_inverter",
@@ -7505,17 +11140,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "v_in": {
             "value": 230,
             "unit": "V",
-            "label": "Input Voltage"
+            "label": "Input Voltage",
+            "min": 0,
+            "exclusiveMin": true
           },
           "v_out": {
             "value": 4000,
             "unit": "V",
             "label": "Output HV"
-          },
-          "switching_freq": {
-            "value": 30,
-            "unit": "kHz",
-            "label": "Switching Freq"
           }
         },
         "ports": [
@@ -7535,11 +11167,12 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "id": "ctrl",
             "pos": "top",
             "label": "C",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "in"
           }
         ],
-        "equation": "P_out = η * V_in * I_in * DutyCycle",
-        "description": "High-voltage inverter power supply for microwave magnetron with PWM duty cycle regulation."
+        "equation": "V_hv = ctrl·v_out  [V]  (regulated, measured against the model ground)\ni_in = G_e·v_ac,  G_e = V_hv·i_out/v_in²  [A]  (loss-free resistor: P_in = ⟨v_ac·i_in⟩ = V_hv·i_out when the supply rms = v_in)",
+        "description": "Averaged model of the high-voltage inverter power supply of a microwave oven: an ideal, loss-free converter with a regulated HV output V_hv = ctrl·v_out (ctrl = 1 when unwired) and a unity-power-factor input (loss-free resistor, Erickson, Fundamentals of Power Electronics ch. 18). The input current is in phase with the AC voltage, so the cycle-averaged input power equals the output power when the supply rms equals the nominal Input Voltage v_in (the model has no energy storage, so the 100 Hz power ripple appears at the input). AC and HV are single-ended terminals measured against the model's Electrical Reference (there is no return terminal). Averaged model: the switching of the inverter itself is not simulated."
       },
       {
         "id": "microwave_cavity",
@@ -7551,47 +11184,62 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "volume": {
             "value": 25,
             "unit": "L",
-            "label": "Volume"
+            "label": "Volume",
+            "min": 0,
+            "exclusiveMin": true
           },
           "ambient_temp": {
             "value": 25,
             "unit": "C",
-            "label": "Ambient"
+            "label": "Ambient",
+            "min": -273.15,
+            "exclusiveMin": true
           },
           "max_temp": {
             "value": 250,
             "unit": "C",
-            "label": "Thermal Cutout Limit"
+            "label": "Thermal Cutout Limit",
+            "min": -273.15,
+            "exclusiveMin": true
           },
           "food_mass": {
             "value": 0.5,
             "unit": "kg",
-            "label": "Food/Water Mass"
+            "label": "Food/Water Mass",
+            "min": 0
           },
           "food_cp": {
             "value": 4184,
             "unit": "J/(kg*K)",
-            "label": "Food Specific Heat"
+            "label": "Food Specific Heat",
+            "min": 0,
+            "exclusiveMin": true
           },
           "wall_mass": {
             "value": 2,
             "unit": "kg",
-            "label": "Wall Mass"
+            "label": "Wall Mass",
+            "min": 0
           },
           "wall_cp": {
             "value": 460,
             "unit": "J/(kg*K)",
-            "label": "Wall Specific Heat"
+            "label": "Wall Specific Heat",
+            "min": 0,
+            "exclusiveMin": true
           },
           "h_conv": {
             "value": 10,
             "unit": "W/(m^2*K)",
-            "label": "Convection Coeff."
+            "label": "Convection Coeff.",
+            "min": 0
           },
           "eps": {
             "value": 0.85,
             "unit": "-",
-            "label": "Surface Emissivity"
+            "label": "Surface Emissivity",
+            "min": 0,
+            "max": 1
           }
         },
         "ports": [
@@ -7617,11 +11265,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "id": "t",
             "pos": "bottom",
             "label": "T",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "temperature",
+            "unit": "K"
           }
         ],
-        "equation": "dQ/dt = P_in - Q_loss\\nm*Cp*dT/dt = Σ(dQ/dt)",
-        "description": "A thermal model of a microwave oven cavity. It tracks temperature based on microwave energy input and heat losses to the environment."
+        "equation": "C·dT/dt = Q_in − h·A·(T − T_amb) − ε·σ·A·(T⁴ − T_amb⁴) − Q_vent  [W]\nC = ρ_air·V·c_air + m_wall·c_wall + m_food·c_food  [J/K],  A = 6·V^(2/3)  [m²]\nQ_in = Q_M + Q_U + Q_S,  Q_vent = (1 − cutout)·Q_in,  cutout = ½·(1 + tanh((T_max − T)/3 K))\nT_M = T_U = T_S = T,  t = T  [K]",
+        "description": "Lumped thermal model of a microwave-oven cavity: air, walls and food share one temperature T (initially the ambient temperature). Heat entering through M, U and S is stored in the heat capacity C and lost to the ambient by natural convection and grey-body radiation (σ = 5.670374419e-8 W/(m²·K⁴), cube surface A). Near the thermal cutout limit T_max the input is vented to ambient (Q_vent), so the cavity cannot exceed it. The T output is the cavity temperature in kelvin."
       }
     ]
   },
@@ -7643,47 +11294,63 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "startTime": {
             "value": 0,
             "unit": "s",
-            "label": "Start Time"
+            "label": "Start Time",
+            "min": 0
           },
           "stopTime": {
             "value": 10,
             "unit": "s",
-            "label": "Stop Time"
+            "label": "Stop Time",
+            "min": 0,
+            "exclusiveMin": true
           },
           "initialStep": {
             "value": 0.001,
             "unit": "s",
-            "label": "Initial Step"
+            "label": "Initial Step",
+            "min": 0,
+            "exclusiveMin": true
           },
           "minimumStep": {
             "value": 0.000001,
             "unit": "s",
-            "label": "Minimum Step"
+            "label": "Minimum Step",
+            "min": 0,
+            "exclusiveMin": true
           },
           "maximumStep": {
             "value": 0.05,
             "unit": "s",
-            "label": "Maximum Step"
+            "label": "Maximum Step",
+            "min": 0,
+            "exclusiveMin": true
           },
           "relativeTolerance": {
             "value": 0.001,
             "unit": "",
-            "label": "Relative Tolerance"
+            "label": "Relative Tolerance",
+            "min": 0,
+            "exclusiveMin": true
           },
           "absoluteTolerance": {
             "value": 0.000001,
             "unit": "",
-            "label": "Absolute Tolerance"
+            "label": "Absolute Tolerance",
+            "min": 0,
+            "exclusiveMin": true
           },
           "nonlinearTolerance": {
             "value": 1e-8,
             "unit": "",
-            "label": "Nonlinear Tolerance"
+            "label": "Nonlinear Tolerance",
+            "min": 0,
+            "exclusiveMin": true
           },
           "maximumIterations": {
             "value": 50,
             "unit": "",
-            "label": "Max Newton Iterations"
+            "label": "Max Newton Iterations",
+            "min": 1
           },
           "enableDiagnostics": {
             "value": "on",
@@ -7700,7 +11367,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "right",
-            "label": "A"
+            "label": "A",
+            "domain": "Physical"
           }
         ],
         "description": "Defines the numerical solver parameters, integration tolerances, time-stepping, and diagnostics for the physical network.",
@@ -7727,8 +11395,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Any"
           }
         ],
-        "equation": "PS-Simulink Converter governing physical equation",
-        "description": "Physical component model for PS-Simulink Converter."
+        "equation": "y = u   (physical-signal to Simulink boundary, value unchanged)",
+        "description": "Boundary between the physical-signal network and Simulink: the value is passed on unchanged."
       },
       {
         "id": "simulink_ps_conv",
@@ -7751,8 +11419,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "domain": "Any"
           }
         ],
-        "equation": "Simulink-PS Converter governing physical equation",
-        "description": "Physical component model for Simulink-PS Converter."
+        "equation": "y = u   (Simulink to physical-signal boundary, value unchanged)",
+        "description": "Boundary between Simulink and the physical-signal network: the value is passed on unchanged."
       },
       {
         "id": "vlab_probe",
@@ -7765,16 +11433,22 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "in",
             "pos": "left",
-            "label": "In"
+            "label": "In",
+            "domain": "Physical",
+            "direction": "in"
           },
           {
             "id": "out",
             "pos": "right",
-            "label": "x"
+            "label": "x",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "probed signal",
+            "unit": "*"
           }
         ],
-        "equation": "Probe governing physical equation",
-        "description": "Physical component model for Probe."
+        "equation": "x = u   (tap: the probed physical signal is repeated unchanged, same unit)",
+        "description": "Probe point: taps the scalar physical signal wired to In and repeats it unchanged on x, so it can be routed to a scope or logged. It draws nothing from the network and adds no dynamics."
       },
       {
         "id": "conn_label",
@@ -7793,11 +11467,12 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "left",
-            "label": "A"
+            "label": "A",
+            "domain": "Physical"
           }
         ],
-        "equation": "Connection Label governing physical equation",
-        "description": "Physical component model for Connection Label."
+        "equation": "no equation: names the net wired to A (no through variable, no unknown)",
+        "description": "Net label (annotation): gives the net its port is wired to a readable name. It takes the domain and direction of whatever it is wired to and has no physical effect."
       },
       {
         "id": "subsystem",
@@ -7831,7 +11506,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "port_index": {
             "value": 1,
             "unit": "",
-            "label": "Port Index"
+            "label": "Port Index",
+            "min": 1
           },
           "data_type": {
             "value": "auto",
@@ -7843,7 +11519,11 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "out",
             "pos": "right",
-            "label": "Out"
+            "label": "Out",
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "subsystem input",
+            "unit": "*"
           }
         ],
         "description": "An input port for a subsystem. Creates an input handle on the parent subsystem block.",
@@ -7864,7 +11544,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "port_index": {
             "value": 1,
             "unit": "",
-            "label": "Port Index"
+            "label": "Port Index",
+            "min": 1
           },
           "data_type": {
             "value": "auto",
@@ -7876,7 +11557,9 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "in",
             "pos": "left",
-            "label": "In"
+            "label": "In",
+            "domain": "Physical",
+            "direction": "in"
           }
         ],
         "description": "An output port for a subsystem. Creates an output handle on the parent subsystem block.",
@@ -7898,11 +11581,12 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "p",
             "pos": "bottom",
-            "label": "P"
+            "label": "P",
+            "domain": "Fluid"
           }
         ],
-        "equation": "Fluid Ground (Atm) governing physical equation",
-        "description": "Physical component model for Fluid Ground (Atm)."
+        "equation": "p = 101325 Pa (1 atm, absolute)",
+        "description": "Pressure datum of a Fluid network (Simscape Reservoir / Hydraulic Reference): pins the connected node at the absolute pressure of 1 standard atmosphere and absorbs any mass flow. Unconnected Fluid ports are open (capped, no flow), never an implicit atmosphere: every connected Fluid network needs a datum (this block, an absolute Pressure Source, or a capacity with an initial pressure)."
       },
       {
         "id": "fluid_resistance",
@@ -7914,23 +11598,26 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "Rf": {
             "value": 100000,
             "unit": "Pa·s/kg",
-            "label": "Resistance"
+            "label": "Resistance",
+            "min": 0
           }
         },
         "ports": [
           {
             "id": "p",
             "pos": "left",
-            "label": "In"
+            "label": "In",
+            "domain": "Fluid"
           },
           {
             "id": "n",
             "pos": "right",
-            "label": "Out"
+            "label": "Out",
+            "domain": "Fluid"
           }
         ],
-        "equation": "Fluid Resistance governing physical equation",
-        "description": "Physical component model for Fluid Resistance."
+        "equation": "p_p - p_n = Rf * mdot   [Pa = (Pa s/kg) * (kg/s)]",
+        "description": "Linear (laminar) flow resistance: the pressure drop is proportional to the mass flow rate, as for Hagen-Poiseuille flow in a pipe. mdot is positive from p to n. Rf = 0 is an ideal short between the ports."
       },
       {
         "id": "orifice",
@@ -7942,33 +11629,55 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "Cd": {
             "value": 0.6,
             "unit": "1",
-            "label": "Discharge Coeff."
+            "label": "Discharge Coeff.",
+            "min": 0,
+            "exclusiveMin": true,
+            "max": 1
           },
           "A": {
             "value": 0.0001,
             "unit": "m²",
-            "label": "Area"
+            "label": "Area",
+            "min": 0
           },
           "rho": {
             "value": 1.2,
             "unit": "kg/m³",
-            "label": "Density"
+            "label": "Density",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "mu": {
+            "value": 0.0000181,
+            "unit": "Pa·s",
+            "label": "Dynamic Viscosity",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "Re_crit": {
+            "value": 12,
+            "unit": "1",
+            "label": "Critical Reynolds Number",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
           {
             "id": "p",
             "pos": "left",
-            "label": "In"
+            "label": "In",
+            "domain": "Fluid"
           },
           {
             "id": "n",
             "pos": "right",
-            "label": "Out"
+            "label": "Out",
+            "domain": "Fluid"
           }
         ],
-        "equation": "mdot = Cd * A * √(2*ρ*ΔP)",
-        "description": "Hydraulic restriction orifice calculating flow rate from cross-sectional area and pressure differential."
+        "equation": "mdot = Cd*A*sqrt(2*rho)*dP/(dP^2 + dP_crit^2)^(1/4),  dP = p_p - p_n,  dP_crit = pi*Re_crit^2*mu^2/(8*rho*Cd^2*A)  [kg/s]  (= Cd*A*sqrt(2*rho*|dP|)*sign(dP) for |dP| >> dP_crit)",
+        "description": "Bernoulli orifice (Simscape Local Restriction) with the smooth laminar / turbulent transition: turbulent mdot = Cd A sqrt(2 rho |dP|) for |dP| well above the critical pressure drop dP_crit (the pressure drop at the critical Reynolds number Re_crit), linear in dP below it, so the law has a finite slope at dP = 0. A = 0 closes the orifice. mdot is positive from p to n; rho and mu are those of the fluid (defaults: air at 20 degC)."
       },
       {
         "id": "fluid_capacitance",
@@ -7980,18 +11689,27 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "Cf": {
             "value": 0.00001,
             "unit": "kg/Pa",
-            "label": "Capacitance"
+            "label": "Capacitance",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "P0": {
+            "value": 101325,
+            "unit": "Pa",
+            "label": "Initial Pressure",
+            "min": 0
           }
         },
         "ports": [
           {
             "id": "p",
             "pos": "left",
-            "label": "In"
+            "label": "In",
+            "domain": "Fluid"
           }
         ],
-        "equation": "Fluid Capacitance governing physical equation",
-        "description": "Physical component model for Fluid Capacitance."
+        "equation": "mdot = Cf * dp/dt   [kg/s = (kg/Pa) * (Pa/s)],  p(0) = P0",
+        "description": "Constant-volume fluid chamber (tank): the mass flow into the port equals the compressibility capacitance Cf = V (d rho / d p) times the rate of change of the absolute pressure. The pressure starts at P0 (default 1 atm). The second terminal of the chamber is the absolute pressure zero, so the block also defines the absolute pressure level of its network."
       },
       {
         "id": "fluid_inertance",
@@ -8003,23 +11721,27 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "Li": {
             "value": 100,
             "unit": "Pa·s²/kg",
-            "label": "Inertance"
+            "label": "Inertance",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
           {
             "id": "p",
             "pos": "left",
-            "label": "In"
+            "label": "In",
+            "domain": "Fluid"
           },
           {
             "id": "n",
             "pos": "right",
-            "label": "Out"
+            "label": "Out",
+            "domain": "Fluid"
           }
         ],
-        "equation": "Fluid Inertance governing physical equation",
-        "description": "Physical component model for Fluid Inertance."
+        "equation": "p_p - p_n = Li * d(mdot)/dt   [Pa = (Pa s^2/kg) * (kg/s^2)]",
+        "description": "Fluid inertance (momentum of a fluid column, Newton's second law on the column): the pressure difference accelerates the mass flow, Li = L / S for a column of length L and cross-section S. With a capacitance it forms an oscillator of period 2 pi sqrt(Li Cf). mdot is positive from p to n."
       },
       {
         "id": "pressure_source",
@@ -8031,18 +11753,21 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "P": {
             "value": 101325,
             "unit": "Pa",
-            "label": "Pressure"
+            "label": "Pressure",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
           {
             "id": "p",
             "pos": "right",
-            "label": "Out"
+            "label": "Out",
+            "domain": "Fluid"
           }
         ],
-        "equation": "P_out - P_in = P_param",
-        "description": "Ideal hydraulic pressure source establishing commanded pressure differential across ports."
+        "equation": "p_p = P   (absolute pressure, any mass flow)",
+        "description": "Ideal single-ended pressure source: holds its port at the absolute pressure P (the second terminal is the absolute pressure zero) and supplies whatever mass flow the network demands. It is itself a pressure datum for its network."
       },
       {
         "id": "ctrl_pressure_source",
@@ -8055,17 +11780,19 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "p",
             "pos": "right",
-            "label": "Out"
+            "label": "Out",
+            "domain": "Fluid"
           },
           {
             "id": "ctrl",
             "pos": "left",
             "label": "In",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "in"
           }
         ],
-        "equation": "Ctrl Pressure Source governing physical equation",
-        "description": "Physical component model for Ctrl Pressure Source."
+        "equation": "p_p = ctrl   (absolute pressure in Pa from the input signal)",
+        "description": "Controlled ideal single-ended pressure source: holds its port at the absolute pressure given by the ctrl input signal (the second terminal is the absolute pressure zero). It is itself a pressure datum for its network."
       },
       {
         "id": "mass_flow_source",
@@ -8084,11 +11811,12 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "p",
             "pos": "right",
-            "label": "Out"
+            "label": "Out",
+            "domain": "Fluid"
           }
         ],
-        "equation": "Mass Flow Source governing physical equation",
-        "description": "Physical component model for Mass Flow Source."
+        "equation": "mdot_out = mdot   [kg/s delivered into the network through the port, negative = withdrawn]",
+        "description": "Ideal single-ended mass flow source: delivers mdot (kg/s) INTO the network through its Out port, whatever the pressure. The network must be able to take the flow (a path to a pressure datum or a capacity), otherwise the mass accumulates without bound and the model is singular."
       },
       {
         "id": "check_valve",
@@ -8100,23 +11828,33 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "Rf": {
             "value": 1000,
             "unit": "Pa·s/kg",
-            "label": "On Resistance"
+            "label": "On Resistance",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "P_crack": {
+            "value": 0,
+            "unit": "Pa",
+            "label": "Cracking Pressure",
+            "min": 0
           }
         },
         "ports": [
           {
             "id": "p",
             "pos": "left",
-            "label": "In"
+            "label": "In",
+            "domain": "Fluid"
           },
           {
             "id": "n",
             "pos": "right",
-            "label": "Out"
+            "label": "Out",
+            "domain": "Fluid"
           }
         ],
-        "equation": "Q = (ΔP > P_crack) ? Cd*A*√(2*ΔP/ρ) : 0",
-        "description": "One-way hydraulic check valve allowing forward flow only when pressure exceeds cracking pressure."
+        "equation": "mdot = (dP - P_crack) / Rf  for dP = p_p - p_n > P_crack,  mdot = 0 otherwise  (smooth gate, width 1 mPa)",
+        "description": "One-way valve with a linear open-state resistance (Simscape Check Valve, linear region): it conducts from p to n once the pressure difference exceeds the cracking pressure P_crack, with flow proportional to the excess pressure, and blocks reverse flow."
       },
       {
         "id": "relief_valve",
@@ -8128,33 +11866,41 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "P_set": {
             "value": 500000,
             "unit": "Pa",
-            "label": "Set Pressure"
+            "label": "Set Pressure",
+            "min": 0,
+            "exclusiveMin": true
           },
           "Rf_open": {
             "value": 100,
             "unit": "Pa·s/kg",
-            "label": "Open Res."
+            "label": "Open Res.",
+            "min": 0,
+            "exclusiveMin": true
           },
           "Rf_closed": {
             "value": 10000000000,
             "unit": "Pa·s/kg",
-            "label": "Closed Res."
+            "label": "Closed Res.",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
           {
             "id": "p",
             "pos": "left",
-            "label": "In"
+            "label": "In",
+            "domain": "Fluid"
           },
           {
             "id": "n",
             "pos": "right",
-            "label": "Out"
+            "label": "Out",
+            "domain": "Fluid"
           }
         ],
-        "equation": "Q = (ΔP > P_set) ? Cd*A*√(2*(ΔP - P_set)/ρ) : 0",
-        "description": "Pressure relief safety valve opening to discharge fluid when system pressure exceeds setpoint."
+        "equation": "dP = p_p - p_n = mdot * R(dP),  R = Rf_open*s + Rf_closed*(1 - s),  s = (1 + tanh((dP - P_set)/10 kPa))/2",
+        "description": "Pressure relief valve (Simscape Pressure Relief Valve): the valve opens when the pressure DIFFERENCE between its ports exceeds the set pressure P_set, so the flow path resistance falls smoothly from Rf_closed (leakage) to Rf_open and the excess pressure is vented from p to n."
       },
       {
         "id": "steam_generator_fluid",
@@ -8173,17 +11919,25 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "p",
             "pos": "right",
-            "label": "Steam"
+            "label": "Steam",
+            "domain": "Fluid"
+          },
+          {
+            "id": "n",
+            "pos": "left",
+            "label": "Return",
+            "domain": "Fluid"
           },
           {
             "id": "q_in",
             "pos": "left",
             "label": "Heat",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "in"
           }
         ],
-        "equation": "Steam Generator governing physical equation",
-        "description": "Physical component model for Steam Generator."
+        "equation": "mdot_steam = max(0, Q) / h_fg(T_sat(p_p))   [kg/s],  steam leaves through p, feed water returns through n",
+        "description": "Ideal steam generator: the heat input Q (parameter, or the q_in signal in W) evaporates water at the saturation state of the Steam port pressure, mdot = Q / h_fg. T_sat(p) and h_fg come from the IAPWS-IF97 saturation line (Clausius-Clapeyron latent heat). The steam is delivered into the network at p and the same mass flow is drawn from n."
       },
       {
         "id": "steam_accumulator",
@@ -8195,23 +11949,27 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "V": {
             "value": 0.5,
             "unit": "m³",
-            "label": "Volume"
+            "label": "Volume",
+            "min": 0,
+            "exclusiveMin": true
           }
         },
         "ports": [
           {
             "id": "pin",
             "pos": "left",
-            "label": "In"
+            "label": "In",
+            "domain": "Fluid"
           },
           {
             "id": "pout",
             "pos": "right",
-            "label": "Out"
+            "label": "Out",
+            "domain": "Fluid"
           }
         ],
-        "equation": "Steam Accumulator governing physical equation",
-        "description": "Physical component model for Steam Accumulator."
+        "equation": "p_in = p_out,  mdot_in - mdot_out = V * (d rho_g / d p)_sat * dp/dt   [kg/s]",
+        "description": "Dry saturated-steam vessel of volume V: the steam mass m = V rho_g(p) follows the saturation line (IAPWS-IF97), so a net inflow raises the pressure with the storage coefficient V d rho_g/dp. Both ports are the vessel node. Flash storage of a liquid inventory is not modelled."
       },
       {
         "id": "steam_nozzle",
@@ -8223,23 +11981,42 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           "Cd": {
             "value": 0.5,
             "unit": "1",
-            "label": "Discharge Coeff."
+            "label": "Discharge Coeff.",
+            "min": 0,
+            "exclusiveMin": true,
+            "max": 1
           },
           "d": {
             "value": 0.0005,
             "unit": "m",
-            "label": "Diameter"
+            "label": "Diameter",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "gamma": {
+            "value": 1.3,
+            "unit": "1",
+            "label": "Specific Heat Ratio",
+            "min": 1,
+            "exclusiveMin": true
           }
         },
         "ports": [
           {
             "id": "p",
             "pos": "left",
-            "label": "In"
+            "label": "In",
+            "domain": "Fluid"
+          },
+          {
+            "id": "n",
+            "pos": "right",
+            "label": "Out",
+            "domain": "Fluid"
           }
         ],
-        "equation": "mdot = Cd * A_throat * P0 * √(γ/(R*T0)) * (2/(γ+1))^((γ+1)/(2*(γ-1)))",
-        "description": "Convergent-divergent steam expansion nozzle accelerating high-pressure steam into velocity jet."
+        "equation": "mdot = Cd*A*Pp*sqrt(2*gamma/((gamma-1)*R*T0)) * sqrt(r^(2/gamma) - r^((gamma+1)/gamma)),  r = max(Pn/Pp, r*),  r* = (2/(gamma+1))^(gamma/(gamma-1)),  T0 = T_sat(Pp)",
+        "description": "Two-port converging steam nozzle: isentropic (Saint-Venant & Wantzel) flow of saturated steam from the upstream pressure Pp (T0 = T_sat(Pp), R = 461.52 J/(kg K)) to the downstream pressure Pn, choked at the critical pressure ratio r*, so the flow stays constant when the downstream pressure falls below r* Pp. No reverse flow."
       },
       {
         "id": "pressure_sensor",
@@ -8252,17 +12029,21 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "p",
             "pos": "left",
-            "label": "In"
+            "label": "In",
+            "domain": "Fluid"
           },
           {
             "id": "out",
             "pos": "right",
             "label": "P",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "pressure",
+            "unit": "Pa"
           }
         ],
-        "equation": "P_out = P_p - P_n",
-        "description": "Measures differential or gauge fluid pressure across two hydraulic ports."
+        "equation": "out = p_p   [Pa, absolute pressure of the node; no mass flow]",
+        "description": "Ideal single-ended pressure sensor: outputs the absolute pressure at its port and draws no mass flow. Use two sensors (or a Subtract block) for a differential reading."
       },
       {
         "id": "flow_sensor",
@@ -8275,22 +12056,27 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "p",
             "pos": "left",
-            "label": "In"
+            "label": "In",
+            "domain": "Fluid"
           },
           {
             "id": "n",
             "pos": "right",
-            "label": "Out"
+            "label": "Out",
+            "domain": "Fluid"
           },
           {
             "id": "out",
             "pos": "top",
             "label": "F",
-            "domain": "Physical"
+            "domain": "Physical",
+            "direction": "out",
+            "quantity": "mass flow rate",
+            "unit": "kg/s"
           }
         ],
-        "equation": "Q_out = Q_branch",
-        "description": "Measures volumetric fluid flow rate flowing through a hydraulic pipeline branch."
+        "equation": "p_p = p_n,  out = mdot   [kg/s, positive from p to n]",
+        "description": "Ideal mass flow rate sensor in series with the line: no pressure drop (p_p = p_n), the output is the mass flow rate through it, positive from p to n."
       }
     ]
   },
@@ -8313,10 +12099,15 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "value": "Y = f(X1, X2, ...)",
             "unit": "",
             "label": "Equation"
+          },
+          "deploymentModel": {
+            "value": "{}",
+            "unit": "",
+            "label": "Deployment Model (JSON)"
           }
         },
         "ports": [],
-        "equation": "Y = f(X1, X2, ...)",
+        "equation": "out = f_DOE(in1, …, inN)  (deployed RSM / GMDH / Taguchi response; each factor and the response is a scalar physical signal)",
         "description": "A data-driven model generated from experimental results (Design of Experiments). It allows high-fidelity behavioral simulation without complex physical equations."
       }
     ]
@@ -8331,12 +12122,40 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "icon": "hydraulic_reference_il",
         "category": "Utilities",
         "params": {
-          "referencePressure": { "value": 101325, "unit": "Pa", "label": "Reference Pressure" },
-          "pressureType": { "value": "absolute", "unit": "", "label": "Pressure Type" },
-          "atmosphericPressure": { "value": 101325, "unit": "Pa", "label": "Atmospheric Pressure" },
-          "elevationCorrection": { "value": "false", "unit": "", "label": "Enable Elevation Correction" },
-          "referenceElevation": { "value": 0, "unit": "m", "label": "Reference Elevation" },
-          "initializationPriority": { "value": "high", "unit": "", "label": "Initialization Priority" }
+          "referencePressure": {
+            "value": 101325,
+            "unit": "Pa",
+            "label": "Reference Pressure",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "pressureType": {
+            "value": "absolute",
+            "unit": "",
+            "label": "Pressure Type"
+          },
+          "atmosphericPressure": {
+            "value": 101325,
+            "unit": "Pa",
+            "label": "Atmospheric Pressure",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "elevationCorrection": {
+            "value": "false",
+            "unit": "",
+            "label": "Enable Elevation Correction"
+          },
+          "referenceElevation": {
+            "value": 0,
+            "unit": "m",
+            "label": "Reference Elevation"
+          },
+          "initializationPriority": {
+            "value": "high",
+            "unit": "",
+            "label": "Initialization Priority"
+          }
         },
         "ports": [
           { "id": "a", "pos": "top", "label": "A", "domain": "isothermal_liquid" }
@@ -8357,8 +12176,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           { "id": "a", "pos": "left", "label": "A", "domain": "isothermal_liquid" },
           { "id": "b", "pos": "right", "label": "B", "domain": "isothermal_liquid" }
         ],
-        "equation": "p_B - p_A = dp",
-        "description": "Ideal pump maintaining a fixed pressure rise in an isothermal liquid network."
+        "equation": "p_B - p_A = pressure_rise   [Pa, any mass flow A -> B]",
+        "description": "Ideal pump in the sense of an ideal pressure source: it holds a fixed pressure rise between its ports and delivers whatever mass flow the network demands. It has no shaft port and no pump curve (no displacement relation Q = D w, tau = D dp): use it as the pressure head of a pump."
       },
       {
         "id": "pipe_il",
@@ -8367,7 +12186,12 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "icon": "pipe_il",
         "category": "Elements",
         "params": {
-          "R": { "value": 100000, "unit": "Pa/(kg/s)", "label": "Hydraulic Resistance" }
+          "R": {
+            "value": 100000,
+            "unit": "Pa/(kg/s)",
+            "label": "Hydraulic Resistance",
+            "min": 0
+          }
         },
         "ports": [
           { "id": "a", "pos": "left", "label": "A", "domain": "isothermal_liquid" },
@@ -8383,16 +12207,48 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "icon": "restriction_il",
         "category": "Elements",
         "params": {
-          "Cd": { "value": 0.6, "unit": "1", "label": "Discharge Coefficient" },
-          "area": { "value": 0.0001, "unit": "m^2", "label": "Restriction Area" },
-          "rho": { "value": 1000, "unit": "kg/m^3", "label": "Fluid Density" }
+          "Cd": {
+            "value": 0.6,
+            "unit": "1",
+            "label": "Discharge Coefficient",
+            "min": 0,
+            "exclusiveMin": true,
+            "max": 1
+          },
+          "area": {
+            "value": 0.0001,
+            "unit": "m^2",
+            "label": "Restriction Area",
+            "min": 0
+          },
+          "rho": {
+            "value": 1000,
+            "unit": "kg/m^3",
+            "label": "Fluid Density",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "mu": {
+            "value": 0.001,
+            "unit": "Pa·s",
+            "label": "Dynamic Viscosity",
+            "min": 0,
+            "exclusiveMin": true
+          },
+          "Re_crit": {
+            "value": 12,
+            "unit": "1",
+            "label": "Critical Reynolds Number",
+            "min": 0,
+            "exclusiveMin": true
+          }
         },
         "ports": [
           { "id": "a", "pos": "left", "label": "A", "domain": "isothermal_liquid" },
           { "id": "b", "pos": "right", "label": "B", "domain": "isothermal_liquid" }
         ],
-        "equation": "mdot = Cd * A * sqrt(2*rho*|dp|) * sign(dp)",
-        "description": "Hydraulic orifice restriction obeying Bernoulli flow."
+        "equation": "mdot = Cd*A*sqrt(2*rho)*dp/(dp^2 + dp_crit^2)^(1/4),  dp = p_A - p_B,  dp_crit = pi*Re_crit^2*mu^2/(8*rho*Cd^2*A)  (= Cd*A*sqrt(2*rho*|dp|)*sign(dp) for |dp| >> dp_crit)",
+        "description": "Hydraulic orifice (Simscape Isothermal Liquid Local Restriction): Bernoulli flow with the smooth laminar / turbulent transition at the critical Reynolds number, finite slope at dp = 0. A = 0 closes the restriction. mdot is positive from A to B; defaults are water at 20 degC."
       }
     ]
   }

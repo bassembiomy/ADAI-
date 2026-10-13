@@ -66,7 +66,9 @@ for (const domainObj of VLAB_LIBRARY) {
     const params: Record<string, number> = {};
     if (block.params) {
       for (const [key, param] of Object.entries(block.params)) {
-        params[key] = typeof param.value === 'number' ? param.value : 1.0;
+        // Text / list parameters ("[1 0 0]", "sin") keep the equation's own default: scaling a placeholder 1.0 by 0.1 or 10
+        // would hand a bare number to a vector parameter, which the strict parameter parser (WP-08) rightly rejects.
+        if (typeof param.value === 'number') params[key] = param.value;
       }
     }
 

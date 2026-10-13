@@ -28,13 +28,17 @@ describe('Motion sensor output ports', () => {
   it('rot_motion_sensor: W and A ports both deliver finite signals', () => {
     const nodes: Node[] = [
       { id: 'src', data: { type: 'torque_source', params: { T: 5 } } } as any,
-      { id: 'load', data: { type: 'inertia', params: { J: 0.01 } } } as any,
+      { id: 'load', data: { type: 'inertia', params: { J: 0.01, B: 0 } } } as any,
+      // WP-13 (F-064): an open mechanical port is open, so the case / reference ports go to the Rotational Reference
+      { id: 'ref', data: { type: 'rot_ref', params: {} } } as any,
       { id: 'sensor', data: { type: 'rot_motion_sensor', params: {} } } as any,
       { id: 'scope1', data: { type: 'scope', params: { numSignals: { value: 2 } } } } as any,
     ];
     const edges: Edge[] = [
       { id: 'e1', source: 'src', target: 'load', sourceHandle: 'r_s', targetHandle: 'r_t' },
       { id: 'e2', source: 'src', target: 'sensor', sourceHandle: 'r_s', targetHandle: 'r_t' },
+      { id: 'e2_src_ref', source: 'src', target: 'ref', sourceHandle: 'c_s', targetHandle: 'r_t' },
+      { id: 'e2_sensor_ref', source: 'sensor', target: 'ref', sourceHandle: 'c_s', targetHandle: 'r_t' },
       { id: 'e3', source: 'sensor', target: 'scope1', sourceHandle: 'w_s', targetHandle: 'in1_t' },
       { id: 'e4', source: 'sensor', target: 'scope1', sourceHandle: 'a_s', targetHandle: 'in2_t' },
     ];
@@ -62,13 +66,16 @@ describe('Motion sensor output ports', () => {
   it('trans_motion_sensor: V and P ports both deliver finite signals', () => {
     const nodes: Node[] = [
       { id: 'src', data: { type: 'force_source', params: { F: 10 } } } as any,
-      { id: 'load', data: { type: 'mass', params: { m: 2 } } } as any,
+      { id: 'load', data: { type: 'mass', params: { m: 2, b: 0 } } } as any,
+      { id: 'ref', data: { type: 'trans_ref', params: {} } } as any,
       { id: 'sensor', data: { type: 'trans_motion_sensor', params: {} } } as any,
       { id: 'scope1', data: { type: 'scope', params: { numSignals: { value: 2 } } } } as any,
     ];
     const edges: Edge[] = [
       { id: 'e1', source: 'src', target: 'load', sourceHandle: 'a_s', targetHandle: 'p_t' },
       { id: 'e2', source: 'src', target: 'sensor', sourceHandle: 'a_s', targetHandle: 'r_t' },
+      { id: 'e2_src_ref', source: 'src', target: 'ref', sourceHandle: 'b_s', targetHandle: 'p_t' },
+      { id: 'e2_sensor_ref', source: 'sensor', target: 'ref', sourceHandle: 'c_s', targetHandle: 'p_t' },
       { id: 'e3', source: 'sensor', target: 'scope1', sourceHandle: 'v_s', targetHandle: 'in1_t' },
       { id: 'e4', source: 'sensor', target: 'scope1', sourceHandle: 'p_s', targetHandle: 'in2_t' },
     ];

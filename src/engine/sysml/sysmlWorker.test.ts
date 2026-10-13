@@ -4,6 +4,7 @@ import { SysmlWorkerClient } from '../../services/sysmlWorkerClient';
 import { generateSysmlModel } from './largeModelGenerator';
 import { fromRepository, toWorkerSnapshot, fromWorkerSnapshot, projectNormalizedDiagram } from './normalizedStore';
 import type { SysmlRepository } from './model';
+import { createEmptyRepository } from './model';
 import { validateSysmlRepository } from './validation';
 import { analyzeMutation } from './mutations';
 import { serializeRepository } from './persistence';
@@ -88,7 +89,7 @@ describe('SysML Worker Protocol & Execution', () => {
     if (response.success) {
       expect(typeof response.result).toBe('string');
       const parsed = JSON.parse(response.result as string);
-      expect(parsed.schemaVersion).toBe(2);
+      expect(parsed.schemaVersion).toBe(5);
     }
   });
 
@@ -242,7 +243,10 @@ describe('SysML Worker Protocol & Execution', () => {
       });
       expect(workerValRes.success).toBe(true);
       if (workerValRes.success) {
-        expect(workerValRes.result).toEqual(mainVal);
+        const workerVal = workerValRes.result as any;
+        expect(workerVal.valid).toEqual(mainVal.valid);
+        expect(workerVal.diagnostics).toEqual(mainVal.diagnostics);
+        expect(workerVal.diagnosticCodes).toEqual([...new Set(mainVal.diagnostics.map((d: any) => d.code))].sort());
       }
 
       // 2. Projection equivalence
@@ -313,6 +317,7 @@ describe('SysML Worker Protocol & Execution', () => {
       const activeIds = defKeys.slice(0, 5);
       store.diagramPresentations.set('diag_small', {
         elementIds: activeIds,
+        presentations: {},
       });
 
       const scopedSnapshot = toWorkerSnapshot(store, 'diag_small', true);
@@ -340,5 +345,293 @@ describe('SysML Worker Protocol & Execution', () => {
       expect(typeof diags.lastTaskDurationMs).toBe('number');
       expect(diags.lastTaskDurationMs).toBeGreaterThanOrEqual(0);
     });
+  });
+
+  describe('compact diagnostics and deletion impact without full-repo embedding (Task 2)', () => {
+    it('validate returns compact diagnostics alongside the full report', () => {
+      const fixture = getFixture(20);
+      const response = handleWorkerMessage({
+        requestId: 'req-compact-val',
+        revision: fixture.revision,
+        taskType: 'validate',
+        payload: fixture,
+      });
+      expect(response.success).toBe(true);
+      if (response.success) {
+        const result = response.result as any;
+        expect(result).toHaveProperty('valid');
+        expect(result).toHaveProperty('diagnostics');
+        expect(Array.isArray(result.diagnosticCodes)).toBe(true);
+        expect(Array.isArray(result.compactDiagnostics)).toBe(true);
+        for (const compact of result.compactDiagnostics) {
+          expect(Object.keys(compact).sort()).toEqual(['code', 'elementId', 'severity']);
+        }
+        expect(result.diagnosticCodes).toEqual([...new Set(result.diagnostics.map((d: any) => d.code))].sort());
+      }
+    });
+
+    it('validate surfaces typed codes for a relationship with a missing endpoint', () => {
+      const fixture = getFixture(10);
+      fixture.relationships['rel-bad'] = {
+        id: 'rel-bad', kind: 'association', sourceId: 'ghost-source',
+        targetId: Object.keys(fixture.definitions)[0],
+      };
+      const response = handleWorkerMessage({
+        requestId: 'req-compact-val-bad',
+        revision: fixture.revision,
+        taskType: 'validate',
+        payload: fixture,
+      });
+      expect(response.success).toBe(true);
+      if (response.success) {
+        const result = response.result as any;
+        expect(result.diagnosticCodes).toContain('MISSING_RELATIONSHIP_ENDPOINT');
+        expect(result.compactDiagnostics.some((d: any) => d.code === 'MISSING_RELATIONSHIP_ENDPOINT')).toBe(true);
+      }
+    });
+
+    it('project returns delta plus diagnostic codes without embedding the repository', () => {
+      const fixture = getFixture(30);
+      const store = fromRepository(fixture);
+      const response = handleWorkerMessage({
+        requestId: 'req-compact-proj',
+        revision: store.revision,
+        taskType: 'project',
+        payload: store,
+      });
+      expect(response.success).toBe(true);
+      if (response.success) {
+        const result = response.result as any;
+        expect(result.view).toBeDefined();
+        expect(result.delta).toBeDefined();
+        expect(Array.isArray(result.diagnosticCodes)).toBe(true);
+        expect('definitions' in result).toBe(false);
+        expect('repository' in result).toBe(false);
+        expect('usages' in result).toBe(false);
+      }
+    });
+
+    it('impact returns compact delta with per-target deletion decisions and no full repo', () => {
+      const fixture = getFixture(30);
+      const firstBlockId = Object.keys(fixture.definitions)[0];
+      const response = handleWorkerMessage({
+        requestId: 'req-compact-imp',
+        revision: fixture.revision,
+        taskType: 'impact',
+        targetElementIds: [firstBlockId],
+        payload: fixture,
+      });
+      expect(response.success).toBe(true);
+      if (response.success) {
+        const result = response.result as any;
+        expect(result.requestedElementIds).toContain(firstBlockId);
+        expect(result.deletedElementIds).toContain(firstBlockId);
+        expect(result.impactSummary).toBeDefined();
+        expect(Array.isArray(result.targets)).toBe(true);
+        expect(result.targets[0]).toMatchObject({ id: firstBlockId });
+        expect(result.targets[0]).toHaveProperty('targetKind');
+        expect(result.targets[0]).toHaveProperty('cascadeIds');
+        expect(Array.isArray(result.diagnosticCodes)).toBe(true);
+        expect('definitions' in result).toBe(false);
+        expect('repository' in result).toBe(false);
+      }
+    });
+
+    it('impact flags unknown targets with a typed diagnostic code', () => {
+      const fixture = getFixture(10);
+      const response = handleWorkerMessage({
+        requestId: 'req-compact-imp-ghost',
+        revision: fixture.revision,
+        taskType: 'impact',
+        targetElementIds: ['ghost-element'],
+        payload: fixture,
+      });
+      expect(response.success).toBe(true);
+      if (response.success) {
+        const result = response.result as any;
+        expect(result.targets[0].targetKind).toBe('unknown');
+        expect(result.diagnosticCodes).toContain('UNKNOWN_ELEMENT');
+      }
+    });
+
+    it('Task 4 (Finding 1): validate resolves State endpoints with typed Map or plain-object context, stays context-blind without', () => {
+      const buildRepo = (): SysmlRepository => {
+        const repo = createEmptyRepository();
+        repo.requirements.req1 = {
+          id: 'req1', name: 'Req 1', namespace: [], kind: 'requirement', requirementId: 'REQ-1',
+          text: 'Must hold', status: 'draft', version: '1',
+        };
+        repo.relationships.rel1 = {
+          id: 'rel1', kind: 'satisfy', sourceId: 'state-active', targetId: 'req1',
+        };
+        return repo;
+      };
+      const codesOf = (response: unknown): string[] =>
+        (response as { success: boolean; result?: { diagnosticCodes?: string[] } }).success
+          ? ((response as any).result.diagnosticCodes as string[])
+          : [];
+
+      // Without context: context-blind, missing State endpoint diagnosed as before.
+      const blind = handleWorkerMessage({
+        requestId: 'req-ctx-blind', revision: 0, taskType: 'validate', payload: buildRepo(),
+      });
+      expect(blind.success).toBe(true);
+      expect(codesOf(blind)).toContain('MISSING_RELATIONSHIP_ENDPOINT');
+
+      // Typed Map context resolves the external State endpoint.
+      const withMap = handleWorkerMessage({
+        requestId: 'req-ctx-map', revision: 0, taskType: 'validate', payload: buildRepo(),
+        endpointContext: {
+          externalEndpoints: new Map([
+            ['state-active', { id: 'state-active', name: 'Active', family: 'state' as const }],
+          ]),
+        },
+      });
+      expect(withMap.success).toBe(true);
+      expect(codesOf(withMap)).not.toContain('MISSING_RELATIONSHIP_ENDPOINT');
+      expect((withMap as any).result.valid).toBe(true);
+
+      // Plain-object context (postMessage/JSON round-trip) coerces instead of dropping blind.
+      const withPlain = handleWorkerMessage({
+        requestId: 'req-ctx-plain', revision: 0, taskType: 'validate', payload: buildRepo(),
+        endpointContext: {
+          externalEndpoints: {
+            'state-active': { id: 'state-active', name: 'Active', family: 'state' as const },
+          },
+        },
+      });
+      expect(withPlain.success).toBe(true);
+      expect(codesOf(withPlain)).not.toContain('MISSING_RELATIONSHIP_ENDPOINT');
+      expect((withPlain as any).result.valid).toBe(true);
+    });
+  describe('SysmlWorkerClient endpoint context (Finding 4 review follow-up)', () => {
+    const buildStateLinkRepo = (): SysmlRepository => {
+      const repo = createEmptyRepository();
+      repo.requirements.req1 = {
+        id: 'req1', name: 'Req 1', namespace: [], kind: 'requirement', requirementId: 'REQ-1',
+        text: 'Must hold', status: 'draft', version: '1',
+      };
+      repo.relationships.rel1 = {
+        id: 'rel1', kind: 'satisfy', sourceId: 'state-active', targetId: 'req1',
+      };
+      return repo;
+    };
+    const mapContext = {
+      externalEndpoints: new Map([
+        ['state-active', { id: 'state-active', name: 'Active', family: 'state' as const }],
+      ]),
+    };
+    const plainContext = {
+      externalEndpoints: {
+        'state-active': { id: 'state-active', name: 'Active', family: 'state' as const },
+      },
+    };
+    const codesOf = (report: { diagnostics: Array<{ code: string }> }): string[] =>
+      report.diagnostics.map(d => d.code);
+
+    it('validate without context diagnoses, with Map or plain-object context resolves', async () => {
+      const client = new SysmlWorkerClient();
+
+      const blind = await client.validate(buildStateLinkRepo(), 0);
+      expect(codesOf(blind)).toContain('MISSING_RELATIONSHIP_ENDPOINT');
+
+      const withMap = await client.validate(buildStateLinkRepo(), 0, undefined, mapContext);
+      expect(codesOf(withMap)).not.toContain('MISSING_RELATIONSHIP_ENDPOINT');
+      expect(withMap.valid).toBe(true);
+
+      const withPlain = await client.validate(buildStateLinkRepo(), 0, undefined, plainContext);
+      expect(codesOf(withPlain)).not.toContain('MISSING_RELATIONSHIP_ENDPOINT');
+      expect(withPlain.valid).toBe(true);
+
+      client.terminate();
+    });
+
+    it('project forwards endpoint context and resolves links in diagnosticCodes', async () => {
+      const client = new SysmlWorkerClient();
+
+      const blind = await client.project(buildStateLinkRepo(), 0);
+      expect(blind.diagnosticCodes).toContain('MISSING_RELATIONSHIP_ENDPOINT');
+
+      const withMap = await client.project(buildStateLinkRepo(), 0, undefined, mapContext);
+      expect(withMap.diagnosticCodes).not.toContain('MISSING_RELATIONSHIP_ENDPOINT');
+
+      client.terminate();
+    });
+
+    it('scheduleValidation forwards endpoint context to the validation report', async () => {
+      const client = new SysmlWorkerClient();
+      const report = await new Promise<any>((resolve, reject) => {
+        client.scheduleValidation(buildStateLinkRepo(), 0, resolve, reject, mapContext);
+      });
+      expect(codesOf(report)).not.toContain('MISSING_RELATIONSHIP_ENDPOINT');
+      expect(report.valid).toBe(true);
+      client.terminate();
+    });
+
+    it('posts endpointContext under the exact field the worker reads (worker path)', async () => {
+      const repo = buildStateLinkRepo();
+      for (let i = 0; i < 220; i++) {
+        repo.definitions[`pad-${i}`] = {
+          id: `pad-${i}`, name: `Pad ${i}`, kind: 'block', namespace: [], ownerId: 'model',
+          isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+        };
+      }
+      const captured: any[] = [];
+      const loopback = {
+        onmessage: null as any,
+        onerror: null as any,
+        postMessage(request: any) {
+          captured.push(request);
+          const response = handleWorkerMessage(request);
+          queueMicrotask(() => (this as any).onmessage?.({ data: response }));
+        },
+        terminate() {},
+      };
+      const client = new SysmlWorkerClient(() => loopback as unknown as Worker);
+
+      const report = await client.validate(repo, repo.revision, undefined, mapContext);
+      expect(codesOf(report)).not.toContain('MISSING_RELATIONSHIP_ENDPOINT');
+      expect(captured).toHaveLength(1);
+      // Exact field name match with the worker reader (requestEndpointContext
+      // reads `endpointContext`, with the legacy `context` alias NOT used).
+      expect(captured[0].endpointContext).toBeDefined();
+      expect(captured[0].endpointContext.externalEndpoints).toBeDefined();
+      client.terminate();
+    });
+
+    it('scheduleValidation posts endpointContext under the exact field the worker reads (worker path)', async () => {
+      const repo = buildStateLinkRepo();
+      for (let i = 0; i < 220; i++) {
+        repo.definitions[`pad-${i}`] = {
+          id: `pad-${i}`, name: `Pad ${i}`, kind: 'block', namespace: [], ownerId: 'model',
+          isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
+        };
+      }
+      const captured: any[] = [];
+      const loopback = {
+        onmessage: null as any,
+        onerror: null as any,
+        postMessage(request: any) {
+          captured.push(request);
+          const response = handleWorkerMessage(request);
+          queueMicrotask(() => (this as any).onmessage?.({ data: response }));
+        },
+        terminate() {},
+      };
+      const client = new SysmlWorkerClient(() => loopback as unknown as Worker);
+
+      const report = await new Promise<any>((resolve, reject) => {
+        // Padded repo forces the off-thread path so the test captures the
+        // posted request; the small unpadded repo would take the fast path.
+        client.scheduleValidation(repo, 0, resolve, reject, mapContext);
+      });
+      expect(codesOf(report)).not.toContain('MISSING_RELATIONSHIP_ENDPOINT');
+      expect(report.valid).toBe(true);
+      expect(captured).toHaveLength(1);
+      expect(captured[0].endpointContext).toBeDefined();
+      expect(captured[0].endpointContext.externalEndpoints).toBeDefined();
+      client.terminate();
+    });
+  });
   });
 });

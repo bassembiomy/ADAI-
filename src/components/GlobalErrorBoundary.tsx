@@ -110,7 +110,7 @@ export class GlobalErrorBoundary extends React.Component<Props, State> {
             </div>
 
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-              <button
+              <button data-help-feature="ui:GlobalErrorBoundary:70787628b141" data-help-source="src/components/GlobalErrorBoundary.tsx"
                 onClick={this.handleResetStorage}
                 style={{
                   padding: '8px 16px',
@@ -124,7 +124,7 @@ export class GlobalErrorBoundary extends React.Component<Props, State> {
               >
                 Clear Local Storage & Reload
               </button>
-              <button
+              <button data-help-feature="ui:GlobalErrorBoundary:0ae1a171f140" data-help-source="src/components/GlobalErrorBoundary.tsx"
                 onClick={this.handleReload}
                 style={{
                   padding: '8px 16px',

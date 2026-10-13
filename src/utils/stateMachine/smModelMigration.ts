@@ -96,6 +96,10 @@ export const migrateStateMachineModel = (
   const clonedInput = structuredClone({
     ...input,
     states: normalizedXB.states,
+    variables: input.variables.map((variable) => ({
+      ...variable,
+      overflowPolicy: variable.overflowPolicy ?? 'saturate',
+    })),
   });
 
   const verification: SMVerificationConfig = {
@@ -119,6 +123,7 @@ export const migrateStateMachineModel = (
         junctions: repaired.junctions,
         layers: repaired.layers,
         verification,
+        ...(clonedInput.diagrams !== undefined ? { diagrams: clonedInput.diagrams } : {}),
       },
       diagnostics: normalizedXB.diagnostics,
     };
@@ -175,6 +180,9 @@ export const migrateStateMachineModel = (
       layers: repaired.layers,
       junctions: repaired.junctions,
       verification,
+      diagrams: clonedInput.diagrams && clonedInput.diagrams.length > 0
+        ? clonedInput.diagrams
+        : [{ id: 'root', name: 'Root Diagram', ownerId: 'root', contextRegionId: 'root' }],
     } as StateMachineModelV5,
     diagnostics,
   };

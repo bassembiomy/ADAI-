@@ -72,10 +72,13 @@ describe('normative representative SysML profile fixture', () => {
     const raw = readFileSync(fixturePath, 'utf-8');
     const { repository: repo } = loadRepository(JSON.parse(raw));
 
-    // Typed usages
-    const usages = Object.values(repo.usages);
-    expect(usages.some(u => u.kind === 'part' && u.aggregation === 'composite')).toBe(true);
-    expect(usages.some(u => u.kind === 'part' && u.aggregation === 'shared')).toBe(true);
+    // Format 5: the fixture's part usages are Block properties (composite parts, and the shared
+    // aggregation as a reference property); no usage record is left.
+    expect(Object.keys(repo.usages)).toEqual([]);
+    const spacecraft = Object.values(repo.definitions).find(d => d.kind === 'block' && d.name === 'SpacecraftSystem');
+    const partProperties = spacecraft?.kind === 'block' ? spacecraft.properties : [];
+    expect(partProperties.some(p => p.kind === 'part' && p.name === 'bus')).toBe(true);
+    expect(partProperties.some(p => p.kind === 'reference' && p.name === 'auxiliary')).toBe(true);
 
     // Connectors: assembly, delegation, binding
     const connKinds = new Set(Object.values(repo.connectors).map(c => c.kind));

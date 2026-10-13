@@ -1,0 +1,11 @@
+{
+  "checks": [
+    "42 categorized components; legacy fixture import; managed window geometry",
+    "Keyboard quick press preserved for one tick; state transition; release and committed scope",
+    "Paused numeric draft/commit; Reset clears queued input",
+    "Start while running renews the simulation loop; Pause and Reset lifecycle",
+    "App light/dark colors and mobile geometry",
+    "Actual report preview and downloaded HTML consume queued keyboard input through semantic runtime"
+  ],
+  "errors": []
+}

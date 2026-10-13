@@ -1,7 +1,9 @@
 import type { RequirementDefinition, SysmlRelationship, SysmlRepository } from './model';
 import { deriveEvidenceStatus } from './evidence';
 import { hash, stableStringify } from './requirements';
-import { buildTraceabilityIndex, type TraceabilityIndex } from './traceabilityIndex';
+import { buildTraceabilityIndex, type TraceabilityExternalElement, type TraceabilityIndex } from './traceabilityIndex';
+import { resolvePartLike } from './partOccurrences';
+import { hasSysmlReference, resolveSysmlReferenceLabel, sysmlObjectLabel, friendlySysmlKind } from '../../features/sysml/sysmlDisplayLabel';
 
 export type RtmStatus = 'covered' | 'verified' | 'failed' | 'uncovered' | 'stale' | 'suspect' | 'orphan' | 'unsupported' | 'unresolved';
 export type RtmChangeKind = 'unchanged' | 'added' | 'modified' | 'suspect';
@@ -29,7 +31,7 @@ export interface RtmCoveringElement {
   id: string;
   name: string;
   kind: SysmlRelationship['kind'];
-  type: 'block' | 'part';
+  type: string;
 }
 
 export interface RtmRequirementRelation {
@@ -41,6 +43,16 @@ export interface RtmRequirementRelation {
   otherRequirementName: string;
 }
 
+export type CoverageStatus = 'not-satisfied' | 'satisfied';
+export type VerificationStatus = 'not-verified' | 'not-run' | 'passed' | 'failed';
+
+export interface RtmReference {
+  id: string;
+  name: string;
+  kind?: string;
+  type?: string;
+}
+
 export interface RtmRow {
   requirement: RequirementDefinition;
   status: RtmStatus;
@@ -50,6 +62,18 @@ export interface RtmRow {
   children: RtmRequirementRef[];
   coveringBlocks: RtmCoveringElement[];
   requirementRelations: RtmRequirementRelation[];
+  containmentParents: RtmRequirementRef[];
+  containmentChildren: RtmRequirementRef[];
+  derivedFrom: RtmRequirementRef[];
+  derivedRequirements: RtmRequirementRef[];
+  copiedFrom: RtmRequirementRef[];
+  copiedRequirements: RtmRequirementRef[];
+  satisfiedBy: RtmCoveringElement[];
+  verifiedBy: RtmReference[];
+  refinedBy: RtmReference[];
+  tracedElements: RtmReference[];
+  satisfactionStatus: CoverageStatus;
+  verificationStatus: VerificationStatus;
   blocks: string[];
   parts: string[];
   ports: string[];
@@ -83,8 +107,13 @@ export interface CoverageMetrics {
   verificationPercent: number;
 }
 
-export function buildTraceabilityMatrix(repo: SysmlRepository, filters: RtmFilters = {}, suppliedIndex?: TraceabilityIndex): TraceabilityMatrix {
-  const index = suppliedIndex ?? buildTraceabilityIndex(repo);
+export function buildTraceabilityMatrix(
+  repo: SysmlRepository,
+  filters: RtmFilters = {},
+  suppliedIndex?: TraceabilityIndex,
+  externalElements: TraceabilityExternalElement[] = [],
+): TraceabilityMatrix {
+  const index = suppliedIndex ?? buildTraceabilityIndex(repo, externalElements);
   const rows = Object.values(repo.requirements)
     .map(requirement => buildRow(repo, requirement, filters.compareBaselineId, index))
     .filter(row => matchesFilters(repo, row, filters))
@@ -127,28 +156,65 @@ export function computeCoverageMetrics(matrix: TraceabilityMatrix): CoverageMetr
   return { total, covered, verified, failed, stale, suspect, uncovered, orphan, unresolved, unsupported, coveragePercent, verificationPercent };
 }
 
-export function exportRtmCsv(matrix: TraceabilityMatrix): string {
-  const csv = (value: string) => `"${value.replace(/"/g, '""')}"`;
+export function exportRtmCsv(matrix: TraceabilityMatrix, repository?: SysmlRepository, externalElements: TraceabilityExternalElement[] = []): string {
+  const csv = (value: string) => `"${String(value ?? '').replace(/"/g, '""')}"`;
   const hasChange = Boolean(matrix.filters.compareBaselineId || matrix.rows.some(r => r.changeKind !== undefined));
   const headers = [
     'Requirement ID', 'Name', 'Text', 'Status',
     ...(hasChange ? ['Change'] : []),
     'Owner', 'Risk', 'Version', 'Baseline',
     'Parents', 'Children', 'Covering Blocks',
+    'Contained By', 'Contains', 'Derived From', 'Derived Requirements', 'Copied From', 'Copied Requirements',
+    'Satisfied By', 'Verified By', 'Refined By', 'Traced Elements',
+    'Satisfaction Status', 'Verification Status',
     'Blocks', 'Parts', 'Ports', 'Connectors', 'Behaviors', 'Simulations', 'Verification Cases',
     'Evidence', 'Artifacts', 'Relationships', 'Unresolved Endpoints',
   ];
-  const rows = matrix.rows.map(row => [
-    row.requirement.requirementId, row.requirement.name, row.requirement.text, row.status,
+  const rows = matrix.rows.map(row => {
+    const references = [
+      ...row.parents, ...row.children, ...row.coveringBlocks, ...row.containmentParents,
+      ...row.containmentChildren, ...row.derivedFrom, ...row.derivedRequirements,
+      ...row.copiedFrom, ...row.copiedRequirements, ...row.satisfiedBy,
+      ...row.verifiedBy, ...row.refinedBy, ...row.tracedElements,
+    ];
+    const labelFor = (id: string, fallbackKind: string) => {
+      const external = externalElements.find(element => element.id === id);
+      if (external) return sysmlObjectLabel(external, fallbackKind);
+      if (repository && hasSysmlReference(repository, id)) return resolveSysmlReferenceLabel(repository, id, fallbackKind);
+      const reference = references.find(item => item.id === id);
+      if (reference?.name?.trim() && reference.name !== id) return sysmlObjectLabel(reference, fallbackKind);
+      if (fallbackKind === 'Referenced element is unavailable') return fallbackKind;
+      return friendlySysmlKind(fallbackKind);
+    };
+    const requirementRef = (item: RtmRequirementRef) => `${item.requirementId} ${sysmlObjectLabel({ name: item.name }, 'Requirement')}`;
+    return [
+    row.requirement.requirementId, sysmlObjectLabel(row.requirement, 'Requirement'), row.requirement.text, row.status,
     ...(hasChange ? [row.changeKind ?? 'unchanged'] : []),
-    row.requirement.owner ?? '', row.requirement.risk ?? '', row.requirement.version, row.requirement.baselineId ?? '',
-    row.parents.map(p => `[${p.kind}] ${p.requirementId} ${p.name}`).join(';'),
-    row.children.map(c => `[${c.kind}] ${c.requirementId} ${c.name}`).join(';'),
-    row.coveringBlocks.map(b => `[${b.kind}] ${b.name}`).join(';'),
-    row.blocks.join(';'), row.parts.join(';'), row.ports.join(';'), row.connectors.join(';'),
-    row.behaviors.join(';'), row.simulations.join(';'), row.verificationCases.join(';'), row.evidence.join(';'),
-    row.artifacts.join(';'), row.relationshipIds.join(';'), row.unresolvedEndpointIds.join(';'),
-  ]);
+    row.requirement.owner ?? '', row.requirement.risk ?? '', row.requirement.version,
+    row.requirement.baselineId ? sysmlObjectLabel(repository?.baselines[row.requirement.baselineId], 'Baseline') : '',
+    row.parents.map(p => `[${p.kind}] ${requirementRef(p)}`).join(';'),
+    row.children.map(c => `[${c.kind}] ${requirementRef(c)}`).join(';'),
+    row.coveringBlocks.map(b => `[${b.kind}] ${labelFor(b.id, b.type || 'Element')}`).join(';'),
+    row.containmentParents.map(requirementRef).join(';'),
+    row.containmentChildren.map(requirementRef).join(';'),
+    row.derivedFrom.map(requirementRef).join(';'),
+    row.derivedRequirements.map(requirementRef).join(';'),
+    row.copiedFrom.map(requirementRef).join(';'),
+    row.copiedRequirements.map(requirementRef).join(';'),
+    row.satisfiedBy.map(s => labelFor(s.id, s.type || 'Element')).join(';'),
+    row.verifiedBy.map(v => labelFor(v.id, v.type || 'Verification Case')).join(';'),
+    row.refinedBy.map(r => labelFor(r.id, r.type === 'unknown' ? 'Referenced element is unavailable' : r.type || 'Element')).join(';'),
+    row.tracedElements.map(t => labelFor(t.id, t.type === 'unknown' ? 'Referenced element is unavailable' : t.type || 'Element')).join(';'),
+    row.satisfactionStatus,
+    row.verificationStatus,
+    row.blocks.map(id => labelFor(id, 'Block')).join(';'), row.parts.map(id => labelFor(id, 'Part')).join(';'),
+    row.ports.map(id => labelFor(id, 'Port')).join(';'), row.connectors.map(id => labelFor(id, 'Connector')).join(';'),
+    row.behaviors.map(id => labelFor(id, 'Behavior')).join(';'), row.simulations.map(id => labelFor(id, 'Simulation')).join(';'),
+    row.verificationCases.map(id => labelFor(id, 'Verification Case')).join(';'), row.evidence.map(id => labelFor(id, 'Evidence')).join(';'),
+    row.artifacts.map(id => labelFor(id, 'Artifact')).join(';'), row.relationshipIds.map(id => labelFor(id, 'Relationship')).join(';'),
+    row.unresolvedEndpointIds.map(() => 'Referenced element is unavailable').join(';'),
+    ];
+  });
   return [headers.join(','), ...rows.map(columns => columns.map(csv).join(','))].join('\r\n');
 }
 
@@ -168,8 +234,20 @@ function buildRow(repo: SysmlRepository, requirement: RequirementDefinition, com
   const coveringBlocks: RtmCoveringElement[] = [];
   const requirementRelations: RtmRequirementRelation[] = [];
 
+  const containmentParents: RtmRequirementRef[] = [];
+  const containmentChildren: RtmRequirementRef[] = [];
+  const derivedFrom: RtmRequirementRef[] = [];
+  const derivedRequirements: RtmRequirementRef[] = [];
+  const copiedFrom: RtmRequirementRef[] = [];
+  const copiedRequirements: RtmRequirementRef[] = [];
+  const satisfiedBy: RtmCoveringElement[] = [];
+  const verifiedBy: RtmReference[] = [];
+  const refinedBy: RtmReference[] = [];
+  const tracedElements: RtmReference[] = [];
+
   for (const r of relationships) {
     const isSource = r.sourceId === requirement.id;
+    const isTarget = r.targetId === requirement.id;
     const otherId = isSource ? r.targetId : r.sourceId;
 
     const otherReq = repo.requirements[otherId];
@@ -186,41 +264,73 @@ function buildRow(repo: SysmlRepository, requirement: RequirementDefinition, com
       if (r.kind === 'requirementContainment') {
         if (!isSource) {
           parents.push({ id: otherReq.id, requirementId: otherReq.requirementId, name: otherReq.name, kind: r.kind });
+          containmentParents.push({ id: otherReq.id, requirementId: otherReq.requirementId, name: otherReq.name, kind: r.kind });
         } else {
           children.push({ id: otherReq.id, requirementId: otherReq.requirementId, name: otherReq.name, kind: r.kind });
+          containmentChildren.push({ id: otherReq.id, requirementId: otherReq.requirementId, name: otherReq.name, kind: r.kind });
         }
       } else if (r.kind === 'deriveReqt') {
         if (isSource) {
           parents.push({ id: otherReq.id, requirementId: otherReq.requirementId, name: otherReq.name, kind: r.kind });
+          derivedFrom.push({ id: otherReq.id, requirementId: otherReq.requirementId, name: otherReq.name, kind: r.kind });
         } else {
           children.push({ id: otherReq.id, requirementId: otherReq.requirementId, name: otherReq.name, kind: r.kind });
+          derivedRequirements.push({ id: otherReq.id, requirementId: otherReq.requirementId, name: otherReq.name, kind: r.kind });
+        }
+      } else if (r.kind === 'copy') {
+        if (isSource) {
+          copiedFrom.push({ id: otherReq.id, requirementId: otherReq.requirementId, name: otherReq.name, kind: r.kind });
+        } else {
+          copiedRequirements.push({ id: otherReq.id, requirementId: otherReq.requirementId, name: otherReq.name, kind: r.kind });
         }
       }
     }
 
-    if (r.kind === 'satisfy') {
+    if (r.kind === 'satisfy' && isTarget) {
       const def = repo.definitions[otherId];
-      const usage = repo.usages[otherId];
+      const usage = resolvePartLike(repo, otherId);
       if (def?.kind === 'block') {
-        coveringBlocks.push({ id: def.id, name: def.name, kind: r.kind, type: 'block' });
+        const item: RtmCoveringElement = { id: def.id, name: def.name, kind: r.kind, type: 'block' };
+        coveringBlocks.push(item);
+        satisfiedBy.push(item);
       } else if (usage?.kind === 'part') {
-        coveringBlocks.push({ id: usage.id, name: usage.name, kind: r.kind, type: 'part' });
+        const item: RtmCoveringElement = { id: usage.id, name: usage.name, kind: r.kind, type: 'part' };
+        coveringBlocks.push(item);
+        satisfiedBy.push(item);
+      } else {
+        const ref = resolveRef(repo, otherId, index);
+        const item: RtmCoveringElement = { id: otherId, name: ref.name, kind: r.kind, type: ref.type ?? 'unknown' };
+        coveringBlocks.push(item);
+        satisfiedBy.push(item);
       }
+    }
+
+    if (r.kind === 'verify' && isTarget) {
+      verifiedBy.push(resolveRef(repo, otherId, index));
+    }
+
+    if (r.kind === 'refine' && isTarget) {
+      refinedBy.push(resolveRef(repo, otherId, index));
+    }
+
+    if (r.kind === 'trace') {
+      tracedElements.push(resolveRef(repo, otherId, index));
     }
   }
 
   for (const id of relatedIds) {
     const definition = repo.definitions[id];
-    const usage = repo.usages[id];
+    const usage = resolvePartLike(repo, id);
     const artifact = repo.artifacts[id];
     if (definition?.kind === 'block') blocks.push(id);
+    else if (definition) blocks.push(id);
     else if (usage?.kind === 'part') parts.push(id);
     else if (usage?.kind === 'port') ports.push(id);
     else if (repo.connectors[id]) connectors.push(id);
     else if (artifact?.kind === 'behavior') behaviors.push(id);
     else if (artifact?.kind === 'simulation') simulations.push(id);
     else if (artifact) artifacts.push(id);
-    else if (!repo.requirements[id] && !repo.verificationCases[id]) unresolvedEndpointIds.push(id);
+    else if (!repo.requirements[id] && !repo.verificationCases[id] && !index.elementsById.has(id)) unresolvedEndpointIds.push(id);
   }
   const verificationCases = sortedUnique([
     ...(index.verificationCasesByRequirement.get(requirement.id) ?? []),
@@ -249,14 +359,45 @@ function buildRow(repo: SysmlRepository, requirement: RequirementDefinition, com
     }
   }
 
+  const satisfactionStatus: CoverageStatus = (satisfiedBy.length > 0 || coveringBlocks.length > 0)
+    ? 'satisfied'
+    : 'not-satisfied';
+
+  const allVerificationIds = sortedUnique([
+    ...verificationCases,
+    ...verifiedBy.map(v => v.id),
+  ]);
+
+  let verificationStatus: VerificationStatus = 'not-verified';
+  const evidenceItems = evidence.map(id => repo.evidence[id]).filter(Boolean);
+  if (evidenceItems.some(item => item.result === 'failed')) {
+    verificationStatus = 'failed';
+  } else if (evidenceItems.some(item => item.result === 'passed')) {
+    verificationStatus = 'passed';
+  } else if (allVerificationIds.length > 0) {
+    verificationStatus = 'not-run';
+  }
+
   const row: Omit<RtmRow, 'status'> = {
     requirement,
     changeKind,
     relationshipIds: relationships.map(item => item.id).sort(),
-    parents,
-    children,
-    coveringBlocks,
+    parents: dedupeRefs(parents),
+    children: dedupeRefs(children),
+    coveringBlocks: dedupeRefs(coveringBlocks),
     requirementRelations,
+    containmentParents: dedupeRefs(containmentParents),
+    containmentChildren: dedupeRefs(containmentChildren),
+    derivedFrom: dedupeRefs(derivedFrom),
+    derivedRequirements: dedupeRefs(derivedRequirements),
+    copiedFrom: dedupeRefs(copiedFrom),
+    copiedRequirements: dedupeRefs(copiedRequirements),
+    satisfiedBy: dedupeRefs(satisfiedBy),
+    verifiedBy: dedupeRefs(verifiedBy),
+    refinedBy: dedupeRefs(refinedBy),
+    tracedElements: dedupeRefs(tracedElements),
+    satisfactionStatus,
+    verificationStatus,
     blocks: sortedUnique(blocks), parts: sortedUnique(parts), ports: sortedUnique(ports), connectors: sortedUnique(connectors),
     behaviors: sortedUnique(behaviors), simulations: sortedUnique(simulations), verificationCases: sortedUnique(verificationCases),
     evidence: sortedUnique(evidence), artifacts: sortedUnique(artifacts), unresolvedEndpointIds: sortedUnique(unresolvedEndpointIds),
@@ -310,4 +451,32 @@ function sortedUnique(values: string[]): string[] { return [...new Set(values)].
 function csv(value: unknown): string {
   const text = String(value ?? '');
   return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+function resolveRef(repo: SysmlRepository, id: string, index?: TraceabilityIndex): RtmReference {
+  const req = repo.requirements[id];
+  if (req) return { id, name: req.name || req.requirementId, kind: 'requirement', type: 'requirement' };
+  const def = repo.definitions[id];
+  if (def) return { id, name: def.name, kind: def.kind, type: def.kind };
+  const usage = resolvePartLike(repo, id);
+  if (usage) return { id, name: usage.name, kind: usage.kind, type: usage.kind };
+  const vc = repo.verificationCases[id];
+  if (vc) return { id, name: vc.name, kind: 'verificationCase', type: 'verificationCase' };
+  const art = repo.artifacts[id];
+  if (art) return { id, name: art.name, kind: art.kind, type: art.kind };
+  const external = index?.elementsById.get(id) as TraceabilityExternalElement | undefined;
+  if (external) return { id, name: external.name, kind: external.kind, type: external.kind };
+  return { id, name: 'Referenced element is unavailable', kind: 'unknown', type: 'unknown' };
+}
+
+function dedupeRefs<T extends { id: string }>(items: T[]): T[] {
+  const seen = new Set<string>();
+  const result: T[] = [];
+  for (const item of items) {
+    if (!seen.has(item.id)) {
+      seen.add(item.id);
+      result.push(item);
+    }
+  }
+  return result;
 }

@@ -24,8 +24,9 @@ export class MechanicalFixtures {
         node('damper', 'trans_damper', { b }),
       ],
       edges: [
-        edge('e1', 'f_src', 'a_s', 'mass', 'p_t'),
-        edge('e2', 'f_src', 'b_s', 'ref', 'p_t'),
+        // F-090: Ideal Force Source drives port B relative to port A (WP-13 certified orientation): B on the mass, A on the reference
+        edge('e1', 'f_src', 'b_s', 'mass', 'p_t'),
+        edge('e2', 'f_src', 'a_s', 'ref', 'p_t'),
         edge('e3', 'mass', 'p_s', 'spring', 'r_t'),
         edge('e4', 'spring', 'c_s', 'ref', 'p_t'),
         edge('e5', 'mass', 'p_s', 'damper', 'r_t'),
@@ -50,12 +51,14 @@ export class MechanicalFixtures {
         node('damp', 'rot_damper', { b }),
       ],
       edges: [
-        edge('e1', 't_src', 'r_s', 'J', 'r_t'),
-        edge('e2', 't_src', 'c_s', 'ref', 'r_t'),
+        // F-090: Ideal Torque Source drives port C relative to port R (WP-13 certified orientation): C on the inertia, R on the reference
+        edge('e1', 't_src', 'c_s', 'J', 'r_t'),
+        edge('e2', 't_src', 'r_s', 'ref', 'r_t'),
         edge('e3', 'J', 'r_s', 'damp', 'r_t'),
         edge('e4', 'damp', 'c_s', 'ref', 'r_t'),
       ],
-      probes: [{ id: 'p1', sourceNodeId: 'J', sourceHandle: 'w', variableName: 'J', unit: 'rad/s' }],
+      // the probe reads the inertia speed (the net of J.r; it read J_branch_torque through the block-level fallback before)
+      probes: [{ id: 'p1', sourceNodeId: 'J', sourceHandle: 'w', variableName: 'J', engineVariable: 'Across_damp_r_(rotational)', unit: 'rad/s' }],
     };
   }
 }

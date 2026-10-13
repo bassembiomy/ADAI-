@@ -109,7 +109,7 @@ export const OpmDockShell: React.FC<Props> = ({
       >
         <div className="flex items-center gap-1 bg-[#1a1a1d] p-0.5 rounded border border-white/5">
           {PAGES.map(p => (
-            <button
+            <button data-help-feature="opm:opmdockshell:layout-panels:66f81baea6" data-help-module="entropy"
               key={p}
               data-testid={`opm-page-${p}`}
               aria-label={`${p} page`}
@@ -138,7 +138,7 @@ export const OpmDockShell: React.FC<Props> = ({
             >
               {left}
             </aside>
-            <div
+            <div data-help-feature="opm:opmdockshell:layout-panels:e30c36a643" data-help-module="entropy"
               data-testid="opm-resizer-left"
               onMouseDown={handleLeftMouseDown}
               onDoubleClick={() => setLeftWidth(DEFAULT_LEFT_WIDTH)}
@@ -156,7 +156,7 @@ export const OpmDockShell: React.FC<Props> = ({
 
         {docks.right && (
           <>
-            <div
+            <div data-help-feature="opm:opmdockshell:layout-panels:92c5d2b14c" data-help-module="entropy"
               data-testid="opm-resizer-right"
               onMouseDown={handleRightMouseDown}
               onDoubleClick={() => setRightWidth(DEFAULT_RIGHT_WIDTH)}
@@ -179,7 +179,7 @@ export const OpmDockShell: React.FC<Props> = ({
       {/* Bottom Dock with Resizer */}
       {docks.bottom && (
         <>
-          <div
+          <div data-help-feature="opm:opmdockshell:layout-panels:a36eb7066b" data-help-module="entropy"
             data-testid="opm-resizer-bottom"
             onMouseDown={handleBottomMouseDown}
             onDoubleClick={() => setBottomHeight(DEFAULT_BOTTOM_HEIGHT)}

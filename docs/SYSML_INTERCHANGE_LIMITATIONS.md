@@ -74,8 +74,61 @@ Because OPM and SysML possess fundamentally different metamodels, the following 
 ## 5. Persistence Format and Integrity
 
 1. **Envelope Format:**
-   Native persistence uses the `ADIA-SysML` format with `schemaVersion: 2`.
-2. **Checksum Verification:**
+   Native persistence uses the `ADIA-SysML` format with `schemaVersion: 2` and
+   `profileId: OMG-SysML-1.6-ADIA`. Legacy array payloads (`blocks`/`parts`/
+   `relationships`/`connectors`) are migrated to this schema on import
+   (`migrated: true`, `migrateLegacy` audit entry); semantic IDs are preserved
+   verbatim and never regenerated.
+2. **Deterministic Serialization:**
+   `serializeRepository` canonicalizes every collection in sorted-id order and
+   serializes with sorted keys (`stableStringify`), so two serializations of
+   the same repository are byte-identical. `toRepository` (normalized store)
+   emits the same sorted order. Checksums are computed over the canonical form.
+3. **Checksum Verification:**
    Every serialized model envelope includes an SHA-256 hash of its canonical JSON representation. Tampered or truncated payloads fail validation on load (`PERSISTENCE_CHECKSUM_MISMATCH`).
-3. **Immutable Baselines:**
+4. **Immutable Baselines:**
    Model baselines (`ModelBaseline`) freeze element hashes and are protected against in-place mutations.
+
+---
+
+## 6. Interchange Loss Reporting and Endpoint Quarantine (Task 7)
+
+1. **Single Report Surface:**
+   `src/engine/sysml/interchangeReport.ts` is the only interchange-report
+   authority. Every import and every lossy projection returns an
+   `InterchangeReport` (`lossless`, `lossEntries`, `unresolvedEndpoints`,
+   `quarantinedRelationshipIds`, `quarantinedConnectorIds`, `diagnostics`).
+   `loadRepository` and `loadCanonicalSysmlProject` always populate it;
+   projections never silently drop a construct.
+2. **Legacy Migration Losses (explicit, never silent):**
+   Unknown legacy relationship kinds are carried as `trace` plus
+   `LEGACY_RELATIONSHIP_KIND_UNSUPPORTED` (warning + loss entry). Unknown
+   connector kinds are defaulted plus `LEGACY_CONNECTOR_KIND_UNSUPPORTED`.
+   Requirement-to-requirement `composition` is carried as
+   `requirementContainment` plus `LEGACY_REQUIREMENT_COMPOSITION_MIGRATED`
+   (info + loss entry). Legacy connectors with empty endpoints are
+   quarantined plus `LEGACY_CONNECTOR_ENDPOINT_UNRESOLVED`.
+3. **Unresolved Endpoints (reject-or-quarantine, no generic associations):**
+   Any relationship/connector whose endpoint does not resolve to a canonical
+   element (including `partId::portId` pairs) is stripped from the live
+   repository into `quarantinedRelationshipIds` / `quarantinedConnectorIds`
+   with `UNRESOLVED_ENDPOINT` (error). Usages, verification links, and
+   evidence with dangling references stay in place and fail closed with the
+   same code. Import `valid` is `false` while quarantine is non-empty.
+4. **Legacy-Projection Losses:**
+   `assessLegacyProjectionLoss` reports `INTERCHANGE_EVIDENCE_NOT_PROJECTED`,
+   `INTERCHANGE_BASELINE_NOT_PROJECTED`, `INTERCHANGE_ARTIFACT_NOT_PROJECTED`,
+   `INTERCHANGE_PORT_USAGE_CONTEXT_LOSS`,
+   `INTERCHANGE_INHERITANCE_PROJECTION_LOSS`, and
+   `INTERCHANGE_VERIFICATION_LINK_LOSS`. Gateway
+   `projectLegacyViewWithInterchangeReport` returns the unchanged view plus
+   this report.
+5. **OPM-Projection Losses:**
+   `assessOpmInterchangeLoss` wraps `projectSysmlToOpm` so every
+   `conceptual-only` / `unsupported` mapping becomes a loss entry
+   (`OPM_COMPOSITION_OWNERSHIP_LOSS`, `OPM_SHARED_AGGREGATION_LOSS`,
+   `OPM_USAGE_UNSUPPORTED`, `OPM_IBD_CONNECTOR_UNSUPPORTED`,
+   `OPM_REQUIREMENT_GOVERNANCE_LOSS`, `OPM_REQUIREMENT_RELATION_LOSS`,
+   `OPM_RELATIONSHIP_UNSUPPORTED`, ...). `generalization` remains the only
+   lossless `mapped` edge. Gateway `projectOpmWithInterchangeReport` returns
+   the projection plus this report.

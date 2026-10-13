@@ -1889,7 +1889,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
       simControlExtraContent={
         <div className="flex flex-col gap-3.5 pt-1">
           {/* Quick Initialize Button */}
-          <button
+          <button data-help-feature="opm:entropyworkspace:simulation:4dbb1a7f85" data-help-module="entropy"
             onClick={handleAutoInitializeStates}
             className="py-2 px-3 bg-[#10b981] hover:bg-emerald-600 text-black font-extrabold rounded-md text-[10px] uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all shadow-lg shrink-0"
             title="Activate the first state of all objects to initialize the model"
@@ -1930,7 +1930,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
                         {childStates.map(stateNode => {
                           const isActive = (stateNode.data as any).isActive;
                           return (
-                            <button
+                            <button data-help-feature="opm:entropyworkspace:states:798963eaae" data-help-module="entropy"
                               key={stateNode.id}
                               onClick={() => handleManualActivateState(stateNode.id, obj.id)}
                               className={`text-[9.5px] px-2.5 py-1 rounded transition-all duration-300 border flex items-center gap-1 ${
@@ -1987,7 +1987,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
                           {proc.data.name}
                         </span>
                       </div>
-                      <button
+                      <button data-help-feature="opm:entropyworkspace:simulation:1b939e6775" data-help-module="entropy"
                         onClick={() => handleManualTriggerProcess(proc.id)}
                         className={`text-[9px] px-2 py-0.5 font-extrabold uppercase rounded transition-all border flex items-center gap-0.5 shrink-0 ${
                           isFiring
@@ -2061,14 +2061,14 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
             <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">OPL Editor Mode</span>
             {isEditingText ? (
               <div className="flex items-center gap-1.5">
-                <button
+                <button data-help-feature="opm:entropyworkspace:opl:70e0a4e255" data-help-module="entropy"
                   onClick={applyOplChanges}
                   className="px-2 py-0.5 bg-green-600 hover:bg-green-700 text-white rounded text-[10px] font-bold flex items-center gap-0.5 transition-colors"
                   title="Apply Changes"
                 >
                   <Check size={10} /> Sync
                 </button>
-                <button
+                <button data-help-feature="opm:entropyworkspace:opl:a374e71beb" data-help-module="entropy"
                   onClick={() => {
                     setIsEditingText(false);
                     const generated = generateOpl(nodes, edges);
@@ -2089,7 +2089,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
 
           {/* Text Area */}
           <div className="flex-1 relative p-3 min-h-0">
-            <textarea
+            <textarea data-help-feature="opm:entropyworkspace:opl:224fcf5d00" data-help-module="entropy"
               value={oplText}
               onChange={(e) => {
                 setOplText(e.target.value);
@@ -2208,7 +2208,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
   );
 
   return (
-    <div className="h-full w-full bg-[#0d0d0d] text-[#e0e0e0] font-sans">
+    <div className="entropy-workspace ui-surface h-full w-full font-sans">
       <OpmDockShell
         docks={isRightFloating ? { ...docks, right: false } : docks}
         onDocksChange={(nextDocks) => {
@@ -2220,9 +2220,9 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
         left={
           <div className="flex flex-col gap-2 p-2">
             {/* Tool Dock (moved verbatim into left dock slot; wrapper adapted from floating to docked) */}
-            <div className="bg-[#161616]/95 backdrop-blur-md border border-[#2d2d2d] rounded-lg p-2 flex flex-col gap-2 shadow-xl" role="toolbar" aria-label="OPM Canvas Tools">
+            <div className="opm-panel ui-card bg-[var(--surface-panel)] border border-[var(--border-default)] rounded-lg p-2 flex flex-col gap-2 shadow-xl" role="toolbar" aria-label="OPM Canvas Tools">
               <span className="text-[8px] uppercase tracking-wider font-extrabold text-orange-400/80 mb-0.5 text-center">Tools</span>
-              <button
+              <button data-help-feature="opm:entropyworkspace:tools:f413e7f8c2" data-help-module="entropy"
                 onClick={() => setActiveTool('select')}
                 aria-label="Select tool"
                 data-testid="opm-tool-select"
@@ -2233,7 +2233,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
               >
                 <span aria-hidden="true">🖱️</span> <span className="text-[8px]">Select</span>
               </button>
-              <button
+              <button data-help-feature="opm:entropyworkspace:tools:d261e41270" data-help-module="entropy"
                 onClick={() => setActiveTool('object')}
                 aria-label="Add Object"
                 data-testid="opm-tool-object"
@@ -2244,7 +2244,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
               >
                 <span aria-hidden="true">🟢</span> <span className="text-[8px]">Object</span>
               </button>
-              <button
+              <button data-help-feature="opm:entropyworkspace:tools:88e3a9dcbb" data-help-module="entropy"
                 onClick={() => setActiveTool('process')}
                 aria-label="Add Process"
                 data-testid="opm-tool-process"
@@ -2255,7 +2255,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
               >
                 <span aria-hidden="true">🔵</span> <span className="text-[8px]">Process</span>
               </button>
-              <button
+              <button data-help-feature="opm:entropyworkspace:tools:3635742a78" data-help-module="entropy"
                 onClick={() => setActiveTool('state')}
                 aria-label="Add State"
                 data-testid="opm-tool-state"
@@ -2266,7 +2266,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
               >
                 <span aria-hidden="true">🔶</span> <span className="text-[8px]">State</span>
               </button>
-              <button
+              <button data-help-feature="opm:entropyworkspace:tools:9ef4d739b2" data-help-module="entropy"
                 onClick={() => setActiveTool('requirement')}
                 aria-label="Add Requirement"
                 data-testid="opm-tool-requirement"
@@ -2281,7 +2281,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
               <div className="h-px bg-[#333] my-1"></div>
               <span className="text-[8px] uppercase tracking-wider font-extrabold text-sky-400/80 text-center mb-0.5">Link Mode</span>
 
-              <select
+              <select data-help-feature="opm:entropyworkspace:links:c8bd9519f3" data-help-module="entropy"
                 value={activeLinkType}
                 onChange={(e) => setActiveLinkType(e.target.value as OPMLinkType)}
                 aria-label="Select link type"
@@ -2315,7 +2315,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
                 {zoomPath.map((zp, i) => {
                   const label = zp === 'root' ? 'System Context' : nodes.find(n => n.id === zp)?.data.name || zp;
                   return (
-                    <button
+                    <button data-help-feature="opm:entropyworkspace:layout-panels:0a754d795f" data-help-module="entropy"
                       key={zp}
                       onClick={() => setZoomPath(zoomPath.slice(0, i + 1))}
                       className={`truncate rounded px-1.5 py-1 text-left text-[10px] transition-colors ${i === zoomPath.length - 1 ? 'bg-orange-950/40 font-bold text-orange-300' : 'text-[#888] hover:bg-[#222]'}`}
@@ -2340,7 +2340,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
         >
           {/* Zone 1: Context & Model Sources (Left) */}
           <div className="flex items-center gap-2 shrink-0">
-            <button
+            <button data-help-feature="opm:entropyworkspace:layout-panels:a1108c5a92" data-help-module="entropy"
               onClick={onBack}
               className="px-2 py-1 text-xs font-semibold border border-[#333] rounded hover:bg-[#252528] text-gray-300 hover:text-white transition-colors flex items-center gap-1"
             >
@@ -2354,7 +2354,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
                 return (
                   <React.Fragment key={zp}>
                     {i > 0 && <span className="text-[#555]">›</span>}
-                    <button
+                    <button data-help-feature="opm:entropyworkspace:layout-panels:0a754d795f" data-help-module="entropy"
                       onClick={() => setZoomPath(zoomPath.slice(0, i + 1))}
                       className={`hover:text-orange-400 transition-colors truncate ${i === zoomPath.length - 1 ? 'text-orange-400 font-bold' : 'text-[#888]'}`}
                     >
@@ -2365,7 +2365,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
               })}
             </div>
             {/* Example Template Loader */}
-            <select
+            <select data-help-feature="opm:entropyworkspace:opl:453dfe06bf" data-help-module="entropy"
               onChange={(e) => {
                 const val = e.target.value;
                 if (val && OPM_EXAMPLES[val]) {
@@ -2392,7 +2392,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
               ))}
             </select>
             {sysmlState && (
-              <button
+              <button data-help-feature="opm:entropyworkspace:opl:cc0b98f7fe" data-help-module="entropy"
                 onClick={() => {
                   const { nodes: impNodes, edges: impEdges, warnings } = importSysmlToOpm(sysmlState);
                   const candidateSnapshot: OpmModelSnapshot = normalizeContainment({ nodes: impNodes, edges: impEdges });
@@ -2425,7 +2425,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
           {/* Zone 2: Simulation Transport & Logic Scope (Center) */}
           <div className="flex items-center gap-2 shrink-0 bg-[#18181c] px-2.5 py-1 rounded-lg border border-white/5 shadow-sm">
             <div className="flex items-center gap-1 bg-black/40 p-0.5 rounded border border-white/5">
-              <button
+              <button data-help-feature="opm:entropyworkspace:simulation:154563eacf" data-help-module="entropy"
                 data-testid="opm-sim-toggle"
                 onClick={toggleSimulation}
                 className={`p-1 rounded transition-colors ${simRunning ? 'text-red-400 hover:bg-red-950/40' : 'text-green-400 hover:bg-green-950/40'}`}
@@ -2433,7 +2433,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
               >
                 {simRunning ? <Pause size={13} /> : <Play size={13} />}
               </button>
-              <button
+              <button data-help-feature="opm:entropyworkspace:simulation:0db1006f1f" data-help-module="entropy"
                 data-testid="opm-sim-step"
                 onClick={runSimTick}
                 className="p-1 text-sky-400 hover:bg-sky-950/40 rounded transition-colors"
@@ -2441,7 +2441,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
               >
                 <ArrowRight size={13} />
               </button>
-              <button
+              <button data-help-feature="opm:entropyworkspace:simulation:adb0691432" data-help-module="entropy"
                 data-testid="opm-sim-reset"
                 onClick={resetSimulation}
                 className="p-1 text-amber-400 hover:bg-amber-950/40 rounded transition-colors"
@@ -2463,7 +2463,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
 
             <div className="flex items-center gap-1.5">
               <span className="text-[8px] uppercase tracking-wider font-extrabold text-[#777]">Tick:</span>
-              <input
+              <input data-help-feature="opm:entropyworkspace:simulation:f431c998f8" data-help-module="entropy"
                 data-testid="opm-toolbar-tick-slider"
                 type="range"
                 min="10"
@@ -2480,7 +2480,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
             <span className="w-px h-3.5 bg-[#333]"></span>
 
             {/* Scope Quick Launcher */}
-            <button
+            <button data-help-feature="opm:entropyworkspace:scope-trace:bdee2667db" data-help-module="entropy"
               data-testid="opm-sim-scope-launcher"
               onClick={() => setRightTab('scope')}
               className={`px-2 py-0.5 text-[10px] rounded transition-all flex items-center gap-1 font-bold ${
@@ -2497,7 +2497,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
           {/* Zone 3: History & Canvas Layout (Right) */}
           <div className="flex items-center gap-1.5 shrink-0">
             <div className="flex items-center bg-[#18181c] rounded-md border border-white/5 p-0.5">
-              <button
+              <button data-help-feature="opm:entropyworkspace:layout-panels:9d727f7f91" data-help-module="entropy"
                 onClick={triggerUndo}
                 disabled={undoStack.length === 0}
                 className="p-1 rounded hover:bg-[#252529] text-[#aaa] hover:text-white disabled:opacity-25 disabled:hover:bg-transparent transition-colors text-xs"
@@ -2505,7 +2505,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
               >
                 ↶
               </button>
-              <button
+              <button data-help-feature="opm:entropyworkspace:layout-panels:f2587f3cff" data-help-module="entropy"
                 onClick={triggerRedo}
                 disabled={redoStack.length === 0}
                 className="p-1 rounded hover:bg-[#252529] text-[#aaa] hover:text-white disabled:opacity-25 disabled:hover:bg-transparent transition-colors text-xs"
@@ -2515,14 +2515,14 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
               </button>
             </div>
             <div className="flex items-center bg-[#18181c] rounded-md border border-white/5 p-0.5">
-              <button
+              <button data-help-feature="opm:entropyworkspace:layout-panels:1bd8a07349" data-help-module="entropy"
                 onClick={() => triggerAutoLayout('force')}
                 className="px-2 py-0.5 text-[10px] rounded hover:bg-[#252529] flex items-center gap-1 text-[#bbb] hover:text-white transition-colors"
                 title="Force-Directed Auto Layout"
               >
                 <Layout size={11} /> Force
               </button>
-              <button
+              <button data-help-feature="opm:entropyworkspace:layout-panels:7b94aa100c" data-help-module="entropy"
                 onClick={() => triggerAutoLayout('hierarchy')}
                 className="px-2 py-0.5 text-[10px] rounded hover:bg-[#252529] flex items-center gap-1 text-[#bbb] hover:text-white transition-colors"
                 title="Grid/Hierarchy Auto Layout (Ctrl+L)"
@@ -2530,7 +2530,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
                 <Layout size={11} /> Tree
               </button>
             </div>
-            <button
+            <button data-help-feature="opm:entropyworkspace:notation-help:d6e26b47c3" data-help-module="entropy"
               onClick={() => setShowShortcutsModal(prev => !prev)}
               data-testid="opm-shortcuts-help-btn"
               className={`px-2 py-0.5 text-[10px] rounded transition-all flex items-center gap-1 font-semibold ${
@@ -2550,7 +2550,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
 
           {/* React Flow Canvas */}
           <div className="absolute inset-0">
-            <ReactFlow
+            <ReactFlow data-help-feature="live:components/entropy/EntropyWorkspace:7f1236c98c39"
               proOptions={{ hideAttribution: true }}
               nodes={filteredNodes}
               edges={mappedEdges}
@@ -2606,7 +2606,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
                 className="absolute top-4 left-1/2 -translate-x-1/2 z-50 bg-[#241305] border border-amber-500/70 text-amber-300 px-3 py-1.5 rounded shadow-2xl text-xs flex items-center gap-2 select-none"
               >
                 <span>{diagnosticNavMessage}</span>
-                <button onClick={() => setDiagnosticNavMessage(null)} className="text-gray-400 hover:text-white text-xs font-bold">✕</button>
+                <button data-help-feature="opm:entropyworkspace:diagnostics:232c75839d" data-help-module="entropy" onClick={() => setDiagnosticNavMessage(null)} className="text-gray-400 hover:text-white text-xs font-bold">✕</button>
               </div>
             )}
           </div>
@@ -2617,7 +2617,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
       !isRightFloating ? (
         <div className="flex h-full flex-col min-h-0">
           {/* Dock Header with Double-Click & Popout */}
-          <div
+          <div data-help-feature="opm:entropyworkspace:layout-panels:8503142304" data-help-module="entropy"
             data-testid="opm-right-dock-header"
             onDoubleClick={() => setIsRightFloating(true)}
             className="h-8 bg-[#18181c] border-b border-white/10 px-3 flex items-center justify-between shrink-0 select-none cursor-pointer group hover:bg-[#202026] transition-colors"
@@ -2628,7 +2628,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
                 Inspector & Tools
               </span>
             </div>
-            <button
+            <button data-help-feature="opm:entropyworkspace:layout-panels:7e134914ab" data-help-module="entropy"
               type="button"
               data-testid="opm-float-right-panel-btn"
               onClick={() => setIsRightFloating(true)}
@@ -2649,7 +2649,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
           <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-[#111]">
             <div className="h-8 bg-[#181818] border-b border-[#222] px-4 flex items-center justify-between text-xs font-bold text-[#888]">
               <span className="text-[10px] uppercase font-bold tracking-wider text-gray-400">Simulation Console</span>
-              <button
+              <button data-help-feature="opm:entropyworkspace:simulation:5889b8e8ad" data-help-module="entropy"
                 onClick={() => setSimLogs([])}
                 className="text-[#555] hover:text-[#bbb] text-[10px]"
               >
@@ -2695,7 +2695,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
 
       {/* OPM Studio Keyboard Shortcuts Modal */}
       {showShortcutsModal && (
-        <div
+        <div data-help-feature="opm:entropyworkspace:notation-help:53d6a44df7" data-help-module="entropy"
           data-testid="opm-shortcuts-modal"
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4"
           onClick={() => setShowShortcutsModal(false)}
@@ -2709,7 +2709,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
                 <span className="text-base">⌨</span>
                 <h3 className="text-sm font-bold text-amber-400">OPM Studio Keyboard Shortcuts</h3>
               </div>
-              <button
+              <button data-help-feature="opm:entropyworkspace:notation-help:81c9b10caa" data-help-module="entropy"
                 onClick={() => setShowShortcutsModal(false)}
                 className="text-gray-400 hover:text-white text-sm px-1.5 py-0.5 rounded hover:bg-white/10"
               >
@@ -2800,7 +2800,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
             </div>
 
             <div className="pt-2 border-t border-[#292929] flex justify-end">
-              <button
+              <button data-help-feature="opm:entropyworkspace:notation-help:728f66783a" data-help-module="entropy"
                 onClick={() => setShowShortcutsModal(false)}
                 className="px-3 py-1 bg-amber-500 hover:bg-amber-400 text-black font-bold rounded text-xs transition-colors"
               >

@@ -2020,7 +2020,7 @@ export const XBlockNode = React.memo(({ data, selected, id }: any) => {
           margin: isVertical ? '0 10px' : '5px 0'
         }}
       >
-        <Handle
+        <Handle data-help-feature="ui:xbridges/XBlockNode:f43fa12ef7fb" data-help-source="src/components/xbridges/XBlockNode.tsx"
           type={isInput ? 'target' : 'source'}
           position={position}
           id={port.id}
@@ -2064,18 +2064,19 @@ export const XBlockNode = React.memo(({ data, selected, id }: any) => {
 
   if (data.type === 'Note') {
     return (
-      <div 
+      <div
+        data-help-topic={`xbridges:${data.type}`}
         ref={nodeRef}
-        className={`relative rounded-md transition-all duration-500 border-2 p-3 ${selected ? 'ring-4 ring-orange-500/20 scale-105 z-50' : 'hover:border-[#444]'}`}
+        className={`relative rounded-md transition-all duration-500 border-2 p-3 xbridges-node ui-card ${selected ? 'ring-4 ring-orange-500/20 scale-105 z-50' : 'hover:border-[var(--border-strong)]'}`}
         onContextMenu={(e) => e.preventDefault()}
         onMouseDown={(e) => {
           if (workspaceContext?.onNodeMouseDown) workspaceContext.onNodeMouseDown(e, id);
           else if (data.onNodeMouseDown) data.onNodeMouseDown(e);
         }}
         style={{ 
-          background: 'rgba(201, 168, 108, 0.08)',
+          background: 'var(--surface-raised)',
           backdropFilter: 'blur(20px)',
-          borderColor: selected ? color : 'rgba(201, 168, 108, 0.3)',
+          borderColor: selected ? color : 'var(--border-default)',
           minWidth: 150,
           minHeight: 100,
           boxShadow: selected 
@@ -2093,15 +2094,15 @@ export const XBlockNode = React.memo(({ data, selected, id }: any) => {
           <div style={{ color }} className="opacity-70">
             {getIcon(data.type)}
           </div>
-          <span className="text-[9px] font-black text-slate-350 uppercase tracking-widest leading-none">
+          <span className="text-[9px] font-black text-[var(--text-secondary)] uppercase tracking-widest leading-none">
             {data.label || 'Note'}
           </span>
         </div>
         
         {/* Note Editor Area */}
         <div className="flex-1 min-h-0 relative z-10">
-          <textarea
-            className="nodrag nopan nowheel w-full h-full bg-transparent text-slate-200 placeholder-slate-500 border-none outline-none resize-none font-sans text-xs leading-relaxed"
+          <textarea data-help-feature="ui:xbridges/XBlockNode:3524288df7a4" data-help-source="src/components/xbridges/XBlockNode.tsx"
+            className="nodrag nopan nowheel w-full h-full bg-transparent text-[var(--text-primary)] placeholder-[var(--text-muted)] border-none outline-none resize-none font-sans text-xs leading-relaxed"
             value={data.params?.text ?? ''}
             placeholder="Type your notes here..."
             onChange={(e) => {
@@ -2122,16 +2123,17 @@ export const XBlockNode = React.memo(({ data, selected, id }: any) => {
   return (
     <div 
       ref={nodeRef}
-      className={`relative rounded-md transition-all duration-500 border-2 ${selected ? 'ring-4 ring-orange-500/20 scale-105 z-50' : 'hover:border-[#444]'} ${isPulsing ? 'block-pulse-highlight' : ''}`}
+      data-help-topic={`xbridges:${data.type}`}
+      className={`relative rounded-md transition-all duration-500 border-2 xbridges-node ui-card ${selected ? 'ring-4 ring-orange-500/20 scale-105 z-50' : 'hover:border-[var(--border-strong)]'} ${isPulsing ? 'block-pulse-highlight' : ''}`}
       onContextMenu={(e) => e.preventDefault()}
       onMouseDown={(e) => {
         if (workspaceContext?.onNodeMouseDown) workspaceContext.onNodeMouseDown(e, id);
         else if (data.onNodeMouseDown) data.onNodeMouseDown(e);
       }}
       style={{ 
-        background: 'rgba(26, 26, 26, 0.95)',
+        background: 'var(--diagram-node)',
         backdropFilter: 'blur(20px)',
-        borderColor: selected ? color : '#333333',
+        borderColor: selected ? color : 'var(--border-default)',
         minWidth: data.type === 'Scope' ? 260 : ['TRANSFER_FUNCTION', 'DISCRETE_TRANSFER_FUNCTION', 'ZERO_POLE_GAIN', 'ROOT_LOCUS', 'LAPLACE_TRANSFORM'].includes(data.type) ? 170 : 130,
         boxShadow: selected 
           ? `0 12px 24px -8px rgba(0,0,0,0.5), 0 0 16px ${color}33` 
@@ -2169,7 +2171,7 @@ export const XBlockNode = React.memo(({ data, selected, id }: any) => {
 
           {['Scope', 'ROOT_LOCUS'].includes(data.type) && (
             <div className="flex bg-[#222] p-0.5 rounded-lg border border-[#333]">
-              <button 
+              <button data-help-feature="ui:xbridges/XBlockNode:55df02f9d2ed" data-help-source="src/components/xbridges/XBlockNode.tsx"
                 onClick={(e) => { 
                   e.stopPropagation(); 
                   if (workspaceContext?.onOpenScope) workspaceContext.onOpenScope(id);
@@ -2181,7 +2183,7 @@ export const XBlockNode = React.memo(({ data, selected, id }: any) => {
                 <Maximize2 size={12} />
               </button>
               {data.type === 'Scope' && (
-                <button 
+                <button data-help-feature="ui:xbridges/XBlockNode:4b441782049c" data-help-source="src/components/xbridges/XBlockNode.tsx"
                   onClick={(e) => { e.stopPropagation(); downloadCSV(); }}
                   className="p-1.5 hover:bg-[#333] rounded-md transition-all text-emerald-400 hover:text-emerald-500"
                   title="Export Data"

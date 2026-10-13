@@ -393,8 +393,8 @@ export const OpmCodeGenerationWorkspace: React.FC<OpmCodeGenerationWorkspaceProp
     (state.lifecycle === 'verified' ? 'qualified' : state.lifecycle === 'failed' ? 'failed' : 'pending');
 
   return (
-    <div className="flex flex-col gap-3 p-3 text-xs" data-testid="opm-codegen-workspace">
-      <div className="bg-[#1a1a1a] border border-[#2d2d2d] rounded-md p-2.5">
+    <div className="opm-panel flex flex-col gap-3 p-3 text-xs" data-testid="opm-codegen-workspace">
+      <div className="opm-panel ui-card bg-[#1a1a1a] border border-[#2d2d2d] rounded-md p-2.5">
         <div className="flex items-center justify-between">
           <span className="uppercase text-[10px] font-extrabold tracking-wider text-gray-400">Artifact lifecycle</span>
           <span className="text-[10px] font-bold text-emerald-300" data-testid="opm-lifecycle">{LIFECYCLE_LABEL[state.lifecycle]}</span>
@@ -411,14 +411,14 @@ export const OpmCodeGenerationWorkspace: React.FC<OpmCodeGenerationWorkspaceProp
 
         {/* Sequential Actions Stepper */}
         <div className="mt-2 flex flex-wrap gap-1.5">
-          <button
+          <button data-help-feature="opm:opmcodegenerationworkspace:codegen:0a5f509857" data-help-module="entropy"
             data-testid="opm-validate"
             onClick={handleValidate}
             className="px-2 py-1 bg-[#222] hover:bg-[#333] border border-[#333] rounded text-[10px] font-bold"
           >
             1. Validate
           </button>
-          <button
+          <button data-help-feature="opm:opmcodegenerationworkspace:codegen:bbf99f23c2" data-help-module="entropy"
             data-testid="opm-generate"
             onClick={handleGenerate}
             disabled={!generateEnabled}
@@ -427,7 +427,7 @@ export const OpmCodeGenerationWorkspace: React.FC<OpmCodeGenerationWorkspaceProp
           >
             2. Generate
           </button>
-          <button
+          <button data-help-feature="opm:opmcodegenerationworkspace:codegen:d91e8a27cd" data-help-module="entropy"
             data-testid="opm-verify"
             onClick={handleVerify}
             disabled={!verifyEnabled}
@@ -436,7 +436,7 @@ export const OpmCodeGenerationWorkspace: React.FC<OpmCodeGenerationWorkspaceProp
           >
             3. Verify
           </button>
-          <button
+          <button data-help-feature="opm:opmcodegenerationworkspace:codegen:f967bb7126" data-help-module="entropy"
             data-testid="opm-download"
             onClick={() => downloadEnabled && state.generatedFingerprint && onDownload?.(state.files, state.generatedFingerprint)}
             disabled={!downloadEnabled}
@@ -445,7 +445,7 @@ export const OpmCodeGenerationWorkspace: React.FC<OpmCodeGenerationWorkspaceProp
           >
             4. Download
           </button>
-          <button
+          <button data-help-feature="opm:opmcodegenerationworkspace:codegen:0842bf7f0b" data-help-module="entropy"
             data-testid="opm-hil"
             onClick={() => downloadEnabled && state.generatedFingerprint && onRunHil?.(state.files, state.generatedFingerprint)}
             disabled={!downloadEnabled}
@@ -508,7 +508,7 @@ export const OpmCodeGenerationWorkspace: React.FC<OpmCodeGenerationWorkspaceProp
           {(state.diagnostics ?? []).map((d, i) => {
             const path = `${d.source.elementId}.${d.source.propertyPath}`;
             return (
-              <div
+              <div data-help-feature="opm:opmcodegenerationworkspace:codegen:98ac0818af" data-help-module="entropy"
                 key={i}
                 data-opm-path={path}
                 onClick={() => onNavigateToDiagnostic?.(d.source)}
@@ -536,7 +536,7 @@ export const OpmCodeGenerationWorkspace: React.FC<OpmCodeGenerationWorkspaceProp
           <>
             <div className="mt-1 flex flex-wrap gap-1">
               {state.files.map((f) => (
-                <button
+                <button data-help-feature="opm:opmcodegenerationworkspace:codegen:e3f47e2758" data-help-module="entropy"
                   key={f.name}
                   onClick={() => setActiveFile(f.name)}
                   className={`px-1.5 py-0.5 rounded font-mono text-[10px] border ${activeFile === f.name ? 'bg-sky-950 text-sky-300 border-sky-700' : 'bg-[#111] text-gray-400 border-[#2d2d2d] hover:text-white'}`}
@@ -545,21 +545,21 @@ export const OpmCodeGenerationWorkspace: React.FC<OpmCodeGenerationWorkspaceProp
                 </button>
               ))}
             </div>
-            <pre className="mt-1 max-h-48 overflow-auto bg-[#0b0b0b] border border-[#2d2d2d] rounded p-2 font-mono text-[10px] text-gray-300 whitespace-pre-wrap">
+            <pre className="opm-code-surface ui-terminal mt-1 max-h-48 overflow-auto bg-[#0b0b0b] border border-[#2d2d2d] rounded p-2 font-mono text-[10px] text-gray-300 whitespace-pre-wrap">
               {activeContent}
             </pre>
           </>
         )}
       </div>
 
-      <div className="bg-[#1a1a1a] border border-[#2d2d2d] rounded-md p-2.5">
+      <div className="opm-panel ui-card bg-[#1a1a1a] border border-[#2d2d2d] rounded-md p-2.5">
         <span className="uppercase text-[10px] font-extrabold tracking-wider text-gray-400">Manifest</span>
-        <pre className="mt-1 max-h-40 overflow-auto bg-[#0b0b0b] border border-[#2d2d2d] rounded p-2 font-mono text-[10px] text-gray-300 whitespace-pre-wrap">
+        <pre className="opm-code-surface ui-terminal mt-1 max-h-40 overflow-auto bg-[#0b0b0b] border border-[#2d2d2d] rounded p-2 font-mono text-[10px] text-gray-300 whitespace-pre-wrap">
           {state.manifest ? JSON.stringify(state.manifest, null, 2) : 'No manifest yet.'}
         </pre>
       </div>
 
-      <div className="bg-[#1a1a1a] border border-[#2d2d2d] rounded-md p-2.5">
+      <div className="opm-console opm-panel ui-terminal bg-[#1a1a1a] border border-[#2d2d2d] rounded-md p-2.5">
         <span className="uppercase text-[10px] font-extrabold tracking-wider text-gray-400">Compiler output &amp; parity</span>
         {!state.evidence ? (
           <div className="mt-1 text-[10px] text-gray-600 italic">No verification evidence yet.</div>

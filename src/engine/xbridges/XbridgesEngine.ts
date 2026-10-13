@@ -40,7 +40,9 @@ export class XbridgesEngine {
         if (conn) {
           const sourceId = conn.sourceBlock || (conn as any).source;
           const sourceBlock = this.model.blocks.find(sb => sb.id === sourceId);
-          if (sourceBlock && sourceBlock.type === 'DOE_MODEL') {
+          // Only polynomial (RSM) models have a meaningful s-domain polynomial; GMDH/Taguchi equations are placeholders.
+          const srcModelType = sourceBlock?.params?.modelType?.value || sourceBlock?.params?.modelType || 'RSM';
+          if (sourceBlock && sourceBlock.type === 'DOE_MODEL' && srcModelType === 'RSM') {
             const equationStr = sourceBlock.params?.equation?.value || sourceBlock.params?.equation || '';
             const inputNames = sourceBlock.params?.inputNames?.value || sourceBlock.params?.inputNames || ['X1'];
             const factorName = inputNames[0] || 'X1';
@@ -388,6 +390,20 @@ export class XbridgesEngine {
       result.outputs.forEach((val, i) => {
         this.checkNumericalStability(block, val, `Output[${i}]`);
       });
+
+      const runtimeError = (result as any).error;
+      if (runtimeError) {
+        const faultCode = (result as any).nextState?.lastFault?.code;
+        // One diagnostic per block per run (this.diagnostics is reset at the start of each run).
+        if (!this.diagnostics.some(d => d.code === 'BLOCK_RUNTIME_FAULT' && d.blockIds?.includes(block.id))) {
+          this.diagnostics.push({
+            severity: 'error',
+            code: 'BLOCK_RUNTIME_FAULT',
+            message: `Block '${block.label || block.type}' reported a runtime fault${faultCode ? ` [${faultCode}]` : ''}: ${String(runtimeError)}`,
+            blockIds: [block.id]
+          });
+        }
+      }
 
       block.outputs.forEach((outPort, i) => {
         this.signalValues.set(`${block.id}.${outPort.id}`, result.outputs[i]);

@@ -1,0 +1,60 @@
+/* Scoped theme rules for DOE Workspace, Engineering Tables, and SysML Editors */
+
+.doe-workspace {
+  background-color: var(--surface-canvas);
+  color: var(--text-primary);
+}
+
+.doe-workspace .doe-panel {
+  background-color: var(--surface-panel);
+  border-color: var(--border-default);
+  color: var(--text-primary);
+}
+
+.engineering-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  background-color: var(--surface-panel);
+  color: var(--text-primary);
+}
+
+.engineering-table th {
+  background-color: var(--table-header-bg, var(--surface-raised));
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-default);
+  font-weight: 600;
+}
+
+.engineering-table td {
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+}
+
+.engineering-table tbody tr:nth-child(even) {
+  background-color: var(--table-row-zebra, var(--surface-sunken));
+}
+
+.engineering-table tbody tr:hover {
+  background-color: var(--table-row-hover, var(--surface-raised));
+}
+
+.sysml-editor {
+  background-color: var(--surface-panel);
+  border-color: var(--border-default);
+  color: var(--text-primary);
+}
+
+.sysml-editor .editor-section {
+  border-color: var(--border-subtle);
+}
+
+.traceability-grid {
+  background-color: var(--surface-canvas);
+  color: var(--text-primary);
+}
+
+.traceability-grid header {
+  background-color: var(--surface-panel);
+  border-color: var(--border-default);
+}

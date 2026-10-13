@@ -161,7 +161,7 @@ export const AiArchitectSidebar: React.FC<AiArchitectSidebarProps> = ({
 
   return (
     <>
-      <button
+      <button data-help-feature="ui:AiArchitectSidebar:c837d7c2f82e" data-help-source="src/components/AiArchitectSidebar.tsx"
         onClick={onToggle}
         className={`fixed right-0 top-1/2 -translate-y-1/2 p-2 bg-[#111] border border-[#333] border-r-0 rounded-l-xl shadow-2xl z-[60] transition-all duration-300 ${isOpen ? 'mr-[400px]' : 'mr-0'} ${
           aiEngine === 'n8n' ? 'text-emerald-400 hover:text-emerald-300' : aiEngine === 'gemini' ? 'text-indigo-400 hover:text-indigo-300' : aiEngine === 'openai' ? 'text-sky-400 hover:text-sky-300' : 'text-purple-400 hover:text-purple-300'
@@ -199,10 +199,10 @@ export const AiArchitectSidebar: React.FC<AiArchitectSidebarProps> = ({
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <button onClick={() => setShowSettings(!showSettings)} className={`p-2 hover:bg-[#222] rounded-lg transition-colors ${showSettings ? 'text-indigo-400 bg-indigo-500/10' : 'text-gray-400'}`} title="API Settings">
+                <button data-help-feature="ui:AiArchitectSidebar:c59d52419a6a" data-help-source="src/components/AiArchitectSidebar.tsx" onClick={() => setShowSettings(!showSettings)} className={`p-2 hover:bg-[#222] rounded-lg transition-colors ${showSettings ? 'text-indigo-400 bg-indigo-500/10' : 'text-gray-400'}`} title="API Settings">
                   <Key size={16} />
                 </button>
-                <button onClick={() => setMessages([{ role: 'model', content: "Chat cleared." }])} className="p-2 hover:bg-[#222] rounded-lg text-gray-400" title="Clear Chat">
+                <button data-help-feature="ui:AiArchitectSidebar:693ef74a2007" data-help-source="src/components/AiArchitectSidebar.tsx" onClick={() => setMessages([{ role: 'model', content: "Chat cleared." }])} className="p-2 hover:bg-[#222] rounded-lg text-gray-400" title="Clear Chat">
                   <Trash2 size={16} />
                 </button>
               </div>
@@ -215,7 +215,7 @@ export const AiArchitectSidebar: React.FC<AiArchitectSidebarProps> = ({
                 <div>
                   <label className="text-[10px] font-bold text-gray-400 uppercase mb-1.5 block">AI Engine Mode</label>
                   <div className="grid grid-cols-4 gap-1 bg-black p-1 rounded-lg border border-[#222]">
-                    <button
+                    <button data-help-feature="ui:AiArchitectSidebar:f7e5ad65c230" data-help-source="src/components/AiArchitectSidebar.tsx"
                       onClick={() => setAiEngine('n8n')}
                       className={`py-1 px-1 rounded text-[9px] font-bold transition-all text-center ${
                         aiEngine === 'n8n'
@@ -225,7 +225,7 @@ export const AiArchitectSidebar: React.FC<AiArchitectSidebarProps> = ({
                     >
                       n8n
                     </button>
-                    <button
+                    <button data-help-feature="ui:AiArchitectSidebar:8b0b40eacd1a" data-help-source="src/components/AiArchitectSidebar.tsx"
                       onClick={() => setAiEngine('gemini')}
                       className={`py-1 px-1 rounded text-[9px] font-bold transition-all text-center ${
                         aiEngine === 'gemini'
@@ -235,7 +235,7 @@ export const AiArchitectSidebar: React.FC<AiArchitectSidebarProps> = ({
                     >
                       Gemini
                     </button>
-                    <button
+                    <button data-help-feature="ui:AiArchitectSidebar:9d4b59bb9abc" data-help-source="src/components/AiArchitectSidebar.tsx"
                       onClick={() => setAiEngine('openai')}
                       className={`py-1 px-1 rounded text-[9px] font-bold transition-all text-center ${
                         aiEngine === 'openai'
@@ -245,7 +245,7 @@ export const AiArchitectSidebar: React.FC<AiArchitectSidebarProps> = ({
                     >
                       OpenAI
                     </button>
-                    <button
+                    <button data-help-feature="ui:AiArchitectSidebar:ec131a8b33d5" data-help-source="src/components/AiArchitectSidebar.tsx"
                       onClick={() => setAiEngine('local')}
                       className={`py-1 px-1 rounded text-[9px] font-bold transition-all text-center ${
                         aiEngine === 'local'
@@ -262,7 +262,7 @@ export const AiArchitectSidebar: React.FC<AiArchitectSidebarProps> = ({
                 {aiEngine === 'gemini' && (
                   <div>
                     <label className="text-[10px] font-bold text-indigo-400 uppercase px-1 mb-1 block">Gemini API Key</label>
-                    <input
+                    <input data-help-feature="ui:AiArchitectSidebar:77be226e5968" data-help-source="src/components/AiArchitectSidebar.tsx"
                       type="password"
                       value={apiKey}
                       onChange={(e) => setApiKey(e.target.value)}
@@ -277,7 +277,7 @@ export const AiArchitectSidebar: React.FC<AiArchitectSidebarProps> = ({
                   <div className="space-y-3">
                     <div>
                       <label className="text-[10px] font-bold text-sky-400 uppercase px-1 mb-1 block">API Key (OpenAI / Custom)</label>
-                      <input
+                      <input data-help-feature="ui:AiArchitectSidebar:4474995f0b21" data-help-source="src/components/AiArchitectSidebar.tsx"
                         type="password"
                         value={openaiApiKey}
                         onChange={(e) => setOpenaiApiKey(e.target.value)}
@@ -287,7 +287,7 @@ export const AiArchitectSidebar: React.FC<AiArchitectSidebarProps> = ({
                     </div>
                     <div>
                       <label className="text-[10px] font-bold text-sky-400 uppercase px-1 mb-1 block">Base URL</label>
-                      <input
+                      <input data-help-feature="ui:AiArchitectSidebar:a84258517124" data-help-source="src/components/AiArchitectSidebar.tsx"
                         type="text"
                         value={openaiBaseUrl}
                         onChange={(e) => setOpenaiBaseUrl(e.target.value)}
@@ -297,7 +297,7 @@ export const AiArchitectSidebar: React.FC<AiArchitectSidebarProps> = ({
                     </div>
                     <div>
                       <label className="text-[10px] font-bold text-sky-400 uppercase px-1 mb-1 block">Model Name</label>
-                      <input
+                      <input data-help-feature="ui:AiArchitectSidebar:2deb4193d46a" data-help-source="src/components/AiArchitectSidebar.tsx"
                         type="text"
                         value={openaiModel}
                         onChange={(e) => setOpenaiModel(e.target.value)}
@@ -313,7 +313,7 @@ export const AiArchitectSidebar: React.FC<AiArchitectSidebarProps> = ({
                   <div className="space-y-3">
                     <div>
                       <label className="text-[10px] font-bold text-purple-400 uppercase px-1 mb-1 block">LM Studio URL</label>
-                      <input
+                      <input data-help-feature="ui:AiArchitectSidebar:a67052430135" data-help-source="src/components/AiArchitectSidebar.tsx"
                         type="text"
                         value={localBaseUrl}
                         onChange={(e) => setLocalBaseUrl(e.target.value)}
@@ -324,7 +324,7 @@ export const AiArchitectSidebar: React.FC<AiArchitectSidebarProps> = ({
                     <div>
                       <div className="flex justify-between items-center px-1 mb-1">
                         <label className="text-[10px] font-bold text-purple-400 uppercase">Loaded Model</label>
-                        <button
+                        <button data-help-feature="ui:AiArchitectSidebar:d3038a93d063" data-help-source="src/components/AiArchitectSidebar.tsx"
                           onClick={() => refreshModels(localBaseUrl)}
                           disabled={isLoadingModels}
                           className="text-[9px] text-purple-400 hover:text-purple-300 flex items-center gap-1 transition-colors disabled:opacity-50"
@@ -335,7 +335,7 @@ export const AiArchitectSidebar: React.FC<AiArchitectSidebarProps> = ({
                       </div>
                       <div className="flex gap-2">
                         {localModels.length > 0 ? (
-                          <select
+                          <select data-help-feature="ui:AiArchitectSidebar:65427447d942" data-help-source="src/components/AiArchitectSidebar.tsx"
                             value={localModel}
                             onChange={(e) => setLocalModel(e.target.value)}
                             className="w-full bg-black border border-[#333] rounded-lg px-3 py-1.5 text-xs text-white focus:border-purple-500/50 outline-none"
@@ -345,7 +345,7 @@ export const AiArchitectSidebar: React.FC<AiArchitectSidebarProps> = ({
                             ))}
                           </select>
                         ) : (
-                          <input
+                          <input data-help-feature="ui:AiArchitectSidebar:09623b926cb7" data-help-source="src/components/AiArchitectSidebar.tsx"
                             type="text"
                             value={localModel}
                             onChange={(e) => setLocalModel(e.target.value)}
@@ -359,7 +359,7 @@ export const AiArchitectSidebar: React.FC<AiArchitectSidebarProps> = ({
                 )}
 
                 <div className="flex justify-end gap-2">
-                  <button onClick={saveSettings} className="bg-zinc-800 hover:bg-zinc-700 text-white px-4 py-1.5 rounded-lg text-xs font-bold transition-colors">
+                  <button data-help-feature="ui:AiArchitectSidebar:e78164190139" data-help-source="src/components/AiArchitectSidebar.tsx" onClick={saveSettings} className="bg-zinc-800 hover:bg-zinc-700 text-white px-4 py-1.5 rounded-lg text-xs font-bold transition-colors">
                     Save & Close
                   </button>
                 </div>
@@ -402,7 +402,7 @@ export const AiArchitectSidebar: React.FC<AiArchitectSidebarProps> = ({
             {/* Input Area */}
             <div className="p-4 bg-[#0a0a0a] border-t border-[#222]">
               <div className="relative">
-                <textarea
+                <textarea data-help-feature="ui:AiArchitectSidebar:caaed859ca90" data-help-source="src/components/AiArchitectSidebar.tsx"
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
@@ -419,7 +419,7 @@ export const AiArchitectSidebar: React.FC<AiArchitectSidebarProps> = ({
                     aiEngine === 'n8n' ? 'focus:border-emerald-500/50' : aiEngine === 'gemini' ? 'focus:border-indigo-500/50' : aiEngine === 'openai' ? 'focus:border-sky-500/50' : 'focus:border-purple-500/50'
                   }`}
                 />
-                <button
+                <button data-help-feature="ui:AiArchitectSidebar:ef22ab2d764b" data-help-source="src/components/AiArchitectSidebar.tsx"
                   onClick={handleSend}
                   disabled={!input.trim() || isLoading}
                   className={`absolute right-2 bottom-2 p-2 rounded-lg transition-all ${

@@ -139,7 +139,7 @@ export const HILDriverPanel: React.FC<HILDriverPanelProps> = ({ channels, onChan
   }, {} as Record<string, number>);
 
   return (
-    <div className="bg-[#121212] border border-[#222] rounded-xl p-4 flex flex-col h-full overflow-hidden">
+    <div className="hil-panel ui-card bg-[#121212] border border-[#222] rounded-xl p-4 flex flex-col h-full overflow-hidden">
       <div className="flex justify-between items-center mb-4 shrink-0">
         <div>
           <h2 className="text-md font-bold text-[#e0e0e0] flex items-center gap-2">
@@ -150,9 +150,9 @@ export const HILDriverPanel: React.FC<HILDriverPanelProps> = ({ channels, onChan
         </div>
         <div className="flex items-center gap-2">
           {headerAction}
-          <button
+          <button data-help-feature="ui:hil/HILDriverPanel:31104cabfc1c" data-help-source="src/components/hil/HILDriverPanel.tsx"
             onClick={addChannel}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#f97316] text-[#0a0a0a] text-xs font-semibold rounded hover:bg-[#ea580c] transition-colors"
+            className="ui-control ui-focus-ring flex items-center gap-1.5 px-3 py-1.5 bg-[#f97316] text-[#0a0a0a] text-xs font-semibold rounded hover:bg-[#ea580c] transition-colors"
           >
             <Plus size={14} /> Add Channel
           </button>
@@ -191,7 +191,7 @@ export const HILDriverPanel: React.FC<HILDriverPanelProps> = ({ channels, onChan
               return (
                 <div
                   key={ch.id}
-                  className={`relative p-3.5 bg-[#181818] border rounded-lg transition-colors duration-200 ${
+                  className={`hil-target-card ui-card relative p-3.5 bg-[#181818] border rounded-lg transition-colors duration-200 ${
                     hasConflict ? 'border-red-900/60 bg-red-950/10' : 'border-[#282828] hover:border-[#333]'
                   }`}
                 >
@@ -206,11 +206,11 @@ export const HILDriverPanel: React.FC<HILDriverPanelProps> = ({ channels, onChan
                     {/* Name */}
                     <div>
                       <label className="block text-[10px] text-[#888] font-medium mb-1">Channel Name</label>
-                      <input
+                      <input data-help-feature="ui:hil/HILDriverPanel:a63945b39f0f" data-help-source="src/components/hil/HILDriverPanel.tsx"
                         type="text"
                         value={ch.name}
                         onChange={(e) => updateChannel(ch.id, { name: e.target.value.trim().replace(/[^a-zA-Z0-9_]/g, '') })}
-                        className="w-full bg-[#0a0a0a] border border-[#2a2a2a] rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-[#f97316]"
+                        className="ui-control ui-focus-ring w-full bg-[#0a0a0a] border border-[#2a2a2a] rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-[#f97316]"
                       />
                     </div>
 
@@ -219,10 +219,10 @@ export const HILDriverPanel: React.FC<HILDriverPanelProps> = ({ channels, onChan
                       <label className="block text-[10px] text-[#888] font-medium mb-1">
                         Pin ({ch.peripheral} on {mcuTarget.replace('_', ' ')})
                       </label>
-                      <select
+                      <select data-help-feature="ui:hil/HILDriverPanel:794e53ed6a97" data-help-source="src/components/hil/HILDriverPanel.tsx"
                         value={currentPin}
                         onChange={(e) => updateChannel(ch.id, { pin: e.target.value })}
-                        className={`w-full bg-[#0a0a0a] border rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-[#f97316] ${
+                        className={`ui-control ui-focus-ring w-full bg-[#0a0a0a] border rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-[#f97316] ${
                           hasConflict ? 'border-red-800' : 'border-[#2a2a2a]'
                         }`}
                       >
@@ -244,7 +244,7 @@ export const HILDriverPanel: React.FC<HILDriverPanelProps> = ({ channels, onChan
                     {/* Peripheral */}
                     <div>
                       <label className="block text-[10px] text-[#888] font-medium mb-1">Peripheral</label>
-                      <select
+                      <select data-help-feature="ui:hil/HILDriverPanel:4a776fe6181e" data-help-source="src/components/hil/HILDriverPanel.tsx"
                         value={ch.peripheral}
                         onChange={(e) => {
                           const val = e.target.value as PeripheralType;
@@ -264,7 +264,7 @@ export const HILDriverPanel: React.FC<HILDriverPanelProps> = ({ channels, onChan
 
                           updateChannel(ch.id, { peripheral: val, direction, dataType, pin: firstFree });
                         }}
-                        className="w-full bg-[#0a0a0a] border border-[#2a2a2a] rounded px-1.5 py-1 text-xs text-white focus:outline-none focus:border-[#f97316]"
+                        className="ui-control ui-focus-ring w-full bg-[#0a0a0a] border border-[#2a2a2a] rounded px-1.5 py-1 text-xs text-white focus:outline-none focus:border-[#f97316]"
                       >
                         {PERIPHERALS.map((p) => (
                           <option key={p} value={p}>{p}</option>
@@ -275,11 +275,11 @@ export const HILDriverPanel: React.FC<HILDriverPanelProps> = ({ channels, onChan
                     {/* Direction */}
                     <div>
                       <label className="block text-[10px] text-[#888] font-medium mb-1">Direction</label>
-                      <select
+                      <select data-help-feature="ui:hil/HILDriverPanel:af8ebf325d39" data-help-source="src/components/hil/HILDriverPanel.tsx"
                         value={ch.direction}
                         disabled={ch.peripheral === 'ADC' || ch.peripheral === 'DAC' || ch.peripheral === 'PWM'}
                         onChange={(e) => updateChannel(ch.id, { direction: e.target.value as 'In' | 'Out' })}
-                        className="w-full bg-[#0a0a0a] border border-[#2a2a2a] rounded px-1.5 py-1 text-xs text-white focus:outline-none focus:border-[#f97316] disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="ui-control ui-focus-ring w-full bg-[#0a0a0a] border border-[#2a2a2a] rounded px-1.5 py-1 text-xs text-white focus:outline-none focus:border-[#f97316] disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <option value="In">Input</option>
                         <option value="Out">Output</option>
@@ -289,10 +289,10 @@ export const HILDriverPanel: React.FC<HILDriverPanelProps> = ({ channels, onChan
                     {/* Data Type */}
                     <div>
                       <label className="block text-[10px] text-[#888] font-medium mb-1">C Data Type</label>
-                      <select
+                      <select data-help-feature="ui:hil/HILDriverPanel:745ec88fd9d3" data-help-source="src/components/hil/HILDriverPanel.tsx"
                         value={ch.dataType}
                         onChange={(e) => updateChannel(ch.id, { dataType: e.target.value as any })}
-                        className="w-full bg-[#0a0a0a] border border-[#2a2a2a] rounded px-1.5 py-1 text-xs text-white focus:outline-none focus:border-[#f97316]"
+                        className="ui-control ui-focus-ring w-full bg-[#0a0a0a] border border-[#2a2a2a] rounded px-1.5 py-1 text-xs text-white focus:outline-none focus:border-[#f97316]"
                       >
                         {DATA_TYPES.map((dt) => (
                           <option key={dt} value={dt}>{dt}</option>
@@ -305,47 +305,47 @@ export const HILDriverPanel: React.FC<HILDriverPanelProps> = ({ channels, onChan
                   <div className="grid grid-cols-4 gap-2 border-t border-[#222]/80 pt-2">
                     <div>
                       <label className="block text-[9px] text-[#666] mb-0.5">Min Range</label>
-                      <input
+                      <input data-help-feature="ui:hil/HILDriverPanel:674d256ce967" data-help-source="src/components/hil/HILDriverPanel.tsx"
                         type="number"
                         value={ch.rangeMin}
                         onChange={(e) => updateChannel(ch.id, { rangeMin: parseFloat(e.target.value) || 0 })}
-                        className="w-full bg-[#0a0a0a] border border-[#222] rounded px-1 py-0.5 text-xs text-white focus:outline-none"
+                        className="ui-control ui-focus-ring w-full bg-[#0a0a0a] border border-[#222] rounded px-1 py-0.5 text-xs text-white focus:outline-none"
                       />
                     </div>
                     <div>
                       <label className="block text-[9px] text-[#666] mb-0.5">Max Range</label>
-                      <input
+                      <input data-help-feature="ui:hil/HILDriverPanel:b48a5ad1cd73" data-help-source="src/components/hil/HILDriverPanel.tsx"
                         type="number"
                         value={ch.rangeMax}
                         onChange={(e) => updateChannel(ch.id, { rangeMax: parseFloat(e.target.value) || 0 })}
-                        className="w-full bg-[#0a0a0a] border border-[#222] rounded px-1 py-0.5 text-xs text-white focus:outline-none"
+                        className="ui-control ui-focus-ring w-full bg-[#0a0a0a] border border-[#222] rounded px-1 py-0.5 text-xs text-white focus:outline-none"
                       />
                     </div>
                     <div>
                       <label className="block text-[9px] text-[#666] mb-0.5">Scale Coeff</label>
-                      <input
+                      <input data-help-feature="ui:hil/HILDriverPanel:c35274558914" data-help-source="src/components/hil/HILDriverPanel.tsx"
                         type="number"
                         step="any"
                         value={ch.scalingFactor}
                         onChange={(e) => updateChannel(ch.id, { scalingFactor: parseFloat(e.target.value) || 1 })}
-                        className="w-full bg-[#0a0a0a] border border-[#222] rounded px-1 py-0.5 text-xs text-white focus:outline-none"
+                        className="ui-control ui-focus-ring w-full bg-[#0a0a0a] border border-[#222] rounded px-1 py-0.5 text-xs text-white focus:outline-none"
                       />
                     </div>
                     <div>
                       <label className="block text-[9px] text-[#666] mb-0.5">Unit</label>
-                      <input
+                      <input data-help-feature="ui:hil/HILDriverPanel:43e1fffa0388" data-help-source="src/components/hil/HILDriverPanel.tsx"
                         type="text"
                         placeholder="e.g. V, Hz"
                         value={ch.unit}
                         onChange={(e) => updateChannel(ch.id, { unit: e.target.value })}
-                        className="w-full bg-[#0a0a0a] border border-[#222] rounded px-1 py-0.5 text-xs text-white focus:outline-none"
+                        className="ui-control ui-focus-ring w-full bg-[#0a0a0a] border border-[#222] rounded px-1 py-0.5 text-xs text-white focus:outline-none"
                       />
                     </div>
                   </div>
 
-                  <button
+                  <button data-help-feature="ui:hil/HILDriverPanel:1a605bb51075" data-help-source="src/components/hil/HILDriverPanel.tsx"
                     onClick={() => removeChannel(ch.id)}
-                    className="absolute bottom-2.5 right-2 px-1.5 py-1 text-red-500 hover:text-red-400 hover:bg-red-950/20 rounded transition-colors"
+                    className="ui-control ui-focus-ring absolute bottom-2.5 right-2 px-1.5 py-1 text-red-500 hover:text-red-400 hover:bg-red-950/20 rounded transition-colors"
                     title="Delete Channel"
                   >
                     <Trash2 size={13} />

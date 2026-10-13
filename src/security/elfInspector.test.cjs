@@ -77,6 +77,46 @@ async function runTests() {
   assert.equal(validResult.valid, true);
   assert.equal(validResult.memory.flashUsed, 5200);
   assert.equal(validResult.memory.ramUsed, 500);
+  assert.equal(validResult.hashes.bin, null);
+  assert.equal(validResult.hashes.hex, null);
+  assert.equal(validResult.evidence, 'injected');
+
+  for (const malformed of ['', 'junk', 'text data bss dec hex filename\n12junk 0 0 12 c firmware.elf', 'text data bss dec hex filename\n1 2 3 99 63 firmware.elf']) {
+    assert.throws(() => parseMemoryUsage(malformed, 'atmega328p'), /INVALID_SIZE_OUTPUT/);
+  }
+  const missingTool = await inspectElf(fakeElf, 'atmega328p', { sizeExecutable: path.join(tmpDir, 'missing-size') });
+  assert.equal(missingTool.valid, false);
+  assert.equal(missingTool.code, 'SIZE_TOOL_FAILED');
+  const bundledAvr = require('./toolchainManager.cjs').resolveToolExecutable('avr-g++');
+  if (bundledAvr) {
+    const realToolResult = await inspectElf(fakeElf, 'atmega328p');
+    assert.equal(realToolResult.code, 'SIZE_TOOL_FAILED', 'bundled AVR utility must be found and reject fake ELF');
+  }
+  const wrongArchitecture = await inspectElf(fakeElf, 'atmega328p', { sizeOutput, objdumpOutput: 'file format elf32-i386\narchitecture: i386, flags 0x0:' });
+  assert.equal(wrongArchitecture.code, 'ELF_ARCHITECTURE_MISMATCH');
+  const goodArchitecture = await inspectElf(fakeElf, 'atmega328p', { sizeOutput, objdumpOutput: 'file format elf32-avr\narchitecture: avr:5, flags 0x0:' });
+  assert.equal(goodArchitecture.valid, true);
+  const armArchitecture = await inspectElf(fakeElf, 'stm32f103c8t6', { sizeOutput, objdumpOutput: 'file format elf32-littlearm\narchitecture: armv7, flags 0x0:' });
+  assert.equal(armArchitecture.valid, true);
+  const malformedInspection = await inspectElf(fakeElf, 'atmega328p', { sizeOutput: 'garbage' });
+  assert.equal(malformedInspection.code, 'INVALID_SIZE_OUTPUT');
+
+  const originalResourcesPath = process.resourcesPath;
+  const originalCwd = process.cwd();
+  try {
+    fs.mkdirSync(path.join(tmpDir, 'target-packs', 'atmega328p'), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, 'target-packs', 'atmega328p', 'manifest.json'), JSON.stringify({ memoryRegions: [{ name: 'FLASH', size: 12345 }, { name: 'RAM', size: 456 }] }));
+    process.resourcesPath = tmpDir;
+    process.chdir(tmpDir);
+    assert.equal(getTargetLimits('atmega328p').flash, 12345);
+    process.resourcesPath = undefined;
+    assert.equal(getTargetLimits('atmega328p').flash, 32768);
+    assert.equal(getTargetLimits('stm32f407vgt6', path.join(tmpDir, 'absent')).flash, 1048576);
+    assert.equal(getTargetLimits('esp32-wroom-32', path.join(tmpDir, 'absent')).sram, 327680);
+  } finally {
+    process.resourcesPath = originalResourcesPath;
+    process.chdir(originalCwd);
+  }
 
   // Cleanup tmpDir
   fs.rmSync(tmpDir, { recursive: true, force: true });

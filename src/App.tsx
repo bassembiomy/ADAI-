@@ -1,6 +1,9 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo, MouseEvent, KeyboardEvent, ChangeEvent } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo, MouseEvent, KeyboardEvent, ChangeEvent, Profiler, startTransition } from 'react';
+import { recordRenderCommit, resetProjectLoadTelemetry } from './features/sysml/performance/renderTelemetry';
+import { projectStateEndpoints, hasMatchingProjectStateContext } from './engine/sysml/workers/projectIoPayload';
+import { parseProjectJsonBuffer } from './utils/projectJsonBuffer';
 import * as math from 'mathjs';
-import Plot from 'react-plotly.js';
+import Plot from './components/doe/PlotlyRenderer';
 import { PlotlyPlots } from './components/doe/PlotlyPlots';
 import { createVLabDOEBlock, createXBridgesDOEBlock } from './engine/doe/integration';
 import { fitRSM, fitGMDH, fitTaguchi } from './engine/doe/statistics';
@@ -14,10 +17,17 @@ import { VLabWorkspace } from './components/vlab/VLabWorkspace';
 import { HILWorkspace } from './components/hil/HILWorkspace';
 import { EntropyWorkspace } from './components/entropy/EntropyWorkspace';
 import { PlantUmlWorkspace } from './components/plantuml/PlantUmlWorkspace';
+import { UseCaseWorkspace } from './components/sysml/UseCaseWorkspace';
+import { ActivityWorkspace } from './components/sysml/ActivityWorkspace';
+import { SequenceWorkspace } from './components/sysml/SequenceWorkspace';
+import { buildCreateInteractionFromContextCommand } from './services/sysmlInteractionCommands';
+import { buildSetVerificationBehaviorCommand, listTestProcedures } from './services/sysmlVerificationCommands';
+import { InteractionElementInspector } from './components/sysml/InteractionElementInspector';
+import { whereUsedInInteractions } from './engine/sysml/services/interactionQueries';
+import { findInteractionElement } from './engine/sysml/interaction';
 import { createVisualDiagram, type VisualDiagramModel } from './features/plantuml/model/visualDiagramModel';
 import { readPlantUmlDiagrams } from './features/plantuml/persistence/plantUmlProjectState';
 import { generateSequencePlantUml } from './features/plantuml/adapters/sequenceAdapter';
-import { generateUseCasePlantUml } from './features/plantuml/adapters/useCaseAdapter';
 import type { AppNode, AppEdge } from './components/entropy/EntropyTypes';
 import { DEFAULT_OPM_SIMULATION_CONFIG, type OpmSimulationConfig } from './components/entropy/OpmSimulationConfig';
 import { HILConfig, HILSessionState } from './engine/hil/hilTypes';
@@ -29,7 +39,7 @@ import {
   MousePointer2, Upload, FileText, Download,
   Activity, Zap, Database, Cpu, Layout, Maximize2, X,
   LayoutGrid, Rows, Network, Flame, RefreshCcw, Wind, Cloud,
-  Eye, Paperclip, FlaskConical, AlertTriangle, FolderOpen,
+  Eye, Paperclip, FlaskConical, AlertTriangle, FolderOpen, ShieldAlert,
   Sun, Moon, Gauge
 } from 'lucide-react';
 import { getStoredTheme, applyThemeToDOM, toggleTheme, AppTheme } from './utils/themeManager';
@@ -40,8 +50,8 @@ import { AiArchitectSidebar } from './components/AiArchitectSidebar';
 import { executeAiActions } from './utils/aiActionProcessor';
 import { IntroStandbyOverlay } from './components/IntroStandbyOverlay';
 import { LiveFpsMonitor } from './components/LiveFpsMonitor';
-import { 
-  VariableType, VariableDef, StateData, JunctionData, TransitionData, Layer, ErrorItem 
+import {
+  VariableType, VariableDef, VariableOverflowPolicy, StateData, JunctionData, TransitionData, Layer, ErrorItem
 } from './types/sm_types';
 import {
   calculateControlPointFromMidpoint,
@@ -60,6 +70,7 @@ import {
 import { createStateMachineClipboard, pasteStateMachineClipboard, StateMachineClipboardData } from './utils/stateMachineClipboard';
 import { pruneStateHierarchy, pruneMultipleStatesHierarchy, countDescendants } from './utils/stateMachine/smStatePruner';
 import { generateMISRACCode, getCTimeType, validateInitialValue } from './utils/stateMachineCodeGenerator';
+import { coerceTypedValue } from './utils/stateMachine/smTypedValue';
 import { isInputFocused } from './utils/domUtils';
 import { validateImportedJson, ValidationResult } from './utils/jsonImportValidator';
 import {
@@ -96,42 +107,146 @@ import {
 import type { SemanticTraceFrame } from './utils/stateMachine/smTrace';
 import { STATE_MACHINE_RUNTIME_BUNDLE } from './generated/stateMachineRuntimeBundle';
 import { analyzeStateMachine } from './utils/smAnalysisEngine';
-import { HELP_DATA } from './HelpData';
-import { SoftwareArchitectureExplorer } from './components/help/SoftwareArchitectureExplorer';
+import { HelpModal } from './components/help/HelpModal';
+import { HmiWorkspace } from './components/hmi/HmiWorkspace';
+import { normalizeHmiComponents, parseHmiVariableValue, validateHmiInput, type HmiInputCommand, type HmiInputResult } from './features/hmi/hmiModel';
+import { createHmiInputQueue, getPortableHmiInputQueueScript } from './features/hmi/hmiInputQueue';
+import { renderHmiWidgetSvg, renderPortableHmiMarkup, getPortableHmiScript, resolveHmiReportComponents } from './features/hmi/hmiReport';
+import { resolveModuleHelp } from './help/helpNavigation';
+import { useContextualHelp } from './help/helpContext';
+import { AppModelExplorer } from './components/modelExplorer/AppModelExplorer';
+import { parseModelExplorerDragData } from './features/modelExplorer/modelExplorerDragDrop';
+import type { ActiveDiagramContext, ExplorerCommandResult } from './features/modelExplorer/modelExplorerTypes';
 import { VLAB_LIBRARY } from './utils/vlabLibrary';
 import { BLOCK_LIBRARY as XBRIDGES_LIBRARY } from './engine/xbridges/BlockDefinitions';
 import JSZip from 'jszip';
 import {
-  buildReportHierarchy,
-  generateDiagramScript,
   createReportSnapshot,
   toHierarchySource,
-  renderRequirementsDiagram,
-  renderBddDiagram,
-  renderInteractiveDiagramHierarchy,
-  renderStateMachineDiagrams,
+  buildSystemReport,
+  renderStateMachineAnalysisHtml,
 } from './features/reporting';
 import { TraceabilityMatrix as CanonicalTraceabilityMatrix } from './components/sysml/TraceabilityMatrix';
 import { BlockPropertiesEditor } from './components/sysml/BlockPropertiesEditor';
+import { SysmlPropertyPanel } from './components/sysml/SysmlPropertyPanel';
+import { sysmlCommandToEditorCommand } from './components/sysml/sysmlCommandAdapter';
+import { migrateV3ToV4 } from './engine/sysml/persistence/migrateV3ToV4';
+import { createEmptyRepositoryV4 } from './engine/sysml/domain';
 import { BlockFeatureEditor } from './components/sysml/BlockFeatureEditor';
 import { RelationshipEndEditor } from './components/sysml/RelationshipEndEditor';
+import { restoreConnectionErrorFocus, SysmlConnectionErrorDetails } from './components/sysml/SysmlConnectionErrorDetails';
+import { computeBlockDisplayBounds, blockCompartmentLines, blockCompartmentHeight } from './components/sysml/blockLayout';
+import { AllocationMatrix as CanonicalAllocationMatrix } from './components/sysml/AllocationMatrix';
 import { IbdConnectorEditor } from './components/sysml/IbdConnectorEditor';
 import { RequirementGovernancePanel } from './components/sysml/RequirementGovernancePanel';
+import { resolveSysmlReferenceLabel, sysmlObjectLabel } from './features/sysml/sysmlDisplayLabel';
+import { StateRequirementTraceability } from './components/statemachine/StateRequirementTraceability';
+import { StateMachineCanvasContextMenu } from './components/statemachine/StateMachineCanvasContextMenu';
 import { validateAssociationEnds } from './engine/sysml/bdd';
 import { validateRequirementContainment } from './engine/sysml/validation';
 import { validateConnector } from './engine/sysml/ibd';
-import { createModelBaseline, clearSuspectLink, synchronizeRequirementCopy } from './engine/sysml/requirements';
-import { loadRepository, serializeRepository } from './engine/sysml/persistence';
-import { createEmptyRepository, parseMultiplicity } from './engine/sysml/model';
+import { getRequirementsDiagramScope } from './engine/sysml/requirementsDiagramScope';
+import { resolveBlockDoubleClickAction, resolveExplicitBlockNavigation } from './engine/sysml/requirementsDiagramScope';
+import { analyzeMutation } from './engine/sysml/mutations';
+import { loadRepository, serializeRepository, serializeSysmlProjectState, type V5UpgradeReport } from './engine/sysml/persistence';
+import { SysmlUpgradeReportDialog } from './components/sysml/SysmlUpgradeReportDialog';
+import { createEmptyRepository, parseMultiplicity, type SysmlRelationship, type ConnectorUsage, type ModelDiagramDefinition } from './engine/sysml/model';
 import { evaluateSysmlOperationGate } from './engine/sysml/evidence';
 import { buildTraceabilityMatrix, computeCoverageMetrics } from './engine/sysml/rtm';
 import { buildCanonicalTraceabilitySnapshot } from './engine/sysml/reportSnapshotAdapter';
-import { applyLegacySysmlDeletion, formatLegacyDeletionImpact, mergeLegacyDiagramIntoRepository, requiresDeletionConfirmation } from './services/sysmlTransactionAdapter';
-import { loadCanonicalSysmlProject, fromRepository, projectLegacyDiagram, selectSuspectLinks, selectEvidenceForRequirement, getDefaultSysmlWorkerClient } from './services/sysmlCommandGateway';
+import { applyLegacySysmlDeletion, impactSeverity, requiresDeletionConfirmation } from './services/sysmlTransactionAdapter';
+import { loadCanonicalSysmlProject, fromRepository, projectLegacyDiagram, selectSuspectLinks, selectEvidenceForRequirement, getDefaultSysmlWorkerClient, executeSysmlCommand, createSysmlGatewayState, computeImpactHash, type SysmlEditorCommand, createTypedUsageCommand, resolveType, type CreateNewTypeAction, type PresentationCoordinates } from './services/sysmlCommandGateway';
+import { loadProjectInWorker, serializeProjectInWorker } from './engine/sysml/workers/projectIoClient';
+import { createInterface, createBlock as createBlockDefinition, createValueType as createValueTypeDefinition, createPortDefinition } from './features/modelExplorer/adapters/modelExplorerFactories';
+import { getElementKindLabel } from './features/modelExplorer/modelExplorerCapabilities';
+import type { ExternalSemanticEndpoint, SemanticEndpointContext } from './engine/sysml/semanticEndpointIndex';
+import { buildDiagramCreationCommand, type DiagramCreationKind } from './services/sysmlDiagramCreation';
+import { buildSysmlCloneElementsCommand } from './services/sysmlCloneCommands';
+import { beginRightDragCopy, endRightDragCopy, moveRightDragCopy, type RightDragCopyState } from './services/rightDragCopyGesture';
+import { resolveSysmlCreationOwner } from './services/sysmlDiagramCreationContext';
+import { createSysmlDelegate } from './agent/toolAdapters/sysmlAdapter';
+import { createReportDelegate, createProjectDelegate } from './agent/toolAdapters/adiaProjectAdapter';
+import { createLiveXbridgesStateAccessors, createXbridgesDelegate } from './agent/toolAdapters/xbridgesAdapter';
+import { ToolGateway } from './agent/toolGateway';
+import { AgentOrchestrator } from './agent/agentOrchestrator';
+import { AgentPanel } from './components/agent/AgentPanel';
+import type {
+  SysmlApplicationDelegate,
+  ReportApplicationDelegate,
+  XbridgesApplicationDelegate,
+  ProjectApplicationDelegate,
+} from './agent/applicationDelegates';
 import { computeViewportBounds, cullElements } from './components/sysml/VirtualizedDiagram';
+import { handleHorizontalToolbarWheel } from './utils/toolbarScroll';
 import { LargeModelDiagnostics, loadStoredPerformanceLimits, saveStoredPerformanceLimits } from './components/sysml/LargeModelDiagnostics';
-import { validateLegacyConnectorCandidate, validateLegacyRelationshipCandidate, validateLegacyRequirementStatusTransition } from './services/sysmlCreationRules';
-import { formatLegacyProperty, inheritedProperties, validateLegacyBlockProperties } from './services/sysmlPropertyRules';
+import { validateLegacyConnectorCandidate, validateLegacyRequirementStatusTransition } from './services/sysmlCreationRules';
+import { getCanvasRelationshipKinds, getDirectBddPropertyRelationshipKind, rejectBlockConnectionChange, rejectUiRelationship, resolveUiConnectionEndpoint } from './services/sysmlConnectionUi';
+import { formatLegacyProperty, inheritedProperties, introducesNewValidationCodes, removePartProperty, validateLegacyBlockEdit, validateLegacyBlockProperties } from './services/sysmlPropertyRules';
+import { projectDiagramScopedCanvasView } from './services/sysmlProjectionState';
+import { projectActiveDiagram } from './engine/sysml/projection/activeDiagramProjection';
+import { projectNormalizedDiagram } from './engine/sysml/normalizedStore';
+import { CreateNewTypeActionPrompt } from './components/sysml/CreateNewTypeActionPrompt';
+import { PortKindActions } from './components/sysml/PortKindActions';
+import { TypeSelectionPrompt } from './components/sysml/TypeSelectionPrompt';
+import { buildCreateOwnedPropertyCommand, planOwnedPortCreation, planOwnedPropertyCreation, suggestedMetaclassForPortKind, type CanonicalPortKind, type CreateNewTypeAction as OwnedFeatureNewTypeAction, type TypeCandidate } from './services/sysmlOwnedFeatureCommands';
+import { buildSysmlPastePlan } from './services/sysmlClipboardAdapter';
+import { buildBlockPropertyUpdateCommand, buildCreatePartDefinitionCommand, buildPartUpdateCommand, buildRelationshipUpdateCommand } from './services/sysmlPropertyCommands';
+import { buildDiagramPresentationBatch, buildPortLayoutCommand } from './services/sysmlPresentationCommands';
+import { buildCreateNewTypeCommand } from './services/sysmlTypeCreationCommands';
+import { classifyLegacyEndpoint, type ConnectionEndpoint, type ConnectionPolicyDiagnostic } from './engine/sysml/connectionPolicy';
+import { calculateBddParallelRoute, resolveBddPropertyRelationshipGeometry, resolveBddPropertySourceAnchor } from './services/sysmlBddRelationshipGeometry';
+import { classifyBddRelationshipPresentation } from './services/sysmlConnectionUi';
+import { RELATIONSHIP_DEFINITIONS, type RequirementRelationshipKind } from './engine/sysml/relationshipDefinitions';
+// Task 6 centralized semantic presentation resolver (spec 3.5): workflow
+// surfaces consume tokens instead of hard-coded palette colors.
+import { elementPresentationColor, isValidPresentationColor, portKindToPresentationRole, semanticPresentationToken } from './engine/sysml/semanticPresentationStyles';
+import { buildCreatePathIbdConnectorCommand } from './services/sysmlIbdConnectorCommands';
+import { pathFromKey } from './engine/sysml/partOccurrences';
+import { DEFAULT_NESTED_PART_DEPTH, MAX_NESTED_PART_DEPTH, isDrawnInIbd, layoutIbdNestedParts } from './features/sysml/ibdNestedParts';
+import { IbdConnectorEndpoint } from './components/sysml/IbdConnectorEndpoint';
+import { resolvePackageDiagramActivation } from './services/sysmlDiagramActivation';
+import { diagramFrameLabel, diagramKindAbbreviation } from './features/sysml/diagramFrame';
+import { requirementStatusColor } from './features/sysml/requirementStatus';
+import { edgeBadgeLabel } from './features/sysml/edgeNotation';
+import { getDiagramKindLabel } from './features/modelExplorer/modelExplorerCapabilities';
+import {
+  containmentPaths,
+  findDropTargetPackage,
+  nestedDescendantIds,
+  packageDrawOrder,
+  resolveDropOwnershipChange,
+  type NestingNode,
+} from './features/sysml/packageNestingLayout';
+import {
+  buildPackageRelationship,
+  packageToolEndpointError,
+  packageToolEndpointKinds,
+  packageToolPrompt,
+  PACKAGE_TOOL_LABELS,
+  type PackageRelationshipTool,
+} from './features/sysml/packageRelationshipNotation';
+import {
+  createInitialNavigationState,
+  enterBlockContext,
+  navigateBack,
+  navigateRoot,
+  openExactDiagram,
+  recoverNavigationState,
+  type DiagramNavigationStackEntry,
+} from './services/sysmlDiagramNavigation';
+import {
+  closeDiagramWorkspaceTab as closeDiagramWorkspaceTabState,
+  ensureDefaultStateMachineWorkspaceFile,
+  ensureDefaultSysmlDiagrams,
+  normalizeDiagramWorkspace,
+  openDiagramWorkspaceTab,
+  type DiagramWorkspaceTab,
+} from './services/sysmlDiagramWorkspace';
+import { ensureRootStateMachineDiagram } from './features/modelExplorer/adapters/stateMachineExplorerAdapter';
+import { resolveCanvasSymbolDiagramTargets, resolveExactDiagramCanvasContext } from './features/modelExplorer/diagramTreeContext';
+import type { StateMachineDiagramData } from './types/sm_types';
+import { resolveActiveSysmlDiagramTarget } from './services/sysmlDiagramTarget';
+import { planContextualCreation } from './features/sysml/contextualCreation';
 
 // Security Helper: Escapes HTML special characters to prevent XSS / HTML injection attacks
 const escapeHtml = (str: unknown): string => {
@@ -154,18 +269,6 @@ const safeParseMultiplicity = (str?: string) => {
   }
 };
 
-// Security Helper: Safe React renderer for Help Center bold text without dangerouslySetInnerHTML
-const renderFormattedHelpText = (text: string) => {
-  if (!text) return null;
-  const parts = text.split(/(\*\*.*?\*\*)/g);
-  return parts.map((part, index) => {
-    if (part.startsWith('**') && part.endsWith('**')) {
-      return <b key={index} className="text-white font-normal">{part.slice(2, -2)}</b>;
-    }
-    return part;
-  });
-};
-
 // Security Sandbox: Disallows access to sensitive environment globals in user expressions
 const FORBIDDEN_EXPRESSION_GLOBALS = /\b(process|require|window|document|globalThis|electron|fetch|XMLHttpRequest|import|eval|Function|Object\.constructor)\b/;
 
@@ -174,152 +277,32 @@ export function safeCreateFunction(params: string[], body: string): Function {
     throw new Error("Security Violation: Access to restricted global objects (process, require, window, document) is forbidden in expressions.");
   }
   // Shadow global objects with undefined parameters to prevent global scope leakage
+  // sast-ignore SEC-SAST-005: safe sandboxed expression evaluator with shadowed globals
   return new Function('window', 'document', 'process', 'require', 'globalThis', ...params, body).bind(
     null, undefined, undefined, undefined, undefined, undefined
   );
 }
 
 // =============================================================================
-// STATIC UI COMPONENTS (ZERO IMPORT ERRORS - FULLY TYPED)
+// SHARED ENGINEERING UI PRIMITIVES
 // =============================================================================
-const Button = ({
-  children,
-  onClick,
-  variant = 'default',
-  size = 'default',
-  className = '',
-  disabled = false,
-  ...props
-}: {
-  children: React.ReactNode;
-  onClick?: () => void;
-  variant?: 'default' | 'outline' | 'destructive' | 'ghost' | 'secondary';
-  size?: 'sm' | 'default' | 'icon';
-  className?: string;
-  disabled?: boolean;
-  [key: string]: any;
-}) => {
-  const base = 'px-3 py-1.5 rounded font-medium transition-colors flex items-center justify-center';
-  const variants = {
-    default: 'bg-[#f97316] text-white hover:bg-[#ea580c]',
-    outline: 'border border-[#333] text-[#e0e0e0] hover:bg-[#1a1a1a]',
-    destructive: 'bg-red-600 hover:bg-red-700 text-white',
-    ghost: 'text-[#a0a0a0] hover:text-[#e0e0e0] hover:bg-[#1a1a1a]',
-    secondary: 'bg-[#1a1a1a] border border-[#333] text-[#e0e0e0] hover:bg-[#222]'
-  };
-  const sizes = {
-    sm: 'text-xs px-2 h-7',
-    default: 'text-sm px-3 h-8',
-    icon: 'h-8 w-8 p-0'
-  };
+import {
+  Button,
+  Input,
+  Label,
+  Badge,
+  Separator,
+  Triangle,
+  Checkbox,
+  Resizer,
+  EngineeringButton,
+  EngineeringInput,
+  EngineeringLabel,
+  EngineeringBadge,
+  EngineeringSeparator,
+  EngineeringCheckbox,
+} from './components/ui/EngineeringPrimitives';
 
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className={`${base} ${variants[variant]} ${sizes[size]} ${className} ${disabled ? 'opacity-50 cursor-not-allowed' : ''
-        }`}
-      {...props}
-    >
-      {children}
-    </button>
-  );
-};
-
-const Input = ({
-  value,
-  onChange,
-  placeholder = '',
-  type = 'text',
-  className = '',
-  ...props
-}: {
-  value: string | number;
-  onChange: (e: ChangeEvent<HTMLInputElement>) => void;
-  placeholder?: string;
-  type?: string;
-  className?: string;
-  [key: string]: any;
-}) => (
-  <input
-    value={value}
-    onChange={onChange}
-    placeholder={placeholder}
-    type={type}
-    className={`px-2 py-1 bg-[#1a1a1a] border border-[#333] rounded text-sm text-[#e0e0e0] ${className}`}
-    {...props}
-  />
-);
-
-const Label = ({ children, className = '', ...props }: { children: React.ReactNode; className?: string;[key: string]: any }) => (
-  <label className={`text-xs text-[#888] ${className}`} {...props}>{children}</label>
-);
-
-const Badge = ({ children, variant = 'secondary', className = '' }: {
-  children: React.ReactNode;
-  variant?: 'default' | 'secondary' | 'outline';
-  className?: string;
-}) => (
-  <span className={`px-2 py-0.5 rounded text-xs ${variant === 'secondary' ? 'bg-[#222] text-[#888]' : 'bg-[#f97316] text-[#0a0a0a]'
-    } ${className}`}>
-    {children}
-  </span>
-);
-
-const Separator = ({ orientation = 'horizontal', className = '' }: {
-  orientation?: 'horizontal' | 'vertical';
-  className?: string;
-}) => (
-  <div className={`${orientation === 'vertical' ? 'w-px h-4' : 'h-px w-full'} bg-[#333] ${className}`} />
-);
-
-const Triangle = ({ size, className, fill }: { size: number, className?: string, fill?: string }) => (
-  <svg
-    width={size}
-    height={size}
-    viewBox="0 0 24 24"
-    fill={fill || "none"}
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className={className}
-  >
-    <path d="M3 20h18L12 4z" />
-  </svg>
-);
-
-const Checkbox = ({
-  checked,
-  onCheckedChange,
-  id,
-  className = ''
-}: {
-  checked: boolean;
-  onCheckedChange: (checked: boolean) => void;
-  id?: string;
-  className?: string;
-}) => (
-  <input
-    id={id}
-    type="checkbox"
-    checked={checked}
-    onChange={(e) => onCheckedChange(e.target.checked)}
-    className={`w-4 h-4 rounded border-[#444] bg-[#1a1a1a] text-[#f97316] focus:ring-[#f97316] ${className}`}
-  />
-);
-
-const Resizer = ({ onMouseDown, orientation = 'vertical' }: { onMouseDown: (e: React.MouseEvent) => void, orientation?: 'vertical' | 'horizontal' }) => (
-  <div
-    onMouseDown={onMouseDown}
-    className={`shrink-0 bg-transparent group transition-colors duration-200 ${orientation === 'vertical' ? 'w-1.5 cursor-col-resize' : 'h-1.5 cursor-row-resize'
-      }`}
-  >
-    <div className={`bg-[#333] group-hover:bg-[#f97316] transition-colors ${orientation === 'vertical' ? 'w-px h-full mx-auto' : 'h-px w-full my-auto'}`} />
-  </div>
-);
-
-// WelcomeOverlay has been moved and refactored as a standalone component IntroStandbyOverlay
 
 
 
@@ -338,8 +321,15 @@ interface Point {
   y: number;
 }
 
-type ManagedWindowId = 'hmi' | 'pid' | 'rtm' | 'doe';
-type DiagramMode = 'statemachine' | 'bdd' | 'ibd' | 'requirements' | 'xbridges' | 'vlab' | 'hil' | 'entropy' | 'plantuml';
+type ManagedWindowId = 'hmi' | 'pid' | 'rtm' | 'allocation' | 'doe';
+type DiagramMode = 'statemachine' | 'bdd' | 'ibd' | 'requirements' | 'package' | 'xbridges' | 'vlab' | 'hil' | 'entropy' | 'plantuml' | 'useCase' | 'activity' | 'sequence';
+
+type ConnectionErrorItem = ErrorItem & {
+  connectionDiagnostic?: ConnectionPolicyDiagnostic;
+  relationshipKind?: string;
+  sourceEndpoint?: ConnectionEndpoint;
+  targetEndpoint?: ConnectionEndpoint;
+};
 
 interface WorkspaceFile {
   id: string;
@@ -384,25 +374,24 @@ const normalizeNumerals = (val: string) => {
     .replace(/[٫،,]/g, '.');
 };
 
+// Task 2 canvas/tree parity: canvas port prompts display the same labels as
+// Model Explorer creation entries (single source: getElementKindLabel).
+const CANVAS_PORT_EXPLORER_KIND: Record<CanonicalPortKind, string> = {
+  umlPort: 'port',
+  proxyPort: 'proxyPort',
+  fullPort: 'fullPort',
+  flowPort: 'flowPort',
+};
+
+const canvasPortPromptLabel = (portKind: CanonicalPortKind): string =>
+  getElementKindLabel(CANVAS_PORT_EXPLORER_KIND[portKind]);
+
 const parseValue = (type: VariableType, value: string): number | boolean => {
   const trimmed = value.trim().toLowerCase();
   if (type === 'bool') return ['1', 'true', 't', 'yes', 'y', 'on'].includes(trimmed);
-  if (['float', 'single', 'double'].includes(type)) {
-    const parsed = parseFloat(trimmed);
-    return isNaN(parsed) ? 0 : parsed;
-  }
-  const parsed = parseInt(trimmed, 10);
-  if (isNaN(parsed)) return 0;
-  switch (type) {
-    case 'int8': return Math.max(-128, Math.min(127, parsed));
-    case 'uint8': return Math.max(0, Math.min(255, parsed));
-    case 'int16': return Math.max(-32768, Math.min(32767, parsed));
-    case 'uint16': return Math.max(0, Math.min(65535, parsed));
-    case 'int32': return Math.max(-2147483648, Math.min(2147483647, parsed));
-    case 'uint32': return Math.max(0, Math.min(4294967295, parsed));
-    case 'uint': return Math.max(0, parsed);
-    default: return parsed;
-  }
+  const parsed = Number(trimmed);
+  if (!Number.isFinite(parsed)) return 0;
+  return coerceTypedValue(parsed, type).value;
 };
 
 const getDefaultValue = (type: VariableType): string => {
@@ -568,66 +557,35 @@ class Plant {
   }
 };
 
-const HierarchyTree = ({
-  states,
-  layers,
-  activeStates,
-  currentLayerId,
-  onSelect,
-  onDoubleClick,
-  selectedIds,
-}: {
-  states: StateData[];
-  layers: Layer[];
-  activeStates: Record<string, string>;
-  currentLayerId: string;
-  onSelect: (id: string) => void;
-  onDoubleClick: (id: string) => void;
-  selectedIds: string[];
-}): React.ReactNode => {
-  const renderNode = (state: StateData, level: number): React.ReactNode => {
-    const isActive = Object.values(activeStates).includes(state.id);
-    const isSelected = selectedIds.includes(state.id);
+const HierarchyTree: React.FC<any> = (props) => (
+  <AppModelExplorer
+    diagramMode={props.diagramMode}
+    states={props.states}
+    layers={props.layers}
+    transitions={props.transitions ?? []}
+    junctions={props.junctions ?? []}
+    activeStates={props.activeStates}
+    currentLayerId={props.currentLayerId}
+    blocks={props.blocks}
+    parts={props.parts}
+    diagrams={props.diagrams}
+    externalModels={props.externalModels}
+    canonicalSysmlRepository={props.canonicalSysmlRepository}
+    sysmlStore={props.sysmlStore}
+    diagramPresentations={props.diagramPresentations}
+    selectedIds={props.selectedIds}
+    onSelect={props.onSelect}
+    onDoubleClick={props.onDoubleClick}
+    onCommitStateMachineSnapshot={props.onCommitStateMachineSnapshot}
 
-    const childLayer = layers.find(l => l.parentStateId === state.id);
-    const childStates = childLayer
-      ? states.filter(s => childLayer.stateIds.includes(s.id))
-      : [];
 
-    return (
-      <div key={state.id}>
-        <div
-          onClick={(e) => { e.stopPropagation(); onSelect(state.id); }}
-          onDoubleClick={(e) => { e.stopPropagation(); onDoubleClick(state.id); }}
-          className={`flex items-center p-1 rounded cursor-pointer hover:bg-[#2a2a2a] ${isSelected ? 'bg-[#f97316]/30' : ''
-            } ${isActive ? 'font-bold' : ''}`}
-          style={{ paddingLeft: `${level * 16 + 8}px` }}
-        >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill={isActive ? '#4ade80' : 'none'} stroke={state.color} strokeWidth="2" className="mr-2 shrink-0">
-            <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-          </svg>
-          <span className="text-sm truncate" title={state.name}>{state.name}</span>
-        </div>
-        {childStates.length > 0 && (
-          <div>
-            {childStates.map(childState => renderNode(childState, level + 1))}
-          </div>
-        )}
-      </div>
-    );
-  };
 
-  const rootLayer = layers.find(l => l.id === 'root');
-  const rootStates = rootLayer ? states.filter(s => rootLayer.stateIds.includes(s.id)) : [];
-
-  return (
-    <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
-      {rootStates.length > 0 ? rootStates.sort((a, b) => a.name.localeCompare(b.name)).map(state => renderNode(state, 0)) : (
-        <div className="text-center text-xs text-[#666] p-4">No states in root.</div>
-      )}
-    </div>
-  );
-};
+    onExecuteSysmlCommand={props.onExecuteSysmlCommand}
+    activeDiagramId={props.activeDiagramId}
+    activeDiagramContext={props.activeDiagramContext as ActiveDiagramContext | undefined}
+    onCommandResult={props.onCommandResult}
+  />
+);
 
 const findPeaks = (y: number[]): { peaks: number[] } => {
   const peaks: number[] = [];
@@ -740,7 +698,7 @@ const FloatingWindow = ({
   }, [isDragging, isResizing, dragOffset, resizeStart, windowState.id, onUpdate, isMobile]);
 
   return (
-    <div
+    <div data-help-feature="live:App:135ca98065b6"
       style={isMobile ? {
         position: 'fixed',
         top: 0,
@@ -770,12 +728,12 @@ const FloatingWindow = ({
         height: windowState.size.height,
         zIndex: windowState.zIndex,
       }}
-      className="bg-[#1a1a1a] border border-[#f97316] rounded-lg flex flex-col shadow-2xl overflow-hidden"
+      className="bg-[var(--surface-base)] border border-[var(--border-strong)] rounded-lg flex flex-col shadow-2xl overflow-hidden"
       onMouseDown={() => !isMobile && onUpdate(windowState.id, { zIndex: Date.now() })}
     >
-      <div
+      <div data-help-feature="live:App:2e5d580ebc83"
         style={{ userSelect: 'none' }}
-        className={`h-8 bg-[#1a1a1a] border-b border-[#222] flex items-center justify-between px-3 shrink-0 ${
+        className={`h-8 bg-[var(--surface-raised)] border-b border-[var(--border-default)] flex items-center justify-between px-3 shrink-0 ${
           isMobile || windowState.isMaximized ? '' : 'cursor-move'
         }`}
         onMouseDown={(e) => {
@@ -785,13 +743,13 @@ const FloatingWindow = ({
           setDragOffset({ x: e.clientX - windowState.pos.x, y: e.clientY - windowState.pos.y });
         }}
       >
-        <span className="text-xs font-bold text-[#f97316]">{windowState.title}</span>
+        <span className="text-xs font-bold text-orange-500">{windowState.title}</span>
         <div className="flex items-center gap-1" onMouseDown={(e) => e.stopPropagation()}>
           {/* Minimize Button */}
-          <button
+          <button data-help-feature="app-window-layout" data-help-source="src/App.tsx"
             onClick={() => onUpdate(windowState.id, { isMinimized: !windowState.isMinimized })}
             title={windowState.isMinimized ? "Restore" : "Minimize"}
-            className="w-6 h-6 rounded flex items-center justify-center text-[#888] hover:text-[#e0e0e0] hover:bg-[#2a2a2a] transition-colors"
+            className="w-6 h-6 rounded flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-panel)] transition-colors"
           >
             {windowState.isMinimized ? (
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -808,10 +766,10 @@ const FloatingWindow = ({
           </button>
 
           {/* Maximize Button */}
-          <button
+          <button data-help-feature="app-window-layout" data-help-source="src/App.tsx"
             onClick={() => onUpdate(windowState.id, { isMaximized: !windowState.isMaximized, isMinimized: false })}
             title={windowState.isMaximized ? "Restore Size" : "Maximize"}
-            className="w-6 h-6 rounded flex items-center justify-center text-[#888] hover:text-[#e0e0e0] hover:bg-[#2a2a2a] transition-colors"
+            className="w-6 h-6 rounded flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-panel)] transition-colors"
           >
             {windowState.isMaximized ? (
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -826,10 +784,10 @@ const FloatingWindow = ({
           </button>
 
           {/* Close/Exit Button */}
-          <button
+          <button data-help-feature="app-dialog-close" data-help-source="src/App.tsx"
             onClick={onClose}
             title="Close"
-            className="w-6 h-6 rounded flex items-center justify-center text-[#888] hover:text-white hover:bg-red-600 transition-colors"
+            className="w-6 h-6 rounded flex items-center justify-center text-[var(--text-muted)] hover:text-white hover:bg-rose-600 transition-colors"
           >
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -844,7 +802,7 @@ const FloatingWindow = ({
       >
         {children}
       </div>
-      {!isMobile && !windowState.isMaximized && !windowState.isMinimized && <div
+      {!isMobile && !windowState.isMaximized && !windowState.isMinimized && <div data-help-feature="live:App:2aa4cff8d03c"
         className="absolute bottom-0 right-0 w-4 h-4 cursor-se-resize z-20"
         onMouseDown={(e) => {
           e.stopPropagation();
@@ -865,12 +823,19 @@ const LegacyTraceabilityMatrix = ({
   blocks,
   relationships,
   parts,
-  onClose
+  onClose,
+  badgeColorFor
 }: {
   blocks: BlockData[],
   relationships: RelationshipData[],
   parts: PartData[],
-  onClose: () => void
+  onClose: () => void,
+  /**
+   * Review follow-up Finding 6a: optional per-element presentation color
+   * (a stored style.color override resolved via resolveSemanticPresentation).
+   * When absent, the «kind» glyph resolves to the role token.
+   */
+  badgeColorFor?: (elementId: string) => string | undefined
 }) => {
   const reqs = blocks.filter(b => b.stereotype === 'requirement');
   const [filterStatus, setFilterStatus] = useState('');
@@ -919,15 +884,72 @@ const LegacyTraceabilityMatrix = ({
   }
 
   const exportExcel = () => {
+    const referenceLabel = (id: string, fallbackKind = 'Element') => {
+      const block = blocks.find(b => b.id === id);
+      if (block) return sysmlObjectLabel(block, block.stereotype || 'Block');
+      const part = parts.find(p => p.id === id);
+      return sysmlObjectLabel(part, part ? 'Part' : fallbackKind);
+    };
     const data = orderedReqs.map(({ req: r, level }) => {
       const outgoing = relationships.filter(rel => rel.sourceId === r.id).map(rel => {
-        const target = blocks.find(b => b.id === rel.targetId);
-        return `[${rel.type}] ${target?.name}`;
+        return `[${rel.type}] ${referenceLabel(rel.targetId)}`;
       }).join('; ');
 
-      const satisfiedByBlocks = blocks.filter(b => b.satisfiedReqIds?.includes(r.id)).map(b => b.name);
-      const satisfiedByParts = parts.filter(p => p.satisfiedReqIds?.includes(r.id)).map(p => p.name);
-      const satisfiedBy = [...satisfiedByBlocks, ...satisfiedByParts].join('; ');
+      const containedBy = relationships
+        .filter(rel => rel.type === 'requirementContainment' && rel.targetId === r.id)
+        .map(rel => referenceLabel(rel.sourceId, 'Requirement'))
+        .join('; ');
+
+      const contains = relationships
+        .filter(rel => rel.type === 'requirementContainment' && rel.sourceId === r.id)
+        .map(rel => referenceLabel(rel.targetId, 'Requirement'))
+        .join('; ');
+
+      const derivedFrom = relationships
+        .filter(rel => (rel.type === 'deriveReqt' || rel.type === 'derive') && rel.sourceId === r.id)
+        .map(rel => referenceLabel(rel.targetId, 'Requirement'))
+        .join('; ');
+
+      const derivedReqs = relationships
+        .filter(rel => (rel.type === 'deriveReqt' || rel.type === 'derive') && rel.targetId === r.id)
+        .map(rel => referenceLabel(rel.sourceId, 'Requirement'))
+        .join('; ');
+
+      const copiedFrom = relationships
+        .filter(rel => rel.type === 'copy' && rel.sourceId === r.id)
+        .map(rel => referenceLabel(rel.targetId, 'Requirement'))
+        .join('; ');
+
+      const copies = relationships
+        .filter(rel => rel.type === 'copy' && rel.targetId === r.id)
+        .map(rel => referenceLabel(rel.sourceId, 'Requirement'))
+        .join('; ');
+
+      const satisfiedByRel = relationships
+        .filter(rel => rel.type === 'satisfy' && rel.targetId === r.id)
+        .map(rel => referenceLabel(rel.sourceId));
+
+      const satisfiedByBlocks = blocks.filter(b => b.satisfiedReqIds?.includes(r.id)).map(b => sysmlObjectLabel(b, b.stereotype || 'Block'));
+      const satisfiedByParts = parts.filter(p => p.satisfiedReqIds?.includes(r.id)).map(p => sysmlObjectLabel(p, 'Part'));
+      const satisfiedBy = [...new Set([...satisfiedByRel, ...satisfiedByBlocks, ...satisfiedByParts])].join('; ');
+
+      const verifiedBy = relationships
+        .filter(rel => rel.type === 'verify' && rel.targetId === r.id)
+        .map(rel => referenceLabel(rel.sourceId, 'Verification Case'))
+        .join('; ');
+
+      const refinedBy = relationships
+        .filter(rel => rel.type === 'refine' && rel.targetId === r.id)
+        .map(rel => referenceLabel(rel.sourceId))
+        .join('; ');
+
+      const traced = relationships
+        .filter(rel => (rel.type === 'trace' || (rel.type as string) === 'traceability') && (rel.sourceId === r.id || rel.targetId === r.id))
+        .map(rel => {
+          const otherId = rel.sourceId === r.id ? rel.targetId : rel.sourceId;
+          return referenceLabel(otherId);
+        })
+        .join('; ');
 
       const prefix = '  '.repeat(level) + (level > 0 ? '└ ' : '');
 
@@ -938,8 +960,17 @@ const LegacyTraceabilityMatrix = ({
         Priority: r.priority || '',
         'Assigned To': r.assignedTo || 'Unassigned',
         Description: r.description || '',
+        'Contained By': containedBy,
+        Contains: contains,
+        'Derived From': derivedFrom,
+        'Derived Requirements': derivedReqs,
+        'Copied From': copiedFrom,
+        'Copied Requirements': copies,
+        'Satisfied By': satisfiedBy,
+        'Verified By': verifiedBy,
+        'Refined By': refinedBy,
+        'Traced Elements': traced,
         Links: outgoing,
-        SatisfiedBy: satisfiedBy
       };
     });
     const ws = XLSX.utils.json_to_sheet(data);
@@ -953,7 +984,7 @@ const LegacyTraceabilityMatrix = ({
       <div className="h-10 flex items-center px-4 border-b border-[#222] justify-between shrink-0">
         <div className="flex gap-2 items-center">
           <span className="text-xs text-[#888]">Filter:</span>
-          <select className="bg-[#0a0a0a] border border-[#333] text-xs rounded px-2 h-6 text-[#e0e0e0]" value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
+          <select data-help-feature="app-rtm-status-filter" data-help-source="src/App.tsx" className="bg-[#0a0a0a] border border-[#333] text-xs rounded px-2 h-6 text-[#e0e0e0]" value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
             <option value="">All Statuses</option>
             <option value="Draft">Draft</option>
             <option value="Approved">Approved</option>
@@ -961,7 +992,7 @@ const LegacyTraceabilityMatrix = ({
           </select>
         </div>
         <div className="flex gap-2">
-          <Button size="sm" onClick={exportExcel} className="h-6 text-xs">Export Excel</Button>
+          <Button data-help-feature="app-rtm-excel" data-help-source="src/App.tsx" size="sm" onClick={exportExcel} className="h-6 text-xs">Export Excel</Button>
         </div>
       </div>
       <div className="flex-1 overflow-auto p-0">
@@ -1020,7 +1051,10 @@ const LegacyTraceabilityMatrix = ({
                         const t = blocks.find(b => b.id === rel.targetId);
                         return (
                           <div key={rel.id} className="flex items-center gap-1.5 bg-[#1a1a1a] px-2 py-1 rounded border border-[#222] w-max">
-                            <span className="text-[#6c9ac6] text-[10px] font-mono">«{rel.type}»</span>
+                            {/* Task 6 review fix: tree «kind» glyph resolves from the centralized
+                                semantic palette; the «kind» text stays as the non-color indicator.
+                                Review follow-up Finding 6a: a resolved stored override wins when supplied. */}
+                            <span className="text-[10px] font-mono" style={{ color: badgeColorFor?.(rel.id) ?? semanticPresentationToken('validRequirementRelationship') }}>«{rel.type}»</span>
                             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="opacity-50"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
                             <span className="text-[#ccc]">{t?.name}</span>
                           </div>
@@ -1130,7 +1164,7 @@ const CodeGenerationDialog = ({
             <div>
               <div className="flex gap-2 mb-2 overflow-x-auto pb-2">
                 {files.map(f => (
-                  <button key={f.name} onClick={() => setActiveFile(f.name)} className={`px-3 py-1 text-xs rounded border ${activeFile === f.name ? 'bg-[#f97316] text-black border-[#f97316]' : 'bg-[#1a1a1a] text-[#888] border-[#333]'}`}>
+                  <button data-help-feature="app-code-file" data-help-source="src/App.tsx" key={f.name} onClick={() => setActiveFile(f.name)} className={`px-3 py-1 text-xs rounded border ${activeFile === f.name ? 'bg-[#f97316] text-black border-[#f97316]' : 'bg-[#1a1a1a] text-[#888] border-[#333]'}`}>
                     {f.name}
                   </button>
                 ))}
@@ -1186,7 +1220,7 @@ const CodeGenerationDialog = ({
       </div>
 
       <div className="h-14 flex items-center justify-end px-5 border-t border-[#222] gap-3">
-        <Button
+        <Button data-help-feature="app-dialog-close" data-help-source="src/App.tsx"
           variant="outline"
           onClick={onClose}
           className="border-[#333] text-[#a0a0a0] hover:text-[#e0e0e0] px-5"
@@ -1194,7 +1228,7 @@ const CodeGenerationDialog = ({
           Close
         </Button>
         {codegenErrors.length === 0 && files.length > 0 && (
-          <Button
+          <Button data-help-feature="app-code-download" data-help-source="src/App.tsx"
             onClick={async () => {
               try {
                 const zip = new JSZip();
@@ -1229,7 +1263,7 @@ const CodeGenerationDialog = ({
           </Button>
         )}
       </div>
-      <div
+      <div data-help-feature="live:App:313080de4e96"
         onMouseDown={handleModalResizeStart}
         className="absolute bottom-0 right-0 w-4 h-4 cursor-se-resize z-10 text-[#f97316] opacity-50 hover:opacity-100 flex items-end justify-end"
         title="Resize Window"
@@ -1390,21 +1424,21 @@ const PidWorkspaceDialog = ({
       <div className="flex-1 flex overflow-hidden">
         {/* Controls */}
         <div className="w-72 p-4 border-r border-[#222] flex flex-col gap-4 overflow-y-auto">
-          <input type="file" ref={fileInputRef} onChange={handlePidFileChange} className="hidden" accept=".xlsx,.csv" />
-          <Button onClick={handleLoadPidData} variant="outline">Load Data</Button>
+          <input data-help-feature="app-pid-load" data-help-source="src/App.tsx" type="file" ref={fileInputRef} onChange={handlePidFileChange} className="hidden" accept=".xlsx,.csv" />
+          <Button data-help-feature="app-pid-load" data-help-source="src/App.tsx" onClick={handleLoadPidData} variant="outline">Load Data</Button>
 
           <div className="space-y-2 p-3 bg-[#1a1a1a] rounded-lg border border-[#222]">
             <Label>PID Parameters</Label>
             <div className="grid grid-cols-3 gap-2">
-              <div><Label>Kp</Label><Input value={pidKp} onChange={e => setPidKp(e.target.value)} className="h-7" /></div>
-              <div><Label>Ki</Label><Input value={pidKi} onChange={e => setPidKi(e.target.value)} className="h-7" /></div>
-              <div><Label>Kd</Label><Input value={pidKd} onChange={e => setPidKd(e.target.value)} className="h-7" /></div>
+              <div><Label>Kp</Label><Input data-help-feature="app-pid-kp" data-help-source="src/App.tsx" value={pidKp} onChange={e => setPidKp(e.target.value)} className="h-7" /></div>
+              <div><Label>Ki</Label><Input data-help-feature="app-pid-ki" data-help-source="src/App.tsx" value={pidKi} onChange={e => setPidKi(e.target.value)} className="h-7" /></div>
+              <div><Label>Kd</Label><Input data-help-feature="app-pid-kd" data-help-source="src/App.tsx" value={pidKd} onChange={e => setPidKd(e.target.value)} className="h-7" /></div>
             </div>
           </div>
 
-          <Button onClick={() => runPidSimulation(true)} variant="default">Run Simulation</Button>
-          <Button onClick={handleAutoTune} variant="secondary">Auto Tune (Z-N)</Button>
-          <Button onClick={handleExportPidCode} variant="outline">Export C Code</Button>
+          <Button data-help-feature="app-pid-run" data-help-source="src/App.tsx" onClick={() => runPidSimulation(true)} variant="default">Run Simulation</Button>
+          <Button data-help-feature="app-pid-tune" data-help-source="src/App.tsx" onClick={handleAutoTune} variant="secondary">Auto Tune (Z-N)</Button>
+          <Button data-help-feature="app-pid-export" data-help-source="src/App.tsx" onClick={handleExportPidCode} variant="outline">Export C Code</Button>
         </div>
 
         {/* Plot */}
@@ -1560,7 +1594,7 @@ const OledDisplay = ({
         {tempText}
       </div>
       <div className="w-full h-1 bg-[#111] border border-[#222] rounded overflow-hidden">
-        <div 
+        <div
           className="h-full bg-gradient-to-r from-[#e8a020] to-[#3de88a] transition-all duration-300"
           style={{ width: `${Math.max(0, Math.min(100, progressVal))}%` }}
         />
@@ -1670,15 +1704,15 @@ const Encoder = ({
   return (
     <div className="w-full h-full flex flex-col items-center justify-between p-2 select-none">
       <div className="flex gap-2 w-full justify-center shrink-0">
-        <button 
-          onClick={() => rotate(-1)} 
+        <button data-help-feature="app-hmi-rotate" data-help-source="src/App.tsx"
+          onClick={() => rotate(-1)}
           className="w-10 h-6 bg-[#222] border border-[#333] hover:border-[#f97316] rounded text-[#888] hover:text-[#fff] text-xs flex items-center justify-center active:scale-95 transition-all"
           disabled={editMode}
         >
           ↺
         </button>
-        <button 
-          onClick={() => rotate(1)} 
+        <button data-help-feature="app-hmi-rotate" data-help-source="src/App.tsx"
+          onClick={() => rotate(1)}
           className="w-10 h-6 bg-[#222] border border-[#333] hover:border-[#f97316] rounded text-[#888] hover:text-[#fff] text-xs flex items-center justify-center active:scale-95 transition-all"
           disabled={editMode}
         >
@@ -1687,7 +1721,7 @@ const Encoder = ({
       </div>
 
       <div className="relative flex-1 flex items-center justify-center my-1">
-        <div 
+        <div data-help-feature="live:App:9b48b1e073d6"
           onMouseDown={handleMouseDown}
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseLeave}
@@ -1704,7 +1738,7 @@ const Encoder = ({
             <span className="text-[10px] text-[#444] font-bold">✦</span>
           </div>
         </div>
-        <div 
+        <div
           className={`absolute w-24 h-24 rounded-full border-2 border-[#f97316] pointer-events-none transition-all duration-300 ${isLpActive ? 'opacity-100 scale-100' : 'opacity-0 scale-90'}`}
         />
       </div>
@@ -1776,7 +1810,7 @@ const ModeSelector = ({
           }
 
           return (
-            <div
+            <div data-help-feature="app-hmi-select" data-help-source="src/App.tsx"
               key={idx}
               onClick={() => handleSelect(idx)}
               style={glowStyle}
@@ -2324,7 +2358,7 @@ const findBestOA = (userLevels: number[]): TaguchiOADef | null => {
   for (const oa of OAs) {
     const sortedOA = [...oa.colLevels].sort((a, b) => b - a);
     if (sortedUser.length > sortedOA.length) continue;
-    
+
     let compatible = true;
     for (let i = 0; i < sortedUser.length; i++) {
       if (sortedUser[i] > sortedOA[i]) {
@@ -2344,7 +2378,7 @@ const findBestOA = (userLevels: number[]): TaguchiOADef | null => {
 const generateDesignMatrix = (factors: { name: string, levels: number }[], oa: TaguchiOADef): number[][] => {
   const mappedCols: number[] = [];
   const usedCols = new Set<number>();
-  
+
   factors.forEach((f, fIdx) => {
     let matchedCol = -1;
     for (let c = 0; c < oa.colLevels.length; c++) {
@@ -2358,7 +2392,7 @@ const generateDesignMatrix = (factors: { name: string, levels: number }[], oa: T
       usedCols.add(matchedCol);
     }
   });
-  
+
   factors.forEach((f, fIdx) => {
     if (mappedCols[fIdx] !== undefined) return;
     let matchedCol = -1;
@@ -2457,7 +2491,7 @@ const DoeWorkspace = ({
 }) => {
   const [eqFontSize, setEqFontSize] = useState(14);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
+
   // Taguchi design builder state
   const [showDesignBuilder, setShowDesignBuilder] = useState(false);
   const [builderNumFactors, setBuilderNumFactors] = useState(3);
@@ -2562,36 +2596,36 @@ const DoeWorkspace = ({
   };
 
   return (
-    <div className="flex flex-col h-full w-full bg-[#0a0a0c] text-[#e0e0e0] font-sans">
+    <div className="doe-workspace doe-panel flex flex-col h-full w-full bg-[var(--surface-base)] text-[var(--text-primary)] font-sans">
       {/* Top Control Bar */}
-      <div className="h-14 border-b border-[#222228] bg-[#111114] flex items-center justify-between px-5 gap-4 shrink-0">
+      <div className="h-14 border-b border-[var(--border-default)] bg-[var(--surface-raised)] flex items-center justify-between px-5 gap-4 shrink-0">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2.5">
-            <div className="p-1.5 rounded-lg bg-orange-500/10 border border-orange-500/30 text-orange-400">
+            <div className="p-1.5 rounded-lg bg-orange-500/10 border border-orange-500/30 text-orange-500">
               <Layers size={16} />
             </div>
             <div>
-              <h2 className="text-xs font-bold uppercase tracking-wider text-white">DOE ANALYZER PRO</h2>
-              <span className="text-[10px] text-zinc-500 font-mono">Response Surface & Optimization</span>
+              <h2 className="text-xs font-bold uppercase tracking-wider text-[var(--text-primary)]">DOE ANALYZER PRO</h2>
+              <span className="text-[10px] text-[var(--text-muted)] font-mono">Response Surface & Optimization</span>
             </div>
           </div>
 
-          <Separator orientation="vertical" className="h-6 bg-[#27272f]" />
+          <Separator orientation="vertical" className="h-6 bg-[var(--border-default)]" />
 
           {/* Model Switcher Segment */}
-          <div className="flex bg-[#18181c] rounded-lg border border-[#27272f] p-0.5">
+          <div className="flex bg-[var(--surface-panel)] rounded-lg border border-[var(--border-default)] p-0.5">
             {[
               { id: 'RSM', label: 'Run RSM', action: calculateRSM },
               { id: 'GMDH', label: 'Run GMDH', action: calculateGMDH },
               { id: 'Taguchi', label: 'Run Taguchi', action: calculateTaguchi },
             ].map(m => (
-              <button
+              <button data-help-feature="app-doe-fit" data-help-source="src/App.tsx"
                 key={m.id}
                 onClick={m.action}
                 className={`px-3 py-1 text-xs font-medium rounded-md whitespace-nowrap transition-colors ${
                   activeModel === m.id
-                    ? 'bg-zinc-800 text-white shadow-sm font-semibold'
-                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/40'
+                    ? 'bg-[var(--surface-raised)] text-[var(--text-primary)] shadow-sm font-semibold'
+                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-base)]'
                 }`}
               >
                 {m.label}
@@ -2600,11 +2634,11 @@ const DoeWorkspace = ({
           </div>
 
           {activeModel === 'Taguchi' && (
-            <Button
+            <Button data-help-feature="app-doe-design-open" data-help-source="src/App.tsx"
               variant="outline"
               size="sm"
               onClick={() => setShowDesignBuilder(true)}
-              className="h-7 px-2.5 text-xs font-medium bg-[#18181c] border-[#27272f] text-zinc-300 hover:text-white hover:bg-zinc-800 whitespace-nowrap"
+              className="h-7 px-2.5 text-xs font-medium bg-[var(--surface-panel)] border-[var(--border-default)] text-[var(--text-primary)] hover:bg-[var(--surface-raised)] whitespace-nowrap"
             >
               Create Taguchi Design
             </Button>
@@ -2612,39 +2646,39 @@ const DoeWorkspace = ({
         </div>
 
         {/* Top Actions Capsule */}
-        <div className="flex items-center gap-1 bg-[#18181c] border border-[#27272f] rounded-lg p-1">
-          <input type="file" ref={fileInputRef} className="hidden" accept=".xlsx,.csv" onChange={handleFileUpload} />
-          <Button
+        <div className="flex items-center gap-1 bg-[var(--surface-panel)] border border-[var(--border-default)] rounded-lg p-1">
+          <input data-help-feature="app-doe-upload" data-help-source="src/App.tsx" type="file" ref={fileInputRef} className="hidden" accept=".xlsx,.csv" onChange={handleFileUpload} />
+          <Button data-help-feature="app-module-export" data-help-source="src/App.tsx"
             variant="ghost"
             size="sm"
             onClick={handleExportProject}
-            className="h-7 px-2.5 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800/60 whitespace-nowrap"
+            className="h-7 px-2.5 text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-raised)] whitespace-nowrap"
             title="Ctrl+S"
           >
-            <Save size={13} className="mr-1.5 text-zinc-400" /> Save
+            <Save size={13} className="mr-1.5 text-[var(--text-muted)]" /> Save
           </Button>
-          <Button
+          <Button data-help-feature="app-doe-upload" data-help-source="src/App.tsx"
             variant="ghost"
             size="sm"
             onClick={() => fileInputRef.current?.click()}
-            className="h-7 px-2.5 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800/60 whitespace-nowrap"
+            className="h-7 px-2.5 text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-raised)] whitespace-nowrap"
           >
-            <Upload size={13} className="mr-1.5 text-zinc-400" /> Upload Data
+            <Upload size={13} className="mr-1.5 text-[var(--text-muted)]" /> Upload Data
           </Button>
-          <Button
+          <Button data-help-feature="app-report-generate" data-help-source="src/App.tsx"
             variant="ghost"
             size="sm"
             onClick={generateReport}
-            className="h-7 px-2.5 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800/60 whitespace-nowrap"
+            className="h-7 px-2.5 text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-raised)] whitespace-nowrap"
           >
-            <FileText size={13} className="mr-1.5 text-zinc-400" /> Report
+            <FileText size={13} className="mr-1.5 text-[var(--text-muted)]" /> Report
           </Button>
-          <Separator orientation="vertical" className="h-4 bg-[#2e2e38]" />
-          <Button
+          <Separator orientation="vertical" className="h-4 bg-[var(--border-default)]" />
+          <Button data-help-feature="app-dialog-close" data-help-source="src/App.tsx"
             variant="ghost"
             size="sm"
             onClick={onClose}
-            className="h-7 px-2 text-xs text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10 whitespace-nowrap"
+            className="h-7 px-2 text-xs text-[var(--text-muted)] hover:text-rose-500 hover:bg-rose-500/10 whitespace-nowrap"
             title="Close DOE Analyzer"
           >
             <X size={14} className="mr-1" /> Close
@@ -2660,17 +2694,17 @@ const DoeWorkspace = ({
               <section className="bg-[#18181c] p-3 rounded-xl border border-[#27272f]">
                 <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-2.5">Model Deployment</h3>
                 <div className="grid grid-cols-2 gap-2">
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
+                  <Button data-help-feature="app-doe-export" data-help-source="src/App.tsx"
+                    variant="outline"
+                    size="sm"
                     className="h-7 text-xs font-medium border-sky-500/30 bg-sky-500/5 text-sky-400 hover:bg-sky-500/20 hover:text-sky-300 transition-colors whitespace-nowrap"
                     onClick={handleExportToXBridges}
                   >
                     <Network size={12} className="mr-1.5" /> X-Bridges
                   </Button>
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
+                  <Button data-help-feature="app-doe-export" data-help-source="src/App.tsx"
+                    variant="outline"
+                    size="sm"
                     className="h-7 text-xs font-medium border-purple-500/30 bg-purple-500/5 text-purple-400 hover:bg-purple-500/20 hover:text-purple-300 transition-colors whitespace-nowrap"
                     onClick={handleExportToVLab}
                   >
@@ -2712,13 +2746,13 @@ const DoeWorkspace = ({
                     <div className="flex items-center justify-between mb-3">
                       <h3 className="text-xs font-bold text-[#888] uppercase tracking-widest">Response Table</h3>
                       <div className="flex bg-[#1a1a1a] p-0.5 rounded border border-[#222]">
-                        <button 
+                        <button data-help-feature="app-doe-response-tab" data-help-source="src/App.tsx"
                           className={`px-2 py-1 text-[9px] rounded font-bold transition-all ${responseTableTab === 'sn' ? 'bg-[#f97316] text-black' : 'text-[#888] hover:text-[#fff]'}`}
                           onClick={() => setResponseTableTab('sn')}
                         >
                           S/N
                         </button>
-                        <button 
+                        <button data-help-feature="app-doe-response-tab" data-help-source="src/App.tsx"
                           className={`px-2 py-1 text-[9px] rounded font-bold transition-all ${responseTableTab === 'mean' ? 'bg-[#f97316] text-black' : 'text-[#888] hover:text-[#fff]'}`}
                           onClick={() => setResponseTableTab('mean')}
                         >
@@ -2868,25 +2902,25 @@ const DoeWorkspace = ({
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-xs font-bold text-[#888] uppercase tracking-widest">Equation</h3>
                   <div className="flex gap-1 items-center">
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
+                    <Button data-help-feature="app-doe-export" data-help-source="src/App.tsx"
+                      variant="outline"
+                      size="sm"
                       className="h-6 px-2 text-[10px] font-medium border-purple-500/30 bg-purple-500/5 text-purple-400 hover:bg-purple-500/20 hover:text-purple-300 whitespace-nowrap"
                       onClick={handleExportToVLab}
                     >
                       <FlaskConical size={10} className="mr-1" /> V-Lab
                     </Button>
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
+                    <Button data-help-feature="app-doe-export" data-help-source="src/App.tsx"
+                      variant="outline"
+                      size="sm"
                       className="h-6 px-2 text-[10px] font-medium border-sky-500/30 bg-sky-500/5 text-sky-400 hover:bg-sky-500/20 hover:text-sky-300 whitespace-nowrap"
                       onClick={handleExportToXBridges}
                     >
                       <Network size={10} className="mr-1" /> X-Bridges
                     </Button>
                     <div className="w-1" />
-                    <Button variant="ghost" size="icon" className="h-6 w-6 text-zinc-400 hover:text-white" onClick={() => setEqFontSize(p => Math.max(8, p - 1))}><span className="text-[9px]">A-</span></Button>
-                    <Button variant="ghost" size="icon" className="h-6 w-6 text-zinc-400 hover:text-white" onClick={() => setEqFontSize(p => Math.min(32, p + 1))}><span className="text-[11px]">A+</span></Button>
+                    <Button data-help-feature="app-doe-equation-size" data-help-source="src/App.tsx" variant="ghost" size="icon" className="h-6 w-6 text-zinc-400 hover:text-white" onClick={() => setEqFontSize(p => Math.max(8, p - 1))}><span className="text-[9px]">A-</span></Button>
+                    <Button data-help-feature="app-doe-equation-size" data-help-source="src/App.tsx" variant="ghost" size="icon" className="h-6 w-6 text-zinc-400 hover:text-white" onClick={() => setEqFontSize(p => Math.min(32, p + 1))}><span className="text-[11px]">A+</span></Button>
                   </div>
                 </div>
                 <div
@@ -2922,7 +2956,7 @@ const DoeWorkspace = ({
                     <>
                       <div>
                         <Label className="mb-2 block">X-Axis Factor</Label>
-                        <select
+                        <select data-help-feature="app-doe-axes" data-help-source="src/App.tsx"
                           className="w-full bg-[#1a1a1a] border border-[#222] rounded p-2 text-xs text-white"
                           value={plotFactors.x}
                           onChange={e => setPlotFactors(prev => ({ ...prev, x: Number(e.target.value) }))}
@@ -2932,7 +2966,7 @@ const DoeWorkspace = ({
                       </div>
                       <div>
                         <Label className="mb-2 block">Y-Axis Factor</Label>
-                        <select
+                        <select data-help-feature="app-doe-axes" data-help-source="src/App.tsx"
                           className="w-full bg-[#1a1a1a] border border-[#222] rounded p-2 text-xs text-white"
                           value={plotFactors.y}
                           onChange={e => setPlotFactors(prev => ({ ...prev, y: Number(e.target.value) }))}
@@ -2956,7 +2990,7 @@ const DoeWorkspace = ({
                         { id: 'taguchi_delta', label: 'Rank/Delta', show: results?.type === 'Taguchi' },
                         { id: 'pred_vs_act', label: 'Pred vs Act', show: results?.type === 'RSM' || results?.type === 'GMDH' || results?.type === 'Taguchi' },
                       ].filter(p => p.show).map(p => (
-                        <button
+                        <button data-help-feature="app-doe-plot" data-help-source="src/App.tsx"
                           key={p.id}
                           onClick={() => setPlotType(p.id as any)}
                           className={`h-7 px-2 text-xs font-medium rounded-md whitespace-nowrap transition-colors border ${
@@ -2979,7 +3013,7 @@ const DoeWorkspace = ({
                         {headers.slice(0, -1).map((h, i) => (
                           <div key={i} className="flex justify-between items-center gap-2">
                             <span className="text-[9px] text-gray-400 truncate w-24">{h}</span>
-                            <select 
+                            <select data-help-feature="app-doe-holds" data-help-source="src/App.tsx"
                               className="bg-[#050505] border border-[#222] text-[9px] p-1 rounded text-white"
                               value={holdValues[i]}
                               onChange={(e) => {
@@ -3027,7 +3061,7 @@ const DoeWorkspace = ({
                       </div>
                       <div>
                         <Label className="mb-2 block">Objective (S/N)</Label>
-                        <select
+                        <select data-help-feature="app-doe-objective" data-help-source="src/App.tsx"
                           className="w-full bg-[#1a1a1a] border border-[#222] rounded p-2 text-xs text-white"
                           value={taguchiConfig.objective}
                           onChange={e => setTaguchiConfig(prev => ({ ...prev, objective: e.target.value as any }))}
@@ -3042,7 +3076,7 @@ const DoeWorkspace = ({
                       {taguchiConfig.objective === 'target' && (
                         <div>
                           <Label className="mb-2 block">Target Value</Label>
-                          <input
+                          <input data-help-feature="app-doe-objective" data-help-source="src/App.tsx"
                             type="number"
                             value={taguchiConfig.targetValue !== undefined ? taguchiConfig.targetValue : 0}
                             onChange={e => setTaguchiConfig(prev => ({ ...prev, targetValue: Number(e.target.value) }))}
@@ -3064,7 +3098,7 @@ const DoeWorkspace = ({
                               <span>{h}</span>
                               <span className="text-[#f97316]">{holdValues[i]?.toFixed(2)}</span>
                             </div>
-                            <input
+                            <input data-help-feature="app-doe-holds" data-help-source="src/App.tsx"
                               type="range"
                               min={Math.min(...data.map(r => r[i]))}
                               max={Math.max(...data.map(r => r[i]))}
@@ -3102,14 +3136,14 @@ const DoeWorkspace = ({
                   <h3 className="text-lg font-black text-white uppercase tracking-tight">Create Taguchi Design</h3>
                   <p className="text-xs text-gray-500">Configure factors and levels to generate a coded Orthogonal Array worksheet.</p>
                 </div>
-                
+
                 <div className="flex items-center gap-4 bg-[#141414] p-4 rounded-xl border border-[#222]">
                   <Label className="uppercase text-xs font-black tracking-widest text-[#f97316]">Number of Factors</Label>
-                  <input 
-                    type="number" 
-                    min={2} 
-                    max={15} 
-                    value={builderNumFactors} 
+                  <input data-help-feature="app-doe-factor-count" data-help-source="src/App.tsx"
+                    type="number"
+                    min={2}
+                    max={15}
+                    value={builderNumFactors}
                     onChange={handleBuilderNumFactorsChange}
                     className="w-20 bg-[#050505] border border-[#333] p-1.5 text-center rounded text-sm text-white"
                   />
@@ -3129,16 +3163,16 @@ const DoeWorkspace = ({
                         <tr key={idx}>
                           <td className="p-2 font-bold text-gray-400">Factor {idx + 1}</td>
                           <td className="p-1">
-                            <input 
-                              type="text" 
-                              value={f.name} 
+                            <input data-help-feature="app-doe-factor-name" data-help-source="src/App.tsx"
+                              type="text"
+                              value={f.name}
                               onChange={(e) => handleBuilderFactorNameChange(idx, e.target.value)}
                               className="bg-[#050505] border border-[#222] p-1.5 rounded text-white text-xs w-full focus:border-[#f97316] outline-none"
                             />
                           </td>
                           <td className="p-1">
-                            <select 
-                              value={f.levels} 
+                            <select data-help-feature="app-doe-factor-levels" data-help-source="src/App.tsx"
+                              value={f.levels}
                               onChange={(e) => handleBuilderFactorLevelsChange(idx, Number(e.target.value))}
                               className="bg-[#050505] border border-[#222] p-1.5 rounded text-white text-xs w-full focus:border-[#f97316] outline-none"
                             >
@@ -3175,8 +3209,8 @@ const DoeWorkspace = ({
                 })()}
 
                 <div className="flex justify-end gap-2">
-                  <Button variant="outline" onClick={() => setShowDesignBuilder(false)}>Cancel</Button>
-                  <Button 
+                  <Button data-help-feature="app-doe-design-open" data-help-source="src/App.tsx" variant="outline" onClick={() => setShowDesignBuilder(false)}>Cancel</Button>
+                  <Button data-help-feature="app-doe-design-generate" data-help-source="src/App.tsx"
                     variant="default"
                     disabled={!findBestOA(builderFactors.map(f => f.levels))}
                     onClick={handleGenerateDesign}
@@ -3195,7 +3229,7 @@ const DoeWorkspace = ({
                     <h3 className="text-lg font-bold text-white">Taguchi Design of Experiments</h3>
                     <p className="text-xs max-w-sm mx-auto mt-1">Configure your factors and levels to generate a coded orthogonal design matrix, or paste your experimental data below.</p>
                   </div>
-                  <Button
+                  <Button data-help-feature="app-doe-design-open" data-help-source="src/App.tsx"
                     variant="outline"
                     onClick={() => setShowDesignBuilder(true)}
                     className="h-8 px-4 text-xs font-semibold bg-[#18181c] border-orange-500/30 text-orange-400 hover:bg-orange-500/20"
@@ -3212,7 +3246,7 @@ const DoeWorkspace = ({
                       { id: 'taguchi_main_sn', label: 'Main Effects (SN)', show: results?.type === 'Taguchi' },
                       { id: 'taguchi_main_mean', label: 'Main Effects (Means)', show: results?.type === 'Taguchi' },
                     ].filter(p => p.show).map(p => (
-                      <button
+                      <button data-help-feature="app-doe-plot" data-help-source="src/App.tsx"
                         key={p.id}
                         onClick={() => setPlotType(p.id as any)}
                         className={`px-2.5 py-1 text-xs font-medium rounded-md whitespace-nowrap transition-colors ${
@@ -3280,7 +3314,7 @@ const EmojiPicker = ({
 
   return (
     <div className="relative mt-1">
-      <button
+      <button data-help-feature="app-emoji-picker" data-help-source="src/App.tsx"
         type="button"
         onClick={() => setIsOpen(!isOpen)}
         className="w-full h-8 px-2 bg-[#0a0a0a] border border-[#333] hover:border-[#f97316] rounded text-xs text-[#e0e0e0] flex items-center justify-between transition-colors"
@@ -3293,7 +3327,7 @@ const EmojiPicker = ({
         <div className="absolute left-0 right-0 z-50 mt-1 max-h-60 overflow-y-auto bg-[#141414] border border-[#2d2d2d] rounded shadow-2xl p-2 font-sans text-xs">
           <div className="flex justify-between items-center mb-1.5 border-b border-[#2d2d2d] pb-1">
             <span className="text-gray-400 font-bold">Pick an Icon</span>
-            <button
+            <button data-help-feature="app-emoji-picker" data-help-source="src/App.tsx"
               type="button"
               onClick={() => setIsOpen(false)}
               className="text-gray-500 hover:text-white"
@@ -3309,7 +3343,7 @@ const EmojiPicker = ({
                 </div>
                 <div className="grid grid-cols-7 gap-1">
                   {cat.icons.map((emoji) => (
-                    <button
+                    <button data-help-feature="app-emoji-picker" data-help-source="src/App.tsx"
                       key={emoji}
                       type="button"
                       onClick={() => {
@@ -3333,841 +3367,6 @@ const EmojiPicker = ({
   );
 };
 
-const HmiDashboardContent = ({
-  variables,
-  components,
-  setComponents,
-  updateVariable,
-  onClose
-}: {
-  variables: VariableDef[];
-  components: HmiComponent[];
-  setComponents: React.Dispatch<React.SetStateAction<HmiComponent[]>>;
-  updateVariable: (id: string, value: string) => void;
-  onClose: () => void;
-}) => {
-  const [editMode, setEditMode] = useState(true);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
-  const [isResizing, setIsResizing] = useState(false);
-  const [resizeHandle, setResizeHandle] = useState<string | null>(null);
-  const [resizeStart, setResizeStart] = useState<{ x: number, y: number, w: number, h: number, mx: number, my: number } | null>(null);
-
-  const addComponent = (type: HmiComponentType) => {
-    const newComp: HmiComponent = {
-      id: uuidv4(),
-      type,
-      name: `${type}_${components.length + 1}`,
-      x: 50 + (components.length * 20) % 300,
-      y: 50 + (components.length * 20) % 300,
-      width: type === 'slider' ? 150 : type === 'lcd' ? 120 : (type === 'rotary' || type === 'gauge' || type === 'hybrid-rotary' || type === 'buzzer') ? 80 : type === 'oled' ? 240 : type === 'encoder' ? 120 : type === 'mode-selector' ? 320 : type === 'mode-icon' ? 55 : 80,
-      height: type === 'slider' ? 40 : (type === 'rotary' || type === 'gauge' || type === 'hybrid-rotary' || type === 'buzzer') ? 80 : type === 'oled' ? 180 : type === 'encoder' ? 150 : type === 'mode-selector' ? 90 : type === 'mode-icon' ? 55 : 60,
-      variableId: null,
-      min: 0,
-      max: 100,
-      variableIds: type === 'rotary' ? [] : undefined,
-      hybridValues: type === 'hybrid-rotary' ? ['0', '1', '2'] : undefined,
-      icon: type === 'button' ? 'none' : undefined,
-      color: (type === 'button' || type === 'led' || type === 'lamp') ? 'orange' : undefined,
-      iconEmoji: type === 'mode-icon' ? '🍟' : undefined,
-      targetValue: type === 'mode-icon' ? '0' : undefined
-    };
-    setComponents(prev => [...prev, newComp]);
-    setSelectedId(newComp.id);
-  };
-
-  const handleMouseDown = (e: React.MouseEvent, id: string) => {
-    if (!editMode) return;
-    e.stopPropagation();
-    setSelectedId(id);
-    setIsDragging(true);
-    const comp = components.find(c => c.id === id);
-    if (comp) {
-      setDragOffset({ x: e.clientX - comp.x, y: e.clientY - comp.y });
-    }
-  };
-
-  const handleResizeMouseDown = (e: React.MouseEvent, handle: string, id: string) => {
-    e.stopPropagation();
-    const comp = components.find(c => c.id === id);
-    if (comp) {
-      setIsResizing(true);
-      setResizeHandle(handle);
-      setResizeStart({ x: comp.x, y: comp.y, w: comp.width, h: comp.height, mx: e.clientX, my: e.clientY });
-    }
-  };
-
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (isResizing && resizeStart && resizeHandle && selectedId) {
-      const dx = e.clientX - resizeStart.mx;
-      const dy = e.clientY - resizeStart.my;
-
-      let newX = resizeStart.x;
-      let newY = resizeStart.y;
-      let newW = resizeStart.w;
-      let newH = resizeStart.h;
-
-      if (resizeHandle.includes('e')) newW = Math.max(20, resizeStart.w + dx);
-      if (resizeHandle.includes('s')) newH = Math.max(20, resizeStart.h + dy);
-      if (resizeHandle.includes('w')) {
-        const delta = Math.min(resizeStart.w - 20, dx);
-        newX = resizeStart.x + delta;
-        newW = resizeStart.w - delta;
-      }
-      if (resizeHandle.includes('n')) {
-        const delta = Math.min(resizeStart.h - 20, dy);
-        newY = resizeStart.y + delta;
-        newH = resizeStart.h - delta;
-      }
-
-      setComponents(prev => prev.map(c => c.id === selectedId ? { ...c, x: newX, y: newY, width: newW, height: newH } : c));
-      return;
-    }
-
-    if (isDragging && selectedId && editMode) {
-      const newX = e.clientX - dragOffset.x;
-      const newY = e.clientY - dragOffset.y;
-      setComponents(prev => prev.map(c => c.id === selectedId ? { ...c, x: newX, y: newY } : c));
-    }
-  };
-
-  const handleMouseUp = () => {
-    setIsDragging(false);
-    setIsResizing(false);
-    setResizeHandle(null);
-    setResizeStart(null);
-  };
-
-  const renderComponent = (comp: HmiComponent) => {
-    const variable = variables.find(v => v.id === comp.variableId);
-    const value = variable ? variable.currentValue : 0;
-    const numValue = typeof value === 'number' ? value : (value ? 1 : 0);
-    const boolValue = !!value;
-
-    const commonStyle = `absolute border ${selectedId === comp.id && editMode ? 'border-[#f97316] z-10' : 'border-[#333]'} bg-[#1a1a1a] rounded flex flex-col items-center justify-center overflow-hidden select-none`;
-
-    return (
-      <div
-        key={comp.id}
-        style={{ left: comp.x, top: comp.y, width: comp.width, height: comp.height }}
-        className={commonStyle}
-        onMouseDown={(e) => handleMouseDown(e, comp.id)}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {selectedId === comp.id && editMode && (
-          <>
-            {['nw', 'ne', 'sw', 'se'].map(h => (
-              <div
-                key={h}
-                className={`absolute w-2 h-2 bg-[#f97316] border border-black z-20 ${h === 'nw' ? 'top-0 left-0 cursor-nw-resize' : h === 'ne' ? 'top-0 right-0 cursor-ne-resize' : h === 'sw' ? 'bottom-0 left-0 cursor-sw-resize' : 'bottom-0 right-0 cursor-se-resize'}`}
-                onMouseDown={(e) => handleResizeMouseDown(e, h, comp.id)}
-              />
-            ))}
-          </>
-        )}
-        {/* Component Content */}
-        <div className="flex-1 flex items-center justify-center w-full p-2">
-          {comp.type === 'toggle' && (
-            <div
-              className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors ${boolValue ? 'bg-[#f97316]' : 'bg-[#333]'}`}
-              onClick={() => !editMode && variable && updateVariable(variable.id, (!boolValue).toString())}
-            >
-              <div className={`w-4 h-4 rounded-full bg-white shadow-md transform transition-transform ${boolValue ? 'translate-x-6' : 'translate-x-0'}`} />
-            </div>
-          )}
-          {comp.type === 'button' && (() => {
-            const btnTheme = comp.color || 'orange';
-            const colorMap = {
-              orange: { bg: 'bg-[#ea580c]/20 hover:bg-[#ea580c]/30 text-[#f97316] border-[#ea580c]/50 active:bg-[#ea580c]/40', activeBg: 'bg-[#ea580c] text-white border-[#f97316] shadow-[0_0_12px_rgba(249,115,22,0.4)]' },
-              green: { bg: 'bg-[#166534]/20 hover:bg-[#166534]/30 text-[#22c55e] border-[#166534]/50 active:bg-[#166534]/40', activeBg: 'bg-[#22c55e] text-black border-[#4ade80] shadow-[0_0_12px_rgba(34,197,94,0.4)]' },
-              red: { bg: 'bg-[#991b1b]/20 hover:bg-[#991b1b]/30 text-[#ef4444] border-[#991b1b]/50 active:bg-[#991b1b]/40', activeBg: 'bg-[#ef4444] text-white border-[#f87171] shadow-[0_0_12px_rgba(239,68,68,0.4)]' },
-              blue: { bg: 'bg-[#075985]/20 hover:bg-[#075985]/30 text-[#38bdf8] border-[#075985]/50 active:bg-[#075985]/40', activeBg: 'bg-[#0284c7] text-white border-[#38bdf8] shadow-[0_0_12px_rgba(56,189,248,0.4)]' },
-              yellow: { bg: 'bg-[#854d0e]/20 hover:bg-[#854d0e]/30 text-[#eab308] border-[#854d0e]/50 active:bg-[#854d0e]/40', activeBg: 'bg-[#eab308] text-black border-[#facc15] shadow-[0_0_12px_rgba(234,179,8,0.4)]' },
-              grey: { bg: 'bg-[#333]/40 hover:bg-[#444]/40 text-[#ccc] border-[#444] active:bg-[#555]/40', activeBg: 'bg-[#555] text-white border-[#666] shadow-[0_0_12px_rgba(255,255,255,0.1)]' }
-            };
-            const currentTheme = colorMap[btnTheme] || colorMap.orange;
-
-            const renderButtonIcon = () => {
-              if (comp.icon === 'power') return <span className="mr-1">⏻</span>;
-              if (comp.icon === 'play') return <span className="mr-1">▶</span>;
-              if (comp.icon === 'light') return <span className="mr-1">💡</span>;
-              return null;
-            };
-
-            return (
-              <button
-                className={`w-full h-full rounded border font-bold text-[10px] tracking-wider uppercase transition-all duration-150 flex items-center justify-center ${
-                  boolValue ? currentTheme.activeBg : currentTheme.bg
-                }`}
-                onMouseDown={() => !editMode && variable && updateVariable(variable.id, 'true')}
-                onMouseUp={() => !editMode && variable && updateVariable(variable.id, 'false')}
-                onMouseLeave={() => !editMode && variable && updateVariable(variable.id, 'false')}
-              >
-                {renderButtonIcon()}
-                {comp.name}
-              </button>
-            );
-          })()}
-          {comp.type === 'lamp' && (() => {
-            const lampColor = comp.color || 'green';
-            const colorClasses = {
-              red: boolValue ? 'bg-red-500/20 border-red-500 shadow-[inset_0_0_10px_rgba(239,68,68,0.5),0_0_15px_rgba(239,68,68,0.6)]' : 'bg-[#222] border-[#444]',
-              green: boolValue ? 'bg-green-500/20 border-green-500 shadow-[inset_0_0_10px_rgba(34,197,94,0.5),0_0_15px_rgba(34,197,94,0.6)]' : 'bg-[#222] border-[#444]',
-              blue: boolValue ? 'bg-[#4db8ff]/20 border-[#4db8ff] shadow-[inset_0_0_10px_rgba(77,184,255,0.5),0_0_15px_rgba(77,184,255,0.6)]' : 'bg-[#222] border-[#444]',
-              yellow: boolValue ? 'bg-[#e8a020]/20 border-[#e8a020] shadow-[inset_0_0_10px_rgba(232,160,32,0.5),0_0_15px_rgba(232,160,32,0.6)]' : 'bg-[#222] border-[#444]',
-              orange: boolValue ? 'bg-[#f97316]/20 border-[#f97316] shadow-[inset_0_0_10px_rgba(249,115,22,0.5),0_0_15px_rgba(249,115,22,0.6)]' : 'bg-[#222] border-[#444]',
-              grey: boolValue ? 'bg-white/20 border-white shadow-[inset_0_0_10px_rgba(255,255,255,0.5),0_0_15px_rgba(255,255,255,0.6)]' : 'bg-[#222] border-[#444]'
-            };
-            return <div className={`w-10 h-10 rounded-full border-2 transition-all duration-200 ${colorClasses[lampColor] || colorClasses.green}`} />;
-          })()}
-          {comp.type === 'led' && (() => {
-            const ledColor = comp.color || 'red';
-            const colorClasses = {
-              red: boolValue ? 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.8)]' : 'bg-[#333]',
-              green: boolValue ? 'bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.8)]' : 'bg-[#333]',
-              blue: boolValue ? 'bg-[#4db8ff] shadow-[0_0_10px_rgba(77,184,255,0.8)]' : 'bg-[#333]',
-              yellow: boolValue ? 'bg-[#e8a020] shadow-[0_0_10px_rgba(232,160,32,0.8)]' : 'bg-[#333]',
-              orange: boolValue ? 'bg-[#f97316] shadow-[0_0_10px_rgba(249,115,22,0.8)]' : 'bg-[#333]',
-              grey: boolValue ? 'bg-white shadow-[0_0_10px_rgba(255,255,255,0.8)]' : 'bg-[#333]'
-            };
-            return <div className={`w-4 h-4 rounded-full transition-all duration-200 ${colorClasses[ledColor] || colorClasses.red}`} />;
-          })()}
-          {comp.type === 'slider' && (
-            <input
-              type="range"
-              min={comp.min ?? 0}
-              max={comp.max ?? 100}
-              value={numValue}
-              onChange={(e) => !editMode && variable && updateVariable(variable.id, e.target.value)}
-              className="w-full accent-[#f97316]"
-              disabled={editMode}
-            />
-          )}
-          {comp.type === 'input' && (
-            <input
-              type="number"
-              value={numValue}
-              onChange={(e) => !editMode && variable && updateVariable(variable.id, e.target.value)}
-              className="w-full bg-[#0a0a0a] border border-[#333] rounded px-2 py-1 text-right text-[#f97316] font-mono"
-              disabled={editMode}
-            />
-          )}
-          {comp.type === 'lcd' && (
-            <div className="w-full h-full bg-[#0a0a0a] border border-[#333] flex items-center justify-end px-2 font-mono text-green-500 text-lg">
-              {typeof value === 'number' ? value.toFixed(2) : String(value)}
-            </div>
-          )}
-          {comp.type === 'gauge' && (
-            <div className="relative w-full h-full flex items-center justify-center">
-              <svg viewBox="0 0 100 50" className="w-full h-full">
-                <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="#333" strokeWidth="10" />
-                <path
-                  d="M 10 50 A 40 40 0 0 1 90 50"
-                  fill="none"
-                  stroke="#f97316"
-                  strokeWidth="10"
-                  strokeDasharray={`${((numValue - (comp.min || 0)) / ((comp.max || 100) - (comp.min || 0))) * 126} 126`}
-                />
-                <text x="50" y="45" textAnchor="middle" fill="#fff" fontSize="12">{numValue.toFixed(0)}</text>
-              </svg>
-            </div>
-          )}
-          {comp.type === 'rotary' && (() => {
-            const isMultiVar = comp.variableIds && comp.variableIds.length > 0;
-
-            if (isMultiVar) {
-              const positions = comp.variableIds!.length;
-              const stepAngle = 270 / (Math.max(1, positions - 1));
-
-              // Determine current index based on variables
-              let currentIndex = 0;
-              comp.variableIds!.forEach((vid, idx) => {
-                if (!vid) return;
-                const v = variables.find(v => v.id === vid);
-                // Check for truthy value (true or > 0)
-                if (v && (v.currentValue === true || Number(v.currentValue) > 0)) {
-                  currentIndex = idx;
-                }
-              });
-
-              const angle = -135 + currentIndex * stepAngle;
-
-              const handleRotaryMouseDown = (e: React.MouseEvent) => {
-                if (editMode) return;
-                e.stopPropagation();
-
-                const rect = e.currentTarget.getBoundingClientRect();
-                const centerX = rect.left + rect.width / 2;
-                const centerY = rect.top + rect.height / 2;
-
-                const updateFromEvent = (ev: { clientX: number, clientY: number }) => {
-                  const angleRad = Math.atan2(ev.clientY - centerY, ev.clientX - centerX);
-                  let deg = angleRad * 180 / Math.PI;
-
-                  // Rotate so -135 becomes 0.
-                  let effectiveAngle = deg + 135;
-                  if (effectiveAngle < 0) effectiveAngle += 360;
-
-                  // Clamping to 0-270 range
-                  if (effectiveAngle > 270) {
-                    if (effectiveAngle > 315) effectiveAngle = 0;
-                    else effectiveAngle = 270;
-                  }
-
-                  const index = Math.round(effectiveAngle / stepAngle);
-                  const clampedIndex = Math.max(0, Math.min(positions - 1, index));
-
-                  if (clampedIndex !== currentIndex) {
-                    // Update variables
-                    comp.variableIds!.forEach((vid, idx) => {
-                      if (!vid) return;
-                      updateVariable(vid, idx === clampedIndex ? '1' : '0');
-                    });
-                  }
-                };
-
-                updateFromEvent(e);
-
-                const handleMouseMove = (moveEvent: globalThis.MouseEvent) => {
-                  updateFromEvent(moveEvent);
-                };
-
-                const handleMouseUp = () => {
-                  document.body.style.cursor = 'default';
-                  document.removeEventListener('mousemove', handleMouseMove);
-                  document.removeEventListener('mouseup', handleMouseUp);
-                };
-
-                document.body.style.cursor = 'grabbing';
-                document.addEventListener('mousemove', handleMouseMove);
-                document.addEventListener('mouseup', handleMouseUp);
-              };
-
-              const posText = `Pos ${currentIndex + 1}`;
-
-              return (
-                <div className="relative w-full h-full flex items-center justify-center" onMouseDown={handleRotaryMouseDown} style={{ cursor: editMode ? 'default' : 'pointer' }}>
-                  <svg viewBox="0 0 100 100" className="w-full h-full">
-                    <defs><radialGradient id="grad-rotary"><stop offset="0%" stopColor="#555" /><stop offset="90%" stopColor="#222" /><stop offset="100%" stopColor="#1a1a1a" /></radialGradient></defs>
-                    <circle cx="50" cy="50" r="40" fill="url(#grad-rotary)" stroke="#1a1a1a" strokeWidth="2" />
-                    {/* Ticks */}
-                    {Array.from({ length: positions }).map((_, i) => (
-                      <line key={i} x1="50" y1="10" x2="50" y2="15" stroke={i === currentIndex ? "#f97316" : "#888"} strokeWidth={i === currentIndex ? 3 : 2} transform={`rotate(${-135 + i * stepAngle} 50 50)`} />
-                    ))}
-                    <g transform={`rotate(${angle} 50 50)`}>
-                      <circle cx="50" cy="20" r="4" fill="#f97316" />
-                      <line x1="50" y1="20" x2="50" y2="50" stroke="#f97316" strokeWidth="2" />
-                    </g>
-                  </svg>
-                  <div className="absolute bottom-1 text-[9px] text-white font-mono select-none">{posText}</div>
-                </div>
-              );
-            }
-
-            const min = comp.min ?? 0;
-            const max = comp.max ?? 100;
-            const range = max - min;
-            const value = Math.max(min, Math.min(max, numValue));
-            const percentage = range === 0 ? 0 : (value - min) / range;
-            const angle = -135 + percentage * 270; // from -135 to 135 degrees
-
-            const handleRotaryMouseDown = (e: React.MouseEvent) => {
-              if (editMode || !variable) return;
-              e.stopPropagation();
-
-              const rect = e.currentTarget.getBoundingClientRect();
-              const centerX = rect.left + rect.width / 2;
-              const centerY = rect.top + rect.height / 2;
-              const startAngleRad = Math.atan2(e.clientY - centerY, e.clientX - centerX);
-
-              const startValue = value;
-              document.body.style.cursor = 'grabbing';
-
-              const handleMouseMove = (moveEvent: globalThis.MouseEvent) => {
-                const currentAngleRad = Math.atan2(moveEvent.clientY - centerY, moveEvent.clientX - centerX);
-                let angleDiff = currentAngleRad - startAngleRad;
-
-                if (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
-                if (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
-
-                const valueChange = (angleDiff / (270 * Math.PI / 180)) * range;
-                let newValue = startValue + valueChange;
-                newValue = Math.max(min, Math.min(max, newValue));
-
-                updateVariable(variable.id, newValue.toString());
-              };
-
-              const handleMouseUp = () => {
-                document.body.style.cursor = 'default';
-                document.removeEventListener('mousemove', handleMouseMove);
-                document.removeEventListener('mouseup', handleMouseUp);
-              };
-
-              document.addEventListener('mousemove', handleMouseMove);
-              document.addEventListener('mouseup', handleMouseUp);
-            };
-
-            return (
-              <div className="relative w-full h-full flex items-center justify-center" onMouseDown={handleRotaryMouseDown} style={{ cursor: editMode ? 'default' : 'grab' }}>
-                <svg viewBox="0 0 100 100" className="w-full h-full">
-                  <defs><radialGradient id="grad-rotary"><stop offset="0%" stopColor="#555" /><stop offset="90%" stopColor="#222" /><stop offset="100%" stopColor="#1a1a1a" /></radialGradient></defs>
-                  <circle cx="50" cy="50" r="40" fill="url(#grad-rotary)" stroke="#1a1a1a" strokeWidth="2" />
-                  {Array.from({ length: 11 }).map((_, i) => <line key={i} x1="50" y1="10" x2="50" y2="15" stroke="#888" strokeWidth="2" transform={`rotate(${-135 + i * 27} 50 50)`} />)}
-                  <g transform={`rotate(${angle} 50 50)`}><circle cx="50" cy="20" r="4" fill="#f97316" /></g>
-                </svg>
-                <div className="absolute text-xs text-white font-mono select-none">{value.toFixed(1)}</div>
-              </div>
-            );
-          })()}
-          {comp.type === 'hybrid-rotary' && (
-            <HybridRotary
-              comp={comp}
-              variable={variable}
-              updateVariable={updateVariable}
-              editMode={editMode}
-            />
-          )}
-          {comp.type === 'buzzer' && (
-            <Buzzer comp={comp} variable={variable} editMode={editMode} />
-          )}
-          {comp.type === 'oled' && (
-            <OledDisplay
-              comp={comp}
-              variables={variables}
-              editMode={editMode}
-            />
-          )}
-          {comp.type === 'encoder' && (
-            <Encoder
-              comp={comp}
-              variables={variables}
-              updateVariable={updateVariable}
-              editMode={editMode}
-            />
-          )}
-          {comp.type === 'mode-selector' && (
-            <ModeSelector
-              comp={comp}
-              variables={variables}
-              updateVariable={updateVariable}
-              editMode={editMode}
-            />
-          )}
-          {comp.type === 'mode-icon' && (() => {
-            const isSelected = variable && String(variable.currentValue) === String(comp.targetValue);
-            let borderClass = 'border-[#222]';
-            let bgClass = 'bg-[#1a1a20]';
-            let glowStyle = {};
-
-            if (isSelected) {
-              borderClass = 'border-[#f97316]';
-              bgClass = 'bg-[#f97316]/10';
-              glowStyle = { boxShadow: '0 0 8px rgba(249,115,22,0.4)' };
-            }
-
-            const handleClick = () => {
-              if (editMode || !variable) return;
-              updateVariable(variable.id, (comp.targetValue ?? '0').toString());
-            };
-
-            return (
-              <div
-                onClick={handleClick}
-                style={glowStyle}
-                className={`w-full h-full border rounded flex flex-col items-center justify-center cursor-pointer p-1 transition-all active:scale-95 ${borderClass} ${bgClass}`}
-              >
-                <span className="text-xl leading-none">{comp.iconEmoji || '✨'}</span>
-                <span className="text-[8px] text-[#ccc] font-medium truncate w-full text-center mt-1">{comp.name}</span>
-              </div>
-            );
-          })()}
-        </div>
-        {/* Label */}
-        <div className="w-full bg-[#1a1a1a] text-[9px] text-center text-[#888] py-0.5 truncate px-1">
-          {comp.name} {variable ? `(${variable.name})` : '(unbound)'}
-        </div>
-      </div>
-    );
-  };
-
-  return (
-    <div className="flex flex-col h-full w-full bg-[#1a1a1a]" onMouseUp={handleMouseUp} onMouseMove={handleMouseMove}>
-      <div className="h-10 flex items-center px-4 border-b border-[#222] justify-between bg-[#1a1a1a] shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="flex bg-[#0a0a0a] rounded p-0.5 border border-[#333]">
-            <button onClick={() => setEditMode(true)} className={"px-3 py-1 text-xs rounded " + (editMode ? "bg-[#333] text-white" : "text-[#888]")}>Edit</button>
-            <button onClick={() => { setEditMode(false); setSelectedId(null); }} className={"px-3 py-1 text-xs rounded " + (!editMode ? "bg-[#f97316] text-black font-bold" : "text-[#888]")}>Run</button>
-          </div>
-        </div>
-      </div>
-
-      <div className="flex-1 flex overflow-hidden">
-        {/* Sidebar (Edit Mode Only) */}
-        {editMode && (
-          <div
-            className="w-48 bg-[#1a1a1a] border-r border-[#222] p-3 flex flex-col gap-3 overflow-y-auto"
-            onMouseDown={e => e.stopPropagation()}
-            onClick={e => e.stopPropagation()}
-          >
-            <Label>Components</Label>
-            <div className="grid grid-cols-2 gap-2">
-              {['toggle', 'button', 'slider', 'input', 'lamp', 'led', 'lcd', 'gauge', 'rotary', 'hybrid-rotary', 'buzzer', 'oled', 'encoder', 'mode-selector', 'mode-icon'].map(t => (
-                <button key={t} onClick={() => addComponent(t as HmiComponentType)} className="flex flex-col items-center justify-center p-2 bg-[#1a1a1a] border border-[#333] rounded hover:bg-[#222] hover:border-[#f97316]">
-                  <span className="text-[10px] capitalize text-[#ccc]">{t}</span>
-                </button>
-              ))}
-            </div>
-
-            <Separator />
-
-            {selectedId ? (
-              <div className="space-y-3">
-                <Label>Properties</Label>
-                {(() => {
-                  const comp = components.find(c => c.id === selectedId);
-                  if (!comp) return null;
-                  return (
-                    <>
-                      <div><Label>Name</Label><Input value={comp.name} onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, name: e.target.value } : c))} /></div>
-                      <div>
-                        <Label>Variable</Label>
-                        <select
-                          value={comp.variableId || ''}
-                          onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, variableId: e.target.value || null } : c))}
-                          className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-xs text-[#e0e0e0] mt-1"
-                        >
-                          <option value="">-- Unbound --</option>
-                          {variables.map(v => <option key={v.id} value={v.id}>{v.name} ({v.type})</option>)}
-                        </select>
-                      </div>
-
-                      {(comp.type === 'button' || comp.type === 'led' || comp.type === 'lamp') && (
-                        <div className="space-y-2 mt-2">
-                          <div>
-                            <Label>Color / Theme</Label>
-                            <select
-                              value={comp.color || 'orange'}
-                              onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, color: e.target.value as any } : c))}
-                              className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-xs text-[#e0e0e0] mt-1"
-                            >
-                              <option value="orange">Orange</option>
-                              <option value="green">Green</option>
-                              <option value="red">Red</option>
-                              <option value="blue">Blue</option>
-                              <option value="yellow">Yellow</option>
-                              <option value="grey">Grey</option>
-                            </select>
-                          </div>
-                          {comp.type === 'button' && (
-                            <div>
-                              <Label>Button Icon</Label>
-                              <select
-                                value={comp.icon || 'none'}
-                                onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, icon: e.target.value as any } : c))}
-                                className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-xs text-[#e0e0e0] mt-1"
-                              >
-                                <option value="none">None</option>
-                                <option value="power">Power (⏻)</option>
-                                <option value="play">Play/Pause (▶)</option>
-                                <option value="light">Light (💡)</option>
-                              </select>
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {comp.type === 'encoder' && (
-                        <div className="space-y-2 mt-2">
-                          <div>
-                            <Label>Button Press Bind (GPIO)</Label>
-                            <select
-                              value={comp.pressVariableId || ''}
-                              onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, pressVariableId: e.target.value || null } : c))}
-                              className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-xs text-[#e0e0e0] mt-1"
-                            >
-                              <option value="">-- Unbound --</option>
-                              {variables.map(v => <option key={v.id} value={v.id}>{v.name} ({v.type})</option>)}
-                            </select>
-                          </div>
-                          <div className="space-y-2 border-t border-[#333] pt-2 mt-2">
-                            <Label>Encoder Values (Discrete Mode)</Label>
-                            {(comp.encoderValues || []).map((val, idx) => (
-                              <div key={idx} className="flex gap-1">
-                                <Input
-                                  value={val}
-                                  onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, encoderValues: (c.encoderValues || []).map((v, i) => i === idx ? e.target.value : v) } : c))}
-                                  className="flex-1 h-6 text-[10px]"
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, encoderValues: (c.encoderValues || []).filter((_, i) => i !== idx) } : c))}
-                                  className="text-[#666] hover:text-red-400 px-1"
-                                >×</button>
-                              </div>
-                            ))}
-                            <Button size="sm" variant="secondary" className="w-full h-6 text-[10px]" onClick={() => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, encoderValues: [...(c.encoderValues || []), '0'] } : c))}>+ Add Value</Button>
-                          </div>
-                        </div>
-                      )}
-
-                      {comp.type === 'mode-selector' && (
-                        <div className="space-y-2 mt-2">
-                          <Label>Cursor Variable (Index)</Label>
-                          <select
-                            value={comp.cursorVariableId || ''}
-                            onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, cursorVariableId: e.target.value || null } : c))}
-                            className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-xs text-[#e0e0e0] mt-1"
-                          >
-                            <option value="">-- Unbound --</option>
-                            {variables.map(v => <option key={v.id} value={v.id}>{v.name} ({v.type})</option>)}
-                          </select>
-                        </div>
-                      )}
-
-                      {comp.type === 'mode-icon' && (
-                        <div className="space-y-2 mt-2">
-                          <div>
-                            <Label>Icon (Emoji)</Label>
-                            <Input
-                              value={comp.iconEmoji || ''}
-                              onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, iconEmoji: e.target.value } : c))}
-                              placeholder="e.g. 🍟"
-                              className="mt-1"
-                            />
-                            <EmojiPicker
-                              currentValue={comp.iconEmoji || ''}
-                              onSelect={emoji => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, iconEmoji: emoji } : c))}
-                            />
-                          </div>
-                          <div>
-                            <Label>Target Value</Label>
-                            <Input
-                              value={comp.targetValue || ''}
-                              onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, targetValue: e.target.value } : c))}
-                              placeholder="e.g. 0, 1, or Air Fry"
-                              className="mt-1"
-                            />
-                          </div>
-                        </div>
-                      )}
-
-                      {comp.type === 'oled' && (
-                        <div className="space-y-2 mt-2 border-t border-[#333] pt-2 max-h-60 overflow-y-auto pr-1">
-                          <Label>Display Variable Mapping</Label>
-                          {[
-                            { label: 'Mode Index/Text', key: 'oledModeVarId' },
-                            { label: 'Temp', key: 'oledTempVarId' },
-                            { label: 'Time', key: 'oledTimeVarId' },
-                            { label: 'State (e.g. HOME)', key: 'oledStateVarId' },
-                            { label: 'Steam Active (Bool)', key: 'oledSteamVarId' },
-                            { label: 'Heat Active (Bool)', key: 'oledHeatVarId' },
-                            { label: 'Fan Active (Bool)', key: 'oledFanVarId' },
-                            { label: 'Light Active (Bool)', key: 'oledLightVarId' },
-                            { label: 'Duo Active (Bool)', key: 'oledDuoVarId' },
-                            { label: 'Progress (0-100)', key: 'oledProgressVarId' }
-                          ].map(mapping => (
-                            <div key={mapping.key} className="mt-1">
-                              <span className="text-[10px] text-gray-400">{mapping.label}</span>
-                              <select
-                                value={(comp as any)[mapping.key] || ''}
-                                onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, [mapping.key]: e.target.value || null } : c))}
-                                className="w-full h-7 bg-[#0a0a0a] border border-[#333] rounded px-1.5 text-[10px] text-[#e0e0e0] mt-0.5"
-                              >
-                                <option value="">-- Unbound --</option>
-                                {variables.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-                              </select>
-                            </div>
-                          ))}
-                          <div className="mt-2 border-t border-[#222] pt-2">
-                            <Label>Screen Title</Label>
-                            <Input
-                              value={comp.oledTitle || ''}
-                              onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, oledTitle: e.target.value } : c))}
-                              placeholder="e.g. MAIN PANEL"
-                              className="mt-1"
-                            />
-                          </div>
-                          <div className="mt-2 border-t border-[#222] pt-2">
-                            <Label>Mode Names (comma-separated)</Label>
-                            <textarea
-                              value={comp.oledModeNames || ''}
-                              onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, oledModeNames: e.target.value } : c))}
-                              placeholder="AIR FRYER, STEAMER, OVEN, ..."
-                              className="w-full min-h-[50px] bg-[#0a0a0a] border border-[#333] rounded p-1.5 text-xs text-[#e0e0e0] font-mono mt-1"
-                            />
-                          </div>
-                          <div className="space-y-2 mt-2 pt-2 border-t border-[#222]">
-                            <Label>Custom Status Indicators (Max 8)</Label>
-                            {(comp.oledIndicatorEmojis || []).map((emoji, idx) => (
-                              <div key={idx} className="flex flex-col gap-1 p-1.5 bg-[#111] border border-[#222] rounded mt-1">
-                                <div className="flex gap-1 items-center justify-between">
-                                  <span className="text-[10px] text-gray-400 font-bold">Indicator #{idx + 1}</span>
-                                  <button
-                                    onClick={() => setComponents(prev => prev.map(c => c.id === comp.id ? {
-                                      ...c,
-                                      oledIndicatorEmojis: (c.oledIndicatorEmojis || []).filter((_, i) => i !== idx),
-                                      oledIndicatorVarIds: (c.oledIndicatorVarIds || []).filter((_, i) => i !== idx),
-                                      oledIndicatorLabels: (c.oledIndicatorLabels || []).filter((_, i) => i !== idx)
-                                    } : c))}
-                                    className="text-[#888] hover:text-red-400 text-xs px-1"
-                                  >
-                                    Remove
-                                  </button>
-                                </div>
-                                <div className="grid grid-cols-2 gap-1 mt-1">
-                                  <div>
-                                    <span className="text-[8px] text-gray-500">Emoji/Icon</span>
-                                    <Input
-                                      value={emoji}
-                                      onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? {
-                                        ...c,
-                                        oledIndicatorEmojis: (c.oledIndicatorEmojis || []).map((v, i) => i === idx ? e.target.value : v)
-                                      } : c))}
-                                      className="h-6 text-[10px] px-1"
-                                    />
-                                    <EmojiPicker
-                                      currentValue={emoji}
-                                      onSelect={emojiVal => setComponents(prev => prev.map(c => c.id === comp.id ? {
-                                        ...c,
-                                        oledIndicatorEmojis: (c.oledIndicatorEmojis || []).map((v, i) => i === idx ? emojiVal : v)
-                                      } : c))}
-                                    />
-                                  </div>
-                                  <div>
-                                    <span className="text-[8px] text-gray-500">Label</span>
-                                    <Input
-                                      value={comp.oledIndicatorLabels?.[idx] || ''}
-                                      onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? {
-                                        ...c,
-                                        oledIndicatorLabels: Array.from({ length: Math.max(c.oledIndicatorLabels?.length || 0, idx + 1) }, (_, i) => i === idx ? e.target.value : (c.oledIndicatorLabels?.[i] || ''))
-                                      } : c))}
-                                      className="h-6 text-[10px] px-1"
-                                      placeholder="e.g. Steam"
-                                    />
-                                  </div>
-                                </div>
-                                <div className="mt-1">
-                                  <span className="text-[8px] text-gray-500">Bind Variable</span>
-                                  <select
-                                    value={comp.oledIndicatorVarIds?.[idx] || ''}
-                                    onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? {
-                                      ...c,
-                                      oledIndicatorVarIds: Array.from({ length: Math.max(c.oledIndicatorVarIds?.length || 0, idx + 1) }, (_, i) => i === idx ? (e.target.value || null) : (c.oledIndicatorVarIds?.[i] || null))
-                                    } : c))}
-                                    className="w-full h-6 bg-[#0a0a0a] border border-[#333] rounded px-1 text-[10px] text-[#e0e0e0]"
-                                  >
-                                    <option value="">-- Unbound --</option>
-                                    {variables.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-                                  </select>
-                                </div>
-                              </div>
-                            ))}
-                            {((comp.oledIndicatorEmojis || []).length < 8) && (
-                              <Button
-                                size="sm"
-                                variant="secondary"
-                                className="w-full h-6 text-[10px] mt-1"
-                                onClick={() => setComponents(prev => prev.map(c => c.id === comp.id ? {
-                                  ...c,
-                                  oledIndicatorEmojis: [...(c.oledIndicatorEmojis || []), '💡'],
-                                  oledIndicatorVarIds: [...(c.oledIndicatorVarIds || []), null],
-                                  oledIndicatorLabels: [...(c.oledIndicatorLabels || []), 'Status']
-                                } : c))}
-                              >
-                                + Add Custom Indicator
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                      )}
-
-                      {comp.type === 'rotary' && (
-                        <div className="space-y-2 border-t border-[#333] pt-2 mt-2">
-                          <Label>Multi-Variable Mode (Max 5)</Label>
-                          {(comp.variableIds || []).map((vid, idx) => (
-                            <div key={idx} className="flex gap-1">
-                              <select
-                                value={vid || ''}
-                                onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, variableIds: (c.variableIds || []).map((v, i) => i === idx ? e.target.value : v) } : c))}
-                                className="flex-1 h-6 bg-[#0a0a0a] border border-[#333] rounded px-1 text-[10px] text-[#e0e0e0]"
-                              >
-                                <option value="">-- Select --</option>
-                                {variables.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-                              </select>
-                              <button
-                                onClick={() => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, variableIds: (c.variableIds || []).filter((_, i) => i !== idx) } : c))}
-                                className="text-[#666] hover:text-red-400 px-1"
-                              >×</button>
-                            </div>
-                          ))}
-                          {(comp.variableIds?.length || 0) < 5 && (
-                            <Button size="sm" variant="secondary" className="w-full h-6 text-[10px]" onClick={() => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, variableIds: [...(c.variableIds || []), ''] } : c))}>+ Add Position</Button>
-                          )}
-                        </div>
-                      )}
-
-                      {comp.type === 'hybrid-rotary' && (
-                        <div className="space-y-2 border-t border-[#333] pt-2 mt-2">
-                          <Label>Hybrid Values</Label>
-                          {(comp.hybridValues || []).map((val, idx) => (
-                            <div key={idx} className="flex gap-1">
-                              <Input
-                                value={val}
-                                onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, hybridValues: (c.hybridValues || []).map((v, i) => i === idx ? e.target.value : v) } : c))}
-                                className="flex-1 h-6 text-[10px]"
-                              />
-                              <button
-                                onClick={() => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, hybridValues: (c.hybridValues || []).filter((_, i) => i !== idx) } : c))}
-                                className="text-[#666] hover:text-red-400 px-1"
-                              >×</button>
-                            </div>
-                          ))}
-                          <Button size="sm" variant="secondary" className="w-full h-6 text-[10px]" onClick={() => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, hybridValues: [...(c.hybridValues || []), '0'] } : c))}>+ Add Value</Button>
-                        </div>
-                      )}
-
-                      {(comp.type === 'slider' || comp.type === 'gauge') && (
-                        <div className="grid grid-cols-2 gap-2">
-                          <div><Label>Min</Label><Input type="number" value={comp.min ?? 0} onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, min: parseFloat(e.target.value) } : c))} /></div>
-                          <div><Label>Max</Label><Input type="number" value={comp.max ?? 0} onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, max: parseFloat(e.target.value) } : c))} /></div>
-                        </div>
-                      )}
-
-                      {comp.type === 'buzzer' && (
-                        <div className="mt-2">
-                          <Label>Sound Type</Label>
-                          <select
-                            value={comp.soundType || 'square'}
-                            onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, soundType: e.target.value as any } : c))}
-                            className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-xs text-[#e0e0e0] mt-1"
-                          >
-                            <option value="sine">Sine</option>
-                            <option value="square">Square</option>
-                            <option value="sawtooth">Sawtooth</option>
-                            <option value="triangle">Triangle</option>
-                          </select>
-                        </div>
-                      )}
-                      <Button variant="destructive" size="sm" onClick={() => { setComponents(prev => prev.filter(c => c.id !== comp.id)); setSelectedId(null); }} className="w-full mt-2">Delete</Button>
-                    </>
-                  );
-                })()}
-              </div>
-            ) : <div className="text-xs text-[#666] text-center mt-4">Select a component to edit</div>}
-          </div>
-        )}
-
-        {/* Canvas */}
-        <div className="flex-1 bg-[#0a0a0a] relative overflow-hidden" onClick={() => setSelectedId(null)}>
-          <div className="absolute inset-0 opacity-20 pointer-events-none" style={{ backgroundImage: 'radial-gradient(#333 1px, transparent 1px)', backgroundSize: '20px 20px' }}></div>
-          {components.map(renderComponent)}
-        </div>
-      </div>
-    </div>
-  );
-};
-
 const ReportDialog = ({
   onClose,
   onGenerate
@@ -4179,7 +3378,7 @@ const ReportDialog = ({
   const [author, setAuthor] = useState('Author');
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50" onMouseDown={onClose}>
+    <div data-help-feature="live:App:345b43c4fed5" className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50" onMouseDown={onClose}>
       <div className="bg-[#1a1a1a] border border-[#f97316] rounded-lg w-[400px] flex flex-col" onMouseDown={e => e.stopPropagation()}>
         <div className="h-12 flex items-center px-5 border-b border-[#222]">
           <h2 className="text-lg font-bold text-[#f97316]">Generate Report</h2>
@@ -4187,13 +3386,13 @@ const ReportDialog = ({
         <div className="p-5 space-y-4">
           <div>
             <Label>Project Name</Label>
-            <Input value={projectName} onChange={e => setProjectName(e.target.value)} className="w-full mt-1" />
+            <Input data-help-feature="app-project-name" data-help-source="src/App.tsx" value={projectName} onChange={e => setProjectName(e.target.value)} className="w-full mt-1" />
           </div>
           <div>
             <Label>Author</Label>
-            <Input value={author} onChange={e => setAuthor(e.target.value)} className="w-full mt-1" />
+            <Input data-help-feature="app-report-author" data-help-source="src/App.tsx" value={author} onChange={e => setAuthor(e.target.value)} className="w-full mt-1" />
           </div>
-          <Button onClick={() => onGenerate(projectName, author)} className="w-full bg-[#f97316] text-[#0a0a0a] font-bold">Generate Report</Button>
+          <Button data-help-feature="app-report-generate" data-help-source="src/App.tsx" onClick={() => onGenerate(projectName, author)} className="w-full bg-[#f97316] text-[#0a0a0a] font-bold">Generate Report</Button>
         </div>
       </div>
     </div>
@@ -4210,7 +3409,7 @@ const NewProjectDialog = ({
   const [name, setName] = useState('');
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50" onMouseDown={onClose}>
+    <div data-help-feature="live:App:345b43c4fed5" className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50" onMouseDown={onClose}>
       <div className="bg-[#1a1a1a] border border-[#f97316] rounded-lg w-[400px] flex flex-col shadow-2xl" onMouseDown={(e: React.MouseEvent) => e.stopPropagation()}>
         <div className="h-12 flex items-center px-5 border-b border-[#222]">
           <h2 className="text-lg font-bold text-[#f97316]">Create New Project</h2>
@@ -4218,7 +3417,7 @@ const NewProjectDialog = ({
         <div className="p-5 space-y-4">
           <div>
             <Label>Project Name</Label>
-            <Input
+            <Input data-help-feature="app-asset-name" data-help-source="src/App.tsx"
               autoFocus
               value={name}
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)}
@@ -4232,8 +3431,8 @@ const NewProjectDialog = ({
             />
           </div>
           <div className="flex gap-2 justify-end pt-2">
-            <Button onClick={onClose} className="px-4 py-2 border border-[#333] bg-transparent text-white hover:bg-[#222]">Cancel</Button>
-            <Button
+            <Button data-help-feature="app-dialog-close" data-help-source="src/App.tsx" onClick={onClose} className="px-4 py-2 border border-[#333] bg-transparent text-white hover:bg-[#222]">Cancel</Button>
+            <Button data-help-feature="app-asset-create" data-help-source="src/App.tsx"
               onClick={() => name.trim() && onCreate(name.trim())}
               disabled={!name.trim()}
               className="px-4 py-2 bg-[#f97316] text-[#0a0a0a] font-bold hover:bg-[#ea580c] disabled:opacity-50"
@@ -4272,7 +3471,7 @@ const WorkspaceFileDialog = ({
   const [selectedType, setSelectedType] = useState<string>('xbridges');
   const [fileName, setFileName] = useState('');
   const [projectName, setProjectName] = useState('');
-  
+
   // For import
   const [importedJson, setImportedJson] = useState<any>(null);
   const [detectedType, setDetectedType] = useState<string>('');
@@ -4307,7 +3506,7 @@ const WorkspaceFileDialog = ({
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    
+
     setImportFileName(file.name.replace(/\.[^/.]+$/, ""));
     const reader = new FileReader();
     reader.onload = (evt) => {
@@ -4345,34 +3544,34 @@ const WorkspaceFileDialog = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/75 backdrop-blur-md flex items-center justify-center z-50 animate-in fade-in duration-300" onMouseDown={onClose}>
+    <div data-help-feature="live:App:345b43c4fed5" className="fixed inset-0 bg-black/75 backdrop-blur-md flex items-center justify-center z-50 animate-in fade-in duration-300" onMouseDown={onClose}>
       <div className="bg-[#111] border border-[#f97316]/40 rounded-2xl w-[750px] max-h-[85vh] flex flex-col shadow-2xl overflow-hidden" onMouseDown={(e) => e.stopPropagation()}>
-        
+
         {/* Header */}
         <div className="px-6 py-4 bg-gradient-to-r from-[#181818] to-[#111] border-b border-[#222] flex justify-between items-center">
           <div className="flex items-center gap-3">
             <span className="text-[#f97316] text-xl">📁</span>
             <h2 className="text-lg font-black uppercase tracking-wider text-[#e0e0e0]">Workspace Asset Manager</h2>
           </div>
-          <button onClick={onClose} className="text-slate-500 hover:text-white transition-colors">✕</button>
+          <button data-help-feature="app-dialog-close" data-help-source="src/App.tsx" onClick={onClose} className="text-slate-500 hover:text-white transition-colors">✕</button>
         </div>
 
         {/* Tab Buttons */}
         <div className="flex bg-[#0f0f0f] border-b border-[#222] p-1 gap-2 px-6">
-          <button 
-            onClick={() => setActiveTab('create')} 
+          <button data-help-feature="app-asset-create-tab" data-help-source="src/App.tsx"
+            onClick={() => setActiveTab('create')}
             className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${activeTab === 'create' ? 'bg-[#f97316]/10 text-[#f97316] border border-[#f97316]/30' : 'text-slate-500 hover:text-slate-300'}`}
           >
             Create New Asset
           </button>
-          <button 
-            onClick={() => setActiveTab('manage')} 
+          <button data-help-feature="app-asset-manage-tab" data-help-source="src/App.tsx"
+            onClick={() => setActiveTab('manage')}
             className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${activeTab === 'manage' ? 'bg-[#f97316]/10 text-[#f97316] border border-[#f97316]/30' : 'text-slate-500 hover:text-slate-300'}`}
           >
             Manage Files ({existingFiles.length})
           </button>
-          <button 
-            onClick={() => setActiveTab('import')} 
+          <button data-help-feature="app-asset-import-tab" data-help-source="src/App.tsx"
+            onClick={() => setActiveTab('import')}
             className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${activeTab === 'import' ? 'bg-[#f97316]/10 text-[#f97316] border border-[#f97316]/30' : 'text-slate-500 hover:text-slate-300'}`}
           >
             Import Module JSON
@@ -4386,7 +3585,7 @@ const WorkspaceFileDialog = ({
               {/* Asset Type Grid */}
               <div className="grid grid-cols-2 gap-3">
                 {/* Project Option */}
-                <div 
+                <div data-help-feature="app-asset-create-tab" data-help-source="src/App.tsx"
                   onClick={() => setSelectedType('project')}
                   className={`p-4 rounded-xl border transition-all cursor-pointer flex gap-4 items-start ${selectedType === 'project' ? 'bg-[#f97316]/10 border-[#f97316] shadow-[0_0_15px_rgba(249,115,22,0.15)]' : 'bg-[#181818] border-[#222] hover:border-[#333]'}`}
                 >
@@ -4404,7 +3603,7 @@ const WorkspaceFileDialog = ({
 
                 {/* Modules */}
                 {modules.map(m => (
-                  <div 
+                  <div data-help-feature="app-asset-create-tab" data-help-source="src/App.tsx"
                     key={m.id}
                     onClick={() => setSelectedType(m.id)}
                     className={`p-3 rounded-xl border transition-all cursor-pointer flex gap-3 items-center ${selectedType === m.id ? 'bg-[#181818] border-l-4 shadow-[0_0_15px_rgba(255,255,255,0.05)]' : 'bg-[#161616] border-[#222] hover:border-[#333]'}`}
@@ -4426,7 +3625,7 @@ const WorkspaceFileDialog = ({
                 {selectedType === 'project' ? (
                   <div>
                     <label className="text-xs font-bold text-slate-400 uppercase">Project Name</label>
-                    <Input 
+                    <Input data-help-feature="app-project-name" data-help-source="src/App.tsx"
                       autoFocus
                       value={projectName}
                       onChange={e => setProjectName(e.target.value)}
@@ -4438,7 +3637,7 @@ const WorkspaceFileDialog = ({
                 ) : (
                   <div>
                     <label className="text-xs font-bold text-slate-400 uppercase">Asset File/Tab Name</label>
-                    <Input 
+                    <Input data-help-feature="app-asset-name" data-help-source="src/App.tsx"
                       autoFocus
                       value={fileName}
                       onChange={e => setFileName(e.target.value)}
@@ -4448,11 +3647,11 @@ const WorkspaceFileDialog = ({
                     />
                   </div>
                 )}
-                
+
                 <div className="flex justify-end gap-3 pt-2">
-                  <Button onClick={onClose} className="px-5 border border-[#222] bg-transparent text-slate-400 hover:bg-[#181818]">Cancel</Button>
-                  <Button 
-                    onClick={handleCreate} 
+                  <Button data-help-feature="app-dialog-close" data-help-source="src/App.tsx" onClick={onClose} className="px-5 border border-[#222] bg-transparent text-slate-400 hover:bg-[#181818]">Cancel</Button>
+                  <Button data-help-feature="app-asset-create" data-help-source="src/App.tsx"
+                    onClick={handleCreate}
                     disabled={selectedType === 'project' ? !projectName.trim() : false}
                     className="px-5 bg-[#f97316] text-black hover:bg-[#ea580c] font-bold"
                   >
@@ -4481,7 +3680,7 @@ const WorkspaceFileDialog = ({
                       const isOpen = openTabIds.includes(file.id);
                       const modInfo = modules.find(m => m.id === file.type);
                       return (
-                        <tr key={file.id} className="border-b border-[#181818] hover:bg-[#151515] transition-colors group" onDoubleClick={() => !isOpen && onOpenFile(file.id)}>
+                        <tr data-help-feature="app-asset-open" data-help-source="src/App.tsx" key={file.id} className="border-b border-[#181818] hover:bg-[#151515] transition-colors group" onDoubleClick={() => !isOpen && onOpenFile(file.id)}>
                           <td className="p-3 font-bold text-white truncate max-w-[200px]" title={file.name}>{file.name}</td>
                           <td className="p-3">
                             <span className="px-2 py-0.5 rounded text-[10px] font-bold" style={{ backgroundColor: `${modInfo?.color || '#333'}15`, color: modInfo?.color || '#ccc' }}>
@@ -4497,7 +3696,7 @@ const WorkspaceFileDialog = ({
                           </td>
                           <td className="p-3 text-right space-x-2">
                             {!isOpen && (
-                              <button 
+                              <button data-help-feature="app-asset-open" data-help-source="src/App.tsx"
                                 onClick={() => onOpenFile(file.id)}
                                 className="text-xs text-[#f97316] hover:underline"
                               >
@@ -4507,7 +3706,7 @@ const WorkspaceFileDialog = ({
                             {file.id.startsWith('default_') ? (
                               <span className="text-[10px] text-slate-600 font-bold uppercase select-none">System Default</span>
                             ) : (
-                              <button 
+                              <button data-help-feature="app-asset-delete" data-help-source="src/App.tsx"
                                 onClick={() => onDeleteFile(file.id)}
                                 className="text-xs text-red-500 hover:text-red-400 hover:underline"
                               >
@@ -4526,20 +3725,20 @@ const WorkspaceFileDialog = ({
 
           {activeTab === 'import' && (
             <div className="space-y-5">
-              <div 
+              <div data-help-feature="app-asset-import-tab" data-help-source="src/App.tsx"
                 onClick={() => importInputRef.current?.click()}
                 className="border-2 border-dashed border-[#333] hover:border-[#f97316]/50 rounded-2xl p-10 text-center cursor-pointer transition-all bg-[#0a0a0a]"
               >
-                <input 
-                  type="file" 
-                  ref={importInputRef} 
-                  onChange={handleFileChange} 
-                  className="hidden" 
-                  accept=".json"
+                <input
+                  type="file"
+                  ref={importInputRef}
+                  onChange={handleFileChange}
+                  className="hidden"
+                  accept=".adia,.json"
                 />
                 <div className="text-4xl mb-4">📥</div>
                 <h3 className="text-sm font-bold text-white">Click to Select Module JSON File</h3>
-                <p className="text-xs text-slate-500 mt-2">Supports files generated by exporting individual modules (e.g. xbridges.json, vlab.json, etc.)</p>
+                <p className="text-xs text-slate-500 mt-2">Supports files generated by exporting individual modules (e.g. xbridges.adia, vlab.adia, etc.)</p>
               </div>
 
               {importedJson && (
@@ -4552,15 +3751,15 @@ const WorkspaceFileDialog = ({
                   </div>
                   <div>
                     <label className="text-xs font-bold text-slate-400 uppercase">Import Asset Tab Name</label>
-                    <Input 
+                    <Input data-help-feature="app-asset-name" data-help-source="src/App.tsx"
                       value={importFileName}
                       onChange={e => setImportFileName(e.target.value)}
                       className="w-full mt-1.5 bg-[#111] border-[#222] focus:border-[#f97316] text-white font-mono"
                     />
                   </div>
                   <div className="flex justify-end gap-3 pt-2">
-                    <Button onClick={() => setImportedJson(null)} className="px-5 border border-[#222] bg-transparent text-slate-400 hover:bg-[#111]">Reset</Button>
-                    <Button onClick={handleImportExecute} className="px-5 bg-emerald-600 text-white hover:bg-emerald-700 font-bold">Import Tab</Button>
+                    <Button data-help-feature="app-import-reset" data-help-source="src/App.tsx" onClick={() => setImportedJson(null)} className="px-5 border border-[#222] bg-transparent text-slate-400 hover:bg-[#111]">Reset</Button>
+                    <Button data-help-feature="app-asset-import" data-help-source="src/App.tsx" onClick={handleImportExecute} className="px-5 bg-emerald-600 text-white hover:bg-emerald-700 font-bold">Import Tab</Button>
                   </div>
                 </div>
               )}
@@ -4601,23 +3800,26 @@ const WorkspaceTabBar = ({
   ];
 
   return (
-    <div className="h-10 bg-[#121212] border-b border-[#222] flex items-center px-4 shrink-0 justify-between select-none">
+    <div className="workspace-tab-bar ui-surface h-10 bg-[var(--surface-canvas)] border-b border-[var(--border-default)] flex items-center px-4 shrink-0 justify-between select-none">
       <div className="flex items-center gap-1 overflow-x-auto no-scrollbar flex-1 h-full pt-1">
         {openTabIds.map((tabId) => {
           const file = workspaceFiles.find(f => f.id === tabId);
           if (!file) return null;
-          
+
           const isActive = activeFileId === tabId;
           const modInfo = modules.find(m => m.id === file.type);
-          
+
           return (
-            <div 
+            <div data-help-feature="app-asset-open" data-help-source="src/App.tsx"
               key={tabId}
+              role="tab"
+              aria-selected={isActive}
+              data-workspace-type={file.type}
               onClick={() => onSwitchTab(tabId)}
               className={`flex items-center gap-2 px-4 h-full rounded-t-lg text-xs font-bold transition-all duration-200 cursor-pointer border-t-2 shrink-0 ${
-                isActive 
-                  ? 'bg-[#1a1a1a] text-white border-t-[#f97316]' 
-                  : 'text-slate-500 hover:text-slate-300 hover:bg-[#161616] border-t-transparent'
+                  isActive
+                ? 'workspace-tab-active ui-card bg-[var(--surface-panel)] text-[var(--text-primary)] border-t-[#f97316]'
+                  : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-raised)] border-t-transparent'
               }`}
               style={{
                 boxShadow: isActive ? 'inset 0 1px 1px rgba(255,255,255,0.05)' : 'none'
@@ -4625,12 +3827,12 @@ const WorkspaceTabBar = ({
             >
               <span style={{ color: modInfo?.color }}>{modInfo?.icon || '📁'}</span>
               <span className="truncate max-w-[120px]">{file.name}</span>
-              <button 
+              <button data-help-feature="app-asset-close" data-help-source="src/App.tsx"
                 onClick={(e) => {
                   e.stopPropagation();
                   onCloseTab(tabId);
                 }}
-                className="ml-2 w-4 h-4 rounded-full hover:bg-slate-800 hover:text-red-400 flex items-center justify-center text-[8px] text-slate-500 font-normal transition-colors"
+                className="ml-2 w-4 h-4 rounded-full hover:bg-[var(--surface-raised)] hover:text-red-400 flex items-center justify-center text-[8px] text-[var(--text-muted)] font-normal transition-colors"
                 title="Close Tab"
               >
                 ✕
@@ -4639,9 +3841,9 @@ const WorkspaceTabBar = ({
           );
         })}
       </div>
-      <button 
+      <button data-help-feature="app-asset-manager" data-help-source="src/App.tsx"
         onClick={onOpenDialog}
-        className="ml-4 p-1 rounded hover:bg-[#1c1c1c] text-[#f97316] transition-colors flex items-center justify-center"
+        className="ui-control ui-focus-ring ml-4 p-1 rounded hover:bg-[var(--surface-raised)] text-[#f97316] transition-colors flex items-center justify-center"
         title="Open Workspace Asset Manager"
       >
         <span className="text-lg font-bold">+</span>
@@ -4658,26 +3860,26 @@ const SaveSelectionDialog = ({
   onSave: (selectedKeys: string[]) => void;
 }) => {
   const [selectedKeys, setSelectedKeys] = useState<string[]>([
-    'statemachine', 'bdd', 'ibd', 'requirements', 'xbridges', 
+    'statemachine', 'bdd', 'ibd', 'requirements', 'xbridges',
     'vlab', 'hmi', 'hil', 'doe', 'entropy', 'unified'
   ]);
 
   const modules = [
-    { id: 'unified', name: 'Unified Project File (contains everything in one file)', desc: 'adia_project_unified.json' },
-    { id: 'statemachine', name: 'State Machine Module', desc: 'statemachine.json' },
-    { id: 'bdd', name: 'SysML BDD Module', desc: 'bdd.json' },
-    { id: 'ibd', name: 'SysML IBD Module', desc: 'ibd.json' },
-    { id: 'requirements', name: 'Requirements Module', desc: 'requirements.json' },
-    { id: 'xbridges', name: 'X-Bridges Module', desc: 'xbridges.json' },
-    { id: 'vlab', name: 'V-Lab Physical Model Module', desc: 'vlab.json' },
-    { id: 'hmi', name: 'HMI Dashboard Layout', desc: 'hmi.json' },
-    { id: 'hil', name: 'HIL Configuration', desc: 'hil.json' },
-    { id: 'doe', name: 'DOE RSM Analysis Data', desc: 'doe.json' },
-    { id: 'entropy', name: 'ENTROPY OPM Module', desc: 'entropy.json' },
+    { id: 'unified', name: 'Unified Project File (contains everything in one file)', desc: 'adia_project_unified.adia' },
+    { id: 'statemachine', name: 'State Machine Module', desc: 'statemachine.adia' },
+    { id: 'bdd', name: 'SysML BDD Module', desc: 'bdd.adia' },
+    { id: 'ibd', name: 'SysML IBD Module', desc: 'ibd.adia' },
+    { id: 'requirements', name: 'Requirements Module', desc: 'requirements.adia' },
+    { id: 'xbridges', name: 'X-Bridges Module', desc: 'xbridges.adia' },
+    { id: 'vlab', name: 'V-Lab Physical Model Module', desc: 'vlab.adia' },
+    { id: 'hmi', name: 'HMI Dashboard Layout', desc: 'hmi.adia' },
+    { id: 'hil', name: 'HIL Configuration', desc: 'hil.adia' },
+    { id: 'doe', name: 'DOE RSM Analysis Data', desc: 'doe.adia' },
+    { id: 'entropy', name: 'ENTROPY OPM Module', desc: 'entropy.adia' },
   ];
 
   const handleToggle = (id: string) => {
-    setSelectedKeys(prev => 
+    setSelectedKeys(prev =>
       prev.includes(id) ? prev.filter(k => k !== id) : [...prev, id]
     );
   };
@@ -4691,28 +3893,28 @@ const SaveSelectionDialog = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 animate-fade-in" onMouseDown={onClose}>
+    <div data-help-feature="live:App:345b43c4fed5" className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 animate-fade-in" onMouseDown={onClose}>
       <div className="bg-[#1a1a1a] border border-[#f97316] rounded-xl w-[500px] max-h-[90vh] flex flex-col shadow-2xl" onMouseDown={(e: React.MouseEvent) => e.stopPropagation()}>
         <div className="h-14 flex items-center justify-between px-6 border-b border-[#222]">
           <h2 className="text-lg font-bold text-[#f97316]">Select Modules to Save</h2>
-          <button 
-            onClick={handleToggleAll} 
+          <button data-help-feature="app-module-select" data-help-source="src/App.tsx"
+            onClick={handleToggleAll}
             className="text-xs text-[#888] hover:text-[#f97316] transition-colors cursor-pointer"
           >
             {selectedKeys.length === modules.length ? 'Deselect All' : 'Select All'}
           </button>
         </div>
-        
+
         <div className="flex-1 overflow-y-auto p-6 space-y-3">
           <p className="text-xs text-[#888] mb-2">Check the modules you want to export. By default, all are selected.</p>
           <div className="space-y-2 border border-[#222] rounded-lg p-3 bg-[#111]/40">
             {modules.map(m => (
-              <label 
-                key={m.id} 
+              <label
+                key={m.id}
                 className="flex items-start gap-3 p-2 rounded hover:bg-[#222]/50 cursor-pointer transition-colors"
               >
-                <input 
-                  type="checkbox" 
+                <input data-help-feature="app-module-select" data-help-source="src/App.tsx"
+                  type="checkbox"
                   checked={selectedKeys.includes(m.id)}
                   onChange={() => handleToggle(m.id)}
                   className="mt-0.5 rounded border-[#333] text-[#f97316] focus:ring-[#f97316] focus:ring-offset-0 focus:ring-0 bg-transparent w-4 h-4 cursor-pointer"
@@ -4727,13 +3929,13 @@ const SaveSelectionDialog = ({
         </div>
 
         <div className="h-16 flex items-center justify-end px-6 border-t border-[#222] gap-3">
-          <Button 
-            onClick={onClose} 
+          <Button data-help-feature="app-dialog-close" data-help-source="src/App.tsx"
+            onClick={onClose}
             className="px-4 py-2 border border-[#333] bg-transparent text-white hover:bg-[#222]"
           >
             Cancel
           </Button>
-          <Button
+          <Button data-help-feature="app-module-export" data-help-source="src/App.tsx"
             onClick={() => onSave(selectedKeys)}
             disabled={selectedKeys.length === 0}
             className="px-5 py-2 bg-[#f97316] text-[#0a0a0a] font-bold hover:bg-[#ea580c] disabled:opacity-50"
@@ -4763,7 +3965,7 @@ const TickRateInput = ({ value, onChange }: { value: number, onChange: (val: num
   };
 
   return (
-    <Input
+    <Input data-help-feature="app-tick" data-help-source="src/App.tsx"
       type="text"
       value={localValue}
       onChange={(e) => setLocalValue(e.target.value)}
@@ -4835,7 +4037,7 @@ const ManualEntryTable = ({
       <div className="flex items-center justify-between px-3 py-2 border-b border-[#27272f] bg-[#141417]">
         <span className="text-xs font-bold uppercase tracking-wider text-zinc-400">Experiment Data</span>
         <div className="flex gap-2">
-          <Button
+          <Button data-help-feature="app-table-add-factor" data-help-source="src/App.tsx"
             size="sm"
             variant="ghost"
             onClick={addFactor}
@@ -4843,7 +4045,7 @@ const ManualEntryTable = ({
           >
             <Plus size={12} className="mr-1 text-zinc-400" /> Factor
           </Button>
-          <Button
+          <Button data-help-feature="app-table-add-row" data-help-source="src/App.tsx"
             size="sm"
             variant="ghost"
             onClick={addRow}
@@ -4853,7 +4055,7 @@ const ManualEntryTable = ({
           </Button>
         </div>
       </div>
-      <div className="flex-1 overflow-auto custom-scrollbar" onPaste={handlePaste}>
+      <div data-help-feature="live:App:f197a9653268" className="flex-1 overflow-auto custom-scrollbar" onPaste={handlePaste}>
         <table className="w-full text-xs text-left border-collapse">
           <thead className="sticky top-0 bg-[#1a1a1a] z-10 shadow-sm">
             <tr>
@@ -4872,7 +4074,7 @@ const ManualEntryTable = ({
                 <td className="p-2 text-center text-[#444]">{rIdx + 1}</td>
                 {row.map((cell, cIdx) => (
                   <td key={cIdx} className="p-0 border-r border-[#1a1a1a]">
-                    <input
+                    <input data-help-feature="app-table-cell" data-help-source="src/App.tsx"
                       type="number"
                       value={cell}
                       onChange={(e) => updateCell(rIdx, cIdx, e.target.value)}
@@ -4881,7 +4083,7 @@ const ManualEntryTable = ({
                   </td>
                 ))}
                 <td className="p-1">
-                  <button onClick={() => removeRow(rIdx)} className="text-red-500/50 hover:text-red-500 p-1 transition-colors">
+                  <button data-help-feature="app-table-remove-row" data-help-source="src/App.tsx" onClick={() => removeRow(rIdx)} className="text-red-500/50 hover:text-red-500 p-1 transition-colors">
                     <Trash2 size={12} />
                   </button>
                 </td>
@@ -4910,604 +4112,14 @@ const ALL_MODULES = [
   { id: 'entropy', label: 'ENTROPY OPM' },
 ] as const;
 
-const DynamicIcon = ({ name, size, className }: { name?: string; size: number; className?: string }) => {
-  switch (name) {
-    case 'activity': return <Activity size={size} className={className} />;
-    case 'zap': return <Zap size={size} className={className} />;
-    case 'cpu': return <Cpu size={size} className={className} />;
-    case 'layers': return <Layers size={size} className={className} />;
-    case 'database': return <Database size={size} className={className} />;
-    case 'network': return <Network size={size} className={className} />;
-    case 'plus': return <Plus size={size} className={className} />;
-    case 'resistor': return <Zap size={size} className={className} />;
-    case 'capacitor': return <Layers size={size} className={className} />;
-    case 'inductor': return <Activity size={size} className={className} />;
-    case 'dc_motor': return <Cpu size={size} className={className} />;
-    case 'inertia': return <Database size={size} className={className} />;
-    case 'mass': return <Box size={size} className={className} />;
-    case 'trans_spring': return <Rows size={size} className={className} />;
-    case 'scope': return <Activity size={size} className={className} />;
-    case 'settings-2': return <Settings2 size={size} className={className} />;
-    case 'magnetron': return <Zap size={size} className={className} />;
-    case 'heater': return <Flame size={size} className={className} />;
-    case 'cavity': return <Box size={size} className={className} />;
-    case 'inverter': return <RefreshCcw size={size} className={className} />;
-    case 'gas_chamber': return <Wind size={size} className={className} />;
-    case 'ma_chamber': return <Cloud size={size} className={className} />;
-    case 'reluctance': return <Activity size={size} className={className} />;
-    case 'doe_model': return <Database size={size} className={className} />;
-    default: return <Box size={size} className={className} />;
-  }
-};
-
-const HelpModal = ({ isOpen, onClose, initialTopic }: { isOpen: boolean; onClose: () => void; initialTopic?: string }) => {
-  const [activeTopic, setActiveTopic] = useState<string>(initialTopic || "getting-started");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [showBlockRef, setShowBlockRef] = useState(false);
-  const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
-  const [selectedDomainFilter, setSelectedDomainFilter] = useState<string>("All");
-  const [selectedSourceFilter, setSelectedSourceFilter] = useState<string>("All");
-  const [showArchitectureExplorer, setShowArchitectureExplorer] = useState(false);
-
-  useEffect(() => {
-    if (initialTopic && isOpen) {
-      setActiveTopic(initialTopic);
-      setShowBlockRef(false);
-      setShowArchitectureExplorer(false);
-    }
-  }, [initialTopic, isOpen]);
-  
-  if (!isOpen) return null;
-
-  const topic = HELP_DATA[activeTopic] || HELP_DATA["getting-started"];
-
-  // Categories for Help Topics
-  const topicCategories: Record<string, string[]> = {};
-  Object.keys(HELP_DATA).forEach(key => {
-    const cat = HELP_DATA[key].category;
-    if (!topicCategories[cat]) topicCategories[cat] = [];
-    topicCategories[cat].push(key);
-  });
-
-  // Flattened library for search
-  const vlabBlocks = VLAB_LIBRARY.flatMap(domain => 
-    domain.blocks.map(b => ({ ...b, domain: domain.type, source: 'V-Lab' }))
-  );
-  
-  const xbridgesBlocks = Object.keys(XBRIDGES_LIBRARY).map(key => {
-    try {
-      const b = XBRIDGES_LIBRARY[key]('tmp', {});
-      return { 
-        id: key, 
-        name: key, 
-        domain: 'Control', 
-        source: 'X-Bridges', 
-        params: b.params, 
-        ports: [...(b.inputs || []), ...(b.outputs || [])],
-        icon: b.icon,
-        equation: b.equation,
-        description: b.description
-      };
-    } catch(e) {
-      return { id: key, name: key, domain: 'Control', source: 'X-Bridges', params: {}, ports: [], icon: undefined, equation: undefined, description: undefined };
-    }
-  });
-
-  const allBlocks = [...vlabBlocks, ...xbridgesBlocks];
-  
-  const domainsList = ["All", ...Array.from(new Set(allBlocks.map(b => b.domain)))];
-
-  const filteredBlocks = allBlocks
-    .map(b => {
-      const q = searchQuery.toLowerCase().trim();
-      const name = b.name.toLowerCase();
-      const id = b.id.toLowerCase();
-      const domain = b.domain.toLowerCase();
-      const desc = (b.description || '').toLowerCase();
-      const eq = (b.equation || '').toLowerCase();
-
-      let score = 0;
-      if (!q) {
-        score = 1;
-      } else if (name === q || id === q) {
-        score = 1000;
-      } else if (name.startsWith(q) || id.startsWith(q)) {
-        score = 800;
-      } else if (name.includes(q) || id.includes(q)) {
-        score = 600;
-      } else if (domain.includes(q)) {
-        score = 400;
-      } else if (desc.includes(q) || eq.includes(q)) {
-        score = 100;
-      }
-
-      const matchesDomain = selectedDomainFilter === "All" || b.domain.toLowerCase() === selectedDomainFilter.toLowerCase();
-      const matchesSource = selectedSourceFilter === "All" || b.source.toLowerCase() === selectedSourceFilter.toLowerCase();
-
-      return { block: b, score, match: score > 0 && matchesDomain && matchesSource };
-    })
-    .filter(item => item.match)
-    .sort((a, b) => b.score - a.score)
-    .map(item => item.block);
-
-  const selectedBlock = allBlocks.find(b => b.id === selectedBlockId);
-
-  const getDomainColor = (domain: string) => {
-    const d = domain.toLowerCase();
-    if (d.includes('electr')) return 'text-cyan-400 bg-cyan-500/10 border-cyan-500/30';
-    if (d.includes('mechanic') || d.includes('rotat') || d.includes('translat')) return 'text-amber-400 bg-amber-500/10 border-amber-500/30';
-    if (d.includes('therm')) return 'text-red-400 bg-red-500/10 border-red-500/30';
-    if (d.includes('magnet')) return 'text-purple-400 bg-purple-500/10 border-purple-500/30';
-    if (d.includes('gas') || d.includes('fluid') || d.includes('air')) return 'text-sky-400 bg-sky-500/10 border-sky-500/30';
-    if (d.includes('control')) return 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30';
-    return 'text-orange-400 bg-orange-500/10 border-orange-500/30';
-  };
-
-  return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/95 backdrop-blur-3xl p-6 md:p-10 text-white font-sans">
-      <div className="bg-[#0f0f0f] rounded-3xl border border-white/10 w-full h-full max-w-7xl flex flex-col shadow-[0_0_150px_rgba(0,0,0,0.8)] overflow-hidden">
-        
-        {/* TOP HEADER */}
-        <header className="h-20 border-b border-white/5 flex items-center justify-between px-8 md:px-10 bg-[#151515]/50 backdrop-blur-xl shrink-0">
-          <div className="flex items-center gap-6 md:gap-8">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-orange-500 to-red-600 rounded-xl flex items-center justify-center font-black text-xl shadow-[0_0_20px_rgba(249,115,22,0.3)]">A</div>
-              <div className="flex flex-col">
-                <span className="font-black tracking-tight text-xl leading-none">ADIA <span className="text-orange-500">DOCS</span></span>
-                <span className="text-[9px] text-gray-500 font-bold uppercase tracking-[0.2em] mt-1">Multi-Domain MBD & HIL Reference</span>
-              </div>
-            </div>
-            
-            <div className="h-10 w-[1px] bg-white/10 hidden sm:block"></div>
-            
-            <div className="flex bg-black/40 p-1 rounded-xl border border-white/5">
-              <button 
-                onClick={() => setShowBlockRef(false)}
-                className={`px-5 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${!showBlockRef ? 'bg-orange-500 text-black shadow-lg shadow-orange-500/20' : 'text-gray-500 hover:text-white'}`}
-              >
-                User Guide & Modules
-              </button>
-              <button 
-                onClick={() => setShowBlockRef(true)}
-                className={`px-5 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${showBlockRef ? 'bg-orange-500 text-black shadow-lg shadow-orange-500/20' : 'text-gray-500 hover:text-white'}`}
-              >
-                Illustrated Block Reference ({allBlocks.length})
-              </button>
-            </div>
-          </div>
-          
-          <div className="flex items-center gap-4 md:gap-6">
-            <div className="relative group">
-              <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-orange-500 transition-colors">
-                <Search size={16} />
-              </div>
-              <input 
-                type="text" 
-                placeholder={showBlockRef ? "Search 250+ blocks, equations, ports..." : "Search documentation topics & guides..."}
-                className="bg-black/60 border border-white/10 rounded-full py-2.5 pl-12 pr-6 text-xs w-64 md:w-80 focus:outline-none focus:border-orange-500/50 focus:ring-1 focus:ring-orange-500/20 transition-all font-medium"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-            <button 
-              onClick={onClose}
-              className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-white/5 hover:bg-red-500/20 hover:text-red-500 flex items-center justify-center transition-all group shrink-0"
-              title="Close Help"
-            >
-              <X size={22} className="group-hover:rotate-90 transition-transform" />
-            </button>
-          </div>
-        </header>
-
-        <div className="flex flex-1 overflow-hidden">
-          
-          {/* SIDEBAR */}
-          <aside className="w-80 border-r border-white/5 bg-[#0a0a0a] flex flex-col shrink-0">
-            {showBlockRef && (
-              <div className="p-4 border-b border-white/5 bg-[#121212]/80 space-y-3 shrink-0">
-                {/* Engine Filter */}
-                <div className="flex items-center gap-1.5 bg-black/50 p-1 rounded-lg border border-white/5 text-[9px] font-bold">
-                  {["All", "V-Lab", "X-Bridges"].map(src => (
-                    <button
-                      key={src}
-                      onClick={() => setSelectedSourceFilter(src)}
-                      className={`flex-1 py-1 rounded text-center transition-all ${selectedSourceFilter === src ? 'bg-orange-500 text-black font-black' : 'text-gray-400 hover:text-white'}`}
-                    >
-                      {src}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Domain Selector */}
-                <div className="flex items-center gap-1 overflow-x-auto custom-scrollbar pb-1">
-                  {domainsList.slice(0, 8).map(d => (
-                    <button
-                      key={d}
-                      onClick={() => setSelectedDomainFilter(d)}
-                      className={`px-2 py-1 rounded text-[8px] font-bold uppercase whitespace-nowrap transition-all ${selectedDomainFilter === d ? 'bg-orange-500/20 text-orange-400 border border-orange-500/40' : 'bg-white/5 text-gray-500 hover:text-gray-300'}`}
-                    >
-                      {d}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
-              {!showBlockRef ? (
-                /* DOCUMENTATION TREE */
-                <div className="space-y-8">
-                  {Object.keys(topicCategories).map(cat => (
-                    <div key={cat}>
-                      <h4 className="text-[10px] font-black text-gray-600 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
-                        <div className="w-1.5 h-1.5 rounded-full bg-orange-500"></div>
-                        {cat}
-                      </h4>
-                      <ul className="space-y-1">
-                        {topicCategories[cat].map(key => (
-                          <li key={key}>
-                            <button 
-                              onClick={() => setActiveTopic(key)}
-                              className={`w-full text-left px-4 py-2.5 rounded-xl text-xs transition-all flex items-center gap-3 ${activeTopic === key ? 'bg-orange-500/10 text-orange-500 font-bold border border-orange-500/20' : 'text-gray-500 hover:bg-white/5 hover:text-gray-300'}`}
-                            >
-                              <BookOpen size={14} className={activeTopic === key ? 'text-orange-500' : 'text-gray-700'} />
-                              {HELP_DATA[key].title}
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                /* BLOCK LIBRARY TREE */
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between mb-3 text-[10px] font-black text-gray-600 uppercase tracking-[0.2em]">
-                    <span>Components ({filteredBlocks.length})</span>
-                    {selectedDomainFilter !== "All" && (
-                      <button onClick={() => setSelectedDomainFilter("All")} className="text-orange-500 hover:underline">Reset</button>
-                    )}
-                  </div>
-                  {filteredBlocks.map(block => (
-                    <button 
-                      key={block.id}
-                      onClick={() => setSelectedBlockId(block.id)}
-                      className={`w-full text-left px-3.5 py-2.5 rounded-xl text-[11px] transition-all flex items-center justify-between group ${selectedBlockId === block.id ? 'bg-orange-500 text-black font-black shadow-md shadow-orange-500/20' : 'text-gray-400 hover:bg-white/5'}`}
-                    >
-                      <div className="flex items-center gap-2.5 truncate">
-                        <Box size={13} className={selectedBlockId === block.id ? 'text-black' : 'text-gray-600'} />
-                        <span className="truncate">{block.name}</span>
-                      </div>
-                      <span className={`text-[8px] uppercase font-black px-1.5 py-0.5 rounded shrink-0 ml-2 ${selectedBlockId === block.id ? 'bg-black/20 text-black' : 'bg-white/5 text-gray-500'}`}>
-                        {block.domain}
-                      </span>
-                    </button>
-                  ))}
-                  {filteredBlocks.length === 0 && (
-                    <div className="p-6 text-center text-xs text-gray-600 italic">
-                      No blocks match your search or filter.
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </aside>
-
-          {/* MAIN CONTENT AREA */}
-          <main className="flex-1 overflow-y-auto bg-[#0a0a0a] p-10 md:p-14 custom-scrollbar relative">
-            {!showBlockRef ? (
-              /* TOPIC VIEW */
-              <div className="max-w-4xl mx-auto">
-                {activeTopic === 'software-architecture' && showArchitectureExplorer ? (
-                  <SoftwareArchitectureExplorer onClose={() => setShowArchitectureExplorer(false)} />
-                ) : <>
-                <div className="mb-14">
-                  <nav className="flex items-center gap-3 text-[10px] font-bold text-gray-600 uppercase tracking-widest mb-6">
-                    <span className="hover:text-orange-500 cursor-pointer" onClick={() => setActiveTopic("getting-started")}>ADIA Docs</span>
-                    <ChevronRight size={10} />
-                    <span className="text-gray-400">{topic.category}</span>
-                    <ChevronRight size={10} />
-                    <span className="text-white">{topic.title}</span>
-                  </nav>
-                  
-                <h1 className="text-5xl font-black text-white tracking-tighter mb-4 leading-tight">
-                    {topic.title}
-                  </h1>
-                  <p className="text-lg text-gray-400 leading-relaxed font-light max-w-3xl">
-                    {topic.description}
-                  </p>
-                </div>
-
-                {activeTopic === 'software-architecture' && (
-                  <button onClick={() => setShowArchitectureExplorer(true)} className="mb-10 flex items-center gap-3 rounded-xl border border-orange-500/40 bg-orange-500/10 px-5 py-3 text-sm font-bold text-orange-400 hover:bg-orange-500/20">
-                    <Layers size={18} /> Open Architecture Explorer
-                  </button>
-                )}
-
-                {topic.image && (
-                  <div className="mb-14 rounded-3xl overflow-hidden border border-white/10 shadow-2xl group relative bg-black/40">
-                    <img src={topic.image} alt={topic.title} className="w-full object-cover group-hover:scale-105 transition-transform duration-700 max-h-[380px]" />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent"></div>
-                    <div className="absolute bottom-6 left-6 flex items-center gap-3">
-                      <div className="p-2 bg-orange-500 rounded-lg text-black"><Activity size={16} /></div>
-                      <span className="text-xs font-black uppercase tracking-widest text-white shadow-sm">Illustrated Architecture Diagram</span>
-                    </div>
-                  </div>
-                )}
-
-                <div className="prose prose-invert max-w-none">
-                  <div className="text-gray-300 leading-relaxed text-base mb-14 font-light bg-white/[0.02] p-8 rounded-3xl border border-white/5">
-                    {topic.content}
-                  </div>
-
-                  <div className="space-y-16">
-                    {topic.sections?.map((section, idx) => (
-                      <section key={idx} className="relative pl-10 border-l-2 border-white/10 group">
-                        <div className="absolute left-[-7px] top-1 w-3 h-3 rounded-full bg-white/20 group-hover:bg-orange-500 transition-colors shadow-[0_0_15px_rgba(255,255,255,0.1)] group-hover:shadow-orange-500/50"></div>
-                        <h2 className="text-2xl font-black text-white mb-4 tracking-tight flex items-center gap-3">
-                          {section.title}
-                        </h2>
-                        <div className="text-gray-400 leading-relaxed mb-6 whitespace-pre-wrap font-light text-sm">
-                          {section.body}
-                        </div>
-                        
-                        {section.list && (
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6">
-                            {section.list.map((item, i) => (
-                              <div key={i} className="flex items-start gap-3 p-4 bg-white/[0.02] border border-white/5 rounded-2xl">
-                                <div className="w-1.5 h-1.5 rounded-full bg-orange-500 mt-1.5 shrink-0"></div>
-                                <span className="text-xs text-gray-300 font-light leading-relaxed">{renderFormattedHelpText(item)}</span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-
-                        {section.code && (
-                          <div className="relative group/code mt-6">
-                            <div className="absolute right-4 top-3 text-[9px] font-black text-white/30 uppercase tracking-widest">Mathematical / Code Formulation</div>
-                            <div className="bg-black/90 rounded-2xl border border-white/10 p-6 font-mono text-xs text-orange-400 overflow-x-auto shadow-inner">
-                              <pre className="m-0">{section.code}</pre>
-                            </div>
-                          </div>
-                        )}
-                      </section>
-                    ))}
-                  </div>
-
-                  {topic.related && (
-                    <div className="mt-24 pt-12 border-t border-white/5">
-                      <h3 className="text-[10px] font-black text-gray-600 uppercase tracking-[0.3em] mb-8">Related Modules & Deep Dives</h3>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        {topic.related.map(key => (
-                          <button 
-                            key={key}
-                            onClick={() => setActiveTopic(key)}
-                            className="p-6 bg-[#151515] border border-white/5 rounded-3xl hover:border-orange-500/40 transition-all text-left group hover:-translate-y-1"
-                          >
-                            <span className="text-[9px] text-orange-500 uppercase font-black block mb-1.5 tracking-widest">{HELP_DATA[key]?.category}</span>
-                            <span className="text-sm font-bold text-white group-hover:text-orange-500 transition-colors block leading-tight">{HELP_DATA[key]?.title}</span>
-                            <div className="mt-3 flex items-center gap-1.5 text-[9px] font-bold text-gray-500 group-hover:text-gray-300 transition-colors">
-                              Explore Guide <ChevronRight size={10} />
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-                </>}
-              </div>
-            ) : (
-              /* BLOCK REFERENCE VIEW */
-              <div className="max-w-4xl mx-auto">
-                {selectedBlock ? (
-                  <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-                    {/* Header */}
-                    <div className="flex items-start justify-between mb-12 border-b border-white/5 pb-8">
-                      <div className="flex flex-col">
-                        <div className="flex items-center gap-4 mb-3">
-                          <div className="p-3.5 bg-orange-500 rounded-2xl text-black shadow-xl shadow-orange-500/20">
-                            <DynamicIcon name={selectedBlock.icon} size={28} />
-                          </div>
-                          <div>
-                            <h1 className="text-4xl font-black text-white tracking-tighter">{selectedBlock.name}</h1>
-                            <div className="flex items-center gap-2.5 mt-1.5">
-                              <span className="px-3 py-0.5 bg-white/5 border border-white/10 rounded-full text-[9px] font-black text-gray-400 uppercase tracking-widest">{selectedBlock.source} Component</span>
-                              <span className={`px-3 py-0.5 border rounded-full text-[9px] font-black uppercase tracking-widest ${getDomainColor(selectedBlock.domain)}`}>
-                                {selectedBlock.domain} Domain
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-[9px] font-black text-gray-600 uppercase tracking-widest mb-1">Catalog Status</div>
-                        <div className="text-emerald-400 font-bold text-xs flex items-center gap-1.5 justify-end">
-                          <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></div>
-                          Full Physics & Port Verified
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                      {/* Left Column: Pinout & Parameters */}
-                      <div className="space-y-8">
-                        <section>
-                          <h3 className="text-xs font-black text-gray-400 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
-                            <Box size={14} className="text-orange-500" />
-                            Schematic Terminal Interface
-                          </h3>
-                          <div className="bg-black/60 rounded-3xl border border-white/5 p-6 relative flex flex-col items-center justify-center min-h-[260px] shadow-inner">
-                            {/* Block Visualization */}
-                            <div className="w-36 h-36 bg-orange-500/5 border-2 border-orange-500/30 rounded-3xl flex flex-col items-center justify-center relative shadow-[0_0_50px_rgba(249,115,22,0.1)] group">
-                              <DynamicIcon name={selectedBlock.icon} size={40} className="text-orange-500 mb-1" />
-                              <span className="text-[10px] font-black text-white/80 max-w-[100px] text-center truncate px-1">{selectedBlock.name}</span>
-                              
-                              {/* Port Pins */}
-                              {selectedBlock.ports?.map((p: any, i: number) => {
-                                const pos = p.position || (i % 2 === 0 ? 'left' : 'right');
-                                return (
-                                  <div 
-                                    key={i} 
-                                    className={`absolute text-[8px] font-black uppercase text-gray-400 flex items-center gap-1 ${pos === 'left' ? '-left-14' : pos === 'right' ? '-right-14' : pos === 'top' ? '-top-8' : '-bottom-8'}`}
-                                  >
-                                    <span className="px-1 py-0.5 bg-black/80 rounded border border-white/10 text-orange-400/90">{p.label || p.name || `Pin ${i+1}`}</span>
-                                    <div className={`w-2.5 h-2.5 rounded-full border-2 border-orange-500 bg-black ${pos === 'left' ? 'order-last' : 'order-first'}`}></div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                            <span className="text-[9px] text-gray-600 font-bold uppercase tracking-widest mt-6">
-                              {selectedBlock.ports?.length || 2} Connected Terminals ({selectedBlock.source === 'V-Lab' ? 'Acausal Energy Ports' : 'Causal Signal Ports'})
-                            </span>
-                          </div>
-                        </section>
-
-                        <section>
-                          <h3 className="text-xs font-black text-gray-400 uppercase tracking-[0.2em] mb-4">
-                            Configurable Parameters
-                          </h3>
-                          <div className="space-y-2.5">
-                            {Object.entries(selectedBlock.params || {}).map(([key, p]: [string, any]) => (
-                              <div key={key} className="flex items-center justify-between p-3.5 bg-white/[0.02] border border-white/5 rounded-2xl hover:bg-white/[0.04] transition-colors">
-                                <div className="flex flex-col">
-                                  <span className="text-[11px] font-bold text-white">{p.label || key}</span>
-                                  <span className="text-[9px] text-gray-600 font-mono">{key}</span>
-                                </div>
-                                <div className="text-right">
-                                  <span className="text-xs font-bold text-orange-400 font-mono">{String(p.value ?? p.default ?? '0')}</span>
-                                  <span className="text-[9px] text-gray-500 ml-1.5 uppercase font-bold">{p.unit || ''}</span>
-                                </div>
-                              </div>
-                            ))}
-                            {Object.keys(selectedBlock.params || {}).length === 0 && (
-                              <div className="p-6 text-center text-xs text-gray-600 italic bg-white/[0.01] border border-dashed border-white/10 rounded-2xl">
-                                Standard ideal component with fixed internal characteristics.
-                              </div>
-                            )}
-                          </div>
-                        </section>
-                      </div>
-
-                      {/* Right Column: Execution, Equations, and How-To-Use */}
-                      <div className="space-y-8">
-                        <section>
-                          <h3 className="text-xs font-black text-gray-400 uppercase tracking-[0.2em] mb-4">
-                            Governing Physics & Transfer Equations
-                          </h3>
-                          <div className="bg-black/60 rounded-3xl border border-white/5 p-6">
-                            <p className="text-xs text-gray-400 leading-relaxed font-light mb-4">
-                              {selectedBlock.description || "This component participates in continuous simulation through simultaneous differential-algebraic equations solved by the numerical solver."}
-                            </p>
-                            <div className="bg-orange-500/5 p-5 rounded-2xl border border-orange-500/20">
-                              <h4 className="text-[9px] font-black text-orange-500 uppercase tracking-widest mb-2">Mathematical Formulation</h4>
-                              <div className="font-mono text-xs text-white/90 italic whitespace-pre-wrap leading-relaxed">
-                                {selectedBlock.equation || (selectedBlock.domain === 'Electrical' ? 'V_p - V_n = I * R' : selectedBlock.domain === 'Mechanical' ? 'F = m * dv/dt + B * v' : 'Y = f(U)')}
-                              </div>
-                            </div>
-                          </div>
-                        </section>
-
-                        <section>
-                          <h3 className="text-xs font-black text-gray-400 uppercase tracking-[0.2em] mb-4">
-                            How to Use & Button Steps in Canvas
-                          </h3>
-                          <div className="p-6 bg-gradient-to-br from-white/[0.03] to-transparent border border-white/10 rounded-3xl space-y-3 text-xs text-gray-300 font-light">
-                            <div className="flex items-start gap-2.5">
-                              <span className="w-5 h-5 rounded-full bg-orange-500/20 text-orange-400 flex items-center justify-center font-bold text-[10px] shrink-0">1</span>
-                              <span>Click and drag <b>{selectedBlock.name}</b> from the left component panel onto the canvas.</span>
-                            </div>
-                            <div className="flex items-start gap-2.5">
-                              <span className="w-5 h-5 rounded-full bg-orange-500/20 text-orange-400 flex items-center justify-center font-bold text-[10px] shrink-0">2</span>
-                              <span>Drag connection wires between terminal pins matching the <b>{selectedBlock.domain}</b> domain.</span>
-                            </div>
-                            <div className="flex items-start gap-2.5">
-                              <span className="w-5 h-5 rounded-full bg-orange-500/20 text-orange-400 flex items-center justify-center font-bold text-[10px] shrink-0">3</span>
-                              <span>Double-click the block on the canvas to open the sidebar parameters editor.</span>
-                            </div>
-                            <div className="flex items-start gap-2.5">
-                              <span className="w-5 h-5 rounded-full bg-orange-500/20 text-orange-400 flex items-center justify-center font-bold text-[10px] shrink-0">4</span>
-                              <span>Click <b>Start Simulation</b> in the top toolbar to execute real-time solver steps.</span>
-                            </div>
-                          </div>
-                        </section>
-
-                        <section>
-                          <button 
-                            onClick={() => {
-                              setShowBlockRef(false);
-                              if (selectedBlock.source === 'V-Lab') {
-                                setActiveTopic('vlab-fundamentals');
-                              } else {
-                                setActiveTopic('xbridges-ref');
-                              }
-                            }}
-                            className="w-full py-3.5 bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 border border-orange-500/30 rounded-2xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all group"
-                          >
-                            <span>Read Full {selectedBlock.source} Theory Guide</span>
-                            <ChevronRight size={14} className="group-hover:translate-x-1 transition-transform" />
-                          </button>
-                        </section>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="h-[60vh] flex flex-col items-center justify-center text-center">
-                    <div className="w-20 h-20 bg-white/[0.03] rounded-full flex items-center justify-center mb-6 border border-white/5">
-                      <Search size={32} className="text-gray-600" />
-                    </div>
-                    <h2 className="text-2xl font-black text-white tracking-tight mb-2">Explore the Multi-Domain Block Catalog</h2>
-                    <p className="text-gray-500 max-w-md leading-relaxed text-xs font-light mb-6">
-                      Select any physical component or control block from the sidebar to inspect its electrical/mechanical pinouts, transfer equations, parameters, and step-by-step canvas usage.
-                    </p>
-                    <div className="flex flex-wrap gap-2 justify-center max-w-lg">
-                      {["Resistor", "Capacitor", "Inertia", "DC Voltage Source", "PID Controller", "Clarke Transform", "BLDC Motor"].map(sample => {
-                        const target = allBlocks.find(b => b.name.toLowerCase().includes(sample.toLowerCase()));
-                        return target ? (
-                          <button
-                            key={sample}
-                            onClick={() => setSelectedBlockId(target.id)}
-                            className="px-3 py-1.5 bg-white/5 hover:bg-orange-500/10 hover:text-orange-400 border border-white/10 rounded-xl text-[10px] font-bold text-gray-400 transition-colors"
-                          >
-                            {sample}
-                          </button>
-                        ) : null;
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </main>
-        </div>
-
-        {/* FOOTER */}
-        <footer className="h-14 border-t border-white/5 bg-[#111] flex items-center justify-between px-8 md:px-10 shrink-0">
-          <div className="flex items-center gap-6">
-            <span className="text-[9px] text-gray-600 font-black uppercase tracking-widest">ADIA Model-Based Design Engineering Suite</span>
-            <div className="h-4 w-[1px] bg-white/5"></div>
-            <div className="flex gap-4">
-              <span className="text-[9px] text-gray-500 font-bold uppercase">250+ Multi-Domain Blocks Verified</span>
-              <span className="text-[9px] text-gray-500 font-bold uppercase">HIL Real-Time Driver Ready</span>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="text-[9px] text-gray-600 font-bold">Press <kbd className="px-1.5 py-0.5 bg-white/10 rounded text-white font-mono text-[8px]">Esc</kbd> to exit</span>
-          </div>
-        </footer>
-      </div>
-    </div>
-  );
-};
-
-const ReportPreviewModal = ({ 
-  isOpen, 
-  onClose, 
-  results, 
-  data, 
-  headers, 
-  plotFactors, 
-  holdValues 
+const ReportPreviewModal = ({
+  isOpen,
+  onClose,
+  results,
+  data,
+  headers,
+  plotFactors,
+  holdValues
 }: any) => {
   const [layout, setLayout] = useState<'1-col' | '2-col'>('1-col');
   const previewRef = useRef<HTMLDivElement>(null);
@@ -5516,11 +4128,11 @@ const ReportPreviewModal = ({
 
   const exportToWord = async () => {
     if (!previewRef.current) return;
-    
+
     const clone = previewRef.current.cloneNode(true) as HTMLDivElement;
     const originalPlots = previewRef.current.querySelectorAll('.js-plotly-plot');
     const clonePlots = clone.querySelectorAll('.js-plotly-plot');
-    
+
     // We replace interactive plotly divs with static images for Word
     for (let i = 0; i < originalPlots.length; i++) {
       try {
@@ -5540,7 +4152,7 @@ const ReportPreviewModal = ({
     <head><meta charset='utf-8'><title>ADIA DOE Report</title></head><body style="background-color: #1a1a1a; color: #e0e0e0;">`;
     const footer = "</body></html>";
     const sourceHTML = header + DOMPurify.sanitize(clone.innerHTML) + footer;
-    
+
     const blob = new Blob(['\ufeff', sourceHTML], { type: 'application/msword' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -5580,37 +4192,37 @@ const ReportPreviewModal = ({
           </div>
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-1 bg-[#1a1a1a] rounded-lg p-1 border border-[#333]">
-              <button 
-                onClick={() => setLayout('1-col')} 
+              <button data-help-feature="app-report-layout" data-help-source="src/App.tsx"
+                onClick={() => setLayout('1-col')}
                 className={`p-1.5 rounded transition-colors ${layout === '1-col' ? 'bg-[#333] text-white' : 'text-gray-500 hover:text-gray-300'}`}
                 title="1 Column Layout"
               >
                 <Rows size={16} />
               </button>
-              <button 
-                onClick={() => setLayout('2-col')} 
+              <button data-help-feature="app-report-layout" data-help-source="src/App.tsx"
+                onClick={() => setLayout('2-col')}
                 className={`p-1.5 rounded transition-colors ${layout === '2-col' ? 'bg-[#333] text-white' : 'text-gray-500 hover:text-gray-300'}`}
                 title="2 Columns Grid"
               >
                 <LayoutGrid size={16} />
               </button>
             </div>
-            
-            <Button size="sm" onClick={exportToPDF} className="bg-red-600 hover:bg-red-700 text-white border-0">
+
+            <Button data-help-feature="app-report-pdf" data-help-source="src/App.tsx" size="sm" onClick={exportToPDF} className="bg-red-600 hover:bg-red-700 text-white border-0">
               <Download size={14} className="mr-2" /> PDF
             </Button>
-            <Button size="sm" onClick={exportToWord} className="bg-orange-600 hover:bg-orange-700 text-white border-0">
+            <Button data-help-feature="app-report-word" data-help-source="src/App.tsx" size="sm" onClick={exportToWord} className="bg-orange-600 hover:bg-orange-700 text-white border-0">
               <Download size={14} className="mr-2" /> Word (.doc)
             </Button>
-            <button onClick={onClose} className="p-2 text-gray-400 hover:text-white rounded-full hover:bg-white/10 transition-colors">
+            <button data-help-feature="app-dialog-close" data-help-source="src/App.tsx" onClick={onClose} className="p-2 text-gray-400 hover:text-white rounded-full hover:bg-white/10 transition-colors">
               <X size={20} />
             </button>
           </div>
         </div>
 
         <div className="flex-1 overflow-y-auto p-8 bg-[#0a0a0a] flex justify-center custom-scrollbar">
-          <div 
-            ref={previewRef} 
+          <div
+            ref={previewRef}
             className="bg-[#1a1a1a] w-full max-w-[210mm] min-h-[297mm] shadow-2xl p-10 text-[#e0e0e0] border border-[#333]"
             style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}
           >
@@ -5645,29 +4257,29 @@ const ReportPreviewModal = ({
             <div style={{ marginBottom: '20px' }}>
               <h2 style={{ fontSize: '18px', color: '#f97316', borderBottom: '1px solid #333', paddingBottom: '5px', fontWeight: 'bold' }}>2. Model Equation</h2>
               <div style={{ backgroundColor: '#1a1a1a', padding: '15px', borderRadius: '4px', border: '1px solid #333', fontFamily: 'monospace', fontSize: '12px', color: '#10b981' }}>
-                {results?.type === 'Taguchi' 
-                  ? 'Taguchi models optimize S/N ratios for robust design; an explicit polynomial regression equation is not generated.' 
+                {results?.type === 'Taguchi'
+                  ? 'Taguchi models optimize S/N ratios for robust design; an explicit polynomial regression equation is not generated.'
                   : (results?.equation || 'No equation available')}
               </div>
             </div>
 
             <div style={{ marginBottom: '20px' }}>
               <h2 style={{ fontSize: '18px', color: '#f97316', borderBottom: '1px solid #333', paddingBottom: '5px', marginBottom: '15px', fontWeight: 'bold' }}>3. Analysis Diagrams</h2>
-              <div style={{ 
-                display: 'grid', 
-                gridTemplateColumns: layout === '2-col' ? '1fr 1fr' : '1fr', 
-                gap: '20px' 
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: layout === '2-col' ? '1fr 1fr' : '1fr',
+                gap: '20px'
               }}>
                 {plotsToShow.map(pt => (
                   <div key={pt} style={{ border: '1px solid #333', padding: '10px', borderRadius: '4px', background: '#1a1a1a' }}>
                     <div style={{ width: '100%', height: '350px', overflow: 'hidden' }}>
-                      <PlotlyPlots 
-                        type={pt as any} 
-                        results={results} 
-                        data={data} 
-                        headers={headers} 
-                        factors={plotFactors} 
-                        holdValues={holdValues} 
+                      <PlotlyPlots
+                        type={pt as any}
+                        results={results}
+                        data={data}
+                        headers={headers}
+                        factors={plotFactors}
+                        holdValues={holdValues}
                       />
                     </div>
                   </div>
@@ -5681,14 +4293,14 @@ const ReportPreviewModal = ({
   );
 };
 
-const GlobalReportPreviewModal = ({ 
-  isOpen, 
-  onClose, 
-  reportData 
-}: { 
-  isOpen: boolean; 
-  onClose: () => void; 
-  reportData: { html: string, projectName: string } | null 
+const GlobalReportPreviewModal = ({
+  isOpen,
+  onClose,
+  reportData
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  reportData: { html: string, projectName: string } | null
 }) => {
   const [layout, setLayout] = useState<'1-col' | '2-col'>('1-col');
 
@@ -5811,29 +4423,29 @@ const GlobalReportPreviewModal = ({
           </div>
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-1 bg-[#1a1a1a] rounded-lg p-1 border border-[#333]">
-              <button 
-                onClick={() => setLayout('1-col')} 
+              <button data-help-feature="app-report-layout" data-help-source="src/App.tsx"
+                onClick={() => setLayout('1-col')}
                 className={`p-1.5 rounded transition-colors ${layout === '1-col' ? 'bg-[#333] text-white' : 'text-gray-500 hover:text-gray-300'}`}
                 title="1 Column Layout"
               >
                 <Rows size={16} />
               </button>
-              <button 
-                onClick={() => setLayout('2-col')} 
+              <button data-help-feature="app-report-layout" data-help-source="src/App.tsx"
+                onClick={() => setLayout('2-col')}
                 className={`p-1.5 rounded transition-colors ${layout === '2-col' ? 'bg-[#333] text-white' : 'text-gray-500 hover:text-gray-300'}`}
                 title="2 Columns Grid"
               >
                 <LayoutGrid size={16} />
               </button>
             </div>
-            
-            <Button size="sm" onClick={exportToHTML} className="bg-emerald-600 hover:bg-emerald-700 text-white border-0">
+
+            <Button data-help-feature="app-report-html" data-help-source="src/App.tsx" size="sm" onClick={exportToHTML} className="bg-emerald-600 hover:bg-emerald-700 text-white border-0">
               <Download size={14} className="mr-2" /> HTML
             </Button>
-            <Button size="sm" onClick={exportToWord} className="bg-orange-600 hover:bg-orange-700 text-white border-0">
+            <Button data-help-feature="app-report-word" data-help-source="src/App.tsx" size="sm" onClick={exportToWord} className="bg-orange-600 hover:bg-orange-700 text-white border-0">
               <Download size={14} className="mr-2" /> Word (.doc)
             </Button>
-            <button onClick={onClose} className="p-2 text-gray-400 hover:text-white rounded-full hover:bg-white/10 transition-colors">
+            <button data-help-feature="app-dialog-close" data-help-source="src/App.tsx" onClick={onClose} className="p-2 text-gray-400 hover:text-white rounded-full hover:bg-white/10 transition-colors">
               <X size={20} />
             </button>
           </div>
@@ -5855,6 +4467,20 @@ const GlobalReportPreviewModal = ({
 };
 
 
+/**
+ * Tab-strip identity for the unified workspace strip. Module workspace files
+ * (keyed by file id) and exact-ID diagram views (keyed by kind + diagram id)
+ * share one strip, so both need keys from the same namespace.
+ */
+const moduleWorkspaceTabKey = (fileId: string): string => `module:${fileId}`;
+
+const diagramWorkspaceTabKey = (tab: DiagramWorkspaceTab): string =>
+  tab.kind === 'module' ? `module:${tab.mode}` : `${tab.kind}:${tab.diagramId}`;
+
+type WorkspaceTarget =
+  | { kind: 'diagram'; tab: DiagramWorkspaceTab }
+  | { kind: 'file'; fileId: string };
+
 const ADIA = () => {
   const [currentTheme, setCurrentTheme] = useState<AppTheme>(getStoredTheme);
 
@@ -5873,9 +4499,9 @@ const ADIA = () => {
   const [showWelcome, setShowWelcome] = useState(() => !window.location.search.includes('projectName'));
   const [showStandby, setShowStandby] = useState(false);
 
-  // Standby Timeout Listener (30 seconds of inactivity)
+  // Standby Timeout Listener (3 minutes of inactivity)
   useEffect(() => {
-    if (showWelcome) return; // Don't trigger standby if the initial welcome/intro screen is visible
+    if (showWelcome || (typeof navigator !== 'undefined' && navigator.webdriver)) return; // Don't trigger standby if the initial welcome/intro screen is visible or in test environment
 
     let timeoutId: NodeJS.Timeout;
 
@@ -5883,7 +4509,7 @@ const ADIA = () => {
       clearTimeout(timeoutId);
       timeoutId = setTimeout(() => {
         setShowStandby(true);
-      }, 30000); // 30 seconds
+      }, 180000); // 3 minutes
     };
 
     const handleActivity = () => {
@@ -6043,7 +4669,9 @@ const ADIA = () => {
 
   const [errors, setErrors] = useState<ErrorItem[]>([]);
   const [showErrorDialog, setShowErrorDialog] = useState(false);
-  const [currentError, setCurrentError] = useState<ErrorItem | null>(null);
+  const [currentError, setCurrentError] = useState<ConnectionErrorItem | null>(null);
+  const errorDialogTriggerRef = useRef<HTMLElement | null>(null);
+  const errorDismissButtonRef = useRef<HTMLButtonElement | null>(null);
   const [showReportDialog, setShowReportDialog] = useState(false);
   const [showGlobalReportPreview, setShowGlobalReportPreview] = useState(false);
   const [globalReportData, setGlobalReportData] = useState<{ html: string, projectName: string } | null>(null);
@@ -6053,6 +4681,7 @@ const ADIA = () => {
     hmi: { id: 'hmi', title: 'HMI Dashboard', isOpen: false, isMinimized: false, isMaximized: false, pos: { x: 110, y: 110 }, size: { width: 900, height: 600 }, zIndex: 10 },
     pid: { id: 'pid', title: 'PID Tuner', isOpen: false, isMinimized: false, isMaximized: false, pos: { x: 160, y: 160 }, size: { width: 1000, height: 700 }, zIndex: 10 },
     rtm: { id: 'rtm', title: 'Requirements Traceability Matrix', isOpen: false, isMinimized: false, isMaximized: false, pos: { x: 210, y: 210 }, size: { width: 900, height: 600 }, zIndex: 10 },
+    allocation: { id: 'allocation', title: 'Allocation Matrix', isOpen: false, isMinimized: false, isMaximized: false, pos: { x: 235, y: 235 }, size: { width: 900, height: 600 }, zIndex: 10 },
     doe: { id: 'doe', title: 'DOE RSM Analysis', isOpen: false, isMinimized: false, isMaximized: false, pos: { x: 260, y: 260 }, size: { width: 1100, height: 750 }, zIndex: 10 },
   });
 
@@ -6106,24 +4735,88 @@ const ADIA = () => {
     otherDeletedIds?: string[];
   } | null>(null);
 
+  // SysML (BDD/Requirements/IBD) deletion confirmation — replaces native window.confirm/alert
+  const [pendingCreateNewTypeAction, setPendingCreateNewTypeAction] = useState<{ action: CreateNewTypeAction; candidates: import('./engine/sysml/commands/commandResult').TypeCandidate[] } | null>(null);
+
+  const [portTypePrompt, setPortTypePrompt] = useState<{
+    ownerBlockId: string;
+    portKind: CanonicalPortKind;
+    candidates: TypeCandidate[];
+    action: OwnedFeatureNewTypeAction;
+    error?: string;
+  } | null>(null);
+  // Task 7 IBD parity (spec 3.2, 4.1): canvas Part creation plans through the
+  // same surface-agnostic property planner as Model Explorer and resumes only
+  // after an explicit type choice, mirroring the portTypePrompt flow. The
+  // pending drop coordinates and name travel with the request; cancelling
+  // performs no mutation and no type is ever selected silently.
+  const [propertyTypePrompt, setPropertyTypePrompt] = useState<{
+    ownerBlockId: string;
+    x: number;
+    y: number;
+    name: string;
+    candidates: TypeCandidate[];
+    action: OwnedFeatureNewTypeAction;
+    error?: string;
+  } | null>(null);
+  const [sysmlDeleteConfirm, setSysmlDeleteConfirm] = useState<{
+    impact: import('./engine/sysml/mutations').MutationImpact;
+    transaction?: import('./services/sysmlTransactionAdapter').LegacySysmlDeletionResult;
+    elementName: string;
+    elementKind: string;
+    severity: import('./services/sysmlTransactionAdapter').ImpactSeverity;
+    onConfirm: () => void;
+  } | null>(null);
+
   const [states, setStates] = useState<StateData[]>([]);
   const [junctions, setJunctions] = useState<JunctionData[]>([]);
   const [transitions, setTransitions] = useState<TransitionData[]>([]);
   const [view, setView] = useState({ scale: 1, offsetX: 0, offsetY: 0 });
   const [gridEnabled, setGridEnabled] = useState(true);
-  const [snapEnabled, setSnapEnabled] = useState(true);
+  const [snapEnabled, setSnapEnabled] = useState(false);
 
   // Selection state (supports multiple items)
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [pendingBddBlockId, setPendingBddBlockId] = useState<string | null>(null);
+  const pendingBddBlockGestureRef = useRef<{
+    blockId: string;
+    startClientX: number;
+    startClientY: number;
+    startWorldX: number;
+    startWorldY: number;
+    ctrlKey: boolean;
+    moved: boolean;
+    dragIds: string[];
+    anchor: Point;
+    appliedDelta: Point;
+    lastClientX: number;
+    lastClientY: number;
+  } | null>(null);
   const [hoveredTransitionId, setHoveredTransitionId] = useState<string | null>(null);
 
   const [isCreatingTransition, setIsCreatingTransition] = useState(false);
   const [transitionSourceId, setTransitionSourceId] = useState<string | null>(null);
-  const [requirementConnectionPicker, setRequirementConnectionPicker] = useState<{ sourceId: string; targetId: string } | null>(null);
-  const [diagramPresentations, setDiagramPresentations] = useState<Record<string, { elementIds: string[] }>>({});
+  const [packageRelationshipTool, setPackageRelationshipTool] = useState<null | PackageRelationshipTool>(null);
+  const [packageRelationshipSourceId, setPackageRelationshipSourceId] = useState<string | null>(null);
+  const [requirementConnectionPicker, setRequirementConnectionPicker] = useState<{ sourceId: string; targetId: string; reversedKinds?: RelationshipData['type'][] } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
-  const [dragOffset, setDragOffset] = useState<Point>({ x: 0, y: 0 });
+  const dragOffsetRef = useRef<Point>({ x: 0, y: 0 });
+  const dragRawPositionsRef = useRef<Record<string, Point>>({});
+  const dragRafRef = useRef<number | null>(null);
+  const pendingDragPointRef = useRef<Point | null>(null);
+  const performDragMoveRef = useRef<((worldX: number, worldY: number) => void) | null>(null);
+  const setDiagramDragOffset = useCallback((point: Point) => {
+    dragOffsetRef.current = point;
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (dragRafRef.current !== null) {
+        cancelAnimationFrame(dragRafRef.current);
+      }
+    };
+  }, []);
   const [mousePos, setMousePos] = useState<Point>({ x: 0, y: 0 });
   const [showZoomIndicator, setShowZoomIndicator] = useState(false);
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -6132,6 +4825,13 @@ const ADIA = () => {
   const lastMousePos = useRef<Point>({ x: 0, y: 0 });
   const midDown = useRef(false);
   const rightDown = useRef(false);
+  const rightDragCopyRef = useRef<RightDragCopyState | null>(null);
+  const [smCanvasContextMenu, setSmCanvasContextMenu] = useState<{
+    x: number;
+    y: number;
+    worldX: number;
+    worldY: number;
+  } | null>(null);
 
   // Simulation state
   const [activeStates, setActiveStates] = useState<Record<string, string>>({});
@@ -6140,6 +4840,10 @@ const ADIA = () => {
   const [firedTransitions, setFiredTransitions] = useState<Record<string, number>>({});
   const simulationSessionRef = useRef<AppSimulationSession | null>(null);
   const simulationLifecycleRef = useRef(createAppSimulationLifecycle());
+  const hmiInputQueueRef = useRef(createHmiInputQueue());
+  const [hmiResetVersion, setHmiResetVersion] = useState(0);
+  const [simulationStartVersion, setSimulationStartVersion] = useState(0);
+  const [hmiSamples, setHmiSamples] = useState<Array<{ time: number; values: Record<string, number | boolean> }>>([]);
 
   // Code generation state
   const [showCodegenDialog, setShowCodegenDialog] = useState(false);
@@ -6163,24 +4867,46 @@ const ADIA = () => {
   // Tab Management State
   const [openTabs, setOpenTabs] = useState<string[]>(['statemachine']);
   const [diagramMode, setDiagramModeState] = useState<DiagramMode>('statemachine' as DiagramMode);
-  const [plantUmlDiagram, setPlantUmlDiagram] = useState<VisualDiagramModel>(() => createVisualDiagram('use-case', 'New use case diagram'));
+  const [activePackageDiagramId, setActivePackageDiagramId] = useState<string | null>(null);
+  const [activeSysmlDiagramIdState, setActiveSysmlDiagramIdState] = useState<string | null>(null);
+  const pendingSequenceSelectionRef = useRef<{ diagramId: string; elementIds: string[] } | null>(null);
+  const [diagramNavigationStack, setDiagramNavigationStack] = useState<DiagramNavigationStackEntry[]>([]);
+  // Owned diagram workspace (Task 4): exact-ID tabs shared by the tree,
+  // canvas, tab strip, and save payload. `openTabs` (legacy mode labels)
+  // stays valid as a migration source and is normalized into this state.
+  const [diagramWorkspace, setDiagramWorkspace] = useState<{ tabs: DiagramWorkspaceTab[]; activeTab: DiagramWorkspaceTab | null }>(() => {
+    const seeded = ensureDefaultSysmlDiagrams(createEmptyRepository()).repository;
+    const normalized = normalizeDiagramWorkspace(seeded, []);
+    return { tabs: normalized.tabs, activeTab: normalized.activeTab };
+  });
+  // State-machine diagrams created this session (the repository holds SysML
+  // diagrams; the root SM default is derived below via ensureRootStateMachineDiagram).
+  const [sessionStateMachineDiagrams, setSessionStateMachineDiagrams] = useState<StateMachineDiagramData[]>([]);
+  const [packageDiagramChooser, setPackageDiagramChooser] = useState<{ diagramIds: string[] } | null>(null);
+  // Cameo-style confirmation before a canvas drop/containment changes ownership.
+  // revertBounds restores the dropped symbols if the move is declined.
+  const [pendingPackageMove, setPendingPackageMove] = useState<{
+    elementIds: string[];
+    targetOwnerId: string;
+    diagramId: string;
+    revertBounds: Record<string, PresentationCoordinates>;
+  } | null>(null);
+  // Several diagrams reachable from one symbol (double-click): let the user pick.
+  const [diagramTargetChooser, setDiagramTargetChooser] = useState<{ sourceId: string; diagramIds: string[] } | null>(null);
+  const [plantUmlDiagram, setPlantUmlDiagram] = useState<VisualDiagramModel>(() => createVisualDiagram('sequence', 'New sequence diagram'));
   const syncTabRef = useRef<(mode: DiagramMode) => void>(() => {});
 
-  const setDiagramMode = useCallback((mode: DiagramMode) => {
-    setSelectedIds([]);
-    setDiagramModeState(mode);
-    setOpenTabs(prev => {
-      if (prev.includes(mode)) return prev;
-      return [...prev, mode];
-    });
-    syncTabRef.current(mode);
-  }, []);
-  const [helpInitialTopic, setHelpInitialTopic] = useState<string>("getting-started");
 
-  const handleOpenHelp = useCallback((topic?: string) => {
-    setHelpInitialTopic(topic || (diagramMode === 'entropy' ? 'entropy-opm' : 'getting-started'));
+  const [helpInitialTopic, setHelpInitialTopic] = useState<string>("getting-started");
+  const [helpInitialSection, setHelpInitialSection] = useState<string | undefined>();
+
+  const handleOpenHelp = useCallback((topic?: string, section?: string) => {
+    setHelpInitialTopic(topic || resolveModuleHelp(diagramMode));
+    setHelpInitialSection(section);
     setShowHelpModal(true);
   }, [diagramMode]);
+
+  useContextualHelp(diagramMode, handleOpenHelp);
 
   const [activePropTab, setActivePropTab] = useState<'general' | 'assign' | 'governance'>('general');
 
@@ -6201,61 +4927,460 @@ const ADIA = () => {
     faultInjections: {},
     log: []
   });
-  const [blocks, setBlocks] = useState<BlockData[]>([]);
-  const [relationships, setRelationships] = useState<RelationshipData[]>([]);
-  const [parts, setParts] = useState<PartData[]>([]);
-  const [connectors, setConnectors] = useState<ConnectorData[]>([]);
-  const [canonicalSysmlRepository, setCanonicalSysmlRepository] = useState(createEmptyRepository);
-  const [sysmlStore, setSysmlStore] = useState(() => fromRepository(createEmptyRepository()));
-
-  // The legacy diagram editors still expose array setters. Keep the canonical
-  // store current until every editor has been migrated to gateway commands.
-  // The debounce prevents pointer-move events from rebuilding the store on
-  // every frame, while the revision is advanced only for a settled edit.
+  const pendingPresentationUpdatesRef = useRef<Map<string, PresentationCoordinates>>(new Map());
+  const presentationDraftsRef = useRef<Record<string, PresentationCoordinates>>({});
+  const [presentationDrafts, setPresentationDrafts] = useState<Record<string, PresentationCoordinates>>({});
+  const updatePresentationDraft = useCallback((id: string, presentation: PresentationCoordinates) => {
+    const next = { ...(presentationDraftsRef.current[id] ?? {}), ...presentation };
+    presentationDraftsRef.current = { ...presentationDraftsRef.current, [id]: next };
+    setPresentationDrafts(presentationDraftsRef.current);
+  }, []);
+  const isDraggingRef = useRef(false);
+  const isResizingRef = useRef(false);
   useEffect(() => {
-    if (isDragging) return;
-    const timer = setTimeout(() => {
-      setCanonicalSysmlRepository(previous => {
-        const next = mergeLegacyDiagramIntoRepository(previous, {
-          blocks,
-          parts,
-          connectors,
-          relationships,
-        });
-        setSysmlStore(current => fromRepository(
-          next,
-          Object.fromEntries(current.coordinates.entries()),
-          Object.fromEntries(current.diagramPresentations.entries()),
-        ));
-        return next;
+    isDraggingRef.current = isDragging;
+  }, [isDragging]);
+  const [canonicalSysmlRepository, setCanonicalSysmlRepository] = useState(() => ensureDefaultSysmlDiagrams(createEmptyRepository()).repository);
+  const [sysmlStore, setSysmlStore] = useState(() => fromRepository(ensureDefaultSysmlDiagrams(createEmptyRepository()).repository));
+  // Upgrade report of a project opened from an older model format; shown to the user, never applied silently.
+  const [sysmlUpgrade, setSysmlUpgrade] = useState<{ report: V5UpgradeReport; backupPath: string | null; backupError: string | null } | null>(null);
+  const pendingUpgradeBackupRef = useRef<{ path: string | null; error: string | null }>({ path: null, error: null });
+  const sysmlGatewayStateRef = useRef(createSysmlGatewayState(ensureDefaultSysmlDiagrams(createEmptyRepository()).repository));
+  const pendingHydrationSequenceRef = useRef(0);
+  const committedHydrationSequenceRef = useRef(0);
+  const [hydrationCommitSequence, setHydrationCommitSequence] = useState(0);
+  useEffect(() => {
+    committedHydrationSequenceRef.current = hydrationCommitSequence;
+  }, [hydrationCommitSequence]);
+  const sysmlCoordinates = useMemo(
+    () => Object.fromEntries(sysmlStore.coordinates.entries()),
+    [sysmlStore],
+  );
+  const sysmlDiagramPresentations = useMemo(
+    () => Object.fromEntries(sysmlStore.diagramPresentations.entries()),
+    [sysmlStore],
+  );
+  const selectedPackageDiagram = activePackageDiagramId ? canonicalSysmlRepository.diagrams[activePackageDiagramId] : undefined;
+  const fallbackPackageDiagramId = Object.values(canonicalSysmlRepository.diagrams)
+    .find(diagram => diagram.diagramKind === 'package')?.id;
+  const activeIbdDiagram = activeSysmlDiagramIdState ? canonicalSysmlRepository.diagrams[activeSysmlDiagramIdState] : undefined;
+  const isMatchingIbdDiagram = activeIbdDiagram?.diagramKind === 'ibd' &&
+    (activeIbdDiagram.contextElementId === currentLayerId || activeIbdDiagram.ownerId === currentLayerId);
+  const matchingIbdDiagram = Object.values(canonicalSysmlRepository.diagrams).find(
+    d => d.diagramKind === 'ibd' && (d.contextElementId === currentLayerId || d.ownerId === currentLayerId)
+  );
+  const activeSysmlDiagramId: string = diagramMode === 'ibd'
+    ? ((isMatchingIbdDiagram && activeSysmlDiagramIdState) ? activeSysmlDiagramIdState : matchingIbdDiagram ? matchingIbdDiagram.id : currentLayerId)
+    : diagramMode === 'package' ? (selectedPackageDiagram?.diagramKind === 'package' ? selectedPackageDiagram.id : fallbackPackageDiagramId ?? '')
+    : (activeSysmlDiagramIdState && canonicalSysmlRepository.diagrams[activeSysmlDiagramIdState]?.diagramKind === diagramMode)
+      ? activeSysmlDiagramIdState
+      : Object.values(canonicalSysmlRepository.diagrams).find(d => d.diagramKind === diagramMode)?.id ?? diagramMode;
+
+  const sysmlCanvasProjection = useMemo(
+    () => projectActiveDiagram(sysmlStore, activeSysmlDiagramId),
+    [sysmlStore, activeSysmlDiagramId],
+  );
+  const { packages, blocks, relationships, parts, connectors } = sysmlCanvasProjection;
+
+  // Behavior default for the tree projection (Task 3 note): the unified
+  // projection only renders state-machine diagrams supplied by App state, so
+  // the root default is seeded here from the live layers. Idempotent and
+  // session diagrams created via the explorer are preserved.
+  const seededStateMachineDiagrams = useMemo(() => ensureRootStateMachineDiagram({
+    states,
+    layers,
+    transitions,
+    junctions,
+    diagrams: sessionStateMachineDiagrams,
+  }).diagrams ?? [], [states, layers, transitions, junctions, sessionStateMachineDiagrams]);
+
+  // Single exact-ID open path (Task 4) for creation, tree double-click, mode
+  // switching, and tabs. Rejected/unknown IDs return false and mutate
+  // nothing: no tab is synthesized for a failed command.
+  const openExactDiagramByIdImmediate = useCallback((diagramId: string, options?: { preserveReturnStack?: boolean; pushOrigin?: boolean; workspaceAlreadyUpdated?: boolean }) => {
+    const currentRepo = sysmlGatewayStateRef.current?.repository ?? canonicalSysmlRepository;
+    const context = resolveExactDiagramCanvasContext(diagramId, currentRepo, {
+      states, layers, transitions, junctions, diagrams: seededStateMachineDiagrams,
+    });
+    if (!context) return false;
+    setCurrentLayerId(context.layerId);
+    setLayerStack(context.layerStack);
+    setLayerPath(context.layerPath);
+    const smDiagram = seededStateMachineDiagrams.find(diagram => diagram.id === diagramId);
+    if (smDiagram) {
+      const smTab: DiagramWorkspaceTab = { kind: 'stateMachineDiagram', diagramId, contextRegionId: smDiagram.contextRegionId };
+      if (!options?.workspaceAlreadyUpdated) {
+        setDiagramWorkspace(previous => ({
+          tabs: openDiagramWorkspaceTab(previous.tabs, smTab),
+          activeTab: smTab,
+        }));
+      }
+      setSelectedIds([]);
+      setPackageRelationshipTool(null);
+      setPackageRelationshipSourceId(null);
+      setDiagramModeState('statemachine');
+      return true;
+    }
+    const diagram = currentRepo.diagrams[diagramId];
+    if (!diagram) return false;
+    const currentActiveId = activeSysmlDiagramIdState || activeSysmlDiagramId;
+    const baseStack = options?.preserveReturnStack ? diagramNavigationStack : [];
+    const returnStack = options?.pushOrigin
+      ? [...baseStack, {
+        diagramId: currentActiveId,
+        diagramKind: diagramMode,
+        contextElementId: undefined,
+        name: currentRepo.diagrams[currentActiveId]?.name,
+      }]
+      : baseStack;
+    const nav = openExactDiagram(
+      {
+        activeDiagramId: currentActiveId,
+        diagramKind: diagramMode,
+        contextElementId: diagramMode === 'ibd' ? currentLayerId : undefined,
+        returnStack,
+      },
+      currentRepo,
+      diagramId,
+    );
+    const workspaceTab: DiagramWorkspaceTab = { kind: 'sysmlDiagram', diagramId };
+    if (!options?.workspaceAlreadyUpdated) {
+      setDiagramWorkspace(previous => ({
+        tabs: openDiagramWorkspaceTab(previous.tabs, workspaceTab),
+        activeTab: workspaceTab,
+      }));
+    }
+    setActiveSysmlDiagramIdState(nav.activeDiagramId);
+    setDiagramNavigationStack(nav.returnStack);
+    setSelectedIds([]);
+    setPackageRelationshipTool(null);
+    setPackageRelationshipSourceId(null);
+    if (diagram.diagramKind === 'package') {
+      setActivePackageDiagramId(diagramId);
+    }
+    if (nav.diagramKind !== diagramMode) {
+      setDiagramModeState(nav.diagramKind as DiagramMode);
+    }
+    return true;
+  }, [seededStateMachineDiagrams, canonicalSysmlRepository, states, layers, transitions, junctions, activeSysmlDiagramIdState, activeSysmlDiagramId, diagramMode, currentLayerId, diagramNavigationStack]);
+
+  const openExactDiagramById = useCallback((...args: Parameters<typeof openExactDiagramByIdImmediate>) => {
+    let opened = false;
+    startTransition(() => { opened = openExactDiagramByIdImmediate(...args); });
+    return opened;
+  }, [openExactDiagramByIdImmediate]);
+
+  const openCanvasSymbolDiagram = useCallback((semanticId: string): boolean => {
+    const diagramIds = resolveCanvasSymbolDiagramTargets(semanticId, canonicalSysmlRepository, {
+      states, layers, transitions, junctions, diagrams: seededStateMachineDiagrams,
+    });
+    // Several SysML diagrams reachable from one Package Diagram symbol: let
+    // the user choose. (Elsewhere, e.g. a BDD block, an ambiguous target
+    // keeps falling through to the caller's default, such as entering the IBD.)
+    if (diagramMode === 'package' && diagramIds.length > 1 && diagramIds.every(id => canonicalSysmlRepository.diagrams[id])) {
+      setDiagramTargetChooser({ sourceId: semanticId, diagramIds });
+      return true;
+    }
+    if (diagramIds.length !== 1) return false;
+    const diagramId = diagramIds[0];
+    // Every drill-down from a SysML diagram records where it came from, so
+    // Back returns to it (previously only IBD entries did). The IBD-to-IBD
+    // layer path keeps its own breadcrumb stack.
+    const currentActiveId = activeSysmlDiagramIdState || activeSysmlDiagramId;
+    const fromSysmlDiagram = diagramMode !== 'statemachine' && diagramMode !== 'ibd' && Boolean(canonicalSysmlRepository.diagrams[currentActiveId]);
+    const diagram = canonicalSysmlRepository.diagrams[diagramId];
+    const pushOrigin = (diagram?.diagramKind === 'ibd' && diagramMode !== 'ibd') || (fromSysmlDiagram && diagramId !== currentActiveId);
+    return openExactDiagramById(diagramId, pushOrigin ? { pushOrigin: true, preserveReturnStack: true } : undefined);
+  }, [canonicalSysmlRepository, states, layers, transitions, junctions, seededStateMachineDiagrams, openExactDiagramById, diagramMode, activeSysmlDiagramIdState, activeSysmlDiagramId]);
+
+  const setDiagramMode = useCallback((mode: DiagramMode) => {
+    setSelectedIds([]);
+    setPackageRelationshipTool(null);
+    setPackageRelationshipSourceId(null);
+    if (mode !== 'ibd') {
+      setCurrentLayerId('root');
+      setLayerStack([]);
+      setLayerPath(['Root']);
+      setDiagramNavigationStack([]);
+      const currentRepo = sysmlGatewayStateRef.current?.repository ?? canonicalSysmlRepository;
+      const targetDiagramId = mode === 'package'
+        ? (activePackageDiagramId && currentRepo.diagrams[activePackageDiagramId]?.diagramKind === 'package'
+            ? activePackageDiagramId
+            : Object.values(currentRepo.diagrams).find((d: any) => d?.diagramKind === 'package')?.id ?? 'package')
+        : (Object.values(currentRepo.diagrams).find((d: any) => d?.diagramKind === mode)?.id ?? (['bdd', 'requirements', 'package', 'rtm'].includes(mode) ? mode : null));
+      if (targetDiagramId && currentRepo.diagrams[targetDiagramId]) {
+        openExactDiagramById(targetDiagramId, { preserveReturnStack: true });
+      } else if (targetDiagramId) {
+        // Legacy-compatible pseudo-ID path (no real diagram yet): keep the
+        // previous selection so the recovery effect can resolve it.
+        setActiveSysmlDiagramIdState(targetDiagramId);
+      }
+    }
+    setDiagramModeState(mode);
+    setOpenTabs(prev => {
+      if (prev.includes(mode)) return prev;
+      return [...prev, mode];
+    });
+    syncTabRef.current(mode);
+  }, [canonicalSysmlRepository, activePackageDiagramId, openExactDiagramById]);
+
+  useEffect(() => {
+    const nav = recoverNavigationState(
+      {
+        activeDiagramId: activeSysmlDiagramIdState || activeSysmlDiagramId,
+        diagramKind: diagramMode,
+        contextElementId: diagramMode === 'ibd' ? currentLayerId : undefined,
+        returnStack: diagramNavigationStack,
+      },
+      canonicalSysmlRepository,
+    );
+    if (activeSysmlDiagramIdState && nav.activeDiagramId !== activeSysmlDiagramIdState) {
+      setActiveSysmlDiagramIdState(nav.activeDiagramId);
+    }
+    if (nav.returnStack.length !== diagramNavigationStack.length) {
+      setDiagramNavigationStack(nav.returnStack);
+    }
+  }, [canonicalSysmlRepository]);
+  // Nested parts on the IBD: a part's own parts are drawn inside its symbol (one level by default).
+  const [showNestedParts, setShowNestedParts] = useState(true);
+  const [nestedPartDepth, setNestedPartDepth] = useState(DEFAULT_NESTED_PART_DEPTH);
+  const sysmlCanvasView = useMemo(() => {
+    const scoped = projectDiagramScopedCanvasView(
+      { packages, blocks, relationships, parts, connectors },
+      activeSysmlDiagramId,
+      sysmlDiagramPresentations,
+      diagramMode === 'ibd' ? [currentLayerId] : [],
+      presentationDrafts,
+    );
+    if (diagramMode !== 'ibd') return scoped;
+    return { ...scoped, parts: layoutIbdNestedParts(canonicalSysmlRepository, currentLayerId, scoped.parts, { enabled: showNestedParts, depth: nestedPartDepth }) };
+  }, [packages, blocks, relationships, parts, connectors, activeSysmlDiagramId, sysmlDiagramPresentations, diagramMode, currentLayerId, presentationDrafts, canonicalSysmlRepository, showNestedParts, nestedPartDepth]);
+  const semanticOwnerOf = useCallback((id: string): string | undefined =>
+    canonicalSysmlRepository.packages[id]?.ownerId
+      ?? canonicalSysmlRepository.definitions[id]?.ownerId
+      ?? canonicalSysmlRepository.requirements[id]?.ownerId
+      ?? canonicalSysmlRepository.verificationCases[id]?.ownerId,
+  [canonicalSysmlRepository]);
+  // Package Diagram nesting geometry (live, including in-progress drag drafts).
+  const packageNestingNodes = useMemo((): NestingNode[] => diagramMode !== 'package' ? [] : [
+    ...sysmlCanvasView.packages.map(pkg => ({
+      id: pkg.id, ownerId: semanticOwnerOf(pkg.id), x: pkg.x, y: pkg.y, width: pkg.width, height: pkg.height, isPackage: true,
+    })),
+    ...sysmlCanvasView.blocks.map(block => {
+      const bounds = computeBlockDisplayBounds(block);
+      return { id: block.id, ownerId: semanticOwnerOf(block.id), x: block.x, y: block.y, width: bounds.width, height: bounds.height, isPackage: false };
+    }),
+  ], [diagramMode, sysmlCanvasView.packages, sysmlCanvasView.blocks, semanticOwnerOf]);
+  // Diagram shortcut symbols on a Package Diagram (Cameo "navigation map").
+  const diagramShortcuts = useMemo(() => {
+    if (diagramMode !== 'package') return [];
+    const presentation = sysmlDiagramPresentations[activeSysmlDiagramId];
+    return (presentation?.elementIds ?? [])
+      .filter(id => id !== activeSysmlDiagramId && canonicalSysmlRepository.diagrams[id])
+      .map(id => {
+        const bounds = { ...(presentation?.presentations[id]?.bounds ?? {}), ...(presentationDrafts[id] ?? {}) };
+        return {
+          id,
+          diagram: canonicalSysmlRepository.diagrams[id],
+          x: bounds.x ?? 80,
+          y: bounds.y ?? 80,
+          width: bounds.width ?? 160,
+          height: 56,
+        };
       });
-    }, 250);
-    return () => clearTimeout(timer);
-  }, [blocks, parts, connectors, relationships, isDragging]);
+  }, [diagramMode, sysmlDiagramPresentations, activeSysmlDiagramId, canonicalSysmlRepository, presentationDrafts]);
+  // Explicit per-baseline deletion authorizations granted from the governance
+  // panel. Projection-only state: it never mutates semantics by itself; the
+  // gateway still requires a confirmed impact hash for destructive mutations.
+  const [authorizedBaselineIds, setAuthorizedBaselineIds] = useState<string[]>([]);
+
+  // SysML Application Delegate connected to the canonical command gateway
+  const sysmlApplicationDelegate = useMemo<SysmlApplicationDelegate>(() => {
+    return createSysmlDelegate({
+      getState: () => ({ ...sysmlGatewayStateRef.current }),
+      setState: (nextState) => {
+        sysmlGatewayStateRef.current = { ...sysmlGatewayStateRef.current, ...nextState };
+        setCanonicalSysmlRepository(nextState.repository);
+        if (nextState.store) {
+          setSysmlStore(nextState.store);
+        }
+      },
+      onStateChange: () => {},
+    });
+  }, [canonicalSysmlRepository, sysmlStore]);
+
+  const externalEndpointContext = useMemo<SemanticEndpointContext>(() => {
+    const map = new Map<string, ExternalSemanticEndpoint>();
+    for (const s of states) {
+      map.set(s.id, { id: s.id, name: s.name, family: 'state' });
+    }
+    return { externalEndpoints: map };
+  }, [states]);
+
+  const handleExecuteSysmlCommand = useCallback((cmd: SysmlEditorCommand) => {
+    const currentRepo = sysmlGatewayStateRef.current?.repository ?? canonicalSysmlRepository;
+    const currentStore = sysmlGatewayStateRef.current?.store ?? sysmlStore;
+    const currentCoords = sysmlGatewayStateRef.current?.coordinates ?? Object.fromEntries(currentStore.coordinates.entries());
+    const currentDiagPres = sysmlGatewayStateRef.current?.diagramPresentations ?? Object.fromEntries(currentStore.diagramPresentations.entries());
+    const currentState = {
+      ...sysmlGatewayStateRef.current,
+      repository: currentRepo,
+      store: currentStore,
+      coordinates: currentCoords,
+      diagramPresentations: currentDiagPres,
+      context: externalEndpointContext,
+    };
+    const result = executeSysmlCommand(currentState, cmd, activeSysmlDiagramId, externalEndpointContext);
+    if (result.committed) {
+      sysmlGatewayStateRef.current = { ...currentState, ...result, context: externalEndpointContext };
+      startTransition(() => {
+        setCanonicalSysmlRepository(result.repository);
+        setSysmlStore(result.store ? { ...result.store } : fromRepository(result.repository, result.coordinates, result.diagramPresentations));
+      });
+    }
+    return result;
+  }, [canonicalSysmlRepository, sysmlStore, externalEndpointContext, activeSysmlDiagramId]);
+
+  // The gateway deletes in two phases: an unconfirmed deleteElements returns
+  // only an impact preview (committed: false, no diagnostics), and commits
+  // once re-sent with that impact's hash. Callers reach this after the user
+  // has already reviewed the impact (or none was needed), so it completes the
+  // second phase — except when an unauthorized baseline is affected, which
+  // must stay blocked.
+  const executeConfirmedDeletion = useCallback((elementIds: string[]) => {
+    const command = { type: 'deleteElements' as const, elementIds, authorizedBaselineIds };
+    const preflight = handleExecuteSysmlCommand(command);
+    if (preflight.committed || !preflight.impact) return preflight;
+    if (impactSeverity(preflight.impact, authorizedBaselineIds) === 'blocked') {
+      return {
+        ...preflight,
+        diagnostics: preflight.diagnostics.length > 0 ? preflight.diagnostics : [{
+          severity: 'error' as const,
+          code: 'DELETE_BLOCKED_BY_BASELINE',
+          message: 'Deletion is blocked: it affects a protected baseline that has not been authorized.',
+        }],
+      };
+    }
+    return handleExecuteSysmlCommand({ ...command, confirmedImpactHash: computeImpactHash(preflight.impact) });
+  }, [handleExecuteSysmlCommand, authorizedBaselineIds]);
+
+  const applyCanonicalProjectLoad = useCallback((loaded: ReturnType<typeof loadCanonicalSysmlProject>) => {
+    if (!loaded.valid) throw new Error(`Canonical SysML repository failed validation: ${loaded.diagnostics.map(item => item.code).join(', ')}`);
+    // Owned-diagram bootstrap (Task 4): missing defaults are created
+    // idempotently before any projection/store is derived, so the tree,
+    // canvas, and workspace tabs resolve the same exact IDs.
+    const repository = ensureDefaultSysmlDiagrams(loaded.repository).repository;
+    const store = (loaded as any).store ?? fromRepository(repository, loaded.coordinates, loaded.diagramPresentations);
+    sysmlGatewayStateRef.current = createSysmlGatewayState(repository, loaded.coordinates, loaded.diagramPresentations, undefined, undefined, store);
+    sysmlGatewayStateRef.current.store = store;
+    setCanonicalSysmlRepository(repository);
+    setSysmlStore(store);
+    if (loaded.upgradeReport) {
+      setSysmlUpgrade({
+        report: loaded.upgradeReport,
+        backupPath: pendingUpgradeBackupRef.current.path,
+        backupError: pendingUpgradeBackupRef.current.error,
+      });
+    }
+    pendingUpgradeBackupRef.current = { path: null, error: null };
+    return repository;
+  }, []);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as any).__sysmlExecuteCommand = handleExecuteSysmlCommand;
+      (window as any).__sysmlExecuteConfirmedDeletion = executeConfirmedDeletion;
+      (window as any).__setActivePackageDiagramId = setActivePackageDiagramId;
+      (window as any).__setActiveSysmlDiagramId = openExactDiagramById;
+      try {
+        Object.defineProperty(window, '__sysmlRepository', {
+          get: () => sysmlGatewayStateRef.current?.repository ?? canonicalSysmlRepository,
+          configurable: true,
+        });
+      } catch {
+        (window as any).__sysmlRepository = canonicalSysmlRepository;
+      }
+    }
+  }, [handleExecuteSysmlCommand, canonicalSysmlRepository, openExactDiagramById]);
+
+  // Task 7 browser-gate read access (spec 6, 8.3): stable test selectors for
+  // the real save/reload path. These hooks expose production state only —
+  // the semantic token resolver and the live diagram-presentation store — so
+  // browser tests can assert token roles and override preservation without
+  // substituting the save/hydration path. They never mutate state.
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as any).__adiaTestHooks = {
+        getRenderedSysmlRevision: () => canonicalSysmlRepository.revision,
+        getRenderedHydrationSequence: () => hydrationCommitSequence,
+        getPendingHydrationSequence: () => pendingHydrationSequenceRef.current,
+        getRenderedDefinitionCount: () => Object.keys(canonicalSysmlRepository.definitions).length,
+        semanticToken: (role: string) => semanticPresentationToken(role),
+        getDiagramPresentations: () => sysmlDiagramPresentations,
+        getActiveDiagramId: () => activeSysmlDiagramId,
+        getDiagramMode: () => (diagramMode === 'statemachine' ? 'stateMachine' : diagramMode),
+        getNavigationStack: () => diagramNavigationStack,
+        getDiagramWorkspace: () => diagramWorkspace,
+      };
+    }
+  }, [canonicalSysmlRepository, hydrationCommitSequence, sysmlDiagramPresentations, activeSysmlDiagramId, diagramMode, diagramNavigationStack, diagramWorkspace]);
+
+  // Report Application Delegate connected to the real report export pipeline
+  const reportApplicationDelegate = useMemo<ReportApplicationDelegate>(() => {
+    return createReportDelegate({
+      getProjectData: () => ({
+        projectId: 'ADIA_Project',
+        modelRevision: canonicalSysmlRepository.revision,
+        blocks,
+        relationships,
+      }),
+      outputDir: './reports',
+    });
+  }, [canonicalSysmlRepository.revision, blocks, relationships]);
+
 
   const blocksById = useMemo(() => {
     const map = new Map<string, BlockData>();
+    if (diagramMode === 'ibd') {
+      const typeIds = new Set([currentLayerId]);
+      for (const part of sysmlCanvasView.parts) {
+        if (part.typeId) typeIds.add(part.typeId);
+      }
+      for (const block of projectNormalizedDiagram(sysmlStore, undefined, [...typeIds]).blocks) {
+        map.set(block.id, block);
+      }
+    }
     for (const b of blocks) {
       map.set(b.id, b);
     }
+    for (const b of sysmlCanvasView.blocks) {
+      map.set(b.id, b);
+    }
     return map;
-  }, [blocks]);
+  }, [blocks, sysmlCanvasView.blocks, sysmlCanvasView.parts, sysmlStore, diagramMode, currentLayerId]);
 
   const partsById = useMemo(() => {
     const map = new Map<string, PartData>();
     for (const p of parts) {
       map.set(p.id, p);
     }
-    return map;
-  }, [parts]);
-
-  const partTypeIds = useMemo(() => {
-    const set = new Set<string>();
-    for (const p of parts) {
-      if (p.typeId) set.add(p.typeId);
+    for (const p of sysmlCanvasView.parts) {
+      map.set(p.id, p);
     }
-    return set;
-  }, [parts]);
+    return map;
+  }, [parts, sysmlCanvasView.parts]);
+
+  const activeDiagramElementIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const b of sysmlCanvasView.blocks) {
+      ids.add(b.id);
+      for (const prop of b.properties ?? []) ids.add(prop.id);
+      for (const port of b.ports ?? []) ids.add(port.id);
+    }
+    for (const p of sysmlCanvasView.parts) ids.add(p.id);
+    for (const pkg of sysmlCanvasView.packages) ids.add(pkg.id);
+    return ids;
+  }, [sysmlCanvasView.blocks, sysmlCanvasView.parts, sysmlCanvasView.packages]);
 
   const diagramViewport = useMemo(() => {
     const rect = canvasRef.current?.getBoundingClientRect();
@@ -6267,27 +5392,24 @@ const ADIA = () => {
   const culledDiagram = useMemo(() => {
     const limits = loadStoredPerformanceLimits();
     const threshold = limits.virtualizationThreshold ?? 150;
-    if (!limits.forcePerformanceMode && blocks.length < threshold && parts.length < threshold) {
+    if (!limits.forcePerformanceMode && sysmlCanvasView.blocks.length < threshold && sysmlCanvasView.parts.length < threshold) {
       return null;
     }
-    return cullElements(diagramViewport, blocks, relationships, parts, connectors, undefined, 500, {
+    return cullElements(diagramViewport, sysmlCanvasView.blocks, sysmlCanvasView.relationships, sysmlCanvasView.parts, sysmlCanvasView.connectors, undefined, 500, {
       storeRevision: sysmlStore.revision,
       ibdContextBlockId: currentLayerId,
     });
-  }, [diagramViewport, blocks, relationships, parts, connectors, sysmlStore.revision, currentLayerId]);
+  }, [diagramViewport, sysmlCanvasView, sysmlStore.revision, currentLayerId]);
 
-  // Schedule large validation asynchronously after edits with revision-based cancellation
-  useEffect(() => {
-    if (blocks.length === 0 && parts.length === 0) return;
-    const cancel = getDefaultSysmlWorkerClient().scheduleValidation(
-      sysmlStore,
-      sysmlStore.revision,
-      () => {
-        // Validation completed in worker thread without blocking UI
-      }
-    );
-    return cancel;
-  }, [sysmlStore.revision]);
+  const requirementsDiagramScope = useMemo(
+    () => getRequirementsDiagramScope(
+      blocks,
+      relationships,
+      currentLayerId,
+      new Set((sysmlDiagramPresentations[activeSysmlDiagramId] ?? sysmlDiagramPresentations.requirements)?.elementIds ?? []),
+    ),
+    [blocks, relationships, currentLayerId, activeSysmlDiagramId, sysmlDiagramPresentations],
+  );
 
   const [showSysmlDiagnostics, setShowSysmlDiagnostics] = useState(false);
   const [interfaceRealizations, setInterfaceRealizations] = useState<InterfaceRealizationData[]>([]);
@@ -6301,6 +5423,16 @@ const ADIA = () => {
   // Global X-Bridges persistence
   const [globalXBridgesNodes, setGlobalXBridgesNodes] = useState<any[]>([]);
   const [globalXBridgesEdges, setGlobalXBridgesEdges] = useState<any[]>([]);
+  const globalXBridgesNodesRef = useRef<any[]>(globalXBridgesNodes);
+  const globalXBridgesEdgesRef = useRef<any[]>(globalXBridgesEdges);
+
+  useEffect(() => {
+    globalXBridgesNodesRef.current = globalXBridgesNodes;
+  }, [globalXBridgesNodes]);
+
+  useEffect(() => {
+    globalXBridgesEdgesRef.current = globalXBridgesEdges;
+  }, [globalXBridgesEdges]);
 
   // V-Lab STATE
   const [vlabNodes, setVlabNodes] = useState<any[]>([]);
@@ -6316,13 +5448,70 @@ const ADIA = () => {
   // FACTORY I/O GATEWAY STATE
   const [showFactoryIOGateway, setShowFactoryIOGateway] = useState(false);
   const [factoryIOMapping, setFactoryIOMapping] = useState<{ adiaVarId: string, factoryTagId: string | number, type: 'sensor' | 'actuator' }[]>([]);
-  const [factoryIOEnabled, setFactoryIOEnabled] = useState(true);
+  const [factoryIOEnabled, setFactoryIOEnabled] = useState(false);
   const [factoryIOStatus, setFactoryIOStatus] = useState<'connected' | 'disconnected' | 'error'>('disconnected');
 
   // Multi-File and Tab Management State
   const [workspaceFiles, setWorkspaceFiles] = useState<WorkspaceFile[]>([]);
   const [openTabIds, setOpenTabIds] = useState<string[]>([]);
   const [activeFileId, setActiveFileId] = useState<string>('');
+  const moduleWorkspaceFiles = useMemo(() => openTabIds
+    .map(tabId => workspaceFiles.find(file => file.id === tabId))
+    .filter((file): file is WorkspaceFile => file !== undefined)
+    .filter(file => !['bdd', 'requirements', 'ibd', 'package'].includes(file.type)),
+  [openTabIds, workspaceFiles]);
+
+  /**
+   * True when this exact-ID diagram view is the one the canvas renders. Diagram
+   * tabs and workspace-file tabs used to carry independent "active" signals,
+   * which left a second, stale tab highlighted beside the rendered one.
+   */
+  const isDiagramWorkspaceTabRendered = useCallback((tab: DiagramWorkspaceTab): boolean => {
+    if (tab.kind === 'stateMachineDiagram') {
+      const diagram = seededStateMachineDiagrams.find(candidate => candidate.id === tab.diagramId);
+      return diagramMode === 'statemachine' && diagram?.contextRegionId === currentLayerId;
+    }
+    if (tab.kind !== 'sysmlDiagram') return false;
+    const diagramKind = canonicalSysmlRepository.diagrams[tab.diagramId]?.diagramKind;
+    if (!diagramKind || diagramKind !== diagramMode) return false;
+    const renderedDiagramId = canonicalSysmlRepository.diagrams[activeSysmlDiagramId]
+      ? activeSysmlDiagramId
+      : null;
+    return renderedDiagramId === null || renderedDiagramId === tab.diagramId;
+  }, [activeSysmlDiagramId, canonicalSysmlRepository, diagramMode, seededStateMachineDiagrams, currentLayerId]);
+
+  /**
+   * The one active tab of the unified strip: an explicitly opened diagram view
+   * wins while it is rendered, otherwise the workspace file whose canvas is
+   * showing. Falls back to the last opened diagram view so the strip never
+   * renders with no active tab at all.
+   */
+  const activeWorkspaceTab = useMemo((): { key: string; diagramView: boolean } => {
+    const activeTab = diagramWorkspace.activeTab;
+    if (activeTab && isDiagramWorkspaceTabRendered(activeTab)) {
+      return { key: diagramWorkspaceTabKey(activeTab), diagramView: true };
+    }
+    const moduleFile = moduleWorkspaceFiles.find(file => file.id === activeFileId);
+    if (moduleFile) {
+      return { key: moduleWorkspaceTabKey(moduleFile.id), diagramView: false };
+    }
+    const renderedTab = diagramWorkspace.tabs.find(isDiagramWorkspaceTabRendered);
+    if (renderedTab) {
+      return { key: diagramWorkspaceTabKey(renderedTab), diagramView: true };
+    }
+    return activeTab
+      ? { key: diagramWorkspaceTabKey(activeTab), diagramView: true }
+      : { key: '', diagramView: false };
+  }, [activeFileId, diagramWorkspace, isDiagramWorkspaceTabRendered, moduleWorkspaceFiles]);
+
+  const hierarchyExternalModels = useMemo(() => workspaceFiles
+    .filter(file => file.type === 'xbridges' || file.type === 'vlab')
+    .map(file => ({
+      id: file.id,
+      name: file.name,
+      domain: file.type as 'xbridges' | 'vlab',
+      diagramId: file.id,
+    })), [workspaceFiles]);
   const [showWorkspaceFileDialog, setShowWorkspaceFileDialog] = useState(false);
   const [sharedClipboard, setSharedClipboard] = useState<{
     nodes: any[];
@@ -6343,17 +5532,11 @@ const ADIA = () => {
         };
       case 'bdd':
         return { blocks: blocks.filter(b => b.stereotype !== 'requirement'), relationships, customStereotypes };
-      case 'requirements': {
-        const reqRelEndpoints = new Set(
-          relationships
-            .filter(r => r.type === 'satisfy' || r.type === 'deriveReqt' || r.type === 'verify' || r.type === 'refine' || r.type === 'derive' || r.type === 'requirementContainment' || r.type === 'copy' || r.type === 'trace')
-            .flatMap(r => [r.sourceId, r.targetId])
-        );
+      case 'requirements':
         return {
-          blocks: blocks.filter(b => b.stereotype === 'requirement' || reqRelEndpoints.has(b.id)),
-          relationships,
+          blocks: blocks.filter(b => requirementsDiagramScope.visibleBlockIds.has(b.id)),
+          relationships: relationships.filter(r => requirementsDiagramScope.visibleRelationshipIds.has(r.id)),
         };
-      }
       case 'ibd':
         return { parts, connectors, interfaceRealizations };
       case 'xbridges':
@@ -6375,7 +5558,8 @@ const ADIA = () => {
     states, junctions, transitions, layers, variables, view, tickMs, safetyMode,
     blocks, relationships, customStereotypes, parts, connectors, interfaceRealizations,
     globalXBridgesNodes, globalXBridgesEdges, vlabNodes, vlabEdges, hilConfig,
-    entropyNodes, entropyEdges, opmSimulationConfig, hmiComponents, headers, data, activeModel, taguchiConfig, results
+    entropyNodes, entropyEdges, opmSimulationConfig, hmiComponents, headers, data, activeModel, taguchiConfig, results,
+    requirementsDiagramScope,
   ]);
 
   // Helper to save current active file state into workspaceFiles list
@@ -6418,19 +5602,10 @@ const ADIA = () => {
           setStates([]); setJunctions([]); setTransitions([]); setLayers([]); setVariables([]);
           break;
         case 'bdd':
-          setBlocks(prev => prev.filter(b => b.stereotype === 'requirement'));
-          setRelationships(prev => prev.filter(r => 
-            r.type === 'deriveReqt' || r.type === 'derive' || r.type === 'refine' || r.type === 'satisfy' || r.type === 'verify' || r.type === 'trace'
-          ));
-          break;
         case 'requirements':
-          setBlocks(prev => prev.filter(b => b.stereotype !== 'requirement'));
-          setRelationships(prev => prev.filter(r => 
-            r.type !== 'deriveReqt' && r.type !== 'derive' && r.type !== 'refine' && r.type !== 'satisfy' && r.type !== 'verify' && r.type !== 'trace'
-          ));
-          break;
         case 'ibd':
-          setParts([]); setConnectors([]); setInterfaceRealizations([]);
+          // Diagram tabs are viewpoints over the canonical repository; an
+          // empty tab must not erase shared semantic model elements.
           break;
         case 'xbridges':
           setGlobalXBridgesNodes([]); setGlobalXBridgesEdges([]);
@@ -6463,63 +5638,53 @@ const ADIA = () => {
     }
 
     const d = file.data;
+    const loadFileSysml = (legacyPayload: Record<string, unknown>) => {
+      const persistedCanonical = d.sysmlRepository || d.canonicalSysmlRepository;
+      const hasCanonicalModelContent = canonicalSysmlRepository.revision > 0
+        || Object.keys(canonicalSysmlRepository.diagrams).length > 0
+        || Object.keys(canonicalSysmlRepository.definitions).length > 0
+        || Object.keys(canonicalSysmlRepository.usages).length > 0
+        || Object.keys(canonicalSysmlRepository.relationships).length > 0
+        || Object.keys(canonicalSysmlRepository.requirements).length > 0;
+      // SysML diagram tabs are viewpoints over one repository. Their legacy
+      // snapshots contain only a diagram-scoped projection and must not
+      // replace a canonical model that has already been loaded or edited.
+      if (!persistedCanonical && hasCanonicalModelContent) return;
+      const payload = persistedCanonical
+        ? { ...d, sysmlRepository: d.sysmlRepository ?? d.canonicalSysmlRepository }
+        : legacyPayload;
+      applyCanonicalProjectLoad(loadCanonicalSysmlProject(payload));
+    };
     switch (file.type) {
       case 'statemachine':
         applyStateMachineSnapshot(d);
         if (d.view) setView(d.view);
         break;
       case 'bdd':
-        setBlocks(prev => [
-          ...prev.filter(b => b.stereotype === 'requirement'),
-          ...(d.blocks || [])
-        ]);
-        if (d.relationships) {
-          setRelationships(prev => {
-            const relMap = new Map<string, RelationshipData>();
-            prev.forEach(r => {
-              if (r.type === 'deriveReqt' || r.type === 'derive' || r.type === 'refine' || r.type === 'satisfy' || r.type === 'verify' || r.type === 'trace') {
-                relMap.set(r.id, r);
-              }
-            });
-            (d.relationships || []).forEach((r: RelationshipData) => relMap.set(r.id, r));
-            return Array.from(relMap.values());
-          });
-        }
+        loadFileSysml({
+          blocks: [...blocks.filter(b => b.stereotype === 'requirement'), ...migrateBlocks(d.blocks || [])],
+          relationships: [...relationships.filter(r => ['deriveReqt', 'derive', 'refine', 'satisfy', 'verify', 'trace'].includes(r.type)), ...(d.relationships || [])],
+          parts,
+          connectors,
+        });
         if (d.customStereotypes) setCustomStereotypes(d.customStereotypes);
         break;
       case 'requirements':
-        setBlocks(prev => [
-          ...prev.filter(b => b.stereotype !== 'requirement'),
-          ...(d.blocks || [])
-        ]);
-        if (d.relationships) {
-          setRelationships(prev => {
-            const relMap = new Map<string, RelationshipData>();
-            prev.forEach(r => {
-              if (r.type !== 'deriveReqt' && r.type !== 'derive' && r.type !== 'refine' && r.type !== 'satisfy' && r.type !== 'verify' && r.type !== 'trace') {
-                relMap.set(r.id, r);
-              }
-            });
-            (d.relationships || []).forEach((r: RelationshipData) => relMap.set(r.id, r));
-            return Array.from(relMap.values());
-          });
-        }
+        loadFileSysml({
+          blocks: [...blocks.filter(b => b.stereotype !== 'requirement'), ...migrateBlocks(d.blocks || [])],
+          relationships: [...relationships.filter(r => !['deriveReqt', 'derive', 'refine', 'satisfy', 'verify', 'trace'].includes(r.type)), ...(d.relationships || [])],
+          parts,
+          connectors,
+        });
         break;
       case 'ibd':
-        if (d.parts) setParts(d.parts);
-        if (d.connectors) setConnectors(d.connectors);
+        loadFileSysml({
+          blocks,
+          relationships,
+          parts: d.parts || parts,
+          connectors: d.connectors || connectors,
+        });
         if (d.interfaceRealizations) setInterfaceRealizations(d.interfaceRealizations);
-        if (d.parts && d.parts.length > 0) {
-          const firstBlockId = d.parts[0].blockId;
-          if (firstBlockId && d.parts.every((p: any) => p.blockId === firstBlockId)) {
-            const targetBlock = blocks.find((b: any) => b.id === firstBlockId);
-            if (targetBlock) {
-              setCurrentLayerId(firstBlockId);
-              setLayerStack([firstBlockId]);
-              setLayerPath(['Root', targetBlock.name]);
-            }
-          }
-        }
         break;
       case 'xbridges':
         setGlobalXBridgesNodes(d.globalXBridgesNodes || []);
@@ -6538,7 +5703,7 @@ const ADIA = () => {
         setOpmSimulationConfig(d.opmSimulationConfig || DEFAULT_OPM_SIMULATION_CONFIG);
         break;
       case 'hmi':
-        setHmiComponents(d.hmiComponents || []);
+        setHmiComponents(normalizeHmiComponents(d.hmiComponents));
         break;
       case 'doe':
         if (d.headers) setHeaders(d.headers);
@@ -6550,31 +5715,106 @@ const ADIA = () => {
     }
   }, [
     setStates, setJunctions, setTransitions, setLayers, setVariables, setView, setTickMs,
-    setBlocks, setRelationships, setCustomStereotypes, setParts, setConnectors, setInterfaceRealizations,
+    blocks, relationships, parts, connectors, applyCanonicalProjectLoad, setCustomStereotypes, setInterfaceRealizations,
+    canonicalSysmlRepository,
     setGlobalXBridgesNodes, setGlobalXBridgesEdges, setVlabNodes, setVlabEdges, setHilConfig,
     setEntropyNodes, setEntropyEdges, setOpmSimulationConfig, setHmiComponents, setHeaders, setData, setActiveModel, setTaguchiConfig, setResults,
     applyStateMachineSnapshot
   ]);
 
   // Switch active file function
-  const switchActiveFile = useCallback((newFileId: string) => {
+  const switchActiveFile = useCallback((newFileId: string, fallbackFile?: WorkspaceFile) => {
+    const targetExists = workspaceFiles.some(file => file.id === newFileId);
+    if (!targetExists && fallbackFile?.id !== newFileId) return;
+
+    // Selecting the tab that is already showing must not reload its model
+    // state. While an exact-ID diagram view is the rendered one, the workspace
+    // file underneath it is not the active tab, so selecting that file must
+    // still bring its canvas back on a single press.
+    if (targetExists && newFileId === activeFileId && !activeWorkspaceTab.diagramView && diagramWorkspace.activeTab === null) return;
+
     setSelectedIds([]);
-    setWorkspaceFiles(prevFiles => {
-      let updatedFiles = prevFiles;
-      if (activeFileId) {
-        updatedFiles = saveCurrentFileState(prevFiles, activeFileId);
-      }
-      
-      const targetFile = updatedFiles.find(f => f.id === newFileId);
-      if (targetFile) {
-        loadStateForFile(targetFile);
-        setDiagramModeState(targetFile.type as DiagramMode);
-        setActiveFileId(newFileId);
-      }
-      
-      return updatedFiles;
+    const availableFiles = targetExists
+      ? workspaceFiles
+      : ensureDefaultStateMachineWorkspaceFile(workspaceFiles, () => fallbackFile!).files;
+    const updatedFiles = activeFileId
+      ? saveCurrentFileState(availableFiles, activeFileId)
+      : availableFiles;
+    const targetFile = updatedFiles.find(file => file.id === newFileId);
+    if (!targetFile) return;
+
+    setWorkspaceFiles(updatedFiles);
+    loadStateForFile(targetFile);
+    setDiagramModeState(targetFile.type as DiagramMode);
+    setActiveFileId(newFileId);
+    // This workspace file is the rendered view now, so no diagram tab may stay
+    // highlighted beside it.
+    setDiagramWorkspace(previous => (
+      previous.activeTab === null ? previous : { ...previous, activeTab: null }
+    ));
+    // View-only guard: a block context entered from an IBD must never leak into
+    // a layer-scoped canvas as an unknown layer.
+    if (targetFile.type === 'statemachine' && !layers.some(layer => layer.id === currentLayerId)) {
+      setCurrentLayerId('root');
+      setLayerStack([]);
+      setLayerPath(['Root']);
+    }
+  }, [
+    activeFileId,
+    activeWorkspaceTab.diagramView,
+    currentLayerId,
+    diagramWorkspace.activeTab,
+    layers,
+    loadStateForFile,
+    saveCurrentFileState,
+    workspaceFiles,
+  ]);
+
+  const activateWorkspaceTarget = useCallback((target: WorkspaceTarget, options?: { workspaceAlreadyUpdated?: boolean; fallbackFile?: WorkspaceFile }) => {
+    if (target.kind === 'file') {
+      if (!workspaceFiles.some(file => file.id === target.fileId) && options?.fallbackFile?.id !== target.fileId) return;
+      switchActiveFile(target.fileId, options?.fallbackFile);
+      return;
+    }
+
+    const { tab } = target;
+    if (tab.kind === 'module' || !diagramWorkspace.tabs.some(openTab => diagramWorkspaceTabKey(openTab) === diagramWorkspaceTabKey(tab))) return;
+    if (tab.kind === 'sysmlDiagram' && !canonicalSysmlRepository.diagrams[tab.diagramId]) return;
+    if (tab.kind === 'stateMachineDiagram' && !seededStateMachineDiagrams.some(diagram => diagram.id === tab.diagramId)) return;
+    openExactDiagramById(tab.diagramId, {
+      preserveReturnStack: true,
+      workspaceAlreadyUpdated: options?.workspaceAlreadyUpdated,
     });
-  }, [activeFileId, saveCurrentFileState, loadStateForFile]);
+  }, [canonicalSysmlRepository, diagramWorkspace.tabs, openExactDiagramById, seededStateMachineDiagrams, switchActiveFile, workspaceFiles]);
+
+  // Closing a tab removes only its view. The adjacent tab is activated by the
+  // same path as a click, while an empty diagram strip returns to State Machine.
+  const closeDiagramWorkspaceTab = useCallback((diagramId: string) => {
+    const closedTab = diagramWorkspace.tabs.find(tab => 'diagramId' in tab && tab.diagramId === diagramId);
+    if (!closedTab) return;
+    const wasActive = diagramWorkspace.activeTab !== null &&
+      diagramWorkspaceTabKey(diagramWorkspace.activeTab) === diagramWorkspaceTabKey(closedTab);
+    const nextWorkspace = closeDiagramWorkspaceTabState(
+      diagramWorkspace.tabs,
+      diagramWorkspace.activeTab,
+      diagramId,
+    );
+    setDiagramWorkspace(nextWorkspace);
+    if (!wasActive) return;
+    if (nextWorkspace.activeTab) {
+      activateWorkspaceTarget({ kind: 'diagram', tab: nextWorkspace.activeTab }, { workspaceAlreadyUpdated: true });
+      return;
+    }
+
+    const stateMachineFile = ensureDefaultStateMachineWorkspaceFile(workspaceFiles, (): WorkspaceFile => ({
+      id: 'default_sm',
+      name: 'Main State Machine',
+      type: 'statemachine',
+      data: getActiveStateData('statemachine'),
+    })).file;
+    setOpenTabIds(previous => previous.includes(stateMachineFile.id) ? previous : [...previous, stateMachineFile.id]);
+    activateWorkspaceTarget({ kind: 'file', fileId: stateMachineFile.id }, { fallbackFile: stateMachineFile });
+  }, [activateWorkspaceTarget, diagramWorkspace, getActiveStateData, workspaceFiles]);
 
   // Create new file function
   const createNewFile = useCallback((name: string, type: string) => {
@@ -6585,7 +5825,7 @@ const ADIA = () => {
       type: type,
       data: null
     };
-    
+
     setWorkspaceFiles(prev => {
       let updatedFiles = prev;
       if (activeFileId) {
@@ -6593,12 +5833,12 @@ const ADIA = () => {
       }
       return [...updatedFiles, newFile];
     });
-    
+
     setOpenTabIds(prev => {
       if (prev.includes(newId)) return prev;
       return [...prev, newId];
     });
-    
+
     setActiveFileId(newId);
     setDiagramModeState(type as DiagramMode);
     loadStateForFile(newFile);
@@ -6606,27 +5846,23 @@ const ADIA = () => {
 
   // Close tab function
   const closeTab = useCallback((fileId: string) => {
-    setOpenTabIds(prev => {
-      const next = prev.filter(id => id !== fileId);
-      
-      if (activeFileId === fileId) {
-        if (next.length > 0) {
-          const index = prev.indexOf(fileId);
-          const nextActiveId = next[Math.min(index, next.length - 1)];
-          setTimeout(() => {
-            switchActiveFile(nextActiveId);
-          }, 0);
-        } else {
-          const fallbackId = 'default_sm';
-          setTimeout(() => {
-            setOpenTabIds([fallbackId]);
-            switchActiveFile(fallbackId);
-          }, 0);
-        }
-      }
-      return next;
-    });
-  }, [activeFileId, switchActiveFile]);
+    const visibleIds = moduleWorkspaceFiles.map(file => file.id);
+    const index = visibleIds.indexOf(fileId);
+    if (index < 0) return;
+    setOpenTabIds(previous => previous.filter(id => id !== fileId));
+    if (activeWorkspaceTab.key !== moduleWorkspaceTabKey(fileId)) return;
+
+    const remainingIds = visibleIds.filter(id => id !== fileId);
+    if (remainingIds.length > 0) {
+      activateWorkspaceTarget({ kind: 'file', fileId: remainingIds[Math.min(index, remainingIds.length - 1)] });
+      return;
+    }
+    const stateMachineFile = ensureDefaultStateMachineWorkspaceFile(workspaceFiles, (): WorkspaceFile => ({
+      id: 'default_sm', name: 'Main State Machine', type: 'statemachine', data: getActiveStateData('statemachine'),
+    })).file;
+    setOpenTabIds(previous => previous.includes(stateMachineFile.id) ? previous : [...previous, stateMachineFile.id]);
+    activateWorkspaceTarget({ kind: 'file', fileId: stateMachineFile.id }, { fallbackFile: stateMachineFile });
+  }, [moduleWorkspaceFiles, activeWorkspaceTab.key, activateWorkspaceTarget, workspaceFiles, getActiveStateData]);
 
   // Open file in tab function
   const openFileInTab = useCallback((fileId: string) => {
@@ -6645,21 +5881,21 @@ const ADIA = () => {
     if (activeFile && activeFile.type === mode) {
       return; // Already active file of this type
     }
-    
+
     // 2. Find if a file of this type is already open in tabs
     const openTabFile = workspaceFiles.find(f => openTabIds.includes(f.id) && f.type === mode);
     if (openTabFile) {
       switchActiveFile(openTabFile.id);
       return;
     }
-    
+
     // 3. Find if a file of this type exists in workspaceFiles but not open in tabs
     const existingFile = workspaceFiles.find(f => f.type === mode);
     if (existingFile) {
       openFileInTab(existingFile.id);
       return;
     }
-    
+
     // 4. If no file of this type exists, create a default file of this type
     const defaultNames: Record<string, string> = {
       statemachine: 'Main State Machine',
@@ -6689,7 +5925,7 @@ const ADIA = () => {
     }
     // Prevent React events from being treated as block data
     const actualBlock = (block && block.nativeEvent) ? null : block;
-    
+
     let newNode: any = actualBlock;
     if (!newNode) {
       const exportRes = createVLabDOEBlock(results.canonicalResult || results);
@@ -6699,8 +5935,7 @@ const ADIA = () => {
       }
       newNode = exportRes;
     }
-    console.log('[DOE EXPORT DEBUG] Exporting to VLab:', newNode);
-    
+
     const getTargetFileForMode = (mode: DiagramMode) => {
       const activeFile = workspaceFiles.find(f => f.id === activeFileId);
       if (activeFile && activeFile.type === mode) {
@@ -6722,9 +5957,9 @@ const ADIA = () => {
       const newId = `file_${Date.now()}`;
       return { id: newId, isNew: true, name };
     };
-    
+
     const target = getTargetFileForMode('vlab');
-    
+
     if (target.isNew) {
       const newFile: WorkspaceFile = {
         id: target.id,
@@ -6735,7 +5970,7 @@ const ADIA = () => {
           vlabEdges: []
         }
       };
-      
+
       setWorkspaceFiles(prev => {
         let updatedFiles = prev;
         if (activeFileId) {
@@ -6743,16 +5978,33 @@ const ADIA = () => {
         }
         return [...updatedFiles, newFile];
       });
-      
+
       setOpenTabIds(prev => {
         if (prev.includes(target.id)) return prev;
         return [...prev, target.id];
       });
-      
+
       setActiveFileId(target.id);
       setDiagramModeState('vlab');
       loadStateForFile(newFile);
     } else {
+      // Repeated exports must not stack on one spot or reuse an id: offset the new block and de-duplicate its id against
+      // the nodes already in the target diagram (the active diagram's live nodes when it is the target).
+      const existingNodes: any[] = activeFileId === target.id
+        ? vlabNodes
+        : (workspaceFiles.find(f => f.id === target.id)?.data?.vlabNodes || []);
+      if (existingNodes.length > 0 && newNode && typeof newNode === 'object') {
+        const taken = new Set(existingNodes.map((n: any) => n.id));
+        let uniqueId = newNode.id;
+        for (let k = 2; taken.has(uniqueId); k++) uniqueId = `${newNode.id}_${k}`;
+        const offset = existingNodes.filter((n: any) => n?.data?.type === 'doe_custom').length * 40;
+        newNode = {
+          ...newNode,
+          id: uniqueId,
+          position: { x: (newNode.position?.x ?? 400) + offset, y: (newNode.position?.y ?? 300) + offset },
+          data: newNode.data ? { ...newNode.data, id: uniqueId } : newNode.data
+        };
+      }
       setWorkspaceFiles(prev => {
         let updated = prev;
         if (activeFileId) {
@@ -6773,14 +6025,14 @@ const ADIA = () => {
           return f;
         });
       });
-      
+
       if (activeFileId === target.id) {
         setVlabNodes(prev => [...prev, newNode]);
       }
-      
+
       openFileInTab(target.id);
     }
-    
+
     toggleWindow('doe');
     addError('info', `Exported ${activeModel} model to V-Lab workspace.`);
   };
@@ -6796,11 +6048,11 @@ const ADIA = () => {
       return;
     }
     const newNode = exportRes;
-    
+
     if (xBridgesStateId) {
       // 1. If inside a state-specific sub-workspace, append node to that state's xBridgesModel.nodes
-      setStates(prev => prev.map(s => 
-        s.id === xBridgesStateId 
+      setStates(prev => prev.map(s =>
+        s.id === xBridgesStateId
           ? {
               ...s,
               xBridgesModel: {
@@ -6836,9 +6088,9 @@ const ADIA = () => {
         const newId = `file_${Date.now()}`;
         return { id: newId, isNew: true, name };
       };
-      
+
       const target = getTargetFileForMode('xbridges');
-      
+
       if (target.isNew) {
         const newFile: WorkspaceFile = {
           id: target.id,
@@ -6849,7 +6101,7 @@ const ADIA = () => {
             globalXBridgesEdges: []
           }
         };
-        
+
         setWorkspaceFiles(prev => {
           let updatedFiles = prev;
           if (activeFileId) {
@@ -6857,12 +6109,12 @@ const ADIA = () => {
           }
           return [...updatedFiles, newFile];
         });
-        
+
         setOpenTabIds(prev => {
           if (prev.includes(target.id)) return prev;
           return [...prev, target.id];
         });
-        
+
         setActiveFileId(target.id);
         setDiagramModeState('xbridges');
         loadStateForFile(newFile);
@@ -6887,16 +6139,16 @@ const ADIA = () => {
             return f;
           });
         });
-        
+
         if (activeFileId === target.id) {
           setGlobalXBridgesNodes(prev => [...prev, newNode]);
         }
-        
+
         openFileInTab(target.id);
       }
       addError('info', `Exported ${activeModel} model to X-Bridges workspace.`);
     }
-    
+
     toggleWindow('doe');
   };
 
@@ -6947,7 +6199,7 @@ const ADIA = () => {
     return [
       {
         type: 'project_json',
-        fileName: `adia_project_${new Date().toISOString().slice(0, 10)}.json`,
+        fileName: `adia_project_${new Date().toISOString().slice(0, 10)}.adia`,
         label: 'ADIA Project JSON',
         content: projectJson,
         mimeType: 'application/json',
@@ -6956,7 +6208,7 @@ const ADIA = () => {
       },
       {
         type: 'xbridges_model',
-        fileName: `xbridges_model_${new Date().toISOString().slice(0, 10)}.json`,
+        fileName: `xbridges_model_${new Date().toISOString().slice(0, 10)}.adia`,
         label: 'X-Bridges Model',
         content: JSON.stringify({ nodes: globalXBridgesNodes, edges: globalXBridgesEdges }, null, 2),
         mimeType: 'application/json',
@@ -6965,7 +6217,7 @@ const ADIA = () => {
       },
       {
         type: 'vlab_model',
-        fileName: `vlab_model_${new Date().toISOString().slice(0, 10)}.json`,
+        fileName: `vlab_model_${new Date().toISOString().slice(0, 10)}.adia`,
         label: 'V-Lab Model',
         content: JSON.stringify({ nodes: vlabNodes, edges: vlabEdges }, null, 2),
         mimeType: 'application/json',
@@ -6977,18 +6229,29 @@ const ADIA = () => {
 
 
 
-  // AI SIDEBAR STATE
+  // AI SIDEBAR & AGENT PANEL STATE
   const [isAiSidebarOpen, setIsAiSidebarOpen] = useState(false);
+  const [isAgentPanelOpen, setIsAgentPanelOpen] = useState(false);
 
   useEffect(() => {
+    let isMounted = true;
     if (factoryIOEnabled && (window as any).require) {
       const { ipcRenderer } = (window as any).require('electron');
       ipcRenderer.invoke('fetch-factory-io-tags').then((tags: any) => {
+        if (!isMounted) return;
         if (tags && !tags.error) setFactoryIOStatus('connected');
         else setFactoryIOStatus('error');
+      }).catch(() => {
+        if (!isMounted) return;
+        setFactoryIOStatus('error');
       });
+    } else if (!factoryIOEnabled) {
+      setFactoryIOStatus('disconnected');
     }
-  }, []);
+    return () => {
+      isMounted = false;
+    };
+  }, [factoryIOEnabled]);
 
   const projectImportRef = useRef<HTMLInputElement>(null);
   const [importValidationError, setImportValidationError] = useState<ValidationResult | null>(null);
@@ -7005,11 +6268,15 @@ const ADIA = () => {
 
   // Clipboard state
   const [clipboard, setClipboard] = useState<StateMachineClipboardData | null>(null);
+  const sysmlClipboardRef = useRef<string[]>([]);
 
   // Resizing state
   const [isResizing, setIsResizing] = useState(false);
+  useEffect(() => {
+    isResizingRef.current = isResizing;
+  }, [isResizing]);
   const [resizeHandle, setResizeHandle] = useState<string | null>(null);
-  const [resizeStart, setResizeStart] = useState<{ id: string, x: number, y: number, w: number, h: number, mx: number, my: number, type?: 'block' | 'state' | 'ibdContext' | 'part' } | null>(null);
+  const [resizeStart, setResizeStart] = useState<{ id: string, x: number, y: number, w: number, h: number, mx: number, my: number, type?: 'block' | 'package' | 'state' | 'ibdContext' | 'part' } | null>(null);
 
   // Panel resizing state
   const [hierarchyWidth, setHierarchyWidth] = useState(256);
@@ -7036,10 +6303,134 @@ const ADIA = () => {
     }
   }, [setIsRunning, setErrors, setCurrentError, setShowErrorDialog]);
 
+  const handleExplorerCommandResult = useCallback((result: ExplorerCommandResult) => {
+    for (const diagnostic of result.diagnostics) {
+      addError(diagnostic.severity, `${diagnostic.code}: ${diagnostic.message}`, 'Model Explorer', diagnostic.semanticId);
+    }
+  }, [addError]);
+
+  const handleExplorerCommand = useCallback((result: ExplorerCommandResult, command?: import('./features/modelExplorer/modelExplorerTypes').ModelExplorerCommand) => {
+    handleExplorerCommandResult(result);
+    if (!result.committed || !result.selectedIds?.[0]) return;
+    if (command?.type !== 'createDiagram') return;
+    const createdDiagramId = result.selectedIds[0];
+    if (command.diagramKind === 'package') {
+      setActivePackageDiagramId(createdDiagramId);
+    }
+    if (command.diagramKind === 'stateMachine') {
+      // Track session state-machine diagrams so the tree projection and the
+      // exact-ID workspace open resolve the same record.
+      setSessionStateMachineDiagrams(previous => {
+        if (previous.some(diagram => diagram.id === createdDiagramId)) return previous;
+        return [...previous, {
+          id: createdDiagramId,
+          name: 'State Machine Diagram',
+          ownerId: command.ownerId,
+          contextRegionId: command.ownerId,
+        }];
+      });
+      const smTab: DiagramWorkspaceTab = {
+        kind: 'stateMachineDiagram',
+        diagramId: createdDiagramId,
+        contextRegionId: command.ownerId,
+      };
+      setDiagramWorkspace(previous => ({
+        tabs: openDiagramWorkspaceTab(previous.tabs, smTab),
+        activeTab: smTab,
+      }));
+      setSelectedIds([]);
+      setDiagramModeState('statemachine');
+      return;
+    }
+    // Open the created diagram's exact ID (rejected commands return early
+    // above, so no tab is synthesized for a failed command).
+    openExactDiagramById(createdDiagramId);
+  }, [handleExplorerCommandResult, openExactDiagramById]);
+
+  const handleActivatePackageDiagram = useCallback(() => {
+    const activation = resolvePackageDiagramActivation(canonicalSysmlRepository, activePackageDiagramId);
+    if (activation.status === 'open') {
+      setActivePackageDiagramId(activation.diagramId);
+      openExactDiagramById(activation.diagramId, { preserveReturnStack: true });
+    } else if (activation.status === 'choose') {
+      setPackageDiagramChooser({ diagramIds: activation.diagramIds });
+    } else if (activation.status === 'create') {
+      const newDiagramId = uuidv4();
+      const diagram: ModelDiagramDefinition = {
+        id: newDiagramId,
+        kind: 'diagram',
+        diagramKind: 'package',
+        ownerId: activation.ownerId,
+        namespace: ['model'],
+        name: 'Package Diagram',
+      };
+      const result = handleExecuteSysmlCommand({
+        type: 'createDiagram',
+        diagram,
+      });
+      if (result.committed) {
+        const createdId = newDiagramId;
+        setActivePackageDiagramId(createdId);
+        openExactDiagramById(createdId);
+      } else {
+        result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
+      }
+    }
+  }, [canonicalSysmlRepository, activePackageDiagramId, openExactDiagramById, handleExecuteSysmlCommand, addError]);
+
+  /** "New Sequence Diagram" on a Block: creates its Interaction (one lifeline per part) and opens the diagram. */
+  const createSequenceDiagramForBlock = useCallback((blockId: string, partIds?: string[]) => {
+    const plan = buildCreateInteractionFromContextCommand(canonicalSysmlRepository, { blockId, partIds });
+    if (!plan.ok) {
+      plan.diagnostics.forEach(d => addError('error', d.message, 'SysML', blockId));
+      return;
+    }
+    const result = handleExecuteSysmlCommand(plan.command);
+    if (result.committed) {
+      openExactDiagramById(plan.createdIds[1]);
+    } else {
+      result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
+    }
+  }, [canonicalSysmlRepository, handleExecuteSysmlCommand, openExactDiagramById, addError]);
+
+  const showConnectionPolicyError = useCallback((rejection: {
+    diagnostic: ConnectionPolicyDiagnostic;
+    relationshipKind: string;
+    source: ConnectionEndpoint;
+    target: ConnectionEndpoint;
+  }, elementId?: string) => {
+    const activeElement = document.activeElement;
+    errorDialogTriggerRef.current = activeElement instanceof HTMLElement ? activeElement : null;
+    const error: ConnectionErrorItem = {
+      id: uuidv4(),
+      type: 'error',
+      message: rejection.diagnostic.code ? `${rejection.diagnostic.code}: ${rejection.diagnostic.message}` : rejection.diagnostic.message,
+      timestamp: new Date(),
+      source: 'SysML connection policy',
+      elementId,
+      connectionDiagnostic: rejection.diagnostic,
+      relationshipKind: rejection.relationshipKind,
+      sourceEndpoint: rejection.source,
+      targetEndpoint: rejection.target,
+    };
+    setErrors(prev => [error, ...prev].slice(0, 100));
+    setCurrentError(error);
+    setShowErrorDialog(true);
+  }, []);
+
+  const dismissErrorDialog = useCallback(() => {
+    setShowErrorDialog(false);
+    const trigger = errorDialogTriggerRef.current;
+    errorDialogTriggerRef.current = null;
+    restoreConnectionErrorFocus(trigger);
+  }, []);
+
+  useEffect(() => {
+    if (showErrorDialog) errorDismissButtonRef.current?.focus();
+  }, [showErrorDialog]);
+
   const exportPlantUmlSource = useCallback(() => {
-    const source = plantUmlDiagram.type === 'sequence'
-      ? generateSequencePlantUml(plantUmlDiagram)
-      : generateUseCasePlantUml(plantUmlDiagram);
+    const source = generateSequencePlantUml(plantUmlDiagram);
     const blob = new Blob([source], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
@@ -7281,41 +6672,44 @@ const ADIA = () => {
     });
 
     if (selectedKeys.includes('statemachine')) {
-      projectFiles['statemachine.json'] = { ...persistedStateMachine, view };
+      projectFiles['statemachine.adia'] = { ...persistedStateMachine, view };
     }
     if (selectedKeys.includes('bdd')) {
-      projectFiles['bdd.json'] = { blocks: blocks.filter(b => b.stereotype !== 'requirement'), relationships, customStereotypes };
+      projectFiles['bdd.adia'] = { blocks: blocks.filter(b => b.stereotype !== 'requirement'), relationships, customStereotypes };
     }
     if (selectedKeys.includes('ibd')) {
-      projectFiles['ibd.json'] = { parts, connectors, interfaceRealizations };
+      projectFiles['ibd.adia'] = { parts, connectors, interfaceRealizations };
     }
     if (selectedKeys.includes('requirements')) {
-      projectFiles['requirements.json'] = { blocks: blocks.filter(b => b.stereotype === 'requirement'), relationships };
+      projectFiles['requirements.adia'] = { blocks: blocks.filter(b => b.stereotype === 'requirement'), relationships };
     }
     if (selectedKeys.includes('xbridges')) {
-      projectFiles['xbridges.json'] = { globalXBridgesNodes, globalXBridgesEdges };
+      projectFiles['xbridges.adia'] = { globalXBridgesNodes, globalXBridgesEdges };
     }
     if (selectedKeys.includes('vlab')) {
-      projectFiles['vlab.json'] = { vlabNodes, vlabEdges };
+      projectFiles['vlab.adia'] = { vlabNodes, vlabEdges };
     }
     if (selectedKeys.includes('hmi')) {
-      projectFiles['hmi.json'] = { hmiComponents };
+      projectFiles['hmi.adia'] = { hmiComponents };
     }
     if (selectedKeys.includes('hil')) {
-      projectFiles['hil.json'] = hilConfig;
+      projectFiles['hil.adia'] = hilConfig;
     }
     if (selectedKeys.includes('doe')) {
-      projectFiles['doe.json'] = { schemaVersion: 1, headers, data, activeModel, taguchiConfig, results };
+      projectFiles['doe.adia'] = { schemaVersion: 1, headers, data, activeModel, taguchiConfig, results };
     }
     if (selectedKeys.includes('entropy')) {
-      projectFiles['entropy.json'] = { entropyNodes, entropyEdges, opmSimulationConfig };
+      projectFiles['entropy.adia'] = { entropyNodes, entropyEdges, opmSimulationConfig };
     }
     if (selectedKeys.includes('unified')) {
-      projectFiles['adia_project_unified.json'] = {
+      projectFiles['adia_project_unified.adia'] = {
         version: VERSION,
         timestamp: new Date().toISOString(),
         projectName: currentProjectName,
         openTabs,
+        diagramWorkspace,
+        activeSysmlDiagramId,
+        diagramNavigationStack,
         ...persistedStateMachine, view,
         blocks, relationships, parts, connectors, interfaceRealizations, customStereotypes,
         hmiComponents, vlabNodes, vlabEdges, globalXBridgesNodes, globalXBridgesEdges,
@@ -7325,6 +6719,7 @@ const ADIA = () => {
         entropyNodes,
         entropyEdges,
         opmSimulationConfig,
+        canonicalSysmlRepository,
         workspaceFiles: saveCurrentFileState(workspaceFiles, activeFileId),
         openTabIds,
         activeFileId
@@ -7387,6 +6782,7 @@ const ADIA = () => {
     hilConfig,
     headers, data, activeModel, taguchiConfig, results, managedWindows, addError,
     entropyNodes, entropyEdges, opmSimulationConfig, currentProjectName, openTabs,
+    diagramWorkspace, activeSysmlDiagramId, diagramNavigationStack,
     workspaceFiles, openTabIds, activeFileId, saveCurrentFileState
   ]);
 
@@ -7406,24 +6802,54 @@ const ADIA = () => {
     }
   }, [xBridgesStateId, setGlobalXBridgesNodes, setGlobalXBridgesEdges, setStates]);
 
-  const hydrateProject = useCallback((importedData: any) => {
+
+  const hydrateProjectImmediate = useCallback((importedData: any, preloadedResult?: any) => {
+    const hydrationSequence = ++pendingHydrationSequenceRef.current;
     try {
-      let sysmlLoadedView: { blocks: BlockData[]; relationships: RelationshipData[]; parts: PartData[]; connectors: ConnectorData[] } | null = null;
-      if (importedData.sysmlRepository) {
-        const loaded = loadCanonicalSysmlProject(importedData);
-        if (!loaded.valid) {
-          throw new Error(`Canonical SysML repository failed validation: ${loaded.diagnostics.map(item => item.code).join(', ')}`);
-        }
-        setCanonicalSysmlRepository(loaded.repository);
-        setSysmlStore(fromRepository(loaded.repository, loaded.coordinates, loaded.diagramPresentations));
-        if (loaded.diagramPresentations) {
-          setDiagramPresentations(loaded.diagramPresentations);
-        }
-        sysmlLoadedView = loaded.view;
-      }
+      // Canonical repositories are preferred; legacy imports are migrated by
+      // the same loader, then all canvas views are refreshed from that model.
+      // Task 7 (spec 3.4, 4.4): State-to-Requirement relationships resolve
+      // their State endpoints by stable semantic ID against the incoming
+      // State Machine model supplied with the payload, so a legal Satisfy
+      // remains valid after hydration instead of being quarantined as an
+      // unresolved endpoint. No stale State copies are persisted: only live
+      // endpoint identities from the incoming model are supplied.
+      const hydrationEndpoints = projectStateEndpoints(importedData.states);
+      const hydratedRepository = applyCanonicalProjectLoad(
+        preloadedResult && preloadedResult.valid && hasMatchingProjectStateContext(preloadedResult.stateEndpointSignature, importedData.states)
+          ? preloadedResult
+          : loadCanonicalSysmlProject({
+              ...importedData,
+              sysmlRepository: importedData.sysmlRepository ?? importedData.canonicalSysmlRepository ?? preloadedResult?.repository,
+              sysmlCoordinates: importedData.sysmlCoordinates ?? importedData.coordinates ?? preloadedResult?.coordinates,
+              diagramPresentations: importedData.diagramPresentations ?? preloadedResult?.diagramPresentations,
+            }, hydrationEndpoints.size > 0 ? { externalEndpoints: hydrationEndpoints } : undefined)
+      );
       // Logic & Simulation
       if (importedData.projectName) setCurrentProjectName(importedData.projectName);
       if (importedData.openTabs) setOpenTabs(importedData.openTabs);
+      // Exact-ID workspace restore: persisted tabs win, legacy mode-only
+      // openTabs stay valid as a migration source. Invalid tabs are
+      // discarded with diagnostics; the active valid diagram is restored.
+      // The canvas mode sync happens after the workspace-file restore below.
+      let restoredWorkspaceDiagramKind: string | null = null;
+      {
+        const rawWorkspace = importedData.diagramWorkspace;
+        const rawTabs = rawWorkspace?.tabs ?? rawWorkspace ?? importedData.openTabs ?? [];
+        const rawActive = rawWorkspace?.activeTab ?? importedData.activeSysmlDiagramId ?? null;
+        const normalized = normalizeDiagramWorkspace(hydratedRepository, rawTabs, rawActive);
+        setDiagramWorkspace({ tabs: normalized.tabs, activeTab: normalized.activeTab });
+        const restoredId = normalized.activeTab?.kind === 'sysmlDiagram' ? normalized.activeTab.diagramId : null;
+        if (restoredId && hydratedRepository.diagrams[restoredId]) {
+          setActiveSysmlDiagramIdState(restoredId);
+          const restoredKind = hydratedRepository.diagrams[restoredId].diagramKind;
+          if (restoredKind === 'package') setActivePackageDiagramId(restoredId);
+          if (restoredKind !== 'ibd') restoredWorkspaceDiagramKind = restoredKind;
+        }
+        if (Array.isArray(importedData.diagramNavigationStack)) {
+          setDiagramNavigationStack(importedData.diagramNavigationStack);
+        }
+      }
       if (importedData.states) setStates(importedData.states);
       if (importedData.junctions) setJunctions(importedData.junctions);
       if (importedData.transitions) setTransitions(importedData.transitions);
@@ -7438,23 +6864,12 @@ const ADIA = () => {
       }
       if (importedData.tickMs) setTickMs(importedData.tickMs);
 
-      // SysML & Requirements — derive from canonical repository if present, else migrate legacy
-      if (sysmlLoadedView) {
-        setBlocks(migrateBlocks(sysmlLoadedView.blocks));
-        setRelationships(sysmlLoadedView.relationships);
-        setParts(sysmlLoadedView.parts);
-        setConnectors(sysmlLoadedView.connectors);
-      } else {
-        if (importedData.blocks) setBlocks(migrateBlocks(importedData.blocks));
-        if (importedData.relationships) setRelationships(importedData.relationships);
-        if (importedData.parts) setParts(importedData.parts);
-        if (importedData.connectors) setConnectors(importedData.connectors);
-      }
+      // SysML projections were refreshed atomically from the canonical load above.
       if (importedData.interfaceRealizations) setInterfaceRealizations(importedData.interfaceRealizations);
       if (importedData.customStereotypes) setCustomStereotypes(importedData.customStereotypes);
 
       // HMI Dashboard
-      if (importedData.hmiComponents) setHmiComponents(importedData.hmiComponents);
+      if (importedData.hmiComponents) setHmiComponents(normalizeHmiComponents(importedData.hmiComponents));
 
       // V-Lab Physical Modeling
       if (importedData.vlabNodes) setVlabNodes(importedData.vlabNodes);
@@ -7644,6 +7059,13 @@ const ADIA = () => {
         setDiagramModeState('statemachine');
       }
 
+      // New-payload exact-workspace restore lands the canvas on the restored
+      // diagram. Legacy payloads without diagramWorkspace keep the
+      // workspace-file mode above.
+      if (restoredWorkspaceDiagramKind && importedData.diagramWorkspace !== undefined) {
+        setDiagramModeState(restoredWorkspaceDiagramKind as DiagramMode);
+      }
+
       // Reset runtime state
       setIsRunning(false);
       setActiveStates({});
@@ -7682,13 +7104,15 @@ const ADIA = () => {
       setHistory([]);
       setHistoryIndex(-1);
 
+      setHydrationCommitSequence(hydrationSequence);
       addError('info', 'Unified ADIA Project imported successfully');
     } catch (error) {
+      setHydrationCommitSequence(hydrationSequence);
       addError('error', 'Failed to hydrate project state. File might be corrupted.');
     }
   }, [
     setStates, setJunctions, setTransitions, setLayers, setVariables, setView, setTickMs,
-    setBlocks, setRelationships, setParts, setConnectors, setInterfaceRealizations, setCustomStereotypes,
+    applyCanonicalProjectLoad, setInterfaceRealizations, setCustomStereotypes,
     setHmiComponents, setVlabNodes, setVlabEdges, setGlobalXBridgesNodes, setGlobalXBridgesEdges,
     setHilConfig,
     setHeaders, setData, setActiveModel, setTaguchiConfig, setResults, setManagedWindows,
@@ -7697,11 +7121,24 @@ const ADIA = () => {
     setCurrentProjectName, setOpenTabs, setWorkspaceFiles, setOpenTabIds, setActiveFileId, setDiagramModeState
   ]);
 
-  const buildUnifiedProjectPayload = useCallback(() => {
+  const hydrateProject = useCallback((importedData: any, preloadedResult?: any) => {
+    startTransition(() => hydrateProjectImmediate(importedData, preloadedResult));
+  }, [hydrateProjectImmediate]);
+
+  const buildUnifiedProjectPayload = useCallback((options?: { deferSysmlPreparation?: boolean }) => {
+    // Format 5 file: part usage records are folded into Block properties and the presentations follow.
+    const committedState = sysmlGatewayStateRef.current;
+    const savedSysml = options?.deferSysmlPreparation
+      ? { sysmlRepository: committedState.repository, diagramPresentations: committedState.diagramPresentations, sysmlCoordinates: committedState.coordinates }
+      : serializeSysmlProjectState(committedState.repository, committedState.diagramPresentations, committedState.coordinates);
     return createUnifiedProjectPayload({
       version: VERSION,
       projectName: currentProjectName,
       tickMs,
+      openTabs,
+      diagramWorkspace,
+      activeSysmlDiagramId,
+      diagramNavigationStack,
       states,
       junctions,
       transitions,
@@ -7713,12 +7150,9 @@ const ADIA = () => {
       relationships,
       parts,
       connectors,
-      sysmlRepository: serializeRepository(canonicalSysmlRepository),
-      sysmlCoordinates: Object.fromEntries([
-        ...blocks.map(b => [b.id, { x: b.x, y: b.y, width: b.width, height: b.height }]),
-        ...parts.map(p => [p.id, { x: p.x, y: p.y, width: p.width, height: p.height }]),
-      ]),
-      diagramPresentations,
+      sysmlRepository: savedSysml.sysmlRepository,
+      sysmlCoordinates: savedSysml.sysmlCoordinates,
+      diagramPresentations: savedSysml.diagramPresentations,
       interfaceRealizations,
       customStereotypes,
       hmiComponents,
@@ -7745,6 +7179,10 @@ const ADIA = () => {
   }, [
     currentProjectName,
     tickMs,
+    openTabs,
+    diagramWorkspace,
+    activeSysmlDiagramId,
+    diagramNavigationStack,
     states,
     junctions,
     transitions,
@@ -7757,7 +7195,7 @@ const ADIA = () => {
     parts,
     connectors,
     canonicalSysmlRepository,
-    diagramPresentations,
+    sysmlDiagramPresentations,
     interfaceRealizations,
     customStereotypes,
     hmiComponents,
@@ -7781,10 +7219,18 @@ const ADIA = () => {
   ]);
 
   const saveUnifiedProject = useCallback(async (saveAs: boolean = false) => {
+    if (pendingHydrationSequenceRef.current !== committedHydrationSequenceRef.current) {
+      addError('info', 'Project is still loading. Save when loading completes.');
+      return;
+    }
     try {
-      const payload = buildUnifiedProjectPayload();
+      // Both desktop and browser saves prepare format 5 in the Worker.
+      const rawPayload = buildUnifiedProjectPayload({ deferSysmlPreparation: true });
+      let savedSnapshot: string | null = null;
+      const buffer = await serializeProjectInWorker(rawPayload, { onSnapshot: value => { savedSnapshot = value; } });
       const electron = (window as any).electronAPI;
       if (electron) {
+        const payload = await parseProjectJsonBuffer(buffer);
         let result: any;
         if (saveAs) {
           result = typeof electron.projectSaveAs === 'function'
@@ -7798,8 +7244,8 @@ const ADIA = () => {
 
         if (result && (result.status === 'saved' || result.success) && result.filePath) {
           setActiveProjectPath(result.filePath);
-          lastSavedSnapshotRef.current = createProjectSnapshot(payload);
-          
+          lastSavedSnapshotRef.current = savedSnapshot;
+
           const fileName = result.filePath.split(/[/\\]/).pop() || '';
           const nameWithoutExt = fileName.replace(/\.adia$/i, '').replace(/\.json$/i, '');
           if (nameWithoutExt) {
@@ -7812,9 +7258,8 @@ const ADIA = () => {
           addError('error', `Failed to save project: ${result?.message || result?.error || 'Unknown error'}`);
         }
       } else {
-        // Web / Browser Fallback
-        const jsonStr = JSON.stringify(payload, null, 2);
-        const blob = new Blob([jsonStr], { type: 'application/json' });
+        // Web / Browser Fallback: serialize in worker so UI thread does not freeze
+        const blob = new Blob([buffer], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
@@ -7823,7 +7268,7 @@ const ADIA = () => {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-        lastSavedSnapshotRef.current = createProjectSnapshot(payload);
+        lastSavedSnapshotRef.current = savedSnapshot;
         addError('info', 'Project downloaded as .adia file.');
       }
     } catch (err: any) {
@@ -7831,6 +7276,72 @@ const ADIA = () => {
       addError('error', `Failed to save project: ${err?.message || String(err)}`);
     }
   }, [buildUnifiedProjectPayload, currentProjectName, addError]);
+
+  // X-BRIDGES Application Delegate connected to live React Flow state
+  const liveXbridgesState = useMemo(() => createLiveXbridgesStateAccessors(
+    globalXBridgesNodesRef,
+    globalXBridgesEdgesRef,
+    setGlobalXBridgesNodes,
+    setGlobalXBridgesEdges,
+  ), []);
+
+  const xbridgesApplicationDelegate = useMemo<XbridgesApplicationDelegate | undefined>(() => {
+    if (diagramMode !== 'xbridges') return undefined;
+    return createXbridgesDelegate({
+      ...liveXbridgesState,
+      onSave: (nodes, edges) => handleXBridgesSave(nodes, edges, []),
+    });
+  }, [diagramMode, liveXbridgesState, handleXBridgesSave]);
+
+  // Project Application Delegate for project identity, active workspace, and persistence
+  const projectApplicationDelegate = useMemo<ProjectApplicationDelegate>(() => {
+    return createProjectDelegate({
+      getProjectId: () => currentProjectName || 'ADIA_Project',
+      getActiveWorkspace: () => diagramMode,
+      getRevision: () => canonicalSysmlRepository.revision,
+      onRefreshPersistence: async () => {
+        await saveUnifiedProject(false);
+      },
+    });
+  }, [currentProjectName, diagramMode, canonicalSysmlRepository.revision, saveUnifiedProject]);
+
+  // ToolGateway constructed with live application delegates
+  const agentToolGateway = useMemo<ToolGateway>(() => {
+    return new ToolGateway({
+      project: projectApplicationDelegate,
+      xbridges: xbridgesApplicationDelegate,
+      sysml: sysmlApplicationDelegate,
+      report: reportApplicationDelegate,
+    });
+  }, [projectApplicationDelegate, xbridgesApplicationDelegate, sysmlApplicationDelegate, reportApplicationDelegate]);
+
+  // Single active AgentOrchestrator instance for the project
+  const agentOrchestrator = useMemo<AgentOrchestrator>(() => {
+    const orchestrator = new AgentOrchestrator(undefined, agentToolGateway);
+    orchestrator.updateProjectContext({
+      projectId: currentProjectName || 'ADIA_Project',
+      workspace: diagramMode,
+      revision: canonicalSysmlRepository.revision,
+      nodes: globalXBridgesNodes,
+      edges: globalXBridgesEdges,
+    });
+    return orchestrator;
+  }, []);
+
+  useEffect(() => {
+    agentOrchestrator.setToolGateway(agentToolGateway);
+  }, [agentOrchestrator, agentToolGateway]);
+
+  // Update orchestrator project context whenever project properties change
+  useEffect(() => {
+    agentOrchestrator.updateProjectContext({
+      projectId: currentProjectName || 'ADIA_Project',
+      workspace: diagramMode,
+      revision: canonicalSysmlRepository.revision,
+      nodes: globalXBridgesNodes,
+      edges: globalXBridgesEdges,
+    });
+  }, [agentOrchestrator, currentProjectName, diagramMode, canonicalSysmlRepository.revision, globalXBridgesNodes, globalXBridgesEdges]);
 
   const confirmProjectReplacementIfDirty = useCallback((): boolean => {
     const currentPayload = buildUnifiedProjectPayload();
@@ -7852,6 +7363,7 @@ const ADIA = () => {
 
         if (result && (result.status === 'opened' || result.success) && (result.data || result.projectData)) {
           const projectData = result.data || result.projectData;
+          pendingUpgradeBackupRef.current = { path: result.upgrade?.backupPath ?? null, error: result.upgrade?.backupError ?? null };
           const validation = validateImportedJson(projectData);
           if (!validation.isValid) {
             setImportValidationError(validation);
@@ -7891,6 +7403,18 @@ const ADIA = () => {
   }, [confirmProjectReplacementIfDirty, hydrateProject, buildUnifiedProjectPayload, addError]);
 
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as any).__hydrateProject = hydrateProject;
+      (window as any).__buildUnifiedProjectPayload = buildUnifiedProjectPayload;
+      (window as any).__serializeProjectInWorker = serializeProjectInWorker;
+      (window as any).__loadProjectInWorker = loadProjectInWorker;
+      if ((window as any).__ADIA_PERF_ENABLED__ === true) {
+        (window as any).__saveUnifiedProject = saveUnifiedProject;
+      }
+    }
+  }, [hydrateProject, buildUnifiedProjectPayload, saveUnifiedProject]);
+
+  useEffect(() => {
     const electron = (window as any).electronAPI;
     if (!electron) return;
 
@@ -7916,6 +7440,7 @@ const ADIA = () => {
         }
 
         const dataToHydrate = validation.sanitizedData || projectData;
+        pendingUpgradeBackupRef.current = { path: eventData?.upgrade?.backupPath ?? null, error: eventData?.upgrade?.backupError ?? null };
         hydrateProject(dataToHydrate);
         if (filePath) {
           setActiveProjectPath(filePath);
@@ -7982,10 +7507,20 @@ const ADIA = () => {
   const selectedJunction = useMemo(() => selectedIds.length === 1 ? junctions.find(j => j.id === selectedIds[0]) : null, [selectedIds, junctions]);
   const selectedTransition = useMemo(() => selectedIds.length === 1 ? transitions.find(t => t.id === selectedIds[0]) : null, [selectedIds, transitions]);
   const selectedBlock = useMemo(() => selectedIds.length === 1 ? blocks.find(b => b.id === selectedIds[0]) : null, [selectedIds, blocks]);
+  const selectedPackage = useMemo(() => selectedIds.length === 1 ? packages.find(p => p.id === selectedIds[0]) : null, [selectedIds, packages]);
   const selectedRelationship = useMemo(() => selectedIds.length === 1 ? relationships.find(r => r.id === selectedIds[0]) : null, [selectedIds, relationships]);
   const selectedPart = useMemo(() => selectedIds.length === 1 ? parts.find(p => p.id === selectedIds[0]) : null, [selectedIds, parts]);
+
   const selectedConnector = useMemo(() => selectedIds.length === 1 ? connectors.find(c => c.id === selectedIds[0]) : null, [selectedIds, connectors]);
   const selectedInterfaceRealization = useMemo(() => selectedIds.length === 1 ? interfaceRealizations.find(ir => ir.id === selectedIds[0]) : null, [selectedIds, interfaceRealizations]);
+  const emptyInspectorRepoV4 = useMemo(() => createEmptyRepositoryV4(), []);
+  const shouldDeriveInspectorV4 = !isPropertiesCollapsed && selectedIds.length > 0;
+  const inspectorRepoV4 = useMemo(
+    () => shouldDeriveInspectorV4
+      ? migrateV3ToV4(canonicalSysmlRepository, sysmlCoordinates, sysmlDiagramPresentations)
+      : emptyInspectorRepoV4,
+    [shouldDeriveInspectorV4, emptyInspectorRepoV4, canonicalSysmlRepository, sysmlCoordinates, sysmlDiagramPresentations]
+  );
   const currentLayer = useMemo(() => layers.find(l => l.id === currentLayerId) || layers[0], [layers, currentLayerId]);
   const currentStates = useMemo(() => states.filter(s => s.parentId === currentLayerId), [states, currentLayerId]) as StateData[];
   const currentJunctions = useMemo(() => junctions.filter(j => layers.find(l => l.junctionIds.includes(j.id))?.id === currentLayerId), [junctions, layers, currentLayerId]);
@@ -8033,6 +7568,7 @@ const ADIA = () => {
       id: uuidv4(),
       name: newVarName,
       type: newVarType,
+      overflowPolicy: 'saturate',
       initialValue: newVarValue,
       currentValue: parseValue(newVarType, newVarValue),
       visibleInScope: true
@@ -8049,16 +7585,48 @@ const ADIA = () => {
   }, [variables, addError]);
 
   const updateVariableValue = useCallback((idOrName: string, value: string) => {
+    const variable = variables.find(v => v.id === idOrName || v.name === idOrName);
+    if (!variable) return;
+    const result = parseHmiVariableValue(variable, value);
+    if (!result.accepted) {
+      addError('error', `${variable.name}: ${result.error}`, 'Variable Runtime');
+      return;
+    }
+    if (factoryIOEnabled && factoryIOMapping.some(m => m.type === 'sensor' && m.adiaVarId === variable.id)) {
+      addError('error', `${variable.name} is driven by external I/O.`, 'Variable Runtime');
+      return;
+    }
+    if (!hmiInputQueueRef.current.enqueue({ sourceId: 'variable-panel', variableId: variable.id, value: result.value })) {
+      addError('error', 'Operator input queue is full.', 'Variable Runtime');
+    }
+  }, [addError, variables, factoryIOEnabled, factoryIOMapping]);
+
+  const handleHmiInput = useCallback((command: HmiInputCommand): HmiInputResult => {
+    const externalIds = factoryIOEnabled
+      ? factoryIOMapping.filter(m => m.type === 'sensor').map(m => m.adiaVarId) : [];
+    const result = validateHmiInput(command, variables, externalIds);
+    if (!result.accepted) return result;
+    const variable = variables.find(v => v.id === command.variableId)!;
+    const release = command.releaseValue === undefined ? undefined : parseHmiVariableValue(variable, command.releaseValue);
+    const accepted = hmiInputQueueRef.current.enqueue({ ...command, value: result.value,
+      releaseValue: release?.accepted ? release.value : undefined });
+    return accepted ? { accepted: true } : { accepted: false, error: 'Operator input queue is full.' };
+  }, [variables, factoryIOEnabled, factoryIOMapping]);
+
+  const updateVariableType = useCallback((id: string, type: VariableType) => {
     setVariables(prev => prev.map(v => {
-      if (v.id === idOrName || v.name === idOrName) {
-        const parsed = parseValue(v.type, value);
-        if (simulationSessionRef.current) {
-          setSessionVariableValue(simulationSessionRef.current, v.id, parsed);
-        }
-        return { ...v, currentValue: parsed };
+      if (v.id !== id) return v;
+      const initial = validateInitialValue({ type, initialValue: v.initialValue });
+      if (initial === null) {
+        addError('error', `Cannot change '${v.name}' to ${type}: initial value is invalid.`, 'Variable Type');
+        return v;
       }
-      return v;
+      return { ...v, type, initialValue: initial, currentValue: parseValue(type, initial) };
     }));
+  }, [addError]);
+
+  const updateVariableOverflowPolicy = useCallback((id: string, overflowPolicy: VariableOverflowPolicy) => {
+    setVariables(prev => prev.map(v => v.id === id ? { ...v, overflowPolicy } : v));
   }, []);
 
   const updateVariableInitValue = useCallback((id: string, value: string) => {
@@ -8117,7 +7685,7 @@ const ADIA = () => {
         tickMs, states, junctions, transitions, layers, variables,
         safetyMode, hilConfig,
       }),
-      blocks, relationships, parts, connectors, interfaceRealizations, customStereotypes
+      // SysML history is owned by the canonical gateway patch history.
     });
     setHistory(prev => {
       const newHistory = prev.slice(0, historyIndex + 1);
@@ -8126,37 +7694,48 @@ const ADIA = () => {
       return newHistory;
     });
     setHistoryIndex(prev => Math.min(prev + 1, 49));
-  }, [states, junctions, transitions, layers, variables, tickMs, safetyMode, hilConfig, blocks, relationships, parts, connectors, interfaceRealizations, historyIndex]);
+  }, [states, junctions, transitions, layers, variables, tickMs, safetyMode, hilConfig, historyIndex]);
 
   const undo = useCallback(() => {
-    if (historyIndex > 0) {
+    if ((sysmlGatewayStateRef.current.patchHistory?.past.length ?? 0) > 0) {
+      const result = handleExecuteSysmlCommand({ type: 'undo' });
+      if (result.committed) {
+        addError('info', 'Undo');
+        return;
+      }
+    }
+    if (diagramMode === 'statemachine' && historyIndex > 0) {
       const prevSnapshot = JSON.parse(history[historyIndex - 1]);
       applyStateMachineSnapshot(prevSnapshot);
-      setBlocks(migrateBlocks(prevSnapshot.blocks));
-      setRelationships(prevSnapshot.relationships || []);
-      setParts(prevSnapshot.parts || []);
-      setConnectors(prevSnapshot.connectors || []);
-      setInterfaceRealizations(prevSnapshot.interfaceRealizations || []);
-      setCustomStereotypes(prevSnapshot.customStereotypes || []);
       setHistoryIndex(prev => prev - 1);
       addError('info', 'Undo');
     }
-  }, [history, historyIndex, addError, applyStateMachineSnapshot]);
+  }, [diagramMode, handleExecuteSysmlCommand, history, historyIndex, addError, applyStateMachineSnapshot]);
 
   const redo = useCallback(() => {
-    if (historyIndex < history.length - 1) {
+    if ((sysmlGatewayStateRef.current.patchHistory?.future.length ?? 0) > 0) {
+      const result = handleExecuteSysmlCommand({ type: 'redo' });
+      if (result.committed) {
+        addError('info', 'Redo');
+        return;
+      }
+    }
+    if (diagramMode === 'statemachine' && historyIndex < history.length - 1) {
       const nextSnapshot = JSON.parse(history[historyIndex + 1]);
       applyStateMachineSnapshot(nextSnapshot);
-      setBlocks(migrateBlocks(nextSnapshot.blocks));
-      setRelationships(nextSnapshot.relationships || []);
-      setParts(nextSnapshot.parts || []);
-      setConnectors(nextSnapshot.connectors || []);
-      setInterfaceRealizations(nextSnapshot.interfaceRealizations || []);
-      setCustomStereotypes(nextSnapshot.customStereotypes || []);
       setHistoryIndex(prev => prev + 1);
       addError('info', 'Redo');
     }
-  }, [history, historyIndex, addError, applyStateMachineSnapshot]);
+  }, [diagramMode, handleExecuteSysmlCommand, history, historyIndex, addError, applyStateMachineSnapshot]);
+
+  const handleCommitStateMachineSnapshot = useCallback((snapshot: any, description: string) => {
+    addToHistory();
+    setStates(snapshot.states);
+    setLayers(snapshot.layers);
+    setTransitions(snapshot.transitions);
+    setJunctions(snapshot.junctions);
+    addError('info', description || 'Model update');
+  }, [addToHistory, addError]);
 
   // VALIDATION
   // VALIDATION
@@ -8453,7 +8032,7 @@ const ADIA = () => {
         const allParallel = layerStates.length > 0 && layerStates.every(s => s.isParallel);
 
         if (totalAutostarts === 0) {
-          const layerName = layer.name || (layer.id === 'root' ? 'Root' : layer.id);
+          const layerName = sysmlObjectLabel(layer, layer.id === 'root' ? 'Root' : 'Region');
           newErrors.push({
             id: uuidv4(),
             type: 'error',
@@ -8465,7 +8044,7 @@ const ADIA = () => {
           });
         } else if (totalAutostarts > 1 && !allParallel) {
           [...autostartStates, ...autostartJunctions].forEach(s => {
-            const layerName = layer.name || (layer.id === 'root' ? 'Root' : layer.id);
+            const layerName = sysmlObjectLabel(layer, layer.id === 'root' ? 'Root' : 'Region');
             newErrors.push({
               id: uuidv4(),
               type: 'error',
@@ -8621,17 +8200,17 @@ const ADIA = () => {
 
   const handleExecuteAiActions = useCallback((actions: any[]) => {
     executeAiActions(
-      actions, 
+      actions,
       { states, variables, junctions, layers, currentLayerId },
-      { 
-        setStates, setVariables, setTransitions, setBlocks, addError,
+      {
+        setStates, setVariables, setTransitions, addError,
         setFactors, setHeaders, setModelType: setActiveModel,
         calculateRSM, calculateGMDH, calculateTaguchi,
         handleExportToXbridges: handleExportToXBridges,
         handleExportToVLab
       }
     );
-  }, [states, variables, junctions, layers, currentLayerId, addError, setStates, setVariables, setTransitions, setBlocks, setFactors, setHeaders, setActiveModel, calculateRSM, calculateGMDH, calculateTaguchi, handleExportToXBridges, handleExportToVLab]);
+  }, [states, variables, junctions, layers, currentLayerId, addError, setStates, setVariables, setTransitions, setFactors, setHeaders, setActiveModel, calculateRSM, calculateGMDH, calculateTaguchi, handleExportToXBridges, handleExportToVLab]);
 
   const simulationIOMappings = useMemo(
     () => factoryIOEnabled ? createFactoryIOMappings(factoryIOMapping) : [],
@@ -8656,6 +8235,9 @@ const ADIA = () => {
     previousSimulationModelKeyRef.current = simulationModelKey;
     simulationLifecycleRef.current.invalidate();
     simulationSessionRef.current = null;
+    hmiInputQueueRef.current.clear();
+    setHmiResetVersion(version => version + 1);
+    setHmiSamples([]);
     setIsRunning(false);
     setActiveStates({});
     setStateTimers({});
@@ -8744,6 +8326,9 @@ const ADIA = () => {
   ) => {
     const update = traceFrameToAppUpdate(frame, session.ir);
     const activeIds = new Set(Object.values(update.activeStates));
+    if (sampleScope) setHmiSamples(prev => [...prev, {
+      time: timeSeconds, values: { ...update.variableValues },
+    }].slice(-600));
 
     setVariables(prev => prev.map(variable => {
       if (!Object.prototype.hasOwnProperty.call(update.variableValues, variable.id)) {
@@ -8826,6 +8411,14 @@ const ADIA = () => {
       const frame = await runAppSimulationTick(session, tickMs, {
         readInputs: readFactoryInputs,
         isCurrent: () => lifecycle.isCurrent(operation),
+        beforeStep: () => {
+          for (const [id, value] of Object.entries(hmiInputQueueRef.current.drain())) {
+            const variable = variables.find(v => v.id === id);
+            if (!variable || session.ioMappings.some(m => m.variableId === id && m.direction === 'read')) continue;
+            const parsed = parseHmiVariableValue(variable, value);
+            if (parsed.accepted) setSessionVariableValue(session, id, parsed.value);
+          }
+        },
         applyFrame: nextFrame => {
           setSimulationTime(newTime);
           applySimulationFrameToReact(session, nextFrame, newTime, true);
@@ -8854,7 +8447,7 @@ const ADIA = () => {
   }, [
     addError, applySimulationFrameToReact, createSimulationSession,
     readFactoryInputs, simulationTime, tickMs,
-    writeFactoryOutputs
+    writeFactoryOutputs, variables
   ]);
 
   const startSimulation = useCallback(async () => {
@@ -8864,7 +8457,7 @@ const ADIA = () => {
       return;
     }
     if (!validateModel()) return;
-
+    setIsRunning(false);
     const lifecycle = simulationLifecycleRef.current;
     lifecycle.invalidate();
     const generation = lifecycle.currentGeneration();
@@ -8876,6 +8469,7 @@ const ADIA = () => {
       simulationSessionRef.current = session;
       setSimulationTime(0);
       setScopeData([]);
+      setHmiSamples([]);
       setTraceHistory([]);
       setFiredTransitions({});
       applySimulationFrameToReact(session, session.initialFrame, 0, false);
@@ -8884,6 +8478,7 @@ const ADIA = () => {
         return;
       }
       setIsRunning(true);
+      setSimulationStartVersion(version => version + 1);
       addError('info', 'Simulation started');
     } catch (error: any) {
       simulationSessionRef.current = null;
@@ -8902,6 +8497,9 @@ const ADIA = () => {
 
   const resetSimulation = useCallback(async () => {
     setIsRunning(false);
+    hmiInputQueueRef.current.clear();
+    setHmiResetVersion(version => version + 1);
+    setHmiSamples([]);
     const lifecycle = simulationLifecycleRef.current;
     lifecycle.invalidate();
     const generation = lifecycle.currentGeneration();
@@ -8923,6 +8521,7 @@ const ADIA = () => {
         }
       );
       if (!lifecycle.isCurrent(operation)) return;
+      hmiInputQueueRef.current.clear();
 
       setSimulationTime(0);
       setScopeData([]);
@@ -8967,20 +8566,6 @@ const ADIA = () => {
     simStepRef.current = simulationStep;
   }, [simulationStep]);
 
-  // One-time migration: ensure all requirement blocks have a layerId.
-  // Blocks without layerId are old data and belong to the root layer.
-  useEffect(() => {
-    setBlocks(prev => {
-      const needsMigration = prev.some(b => b.stereotype === 'requirement' && b.layerId === undefined);
-      if (!needsMigration) return prev;
-      return prev.map(b =>
-        b.stereotype === 'requirement' && b.layerId === undefined
-          ? { ...b, layerId: 'root' }
-          : b
-      );
-    });
-  }, []); // Run once on mount
-
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | null = null;
     let cancelled = false;
@@ -9011,7 +8596,7 @@ const ADIA = () => {
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [isRunning, tickMs]);
+  }, [isRunning, tickMs, simulationStartVersion]);
 
   // LAYER / NESTED STATE OPERATIONS
   const enterLayer = useCallback((stateId: string) => {
@@ -9050,16 +8635,89 @@ const ADIA = () => {
   }, [blocks, currentLayerId, addError]);
 
   const enterBlock = useCallback((blockId: string) => {
-    const block = blocks.find(b => b.id === blockId);
+    console.log('[DEBUG_ENTER_BLOCK] called with blockId:', blockId);
+    const block = blocks.find(b => b.id === blockId) ?? (canonicalSysmlRepository.definitions[blockId]?.kind === 'block' ? { id: blockId, name: canonicalSysmlRepository.definitions[blockId].name } : null);
+    console.log('[DEBUG_ENTER_BLOCK] resolved block:', block);
     if (!block) return;
+
+    const nav = enterBlockContext(
+      {
+        activeDiagramId: activeSysmlDiagramIdState || activeSysmlDiagramId,
+        diagramKind: diagramMode,
+        contextElementId: diagramMode === 'ibd' ? currentLayerId : undefined,
+        returnStack: diagramNavigationStack,
+      },
+      canonicalSysmlRepository,
+      blockId,
+    );
+    setDiagramNavigationStack(nav.returnStack);
+    setActiveSysmlDiagramIdState(nav.activeDiagramId);
 
     setLayerStack(prev => [...prev, currentLayerId]);
     setLayerPath(prev => [...prev, block.name]);
     setCurrentLayerId(blockId);
     setDiagramMode('ibd');
     setSelectedIds([]);
+    setView({ scale: 1, offsetX: 0, offsetY: 0 });
     addError('info', `Entered block: ${block.name}`);
-  }, [blocks, currentLayerId, addError]);
+  }, [blocks, currentLayerId, addError, activeSysmlDiagramIdState, activeSysmlDiagramId, diagramMode, diagramNavigationStack, canonicalSysmlRepository, setDiagramMode]);
+
+  const handleActivateIbdDiagram = useCallback(() => {
+    // 1. If a block is currently selected on the canvas, enter its IBD
+    const targetBlockId = (selectedIds.length === 1 ? selectedIds[0] : null)
+      ?? (selectedIds.length > 0 ? selectedIds.find(id => canonicalSysmlRepository.definitions[id]?.kind === 'block' || blocks.some(b => b.id === id && b.stereotype !== 'requirement')) : null);
+    const selectedBlock = targetBlockId
+      ? (blocks.find(b => b.id === targetBlockId && b.stereotype !== 'requirement')
+          ?? (canonicalSysmlRepository.definitions[targetBlockId]?.kind === 'block' ? canonicalSysmlRepository.definitions[targetBlockId] : null))
+      : null;
+    if (selectedBlock) {
+      enterBlock(selectedBlock.id);
+      return;
+    }
+
+    // 2. If already inside a valid block IBD, remain in it
+    if (diagramMode === 'ibd' && currentLayerId !== 'root' && canonicalSysmlRepository.definitions[currentLayerId]?.kind === 'block') {
+      return;
+    }
+
+    // 3. If active diagram state points to an IBD diagram, activate its context block
+    if (activeSysmlDiagramIdState && canonicalSysmlRepository.diagrams[activeSysmlDiagramIdState]?.diagramKind === 'ibd') {
+      const diag = canonicalSysmlRepository.diagrams[activeSysmlDiagramIdState];
+      const targetId = diag.contextElementId ?? diag.ownerId;
+      if (targetId && canonicalSysmlRepository.definitions[targetId]?.kind === 'block') {
+        enterBlock(targetId);
+        return;
+      }
+    }
+
+    // 4. If any block exists in the repository, enter the first block
+    const firstBlock = blocks.find(b => b.stereotype !== 'requirement') ?? Object.values(canonicalSysmlRepository.definitions).find(d => d.kind === 'block');
+    if (firstBlock) {
+      enterBlock(firstBlock.id);
+      return;
+    }
+
+    // 5. Fallback: switch mode to ibd
+    setDiagramMode('ibd');
+  }, [selectedIds, blocks, diagramMode, currentLayerId, canonicalSysmlRepository, activeSysmlDiagramIdState, enterBlock, setDiagramMode]);
+
+  const syncStateMachineWorkspaceToLayer = useCallback((layerId: string) => {
+    const matchingTab = diagramWorkspace.tabs.find(tab =>
+      tab.kind === 'stateMachineDiagram' && tab.contextRegionId === layerId
+      && seededStateMachineDiagrams.some(diagram => diagram.id === tab.diagramId && diagram.contextRegionId === layerId)
+    );
+    if (matchingTab) {
+      setDiagramWorkspace(previous => ({ ...previous, activeTab: matchingTab }));
+      return;
+    }
+    const stateMachineFile = ensureDefaultStateMachineWorkspaceFile(workspaceFiles, (): WorkspaceFile => ({
+      id: 'default_sm', name: 'Main State Machine', type: 'statemachine', data: getActiveStateData('statemachine'),
+    }));
+    if (stateMachineFile.files !== workspaceFiles) setWorkspaceFiles(stateMachineFile.files);
+    setOpenTabIds(previous => previous.includes(stateMachineFile.file.id) ? previous : [...previous, stateMachineFile.file.id]);
+    setActiveFileId(stateMachineFile.file.id);
+    setDiagramWorkspace(previous => ({ ...previous, activeTab: null }));
+  }, [diagramWorkspace.tabs, seededStateMachineDiagrams, workspaceFiles, getActiveStateData]);
 
   const exitLayer = useCallback(() => {
     if (layerStack.length === 0) return;
@@ -9068,13 +8726,30 @@ const ADIA = () => {
     setLayerPath(prev => prev.slice(0, -1));
     setCurrentLayerId(parentLayerId);
 
-    if (diagramMode === 'ibd' && parentLayerId === 'root') {
-      setDiagramMode('bdd');
+    if (diagramMode === 'statemachine') syncStateMachineWorkspaceToLayer(parentLayerId);
+
+    if (diagramMode === 'ibd') {
+      const nav = navigateBack(
+        {
+          activeDiagramId: activeSysmlDiagramIdState || activeSysmlDiagramId,
+          diagramKind: diagramMode,
+          contextElementId: currentLayerId,
+          returnStack: diagramNavigationStack,
+        },
+        canonicalSysmlRepository,
+      );
+      setDiagramNavigationStack(nav.returnStack);
+      setActiveSysmlDiagramIdState(nav.activeDiagramId);
+      if (nav.activeDiagramId && (canonicalSysmlRepository.diagrams[nav.activeDiagramId] || seededStateMachineDiagrams.some(d => d.id === nav.activeDiagramId))) {
+        openExactDiagramById(nav.activeDiagramId, { preserveReturnStack: true });
+      } else if (nav.diagramKind !== diagramMode) {
+        setDiagramMode(nav.diagramKind as DiagramMode);
+      }
     }
 
     setSelectedIds([]);
     addError('info', 'Returned to parent layer');
-  }, [layerStack, diagramMode, addError]);
+  }, [layerStack, diagramMode, addError, activeSysmlDiagramIdState, activeSysmlDiagramId, currentLayerId, diagramNavigationStack, canonicalSysmlRepository, seededStateMachineDiagrams, openExactDiagramById, setDiagramMode, syncStateMachineWorkspaceToLayer]);
 
   const goToLayer = useCallback((index: number) => {
     if (index >= layerPath.length - 1) return;
@@ -9083,13 +8758,34 @@ const ADIA = () => {
     setLayerPath(prev => prev.slice(0, index + 1));
     setCurrentLayerId(targetLayerId);
 
-    if (diagramMode === 'ibd' && targetLayerId === 'root') {
-      setDiagramMode('bdd');
+    if (diagramMode === 'statemachine') syncStateMachineWorkspaceToLayer(targetLayerId);
+
+    if (diagramMode === 'ibd') {
+      if (targetLayerId === 'root' || index === 0) {
+        const nav = navigateRoot(
+          {
+            activeDiagramId: activeSysmlDiagramIdState || activeSysmlDiagramId,
+            diagramKind: diagramMode,
+            contextElementId: currentLayerId,
+            returnStack: diagramNavigationStack,
+          },
+          canonicalSysmlRepository,
+        );
+        setDiagramNavigationStack(nav.returnStack);
+        setActiveSysmlDiagramIdState(nav.activeDiagramId);
+        if (nav.activeDiagramId && (canonicalSysmlRepository.diagrams[nav.activeDiagramId] || seededStateMachineDiagrams.some(d => d.id === nav.activeDiagramId))) {
+          openExactDiagramById(nav.activeDiagramId, { preserveReturnStack: true });
+        } else if (nav.diagramKind !== diagramMode) {
+          setDiagramMode(nav.diagramKind as DiagramMode);
+        }
+      } else {
+        setDiagramNavigationStack(prev => prev.slice(0, index));
+      }
     }
 
     setSelectedIds([]);
     addError('info', `Navigated to layer: ${layerPath[index]}`);
-  }, [layerStack, layerPath, diagramMode, addError]);
+  }, [layerStack, layerPath, diagramMode, addError, activeSysmlDiagramIdState, activeSysmlDiagramId, currentLayerId, diagramNavigationStack, canonicalSysmlRepository, seededStateMachineDiagrams, openExactDiagramById, setDiagramMode, syncStateMachineWorkspaceToLayer]);
 
   // STATE MACHINE EDITOR
   const createState = useCallback((x: number, y: number, parentId?: string) => {
@@ -9166,12 +8862,8 @@ const ADIA = () => {
     }
   }, [layers, states]);
 
-  const deleteNonStateElements = useCallback((ids: string[]) => {
+  const applyNonStateTransaction = useCallback((transaction: import('./services/sysmlTransactionAdapter').LegacySysmlDeletionResult, ids: string[]) => {
     const idSet = new Set(ids);
-    if (idSet.size === 0) return;
-
-    const transaction = applyLegacySysmlDeletion({ blocks, relationships, parts, connectors }, ids);
-    if (requiresDeletionConfirmation(transaction.impact) && !window.confirm(formatLegacyDeletionImpact(transaction.impact))) return;
     addToHistory();
     setJunctions(prev => prev.filter(j => !idSet.has(j.id)));
     setTransitions(prev => prev.filter(t => !idSet.has(t.id) && !idSet.has(t.sourceId) && !idSet.has(t.targetId)));
@@ -9181,13 +8873,48 @@ const ADIA = () => {
       transitionIds: l.transitionIds.filter(tid => !idSet.has(tid))
     })));
     const deletedIds = new Set(transaction.impact.deletedElementIds);
-    setBlocks(transaction.model.blocks);
-    setRelationships(transaction.model.relationships);
-    setParts(transaction.model.parts);
-    setConnectors(transaction.model.connectors);
+    const gatewayResult = executeConfirmedDeletion(transaction.impact.deletedElementIds);
+    if (!gatewayResult.committed) {
+      gatewayResult.diagnostics.forEach(diagnostic => addError(diagnostic.severity, diagnostic.message, 'SysML', diagnostic.elementId));
+      return;
+    }
     setInterfaceRealizations(prev => prev.filter(ir => !deletedIds.has(ir.id) && !deletedIds.has(ir.partId) && !deletedIds.has(ir.interfaceId)));
     setSelectedIds(prev => prev.filter(sid => !deletedIds.has(sid)));
-  }, [addToHistory, blocks, relationships, parts, connectors]);
+  }, [addToHistory, executeConfirmedDeletion, addError]);
+
+  const deleteNonStateElements = useCallback((ids: string[]) => {
+    const idSet = new Set(ids);
+    if (idSet.size === 0) return;
+
+    const transaction = applyLegacySysmlDeletion({ blocks, relationships, parts, connectors }, ids);
+    const severity = impactSeverity(transaction.impact, authorizedBaselineIds);
+    if (severity === 'blocked') {
+      const blocked = transaction.impact.blockedBaselineIds ?? transaction.impact.affectedBaselineIds;
+      setSysmlDeleteConfirm({
+        impact: transaction.impact,
+        transaction,
+        elementName: `${ids.length} element(s)`,
+        elementKind: 'element',
+        severity,
+        onConfirm: () => {},
+      });
+      return;
+    }
+    if (requiresDeletionConfirmation(transaction.impact)) {
+      setSysmlDeleteConfirm({
+        impact: transaction.impact,
+        transaction,
+        elementName: `${ids.length} element(s)`,
+        elementKind: 'element',
+        severity,
+        onConfirm: () => {
+          applyNonStateTransaction(transaction, ids);
+        },
+      });
+      return;
+    }
+    applyNonStateTransaction(transaction, ids);
+  }, [blocks, relationships, parts, connectors, authorizedBaselineIds, applyNonStateTransaction]);
 
   const deleteStates = useCallback((targetIds: string | string[], otherDeletedIds: string[] = []) => {
     const rawIds = Array.isArray(targetIds) ? targetIds : [targetIds];
@@ -9299,10 +9026,14 @@ const ADIA = () => {
         junctionIds: l.junctionIds.filter(jid => !otherSet.has(jid)),
         transitionIds: l.transitionIds.filter(tid => !otherSet.has(tid))
       }));
-      setBlocks(prev => prev.filter(b => !otherSet.has(b.id)));
-      setRelationships(prev => prev.filter(r => !otherSet.has(r.id) && !otherSet.has(r.sourceId) && !otherSet.has(r.targetId)));
-      setParts(prev => prev.filter(p => !otherSet.has(p.id)));
-      setConnectors(prev => prev.filter(c => !otherSet.has(c.id) && !otherSet.has(c.sourcePartId) && !otherSet.has(c.targetPartId)));
+      const gatewayResult = handleExecuteSysmlCommand({
+        type: 'deleteElements',
+        elementIds: [...otherSet],
+        authorizedBaselineIds,
+      });
+      if (!gatewayResult.committed) {
+        gatewayResult.diagnostics.forEach(diagnostic => addError(diagnostic.severity, diagnostic.message, 'SysML', diagnostic.elementId));
+      }
       setInterfaceRealizations(prev => prev.filter(ir => !otherSet.has(ir.id) && !otherSet.has(ir.partId) && !otherSet.has(ir.interfaceId)));
     }
 
@@ -9320,13 +9051,13 @@ const ADIA = () => {
     const deletedStateCount = resolvedIds.length;
     if (deletedStateCount === 1) {
       const stateObj = states.find(s => s.id === resolvedIds[0]);
-      addError('info', `Deleted state: ${stateObj?.name || resolvedIds[0]}`);
+      addError('info', `Deleted state: ${sysmlObjectLabel(stateObj, 'State')}`);
     } else if (deletedStateCount > 1) {
       addError('info', `Deleted ${deletedStateCount} states`);
     } else {
       addError('info', 'Deleted selected elements');
     }
-  }, [deleteConfirmState, states, layers, junctions, transitions, currentLayerId, layerStack, layerPath, addError, addToHistory]);
+  }, [deleteConfirmState, states, layers, junctions, transitions, currentLayerId, layerStack, layerPath, addError, addToHistory, handleExecuteSysmlCommand, authorizedBaselineIds]);
 
   const createXBridgesState = useCallback((x: number, y: number) => {
     addToHistory();
@@ -9467,168 +9198,737 @@ const ADIA = () => {
     addError('info', 'Deleted transition');
   }, [addError]);
 
-  // BDD OPERATIONS
-  const createBlock = useCallback((x: number, y: number, stereotype: string = 'block') => {
-    addToHistory();
-    const newId = uuidv4();
-    // For requirements, store which layer this block was created in
-    const blockLayerId = (stereotype === 'requirement' && diagramMode === 'requirements') ? currentLayerId : undefined;
-    const newBlock: BlockData = {
-      id: newId,
-      name: `New${stereotype.charAt(0).toUpperCase() + stereotype.slice(1)}`,
-      stereotype,
-      x: snapEnabled ? snapToGrid(x - 75, GRID_SIZE) : x - 75,
-      y: snapEnabled ? snapToGrid(y - 50, GRID_SIZE) : y - 50,
-      width: 150,
-      height: 100,
-      properties: [],
-      classes: [],
-      operations: [],
-      constraints: [],
-      ports: [],
-      reqId: stereotype === 'requirement' ? `REQ-${blocks.filter(b => b.stereotype === 'requirement').length + 1}` : undefined,
-      status: stereotype === 'requirement' ? 'Draft' : undefined,
-      priority: stereotype === 'requirement' ? 'Medium' : undefined,
-      description: stereotype === 'requirement' ? 'Requirement text...' : undefined,
-      risk: stereotype === 'requirement' ? 'Medium' : undefined,
-      verificationMethod: stereotype === 'requirement' ? 'Test' : undefined,
-      source: stereotype === 'requirement' ? '' : undefined,
-      version: stereotype === 'requirement' ? '1.0' : undefined,
-      rationale: stereotype === 'requirement' ? '' : undefined,
-      namespace: [],
-      isAbstract: false,
-      isLeaf: false,
-      layerId: blockLayerId,
-    };
-    setBlocks(prev => [...prev, newBlock]);
+  // BDD / SysML CREATION OPERATIONS
+  const createSysmlElementOnActiveDiagram = useCallback((
+    x: number,
+    y: number,
+    kind: DiagramCreationKind,
+  ) => {
+    const diagramId = resolveActiveSysmlDiagramTarget({
+      diagramMode,
+      activeDiagramId: activeSysmlDiagramId,
+      currentLayerId,
+    });
+    const contextElementId = diagramMode === 'ibd' ? currentLayerId : undefined;
+    const ownerRes = resolveSysmlCreationOwner(canonicalSysmlRepository, {
+      diagramId,
+      diagramKind: diagramMode,
+      contextElementId,
+    });
+    if (!ownerRes.ok) {
+      addError('error', ownerRes.diagnostic.message, 'SysML');
+      return;
+    }
+    const ownerId = ownerRes.ownerId;
+    const parentRequirementId = diagramMode === 'requirements' && currentLayerId !== 'root' && currentLayerId !== 'requirements'
+      ? (canonicalSysmlRepository.requirements[currentLayerId] ? currentLayerId : undefined)
+      : undefined;
 
-    setSelectedIds([newBlock.id]);
-    addError('info', `Created ${stereotype}: ${newBlock.name}`);
-  }, [snapEnabled, addError, addToHistory, blocks, diagramMode, currentLayerId]);
+    // Package Diagram: creating inside a Package symbol makes that Package the owner.
+    const nestedOwnerId = diagramMode === 'package'
+      ? findDropTargetPackage('', { x: x - 1, y: y - 1, width: 2, height: 2 }, packageNestingNodes)?.id
+      : undefined;
+    const outcome = buildDiagramCreationCommand({
+      repository: canonicalSysmlRepository,
+      kind,
+      ownerId,
+      diagramId,
+      diagramKind: diagramMode,
+      contextElementId,
+      nestedOwnerId,
+      position: {
+        x: snapEnabled ? snapToGrid(x - 75, GRID_SIZE) : x - 75,
+        y: snapEnabled ? snapToGrid(y - 50, GRID_SIZE) : y - 50,
+      },
+    });
+    if (!outcome.ok) {
+      addError('error', outcome.diagnostic.message, 'SysML');
+      return;
+    }
+
+    let commandToDispatch: SysmlEditorCommand = outcome.command;
+    if (kind === 'Requirement' && parentRequirementId) {
+      commandToDispatch = {
+        type: 'batch',
+        commands: [
+          outcome.command,
+          {
+            type: 'createElement',
+            element: {
+              id: uuidv4(),
+              sourceId: parentRequirementId,
+              targetId: outcome.semanticId,
+              kind: 'requirementContainment',
+            },
+          },
+        ],
+      };
+    }
+
+    const result = handleExecuteSysmlCommand(commandToDispatch);
+    if (result.committed) {
+      setSelectedIds([outcome.semanticId]);
+      const nestedOwnerName = nestedOwnerId ? canonicalSysmlRepository.packages[nestedOwnerId]?.name : undefined;
+      addError('info', parentRequirementId && kind === 'Requirement' ? `Created contained requirement`
+        : nestedOwnerName ? `Created ${kind} in Package ${nestedOwnerName}` : `Created ${kind}`);
+    } else {
+      result.diagnostics.forEach(item => addError(item.severity, item.message, 'SysML', item.elementId));
+    }
+  }, [canonicalSysmlRepository, currentLayerId, diagramMode, activeSysmlDiagramId, snapEnabled, handleExecuteSysmlCommand, addError, packageNestingNodes]);
+
+  /** Ask before an ownership move implied by a Package Diagram drop or Containment path. */
+  const requestPackageOwnershipMove = useCallback((
+    elementIds: string[],
+    targetOwnerId: string,
+    revertBounds: Record<string, PresentationCoordinates> = {},
+  ) => {
+    const movable = elementIds.filter(id => id !== targetOwnerId && semanticOwnerOf(id) !== targetOwnerId);
+    if (movable.length === 0) {
+      addError('info', 'The element is already owned by that Package.', 'SysML');
+      return;
+    }
+    setPendingPackageMove({ elementIds: movable, targetOwnerId, diagramId: activeSysmlDiagramId, revertBounds });
+  }, [semanticOwnerOf, activeSysmlDiagramId, addError]);
+
+  const createBlock = useCallback((x: number, y: number, stereotype: string = 'block') => {
+    const kind: DiagramCreationKind = stereotype === 'requirement' ? 'Requirement'
+      : stereotype === 'testCase' ? 'TestCase'
+      : stereotype === 'useCase' ? 'UseCase'
+      : 'Block';
+    createSysmlElementOnActiveDiagram(x, y, kind);
+  }, [createSysmlElementOnActiveDiagram]);
 
   const updateBlock = useCallback((id: string, updates: Partial<BlockData>) => {
-    setBlocks(prev => prev.map(b => b.id === id ? { ...b, ...updates } : b));
-  }, []);
+    const geometricKeys = ['x', 'y', 'width', 'height', 'ibdX', 'ibdY', 'ibdWidth', 'ibdHeight'];
+    const hasGeometric = Object.keys(updates).some(k => geometricKeys.includes(k));
+    const hasSemantic = Object.keys(updates).some(k => !geometricKeys.includes(k));
+
+    if (hasGeometric && !hasSemantic) {
+      const activeDiagramId = activeSysmlDiagramId;
+      const presentation: PresentationCoordinates = {};
+      if (updates.x !== undefined || updates.ibdX !== undefined) presentation.x = updates.x ?? updates.ibdX;
+      if (updates.y !== undefined || updates.ibdY !== undefined) presentation.y = updates.y ?? updates.ibdY;
+      if (updates.width !== undefined || updates.ibdWidth !== undefined) presentation.width = updates.width ?? updates.ibdWidth;
+      if (updates.height !== undefined || updates.ibdHeight !== undefined) presentation.height = updates.height ?? updates.ibdHeight;
+      if (isDraggingRef.current || isResizingRef.current) {
+        updatePresentationDraft(id, presentation);
+        const existing = pendingPresentationUpdatesRef.current.get(id) ?? {};
+        pendingPresentationUpdatesRef.current.set(id, { ...existing, ...presentation });
+        return;
+      }
+      handleExecuteSysmlCommand({
+        type: 'updatePresentation',
+        diagramId: activeDiagramId,
+        elementId: id,
+        presentation,
+        coalesceKey: `drag-${id}`,
+      });
+      return;
+    }
+
+    if (hasGeometric && hasSemantic) {
+      const activeDiagramId = activeSysmlDiagramId;
+      const presentation: PresentationCoordinates = {};
+      if (updates.x !== undefined) presentation.x = updates.x;
+      if (updates.y !== undefined) presentation.y = updates.y;
+      if (updates.width !== undefined) presentation.width = updates.width;
+      if (updates.height !== undefined) presentation.height = updates.height;
+      const semanticPatch = { ...updates };
+      geometricKeys.forEach(k => delete (semanticPatch as any)[k]);
+      const semanticCommand = buildBlockPropertyUpdateCommand(canonicalSysmlRepository, id, semanticPatch as Record<string, unknown>);
+      const semanticCommands = semanticCommand.type === 'batch' ? semanticCommand.commands : [semanticCommand];
+      const result = handleExecuteSysmlCommand({
+        type: 'batch',
+        commands: [
+          ...semanticCommands,
+          { type: 'updatePresentation', diagramId: activeDiagramId, elementId: id, presentation },
+        ],
+      });
+      if (!result.committed) {
+        result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
+      }
+      return;
+    }
+
+    const command = buildBlockPropertyUpdateCommand(canonicalSysmlRepository, id, updates as Record<string, unknown>);
+    const result = handleExecuteSysmlCommand(command);
+    if (!result.committed) {
+      if (Array.isArray(updates.satisfiedReqIds) && result.impact && command.type === 'deleteElements') {
+        const severity = impactSeverity(result.impact, authorizedBaselineIds);
+        const blockName = canonicalSysmlRepository.definitions[id]?.name ?? id;
+        setSysmlDeleteConfirm({
+          impact: result.impact,
+          elementName: `Satisfy relationship(s) for ${blockName}`,
+          elementKind: 'relationship',
+          severity,
+          onConfirm: severity === 'blocked' ? () => {} : () => {
+            const confirmed = handleExecuteSysmlCommand({
+              ...command,
+              confirmedImpactHash: computeImpactHash(result.impact!),
+              authorizedBaselineIds,
+            });
+            if (!confirmed.committed) {
+              confirmed.diagnostics.forEach(diagnostic => addError(diagnostic.severity, diagnostic.message, 'SysML', diagnostic.elementId));
+            }
+          },
+        });
+        return;
+      }
+      result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
+    }
+  }, [canonicalSysmlRepository, handleExecuteSysmlCommand, addError, updatePresentationDraft, activeSysmlDiagramId, authorizedBaselineIds]);
+
+  const applySysmlDeletion = useCallback((transaction: import('./services/sysmlTransactionAdapter').LegacySysmlDeletionResult, msg: string) => {
+    const deletedIds = new Set(transaction.impact.deletedElementIds);
+    const result = executeConfirmedDeletion(transaction.impact.deletedElementIds);
+    if (!result.committed) {
+      result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
+      return;
+    }
+    setInterfaceRealizations(prev => prev.filter(ir => !deletedIds.has(ir.id) && !deletedIds.has(ir.partId) && !deletedIds.has(ir.interfaceId)));
+    setSelectedIds(prev => prev.filter(sid => !deletedIds.has(sid)));
+    if (deletedIds.has(currentLayerId) || [...layerStack].some(id => deletedIds.has(id))) {
+      setCurrentLayerId('root');
+      setLayerStack([]);
+      setLayerPath([]);
+    }
+    addError('info', msg);
+  }, [executeConfirmedDeletion, currentLayerId, layerStack, addError]);
 
   const deleteBlock = useCallback((id: string) => {
     const block = blocks.find(b => b.id === id);
     if (!block) return;
     const kind = block.stereotype === 'requirement' ? 'requirement' : 'block';
     const transaction = applyLegacySysmlDeletion({ blocks, relationships, parts, connectors }, [id]);
-    if (requiresDeletionConfirmation(transaction.impact) && !window.confirm(formatLegacyDeletionImpact(transaction.impact))) return;
-    addToHistory();
-    const deletedIds = new Set(transaction.impact.deletedElementIds);
-    setBlocks(transaction.model.blocks);
-    setRelationships(transaction.model.relationships);
-    setParts(transaction.model.parts);
-    setConnectors(transaction.model.connectors);
-    setInterfaceRealizations(prev => prev.filter(ir => !deletedIds.has(ir.id) && !deletedIds.has(ir.partId) && !deletedIds.has(ir.interfaceId)));
-    setSelectedIds(prev => prev.filter(sid => !deletedIds.has(sid)));
-    addError('info', `Deleted ${kind}: ${block.name}`);
-  }, [blocks, relationships, parts, connectors, addError, addToHistory]);
+    const severity = impactSeverity(transaction.impact, authorizedBaselineIds);
+    if (severity === 'blocked' || requiresDeletionConfirmation(transaction.impact)) {
+      setSysmlDeleteConfirm({
+        impact: transaction.impact,
+        transaction,
+        elementName: block.name,
+        elementKind: kind,
+        severity,
+        onConfirm: severity === 'blocked' ? () => {} : () => {
+          applySysmlDeletion(transaction, `Deleted ${kind}: ${block.name}`);
+        },
+      });
+      return;
+    }
+    applySysmlDeletion(transaction, `Deleted ${kind}: ${block.name}`);
+  }, [blocks, relationships, parts, connectors, addError, addToHistory, authorizedBaselineIds, applySysmlDeletion]);
 
   const removeFromDiagram = useCallback((ids: string | string[]) => {
     const rawIds = Array.isArray(ids) ? ids : [ids];
     if (rawIds.length === 0) return;
-    const idSet = new Set(rawIds);
-    addToHistory();
-    const currentDiagramId = diagramMode === 'requirements' ? 'requirements' : (diagramMode || 'default');
-    setDiagramPresentations(prev => {
-      const existing = prev[currentDiagramId]?.elementIds ?? blocks.map(b => b.id);
-      return {
-        ...prev,
-        [currentDiagramId]: {
-          elementIds: existing.filter(id => !idSet.has(id)),
-        },
-      };
+    const currentDiagramId = activeSysmlDiagramId;
+    const result = handleExecuteSysmlCommand({
+      type: 'removeFromDiagram',
+      diagramId: currentDiagramId,
+      elementIds: rawIds,
     });
-    setBlocks(prev => prev.filter(b => !idSet.has(b.id)));
-    setRelationships(prev => prev.filter(r => !idSet.has(r.sourceId) && !idSet.has(r.targetId)));
-    setSelectedIds(prev => prev.filter(sid => !idSet.has(sid)));
-    addError('info', `Removed ${rawIds.length} element(s) from diagram (preserved in model)`);
-  }, [addToHistory, diagramMode, blocks, addError]);
+    if (!result.committed) {
+      addError('error', result.diagnostics.map(diagnostic => diagnostic.message).join('; ') || 'Unable to remove the presentation from the diagram.');
+      return;
+    }
+    setSelectedIds(prev => prev.filter(id => !rawIds.includes(id)));
+    addError('info', `Removed ${rawIds.length} presentation(s) from diagram (preserved in model)`);
+  }, [addError, diagramMode, currentLayerId, activeSysmlDiagramId, handleExecuteSysmlCommand]);
+
+  /** Back along the diagram return stack (pkg → bdd → … drill-downs) outside the IBD layer breadcrumb. */
+  const diagramBackTarget = diagramMode !== 'ibd' && diagramMode !== 'statemachine'
+    ? diagramNavigationStack[diagramNavigationStack.length - 1]
+    : undefined;
+  const navigateDiagramBack = useCallback(() => {
+    const nav = navigateBack({
+      activeDiagramId: activeSysmlDiagramIdState || activeSysmlDiagramId,
+      diagramKind: diagramMode,
+      returnStack: diagramNavigationStack,
+    }, canonicalSysmlRepository);
+    if (!canonicalSysmlRepository.diagrams[nav.activeDiagramId]) {
+      setDiagramNavigationStack(nav.returnStack);
+      return;
+    }
+    openExactDiagramById(nav.activeDiagramId, { preserveReturnStack: true });
+    // After opening: openExactDiagramById re-applies the pre-pop stack from its closure.
+    setDiagramNavigationStack(nav.returnStack);
+  }, [activeSysmlDiagramIdState, activeSysmlDiagramId, diagramMode, diagramNavigationStack, canonicalSysmlRepository, openExactDiagramById]);
+
+  /** Cameo "Display Paths": re-show hidden relationships between the selected (or all) shown elements. */
+  const displayPackagePaths = useCallback(() => {
+    const presentation = sysmlDiagramPresentations[activeSysmlDiagramId];
+    const hidden = new Set(presentation?.hiddenElementIds ?? []);
+    const shown = new Set(presentation?.elementIds ?? []);
+    const scope = selectedIds.filter(id => shown.has(id));
+    const inScope = (id: string) => scope.length === 0 ? shown.has(id) : scope.includes(id);
+    const pathIds = Object.values(canonicalSysmlRepository.relationships)
+      .filter(rel => hidden.has(rel.id) && inScope(rel.sourceId) && inScope(rel.targetId))
+      .map(rel => rel.id);
+    if (pathIds.length === 0) {
+      addError('info', 'No hidden paths to display.');
+      return;
+    }
+    const result = handleExecuteSysmlCommand({ type: 'addToDiagram', diagramId: activeSysmlDiagramId, elementIds: pathIds });
+    if (result.committed) addError('info', `Displayed ${pathIds.length} path(s).`);
+    else result.diagnostics.forEach(diagnostic => addError(diagnostic.severity, diagnostic.message, 'SysML', diagnostic.elementId));
+  }, [sysmlDiagramPresentations, activeSysmlDiagramId, selectedIds, canonicalSysmlRepository, handleExecuteSysmlCommand, addError]);
 
   const createRequirement = useCallback((x: number, y: number) => {
     createBlock(x, y, 'requirement');
   }, [createBlock]);
 
-  const createRelationship = useCallback((sourceId: string, targetId: string, type: RelationshipData['type'] = 'association') => {
-    const newRel: RelationshipData = {
-      id: uuidv4(),
-      sourceId,
-      targetId,
-      type,
-      label: '',
-      sourceMultiplicity: '1',
-      targetMultiplicity: '1'
+  const createRelationship = useCallback((sourceId: string, targetId: string, type: RelationshipData['type']) => {
+    const sourceEndpoint = resolveUiConnectionEndpoint({ blocks, parts, states }, sourceId);
+    const targetEndpoint = resolveUiConnectionEndpoint({ blocks, parts, states }, targetId);
+    const newRel = { id: uuidv4(), sourceId, targetId, type };
+    const candidate: SysmlRelationship = {
+      id: newRel.id,
+      sourceId: newRel.sourceId,
+      targetId: newRel.targetId,
+      kind: (newRel.type === 'aggregation' ? 'sharedAggregation' : newRel.type) as SysmlRelationship['kind'],
+      name: '',
+      sourceFamily: sourceEndpoint.family,
+      targetFamily: targetEndpoint.family,
     };
-    const validation = validateLegacyRelationshipCandidate({ blocks, parts, relationships }, newRel);
-    if (!validation.valid) {
-      addError('error', `Invalid ${type}: ${validation.reason}`);
+    const result = handleExecuteSysmlCommand(
+      diagramMode !== 'statemachine' && activeSysmlDiagramId
+        ? { type: 'createAndPresent', diagramId: activeSysmlDiagramId, element: candidate, presentation: {} }
+        : { type: 'createElement', element: candidate }
+    );
+    if (!result.committed) {
+      result.diagnostics.forEach(d => addError(d.severity, d.code ? `${d.code}: ${d.message}` : d.message, 'SysML', d.elementId));
       return;
     }
-    addToHistory();
-    setRelationships(prev => [...prev, newRel]);
-    setSelectedIds([newRel.id]);
+    if (diagramMode !== 'statemachine') {
+      setSelectedIds([candidate.id]);
+    }
     addError('info', `Created ${type}`);
-  }, [addError, addToHistory, blocks, parts, relationships]);
+  }, [handleExecuteSysmlCommand, addError, activeSysmlDiagramId, blocks, parts, states, diagramMode]);
+
+  type BddFeatureDrag =
+    | { kind: 'property'; ownerId: string; featureId: string; name: string; typeId?: string; typeName: string; multiplicity: string }
+    | { kind: 'operation'; ownerId: string; name: string };
+  const [bddFeatureDrag, setBddFeatureDrag] = useState<BddFeatureDrag | null>(null);
+
+  const startBddFeatureDrag = useCallback((e: MouseEvent<SVGTextElement>, feature: BddFeatureDrag) => {
+    if (diagramMode !== 'bdd' || e.button !== 0) return;
+    e.stopPropagation();
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (rect) {
+      setMousePos({
+        x: ((e.clientX - rect.left) / uiZoom - view.offsetX) / view.scale,
+        y: ((e.clientY - rect.top) / uiZoom - view.offsetY) / view.scale,
+      });
+    }
+    setSelectedIds([feature.ownerId]);
+    setBddFeatureDrag(feature);
+  }, [diagramMode, uiZoom, view.offsetX, view.offsetY, view.scale]);
+
+  const dropBddFeatureOnBlock = useCallback((e: MouseEvent<SVGGElement>, targetId: string) => {
+    if (diagramMode !== 'bdd' || !bddFeatureDrag) return;
+    e.stopPropagation();
+    const source = sysmlCanvasView.blocks.find(block => block.id === bddFeatureDrag.ownerId) ?? blocks.find(block => block.id === bddFeatureDrag.ownerId);
+    const target = sysmlCanvasView.blocks.find(block => block.id === targetId) ?? blocks.find(block => block.id === targetId);
+    if (!source || !target || source.id === target.id) {
+      setBddFeatureDrag(null);
+      return;
+    }
+
+    let type: RelationshipData['type'];
+    let label: string;
+    let sourceMultiplicity = '1';
+    if (bddFeatureDrag.kind === 'property') {
+      const geometryResult = resolveBddPropertyRelationshipGeometry({
+        propertyId: bddFeatureDrag.featureId,
+        ownerBlockId: bddFeatureDrag.ownerId,
+        targetBlockId: target.id,
+        blocks: sysmlCanvasView.blocks.map(b => {
+          const bounds = computeBlockDisplayBounds(b);
+          return {
+            id: b.id,
+            name: b.name,
+            x: b.x,
+            y: b.y,
+            width: bounds.width,
+            height: bounds.height,
+            properties: b.properties?.map(p => ({
+              id: p.id,
+              name: p.name,
+              typeId: p.typeId,
+              typeName: p.type,
+            })),
+          };
+        }),
+      });
+      if (!geometryResult.ok && geometryResult.diagnostic) {
+        addError('warning', geometryResult.diagnostic.message);
+        setBddFeatureDrag(null);
+        return;
+      }
+      type = 'association';
+      label = `${bddFeatureDrag.name} : ${target.name}`;
+      sourceMultiplicity = bddFeatureDrag.multiplicity || '1';
+    } else {
+      type = 'dependency';
+      label = bddFeatureDrag.name;
+    }
+
+    const candidate: RelationshipData = {
+      id: uuidv4(),
+      sourceId: bddFeatureDrag.kind === 'property' ? bddFeatureDrag.featureId : source.id,
+      targetId: target.id,
+      type,
+      label,
+      sourceMultiplicity,
+      targetMultiplicity: '1',
+    };
+    const rejection = rejectUiRelationship({ blocks, parts, relationships }, candidate, 'bdd');
+    if (rejection) {
+      showConnectionPolicyError(rejection);
+    } else {
+      const rel: SysmlRelationship = {
+        id: candidate.id,
+        sourceId: candidate.sourceId,
+        targetId: candidate.targetId,
+        kind: (candidate.type === 'aggregation' ? 'sharedAggregation' : candidate.type) as SysmlRelationship['kind'],
+        name: candidate.label,
+      };
+      const result = handleExecuteSysmlCommand({
+        type: 'createAndPresent',
+        diagramId: activeSysmlDiagramId,
+        element: rel,
+        presentation: {},
+      });
+      if (result.committed) {
+        setSelectedIds([candidate.id]);
+        addError('info', `Created ${type} from ${bddFeatureDrag.kind}: ${bddFeatureDrag.name}`);
+      } else {
+        result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
+      }
+    }
+    setBddFeatureDrag(null);
+  }, [diagramMode, bddFeatureDrag, blocks, sysmlCanvasView, addError, relationships, parts, showConnectionPolicyError, addToHistory, handleExecuteSysmlCommand, activeSysmlDiagramId]);
 
   const updateRelationship = useCallback((id: string, updates: Partial<RelationshipData>) => {
-    const current = relationships.find(relationship => relationship.id === id);
-    if (!current) return;
-    const candidate = { ...current, ...updates };
-    const validation = validateLegacyRelationshipCandidate({ blocks, parts, relationships }, candidate);
-    if (!validation.valid) {
-      addError('error', `Invalid relationship update: ${validation.reason}`);
+    const patch: Record<string, unknown> = {};
+    if (updates.name !== undefined) patch.name = updates.name;
+    if (updates.label !== undefined) patch.name = updates.label;
+    if (updates.type !== undefined) patch.kind = updates.type === 'aggregation' ? 'sharedAggregation' : updates.type === 'derive' ? 'deriveReqt' : updates.type;
+    if (updates.sourceRole !== undefined) patch.sourceRole = updates.sourceRole;
+    if (updates.targetRole !== undefined) patch.targetRole = updates.targetRole;
+    if (updates.sourceMultiplicity !== undefined) patch.sourceMultiplicity = updates.sourceMultiplicity;
+    if (updates.targetMultiplicity !== undefined) patch.targetMultiplicity = updates.targetMultiplicity;
+    if (updates.sourceNavigable !== undefined) patch.sourceNavigable = updates.sourceNavigable;
+    if (updates.targetNavigable !== undefined) patch.targetNavigable = updates.targetNavigable;
+    if (updates.sourceAggregation !== undefined) patch.sourceAggregation = updates.sourceAggregation;
+    if (updates.targetAggregation !== undefined) patch.targetAggregation = updates.targetAggregation;
+
+    if (canonicalSysmlRepository.relationships?.[id]) {
+      const outcome = buildRelationshipUpdateCommand(canonicalSysmlRepository, id, patch);
+      if (!outcome.ok) {
+        addError('error', outcome.diagnostic.message, 'SysML');
+        return;
+      }
+      const result = handleExecuteSysmlCommand(outcome.command);
+      if (!result.committed) {
+        result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
+      }
       return;
     }
-    setRelationships(prev => prev.map(r => r.id === id ? candidate : r));
-  }, [relationships, blocks, parts, addError]);
+
+    const result = handleExecuteSysmlCommand(buildPartUpdateCommand(canonicalSysmlRepository, id, patch));
+    if (!result.committed) {
+      result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
+    }
+  }, [canonicalSysmlRepository, handleExecuteSysmlCommand, addError]);
 
   const deleteRelationship = useCallback((id: string) => {
-    addToHistory();
-    setRelationships(prev => prev.filter(r => r.id !== id));
-    setSelectedIds(prev => prev.filter(sid => sid !== id));
-    addError('info', 'Deleted relationship');
-  }, [addError, addToHistory]);
+    const transaction = applyLegacySysmlDeletion({ blocks, relationships, parts, connectors }, [id]);
+    const severity = impactSeverity(transaction.impact, authorizedBaselineIds);
+    if (severity === 'blocked' || requiresDeletionConfirmation(transaction.impact)) {
+      const rel = relationships.find(r => r.id === id);
+      setSysmlDeleteConfirm({
+        impact: transaction.impact,
+        transaction,
+        elementName: rel?.label || id,
+        elementKind: 'relationship',
+        severity,
+        onConfirm: severity === 'blocked' ? () => {} : () => {
+          applySysmlDeletion(transaction, 'Deleted relationship');
+        },
+      });
+      return;
+    }
+    applySysmlDeletion(transaction, 'Deleted relationship');
+  }, [blocks, relationships, parts, connectors, addError, addToHistory, authorizedBaselineIds, applySysmlDeletion]);
+
+  const deleteSemanticPackage = useCallback((id: string) => {
+    const pkg = canonicalSysmlRepository.packages[id];
+    if (!pkg || id === 'model') return;
+    const command = { type: 'deleteElements' as const, elementIds: [id], authorizedBaselineIds };
+    const result = handleExecuteSysmlCommand(command);
+    if (result.committed) {
+      setSelectedIds(previous => previous.filter(selectedId => selectedId !== id));
+      addError('info', `Deleted package: ${pkg.name}`);
+      return;
+    }
+    if (result.impact) {
+      const severity = impactSeverity(result.impact, authorizedBaselineIds);
+      setSysmlDeleteConfirm({
+        impact: result.impact,
+        elementName: pkg.name,
+        elementKind: 'package',
+        severity,
+        onConfirm: severity === 'blocked' ? () => {} : () => {
+          const confirmed = handleExecuteSysmlCommand({
+            ...command,
+            confirmedImpactHash: computeImpactHash(result.impact!),
+          });
+          if (confirmed.committed) {
+            setSelectedIds(previous => previous.filter(selectedId => selectedId !== id));
+            addError('info', `Deleted package: ${pkg.name}`);
+          } else {
+            confirmed.diagnostics.forEach(diagnostic => addError(diagnostic.severity, diagnostic.message, 'SysML', diagnostic.elementId));
+          }
+        },
+      });
+      return;
+    }
+    result.diagnostics.forEach(diagnostic => addError(diagnostic.severity, diagnostic.message, 'SysML', diagnostic.elementId));
+  }, [canonicalSysmlRepository, authorizedBaselineIds, handleExecuteSysmlCommand, addError]);
+
+  // Single entry point for every SysmlPropertyPanel. Deletes go through the
+  // same impact-review flow as the canvas/model delete actions (sending them
+  // straight to the gateway only yields an uncommitted impact preview).
+  const dispatchInspectorCommand = useCallback((cmd: Parameters<typeof sysmlCommandToEditorCommand>[0]) => {
+    const editorCmd = sysmlCommandToEditorCommand(cmd);
+    if (!editorCmd) return;
+    if (editorCmd.type === 'deleteElements') {
+      const [first] = editorCmd.elementIds;
+      if (editorCmd.elementIds.length === 1 && canonicalSysmlRepository.packages[first]) {
+        deleteSemanticPackage(first);
+      } else {
+        deleteNonStateElements(editorCmd.elementIds);
+      }
+      return;
+    }
+    const result = handleExecuteSysmlCommand(editorCmd);
+    if (!result.committed) result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
+  }, [canonicalSysmlRepository, deleteSemanticPackage, deleteNonStateElements, handleExecuteSysmlCommand, addError]);
 
   // IBD OPERATIONS
+  // Task 7 (spec 3.2, 4.1): IBD Part creation offers an explicit Block type
+  // choice through the shared property planner — never the first Block
+  // definition silently. The pending drop position and name travel with the
+  // type-selection request; resume commits the same legacy usage +
+  // definition-property records with IBD placement, mirroring the
+  // portTypePrompt select/create-new-type/cancel flow.
+  // Review follow-up (Finding 2): the resume accepts an explicit repository
+  // snapshot. Callers resuming immediately after a CreateNewType commit must
+  // pass the fresh `res.repository` — the render-closure
+  // `canonicalSysmlRepository` is stale until React state updates, and
+  // resolving the just-created type against it yields TYPE_NOT_FOUND.
+  // Existing callers omit the parameter and keep the closure behavior.
+  const commitIbdPartAt = useCallback((typeId: string | undefined, ownerBlockId: string, x: number, y: number, name: string, repository?: typeof canonicalSysmlRepository) => {
+    const repo = repository ?? canonicalSysmlRepository;
+
+    const contextBlock = sysmlCanvasView.blocks.find(b => b.id === currentLayerId);
+    const frameX = contextBlock?.ibdX ?? 50;
+    const frameY = contextBlock?.ibdY ?? 50;
+    const frameW = contextBlock?.ibdWidth ?? 1200;
+    const frameH = contextBlock?.ibdHeight ?? 800;
+
+    let initialX = snapEnabled ? snapToGrid(x - 75, GRID_SIZE) : x - 75;
+    let initialY = snapEnabled ? snapToGrid(y - 50, GRID_SIZE) : y - 50;
+    initialX = Math.max(frameX + 30, Math.min(initialX, frameX + frameW - 180));
+    initialY = Math.max(frameY + 40, Math.min(initialY, frameY + frameH - 140));
+
+    const plan = buildCreateOwnedPropertyCommand(repo, {
+      ownerBlockId,
+      propertyKind: 'part',
+      typeId,
+      name,
+      diagramId: activeSysmlDiagramId,
+      presentation: {
+        x: initialX,
+        y: initialY,
+        width: 150,
+        height: 100,
+      },
+    });
+
+    if (!plan.ok || !plan.command) {
+      const msg = plan.diagnostics[0]?.message ?? 'Failed to build Part command';
+      setPropertyTypePrompt(prev => prev ? { ...prev, error: msg } : null);
+      plan.diagnostics.forEach(d => addError('error', d.message, 'SysML', d.elementId));
+      return;
+    }
+
+    const result = handleExecuteSysmlCommand(plan.command);
+
+    if (result.committed) {
+      setPropertyTypePrompt(null);
+      // The part is the Block property: its id is the property id.
+      setSelectedIds([(plan.command.intent as any).featureId]);
+      addError('info', `Created part: ${name}`);
+    } else {
+      result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
+      setPropertyTypePrompt(prev => prev ? { ...prev, error: result.diagnostics[0]?.message } : null);
+    }
+  }, [canonicalSysmlRepository, currentLayerId, activeSysmlDiagramId, sysmlCanvasView, snapEnabled, handleExecuteSysmlCommand, addError]);
+
   const createPart = useCallback((x: number, y: number) => {
-    addToHistory();
-    const newPart: PartData = {
-      id: uuidv4(),
-      name: `part_${parts.length + 1}`,
-      blockId: currentLayerId,
-      typeId: null,
-      x: snapEnabled ? snapToGrid(x - 75, GRID_SIZE) : x - 75,
-      y: snapEnabled ? snapToGrid(y - 50, GRID_SIZE) : y - 50,
-      width: 150,
-      height: 100,
-      multiplicity: '1'
-    };
-    setParts(prev => [...prev, newPart]);
-    setSelectedIds([newPart.id]);
-    addError('info', `Created part: ${newPart.name}`);
-  }, [parts.length, currentLayerId, snapEnabled, addError, addToHistory]);
+    const ownerRes = resolveSysmlCreationOwner(canonicalSysmlRepository, {
+      diagramId: activeSysmlDiagramId,
+      diagramKind: 'ibd',
+      contextElementId: currentLayerId,
+    });
+    if (!ownerRes.ok) {
+      addError('error', ownerRes.diagnostic.message, 'SysML');
+      return;
+    }
+    const activeBlockId = ownerRes.ownerId;
+
+    // The part is created directly in the opened block. A selected Block
+    // (other than the owner) types the part; otherwise the gateway creates a
+    // dedicated Block type for it in the same command.
+    const selectedDefinition = selectedIds.length === 1 ? canonicalSysmlRepository.definitions[selectedIds[0]] : undefined;
+    const typeId = selectedDefinition?.kind === 'block' && selectedDefinition.id !== activeBlockId
+      ? selectedDefinition.id
+      : undefined;
+    commitIbdPartAt(typeId, activeBlockId, x, y, `part_${parts.length + 1}`);
+  }, [canonicalSysmlRepository, currentLayerId, activeSysmlDiagramId, selectedIds, parts.length, addError, commitIbdPartAt]);
+
+  const handlePropertyTypeSelected = useCallback((typeId: string) => {
+    if (!propertyTypePrompt) return;
+    const plan = planOwnedPropertyCreation(canonicalSysmlRepository, {
+      ownerBlockId: propertyTypePrompt.ownerBlockId,
+      propertyKind: 'part',
+      typeId,
+    });
+    if (plan.outcome !== 'command') {
+      setPropertyTypePrompt(prev => prev ? {
+        ...prev,
+        candidates: plan.outcome === 'typeSelection' ? plan.request.candidates : prev.candidates,
+        action: plan.outcome === 'typeSelection' ? plan.request.action : prev.action,
+        error: plan.outcome === 'error' ? plan.diagnostics[0]?.message : prev.error,
+      } : null);
+      return;
+    }
+    commitIbdPartAt(typeId, propertyTypePrompt.ownerBlockId, propertyTypePrompt.x, propertyTypePrompt.y, propertyTypePrompt.name);
+  }, [propertyTypePrompt, canonicalSysmlRepository, commitIbdPartAt]);
+
+  const handleCreateNewTypeForProperty = useCallback(() => {
+    if (!propertyTypePrompt) return;
+    // Canonical CreateNewType mirroring handleCreateNewTypeForPort: the new
+    // type commits through the semantic gateway with no diagram presentation,
+    // and the pending Part request resumes only after the new type commits.
+    const metaclass = propertyTypePrompt.action.payload?.suggestedMetaclass;
+    const elementKind = metaclass === 'InterfaceBlock' ? 'interface' : metaclass === 'ValueType' ? 'valueType' : 'block';
+    const ownerId = canonicalSysmlRepository.definitions[propertyTypePrompt.ownerBlockId]?.ownerId || 'model';
+    const siblingCount = Object.values(canonicalSysmlRepository.definitions).filter(d => d.kind === elementKind).length + 1;
+    const baseName = metaclass === 'InterfaceBlock' ? 'InterfaceBlock' : metaclass === 'ValueType' ? 'ValueType' : 'Block';
+    const element = elementKind === 'interface'
+      ? createInterface({ name: `${baseName}_${siblingCount}`, ownerId })
+      : elementKind === 'valueType'
+        ? createValueTypeDefinition({ name: `${baseName}_${siblingCount}`, ownerId })
+        : createBlockDefinition({ name: `${baseName}_${siblingCount}`, ownerId });
+    const res = handleExecuteSysmlCommand({ type: 'createElement', element } as any);
+    if (!res.committed || !res.repository.definitions[element.id]) {
+      setPropertyTypePrompt(null);
+      res.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
+      return;
+    }
+    commitIbdPartAt(element.id, propertyTypePrompt.ownerBlockId, propertyTypePrompt.x, propertyTypePrompt.y, propertyTypePrompt.name, res.repository);
+  }, [propertyTypePrompt, canonicalSysmlRepository, handleExecuteSysmlCommand, addError, commitIbdPartAt]);
+
+  const handleCreateNewTypeAction = useCallback((action: CreateNewTypeAction) => {
+    const result = handleExecuteSysmlCommand(buildCreateNewTypeCommand(action, canonicalSysmlRepository, () => uuidv4()));
+    if (result.committed) {
+      setPendingCreateNewTypeAction(null);
+      addError('info', `Created type definition '${action.suggestedName}'.`);
+    } else {
+      result.diagnostics.forEach(diagnostic => addError(diagnostic.severity, diagnostic.message, 'SysML', diagnostic.elementId));
+    }
+  }, [canonicalSysmlRepository, handleExecuteSysmlCommand, addError]);
 
   const updatePart = useCallback((id: string, updates: Partial<PartData>) => {
-    setParts(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
-  }, []);
+    const isPureGeometricUpdate = Object.keys(updates).every(key => ['x', 'y', 'width', 'height'].includes(key));
+    if (isPureGeometricUpdate) {
+      const activeDiagramId = activeSysmlDiagramId;
+      const presentation: PresentationCoordinates = {};
+      if (updates.x !== undefined) presentation.x = updates.x;
+      if (updates.y !== undefined) presentation.y = updates.y;
+      if (updates.width !== undefined) presentation.width = updates.width;
+      if (updates.height !== undefined) presentation.height = updates.height;
+      if (isDraggingRef.current || isResizingRef.current) {
+        updatePresentationDraft(id, presentation);
+        const existing = pendingPresentationUpdatesRef.current.get(id) ?? {};
+        pendingPresentationUpdatesRef.current.set(id, { ...existing, ...presentation });
+        return;
+      }
+      handleExecuteSysmlCommand({
+        type: 'updatePresentation',
+        diagramId: activeDiagramId,
+        elementId: id,
+        presentation,
+        coalesceKey: `drag-${id}`,
+      });
+      return;
+    }
+
+    if (updates.typeId) {
+      const resolved = resolveType(updates.typeId, canonicalSysmlRepository, { expectedMetaclasses: ['Block'] });
+      if (!resolved.found) {
+        addError('error', `Part must reference an existing block type.`, 'SysML', id);
+        setPendingCreateNewTypeAction({ action: resolved.action, candidates: resolved.candidates });
+        return;
+      }
+    }
+
+    const patch: Record<string, unknown> = {};
+    if (updates.name !== undefined) patch.name = updates.name;
+    if (updates.typeId !== undefined) patch.typeId = updates.typeId;
+    if (updates.aggregation !== undefined) patch.aggregation = updates.aggregation;
+    if (updates.multiplicity !== undefined) {
+      try {
+        patch.multiplicity = parseMultiplicity(updates.multiplicity || '1');
+      } catch {
+        addError('error', `Invalid multiplicity "${updates.multiplicity}" for part.`, 'SysML', id);
+        return;
+      }
+    }
+
+    const result = handleExecuteSysmlCommand(buildPartUpdateCommand(canonicalSysmlRepository, id, patch));
+    if (!result.committed) {
+      result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
+    }
+  }, [canonicalSysmlRepository, handleExecuteSysmlCommand, addError, updatePresentationDraft, activeSysmlDiagramId]);
 
   const deletePart = useCallback((id: string) => {
+    if (id.includes('/')) {
+      // A nested part is a property of its parent's type, shared by every use of that type.
+      addError('warning', 'A nested part belongs to the Block that declares it. Open that Block to delete the part.');
+      return;
+    }
     const part = parts.find(p => p.id === id);
     if (!part) return;
     const transaction = applyLegacySysmlDeletion({ blocks, relationships, parts, connectors }, [id]);
-    if (requiresDeletionConfirmation(transaction.impact) && !window.confirm(formatLegacyDeletionImpact(transaction.impact))) return;
-    addToHistory();
-    const deletedIds = new Set(transaction.impact.deletedElementIds);
-    setParts(transaction.model.parts);
-    setConnectors(transaction.model.connectors);
-    setRelationships(transaction.model.relationships);
-    setInterfaceRealizations(prev => prev.filter(ir => !deletedIds.has(ir.id) && !deletedIds.has(ir.partId) && !deletedIds.has(ir.interfaceId)));
-    setSelectedIds(prev => prev.filter(sid => !deletedIds.has(sid)));
-    addError('info', `Deleted part: ${part.name}`);
-  }, [blocks, relationships, parts, connectors, addError, addToHistory]);
+    const severity = impactSeverity(transaction.impact, authorizedBaselineIds);
+    if (severity === 'blocked' || requiresDeletionConfirmation(transaction.impact)) {
+      setSysmlDeleteConfirm({
+        impact: transaction.impact,
+        transaction,
+        elementName: part.name,
+        elementKind: 'part',
+        severity,
+        onConfirm: severity === 'blocked' ? () => {} : () => {
+          applySysmlDeletion(transaction, `Deleted part: ${part.name}`);
+        },
+      });
+      return;
+    }
+    applySysmlDeletion(transaction, `Deleted part: ${part.name}`);
+  }, [blocks, relationships, parts, connectors, addError, addToHistory, authorizedBaselineIds, applySysmlDeletion]);
 
   const handleDoubleClick = useCallback((e: MouseEvent<HTMLDivElement>) => {
     if (e.target === canvasRef.current) {
@@ -9689,75 +9989,187 @@ const ADIA = () => {
       levelGroups[lvl].push(id);
     });
 
-    const newBlocks = [...blocks];
+    const updates: Array<{ elementId: string; x: number; y: number }> = [];
     Object.entries(levelGroups).forEach(([lvlStr, ids]) => {
       const lvl = parseInt(lvlStr);
       ids.forEach((id, index) => {
-        const idx = newBlocks.findIndex(b => b.id === id);
-        if (idx !== -1) newBlocks[idx] = { ...newBlocks[idx], x: 50 + index * 220, y: 50 + lvl * 180 };
+    const presentation = (sysmlDiagramPresentations[activeSysmlDiagramId] ?? sysmlDiagramPresentations.requirements)?.presentations[id];
+        if (!presentation) return;
+        updates.push({ elementId: id, x: 50 + index * 220, y: 50 + lvl * 180 });
       });
     });
-    setBlocks(newBlocks);
+    const command = buildDiagramPresentationBatch(activeSysmlDiagramId, updates);
+    if (!command) {
+      addError('warning', 'No requirement presentations are available to lay out on this diagram.');
+      return;
+    }
+    const result = handleExecuteSysmlCommand(command);
+    if (!result.committed) {
+      result.diagnostics.forEach(diagnostic => addError(diagnostic.severity, diagnostic.message, 'SysML', diagnostic.elementId));
+      return;
+    }
     addError('info', 'Auto-layout applied to current layer.');
-  }, [blocks, relationships, currentLayerId, addError]);
+  }, [blocks, relationships, currentLayerId, sysmlDiagramPresentations, handleExecuteSysmlCommand, addError]);
 
-  const handleAddPortToSelected = useCallback((kind: 'standard' | 'flow' | 'proxy') => {
-    if (selectedIds.length !== 1) {
+  // Review follow-up (Finding 2 audit): the port select path accepts the same
+  // explicit-repository parameter as the part resume. Interactive selection
+  // passes nothing and re-plans against the live closure repository (correct
+  // for a fresh user gesture); any future resume-after-create caller must
+  // pass the fresh `res.repository` so the just-created type resolves.
+  const handlePortTypeSelected = useCallback((typeId: string, repository?: typeof canonicalSysmlRepository) => {
+    if (!portTypePrompt) return;
+    // Same surface-agnostic planner + canonical gateway command as Model
+    // Explorer (spec 3.2, 4.1): an explicitly selected but incompatible or
+    // unresolvable type is a structured error, never a silent substitution,
+    // and the gateway commit path never mutates on error.
+    const repo = repository ?? canonicalSysmlRepository;
+    const plan = planOwnedPortCreation(repo, {
+      ownerBlockId: portTypePrompt.ownerBlockId,
+      portKind: portTypePrompt.portKind,
+      typeId,
+      diagramId: activeSysmlDiagramId,
+    });
+    if (plan.outcome === 'command') {
+      const res = handleExecuteSysmlCommand(plan.command as any);
+      if (res.committed) {
+        setPortTypePrompt(null);
+        setShowErrorDialog(false);
+      } else {
+        res.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
+        setPortTypePrompt(prev => prev ? { ...prev, error: res.diagnostics[0]?.message } : null);
+      }
+    } else if (plan.outcome === 'typeSelection') {
+      // Stale prompt (e.g. repository changed while the chooser was open):
+      // refresh candidates rather than committing a typed feature.
+      setPortTypePrompt(prev => prev ? {
+        ...prev,
+        candidates: plan.request.candidates,
+        action: plan.request.action,
+        error: undefined,
+      } : null);
+    } else {
+      setPortTypePrompt(prev => prev ? { ...prev, error: plan.diagnostics[0]?.message } : null);
+    }
+  }, [portTypePrompt, canonicalSysmlRepository, activeSysmlDiagramId, handleExecuteSysmlCommand, addError, setShowErrorDialog]);
+
+  const handleCreateNewTypeForPort = useCallback(() => {
+    if (!portTypePrompt) return;
+    // Canonical CreateNewType (spec 4.1): same element-kind derivation as
+    // Model Explorer (InterfaceBlock -> interface, ValueType -> valueType,
+    // otherwise block), committed through the semantic gateway with no
+    // diagram presentation. The pending port request resumes only after the
+    // new type commits; any failure clears the prompt without mutating the
+    // pending feature.
+    const metaclass = portTypePrompt.action.payload?.suggestedMetaclass;
+    const elementKind = metaclass === 'InterfaceBlock' ? 'interface' : metaclass === 'ValueType' ? 'valueType' : 'block';
+    const ownerId = canonicalSysmlRepository.definitions[portTypePrompt.ownerBlockId]?.ownerId || 'model';
+    const siblingCount = Object.values(canonicalSysmlRepository.definitions).filter(d => d.kind === elementKind).length + 1;
+    const baseName = metaclass === 'InterfaceBlock' ? 'InterfaceBlock' : metaclass === 'ValueType' ? 'ValueType' : 'Block';
+    const element = elementKind === 'interface'
+      ? createInterface({ name: `${baseName}_${siblingCount}`, ownerId })
+      : elementKind === 'valueType'
+        ? createValueTypeDefinition({ name: `${baseName}_${siblingCount}`, ownerId })
+        : createBlockDefinition({ name: `${baseName}_${siblingCount}`, ownerId });
+    const res = handleExecuteSysmlCommand({ type: 'createElement', element } as any);
+    if (!res.committed || !res.repository.definitions[element.id]) {
+      setPortTypePrompt(null);
+      res.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
+      return;
+    }
+    // Review follow-up (Finding 2 audit): the pending port request resumes
+    // against the fresh `res.repository`, never the stale render-closure
+    // repository, so the just-created type resolves on the resume.
+    const plan = planOwnedPortCreation(res.repository, {
+      ownerBlockId: portTypePrompt.ownerBlockId,
+      portKind: portTypePrompt.portKind,
+      typeId: element.id,
+      diagramId: activeSysmlDiagramId,
+    });
+    if (plan.outcome !== 'command') {
+      setPortTypePrompt(prev => prev ? {
+        ...prev,
+        error: plan.outcome === 'error' ? plan.diagnostics[0]?.message : prev.error,
+      } : null);
+      return;
+    }
+    const portRes = handleExecuteSysmlCommand(plan.command as any);
+    if (portRes.committed) {
+      setPortTypePrompt(null);
+      setShowErrorDialog(false);
+    } else {
+      portRes.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
+      setPortTypePrompt(prev => prev ? { ...prev, error: portRes.diagnostics[0]?.message } : null);
+    }
+  }, [portTypePrompt, canonicalSysmlRepository, activeSysmlDiagramId, handleExecuteSysmlCommand, addError, setShowErrorDialog]);
+
+  // Task 2 canvas/tree parity (spec 3.2, 4.1, 4.2): toolbar and canvas port
+  // actions plan through the same surface-agnostic planner as Model
+  // Explorer, store the same pending type-selection request (compatible
+  // candidates + explicit CreateNewType action), and dispatch the same
+  // canonical gateway command. Standard Port plans an immediate untyped
+  // UML Port command (explicit no-type exception); every other kind
+  // without an explicit type opens the shared chooser. Cancelling performs
+  // no mutation.
+  const requestCanvasPortCreation = useCallback((ownerBlockId: string, portKind: CanonicalPortKind): { outcome: 'commanded' } | { outcome: 'prompted' } | { outcome: 'rejected' } => {
+    const plan = planContextualCreation({
+      repository: canonicalSysmlRepository,
+      source: 'canvas',
+      selectedId: ownerBlockId,
+      intent: { metaclass: 'Port', portKind },
+      diagramId: activeSysmlDiagramId,
+    });
+    if (plan.kind === 'command') {
+      const res = handleExecuteSysmlCommand(plan.command as any);
+      if (!res.committed) {
+        res.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
+        return { outcome: 'rejected' };
+      }
+      return { outcome: 'commanded' };
+    }
+    if (plan.kind === 'typeSelection') {
+      setPortTypePrompt({
+        ownerBlockId,
+        portKind,
+        candidates: plan.request.candidates,
+        action: plan.request.action,
+      });
+      return { outcome: 'prompted' };
+    }
+    const msg = plan.reason;
+    addError('error', msg, 'SysML', ownerBlockId);
+    return { outcome: 'rejected' };
+  }, [canonicalSysmlRepository, activeSysmlDiagramId, handleExecuteSysmlCommand, addError]);
+
+  const handleAddPortToSelected = useCallback((kind: 'standard' | 'flow' | 'proxy' | 'full') => {
+    // Target the selected Block/Part; with nothing selected inside an opened
+    // block (IBD), the port goes on that block.
+    const openedBlockId = canonicalSysmlRepository.definitions[currentLayerId]?.kind === 'block' ? currentLayerId : undefined;
+    const id = selectedIds.length === 1 ? selectedIds[0] : selectedIds.length === 0 ? openedBlockId : undefined;
+    if (!id) {
       addError('warning', 'Select exactly one Block or Part to add a port.');
       return;
     }
-    const id = selectedIds[0];
+    const kindMap: Record<'standard' | 'flow' | 'proxy' | 'full', CanonicalPortKind> = {
+      standard: 'umlPort',
+      flow: 'flowPort',
+      proxy: 'proxyPort',
+      full: 'fullPort',
+    };
+    const canonicalPortKind = kindMap[kind];
 
-    const part = parts.find(p => p.id === id);
-    if (part) {
-      const originalTypeId = part.typeId;
-
-      if (!originalTypeId) {
-        const newBlockId = uuidv4();
-        const newPort: PortData = { id: uuidv4(), name: `p1`, type: kind === 'proxy' ? 'Interface' : (kind === 'flow' ? 'Power' : 'void'), kind, direction: kind === 'flow' ? 'in' : undefined };
-        const newBlock: BlockData = {
-          id: newBlockId, name: `${part.name}_Def`, stereotype: 'block', classes: [],
-          x: 100, y: 100, width: 150, height: 100,
-          properties: [], operations: [], constraints: [], ports: [newPort]
-        };
-        setBlocks(prev => [...prev, newBlock]);
-        updatePart(part.id, { typeId: newBlockId });
-        addError('info', `Created definition '${newBlock.name}' for part and added port.`);
-        return;
-      }
-
-      const isShared = parts.some(p => p.id !== part.id && p.typeId === originalTypeId);
-      const originalBlock = blocks.find(b => b.id === originalTypeId);
-      if (!originalBlock) {
-        addError('error', `Could not find block definition with ID ${originalTypeId}`);
-        return;
-      }
-
-      if (isShared) {
-        addError('info', `Specializing definition for '${part.name}'...`);
-        const newBlockId = uuidv4();
-        const newBlock: BlockData = { ...originalBlock, id: newBlockId, name: `${originalBlock.name}_${part.name}`, ports: originalBlock.ports.map(p => ({ ...p })), properties: originalBlock.properties.map(p => ({ ...p })), constraints: originalBlock.constraints, };
-        const newPort: PortData = { id: uuidv4(), name: `p${newBlock.ports.length + 1}`, type: kind === 'proxy' ? 'Interface' : (kind === 'flow' ? 'Power' : 'void'), kind, direction: kind === 'flow' ? 'in' : undefined };
-        newBlock.ports.push(newPort);
-        setBlocks(prev => [...prev, newBlock]);
-        updatePart(part.id, { typeId: newBlockId });
-        addError('info', `Created new definition '${newBlock.name}' and added port.`);
-      } else {
-        const newPort: PortData = { id: uuidv4(), name: `p${originalBlock.ports.length + 1}`, type: kind === 'proxy' ? 'Interface' : (kind === 'flow' ? 'Power' : 'void'), kind, direction: kind === 'flow' ? 'in' : undefined };
-        updateBlock(originalTypeId, { ports: [...originalBlock.ports, newPort] });
-        addError('info', `Added ${kind} port to definition: ${originalBlock.name}`);
-      }
-    } else {
-      const block = blocks.find(b => b.id === id);
-      if (!block) {
-        addError('warning', 'Selected element is not a Block or Part.');
-        return;
-      }
-      const newPort: PortData = { id: uuidv4(), name: `p${block.ports.length + 1}`, type: kind === 'proxy' ? 'Interface' : (kind === 'flow' ? 'Power' : 'void'), kind, direction: kind === 'flow' ? 'in' : undefined };
-      updateBlock(id, { ports: [...block.ports, newPort] });
-      addError('info', `Added ${kind} port to Block: ${block.name}`);
+    // partsById also holds the nested parts drawn inside a part (their ids are property paths).
+    const part = partsById.get(id);
+    const targetBlockId = part ? part.typeId : id;
+    if (!targetBlockId) {
+      addError('warning', 'Selected element is not a valid Block or Part.');
+      return;
     }
-  }, [selectedIds, blocks, parts, updateBlock, updatePart, addError, setBlocks]);
+
+    const result = requestCanvasPortCreation(targetBlockId, canonicalPortKind);
+    if (result.outcome === 'commanded') {
+      addError('info', `Added ${kind} port.`);
+    }
+  }, [selectedIds, partsById, canonicalSysmlRepository, currentLayerId, requestCanvasPortCreation, addError]);
 
   const createInterfaceRealization = useCallback((interfaceId: string, partId: string, portId: string) => {
     addToHistory();
@@ -9774,6 +10186,7 @@ const ADIA = () => {
 
   const [isCreatingConnector, setIsCreatingConnector] = useState(false);
   const [connectorSource, setConnectorSource] = useState<{ partId: string, portId: string } | null>(null);
+  const connectorSourceRef = useRef<{ partId: string, portId: string } | null>(null);
 
   const handlePortMouseDown = useCallback((e: MouseEvent<SVGRectElement>, elementId: string, portId: string) => {
     e.stopPropagation();
@@ -9783,6 +10196,54 @@ const ADIA = () => {
     setDraggedPort({ elementId, portId });
     setIsDragging(true); // To prevent other interactions
   }, [isCreatingConnector]);
+
+  /**
+   * Picks one end of a connector under construction. `portId` is a port of the
+   * part, or empty for the part itself (a part-to-part / part-to-port
+   * connector). The second pick creates the connector.
+   */
+  const selectConnectorEnd = useCallback((partId: string, portId: string) => {
+    const activeSource = connectorSourceRef.current;
+    if (!activeSource) {
+      const nextSource = { partId, portId };
+      setConnectorSource(nextSource);
+      connectorSourceRef.current = nextSource;
+      return;
+    }
+    if (activeSource.partId === partId && activeSource.portId === portId) {
+      setIsCreatingConnector(false);
+      setConnectorSource(null);
+      connectorSourceRef.current = null;
+      return;
+    }
+
+    // A connector end is a property path under the context Block ([] = a boundary port); a nested
+    // part drawn inside another part is picked by its path key, so a nested end needs no special case.
+    const endOf = (pickedPartId: string, pickedPortId: string) => ({
+      path: pickedPartId === currentLayerId ? [] : pathFromKey(pickedPartId),
+      ...(pickedPortId ? { portId: pickedPortId } : {}),
+    });
+    const plan = buildCreatePathIbdConnectorCommand(canonicalSysmlRepository, {
+      contextId: currentLayerId,
+      diagramId: activeSysmlDiagramId,
+      source: endOf(activeSource.partId, activeSource.portId),
+      target: endOf(partId, portId),
+    });
+
+    if (!plan.ok || !plan.command) {
+      plan.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
+    } else {
+      const result = handleExecuteSysmlCommand(plan.command);
+      if (result.committed) {
+        addError('info', `Created ${plan.connector?.kind || 'connector'}`);
+      } else {
+        result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
+      }
+    }
+    setIsCreatingConnector(false);
+    setConnectorSource(null);
+    connectorSourceRef.current = null;
+  }, [currentLayerId, activeSysmlDiagramId, canonicalSysmlRepository, addError, handleExecuteSysmlCommand]);
 
   const handlePortClick = useCallback((e: MouseEvent<SVGRectElement>, partId: string, portId: string) => {
     e.stopPropagation();
@@ -9798,76 +10259,38 @@ const ADIA = () => {
       }
     }
 
-    if (isCreatingConnector) {
-      if (connectorSource) {
-        if (connectorSource.partId === partId && connectorSource.portId === portId) {
-          setIsCreatingConnector(false);
-          setConnectorSource(null);
-          return;
-        }
-
-        // FR-IBD-003: Validate compatibility
-        const getBlockForEnd = (pId: string) => {
-          if (pId === currentLayerId) return blocks.find(b => b.id === pId);
-          const p = parts.find(part => part.id === pId);
-          return blocks.find(b => b.id === p?.typeId);
-        };
-
-        const sourceBlock = getBlockForEnd(connectorSource.partId);
-        const targetBlock = getBlockForEnd(partId);
-
-        const sourcePort = sourceBlock?.ports.find(p => p.id === connectorSource.portId);
-        const targetPort = targetBlock?.ports.find(p => p.id === portId);
-
-        if (sourcePort && targetPort) {
-          if (sourcePort.type !== targetPort.type && sourcePort.type !== 'any' && targetPort.type !== 'any') {
-            addError('error', `Incompatible ports: ${sourcePort.name} (${sourcePort.type}) vs ${targetPort.name} (${targetPort.type})`);
-            return;
-          }
-
-          const newConnector: ConnectorData = {
-            id: uuidv4(),
-            sourcePartId: connectorSource.partId,
-            sourcePortId: connectorSource.portId,
-            targetPartId: partId,
-            targetPortId: portId,
-            kind: connectorSource.partId === currentLayerId || partId === currentLayerId ? 'delegation' : 'assembly'
-          };
-          const validation = validateLegacyConnectorCandidate({ blocks, parts, connectors }, newConnector, currentLayerId);
-          if (!validation.valid) {
-            addError('error', `Invalid connector: ${validation.reason}`);
-            return;
-          }
-          addToHistory();
-          setConnectors(prev => [...prev, newConnector]);
-          addError('info', 'Created connection');
-        }
-        setIsCreatingConnector(false);
-        setConnectorSource(null);
-      } else {
-        setConnectorSource({ partId, portId });
-      }
-    }
-  }, [isCreatingConnector, connectorSource, parts, blocks, connectors, addError, addToHistory, isCreatingTransition, transitionSourceId, createInterfaceRealization, currentLayerId]);
+    if (isCreatingConnector) selectConnectorEnd(partId, portId);
+  }, [isCreatingConnector, parts, blocks, connectors, addError, addToHistory, isCreatingTransition, transitionSourceId, createInterfaceRealization, selectConnectorEnd]);
 
   const deleteConnector = useCallback((id: string) => {
-    addToHistory();
-    setConnectors(prev => prev.filter(c => c.id !== id));
-    setSelectedIds(prev => prev.filter(sid => sid !== id));
-    addError('info', 'Deleted connector');
-  }, [addError, addToHistory]);
-
-  const updateConnector = useCallback((id: string, updates: Partial<ConnectorData>) => {
-    const current = connectors.find(connector => connector.id === id);
-    if (!current) return;
-    const candidate = { ...current, ...updates };
-    const validation = validateLegacyConnectorCandidate({ blocks, parts, connectors }, candidate, currentLayerId);
-    if (!validation.valid) {
-      addError('error', `Invalid connector update: ${validation.reason}`);
+    const transaction = applyLegacySysmlDeletion({ blocks, relationships, parts, connectors }, [id]);
+    const severity = impactSeverity(transaction.impact, authorizedBaselineIds);
+    if (severity === 'blocked' || requiresDeletionConfirmation(transaction.impact)) {
+      setSysmlDeleteConfirm({
+        impact: transaction.impact,
+        transaction,
+        elementName: id,
+        elementKind: 'connector',
+        severity,
+        onConfirm: severity === 'blocked' ? () => {} : () => {
+          applySysmlDeletion(transaction, 'Deleted connector');
+        },
+      });
       return;
     }
-    setConnectors(prev => prev.map(c => c.id === id ? candidate : c));
-  }, [connectors, blocks, parts, currentLayerId, addError]);
+    applySysmlDeletion(transaction, 'Deleted connector');
+  }, [blocks, relationships, parts, connectors, addError, addToHistory, authorizedBaselineIds, applySysmlDeletion]);
+
+  const updateConnector = useCallback((id: string, updates: Partial<ConnectorData>) => {
+    const result = handleExecuteSysmlCommand({
+      type: 'updateElement',
+      elementId: id,
+      patch: updates,
+    });
+    if (!result.committed) {
+      result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
+    }
+  }, [handleExecuteSysmlCommand, addError]);
 
   const deleteInterfaceRealization = useCallback((id: string) => {
     addToHistory();
@@ -9920,7 +10343,16 @@ const ADIA = () => {
     const worldX = ((e.clientX - rect.left) / uiZoom - view.offsetX) / view.scale;
     const worldY = ((e.clientY - rect.top) / uiZoom - view.offsetY) / view.scale;
 
-    const block = blocks.find(b => b.id === id);
+    const packageNode = sysmlCanvasView.packages.find(pkg => pkg.id === id);
+    if (packageNode) {
+      setIsResizing(true);
+      setResizeHandle(handle);
+      setResizeStart({ id, x: packageNode.x, y: packageNode.y, w: packageNode.width, h: packageNode.height, mx: worldX, my: worldY, type: 'package' });
+      addToHistory();
+      return;
+    }
+
+    const block = sysmlCanvasView.blocks.find(b => b.id === id) ?? blocks.find(b => b.id === id);
     if (block) {
       setIsResizing(true);
       setResizeHandle(handle);
@@ -9933,7 +10365,7 @@ const ADIA = () => {
       return;
     }
 
-    const part = parts.find(p => p.id === id);
+    const part = sysmlCanvasView.parts.find(p => p.id === id) ?? parts.find(p => p.id === id);
     if (part) {
       setIsResizing(true);
       setResizeHandle(handle);
@@ -9949,7 +10381,7 @@ const ADIA = () => {
       setResizeStart({ id: state.id, x: state.x, y: state.y, w: state.width, h: state.height, mx: worldX, my: worldY, type: 'state' });
       addToHistory();
     }
-  }, [blocks, states, parts, view, addToHistory, uiZoom, diagramMode, currentLayerId]);
+  }, [sysmlCanvasView, states, view, addToHistory, uiZoom, diagramMode, currentLayerId]);
 
   // CANVAS NAVIGATION (CATIA-style)
   const handleMouseDown = useCallback((e: MouseEvent<HTMLDivElement>) => {
@@ -9993,12 +10425,276 @@ const ADIA = () => {
     }
   }, [isCreatingTransition, isCreatingConnector, setIsCreatingTransition, setTransitionSourceId, setIsCreatingConnector, setConnectorSource, setSelectedIds, canvasRef, isSpacePressed, setIsPanning, rightDown, midDown, lastMousePos]);
 
+  const performDragMove = useCallback((worldX: number, worldY: number) => {
+    const gesture = pendingBddBlockGestureRef.current;
+    const desiredDelta = gesture ? {
+      x: snapEnabled ? snapToGrid(gesture.anchor.x + worldX - gesture.startWorldX, GRID_SIZE) - gesture.anchor.x : worldX - gesture.startWorldX,
+      y: snapEnabled ? snapToGrid(gesture.anchor.y + worldY - gesture.startWorldY, GRID_SIZE) - gesture.anchor.y : worldY - gesture.startWorldY,
+    } : undefined;
+    let dx = gesture ? desiredDelta!.x - gesture.appliedDelta.x : worldX - dragOffsetRef.current.x;
+    let dy = gesture ? desiredDelta!.y - gesture.appliedDelta.y : worldY - dragOffsetRef.current.y;
+    if (gesture && diagramMode === 'ibd' && !gesture.dragIds.includes(currentLayerId)) {
+      const context = blocksById.get(currentLayerId);
+      if (context) {
+        const frame = {
+          x: presentationDraftsRef.current[context.id]?.x ?? context.ibdX ?? 50,
+          y: presentationDraftsRef.current[context.id]?.y ?? context.ibdY ?? 50,
+          width: context.ibdWidth ?? 1200, height: context.ibdHeight ?? 800,
+        };
+        let minDx = -Infinity, maxDx = Infinity, minDy = -Infinity, maxDy = Infinity;
+        for (const id of gesture.dragIds) {
+          const part = partsById.get(id);
+          if (!part) continue;
+          const x = presentationDraftsRef.current[id]?.x ?? part.x;
+          const y = presentationDraftsRef.current[id]?.y ?? part.y;
+          minDx = Math.max(minDx, frame.x - x);
+          maxDx = Math.min(maxDx, frame.x + frame.width - part.width - x);
+          minDy = Math.max(minDy, frame.y - y);
+          maxDy = Math.min(maxDy, frame.y + frame.height - part.height - y);
+        }
+        if (minDx <= maxDx) dx = Math.max(minDx, Math.min(dx, maxDx));
+        if (minDy <= maxDy) dy = Math.max(minDy, Math.min(dy, maxDy));
+      }
+    }
+    if (dx === 0 && dy === 0) return;
+    if (gesture) gesture.appliedDelta = { x: gesture.appliedDelta.x + dx, y: gesture.appliedDelta.y + dy };
+    // Snap the pressed element once and carry its group by the same delta.
+    const snapIndividually = snapEnabled && !gesture;
+
+    // The first animation frame can run before React commits the new selection.
+    const dragIds = gesture?.moved ? gesture.dragIds : selectedIds;
+    const idsToMove = new Set(dragIds);
+    if (diagramMode === 'package') {
+      // A Package symbol carries the elements drawn nested inside it.
+      dragIds.forEach(id => {
+        if (packageNestingNodes.some(node => node.id === id && node.isPackage)) {
+          nestedDescendantIds(id, packageNestingNodes).forEach(nestedId => idsToMove.add(nestedId));
+        }
+      });
+    }
+    dragIds.forEach(id => {
+      const state = states.find(s => s.id === id);
+      if (state) {
+        const childLayer = layers.find(l => l.parentStateId === id);
+        if (childLayer) {
+          childLayer.stateIds.forEach(childId => idsToMove.add(childId));
+          childLayer.junctionIds.forEach(childId => idsToMove.add(childId));
+        }
+        currentJunctions.forEach(j => {
+          if (j.x >= state.x && j.x <= state.x + state.width &&
+            j.y >= state.y && j.y <= state.y + state.height &&
+            !idsToMove.has(j.id)) {
+            idsToMove.add(j.id);
+          }
+        });
+      }
+    });
+
+    // Move all selected items
+    idsToMove.forEach(id => {
+      const state = states.find(s => s.id === id);
+      if (state) {
+        const rawPosition = dragRawPositionsRef.current[id] ?? { x: state.x, y: state.y };
+        const nextRawPosition = { x: rawPosition.x + dx, y: rawPosition.y + dy };
+        dragRawPositionsRef.current[id] = nextRawPosition;
+
+        const snappedX = snapIndividually ? snapToGrid(nextRawPosition.x, GRID_SIZE) : nextRawPosition.x;
+        const snappedY = snapIndividually ? snapToGrid(nextRawPosition.y, GRID_SIZE) : nextRawPosition.y;
+
+        updateState(id, { x: snappedX, y: snappedY });
+
+        // Move child junctions
+        junctions.forEach(j => {
+          if (j.parentId === id && !idsToMove.has(j.id)) { // Ensure child junctions are not already selected
+            const childRaw = dragRawPositionsRef.current[j.id] ?? { x: j.x, y: j.y };
+            const nextChildRaw = { x: childRaw.x + dx, y: childRaw.y + dy };
+            dragRawPositionsRef.current[j.id] = nextChildRaw;
+            updateJunction(j.id, { x: nextChildRaw.x, y: nextChildRaw.y });
+          }
+        });
+      }
+      const junction = junctions.find(j => j.id === id);
+      if (junction) {
+        const rawPosition = dragRawPositionsRef.current[id] ?? { x: junction.x, y: junction.y };
+        const nextRawPosition = { x: rawPosition.x + dx, y: rawPosition.y + dy };
+        dragRawPositionsRef.current[id] = nextRawPosition;
+
+        let finalX = snapIndividually ? snapToGrid(nextRawPosition.x, GRID_SIZE) : nextRawPosition.x;
+        let finalY = snapIndividually ? snapToGrid(nextRawPosition.y, GRID_SIZE) : nextRawPosition.y;
+
+        const parentState = states.find(s => s.id === junction.parentId);
+        if (parentState) {
+          // junction radius is 8, rect size is 16x16
+          finalX = Math.max(parentState.x, Math.min(finalX, parentState.x + parentState.width - 16));
+          finalY = Math.max(parentState.y, Math.min(finalY, parentState.y + parentState.height - 16));
+        }
+
+        updateJunction(id, { x: finalX, y: finalY });
+      }
+
+      // BDD Blocks
+      const block = sysmlCanvasView.blocks.find(b => b.id === id);
+      if (block) {
+        const isContextBlock = diagramMode === 'ibd' && block.id === currentLayerId;
+        if (isContextBlock) {
+          const currentBlockX = presentationDraftsRef.current[id]?.x ?? block.ibdX ?? 50;
+          const currentBlockY = presentationDraftsRef.current[id]?.y ?? block.ibdY ?? 50;
+          const rawPosition = dragRawPositionsRef.current[id] ?? { x: currentBlockX, y: currentBlockY };
+          const nextRawPosition = { x: rawPosition.x + dx, y: rawPosition.y + dy };
+          dragRawPositionsRef.current[id] = nextRawPosition;
+
+          const snappedX = snapIndividually ? snapToGrid(nextRawPosition.x, GRID_SIZE) : nextRawPosition.x;
+          const snappedY = snapIndividually ? snapToGrid(nextRawPosition.y, GRID_SIZE) : nextRawPosition.y;
+
+          updateBlock(id, {
+            ibdX: snappedX,
+            ibdY: snappedY,
+          });
+
+          // Make all parts in this context follow the context block boundary in lockstep
+          const contextParts = sysmlCanvasView.parts.filter(p => p.blockId === id || !p.blockId || p.blockId === currentLayerId);
+          contextParts.forEach(p => {
+            if (!idsToMove.has(p.id)) {
+              const currentPartX = presentationDraftsRef.current[p.id]?.x ?? p.x;
+              const currentPartY = presentationDraftsRef.current[p.id]?.y ?? p.y;
+              const partRaw = dragRawPositionsRef.current[p.id] ?? { x: currentPartX, y: currentPartY };
+              const nextPartRaw = { x: partRaw.x + dx, y: partRaw.y + dy };
+              dragRawPositionsRef.current[p.id] = nextPartRaw;
+
+              const snappedPartX = snapIndividually ? snapToGrid(nextPartRaw.x, GRID_SIZE) : nextPartRaw.x;
+              const snappedPartY = snapIndividually ? snapToGrid(nextPartRaw.y, GRID_SIZE) : nextPartRaw.y;
+
+              updatePart(p.id, {
+                x: snappedPartX,
+                y: snappedPartY,
+              });
+            }
+          });
+        } else {
+          const currentBlock = { ...block, ...(presentationDraftsRef.current[id] ?? {}) };
+          const rawPosition = dragRawPositionsRef.current[id] ?? { x: currentBlock.x, y: currentBlock.y };
+          const nextRawPosition = { x: rawPosition.x + dx, y: rawPosition.y + dy };
+          dragRawPositionsRef.current[id] = nextRawPosition;
+          const newX = nextRawPosition.x;
+          const newY = nextRawPosition.y;
+          updateBlock(id, {
+            x: snapIndividually ? snapToGrid(newX, GRID_SIZE) : newX,
+            y: snapIndividually ? snapToGrid(newY, GRID_SIZE) : newY,
+          });
+        }
+      }
+
+      // UML Package presentations use the same diagram-scoped movement
+      // command as every other semantic element. Moving the notation never
+      // changes package ownership or creates a Block surrogate.
+      const packageNode = sysmlCanvasView.packages.find(pkg => pkg.id === id);
+      if (packageNode) {
+        const currentPackage = { ...packageNode, ...(presentationDraftsRef.current[id] ?? {}) };
+        const rawPosition = dragRawPositionsRef.current[id] ?? { x: currentPackage.x, y: currentPackage.y };
+        const nextRawPosition = { x: rawPosition.x + dx, y: rawPosition.y + dy };
+        dragRawPositionsRef.current[id] = nextRawPosition;
+        updateBlock(id, {
+          x: snapIndividually ? snapToGrid(nextRawPosition.x, GRID_SIZE) : nextRawPosition.x,
+          y: snapIndividually ? snapToGrid(nextRawPosition.y, GRID_SIZE) : nextRawPosition.y,
+        });
+      }
+
+      const shortcut = diagramShortcuts.find(candidate => candidate.id === id);
+      if (shortcut) {
+        const rawPosition = dragRawPositionsRef.current[id] ?? { x: shortcut.x, y: shortcut.y };
+        const nextRawPosition = { x: rawPosition.x + dx, y: rawPosition.y + dy };
+        dragRawPositionsRef.current[id] = nextRawPosition;
+        updateBlock(id, {
+          x: snapIndividually ? snapToGrid(nextRawPosition.x, GRID_SIZE) : nextRawPosition.x,
+          y: snapIndividually ? snapToGrid(nextRawPosition.y, GRID_SIZE) : nextRawPosition.y,
+        });
+      }
+
+      // IBD Parts
+      const part = sysmlCanvasView.parts.find(p => p.id === id);
+      if (part) {
+        const currentPart = { ...part, ...(presentationDraftsRef.current[id] ?? {}) };
+        const rawPosition = dragRawPositionsRef.current[id] ?? { x: currentPart.x, y: currentPart.y };
+        const nextRawPosition = { x: rawPosition.x + dx, y: rawPosition.y + dy };
+        dragRawPositionsRef.current[id] = nextRawPosition;
+        const newX = nextRawPosition.x;
+        const newY = nextRawPosition.y;
+
+        // REQ-LAYOUT-003: Prevent Parts from being moved outside the Context Block diagram boundary
+        let finalX = snapIndividually ? snapToGrid(newX, GRID_SIZE) : newX;
+        let finalY = snapIndividually ? snapToGrid(newY, GRID_SIZE) : newY;
+
+        if (diagramMode === 'ibd') {
+          const contextBlock = sysmlCanvasView.blocks.find(b => b.id === currentLayerId) ?? blocks.find(b => b.id === currentLayerId);
+          if (contextBlock) {
+            const cx = presentationDraftsRef.current[contextBlock.id]?.x ?? contextBlock.ibdX ?? 50;
+            const cy = presentationDraftsRef.current[contextBlock.id]?.y ?? contextBlock.ibdY ?? 50;
+            const cw = presentationDraftsRef.current[contextBlock.id]?.width ?? contextBlock.ibdWidth ?? 1200;
+            const ch = presentationDraftsRef.current[contextBlock.id]?.height ?? contextBlock.ibdHeight ?? 800;
+            finalX = Math.max(cx, Math.min(finalX, cx + cw - part.width));
+            finalY = Math.max(cy, Math.min(finalY, cy + ch - part.height));
+          }
+        }
+
+        updatePart(id, {
+          x: finalX,
+          y: finalY
+        });
+      }
+    });
+
+    // Update drag offset to current position for next frame
+    setDiagramDragOffset({ x: worldX, y: worldY });
+  }, [selectedIds, diagramMode, packageNestingNodes, states, layers, currentJunctions, junctions, snapEnabled, updateState, updateJunction, sysmlCanvasView, currentLayerId, updateBlock, diagramShortcuts, blocks, updatePart, setDiagramDragOffset, blocksById, partsById]);
+
+  performDragMoveRef.current = performDragMove;
+
   const handleMouseMove = useCallback((e: MouseEvent<HTMLDivElement>) => {
+    const liveGesture = pendingBddBlockGestureRef.current;
+    if (liveGesture) {
+      liveGesture.lastClientX = e.clientX;
+      liveGesture.lastClientY = e.clientY;
+    }
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect) return;
     const worldX = ((e.clientX - rect.left) / uiZoom - view.offsetX) / view.scale;
     const worldY = ((e.clientY - rect.top) / uiZoom - view.offsetY) / view.scale;
-    setMousePos({ x: worldX, y: worldY });
+    if (!isDragging) setMousePos({ x: worldX, y: worldY });
+
+    if (rightDragCopyRef.current) {
+      rightDragCopyRef.current = moveRightDragCopy(rightDragCopyRef.current, {
+        clientX: e.clientX,
+        clientY: e.clientY,
+      });
+      return;
+    }
+
+    const pendingBlockGesture = pendingBddBlockGestureRef.current;
+    if (pendingBlockGesture && !pendingBlockGesture.moved) {
+      const distance = Math.hypot(
+        e.clientX - pendingBlockGesture.startClientX,
+        e.clientY - pendingBlockGesture.startClientY,
+      );
+      if (distance === 0) return;
+
+      pendingBlockGesture.moved = true;
+      setPendingBddBlockId(null);
+      setSelectedIds(pendingBlockGesture.dragIds);
+      if (diagramMode === 'statemachine') addToHistory();
+      isDraggingRef.current = true;
+      setIsDragging(true);
+      setDiagramDragOffset({ x: pendingBlockGesture.startWorldX, y: pendingBlockGesture.startWorldY });
+      pendingDragPointRef.current = { x: worldX, y: worldY };
+      if (dragRafRef.current === null) {
+        dragRafRef.current = requestAnimationFrame(() => {
+          dragRafRef.current = null;
+          const target = pendingDragPointRef.current;
+          pendingDragPointRef.current = null;
+          if (target) performDragMoveRef.current?.(target.x, target.y);
+        });
+      }
+      return;
+    }
 
     if (isPanning) {
       const dx = e.clientX - lastMousePos.current.x;
@@ -10032,6 +10728,19 @@ const ADIA = () => {
         }
         if (resizeHandle.includes('n')) {
           const delta = Math.min(resizeStart.h - 60, dy);
+          newY = resizeStart.y + delta;
+          newH = resizeStart.h - delta;
+        }
+      } else if (resizeStart.type === 'ibdContext') {
+        if (resizeHandle.includes('e')) newW = Math.max(400, resizeStart.w + dx);
+        if (resizeHandle.includes('s')) newH = Math.max(300, resizeStart.h + dy);
+        if (resizeHandle.includes('w')) {
+          const delta = Math.min(resizeStart.w - 400, dx);
+          newX = resizeStart.x + delta;
+          newW = resizeStart.w - delta;
+        }
+        if (resizeHandle.includes('n')) {
+          const delta = Math.min(resizeStart.h - 300, dy);
           newY = resizeStart.y + delta;
           newH = resizeStart.h - delta;
         }
@@ -10072,14 +10781,14 @@ const ADIA = () => {
     if (isDragging && draggedPort) {
       const { elementId, portId } = draggedPort;
       // Find element (Part or Block)
-      let element: { x: number, y: number, width: number, height: number, typeId?: string | null } | undefined = parts.find(p => p.id === elementId);
+      let element: { x: number, y: number, width: number, height: number, typeId?: string | null } | undefined = sysmlCanvasView.parts.find(p => p.id === elementId);
       let isContext = false;
       if (!element) {
-        element = blocks.find(b => b.id === elementId);
+        element = sysmlCanvasView.blocks.find(b => b.id === elementId);
         isContext = true;
       }
-      const part = parts.find(p => p.id === elementId);
-      const block = blocks.find(b => b.id === elementId);
+      const part = sysmlCanvasView.parts.find(p => p.id === elementId);
+      const block = sysmlCanvasView.blocks.find(b => b.id === elementId);
 
       if (element) {
         let elX = element.x, elY = element.y, elW = element.width, elH = element.height;
@@ -10109,153 +10818,127 @@ const ADIA = () => {
         else { side = 'right'; offset = Math.max(0, Math.min(1, relY / elH)); }
 
         if (isContext && block) {
-          // Update Block definition (Context)
-          setBlocks(prev => prev.map(b => b.id === elementId ? {
-            ...b, ports: b.ports.map(p => p.id === portId ? { ...p, side, offset } : p)
-          } : b));
+          const presentationExists = sysmlDiagramPresentations[activeSysmlDiagramId]?.elementIds.includes(elementId) ?? false;
+          const result = handleExecuteSysmlCommand(buildPortLayoutCommand(activeSysmlDiagramId, elementId, portId, side, offset, {
+            presentationExists,
+            bounds: { x: elX, y: elY, width: elW, height: elH },
+          }));
+          if (!result.committed) result.diagnostics.forEach(diagnostic => addError(diagnostic.severity, diagnostic.message, 'SysML', diagnostic.elementId));
         } else if (part) {
-          // Update Part instance only
-          setParts(prev => prev.map(p => p.id === elementId ? {
-            ...p, portLayouts: { ...(p.portLayouts || {}), [portId]: { side, offset } }
-          } : p));
+          const presentationExists = sysmlDiagramPresentations[activeSysmlDiagramId]?.elementIds.includes(elementId) ?? false;
+          const result = handleExecuteSysmlCommand(buildPortLayoutCommand(activeSysmlDiagramId, elementId, portId, side, offset, { presentationExists }));
+          if (!result.committed) result.diagnostics.forEach(diagnostic => addError(diagnostic.severity, diagnostic.message, 'SysML', diagnostic.elementId));
         }
       }
       return;
     }
 
-    if (isDragging) {
-      // Calculate delta
-      const dx = worldX - dragOffset.x;
-      const dy = worldY - dragOffset.y;
-
-      const idsToMove = new Set(selectedIds);
-      selectedIds.forEach(id => {
-        const state = states.find(s => s.id === id);
-        if (state) {
-          const childLayer = layers.find(l => l.parentStateId === id);
-          if (childLayer) {
-            childLayer.stateIds.forEach(childId => idsToMove.add(childId));
-            childLayer.junctionIds.forEach(childId => idsToMove.add(childId));
+    if (isDragging || pendingBlockGesture?.moved) {
+      pendingDragPointRef.current = { x: worldX, y: worldY };
+      if (dragRafRef.current === null) {
+        dragRafRef.current = requestAnimationFrame(() => {
+          dragRafRef.current = null;
+          const target = pendingDragPointRef.current;
+          pendingDragPointRef.current = null;
+          if (target) {
+            setMousePos(target);
+            performDragMoveRef.current?.(target.x, target.y);
           }
-          currentJunctions.forEach(j => {
-            if (j.x >= state.x && j.x <= state.x + state.width &&
-              j.y >= state.y && j.y <= state.y + state.height &&
-              !idsToMove.has(j.id)) {
-              idsToMove.add(j.id);
-            }
-          });
-        }
-      });
-
-      // Move all selected items
-      idsToMove.forEach(id => {
-        const state = states.find(s => s.id === id);
-        if (state) {
-          const newX = state.x + dx;
-          const newY = state.y + dy;
-          const snappedX = snapEnabled ? snapToGrid(newX, GRID_SIZE) : newX;
-          const snappedY = snapEnabled ? snapToGrid(newY, GRID_SIZE) : newY;
-
-
-          updateState(id, { x: snappedX, y: snappedY });
-
-          // Move child junctions
-          junctions.forEach(j => {
-            if (j.parentId === id && !idsToMove.has(j.id)) { // Ensure child junctions are not already selected
-              updateJunction(j.id, { x: j.x + dx, y: j.y + dy });
-            }
-          });
-        }
-        const junction = junctions.find(j => j.id === id);
-        if (junction) {
-          const newX = junction.x + dx;
-          const newY = junction.y + dy;
-
-          let finalX = snapEnabled ? snapToGrid(newX, GRID_SIZE) : newX;
-          let finalY = snapEnabled ? snapToGrid(newY, GRID_SIZE) : newY;
-
-          const parentState = states.find(s => s.id === junction.parentId);
-          if (parentState) {
-            // junction radius is 8, rect size is 16x16
-            finalX = Math.max(parentState.x, Math.min(finalX, parentState.x + parentState.width - 16));
-            finalY = Math.max(parentState.y, Math.min(finalY, parentState.y + parentState.height - 16));
-          }
-
-          updateJunction(id, { x: finalX, y: finalY });
-        }
-
-        // BDD Blocks
-        const block = blocks.find(b => b.id === id);
-        if (block) {
-          if (diagramMode === 'ibd' && block.id === currentLayerId) {
-            const oldX = block.ibdX ?? 50;
-            const oldY = block.ibdY ?? 50;
-            const newX = oldX + dx;
-            const newY = oldY + dy;
-            const snappedX = snapEnabled ? snapToGrid(newX, GRID_SIZE) : newX;
-            const snappedY = snapEnabled ? snapToGrid(newY, GRID_SIZE) : newY;
-            const actualDx = snappedX - oldX;
-            const actualDy = snappedY - oldY;
-
-            updateBlock(id, {
-              ibdX: snappedX,
-              ibdY: snappedY
-            });
-
-            // Make all parts in this context follow the context block boundary
-            parts.forEach(p => {
-              if (p.blockId === id && !idsToMove.has(p.id)) {
-                updatePart(p.id, {
-                  x: p.x + actualDx,
-                  y: p.y + actualDy
-                });
-              }
-            });
-          } else {
-            const newX = block.x + dx;
-            const newY = block.y + dy;
-            updateBlock(id, {
-              x: snapEnabled ? snapToGrid(newX, GRID_SIZE) : newX,
-              y: snapEnabled ? snapToGrid(newY, GRID_SIZE) : newY
-            });
-          }
-        }
-
-        // IBD Parts
-        const part = parts.find(p => p.id === id);
-        if (part) {
-          const newX = part.x + dx;
-          const newY = part.y + dy;
-
-          // REQ-LAYOUT-003: Prevent Parts from being moved outside the Context Block diagram boundary
-          let finalX = snapEnabled ? snapToGrid(newX, GRID_SIZE) : newX;
-          let finalY = snapEnabled ? snapToGrid(newY, GRID_SIZE) : newY;
-
-          if (diagramMode === 'ibd') {
-            const contextBlock = blocks.find(b => b.id === currentLayerId);
-            if (contextBlock) {
-              const cx = contextBlock.ibdX ?? 50;
-              const cy = contextBlock.ibdY ?? 50;
-              const cw = contextBlock.ibdWidth ?? 1200;
-              const ch = contextBlock.ibdHeight ?? 800;
-              finalX = Math.max(cx, Math.min(finalX, cx + cw - part.width));
-              finalY = Math.max(cy, Math.min(finalY, cy + ch - part.height));
-            }
-          }
-
-          updatePart(id, {
-            x: finalX,
-            y: finalY
-          });
-        }
-      });
-
-      // Update drag offset to current position for next frame
-      setDragOffset({ x: worldX, y: worldY });
+        });
+      }
+      return;
     }
-  }, [isPanning, isDragging, draggedPort, selectedIds, states, junctions, blocks, parts, dragOffset, view, snapEnabled, updateState, updateJunction, updateBlock, updatePart, diagramMode, currentLayerId, isResizing, resizeStart, resizeHandle, layers]);
+  }, [isPanning, isDragging, draggedPort, selectedIds, states, junctions, blocks, parts, sysmlCanvasView, view, snapEnabled, updateState, updateJunction, updateBlock, updatePart, diagramMode, currentLayerId, activeSysmlDiagramId, sysmlDiagramPresentations, isResizing, resizeStart, resizeHandle, layers, handleExecuteSysmlCommand, addError, setDiagramDragOffset, addToHistory, packageNestingNodes, diagramShortcuts]);
 
   const handleMouseUp = useCallback((e: MouseEvent<HTMLDivElement>) => {
+    if (e.button === 2 && rightDragCopyRef.current) {
+      const completedGesture = endRightDragCopy(rightDragCopyRef.current);
+      rightDragCopyRef.current = null;
+      if (completedGesture.kind === 'copy') {
+        const rect = canvasRef.current?.getBoundingClientRect();
+        if (rect) {
+          const x = ((completedGesture.clientX - rect.left) / uiZoom - view.offsetX) / view.scale;
+          const y = ((completedGesture.clientY - rect.top) / uiZoom - view.offsetY) / view.scale;
+          const stateSources = completedGesture.sourceIds
+            .map(id => states.find(state => state.id === id))
+            .filter((state): state is StateData => Boolean(state));
+          if (stateSources.length === completedGesture.sourceIds.length) {
+            const origin = stateSources[0];
+            const clones = stateSources.map(source => ({
+              ...source,
+              id: uuidv4(),
+              name: `${source.name}_copy`,
+              x: x + (source.x - origin.x),
+              y: y + (source.y - origin.y),
+            }));
+            addToHistory();
+            setStates(previous => [...previous, ...clones]);
+            setLayers(previous => previous.map(layer => layer.id === currentLayerId
+              ? { ...layer, stateIds: [...layer.stateIds, ...clones.map(clone => clone.id)] }
+              : layer));
+            setSelectedIds(clones.map(clone => clone.id));
+            return;
+          }
+          const diagramId = activeSysmlDiagramId;
+          try {
+            const copiedIds: string[] = [];
+            const result = handleExecuteSysmlCommand(buildSysmlCloneElementsCommand({
+              sourceIds: completedGesture.sourceIds,
+              diagramId,
+              drop: { x, y },
+              repository: canonicalSysmlRepository,
+              idFactory: () => {
+                const id = uuidv4();
+                copiedIds.push(id);
+                return id;
+              },
+            }));
+            if (result.committed) {
+              setSelectedIds(copiedIds);
+            } else {
+              result.diagnostics.forEach(diagnostic => addError(diagnostic.severity, diagnostic.message, 'SysML', diagnostic.elementId));
+            }
+          } catch (error) {
+            addError('error', error instanceof Error ? error.message : 'Copy request was rejected.', 'SysML');
+          }
+        }
+      }
+    }
+    if (bddFeatureDrag) {
+      const rect = canvasRef.current?.getBoundingClientRect();
+      const worldPoint = rect
+        ? {
+            x: ((e.clientX - rect.left) / uiZoom - view.offsetX) / view.scale,
+            y: ((e.clientY - rect.top) / uiZoom - view.offsetY) / view.scale,
+          }
+        : null;
+      const snapDistance = 24 / (uiZoom * view.scale);
+      const target = worldPoint
+        ? sysmlCanvasView.blocks
+            .filter(block => block.id !== bddFeatureDrag.ownerId)
+            .map(block => {
+              const bounds = computeBlockDisplayBounds(block);
+              const dx = Math.max(block.x - worldPoint.x, 0, worldPoint.x - (block.x + bounds.width));
+              const dy = Math.max(block.y - worldPoint.y, 0, worldPoint.y - (block.y + bounds.height));
+              return { block, distance: Math.hypot(dx, dy) };
+            })
+            .filter(candidate => candidate.distance <= snapDistance)
+            .sort((a, b) => a.distance - b.distance)[0]?.block
+        : undefined;
+      if (target) dropBddFeatureOnBlock(e as unknown as MouseEvent<SVGGElement>, target.id);
+      else setBddFeatureDrag(null);
+    }
+    const pendingBlockGesture = pendingBddBlockGestureRef.current;
+    if (pendingBlockGesture) {
+      setPendingBddBlockId(null);
+      if (!pendingBlockGesture.moved) {
+        setSelectedIds(previous => pendingBlockGesture.ctrlKey
+          ? (previous.includes(pendingBlockGesture.blockId)
+            ? previous.filter(id => id !== pendingBlockGesture.blockId)
+            : [...previous, pendingBlockGesture.blockId])
+          : [pendingBlockGesture.blockId]);
+      }
+    }
     if (e.button === 1) {
       midDown.current = false;
     }
@@ -10267,14 +10950,135 @@ const ADIA = () => {
       setResizeHandle(null);
       setResizeStart(null);
     }
-    if (isDragging) {
+    if (dragRafRef.current !== null) {
+      cancelAnimationFrame(dragRafRef.current);
+      dragRafRef.current = null;
+    }
+    if ((isDragging || pendingBlockGesture?.moved) && !draggedPort) {
+      const rect = canvasRef.current?.getBoundingClientRect();
+      if (rect) {
+        performDragMoveRef.current?.(
+          ((e.clientX - rect.left) / uiZoom - view.offsetX) / view.scale,
+          ((e.clientY - rect.top) / uiZoom - view.offsetY) / view.scale,
+        );
+      }
+    }
+    pendingDragPointRef.current = null;
+    pendingBddBlockGestureRef.current = null;
+    if (isDragging || pendingBlockGesture?.moved) {
+      isDraggingRef.current = false;
       setIsDragging(false);
       setDraggedPort(null);
+      dragRawPositionsRef.current = {};
+    }
+    if (pendingPresentationUpdatesRef.current.size > 0) {
+      const activeDiagramId = activeSysmlDiagramId;
+      // Package Diagram: dropping into / out of a Package symbol implies an
+      // ownership move (UML nesting). Positions commit now; the move is
+      // confirmed separately and the drop is reverted if it is declined.
+      let ownershipDrop: { targetOwnerId: string; elementIds: string[] } | undefined;
+      const revertBounds: Record<string, PresentationCoordinates> = {};
+      if (diagramMode === 'package' && isDragging && !isResizing) {
+        const movedIds = new Set(pendingPresentationUpdatesRef.current.keys());
+        const committedPresentations = sysmlDiagramPresentations[activeDiagramId]?.presentations ?? {};
+        const diagramOwnerId = canonicalSysmlRepository.diagrams[activeDiagramId]?.ownerId ?? 'model';
+        for (const id of movedIds) {
+          const node = packageNestingNodes.find(candidate => candidate.id === id);
+          const before = committedPresentations[id]?.bounds;
+          if (!node || before?.x === undefined || before.y === undefined) continue;
+          revertBounds[id] = { x: before.x, y: before.y };
+          // Elements travelling with their dragged owner keep their owner.
+          if (node.ownerId && movedIds.has(node.ownerId)) continue;
+          const targetOwnerId = resolveDropOwnershipChange({
+            elementId: id,
+            currentOwnerId: node.ownerId,
+            before: { x: before.x, y: before.y, width: node.width, height: node.height },
+            after: node,
+            nodes: packageNestingNodes,
+            diagramOwnerId,
+          });
+          if (!targetOwnerId) continue;
+          if (!ownershipDrop) ownershipDrop = { targetOwnerId, elementIds: [id] };
+          else if (ownershipDrop.targetOwnerId === targetOwnerId) ownershipDrop.elementIds.push(id);
+        }
+      }
+      if (ownershipDrop) requestPackageOwnershipMove(ownershipDrop.elementIds, ownershipDrop.targetOwnerId, revertBounds);
+      const commands: Extract<SysmlEditorCommand, { type: 'batch' }>['commands'] = Array.from(pendingPresentationUpdatesRef.current, ([elementId, presentation]) => ({
+        type: 'updatePresentation' as const, diagramId: activeDiagramId, elementId, presentation,
+      }));
+      // Named IBDs render their owning frame implicitly until it is laid out.
+      // Present that frame within the same transaction as its first movement.
+      if (diagramMode === 'ibd' && pendingPresentationUpdatesRef.current.has(currentLayerId)
+        && !sysmlDiagramPresentations[activeDiagramId]?.elementIds.includes(currentLayerId)) {
+        const context = sysmlCanvasView.blocks.find(block => block.id === currentLayerId);
+        commands.unshift({ type: 'addToDiagram', diagramId: activeDiagramId, elementIds: [currentLayerId], coordinates: {
+          [currentLayerId]: {
+            x: context?.ibdX ?? 50, y: context?.ibdY ?? 50,
+            width: context?.ibdWidth ?? 1200, height: context?.ibdHeight ?? 800,
+          },
+        } });
+      }
+      const result = handleExecuteSysmlCommand({
+        type: 'batch',
+        commands,
+      });
+      if (!result.committed) result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
+      pendingPresentationUpdatesRef.current.clear();
+      presentationDraftsRef.current = {};
+      setPresentationDrafts({});
+      dragRawPositionsRef.current = {};
     }
     if (isPanning) {
       setIsPanning(false);
     }
-  }, [isDragging, isPanning, draggedPort, isResizing, selectedIds]);
+  }, [bddFeatureDrag, dropBddFeatureOnBlock, sysmlCanvasView, uiZoom, view, isDragging, isPanning, draggedPort, isResizing, selectedIds, diagramMode, currentLayerId, activeSysmlDiagramId, handleExecuteSysmlCommand, sysmlDiagramPresentations, canonicalSysmlRepository, packageNestingNodes, requestPackageOwnershipMove, addError]);
+
+  const diagramMouseHandlersRef = useRef({ move: handleMouseMove, up: handleMouseUp });
+  diagramMouseHandlersRef.current = { move: handleMouseMove, up: handleMouseUp };
+  useEffect(() => {
+    const handleWindowMouseMove = (event: globalThis.MouseEvent) => {
+      if (!pendingBddBlockGestureRef.current && !isDraggingRef.current) return;
+      if (canvasRef.current?.contains(event.target as Node)) return;
+      diagramMouseHandlersRef.current.move(event as unknown as MouseEvent<HTMLDivElement>);
+    };
+    const handleWindowMouseUp = (event: globalThis.MouseEvent) => {
+      if (!pendingBddBlockGestureRef.current && !isDraggingRef.current) return;
+      if (canvasRef.current?.contains(event.target as Node)) return;
+      diagramMouseHandlersRef.current.up(event as unknown as MouseEvent<HTMLDivElement>);
+    };
+    const finishOnBlur = () => {
+      const gesture = pendingBddBlockGestureRef.current;
+      if (!gesture) {
+        if (!isDraggingRef.current) return;
+        isDraggingRef.current = false;
+        setIsDragging(false);
+        setDraggedPort(null);
+        pendingDragPointRef.current = null;
+        dragRawPositionsRef.current = {};
+        if (dragRafRef.current !== null) {
+          cancelAnimationFrame(dragRafRef.current);
+          dragRafRef.current = null;
+        }
+        return;
+      }
+      if (!gesture.moved) {
+        pendingBddBlockGestureRef.current = null;
+        setPendingBddBlockId(null);
+        return;
+      }
+      diagramMouseHandlersRef.current.up(new globalThis.MouseEvent('mouseup', {
+        button: 0, clientX: gesture.lastClientX, clientY: gesture.lastClientY,
+      }) as unknown as MouseEvent<HTMLDivElement>);
+    };
+    window.addEventListener('mousemove', handleWindowMouseMove);
+    window.addEventListener('mouseup', handleWindowMouseUp);
+    window.addEventListener('blur', finishOnBlur);
+    return () => {
+      window.removeEventListener('mousemove', handleWindowMouseMove);
+      window.removeEventListener('mouseup', handleWindowMouseUp);
+      window.removeEventListener('blur', finishOnBlur);
+    };
+  }, []);
 
   const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -10302,6 +11106,23 @@ const ADIA = () => {
     setTimeout(() => setShowZoomIndicator(false), 500);
   }, [view, uiZoom]);
 
+  const beginElementDrag = useCallback((e: MouseEvent<SVGElement>, elementId: string, worldX: number, worldY: number) => {
+    const dragIds = selectedIds.includes(elementId) ? [...selectedIds]
+      : e.ctrlKey ? [...selectedIds, elementId] : [elementId];
+    const block = blocksById.get(elementId);
+    const node = partsById.get(elementId) ?? block ?? sysmlCanvasView.packages.find(pkg => pkg.id === elementId) ?? diagramShortcuts.find(shortcut => shortcut.id === elementId);
+    const anchor = diagramMode === 'ibd' && elementId === currentLayerId
+      ? { x: block?.ibdX ?? 50, y: block?.ibdY ?? 50 }
+      : { x: node?.x ?? worldX, y: node?.y ?? worldY };
+    pendingBddBlockGestureRef.current = {
+      blockId: elementId, startClientX: e.clientX, startClientY: e.clientY,
+      startWorldX: worldX, startWorldY: worldY, ctrlKey: e.ctrlKey, moved: false, dragIds, anchor, appliedDelta: { x: 0, y: 0 },
+      lastClientX: e.clientX, lastClientY: e.clientY,
+    };
+    dragRawPositionsRef.current = {};
+    setPendingBddBlockId(elementId);
+  }, [selectedIds, blocksById, partsById, sysmlCanvasView.packages, diagramShortcuts, diagramMode, currentLayerId]);
+
   const handleStateMouseDown = useCallback((e: MouseEvent<SVGGElement>, stateId: string) => {
     e.stopPropagation();
     if (isCreatingTransition) {
@@ -10326,25 +11147,11 @@ const ADIA = () => {
 
     if (e.button === 2) {
       e.preventDefault();
-      const stateToClone = states.find(s => s.id === stateId);
-      if (!stateToClone) return;
-      const newId = uuidv4();
-      const newState = {
-        ...stateToClone,
-        id: newId,
-        name: `${stateToClone.name}_copy`,
-        x: stateToClone.x,
-        y: stateToClone.y,
-      };
-      addToHistory();
-      setStates(prev => [...prev, newState]);
-      setLayers(prev => prev.map(l => l.id === currentLayerId ? {
-        ...l,
-        stateIds: [...l.stateIds, newId]
-      } : l));
-      setSelectedIds([newId]);
-      setIsDragging(true);
-      setDragOffset({ x: worldX, y: worldY });
+      rightDragCopyRef.current = beginRightDragCopy({
+        sourceIds: selectedIds.includes(stateId) ? selectedIds : [stateId],
+        clientX: e.clientX,
+        clientY: e.clientY,
+      });
       return;
     }
 
@@ -10360,7 +11167,7 @@ const ADIA = () => {
     setIsDragging(true);
 
     // For dragging, we track the mouse position relative to world
-    setDragOffset({ x: worldX, y: worldY });
+    setDiagramDragOffset({ x: worldX, y: worldY });
   }, [isCreatingTransition, transitionSourceId, states, view, createTransition, selectedIds, addToHistory, uiZoom, currentLayerId]);
 
   const handleJunctionMouseDown = useCallback((e: MouseEvent<SVGGElement>, junctionId: string) => {
@@ -10405,7 +11212,7 @@ const ADIA = () => {
       } : l));
       setSelectedIds([newId]);
       setIsDragging(true);
-      setDragOffset({ x: worldX, y: worldY });
+      setDiagramDragOffset({ x: worldX, y: worldY });
       return;
     }
 
@@ -10419,27 +11226,89 @@ const ADIA = () => {
 
     addToHistory(); // Save state before dragging
     setIsDragging(true);
-    setDragOffset({ x: worldX, y: worldY });
+    setDiagramDragOffset({ x: worldX, y: worldY });
   }, [isCreatingTransition, transitionSourceId, junctions, view, createTransition, selectedIds, addToHistory, uiZoom, currentLayerId]);
 
   const handleBlockMouseDown = useCallback((e: MouseEvent<SVGGElement>, blockId: string) => {
     e.stopPropagation();
+
+    if (diagramMode === 'package' && packageRelationshipTool && e.button === 0) {
+      // Reject a wrong endpoint at click time, keeping the tool armed.
+      const endpointError = packageToolEndpointError(
+        packageRelationshipTool,
+        packageRelationshipSourceId ? 'target' : 'source',
+        blockId,
+        packageToolEndpointKinds(canonicalSysmlRepository),
+      );
+      if (endpointError) {
+        addError('warning', endpointError, 'SysML', blockId);
+        return;
+      }
+      if (!packageRelationshipSourceId) {
+        setPackageRelationshipSourceId(blockId);
+        return;
+      }
+      const sourceId = packageRelationshipSourceId;
+      if (packageRelationshipTool === 'containment') {
+        // Containment (owner ⊕── owned) is ownership, not a stored
+        // relationship: it goes through the explicit Move command.
+        setPackageRelationshipSourceId(null);
+        setPackageRelationshipTool(null);
+        requestPackageOwnershipMove([blockId], sourceId);
+        return;
+      }
+      const relationship: SysmlRelationship = buildPackageRelationship(uuidv4(), packageRelationshipTool, sourceId, blockId);
+      const result = handleExecuteSysmlCommand({
+        type: 'createAndPresent', diagramId: activeSysmlDiagramId, element: relationship, presentation: {},
+      });
+      if (result.committed) {
+        setSelectedIds([relationship.id]);
+      } else {
+        result.diagnostics.forEach(diagnostic => addError(diagnostic.severity, diagnostic.message, 'SysML', diagnostic.elementId));
+      }
+      setPackageRelationshipSourceId(null);
+      setPackageRelationshipTool(null);
+      return;
+    }
     if (isCreatingTransition) { // Reusing this flag for relationships
       if (transitionSourceId) {
         if (transitionSourceId !== blockId) {
-          const source = blocks.find(b => b.id === transitionSourceId);
-          const target = blocks.find(b => b.id === blockId);
+          const resolveEntity = (id: string) => {
+            const direct = blocks.find(b => b.id === id) ?? states.find(s => s.id === id) ?? parts.find(p => p.id === id);
+            if (direct) return direct;
+            return blocks.flatMap(b => b.properties ?? []).find(p => p.id === id);
+          };
+          const source = resolveEntity(transitionSourceId);
+          const target = resolveEntity(blockId);
           if (!source || !target) return;
-          let type: RelationshipData['type'] = 'association';
-
-          if (source?.stereotype === 'requirement' && target?.stereotype === 'requirement') {
+          const isPropertyEndpoint = ('typeId' in source && 'kind' in source) || ('typeId' in target && 'kind' in target);
+          const directPropertyKind = diagramMode === 'bdd'
+            ? getDirectBddPropertyRelationshipKind({ blocks, parts, relationships, states }, transitionSourceId, blockId)
+            : undefined;
+          const legalKinds = getCanvasRelationshipKinds({ blocks, parts, relationships, states }, transitionSourceId, blockId, diagramMode === 'ibd' ? 'ibd' : diagramMode === 'requirements' ? 'requirements' : 'bdd');
+          if (legalKinds.length === 0) {
+            const reversedKinds = getCanvasRelationshipKinds({ blocks, parts, relationships, states }, blockId, transitionSourceId, diagramMode === 'ibd' ? 'ibd' : diagramMode === 'requirements' ? 'requirements' : 'bdd');
+            if (reversedKinds.length > 0) {
+              setRequirementConnectionPicker({ sourceId: blockId, targetId: transitionSourceId, reversedKinds });
+            } else {
+              showConnectionPolicyError({
+                relationshipKind: 'relationship',
+                source: classifyLegacyEndpoint(source),
+                target: classifyLegacyEndpoint(target),
+                diagnostic: {
+                  code: 'NO_LEGAL_RELATIONSHIP',
+                  message: `No available relationship can connect ${source.name} to ${target.name} on this diagram.`,
+                  correctiveAction: 'Choose compatible endpoints or the appropriate diagram. Check existing links for duplicate or cyclic relationships.',
+                },
+              });
+            }
+          } else if (directPropertyKind) {
+            createRelationship(transitionSourceId, blockId, directPropertyKind);
+          } else if (diagramMode === 'requirements' || isPropertyEndpoint || !legalKinds.includes('association')) {
             setRequirementConnectionPicker({ sourceId: transitionSourceId, targetId: blockId });
-            setIsCreatingTransition(false);
-            setTransitionSourceId(null);
-            return;
+          } else {
+            createRelationship(transitionSourceId, blockId, 'association');
           }
-
-          createRelationship(transitionSourceId, blockId, type);
           setIsCreatingTransition(false);
           setTransitionSourceId(null);
         }
@@ -10457,39 +11326,25 @@ const ADIA = () => {
 
     if (e.button === 2) {
       e.preventDefault();
-      const blockToClone = blocks.find(b => b.id === blockId);
-      if (!blockToClone) return;
-      const newId = uuidv4();
-      const newBlock = {
-        ...blockToClone,
-        id: newId,
-        name: `${blockToClone.name}_copy`,
-        ports: blockToClone.ports.map(p => ({
-          ...p,
-          id: uuidv4()
-        }))
-      };
-      addToHistory();
-      setBlocks(prev => [...prev, newBlock]);
-      setSelectedIds([newId]);
-      setIsDragging(true);
-      setDragOffset({ x: worldX, y: worldY });
+      rightDragCopyRef.current = beginRightDragCopy({
+        sourceIds: selectedIds.includes(blockId) ? selectedIds : [blockId],
+        clientX: e.clientX,
+        clientY: e.clientY,
+      });
       return;
     }
 
-    if (e.ctrlKey) {
-      setSelectedIds(prev => prev.includes(blockId) ? prev.filter(id => id !== blockId) : [...prev, blockId]);
-    } else {
-      if (!selectedIds.includes(blockId)) setSelectedIds([blockId]);
-    }
-    addToHistory();
-    setIsDragging(true);
-    setDragOffset({ x: worldX, y: worldY });
-  }, [isCreatingTransition, transitionSourceId, createRelationship, view, selectedIds, addToHistory, isCreatingConnector, uiZoom, blocks]);
+    if (e.button !== 0) return;
+    beginElementDrag(e, blockId, worldX, worldY);
+  }, [isCreatingTransition, transitionSourceId, createRelationship, view, selectedIds, isCreatingConnector, uiZoom, blocks, parts, relationships, diagramMode, showConnectionPolicyError, handleExecuteSysmlCommand, activeSysmlDiagramId, canonicalSysmlRepository, packageRelationshipTool, packageRelationshipSourceId, addError, requestPackageOwnershipMove, beginElementDrag]);
 
   const handlePartMouseDown = useCallback((e: MouseEvent<SVGGElement>, partId: string) => {
     e.stopPropagation();
-    if (isCreatingConnector) return; // Handled by port click usually, but if clicking body do nothing or cancel?
+    // While connecting, a click on the part body picks the part itself as an end.
+    if (isCreatingConnector) {
+      selectConnectorEnd(partId, '');
+      return;
+    }
 
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect) return;
@@ -10498,31 +11353,31 @@ const ADIA = () => {
 
     if (e.button === 2) {
       e.preventDefault();
-      const partToClone = parts.find(p => p.id === partId);
-      if (!partToClone) return;
-      const newId = uuidv4();
-      const newPart = {
-        ...partToClone,
-        id: newId,
-        name: `${partToClone.name}_copy`
-      };
-      addToHistory();
-      setParts(prev => [...prev, newPart]);
-      setSelectedIds([newId]);
-      setIsDragging(true);
-      setDragOffset({ x: worldX, y: worldY });
+      rightDragCopyRef.current = beginRightDragCopy({
+        sourceIds: selectedIds.includes(partId) ? selectedIds : [partId],
+        clientX: e.clientX,
+        clientY: e.clientY,
+      });
       return;
     }
 
+    if (e.button !== 0) return;
+    beginElementDrag(e, partId, worldX, worldY);
+  }, [isCreatingConnector, view, selectedIds, uiZoom, parts, selectConnectorEnd, beginElementDrag]);
+
+  // A nested part is laid out inside its parent: it can be selected or picked as a connector end, but not dragged.
+  const handleNestedPartMouseDown = useCallback((e: MouseEvent<SVGGElement>, partId: string) => {
+    e.stopPropagation();
+    if (isCreatingConnector) {
+      selectConnectorEnd(partId, '');
+      return;
+    }
     if (e.ctrlKey) {
       setSelectedIds(prev => prev.includes(partId) ? prev.filter(id => id !== partId) : [...prev, partId]);
     } else {
-      if (!selectedIds.includes(partId)) setSelectedIds([partId]);
+      setSelectedIds([partId]);
     }
-    addToHistory();
-    setIsDragging(true);
-    setDragOffset({ x: worldX, y: worldY });
-  }, [isCreatingConnector, view, selectedIds, addToHistory, uiZoom, parts]);
+  }, [isCreatingConnector, selectConnectorEnd]);
 
   const handleStateDoubleClick = useCallback((e: MouseEvent<SVGGElement>, stateId: string) => {
     e.stopPropagation();
@@ -10533,12 +11388,14 @@ const ADIA = () => {
       return;
     }
 
+    if (openCanvasSymbolDiagram(stateId)) return;
+
     if (diagramMode === 'requirements') {
       enterRequirement(stateId);
     } else {
       enterLayer(stateId);
     }
-  }, [enterLayer, diagramMode, states]);
+  }, [enterLayer, diagramMode, states, openCanvasSymbolDiagram]);
 
   const handleTransitionClick = useCallback((e: MouseEvent<SVGPathElement>, transitionId: string) => {
     e.stopPropagation();
@@ -10656,14 +11513,12 @@ const ADIA = () => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       try {
-        let raw = (event.target?.result as string) || '';
-        if (raw.charCodeAt(0) === 0xFEFF) {
-          raw = raw.slice(1);
-        }
-        const text = raw.trim();
-        if (!text) {
+        resetProjectLoadTelemetry(window, performance.now());
+        if ((window as any).__ADIA_PERF_ENABLED__ === true) performance.mark('adia-project-load-handler-start');
+        const buffer = event.target?.result as ArrayBuffer;
+        if (!buffer || buffer.byteLength === 0) {
           setImportValidationError({
             isValid: false,
             errorTitle: 'Empty File',
@@ -10671,8 +11526,11 @@ const ADIA = () => {
           });
           return;
         }
-        const importedData = JSON.parse(text);
+        const loaded = await loadProjectInWorker(buffer);
+        if ((window as any).__ADIA_PERF_ENABLED__ === true) performance.mark('adia-project-load-worker-complete');
+        const importedData = loaded.rawPayload;
         const validation = validateImportedJson(importedData);
+        if ((window as any).__ADIA_PERF_ENABLED__ === true) performance.mark('adia-project-load-validation-complete');
         if (!validation.isValid) {
           setImportValidationError(validation);
           return;
@@ -10692,17 +11550,19 @@ const ADIA = () => {
             saveStoredPerformanceLimits({ ...limits, forcePerformanceMode: true });
           }
         }
-        hydrateProject(dataToHydrate);
+        if ((window as any).__ADIA_PERF_ENABLED__ === true) performance.mark('adia-project-load-hydration-start');
+        hydrateProject(dataToHydrate, loaded);
+        if ((window as any).__ADIA_PERF_ENABLED__ === true) performance.mark('adia-project-load-hydration-dispatched');
         addError('info', `Imported project: ${file.name}`);
       } catch (error) {
         setImportValidationError({
           isValid: false,
-          errorTitle: 'JSON Syntax Error',
-          errors: [`Failed to parse project file JSON: ${error instanceof Error ? error.message : 'Invalid JSON format'}`]
+          errorTitle: 'Project Load Error',
+          errors: [`Failed to parse project file: ${error instanceof Error ? error.message : 'Invalid project format'}`]
         });
       }
     };
-    reader.readAsText(file);
+    reader.readAsArrayBuffer(file);
     if (projectImportRef.current) projectImportRef.current.value = '';
   }, [hydrateProject, addError]);
 
@@ -10744,1243 +11604,10 @@ const ADIA = () => {
     );
     const traceabilityMetrics = computeCoverageMetrics(traceabilityMatrix);
 
-    const style = `
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #fff; color: #333; padding: 40px; line-height: 1.6; max-width: 900px; margin: 0 auto; }
-        h1 { color: #f97316; border-bottom: 2px solid #f97316; padding-bottom: 10px; margin-bottom: 20px; }
-        h2 { color: #222; border-bottom: 1px solid #eee; margin-top: 40px; padding-bottom: 5px; page-break-after: avoid; }
-        h3 { color: #444; margin-top: 25px; font-size: 1.1em; page-break-after: avoid; }
-        .meta { color: #666; font-size: 0.9em; margin-bottom: 40px; }
-        .tree { margin-left: 20px; border-left: 1px solid #ddd; padding-left: 15px; }
-        .item { margin-bottom: 15px; }
-        .item-header { font-weight: bold; color: #000; }
-        .props { font-size: 0.9em; color: #555; margin-left: 10px; }
-        .tag { background: #eee; padding: 2px 6px; border-radius: 4px; font-size: 0.8em; }
-        .diagram-container { margin: 16px 0; }
-        .diagram-cell { break-inside: avoid; page-break-inside: avoid; margin-bottom: 16px; }
-        .diagram-card { margin: 20px 0; border: 1px solid #e2e8f0; border-radius: 8px; background: #ffffff; box-shadow: 0 2px 8px rgba(0,0,0,0.04); overflow: hidden; page-break-inside: avoid; }
-        .diagram-header { display: flex; justify-content: space-between; align-items: center; padding: 10px 16px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; font-size: 12px; font-weight: 600; color: #334155; }
-        .diagram-link-btn { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; background: #fff; color: #ea580c; border: 1px solid #fed7aa; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer; text-decoration: none; transition: all 0.15s ease; }
-        .diagram-link-btn:hover { background: #ea580c; color: #ffffff; border-color: #ea580c; box-shadow: 0 2px 6px rgba(234, 88, 12, 0.25); }
-        .diagram-preview-body { padding: 16px; display: flex; justify-content: center; align-items: center; cursor: zoom-in; background: #fafafa; overflow-x: auto; transition: background 0.15s ease; }
-        .diagram-preview-body:hover { background: #f1f5f9; }
-        .diagram-hint { text-align: center; padding: 6px; font-size: 11px; color: #94a3b8; border-top: 1px dashed #e2e8f0; background: #ffffff; }
-        #diagram-modal { display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(4px); z-index: 999999; flex-direction: column; }
-        #diagram-modal.active { display: flex; }
-        #diagram-modal-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 24px; background: #0f172a; border-bottom: 1px solid #334155; color: #f8fafc; }
-        #diagram-modal-body { flex: 1; overflow: auto; display: flex; justify-content: center; align-items: center; padding: 24px; background: #1e293b; cursor: grab; }
-        #diagram-modal-body:active { cursor: grabbing; }
-        .modal-ctrl-btn { background: #334155; color: #f8fafc; border: 1px solid #475569; border-radius: 4px; padding: 6px 12px; font-size: 12px; font-weight: bold; cursor: pointer; margin-left: 8px; transition: all 0.15s; }
-        .modal-ctrl-btn:hover { background: #ea580c; border-color: #ea580c; }
-        svg { max-width: 100%; height: auto; }
-        table { width: 100%; border-collapse: collapse; margin-top: 15px; margin-bottom: 15px; font-size: 0.9em; }
-        th, td { padding: 10px; border: 1px solid #ddd; text-align: left; }
-        th { background-color: #f5f5f5; color: #333; }
-        .badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 0.8em; font-weight: bold; }
-        .badge-critical { background-color: #fee2e2; color: #991b1b; }
-        .badge-warning { background-color: #fef3c7; color: #92400e; }
-        .badge-info { background-color: #e0f2fe; color: #075985; }
-        @media print {
-          .diagram-link-btn, .diagram-hint, #diagram-modal { display: none !important; }
-          .diagram-cell { page-break-inside: avoid; }
-          .diagram-card { border: 1px solid #ddd; box-shadow: none; }
-          svg { max-width: 100% !important; height: auto !important; }
-        }
-    `;
+    // Sections the report builder numbers after the standard ones (9, 10, ...).
+    const extraSections: { id: string; title: string; html: string }[] = [];
 
-    let html = `<html><head><title>${escapeHtml(projectName)} Report</title><style>${style}</style></head><body>`;
-    html += `<h1>${escapeHtml(projectName)}</h1>`;
-    html += `<div class="meta"><strong>Author:</strong> ${escapeHtml(author)} &bull; <strong>Date:</strong> ${escapeHtml(new Date().toLocaleString())} &bull; <strong>Engine:</strong> ${escapeHtml(VERSION)}</div>`;
-
-    if (snapshot.diagnostics) {
-      const removedRelCount = snapshot.diagnostics.removedRelationshipIds?.length || 0;
-      const removedConnCount = snapshot.diagnostics.removedConnectorIds?.length || 0;
-      const totalRemoved = removedRelCount + removedConnCount;
-      const errorCount = snapshot.diagnostics.errors?.length || 0;
-
-      html += `<div class="consistency-summary" style="background: #eff6ff; border: 1px solid #bfdbfe; color: #1e3a8a; padding: 12px 16px; border-radius: 6px; margin-bottom: 24px; font-size: 0.9em;">
-        <strong>Model Consistency Summary:</strong> revision: ${escapeHtml(snapshot.revision)} &bull; removed connections: ${totalRemoved} (relationships: ${removedRelCount}, connectors: ${removedConnCount}) &bull; errors: ${errorCount}
-      </div>`;
-    }
-
-    html += `<h2>Traceability Matrix</h2>`;
-    html += `<div class="consistency-summary"><strong>Canonical revision:</strong> ${escapeHtml(String(traceabilitySnapshot.repositoryRevision))} &bull; <strong>Model hash:</strong> ${escapeHtml(traceabilitySnapshot.modelHash)} &bull; <strong>Coverage:</strong> ${traceabilityMetrics.coveragePercent.toFixed(1)}% &bull; <strong>Verification:</strong> ${traceabilityMetrics.verificationPercent.toFixed(1)}%</div>`;
-    html += `<table><tr><th>Requirement</th><th>Status</th><th>Change</th><th>Owner / Risk</th><th>Covering Elements</th><th>Verification / Evidence</th><th>Unresolved</th></tr>`;
-    for (const row of traceabilityMatrix.rows) {
-      const links = [...row.coveringBlocks.map(item => item.name), ...row.blocks, ...row.parts].join('; ');
-      html += `<tr><td>${escapeHtml(row.requirement.requirementId)} · ${escapeHtml(row.requirement.name)}</td><td>${escapeHtml(row.status)}</td><td>${escapeHtml(row.changeKind ?? 'unchanged')}</td><td>${escapeHtml(`${row.requirement.owner ?? 'Unassigned'} / ${row.requirement.risk ?? 'unspecified'}`)}</td><td>${escapeHtml(links || 'None')}</td><td>${escapeHtml(`${row.verificationCases.length} cases / ${row.evidence.length} evidence`)}</td><td>${escapeHtml(row.unresolvedEndpointIds.join('; ') || 'None')}</td></tr>`;
-    }
-    html += `</table>`;
-    if (traceabilitySnapshot.diagnostics.length > 0) {
-      html += `<h3>Traceability Diagnostics</h3><ul>${traceabilitySnapshot.diagnostics.map(item => `<li>${escapeHtml(item.code)}: ${escapeHtml(item.message)}</li>`).join('')}</ul>`;
-    }
-
-    // ═══════════════════════════════════════════════════════════════════
-    // AUTO-LAYOUT ENGINE FOR REPORT DIAGRAMS
-    // Repositions nodes into readable arrangements for report output
-    // without modifying the user's actual canvas positions.
-    // ═══════════════════════════════════════════════════════════════════
-    const autoLayoutForReport = (
-      nodes: any[],
-      edges: any[],
-      type: 'req' | 'bdd' | 'ibd' | 'statemachine' | 'xbridges'
-    ): any[] => {
-      if (nodes.length <= 1) return nodes;
-
-      const NODE_GAP_X = 60;
-      const NODE_GAP_Y = 80;
-      const MAX_ROW_WIDTH = 780; // A4 target width
-
-      // Build adjacency for hierarchical layout
-      const buildAdjacency = () => {
-        const children = new Map<string, string[]>();
-        const parents = new Set<string>();
-        const nodeIds = new Set(nodes.map(n => n.id));
-
-        edges.forEach((e: any) => {
-          let srcId = e.sourceId || e.sourcePartId;
-          let tgtId = e.targetId || e.targetPartId;
-
-          if (type === 'bdd' && e.type === 'generalization') {
-            const temp = srcId;
-            srcId = tgtId;
-            tgtId = temp;
-          }
-
-          if (!nodeIds.has(srcId) || !nodeIds.has(tgtId)) return;
-          if (srcId === tgtId) return;
-
-          if (!children.has(srcId)) children.set(srcId, []);
-          children.get(srcId)!.push(tgtId);
-          parents.add(tgtId);
-        });
-
-        // Find root nodes (nodes with no incoming edges)
-        const roots = nodes.filter(n => !parents.has(n.id));
-        if (roots.length === 0) return { children, roots: [nodes[0]] }; // fallback
-        return { children, roots };
-      };
-
-      if (type === 'statemachine') {
-        // ── Hierarchical / layered layout (top-to-bottom) ──
-        // BFS from start states to assign layers
-        const { children, roots } = buildAdjacency();
-
-        // Prioritize autostart states as roots
-        const autostartRoots = roots.filter(n => n.autostart || n.nodeType === 'parentState');
-        const effectiveRoots = autostartRoots.length > 0 ? autostartRoots : roots;
-
-        const layerMap = new Map<string, number>();
-        const queue: { id: string, layer: number }[] = effectiveRoots.map(r => ({ id: r.id, layer: 0 }));
-        const visited = new Set<string>();
-
-        while (queue.length > 0) {
-          const { id, layer } = queue.shift()!;
-          if (visited.has(id)) continue;
-          visited.add(id);
-          layerMap.set(id, Math.max(layerMap.get(id) || 0, layer));
-
-          const kids = children.get(id) || [];
-          kids.forEach(kid => {
-            if (!visited.has(kid)) {
-              queue.push({ id: kid, layer: layer + 1 });
-            }
-          });
-        }
-
-        // Place unvisited nodes into next layer
-        nodes.forEach(n => {
-          if (!layerMap.has(n.id)) {
-            layerMap.set(n.id, (Math.max(...Array.from(layerMap.values()), 0)) + 1);
-          }
-        });
-
-        // Group nodes by layer
-        const layerGroups = new Map<number, any[]>();
-        nodes.forEach(n => {
-          const layer = layerMap.get(n.id) || 0;
-          if (!layerGroups.has(layer)) layerGroups.set(layer, []);
-          layerGroups.get(layer)!.push(n);
-        });
-
-        const sortedLayers = Array.from(layerGroups.keys()).sort((a, b) => a - b);
-        let currentY = 0;
-
-        sortedLayers.forEach(layerIdx => {
-          const layerNodes = layerGroups.get(layerIdx)!;
-          let currentX = 0;
-          const maxH = Math.max(...layerNodes.map(n => n.height || 80));
-
-          // Center the row
-          const totalWidth = layerNodes.reduce((sum, n) => sum + (n.width || 160) + NODE_GAP_X, -NODE_GAP_X);
-          const startX = Math.max(0, (MAX_ROW_WIDTH - totalWidth) / 2);
-          currentX = startX;
-
-          layerNodes.forEach(n => {
-            const w = n.width || 160;
-            n.displayX = currentX;
-            n.displayY = currentY;
-            currentX += w + NODE_GAP_X;
-          });
-
-          currentY += maxH + NODE_GAP_Y;
-        });
-
-      } else if (type === 'bdd' || type === 'req') {
-        // ── Hierarchical Layered Tree Layout for BDD / Requirements ──
-        const { children, roots } = buildAdjacency();
-
-        // Assign levels via BFS
-        const levelMap = new Map<string, number>();
-        const bfsQueue: { id: string, level: number }[] = roots.map(r => ({ id: r.id, level: 0 }));
-        const bfsVisited = new Set<string>();
-
-        while (bfsQueue.length > 0) {
-          const { id, level } = bfsQueue.shift()!;
-          if (bfsVisited.has(id)) continue;
-          bfsVisited.add(id);
-          levelMap.set(id, level);
-
-          const kids = children.get(id) || [];
-          kids.forEach(kid => {
-            if (!bfsVisited.has(kid)) {
-              bfsQueue.push({ id: kid, level: level + 1 });
-            }
-          });
-        }
-
-        // Place unvisited nodes at the next single level
-        const maxLevel = Math.max(...Array.from(levelMap.values()), -1);
-        nodes.forEach(n => {
-          if (!levelMap.has(n.id)) {
-            levelMap.set(n.id, maxLevel + 1);
-          }
-        });
-
-        // Group by level
-        const levelGroups = new Map<number, any[]>();
-        nodes.forEach(n => {
-          const level = levelMap.get(n.id) || 0;
-          if (!levelGroups.has(level)) levelGroups.set(level, []);
-          levelGroups.get(level)!.push(n);
-        });
-
-        const sortedLevels = Array.from(levelGroups.keys()).sort((a, b) => a - b);
-        let curY = 0;
-
-        // Order nodes within level using parent position to minimize crossings
-        const nodeXPos = new Map<string, number>();
-
-        sortedLevels.forEach(level => {
-          const levelNodes = levelGroups.get(level)!;
-
-          if (level > 0) {
-            // Sort by average parent X position
-            levelNodes.sort((a, b) => {
-              const parentsA = edges.filter((e: any) => (e.targetId || e.targetPartId) === a.id).map((e: any) => nodeXPos.get(e.sourceId || e.sourcePartId) ?? 0);
-              const parentsB = edges.filter((e: any) => (e.targetId || e.targetPartId) === b.id).map((e: any) => nodeXPos.get(e.sourceId || e.sourcePartId) ?? 0);
-              const avgA = parentsA.length ? parentsA.reduce((s, v) => s + v, 0) / parentsA.length : 0;
-              const avgB = parentsB.length ? parentsB.reduce((s, v) => s + v, 0) / parentsB.length : 0;
-              return avgA - avgB;
-            });
-          }
-
-          const nodeW = type === 'req' ? 160 : 140;
-          const totalWidth = levelNodes.reduce((sum, n) => sum + (n.width || nodeW) + NODE_GAP_X, -NODE_GAP_X);
-          const startX = Math.max(0, (MAX_ROW_WIDTH - totalWidth) / 2);
-          let curX = startX;
-          const maxH = Math.max(...levelNodes.map(n => n.height || 80));
-
-          levelNodes.forEach(n => {
-            n.displayX = curX;
-            n.displayY = curY;
-            nodeXPos.set(n.id, curX + (n.width || nodeW) / 2);
-            curX += (n.width || nodeW) + NODE_GAP_X;
-          });
-
-          curY += maxH + NODE_GAP_Y + 24;
-        });
-
-      } else if (type === 'ibd') {
-        // ── Grid layout for IBD parts ──
-        const nodeW = 180;
-        const nodeH = 100;
-        const cols = Math.max(2, Math.floor(MAX_ROW_WIDTH / (nodeW + NODE_GAP_X)));
-
-        nodes.forEach((n, i) => {
-          const col = i % cols;
-          const row = Math.floor(i / cols);
-          n.displayX = col * (nodeW + NODE_GAP_X);
-          n.displayY = row * (nodeH + NODE_GAP_Y);
-          if (!n.width || n.width < 100) n.width = nodeW;
-          if (!n.height || n.height < 60) n.height = nodeH;
-        });
-
-      } else {
-        // ── Fallback: grid layout ──
-        const cols = Math.max(2, Math.floor(MAX_ROW_WIDTH / 200));
-        nodes.forEach((n, i) => {
-          const col = i % cols;
-          const row = Math.floor(i / cols);
-          n.displayX = col * 200;
-          n.displayY = row * 150;
-        });
-      }
-
-      return nodes;
-    };
-
-    const reportHierarchy = buildReportHierarchy(hierarchySource);
-
-    // Helper to generate SVG for report
-    const renderDiagramSVG = (nodes: any[], edges: any[], type: 'req' | 'bdd' | 'ibd' | 'statemachine' | 'xbridges', contextId?: string) => {
-      if (nodes.length === 0) return '';
-
-      // Deep-copy edges to avoid mutating actual state data
-      const edgesCopy = edges.map((e: any) => ({ ...e }));
-
-      // Prepare Nodes: Use fixed size for BDD blocks to match App, use instance size for IBD/Req
-      const displayNodes = nodes.map(n => {
-        const isBdd = type === 'bdd';
-        const isReq = type === 'req';
-        const width = isBdd ? (n.width || 140) : isReq ? (n.width || 160) : n.width;
-        const height = isBdd ? (n.height || 70) : isReq ? (n.height || 80) : n.height;
-        return { ...n, width, height, displayX: n.x || 0, displayY: n.y || 0 };
-      });
-
-      const displayNodesMap = new Map<string, any>();
-      displayNodes.forEach(n => displayNodesMap.set(n.id, n));
-
-      // Ensure all edge sources and targets are in displayNodes for statemachine
-      if (type === 'statemachine') {
-        edgesCopy.forEach((e: any) => {
-          [e.sourceId, e.targetId].forEach(id => {
-            if (!displayNodesMap.has(id)) {
-              const globalState = states.find(s => s.id === id);
-              const globalJunc = junctions.find(j => j.id === id);
-              if (globalState) {
-                const node = { ...globalState, nodeType: 'externalState', width: globalState.width, height: globalState.height, displayX: globalState.x, displayY: globalState.y };
-                displayNodes.push(node);
-                displayNodesMap.set(id, node);
-              } else if (globalJunc) {
-                const node = { ...globalJunc, nodeType: 'junction', width: 20, height: 20, displayX: globalJunc.x - 10, displayY: globalJunc.y - 10 };
-                displayNodes.push(node);
-                displayNodesMap.set(id, node);
-              }
-            }
-          });
-        });
-      }
-
-      // ── AUTO-LAYOUT: reposition nodes for report readability ──
-      autoLayoutForReport(displayNodes, edgesCopy, type);
-
-      // Rebuild the map after layout (positions changed)
-      displayNodes.forEach(n => displayNodesMap.set(n.id, n));
-
-      // Clear any user-defined control points (they won't match new positions)
-      if (type === 'statemachine') {
-        edgesCopy.forEach((e: any) => {
-          e.controlPoint = undefined;
-          e.hasControlPoint = false;
-        });
-      }
-
-      // Calculate bounds from new layout
-      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-      displayNodes.forEach(n => {
-        minX = Math.min(minX, n.displayX);
-        minY = Math.min(minY, n.displayY);
-        maxX = Math.max(maxX, n.displayX + n.width);
-        maxY = Math.max(maxY, n.displayY + n.height);
-      });
-
-      const contextBlock = contextId ? blocks.find(b => b.id === contextId) : null;
-      const contextFrame = (type === 'ibd' && contextBlock) ? {
-        x: contextBlock.ibdX ?? 50,
-        y: contextBlock.ibdY ?? 50,
-        w: contextBlock.ibdWidth ?? 1200,
-        h: contextBlock.ibdHeight ?? 800
-      } : (type === 'ibd' ? {
-        x: minX - 80,
-        y: minY - 80,
-        w: maxX - minX + 160,
-        h: maxY - minY + 160
-      } : { x: minX, y: minY, w: maxX - minX, h: maxY - minY });
-
-      // Update min/max X/Y based on the contextFrame
-      if (type === 'ibd') {
-        minX = contextFrame.x;
-        minY = contextFrame.y;
-        maxX = contextFrame.x + contextFrame.w;
-        maxY = contextFrame.y + contextFrame.h;
-      }
-
-      const padding = 60;
-      const rawWidth = Math.max(200, maxX - minX + padding * 2);
-      const rawHeight = Math.max(150, maxY - minY + padding * 2);
-
-      // Cap SVG display width for A4 readability
-      const MAX_SVG_WIDTH = 780;
-      const scaleFactor = rawWidth > MAX_SVG_WIDTH ? MAX_SVG_WIDTH / rawWidth : 1;
-      const displayWidth = Math.min(rawWidth, MAX_SVG_WIDTH);
-      const displayHeight = rawHeight * scaleFactor;
-
-      const viewBox = `${minX - padding} ${minY - padding} ${rawWidth} ${rawHeight}`;
-
-      const title = type === 'req' ? 'Requirements Traceability Diagram' :
-                    type === 'bdd' ? 'Block Definition Diagram (BDD)' :
-                    type === 'ibd' ? `Internal Block Diagram (IBD) · ${contextBlock?.name || 'System'}` :
-                    type === 'statemachine' ? 'State Machine Architecture' : 'System Diagram';
-
-      const diagId = `diag-${Math.random().toString(36).substring(2, 9)}`;
-
-      // Render root SVG
-      const rootSvg = renderSingleSVG(displayNodes, edgesCopy, type, viewBox, displayWidth, displayHeight, displayNodesMap, contextId, diagId);
-
-      // Render child drill-down layers if any element inside has sub-layers
-      let childLayersHtml = '';
-      displayNodes.forEach(node => {
-        if (reportHierarchy.hasChildLayer(node.id)) {
-          const childInfo = reportHierarchy.getChildLayerInfo(node.id)!;
-          if (childInfo.type === 'ibd') {
-            const targetBlockId = node.typeId || node.id;
-            const targetBlock = blocks.find(b => b.id === targetBlockId);
-            const childParts = parts.filter(p => p.blockId === targetBlockId);
-            const childConns = connectors.filter(c => {
-              const s = parts.find(p => p.id === c.sourcePartId);
-              const t = parts.find(p => p.id === c.targetPartId);
-              return (s && s.blockId === targetBlockId) || (t && t.blockId === targetBlockId);
-            });
-
-            if (childParts.length > 0) {
-              const childDisplayNodes = childParts.map(p => ({ ...p, displayX: p.x || 0, displayY: p.y || 0 }));
-              const childEdgesCopy = childConns.map(c => ({ ...c }));
-              autoLayoutForReport(childDisplayNodes, childEdgesCopy, 'ibd');
-
-              let cMinX = Infinity, cMinY = Infinity, cMaxX = -Infinity, cMaxY = -Infinity;
-              childDisplayNodes.forEach(n => {
-                cMinX = Math.min(cMinX, n.displayX);
-                cMinY = Math.min(cMinY, n.displayY);
-                cMaxX = Math.max(cMaxX, n.displayX + n.width);
-                cMaxY = Math.max(cMaxY, n.displayY + n.height);
-              });
-              const cPad = 60;
-              const cRawW = Math.max(200, cMaxX - cMinX + cPad * 2 + 160);
-              const cRawH = Math.max(150, cMaxY - cMinY + cPad * 2 + 160);
-              const cScale = cRawW > MAX_SVG_WIDTH ? MAX_SVG_WIDTH / cRawW : 1;
-              const cDispW = Math.min(cRawW, MAX_SVG_WIDTH);
-              const cDispH = cRawH * cScale;
-              const cViewBox = `${cMinX - cPad - 80} ${cMinY - cPad - 80} ${cRawW} ${cRawH}`;
-              const cMap = new Map<string, any>();
-              childDisplayNodes.forEach(n => cMap.set(n.id, n));
-
-              const childSvg = renderSingleSVG(childDisplayNodes, childEdgesCopy, 'ibd', cViewBox, cDispW, cDispH, cMap, targetBlockId, diagId);
-              childLayersHtml += `<div id="layer-${childInfo.layerId}" class="diagram-layer-view" style="display:none; width:100%;">${childSvg}</div>`;
-            }
-          } else if (childInfo.type === 'statemachine') {
-            const childLayer = layers.find(l => l.parentStateId === node.id);
-            if (childLayer) {
-              const childStates = states.filter(s => childLayer.stateIds.includes(s.id));
-              const childJuncs = junctions.filter(j => childLayer.junctionIds.includes(j.id));
-              const childTrans = transitions.filter(t => childLayer.transitionIds.includes(t.id));
-
-              const childNodes: any[] = [
-                ...childStates.map(s => ({ ...s, nodeType: 'state' })),
-                ...childJuncs.map(j => ({ ...j, nodeType: 'junction', width: 20, height: 20, x: j.x - 10, y: j.y - 10 }))
-              ];
-              const childDisplayNodes = childNodes.map(n => ({ ...n, displayX: n.x || 0, displayY: n.y || 0 }));
-              const childEdgesCopy = childTrans.map(t => ({ ...t }));
-              autoLayoutForReport(childDisplayNodes, childEdgesCopy, 'statemachine');
-
-              let cMinX = Infinity, cMinY = Infinity, cMaxX = -Infinity, cMaxY = -Infinity;
-              childDisplayNodes.forEach(n => {
-                cMinX = Math.min(cMinX, n.displayX);
-                cMinY = Math.min(cMinY, n.displayY);
-                cMaxX = Math.max(cMaxX, n.displayX + n.width);
-                cMaxY = Math.max(cMaxY, n.displayY + n.height);
-              });
-              const cPad = 60;
-              const cRawW = Math.max(200, cMaxX - cMinX + cPad * 2);
-              const cRawH = Math.max(150, cMaxY - cMinY + cPad * 2);
-              const cScale = cRawW > MAX_SVG_WIDTH ? MAX_SVG_WIDTH / cRawW : 1;
-              const cDispW = Math.min(cRawW, MAX_SVG_WIDTH);
-              const cDispH = cRawH * cScale;
-              const cViewBox = `${cMinX - cPad} ${cMinY - cPad} ${cRawW} ${cRawH}`;
-              const cMap = new Map<string, any>();
-              childDisplayNodes.forEach(n => cMap.set(n.id, n));
-
-              const childSvg = renderSingleSVG(childDisplayNodes, childEdgesCopy, 'statemachine', cViewBox, cDispW, cDispH, cMap, undefined, diagId);
-              childLayersHtml += `<div id="layer-${childInfo.layerId}" class="diagram-layer-view" style="display:none; width:100%;">${childSvg}</div>`;
-            }
-          }
-        }
-      });
-
-      let svgResult = `<div class="diagram-card">`;
-      svgResult += `<div class="diagram-header">`;
-      svgResult += `<div id="bc-${diagId}" class="diagram-breadcrumbs"></div>`;
-      svgResult += `<div class="diagram-controls">`;
-      svgResult += `<button class="modal-ctrl-btn" onclick="window.ADIA_DIAGRAM_NAV.zoom('${diagId}', 1.25)">➕ Zoom In</button>`;
-      svgResult += `<button class="modal-ctrl-btn" onclick="window.ADIA_DIAGRAM_NAV.zoom('${diagId}', 0.8)">➖ Zoom Out</button>`;
-      svgResult += `<button class="modal-ctrl-btn" onclick="window.ADIA_DIAGRAM_NAV.resetZoom('${diagId}')">↺ Reset</button>`;
-      svgResult += `<button class="diagram-link-btn" onclick="openDiagramModal('${diagId}', '${escapeHtml(title)}')">🔍 Fullscreen</button>`;
-      svgResult += `</div>`;
-      svgResult += `</div>`;
-      svgResult += `<div id="${diagId}" class="diagram-preview-body">`;
-      svgResult += `<div id="layer-root-${diagId}" class="diagram-layer-view" style="display:block; width:100%;">`;
-      svgResult += rootSvg;
-      svgResult += `</div>`;
-      svgResult += childLayersHtml;
-      svgResult += `</div>`;
-      svgResult += `<div class="diagram-hint">💡 <b>Interactive Diagram:</b> Double-click any element marked with ⧉ to explore its nested architecture layer. Use breadcrumbs above to navigate back.</div>`;
-      svgResult += `</div>`;
-      svgResult += `<script>window.ADIA_DIAGRAM_NAV.initContainer('${diagId}', 'root-${diagId}', '${escapeHtml(title)}');</script>`;
-      return svgResult;
-    };
-
-    // Single SVG rendering helper (used by renderDiagramSVG)
-    const renderSingleSVG = (
-      displayNodes: any[],
-      edges: any[],
-      type: string,
-      viewBox: string,
-      svgWidth: number,
-      svgHeight: number,
-      displayNodesMap: Map<string, any>,
-      contextId?: string,
-      diagId?: string
-    ) => {
-      const contextBlock = contextId ? blocksById.get(contextId) : null;
-
-      // Calculate bounds for this page's nodes to render local context frame
-      let minX_ = Infinity, minY_ = Infinity, maxX_ = -Infinity, maxY_ = -Infinity;
-      displayNodes.forEach(n => {
-        minX_ = Math.min(minX_, n.displayX);
-        minY_ = Math.min(minY_, n.displayY);
-        maxX_ = Math.max(maxX_, n.displayX + n.width);
-        maxY_ = Math.max(maxY_, n.displayY + n.height);
-      });
-      const framePadding = type === 'ibd' ? 80 : 0;
-      const contextFrame = {
-        x: minX_ - framePadding,
-        y: minY_ - framePadding,
-        w: maxX_ - minX_ + framePadding * 2,
-        h: maxY_ - minY_ + framePadding * 2
-      };
-
-      // Helper for Port Position
-      const getPortPos = (nodeOrId: any, portId: string) => {
-        const isString = typeof nodeOrId === 'string';
-        const id = isString ? nodeOrId : nodeOrId?.id;
-
-        if (type === 'ibd' && id === contextId) {
-          const block = contextBlock;
-          const port = block?.ports?.find((p: any) => p.id === portId);
-          const side = port?.side || 'left';
-          const offset = port?.offset ?? 0.5;
-
-          let x = 0, y = 0;
-          if (side === 'top') { x = contextFrame.x + contextFrame.w * offset; y = contextFrame.y; }
-          else if (side === 'bottom') { x = contextFrame.x + contextFrame.w * offset; y = contextFrame.y + contextFrame.h; }
-          else if (side === 'left') { x = contextFrame.x; y = contextFrame.y + contextFrame.h * offset; }
-          else { x = contextFrame.x + contextFrame.w; y = contextFrame.y + contextFrame.h * offset; }
-          return { x, y };
-        }
-
-        const node = isString ? displayNodes.find(n => n.id === id) : nodeOrId;
-        if (!node) return { x: 0, y: 0 };
-
-        let block = type === 'ibd' ? blocksById.get(node.typeId) : node;
-        if (!block) return { x: node.displayX + (node.width || 120) / 2, y: node.displayY + (node.height || 80) / 2 };
-
-        const port = block.ports?.find((p: any) => p.id === portId);
-        const portIndex = block.ports?.findIndex((p: any) => p.id === portId) ?? 0;
-
-        const layout = type === 'ibd' ? node.portLayouts?.[portId] : null;
-        const side = layout?.side || port?.side;
-        const offset = layout?.offset ?? port?.offset;
-
-        let x = 0, y = 0;
-        if (side && offset != null) {
-          if (side === 'top') { x = node.displayX + node.width * offset; y = node.displayY; }
-          else if (side === 'bottom') { x = node.displayX + node.width * offset; y = node.displayY + node.height; }
-          else if (side === 'left') { x = node.displayX; y = node.displayY + node.height * offset; }
-          else { x = node.displayX + node.width; y = node.displayY + node.height * offset; }
-        } else {
-          const isLeft = portIndex % 2 === 0;
-          if (type === 'ibd') {
-            x = node.displayX + (isLeft ? 0 : node.width);
-            y = node.displayY + 20 + Math.floor(portIndex / 2) * 20 + 5;
-          } else {
-            x = node.displayX + (isLeft ? 0 : node.width);
-            y = node.displayY + 60 + Math.floor(portIndex / 2) * 40;
-          }
-        }
-        return { x, y };
-      };
-
-      const getBox = (n: any) => ({ x: n.displayX, y: n.displayY, width: n.width, height: n.height });
-      const getCenter = (n: any) => ({ x: n.displayX + n.width / 2, y: n.displayY + n.height / 2 });
-
-      let svg = `<svg width="${svgWidth}" height="${svgHeight}" viewBox="${viewBox}" xmlns="http://www.w3.org/2000/svg" style="font-family: 'Segoe UI', Tahoma, sans-serif; max-width: 100%; height: auto;">`;
-
-      // Defs for markers
-      svg += `<defs>
-          <marker id="m-arrow-${type}" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10" fill="none" stroke="#546e7a" stroke-width="1.2" /></marker>
-          <marker id="m-arrow-filled-${type}" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 Z" fill="#333" stroke="#333" /></marker>
-          <marker id="m-diamond-${type}" markerWidth="16" markerHeight="10" refX="1" refY="5" orient="auto"><path d="M1,5 L8,1 L15,5 L8,9 Z" fill="#fff" stroke="#333" stroke-width="1.2" /></marker>
-          <marker id="m-diamond-fill-${type}" markerWidth="16" markerHeight="10" refX="1" refY="5" orient="auto"><path d="M1,5 L8,1 L15,5 L8,9 Z" fill="#333" stroke="#333" /></marker>
-          <marker id="m-triangle-${type}" markerWidth="14" markerHeight="12" refX="13" refY="6" orient="auto"><path d="M1,1 L13,6 L1,11 Z" fill="#fff" stroke="#333" stroke-width="1.2" /></marker>
-          <marker id="requirement-containment-crosshair" markerWidth="14" markerHeight="14" refX="7" refY="7" orient="auto"><circle cx="7" cy="7" r="5.5" fill="#ffffff" stroke="#333333" stroke-width="1.2" /><path d="M 7 1.5 L 7 12.5 M 1.5 7 L 12.5 7" stroke="#333333" stroke-width="1.2" stroke-linecap="round" /></marker>
-          <marker id="m-containment-${type}" markerWidth="14" markerHeight="14" refX="7" refY="7" orient="auto"><circle cx="7" cy="7" r="5.5" fill="#ffffff" stroke="#333333" stroke-width="1.2" /><path d="M 7 1.5 L 7 12.5 M 1.5 7 L 12.5 7" stroke="#333333" stroke-width="1.2" stroke-linecap="round" /></marker>
-        </defs>`;
-
-      // If IBD, render the outer context block boundary and its ports
-      if (type === 'ibd') {
-        const ctxBlockName = contextBlock ? contextBlock.name : 'System';
-        svg += `<rect x="${contextFrame.x}" y="${contextFrame.y}" width="${contextFrame.w}" height="${contextFrame.h}" fill="none" stroke="#666" stroke-width="1.5" stroke-dasharray="4,4" rx="6" />`;
-        svg += `<text x="${contextFrame.x + 10}" y="${contextFrame.y + 20}" fill="#666" font-size="12" font-weight="bold">ibd [Block] ${escapeHtml(ctxBlockName)}</text>`;
-
-        if (contextBlock && contextBlock.ports) {
-          contextBlock.ports.forEach((p: any) => {
-            const portPos = getPortPos(contextId, p.id);
-            svg += `<rect x="${portPos.x - 4}" y="${portPos.y - 4}" width="8" height="8" fill="#333" stroke="#f97316" stroke-width="1" />`;
-
-            const side = p.side || 'left';
-            let tx = portPos.x, ty = portPos.y;
-            let anchor = "middle";
-            if (side === 'left') { tx -= 6; anchor = "end"; ty += 3; }
-            else if (side === 'right') { tx += 6; anchor = "start"; ty += 3; }
-            else if (side === 'top') { ty -= 6; }
-            else if (side === 'bottom') { ty += 10; }
-
-            svg += `<text x="${tx}" y="${ty}" text-anchor="${anchor}" font-size="8" fill="#666">${escapeHtml(p.name)}</text>`;
-          });
-        }
-      }
-
-      // Render Nodes
-      displayNodes.forEach(n => {
-        const fill = type === 'req' ? '#fff' : '#f0f0f0';
-        const stroke = type === 'req' ? '#f97316' : '#333';
-        const hasChild = reportHierarchy.hasChildLayer(n.id);
-        const childInfo = hasChild ? reportHierarchy.getChildLayerInfo(n.id) : undefined;
-        const dblClickAttr = (hasChild && childInfo && diagId)
-          ? `ondblclick="window.ADIA_DIAGRAM_NAV.drillDown('${diagId}', '${childInfo.layerId}', '${escapeHtml(childInfo.title)}'); event.stopPropagation();"`
-          : '';
-        const nodeClass = `diagram-node${hasChild ? ' has-child-layer' : ''}`;
-
-        if (type === 'statemachine') {
-          if (n.nodeType === 'junction') {
-            svg += `<g transform="translate(${n.displayX + n.width / 2}, ${n.displayY + n.height / 2})">`;
-            svg += `<circle r="8" fill="#333" stroke="#ff9900" stroke-width="2" />`;
-            if (n.type === 'history') svg += `<text x="0" y="4" text-anchor="middle" fill="#fff" font-size="11" font-weight="bold">H</text>`;
-            if (n.type === 'deep-history') svg += `<text x="0" y="4" text-anchor="middle" fill="#fff" font-size="11" font-weight="bold">H*</text>`;
-            svg += `<text x="0" y="-18" text-anchor="middle" fill="#ff9900" font-size="12" font-weight="bold">${escapeHtml(n.name)}</text>`;
-            svg += `</g>`;
-          } else {
-            // State
-            svg += `<g class="${nodeClass}" transform="translate(${n.displayX}, ${n.displayY})" ${dblClickAttr}>`;
-            svg += `<rect width="${n.width}" height="${n.height}" rx="8" fill="#fcfcfc" stroke="#333" stroke-width="2" />`;
-            svg += `<path d="M0 26 h${n.width}" stroke="#ddd" stroke-width="1" />`;
-            svg += `<text x="${n.width / 2}" y="18" text-anchor="middle" font-size="13" font-weight="bold" fill="#000" font-family="sans-serif">${escapeHtml(n.name)}</text>`;
-
-            if (hasChild) {
-              svg += `<g class="diagram-drill-badge"><rect x="${n.width - 24}" y="5" width="18" height="15" rx="3" fill="#ea580c" /><text x="${n.width - 15}" y="16" text-anchor="middle" font-size="9" fill="#fff" font-weight="bold">⧉</text></g>`;
-            }
-
-            if (n.entry || n.during || n.exit) {
-              let yTxt = 36;
-              if (n.entry) { svg += `<text x="6" y="${yTxt}" font-size="10" fill="#555" font-family="monospace">entry/</text>`; yTxt += 12; }
-              if (n.during) { svg += `<text x="6" y="${yTxt}" font-size="10" fill="#555" font-family="monospace">during/</text>`; yTxt += 12; }
-              if (n.exit) { svg += `<text x="6" y="${yTxt}" font-size="10" fill="#555" font-family="monospace">exit/</text>`; }
-            }
-            if (n.internalTransitions) {
-              const lines = n.internalTransitions.split('\n').filter((l: string) => l.trim());
-              if (lines.length > 0) {
-                const startY = n.height - 15 - (lines.length * 10);
-                svg += `<g transform="translate(8, ${startY})">`;
-                svg += `<line x1="-8" y1="-5" x2="${n.width - 8}" y2="-5" stroke="#eee" stroke-width="1" />`;
-                lines.slice(0, 3).forEach((line: string, i: number) => {
-                  const txt = line.length > 25 ? line.slice(0, 25) + '...' : line;
-                  const safeTxt = escapeHtml(txt);
-                  svg += `<text y="${i * 10}" fill="#888" font-size="9" font-family="monospace">${safeTxt}</text>`;
-                });
-                svg += `</g>`;
-              }
-            }
-            if (n.autostart) {
-              svg += `<circle cx="10" cy="-5" r="3" fill="#333" />`;
-            }
-            svg += `</g>`;
-          }
-          return;
-        }
-
-        svg += `<g class="${nodeClass}" transform="translate(${n.displayX}, ${n.displayY})" ${dblClickAttr}>`;
-        svg += `<rect width="${n.width}" height="${n.height}" fill="${fill}" stroke="${stroke}" stroke-width="1" rx="4" />`;
-
-        if (type === 'req') {
-          svg += `<text x="${n.width / 2}" y="22" text-anchor="middle" font-size="13" font-weight="bold" fill="#000" font-family="sans-serif">${escapeHtml(n.reqId)}</text>`;
-          const displayName = n.name.length > 22 ? n.name.substring(0, 20) + '...' : n.name;
-          svg += `<text x="${n.width / 2}" y="40" text-anchor="middle" font-size="11" fill="#333" font-family="sans-serif">${escapeHtml(displayName)}</text>`;
-          if (n.description) {
-            const desc = n.description.length > 30 ? n.description.substring(0, 28) + '...' : n.description;
-            svg += `<text x="6" y="58" font-size="10" fill="#555" font-family="sans-serif">${escapeHtml(desc)}</text>`;
-          }
-        } else {
-          svg += `<text x="${n.width / 2}" y="17" text-anchor="middle" font-size="10" fill="#666" font-family="monospace">«${escapeHtml(n.stereotype || (type === 'ibd' ? 'part' : 'block'))}»</text>`;
-          svg += `<text x="${n.width / 2}" y="34" text-anchor="middle" font-size="13" font-weight="bold" fill="#000" font-family="sans-serif">${escapeHtml(n.name)}</text>`;
-          svg += `<line x1="0" y1="38" x2="${n.width}" y2="38" stroke="#888" stroke-width="0.5" />`;
-        }
-
-        if (hasChild) {
-          svg += `<g class="diagram-drill-badge"><rect x="${n.width - 24}" y="5" width="18" height="15" rx="3" fill="#ea580c" /><text x="${n.width - 15}" y="16" text-anchor="middle" font-size="9" fill="#fff" font-weight="bold">⧉</text></g>`;
-        }
-
-        if (type === 'bdd' && n.properties?.length > 0) {
-          n.properties.slice(0, 3).forEach((p: any, i: number) => {
-            svg += `<text x="5" y="${48 + i * 12}" font-size="9" font-family="monospace" fill="#555">${escapeHtml(p.name)}:${escapeHtml(p.type)}</text>`;
-          });
-        }
-
-        // Render Ports
-        let block = type === 'ibd' ? blocks.find(b => b.id === n.typeId) : n;
-        if (block && block.ports && type === 'ibd') {
-          block.ports.forEach((p: any) => {
-            const portPos = getPortPos(n, p.id);
-            const px = portPos.x - n.displayX;
-            const py = portPos.y - n.displayY;
-            svg += `<rect x="${px - 4}" y="${py - 4}" width="8" height="8" fill="#333" stroke="#f97316" stroke-width="1" />`;
-
-            const isLeft = px <= 0;
-            const isRight = px >= n.width;
-            const isTop = py <= 0;
-            const isBottom = py >= n.height;
-            let tx = px, ty = py;
-            let anchor = "middle";
-            if (isLeft) { tx -= 6; anchor = "end"; ty += 3; }
-            else if (isRight) { tx += 6; anchor = "start"; ty += 3; }
-            else if (isTop) { ty -= 6; }
-            else if (isBottom) { ty += 10; }
-
-            svg += `<text x="${tx}" y="${ty}" text-anchor="${anchor}" font-size="8" fill="#666">${escapeHtml(p.name)}</text>`;
-          });
-        }
-
-        svg += `</g>`;
-      });
-
-      // Precompute incoming and outgoing edge counts per node to spread ports
-      const outEdgeMap = new Map<string, any[]>();
-      const inEdgeMap = new Map<string, any[]>();
-      edges.forEach((e: any) => {
-        const sId = e.sourceId || e.sourcePartId;
-        const tId = e.targetId || e.targetPartId;
-        if (!outEdgeMap.has(sId)) outEdgeMap.set(sId, []);
-        outEdgeMap.get(sId)!.push(e);
-        if (!inEdgeMap.has(tId)) inEdgeMap.set(tId, []);
-        inEdgeMap.get(tId)!.push(e);
-      });
-
-      // Render Edges
-      edges.forEach((e: any) => {
-        let sp, tp;
-        let source = type === 'ibd' ? displayNodes.find(n => n.id === e.sourcePartId) : displayNodes.find(n => n.id === e.sourceId);
-        let target = type === 'ibd' ? displayNodes.find(n => n.id === e.targetPartId) : displayNodes.find(n => n.id === e.targetId);
-
-        if (type === 'ibd') {
-          const isSourceCtx = e.sourcePartId === contextId || !e.sourcePartId;
-          const isTargetCtx = e.targetPartId === contextId || !e.targetPartId;
-
-          const sRef = source || (isSourceCtx ? contextId : null);
-          const tRef = target || (isTargetCtx ? contextId : null);
-
-          if (sRef && tRef) {
-            sp = getPortPos(sRef, e.sourcePortId);
-            tp = getPortPos(tRef, e.targetPortId);
-          }
-        } else if (type === 'statemachine') {
-          if (source && target) {
-            if (source.id === target.id) {
-              sp = { x: source.displayX + source.width / 2 - 15, y: source.displayY };
-              tp = { x: source.displayX + source.width / 2 + 15, y: source.displayY };
-            } else if (source.nodeType === 'junction' && target.nodeType !== 'junction') {
-              sp = getJunctionEdgePoint(getCenter(source), getCenter(target));
-              tp = getEdgePoint(getBox(target), getBox(source));
-            } else if (source.nodeType !== 'junction' && target.nodeType === 'junction') {
-              sp = getEdgePoint(getBox(source), getBox(target));
-              tp = getJunctionEdgePoint(getCenter(target), getCenter(source));
-            } else if (source.nodeType === 'junction' && target.nodeType === 'junction') {
-              sp = getJunctionEdgePoint(getCenter(source), getCenter(target));
-              tp = getJunctionEdgePoint(getCenter(target), getCenter(source));
-            } else {
-              sp = getEdgePoint(getBox(source), getBox(target));
-              tp = getEdgePoint(getBox(target), getBox(source));
-            }
-          }
-        } else if (type === 'req' || type === 'bdd') {
-          if (source && target) {
-            const outList = outEdgeMap.get(source.id) || [e];
-            const inList = inEdgeMap.get(target.id) || [e];
-            const outIdx = Math.max(0, outList.indexOf(e));
-            const inIdx = Math.max(0, inList.indexOf(e));
-
-            if (target.displayY >= source.displayY + source.height) {
-              // Top-to-bottom hierarchy: spread ports along source bottom and target top
-              const spX = source.displayX + (source.width / (outList.length + 1)) * (outIdx + 1);
-              const spY = source.displayY + source.height;
-              const tpX = target.displayX + (target.width / (inList.length + 1)) * (inIdx + 1);
-              const tpY = target.displayY;
-              sp = { x: spX, y: spY };
-              tp = { x: tpX, y: tpY };
-            } else {
-              sp = getEdgePoint(getBox(source), getBox(target));
-              tp = getEdgePoint(getBox(target), getBox(source));
-            }
-          }
-        } else {
-          if (source && target) {
-            sp = getEdgePoint(getBox(source), getBox(target));
-            tp = getEdgePoint(getBox(target), getBox(source));
-          }
-        }
-
-        if (sp && tp) {
-          let strokeColor = '#333';
-          let strokeDash = '';
-          let middleLabel = '';
-          let markerStart = '';
-          let markerEnd = '';
-
-          let cp: Point | undefined = undefined;
-
-          if (type === 'ibd') {
-            if (e.itemFlow) middleLabel = `«${e.itemFlow}»`;
-            strokeColor = '#333';
-            markerEnd = `url(#m-arrow-filled-${type})`;
-          } else if (type === 'statemachine') {
-            markerEnd = `url(#m-arrow-filled-${type})`;
-            strokeColor = '#333';
-            if (e.isInternal) middleLabel = `«local» `;
-            if (e.condition && e.condition !== 'true') middleLabel += `[${e.condition}]`;
-            else if (e.afterTicks) middleLabel += `after(${e.afterTicks})`;
-
-            if (e.action) middleLabel += (middleLabel ? ` / ` : ``) + e.action;
-
-            cp = e.controlPoint || {
-              x: (sp.x + tp.x) / 2 + (tp.y - sp.y) * 0.3,
-              y: (sp.y + tp.y) / 2 + (sp.x - tp.x) * 0.3,
-            };
-          } else {
-            const relType = e.type;
-            if (relType === 'composition') {
-              markerStart = `url(#m-diamond-fill-${type})`;
-            } else if (relType === 'requirementContainment') {
-              markerStart = `url(#requirement-containment-crosshair)`;
-              middleLabel = '«contains»';
-              strokeColor = '#546e7a';
-            } else if (relType === 'aggregation') {
-              markerStart = `url(#m-diamond-${type})`;
-            } else if (relType === 'generalization') {
-              markerEnd = `url(#m-triangle-${type})`;
-            } else if (['derive', 'deriveReqt', 'refine', 'satisfy', 'verify', 'trace', 'copy'].includes(relType)) {
-              strokeDash = '4,2';
-              middleLabel = `«${relType}»`;
-              markerEnd = `url(#m-arrow-${type})`;
-              strokeColor = '#546e7a';
-            } else if (relType === 'allocation') {
-              strokeDash = '5,5';
-              middleLabel = '«allocate»';
-              markerEnd = `url(#m-arrow-${type})`;
-              strokeColor = '#546e7a';
-            }
-          }
-
-          if (type === 'statemachine' && cp) {
-            const dPath = `M ${sp.x} ${sp.y} Q ${cp.x} ${cp.y} ${tp.x} ${tp.y}`;
-            svg += `<path d="${dPath}" fill="none" stroke="${strokeColor}" stroke-width="1.5" stroke-dasharray="${strokeDash}" marker-end="${markerEnd}" />`;
-          } else if (type === 'ibd') {
-            // Manhattan orthogonal path
-            const midX = (sp.x + tp.x) / 2;
-            const dPath = `M ${sp.x} ${sp.y} L ${midX} ${sp.y} L ${midX} ${tp.y} L ${tp.x} ${tp.y}`;
-            svg += `<path d="${dPath}" fill="none" stroke="${strokeColor}" stroke-width="1.5" marker-end="${markerEnd}" />`;
-          } else if ((type === 'req' || type === 'bdd') && target && source && target.displayY >= source.displayY + source.height) {
-            // Smooth vertical S-curve avoiding crossing through middle nodes
-            const midY = (sp.y + tp.y) / 2;
-            const dPath = `M ${sp.x} ${sp.y} C ${sp.x} ${midY}, ${tp.x} ${midY}, ${tp.x} ${tp.y}`;
-            svg += `<path d="${dPath}" fill="none" stroke="${strokeColor}" stroke-width="1.5" stroke-dasharray="${strokeDash}" marker-start="${markerStart}" marker-end="${markerEnd}" />`;
-          } else {
-            svg += `<line x1="${sp.x}" y1="${sp.y}" x2="${tp.x}" y2="${tp.y}" stroke="${strokeColor}" stroke-width="1.5" stroke-dasharray="${strokeDash}" marker-start="${markerStart}" marker-end="${markerEnd}" />`;
-          }
-
-          if (middleLabel || e.label) {
-            let midX = (sp.x + tp.x) / 2;
-            let midY = (sp.y + tp.y) / 2;
-
-            if (type === 'statemachine' && cp) {
-              midX = cp.x;
-              midY = cp.y - 5;
-            } else if ((type === 'req' || type === 'bdd') && target && source && target.displayY >= source.displayY + source.height) {
-              midX = tp.x;
-              midY = tp.y - 14;
-            }
-
-            const txt = (middleLabel ? middleLabel + ' ' : '') + (e.label || '');
-            const txtW = txt.length * 6.5 + 14;
-            svg += `<rect x="${midX - txtW / 2}" y="${midY - 8}" width="${txtW}" height="15" fill="#ffffff" stroke="#ddd" stroke-width="0.8" rx="3" />`;
-            svg += `<text x="${midX}" y="${midY + 3}" text-anchor="middle" font-size="9" font-weight="600" fill="#f97316" font-family="sans-serif">${escapeHtml(txt)}</text>`;
-          }
-
-          if (type === 'bdd' && (e.sourceMultiplicity || e.targetMultiplicity)) {
-            if (e.sourceMultiplicity) svg += `<text x="${sp.x + (tp.x > sp.x ? 15 : -15)}" y="${sp.y + (tp.y > sp.y ? 15 : -15)}" font-size="10" fill="#000">${escapeHtml(e.sourceMultiplicity)}</text>`;
-            if (e.targetMultiplicity) svg += `<text x="${tp.x + (sp.x > tp.x ? 15 : -15)}" y="${tp.y + (sp.y > tp.y ? 15 : -15)}" font-size="10" fill="#000">${escapeHtml(e.targetMultiplicity)}</text>`;
-          }
-        }
-      });
-
-      svg += `</svg>`;
-      return svg;
-    };
-
-
-    // Helper to generate SVG for HMI
-    const renderHmiSVG = (components: HmiComponent[]) => {
-      if (components.length === 0) return '';
-
-      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-      components.forEach(c => {
-        minX = Math.min(minX, c.x);
-        minY = Math.min(minY, c.y);
-        maxX = Math.max(maxX, c.x + c.width);
-        maxY = Math.max(maxY, c.y + c.height);
-      });
-
-      const padding = 20;
-      const width = Math.max(100, maxX - minX + padding * 2);
-      const height = Math.max(100, maxY - minY + padding * 2);
-      const viewBox = `${minX - padding} ${minY - padding} ${width} ${height}`;
-
-      let svg = `<div style="margin: 20px 0; border: 1px solid #333; padding: 10px; overflow: auto; background: #1a1a1a;">`;
-      svg += `<h3 style="margin-top:0; color:#f97316; font-size:14px;">HMI Visual Design</h3>`;
-      svg += `<svg width="${width}" height="${height}" viewBox="${viewBox}" xmlns="http://www.w3.org/2000/svg" style="font-family: sans-serif; background: #0a0a0a;">`;
-
-      components.forEach(c => {
-        const cx = c.width / 2;
-        const cy = c.height / 2;
-        const highlight = '#f97316';
-
-        svg += `<g transform="translate(${c.x}, ${c.y})">`;
-        svg += `<rect width="${c.width}" height="${c.height}" fill="#1a1a1a" stroke="#333" stroke-width="1" rx="4" />`;
-
-        const themeColors = {
-          orange: '#f97316',
-          green: '#22c55e',
-          red: '#ef4444',
-          blue: '#0284c7',
-          yellow: '#eab308',
-          grey: '#555'
-        };
-
-        if (c.type === 'toggle') {
-          svg += `<rect x="${cx - 20}" y="${cy - 10}" width="40" height="20" rx="10" fill="#333" />`;
-          svg += `<circle cx="${cx - 10}" cy="${cy}" r="8" fill="#fff" />`;
-        } else if (c.type === 'button') {
-          const btnColor = themeColors[c.color || 'orange'] || themeColors.orange;
-          const iconSym = c.icon === 'power' ? '⏻ ' : c.icon === 'play' ? '▶ ' : c.icon === 'light' ? '💡 ' : '';
-          svg += `<rect x="4" y="4" width="${c.width - 8}" height="${c.height - 8}" rx="4" fill="#222" stroke="${btnColor}" stroke-width="1" />`;
-          svg += `<text x="${cx}" y="${cy}" text-anchor="middle" dominant-baseline="middle" fill="${btnColor}" font-size="10">${iconSym}${escapeHtml(c.name)}</text>`;
-        } else if (c.type === 'lamp') {
-          const lampColor = themeColors[c.color || 'green'] || themeColors.green;
-          svg += `<circle cx="${cx}" cy="${cy}" r="15" fill="#222" stroke="${lampColor}" stroke-width="2" />`;
-        } else if (c.type === 'led') {
-          const ledColor = themeColors[c.color || 'red'] || themeColors.red;
-          svg += `<circle cx="${cx}" cy="${cy}" r="6" fill="${ledColor}" />`;
-        } else if (c.type === 'slider') {
-          svg += `<line x1="10" y1="${cy}" x2="${c.width - 10}" y2="${cy}" stroke="#555" stroke-width="4" stroke-linecap="round" />`;
-          svg += `<circle cx="${cx}" cy="${cy}" r="8" fill="${highlight}" />`;
-        } else if (c.type === 'input') {
-          svg += `<rect x="4" y="${cy - 10}" width="${c.width - 8}" height="20" fill="#0a0a0a" stroke="#333" />`;
-          svg += `<text x="${c.width - 10}" y="${cy}" text-anchor="end" dominant-baseline="middle" fill="${highlight}" font-family="monospace" font-size="10">0</text>`;
-        } else if (c.type === 'lcd') {
-          svg += `<rect x="4" y="4" width="${c.width - 8}" height="${c.height - 8}" fill="#0a0a0a" stroke="#333" />`;
-          svg += `<text x="${c.width - 10}" y="${cy}" text-anchor="end" dominant-baseline="middle" fill="#4ade80" font-family="monospace" font-size="14">0.00</text>`;
-        } else if (c.type === 'gauge') {
-          svg += `<path d="M 10 ${c.height - 10} A ${c.width / 2 - 10} ${c.width / 2 - 10} 0 0 1 ${c.width - 10} ${c.height - 10}" fill="none" stroke="#333" stroke-width="6" />`;
-        } else if (c.type === 'rotary' || c.type === 'hybrid-rotary') {
-          svg += `<circle cx="${cx}" cy="${cy}" r="${Math.min(c.width, c.height) / 2 - 10}" fill="#222" stroke="#1a1a1a" stroke-width="2" />`;
-          svg += `<line x1="${cx}" y1="${cy}" x2="${cx}" y2="${cy - (Math.min(c.width, c.height) / 2 - 15)}" stroke="${highlight}" stroke-width="2" transform="rotate(-135, ${cx}, ${cy})" />`;
-        } else if (c.type === 'buzzer') {
-          svg += `<path d="M${cx - 8} ${cy - 8} h4 l4 -4 v24 l-4 -4 h-4 z" fill="#444" />`;
-        } else if (c.type === 'oled') {
-          const customModeList = c.oledModeNames
-            ? c.oledModeNames.split(',').map(s => s.trim())
-            : [
-                'AIR FRYER', 'STEAMER', 'OVEN', 'RAPID STEAM', 'BROIL', 'REHEAT',
-                'KEEP WARM', 'FERMENT', 'DEFROST', 'SLOW COOK', 'DEHYDRATE', 'DUO COOK'
-              ];
-          const modeText = customModeList[0] || 'READY';
-          let indicatorsStr = '💧 🔥 🌀 💡 ⚡';
-          if (Array.isArray(c.oledIndicatorEmojis) && c.oledIndicatorEmojis.length > 0) {
-            indicatorsStr = c.oledIndicatorEmojis.join(' ');
-          }
-          const titleText = (c.oledTitle || c.name).toUpperCase();
-
-          svg += `<rect x="4" y="4" width="${c.width - 8}" height="${c.height - 8}" fill="#000" stroke="#222" stroke-width="2" rx="6" />`;
-          svg += `<text x="12" y="20" fill="#4d7aaa" font-size="8" font-family="monospace">${escapeHtml(titleText)}</text>`;
-          svg += `<text x="${c.width - 12}" y="20" text-anchor="end" fill="#3de88a" font-size="8" font-family="monospace" font-weight="bold">${escapeHtml(modeText)}</text>`;
-          svg += `<text x="12" y="45" fill="#4db8ff" font-size="18" font-family="monospace" font-weight="bold">200°C</text>`;
-          svg += `<rect x="12" y="55" width="${c.width - 24}" height="3" fill="#111" rx="1" />`;
-          svg += `<rect x="12" y="55" width="${(c.width - 24) * 0.4}" height="3" fill="#3de88a" rx="1" />`;
-          svg += `<text x="12" y="75" fill="#4db8ff" font-size="10" font-family="monospace">30:00</text>`;
-          svg += `<text x="${c.width - 12}" y="75" text-anchor="end" fill="#3de88a" font-size="8" font-family="monospace">HOME</text>`;
-          svg += `<text x="12" y="95" fill="#335577" font-size="7" font-family="monospace">${escapeHtml(indicatorsStr)}</text>`;
-        } else if (c.type === 'mode-icon') {
-          svg += `<rect x="4" y="4" width="${c.width - 8}" height="${c.height - 8}" fill="#1a1a20" stroke="#333" rx="4" />`;
-          svg += `<text x="${cx}" y="${cy - 4}" text-anchor="middle" font-size="14">${escapeHtml(c.iconEmoji || '✨')}</text>`;
-          svg += `<text x="${cx}" y="${cy + 12}" text-anchor="middle" font-size="7" fill="#ccc">${escapeHtml(c.name)}</text>`;
-        } else if (c.type === 'encoder') {
-          const isHybrid = Array.isArray(c.encoderValues) && c.encoderValues.length > 0;
-          const displayVal = isHybrid ? (c.encoderValues?.[0] || '0') : '0';
-
-          svg += `<circle cx="${cx}" cy="${cy - 15}" r="30" fill="#2a2a36" stroke="#333340" stroke-width="2" />`;
-          svg += `<circle cx="${cx}" cy="${cy - 35}" r="3.5" fill="#f97316" />`;
-          svg += `<circle cx="${cx}" cy="${cy - 15}" r="15" fill="#0d0d10" stroke="#222230" />`;
-          svg += `<rect x="${cx - 25}" y="${c.height - 25}" width="20" height="12" rx="2" fill="#222" stroke="#333" />`;
-          svg += `<text x="${cx - 15}" y="${c.height - 17}" text-anchor="middle" fill="#888" font-size="8">↺</text>`;
-          svg += `<rect x="${cx + 5}" y="${c.height - 25}" width="20" height="12" rx="2" fill="#222" stroke="#333" />`;
-          svg += `<text x="${cx + 15}" y="${c.height - 17}" text-anchor="middle" fill="#888" font-size="8">↻</text>`;
-          svg += `<text x="${cx}" y="${cy + 25}" text-anchor="middle" fill="#555" font-family="monospace" font-size="7">${escapeHtml(displayVal)}</text>`;
-        } else if (c.type === 'mode-selector') {
-          svg += `<rect x="4" y="4" width="${c.width - 8}" height="${c.height - 8}" fill="#111" stroke="#222" rx="4" />`;
-          svg += `<text x="10" y="16" fill="#555" font-size="7" font-family="sans-serif" font-weight="bold">COOKING MODES</text>`;
-          svg += `<rect x="10" y="24" width="24" height="24" rx="2" fill="#f97316" fill-opacity="0.1" stroke="#f97316" stroke-width="1" />`;
-          svg += `<text x="22" y="40" text-anchor="middle" font-size="12">🍟</text>`;
-          svg += `<rect x="40" y="24" width="24" height="24" rx="2" fill="#1a1a20" stroke="#222" stroke-width="1" />`;
-          svg += `<text x="52" y="40" text-anchor="middle" font-size="12">💧</text>`;
-          svg += `<rect x="70" y="24" width="24" height="24" rx="2" fill="#1a1a20" stroke="#222" stroke-width="1" />`;
-          svg += `<text x="82" y="40" text-anchor="middle" font-size="12">🍞</text>`;
-          svg += `<rect x="100" y="24" width="24" height="24" rx="2" fill="#4db8ff" fill-opacity="0.1" stroke="#4db8ff" stroke-width="1" />`;
-          svg += `<text x="112" y="40" text-anchor="middle" font-size="12">♨️</text>`;
-          svg += `<text x="135" y="40" fill="#444" font-size="10">...</text>`;
-        }
-
-        svg += `<text x="${cx}" y="${c.height - 4}" text-anchor="middle" font-size="8" fill="#888">${escapeHtml(c.name)}</text>`;
-        svg += `</g>`;
-      });
-
-      svg += `</svg></div>`;
-      return svg;
-    };
-
-    // 1. Requirements
-    const reqs = hierarchySource.blocks.filter(b => b.stereotype === 'requirement');
-    if (reqs.length > 0) {
-      html += `<h2>1. Requirements</h2>`;
-      html += renderRequirementsDiagram({ blocks: hierarchySource.blocks, relationships: hierarchySource.relationships });
-
-      html += `<table style="width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 0.9em;">`;
-      html += `<tr style="background-color: #f5f5f5; text-align: left; color: #333;">
-                <th style="padding: 10px; border: 1px solid #ddd;">ID</th>
-                <th style="padding: 10px; border: 1px solid #ddd;">Name</th>
-                <th style="padding: 10px; border: 1px solid #ddd;">Status</th>
-                <th style="padding: 10px; border: 1px solid #ddd;">Priority</th>
-                <th style="padding: 10px; border: 1px solid #ddd;">Assigned To</th>
-                <th style="padding: 10px; border: 1px solid #ddd;">Description</th>
-              </tr>`;
-
-      // Build hierarchy map
-      const childrenMap = new Map<string, string[]>();
-      const parentSet = new Set<string>();
-
-      hierarchySource.relationships.forEach(rel => {
-        const source = hierarchySource.blocks.find(b => b.id === rel.sourceId);
-        const target = hierarchySource.blocks.find(b => b.id === rel.targetId);
-        if (source?.stereotype === 'requirement' && target?.stereotype === 'requirement') {
-          // Only use specific SysML relationships for parent-child nesting, matching the Traceability Matrix
-          if (rel.type === 'requirementContainment' || rel.type === 'composition' || rel.type === 'derive' || rel.type === 'deriveReqt') {
-            if (!childrenMap.has(rel.sourceId)) childrenMap.set(rel.sourceId, []);
-            childrenMap.get(rel.sourceId)!.push(rel.targetId);
-            parentSet.add(rel.targetId);
-          }
-        }
-      });
-
-      // Roots are requirements that are not children of any other requirement
-      const roots = reqs.filter(r => !parentSet.has(r.id));
-
-      // Recursive render function for table rows
-      const renderReqRow = (r: BlockData, level: number) => {
-        const prefix = '&nbsp;&nbsp;&nbsp;&nbsp;'.repeat(level) + (level > 0 ? '└ ' : '');
-        let rowHtml = `<tr>
-          <td style="padding: 10px; border: 1px solid #ddd; font-family: monospace; color: #888;">${escapeHtml(r.reqId || '')}</td>
-          <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">${prefix}${escapeHtml(r.name)}</td>
-          <td style="padding: 10px; border: 1px solid #ddd;">${escapeHtml(r.status || 'Draft')}</td>
-          <td style="padding: 10px; border: 1px solid #ddd;">${escapeHtml(r.priority || 'Medium')}</td>
-          <td style="padding: 10px; border: 1px solid #ddd;">${escapeHtml(r.assignedTo || 'Unassigned')}</td>
-          <td style="padding: 10px; border: 1px solid #ddd;">${escapeHtml(r.description || '')}</td>
-        </tr>`;
-
-        const children = childrenMap.get(r.id) || [];
-        children.forEach(childId => {
-          const child = reqs.find(x => x.id === childId);
-          if (child) {
-            rowHtml += renderReqRow(child, level + 1);
-          }
-        });
-        return rowHtml;
-      };
-
-      if (roots.length === 0 && reqs.length > 0) {
-        // Fallback if circular or no explicit roots found
-        reqs.forEach((r) => {
-          html += renderReqRow(r, 0);
-        });
-      } else {
-        roots.forEach((r) => {
-          html += renderReqRow(r, 0);
-        });
-      }
-
-      html += `</table>`;
-    }
-
-    // 2. BDD
-    const bddBlocks = hierarchySource.blocks.filter(b => {
-      if (b.stereotype === 'requirement') return false;
-      return true;
-    });
-
-    if (bddBlocks.length > 0) {
-      html += `<h2>2. System Architecture (BDD)</h2>`;
-      html += renderBddDiagram({
-        blocks: hierarchySource.blocks,
-        relationships: hierarchySource.relationships,
-        parts: hierarchySource.parts,
-        containerId: 'adia-diagram-hierarchy',
-      });
-      html += `<div class="tree">`;
-      bddBlocks.forEach(b => {
-        html += `<div class="item">
-                <div class="item-header">«${escapeHtml(b.stereotype)}» ${escapeHtml(b.name)}</div>`;
-        if (b.properties && b.properties.length > 0) {
-          html += `<div class="props"><strong>Properties:</strong><ul>`;
-          b.properties.forEach(p => html += `<li>${escapeHtml(p.name)}: ${escapeHtml(p.type)} ${p.defaultValue ? '= ' + escapeHtml(p.defaultValue) : ''}</li>`);
-          html += `</ul></div>`;
-        }
-        if (b.ports && b.ports.length > 0) {
-          html += `<div class="props"><strong>Ports:</strong><ul>`;
-          b.ports.forEach(p => html += `<li>${escapeHtml(p.name)} : ${escapeHtml(p.type)} (${escapeHtml(p.kind || 'standard')})</li>`);
-          html += `</ul></div>`;
-        }
-        html += `</div>`;
-      });
-      html += `</div>`;
-    }
-
-    // 3. IBD
-    // 3. IBD
-    if (hierarchySource.parts.length > 0) {
-      html += `<h2>3. Internal Structure (IBD)</h2>`;
-      html += renderInteractiveDiagramHierarchy(hierarchySource, { title: projectName });
-
-      // Generate context listings
-      const contextIds = Array.from(new Set(hierarchySource.parts.map(p => p.blockId).filter(id => id !== null))) as string[];
-      contextIds.forEach(ctxId => {
-        const ctxBlock = hierarchySource.blocks.find(b => b.id === ctxId);
-        const ctxName = ctxBlock ? ctxBlock.name : (ctxId === 'root' ? 'Root' : 'Unknown');
-        const ctxParts = hierarchySource.parts.filter(p => p.blockId === ctxId);
-        const ctxConns = hierarchySource.connectors.filter(c => {
-          const s = hierarchySource.parts.find(p => p.id === c.sourcePartId);
-          const t = hierarchySource.parts.find(p => p.id === c.targetPartId);
-
-          // Connectors in this context block
-          const sInCtx = s && s.blockId === ctxId;
-          const tInCtx = t && t.blockId === ctxId;
-
-          // Or environment connectors linked to this context block ports
-          const isEnvSource = !c.sourcePartId && t && t.blockId === ctxId;
-          const isEnvTarget = !c.targetPartId && s && s.blockId === ctxId;
-
-          return sInCtx || tInCtx || isEnvSource || isEnvTarget;
-        });
-
-        if (ctxParts.length > 0) {
-          html += `<div class="tree" style="margin-bottom: 30px;">`;
-          html += `<h3>Context: ${escapeHtml(ctxName)}</h3>`;
-
-          // Parts list for this context
-          html += `<div class="props"><strong>Parts:</strong><ul>`;
-          ctxParts.forEach(p => {
-            const typeName = hierarchySource.blocks.find(b => b.id === p.typeId)?.name || 'Unknown';
-            html += `<li>${escapeHtml(p.name)} : ${escapeHtml(typeName)}</li>`;
-          });
-          html += `</ul></div>`;
-
-          // Connectors list for this context
-          if (ctxConns.length > 0) {
-            html += `<div class="props"><strong>Connections:</strong><ul>`;
-            ctxConns.forEach(c => {
-              const sPart = hierarchySource.parts.find(p => p.id === c.sourcePartId)?.name || 'Env';
-              const tPart = hierarchySource.parts.find(p => p.id === c.targetPartId)?.name || 'Env';
-
-              const sBlock = hierarchySource.parts.find(p => p.id === c.sourcePartId)
-                ? hierarchySource.blocks.find(b => b.id === (hierarchySource.parts.find(p => p.id === c.sourcePartId)?.typeId))
-                : ctxBlock;
-              const tBlock = hierarchySource.parts.find(p => p.id === c.targetPartId)
-                ? hierarchySource.blocks.find(b => b.id === (hierarchySource.parts.find(p => p.id === c.targetPartId)?.typeId))
-                : ctxBlock;
-
-              const sPortName = sBlock?.ports?.find((p: any) => p.id === c.sourcePortId)?.name || c.sourcePortId || '';
-              const tPortName = tBlock?.ports?.find((p: any) => p.id === c.targetPortId)?.name || c.targetPortId || '';
-
-              const sDesc = sPart + (sPortName ? `.${sPortName}` : '');
-              const tDesc = tPart + (tPortName ? `.${tPortName}` : '');
-
-              html += `<li><span class="tag">Conn</span> ${escapeHtml(sDesc)} &harr; ${escapeHtml(tDesc)} ${c.itemFlow ? '(' + escapeHtml(c.itemFlow) + ')' : ''}</li>`;
-            });
-            html += `</ul></div>`;
-          }
-          html += `</div>`;
-        }
-      });
-    }
-
-    // 4. State Machine
     if (hierarchySource.states.length > 0) {
-      html += `<h2>4. State Machine</h2><div class="tree">`;
-
-      const smFigures = renderStateMachineDiagrams({
-        layers: hierarchySource.layers,
-        states: hierarchySource.states,
-        junctions: hierarchySource.junctions,
-        transitions: hierarchySource.transitions,
-      });
-      smFigures.forEach(fig => {
-        html += fig;
-      });
-
-      hierarchySource.states.forEach(s => {
-        html += `<div class="item"><div class="item-header">${escapeHtml(s.name)} <span class="tag">State</span></div>`;
-        const outgoing = hierarchySource.transitions.filter(t => t.sourceId === s.id);
-        const internal = (s.internalTransitions || '').split('\n').filter(l => l.trim());
-        if (outgoing.length > 0 || internal.length > 0) {
-          html += `<div class="props"><strong>Transitions:</strong><ul>`;
-          outgoing.forEach(t => {
-            const target = hierarchySource.states.find(st => st.id === t.targetId)?.name || hierarchySource.junctions.find(j => j.id === t.targetId)?.name || 'Unknown';
-            html += `<li>To <strong>${escapeHtml(target)}</strong>: [${escapeHtml(t.condition || 'true')}]${t.action ? ' / ' + escapeHtml(t.action) : ''}</li>`;
-          });
-          internal.forEach(i => {
-            const safeI = escapeHtml(i);
-            html += `<li><strong>Internal:</strong> ${safeI}</li>`;
-          });
-          html += `</ul></div>`;
-        }
-        html += `</div>`;
-      });
-      html += `</div>`;
-
-      // 4.1 Critical Path Analysis (Critical Batches)
       const analysis = analyzeStateMachine({
         tickMs,
         states: hierarchySource.states as StateData[],
@@ -11990,137 +11617,44 @@ const ADIA = () => {
         layers: hierarchySource.layers as Layer[],
         safetyMode,
       });
-      const analysisErrors = analysis.diagnostics.filter(
-        diagnostic => diagnostic.severity === 'error',
-      );
-
-      if (analysisErrors.length > 0) {
-        html += `<h2>4.0 Semantic Analysis Diagnostics</h2><div class="tree">`;
-        html += `<p style="color: #b91c1c; font-weight: bold;">Semantic analysis was not completed because the model is invalid. The sections below are not verification evidence.</p><ul>`;
-        analysisErrors.forEach(diagnostic => {
-          html += `<li><strong>${escapeHtml(diagnostic.code)}</strong>: ${escapeHtml(diagnostic.message)}</li>`;
-        });
-        html += `</ul></div>`;
-      }
-
-      html += `<h2>4.1 Critical Path Analysis</h2><div class="tree">`;
-      html += `<p>The execution path analysis evaluates the longest and most complex functional routes (critical batches) through the state machine.</p>`;
-      if (analysis.criticalPaths.length > 0) {
-        html += `<table>
-                  <tr style="background-color: #f5f5f5; text-align: left; color: #333;">
-                    <th style="padding: 10px; border: 1px solid #ddd;">ID</th>
-                    <th style="padding: 10px; border: 1px solid #ddd;">Name</th>
-                    <th style="padding: 10px; border: 1px solid #ddd;">Execution Sequence</th>
-                    <th style="padding: 10px; border: 1px solid #ddd; text-align: center;">Complexity</th>
-                  </tr>`;
-        analysis.criticalPaths.forEach(cp => {
-          html += `<tr>
-                    <td style="padding: 10px; border: 1px solid #ddd; font-family: monospace; font-weight: bold; color: #f97316;">${escapeHtml(cp.id)}</td>
-                    <td style="padding: 10px; border: 1px solid #ddd;"><strong>${escapeHtml(cp.name)}</strong><br/><small style="color: #666;">${escapeHtml(cp.description)}</small></td>
-                    <td style="padding: 10px; border: 1px solid #ddd; font-family: monospace; font-size: 0.95em;">${cp.states.map(s => `<span class="tag">${escapeHtml(s)}</span>`).join(' &rarr; ')}</td>
-                    <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold; text-align: center;">${escapeHtml(cp.complexity)}</td>
-                  </tr>`;
-        });
-        html += `</table>`;
-      } else if (analysisErrors.length > 0) {
-        html += `<p><em>Critical-path analysis was not run because semantic validation failed.</em></p>`;
-      } else {
-        html += `<p><em>No critical paths identified. Check if an autostart state is configured.</em></p>`;
-      }
-      html += `</div>`;
-
-      // 4.2 Corner Case & Behavior Analysis
-      html += `<h2>4.2 Corner Case & Behavior Analysis</h2><div class="tree">`;
-      html += `<p>Systematic audit of risk-prone states, deadlock conditions, race risks, and boundaries in the designed logic.</p>`;
-      if (analysis.cornerCases.length > 0) {
-        html += `<table>
-                  <tr style="background-color: #f5f5f5; text-align: left; color: #333;">
-                    <th style="padding: 10px; border: 1px solid #ddd;">ID</th>
-                    <th style="padding: 10px; border: 1px solid #ddd;">Category</th>
-                    <th style="padding: 10px; border: 1px solid #ddd;">Severity</th>
-                    <th style="padding: 10px; border: 1px solid #ddd;">Element</th>
-                    <th style="padding: 10px; border: 1px solid #ddd;">Description</th>
-                    <th style="padding: 10px; border: 1px solid #ddd;">Recommendation</th>
-                  </tr>`;
-        analysis.cornerCases.forEach(cc => {
-          const badgeClass = cc.severity === 'critical' ? 'badge-critical' : cc.severity === 'warning' ? 'badge-warning' : 'badge-info';
-          html += `<tr>
-                    <td style="padding: 10px; border: 1px solid #ddd; font-family: monospace; font-weight: bold;">${escapeHtml(cc.id)}</td>
-                    <td style="padding: 10px; border: 1px solid #ddd; font-family: monospace; font-weight: bold;">${escapeHtml(cc.category)}</td>
-                    <td style="padding: 10px; border: 1px solid #ddd;"><span class="badge ${badgeClass}">${escapeHtml(cc.severity.toUpperCase())}</span></td>
-                    <td style="padding: 10px; border: 1px solid #ddd;"><strong>${escapeHtml(cc.elementName)}</strong></td>
-                    <td style="padding: 10px; border: 1px solid #ddd;">${escapeHtml(cc.description)}</td>
-                    <td style="padding: 10px; border: 1px solid #ddd;"><span style="color: #3b82f6; font-weight: 500;">${escapeHtml(cc.recommendation)}</span></td>
-                  </tr>`;
-        });
-        html += `</table>`;
-      } else if (analysisErrors.length > 0) {
-        html += `<p style="color: #b91c1c; font-weight: bold;">Corner-case analysis was not run because semantic validation failed.</p>`;
-      } else {
-        html += `<p style="color: #15803d; font-weight: bold;">&check; The validated semantic model has no structurally detected deadlocks, unreachable states, or unconditional loops. Runtime and target verification remain separate evidence gates.</p>`;
-      }
-      html += `</div>`;
-
-      // 4.3 Test Scenario Matrix
-      html += `<h2>4.3 Test Scenario Matrix</h2><div class="tree">`;
-      html += analysisErrors.length > 0
-        ? `<p style="color: #b91c1c; font-weight: bold;">No test scenarios were derived because semantic validation failed.</p>`
-        : `<p>Structurally derived test scenarios for critical paths and detected corner cases. Execute them in host, differential, embedded, and target-hardware gates before treating them as runtime evidence.</p>`;
-      
-      analysis.testScenarios.forEach(ts => {
-        html += `<div class="item" style="border: 1px solid #e5e7eb; border-radius: 6px; padding: 15px; margin-bottom: 20px; background-color: #fafafa;">
-                  <div class="item-header" style="font-size: 1.1em; color: #1e293b; border-bottom: 1px solid #e5e7eb; padding-bottom: 6px; margin-bottom: 10px;">
-                    <span class="tag" style="background-color: #f97316; color: #fff;">${escapeHtml(ts.category.toUpperCase())}</span> ${escapeHtml(ts.name)} <span style="font-family: monospace; font-size: 0.9em; color: #64748b; float: right;">${escapeHtml(ts.id)}</span>
-                  </div>`;
-        
-        if (ts.preconditions.length > 0) {
-          html += `<div class="props" style="margin-bottom: 10px;">
-                    <strong>Preconditions:</strong>
-                    <ul style="margin: 4px 0; padding-left: 20px; font-size: 0.95em;">
-                      ${ts.preconditions.map(p => `<li>${escapeHtml(p)}</li>`).join('')}
-                    </ul>
-                  </div>`;
-        }
-
-        html += `<strong>Steps:</strong>
-                <table style="width: 100%; border-collapse: collapse; margin-top: 8px; margin-bottom: 10px; font-size: 0.85em; background-color: #fff;">
-                  <tr style="background-color: #f1f5f9; text-align: left;">
-                    <th style="width: 8%; padding: 6px; border: 1px solid #cbd5e1; text-align: center;">Step</th>
-                    <th style="width: 52%; padding: 6px; border: 1px solid #cbd5e1;">Action / Input Stimulus</th>
-                    <th style="width: 40%; padding: 6px; border: 1px solid #cbd5e1;">Expected Transition / Output State</th>
-                  </tr>`;
-        ts.steps.forEach((step, index) => {
-          html += `<tr>
-                    <td style="padding: 6px; border: 1px solid #cbd5e1; text-align: center; font-weight: bold;">${index + 1}</td>
-                    <td style="padding: 6px; border: 1px solid #cbd5e1; font-family: monospace;">${escapeHtml(step.action)}</td>
-                    <td style="padding: 6px; border: 1px solid #cbd5e1;">${escapeHtml(step.expected)}</td>
-                  </tr>`;
-        });
-        html += `</table>`;
-
-        html += `<div class="props" style="background-color: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; padding: 8px; border-radius: 4px; font-size: 0.9em;">
-                  <strong>Expected Outcome:</strong> ${escapeHtml(ts.expectedResult)}
-                </div>`;
-        html += `</div>`;
-      });
-      html += `</div>`;
+      extraSections.push({ id: 'state-machine-analysis', title: 'State Machine Analysis', html: renderStateMachineAnalysisHtml(analysis) });
     }
 
-    // 5. HMI
+    // Helper to generate SVG for HMI
+    const renderHmiSVG = (components: HmiComponent[]) => {
+      if (components.length === 0) return '';
+
+      const positioned = resolveHmiReportComponents(components);
+      const minX = Math.min(0, ...positioned.map(c => c.x));
+      const minY = Math.min(0, ...positioned.map(c => c.y));
+      const width = Math.max(100, ...positioned.map(c => c.x + c.width)) - minX + 40;
+      const height = Math.max(100, ...positioned.map(c => c.y + c.height)) - minY + 40;
+      let svg = `<div class="hmi-reference"><svg width="${width}" height="${height}" viewBox="${minX - 20} ${minY - 20} ${width} ${height}" xmlns="http://www.w3.org/2000/svg" style="color:var(--text-primary,#182231);font-family: sans-serif;">`;
+      const values = Object.fromEntries(variables.map(v => [v.id, v.currentValue]));
+      positioned.forEach(c => {
+        svg += `<g transform="translate(${c.x}, ${c.y})">${renderHmiWidgetSvg(c, values, { activeStateIds: Object.values(activeStates) })}</g>`;
+      });
+
+      svg += `</svg></div>`;
+      return svg;
+    };
+
+    // HMI design (static picture of the configured components)
     if (hmiComponents.length > 0) {
-      html += `<h2>5. HMI Design</h2><div class="tree">`;
-      html += renderHmiSVG(hmiComponents);
+      let hmiHtml = `<div class="hmi-design">`;
+      hmiHtml += renderHmiSVG(hmiComponents);
       hmiComponents.forEach(c => {
         const boundVariableName = variables.find(v => v.id === c.variableId)?.name || 'Unbound';
-        html += `<div class="item"><div class="item-header">${escapeHtml(c.name)} <span class="tag">${escapeHtml(c.type)}</span></div><div class="props">Bound to: <strong>${escapeHtml(boundVariableName)}</strong></div></div>`;
+        hmiHtml += `<div class="item"><div class="item-header">${escapeHtml(c.name)} <span class="tag">${escapeHtml(c.type)}</span></div><div class="props">Bound to: <strong>${escapeHtml(boundVariableName)}</strong></div></div>`;
       });
-      html += `</div>`;
+      hmiHtml += `</div>`;
+      extraSections.push({ id: 'hmi-design', title: 'HMI Design', html: hmiHtml });
     }
 
     // 6. Interactive System Prototype
     if (hmiComponents.length > 0) {
-      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-      hmiComponents.forEach(c => {
+      let minX = 0, minY = 0, maxX = 0, maxY = 0;
+      resolveHmiReportComponents(hmiComponents).forEach(c => {
         minX = Math.min(minX, c.x);
         minY = Math.min(minY, c.y);
         maxX = Math.max(maxX, c.x + c.width);
@@ -12143,6 +11677,7 @@ const ADIA = () => {
 
       // Serialize presentation data separately from the authoritative model.
       const serializedVariables = variables.map(v => ({
+        ...v,
         id: v.id,
         name: v.name,
         type: v.type,
@@ -12156,186 +11691,10 @@ const ADIA = () => {
         parentId: s.parentId
       }));
 
-      const serializedHmiComponents = hmiComponents.map(c => ({
-        id: c.id,
-        name: c.name,
-        type: c.type,
-        variableId: c.variableId,
-        pressVariableId: c.pressVariableId,
-        color: c.color,
-        icon: c.icon,
-        encoderValues: c.encoderValues,
-        cursorVariableId: c.cursorVariableId,
-        iconEmoji: c.iconEmoji,
-        targetValue: c.targetValue,
-        oledTitle: c.oledTitle,
-        oledModeNames: c.oledModeNames,
-        oledModeVarId: c.oledModeVarId,
-        oledTempVarId: c.oledTempVarId,
-        oledTimeVarId: c.oledTimeVarId,
-        oledStateVarId: c.oledStateVarId,
-        oledProgressVarId: c.oledProgressVarId,
-        oledIndicatorEmojis: c.oledIndicatorEmojis,
-        oledIndicatorVarIds: c.oledIndicatorVarIds,
-        oledIndicatorLabels: c.oledIndicatorLabels,
-        min: c.min,
-        max: c.max,
-        x: c.x,
-        y: c.y,
-        width: c.width,
-        height: c.height
-      }));
+      const serializedHmiComponents = normalizeHmiComponents(hmiComponents);
+      const componentsHtml = renderPortableHmiMarkup(serializedHmiComponents, variables);
 
-      let componentsHtml = '';
-      hmiComponents.forEach(c => {
-        const cx = c.x - (minX - padding);
-        const cy = c.y - (minY - padding);
-        const cw = c.width;
-        const ch = c.height;
-
-        componentsHtml += `<div class="hmi-comp-container" style="left: ${cx}px; top: ${cy}px; width: ${cw}px; height: ${ch}px;" data-id="${c.id}" data-type="${c.type}">`;
-
-        if (c.type === 'toggle') {
-          componentsHtml += `
-            <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%;">
-              <div class="hmi-toggle-track" id="track-${c.id}" onclick="window.ADIA_SIM.toggleClick('${c.id}')">
-                <div class="hmi-toggle-thumb"></div>
-              </div>
-              <span style="font-size: 8px; color: #888; margin-top: 4px; text-align: center; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${c.name}</span>
-            </div>`;
-        } else if (c.type === 'button') {
-          const btnColor = c.color === 'green' ? '#22c55e' : c.color === 'red' ? '#ef4444' : c.color === 'blue' ? '#0284c7' : c.color === 'yellow' ? '#eab308' : c.color === 'grey' ? '#555' : '#f97316';
-          const iconSym = c.icon === 'power' ? '⏻ ' : c.icon === 'play' ? '▶ ' : c.icon === 'light' ? '💡 ' : '';
-          componentsHtml += `
-            <button class="hmi-btn" id="btn-${c.id}" onmousedown="window.ADIA_SIM.buttonPress('${c.id}', true)" onmouseup="window.ADIA_SIM.buttonPress('${c.id}', false)" onmouseleave="window.ADIA_SIM.buttonPress('${c.id}', false)" style="--btn-color: ${btnColor}">
-              ${iconSym}${c.name}
-            </button>`;
-        } else if (c.type === 'lamp') {
-          const lampColor = c.color === 'green' ? '#22c55e' : c.color === 'red' ? '#ef4444' : c.color === 'blue' ? '#0284c7' : c.color === 'yellow' ? '#eab308' : c.color === 'grey' ? '#555' : '#22c55e';
-          componentsHtml += `
-            <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%;">
-              <div class="hmi-lamp-circle" id="lamp-${c.id}" style="--glow-color: ${lampColor}; border-color: ${lampColor}"></div>
-              <span style="font-size: 8px; color: #888; margin-top: 4px; text-align: center; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${c.name}</span>
-            </div>`;
-        } else if (c.type === 'led') {
-          const ledColor = c.color === 'green' ? '#22c55e' : c.color === 'red' ? '#ef4444' : c.color === 'blue' ? '#0284c7' : c.color === 'yellow' ? '#eab308' : c.color === 'grey' ? '#555' : '#ef4444';
-          componentsHtml += `
-            <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%;">
-              <div class="hmi-led-circle" id="led-${c.id}" style="--led-color: ${ledColor}"></div>
-              <span style="font-size: 8px; color: #888; margin-top: 4px; text-align: center; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${c.name}</span>
-            </div>`;
-        } else if (c.type === 'slider') {
-          componentsHtml += `
-            <div style="display: flex; flex-direction: column; justify-content: center; height: 100%; padding: 0 4px;">
-              <input type="range" id="slider-${c.id}" min="${c.min ?? 0}" max="${c.max ?? 100}" oninput="window.ADIA_SIM.sliderChange('${c.id}', this.value)" style="width: 100%; accent-color: #f97316;" />
-              <span style="font-size: 8px; color: #888; text-align: center; margin-top: 2px; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${c.name}</span>
-            </div>`;
-        } else if (c.type === 'input') {
-          componentsHtml += `
-            <div style="display: flex; flex-direction: column; justify-content: center; height: 100%; padding: 2px;">
-              <input type="number" id="input-${c.id}" min="${c.min ?? 0}" max="${c.max ?? 100}" onchange="window.ADIA_SIM.inputChange('${c.id}', this.value)" style="width: 100%; background: #0a0a0a; border: 1px solid #333; color: #f97316; font-family: monospace; font-size: 10px; text-align: center; border-radius: 4px; padding: 2px;" />
-              <span style="font-size: 8px; color: #888; text-align: center; margin-top: 2px; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${c.name}</span>
-            </div>`;
-        } else if (c.type === 'lcd') {
-          componentsHtml += `
-            <div style="display: flex; flex-direction: column; justify-content: center; height: 100%; background: #0a0a0a; border: 1px solid #333; border-radius: 6px; padding: 4px; box-sizing: border-box;">
-              <div id="lcd-${c.id}" style="font-family: monospace; font-size: 14px; color: #4ade80; text-align: right; text-shadow: 0 0 6px rgba(74,222,128,0.4); overflow: hidden; white-space: nowrap;">0.00</div>
-              <span style="font-size: 7px; color: #555; text-align: left; margin-top: 1px; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${c.name}</span>
-            </div>`;
-        } else if (c.type === 'gauge') {
-          componentsHtml += `
-            <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%;">
-              <svg viewBox="0 0 100 50" style="width: 80%; height: auto;">
-                <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="#333" stroke-width="8" />
-                <path id="gauge-path-${c.id}" d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="#f97316" stroke-width="8" stroke-dasharray="0 126" />
-                <text id="gauge-text-${c.id}" x="50" y="45" text-anchor="middle" fill="#fff" font-size="11" font-family="monospace">0</text>
-              </svg>
-              <span style="font-size: 7px; color: #888; margin-top: 2px; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${c.name}</span>
-            </div>`;
-        } else if (c.type === 'rotary' || c.type === 'hybrid-rotary' || c.type === 'encoder') {
-          const isEncoder = c.type === 'encoder';
-          const innerIcon = isEncoder ? '✦' : '⚙️';
-          componentsHtml += `
-            <div style="display: flex; flex-direction: column; align-items: center; justify-content: space-between; height: 100%; padding: 2px 0;">
-              <div style="display: flex; gap: 4px; margin-bottom: 2px;">
-                <button onclick="window.ADIA_SIM.rotateKnob('${c.id}', -1)" style="width: 20px; height: 14px; background: #222; border: 1px solid #333; border-radius: 4px; color: #888; font-size: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; outline: none;">↺</button>
-                <button onclick="window.ADIA_SIM.rotateKnob('${c.id}', 1)" style="width: 20px; height: 14px; background: #222; border: 1px solid #333; border-radius: 4px; color: #888; font-size: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; outline: none;">↻</button>
-              </div>
-              <div style="position: relative; width: ${ch - 24}px; height: ${ch - 24}px; cursor: pointer;" 
-                   onmousedown="window.ADIA_SIM.knobPress('${c.id}', true)" 
-                   onmouseup="window.ADIA_SIM.knobPress('${c.id}', false)"
-                   onmouseleave="window.ADIA_SIM.knobPress('${c.id}', false)">
-                <div class="hmi-knob-circle" id="knob-${c.id}">
-                  <div class="hmi-knob-dot"></div>
-                  <div class="hmi-knob-inner">${innerIcon}</div>
-                </div>
-                <div class="knob-lp-ring" id="knob-lp-${c.id}"></div>
-              </div>
-              <div id="knob-val-${c.id}" style="font-family: monospace; font-size: 8px; color: #ccc; margin-top: 1px; width: 100%; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">0</div>
-            </div>`;
-        } else if (c.type === 'oled') {
-          componentsHtml += `
-            <div class="hmi-comp oled" id="oled-${c.id}" style="width: 100%; height: 100%; background: black; border: 1px solid #1a1a22; border-radius: 8px; padding: 6px; flex-direction: column; justify-content: space-between; font-family: monospace; color: #4db8ff; box-shadow: inset 0 0 10px rgba(0,0,0,0.9); display: flex; box-sizing: border-box;">
-              <div style="font-size: 7px; color: #4d7aaa; display: flex; justify-content: space-between; border-bottom: 1px solid #111; padding-bottom: 2px;">
-                <span class="oled-title" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60%;">${c.oledTitle || c.name}</span>
-                <span class="oled-mode" style="color: #3de88a; font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 40%;">READY</span>
-              </div>
-              <div class="oled-temp" style="font-size: 16px; font-weight: bold; color: #4db8ff; margin: 1px 0;">200°C</div>
-              <div style="width: 100%; height: 3px; background: #111; border: 1px solid #222; border-radius: 2px; overflow: hidden; margin: 1px 0;">
-                <div class="oled-progress-bar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #e8a020, #3de88a); transition: width 0.3s;"></div>
-              </div>
-              <div style="display: flex; justify-content: space-between; align-items: center; font-size: 9px; margin: 1px 0;">
-                <span class="oled-time">30:00</span>
-                <span class="oled-state" style="color: #3de88a; border: 1px solid rgba(61,232,138,0.2); border-radius: 2px; padding: 0 3px; font-size: 7px;">HOME</span>
-              </div>
-              <div class="oled-indicators" style="display: flex; gap: 3px; font-size: 10px; border-top: 1px solid #111; padding-top: 2px; height: 14px; overflow: hidden;"></div>
-              <div class="oled-context" style="font-size: 6px; color: #335577; border-top: 1px solid #111; padding-top: 2px; text-align: left; height: 9px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;">Ready to cook</div>
-            </div>`;
-        } else if (c.type === 'mode-icon') {
-          componentsHtml += `
-            <div class="hmi-mode-card" id="modeicon-${c.id}" onclick="window.ADIA_SIM.modeIconClick('${c.id}')" style="width: 100%; height: 100%;">
-              <span style="font-size: 14px;">${c.iconEmoji || '✨'}</span>
-              <span style="font-size: 7px; color: #ccc; margin-top: 2px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 100%;">${c.name}</span>
-            </div>`;
-        } else if (c.type === 'mode-selector') {
-          componentsHtml += `
-            <div class="hmi-comp mode-selector" style="width: 100%; height: 100%; background: #111; border: 1px solid #222; border-radius: 6px; padding: 4px; display: flex; flex-direction: column; justify-content: space-between; box-sizing: border-box;">
-              <div style="font-size: 7px; color: #555; font-weight: bold; text-transform: uppercase;">Cooking Modes</div>
-              <div class="modes-grid" style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 2px; margin-top: 1px;">
-                ${[
-                  { name: 'Air Fry', emoji: '🍟' },
-                  { name: 'Steam', emoji: '💧' },
-                  { name: 'Oven', emoji: '🍞' },
-                  { name: 'Rapid Stm', emoji: '♨️' },
-                  { name: 'Broil', emoji: '🔥' },
-                  { name: 'Reheat', emoji: '🍲' },
-                  { name: 'Warm', emoji: '☕' },
-                  { name: 'Ferment', emoji: '🧫' },
-                  { name: 'Defrost', emoji: '❄️' },
-                  { name: 'Slow Cook', emoji: '🥘' },
-                  { name: 'Dehydrate', emoji: '🌿' },
-                  { name: 'Duo Cook', emoji: '⚡' }
-                ].map((m, idx) => `
-                  <div class="selector-mode-card" id="modeselect-${c.id}-${idx}" onclick="window.ADIA_SIM.modeSelectorClick('${c.id}', ${idx})" style="border: 1px solid #222; background: #1a1a20; border-radius: 3px; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; padding: 1px; transition: all 0.1s;">
-                    <span style="font-size: 8px;">${m.emoji}</span>
-                    <span style="font-size: 5px; color: #888; text-align: center; margin-top: 0.5px; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${m.name.split(' ')[0]}</span>
-                  </div>
-                `).join('')}
-              </div>
-            </div>`;
-        } else if (c.type === 'buzzer') {
-          componentsHtml += `
-            <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%;">
-              <div id="buzzer-${c.id}" style="font-size: 18px; color: #444; transition: all 0.1s;">🔊</div>
-              <span style="font-size: 8px; color: #888; margin-top: 2px; text-align: center; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${c.name}</span>
-            </div>`;
-        }
-
-        componentsHtml += `</div>`;
-      });
-
-      html += `
-        <h2>6. Interactive System Prototype</h2>
+      const prototypeHtml = `
         <div class="hmi-sim-container">
           <style>
             .hmi-sim-container {
@@ -12583,7 +11942,7 @@ const ADIA = () => {
             </div>
           </div>
 
-          <div class="hmi-canvas-wrapper" style="width: ${width}px; height: ${height}px;">
+          <div id="portable-hmi-canvas" class="hmi-canvas-wrapper" style="width: ${width}px; height: ${height}px;">
             ${componentsHtml}
           </div>
 
@@ -12603,7 +11962,9 @@ const ADIA = () => {
 
         <script>
           ${STATE_MACHINE_RUNTIME_BUNDLE}
+          ${getPortableHmiScript()}
           (function() {
+            ${getPortableHmiInputQueueScript()}
             const PROJECT_DATA = {
               model: ${serializeInlineScriptJson(standaloneMigration.model)},
               modelDiagnostics: ${serializeInlineScriptJson(standaloneMigration.diagnostics)},
@@ -12624,6 +11985,38 @@ const ADIA = () => {
             let simTime = 0;
             let lpTimers = {};
             let audioCtx = null;
+            const hmiInputQueue = createHmiInputQueue();
+            let committedSamples = [];
+            let hmiResetVersion = 0;
+            function queueHmiInput(command) {
+              const v = PROJECT_DATA.variables.find(v => v.id === command.variableId);
+              if (!v) return { accepted: false, error: "Missing variable binding." };
+              const parsed = window.ADIAStateMachineRuntime.parseHmiVariableValue(v, command.value);
+              if (!parsed.accepted) return parsed;
+              const component = PROJECT_DATA.hmiComponents.find(c => c.id === command.sourceId);
+              if (component && command.mode !== "release" && ["input", "slider", "vertical-slider", "knob", "encoder", "hybrid-rotary"].includes(component.type)
+                && !(component.encoderValues?.length || component.hybridValues?.length) && v.type !== "bool"
+                && (Number(parsed.value) < (component.min ?? 0) || Number(parsed.value) > (component.max ?? 100))) {
+                return { accepted: false, error: "Input is outside the configured component range." };
+              }
+              const released = command.releaseValue === undefined ? undefined
+                : window.ADIAStateMachineRuntime.parseHmiVariableValue(v, command.releaseValue);
+              if (released && !released.accepted) return released;
+              const accepted = hmiInputQueue.enqueue({ ...command, value: parsed.value, releaseValue: released?.value });
+              return accepted ? { accepted: true } : { accepted: false, error: "Operator input queue is full." };
+            }
+            const portableHmi = window.ADIA_HMI.mount(document.getElementById("portable-hmi-canvas"), PROJECT_DATA.hmiComponents, {
+              onInput: queueHmiInput,
+              onCommand: command => {
+                if (command === "step") { simRunning = false; window.ADIA_SIM.step(); }
+                else if (command === "reset") window.ADIA_SIM.reset();
+                else {
+                  if (command === "start") window.ADIA_SIM.reset();
+                  simRunning = command !== "pause";
+                  updateUi();
+                }
+              }
+            });
 
             function escapeHtml(str) {
               return String(str || '')
@@ -12675,24 +12068,7 @@ const ADIA = () => {
             }
 
             function updateVariableById(id, value) {
-              const v = PROJECT_DATA.variables.find(x => x.id === id);
-              if (!v || !semanticRuntime) return;
-              let val = value;
-              if (varTypes[v.name] === "bool") {
-                val = value === "true" || value === true || value === "1" || value === 1;
-              } else if (varTypes[v.name] === "int" || varTypes[v.name] === "float") {
-                val = Number(value) || 0;
-              }
-              const oldVal = varValues[v.name];
-              if (oldVal !== val) {
-                window.ADIAStateMachineRuntime.applyInputs(
-                  semanticRuntime,
-                  { [v.id]: val }
-                );
-                varValues[v.name] = semanticRuntime.data[v.id];
-                logEvent("Variable Change", v.name + ": " + oldVal + " → " + val);
-                updateUi();
-              }
+              return queueHmiInput({ sourceId: "legacy-report", variableId: id, value });
             }
 
             function beepBuzzer() {
@@ -12713,6 +12089,8 @@ const ADIA = () => {
                 osc.stop(audioCtx.currentTime + 0.08);
               } catch (e) {}
             }
+
+            const displayStateName = (state) => state?.name?.trim() || "State";
 
             function applySemanticFrame(frame) {
               const nextActiveStates = {};
@@ -12738,7 +12116,7 @@ const ADIA = () => {
                   const transitionId = action.slice("transition:".length);
                   const transition = semanticRuntime.ir.transitions[transitionId];
                   if (!transition) {
-                    logEvent("Transition", transitionId);
+                    logEvent("Transition", "Transition");
                     return;
                   }
                   const sourceState = PROJECT_DATA.states.find(
@@ -12749,25 +12127,24 @@ const ADIA = () => {
                   );
                   logEvent(
                     "Transition",
-                    (sourceState ? sourceState.name : transition.sourceStateId)
+                    displayStateName(sourceState)
                       + " → "
-                      + (
-                        destinationState
-                          ? destinationState.name
-                          : transition.destinationStateId
-                      )
+                      + displayStateName(destinationState)
                   );
                 });
             }
 
             function stepSimulation() {
               if (!semanticRuntime) return;
+              window.ADIAStateMachineRuntime.applyInputs(semanticRuntime, hmiInputQueue.drain());
               const elapsedMs = PROJECT_DATA.tickMs || 100;
               const frame = window.ADIAStateMachineRuntime.stepRuntime(
                 semanticRuntime,
                 elapsedMs
               );
               simTime += elapsedMs / 1000;
+              committedSamples.push({ time: simTime, values: { ...frame.data } });
+              if (committedSamples.length > 600) committedSamples.shift();
               applySemanticFrame(frame);
               updateUi();
               if (frame.error) {
@@ -12782,12 +12159,12 @@ const ADIA = () => {
               db.textContent = "";
 
               PROJECT_DATA.model.layers.forEach(layer => {
-                const layerName = layer.name || (layer.id === "root" ? "Root Region" : "Region");
+                const layerName = layer.name?.trim() || (layer.id === "root" ? "Root Region" : "Region");
                 const activeStateIds = Object.entries(activeStates)
                   .filter(([key]) => key === layer.id || key.startsWith(layer.id + "_"))
                   .map(([, stateId]) => stateId);
                 const stateName = activeStateIds
-                  .map(stateId => PROJECT_DATA.states.find(s => s.id === stateId)?.name || stateId)
+                  .map(stateId => displayStateName(PROJECT_DATA.states.find(s => s.id === stateId)))
                   .join(", ") || "—";
                 const cell = document.createElement("div");
                 cell.style.background = "#1a1a20";
@@ -12855,198 +12232,8 @@ const ADIA = () => {
             }
 
             function updateUi() {
-              PROJECT_DATA.hmiComponents.forEach(c => {
-                const val = c.variableId ? getVarValById(c.variableId) : null;
-                if (c.type === "toggle") {
-                  const track = document.getElementById("track-" + c.id);
-                  if (track) {
-                    if (val === true || val === "true" || val === 1) track.classList.add("active");
-                    else track.classList.remove("active");
-                  }
-                } else if (c.type === "button") {
-                  const btn = document.getElementById("btn-" + c.id);
-                  if (btn) {
-                    const isPress = c.pressVariableId ? getVarValById(c.pressVariableId) : null;
-                    const active = (val === true || val === "true" || val === 1 || isPress === true || isPress === "true" || isPress === 1);
-                    if (active) btn.classList.add("active");
-                    else btn.classList.remove("active");
-                  }
-                } else if (c.type === "lamp") {
-                  const lamp = document.getElementById("lamp-" + c.id);
-                  if (lamp) {
-                    if (val === true || val === "true" || val === 1) lamp.classList.add("active");
-                    else lamp.classList.remove("active");
-                  }
-                } else if (c.type === "led") {
-                  const led = document.getElementById("led-" + c.id);
-                  if (led) {
-                    if (val === true || val === "true" || val === 1) led.classList.add("active");
-                    else led.classList.remove("active");
-                  }
-                } else if (c.type === "slider") {
-                  const slider = document.getElementById("slider-" + c.id);
-                  if (slider) slider.value = Number(val) || 0;
-                } else if (c.type === "input") {
-                  const input = document.getElementById("input-" + c.id);
-                  if (input) input.value = val !== null ? val : "";
-                } else if (c.type === "lcd") {
-                  const lcd = document.getElementById("lcd-" + c.id);
-                  if (lcd) {
-                    const num = Number(val);
-                    lcd.textContent = isNaN(num) ? String(val ?? "") : num.toFixed(2);
-                  }
-                } else if (c.type === "gauge") {
-                  const path = document.getElementById("gauge-path-" + c.id);
-                  const text = document.getElementById("gauge-text-" + c.id);
-                  if (path && text) {
-                    const minVal = c.min ?? 0;
-                    const maxVal = c.max ?? 100;
-                    const range = maxVal - minVal;
-                    const currentVal = Number(val) || 0;
-                    const percent = range === 0 ? 0 : Math.max(0, Math.min(1, (currentVal - minVal) / range));
-                    path.setAttribute("stroke-dasharray", (percent * 126) + " 126");
-                    text.textContent = Math.round(currentVal);
-                  }
-                } else if (c.type === "rotary" || c.type === "hybrid-rotary" || c.type === "encoder") {
-                  const knob = document.getElementById("knob-" + c.id);
-                  const valText = document.getElementById("knob-val-" + c.id);
-                  if (knob) {
-                    let angle = 0;
-                    let displayVal = "0";
-                    if (c.type === "encoder") {
-                      const isHybrid = Array.isArray(c.encoderValues) && c.encoderValues.length > 0;
-                      const encoderValues = c.encoderValues || [];
-                      if (isHybrid) {
-                        const idx = encoderValues.findIndex(x => String(x) === String(val));
-                        const currentIndex = idx !== -1 ? idx : 0;
-                        angle = currentIndex * (360 / Math.max(1, encoderValues.length));
-                        displayVal = String(encoderValues[currentIndex] || "");
-                      } else {
-                        const rotVal = Number(val) || 0;
-                        angle = rotVal * 18;
-                        displayVal = String(rotVal);
-                      }
-                    } else if (c.type === "hybrid-rotary") {
-                      const values = c.hybridValues || [];
-                      const idx = values.findIndex(v => String(v) === String(val));
-                      const currentIndex = idx !== -1 ? idx : 0;
-                      angle = -135 + currentIndex * (270 / Math.max(1, values.length - 1));
-                      displayVal = String(values[currentIndex] || "");
-                    } else {
-                      const minVal = c.min ?? 0;
-                      const maxVal = c.max ?? 100;
-                      const range = maxVal - minVal;
-                      const currentVal = Number(val) || 0;
-                      angle = -135 + (range === 0 ? 0 : (currentVal - minVal) / range) * 270;
-                      displayVal = currentVal.toFixed(1);
-                    }
-                    knob.style.transform = "rotate(" + angle + "deg)";
-                    if (valText) valText.textContent = displayVal;
-                  }
-                } else if (c.type === "oled") {
-                  const oled = document.getElementById("oled-" + c.id);
-                  if (oled) {
-                    const modeTextEl = oled.querySelector(".oled-mode");
-                    const tempEl = oled.querySelector(".oled-temp");
-                    const progressEl = oled.querySelector(".oled-progress-bar");
-                    const timeEl = oled.querySelector(".oled-time");
-                    const stateEl = oled.querySelector(".oled-state");
-                    const indicatorsEl = oled.querySelector(".oled-indicators");
-                    const contextEl = oled.querySelector(".oled-context");
-                    
-                    if (modeTextEl) {
-                      const modeIdx = c.oledModeVarId ? Number(getVarValById(c.oledModeVarId)) || 0 : 0;
-                      const modeNames = c.oledModeNames ? c.oledModeNames.split(",").map(s => s.trim()) : [
-                        "AIR FRYER", "STEAMER", "OVEN", "RAPID STEAM", "BROIL", "REHEAT",
-                        "KEEP WARM", "FERMENT", "DEFROST", "SLOW COOK", "DEHYDRATE", "DUO COOK"
-                      ];
-                      modeTextEl.textContent = modeNames[modeIdx] || "READY";
-                    }
-                    if (tempEl) {
-                      const tempVal = c.oledTempVarId ? getVarValById(c.oledTempVarId) : "";
-                      tempEl.textContent = tempVal !== undefined && tempVal !== null && tempVal !== "" ? tempVal + "°C" : "";
-                    }
-                    if (progressEl) {
-                      const progressVal = c.oledProgressVarId ? Number(getVarValById(c.oledProgressVarId)) || 0 : 0;
-                      progressEl.style.width = Math.max(0, Math.min(100, progressVal)) + "%";
-                    }
-                    if (timeEl) {
-                      const timeVal = c.oledTimeVarId ? getVarValById(c.oledTimeVarId) : "";
-                      const timeNum = Number(timeVal);
-                      if (!isNaN(timeNum) && timeVal !== "" && timeVal !== null) {
-                        const m = Math.floor(timeNum / 60);
-                        const s = Math.round(timeNum % 60);
-                        if (timeNum < 180 && String(c.oledTitle).toLowerCase().includes("fryer")) {
-                          timeEl.textContent = String(Math.floor(timeNum)).padStart(2, "0") + ":00";
-                        } else {
-                          timeEl.textContent = String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
-                        }
-                      } else {
-                        timeEl.textContent = String(timeVal ?? "");
-                      }
-                    }
-                    if (stateEl) {
-                      const stateVal = c.oledStateVarId ? String(getVarValById(c.oledStateVarId)) : "";
-                      if (stateVal) stateEl.textContent = stateVal;
-                      else {
-                        const rootActiveStateId = activeStates["root"];
-                        const rootActiveState = PROJECT_DATA.states.find(s => s.id === rootActiveStateId);
-                        stateEl.textContent = rootActiveState ? rootActiveState.name : "HOME";
-                      }
-                    }
-                    if (indicatorsEl && Array.isArray(c.oledIndicatorEmojis)) {
-                      indicatorsEl.textContent = "";
-                      c.oledIndicatorEmojis.forEach((emoji, idx) => {
-                        const varId = c.oledIndicatorVarIds?.[idx];
-                        const iVal = varId ? !!getVarValById(varId) : false;
-                        const label = c.oledIndicatorLabels?.[idx] || "";
-                        const isSpin = emoji === "🌀" || emoji === "⚙️" || emoji === "🎡" || label.toLowerCase().includes("fan") || label.toLowerCase().includes("spin");
-                        const span = document.createElement("span");
-                        span.title = label;
-                        span.textContent = emoji;
-                        span.style.transition = "opacity 0.2s";
-                        span.style.opacity = iVal ? "1" : "0.2";
-                        span.style.display = "inline-block";
-                        if (iVal && isSpin) {
-                          span.style.animation = "sim-spin 2s linear infinite";
-                        }
-                        indicatorsEl.appendChild(span);
-                      });
-                    }
-                    if (contextEl) {
-                      contextEl.textContent = "System OK";
-                    }
-                  }
-                } else if (c.type === "mode-icon") {
-                  const card = document.getElementById("modeicon-" + c.id);
-                  if (card) {
-                    if (String(val) === String(c.targetValue)) card.classList.add("active");
-                    else card.classList.remove("active");
-                  }
-                } else if (c.type === "mode-selector") {
-                  const selVarVal = val;
-                  const curVarVal = c.cursorVariableId ? getVarValById(c.cursorVariableId) : null;
-                  for (let idx = 0; idx < 12; idx++) {
-                    const item = document.getElementById("modeselect-" + c.id + "-" + idx);
-                    if (item) {
-                      item.className = "selector-mode-card";
-                      if (Number(selVarVal) === idx) item.classList.add("active");
-                      else if (Number(curVarVal) === idx) item.classList.add("cursor");
-                    }
-                  }
-                } else if (c.type === "buzzer") {
-                  const buzzer = document.getElementById("buzzer-" + c.id);
-                  if (buzzer) {
-                    if (val === true || val === "true" || val === 1) {
-                      buzzer.style.color = "#ef4444";
-                      buzzer.style.transform = stepCount % 2 === 0 ? "scale(1.2)" : "scale(1.0)";
-                      beepBuzzer();
-                    } else {
-                      buzzer.style.color = "#444";
-                      buzzer.style.transform = "scale(1.0)";
-                    }
-                  }
-                }
+              portableHmi.update(Object.fromEntries(PROJECT_DATA.variables.map(v => [v.id, getVarValById(v.id)])), {
+                activeStateIds: Object.values(activeStates), time: simTime, samples: committedSamples, resetVersion: hmiResetVersion
               });
               updateDashboard();
             }
@@ -13130,6 +12317,10 @@ const ADIA = () => {
               },
               reset() {
                 if (!semanticRuntime) return;
+                simRunning = false;
+                hmiInputQueue.clear();
+                hmiResetVersion++;
+                committedSamples = [];
                 simTime = 0;
                 applySemanticFrame(
                   window.ADIAStateMachineRuntime.resetRuntime(semanticRuntime)
@@ -13242,134 +12433,31 @@ const ADIA = () => {
           })();
         </script>
       `;
+      extraSections.push({ id: 'interactive-prototype', title: 'Interactive System Prototype', html: prototypeHtml });
     }
 
-    html += `
-      <!-- High-Resolution Interactive Diagram Modal Viewer -->
-      <div id="diagram-modal" onclick="closeDiagramModal()">
-        <div id="diagram-modal-header" onclick="event.stopPropagation()">
-          <div id="diagram-modal-title" style="font-weight:bold; font-size:14px; color:#f97316;">📊 SysML Diagram Viewer</div>
-          <div>
-            <button class="modal-ctrl-btn" onclick="zoomDiagram(1.25)">➕ Zoom In</button>
-            <button class="modal-ctrl-btn" onclick="zoomDiagram(0.8)">➖ Zoom Out</button>
-            <button class="modal-ctrl-btn" onclick="resetDiagramZoom()">↺ Reset 100%</button>
-            <button class="modal-ctrl-btn" onclick="openDiagramInNewTab()">⧉ Open in New Tab</button>
-            <button class="modal-ctrl-btn" style="background:#dc2626;border-color:#dc2626;" onclick="closeDiagramModal()">✕ Close</button>
-          </div>
-        </div>
-        <div id="diagram-modal-body" onclick="event.stopPropagation()">
-          <div id="diagram-modal-content" style="transform-origin: center center; transition: transform 0.08s ease-out; width: 100%; display: flex; justify-content: center; align-items: center;"></div>
-        </div>
-      </div>
-      <script>
-        let currentZoom = 1;
-        let currentSvgHtml = '';
-        let isPanning = false;
-        let startX = 0, startY = 0;
-        let panX = 0, panY = 0;
-
-        function openDiagramModal(diagId, title) {
-          const container = document.getElementById(diagId);
-          if (!container) return;
-          const svgEl = container.querySelector('svg');
-          if (!svgEl) return;
-
-          currentSvgHtml = svgEl.outerHTML;
-          const modal = document.getElementById('diagram-modal');
-          const modalTitle = document.getElementById('diagram-modal-title');
-          const modalContent = document.getElementById('diagram-modal-content');
-          
-          if (modalTitle) modalTitle.textContent = '📊 ' + (title || 'SysML Diagram Viewer');
-          if (modalContent) {
-            modalContent.replaceChildren(svgEl.cloneNode(true));
-            const newSvg = modalContent.querySelector('svg');
-            if (newSvg) {
-              newSvg.style.maxWidth = 'none';
-              newSvg.style.width = '100%';
-              newSvg.style.height = 'auto';
-              newSvg.style.display = 'block';
-              newSvg.style.background = '#ffffff';
-              newSvg.style.borderRadius = '8px';
-              newSvg.style.padding = '20px';
-              newSvg.style.boxShadow = '0 10px 30px rgba(0,0,0,0.5)';
-            }
-          }
-          currentZoom = 1;
-          panX = 0;
-          panY = 0;
-          updateModalTransform();
-          if (modal) modal.classList.add('active');
-        }
-
-        function closeDiagramModal() {
-          const modal = document.getElementById('diagram-modal');
-          if (modal) modal.classList.remove('active');
-        }
-
-        function zoomDiagram(factor) {
-          currentZoom = Math.max(0.2, Math.min(5, currentZoom * factor));
-          updateModalTransform();
-        }
-
-        function resetDiagramZoom() {
-          currentZoom = 1;
-          panX = 0;
-          panY = 0;
-          updateModalTransform();
-        }
-
-        function updateModalTransform() {
-          const content = document.getElementById('diagram-modal-content');
-          if (content) {
-            content.style.transform = "translate(" + panX + "px, " + panY + "px) scale(" + currentZoom + ")";
-          }
-        }
-
-        function openDiagramInNewTab() {
-          if (!currentSvgHtml) return;
-          const blob = new Blob([currentSvgHtml], { type: 'image/svg+xml' });
-          const url = URL.createObjectURL(blob);
-          window.open(url, '_blank');
-        }
-
-        // Modal Pan & Mouse Wheel Zoom
-        document.addEventListener('DOMContentLoaded', () => {
-          const modalBody = document.getElementById('diagram-modal-body');
-          if (modalBody) {
-            modalBody.addEventListener('mousedown', (e) => {
-              isPanning = true;
-              startX = e.clientX - panX;
-              startY = e.clientY - panY;
-            });
-            window.addEventListener('mousemove', (e) => {
-              if (!isPanning) return;
-              panX = e.clientX - startX;
-              panY = e.clientY - startY;
-              updateModalTransform();
-            });
-            window.addEventListener('mouseup', () => {
-              isPanning = false;
-            });
-            modalBody.addEventListener('wheel', (e) => {
-              e.preventDefault();
-              const factor = e.deltaY < 0 ? 1.15 : 0.85;
-              zoomDiagram(factor);
-            }, { passive: false });
-          }
-        });
-
-        window.addEventListener('keydown', (e) => {
-          if (e.key === 'Escape') closeDiagramModal();
-        });
-      </script>
-      ${generateDiagramScript(reportHierarchy)}
-    </body></html>`;
-
+    const html = buildSystemReport({
+      projectName,
+      author,
+      engineVersion: VERSION,
+      generatedAt: new Date(),
+      repository: canonicalSysmlRepository,
+      hierarchy: hierarchySource,
+      diagnostics: snapshot.diagnostics,
+      traceability: {
+        matrix: traceabilityMatrix,
+        metrics: traceabilityMetrics,
+        modelHash: traceabilitySnapshot.modelHash,
+        repositoryRevision: traceabilitySnapshot.repositoryRevision,
+        diagnostics: traceabilitySnapshot.diagnostics.map(item => ({ code: item.code, message: item.message })),
+      },
+      extraSections,
+    });
     setGlobalReportData({ html, projectName });
     setShowGlobalReportPreview(true);
     setShowReportDialog(false);
     addError('info', 'Report preview ready');
-  }, [blocks, parts, connectors, relationships, states, transitions, junctions, hmiComponents, variables, addError, setShowReportDialog, layers, tickMs, safetyMode, canonicalSysmlRepository]);
+  }, [blocks, parts, connectors, relationships, states, transitions, junctions, hmiComponents, variables, activeStates, addError, setShowReportDialog, layers, tickMs, safetyMode, canonicalSysmlRepository]);
 
   // KEYBOARD SHORTCUTS
   useEffect(() => {
@@ -13487,24 +12575,20 @@ const ADIA = () => {
       if (e.ctrlKey) {
         if (e.key === 'c' || e.key === 'C') {
           // Copy
-          const clipData = createStateMachineClipboard(
-            selectedIds,
-            states,
-            junctions,
-            transitions,
-            layers,
-            blocks,
-            relationships,
-            parts,
-            connectors,
-            interfaceRealizations
-          );
-          setClipboard(clipData);
+          if (diagramMode === 'statemachine') {
+            setClipboard(createStateMachineClipboard(
+              selectedIds, states, junctions, transitions, layers,
+              blocks, relationships, parts, connectors, interfaceRealizations,
+            ));
+          } else {
+            sysmlClipboardRef.current = [...selectedIds];
+            setClipboard(null);
+          }
           addError('info', `Copied ${selectedIds.length} items`);
         }
         if (e.key === 'v' || e.key === 'V') {
           // Paste
-          if (clipboard) {
+          if (diagramMode === 'statemachine' && clipboard) {
             addToHistory();
             const result = pasteStateMachineClipboard(
               clipboard,
@@ -13524,35 +12608,47 @@ const ADIA = () => {
             setJunctions(prev => [...prev, ...result.newJunctions]);
             setTransitions(prev => [...prev, ...result.newTransitions]);
             setLayers(result.updatedLayers);
-            setBlocks(prev => [...prev, ...result.newBlocks]);
-            setRelationships(prev => [...prev, ...result.newRelationships]);
-            setParts(prev => [...prev, ...result.newParts]);
-            setConnectors(prev => [...prev, ...result.newConnectors]);
             setInterfaceRealizations(prev => [...prev, ...result.newInterfaceRealizations]);
 
             setSelectedIds(result.pastedTopLevelIds);
             addError('info', 'Pasted items');
+          } else if (diagramMode !== 'statemachine' && sysmlClipboardRef.current.length > 0) {
+            const diagramId = activeSysmlDiagramId;
+            const plan = buildSysmlPastePlan(
+              canonicalSysmlRepository,
+              sysmlDiagramPresentations,
+              sysmlClipboardRef.current,
+              diagramId,
+              () => uuidv4(),
+            );
+            if (!plan) {
+              addError('warning', 'The copied SysML selection is no longer present in the repository.');
+            } else {
+              const result = handleExecuteSysmlCommand(plan.command);
+              if (result.committed) {
+                setSelectedIds(plan.pastedIds);
+                addError('info', 'Pasted SysML elements through the repository command gateway.');
+              } else {
+                result.diagnostics.forEach(diagnostic => addError(diagnostic.severity, diagnostic.message, 'SysML', diagnostic.elementId));
+              }
+            }
           }
         }
         if (e.key === 'x' || e.key === 'X') {
           // Cut
-          addToHistory();
-          const clipData = createStateMachineClipboard(
-            selectedIds,
-            states,
-            junctions,
-            transitions,
-            layers,
-            blocks,
-            relationships,
-            parts,
-            connectors,
-            interfaceRealizations
-          );
-          setClipboard(clipData);
-          // Delete logic
           const selectedStateIds = selectedIds.filter(id => states.some(s => s.id === id));
           const otherSelectedIds = selectedIds.filter(id => !states.some(s => s.id === id));
+          if (diagramMode === 'statemachine') {
+            addToHistory();
+            setClipboard(createStateMachineClipboard(
+              selectedIds, states, junctions, transitions, layers,
+              blocks, relationships, parts, connectors, interfaceRealizations,
+            ));
+          } else {
+            sysmlClipboardRef.current = [...otherSelectedIds];
+            setClipboard(null);
+          }
+          // Delete logic
           executeDeleteState(selectedStateIds, otherSelectedIds);
           addError('info', 'Cut items');
         }
@@ -13586,7 +12682,7 @@ const ADIA = () => {
 
           if (selectedStateIds.length > 0) {
             deleteStates(selectedStateIds, otherSelectedIds);
-          } else if (diagramMode === 'requirements' || diagramMode === 'bdd') {
+          } else if (diagramMode === 'requirements' || diagramMode === 'bdd' || diagramMode === 'package') {
             removeFromDiagram(otherSelectedIds);
           } else {
             deleteNonStateElements(otherSelectedIds);
@@ -13598,6 +12694,8 @@ const ADIA = () => {
         setIsCreatingTransition(false);
         setTransitionSourceId(null);
         setSelectedIds([]);
+        setPortTypePrompt(null);
+        setPropertyTypePrompt(null);
       }
     };
 
@@ -13616,7 +12714,7 @@ const ADIA = () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [selectedIds, view, deleteState, deleteStates, deleteNonStateElements, executeDeleteState, deleteJunction, deleteTransition, deleteBlock, removeFromDiagram, deleteRelationship, deletePart, deleteConnector, deleteInterfaceRealization, states, junctions, transitions, blocks, relationships, parts, connectors, interfaceRealizations, clipboard, currentLayerId, currentStates, currentJunctions, currentTransitions, addToHistory, undo, redo, addError, handleExportProject, diagramMode, startSimulation, pauseSimulation, resetSimulation, isHierarchyCollapsed, isVariablesCollapsed, isPropertiesCollapsed, isScopeCollapsed]);
+  }, [selectedIds, view, deleteState, deleteStates, deleteNonStateElements, executeDeleteState, deleteJunction, deleteTransition, deleteBlock, removeFromDiagram, deleteRelationship, deletePart, deleteConnector, deleteInterfaceRealization, states, junctions, transitions, blocks, relationships, parts, connectors, interfaceRealizations, clipboard, currentLayerId, currentStates, currentJunctions, currentTransitions, canonicalSysmlRepository, sysmlDiagramPresentations, handleExecuteSysmlCommand, addToHistory, undo, redo, addError, handleExportProject, diagramMode, activeSysmlDiagramId, startSimulation, pauseSimulation, resetSimulation, isHierarchyCollapsed, isVariablesCollapsed, isPropertiesCollapsed, isScopeCollapsed]);
 
   // CODE GENERATION (FULLY FUNCTIONAL WITH USER FEEDBACK)
   const generateCode = useCallback(async () => {
@@ -13728,7 +12826,7 @@ const ADIA = () => {
       const isSelected = selectedIds.includes(state.id);
       const hasSubLayer = states.some(s => s.parentId === state.id); // REQ-HSM-012
       return (
-        <g
+        <g data-help-feature="app-state-layer" data-help-source="src/App.tsx"
           key={state.id}
           transform={`translate(${state.x}, ${state.y})`}
           onMouseDown={(e) => handleStateMouseDown(e, state.id)}
@@ -13739,7 +12837,7 @@ const ADIA = () => {
             const hx = h.includes('e') ? state.width : 0;
             const hy = h.includes('s') ? state.height : 0;
             return (
-              <rect
+              <rect data-help-feature="live:App:70a9104101f7"
                 key={h}
                 x={hx - 4} y={hy - 4} width={8} height={8}
                 fill="#f97316" stroke="#0a0a0a" strokeWidth={1}
@@ -13788,8 +12886,8 @@ const ADIA = () => {
             width={state.width}
             height={state.height}
             rx={8}
-            fill={state.isActive ? '#2a2a2a' : '#1a1a1a'}
-            stroke={isSelected ? state.color : '#444'}
+            fill={state.isActive ? 'var(--sysml-state-active-fill)' : 'var(--sysml-state-fill)'}
+            stroke={isSelected ? state.color : 'var(--sysml-state-stroke)'}
             strokeWidth={isSelected ? 2 : 1}
           />
 
@@ -13835,7 +12933,7 @@ const ADIA = () => {
             x={8}
             y={17}
             textAnchor="start"
-            fill="#888"
+            fill="var(--sysml-state-subtext)"
             fontSize={9}
             fontFamily="Inter, sans-serif"
           >
@@ -13867,7 +12965,7 @@ const ADIA = () => {
               x={state.width - 8}
               y={state.height - 8}
               textAnchor="end"
-              fill="#888"
+              fill="var(--sysml-state-subtext)"
               fontSize={8}
               fontFamily="Inter, sans-serif"
             >
@@ -13878,9 +12976,9 @@ const ADIA = () => {
           {/* Graphical Representation of Internal Transitions */}
           {state.internalTransitions && (
             <g transform={`translate(8, ${state.height - 15 - (state.internalTransitions.split('\n').length * 10)})`}>
-              <line x1={-8} y1={-5} x2={state.width - 8} y2={-5} stroke="#444" strokeWidth={1} />
+              <line x1={-8} y1={-5} x2={state.width - 8} y2={-5} stroke="var(--sysml-block-divider)" strokeWidth={1} />
               {state.internalTransitions.split('\n').slice(0, 3).map((line, i) => (
-                <text key={i} y={i * 10} fill="#aaa" fontSize={9} fontFamily="monospace">{line.length > 25 ? line.slice(0, 25) + '...' : line}</text>
+                <text key={i} y={i * 10} fill="var(--sysml-state-subtext)" fontSize={9} fontFamily="monospace">{line.length > 25 ? line.slice(0, 25) + '...' : line}</text>
               ))}
             </g>
           )}
@@ -13911,7 +13009,7 @@ const ADIA = () => {
     return currentJunctions.map(junction => {
       const isSelected = selectedIds.includes(junction.id);
       return (
-        <g
+        <g data-help-feature="live:App:8dea4e38c6d5"
           key={junction.id}
           transform={`translate(${junction.x}, ${junction.y})`}
           onMouseDown={(e) => handleJunctionMouseDown(e, junction.id)}
@@ -14018,7 +13116,7 @@ const ADIA = () => {
       return (
         <g key={transition.id}>
           {/* Hit area - enlarged for free grabbing & smooth dragging */}
-          <path
+          <path data-help-feature="app-sm-curve" data-help-source="src/App.tsx"
             d={path}
             fill="none"
             stroke="transparent"
@@ -14090,7 +13188,7 @@ const ADIA = () => {
                 opacity={0.4}
                 style={{ pointerEvents: 'none' }}
               />
-              <circle
+              <circle data-help-feature="app-sm-curve" data-help-source="src/App.tsx"
                 cx={cp.x}
                 cy={cp.y}
                 r={handleRadius}
@@ -14114,10 +13212,153 @@ const ADIA = () => {
     });
   }, [currentTransitions, states, junctions, view, selectedIds, hoveredTransitionId, firedTransitions, startTransitionDrag, resetTransitionCurve, errors]);
 
-  const renderBlocks = useCallback((): React.ReactNode => {
+  const renderPackages = useCallback((): React.ReactNode => {
+    if (diagramMode === 'ibd') return null;
+    // Outer packages first so nested Package symbols paint on top of their owners.
+    const drawRank = new Map(packageDrawOrder(packageNestingNodes.filter(node => node.isPackage)).map((node, index) => [node.id, index]));
+    const orderedPackages = diagramMode === 'package'
+      ? [...sysmlCanvasView.packages].sort((a, b) => (drawRank.get(a.id) ?? 0) - (drawRank.get(b.id) ?? 0))
+      : sysmlCanvasView.packages;
+    return orderedPackages.map(pkg => {
+      const isSelected = selectedIds.includes(pkg.id);
+      const keyword = pkg.stereotype === 'modelLibrary' ? '«modelLibrary»' : '«package»';
+      const tabWidth = Math.min(Math.max(72, keyword.length * 5.6 + 20, pkg.name.length * 7 + 20), pkg.width - 16);
+      return (
+        <g data-help-feature="app-diagram-open" data-help-source="src/App.tsx"
+          key={pkg.id}
+          data-semantic-id={pkg.id}
+          data-presentation-kind="package"
+          transform={`translate(${pkg.x}, ${pkg.y})`}
+          onMouseDown={(event) => handleBlockMouseDown(event, pkg.id)}
+          onDoubleClick={(event) => {
+            event.stopPropagation();
+            if (openCanvasSymbolDiagram(pkg.id)) return;
+            // No diagram to open: show the Package's specification instead (Cameo behaviour).
+            setSelectedIds([pkg.id]);
+            addError('info', `${sysmlObjectLabel(pkg, 'Package')} has no diagram; its specification is shown in the Properties panel.`);
+          }}
+          style={{ cursor: 'move' }}
+        >
+          {isSelected && (
+            <rect x={-4} y={-4} width={pkg.width + 8} height={pkg.height + 8} fill="none" stroke="#f97316" strokeWidth={2} strokeDasharray="5,5" rx={3} />
+          )}
+          <path
+            d={`M 0 22 L 0 0 L ${tabWidth} 0 L ${tabWidth + 12} 14 L ${pkg.width} 14 L ${pkg.width} ${pkg.height} L 0 ${pkg.height} Z`}
+            fill="var(--sysml-block-fill)"
+            fillOpacity={0.42}
+            stroke={isSelected ? '#f97316' : 'var(--sysml-block-stroke)'}
+            strokeWidth={1.2}
+          />
+          <text x={10} y={12} fill="var(--sysml-block-meta)" fontSize={9} fontFamily="monospace">{keyword}</text>
+          <text x={10} y={34} fill="var(--sysml-block-text)" fontSize={12} fontWeight="bold">{pkg.name}</text>
+          {isSelected && ['nw', 'ne', 'sw', 'se'].map(handle => (
+            <rect data-help-feature="live:App:85a80aef7d77"
+              key={handle}
+              data-resize-handle={handle}
+              x={(handle.includes('e') ? pkg.width : 0) - 5}
+              y={(handle.includes('s') ? pkg.height : 0) - 5}
+              width={10}
+              height={10}
+              fill="#f97316"
+              stroke="#111"
+              style={{ cursor: `${handle}-resize` }}
+              onMouseDown={event => handleResizeMouseDown(event, handle, pkg.id)}
+            />
+          ))}
+        </g>
+      );
+    });
+  }, [diagramMode, sysmlCanvasView.packages, selectedIds, handleBlockMouseDown, handleResizeMouseDown, openCanvasSymbolDiagram, packageNestingNodes, addError]);
+
+  /**
+   * UML containment paths (owner ⊕── owned): drawn for an owned element shown
+   * on the same Package Diagram as its owning Package but outside its symbol.
+   * Derived from ownership, never stored as a relationship.
+   */
+  const renderContainmentPaths = useCallback((): React.ReactNode => {
+    if (diagramMode !== 'package') return null;
+    const byId = new Map(packageNestingNodes.map(node => [node.id, node]));
+    return containmentPaths(packageNestingNodes).map(({ ownerId, ownedId }) => {
+      const owner = byId.get(ownerId)!;
+      const owned = byId.get(ownedId)!;
+      const route = calculateSeparatedRelationshipPath(owner, owned, 0, 1);
+      const { sp, angle } = route;
+      const ownedElement = canonicalSysmlRepository.packages[ownedId] ?? canonicalSysmlRepository.definitions[ownedId]
+        ?? canonicalSysmlRepository.requirements[ownedId] ?? canonicalSysmlRepository.verificationCases[ownedId];
+      return (
+        <g key={`containment:${ownerId}:${ownedId}`} data-presentation-kind="containment" data-owner-id={ownerId} data-owned-id={ownedId} pointerEvents="none">
+          <title>{`${sysmlObjectLabel(canonicalSysmlRepository.packages[ownerId], 'Package')} contains ${sysmlObjectLabel(ownedElement, 'Element')}`}</title>
+          <path d={route.path} fill="none" style={{ stroke: '#888' }} strokeWidth={1.5} />
+          <g transform={`translate(${sp.x}, ${sp.y}) rotate(${angle})`}>
+            <circle cx={7} cy={0} r={6} fill="#141414" style={{ stroke: '#888' }} strokeWidth={1.5} />
+            <line x1={1} y1={0} x2={13} y2={0} style={{ stroke: '#888' }} strokeWidth={1.5} />
+            <line x1={7} y1={-6} x2={7} y2={6} style={{ stroke: '#888' }} strokeWidth={1.5} />
+          </g>
+        </g>
+      );
+    });
+  }, [diagramMode, packageNestingNodes, canonicalSysmlRepository]);
+
+  /** Diagram shortcut symbols: double-click navigates, with a return path to this diagram. */
+  const renderDiagramShortcuts = useCallback((): React.ReactNode => diagramShortcuts.map(shortcut => {
+    const isSelected = selectedIds.includes(shortcut.id);
+    return (
+      <g data-help-feature="app-diagram-open" data-help-source="src/App.tsx"
+        key={shortcut.id}
+        data-semantic-id={shortcut.id}
+        data-presentation-kind="diagramShortcut"
+        transform={`translate(${shortcut.x}, ${shortcut.y})`}
+        onMouseDown={(event) => {
+          if (packageRelationshipTool) {
+            event.stopPropagation();
+            addError('warning', 'A diagram shortcut cannot be a relationship end.', 'SysML', shortcut.id);
+            return;
+          }
+          handleBlockMouseDown(event, shortcut.id);
+        }}
+        onDoubleClick={(event) => {
+          event.stopPropagation();
+          openExactDiagramById(shortcut.id, { pushOrigin: true, preserveReturnStack: true });
+        }}
+        style={{ cursor: 'pointer' }}
+      >
+        <title>{`Open ${getDiagramKindLabel(shortcut.diagram.diagramKind)} ${sysmlObjectLabel(shortcut.diagram, 'Diagram')}`}</title>
+        <rect width={shortcut.width} height={shortcut.height} rx={3} fill="var(--sysml-block-fill)" fillOpacity={0.6}
+          stroke={isSelected ? '#f97316' : 'var(--sysml-block-stroke)'} strokeWidth={isSelected ? 2 : 1.2} />
+        {/* Diagram icon: miniature frame with a name tab */}
+        <path d="M 8 10 L 30 10 L 30 30 L 8 30 Z M 8 10 L 20 10 L 22 14 L 8 14" fill="none" stroke="var(--sysml-block-meta)" strokeWidth={1} />
+        <text x={38} y={21} fill="var(--sysml-block-meta)" fontSize={9} fontFamily="monospace">{diagramKindAbbreviation(shortcut.diagram.diagramKind)}</text>
+        <text x={38} y={38} fill="var(--sysml-block-text)" fontSize={12} fontWeight="bold">{sysmlObjectLabel(shortcut.diagram, 'Diagram')}</text>
+      </g>
+    );
+  }), [diagramShortcuts, selectedIds, packageRelationshipTool, addError, handleBlockMouseDown, openExactDiagramById]);
+
+  /** SysML diagram frame with its `pkg [...] ... [...]` header, sized around the content. */
+  const renderPackageDiagramFrame = useCallback((): React.ReactNode => {
+    if (diagramMode !== 'package') return null;
+    const label = diagramFrameLabel(canonicalSysmlRepository, activeSysmlDiagramId);
+    if (!label) return null;
+    const rects = [...packageNestingNodes, ...diagramShortcuts];
+    const padding = 40;
+    const minX = rects.length ? Math.min(...rects.map(r => r.x)) - padding : 40;
+    const minY = rects.length ? Math.min(...rects.map(r => r.y)) - padding - 24 : 40;
+    const maxX = rects.length ? Math.max(...rects.map(r => r.x + r.width)) + padding : 640;
+    const maxY = rects.length ? Math.max(...rects.map(r => r.y + r.height)) + padding : 440;
+    const tabWidth = label.length * 6.4 + 20;
+    return (
+      <g data-presentation-kind="diagramFrame" pointerEvents="none">
+        <rect x={minX} y={minY} width={maxX - minX} height={maxY - minY} fill="none" stroke="var(--sysml-block-stroke)" strokeWidth={1.2} />
+        <path d={`M ${minX} ${minY + 20} L ${minX + tabWidth - 8} ${minY + 20} L ${minX + tabWidth} ${minY + 12} L ${minX + tabWidth} ${minY}`}
+          fill="none" stroke="var(--sysml-block-stroke)" strokeWidth={1.2} />
+        <text x={minX + 8} y={minY + 14} fill="var(--sysml-block-text)" fontSize={11} fontFamily="monospace">{label}</text>
+      </g>
+    );
+  }, [diagramMode, canonicalSysmlRepository, activeSysmlDiagramId, packageNestingNodes, diagramShortcuts]);
+
+  const renderBlocks = useCallback((ibdContextLayer: 'all' | 'frame' | 'ports' = 'all'): React.ReactNode => {
     // In BDD mode, always treat as root level (ignore currentLayerId from IBD navigation)
     const effectiveLayerId = diagramMode === 'bdd' ? 'root' : currentLayerId;
-    const targetBlocks = culledDiagram ? culledDiagram.visibleBlocks : blocks;
+    const targetBlocks = culledDiagram ? culledDiagram.visibleBlocks : sysmlCanvasView.blocks;
     const isDegraded = Boolean(culledDiagram?.isDegradedMode && view.scale < 0.7);
 
     return targetBlocks.map(block => {
@@ -14127,6 +13368,7 @@ const ADIA = () => {
           const isSelected = selectedIds.includes(block.id);
           return (
             <g key={block.id}>
+              {ibdContextLayer !== 'ports' && <>
               <rect x={frame.x} y={frame.y} width={frame.w} height={frame.h} fill="none" stroke="#444" strokeWidth={2} strokeDasharray="10,5"
                 onMouseDown={(e) => handleBlockMouseDown(e, block.id)}
                 onClick={(e) => { e.stopPropagation(); setSelectedIds([block.id]); }}
@@ -14138,7 +13380,7 @@ const ADIA = () => {
                 const hx = h.includes('e') ? frame.x + frame.w : frame.x;
                 const hy = h.includes('s') ? frame.y + frame.h : frame.y;
                 return (
-                  <rect
+                  <rect data-help-feature="live:App:ddd9fcbcc7cb"
                     key={h}
                     x={hx - 4} y={hy - 4} width={8} height={8}
                     fill="#f97316" stroke="#0a0a0a" strokeWidth={1}
@@ -14147,8 +13389,9 @@ const ADIA = () => {
                   />
                 );
               })}
+              </>}
 
-              {block.ports.map((port, i) => {
+              {ibdContextLayer !== 'frame' && block.ports.map((port, i) => {
                 let x = 0, y = 0;
                 let isLeft = false;
                 if (port.side && port.offset != null) {
@@ -14163,23 +13406,30 @@ const ADIA = () => {
                 }
 
                 return (
-                  <g key={port.id} transform={`translate(${x}, ${y})`}>
-                    <rect
-                      x={-6} y={-6} width={12} height={12}
-                      fill={connectorSource?.portId === port.id && connectorSource?.partId === block.id ? '#f97316' : '#222'}
-                      stroke={port.kind === 'flow' ? '#6c9ac6' : port.kind === 'proxy' ? '#c96c8a' : '#f97316'}
-                      strokeWidth={1}
-                      onMouseDown={(e) => handlePortMouseDown(e, block.id, port.id)}
-                      onClick={(e) => handlePortClick(e, block.id, port.id)}
-                      style={{ cursor: 'pointer' }}
+                  <g key={port.id}>
+                    <IbdConnectorEndpoint
+                      isBoundary={true}
+                      portKind={port.kind}
+                      overrideColor={sysmlDiagramPresentations[activeSysmlDiagramId]?.presentations[port.id]?.style?.color}
+                      definitionId={port.id}
+                      ownerOccurrenceId={null}
+                      name={port.name}
+                      direction={port.direction}
+                      x={x}
+                      y={y}
+                      isSelected={connectorSource?.portId === port.id && connectorSource?.partId === block.id}
+                      isConnecting={isCreatingConnector}
+                      onClick={(_endpoint, e) => handlePortClick(e as any, block.id, port.id)}
+                      onMouseDown={(e) => handlePortMouseDown(e as any, block.id, port.id)}
                     />
-                    <text x={isLeft ? 10 : -10} y={4} textAnchor={isLeft ? "start" : "end"} fill="#aaa" fontSize={10}>{port.name}</text>
+                    <text x={x + (isLeft ? 10 : -10)} y={y + 4} textAnchor={isLeft ? "start" : "end"} fill="#aaa" fontSize={10} pointerEvents="none">{port.name}</text>
                   </g>
                 );
               })}
             </g>
           );
         }
+        if (ibdContextLayer === 'ports') return null;
         if (block.stereotype !== 'interface' && block.stereotype !== 'interfaceBlock') return null;
 
         // Only show interface blocks / interfaces in IBD if they are realized by a part in the current layer,
@@ -14195,7 +13445,9 @@ const ADIA = () => {
       }
 
       if (diagramMode === 'requirements') {
-        if (block.stereotype !== 'requirement') return null;
+        const allowedStereotypes = ['requirement', 'block', 'part', 'testCase', 'activity', 'useCase', 'stateMachine'];
+        if (!allowedStereotypes.includes(block.stereotype)) return null;
+        if (!requirementsDiagramScope.visibleBlockIds.has(block.id)) return null;
         // Use layerId for visibility: show only blocks belonging to the current layer.
         // Blocks without layerId (legacy) default to root.
         const blockLayer = block.layerId ?? 'root';
@@ -14204,45 +13456,62 @@ const ADIA = () => {
 
       if (diagramMode === 'bdd' && block.stereotype === 'requirement') return null;
 
-      // In BDD mode, hide any block that is being used as a type for a part.
-      if (diagramMode === 'bdd' && partTypeIds.has(block.id)) {
-        return null;
-      }
+      const isSelected = selectedIds.includes(block.id) && pendingBddBlockId !== block.id;
 
-      const isSelected = selectedIds.includes(block.id);
+      const { width: displayWidth, height: displayHeight } = computeBlockDisplayBounds(block);
+      const allocationLines = blockCompartmentLines(block);
+      const bodyBottom = displayHeight - blockCompartmentHeight(block);
 
-      const displayWidth = block.width || 150;
-      const displayHeight = block.height || 100;
+      // Review follow-up Finding 6b: a stored style.color override for this
+      // block/requirement element+diagram wins for the node body stroke
+      // (applied through `style` per the Task 6 var()-in-style fix — browsers
+      // do not resolve var() in SVG presentation attributes); absent/invalid
+      // resolves to the existing role default and selection keeps precedence.
+      // Presentation only: validation state is computed upstream.
+      const storedNodeOverride = sysmlDiagramPresentations[activeSysmlDiagramId]?.presentations[block.id]?.style?.color;
+      const nodeOverrideStyle = !isSelected && isValidPresentationColor(storedNodeOverride)
+        ? { stroke: String(storedNodeOverride).trim() }
+        : undefined;
 
       return (
-        <g
+        <g data-help-feature="app-diagram-open" data-help-source="src/App.tsx"
           key={block.id}
+          data-semantic-id={block.id}
           transform={`translate(${block.x}, ${block.y})`}
           onMouseDown={(e) => handleBlockMouseDown(e, block.id)}
-          onDoubleClick={(e: MouseEvent<SVGGElement>) => {
-            e.stopPropagation();
-            if (diagramMode === 'requirements') {
-              enterRequirement(block.id);
-            } else {
-              enterBlock(block.id);
+          onMouseUp={(e: MouseEvent<SVGGElement>) => {
+            if (diagramMode === 'bdd' && bddFeatureDrag) {
+              e.stopPropagation();
+              if (block.id !== bddFeatureDrag.ownerId) dropBddFeatureOnBlock(e, block.id);
+              else setBddFeatureDrag(null);
             }
           }}
-          style={{ cursor: isCreatingTransition ? 'crosshair' : 'move' }}
+          onDoubleClick={(e: MouseEvent<SVGGElement>) => {
+            e.stopPropagation();
+            if (openCanvasSymbolDiagram(block.id)) return;
+            const decision = resolveBlockDoubleClickAction(diagramMode, block);
+            if (decision.action === 'enterRequirement') {
+              enterRequirement(decision.targetId!);
+            } else if (decision.action === 'enterBlock' && diagramMode === 'ibd') {
+              enterBlock(decision.targetId!);
+            }
+          }}
+          style={{ cursor: bddFeatureDrag ? 'copy' : isCreatingTransition ? 'crosshair' : 'move' }}
         >
           {isSelected && (
             <rect x={-4} y={-4} width={displayWidth + 8} height={displayHeight + 8} fill="none" stroke="#f97316" strokeWidth={2} strokeDasharray="5,5" rx={4} />
           )}
 
-          <rect width={displayWidth} height={displayHeight} fill={block.stereotype === 'requirement' ? '#1e1e1e' : '#1a1a1a'} stroke={isSelected ? '#f97316' : '#e0e0e0'} strokeWidth={1} />
+          <rect width={displayWidth} height={displayHeight} fill={block.stereotype === 'requirement' ? 'var(--sysml-requirement-fill)' : 'var(--sysml-block-fill)'} stroke={isSelected ? '#f97316' : 'var(--sysml-block-stroke)'} style={nodeOverrideStyle} strokeWidth={1} />
 
           {/* Header */}
-          <text x={displayWidth / 2} y={15} textAnchor="middle" fill="#f97316" fontSize={10} fontFamily="monospace">
-            {block.isAbstract ? `«${block.stereotype}, abstract»` : `«${block.stereotype}»`}
+          <text x={displayWidth / 2} y={15} textAnchor="middle" fill="var(--sysml-block-meta)" fontSize={10} fontFamily="monospace">
+            {`«${block.stereotype}»`}
           </text>
-          <text x={displayWidth / 2} y={30} textAnchor="middle" fill="#e0e0e0" fontSize={12} fontWeight="bold" fontStyle={block.isAbstract ? 'italic' : 'normal'}>
-            {block.name}{block.isLeaf ? ' {leaf}' : ''}
+          <text x={displayWidth / 2} y={30} textAnchor="middle" fill="var(--sysml-block-text)" fontSize={12} fontWeight="bold" fontStyle={block.isAbstract ? 'italic' : 'normal'}>
+            {sysmlObjectLabel(block, block.stereotype || 'Block')}{block.isAbstract ? ' {abstract}' : ''}{block.isLeaf ? ' {leaf}' : ''}
           </text>
-          <line x1={0} y1={35} x2={displayWidth} y2={35} stroke="#444" strokeWidth={1} />
+          <line x1={0} y1={35} x2={displayWidth} y2={35} stroke="var(--sysml-block-divider)" strokeWidth={1} />
 
           {/* If degraded mode active, skip complex sub-elements for performance */}
           {!isDegraded && (
@@ -14257,11 +13526,7 @@ const ADIA = () => {
                     </div>
                   </foreignObject>
                   {/* Status Indicator */}
-                  <circle cx={displayWidth - 15} cy={-35} r={3} fill={
-                    block.status === 'Verified' ? '#4ade80' :
-                      block.status === 'Approved' ? '#6c9ac6' :
-                        block.status === 'Draft' ? '#888' : '#c96c8a'
-                  } />
+                  <circle cx={displayWidth - 15} cy={-35} r={3} fill={requirementStatusColor(block.status)} />
                   {/* Attached PDFs Indicator */}
                   {block.attachedFiles && block.attachedFiles.length > 0 && (
                     <g transform={`translate(${displayWidth - 35}, -40)`}>
@@ -14276,15 +13541,71 @@ const ADIA = () => {
                 </g>
               ) : (
                 <g transform="translate(5, 45)">
-                  {block.properties.slice(0, 3).map((prop, i) => (
-                    <text key={prop.id} y={i * 12} fill="#aaa" fontSize={10} fontFamily="monospace">
+                  {block.properties.map((prop, i) => (
+                    <text data-help-feature="live:App:ee2c7e93de56"
+                      key={prop.id}
+                      data-property-id={prop.id}
+                      y={i * 12}
+                      fill={bddFeatureDrag?.ownerId === block.id && bddFeatureDrag.kind === 'property' && bddFeatureDrag.featureId === prop.id ? '#f97316' : '#aaa'}
+                      fontSize={10}
+                      fontFamily="monospace"
+                      style={{ cursor: diagramMode === 'bdd' ? (isCreatingTransition ? 'crosshair' : 'grab') : 'default', userSelect: 'none', pointerEvents: 'all' }}
+                      onMouseDown={(e) => {
+                        e.stopPropagation();
+                        if (isCreatingTransition) {
+                          e.stopPropagation();
+                          if (transitionSourceId) {
+                            if (transitionSourceId !== prop.id) {
+                              const resolveEntity = (id: string) => {
+                                const direct = blocks.find(b => b.id === id) ?? states.find(s => s.id === id) ?? parts.find(p => p.id === id);
+                                if (direct) return direct;
+                                return blocks.flatMap(b => b.properties ?? []).find(p => p.id === id);
+                              };
+                              const source = resolveEntity(transitionSourceId);
+                              if (!source) return;
+                              const legalKinds = getCanvasRelationshipKinds({ blocks, parts, relationships, states }, transitionSourceId, prop.id, diagramMode === 'ibd' ? 'ibd' : diagramMode === 'requirements' ? 'requirements' : 'bdd');
+                              if (legalKinds.length > 0) {
+                                setRequirementConnectionPicker({ sourceId: transitionSourceId, targetId: prop.id });
+                              } else {
+                                const reversedKinds = getCanvasRelationshipKinds({ blocks, parts, relationships, states }, prop.id, transitionSourceId, diagramMode === 'ibd' ? 'ibd' : diagramMode === 'requirements' ? 'requirements' : 'bdd');
+                                if (reversedKinds.length > 0) {
+                                  setRequirementConnectionPicker({ sourceId: prop.id, targetId: transitionSourceId, reversedKinds });
+                                } else {
+                                  showConnectionPolicyError({
+                                    relationshipKind: 'relationship',
+                                    source: classifyLegacyEndpoint(source),
+                                    target: classifyLegacyEndpoint(prop),
+                                    diagnostic: {
+                                      code: 'NO_LEGAL_RELATIONSHIP',
+                                      message: `No available relationship can connect ${source.name} to ${prop.name} on this diagram.`,
+                                      correctiveAction: 'Choose compatible endpoints or the appropriate diagram.',
+                                    },
+                                  });
+                                }
+                              }
+                              setIsCreatingTransition(false);
+                              setTransitionSourceId(null);
+                            }
+                          } else {
+                            setTransitionSourceId(prop.id);
+                          }
+                          return;
+                        }
+                        startBddFeatureDrag(e, {
+                          kind: 'property', ownerId: block.id, featureId: prop.id, name: prop.name,
+                          typeId: prop.typeId,
+                          typeName: blocks.find(candidate => candidate.id === prop.typeId)?.name ?? prop.type,
+                          multiplicity: prop.multiplicity ?? '1',
+                        });
+                      }}
+                    >
                       {formatLegacyProperty(prop)}{prop.defaultValue ? ` = ${prop.defaultValue}` : ''}
                     </text>
                   ))}
                   {block.classes && block.classes.length > 0 && (
                     <g transform={`translate(0, ${block.properties.length * 12 + 5})`}>
                       <line x1={-5} y1={-2} x2={displayWidth - 5} y2={-2} stroke="#444" strokeWidth={1} />
-                      {block.classes.slice(0, 3).map((cls, i) => (
+                      {block.classes.map((cls, i) => (
                         <text key={i} y={i * 12 + 8} fill="#aaa" fontSize={10} fontFamily="monospace">
                           {cls}
                         </text>
@@ -14297,10 +13618,18 @@ const ADIA = () => {
               {/* Operations Separator if needed */}
               {block.operations.length > 0 && (
                 <>
-                  <line x1={0} y1={displayHeight - 25} x2={displayWidth} y2={displayHeight - 25} stroke="#444" strokeWidth={1} />
-                  <g transform={`translate(5, ${displayHeight - 15})`}>
+                  <line x1={0} y1={bodyBottom - 25} x2={displayWidth} y2={bodyBottom - 25} stroke="#444" strokeWidth={1} />
+                  <g transform={`translate(5, ${bodyBottom - 15})`}>
                     {block.operations.slice(0, 2).map((op, i) => (
-                      <text key={i} y={i * 12} fill="#aaa" fontSize={10} fontFamily="monospace">{op}</text>
+                      <text data-help-feature="live:App:9dbeffc76288"
+                        key={`${op}-${i}`}
+                        y={i * 12}
+                        fill={bddFeatureDrag?.ownerId === block.id && bddFeatureDrag.kind === 'operation' && bddFeatureDrag.name === op ? '#f97316' : '#aaa'}
+                        fontSize={10}
+                        fontFamily="monospace"
+                        style={{ cursor: diagramMode === 'bdd' ? 'grab' : 'default', userSelect: 'none' }}
+                        onMouseDown={(e) => startBddFeatureDrag(e, { kind: 'operation', ownerId: block.id, name: op })}
+                      >{op}</text>
                     ))}
                   </g>
                 </>
@@ -14309,8 +13638,8 @@ const ADIA = () => {
               {/* Constraints */}
               {block.constraints && block.constraints.length > 0 && (
                 <>
-                  <line x1={0} y1={displayHeight - (block.operations.length > 0 ? 40 : 25)} x2={displayWidth} y2={displayHeight - (block.operations.length > 0 ? 40 : 25)} stroke="#444" strokeWidth={1} />
-                  <g transform={`translate(5, ${displayHeight - (block.operations.length > 0 ? 30 : 15)})`}>
+                  <line x1={0} y1={bodyBottom - (block.operations.length > 0 ? 40 : 25)} x2={displayWidth} y2={bodyBottom - (block.operations.length > 0 ? 40 : 25)} stroke="#444" strokeWidth={1} />
+                  <g transform={`translate(5, ${bodyBottom - (block.operations.length > 0 ? 30 : 15)})`}>
                     {block.constraints.slice(0, 2).map((c, i) => (
                       <text key={i} y={i * 12} fill="#aaa" fontSize={10} fontFamily="monospace">{`{${c}}`}</text>
                     ))}
@@ -14318,24 +13647,49 @@ const ADIA = () => {
                 </>
               )}
 
-              {/* Ports */}
-              {block.ports.map((port, i) => (
+              {/* Allocation compartments («allocatedFrom» / «allocatedTo»), drawn only when non-empty */}
+              {allocationLines.length > 0 && (
+                <>
+                  <line x1={0} y1={bodyBottom} x2={displayWidth} y2={bodyBottom} stroke="#444" strokeWidth={1} />
+                  <g transform={`translate(5, ${bodyBottom + 12})`} data-testid={`allocation-compartment-${block.id}`}>
+                    {allocationLines.map((line, i) => (
+                      <text key={i} y={i * 12} fill="#aaa" fontSize={10} fontFamily="monospace" fontStyle={line.startsWith('«') ? 'italic' : undefined}>{line}</text>
+                    ))}
+                  </g>
+                </>
+              )}
+
+              {/* Ports (Task 6: stroke/glyph resolve from the centralized
+                  semantic palette via portKindToPresentationRole; review
+                  follow-up Finding 6a: a stored style.color override for the
+                  port's element+diagram wins for rendering via
+                  resolveSemanticPresentation, absent/invalid resolves to the
+                  role token; legacy ports carry no presentation override so
+                  role defaults apply deterministically) */}
+              {block.ports.map((port, i) => {
+                const portRole = portKindToPresentationRole(port.kind);
+                const portToken = elementPresentationColor(portRole, activeSysmlDiagramId, port.id, sysmlDiagramPresentations);
+                return (
                 <g key={port.id} transform={`translate(-5, ${20 + i * 15})`}>
+                  {/* Task 6 review fix: the token is applied through `style`
+                      because browsers do not resolve var() in SVG
+                      presentation attributes. */}
                   <rect
                     width={10}
                     height={10}
                     fill="#333"
-                    stroke={port.kind === 'flow' ? '#6c9ac6' : port.kind === 'proxy' ? '#c96c8a' : '#f97316'}
+                    style={{ stroke: portToken }}
                     strokeWidth={1}
                   />
                   {port.kind === 'flow' && (
-                    <text x={5} y={8} textAnchor="middle" fill="#6c9ac6" fontSize={8} fontWeight="bold">
+                    <text x={5} y={8} textAnchor="middle" style={{ fill: portToken }} fontSize={8} fontWeight="bold">
                       {port.direction === 'in' ? '>' : port.direction === 'out' ? '<' : '<>'}
                     </text>
                   )}
                   <title>{port.name} : {port.type} ({port.kind || 'standard'}){port.unit ? ` { unit: ${port.unit} }` : ''}</title>
                 </g>
-              ))}
+                );
+              })}
 
               {/* Satisfied Requirements Indicator */}
               {block.satisfiedReqIds && block.satisfiedReqIds.length > 0 && (
@@ -14351,7 +13705,7 @@ const ADIA = () => {
             const hx = h.includes('e') ? displayWidth : 0;
             const hy = h.includes('s') ? displayHeight : 0;
             return (
-              <rect
+              <rect data-help-feature="live:App:ddd9fcbcc7cb"
                 key={h}
                 x={hx - 4} y={hy - 4} width={8} height={8}
                 fill="#f97316" stroke="#0a0a0a" strokeWidth={1}
@@ -14363,107 +13717,260 @@ const ADIA = () => {
         </g>
       );
     });
-  }, [blocks, culledDiagram, view.scale, parts, selectedIds, isCreatingTransition, handleBlockMouseDown, diagramMode, currentLayerId, connectorSource, handlePortClick, handlePortMouseDown, enterBlock, enterRequirement, handleResizeMouseDown, interfaceRealizations, transitionSourceId]);
+  }, [blocks, culledDiagram, sysmlCanvasView, view.scale, parts, selectedIds, pendingBddBlockId, isCreatingTransition, handleBlockMouseDown, diagramMode, currentLayerId, activeSysmlDiagramId, sysmlDiagramPresentations, connectorSource, handlePortClick, handlePortMouseDown, enterBlock, enterRequirement, handleResizeMouseDown, interfaceRealizations, transitionSourceId, requirementsDiagramScope, bddFeatureDrag, dropBddFeatureOnBlock, startBddFeatureDrag, openCanvasSymbolDiagram]);
 
   const renderRelationships = useCallback((): React.ReactNode => {
-    const targetRelationships = culledDiagram ? culledDiagram.visibleRelationships : relationships;
+    const targetRelationships = diagramMode !== 'package' && culledDiagram ? culledDiagram.visibleRelationships : sysmlCanvasView.relationships;
     const isInteracting = isDragging || isPanning;
+    const packagesById = new Map(sysmlCanvasView.packages.map(pkg => [pkg.id, pkg]));
+    const visibleBlockIdForEndpoint = (endpointId: string) => {
+      if (sysmlCanvasView.blocks.some(block => block.id === endpointId)) return endpointId;
+      return sysmlCanvasView.blocks.find(block => block.properties?.some(property => property.id === endpointId))?.id ?? endpointId;
+    };
 
     const pairGroups = new Map<string, string[]>();
     targetRelationships.forEach(rel => {
-      const pairKey = [rel.sourceId, rel.targetId].sort().join(':::');
+      const pairKey = [visibleBlockIdForEndpoint(rel.sourceId), visibleBlockIdForEndpoint(rel.targetId)].sort().join(':::');
       if (!pairGroups.has(pairKey)) pairGroups.set(pairKey, []);
       pairGroups.get(pairKey)!.push(rel.id);
     });
 
     return targetRelationships.map(rel => {
-      const source = blocksById.get(rel.sourceId);
-      const target = blocksById.get(rel.targetId);
+      if (!activeDiagramElementIds.has(rel.sourceId) || !activeDiagramElementIds.has(rel.targetId)) {
+        return null;
+      }
+      // Package Diagram: a path is shown whenever both ends are shown (Cameo
+      // behaviour), unless the user removed it from this diagram.
+      if (diagramMode === 'package' && sysmlDiagramPresentations[activeSysmlDiagramId]?.hiddenElementIds?.includes(rel.id)) return null;
+
+      const resolveNode = (id: string) => {
+        const direct = blocksById.get(id) ?? packagesById.get(id) ?? (partsById.get(id) as any);
+        if (direct) return direct;
+        return sysmlCanvasView.blocks.find(b => b.properties?.some(p => p.id === id));
+      };
+      const source = resolveNode(rel.sourceId);
+      const target = resolveNode(rel.targetId);
       if (!source || !target) return null;
 
       const isReqRel = source.stereotype === 'requirement' || target.stereotype === 'requirement';
       if (diagramMode === 'ibd') return null;
       if (diagramMode === 'bdd' && isReqRel) return null;
-      if (diagramMode === 'requirements' && !isReqRel) return null;
+      if (diagramMode === 'requirements' && !requirementsDiagramScope.visibleRelationshipIds.has(rel.id)) return null;
 
-      // Check visibility for requirements: both source and target must be in the current layer
-      if (diagramMode === 'requirements') {
-        const isBlockVisible = (block: BlockData) => (block.layerId ?? 'root') === currentLayerId;
-        if (!isBlockVisible(source) || !isBlockVisible(target)) return null;
-      }
-
-      const srcW = source.width || 150;
-      const srcH = source.height || 100;
-      const tgtW = target.width || 150;
-      const tgtH = target.height || 100;
+      const sourceBounds = 'properties' in source ? computeBlockDisplayBounds(source) : { width: source.width || 120, height: source.height || 60 };
+      const targetBounds = 'properties' in target ? computeBlockDisplayBounds(target) : { width: target.width || 120, height: target.height || 60 };
+      const srcW = sourceBounds.width;
+      const srcH = sourceBounds.height;
+      const tgtW = targetBounds.width;
+      const tgtH = targetBounds.height;
 
       const pairKey = [rel.sourceId, rel.targetId].sort().join(':::');
       const group = pairGroups.get(pairKey) || [rel.id];
       const edgeIndex = group.indexOf(rel.id);
       const totalEdges = group.length;
 
-      const route = calculateSeparatedRelationshipPath(
-        { x: source.x, y: source.y, width: srcW, height: srcH },
-        { x: target.x, y: target.y, width: tgtW, height: tgtH },
-        edgeIndex,
-        totalEdges
+      const bddPresentation = diagramMode === 'bdd'
+        ? classifyBddRelationshipPresentation(
+            {
+              blocks: sysmlCanvasView.blocks,
+              parts: (sysmlCanvasView as any).parts || [],
+              relationships: sysmlCanvasView.relationships,
+            },
+            rel,
+          )
+        : undefined;
+
+      const isPropertySource = diagramMode === 'bdd' && (
+        bddPresentation?.kind === 'propertyAssociation' ||
+        ('properties' in source && Boolean((source.properties as any[])?.some((p: any) => p.id === rel.sourceId)))
       );
+      let route: { path: string; sp: { x: number; y: number }; tp: { x: number; y: number }; labelPos: { x: number; y: number }; propertyLabelPos?: { x: number; y: number }; angle: number } | undefined;
+      if (isPropertySource) {
+        const geom = resolveBddPropertyRelationshipGeometry({
+          propertyId: bddPresentation?.propertyId || rel.sourceId,
+          ownerBlockId: bddPresentation?.ownerBlockId || source.id,
+          targetBlockId: target.id,
+          blocks: sysmlCanvasView.blocks.map(b => {
+            const bounds = computeBlockDisplayBounds(b);
+            return {
+              id: b.id,
+              name: b.name,
+              x: b.x,
+              y: b.y,
+              width: bounds.width,
+              height: bounds.height,
+              properties: b.properties?.map(p => ({
+                id: p.id,
+                name: p.name,
+                typeId: p.typeId,
+                typeName: p.type,
+              })),
+            };
+          }),
+          allowFallback: true,
+        });
+        if (geom.source && geom.target) {
+          const dx = geom.target.x - geom.source.x;
+          const dy = geom.target.y - geom.source.y;
+          const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
+          const parallelRoute = calculateBddParallelRoute(geom.source, geom.target, edgeIndex, totalEdges);
+          route = {
+            path: parallelRoute.path,
+            sp: geom.source,
+            tp: geom.target,
+            labelPos: parallelRoute.labelPos,
+            propertyLabelPos: geom.propertyLabelPos,
+            angle,
+          };
+        }
+      }
+      if (!route) {
+        route = calculateSeparatedRelationshipPath(
+          { x: source.x, y: source.y, width: srcW, height: srcH },
+          { x: target.x, y: target.y, width: tgtW, height: tgtH },
+          edgeIndex,
+          totalEdges
+        );
+      }
 
       const isSelected = selectedIds.includes(rel.id);
       const isSuspect = Boolean((rel as any).suspect);
-      const strokeColor = isSelected ? '#f97316' : isSuspect ? '#ef4444' : '#888';
-      const strokeDash = rel.type === 'allocation' ? '5,5' : undefined;
       const isTrace = ['derive', 'deriveReqt', 'refine', 'satisfy', 'verify', 'trace', 'copy'].includes(rel.type);
+      // Task 6: committed relationship projections resolve presentation from
+      // the centralized semantic palette. Precedence (selection, then suspect
+      // error, then valid requirement relationship) is presentational only;
+      // validation state is computed upstream and color never drives it.
+      // Review follow-up Finding 6a: a stored style.color override for the
+      // relationship's element+diagram wins for rendering base semantic
+      // roles via resolveSemanticPresentation (kept in style props per the
+      // Task 6 var()-in-style fix); selection/error status roles always
+      // resolve to the role token so an override can never hide the
+      // selection highlight or the suspect-error indicator.
+      // Absent/invalid resolves to the role default.
+      const isAssociation = rel.type === 'association';
+      const strokeColor = isSelected
+        ? elementPresentationColor('selection', activeSysmlDiagramId, rel.id, sysmlDiagramPresentations)
+        : isSuspect
+          ? elementPresentationColor('error', activeSysmlDiagramId, rel.id, sysmlDiagramPresentations)
+          : isTrace
+            ? elementPresentationColor('validRequirementRelationship', activeSysmlDiagramId, rel.id, sysmlDiagramPresentations)
+            : isAssociation
+              ? elementPresentationColor('association', activeSysmlDiagramId, rel.id, sysmlDiagramPresentations)
+              : (() => {
+                  const stored = sysmlDiagramPresentations[activeSysmlDiagramId]?.presentations[rel.id]?.style?.color;
+                  return isValidPresentationColor(stored) ? String(stored).trim() : '#888';
+                })();
+      const isPackageRelation = ['packageImport', 'elementImport', 'packageMerge'].includes(rel.type);
+      const strokeDash = ['allocation', 'dependency', 'expose', 'packageImport', 'elementImport', 'packageMerge'].includes(rel.type) ? '5,5' : undefined;
       const isReqContainment = rel.type === 'requirementContainment';
       const containmentDiagnostics = isReqContainment && canonicalSysmlRepository.relationships[rel.id]
         ? validateRequirementContainment(canonicalSysmlRepository, rel.id)
         : [];
       const containmentErrorText = containmentDiagnostics.map(d => d.message).join('; ');
+      const sourceLabel = sysmlObjectLabel(source, source.stereotype || 'Element');
+      const targetLabel = sysmlObjectLabel(target, target.stereotype || 'Element');
+      const relationshipLabel = sysmlObjectLabel({ name: rel.label, kind: rel.type }, 'Relationship');
+      // SysML notation: association/composition/generalization carry no keyword;
+      // stereotyped links show «keyword». The title above keeps the full name.
+      const badgeText = rel.type === 'requirementContainment'
+        ? (containmentDiagnostics.length > 0 ? '«contains» [!]' : '«contains»')
+        : edgeBadgeLabel({ type: rel.type, label: rel.label });
       const ariaLabel = isReqContainment
-        ? `Requirement containment: ${source.name || source.reqId || source.id} contains ${target.name || target.reqId || target.id}${containmentErrorText ? ` - Error: ${containmentErrorText}` : ''}`
+        ? `Requirement containment: ${sourceLabel} contains ${targetLabel}${containmentErrorText ? ` - Error: ${containmentErrorText}` : ''}`
         : undefined;
       const { sp, tp, labelPos, angle } = route;
 
+      const sourceProperty = 'properties' in source
+        ? (source.properties as any[])?.find((p: any) => p.id === (bddPresentation?.propertyId || rel.sourceId))
+        : undefined;
+      const propertyRole = sysmlObjectLabel({ name: sourceProperty?.name }, 'Property');
+      const propertyMult = sourceProperty?.multiplicity ? ` [${sourceProperty.multiplicity}]` : '';
+      const propertyLabel = `${propertyRole}${propertyMult}`.trim();
+
       return (
-        <g
+        <g data-help-feature="app-diagram-select-path" data-help-source="src/App.tsx"
           key={rel.id}
+          data-semantic-id={rel.id}
+          data-presentation-kind="relationship"
+          data-relationship-kind={rel.type}
+          data-bdd-presentation-kind={bddPresentation?.kind}
+          data-presentation-token={bddPresentation?.kind === 'propertyAssociation' ? 'property-association' : undefined}
           onClick={(e) => { e.stopPropagation(); setSelectedIds([rel.id]); }}
           style={{ cursor: 'pointer' }}
           role={isReqContainment ? "graphics-symbol" : undefined}
           aria-label={ariaLabel}
         >
+          <title>{bddPresentation?.kind === 'propertyAssociation'
+            ? `${propertyRole} of ${sourceLabel} -> ${targetLabel}`
+            : `${relationshipLabel}: ${sourceLabel} -> ${targetLabel}`}</title>
+
           {/* Broad click target */}
           <path d={route.path} fill="none" stroke="transparent" strokeWidth={14} />
 
-          {/* Rendered line/curve */}
-          <path d={route.path} fill="none" stroke={strokeColor} strokeWidth={2} strokeDasharray={isTrace ? '4,2' : strokeDash} />
+          {/* Rendered line/curve (Task 6 review fix: token resolves through
+              `style` because browsers do not resolve var() in SVG
+              presentation attributes) */}
+          <path d={route.path} fill="none" style={{ stroke: strokeColor }} strokeWidth={2} strokeDasharray={isTrace ? '4,2' : strokeDash} />
 
           {/* Arrowheads & Markers */}
-          {rel.type === 'generalization' && (
-            <polygon points={`${tp.x},${tp.y} ${tp.x - 10},${tp.y - 5} ${tp.x - 10},${tp.y + 5}`} fill="#1a1a1a" stroke={strokeColor} strokeWidth={1.5} transform={`rotate(${angle}, ${tp.x}, ${tp.y})`} />
+          {bddPresentation?.kind === 'propertyAssociation' && (
+            <g data-presentation-role="property-end-adornment">
+              <circle
+                cx={sp.x}
+                cy={sp.y}
+                r={4}
+                style={{ fill: strokeColor }}
+                data-testid="bdd-property-end-marker"
+                data-presentation-role="property-end-marker"
+              />
+              {propertyLabel && (
+                <text
+                  x={route.propertyLabelPos?.x ?? (sp.x + (tp.x >= sp.x ? 12 : -12))}
+                  y={route.propertyLabelPos?.y ?? (sp.y - 6)}
+                  textAnchor={tp.x >= sp.x ? 'start' : 'end'}
+                  style={{ fill: strokeColor }}
+                  fontSize={10}
+                  fontWeight="500"
+                  data-testid="bdd-property-end-label"
+                  data-presentation-role="property-end-label"
+                >
+                  {propertyLabel}
+                </text>
+              )}
+            </g>
+          )}
+          {(rel.type === 'generalization' || rel.type === 'conform') && (
+            <polygon points={`${tp.x},${tp.y} ${tp.x - 10},${tp.y - 5} ${tp.x - 10},${tp.y + 5}`} fill="#1a1a1a" style={{ stroke: strokeColor }} strokeWidth={1.5} transform={`rotate(${angle}, ${tp.x}, ${tp.y})`} />
           )}
           {rel.type === 'composition' && (
-            <polygon points={`${sp.x},${sp.y} ${sp.x + 10},${sp.y - 5} ${sp.x + 20},${sp.y} ${sp.x + 10},${sp.y + 5}`} fill={strokeColor} stroke={strokeColor} strokeWidth={1.5} transform={`rotate(${angle}, ${sp.x}, ${sp.y})`} />
+            <polygon points={`${sp.x},${sp.y} ${sp.x + 10},${sp.y - 5} ${sp.x + 20},${sp.y} ${sp.x + 10},${sp.y + 5}`} style={{ fill: strokeColor, stroke: strokeColor }} strokeWidth={1.5} transform={`rotate(${angle}, ${sp.x}, ${sp.y})`} />
           )}
           {rel.type === 'requirementContainment' && (
             <g transform={`translate(${sp.x}, ${sp.y}) rotate(${angle})`}>
-              <circle cx={7} cy={0} r={6} fill="#141414" stroke={strokeColor} strokeWidth={1.5} />
-              <line x1={1} y1={0} x2={13} y2={0} stroke={strokeColor} strokeWidth={1.5} strokeLinecap="round" />
-              <line x1={7} y1={-6} x2={7} y2={6} stroke={strokeColor} strokeWidth={1.5} strokeLinecap="round" />
+              <circle cx={7} cy={0} r={6} fill="#141414" style={{ stroke: strokeColor }} strokeWidth={1.5} />
+              <line x1={1} y1={0} x2={13} y2={0} style={{ stroke: strokeColor }} strokeWidth={1.5} strokeLinecap="round" />
+              <line x1={7} y1={-6} x2={7} y2={6} style={{ stroke: strokeColor }} strokeWidth={1.5} strokeLinecap="round" />
             </g>
           )}
           {rel.type === 'aggregation' && (
-            <polygon points={`${sp.x},${sp.y} ${sp.x + 10},${sp.y - 5} ${sp.x + 20},${sp.y} ${sp.x + 10},${sp.y + 5}`} fill="#1a1a1a" stroke={strokeColor} strokeWidth={1.5} transform={`rotate(${angle}, ${sp.x}, ${sp.y})`} />
+            <polygon points={`${sp.x},${sp.y} ${sp.x + 10},${sp.y - 5} ${sp.x + 20},${sp.y} ${sp.x + 10},${sp.y + 5}`} fill="#1a1a1a" style={{ stroke: strokeColor }} strokeWidth={1.5} transform={`rotate(${angle}, ${sp.x}, ${sp.y})`} />
           )}
-          {rel.type === 'allocation' && (
-            <polygon points={`${tp.x},${tp.y} ${tp.x - 10},${tp.y - 5} ${tp.x - 10},${tp.y + 5}`} fill="none" stroke={strokeColor} strokeWidth={1.5} transform={`rotate(${angle}, ${tp.x}, ${tp.y})`} />
+          {(rel.type === 'allocation' || rel.type === 'expose') && (
+            // «allocate» is a stereotyped dependency: open arrowhead, never the
+            // hollow triangle that means generalization.
+            <path data-presentation-role="open-arrowhead" d={`M ${tp.x - 10} ${tp.y - 5} L ${tp.x} ${tp.y} L ${tp.x - 10} ${tp.y + 5}`} fill="none" style={{ stroke: strokeColor }} strokeWidth={1.5} transform={`rotate(${angle}, ${tp.x}, ${tp.y})`} />
+          )}
+          {(rel.type === 'dependency' || isPackageRelation) && (
+            // UML Dependency/Import/Merge use an open arrowhead; a closed
+            // triangle would read as Generalization/Realization.
+            <path data-presentation-role="open-arrowhead" d={`M ${tp.x - 10} ${tp.y - 5} L ${tp.x} ${tp.y} L ${tp.x - 10} ${tp.y + 5}`} fill="none" style={{ stroke: strokeColor }} strokeWidth={1.5} transform={`rotate(${angle}, ${tp.x}, ${tp.y})`} />
           )}
           {isTrace && (
-            <path d={`M ${tp.x - 8} ${tp.y - 4} L ${tp.x} ${tp.y} L ${tp.x - 8} ${tp.y + 4}`} fill="none" stroke={strokeColor} strokeWidth={1.5} transform={`rotate(${angle}, ${tp.x}, ${tp.y})`} />
+            <path d={`M ${tp.x - 8} ${tp.y - 4} L ${tp.x} ${tp.y} L ${tp.x - 8} ${tp.y + 4}`} fill="none" style={{ stroke: strokeColor }} strokeWidth={1.5} transform={`rotate(${angle}, ${tp.x}, ${tp.y})`} />
           )}
 
           {/* Stereotype / Label Badge with background - deferred during drag/pan */}
-          {!isInteracting && (isTrace || rel.type === 'allocation' || rel.type === 'requirementContainment' || rel.label) && (
+          {!isInteracting && (badgeText || isSuspect) && (
             <g transform={`translate(${labelPos.x}, ${labelPos.y})`}>
               <rect
                 x={-42}
@@ -14479,55 +13986,62 @@ const ADIA = () => {
                 x={0}
                 y={2}
                 textAnchor="middle"
-                fill={containmentDiagnostics.length > 0 ? '#ef4444' : strokeColor}
+                style={{ fill: containmentDiagnostics.length > 0 ? '#ef4444' : strokeColor }}
                 fontSize={9}
                 fontWeight="600"
               >
-                {rel.type === 'requirementContainment'
-                  ? (containmentDiagnostics.length > 0 ? '«contains» [!]' : '«contains»')
-                  : (rel.label || `«${rel.type === 'allocation' ? 'allocate' : rel.type}»`)}{isSuspect ? ' [!]' : ''}
+                {badgeText}{isSuspect ? ' [!]' : ''}
               </text>
             </g>
           )}
 
           {!isInteracting && (rel as any).sourceRole && (
-            <text x={sp.x + (tp.x > sp.x ? 12 : -12)} y={sp.y - 4} fill={strokeColor} fontSize={9} fontStyle="italic" textAnchor={tp.x > sp.x ? 'start' : 'end'}>+{(rel as any).sourceRole}</text>
+            <text x={sp.x + (tp.x > sp.x ? 12 : -12)} y={sp.y - 4} style={{ fill: strokeColor }} fontSize={9} fontStyle="italic" textAnchor={tp.x > sp.x ? 'start' : 'end'}>+{(rel as any).sourceRole}</text>
           )}
           {!isInteracting && rel.sourceMultiplicity && (
-            <text x={sp.x + (tp.x > sp.x ? 12 : -12)} y={sp.y + 12} fill={strokeColor} fontSize={10} textAnchor={tp.x > sp.x ? 'start' : 'end'}>{rel.sourceMultiplicity}</text>
+            <text x={sp.x + (tp.x > sp.x ? 12 : -12)} y={sp.y + 12} style={{ fill: strokeColor }} fontSize={10} textAnchor={tp.x > sp.x ? 'start' : 'end'}>{rel.sourceMultiplicity}</text>
           )}
           {!isInteracting && (rel as any).targetRole && (
-            <text x={tp.x + (sp.x > tp.x ? 12 : -12)} y={tp.y - 4} fill={strokeColor} fontSize={9} fontStyle="italic" textAnchor={sp.x > tp.x ? 'start' : 'end'}>+{(rel as any).targetRole}</text>
+            <text x={tp.x + (sp.x > tp.x ? 12 : -12)} y={tp.y - 4} style={{ fill: strokeColor }} fontSize={9} fontStyle="italic" textAnchor={sp.x > tp.x ? 'start' : 'end'}>+{(rel as any).targetRole}</text>
           )}
           {!isInteracting && rel.targetMultiplicity && (
-            <text x={tp.x + (sp.x > tp.x ? 12 : -12)} y={tp.y - 12} fill={strokeColor} fontSize={10} textAnchor={sp.x > tp.x ? 'start' : 'end'}>{rel.targetMultiplicity}</text>
+            <text x={tp.x + (sp.x > tp.x ? 12 : -12)} y={tp.y - 12} style={{ fill: strokeColor }} fontSize={10} textAnchor={sp.x > tp.x ? 'start' : 'end'}>{rel.targetMultiplicity}</text>
           )}
         </g>
       );
     });
-  }, [relationships, blocksById, culledDiagram, selectedIds, diagramMode, currentLayerId, canonicalSysmlRepository, isDragging, isPanning]);
+  }, [relationships, sysmlCanvasView, blocksById, partsById, activeDiagramElementIds, culledDiagram, selectedIds, diagramMode, currentLayerId, canonicalSysmlRepository, isDragging, isPanning, requirementsDiagramScope, sysmlDiagramPresentations, activeSysmlDiagramId]);
 
   const renderParts = useCallback((): React.ReactNode => {
     // Only render parts in IBD mode
     if (diagramMode !== 'ibd') return null;
-    const targetParts = culledDiagram ? culledDiagram.visibleParts : parts;
-    return targetParts.filter(p => p.blockId === currentLayerId).map(part => {
+    const targetParts = culledDiagram ? culledDiagram.visibleParts : sysmlCanvasView.parts;
+    return targetParts.filter(p => isDrawnInIbd(p, currentLayerId)).map(part => {
       const block = part.typeId ? blocksById.get(part.typeId) : undefined;
       const isSelected = selectedIds.includes(part.id);
+      const isNested = Boolean(part.parentPartId);
 
       return (
-        <g
+        <g data-help-feature="app-diagram-open" data-help-source="src/App.tsx"
           key={part.id}
+          data-semantic-id={part.id}
+          data-nested-part={isNested ? 'true' : undefined}
           transform={`translate(${part.x}, ${part.y})`}
-          onMouseDown={(e) => handlePartMouseDown(e, part.id)}
+          onMouseDown={(e) => (isNested ? handleNestedPartMouseDown(e, part.id) : handlePartMouseDown(e, part.id))}
+          onDoubleClick={(event) => {
+            event.stopPropagation();
+            if (!isNested) openCanvasSymbolDiagram(part.id);
+          }}
           style={{ cursor: isCreatingConnector ? 'default' : 'move' }}
         >
           {isSelected && (
             <rect x={-4} y={-4} width={part.width + 8} height={part.height + 8} fill="none" stroke="#f97316" strokeWidth={2} strokeDasharray="5,5" rx={4} />
           )}
-          <rect width={part.width} height={part.height} fill="#1a1a1a" stroke={isSelected ? '#f97316' : '#666'} strokeWidth={1} />
-          <text x={part.width / 2} y={20} textAnchor="middle" fill="#e0e0e0" fontSize={12} fontWeight="bold">{part.name} {part.multiplicity ? `[${part.multiplicity}]` : ''}</text>
-          <text x={part.width / 2} y={35} textAnchor="middle" fill="#888" fontSize={10}>: {block?.name || 'Unknown'}</text>
+          <rect width={part.width} height={part.height} fill="var(--sysml-part-fill)" stroke={isSelected ? '#f97316' : 'var(--sysml-part-stroke)'} strokeWidth={1} />
+          {/* SysML part property notation: name : Type [multiplicity] */}
+          <text x={part.width / 2} y={24} textAnchor="middle" fill="var(--sysml-block-text)" fontSize={isNested ? 10 : 12} fontWeight="bold">
+            {`${sysmlObjectLabel(part, 'Part')} : ${block ? sysmlObjectLabel(block, 'Block') : 'Block'}${part.multiplicity && part.multiplicity !== '1' ? ` [${part.multiplicity}]` : ''}`}
+          </text>
 
           {/* Ports - FR-IBD-005: Reflect changes in BDD automatically */}
           {block?.ports?.map((port, i) => {
@@ -14550,33 +14064,22 @@ const ADIA = () => {
 
             return (
               <g key={port.id} transform={`translate(${xOffset}, ${yOffset})`}>
-                <rect
-                  x={-5} y={-5}
-                  width={10} height={10}
-                  fill={connectorSource?.portId === port.id && connectorSource?.partId === part.id ? '#f97316' : '#333'}
-                  stroke={port.kind === 'flow' ? '#6c9ac6' : port.kind === 'proxy' ? '#c96c8a' : '#f97316'}
-                  strokeWidth={1}
-                  onMouseDown={(e) => handlePortMouseDown(e, part.id, port.id)}
-                  onClick={(e) => handlePortClick(e, part.id, port.id)}
-                  style={{ cursor: 'pointer' }}
+                <IbdConnectorEndpoint
+                  isBoundary={false}
+                  portKind={port.kind}
+                  overrideColor={sysmlDiagramPresentations[activeSysmlDiagramId]?.presentations[port.id]?.style?.color}
+                  definitionId={port.id}
+                  ownerOccurrenceId={part.id}
+                  name={port.name}
+                  direction={port.direction}
+                  x={0}
+                  y={0}
+                  isSelected={connectorSource?.portId === port.id && connectorSource?.partId === part.id}
+                  isConnecting={isCreatingConnector}
+                  onClick={(_endpoint, e) => handlePortClick(e as any, part.id, port.id)}
+                  onMouseDown={(e) => (isNested ? e.stopPropagation() : handlePortMouseDown(e as any, part.id, port.id))}
                 />
-                {port.kind === 'flow' && (
-                  <>
-                    <text x={5} y={8} textAnchor="middle" fill="#6c9ac6" fontSize={8} fontWeight="bold" pointerEvents="none">
-                      {port.direction === 'in' ? (isLeft ? '>' : '<') : port.direction === 'out' ? (isLeft ? '<' : '>') : '<>'}
-                    </text>
-                    <g transform="translate(5, 5)" style={{ pointerEvents: 'none' }}>
-                      {port.direction === 'in' ? (
-                        isLeft ? <path d="M -3 0 L 3 0 M 0 -3 L 3 0 L 0 3" stroke="#6c9ac6" strokeWidth="1.5" fill="none" /> : <path d="M 3 0 L -3 0 M 0 -3 L -3 0 L 0 3" stroke="#6c9ac6" strokeWidth="1.5" fill="none" />
-                      ) : port.direction === 'out' ? (
-                        isLeft ? <path d="M 3 0 L -3 0 M 0 -3 L -3 0 L 0 3" stroke="#6c9ac6" strokeWidth="1.5" fill="none" /> : <path d="M -3 0 L 3 0 M 0 -3 L 3 0 L 0 3" stroke="#6c9ac6" strokeWidth="1.5" fill="none" />
-                      ) : (
-                        <path d="M -3 0 L 3 0 M 0 -3 L 3 0 L 0 3 M 0 -3 L -3 0 L 0 3" stroke="#6c9ac6" strokeWidth="1.5" fill="none" />
-                      )}
-                    </g>
-                  </>
-                )}
-                <text x={isLeft ? -5 : 15} y={9} textAnchor={isLeft ? "end" : "start"} fill="#aaa" fontSize={9}>{port.name}</text>
+                <text x={isLeft ? -8 : 12} y={3} textAnchor={isLeft ? "end" : "start"} fill="var(--sysml-port-label)" fontSize={9} pointerEvents="none">{port.name}</text>
               </g>
             );
           })}
@@ -14589,11 +14092,11 @@ const ADIA = () => {
           )}
 
           {/* Resize Handles */}
-          {isSelected && ['nw', 'ne', 'sw', 'se'].map(h => {
+          {isSelected && !isNested && ['nw', 'ne', 'sw', 'se'].map(h => {
             const hx = h.includes('e') ? part.width : 0;
             const hy = h.includes('s') ? part.height : 0;
             return (
-              <rect
+              <rect data-help-feature="live:App:95532989216d"
                 key={h}
                 x={hx - 4} y={hy - 4} width={8} height={8}
                 fill="#f97316" stroke="#0a0a0a" strokeWidth={1}
@@ -14605,21 +14108,47 @@ const ADIA = () => {
         </g>
       );
     });
-  }, [parts, blocksById, culledDiagram, selectedIds, isCreatingConnector, connectorSource, handlePortClick, handlePartMouseDown, handlePortMouseDown, diagramMode, currentLayerId]);
+  }, [parts, sysmlCanvasView, blocksById, culledDiagram, selectedIds, isCreatingConnector, connectorSource, handlePortClick, handlePartMouseDown, handleNestedPartMouseDown, handlePortMouseDown, diagramMode, currentLayerId, activeSysmlDiagramId, sysmlDiagramPresentations, openCanvasSymbolDiagram]);
 
   const renderConnectors = useCallback((): React.ReactNode => {
     // Only render connectors in IBD mode
     if (diagramMode !== 'ibd') return null;
-    const targetParts = culledDiagram ? culledDiagram.visibleParts : parts;
-    const targetConnectors = culledDiagram ? culledDiagram.visibleConnectors : connectors;
-    const currentPartIds = new Set(targetParts.filter(p => p.blockId === currentLayerId).map(p => p.id));
+    const targetParts = culledDiagram ? culledDiagram.visibleParts : sysmlCanvasView.parts;
+    const targetConnectors = culledDiagram ? culledDiagram.visibleConnectors : sysmlCanvasView.connectors;
+    const currentPartIds = new Set(sysmlCanvasView.parts.filter(p => isDrawnInIbd(p, currentLayerId)).map(p => p.id));
     currentPartIds.add(currentLayerId); // Add the context block itself
     const isInteracting = isDragging || isPanning;
 
     const visibleConnectors = targetConnectors.filter(c => currentPartIds.has(c.sourcePartId) && currentPartIds.has(c.targetPartId));
 
     return visibleConnectors.map((conn, connIdx) => {
-      const getPortPos = (partId: string, portId: string) => {
+      // Centre of a connector end's part (or of the context frame), used to
+      // aim a part-to-part connector at the facing edge.
+      const centerOf = (partId: string) => {
+        if (partId === currentLayerId) {
+          const ctx = blocksById.get(partId);
+          return { x: (ctx?.ibdX ?? 50) + (ctx?.ibdWidth ?? 1200) / 2, y: (ctx?.ibdY ?? 50) + (ctx?.ibdHeight ?? 800) / 2 };
+        }
+        const p = partsById.get(partId);
+        return p ? { x: p.x + p.width / 2, y: p.y + p.height / 2 } : { x: 0, y: 0 };
+      };
+      const getPortPos = (partId: string, portId: string, towardPartId?: string) => {
+        if (!portId && partId !== currentLayerId) {
+          // The end is the part itself: attach to the middle of the edge that faces the other end.
+          const part = partsById.get(partId);
+          if (!part) return { x: 0, y: 0, side: 'right' as const };
+          const from = { x: part.x + part.width / 2, y: part.y + part.height / 2 };
+          const to = centerOf(towardPartId ?? partId);
+          const dx = to.x - from.x, dy = to.y - from.y;
+          if (Math.abs(dx) >= Math.abs(dy)) {
+            return dx >= 0
+              ? { x: part.x + part.width, y: from.y, side: 'right' as const }
+              : { x: part.x, y: from.y, side: 'left' as const };
+          }
+          return dy >= 0
+            ? { x: from.x, y: part.y + part.height, side: 'bottom' as const }
+            : { x: from.x, y: part.y, side: 'top' as const };
+        }
         if (partId === currentLayerId) {
           const block = blocksById.get(partId);
           const port = block?.ports?.find(p => p.id === portId);
@@ -14654,16 +14183,23 @@ const ADIA = () => {
         }
       };
 
-      const p1 = getPortPos(conn.sourcePartId, conn.sourcePortId);
-      const p2 = getPortPos(conn.targetPartId, conn.targetPortId);
+      const p1 = getPortPos(conn.sourcePartId, conn.sourcePortId, conn.targetPartId);
+      const p2 = getPortPos(conn.targetPartId, conn.targetPortId, conn.sourcePartId);
 
       const route = calculateOrthogonalConnectorPath(p1, p2, connIdx);
       const isSelected = selectedIds.includes(conn.id);
 
       return (
-        <g key={conn.id} onClick={(e) => { e.stopPropagation(); setSelectedIds([conn.id]); }} style={{ cursor: 'pointer' }}>
+        <g data-help-feature="app-diagram-select-path" data-help-source="src/App.tsx"
+          key={conn.id}
+          data-presentation-kind="connector"
+          data-connector-id={conn.id}
+          onClick={(e) => { e.stopPropagation(); setSelectedIds([conn.id]); }}
+          style={{ cursor: 'pointer' }}
+        >
           <path d={route.path} fill="none" stroke="transparent" strokeWidth={12} />
-          <path d={route.path} fill="none" stroke={isSelected ? '#f97316' : '#888'} strokeWidth={2} pointerEvents="none" />
+          {/* SysML: a binding connector is dashed (assembly/delegation are solid). */}
+          <path d={route.path} fill="none" stroke={isSelected ? '#f97316' : '#888'} strokeWidth={2} strokeDasharray={conn.kind === 'binding' ? '6,4' : undefined} pointerEvents="none" />
           {!isInteracting && (conn.itemFlow || conn.label) && (
             <g transform={`translate(${route.midX}, ${route.midY})`}>
               <polygon
@@ -14673,14 +14209,14 @@ const ADIA = () => {
               />
               <rect x={-36} y={-20} width={72} height={16} rx={3} fill="#141414" stroke="#333" strokeWidth={0.8} />
               <text x={0} y={-8} textAnchor="middle" fill="#f97316" fontSize={8} fontWeight="bold">
-                {conn.itemFlow ? `«${conn.itemFlow}»` : conn.label}
+                {conn.itemFlow ? `«itemFlow» ${resolveSysmlReferenceLabel(canonicalSysmlRepository, conn.itemFlow, 'Item')}` : conn.label}
               </text>
             </g>
           )}
         </g>
       );
     });
-  }, [connectors, parts, partsById, blocksById, culledDiagram, selectedIds, currentLayerId, diagramMode, isDragging, isPanning]);
+  }, [connectors, parts, sysmlCanvasView, partsById, blocksById, culledDiagram, selectedIds, currentLayerId, diagramMode, isDragging, isPanning, canonicalSysmlRepository]);
 
   const renderInterfaceRealizations = useCallback((): React.ReactNode => {
     if (diagramMode !== 'ibd') return null;
@@ -14721,7 +14257,7 @@ const ADIA = () => {
       const strokeColor = isSelected ? '#f97316' : '#6c9ac6';
 
       return (
-        <g key={id} onClick={(e) => { e.stopPropagation(); setSelectedIds([id]); }}>
+        <g data-help-feature="app-diagram-select-path" data-help-source="src/App.tsx" key={id} onClick={(e) => { e.stopPropagation(); setSelectedIds([id]); }}>
           <line x1={sp.x} y1={sp.y} x2={tp.x} y2={tp.y} stroke={strokeColor} strokeWidth={1.5} strokeDasharray="4,2" />
           <circle cx={tp.x} cy={tp.y} r="3" fill="none" stroke={strokeColor} />
         </g>
@@ -14797,7 +14333,7 @@ const ADIA = () => {
       const rect = canvasRef.current.getBoundingClientRect();
       setView({ scale: 1, offsetX: rect.width / 2 - targetX, offsetY: rect.height / 2 - targetY });
     }
-    setShowErrorDialog(false);
+    dismissErrorDialog();
   }, [states, junctions, transitions, layers, currentLayerId]);
 
   const handleAutoFix = useCallback((error: ErrorItem) => {
@@ -14810,7 +14346,7 @@ const ADIA = () => {
         updateState(state.id, { name: newName });
         addError('info', `Auto-fixed state name: ${state.name} -> ${newName}`);
         setErrors(prev => prev.filter(e => e.id !== error.id));
-        setShowErrorDialog(false);
+        dismissErrorDialog();
       }
     } else if (error.message.includes('Duplicate state name')) {
       const state = states.find(s => s.id === error.elementId);
@@ -14824,7 +14360,7 @@ const ADIA = () => {
         updateState(state.id, { name: newName });
         addError('info', `Auto-fixed duplicate state name: ${state.name} -> ${newName}`);
         setErrors(prev => prev.filter(e => e.id !== error.id));
-        setShowErrorDialog(false);
+        dismissErrorDialog();
       }
     } else if (error.message.includes('has no AutoStart')) {
       // REQ-HSM-004 & REQ-HSM-023: Auto-fix by setting first state as autostart
@@ -14856,7 +14392,7 @@ const ADIA = () => {
         updateState(state.id, { autostart: true });
         addError('info', `Auto-fixed: Set '${state.name}' as AutoStart for layer '${layerName}'`);
         setErrors(prev => prev.filter(e => e.id !== error.id));
-        setShowErrorDialog(false);
+        dismissErrorDialog();
       }
     } else if (error.message.includes('unguarded and untimed')) {
       const transition = transitions.find(t => t.id === error.elementId);
@@ -14864,7 +14400,7 @@ const ADIA = () => {
         updateTransition(transition.id, { type: 'after', afterTicks: 5 });
         addError('info', `Auto-fixed transition: Added after-timer`);
         setErrors(prev => prev.filter(e => e.id !== error.id));
-        setShowErrorDialog(false);
+        dismissErrorDialog();
       }
     }
   }, [states, layers, transitions, updateState, updateTransition, addError]);
@@ -14958,7 +14494,7 @@ const ADIA = () => {
         return s;
       }));
       setErrors(prev => prev.filter(e => !e.canAutoFix));
-      setShowErrorDialog(false);
+      dismissErrorDialog();
       addError('info', `Auto-fixed ${updates.size} issues.`);
     }
   }, [errors, states, layers, updateState, addError]);
@@ -14966,7 +14502,41 @@ const ADIA = () => {
   const visibleVariables = useMemo(() => variables.filter(v => v.visibleInScope), [variables]);
   const colors = ['#f97316', '#6c9ac6', '#6cc9a8', '#c96c8a', '#9a6cc9', '#c9c46c'];
 
+  /**
+   * Activates a hierarchy node's own view: workspace model files open their tab,
+   * exact-ID diagrams open their exact canvas, blocks enter their IBD context,
+   * and states enter their nested layer.
+   */
+  const activateHierarchyNode = (id: string, kind?: string) => {
+    const externalModelFile = workspaceFiles.find(file => file.id === id && (file.type === 'xbridges' || file.type === 'vlab'));
+    if (externalModelFile) {
+      openFileInTab(externalModelFile.id);
+    } else if (kind === 'diagram' || canonicalSysmlRepository.diagrams[id]) {
+      const targetDiagram = canonicalSysmlRepository.diagrams[id];
+      if (!targetDiagram) {
+        // State-machine (or other non-SysML) diagram node:
+        // open its exact workspace view. Unknown IDs are
+        // rejected without mutation.
+        openExactDiagramById(id);
+      } else if (targetDiagram.diagramKind === 'ibd') {
+        openExactDiagramById(id, diagramMode !== 'ibd' ? { pushOrigin: true } : undefined);
+      } else {
+        openExactDiagramById(id);
+      }
+    } else if (kind === 'block' || canonicalSysmlRepository.definitions[id]?.kind === 'block') {
+      enterBlock(id);
+    } else if (diagramMode === "statemachine") {
+      enterLayer(id);
+    }
+  };
 
+  /**
+   * A hierarchy row that owns a diagram view: selecting it once must bring that
+   * diagram into the canvas so the pressed row is the highlighted tab.
+   */
+  const isDiagramHierarchyNode = (id: string): boolean =>
+    Boolean(canonicalSysmlRepository.diagrams[id])
+    || seededStateMachineDiagrams.some(diagram => diagram.id === id);
 
   return (
     <>
@@ -14976,9 +14546,9 @@ const ADIA = () => {
       {showStandby && (
         <IntroStandbyOverlay mode="standby" onClose={() => setShowStandby(false)} />
       )}
-      <HelpModal isOpen={showHelpModal} onClose={() => setShowHelpModal(false)} initialTopic={helpInitialTopic} />
-      <FactoryIOGateway 
-        isOpen={showFactoryIOGateway} 
+      <HelpModal isOpen={showHelpModal} onClose={() => setShowHelpModal(false)} initialTopic={helpInitialTopic} initialSection={helpInitialSection} />
+      <FactoryIOGateway
+        isOpen={showFactoryIOGateway}
         onClose={() => setShowFactoryIOGateway(false)}
         variables={variables}
         mapping={factoryIOMapping}
@@ -14987,25 +14557,42 @@ const ADIA = () => {
         setIsEnabled={setFactoryIOEnabled}
         status={factoryIOStatus}
       />
-      <AiArchitectSidebar 
-        isOpen={isAiSidebarOpen} 
+      <AiArchitectSidebar
+        isOpen={isAiSidebarOpen}
         onToggle={() => setIsAiSidebarOpen(!isAiSidebarOpen)}
         currentContext={{ states, variables, transitions, junctions, layers, blocks }}
         onExecuteActions={handleExecuteAiActions}
+      />
+      <AgentPanel
+        isOpen={isAgentPanelOpen}
+        onToggle={() => setIsAgentPanelOpen(prev => !prev)}
+        onClose={() => setIsAgentPanelOpen(false)}
+        orchestrator={agentOrchestrator}
+        projectContext={{
+          projectName: currentProjectName,
+          activeWorkspace: diagramMode,
+          blocksCount: blocks.length,
+          nodesCount: (diagramMode === 'xbridges' ? globalXBridgesNodes.length : diagramMode === 'vlab' ? vlabNodes.length : blocks.length),
+          connectionsCount: (diagramMode === 'xbridges' ? globalXBridgesEdges.length : relationships.length),
+          refreshProject: () => {
+            agentOrchestrator.refreshProjectContext();
+          },
+          delegateReadiness: agentToolGateway.getDelegateReadiness(),
+        }}
       />
       <GlobalReportPreviewModal
         isOpen={showGlobalReportPreview}
         onClose={() => setShowGlobalReportPreview(false)}
         reportData={globalReportData}
       />
-      <ReportPreviewModal 
-        isOpen={showReportPreview} 
-        onClose={() => setShowReportPreview(false)} 
-        results={results} 
-        data={data} 
-        headers={headers} 
-        plotFactors={plotFactors} 
-        holdValues={holdValues} 
+      <ReportPreviewModal
+        isOpen={showReportPreview}
+        onClose={() => setShowReportPreview(false)}
+        results={results}
+        data={data}
+        headers={headers}
+        plotFactors={plotFactors}
+        holdValues={holdValues}
       />
       <LargeModelDiagnostics
         isOpen={showSysmlDiagnostics}
@@ -15019,8 +14606,16 @@ const ADIA = () => {
         isDegradedMode={culledDiagram?.isDegradedMode}
         workerDiagnostics={getDefaultSysmlWorkerClient().getDiagnostics()}
       />
+      {sysmlUpgrade && (
+        <SysmlUpgradeReportDialog
+          report={sysmlUpgrade.report}
+          backupPath={sysmlUpgrade.backupPath}
+          backupError={sysmlUpgrade.backupError}
+          onClose={() => setSysmlUpgrade(null)}
+        />
+      )}
       {importValidationError && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-[100] animate-in fade-in duration-200" onMouseDown={() => setImportValidationError(null)}>
+        <div data-help-feature="live:App:c5712d126c53" className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-[100] animate-in fade-in duration-200" onMouseDown={() => setImportValidationError(null)}>
           <div className="bg-[#121212] border-2 border-red-500/80 rounded-2xl w-[600px] max-h-[80vh] flex flex-col shadow-2xl overflow-hidden" onMouseDown={(e) => e.stopPropagation()}>
             <div className="px-6 py-4 bg-red-950/40 border-b border-red-500/30 flex justify-between items-center">
               <div className="flex items-center gap-3">
@@ -15030,7 +14625,7 @@ const ADIA = () => {
                   <p className="text-xs text-slate-400">File import refused to prevent application crash</p>
                 </div>
               </div>
-              <button onClick={() => setImportValidationError(null)} className="text-slate-400 hover:text-white text-lg">✕</button>
+              <button data-help-feature="app-error-dismiss" data-help-source="src/App.tsx" onClick={() => setImportValidationError(null)} className="text-slate-400 hover:text-white text-lg">✕</button>
             </div>
 
             <div className="p-6 overflow-y-auto space-y-3 font-mono text-xs">
@@ -15046,7 +14641,7 @@ const ADIA = () => {
             </div>
 
             <div className="px-6 py-4 bg-[#181818] border-t border-[#222] flex justify-end">
-              <button
+              <button data-help-feature="app-error-dismiss" data-help-source="src/App.tsx"
                 onClick={() => setImportValidationError(null)}
                 className="px-5 py-2 bg-red-600 hover:bg-red-500 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer"
               >
@@ -15056,8 +14651,10 @@ const ADIA = () => {
           </div>
         </div>
       )}
-      <div
-        className="flex flex-col bg-[#0a0a0a] text-[#e0e0e0] font-sans overflow-hidden"
+      <Profiler id="workspace" onRender={(_, phase, actualDuration) => recordRenderCommit('workspace', phase, actualDuration)}>
+        <div
+          className="flex flex-col ui-surface font-sans overflow-hidden"
+          data-sysml-performance-mode={loadStoredPerformanceLimits().forcePerformanceMode ? 'true' : undefined}
         style={{
           zoom: uiZoom,
           width: `${100 / uiZoom}vw`,
@@ -15065,15 +14662,15 @@ const ADIA = () => {
         }}
       >
         {/* Hidden input for project import */}
-        <input type="file" ref={projectImportRef} onChange={handleProjectFileChange} className="hidden" accept=".adia,.json" />
+        <input data-help-feature="app-open" data-help-source="src/App.tsx" type="file" ref={projectImportRef} onChange={handleProjectFileChange} className="hidden" accept=".adia,.json" />
 
-        {/* Top Toolbar - Modernized & Unified Dark Header */}
-        <header className="h-14 bg-[#111114] border-b border-[#222228] flex items-center px-4 gap-3 shrink-0 overflow-x-auto no-scrollbar">
+        {/* Top Toolbar - Modernized & Unified Semantic Header */}
+        <header className="h-14 ui-surface bg-[var(--surface-panel)] border-b border-[var(--border-default)] flex items-center px-4 gap-3 shrink-0 overflow-x-auto no-scrollbar">
           {/* Brand & Project Identity Group */}
           <div className="flex items-center gap-2.5 shrink-0">
-            <button
+            <button data-help-feature="app-asset-manager" data-help-source="src/App.tsx"
               onClick={() => setShowWorkspaceFileDialog(true)}
-              className="p-1.5 hover:bg-[#1f1f26] rounded-lg transition-colors cursor-pointer focus:outline-none focus:ring-1 focus:ring-[#f97316]/50 text-[#f97316] group"
+              className="p-1.5 hover:bg-[var(--surface-raised)] rounded-lg transition-colors cursor-pointer focus:outline-none focus:ring-1 focus:ring-[#f97316]/50 text-[#f97316] group"
               title="Create/Open Workspace Asset File"
             >
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="group-hover:scale-110 transition-transform">
@@ -15081,64 +14678,36 @@ const ADIA = () => {
               </svg>
             </button>
             <div>
-              <div className="font-bold text-lg tracking-tight text-white flex items-center gap-2">
+              <div className="font-bold text-lg tracking-tight text-[var(--text-primary)] flex items-center gap-2">
                 <span>ADIA</span>
-                <input
+                <input data-help-feature="app-project-name" data-help-source="src/App.tsx"
                   type="text"
                   value={currentProjectName}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCurrentProjectName(e.target.value)}
-                  className="bg-[#18181c] text-zinc-300 hover:text-white focus:text-white text-xs font-medium px-2 py-0.5 rounded border border-[#2e2e38] focus:border-[#f97316]/60 focus:outline-none tracking-normal w-28 focus:w-44 transition-all text-center cursor-pointer focus:cursor-text"
+                  className="bg-[var(--surface-raised)] text-[var(--text-primary)] hover:border-[var(--border-strong)] focus:border-[#f97316] text-xs font-medium px-2 py-0.5 rounded border border-[var(--border-default)] focus:outline-none tracking-normal w-28 focus:w-44 transition-all text-center cursor-pointer focus:cursor-text"
                   title="Click to rename project"
                 />
               </div>
-              <div className="text-[10px] text-zinc-500 font-mono mt-[-2px]">{VERSION}</div>
+              <div className="text-[10px] text-[var(--text-muted)] font-mono mt-[-2px]">{VERSION}</div>
             </div>
           </div>
 
-          <Separator orientation="vertical" className="h-6 bg-[#27272f]" />
-
-          {/* DIAGRAM MODE SWITCHER */}
-          <div className="flex bg-[#18181c] rounded-lg border border-[#27272f] p-0.5 shrink-0">
-            {[
-              { id: 'statemachine', label: 'State Machine' },
-              { id: 'bdd', label: 'SysML BDD' },
-              { id: 'requirements', label: 'Requirements' },
-              { id: 'ibd', label: 'SysML IBD' },
-              { id: 'xbridges', label: 'X-Bridges' },
-              { id: 'vlab', label: 'V-Lab' },
-              { id: 'hil', label: 'HIL' },
-              { id: 'entropy', label: 'ENTROPY OPM' },
-            ].map(mode => (
-              <button
-                key={mode.id}
-                onClick={() => setDiagramMode(mode.id as DiagramMode)}
-                className={`px-2.5 py-1 text-xs font-medium rounded-md whitespace-nowrap transition-colors ${
-                  diagramMode === mode.id
-                    ? mode.id === 'plantuml' ? 'bg-orange-500 text-zinc-950 shadow-sm font-semibold' : 'bg-zinc-800 text-white shadow-sm font-semibold'
-                    : 'text-zinc-400 hover:text-orange-400 hover:bg-zinc-800/40'
-                }`}
-              >
-                {mode.label}
-              </button>
-            ))}
-          </div>
-
-          <Separator orientation="vertical" className="h-6 bg-[#27272f]" />
+          <Separator orientation="vertical" className="h-6" />
 
           {/* SIMULATION & VALIDATION GROUP */}
-          <div className="flex items-center gap-1.5 bg-[#18181c] border border-[#27272f] rounded-lg p-1 shrink-0">
+          <div className="flex items-center gap-1.5 ui-card bg-[var(--surface-raised)] border border-[var(--border-default)] rounded-lg p-1 shrink-0">
             {/* Sim tick rate control */}
-            <div className="flex items-center gap-1 px-1.5 text-xs text-zinc-400">
+            <div className="flex items-center gap-1 px-1.5 text-xs text-[var(--text-secondary)]">
               <span className="text-[11px] whitespace-nowrap">Tick:</span>
               <TickRateInput value={tickMs} onChange={setTickMs} />
-              <span className="text-[10px] text-zinc-500">ms</span>
+              <span className="text-[10px] text-[var(--text-muted)]">ms</span>
             </div>
 
             {(diagramMode as DiagramMode) !== 'xbridges' && (diagramMode as DiagramMode) !== 'hil' && (
               <>
-                <Separator orientation="vertical" className="h-4 bg-[#2e2e38]" />
+                <Separator orientation="vertical" className="h-4" />
 
-                <Button
+                <Button data-help-feature="app-simulation-run" data-help-source="src/App.tsx"
                   size="sm"
                   onClick={isRunning ? pauseSimulation : startSimulation}
                   className={`h-7 px-2.5 text-xs font-semibold whitespace-nowrap rounded-md ${
@@ -15165,11 +14734,11 @@ const ADIA = () => {
                   )}
                 </Button>
 
-                <Button
+                <Button data-help-feature="app-simulation-step" data-help-source="src/App.tsx"
                   variant="ghost"
                   size="sm"
                   onClick={stepSimulation}
-                  className="h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
+                  className="h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors"
                   title="Step single cycle"
                 >
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1">
@@ -15179,11 +14748,11 @@ const ADIA = () => {
                   Step
                 </Button>
 
-                <Button
+                <Button data-help-feature="app-simulation-reset" data-help-source="src/App.tsx"
                   variant="ghost"
                   size="sm"
                   onClick={resetSimulation}
-                  className="h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
+                  className="h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors"
                   title="Reset simulation"
                 >
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1">
@@ -15193,13 +14762,13 @@ const ADIA = () => {
                   Reset
                 </Button>
 
-                <Separator orientation="vertical" className="h-4 bg-[#2e2e38]" />
+                <Separator orientation="vertical" className="h-4" />
 
-                <Button
+                <Button data-help-feature="app-validate" data-help-source="src/App.tsx"
                   variant="ghost"
                   size="sm"
                   onClick={() => { if (validateModel()) addError('info', 'Model validation passed.'); }}
-                  className="h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
+                  className="h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors"
                   title="Check for errors"
                 >
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1 text-emerald-400">
@@ -15209,16 +14778,16 @@ const ADIA = () => {
                   Validate
                 </Button>
 
-                <Button
+                <Button data-help-feature="app-validate-ai" data-help-source="src/App.tsx"
                   variant="ghost"
                   size="sm"
                   onClick={validateWithAI}
                   disabled={isAiValidating}
-                  className="h-7 px-2 text-xs text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 whitespace-nowrap"
+                  className="h-7 px-2 text-xs text-amber-500 hover:text-amber-400 hover:bg-amber-500/10 whitespace-nowrap"
                   title="Validate logic with AI"
                 >
                   {isAiValidating ? (
-                    <svg className="animate-spin mr-1 h-3.5 w-3.5 text-amber-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <svg className="animate-spin mr-1 h-3.5 w-3.5 text-amber-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
@@ -15234,32 +14803,32 @@ const ADIA = () => {
               </>
             )}
 
-            <Separator orientation="vertical" className="h-4 bg-[#2e2e38]" />
+            <Separator orientation="vertical" className="h-4" />
 
             <div className="flex items-center gap-1.5 px-1.5 py-0.5">
-              <Checkbox
+              <Checkbox data-help-feature="app-safety-mode" data-help-source="src/App.tsx"
                 checked={safetyMode}
                 onCheckedChange={(c) => setSafetyMode(c as boolean)}
                 id="safety-mode"
-                className="h-3.5 w-3.5 rounded border-zinc-600 data-[state=checked]:bg-red-500 data-[state=checked]:border-red-500"
+                className="h-3.5 w-3.5 rounded border-[var(--border-strong)] data-[state=checked]:bg-red-500 data-[state=checked]:border-red-500"
               />
-              <Label htmlFor="safety-mode" className={`text-xs cursor-pointer select-none whitespace-nowrap ${safetyMode ? "text-red-400 font-semibold" : "text-zinc-400"}`}>
+              <Label htmlFor="safety-mode" className={`text-xs cursor-pointer select-none whitespace-nowrap ${safetyMode ? "text-red-500 font-semibold" : "text-[var(--text-secondary)]"}`}>
                 Safety
               </Label>
             </div>
           </div>
 
-          <Separator orientation="vertical" className="h-6 bg-[#27272f]" />
+          <Separator orientation="vertical" className="h-6" />
 
           {/* CODE GENERATION & PROJECT I/O GROUP */}
-          <div className="flex items-center gap-1 bg-[#18181c] border border-[#27272f] rounded-lg p-1 shrink-0">
+          <div className="flex items-center gap-1 ui-card bg-[var(--surface-raised)] border border-[var(--border-default)] rounded-lg p-1 shrink-0">
             {/* Generate C/H Button - Primary Accent */}
-            <Button
+            <Button data-help-feature="app-generate-code" data-help-source="src/App.tsx"
               variant="outline"
               size="sm"
               onClick={generateCode}
               disabled={isGenerating}
-              className="h-7 px-2.5 text-xs font-semibold whitespace-nowrap bg-orange-500/10 border-orange-500/30 text-orange-400 hover:bg-orange-500/20 hover:text-orange-300 disabled:opacity-50 disabled:cursor-wait"
+              className="h-7 px-2.5 text-xs font-semibold whitespace-nowrap bg-orange-500/10 border-orange-500/30 text-orange-500 hover:bg-orange-500/20 hover:text-orange-600 disabled:opacity-50 disabled:cursor-wait"
               title="Generate C/H Embedded Code"
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1">
@@ -15269,70 +14838,72 @@ const ADIA = () => {
               {isGenerating ? 'Generating...' : 'Generate C/H'}
             </Button>
 
-            <Separator orientation="vertical" className="h-4 bg-[#2e2e38]" />
+            <Separator orientation="vertical" className="h-4" />
 
-            <Button
+            <Button data-help-feature="app-save" data-help-source="src/App.tsx"
               variant="ghost"
               size="sm"
               onClick={() => saveUnifiedProject(false)}
-              className="h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
+              disabled={pendingHydrationSequenceRef.current !== hydrationCommitSequence}
+              className="h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors"
               title="Save ADIA project (.adia)"
             >
-              <Save size={13} className="mr-1 text-zinc-400" />
+              <Save size={13} className="mr-1 text-[var(--text-muted)]" />
               Save
             </Button>
 
-            <Button
+            <Button data-help-feature="app-save" data-help-source="src/App.tsx"
               variant="ghost"
               size="sm"
               onClick={() => saveUnifiedProject(true)}
-              className="h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
+              disabled={pendingHydrationSequenceRef.current !== hydrationCommitSequence}
+              className="h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors"
               title="Save ADIA project as new file (.adia)"
             >
               Save As
             </Button>
 
-            <Button
+            <Button data-help-feature="app-open" data-help-source="src/App.tsx"
               variant="ghost"
               size="sm"
               onClick={handleOpenProjectDialog}
-              className="h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
+              className="h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors"
               title="Open ADIA project (.adia)"
             >
-              <FolderOpen size={13} className="mr-1 text-zinc-400" />
+              <FolderOpen size={13} className="mr-1 text-[var(--text-muted)]" />
               Open
             </Button>
 
-            <Button
+            <Button data-help-feature="app-module-export" data-help-source="src/App.tsx"
               variant="ghost"
               size="sm"
               onClick={handleExportProject}
-              className="h-7 px-2 text-xs text-zinc-400 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
-              title="Export individual module files (.json)"
+              className="h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors"
+              title="Choose which modules/files to save (.adia)"
             >
-              Export
+              Save Selected…
             </Button>
 
-            <Button
+            <Button data-help-feature="app-report-generate" data-help-source="src/App.tsx"
               variant="ghost"
               size="sm"
               onClick={() => setShowReportDialog(true)}
-              className="h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
+              className="h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors"
               title="Generate Engineering Report"
             >
               Report
             </Button>
           </div>
 
-          <Separator orientation="vertical" className="h-6 bg-[#27272f]" />
+          <Separator orientation="vertical" className="h-6" />
 
           {/* ENGINEERING TOOLS & GATEWAYS GROUP */}
-          <div className="flex items-center gap-1 bg-[#18181c] border border-[#27272f] rounded-lg p-1 shrink-0">
-            <Button
+          <div className="flex items-center gap-1 ui-card bg-[var(--surface-raised)] border border-[var(--border-default)] rounded-lg p-1 shrink-0">
+            <Button data-help-feature="app-panel-toggle" data-help-source="src/App.tsx"
               variant="ghost"
               size="sm"
               onClick={() => toggleWindow('hmi')}
-              className="h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
+              className="h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors"
               title="Open HMI Dashboard Panel"
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1 text-orange-400">
@@ -15343,11 +14914,11 @@ const ADIA = () => {
               HMI Panel
             </Button>
 
-            <Button
+            <Button data-help-feature="app-panel-toggle" data-help-source="src/App.tsx"
               variant="ghost"
               size="sm"
               onClick={() => toggleWindow('pid')}
-              className="h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
+              className="h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors"
               title="PID Controller Tuner"
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1 text-sky-400">
@@ -15358,28 +14929,28 @@ const ADIA = () => {
               PID Tuner
             </Button>
 
-            <Button
+            <Button data-help-feature="app-panel-toggle" data-help-source="src/App.tsx"
               variant="ghost"
               size="sm"
               onClick={() => toggleWindow('doe')}
-              className="h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
+              className="h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors"
               title="Design of Experiments (Response Surface Methodology)"
             >
               DOE (RSM)
             </Button>
 
-            <Separator orientation="vertical" className="h-4 bg-[#2e2e38]" />
+            <Separator orientation="vertical" className="h-4" />
 
-            <Button
+            <Button data-help-feature="app-gateway-factory" data-help-source="src/App.tsx"
               variant="ghost"
               size="sm"
               onClick={() => setShowFactoryIOGateway(true)}
-              className={`h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors ${
+              className={`h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors ${
                 factoryIOEnabled ? 'text-indigo-400 bg-indigo-500/10' : ''
               }`}
               title="Factory I/O Gateway Connection"
             >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={`mr-1 ${factoryIOEnabled ? 'text-indigo-400' : 'text-zinc-400'}`}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={`mr-1 ${factoryIOEnabled ? 'text-indigo-400' : 'text-[var(--text-muted)]'}`}>
                 <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
                 <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
                 <line x1="12" y1="22.08" x2="12" y2="12" />
@@ -15388,24 +14959,24 @@ const ADIA = () => {
               {factoryIOEnabled && <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 ml-1"></span>}
             </Button>
 
-            <Button
+            <Button data-help-feature="app-gateway-3dx" data-help-source="src/App.tsx"
               id="3dx-toolbar-btn"
               variant="ghost"
               size="sm"
               onClick={() => setShow3DXGateway(true)}
-              className="h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
+              className="h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors"
               title="Connect to 3DEXPERIENCE Platform"
             >
               <Cloud size={13} className="mr-1 text-cyan-400" />
               3DEXPERIENCE
             </Button>
 
-            <Button
+            <Button data-help-feature="app-sysml-diagnostics" data-help-source="src/App.tsx"
               id="sysml-diagnostics-toolbar-btn"
               variant="ghost"
               size="sm"
               onClick={() => setShowSysmlDiagnostics(true)}
-              className="h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
+              className="h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors"
               title="SysML Performance Diagnostics & Limits"
             >
               <Gauge size={13} className="mr-1 text-orange-400" />
@@ -15417,12 +14988,12 @@ const ADIA = () => {
 
           {/* HELP & STATUS GROUP */}
           <div className="flex items-center gap-2 shrink-0">
-            <Button
+            <Button data-help-feature="app-help-open" data-help-source="src/App.tsx"
               variant="ghost"
               size="sm"
               onClick={() => handleOpenHelp()}
-              className="h-7 px-2 text-xs text-zinc-400 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
-              title="Help & Documentation"
+              className="h-7 px-2 text-xs text-[var(--text-secondary)] hover:text-[#f97316] hover:bg-[var(--surface-panel)] whitespace-nowrap transition-colors"
+              title="Help for this workspace (F1)"
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1 text-emerald-400">
                 <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
@@ -15433,20 +15004,15 @@ const ADIA = () => {
             </Button>
 
             {/* Theme Switcher Button */}
-            <button
+            <button data-help-feature="app-theme" data-help-source="src/App.tsx"
               id="adia-theme-toggle-btn"
               type="button"
-              title={currentTheme === 'dark' ? 'Switch to Emerald & Champagne Light Mode' : 'Switch to Dark Mode'}
+              title={currentTheme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
               onClick={() => {
                 const next = toggleTheme();
                 setCurrentTheme(next);
               }}
-              className="h-7 px-2.5 flex items-center gap-1.5 text-xs font-semibold rounded-md border transition-all duration-200 shadow-sm cursor-pointer"
-              style={{
-                backgroundColor: currentTheme === 'light' ? '#E5D5B2' : '#18181c',
-                borderColor: currentTheme === 'light' ? '#C9AF84' : '#27272f',
-                color: currentTheme === 'light' ? '#022C22' : '#F8E7C9',
-              }}
+              className="ui-control ui-focus-ring h-7 px-2.5 flex items-center gap-1.5 text-xs font-semibold rounded-md border border-[var(--border-default)] transition-all duration-200 shadow-sm cursor-pointer"
             >
               {currentTheme === 'dark' ? (
                 <>
@@ -15455,52 +15021,126 @@ const ADIA = () => {
                 </>
               ) : (
                 <>
-                  <Moon className="w-3.5 h-3.5 text-[#022C22]" />
+                  <Moon className="w-3.5 h-3.5 text-[var(--text-primary)]" />
                   <span className="hidden sm:inline font-mono font-bold">Dark</span>
                 </>
               )}
             </button>
 
             {/* Status indicators */}
-            <div className="flex items-center gap-3 bg-[#18181c] border border-[#27272f] rounded-lg px-2.5 py-1 text-xs">
+            <div className="flex items-center gap-3 ui-card bg-[var(--surface-raised)] border border-[var(--border-default)] rounded-lg px-2.5 py-1 text-xs">
               <div className="flex items-center gap-1.5">
-                <div className={`w-2 h-2 rounded-full ${isRunning ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-600'}`} />
-                <span className={`font-mono text-[11px] font-semibold ${isRunning ? 'text-emerald-400' : 'text-zinc-500'}`}>
+                <div className={`w-2 h-2 rounded-full ${isRunning ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-500'}`} />
+                <span className={`font-mono text-[11px] font-semibold ${isRunning ? 'text-emerald-500' : 'text-[var(--text-muted)]'}`}>
                   {isRunning ? 'RUN' : 'STOP'}
                 </span>
               </div>
-              <Separator orientation="vertical" className="h-3.5 bg-[#2e2e38]" />
+              <Separator orientation="vertical" className="h-3.5" />
               <LiveFpsMonitor />
-              <Separator orientation="vertical" className="h-3.5 bg-[#2e2e38]" />
-              <div className="text-zinc-500 font-mono text-[11px]">
-                T: <span className="text-zinc-300 font-semibold">{simulationTime.toFixed(1)}s</span>
+              <Separator orientation="vertical" className="h-3.5" />
+              <div className="text-[var(--text-muted)] font-mono text-[11px]">
+                T: <span className="text-[var(--text-primary)] font-semibold">{simulationTime.toFixed(1)}s</span>
               </div>
-              <div className="text-zinc-500 font-mono text-[11px]">
-                S: <span className="text-zinc-300 font-semibold">{currentStates.length}</span>
+              <div className="text-[var(--text-muted)] font-mono text-[11px]">
+                S: <span className="text-[var(--text-primary)] font-semibold">{currentStates.length}</span>
               </div>
-              <div className="text-zinc-500 font-mono text-[11px]">
-                V: <span className="text-zinc-300 font-semibold">{variables.length}</span>
+              <div className="text-[var(--text-muted)] font-mono text-[11px]">
+                V: <span className="text-[var(--text-primary)] font-semibold">{variables.length}</span>
               </div>
             </div>
           </div>
         </header>
 
-        {/* Workspace Tab Bar */}
-        <WorkspaceTabBar
-          openTabIds={openTabIds}
-          activeFileId={activeFileId}
-          workspaceFiles={workspaceFiles}
-          onSwitchTab={switchActiveFile}
-          onCloseTab={closeTab}
-          onOpenDialog={() => setShowWorkspaceFileDialog(true)}
-        />
+
+        {/* Unified workspace tabs: module files and exact-ID diagram views share
+            one navigation strip. Closing a diagram removes only its view. */}
+        {(moduleWorkspaceFiles.length > 0 || diagramWorkspace.tabs.length > 0) && (
+          <div
+            data-testid="diagram-workspace-tabs"
+            className="ui-surface bg-[var(--surface-canvas)] border-b border-[var(--border-default)] flex items-center px-4 shrink-0 select-none"
+          >
+            <div className="flex items-center gap-1 overflow-x-auto no-scrollbar flex-1 h-9 pt-1">
+              {moduleWorkspaceFiles.map(file => {
+                const isActive = activeWorkspaceTab.key === moduleWorkspaceTabKey(file.id);
+                return (
+                  <div data-help-feature="app-asset-open" data-help-source="src/App.tsx"
+                    key={`module:${file.id}`}
+                    role="tab"
+                    aria-selected={isActive}
+                    data-workspace-type={file.type}
+                    onClick={() => activateWorkspaceTarget({ kind: 'file', fileId: file.id })}
+                    className={`flex items-center gap-2 px-3 h-full rounded-t-lg text-xs font-bold transition-all duration-200 cursor-pointer border-t-2 shrink-0 ${
+                      isActive
+                        ? 'workspace-tab-active ui-card bg-[var(--surface-panel)] text-[var(--text-primary)] border-t-[#f97316]'
+                        : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-raised)] border-t-transparent'
+                    }`}
+                  >
+                    <span className="truncate max-w-[160px]">{file.name}</span>
+                    <button data-help-feature="app-asset-close" data-help-source="src/App.tsx"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        closeTab(file.id);
+                      }}
+                      className="ml-1 w-4 h-4 rounded-full hover:bg-[var(--surface-raised)] hover:text-red-400 flex items-center justify-center text-[8px] text-[var(--text-muted)] font-normal transition-colors"
+                      title="Close Tab"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                );
+              })}
+              {diagramWorkspace.tabs.map(tab => {
+                const diagramId = 'diagramId' in tab ? tab.diagramId : tab.mode;
+                const name = tab.kind === 'stateMachineDiagram'
+                  ? sysmlObjectLabel(seededStateMachineDiagrams.find(diagram => diagram.id === diagramId), 'Diagram')
+                  : tab.kind === 'sysmlDiagram'
+                  ? sysmlObjectLabel(canonicalSysmlRepository.diagrams[diagramId], 'Diagram')
+                  : tab.mode;
+                const isActive = activeWorkspaceTab.key === diagramWorkspaceTabKey(tab);
+                return (
+                  <div data-help-feature="app-asset-open" data-help-source="src/App.tsx"
+                    key={`${tab.kind}:${diagramId}`}
+                    role="tab"
+                    aria-selected={isActive}
+                    data-diagram-id={diagramId}
+                    onClick={() => activateWorkspaceTarget({ kind: 'diagram', tab })}
+                    className={`flex items-center gap-2 px-3 h-full rounded-t-lg text-xs font-bold transition-all duration-200 cursor-pointer border-t-2 shrink-0 ${
+                      isActive
+                        ? 'workspace-tab-active ui-card bg-[var(--surface-panel)] text-[var(--text-primary)] border-t-[#f97316]'
+                        : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-raised)] border-t-transparent'
+                    }`}
+                  >
+                    <span className="truncate max-w-[160px]">{name}</span>
+                    <button data-help-feature="app-asset-close" data-help-source="src/App.tsx"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        closeDiagramWorkspaceTab(diagramId);
+                      }}
+                      className="ml-1 w-4 h-4 rounded-full hover:bg-[var(--surface-raised)] hover:text-red-400 flex items-center justify-center text-[8px] text-[var(--text-muted)] font-normal transition-colors"
+                      title="Close Tab"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+            <button data-help-feature="app-asset-manager" data-help-source="src/App.tsx"
+              onClick={() => setShowWorkspaceFileDialog(true)}
+              className="ui-control ui-focus-ring ml-4 p-1 rounded hover:bg-[var(--surface-raised)] text-[#f97316] transition-colors flex items-center justify-center"
+              title="Open Workspace Asset Manager"
+            >
+              <Plus size={16} />
+            </button>
+          </div>
+        )}
 
         {/* Main Content Area */}
-        <div className="flex flex-1 overflow-hidden" onMouseUp={() => setResizingPanel(null)}>
+        <div data-help-feature="live:App:eca48c76262c" className="flex flex-1 overflow-hidden" onMouseUp={() => setResizingPanel(null)}>
           {/* Left Sidebar - Hierarchy */}
-          {!['xbridges', 'vlab', 'hil', 'entropy'].includes(diagramMode) && (
-            <aside style={{ width: isMobile ? '100%' : (isHierarchyCollapsed ? '48px' : `${hierarchyWidth}px`), display: isMobile && mobileTab !== 'hierarchy' ? 'none' : 'flex' }} className="bg-[#1a1a1a] flex flex-col shrink-0 transition-all duration-300 overflow-hidden">
-              <div className="h-10 flex items-center justify-between px-4 border-b border-[#222]">
+          {![ 'hil', 'entropy'].includes(diagramMode) && (
+            <aside style={{ width: isMobile ? '100%' : (isHierarchyCollapsed ? '48px' : `${hierarchyWidth}px`), display: isMobile && mobileTab !== 'hierarchy' ? 'none' : 'flex' }} className="ui-surface bg-[var(--surface-panel)] border-r border-[var(--border-default)] flex flex-col shrink-0 transition-all duration-300 overflow-hidden">
+              <div className="h-10 flex items-center justify-between px-4 border-b border-[var(--border-default)]">
                 {!isHierarchyCollapsed && (
                   <div className="flex items-center overflow-hidden whitespace-nowrap">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="2" className="mr-2.5">
@@ -15508,30 +15148,69 @@ const ADIA = () => {
                        <path d="M16 17l-3-3 3-3" />
                        <path d="M13 14H3" />
                     </svg>
-                    <span className="text-sm font-medium">Hierarchy</span>
+                    <span className="text-sm font-medium text-[var(--text-primary)]">Hierarchy</span>
                   </div>
                 )}
-                <button
+                <button data-help-feature="app-panel-collapse" data-help-source="src/App.tsx"
                   onClick={() => setIsHierarchyCollapsed(!isHierarchyCollapsed)}
-                  className={`p-1.5 rounded hover:bg-[#222] text-[#f97316] transition-all ${isHierarchyCollapsed ? 'w-full flex justify-center' : ''}`}
+                  className={`p-1.5 rounded hover:bg-[var(--surface-raised)] text-[#f97316] transition-all ${isHierarchyCollapsed ? 'w-full flex justify-center' : ''}`}
                 >
                   <Triangle size={10} className={`transition-transform duration-300 ${isHierarchyCollapsed ? 'rotate-90' : '-rotate-90'}`} fill="currentColor" />
                 </button>
               </div>
               {!isHierarchyCollapsed && (
-                <HierarchyTree
-                  states={states}
-                  layers={layers}
-                  activeStates={activeStates}
-                  currentLayerId={currentLayerId}
-                  onSelect={(id: string) => setSelectedIds([id])}
-                  onDoubleClick={(id: string) => enterLayer(id)}
-                  selectedIds={selectedIds}
-                />
+                <Profiler id="explorer" onRender={(_, phase, actualDuration) => recordRenderCommit('explorer', phase, actualDuration)}>
+                  <HierarchyTree
+                    states={states}
+                    layers={layers}
+                    transitions={transitions}
+                    junctions={junctions}
+                    activeStates={activeStates}
+                    currentLayerId={currentLayerId}
+                    diagramMode={diagramMode}
+                    blocks={blocks}
+                    parts={parts}
+                    diagrams={seededStateMachineDiagrams}
+                    diagramPresentations={sysmlDiagramPresentations}
+                    externalModels={hierarchyExternalModels}
+                    canonicalSysmlRepository={canonicalSysmlRepository}
+                    sysmlStore={sysmlStore}
+                    onSelect={(id: string, multiSelect?: boolean) => {
+                      if (!multiSelect && isDiagramHierarchyNode(id)) {
+                        activateHierarchyNode(id, 'diagram');
+                      }
+                      setSelectedIds([id]);
+                    }}
+                    onDoubleClick={(id: string, kind?: string) => activateHierarchyNode(id, kind)}
+                    selectedIds={selectedIds}
+                    onCommitStateMachineSnapshot={handleCommitStateMachineSnapshot}
+
+
+
+                    onExecuteSysmlCommand={handleExecuteSysmlCommand}
+                    onCommandResult={handleExplorerCommand}
+                    activeDiagramId={activeSysmlDiagramId}
+                    activeDiagramContext={(() => {
+                      const contextId = activeSysmlDiagramId;
+                      const presented = diagramMode === 'statemachine'
+                        ? [...states.map(state => state.id), ...junctions.map(junction => junction.id), ...transitions.map(transition => transition.id)]
+                        : sysmlDiagramPresentations[contextId]?.elementIds ?? [];
+                      return {
+                        diagramId: contextId,
+                        name: sysmlObjectLabel(canonicalSysmlRepository.diagrams[contextId]
+                          ?? seededStateMachineDiagrams.find(diagram => diagram.id === contextId), 'Diagram'),
+                        kind: diagramMode,
+                        domain: diagramMode === 'statemachine' ? 'stateMachine' : diagramMode === 'xbridges' ? 'xbridges' : diagramMode === 'vlab' ? 'vlab' : 'sysml',
+                        presentedSemanticIds: presented,
+                        contextSemanticIds: [],
+                      } as ActiveDiagramContext;
+                    })()}
+                  />
+                </Profiler>
               )}
             </aside>
           )}
-          {!isMobile && !isHierarchyCollapsed && !['xbridges', 'vlab', 'hil', 'entropy'].includes(diagramMode) && <Resizer onMouseDown={(e) => handleResizeStart(e, 'hierarchy')} />}
+          {!isMobile && !isHierarchyCollapsed && !['xbridges', 'vlab', 'hil', 'entropy'].includes(diagramMode) && <Resizer data-help-feature="live:App:590d20381723" onMouseDown={(e) => handleResizeStart(e, 'hierarchy')} />}
 
           {/* Left Sidebar - Variables */}
           {!['xbridges', 'vlab', 'hil', 'entropy'].includes(diagramMode) && (
@@ -15547,7 +15226,7 @@ const ADIA = () => {
                     <span className="text-sm font-medium text-[#e0e0e0]">Variables</span>
                   </div>
                 )}
-                <button
+                <button data-help-feature="app-panel-collapse" data-help-source="src/App.tsx"
                   onClick={() => setIsVariablesCollapsed(!isVariablesCollapsed)}
                   className={`p-1.5 rounded hover:bg-[#222] text-[#f97316] transition-all ${isVariablesCollapsed ? 'w-full flex justify-center' : ''}`}
                 >
@@ -15564,13 +15243,13 @@ const ADIA = () => {
                         <span className="text-[10px] font-bold text-[#f97316] uppercase tracking-wider">New Variable</span>
                       </div>
                       <div className="flex gap-1.5 mb-1.5">
-                        <Input
+                        <Input data-help-feature="app-variable-name" data-help-source="src/App.tsx"
                           placeholder="Name"
                           value={newVarName}
                           onChange={(e) => setNewVarName(e.target.value)}
                           className="h-7 text-[11px] bg-[#0d0d0d] border-[#333] focus:border-[#f97316]/50"
                         />
-                        <select
+                        <select data-help-feature="app-variable-new-type" data-help-source="src/App.tsx"
                           value={newVarType}
                           onChange={(e) => {
                             const t = e.target.value as VariableType;
@@ -15583,13 +15262,13 @@ const ADIA = () => {
                         </select>
                       </div>
                       <div className="flex gap-1.5">
-                        <Input
+                        <Input data-help-feature="app-variable-new-initial" data-help-source="src/App.tsx"
                           placeholder="Init Value"
                           value={newVarValue}
                           onChange={(e) => setNewVarValue(e.target.value)}
                           className="h-7 text-[11px] bg-[#0d0d0d] border-[#333] focus:border-[#f97316]/50"
                         />
-                        <Button size="sm" onClick={addVariable} className="h-7 px-3 bg-[#f97316] text-[#0a0a0a] text-[10px] font-bold hover:bg-[#ea580c]">ADD</Button>
+                        <Button data-help-feature="app-variable-add" data-help-source="src/App.tsx" size="sm" onClick={addVariable} className="h-7 px-3 bg-[#f97316] text-[#0a0a0a] text-[10px] font-bold hover:bg-[#ea580c]">ADD</Button>
                       </div>
                     </div>
 
@@ -15607,7 +15286,7 @@ const ADIA = () => {
                           <div key={variable.id} className="group border-b border-[#1a1a1a] last:border-0">
                             <div className="flex items-center h-8 px-4 hover:bg-[#222] transition-colors">
                               <div className="flex items-center gap-2 flex-1 overflow-hidden">
-                                <Checkbox
+                                <Checkbox data-help-feature="app-scope-select" data-help-source="src/App.tsx"
                                   checked={variable.visibleInScope}
                                   onCheckedChange={() => toggleVariableVisibility(variable.id)}
                                   className="w-3.5 h-3.5 border-[#333] data-[state=checked]:bg-[#f97316] data-[state=checked]:border-[#f97316]"
@@ -15618,7 +15297,7 @@ const ADIA = () => {
                                   {variable.type.substring(0, 3)}
                                 </span>
                               </div>
-                              <button
+                              <button data-help-feature="app-variable-delete" data-help-source="src/App.tsx"
                                 onClick={() => removeVariable(variable.id)}
                                 className="ml-2 text-[#444] hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
                               >
@@ -15629,9 +15308,24 @@ const ADIA = () => {
                             </div>
 
                             <div className="px-4 pb-2 pt-0.5 grid grid-cols-2 gap-3 group-hover:bg-[#1a1a1a]/30 transition-colors">
+                              <select data-help-feature="app-variable-type" data-help-source="src/App.tsx"
+                                value={variable.type}
+                                onChange={(e) => updateVariableType(variable.id, e.target.value as VariableType)}
+                                className="h-6 text-[10px] font-mono bg-[#0d0d0d] border border-[#222] rounded px-1"
+                              >
+                                {ALLOWED_TYPES.map(type => <option key={type} value={type}>{type}</option>)}
+                              </select>
+                              <select data-help-feature="app-variable-overflow" data-help-source="src/App.tsx"
+                                value={variable.overflowPolicy ?? 'saturate'}
+                                onChange={(e) => updateVariableOverflowPolicy(variable.id, e.target.value as VariableOverflowPolicy)}
+                                className="h-6 text-[10px] font-mono bg-[#0d0d0d] border border-[#222] rounded px-1"
+                              >
+                                <option value="saturate">saturate</option>
+                                <option value="error">error</option>
+                              </select>
                               <div className="space-y-0.5">
                                 <span className="text-[8px] font-bold text-[#444] uppercase tracking-tighter">Initial</span>
-                                <Input
+                                <Input data-help-feature="app-variable-initial" data-help-source="src/App.tsx"
                                   value={variable.initialValue}
                                   onChange={(e) => updateVariableInitValue(variable.id, e.target.value)}
                                   disabled={isRunning}
@@ -15640,7 +15334,7 @@ const ADIA = () => {
                               </div>
                               <div className="space-y-0.5">
                                 <span className="text-[8px] font-bold text-[#444] uppercase tracking-tighter">Current</span>
-                                <Input
+                                <Input data-help-feature="app-variable-live" data-help-source="src/App.tsx"
                                   value={String(variable.currentValue)}
                                   onChange={(e) => updateVariableValue(variable.id, e.target.value)}
                                   className="h-6 text-[10px] font-mono bg-[#0d0d0d] border-[#222] text-emerald-400 focus:border-[#f97316]/30 px-1.5"
@@ -15662,7 +15356,7 @@ const ADIA = () => {
               )}
             </aside>
           )}
-          {!isMobile && !['xbridges', 'vlab', 'hil', 'entropy'].includes(diagramMode) && <Resizer onMouseDown={(e) => handleResizeStart(e, 'variables')} />}
+          {!isMobile && !['xbridges', 'vlab', 'hil', 'entropy'].includes(diagramMode) && <Resizer data-help-feature="live:App:76a83fd32464" onMouseDown={(e) => handleResizeStart(e, 'variables')} />}
 
           {/* Canvas Area */}
           <div style={{ display: isMobile && mobileTab !== 'canvas' ? 'none' : 'flex' }} className="flex-1 flex flex-col min-w-0">
@@ -15701,6 +15395,47 @@ const ADIA = () => {
                   onChange={setPlantUmlDiagram}
                   onSave={() => addError('info', 'PlantUML diagram saved in the current project session.')}
                   onExport={exportPlantUmlSource}
+                />
+              )}
+
+              {diagramMode === 'useCase' && (
+                <UseCaseWorkspace
+                  key={activeSysmlDiagramId}
+                  repository={canonicalSysmlRepository}
+                  diagramId={activeSysmlDiagramId}
+                  diagramPresentations={sysmlDiagramPresentations}
+                  onExecute={handleExecuteSysmlCommand}
+                  onNavigate={(elementId) => { if (!openCanvasSymbolDiagram(elementId)) setSelectedIds([elementId]); }}
+                  onSelect={setSelectedIds}
+                  authorizedBaselineIds={authorizedBaselineIds}
+                />
+              )}
+
+              {diagramMode === 'activity' && (
+                <ActivityWorkspace
+                  key={activeSysmlDiagramId}
+                  repository={canonicalSysmlRepository}
+                  diagramId={activeSysmlDiagramId}
+                  diagramPresentations={sysmlDiagramPresentations}
+                  onExecute={handleExecuteSysmlCommand}
+                  onNavigate={(elementId) => { if (!openCanvasSymbolDiagram(elementId)) setSelectedIds([elementId]); }}
+                  onSelect={setSelectedIds}
+                  authorizedBaselineIds={authorizedBaselineIds}
+                />
+              )}
+
+              {diagramMode === 'sequence' && (
+                <SequenceWorkspace
+                  key={activeSysmlDiagramId}
+                  repository={canonicalSysmlRepository}
+                  diagramId={activeSysmlDiagramId}
+                  diagramPresentations={sysmlDiagramPresentations}
+                  onExecute={handleExecuteSysmlCommand}
+                  onNavigate={(elementId) => { if (!openCanvasSymbolDiagram(elementId)) setSelectedIds([elementId]); }}
+                  onSelect={(ids) => { pendingSequenceSelectionRef.current = null; setSelectedIds(ids); }}
+                  initialSelection={pendingSequenceSelectionRef.current?.diagramId === activeSysmlDiagramId ? pendingSequenceSelectionRef.current.elementIds : undefined}
+                  endpoints={externalEndpointContext}
+                  transitions={transitions}
                 />
               )}
 
@@ -15807,17 +15542,20 @@ const ADIA = () => {
                 />
               )}
 
-              {!xBridgesStateId && !['xbridges', 'vlab', 'hil', 'entropy'].includes(diagramMode) && (
+              {!xBridgesStateId && !['xbridges', 'vlab', 'hil', 'entropy', 'useCase', 'activity', 'sequence'].includes(diagramMode) && (
                 <>
 
               {/* Canvas Toolbar */}
-              <div className="absolute top-3 left-3 z-10 flex items-center gap-2 bg-[#1a1a1a]/95 border border-[#333] rounded-lg px-2.5 py-1.5 text-xs">
+              <div data-help-feature="live:App:2baeda448e81"
+                onWheel={handleHorizontalToolbarWheel}
+                className="absolute top-3 left-3 z-10 flex items-center gap-2 max-w-[calc(100%-1.5rem)] overflow-x-auto overflow-y-hidden adia-toolbar-scrollbar bg-[#1a1a1a]/95 border border-[#333] rounded-lg px-2.5 py-1.5 pb-2 text-xs select-none shadow-lg [&>*]:shrink-0"
+              >
                 {/* Layer Breadcrumb */}
                 {layerPath.length > 1 && (
                   <>
                     {layerPath.map((name, index) => ( // REQ-HSM-041 & 042
                       <React.Fragment key={index}>
-                        <button
+                        <button data-help-feature="app-layer-breadcrumb" data-help-source="src/App.tsx"
                           onClick={index < layerPath.length - 1 ? () => goToLayer(index) : undefined}
                           disabled={index === layerPath.length - 1}
                           className={`flex items-center gap-1 px-2 py-0.5 rounded ${index === layerPath.length - 1
@@ -15843,7 +15581,7 @@ const ADIA = () => {
 
                 {diagramMode === 'statemachine' && (
                   <>
-                    <Button
+                    <Button data-help-feature="app-sm-add-state" data-help-source="src/App.tsx"
                       variant="secondary"
                       size="sm"
                       onClick={() => {
@@ -15864,7 +15602,7 @@ const ADIA = () => {
                       State
                     </Button>
 
-                    <Button
+                    <Button data-help-feature="app-sm-add-junction" data-help-source="src/App.tsx"
                       variant="secondary"
                       size="sm"
                       onClick={() => {
@@ -15884,7 +15622,7 @@ const ADIA = () => {
                       Junction
                     </Button>
 
-                    <Button
+                    <Button data-help-feature="app-sm-add-xbridges" data-help-source="src/App.tsx"
                       variant="secondary"
                       size="sm"
                       onClick={() => {
@@ -15908,41 +15646,133 @@ const ADIA = () => {
                   </>
                 )}
 
-                {diagramMode === 'bdd' && (
+              {diagramBackTarget && canonicalSysmlRepository.diagrams[diagramBackTarget.diagramId] && (
+                <Button data-help-feature="app-diagram-return" data-help-source="src/App.tsx" variant="secondary" size="sm" onClick={navigateDiagramBack}
+                  className="h-6 px-2 text-[#e0e0e0] hover:bg-[#222]"
+                  title={`Return to ${sysmlObjectLabel(canonicalSysmlRepository.diagrams[diagramBackTarget.diagramId], 'Diagram')}`}>
+                  ← {sysmlObjectLabel(canonicalSysmlRepository.diagrams[diagramBackTarget.diagramId], 'Diagram')}
+                </Button>
+              )}
+
+              {(diagramMode === 'bdd' || diagramMode === 'package') && (
                   <>
-                    <Button
+                    <Button data-help-feature="app-sysml-create" data-help-source="src/App.tsx"
                       variant="secondary"
                       size="sm"
                       onClick={() => {
                         const rect = canvasRef.current?.getBoundingClientRect();
-                        if (rect) createBlock((rect.width / 2 - view.offsetX) / view.scale, (rect.height / 2 - view.offsetY) / view.scale, 'block');
+                        if (rect) createSysmlElementOnActiveDiagram((rect.width / 2 - view.offsetX) / view.scale, (rect.height / 2 - view.offsetY) / view.scale, 'Package');
+                      }}
+                      className="h-6 px-2 text-[#e0e0e0] hover:bg-[#222]"
+                    >
+                      Package
+                    </Button>
+                    {diagramMode === 'package' && (
+                      <Button data-help-feature="app-sysml-create" data-help-source="src/App.tsx"
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => {
+                          const rect = canvasRef.current?.getBoundingClientRect();
+                          if (rect) createSysmlElementOnActiveDiagram((rect.width / 2 - view.offsetX) / view.scale, (rect.height / 2 - view.offsetY) / view.scale, 'ModelLibrary');
+                        }}
+                        className="h-6 px-2 text-[#e0e0e0] hover:bg-[#222]"
+                        title="«modelLibrary» Package of reusable elements (SysML 1.6 §7.3.2.4)"
+                      >
+                        Model Library
+                      </Button>
+                    )}
+                    <Button data-help-feature="app-sysml-create" data-help-source="src/App.tsx"
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        const rect = canvasRef.current?.getBoundingClientRect();
+                        if (rect) createSysmlElementOnActiveDiagram((rect.width / 2 - view.offsetX) / view.scale, (rect.height / 2 - view.offsetY) / view.scale, 'Block');
                       }}
                       className="h-6 px-2 text-[#e0e0e0] hover:bg-[#222]"
                     >
                       Block
                     </Button>
-                    <div className="flex gap-0.5">
-                      <Button size="sm" onClick={() => handleAddPortToSelected('standard')} className="h-6 px-1 text-[10px] bg-[#f97316]/20 text-[#f97316] hover:bg-[#f97316]/30 border border-[#f97316]/50" title="Add Standard Port">+Std</Button>
-                      <Button size="sm" onClick={() => handleAddPortToSelected('flow')} className="h-6 px-1 text-[10px] bg-[#6c9ac6]/20 text-[#6c9ac6] hover:bg-[#6c9ac6]/30 border border-[#6c9ac6]/50" title="Add Flow Port">+Flow</Button>
-                      <Button size="sm" onClick={() => handleAddPortToSelected('proxy')} className="h-6 px-1 text-[10px] bg-[#c96c8a]/20 text-[#c96c8a] hover:bg-[#c96c8a]/30 border border-[#c96c8a]/50" title="Add Proxy Port">+Prx</Button>
-                    </div>
+                    {diagramMode === 'bdd' && (
+                      <PortKindActions onAddPort={handleAddPortToSelected} />
+                    )}
+                    {diagramMode === 'package' && (
+                      <div className="flex gap-0.5">
+                        {([
+                          'containment',
+                          'generalization',
+                          'packageImport',
+                          'access',
+                          'elementImport',
+                          'packageMerge',
+                          'dependency',
+                          'conform',
+                          'expose',
+                        ] as const).map(kind => (
+                          <Button data-help-feature="app-package-path-tool" data-help-source="src/App.tsx" key={kind} size="sm" variant={packageRelationshipTool === kind ? 'default' : 'secondary'}
+                            onClick={() => { setPackageRelationshipTool(kind); setPackageRelationshipSourceId(null); }}
+                            className="h-6 px-2 text-[10px]"
+                            title={kind === 'containment'
+                              ? 'Select the owning Package, then the element it should contain (moves ownership)'
+                              : `Select source then target for ${PACKAGE_TOOL_LABELS[kind]}`}>
+                            {PACKAGE_TOOL_LABELS[kind]}
+                          </Button>
+                        ))}
+                        <Button data-help-feature="app-package-display-paths" data-help-source="src/App.tsx" size="sm" variant="secondary" onClick={displayPackagePaths}
+                          className="h-6 px-2 text-[10px]" title="Show paths previously removed from this diagram (between the selected elements, or all)">
+                          Display Paths
+                        </Button>
+                      </div>
+                    )}
                   </>
                 )}
 
-                {diagramMode === 'requirements' && (
+              {diagramMode === 'requirements' && (
                   <>
-                    <Button
+                    <Button data-help-feature="app-sysml-create" data-help-source="src/App.tsx"
                       variant="secondary"
                       size="sm"
                       onClick={() => {
                         const rect = canvasRef.current?.getBoundingClientRect();
-                        if (rect) createBlock((rect.width / 2 - view.offsetX) / view.scale, (rect.height / 2 - view.offsetY) / view.scale, 'requirement');
+                        if (rect) createSysmlElementOnActiveDiagram((rect.width / 2 - view.offsetX) / view.scale, (rect.height / 2 - view.offsetY) / view.scale, 'Package');
                       }}
                       className="h-6 px-2 text-[#e0e0e0] hover:bg-[#222]"
                     >
-                      Requirement
+                      + Package
                     </Button>
-                    <Button
+                    <Button data-help-feature="app-sysml-create" data-help-source="src/App.tsx"
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        const rect = canvasRef.current?.getBoundingClientRect();
+                        if (rect) createSysmlElementOnActiveDiagram((rect.width / 2 - view.offsetX) / view.scale, (rect.height / 2 - view.offsetY) / view.scale, 'Requirement');
+                      }}
+                      className="h-6 px-2 text-[#e0e0e0] hover:bg-[#222]"
+                    >
+                      + Requirement
+                    </Button>
+                    <Button data-help-feature="app-sysml-create" data-help-source="src/App.tsx"
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        const rect = canvasRef.current?.getBoundingClientRect();
+                        if (rect) createSysmlElementOnActiveDiagram((rect.width / 2 - view.offsetX) / view.scale, (rect.height / 2 - view.offsetY) / view.scale, 'Block');
+                      }}
+                      className="h-6 px-2 text-[#e0e0e0] hover:bg-[#222]"
+                    >
+                      + Block
+                    </Button>
+                    <Button data-help-feature="app-sysml-create" data-help-source="src/App.tsx"
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        const rect = canvasRef.current?.getBoundingClientRect();
+                        if (rect) createSysmlElementOnActiveDiagram((rect.width / 2 - view.offsetX) / view.scale, (rect.height / 2 - view.offsetY) / view.scale, 'TestCase');
+                      }}
+                      className="h-6 px-2 text-[#e0e0e0] hover:bg-[#222]"
+                    >
+                      + Test Case
+                    </Button>
+                    <Button data-help-feature="app-panel-toggle" data-help-source="src/App.tsx"
                       variant="secondary"
                       size="sm"
                       onClick={() => toggleWindow('rtm')}
@@ -15950,7 +15780,15 @@ const ADIA = () => {
                     >
                       RTM
                     </Button>
-                    <Button
+                    <Button data-help-feature="app-panel-toggle" data-help-source="src/App.tsx"
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => toggleWindow('allocation')}
+                      className="h-6 px-2 text-[#f97316] hover:bg-[#222]"
+                    >
+                      Allocations
+                    </Button>
+                    <Button data-help-feature="app-sysml-layout" data-help-source="src/App.tsx"
                       variant="secondary"
                       size="sm"
                       onClick={handleAutoLayout}
@@ -15963,7 +15801,7 @@ const ADIA = () => {
 
                 {diagramMode === 'ibd' && (
                   <>
-                    <Button
+                    <Button data-help-feature="app-ibd-add-part" data-help-source="src/App.tsx"
                       variant="secondary"
                       size="sm"
                       onClick={() => {
@@ -15975,17 +15813,19 @@ const ADIA = () => {
                       Part
                     </Button>
                     <div className="flex gap-0.5">
-                      <Button size="sm" onClick={() => handleAddPortToSelected('standard')} className="h-6 px-1 text-[10px] bg-[#f97316]/20 text-[#f97316] hover:bg-[#f97316]/30 border border-[#f97316]/50" title="Add Standard Port">+Std</Button>
-                      <Button size="sm" onClick={() => handleAddPortToSelected('flow')} className="h-6 px-1 text-[10px] bg-[#6c9ac6]/20 text-[#6c9ac6] hover:bg-[#6c9ac6]/30 border border-[#6c9ac6]/50" title="Add Flow Port">+Flow</Button>
-                      <Button size="sm" onClick={() => handleAddPortToSelected('proxy')} className="h-6 px-1 text-[10px] bg-[#c96c8a]/20 text-[#c96c8a] hover:bg-[#c96c8a]/30 border border-[#c96c8a]/50" title="Add Proxy Port">+Prx</Button>
+                      <Button data-help-feature="app-port-add" data-help-source="src/App.tsx" size="sm" onClick={() => handleAddPortToSelected('standard')} className="h-6 px-1 text-[10px] border" style={{ borderColor: semanticPresentationToken('standardPort'), color: semanticPresentationToken('standardPort'), backgroundColor: 'transparent' }} title="Add Standard Port">+Std</Button>
+                      <Button data-help-feature="app-port-add" data-help-source="src/App.tsx" size="sm" onClick={() => handleAddPortToSelected('flow')} className="h-6 px-1 text-[10px] border" style={{ borderColor: semanticPresentationToken('flowPort'), color: semanticPresentationToken('flowPort'), backgroundColor: 'transparent' }} title="Add Flow Port">+Flow</Button>
+                      <Button data-help-feature="app-port-add" data-help-source="src/App.tsx" size="sm" onClick={() => handleAddPortToSelected('proxy')} className="h-6 px-1 text-[10px] border" style={{ borderColor: semanticPresentationToken('proxyPort'), color: semanticPresentationToken('proxyPort'), backgroundColor: 'transparent' }} title="Add Proxy Port">+Prx</Button>
+                      <Button data-help-feature="app-port-add" data-help-source="src/App.tsx" size="sm" onClick={() => handleAddPortToSelected('full')} className="h-6 px-1 text-[10px] border" style={{ borderColor: semanticPresentationToken('fullPort'), color: semanticPresentationToken('fullPort'), backgroundColor: 'transparent' }} title="Add Full Port">+Full</Button>
                     </div>
-                    <Button
+                    <Button data-help-feature="app-ibd-connector-tool" data-help-source="src/App.tsx"
                       variant="secondary"
                       size="sm"
                       onClick={() => {
                         if (isCreatingConnector) {
                           setIsCreatingConnector(false);
                           setConnectorSource(null);
+                          connectorSourceRef.current = null;
                         } else {
                           setIsCreatingConnector(true);
                         }
@@ -15994,11 +15834,35 @@ const ADIA = () => {
                     >
                       {isCreatingConnector ? 'Cancel' : 'Connect'}
                     </Button>
+                    <Button data-help-feature="app-ibd-depth" data-help-source="src/App.tsx"
+                      variant="secondary"
+                      size="sm"
+                      aria-pressed={showNestedParts}
+                      title="Show each part's own parts inside its symbol, so a connector can end in a nested part or port"
+                      onClick={() => setShowNestedParts(prev => !prev)}
+                      className={`h-6 px-2 ${showNestedParts ? 'bg-[#f97316] text-[#0a0a0a]' : 'text-[#e0e0e0] hover:bg-[#222]'}`}
+                    >
+                      Nested parts
+                    </Button>
+                    {showNestedParts && (
+                      <select data-help-feature="app-ibd-depth" data-help-source="src/App.tsx"
+                        aria-label="Levels of nested parts"
+                        title="Levels of nested parts"
+                        value={nestedPartDepth}
+                        onChange={(event) => setNestedPartDepth(Number(event.target.value))}
+                        className="h-6 rounded border border-[#333] bg-[#111] px-1 text-[10px] text-[#e0e0e0]"
+                      >
+                        {Array.from({ length: MAX_NESTED_PART_DEPTH }, (_, index) => index + 1).map(levels => (
+                          <option key={levels} value={levels}>{levels === 1 ? '1 level' : `${levels} levels`}</option>
+                        ))}
+                      </select>
+                    )}
                   </>
                 )}
 
-                {diagramMode !== 'ibd' && (
-                  <Button
+                {/* Package Diagrams use the typed relationship tools above, not the BDD connect flow. */}
+                {diagramMode !== 'ibd' && diagramMode !== 'package' && (
+                  <Button data-help-feature="app-sm-transition-tool" data-help-source="src/App.tsx"
                     variant="secondary"
                     size="sm"
                     onClick={() => {
@@ -16023,7 +15887,7 @@ const ADIA = () => {
 
                 <Separator orientation="vertical" className="h-3 bg-[#333] mx-1.5" />
 
-                <Button
+                <Button data-help-feature="app-grid" data-help-source="src/App.tsx"
                   variant="ghost"
                   size="icon"
                   onClick={() => setGridEnabled(!gridEnabled)}
@@ -16035,7 +15899,7 @@ const ADIA = () => {
                   </svg>
                 </Button>
 
-                <Button
+                <Button data-help-feature="app-snap" data-help-source="src/App.tsx"
                   variant="ghost"
                   size="icon"
                   onClick={() => setSnapEnabled(!snapEnabled)}
@@ -16050,7 +15914,7 @@ const ADIA = () => {
 
                 <Separator orientation="vertical" className="h-3 bg-[#333] mx-1.5" />
 
-                <Button
+                <Button data-help-feature="app-zoom" data-help-source="src/App.tsx"
                   variant="ghost"
                   size="icon"
                   onClick={() => setView(prev => ({ ...prev, scale: Math.min(MAX_SCALE, prev.scale * 1.2) }))}
@@ -16066,7 +15930,7 @@ const ADIA = () => {
                   {Math.round(view.scale * 100)}%
                 </span>
 
-                <Button
+                <Button data-help-feature="app-zoom" data-help-source="src/App.tsx"
                   variant="ghost"
                   size="icon"
                   onClick={() => setView(prev => ({ ...prev, scale: Math.max(MIN_SCALE, prev.scale / 1.2) }))}
@@ -16077,7 +15941,7 @@ const ADIA = () => {
                   </svg>
                 </Button>
 
-                <Button
+                <Button data-help-feature="app-zoom" data-help-source="src/App.tsx"
                   variant="ghost"
                   size="icon"
                   onClick={() => setView({ scale: 1, offsetX: 0, offsetY: 0 })}
@@ -16095,9 +15959,15 @@ const ADIA = () => {
                   {transitionSourceId ? 'Click target state/junction to connect...' : 'Click source state/junction...'}
                 </div>
               )}
+              {diagramMode === 'package' && packageRelationshipTool && (
+                <div className="absolute top-3 right-3 z-10 px-4 py-2 bg-[#f97316] text-[#0a0a0a] rounded-lg text-xs">
+                  {packageToolPrompt(packageRelationshipTool, Boolean(packageRelationshipSourceId))}
+                  <button data-help-feature="app-package-path-tool" data-help-source="src/App.tsx" className="ml-3 underline" onClick={() => { setPackageRelationshipTool(null); setPackageRelationshipSourceId(null); }}>Cancel</button>
+                </div>
+              )}
               {isCreatingConnector && (
                 <div className="absolute top-3 right-3 z-10 px-4 py-2 bg-[#f97316] text-[#0a0a0a] rounded-lg font-medium text-sm shadow-lg">
-                  {connectorSource ? 'Click target port...' : 'Click source port...'}
+                  {connectorSource ? 'Click target port or part...' : 'Click source port or part...'}
                 </div>
               )}
 
@@ -16109,19 +15979,68 @@ const ADIA = () => {
               )}
 
 
-              <div
-                ref={canvasRef}
-                id="adia-diagram-canvas"
+              <Profiler id="canvas" onRender={(_, phase, actualDuration) => recordRenderCommit('canvas', phase, actualDuration)}>
+                <div data-help-feature="live:App:2fb96905afb4"
+                  ref={canvasRef}
+                  id="adia-diagram-canvas"
                 className="absolute inset-0"
                 onMouseDown={handleMouseDown}
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}
-                onMouseLeave={handleMouseUp}
+                onMouseLeave={(e) => {
+                  if (pendingBddBlockGestureRef.current || isDraggingRef.current) return;
+                  handleMouseUp(e);
+                }}
                 onDoubleClick={handleDoubleClick}
                 onWheel={handleWheel}
-                onContextMenu={(e) => e.preventDefault()}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  if (diagramMode === 'statemachine') {
+                    const rect = canvasRef.current?.getBoundingClientRect();
+                    if (!rect) return;
+                    const worldX = ((e.clientX - rect.left) / uiZoom - view.offsetX) / view.scale;
+                    const worldY = ((e.clientY - rect.top) / uiZoom - view.offsetY) / view.scale;
+                    setSmCanvasContextMenu({
+                      x: e.clientX,
+                      y: e.clientY,
+                      worldX,
+                      worldY,
+                    });
+                  }
+                }}
+                onDragOver={(e) => {
+                  if (e.dataTransfer.types.includes('application/x-adia-model-element')) {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'copy';
+                  }
+                }}
+                onDrop={(e) => {
+                  const payload = parseModelExplorerDragData(e.dataTransfer);
+                  if (!payload) return;
+                  e.preventDefault();
+                  const rect = canvasRef.current?.getBoundingClientRect();
+                  if (!rect) return;
+                  const worldPoint = {
+                    x: ((e.clientX - rect.left) / uiZoom - view.offsetX) / view.scale,
+                    y: ((e.clientY - rect.top) / uiZoom - view.offsetY) / view.scale,
+                  };
+                  const activeDiagId = resolveActiveSysmlDiagramTarget({
+                    diagramMode,
+                    activeDiagramId: activeSysmlDiagramId,
+                    currentLayerId,
+                  });
+                  const elemIds = payload.semanticIds ?? [payload.semanticId];
+                  handleExecuteSysmlCommand({
+                    type: 'addToDiagram',
+                    diagramId: activeDiagId,
+                    elementIds: elemIds,
+                    coordinates: {
+                      [payload.semanticId]: worldPoint,
+                    },
+                  });
+                }}
               >
-                <svg width="100%" height="100%" style={{ pointerEvents: 'none' }}>
+                <svg className="sysml-diagram-canvas" width="100%" height="100%" style={{ pointerEvents: 'none' }}>
                   <defs>
                     <pattern
                       id="grid"
@@ -16166,23 +16085,66 @@ const ADIA = () => {
                           {renderJunctions()}
                         </g>
                       </>
-                    ) : (diagramMode === 'bdd' || diagramMode === 'requirements') ? (
+                    ) : (diagramMode === 'bdd' || diagramMode === 'requirements' || diagramMode === 'package') ? (
                       <>
+                        {renderPackageDiagramFrame()}
+                        <g style={{ pointerEvents: 'all' }}>
+                          {renderPackages()}
+                        </g>
+                        <g>
+                          {renderContainmentPaths()}
+                        </g>
+                        <g style={{ pointerEvents: 'all' }}>
+                          {renderDiagramShortcuts()}
+                        </g>
                         <g style={{ pointerEvents: 'all' }}>
                           {renderBlocks()}
                         </g>
                         <g style={{ pointerEvents: 'all' }}>
                           {renderRelationships()}
                         </g>
+                        {diagramMode === 'bdd' && bddFeatureDrag && (() => {
+                          const source = sysmlCanvasView.blocks.find(block => block.id === bddFeatureDrag.ownerId);
+                          if (!source) return null;
+                          const bounds = computeBlockDisplayBounds(source);
+                          const featureY = bounds.height - 15 + Math.max(0, source.operations.findIndex(operation => operation === bddFeatureDrag.name)) * 12;
+                          const propertyLayouts = sysmlCanvasView.blocks.map(block => {
+                            const blockBounds = computeBlockDisplayBounds(block);
+                            return {
+                              id: block.id,
+                              x: block.x,
+                              y: block.y,
+                              width: blockBounds.width,
+                              height: blockBounds.height,
+                              properties: block.properties.map((property, index) => ({
+                                id: property.id,
+                                localY: 45 + index * 12 + 6,
+                              })),
+                            };
+                          });
+                          const propertyAnchor = bddFeatureDrag.kind === 'property'
+                            ? resolveBddPropertySourceAnchor({
+                                propertyId: bddFeatureDrag.featureId,
+                                ownerBlockId: source.id,
+                                toward: mousePos,
+                                blocks: propertyLayouts,
+                              })
+                            : undefined;
+                          const startX = propertyAnchor?.x ?? (mousePos.x >= source.x + bounds.width / 2 ? source.x + bounds.width : source.x);
+                          const startY = propertyAnchor?.y ?? source.y + featureY;
+                          return (
+                            <g pointerEvents="none">
+                              <path d={`M ${startX} ${startY} L ${mousePos.x} ${mousePos.y}`} fill="none" stroke="#f97316" strokeWidth={2} strokeDasharray="6 4" />
+                              <circle cx={mousePos.x} cy={mousePos.y} r={4} fill="#f97316" />
+                            </g>
+                          );
+                        })()}
                       </>
                     ) : (
                       diagramMode === 'ibd' ? (
                         <>
                           <g style={{ pointerEvents: 'all' }}>
-                            {renderBlocks()}
-                          </g>
-                          <g style={{ pointerEvents: 'all' }}>
-                            {renderParts()}
+                            {renderBlocks('frame')}
                           </g>
                           <g style={{ pointerEvents: 'all' }}>
                             {renderConnectors()}
@@ -16190,12 +16152,19 @@ const ADIA = () => {
                           <g style={{ pointerEvents: 'all' }}>
                             {renderInterfaceRealizations()}
                           </g>
+                          <g style={{ pointerEvents: 'all' }}>
+                            {renderParts()}
+                          </g>
+                          <g style={{ pointerEvents: 'all' }}>
+                            {renderBlocks('ports')}
+                          </g>
                         </>
                       ) : null
                     )}
                   </g>
                 </svg>
               </div>
+            </Profiler>
 
               {/* Status bar */}
               <div className="absolute bottom-0 left-0 right-0 h-7 bg-[#1a1a1a] border-t border-[#222] flex items-center px-3 text-xs text-[#666]">
@@ -16206,7 +16175,7 @@ const ADIA = () => {
                     <span className="mr-4">States: {currentStates.length}</span>
                     <span>Transitions: {currentTransitions.length}</span>
                   </>
-                ) : (diagramMode === 'bdd' || diagramMode === 'requirements') ? (
+                ) : (diagramMode === 'bdd' || diagramMode === 'requirements' || diagramMode === 'package') ? (
                   <>
                     <span className="mr-4">Blocks: {blocks.length}</span>
                     <span>Relations: {relationships.length}</span>
@@ -16232,15 +16201,15 @@ const ADIA = () => {
             {!['xbridges', 'vlab', 'hil', 'entropy'].includes(diagramMode) && (
               <>
                 {/* Bottom Panel */}
-            {!isMobile && !isScopeCollapsed && <Resizer onMouseDown={(e) => handleResizeStart(e, 'scope')} orientation="horizontal" />}
+            {!isMobile && !isScopeCollapsed && <Resizer data-help-feature="live:App:ca067bd95989" onMouseDown={(e) => handleResizeStart(e, 'scope')} orientation="horizontal" />}
             <div style={{ height: isMobile ? '30%' : (isScopeCollapsed ? '40px' : `${scopeHeight}px`), display: isMobile && mobileTab !== 'canvas' ? 'none' : 'flex' }} className="bg-[#1a1a1a] border-t border-[#222] flex flex-col shrink-0 transition-all duration-300 overflow-hidden">
-              <div
+              <div data-help-feature="app-scope-dock" data-help-source="src/App.tsx"
                 onDoubleClick={() => setIsScopeDetached(!isScopeDetached)}
                 title="Double-click header to expand/dock Scope window"
                 className="flex items-center justify-between px-4 border-b border-[#222] h-10 shrink-0 select-none cursor-pointer"
               >
                 <div className="flex items-center gap-2">
-                  <button
+                  <button data-help-feature="app-scope-dock" data-help-source="src/App.tsx"
                     onClick={(e) => { e.stopPropagation(); setIsScopeCollapsed(!isScopeCollapsed); }}
                     className="p-1 hover:bg-[#222] rounded text-[#f97316] transition-colors"
                   >
@@ -16267,7 +16236,7 @@ const ADIA = () => {
                           <div className="text-xs text-[#666] p-2 text-center">No variables</div>
                         ) : (
                           variables.map(v => (
-                            <div
+                            <div data-help-feature="app-scope-select" data-help-source="src/App.tsx"
                               key={v.id}
                               className="flex items-center gap-2 p-1.5 hover:bg-[#222] rounded cursor-pointer"
                               onClick={(e) => {
@@ -16289,7 +16258,7 @@ const ADIA = () => {
 
                     <Separator orientation="vertical" className="h-4 bg-[#333] mx-2" />
 
-                    <Checkbox
+                    <Checkbox data-help-feature="app-scope-transition-sampling" data-help-source="src/App.tsx"
                       id="sampleOnTransition"
                       checked={sampleOnTransitionOnly}
                       onCheckedChange={(checked) => setSampleOnTransitionOnly(checked as boolean)}
@@ -16299,7 +16268,7 @@ const ADIA = () => {
                       Sample on transitions only
                     </Label>
                     <Separator orientation="vertical" className="h-4 bg-[#333] mx-2" />
-                    <Button
+                    <Button data-help-feature="app-scope-csv" data-help-source="src/App.tsx"
                       variant="ghost"
                       size="sm"
                       onClick={exportScopeCSV}
@@ -16312,7 +16281,7 @@ const ADIA = () => {
                       </svg>
                       Export CSV
                     </Button>
-                    <Button
+                    <Button data-help-feature="app-scope-clear" data-help-source="src/App.tsx"
                       variant="ghost"
                       size="sm"
                       onClick={clearScope}
@@ -16324,7 +16293,7 @@ const ADIA = () => {
                       </svg>
                       Clear
                     </Button>
-                    <Button
+                    <Button data-help-feature="app-scope-dock" data-help-source="src/App.tsx"
                       variant="ghost"
                       size="icon"
                       onClick={() => setIsScopeDetached(!isScopeDetached)}
@@ -16338,7 +16307,7 @@ const ADIA = () => {
               </div>
 
               {!isScopeCollapsed && (
-                <div
+                <div data-help-feature="app-scope-dock" data-help-source="src/App.tsx"
                   onDoubleClick={() => setIsScopeDetached(!isScopeDetached)}
                   className="flex-1 p-3 overflow-x-auto overflow-y-hidden cursor-pointer select-none"
                   title="Double-click to expand into detached window"
@@ -16420,16 +16389,29 @@ const ADIA = () => {
                   )}
                 </div>
               )}
+              {smCanvasContextMenu && (
+                <StateMachineCanvasContextMenu
+                  x={smCanvasContextMenu.x}
+                  y={smCanvasContextMenu.y}
+                  worldX={smCanvasContextMenu.worldX}
+                  worldY={smCanvasContextMenu.worldY}
+                  onAddState={(wx, wy) => createState(wx, wy)}
+                  onAddJunction={(wx, wy) => createJunction(wx, wy)}
+                  onAddXBridgesState={(wx, wy) => createXBridgesState(wx, wy)}
+                  onClose={() => setSmCanvasContextMenu(null)}
+                />
+              )}
             </div>
 
               </>
             )}          </div>
-          {!isMobile && !['xbridges', 'vlab', 'hil', 'entropy'].includes(diagramMode) && <Resizer onMouseDown={(e) => handleResizeStart(e, 'properties')} />}
+          {!isMobile && !['xbridges', 'vlab', 'hil', 'entropy'].includes(diagramMode) && <Resizer data-help-feature="live:App:1991d07ad9b1" onMouseDown={(e) => handleResizeStart(e, 'properties')} />}
 
           {!['xbridges', 'vlab', 'hil', 'entropy'].includes(diagramMode) && (
             <>
             {/* Right Dock: Properties */}
-          <aside style={{ width: isMobile ? '100%' : (isPropertiesCollapsed ? '48px' : `${propertiesWidth}px`), display: isMobile && mobileTab !== 'properties' ? 'none' : 'flex' }} className="bg-[#1a1a1a] border-l border-[#222] flex flex-col shrink-0 transition-all duration-300 overflow-hidden">
+            <Profiler id="inspector" onRender={(_, phase, actualDuration) => recordRenderCommit('inspector', phase, actualDuration)}>
+              <aside style={{ width: isMobile ? '100%' : (isPropertiesCollapsed ? '48px' : `${propertiesWidth}px`), display: isMobile && mobileTab !== 'properties' ? 'none' : 'flex' }} className="bg-[#1a1a1a] border-l border-[#222] flex flex-col shrink-0 transition-all duration-300 overflow-hidden">
             <div className="h-10 flex items-center justify-between px-4 border-b border-[#222]">
               {!isPropertiesCollapsed && (
                 <div className="flex items-center overflow-hidden whitespace-nowrap">
@@ -16440,7 +16422,7 @@ const ADIA = () => {
                   <span className="text-sm font-medium">Properties</span>
                 </div>
               )}
-              <button
+              <button data-help-feature="app-panel-collapse" data-help-source="src/App.tsx"
                 onClick={() => setIsPropertiesCollapsed(!isPropertiesCollapsed)}
                 className={`p-1.5 rounded hover:bg-[#222] text-[#f97316] transition-all ${isPropertiesCollapsed ? 'w-full flex justify-center' : ''}`}
               >
@@ -16461,7 +16443,7 @@ const ADIA = () => {
                   <>
                     <div>
                       <Label>State Name</Label>
-                      <Input
+                      <Input data-help-feature="app-state-name" data-help-source="src/App.tsx"
                         value={selectedState.name}
                         onChange={(e) => updateState(selectedState.id, { name: e.target.value })}
                         className={`mt-1 ${hasNameError ? 'border-red-500 ring-red-500 focus-visible:ring-red-500' : ''}`}
@@ -16480,7 +16462,7 @@ const ADIA = () => {
                         <p className="mb-2 leading-relaxed whitespace-pre-line">{err.message}</p>
                         {err.canAutoFix && (
                           <div className="flex gap-2 mt-2">
-                            <Button
+                            <Button data-help-feature="app-error-fix" data-help-source="src/App.tsx"
                               size="sm"
                               variant="outline"
                               onClick={() => handleAutoFix(err)}
@@ -16495,7 +16477,7 @@ const ADIA = () => {
 
                   <div>
                     <Label>Priority (lower = higher)</Label>
-                    <Input
+                    <Input data-help-feature="app-state-priority" data-help-source="src/App.tsx"
                       type="number"
                       value={selectedState.priority}
                       onChange={(e) => updateState(selectedState.id, { priority: parseInt(e.target.value) || 0 })}
@@ -16504,7 +16486,7 @@ const ADIA = () => {
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <Checkbox
+                    <Checkbox data-help-feature="app-state-isParallel" data-help-source="src/App.tsx"
                       checked={selectedState.isParallel}
                       onCheckedChange={(checked) => updateState(selectedState.id, { isParallel: checked as boolean })}
                       id="isParallel"
@@ -16515,7 +16497,7 @@ const ADIA = () => {
                   {selectedState.isParallel && (
                     <div>
                       <Label>Region ID</Label>
-                      <Input
+                      <Input data-help-feature="app-state-regionId" data-help-source="src/App.tsx"
                         value={selectedState.regionId || ''}
                         onChange={(e) => updateState(selectedState.id, { regionId: e.target.value || null })}
                         placeholder="e.g., main_region"
@@ -16525,7 +16507,7 @@ const ADIA = () => {
                   )}
 
                   <div className="flex items-center gap-2">
-                    <Checkbox
+                    <Checkbox data-help-feature="app-state-autostart" data-help-source="src/App.tsx"
                       checked={selectedState.autostart}
                       onCheckedChange={(checked) => updateState(selectedState.id, { autostart: checked as boolean })}
                       id="autostart"
@@ -16534,7 +16516,7 @@ const ADIA = () => {
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <Checkbox
+                    <Checkbox data-help-feature="app-state-isSafeState" data-help-source="src/App.tsx"
                       checked={selectedState.isSafeState || false}
                       onCheckedChange={(checked) => updateState(selectedState.id, { isSafeState: checked as boolean })}
                       id="isSafeState"
@@ -16543,7 +16525,7 @@ const ADIA = () => {
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <Checkbox
+                    <Checkbox data-help-feature="app-state-isTerminalState" data-help-source="src/App.tsx"
                       checked={selectedState.isTerminalState || false}
                       onCheckedChange={(checked) => updateState(selectedState.id, { isTerminalState: checked as boolean })}
                       id="isTerminalState"
@@ -16552,7 +16534,7 @@ const ADIA = () => {
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <Checkbox
+                    <Checkbox data-help-feature="app-state-isXBridges" data-help-source="src/App.tsx"
                       checked={selectedState.isXBridges || false}
                       onCheckedChange={(checked) => updateState(selectedState.id, { isXBridges: checked as boolean })}
                       id="isXBridges"
@@ -16569,7 +16551,7 @@ const ADIA = () => {
                             const targets = direction === 'in' ? selectedInputBoundaryTargets : selectedOutputBoundaryTargets;
                             const disabled = mappingVariables.length === 0 || targets.length === 0;
                             return (
-                              <Button
+                              <Button data-help-feature="app-xb-mapping-add" data-help-source="src/App.tsx"
                                 key={direction}
                                 size="sm"
                                 disabled={disabled}
@@ -16596,7 +16578,7 @@ const ADIA = () => {
                             <div className="grid grid-cols-2 gap-2">
                               <div className="flex flex-col gap-1">
                                 <Label className="text-[9px] uppercase tracking-wider text-gray-500">SM Variable</Label>
-                                <select
+                                <select data-help-feature="app-xb-mapping-variable" data-help-source="src/App.tsx"
                                   value={map.smVarId}
                                   onChange={(e) => {
                                     const newMaps = [...selectedState.xBridgesModel!.mappings!];
@@ -16628,7 +16610,7 @@ const ADIA = () => {
                                 const targets = map.direction === 'in' ? selectedInputBoundaryTargets : selectedOutputBoundaryTargets;
                                 const selectedTargetIndex = targets.findIndex(target => target.blockId === map.blockId && target.portId === map.portId);
                                 return (
-                                  <select
+                                  <select data-help-feature="app-xb-mapping-target" data-help-source="src/App.tsx"
                                     value={selectedTargetIndex >= 0 ? String(selectedTargetIndex) : ''}
                                     onChange={(e) => {
                                       const target = targets[Number(e.target.value)];
@@ -16656,7 +16638,7 @@ const ADIA = () => {
                                 );
                               })()}
                             </div>
-                            <button
+                            <button data-help-feature="app-xb-mapping-remove" data-help-source="src/App.tsx"
                               className="absolute -top-1 -right-1 w-4 h-4 bg-red-600 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10"
                               onClick={() => {
                                 const newMaps = selectedState.xBridgesModel!.mappings!.filter((_, i) => i !== idx);
@@ -16683,7 +16665,7 @@ const ADIA = () => {
 
                   <div>
                     <Label>History</Label>
-                    <select
+                    <select data-help-feature="app-state-historyType" data-help-source="src/App.tsx"
                       value={selectedState.historyType || 'none'}
                       onChange={(e) => {
                         const newType = e.target.value as 'none' | 'shallow' | 'deep';
@@ -16709,7 +16691,7 @@ const ADIA = () => {
                   <div className={`space-y-2 p-2 bg-[#1a1a1a] rounded border ${hasInternalError ? 'border-red-500' : 'border-[#333]'}`}>
                     <div className="flex justify-between items-center">
                       <Label className="text-[#f97316]">Internal Transitions</Label>
-                      <Button size="sm" className="h-5 text-[10px] px-2" onClick={() => {
+                      <Button data-help-feature="app-state-internalTransitions" data-help-source="src/App.tsx" size="sm" className="h-5 text-[10px] px-2" onClick={() => {
                         const current = selectedState.internalTransitions ? selectedState.internalTransitions + '\n' : '';
                         updateState(selectedState.id, { internalTransitions: current + '[condition] / action;' });
                       }}>+ Add</Button>
@@ -16745,7 +16727,7 @@ const ADIA = () => {
                         return (
                           <div key={idx} className="p-2 bg-[#0a0a0a] border border-[#333] rounded space-y-1">
                             <div className="flex gap-1">
-                              <select
+                              <select data-help-feature="app-state-internal-editor" data-help-source="src/App.tsx"
                                 value={type}
                                 onChange={e => updateLine(e.target.value, condition, afterTicks, action)}
                                 className="h-6 bg-[#1a1a1a] border border-[#333] rounded text-[10px] w-20 px-1 text-[#e0e0e0]"
@@ -16755,21 +16737,21 @@ const ADIA = () => {
                                 <option value="and">And</option>
                                 <option value="or">Or</option>
                               </select>
-                              <button onClick={() => {
+                              <button data-help-feature="app-state-internalTransitions" data-help-source="src/App.tsx" onClick={() => {
                                 const allLines = (selectedState.internalTransitions || '').split('\n').filter(l => l.trim());
                                 allLines.splice(idx, 1);
                                 updateState(selectedState.id, { internalTransitions: allLines.join('\n') });
                               }} className="ml-auto text-[#666] hover:text-red-400">×</button>
                             </div>
                             {(type !== 'after') && (
-                              <Input value={condition} onChange={e => updateLine(type, e.target.value, afterTicks, action)} placeholder="Condition" className="h-6 text-[10px]" />
+                              <Input data-help-feature="app-state-internal-editor" data-help-source="src/App.tsx" value={condition} onChange={e => updateLine(type, e.target.value, afterTicks, action)} placeholder="Condition" className="h-6 text-[10px]" />
                             )}
                             {(type !== 'condition') && (
-                              <Input value={afterTicks} onChange={e => updateLine(type, condition, e.target.value, action)} placeholder="Ticks" type="number" className="h-6 text-[10px]" />
+                              <Input data-help-feature="app-state-internal-editor" data-help-source="src/App.tsx" value={afterTicks} onChange={e => updateLine(type, condition, e.target.value, action)} placeholder="Ticks" type="number" className="h-6 text-[10px]" />
                             )}
                             <div className="flex items-center gap-1">
                               <span className="text-[#666] text-[10px]">/</span>
-                              <Input value={action.trim()} onChange={e => updateLine(type, condition, afterTicks, e.target.value)} placeholder="Action" className="h-6 text-[10px] flex-1" />
+                              <Input data-help-feature="app-state-internal-editor" data-help-source="src/App.tsx" value={action.trim()} onChange={e => updateLine(type, condition, afterTicks, e.target.value)} placeholder="Action" className="h-6 text-[10px] flex-1" />
                             </div>
                           </div>
                         );
@@ -16782,7 +16764,7 @@ const ADIA = () => {
 
                   <div>
                     <Label>Entry Action (C-like)</Label>
-                    <textarea
+                    <textarea data-help-feature="app-state-entry" data-help-source="src/App.tsx"
                       value={selectedState.entry}
                       onChange={(e) => updateState(selectedState.id, { entry: e.target.value })}
                       placeholder="/* Entry action */ counter = 0;"
@@ -16792,7 +16774,7 @@ const ADIA = () => {
 
                   <div>
                     <Label>During Action (C-like)</Label>
-                    <textarea
+                    <textarea data-help-feature="app-state-during" data-help-source="src/App.tsx"
                       value={selectedState.during}
                       onChange={(e) => updateState(selectedState.id, { during: e.target.value })}
                       placeholder="/* During action */ counter++;"
@@ -16803,12 +16785,12 @@ const ADIA = () => {
                   <div className={`space-y-2 p-2 bg-[#1a1a1a] rounded border ${hasInternalError ? 'border-red-500' : 'border-[#333]'}`}>
                     <div className="flex justify-between items-center">
                       <Label className="text-[#f97316]">Internal Transitions</Label>
-                      <Button size="sm" className="h-5 text-[10px] px-2" onClick={() => {
+                      <Button data-help-feature="app-state-internalTransitions" data-help-source="src/App.tsx" size="sm" className="h-5 text-[10px] px-2" onClick={() => {
                         const current = selectedState.internalTransitions ? selectedState.internalTransitions + '\n' : '';
                         updateState(selectedState.id, { internalTransitions: current + '[condition] / action;' });
                       }}>+ Add</Button>
                     </div>
-                    <textarea
+                    <textarea data-help-feature="app-state-internalTransitions" data-help-source="src/App.tsx"
                       value={selectedState.internalTransitions || ''}
                       onChange={(e) => updateState(selectedState.id, { internalTransitions: e.target.value })}
                       placeholder="[condition] / action"
@@ -16818,7 +16800,7 @@ const ADIA = () => {
 
                   <div>
                     <Label>Exit Action (C-like)</Label>
-                    <textarea
+                    <textarea data-help-feature="app-state-exit" data-help-source="src/App.tsx"
                       value={selectedState.exit}
                       onChange={(e) => updateState(selectedState.id, { exit: e.target.value })}
                       placeholder="/* Exit action */"
@@ -16826,7 +16808,19 @@ const ADIA = () => {
                     />
                   </div>
 
-                  <Button
+                  <StateRequirementTraceability
+                    stateId={selectedState.id}
+                    stateName={selectedState.name}
+                    canonicalRepository={canonicalSysmlRepository}
+                    onLinkRequirement={(requirementId, kind) => {
+                      createRelationship(selectedState.id, requirementId, kind);
+                    }}
+                    onUnlinkRelationship={(relationshipId) => {
+                      deleteRelationship(relationshipId);
+                    }}
+                  />
+
+                  <Button data-help-feature="app-state-layer" data-help-source="src/App.tsx"
                     variant="outline"
                     size="sm"
                     onClick={() => enterLayer(selectedState.id)}
@@ -16839,7 +16833,7 @@ const ADIA = () => {
                     Enter Layer
                   </Button>
 
-                  <Button
+                  <Button data-help-feature="app-state-delete" data-help-source="src/App.tsx"
                     variant="outline"
                     size="sm"
                     onClick={() => deleteState(selectedState.id)}
@@ -16857,7 +16851,7 @@ const ADIA = () => {
                 <>
                   <div>
                     <Label>Junction Name</Label>
-                    <Input
+                    <Input data-help-feature="app-junction-name" data-help-source="src/App.tsx"
                       value={selectedJunction.name}
                       onChange={(e) => updateJunction(selectedJunction.id, { name: e.target.value })}
                       className="mt-1"
@@ -16865,7 +16859,7 @@ const ADIA = () => {
                   </div>
 
                   <div className="flex items-center gap-2 mt-3">
-                    <Checkbox
+                    <Checkbox data-help-feature="app-junction-autostart" data-help-source="src/App.tsx"
                       checked={selectedJunction.autostart || false}
                       onCheckedChange={(checked) => updateJunction(selectedJunction.id, { autostart: checked as boolean })}
                       id="j-autostart"
@@ -16873,7 +16867,7 @@ const ADIA = () => {
                     <Label htmlFor="j-autostart">Default Transition (Auto-start)</Label>
                   </div>
 
-                  <Button
+                  <Button data-help-feature="app-junction-delete" data-help-source="src/App.tsx"
                     variant="outline"
                     size="sm"
                     onClick={() => deleteJunction(selectedJunction.id)}
@@ -16886,40 +16880,69 @@ const ADIA = () => {
                     Delete Junction
                   </Button>
                 </>
+              ) : selectedPackage ? (
+                <div className="space-y-4">
+                  <SysmlPropertyPanel
+                    selection={{
+                      repository: inspectorRepoV4,
+                      elementId: selectedPackage.id,
+                    }}
+                    onExecuteCommand={dispatchInspectorCommand}
+                  />
+                  {diagramMode === 'package' && (
+                    <div className="pt-2 border-t border-[#333] space-y-2">
+                      <div className="text-xs uppercase tracking-wide text-[#888]">Diagram Presentation</div>
+                      <div className="text-xs text-[#888]">Position: {Math.round(selectedPackage.x)}, {Math.round(selectedPackage.y)}</div>
+                      <Button data-help-feature="app-remove-presentation" data-help-source="src/App.tsx" size="sm" variant="outline" className="w-full" onClick={() => removeFromDiagram(selectedPackage.id)}>
+                        Remove from Diagram
+                      </Button>
+                      <Button data-help-feature="app-delete-definition" data-help-source="src/App.tsx" size="sm" variant="outline" className="w-full border-red-800 text-red-400 hover:bg-red-950/30"
+                        onClick={() => deleteSemanticPackage(selectedPackage.id)}>
+                        Delete from Model…
+                      </Button>
+                    </div>
+                  )}
+                </div>
               ) : selectedBlock ? (
                 <>
-                  <div>
-                    <Label>Block Name</Label>
-                    <Input value={selectedBlock.name} onChange={(e) => updateBlock(selectedBlock.id, { name: e.target.value })} className="mt-1" />
-                  </div>
+                  <SysmlPropertyPanel
+                    selection={{
+                      repository: inspectorRepoV4,
+                      elementId: selectedBlock.id,
+                    }}
+                    onExecuteCommand={dispatchInspectorCommand}
+                  />
                   <div>
                     <Label>Stereotype</Label>
-                    <select
-                      value={selectedBlock.stereotype}
-                      onChange={(e) => updateBlock(selectedBlock.id, { stereotype: e.target.value })}
-                      className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1"
-                    >
-                      {selectedBlock.stereotype === 'requirement' && (
-                        <option value="requirement">Requirement</option>
-                      )}
-                      <option value="block">Block</option>
-                      <option value="interface">Interface</option>
-                      <option value="interfaceBlock">Interface Block</option>
-                      <option value="valueType">ValueType</option>
-                      <option value="enumeration">Enumeration</option>
-                      <option value="verificationCase">Verification Case</option>
-                      {customStereotypes
-                        ?.filter(s => s !== 'requirement' && !['block', 'interface', 'interfaceBlock', 'valueType', 'enumeration'].includes(s))
-                        .map(s => (
-                          <option key={s} value={s}>{s}</option>
-                        ))}
-                    </select>
+                    {selectedBlock.stereotype === 'requirement' || ['view', 'viewpoint', 'stakeholder'].includes(selectedBlock.stereotype) ? (
+                      <div className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 py-1 text-sm text-[#e0e0e0]" role="status">
+                        {selectedBlock.stereotype === 'requirement' ? 'Requirement' : `«${selectedBlock.stereotype}»`} <span className="text-[10px] text-[#888]">(fixed by SysML {selectedBlock.stereotype === 'requirement' ? 'Requirements' : 'View/Viewpoint'} semantics)</span>
+                      </div>
+                    ) : (
+                      <select data-help-feature="app-block-stereotype" data-help-source="src/App.tsx"
+                        value={selectedBlock.stereotype}
+                        onChange={(e) => updateBlock(selectedBlock.id, { stereotype: e.target.value })}
+                        className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1"
+                      >
+                        <option value="block">Block</option>
+                        <option value="interface">Interface</option>
+                        <option value="interfaceBlock">Interface Block</option>
+                        <option value="valueType">ValueType</option>
+                        <option value="enumeration">Enumeration</option>
+                        <option value="verificationCase">Verification Case</option>
+                        {customStereotypes
+                          ?.filter(s => s !== 'requirement' && !['block', 'interface', 'interfaceBlock', 'valueType', 'enumeration'].includes(s))
+                          .map(s => (
+                            <option key={s} value={s}>{s}</option>
+                          ))}
+                      </select>
+                    )}
                   </div>
                   {selectedBlock.stereotype === 'requirement' && (
                     <>
                       {/* Tabs Header */}
                       <div className="flex border-b border-[#333] mb-4">
-                        <button
+                        <button data-help-feature="app-property-tab" data-help-source="src/App.tsx"
                           onClick={() => setActivePropTab('general')}
                           className={`flex-1 py-1.5 text-xs font-semibold border-b-2 transition-colors ${
                             activePropTab === 'general'
@@ -16929,7 +16952,7 @@ const ADIA = () => {
                         >
                           General
                         </button>
-                        <button
+                        <button data-help-feature="app-property-tab" data-help-source="src/App.tsx"
                           onClick={() => setActivePropTab('assign')}
                           className={`flex-1 py-1.5 text-xs font-semibold border-b-2 transition-colors ${
                             activePropTab === 'assign'
@@ -16939,7 +16962,7 @@ const ADIA = () => {
                         >
                           Assign
                         </button>
-                        <button
+                        <button data-help-feature="app-property-tab" data-help-source="src/App.tsx"
                           onClick={() => setActivePropTab('governance')}
                           className={`flex-1 py-1.5 text-xs font-semibold border-b-2 transition-colors ${
                             activePropTab === 'governance'
@@ -16953,9 +16976,9 @@ const ADIA = () => {
 
                       {activePropTab === 'general' && (
                         <>
-                          <div><Label>Req ID</Label><Input value={selectedBlock.reqId || ''} onChange={(e) => updateBlock(selectedBlock.id, { reqId: e.target.value })} className="mt-1" /></div>
+                          <div><Label>Req ID</Label><Input data-help-feature="app-block-reqId" data-help-source="src/App.tsx" value={selectedBlock.reqId || ''} onChange={(e) => updateBlock(selectedBlock.id, { reqId: e.target.value })} className="mt-1" /></div>
                           <div><Label>Status</Label>
-                            <select value={selectedBlock.status || ''} onChange={(e) => {
+                            <select data-help-feature="app-requirement-status" data-help-source="src/App.tsx" value={selectedBlock.status || ''} onChange={(e) => {
                               const validation = validateLegacyRequirementStatusTransition(blocks, relationships, selectedBlock.id, e.target.value);
                               if (!validation.valid) addError('error', `Invalid requirement status: ${validation.reason}`);
                               else updateBlock(selectedBlock.id, { status: e.target.value });
@@ -16970,17 +16993,17 @@ const ADIA = () => {
                             </select>
                           </div>
                           <div><Label>Priority</Label>
-                            <select value={selectedBlock.priority || ''} onChange={(e) => updateBlock(selectedBlock.id, { priority: e.target.value })} className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1">
+                            <select data-help-feature="app-block-priority" data-help-source="src/App.tsx" value={selectedBlock.priority || ''} onChange={(e) => updateBlock(selectedBlock.id, { priority: e.target.value })} className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1">
                               <option value="High">High</option>
                               <option value="Medium">Medium</option>
                               <option value="Low">Low</option>
                               <option value="Critical">Critical</option>
                             </select>
                           </div>
-                          <div><Label>Description</Label><textarea value={selectedBlock.description || ''} onChange={(e) => updateBlock(selectedBlock.id, { description: e.target.value })} className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#f97316]" /></div>
+                          <div><Label>Description</Label><textarea data-help-feature="app-block-description" data-help-source="src/App.tsx" value={selectedBlock.description || ''} onChange={(e) => updateBlock(selectedBlock.id, { description: e.target.value })} className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#f97316]" /></div>
                           <div>
                             <Label>Risk</Label>
-                            <select value={selectedBlock.risk || 'Medium'} onChange={(e) => updateBlock(selectedBlock.id, { risk: e.target.value })} className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1">
+                            <select data-help-feature="app-block-risk" data-help-source="src/App.tsx" value={selectedBlock.risk || 'Medium'} onChange={(e) => updateBlock(selectedBlock.id, { risk: e.target.value })} className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1">
                               <option value="High">High</option>
                               <option value="Medium">Medium</option>
                               <option value="Low">Low</option>
@@ -16989,24 +17012,24 @@ const ADIA = () => {
                           </div>
                           <div>
                             <Label>Verification Method</Label>
-                            <select value={selectedBlock.verificationMethod || 'Test'} onChange={(e) => updateBlock(selectedBlock.id, { verificationMethod: e.target.value })} className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1">
+                            <select data-help-feature="app-block-verificationMethod" data-help-source="src/App.tsx" value={selectedBlock.verificationMethod || 'Test'} onChange={(e) => updateBlock(selectedBlock.id, { verificationMethod: e.target.value })} className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1">
                               <option value="Test">Test</option>
                               <option value="Analysis">Analysis</option>
                               <option value="Inspection">Inspection</option>
                               <option value="Demonstration">Demonstration</option>
                             </select>
                           </div>
-                          <div><Label>Source</Label><Input value={selectedBlock.source || ''} onChange={(e) => updateBlock(selectedBlock.id, { source: e.target.value })} className="mt-1" /></div>
-                          <div><Label>Version</Label><Input value={selectedBlock.version || '1.0'} onChange={(e) => updateBlock(selectedBlock.id, { version: e.target.value })} className="mt-1" /></div>
-                          <div><Label>Rationale</Label><textarea value={selectedBlock.rationale || ''} onChange={(e) => updateBlock(selectedBlock.id, { rationale: e.target.value })} className="w-full h-16 bg-[#1a1a1a] border border-[#333] rounded text-sm text-[#e0e0e0] p-2 mt-1" /></div>
-                          <div><Label>Baseline ID</Label><Input value={selectedBlock.baselineId || ''} onChange={(e) => updateBlock(selectedBlock.id, { baselineId: e.target.value || undefined })} className="mt-1" /></div>
+                          <div><Label>Source</Label><Input data-help-feature="app-block-source" data-help-source="src/App.tsx" value={selectedBlock.source || ''} onChange={(e) => updateBlock(selectedBlock.id, { source: e.target.value })} className="mt-1" /></div>
+                          <div><Label>Version</Label><Input data-help-feature="app-block-version" data-help-source="src/App.tsx" value={selectedBlock.version || '1.0'} onChange={(e) => updateBlock(selectedBlock.id, { version: e.target.value })} className="mt-1" /></div>
+                          <div><Label>Rationale</Label><textarea data-help-feature="app-block-rationale" data-help-source="src/App.tsx" value={selectedBlock.rationale || ''} onChange={(e) => updateBlock(selectedBlock.id, { rationale: e.target.value })} className="w-full h-16 bg-[#1a1a1a] border border-[#333] rounded text-sm text-[#e0e0e0] p-2 mt-1" /></div>
+                          <div><Label>Baseline ID</Label><Input data-help-feature="app-block-baselineId" data-help-source="src/App.tsx" value={selectedBlock.baselineId || ''} onChange={(e) => updateBlock(selectedBlock.id, { baselineId: e.target.value || undefined })} className="mt-1" /></div>
 
                           <div className="mt-4 pt-3 border-t border-[#333]">
                             <Label className="flex items-center justify-between text-xs font-semibold text-[#aaa] mb-2">
                               <span>Attached PDFs</span>
                               <span className="text-[10px] text-[#666]">({(selectedBlock.attachedFiles || []).length})</span>
                             </Label>
-                            
+
                             <div className="space-y-2 mb-2 max-h-40 overflow-y-auto">
                               {(!selectedBlock.attachedFiles || selectedBlock.attachedFiles.length === 0) ? (
                                 <div className="text-xs text-[#666] italic py-1">No PDF files attached.</div>
@@ -17020,7 +17043,7 @@ const ADIA = () => {
                                       </span>
                                     </div>
                                     <div className="flex items-center gap-1 shrink-0">
-                                      <button
+                                      <button data-help-feature="app-requirement-pdf-view" data-help-source="src/App.tsx"
                                         onClick={() => {
                                           try {
                                             const base64Parts = file.content.split(',');
@@ -17044,7 +17067,7 @@ const ADIA = () => {
                                       >
                                         <Eye size={12} />
                                       </button>
-                                      <button
+                                      <button data-help-feature="app-requirement-pdf-download" data-help-source="src/App.tsx"
                                         onClick={() => {
                                           try {
                                             const base64Parts = file.content.split(',');
@@ -17072,7 +17095,7 @@ const ADIA = () => {
                                       >
                                         <Download size={12} />
                                       </button>
-                                      <button
+                                      <button data-help-feature="app-requirement-pdf-remove" data-help-source="src/App.tsx"
                                         onClick={() => {
                                           const currentFiles = selectedBlock.attachedFiles || [];
                                           const updatedFiles = currentFiles.filter((_, i) => i !== idx);
@@ -17091,7 +17114,7 @@ const ADIA = () => {
                             </div>
 
                             <div>
-                              <input
+                              <input data-help-feature="app-requirement-pdf-remove" data-help-source="src/App.tsx"
                                 type="file"
                                 id="req-pdf-upload"
                                 accept=".pdf"
@@ -17115,7 +17138,7 @@ const ADIA = () => {
                                   e.target.value = '';
                                 }}
                               />
-                              <Button
+                              <Button data-help-feature="app-requirement-pdf-attach" data-help-source="src/App.tsx"
                                 variant="outline"
                                 size="sm"
                                 onClick={() => document.getElementById('req-pdf-upload')?.click()}
@@ -17132,7 +17155,7 @@ const ADIA = () => {
                         <div className="space-y-4">
                           <div>
                             <Label>Assigned To</Label>
-                            <Input
+                            <Input data-help-feature="app-block-assignedTo" data-help-source="src/App.tsx"
                               value={selectedBlock.assignedTo || ''}
                               onChange={(e) => updateBlock(selectedBlock.id, { assignedTo: e.target.value })}
                               className="mt-1"
@@ -17144,7 +17167,7 @@ const ADIA = () => {
                             <span className="text-[10px] text-[#888] uppercase font-bold tracking-wider">Quick Team Assignment</span>
                             <div className="flex flex-wrap gap-1.5 mt-1.5">
                               {["Control Team", "Hardware Team", "Software Team", "Mechanical Design", "Safety Engineer", "QA Team", "System Architect"].map(team => (
-                                <button
+                                <button data-help-feature="app-block-assignedTo" data-help-source="src/App.tsx"
                                   key={team}
                                   onClick={() => updateBlock(selectedBlock.id, { assignedTo: team })}
                                   className={`px-2 py-1 rounded text-[10px] border transition-colors ${
@@ -17182,37 +17205,46 @@ const ADIA = () => {
                         const masterReq = reqDef.copiedFromId ? canonicalSysmlRepository.requirements[reqDef.copiedFromId] : undefined;
                         const suspectLinks = selectSuspectLinks(sysmlStore, selectedBlock.id);
                         const evidenceHistory = selectEvidenceForRequirement(sysmlStore, selectedBlock.id);
+                        // Projection-only deletion preview: analyze without
+                        // mutating, so the panel can show typed severity,
+                        // unresolved usages, evidence fallout, and protected
+                        // baseline blocks before any confirmation dialog.
+                        const deletionPreview = analyzeMutation(canonicalSysmlRepository, { kind: 'deleteElements', elementIds: [selectedBlock.id] });
 
                         return (
                           <RequirementGovernancePanel
+                            repository={canonicalSysmlRepository}
                             requirement={reqDef}
                             masterRequirement={masterReq}
                             baselines={canonicalSysmlRepository.baselines}
                             suspectLinks={suspectLinks}
                             evidenceHistory={evidenceHistory}
+                            deletionSeverity={impactSeverity(deletionPreview, authorizedBaselineIds)}
+                            unresolvedUsageIds={deletionPreview.unresolvedUsageIds}
+                            invalidatedEvidenceIds={deletionPreview.invalidatedEvidenceIds}
+                            blockedBaselineIds={deletionPreview.affectedBaselineIds.filter(id => !authorizedBaselineIds.includes(id))}
                             onCreateBaseline={(name) => {
-                              const res = createModelBaseline(canonicalSysmlRepository, name);
-                              setCanonicalSysmlRepository(res.repository);
+                              const res = handleExecuteSysmlCommand({ type: 'createModelBaseline', name });
+                              if (!res.committed) return;
                               addError('info', `Created baseline: ${name}`);
                             }}
+                            onCloneBaseline={(baselineId) => {
+                              const res = handleExecuteSysmlCommand({ type: 'cloneBaselineAsWorkingCopy', baselineId, name: `Working copy of ${sysmlObjectLabel(canonicalSysmlRepository.baselines[baselineId], 'Baseline')}` });
+                              if (!res.committed) return;
+                              addError('info', `Cloned protected baseline ${sysmlObjectLabel(canonicalSysmlRepository.baselines[baselineId], 'Baseline')} into unprotected working copy ${sysmlObjectLabel(res.baseline, 'Baseline')}`);
+                            }}
+                            onAuthorizeBaseline={(baselineId) => {
+                              setAuthorizedBaselineIds(prev => prev.includes(baselineId) ? prev : [...prev, baselineId]);
+                              addError('info', `Recorded explicit deletion authorization for protected baseline ${sysmlObjectLabel(canonicalSysmlRepository.baselines[baselineId], 'Baseline')}`);
+                            }}
                             onClearSuspect={(relId) => {
-                              const updated = clearSuspectLink(canonicalSysmlRepository, relId);
-                              setCanonicalSysmlRepository(updated);
-                              addError('info', `Cleared suspect flag on link: ${relId}`);
+                              const res = handleExecuteSysmlCommand({ type: 'clearSuspectLink', relationshipId: relId });
+                              if (!res.committed) return;
+                              addError('info', `Cleared suspect flag on link: ${resolveSysmlReferenceLabel(canonicalSysmlRepository, relId, 'Relationship')}`);
                             }}
                             onSyncFromMaster={() => {
-                              const res = synchronizeRequirementCopy(canonicalSysmlRepository, selectedBlock.id);
-                              setCanonicalSysmlRepository(res.repository);
-                              if (masterReq) {
-                                updateBlock(selectedBlock.id, {
-                                  name: masterReq.name,
-                                  description: masterReq.text,
-                                  status: masterReq.status,
-                                  version: masterReq.version,
-                                  priority: masterReq.priority,
-                                  risk: masterReq.risk,
-                                });
-                              }
+                              const res = handleExecuteSysmlCommand({ type: 'synchronizeRequirementCopy', requirementId: selectedBlock.id });
+                              if (!res.committed) return;
                               addError('info', 'Synchronized copy requirement from master');
                             }}
                           />
@@ -17222,21 +17254,37 @@ const ADIA = () => {
                   )}
                   {selectedBlock.stereotype === 'verificationCase' && (
                     <div className="space-y-3 border-t border-[#333] pt-3">
-                      <div><Label>Verification Method</Label><Input value={selectedBlock.verificationMethod || 'Test'} onChange={(e) => updateBlock(selectedBlock.id, { verificationMethod: e.target.value })} className="mt-1" /></div>
+                      <div><Label>Verification Method</Label><Input data-help-feature="app-block-verificationMethod" data-help-source="src/App.tsx" value={selectedBlock.verificationMethod || 'Test'} onChange={(e) => updateBlock(selectedBlock.id, { verificationMethod: e.target.value })} className="mt-1" /></div>
                       <div><Label>Result</Label>
-                        <select value={selectedBlock.verificationResult || ''} onChange={(e) => updateBlock(selectedBlock.id, { verificationResult: e.target.value ? e.target.value as 'passed' | 'failed' : undefined, executedAt: e.target.value ? new Date().toISOString() : undefined })} className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1">
+                        <select data-help-feature="app-verification-result" data-help-source="src/App.tsx" value={selectedBlock.verificationResult || ''} onChange={(e) => updateBlock(selectedBlock.id, { verificationResult: e.target.value ? e.target.value as 'passed' | 'failed' : undefined, executedAt: e.target.value ? new Date().toISOString() : undefined })} className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1">
                           <option value="">Not Executed</option><option value="passed">Passed</option><option value="failed">Failed</option>
                         </select>
                       </div>
-                      <div><Label>Evidence Artifact URI</Label><Input value={selectedBlock.artifactUri || ''} onChange={(e) => updateBlock(selectedBlock.id, { artifactUri: e.target.value })} className="mt-1" /></div>
+                      {canonicalSysmlRepository.verificationCases[selectedBlock.id] && (
+                        <div><Label>Test procedure</Label>
+                          <select data-help-feature="app-verification-behavior" data-help-source="src/App.tsx"
+                            aria-label="Test procedure" value={canonicalSysmlRepository.verificationCases[selectedBlock.id]?.behaviorId ?? ''}
+                            onChange={(e) => {
+                              const plan = buildSetVerificationBehaviorCommand(canonicalSysmlRepository, { verificationCaseId: selectedBlock.id, behaviorId: e.target.value || undefined });
+                              if (plan.ok) handleExecuteSysmlCommand(plan.command);
+                              else addError('warning', plan.diagnostics.map(d => d.message).join(' '));
+                            }}
+                            className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1"
+                          >
+                            <option value="">(none)</option>
+                            {listTestProcedures(canonicalSysmlRepository).map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
+                          </select>
+                        </div>
+                      )}
+                      <div><Label>Evidence Artifact URI</Label><Input data-help-feature="app-block-artifactUri" data-help-source="src/App.tsx" value={selectedBlock.artifactUri || ''} onChange={(e) => updateBlock(selectedBlock.id, { artifactUri: e.target.value })} className="mt-1" /></div>
                       {selectedBlock.executedAt && <div className="text-[10px] text-[#777]">Executed: {selectedBlock.executedAt}</div>}
                     </div>
                   )}
                   {selectedBlock.stereotype === 'block' && (
                     <div className="space-y-2 border-t border-[#333] pt-3">
-                      <div><Label>Namespace</Label><Input value={(selectedBlock.namespace || []).join('::')} onChange={(e) => updateBlock(selectedBlock.id, { namespace: e.target.value.split('::').map(value => value.trim()).filter(Boolean) })} className="mt-1" /></div>
-                      <label className="flex items-center gap-2 text-xs text-[#aaa]"><input type="checkbox" checked={Boolean(selectedBlock.isAbstract)} onChange={(e) => updateBlock(selectedBlock.id, { isAbstract: e.target.checked })} /> Abstract</label>
-                      <label className="flex items-center gap-2 text-xs text-[#aaa]"><input type="checkbox" checked={Boolean(selectedBlock.isLeaf)} onChange={(e) => updateBlock(selectedBlock.id, { isLeaf: e.target.checked })} /> Leaf</label>
+                      <div><Label>Namespace</Label><Input data-help-feature="app-block-namespace" data-help-source="src/App.tsx" value={(selectedBlock.namespace || []).join('::')} onChange={(e) => updateBlock(selectedBlock.id, { namespace: e.target.value.split('::').map(value => value.trim()).filter(Boolean) })} className="mt-1" /></div>
+                      <label className="flex items-center gap-2 text-xs text-[#aaa]"><input data-help-feature="app-block-isAbstract" data-help-source="src/App.tsx" type="checkbox" checked={Boolean(selectedBlock.isAbstract)} onChange={(e) => updateBlock(selectedBlock.id, { isAbstract: e.target.checked })} /> Abstract</label>
+                      <label className="flex items-center gap-2 text-xs text-[#aaa]"><input data-help-feature="app-block-isLeaf" data-help-source="src/App.tsx" type="checkbox" checked={Boolean(selectedBlock.isLeaf)} onChange={(e) => updateBlock(selectedBlock.id, { isLeaf: e.target.checked })} /> Leaf</label>
                     </div>
                   )}
                   <div>
@@ -17244,7 +17292,7 @@ const ADIA = () => {
                     <div className="space-y-1 mt-1 max-h-40 overflow-y-auto">
                       {selectedBlock.ports.map((port, i) => (
                         <div key={port.id} className="flex items-center gap-1 bg-[#0a0a0a] p-1 rounded border border-[#333]">
-                          <Input
+                          <Input data-help-feature="app-port-name" data-help-source="src/App.tsx"
                             value={port.name}
                             onChange={(e) => {
                               const newPorts = [...selectedBlock.ports];
@@ -17255,7 +17303,7 @@ const ADIA = () => {
                             placeholder="Name"
                           />
                           <span className="text-[#666] text-[10px]">:</span>
-                          <Input
+                          <Input data-help-feature="app-port-type" data-help-source="src/App.tsx"
                             value={port.type}
                             onChange={(e) => {
                               const newPorts = [...selectedBlock.ports];
@@ -17265,7 +17313,7 @@ const ADIA = () => {
                             className="w-16 h-6 text-[10px] px-1"
                             placeholder="Type"
                           />
-                          <select
+                          <select data-help-feature="app-port-kind" data-help-source="src/App.tsx"
                             value={port.kind || 'standard'}
                             onChange={(e) => {
                               const newPorts = [...selectedBlock.ports];
@@ -17277,10 +17325,10 @@ const ADIA = () => {
                             <option value="standard">Std</option>
                             <option value="flow">Flow</option>
                             <option value="proxy">Proxy</option>
+                            <option value="full">Full</option>
                           </select>
-                          {port.kind === 'flow' && (
-                            <>
-                              <select
+                          <>
+                              <select data-help-feature="app-port-direction" data-help-source="src/App.tsx"
                                 value={port.direction || 'in'}
                                 onChange={(e) => {
                                   const newPorts = [...selectedBlock.ports];
@@ -17293,7 +17341,7 @@ const ADIA = () => {
                                 <option value="out">Out</option>
                                 <option value="inout">I/O</option>
                               </select>
-                              <Input
+                              {port.kind === 'flow' && <Input data-help-feature="app-port-unit" data-help-source="src/App.tsx"
                                 value={port.unit || ''}
                                 onChange={(e) => {
                                   const newPorts = [...selectedBlock.ports];
@@ -17301,10 +17349,9 @@ const ADIA = () => {
                                   updateBlock(selectedBlock.id, { ports: newPorts });
                                 }}
                                 className="w-10 h-6 text-[10px] px-1" placeholder="Unit"
-                              />
-                            </>
-                          )}
-                          <button
+                              />}
+                          </>
+                          <button data-help-feature="app-port-delete" data-help-source="src/App.tsx"
                             onClick={() => {
                               const newPorts = selectedBlock.ports.filter(p => p.id !== port.id);
                               updateBlock(selectedBlock.id, { ports: newPorts });
@@ -17317,23 +17364,51 @@ const ADIA = () => {
                       ))}
                     </div>
                     <div className="flex gap-1 mt-2">
-                      <Button size="sm" onClick={() => handleAddPortToSelected('standard')} className="h-6 text-[10px] px-2 bg-[#f97316]/20 text-[#f97316] hover:bg-[#f97316]/30 border border-[#f97316]/50">+ Std</Button>
-                      <Button size="sm" onClick={() => handleAddPortToSelected('flow')} className="h-6 text-[10px] px-2 bg-[#6c9ac6]/20 text-[#6c9ac6] hover:bg-[#6c9ac6]/30 border border-[#6c9ac6]/50">+ Flow</Button>
-                      <Button size="sm" onClick={() => handleAddPortToSelected('proxy')} className="h-6 text-[10px] px-2 bg-[#c96c8a]/20 text-[#c96c8a] hover:bg-[#c96c8a]/30 border border-[#c96c8a]/50">+ Proxy</Button>
+                      <Button data-help-feature="app-port-add" data-help-source="src/App.tsx" size="sm" onClick={() => handleAddPortToSelected('standard')} className="h-6 text-[10px] px-2 border" style={{ borderColor: semanticPresentationToken('standardPort'), color: semanticPresentationToken('standardPort'), backgroundColor: 'transparent' }}>+ Std</Button>
+                      <Button data-help-feature="app-port-add" data-help-source="src/App.tsx" size="sm" onClick={() => handleAddPortToSelected('flow')} className="h-6 text-[10px] px-2 border" style={{ borderColor: semanticPresentationToken('flowPort'), color: semanticPresentationToken('flowPort'), backgroundColor: 'transparent' }}>+ Flow</Button>
+                      <Button data-help-feature="app-port-add" data-help-source="src/App.tsx" size="sm" onClick={() => handleAddPortToSelected('proxy')} className="h-6 text-[10px] px-2 border" style={{ borderColor: semanticPresentationToken('proxyPort'), color: semanticPresentationToken('proxyPort'), backgroundColor: 'transparent' }}>+ Proxy</Button>
+                      <Button data-help-feature="app-port-add" data-help-source="src/App.tsx" size="sm" onClick={() => handleAddPortToSelected('full')} className="h-6 text-[10px] px-2 border" style={{ borderColor: semanticPresentationToken('fullPort'), color: semanticPresentationToken('fullPort'), backgroundColor: 'transparent' }}>+ Full</Button>
                     </div>
                   </div>
                   <div>
                     <Label>Operations (one per line)</Label>
-                    <textarea
+                    <textarea data-help-feature="app-block-operations" data-help-source="src/App.tsx"
                       value={selectedBlock.operations.join('\n')}
                       onChange={(e) => updateBlock(selectedBlock.id, { operations: e.target.value.split('\n').filter(s => s) })}
                       className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#f97316]"
                       placeholder="myOperation(arg: Type): ReturnType"
                     />
                   </div>
+                  {(() => {
+                    const definition = canonicalSysmlRepository.definitions[selectedBlock.id];
+                    const signals = Object.values(canonicalSysmlRepository.definitions).filter(candidate => candidate.kind === 'signal');
+                    if (definition?.kind !== 'block' || signals.length === 0) return null;
+                    const received = definition.receptions ?? [];
+                    return (
+                      <div>
+                        <Label>Receptions (Signals this Block receives)</Label>
+                        <div className="mt-1 flex flex-col gap-1">
+                          {signals.map(signal => (
+                            <label key={signal.id} className="flex items-center gap-2 text-xs text-[#ccc]">
+                              <input data-help-feature="app-definition-receptions" data-help-source="src/App.tsx"
+                                type="checkbox"
+                                checked={received.includes(signal.id)}
+                                onChange={(event) => {
+                                  const next = event.target.checked ? [...received, signal.id] : received.filter(id => id !== signal.id);
+                                  const result = handleExecuteSysmlCommand({ type: 'updateElement', elementId: definition.id, patch: { receptions: next } });
+                                  if (!result.committed) result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
+                                }}
+                              />
+                              {sysmlObjectLabel(signal, 'Signal')}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
                   <div>
                     <Label>Constraints (one per line)</Label>
-                    <textarea
+                    <textarea data-help-feature="app-block-constraints" data-help-source="src/App.tsx"
                       value={(selectedBlock.constraints || []).join('\n')}
                       onChange={(e) => updateBlock(selectedBlock.id, { constraints: e.target.value.split('\n').filter(s => s) })}
                       className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#f97316]"
@@ -17342,7 +17417,7 @@ const ADIA = () => {
                   </div>
                   <div>
                     <Label>Nested Classes / Parts</Label>
-                    <textarea
+                    <textarea data-help-feature="app-block-classes" data-help-source="src/App.tsx"
                       value={(selectedBlock.classes || []).join('\n')}
                       onChange={(e) => updateBlock(selectedBlock.id, { classes: e.target.value.split('\n').filter(s => s) })}
                       className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#f97316]"
@@ -17364,7 +17439,7 @@ const ADIA = () => {
                   </div>
                   <div>
                     <Label>Satisfied Requirements</Label>
-                    <select
+                    <select data-help-feature="app-block-satisfiedReqIds" data-help-source="src/App.tsx"
                       multiple
                       value={selectedBlock.satisfiedReqIds || []}
                       onChange={(e) => {
@@ -17380,7 +17455,44 @@ const ADIA = () => {
                     <div className="text-[10px] text-[#666] mt-1">Hold Ctrl to select multiple</div>
                   </div>
                   <div className="flex flex-col gap-2 mt-4">
-                    <Button
+                    {canonicalSysmlRepository.definitions[selectedBlock.id]?.kind === 'block' && (
+                      <Button data-help-feature="app-sequence-create" data-help-source="src/App.tsx"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => createSequenceDiagramForBlock(selectedBlock.id)}
+                        className="w-full border-[#444] text-[#ccc] hover:bg-[#222]"
+                      >
+                        New Sequence Diagram
+                      </Button>
+                    )}
+                    {canonicalSysmlRepository.definitions[selectedBlock.id]?.kind === 'block' && (() => {
+                      const usages = whereUsedInInteractions(canonicalSysmlRepository, selectedBlock.id)
+                        .filter(usage => usage.diagramIds.length > 0);
+                      if (usages.length === 0) return null;
+                      return (
+                        <div data-testid="shown-in-sequence-diagrams">
+                          <Label>Shown in Sequence Diagrams</Label>
+                          <div className="mt-1 flex flex-col gap-1">
+                            {usages.map(usage => (
+                              <button data-help-feature="app-sequence-reveal" data-help-source="src/App.tsx"
+                                key={usage.interactionId} type="button"
+                                onClick={() => {
+                                  // The sequence workspace remounts per diagram and reports its own (empty) selection, so hand it this one.
+                                  if (usage.diagramIds[0] !== activeSysmlDiagramId) pendingSequenceSelectionRef.current = { diagramId: usage.diagramIds[0], elementIds: usage.elementIds };
+                                  if (openExactDiagramById(usage.diagramIds[0], { pushOrigin: true })) setSelectedIds(usage.elementIds);
+                                  else pendingSequenceSelectionRef.current = null;
+                                }}
+                                className="rounded border border-[#333] px-2 py-1 text-left text-xs text-[#ccc] hover:bg-[#222]"
+                              >
+                                {sysmlObjectLabel(canonicalSysmlRepository.definitions[usage.interactionId], 'Interaction')}
+                                <span className="text-[#777]"> · {usage.elementIds.length} {usage.elementIds.length === 1 ? 'lifeline' : 'lifelines'}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })()}
+                    <Button data-help-feature="app-remove-presentation" data-help-source="src/App.tsx"
                       variant="outline"
                       size="sm"
                       onClick={() => removeFromDiagram(selectedBlock.id)}
@@ -17388,7 +17500,7 @@ const ADIA = () => {
                     >
                       Remove from Diagram
                     </Button>
-                    <Button
+                    <Button data-help-feature="app-delete-definition" data-help-source="src/App.tsx"
                       variant="outline"
                       size="sm"
                       onClick={() => deleteBlock(selectedBlock.id)}
@@ -17400,39 +17512,16 @@ const ADIA = () => {
                 </>
               ) : selectedRelationship ? (
                 <>
-                  <div>
-                    <Label>Relationship Type</Label>
-                    <select
-                      value={selectedRelationship.type}
-                      onChange={(e) => updateRelationship(selectedRelationship.id, { type: e.target.value as any })}
-                      className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1"
-                    >
-                      <option value="association">Association</option>
-                      <option value="generalization">Generalization</option>
-                      <option value="composition">Composition</option>
-                      <option value="aggregation">Aggregation</option>
-                      <option value="allocation">Allocation</option>
-                      <option value="derive">Derive</option>
-                      <option value="deriveReqt">Derive Requirement (deriveReqt)</option>
-                      <option value="refine">Refine</option>
-                      <option value="satisfy">Satisfy</option>
-                      <option value="verify">Verify</option>
-                      <option value="trace">Trace</option>
-                      <option value="copy">Copy</option>
-                      <option
-                        value="requirementContainment"
-                        disabled={!(blocks.find(b => b.id === selectedRelationship.sourceId)?.stereotype === 'requirement' && blocks.find(b => b.id === selectedRelationship.targetId)?.stereotype === 'requirement')}
-                      >
-                        Requirement Containment (parent → child)
-                      </option>
-                      <option value="binding">Binding</option>
-                      <option value="dependency">Dependency</option>
-                    </select>
-                  </div>
-                  <div>
-                    <Label>Label</Label>
-                    <Input value={selectedRelationship.label} onChange={(e) => updateRelationship(selectedRelationship.id, { label: e.target.value })} className="mt-1" />
-                  </div>
+                  <SysmlPropertyPanel
+                    selection={{ repository: inspectorRepoV4, relationshipId: selectedRelationship.id }}
+                    onExecuteCommand={dispatchInspectorCommand}
+                  />
+                  {diagramMode === 'package' && (
+                    <Button data-help-feature="app-remove-presentation" data-help-source="src/App.tsx" size="sm" variant="outline" className="w-full" onClick={() => removeFromDiagram(selectedRelationship.id)}
+                      title="Hide this path on this diagram only; use Display Paths to show it again">
+                      Remove from Diagram
+                    </Button>
+                  )}
                   <RelationshipEndEditor
                     relationship={{
                       id: selectedRelationship.id,
@@ -17457,6 +17546,10 @@ const ADIA = () => {
                     }
                     sourceIsRequirement={blocks.find(b => b.id === selectedRelationship.sourceId)?.stereotype === 'requirement'}
                     targetIsRequirement={blocks.find(b => b.id === selectedRelationship.targetId)?.stereotype === 'requirement'}
+                    sourceEndpoint={resolveUiConnectionEndpoint({ blocks, parts }, selectedRelationship.sourceId)}
+                    targetEndpoint={resolveUiConnectionEndpoint({ blocks, parts }, selectedRelationship.targetId)}
+                    diagram={diagramMode === 'ibd' ? 'ibd' : diagramMode === 'requirements' ? 'requirements' : 'bdd'}
+                    onInvalidChange={(rejection) => showConnectionPolicyError(rejection, selectedRelationship.id)}
                     onChange={(updatedRel) => {
                       updateRelationship(selectedRelationship.id, {
                         type: updatedRel.kind === 'sharedAggregation' ? 'aggregation' : updatedRel.kind === 'deriveReqt' ? 'derive' : updatedRel.kind as any,
@@ -17471,22 +17564,66 @@ const ADIA = () => {
                       } as any);
                     }}
                   />
-                  <Button variant="outline" size="sm" onClick={() => deleteRelationship(selectedRelationship.id)} className="w-full border-red-800 text-red-400 hover:bg-red-950/30">Delete Relation</Button>
+                  <Button data-help-feature="app-relation-delete" data-help-source="src/App.tsx" variant="outline" size="sm" onClick={() => deleteRelationship(selectedRelationship.id)} className="w-full border-red-800 text-red-400 hover:bg-red-950/30">Delete Relation</Button>
                 </>
               ) : selectedPart ? (
                 <>
-                  <div>
-                    <Label>Part Name</Label>
-                    <Input value={selectedPart.name} onChange={(e) => updatePart(selectedPart.id, { name: e.target.value })} className="mt-1" />
-                  </div>
+                  <SysmlPropertyPanel
+                    selection={{ repository: inspectorRepoV4, elementId: selectedPart.id }}
+                    onExecuteCommand={dispatchInspectorCommand}
+                  />
                   <div>
                     <Label>Multiplicity</Label>
-                    <Input value={selectedPart.multiplicity || ''} onChange={(e) => updatePart(selectedPart.id, { multiplicity: e.target.value })} className="mt-1" placeholder="1" />
+                    <Input data-help-feature="app-part-multiplicity" data-help-source="src/App.tsx" value={selectedPart.multiplicity || ''} onChange={(e) => updatePart(selectedPart.id, { multiplicity: e.target.value })} className="mt-1" placeholder="1" />
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <Label>Block Type</Label>
+                      <button data-help-feature="app-part-new-definition" data-help-source="src/App.tsx"
+                        type="button"
+                        onClick={() => {
+                          const defId = uuidv4();
+                          const defName = `${selectedPart.name}_Def`;
+                          const result = handleExecuteSysmlCommand(buildCreatePartDefinitionCommand({
+                            partId: selectedPart.id,
+                            definitionId: defId,
+                            definitionName: defName,
+                            repository: canonicalSysmlRepository,
+                          }));
+                          if (result.committed) addError('info', `Created definition '${defName}' for part.`);
+                          else result.diagnostics.forEach(diagnostic => addError(diagnostic.severity, diagnostic.message, 'SysML', diagnostic.elementId));
+                        }}
+                        className="text-[10px] text-[#f97316] hover:underline cursor-pointer"
+                      >
+                        + New Block Def
+                      </button>
+                    </div>
+                    <select data-help-feature="app-part-type" data-help-source="src/App.tsx"
+                      value={selectedPart.typeId || ''}
+                      onChange={(e) => updatePart(selectedPart.id, { typeId: e.target.value || null })}
+                      className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1"
+                    >
+                      <option value="">Select a Block...</option>
+                      {blocks.filter(b => b.stereotype === 'block').map(b => (
+                        <option key={b.id} value={b.id}>{b.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <Label>Property Semantics</Label>
+                    <select data-help-feature="app-part-aggregation" data-help-source="src/App.tsx"
+                      value={selectedPart.aggregation === 'reference' ? 'reference' : 'composite'}
+                      onChange={(e) => updatePart(selectedPart.id, { aggregation: e.target.value as 'composite' | 'reference' })}
+                      className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1"
+                    >
+                      <option value="composite">Composite Part</option>
+                      <option value="reference">Reference Property</option>
+                    </select>
                   </div>
 
                   {/* Ports Editor for the underlying Block */}
                   {(() => {
-                    const block = blocks.find(b => b.id === selectedPart.typeId);
+                    const block = selectedPart.typeId ? blocksById.get(selectedPart.typeId) : undefined;
                     if (block) {
                       return (
                         <div className="p-2 bg-[#1a1a1a] border border-[#333] rounded mt-2">
@@ -17494,7 +17631,7 @@ const ADIA = () => {
                           <div className="space-y-1 mt-1 max-h-40 overflow-y-auto">
                             {block.ports.map((port, i) => (
                               <div key={port.id} className="flex items-center gap-1 bg-[#0a0a0a] p-1 rounded border border-[#333]">
-                                <Input
+                                <Input data-help-feature="app-port-name" data-help-source="src/App.tsx"
                                   value={port.name}
                                   onChange={(e) => {
                                     const newPorts = [...block.ports];
@@ -17504,7 +17641,7 @@ const ADIA = () => {
                                   className="w-16 h-6 text-[10px] px-1"
                                 />
                                 <span className="text-[#666] text-[10px]">:</span>
-                                <Input
+                                <Input data-help-feature="app-port-type" data-help-source="src/App.tsx"
                                   value={port.type}
                                   onChange={(e) => {
                                     const newPorts = [...block.ports];
@@ -17513,7 +17650,7 @@ const ADIA = () => {
                                   }}
                                   className="w-16 h-6 text-[10px] px-1"
                                 />
-                                <select
+                                <select data-help-feature="app-port-kind" data-help-source="src/App.tsx"
                                   value={port.kind || 'standard'}
                                   onChange={(e) => {
                                     const newPorts = [...block.ports];
@@ -17522,11 +17659,26 @@ const ADIA = () => {
                                   }}
                                   className="h-6 bg-[#1a1a1a] border border-[#333] rounded text-[10px] w-14 px-0 text-[#e0e0e0]"
                                 >
-                                  <option value="standard">Std</option>
-                                  <option value="flow">Flow</option>
-                                  <option value="proxy">Proxy</option>
+                                <option value="standard">Std</option>
+                                <option value="flow">Flow</option>
+                                <option value="proxy">Proxy</option>
+                                <option value="full">Full</option>
                                 </select>
-                                <button
+                                <select data-help-feature="app-port-direction" data-help-source="src/App.tsx"
+                                  aria-label={`Direction for ${sysmlObjectLabel(port, 'Port')}`}
+                                  value={port.direction || 'inout'}
+                                  onChange={(e) => {
+                                    const newPorts = [...block.ports];
+                                    newPorts[i] = { ...port, direction: e.target.value as any };
+                                    updateBlock(block.id, { ports: newPorts });
+                                  }}
+                                  className="h-6 bg-[#1a1a1a] border border-[#333] rounded text-[10px] w-12 px-0 text-[#e0e0e0]"
+                                >
+                                  <option value="in">In</option>
+                                  <option value="out">Out</option>
+                                  <option value="inout">I/O</option>
+                                </select>
+                                <button data-help-feature="app-port-delete" data-help-source="src/App.tsx"
                                   onClick={() => {
                                     const newPorts = block.ports.filter(p => p.id !== port.id);
                                     updateBlock(block.id, { ports: newPorts });
@@ -17539,9 +17691,10 @@ const ADIA = () => {
                             ))}
                           </div>
                           <div className="flex gap-1 mt-2">
-                            <Button size="sm" onClick={() => handleAddPortToSelected('standard')} className="h-6 text-[10px] px-2 bg-[#f97316]/20 text-[#f97316] hover:bg-[#f97316]/30 border border-[#f97316]/50">+ Std</Button>
-                            <Button size="sm" onClick={() => handleAddPortToSelected('flow')} className="h-6 text-[10px] px-2 bg-[#6c9ac6]/20 text-[#6c9ac6] hover:bg-[#6c9ac6]/30 border border-[#6c9ac6]/50">+ Flow</Button>
-                            <Button size="sm" onClick={() => handleAddPortToSelected('proxy')} className="h-6 text-[10px] px-2 bg-[#c96c8a]/20 text-[#c96c8a] hover:bg-[#c96c8a]/30 border border-[#c96c8a]/50">+ Proxy</Button>
+                            <Button data-help-feature="app-port-add" data-help-source="src/App.tsx" size="sm" onClick={() => handleAddPortToSelected('standard')} className="h-6 text-[10px] px-2 border" style={{ borderColor: semanticPresentationToken('standardPort'), color: semanticPresentationToken('standardPort'), backgroundColor: 'transparent' }}>+ Std</Button>
+                            <Button data-help-feature="app-port-add" data-help-source="src/App.tsx" size="sm" onClick={() => handleAddPortToSelected('flow')} className="h-6 text-[10px] px-2 border" style={{ borderColor: semanticPresentationToken('flowPort'), color: semanticPresentationToken('flowPort'), backgroundColor: 'transparent' }}>+ Flow</Button>
+                            <Button data-help-feature="app-port-add" data-help-source="src/App.tsx" size="sm" onClick={() => handleAddPortToSelected('proxy')} className="h-6 text-[10px] px-2 border" style={{ borderColor: semanticPresentationToken('proxyPort'), color: semanticPresentationToken('proxyPort'), backgroundColor: 'transparent' }}>+ Proxy</Button>
+                            <Button data-help-feature="app-port-add" data-help-source="src/App.tsx" size="sm" onClick={() => handleAddPortToSelected('full')} className="h-6 text-[10px] px-2 border" style={{ borderColor: semanticPresentationToken('fullPort'), color: semanticPresentationToken('fullPort'), backgroundColor: 'transparent' }}>+ Full</Button>
                           </div>
                         </div>
                       );
@@ -17551,7 +17704,7 @@ const ADIA = () => {
 
                   <div>
                     <Label>Satisfied Requirements</Label>
-                    <select
+                    <select data-help-feature="app-part-satisfies" data-help-source="src/App.tsx"
                       multiple
                       value={selectedPart.satisfiedReqIds || []}
                       onChange={(e) => {
@@ -17566,7 +17719,7 @@ const ADIA = () => {
                     </select>
                     <div className="text-[10px] text-[#666] mt-1">Hold Ctrl to select multiple</div>
                   </div>
-                  <Button variant="outline" size="sm" onClick={() => deletePart(selectedPart.id)} className="w-full border-red-800 text-red-400 hover:bg-red-950/30">Delete Part</Button>
+                  <Button data-help-feature="app-part-delete" data-help-source="src/App.tsx" variant="outline" size="sm" onClick={() => deletePart(selectedPart.id)} className="w-full border-red-800 text-red-400 hover:bg-red-950/30">Delete Part</Button>
                 </>
               ) : selectedConnector ? (
                 <>
@@ -17583,14 +17736,21 @@ const ADIA = () => {
                       itemProperty: (selectedConnector as any).itemProperty,
                       itemUnit: (selectedConnector as any).itemUnit,
                     }}
-                    availablePorts={parts.filter(p => p.blockId === currentLayerId).flatMap(p => {
-                      const b = blocks.find(b => b.id === p.typeId);
-                      return (b?.ports || []).map(port => ({
-                        id: `${p.id}::${port.id}`,
+                    availablePorts={[
+                      ...((blocksById.get(currentLayerId)?.ports ?? []).map(port => ({
+                        id: `${currentLayerId}::${port.id}`,
                         name: port.name,
-                        ownerName: p.name,
-                      }));
-                    })}
+                        ownerName: blocksById.get(currentLayerId)?.name,
+                      }))),
+                      ...parts.filter(p => p.blockId === currentLayerId).flatMap(p => {
+                        const b = p.typeId ? blocksById.get(p.typeId) : undefined;
+                        return (b?.ports || []).map(port => ({
+                          id: `${p.id}::${port.id}`,
+                          name: port.name,
+                          ownerName: p.name,
+                        }));
+                      }),
+                    ]}
                     definitions={canonicalSysmlRepository.definitions}
                     diagnostics={canonicalSysmlRepository.connectors[selectedConnector.id] ? validateConnector(canonicalSysmlRepository, selectedConnector.id) : []}
                     onChange={(updatedConn) => {
@@ -17612,9 +17772,9 @@ const ADIA = () => {
                   />
                   <div className="mt-2">
                     <Label>Label (Text)</Label>
-                    <Input value={selectedConnector.label || ''} onChange={(e) => updateConnector(selectedConnector.id, { label: e.target.value })} className="mt-1" placeholder="e.g., Control Link" />
+                    <Input data-help-feature="app-connector-label" data-help-source="src/App.tsx" value={selectedConnector.label || ''} onChange={(e) => updateConnector(selectedConnector.id, { label: e.target.value })} className="mt-1" placeholder="e.g., Control Link" />
                   </div>
-                  <Button variant="outline" size="sm" onClick={() => deleteConnector(selectedConnector.id)} className="w-full border-red-800 text-red-400 hover:bg-red-950/30">Delete Connector</Button>
+                  <Button data-help-feature="app-connector-delete" data-help-source="src/App.tsx" variant="outline" size="sm" onClick={() => deleteConnector(selectedConnector.id)} className="w-full border-red-800 text-red-400 hover:bg-red-950/30">Delete Connector</Button>
                 </>
               ) : selectedInterfaceRealization ? (
                 <>
@@ -17622,7 +17782,7 @@ const ADIA = () => {
                     <Label>Interface Connection</Label>
                     <p className="text-xs text-[#888] mt-1">Connects an interface to a part's port.</p>
                   </div>
-                  <Button variant="outline" size="sm" onClick={() => deleteInterfaceRealization(selectedInterfaceRealization.id)} className="w-full border-red-800 text-red-400 hover:bg-red-950/30">Delete Connection</Button>
+                  <Button data-help-feature="app-interface-delete" data-help-source="src/App.tsx" variant="outline" size="sm" onClick={() => deleteInterfaceRealization(selectedInterfaceRealization.id)} className="w-full border-red-800 text-red-400 hover:bg-red-950/30">Delete Connection</Button>
                 </>
               ) : selectedTransition ? (
                 <>
@@ -17650,7 +17810,7 @@ const ADIA = () => {
                         <div className="flex gap-2 mt-2">
                           {err.message.includes('unguarded and untimed') ? (
                             <>
-                              <Button
+                              <Button data-help-feature="app-transition-type" data-help-source="src/App.tsx"
                                 size="sm"
                                 variant="outline"
                                 onClick={() => {
@@ -17662,7 +17822,7 @@ const ADIA = () => {
                               >
                                 Add Guard
                               </Button>
-                              <Button
+                              <Button data-help-feature="app-transition-type" data-help-source="src/App.tsx"
                                 size="sm"
                                 variant="outline"
                                 onClick={() => {
@@ -17675,7 +17835,7 @@ const ADIA = () => {
                               </Button>
                             </>
                           ) : (
-                            <Button
+                            <Button data-help-feature="app-error-fix" data-help-source="src/App.tsx"
                               size="sm"
                               variant="outline"
                               onClick={() => handleAutoFix(err)}
@@ -17691,7 +17851,7 @@ const ADIA = () => {
 
                   <div>
                     <Label>Order (priority for same source)</Label>
-                    <Input
+                    <Input data-help-feature="app-transition-order" data-help-source="src/App.tsx"
                       type="number"
                       value={selectedTransition.order}
                       onChange={(e) => updateTransition(selectedTransition.id, { order: parseInt(e.target.value) || 0 })}
@@ -17700,7 +17860,7 @@ const ADIA = () => {
                   </div>
 
                   <div className="flex items-center gap-2 mt-3 mb-2">
-                    <Checkbox
+                    <Checkbox data-help-feature="app-transition-isInternal" data-help-source="src/App.tsx"
                       checked={!!selectedTransition.isInternal}
                       onCheckedChange={(checked) => updateTransition(selectedTransition.id, { isInternal: checked as boolean })}
                       id="isInternal"
@@ -17711,7 +17871,7 @@ const ADIA = () => {
                   <div className="space-y-3 p-3 bg-[#1a1a1a] rounded-lg border border-[#222]">
                     <Label className="text-[#f97316]">Trigger Logic</Label>
 
-                    <select
+                    <select data-help-feature="app-transition-type" data-help-source="src/App.tsx"
                       value={selectedTransition.type}
                       onChange={(e) => updateTransition(selectedTransition.id, { type: e.target.value as any })}
                       className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0]"
@@ -17725,7 +17885,7 @@ const ADIA = () => {
                     {(selectedTransition.type === 'condition' || selectedTransition.type === 'and' || selectedTransition.type === 'or') && (
                       <div>
                         <Label>Condition</Label>
-                        <textarea
+                        <textarea data-help-feature="app-transition-condition" data-help-source="src/App.tsx"
                           value={selectedTransition.condition}
                           onChange={(e) => updateTransition(selectedTransition.id, { condition: e.target.value as any })}
                           placeholder="e.g., x > 10"
@@ -17737,7 +17897,7 @@ const ADIA = () => {
                     {(selectedTransition.type === 'after' || selectedTransition.type === 'and' || selectedTransition.type === 'or') && (
                       <div>
                         <Label>After (ticks)</Label>
-                        <Input
+                        <Input data-help-feature="app-transition-afterTicks" data-help-source="src/App.tsx"
                           type="number"
                           value={selectedTransition.afterTicks ?? ''}
                           onChange={(e) => updateTransition(selectedTransition.id, {
@@ -17752,7 +17912,7 @@ const ADIA = () => {
 
                   <div>
                     <Label>Action (C-like code)</Label>
-                    <textarea
+                    <textarea data-help-feature="app-transition-action" data-help-source="src/App.tsx"
                       value={selectedTransition.action}
                       onChange={(e) => updateTransition(selectedTransition.id, { action: e.target.value })}
                       placeholder="/* Action on transition */ counter = 0; flag = false;"
@@ -17760,7 +17920,7 @@ const ADIA = () => {
                     />
                   </div>
 
-                  <Button
+                  <Button data-help-feature="app-transition-delete" data-help-source="src/App.tsx"
                     variant="outline"
                     size="sm"
                     onClick={() => deleteTransition(selectedTransition.id)}
@@ -17773,6 +17933,23 @@ const ADIA = () => {
                     Delete Transition
                   </Button>
                 </>
+              ) : selectedIds.length === 1 && findInteractionElement(canonicalSysmlRepository, selectedIds[0]) ? (
+                <InteractionElementInspector
+                  key={selectedIds[0]}
+                  repository={canonicalSysmlRepository}
+                  elementId={selectedIds[0]}
+                  onExecute={handleExecuteSysmlCommand}
+                />
+              ) : selectedIds.length === 1 && (
+                  inspectorRepoV4.elements[selectedIds[0]] ||
+                  inspectorRepoV4.relationships[selectedIds[0]] ||
+                  inspectorRepoV4.diagrams[selectedIds[0]] ||
+                  inspectorRepoV4.itemFlows?.[selectedIds[0]]
+                ) ? (
+                <SysmlPropertyPanel
+                  selection={{ repository: inspectorRepoV4, elementId: selectedIds[0] }}
+                  onExecuteCommand={dispatchInspectorCommand}
+                />
               ) : (
                 <div className="text-center py-8 text-[#666]">
                   <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="mx-auto mb-3 opacity-50">
@@ -17789,6 +17966,7 @@ const ADIA = () => {
               )}
             </div>
           </aside>
+        </Profiler>
             </>
           )}
         </div>
@@ -17796,7 +17974,7 @@ const ADIA = () => {
         {/* Mobile Navigation Bar */}
         {isMobile && (
           <div className="h-14 bg-[#1a1a1a] border-t border-[#222] flex items-center justify-around shrink-0 pb-safe">
-            <button
+            <button data-help-feature="app-panel-collapse" data-help-source="src/App.tsx"
               onClick={() => setMobileTab('hierarchy')}
               className={`flex flex-col items-center justify-center w-full h-full ${mobileTab === 'hierarchy' ? 'text-[#f97316]' : 'text-[#666]'}`}
             >
@@ -17807,7 +17985,7 @@ const ADIA = () => {
               </svg>
               <span className="text-[10px] font-bold">Tree</span>
             </button>
-            <button
+            <button data-help-feature="app-panel-collapse" data-help-source="src/App.tsx"
               onClick={() => setMobileTab('variables')}
               className={`flex flex-col items-center justify-center w-full h-full ${mobileTab === 'variables' ? 'text-[#f97316]' : 'text-[#666]'}`}
             >
@@ -17818,7 +17996,7 @@ const ADIA = () => {
               </svg>
               <span className="text-[10px] font-bold">Vars</span>
             </button>
-            <button
+            <button data-help-feature="app-panel-collapse" data-help-source="src/App.tsx"
               onClick={() => setMobileTab('canvas')}
               className={`flex flex-col items-center justify-center w-full h-full ${mobileTab === 'canvas' ? 'text-[#f97316]' : 'text-[#666]'}`}
             >
@@ -17828,7 +18006,7 @@ const ADIA = () => {
               </svg>
               <span className="text-[10px] font-bold">Canvas</span>
             </button>
-            <button
+            <button data-help-feature="app-panel-collapse" data-help-source="src/App.tsx"
               onClick={() => setMobileTab('properties')}
               className={`flex flex-col items-center justify-center w-full h-full ${mobileTab === 'properties' ? 'text-[#f97316]' : 'text-[#666]'}`}
             >
@@ -17856,12 +18034,12 @@ const ADIA = () => {
               <div className="flex-1 overflow-y-auto p-5 space-y-5">
                 <div className="space-y-3 p-4 bg-[#1a1a1a] rounded-lg border border-[#222]">
                   <Label>Add Variable</Label>
-                  <Input
+                  <Input data-help-feature="app-variable-name" data-help-source="src/App.tsx"
                     placeholder="Name"
                     value={newVarName}
                     onChange={(e) => setNewVarName(e.target.value)}
                   />
-                  <select
+                  <select data-help-feature="app-variable-new-type" data-help-source="src/App.tsx"
                     value={newVarType}
                     onChange={(e) => {
                       setNewVarType(e.target.value as VariableType);
@@ -17873,13 +18051,13 @@ const ADIA = () => {
                       <option key={type} value={type}>{type}</option>
                     ))}
                   </select>
-                  <Input
+                  <Input data-help-feature="app-variable-new-initial" data-help-source="src/App.tsx"
                     placeholder="Initial value"
                     value={newVarValue}
                     onChange={(e) => setNewVarValue(e.target.value)}
                     className="mt-1"
                   />
-                  <Button
+                  <Button data-help-feature="app-variable-add" data-help-source="src/App.tsx"
                     size="sm"
                     onClick={addVariable}
                     className="w-full bg-[#f97316] text-[#0a0a0a] hover:bg-[#ea580c] mt-2 h-9"
@@ -17900,7 +18078,7 @@ const ADIA = () => {
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                          <Checkbox
+                          <Checkbox data-help-feature="app-scope-select" data-help-source="src/App.tsx"
                             checked={variable.visibleInScope}
                             onCheckedChange={() => toggleVariableVisibility(variable.id)}
                             id={`var-${variable.id}`}
@@ -17912,7 +18090,7 @@ const ADIA = () => {
                       <div className="grid grid-cols-2 gap-3">
                         <div>
                           <Label className="text-[11px]">Initial Value</Label>
-                          <Input
+                          <Input data-help-feature="app-variable-initial" data-help-source="src/App.tsx"
                             value={variable.initialValue}
                             onChange={(e) => updateVariableInitValue(variable.id, e.target.value)}
                             disabled={isRunning}
@@ -17928,7 +18106,7 @@ const ADIA = () => {
                               </svg>
                             )}
                           </Label>
-                          <Input
+                          <Input data-help-feature="app-variable-live" data-help-source="src/App.tsx"
                             value={String(variable.currentValue)}
                             onChange={(e) => updateVariableValue(variable.id, e.target.value)}
                             disabled={!isRunning}
@@ -17942,14 +18120,14 @@ const ADIA = () => {
               </div>
 
               <div className="h-14 flex items-center justify-end px-5 border-t border-[#222] gap-3">
-                <Button
+                <Button data-help-feature="app-dialog-close" data-help-source="src/App.tsx"
                   variant="outline"
                   onClick={() => setShowWorkspaceModal(false)}
                   className="border-[#333] text-[#a0a0a0] hover:text-[#e0e0e0] px-5"
                 >
                   Cancel
                 </Button>
-                <Button
+                <Button data-help-feature="app-variable-reset" data-help-source="src/App.tsx"
                   onClick={() => {
                     resetVariables();
                     setShowWorkspaceModal(false);
@@ -17969,7 +18147,7 @@ const ADIA = () => {
 
         {/* Code Generation Dialog - FULLY FUNCTIONAL */}
         {showCodegenDialog && (
-          <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50" onMouseDown={() => setShowCodegenDialog(false)}>
+          <div data-help-feature="live:App:5bc803ce8a54" className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50" onMouseDown={() => setShowCodegenDialog(false)}>
             <CodeGenerationDialog
               files={generatedFiles}
               codegenErrors={codegenErrors}
@@ -18013,14 +18191,14 @@ const ADIA = () => {
 
         {/* Delete State Confirmation Modal */}
         {deleteConfirmState && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in duration-150" onMouseDown={() => setDeleteConfirmState(null)}>
+          <div data-help-feature="live:App:de6bd9093918" className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in duration-150" onMouseDown={() => setDeleteConfirmState(null)}>
             <div className="bg-[#1a1a1a] border border-[#f97316]/60 rounded-xl w-[480px] max-h-[90vh] flex flex-col shadow-2xl overflow-hidden relative" onMouseDown={e => e.stopPropagation()}>
               <div className="h-14 flex items-center px-6 border-b border-[#2a2a2a] bg-[#141414]">
                 <Trash2 className="w-5 h-5 text-[#f97316] mr-3 shrink-0" />
                 <h2 className="text-base font-bold text-[#e0e0e0]">
                   {deleteConfirmState.totalStates > 1 ? 'Confirm Delete States' : 'Confirm Delete State'}
                 </h2>
-                <button
+                <button data-help-feature="app-dialog-cancel" data-help-source="src/App.tsx"
                   onClick={() => setDeleteConfirmState(null)}
                   className="ml-auto text-[#888] hover:text-[#fff] p-1 rounded transition-colors"
                 >
@@ -18057,14 +18235,14 @@ const ADIA = () => {
               </div>
 
               <div className="h-16 flex items-center justify-end px-6 border-t border-[#2a2a2a] bg-[#141414] gap-3">
-                <Button
+                <Button data-help-feature="app-dialog-cancel" data-help-source="src/App.tsx"
                   variant="outline"
                   onClick={() => setDeleteConfirmState(null)}
                   className="border-[#333] text-[#a0a0a0] hover:bg-[#252525] hover:text-white px-5 text-xs h-9"
                 >
                   Cancel
                 </Button>
-                <Button
+                <Button data-help-feature="app-state-delete" data-help-source="src/App.tsx"
                   onClick={() => executeDeleteState(deleteConfirmState.ids, deleteConfirmState.otherDeletedIds)}
                   className="bg-red-600 hover:bg-red-700 text-white px-5 text-xs h-9 font-medium shadow-md flex items-center gap-1.5"
                 >
@@ -18075,10 +18253,141 @@ const ADIA = () => {
             </div>
           </div>
         )}
+        {/* SysML Deletion Confirmation Modal (BDD / Requirements / IBD) */}
+        {sysmlDeleteConfirm && (
+          <div data-help-feature="live:App:e74939a12e4a" className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in duration-150" onMouseDown={() => setSysmlDeleteConfirm(null)}>
+            <div className="bg-[#1a1a1a] border border-red-900/60 rounded-xl w-[520px] max-h-[90vh] flex flex-col shadow-2xl overflow-hidden relative" onMouseDown={e => e.stopPropagation()}>
+              <div className="h-14 flex items-center px-6 border-b border-[#2a2a2a] bg-[#141414]">
+                <AlertTriangle className={`w-5 h-5 ${sysmlDeleteConfirm.severity === 'blocked' ? 'text-red-500' : 'text-[#f97316]'} mr-3 shrink-0`} />
+                <h2 className="text-base font-bold text-[#e0e0e0]">
+                  {sysmlDeleteConfirm.severity === 'blocked' ? 'Deletion Blocked' : `Confirm Delete ${sysmlDeleteConfirm.elementKind.charAt(0).toUpperCase() + sysmlDeleteConfirm.elementKind.slice(1)}`}
+                </h2>
+                <button data-help-feature="app-dialog-cancel" data-help-source="src/App.tsx"
+                  onClick={() => setSysmlDeleteConfirm(null)}
+                  className="ml-auto text-[#888] hover:text-[#fff] p-1 rounded transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
 
-        {/* Requirement Connection Picker Modal */}
+              <div className="p-6 space-y-4 overflow-y-auto">
+                {sysmlDeleteConfirm.severity === 'blocked' ? (
+                  <div className="p-3.5 bg-red-950/40 rounded-lg border border-red-800/60 flex items-start gap-3">
+                    <ShieldAlert className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+                    <p className="text-xs text-red-300 leading-relaxed">
+                      Protected baseline <span className="font-semibold text-white">{(sysmlDeleteConfirm.impact.blockedBaselineIds ?? sysmlDeleteConfirm.impact.affectedBaselineIds).join(', ') || 'unknown'}</span> forbids this deletion. Clone the baseline or authorize explicitly before retrying.
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-sm text-[#cccccc] leading-relaxed">
+                      Are you sure you want to delete <span className="font-semibold text-[#f97316]">{sysmlDeleteConfirm.elementName}</span>?
+                    </p>
+
+                    {/* Impact Details */}
+                    <div className="space-y-2">
+                      {(() => {
+                        const { impact } = sysmlDeleteConfirm;
+                        const requested = new Set(impact.requestedElementIds);
+                        const cascade = impact.deletedElementIds.filter(id => !requested.has(id));
+                        const items: { label: string; value: string; color: string }[] = [];
+                        if (cascade.length > 0) items.push({ label: 'Cascade deleted', value: `${cascade.length} element(s)`, color: 'text-red-300' });
+                        if (impact.nestedRequirementIds.length > 0) items.push({ label: 'Nested requirements', value: `${impact.nestedRequirementIds.length} requirement(s)`, color: 'text-purple-300' });
+                        if (impact.removedRelationshipIds.length > 0) items.push({ label: 'Removed relationships', value: `${impact.removedRelationshipIds.length} relationship(s)`, color: 'text-amber-300' });
+                        if (impact.unresolvedUsageIds.length > 0) items.push({ label: 'Unresolved usages', value: impact.unresolvedUsageIds.join(', '), color: 'text-amber-300' });
+                        if (impact.affectedRequirementIds.filter(id => !requested.has(id)).length > 0) items.push({ label: 'Affected requirements', value: `${impact.affectedRequirementIds.filter(id => !requested.has(id)).length} requirement(s)`, color: 'text-purple-300' });
+                        if (impact.invalidatedEvidenceIds.length > 0) items.push({ label: 'Invalidated evidence', value: `${impact.invalidatedEvidenceIds.length} record(s)`, color: 'text-amber-300' });
+                        if (impact.affectedDiagramKinds.length > 0) items.push({ label: 'Affected diagrams', value: impact.affectedDiagramKinds.join(', ').toUpperCase(), color: 'text-sky-300' });
+                        if (impact.affectedBaselineIds.length > 0) items.push({ label: 'Affected baselines', value: impact.affectedBaselineIds.join(', '), color: 'text-amber-300' });
+
+                        return items.length > 0 && (
+                          <div className="p-3.5 bg-[#2a1a14] rounded-lg border border-[#f97316]/30">
+                            <div className="flex items-center gap-1.5 mb-2">
+                              <AlertTriangle className="w-4 h-4 text-[#f97316]" />
+                              <span className="text-xs font-bold text-[#f97316]">Deletion Impact</span>
+                            </div>
+                            <div className="space-y-1.5">
+                              {items.map((item, i) => (
+                                <div key={i} className="flex items-baseline justify-between text-xs">
+                                  <span className="text-[#999]">{item.label}</span>
+                                  <span className={`font-mono ${item.color}`}>{item.value}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+
+                    <p className="text-[11px] text-[#777] leading-relaxed">
+                      This action is irreversible. All cascaded elements, relationships, and evidence will be permanently removed.
+                    </p>
+                  </>
+                )}
+              </div>
+
+              <div className="h-16 flex items-center justify-end px-6 border-t border-[#2a2a2a] bg-[#141414] gap-3">
+                <Button data-help-feature="app-dialog-cancel" data-help-source="src/App.tsx"
+                  variant="outline"
+                  onClick={() => setSysmlDeleteConfirm(null)}
+                  className="border-[#333] text-[#a0a0a0] hover:bg-[#252525] hover:text-white px-5 text-xs h-9"
+                >
+                  {sysmlDeleteConfirm.severity === 'blocked' ? 'Dismiss' : 'Cancel'}
+                </Button>
+                {sysmlDeleteConfirm.severity !== 'blocked' && (
+                  <Button data-help-feature="app-delete-confirm" data-help-source="src/App.tsx"
+                    onClick={() => {
+                      const fn = sysmlDeleteConfirm.onConfirm;
+                      setSysmlDeleteConfirm(null);
+                      fn();
+                    }}
+                    className="bg-red-600 hover:bg-red-700 text-white px-5 text-xs h-9 font-medium shadow-md flex items-center gap-1.5"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Delete {sysmlDeleteConfirm.elementKind.charAt(0).toUpperCase() + sysmlDeleteConfirm.elementKind.slice(1)}
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {pendingCreateNewTypeAction && (
+          <CreateNewTypeActionPrompt
+            action={pendingCreateNewTypeAction.action}
+            candidates={pendingCreateNewTypeAction.candidates}
+            onCreate={handleCreateNewTypeAction}
+            onDismiss={() => setPendingCreateNewTypeAction(null)}
+          />
+        )}
+
+        {portTypePrompt && (
+          <TypeSelectionPrompt
+            isOpen={true}
+            featureKind={canvasPortPromptLabel(portTypePrompt.portKind)}
+            candidates={portTypePrompt.candidates}
+            onSelectType={handlePortTypeSelected}
+            onCreateNewType={handleCreateNewTypeForPort}
+            onCancel={() => setPortTypePrompt(null)}
+            error={portTypePrompt.error}
+          />
+        )}
+
+        {propertyTypePrompt && (
+          <TypeSelectionPrompt
+            isOpen={true}
+            featureKind={getElementKindLabel('part')}
+            candidates={propertyTypePrompt.candidates}
+            onSelectType={handlePropertyTypeSelected}
+            onCreateNewType={handleCreateNewTypeForProperty}
+            onCancel={() => setPropertyTypePrompt(null)}
+            error={propertyTypePrompt.error ?? (propertyTypePrompt.candidates.length === 0 ? 'TYPE_NOT_FOUND: No compatible existing type.' : undefined)}
+          />
+        )}
+
+        {/* Policy-filtered connection picker */}
         {requirementConnectionPicker && (
-          <div
+          <div data-help-feature="live:App:2312fd515dbd"
             className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4"
             onMouseDown={() => setRequirementConnectionPicker(null)}
           >
@@ -18087,81 +18396,240 @@ const ADIA = () => {
               onMouseDown={(e) => e.stopPropagation()}
             >
               <div>
-                <h3 className="text-base font-semibold text-white">Create Requirement Relationship</h3>
+                <h3 className="text-base font-semibold text-white">
+                  {requirementConnectionPicker.reversedKinds ? 'Reverse Endpoints & Create' : 'Create Relationship'}
+                </h3>
+                {requirementConnectionPicker.reversedKinds && (
+                  <div className="mt-2 p-2 rounded bg-amber-950/40 border border-amber-800/60 text-amber-200 text-xs">
+                    Direction assistance: SysML requires connections to be created from the dependent/realizing element to the requirement. The endpoints below have been aligned to standard SysML direction.
+                  </div>
+                )}
                 <p className="text-xs text-[#888] mt-1">
-                  Choose the relationship kind between{' '}
+                  Connect{' '}
                   <span className="text-[#f97316] font-medium">
-                    {blocks.find(b => b.id === requirementConnectionPicker.sourceId)?.name || 'Source'}
+                    {(blocks.find(b => b.id === requirementConnectionPicker.sourceId)?.name ?? states.find(s => s.id === requirementConnectionPicker.sourceId)?.name ?? blocks.flatMap(b => b.properties ?? []).find(p => p.id === requirementConnectionPicker.sourceId)?.name) || 'Source'}
                   </span>{' '}
-                  and{' '}
+                  to{' '}
                   <span className="text-[#f97316] font-medium">
-                    {blocks.find(b => b.id === requirementConnectionPicker.targetId)?.name || 'Target'}
+                    {(blocks.find(b => b.id === requirementConnectionPicker.targetId)?.name ?? states.find(s => s.id === requirementConnectionPicker.targetId)?.name ?? blocks.flatMap(b => b.properties ?? []).find(p => p.id === requirementConnectionPicker.targetId)?.name) || 'Target'}
                   </span>
                 </p>
               </div>
 
               <div className="flex flex-col gap-2">
-                <Button
-                  onClick={() => {
-                    createRelationship(requirementConnectionPicker.sourceId, requirementConnectionPicker.targetId, 'requirementContainment');
-                    setRequirementConnectionPicker(null);
-                  }}
-                  className="w-full justify-start text-left bg-[#1f1f1f] hover:bg-[#2a2a2a] text-white border border-[#333] p-3 h-auto"
-                >
-                  <div>
-                    <div className="font-semibold text-sm">Requirement Containment</div>
-                    <div className="text-xs text-[#aaa] font-normal">Parent contains child (source → target)</div>
-                  </div>
-                </Button>
-
-                <Button
-                  onClick={() => {
-                    createRelationship(requirementConnectionPicker.sourceId, requirementConnectionPicker.targetId, 'deriveReqt');
-                    setRequirementConnectionPicker(null);
-                  }}
-                  className="w-full justify-start text-left bg-[#1f1f1f] hover:bg-[#2a2a2a] text-white border border-[#333] p-3 h-auto"
-                >
-                  <div>
-                    <div className="font-semibold text-sm">Derive Requirement («deriveReqt»)</div>
-                    <div className="text-xs text-[#aaa] font-normal">Derived requirement from source</div>
-                  </div>
-                </Button>
-
-                <Button
-                  onClick={() => {
-                    createRelationship(requirementConnectionPicker.sourceId, requirementConnectionPicker.targetId, 'copy');
-                    setRequirementConnectionPicker(null);
-                  }}
-                  className="w-full justify-start text-left bg-[#1f1f1f] hover:bg-[#2a2a2a] text-white border border-[#333] p-3 h-auto"
-                >
-                  <div>
-                    <div className="font-semibold text-sm">Copy («copy»)</div>
-                    <div className="text-xs text-[#aaa] font-normal">Requirement copy relationship</div>
-                  </div>
-                </Button>
-
-                <Button
-                  onClick={() => {
-                    createRelationship(requirementConnectionPicker.sourceId, requirementConnectionPicker.targetId, 'trace');
-                    setRequirementConnectionPicker(null);
-                  }}
-                  className="w-full justify-start text-left bg-[#1f1f1f] hover:bg-[#2a2a2a] text-white border border-[#333] p-3 h-auto"
-                >
-                  <div>
-                    <div className="font-semibold text-sm">Trace («trace»)</div>
-                    <div className="text-xs text-[#aaa] font-normal">General traceability relationship</div>
-                  </div>
-                </Button>
+                {getCanvasRelationshipKinds(
+                  { blocks, parts, relationships, states },
+                  requirementConnectionPicker.sourceId,
+                  requirementConnectionPicker.targetId,
+                  diagramMode === 'ibd' ? 'ibd' : diagramMode === 'requirements' ? 'requirements' : 'bdd',
+                ).map(kind => {
+                  const meta = RELATIONSHIP_DEFINITIONS[kind as RequirementRelationshipKind];
+                  return (
+                    <Button data-help-feature="app-relation-create" data-help-source="src/App.tsx"
+                      key={kind}
+                      onClick={() => {
+                        createRelationship(requirementConnectionPicker.sourceId, requirementConnectionPicker.targetId, kind);
+                        setRequirementConnectionPicker(null);
+                      }}
+                      className="w-full justify-start text-left bg-[#1f1f1f] hover:bg-[#2a2a2a] text-white border border-[#333] p-3 h-auto flex flex-col items-start gap-0.5"
+                    >
+                      {meta ? (
+                        <>
+                          <span className="font-semibold text-xs text-orange-300">
+                            {meta.displayLabel} — {meta.label}
+                          </span>
+                          <span className="text-[11px] text-neutral-400">
+                            {meta.directionLabel}
+                          </span>
+                        </>
+                      ) : (
+                        <span>
+                          {kind === 'requirementContainment'
+                            ? 'Requirement Containment (parent → child)'
+                            : kind.replace(/([A-Z])/g, ' $1').replace(/^./, character => character.toUpperCase())}
+                        </span>
+                      )}
+                    </Button>
+                  );
+                })}
               </div>
 
               <div className="flex justify-end pt-2 border-t border-[#2a2a2a]">
-                <Button
+                <Button data-help-feature="app-dialog-cancel" data-help-source="src/App.tsx"
                   variant="outline"
                   onClick={() => setRequirementConnectionPicker(null)}
                   className="border-[#333] text-[#a0a0a0] hover:bg-[#222]"
                 >
                   Cancel
                 </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Package diagram chooser */}
+        {packageDiagramChooser && (
+          <div data-help-feature="live:App:1748cf4e0199"
+            className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4"
+            onMouseDown={() => setPackageDiagramChooser(null)}
+          >
+            <div
+              className="bg-[#141414] border border-[#333] rounded-lg w-[420px] shadow-2xl p-5 flex flex-col gap-4 text-[#e0e0e0]"
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              <div>
+                <h3 className="text-base font-semibold text-white">Select Package Diagram</h3>
+                <p className="text-xs text-[#888] mt-1">Choose a Package Diagram to open or create a new one.</p>
+              </div>
+
+              <div className="flex flex-col gap-2 max-h-60 overflow-y-auto">
+                {packageDiagramChooser.diagramIds.map(id => {
+                  const diag = canonicalSysmlRepository.diagrams[id];
+                  return (
+                    <Button data-help-feature="app-diagram-open" data-help-source="src/App.tsx"
+                      key={id}
+                      onClick={() => {
+                        setActivePackageDiagramId(id);
+                        openExactDiagramById(id, { preserveReturnStack: true });
+                        setPackageDiagramChooser(null);
+                      }}
+                      className="w-full justify-start text-left bg-[#1f1f1f] hover:bg-[#2a2a2a] text-white border border-[#333] p-3 h-auto flex flex-col items-start gap-0.5"
+                    >
+                      <span className="font-semibold text-xs text-orange-300">{sysmlObjectLabel(diag, 'Package Diagram')}</span>
+                    </Button>
+                  );
+                })}
+              </div>
+
+              <div className="flex items-center justify-between pt-2 border-t border-[#333]">
+                <Button data-help-feature="app-diagram-open" data-help-source="src/App.tsx"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    const newId = uuidv4();
+                    const diagram: ModelDiagramDefinition = {
+                      id: newId,
+                      kind: 'diagram',
+                      diagramKind: 'package',
+                      ownerId: 'model',
+                      namespace: ['model'],
+                      name: `Package Diagram ${packageDiagramChooser.diagramIds.length + 1}`,
+                    };
+                    const result = handleExecuteSysmlCommand({
+                      type: 'createDiagram',
+                      diagram,
+                    });
+                    if (result.committed) {
+                      const createdId = newId;
+                      setActivePackageDiagramId(createdId);
+                      openExactDiagramById(createdId);
+                      setPackageDiagramChooser(null);
+                    } else {
+                      result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
+                    }
+                  }}
+                >
+                  Create New Diagram
+                </Button>
+                <Button data-help-feature="app-dialog-cancel" data-help-source="src/App.tsx" size="sm" variant="ghost" onClick={() => setPackageDiagramChooser(null)}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {pendingPackageMove && (() => {
+          const revertDrop = () => {
+            // Same coalesce key as the drag commit, so the revert folds into that history entry.
+            for (const [elementId, bounds] of Object.entries(pendingPackageMove.revertBounds)) {
+              handleExecuteSysmlCommand({
+                type: 'updatePresentation', diagramId: pendingPackageMove.diagramId, elementId, presentation: bounds, coalesceKey: `drag-${elementId}`,
+              });
+            }
+            setPendingPackageMove(null);
+          };
+          const targetName = pendingPackageMove.targetOwnerId === 'model'
+            ? sysmlObjectLabel(canonicalSysmlRepository.packages.model, 'Model')
+            : sysmlObjectLabel(canonicalSysmlRepository.packages[pendingPackageMove.targetOwnerId], 'Package');
+          const elementNames = pendingPackageMove.elementIds.map(id => sysmlObjectLabel(
+            canonicalSysmlRepository.packages[id] ?? canonicalSysmlRepository.definitions[id]
+              ?? canonicalSysmlRepository.requirements[id] ?? canonicalSysmlRepository.verificationCases[id],
+            'Element',
+          ));
+          return (
+            <div data-help-feature="live:App:b446db02c0a0" className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4" onMouseDown={revertDrop}>
+              <div
+                role="dialog"
+                aria-label="Move to Package"
+                className="bg-[#141414] border border-[#333] rounded-lg w-[420px] shadow-2xl p-5 flex flex-col gap-4 text-[#e0e0e0]"
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                <div>
+                  <h3 className="text-base font-semibold text-white">Move to {targetName}?</h3>
+                  <p className="text-xs text-[#888] mt-1">
+                    {elementNames.join(', ')} will become owned by {targetName}. This changes the model's containment tree, not only the diagram.
+                  </p>
+                </div>
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#333]">
+                  <Button data-help-feature="app-dialog-cancel" data-help-source="src/App.tsx" size="sm" variant="ghost" onClick={revertDrop}>Cancel</Button>
+                  <Button data-help-feature="app-package-move" data-help-source="src/App.tsx" size="sm" onClick={() => {
+                    const result = handleExecuteSysmlCommand({
+                      type: 'moveElements', elementIds: pendingPackageMove.elementIds, targetOwnerId: pendingPackageMove.targetOwnerId,
+                    });
+                    if (result.committed) {
+                      setPendingPackageMove(null);
+                      addError('info', `Moved ${elementNames.join(', ')} to ${targetName}`);
+                    } else {
+                      result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
+                      revertDrop();
+                    }
+                  }}>
+                    Move
+                  </Button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+        {diagramTargetChooser && (
+          <div data-help-feature="live:App:3cd25ac7375b"
+            className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4"
+            onMouseDown={() => setDiagramTargetChooser(null)}
+          >
+            <div
+              role="dialog"
+              aria-label="Open Diagram"
+              className="bg-[#141414] border border-[#333] rounded-lg w-[420px] shadow-2xl p-5 flex flex-col gap-4 text-[#e0e0e0]"
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              <div>
+                <h3 className="text-base font-semibold text-white">Open Diagram</h3>
+                <p className="text-xs text-[#888] mt-1">
+                  {resolveSysmlReferenceLabel(canonicalSysmlRepository, diagramTargetChooser.sourceId)} has several diagrams. Choose one to open.
+                </p>
+              </div>
+              <div className="flex flex-col gap-2 max-h-60 overflow-y-auto">
+                {diagramTargetChooser.diagramIds.map(id => {
+                  const diagram = canonicalSysmlRepository.diagrams[id];
+                  return (
+                    <Button data-help-feature="app-diagram-open" data-help-source="src/App.tsx"
+                      key={id}
+                      onClick={() => {
+                        setDiagramTargetChooser(null);
+                        openExactDiagramById(id, { pushOrigin: true, preserveReturnStack: true });
+                      }}
+                      className="w-full justify-start text-left bg-[#1f1f1f] hover:bg-[#2a2a2a] text-white border border-[#333] p-3 h-auto flex flex-col items-start gap-0.5"
+                    >
+                      <span className="font-semibold text-xs text-orange-300">{sysmlObjectLabel(diagram, 'Diagram')}</span>
+                      <span className="text-[10px] text-[#888]">{getDiagramKindLabel(diagram?.diagramKind ?? '')}</span>
+                    </Button>
+                  );
+                })}
+              </div>
+              <div className="flex justify-end pt-2 border-t border-[#333]">
+                <Button data-help-feature="app-dialog-cancel" data-help-source="src/App.tsx" size="sm" variant="ghost" onClick={() => setDiagramTargetChooser(null)}>Cancel</Button>
               </div>
             </div>
           </div>
@@ -18180,26 +18648,36 @@ const ADIA = () => {
 
         {/* Error Dialog */}
         {showErrorDialog && currentError && (
-          <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50" onMouseDown={() => setShowErrorDialog(false)}>
-            <div className="bg-[#1a1a1a] border border-red-900 rounded-lg w-[550px] max-h-[90vh] flex flex-col relative" onMouseDown={e => e.stopPropagation()}>
+          <div data-help-feature="live:App:782623a30ed7" className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50" onMouseDown={dismissErrorDialog}>
+            <div role="alertdialog" aria-modal="true" aria-labelledby="error-dialog-title" className="bg-[#1a1a1a] border border-red-900 rounded-lg w-[550px] max-h-[90vh] flex flex-col relative" onMouseDown={e => e.stopPropagation()}>
               <div className="h-12 flex items-center px-5 border-b border-red-900/50">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ff6b6b" strokeWidth="2" className="mr-3">
                   <circle cx="12" cy="12" r="10" />
                   <line x1="12" y1="8" x2="12" y2="12" />
                   <line x1="12" y1="16" x2="12.01" y2="16" />
                 </svg>
-                <h2 className="text-lg font-bold text-red-400">Error</h2>
+                <h2 id="error-dialog-title" className="text-lg font-bold text-red-400">
+                  {currentError.connectionDiagnostic ? 'SysML Connection Blocked' : 'Error'}
+                </h2>
               </div>
 
               <div className="p-5 bg-red-950/25 rounded-lg border border-red-900 m-5">
                 <p className="text-red-300 text-sm whitespace-pre-wrap">{currentError.message}</p>
+                {currentError.connectionDiagnostic && currentError.relationshipKind && currentError.sourceEndpoint && currentError.targetEndpoint && (
+                  <SysmlConnectionErrorDetails
+                    relationshipKind={currentError.relationshipKind}
+                    source={currentError.sourceEndpoint}
+                    target={currentError.targetEndpoint}
+                    diagnostic={currentError.connectionDiagnostic}
+                  />
+                )}
                 {currentError.source && (
                   <p className="text-xs text-red-400 mt-2.5">Source: {currentError.source}</p>
                 )}
               </div>
 
               <div className="h-14 flex items-center justify-end px-5 border-t border-[#222] gap-3">
-                <Button
+                <Button data-help-feature="app-error-jump" data-help-source="src/App.tsx"
                   variant="outline"
                   onClick={() => handleJumpToError(currentError)}
                   disabled={!currentError.elementId}
@@ -18210,24 +18688,24 @@ const ADIA = () => {
                 {currentError.canAutoFix && (
                   currentError.message.includes('unguarded and untimed') ? (
                     <>
-                      <Button
+                      <Button data-help-feature="app-transition-type" data-help-source="src/App.tsx"
                         onClick={() => {
                           const defaultGuard = variables.length > 0 ? `${variables[0].name} == 1U` : 'flag == true';
                           updateTransition(currentError.elementId!, { type: 'condition', condition: defaultGuard });
                           addError('info', `Added guard condition: [${defaultGuard}]`);
                           setErrors(prev => prev.filter(e => e.id !== currentError.id));
-                          setShowErrorDialog(false);
+                          dismissErrorDialog();
                         }}
                         className="bg-green-600 hover:bg-green-700 text-white px-5 mr-2"
                       >
                         Add Guard
                       </Button>
-                      <Button
+                      <Button data-help-feature="app-transition-type" data-help-source="src/App.tsx"
                         onClick={() => {
                           updateTransition(currentError.elementId!, { type: 'after', afterTicks: 5 });
                           addError('info', `Added after-timer: after(5)`);
                           setErrors(prev => prev.filter(e => e.id !== currentError.id));
-                          setShowErrorDialog(false);
+                          dismissErrorDialog();
                         }}
                         className="bg-green-600 hover:bg-green-700 text-white px-5 mr-2"
                       >
@@ -18235,7 +18713,7 @@ const ADIA = () => {
                       </Button>
                     </>
                   ) : (
-                    <Button
+                    <Button data-help-feature="app-error-fix" data-help-source="src/App.tsx"
                       onClick={() => handleAutoFix(currentError)}
                       className="bg-green-600 hover:bg-green-700 text-white px-5 mr-2"
                     >
@@ -18244,24 +18722,25 @@ const ADIA = () => {
                   )
                 )}
                 {errors.filter(e => e.canAutoFix).length > 1 && (
-                  <Button
+                  <Button data-help-feature="app-error-fix" data-help-source="src/App.tsx"
                     onClick={handleFixAll}
                     className="bg-green-700 hover:bg-green-800 text-white px-5 mr-2"
                   >
                     Fix All ({errors.filter(e => e.canAutoFix).length})
                   </Button>
                 )}
-                <Button
+                <Button data-help-feature="app-error-dismiss" data-help-source="src/App.tsx"
                   variant="outline"
-                  onClick={() => setShowErrorDialog(false)}
+                  ref={errorDismissButtonRef}
+                  onClick={dismissErrorDialog}
                   className="border-[#333] text-[#a0a0a0] hover:text-[#e0e0e0] px-5"
                 >
                   Dismiss
                 </Button>
-                <Button
+                <Button data-help-feature="app-error-clear" data-help-source="src/App.tsx"
                   onClick={() => {
                     clearErrors();
-                    setShowErrorDialog(false);
+                    dismissErrorDialog();
                   }}
                   className="bg-red-600 hover:bg-red-700 text-white px-5"
                 >
@@ -18294,12 +18773,32 @@ const ADIA = () => {
           >
             <CanonicalTraceabilityMatrix
               repository={canonicalSysmlRepository}
+              externalElements={[
+                ...states.map(state => ({ id: state.id, name: state.name, kind: 'state' })),
+                ...junctions.map(junction => ({ id: junction.id, name: junction.name, kind: junction.type ?? 'pseudostate' })),
+              ]}
               onNavigate={(elementId) => {
                 setSelectedIds([elementId]);
                 if (blocks.some(block => block.id === elementId && block.stereotype === 'requirement')) setDiagramMode('requirements');
                 else if (blocks.some(block => block.id === elementId)) setDiagramMode('bdd');
                 else if (parts.some(part => part.id === elementId) || connectors.some(connector => connector.id === elementId)) setDiagramMode('ibd');
               }}
+            />
+          </FloatingWindow>
+        )}
+
+        {/* Allocation Matrix Window */}
+        {managedWindows.allocation.isOpen && (
+          <FloatingWindow
+            windowState={managedWindows.allocation}
+            onClose={() => toggleWindow('allocation')}
+            onUpdate={updateManagedWindow}
+          >
+            <CanonicalAllocationMatrix
+              repository={canonicalSysmlRepository}
+              onExecute={handleExecuteSysmlCommand}
+              authorizedBaselineIds={authorizedBaselineIds}
+              onNavigate={(elementId) => setSelectedIds([elementId])}
             />
           </FloatingWindow>
         )}
@@ -18311,11 +18810,24 @@ const ADIA = () => {
             onClose={() => toggleWindow('hmi')}
             onUpdate={updateManagedWindow}
           >
-            <HmiDashboardContent
+            <HmiWorkspace data-help-topic="hmi_dashboard"
               variables={variables}
               components={hmiComponents}
               setComponents={setHmiComponents}
-              updateVariable={(id, val) => updateVariableValue(id, val)}
+              onInput={handleHmiInput}
+              externalOwnedVariableIds={factoryIOEnabled ? factoryIOMapping.filter(m => m.type === 'sensor').map(m => m.adiaVarId) : []}
+              runtime={{ running: isRunning, time: simulationTime, activeStateIds: Object.values(activeStates),
+                states: states.map(s => ({ id: s.id, name: s.name })), samples: hmiSamples, resetVersion: hmiResetVersion }}
+              onSimulationCommand={command => {
+                if (command === 'pause') pauseSimulation();
+                else if (command === 'reset') void resetSimulation();
+                else if (command === 'step') void stepSimulation();
+                else if (command === 'resume' && simulationSessionRef.current) {
+                  if (simulationSessionRef.current.runtime.error) addError('error', 'Reset the failed simulation before resuming.', 'HMI');
+                  else setIsRunning(true);
+                }
+                else void startSimulation();
+              }}
               onClose={() => toggleWindow('hmi')}
             />
           </FloatingWindow>
@@ -18384,7 +18896,7 @@ const ADIA = () => {
         {/* ── Detached Scope Floating Overlay Window ────────────────────────────── */}
         {isScopeDetached && (
           <div className="fixed inset-4 sm:inset-10 z-50 bg-[#121212]/95 border border-[#333] rounded-xl shadow-2xl flex flex-col backdrop-blur-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            <div
+            <div data-help-feature="app-scope-dock" data-help-source="src/App.tsx"
               onDoubleClick={() => setIsScopeDetached(false)}
               className="h-12 px-5 border-b border-[#222] flex items-center justify-between bg-[#1a1a1a] shrink-0 cursor-pointer select-none"
               title="Double-click header to dock back to bottom panel"
@@ -18397,7 +18909,7 @@ const ADIA = () => {
                 <span className="text-xs text-[#666] bg-[#222] px-2.5 py-0.5 rounded-full ml-2">Double-click header to dock back</span>
               </div>
               <div className="flex items-center gap-2">
-                <Button
+                <Button data-help-feature="app-scope-csv" data-help-source="src/App.tsx"
                   variant="ghost"
                   size="sm"
                   onClick={exportScopeCSV}
@@ -18405,7 +18917,7 @@ const ADIA = () => {
                 >
                   Export CSV
                 </Button>
-                <Button
+                <Button data-help-feature="app-scope-clear" data-help-source="src/App.tsx"
                   variant="ghost"
                   size="sm"
                   onClick={clearScope}
@@ -18413,7 +18925,7 @@ const ADIA = () => {
                 >
                   Clear
                 </Button>
-                <Button
+                <Button data-help-feature="app-scope-dock" data-help-source="src/App.tsx"
                   variant="ghost"
                   size="icon"
                   onClick={() => setIsScopeDetached(false)}
@@ -18485,6 +18997,7 @@ const ADIA = () => {
           </div>
         )}
       </div>
+      </Profiler>
     </>
   );
 };

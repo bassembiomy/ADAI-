@@ -1,4 +1,6 @@
+import { MultibodyConstraintDiagnosticError } from '../../engine/vlab/vlabConstraintDiagnostics';
 import React, { useCallback, useState, useMemo, useEffect, useRef } from 'react';
+import { beginRightDragCopy, moveRightDragCopy } from '../../services/rightDragCopyGesture';
 import {
   ReactFlow,
   Background,
@@ -20,18 +22,31 @@ import {
 import '@xyflow/react/dist/style.css';
 import * as math from 'mathjs';
 import { VLabWorkspaceProps, VLabNode as AppVLabNode, VLabEdge as AppVLabEdge } from './VLabWorkspaceTypes';
+import { normalizeLegacyVLabGraph } from './vlabModelMigration';
 import { VLabNode, NodeErrorBoundary } from './VLabNode';
+import { VLabParamField } from './VLabParamField';
+import { VLabDiagnosticsPanel, diagnosticTargets, toRunDiagnostic, topologyRunDiagnostic } from './VLabDiagnosticsPanel';
+import { VLabMigrationBanner } from './VLabMigrationBanner';
+import type { VLabDiagnostic } from '../../engine/vlab/vlabDiagnostics';
 import { SymbolRenderer } from './VLabSymbols';
 import { VLAB_LIBRARY, VLabBlock, VLabPort, scoreVLabBlock, searchVLabBlocks } from '../../utils/vlabLibrary';
 import { VLAB_COMPONENT_DEFINITIONS } from '../../engine/vlab/vlabComponentDefinitions';
 import { VLabPhysicsEngine } from '../../engine/vlab/vlabPhysics';
+import { checkEdgeSet, portIdFromHandle, validateConnection } from '../../engine/vlab/vlabConnectionRules';
+import { scalarSample } from '../../engine/vlab/vlabScopeRead';
+import { TopologyValidationError, formatTopologyMessage, validateTopology } from '../../engine/vlab/vlabTopologyValidation';
+import { SolverConfiguration, validateSolverConfiguration } from '../../engine/vlab/kernel/types';
 import { Settings2, Play, Pause, Square, Send, ChevronLeft, ChevronDown, ChevronRight, Box, Activity, FlaskConical, LineChart, X, Maximize2, FileSpreadsheet, Info, GraduationCap, BookOpen, Layers, Settings, RefreshCcw, Zap, ZoomIn, ZoomOut, Minus, Network, Cloud, Download, CheckCircle2, AlertCircle, Triangle, Trash2 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import * as XLSX from 'xlsx';
 import { isInputFocused } from '../../utils/domUtils';
+import { handleHorizontalToolbarWheel } from '../../utils/toolbarScroll';
 import { getVLabSignalInfo, exportScopeToCSV, VLAB_SIGNAL_COLORS } from '../../utils/scopeUtils';
 import { VLabSimulinkScope } from './VLabSimulinkScope';
 import { computeAbsoluteReferencePressure, convertPressureFromSI, type PressureUnit, type ElevationUnit } from '../../utils/hydraulicUnits';
+import { normalizeSolverConfiguration } from '../../engine/vlab/kernel/PhysicalNetworkExtractor';
+import { selectSolverConfigurationNode } from '../../engine/vlab/kernel/SolverConfigurationSelection';
+import { VLabWorkerClient } from '../../services/vlabWorkerClient';
 
 interface LabNode {
   id: string;
@@ -41,7 +56,99 @@ interface LabNode {
   params?: Record<string, any>;
 }
 
-const LEARNING_LABS = [
+export interface VLabSolverJob {
+  engine: VLabPhysicsEngine;
+  solverConfiguration: SolverConfiguration;
+  networkNodeId?: string;
+}
+
+export interface VLabStepBoundary {
+  stopTime: number;
+  dt: number;
+  enableDiagnostics: boolean;
+  enableLogging: boolean;
+}
+
+const DEFAULT_VLAB_STEP_SECONDS = 0.05;
+
+function configuredStep(value: number | 'auto', fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+/**
+ * Resolves the interval for one workspace-owned solver boundary. The terminal
+ * step may be shorter than minimumStep so the run can end exactly at stopTime.
+ */
+export function resolveVLabStepBoundary(
+  solverConfiguration: SolverConfiguration,
+  currentTime: number,
+  isInitialStep: boolean
+): VLabStepBoundary {
+  const maximumStep = configuredStep(solverConfiguration.maximumStep, Number.POSITIVE_INFINITY);
+  const requestedStep = isInitialStep
+    ? configuredStep(solverConfiguration.initialStep, DEFAULT_VLAB_STEP_SECONDS)
+    : DEFAULT_VLAB_STEP_SECONDS;
+  const cappedStep = Math.min(requestedStep, maximumStep);
+  const minimumStep = configuredStep(solverConfiguration.minimumStep, 0);
+  const boundedStep = minimumStep <= maximumStep
+    ? Math.max(cappedStep, minimumStep)
+    : cappedStep;
+  const remainingTime = Math.max(0, solverConfiguration.stopTime - currentTime);
+
+  return {
+    stopTime: solverConfiguration.stopTime,
+    dt: Math.min(boundedStep, remainingTime),
+    enableDiagnostics: solverConfiguration.enableDiagnostics,
+    enableLogging: solverConfiguration.enableLogging
+  };
+}
+
+export function createVLabSolverJob(nodes: Node[], edges: Edge[], networkNodeId?: string): VLabSolverJob {
+  const solverNode = selectSolverConfigurationNode(nodes, edges, networkNodeId)
+    || ({ id: 'solver_config_default', data: { type: 'solver_config', params: {} } } as unknown as Node);
+  const candidate = normalizeSolverConfiguration(solverNode);
+  const validation = validateSolverConfiguration(candidate);
+  if (!validation.valid) throw new Error(validation.errors.join('; '));
+  const solverConfiguration = candidate;
+  return {
+    engine: new VLabPhysicsEngine(solverConfiguration),
+    solverConfiguration,
+    networkNodeId
+  };
+}
+
+export function updateVLabSolverJobConfiguration(job: VLabSolverJob, nodes: Node[], edges?: Edge[]): SolverConfiguration {
+  // Node-only inspector updates must retain the job's existing association.
+  const solverNode = edges
+    ? selectSolverConfigurationNode(nodes, edges, job.networkNodeId)
+    : nodes.find(n => n.id === job.solverConfiguration.id);
+  if (!solverNode) return job.solverConfiguration;
+
+  const candidate = normalizeSolverConfiguration(solverNode);
+  const validation = validateSolverConfiguration(candidate);
+  if (!validation.valid) throw new Error(validation.errors.join('; '));
+  const solverConfiguration = candidate;
+  job.engine.updateConfiguration(solverConfiguration);
+  job.solverConfiguration = solverConfiguration;
+  return solverConfiguration;
+}
+
+/** Refreshes the active job before a simulation step without replacing its state or outputs. */
+export function refreshVLabSolverJobAtStepBoundary(
+  job: VLabSolverJob,
+  nodes: Node[],
+  currentTime: number,
+  isInitialStep: boolean,
+  edges?: Edge[]
+): { solverConfiguration: SolverConfiguration; boundary: VLabStepBoundary } {
+  const solverConfiguration = updateVLabSolverJobConfiguration(job, nodes, edges);
+  return {
+    solverConfiguration,
+    boundary: resolveVLabStepBoundary(solverConfiguration, currentTime, isInitialStep)
+  };
+}
+
+export const LEARNING_LABS = [
   {
     id: 'air_fryer_thermal',
     name: 'Air Fryer Heat Transfer',
@@ -50,13 +157,14 @@ const LEARNING_LABS = [
     description: 'Study the multi-domain interaction between electrical power, forced convection, and thermal mass accumulation in a standard air fryer basket.',
     nodes: [
       { id: 'ac_supply', blockId: 'ac_voltage', position: { x: 50, y: 200 }, label: '230V AC Supply', params: { Vpk: 325, f: 50 } },
-      { id: 'heating_element', blockId: 'thermal_resistor', position: { x: 250, y: 200 }, label: 'Heating Element', params: { Rth: 35 } },
+      { id: 'heating_element', blockId: 'thermal_resistor', position: { x: 250, y: 200 }, label: 'Heating Element', params: { R: 35 } },
       { id: 'convection_link', blockId: 'convective_heat', position: { x: 450, y: 100 }, label: 'Convection Interface', params: { h: 80, A: 0.15 } },
       { id: 'air_chamber', blockId: 'ma_chamber', position: { x: 650, y: 200 }, label: 'Cooking Basket (Air)', params: { V: 0.005 } },
       { id: 'circulation_fan', blockId: 'ma_pressure_source', position: { x: 650, y: 400 }, label: 'Air Circulation Fan', params: { P: 150 } },
       { id: 'fan_ctrl', blockId: 'ps_constant', position: { x: 650, y: 550 }, label: 'Fan Speed Ctrl', params: { value: 0.8 } },
       { id: 'temp_sensor', blockId: 'temp_sensor', position: { x: 850, y: 200 }, label: 'Basket Temp Sensor' },
       { id: 'thermal_scope', blockId: 'scope', position: { x: 1050, y: 150 }, label: 'Temp Monitor', params: { time_range: 300 } },
+      { id: 'thermal_ref', blockId: 'thermal_ref', position: { x: 850, y: 350 }, label: 'Thermal Reference' },
       { id: 'ground', blockId: 'ground', position: { x: 200, y: 400 }, label: 'PE Ground' }
     ],
     edges: [
@@ -66,9 +174,10 @@ const LEARNING_LABS = [
       { id: 'e2', source: 'heating_element', target: 'convection_link', sourceHandle: 'h_s', targetHandle: 'a_t' },
       { id: 'e3', source: 'convection_link', target: 'air_chamber', sourceHandle: 'b_s', targetHandle: 'h_t' },
       { id: 'e4', source: 'fan_ctrl', target: 'circulation_fan', sourceHandle: 'y_s', targetHandle: 's_t' },
-      { id: 'e5', source: 'circulation_fan', target: 'air_chamber', sourceHandle: 'b_s', targetHandle: 'a_t' },
-      { id: 'e6', source: 'air_chamber', target: 'temp_sensor', sourceHandle: 'h_s', targetHandle: 'a_t' },
-      { id: 'e7', source: 'temp_sensor', target: 'thermal_scope', sourceHandle: 't_s', targetHandle: 'in1_t' }
+        { id: 'e5', source: 'circulation_fan', target: 'air_chamber', sourceHandle: 'b_s', targetHandle: 'a_t' },
+        { id: 'e6', source: 'air_chamber', target: 'temp_sensor', sourceHandle: 'h_s', targetHandle: 'a_t' },
+        { id: 'e6_ref', source: 'temp_sensor', target: 'thermal_ref', sourceHandle: 'b_s', targetHandle: 'a_t' },
+        { id: 'e7', source: 'temp_sensor', target: 'thermal_scope', sourceHandle: 't_s', targetHandle: 'in1_t' }
     ]
   },
   {
@@ -83,6 +192,7 @@ const LEARNING_LABS = [
       { id: 'mixture_drag', blockId: 'rot_damper', position: { x: 450, y: 200 }, label: 'Mixture Viscosity', params: { b: 0.001 } },
       { id: 'blade_inertia', blockId: 'inertia', position: { x: 450, y: 350 }, label: 'Blade Inertia', params: { J: 0.0002 } },
       { id: 'speed_sensor', blockId: 'rot_motion_sensor', position: { x: 650, y: 200 }, label: 'Speed Sensor' },
+      { id: 'mech_ref', blockId: 'rot_ref', position: { x: 650, y: 450 }, label: 'Rotational Reference' },
       { id: 'blender_scope', blockId: 'scope', position: { x: 850, y: 150 }, label: 'Performance Monitor', params: { time_range: 5 } },
       { id: 'gnd', blockId: 'ground', position: { x: 150, y: 400 }, label: 'Common' }
     ],
@@ -93,7 +203,10 @@ const LEARNING_LABS = [
       { id: 'be2', source: 'blender_motor', target: 'mixture_drag', sourceHandle: 'r_s', targetHandle: 'r_t' },
       { id: 'be3', source: 'mixture_drag', target: 'blade_inertia', sourceHandle: 'r_s', targetHandle: 'r_t' },
       { id: 'be4', source: 'mixture_drag', target: 'speed_sensor', sourceHandle: 'r_s', targetHandle: 'r_t' },
-      { id: 'be5', source: 'speed_sensor', target: 'blender_scope', sourceHandle: 'w_s', targetHandle: 'in1_t' }
+      { id: 'be5', source: 'speed_sensor', target: 'blender_scope', sourceHandle: 'w_s', targetHandle: 'in1_t' },
+      { id: 'be5_sref', source: 'speed_sensor', target: 'mech_ref', sourceHandle: 'c_s', targetHandle: 'r_t' },
+      { id: 'be_mref', source: 'blender_motor', target: 'mech_ref', sourceHandle: 'c_s', targetHandle: 'r_t' },
+      { id: 'be_dref', source: 'mixture_drag', target: 'mech_ref', sourceHandle: 'c_s', targetHandle: 'r_t' }
     ]
   },
   {
@@ -107,9 +220,10 @@ const LEARNING_LABS = [
       { id: 'error_calc', blockId: 'ps_subtract', position: { x: 200, y: 100 }, label: 'Error' },
       { id: 'speed_pid', blockId: 'ps_pid_ctrl', position: { x: 350, y: 100 }, label: 'Speed PID', params: { Kp: 2.5, Ki: 1.2 } },
       { id: 'dc_bus', blockId: 'dc_voltage', position: { x: 50, y: 300 }, label: 'DC Link (600V)', params: { V: 600 } },
-      { id: 'inverter', blockId: 'pwm_3ph_2level', position: { x: 500, y: 300 }, label: 'Inverter Bridge' },
+      { id: 'inverter', blockId: 'pwm_3ph_2level', position: { x: 500, y: 300 }, label: 'Inverter Bridge', params: { control_mode: 'sinusoidal_modulation' } },
       { id: 'ac_motor', blockId: 'ac_motor', position: { x: 700, y: 300 }, label: 'Induction Motor', params: { P: 2 } },
       { id: 'speed_sensor', blockId: 'rot_motion_sensor', position: { x: 850, y: 300 }, label: 'Encoder' },
+      { id: 'mech_ref', blockId: 'rot_ref', position: { x: 650, y: 450 }, label: 'Rotational Reference' },
       { id: 'scope', blockId: 'scope', position: { x: 1000, y: 150 }, label: 'PID Response', params: { time_range: 10 } },
       { id: 'gnd', blockId: 'ground', position: { x: 500, y: 500 }, label: 'GND' }
     ],
@@ -117,16 +231,16 @@ const LEARNING_LABS = [
       { id: 'pe1', source: 'ref_speed', target: 'error_calc', sourceHandle: 'y_s', targetHandle: 'u1_t' },
       { id: 'pe2', source: 'speed_sensor', target: 'error_calc', sourceHandle: 'w_s', targetHandle: 'u2_t' },
       { id: 'pe3', source: 'error_calc', target: 'speed_pid', sourceHandle: 'y_s', targetHandle: 'e_t' },
-      { id: 'pe4', source: 'speed_pid', target: 'inverter', sourceHandle: 'u_s', targetHandle: 'vabc_t' },
+      { id: 'pe4', source: 'speed_pid', target: 'inverter', sourceHandle: 'u_s', targetHandle: 'amp_t' },
       { id: 'pe5', source: 'dc_bus', target: 'inverter', sourceHandle: 'p_s', targetHandle: 'p_t' },
       { id: 'pe6', source: 'dc_bus', target: 'gnd', sourceHandle: 'n_s', targetHandle: 'a_t' },
       { id: 'pe7', source: 'inverter', target: 'gnd', sourceHandle: 'n_s', targetHandle: 'a_t' },
-      { id: 'pe8', source: 'inverter', target: 'ac_motor', sourceHandle: 'a_s', targetHandle: 'a_t' },
-      { id: 'pe9', source: 'inverter', target: 'ac_motor', sourceHandle: 'b_s', targetHandle: 'b_t' },
-      { id: 'pe10', source: 'inverter', target: 'ac_motor', sourceHandle: 'c_s', targetHandle: 'c_t' },
-      { id: 'pe11', source: 'ac_motor', target: 'gnd', sourceHandle: 'n_s', targetHandle: 'a_t' },
+      // F-080: the star point of the wye motor is left open (floating), like a Simscape wye machine fed by a two-level inverter;
+      // grounding it would put the inverter's Vdc/2 common mode across the zero-sequence path (a non-physical DC current)
+      { id: 'pe8', source: 'inverter', target: 'ac_motor', sourceHandle: 'abc_s', targetHandle: 'abc_t' },
       { id: 'pe12', source: 'ac_motor', target: 'speed_sensor', sourceHandle: 'r_s', targetHandle: 'r_t' },
-      { id: 'pe13', source: 'speed_sensor', target: 'scope', sourceHandle: 'w_s', targetHandle: 'in1_t' }
+      { id: 'pe13', source: 'speed_sensor', target: 'scope', sourceHandle: 'w_s', targetHandle: 'in1_t' },
+      { id: 'pe13_sref', source: 'speed_sensor', target: 'mech_ref', sourceHandle: 'c_s', targetHandle: 'r_t' }
     ]
   },
   {
@@ -137,10 +251,12 @@ const LEARNING_LABS = [
     description: 'Compare Open-Loop V/f Control with High-Performance Sensorless FOC for Induction Motor speed and torque regulation.',
     nodes: [
       { id: 'dc_link', blockId: 'dc_voltage', position: { x: 50, y: 300 }, label: 'DC Link (600V)', params: { V: 600 } },
-      { id: 'inverter', blockId: 'pwm_3ph_2level', position: { x: 300, y: 300 }, label: '3-Phase Inverter' },
+      { id: 'inverter', blockId: 'pwm_3ph_2level', position: { x: 300, y: 300 }, label: '3-Phase Inverter', params: { control_mode: 'sinusoidal_modulation' } },
       { id: 'vfd_controller', blockId: 'im_foc_ctrl', position: { x: 300, y: 100 }, label: 'VFD Controller', params: { mode: 1 } },
       { id: 'im_motor', blockId: 'ac_motor', position: { x: 550, y: 300 }, label: 'Induction Motor' },
       { id: 'ref_speed', blockId: 'ps_step', position: { x: 50, y: 100 }, label: 'Speed Reference', params: { time: 1, initial: 500, final: 1500 } },
+      { id: 'speed_sensor', blockId: 'rot_motion_sensor', position: { x: 700, y: 300 }, label: 'Speed Sensor' },
+      { id: 'mech_ref', blockId: 'rot_ref', position: { x: 650, y: 450 }, label: 'Rotational Reference' },
       { id: 'vfd_scope', blockId: 'scope', position: { x: 800, y: 200 }, label: 'VFD Performance', params: { time_range: 5 } },
       { id: 'gnd', blockId: 'ground', position: { x: 300, y: 500 }, label: 'Common Ground' }
     ],
@@ -149,12 +265,12 @@ const LEARNING_LABS = [
       { id: 've2', source: 'dc_link', target: 'inverter', sourceHandle: 'p_s', targetHandle: 'p_t' },
       { id: 've2_ret', source: 'dc_link', target: 'gnd', sourceHandle: 'n_s', targetHandle: 'a_t' },
       { id: 've2_inv', source: 'inverter', target: 'gnd', sourceHandle: 'n_s', targetHandle: 'a_t' },
-      { id: 've3', source: 'vfd_controller', target: 'inverter', sourceHandle: 'vabc_s', targetHandle: 'vabc_t' },
-      { id: 've4_a', source: 'inverter', target: 'im_motor', sourceHandle: 'a_s', targetHandle: 'a_t' },
-      { id: 've4_b', source: 'inverter', target: 'im_motor', sourceHandle: 'b_s', targetHandle: 'b_t' },
-      { id: 've4_c', source: 'inverter', target: 'im_motor', sourceHandle: 'c_s', targetHandle: 'c_t' },
-      { id: 've4_n', source: 'im_motor', target: 'gnd', sourceHandle: 'n_s', targetHandle: 'a_t' },
-      { id: 've5', source: 'im_motor', target: 'vfd_scope', sourceHandle: 'r_s', targetHandle: 'in1_t' }
+      { id: 've3', source: 'vfd_controller', target: 'inverter', sourceHandle: 'vabc_s', targetHandle: 'amp_t' },
+      // F-080: open (floating) motor star point, see the PID lab
+      { id: 've4', source: 'inverter', target: 'im_motor', sourceHandle: 'abc_s', targetHandle: 'abc_t' },
+      { id: 've5', source: 'im_motor', target: 'speed_sensor', sourceHandle: 'r_s', targetHandle: 'r_t' },
+      { id: 've6', source: 'speed_sensor', target: 'vfd_scope', sourceHandle: 'w_s', targetHandle: 'in1_t' },
+      { id: 've6_sref', source: 'speed_sensor', target: 'mech_ref', sourceHandle: 'c_s', targetHandle: 'r_t' }
     ]
   },
   {
@@ -166,23 +282,25 @@ const LEARNING_LABS = [
     nodes: [
       { id: 'washing_ctrl', blockId: 'im_foc_ctrl', position: { x: 50, y: 100 }, label: 'Wash Cycle Controller', params: { target_rpm: 600 } },
       { id: 'dc_link', blockId: 'dc_voltage', position: { x: 50, y: 300 }, label: 'DC Bus (320V)', params: { V: 320 } },
-      { id: 'inverter', blockId: 'pwm_3ph_2level', position: { x: 300, y: 300 }, label: 'Inverter Drive' },
+      { id: 'inverter', blockId: 'pwm_3ph_2level', position: { x: 300, y: 300 }, label: 'Inverter Drive', params: { control_mode: 'sinusoidal_modulation' } },
       { id: 'wash_motor', blockId: 'ac_motor', position: { x: 550, y: 300 }, label: 'Direct Drive Motor' },
       { id: 'basket_load', blockId: 'washing_basket', position: { x: 750, y: 300 }, label: 'Washing Basket', params: { load_mass: 6 } },
+      { id: 'speed_sensor', blockId: 'rot_motion_sensor', position: { x: 850, y: 300 }, label: 'Speed Sensor' },
+      { id: 'mech_ref', blockId: 'rot_ref', position: { x: 650, y: 450 }, label: 'Rotational Reference' },
       { id: 'wash_scope', blockId: 'scope', position: { x: 950, y: 200 }, label: 'Cycle Analysis', params: { time_range: 10 } },
       { id: 'gnd', blockId: 'ground', position: { x: 300, y: 500 }, label: 'System Ground' }
     ],
     edges: [
-      { id: 'we1', source: 'washing_ctrl', target: 'inverter', sourceHandle: 'vabc_s', targetHandle: 'vabc_t' },
+      { id: 'we1', source: 'washing_ctrl', target: 'inverter', sourceHandle: 'vabc_s', targetHandle: 'amp_t' },
       { id: 'we2_dc', source: 'dc_link', target: 'inverter', sourceHandle: 'p_s', targetHandle: 'p_t' },
       { id: 'we2_gnd', source: 'dc_link', target: 'gnd', sourceHandle: 'n_s', targetHandle: 'a_t' },
       { id: 'we2_inv', source: 'inverter', target: 'gnd', sourceHandle: 'n_s', targetHandle: 'a_t' },
-      { id: 'we3_a', source: 'inverter', target: 'wash_motor', sourceHandle: 'a_s', targetHandle: 'a_t' },
-      { id: 'we3_b', source: 'inverter', target: 'wash_motor', sourceHandle: 'b_s', targetHandle: 'b_t' },
-      { id: 'we3_c', source: 'inverter', target: 'wash_motor', sourceHandle: 'c_s', targetHandle: 'c_t' },
-      { id: 'we3_n', source: 'wash_motor', target: 'gnd', sourceHandle: 'n_s', targetHandle: 'a_t' },
+      // F-080: open (floating) motor star point, see the PID lab
+      { id: 'we3', source: 'inverter', target: 'wash_motor', sourceHandle: 'abc_s', targetHandle: 'abc_t' },
       { id: 'we4', source: 'wash_motor', target: 'basket_load', sourceHandle: 'r_s', targetHandle: 'r_t' },
-      { id: 'we5', source: 'wash_motor', target: 'wash_scope', sourceHandle: 'r_s', targetHandle: 'in1_t' }
+      { id: 'we5', source: 'wash_motor', target: 'speed_sensor', sourceHandle: 'r_s', targetHandle: 'r_t' },
+      { id: 'we6', source: 'speed_sensor', target: 'wash_scope', sourceHandle: 'w_s', targetHandle: 'in1_t' },
+      { id: 'we6_sref', source: 'speed_sensor', target: 'mech_ref', sourceHandle: 'c_s', targetHandle: 'r_t' }
     ]
   },
   {
@@ -241,7 +359,7 @@ const LEARNING_LABS = [
   }
 ];
 
-const reconstructLabNodes = (labNodes: LabNode[]): Node[] => {
+export const reconstructLabNodes = (labNodes: LabNode[]): Node[] => {
   const allBlocks = VLAB_LIBRARY.flatMap(d => d.blocks);
 
   return labNodes.map(ln => {
@@ -452,7 +570,7 @@ const ScopeView = ({
             {keys.map((k, i) => {
               const info = signalInfos?.[i];
               const color = VLAB_SIGNAL_COLORS[i % VLAB_SIGNAL_COLORS.length];
-              const labelText = info?.connected ? `${info.blockLabel}.${info.portName} (${info.dataType})` : (info?.fullName || k);
+              const labelText = info?.connected ? (info.channelLabel || `${info.blockLabel}.${info.portName}`) : (info?.fullName || k);
               return (
                 <div key={k} className="flex items-center gap-1.5 bg-white/5 px-2 py-0.5 rounded-full border border-white/5">
                   <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
@@ -567,7 +685,7 @@ const ScopeView = ({
 
         <div className="flex items-center gap-1">
           <div className="flex items-center bg-black/40 p-0.5 rounded-xl border border-white/5 mr-2">
-            <button
+            <button data-help-feature="ui:vlab/VLabWorkspace:34289216e134" data-help-source="src/components/vlab/VLabWorkspace.tsx"
               onClick={() => setZoomLevel(prev => prev / 1.25)}
               className="p-1.5 hover:bg-white/10 rounded-lg text-gray-500 hover:text-white transition-all active:scale-90"
               title="Scale Down"
@@ -575,7 +693,7 @@ const ScopeView = ({
               <ZoomOut size={14} />
             </button>
             <div className="w-px h-3 bg-white/5 mx-0.5" />
-            <button
+            <button data-help-feature="ui:vlab/VLabWorkspace:bbac09bccc52" data-help-source="src/components/vlab/VLabWorkspace.tsx"
               onClick={() => setZoomLevel(prev => prev * 1.25)}
               className="p-1.5 hover:bg-white/10 rounded-lg text-gray-500 hover:text-white transition-all active:scale-90"
               title="Scale Up"
@@ -584,7 +702,7 @@ const ScopeView = ({
             </button>
           </div>
 
-          <button
+          <button data-help-feature="ui:vlab/VLabWorkspace:e5dae6911deb" data-help-source="src/components/vlab/VLabWorkspace.tsx"
             onClick={handleAutoScale}
             className="p-2 hover:bg-white/10 rounded-xl text-gray-500 hover:text-emerald-400 transition-all group"
             title="Reset Scale"
@@ -592,7 +710,7 @@ const ScopeView = ({
             <RefreshCcw size={14} className="group-hover:rotate-180 transition-transform duration-500" />
           </button>
           {onExpand && (
-            <button
+            <button data-help-feature="ui:vlab/VLabWorkspace:3a1706872038" data-help-source="src/components/vlab/VLabWorkspace.tsx"
               onClick={(e) => { e.stopPropagation(); e.preventDefault(); onExpand(); }}
               className="p-2 hover:bg-white/10 rounded-xl text-gray-500 hover:text-white transition-all ml-2 active:scale-90 cursor-pointer z-50"
               title="Expand View"
@@ -654,7 +772,7 @@ const VLabScopeWindow = ({
         }`}
       style={isMaximized ? { left: 0, top: 0, width: '100vw', height: '100vh' } : { left: pos.x, top: pos.y }}
     >
-      <div
+      <div data-help-feature="ui:vlab/VLabWorkspace:539b426adc14" data-help-source="src/components/vlab/VLabWorkspace.tsx"
         className="h-10 bg-[#151515] border-b border-white/5 flex items-center justify-between px-4 cursor-move select-none shrink-0"
         onMouseDown={() => !isMaximized && setIsDragging(true)}
         onDoubleClick={() => setIsMaximized(!isMaximized)}
@@ -664,7 +782,7 @@ const VLabScopeWindow = ({
           <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] truncate max-w-[150px]">{title}</span>
         </div>
         <div className="flex items-center gap-1">
-          <button
+          <button data-help-feature="ui:vlab/VLabWorkspace:aff8fe06b73a" data-help-source="src/components/vlab/VLabWorkspace.tsx"
             onClick={handleExportCSV}
             className="p-1.5 hover:bg-emerald-500/20 hover:text-emerald-400 rounded-md transition-all text-gray-500"
             title="Export CSV Data"
@@ -672,7 +790,7 @@ const VLabScopeWindow = ({
             <Download size={14} />
           </button>
           {onUpdate && (
-            <button
+            <button data-help-feature="ui:vlab/VLabWorkspace:c59d52419a6a" data-help-source="src/components/vlab/VLabWorkspace.tsx"
               onClick={() => setShowSettings(!showSettings)}
               className={`p-1.5 rounded-md transition-all ${showSettings ? 'bg-purple-500/20 text-purple-400' : 'text-gray-500 hover:text-white'}`}
               title="Scope Settings"
@@ -680,21 +798,21 @@ const VLabScopeWindow = ({
               <Settings size={14} />
             </button>
           )}
-          <button
+          <button data-help-feature="ui:vlab/VLabWorkspace:9731d5f5bcc7" data-help-source="src/components/vlab/VLabWorkspace.tsx"
             onClick={() => setIsMinimized(!isMinimized)}
             className="p-1.5 hover:bg-white/5 rounded-md transition-all text-gray-500 hover:text-white"
             title={isMinimized ? "Restore" : "Minimize"}
           >
             <Minus size={14} />
           </button>
-          <button
+          <button data-help-feature="ui:vlab/VLabWorkspace:f196d856320e" data-help-source="src/components/vlab/VLabWorkspace.tsx"
             onClick={() => { setIsMaximized(!isMaximized); setIsMinimized(false); }}
             className="p-1.5 hover:bg-white/5 rounded-md transition-all text-gray-500 hover:text-white"
             title={isMaximized ? "Restore" : "Maximize"}
           >
             {isMaximized ? <Layers size={14} /> : <Maximize2 size={14} />}
           </button>
-          <button
+          <button data-help-feature="ui:vlab/VLabWorkspace:151ed7616191" data-help-source="src/components/vlab/VLabWorkspace.tsx"
             onClick={onClose}
             className="p-1.5 hover:bg-red-500/20 hover:text-red-500 rounded-md transition-all text-gray-500 ml-1"
           >
@@ -711,7 +829,7 @@ const VLabScopeWindow = ({
               {/* Number of Input Channels */}
               <div className="space-y-1">
                 <label className="block text-[8px] font-bold text-gray-400 uppercase">Input Channels (Ports)</label>
-                <input
+                <input data-help-feature="ui:vlab/VLabWorkspace:3dc02c5b291d" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                   type="number"
                   min="1"
                   max="8"
@@ -727,7 +845,7 @@ const VLabScopeWindow = ({
               {/* Time Range */}
               <div className="space-y-1">
                 <label className="block text-[8px] font-bold text-gray-400 uppercase">Time Range</label>
-                <select
+                <select data-help-feature="ui:vlab/VLabWorkspace:35ad75bc8c3a" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                   value={String(params.time_range?.value || '10')}
                   onChange={(e) => {
                     const val = e.target.value === 'auto' ? 'auto' : parseFloat(e.target.value);
@@ -748,7 +866,7 @@ const VLabScopeWindow = ({
               {/* Limit Data Points */}
               <div className="space-y-1">
                 <label className="block text-[8px] font-bold text-gray-400 uppercase">Limit Points</label>
-                <select
+                <select data-help-feature="ui:vlab/VLabWorkspace:f04521aafac1" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                   value={String(params.limit_data_points?.value || 'on')}
                   onChange={(e) => onUpdate({ limit_data_points: { ...params.limit_data_points, value: e.target.value } })}
                   className="w-full text-xs px-1.5 py-1 border border-[#333] bg-[#111] text-gray-300 rounded outline-none"
@@ -761,7 +879,7 @@ const VLabScopeWindow = ({
               {/* Buffer Size */}
               <div className="space-y-1">
                 <label className="block text-[8px] font-bold text-gray-400 uppercase">Max Points</label>
-                <input
+                <input data-help-feature="ui:vlab/VLabWorkspace:d8895d129ed3" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                   type="number"
                   value={params.buffer_size?.value || 1000}
                   onChange={(e) => onUpdate({ buffer_size: { ...params.buffer_size, value: parseInt(e.target.value) || 1000 } })}
@@ -772,7 +890,7 @@ const VLabScopeWindow = ({
               {/* Decimation */}
               <div className="space-y-1">
                 <label className="block text-[8px] font-bold text-gray-400 uppercase">Decimation</label>
-                <input
+                <input data-help-feature="ui:vlab/VLabWorkspace:5ceecb8346b7" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                   type="number"
                   min="1"
                   value={params.decimation?.value || 1}
@@ -784,7 +902,7 @@ const VLabScopeWindow = ({
               {/* Sample Time */}
               <div className="space-y-1">
                 <label className="block text-[8px] font-bold text-gray-400 uppercase">Sample Time (s)</label>
-                <input
+                <input data-help-feature="ui:vlab/VLabWorkspace:a19ca033c2b6" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                   type="number"
                   step="any"
                   value={params.sample_time?.value ?? -1}
@@ -796,7 +914,7 @@ const VLabScopeWindow = ({
               {/* Grid */}
               <div className="space-y-1">
                 <label className="block text-[8px] font-bold text-gray-400 uppercase">Grid</label>
-                <select
+                <select data-help-feature="ui:vlab/VLabWorkspace:650e18e2e430" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                   value={String(params.show_grid?.value || 'on')}
                   onChange={(e) => onUpdate({ show_grid: { ...params.show_grid, value: e.target.value } })}
                   className="w-full text-xs px-1.5 py-1 border border-[#333] bg-[#111] text-gray-300 rounded outline-none"
@@ -809,7 +927,7 @@ const VLabScopeWindow = ({
               {/* Legend */}
               <div className="space-y-1">
                 <label className="block text-[8px] font-bold text-gray-400 uppercase">Legend</label>
-                <select
+                <select data-help-feature="ui:vlab/VLabWorkspace:4646bc23f306" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                   value={String(params.show_legend?.value || 'on')}
                   onChange={(e) => onUpdate({ show_legend: { ...params.show_legend, value: e.target.value } })}
                   className="w-full text-xs px-1.5 py-1 border border-[#333] bg-[#111] text-gray-300 rounded outline-none"
@@ -829,16 +947,27 @@ const VLabScopeWindow = ({
   );
 };
 
-export const areDomainsCompatible = (d1?: string, d2?: string): boolean => {
-  if (!d1 || !d2) return true;
-  const a = d1.toLowerCase();
-  const b = d2.toLowerCase();
-  if (a === b) return true;
-  if (a === 'mechanical' && (b === 'translational' || b === 'rotational')) return true;
-  if (b === 'mechanical' && (a === 'translational' || a === 'rotational')) return true;
-  return false;
+/**
+ * One recorded scope sample from the engine's per-scope value. Only channels the engine actually produced are kept
+ * (`in<k>`, `value`, friendly names): a missing channel is a gap, never a padded 0, and channels are never re-assigned
+ * by value position. A vector / Frame value throws (ScopeReadError); a non-finite sample is dropped, not zeroed.
+ */
+const buildScopePoint = (time: number, val: any): Record<string, number> | null => {
+  const t = parseFloat(time.toFixed(3));
+  if (typeof val === 'number') {
+    if (!Number.isFinite(val)) return null;
+    const num = parseFloat(val.toFixed(6));
+    return { time: t, value: num, in1: num };
+  }
+  const point: Record<string, number> = { time: t };
+  for (const [k, v] of Object.entries(val ?? {})) {
+    if (k === '__perScope') continue;
+    if (typeof v === 'number' && !Number.isFinite(v)) continue;
+    point[k] = parseFloat(scalarSample(v, { scopeId: 'scope', channel: 1, variable: k }).toFixed(6));
+  }
+  if (point.in1 === undefined && point.value !== undefined) point.in1 = point.value;
+  return Object.keys(point).length > 1 ? point : null;
 };
-
 export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
   nodes: initialNodes,
   edges: initialEdges,
@@ -851,8 +980,9 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
   onNavigateToXbridges,
   initialSelectedNodeId
 }) => {
-  const [nodes, setNodes, onLocalNodesChange] = useNodesState<AppVLabNode>(initialNodes);
-  const [edges, setEdges, onLocalEdgesChange] = useEdgesState<AppVLabEdge>(initialEdges);
+  const initialGraphRef = useRef(normalizeLegacyVLabGraph(initialNodes, initialEdges));
+  const [nodes, setNodes, onLocalNodesChange] = useNodesState<AppVLabNode>(initialGraphRef.current.nodes);
+  const [edges, setEdges, onLocalEdgesChange] = useEdgesState<AppVLabEdge>(initialGraphRef.current.edges);
 
   const [viewPath, setViewPath] = useState<string[]>(['root']);
   const currentParentId = viewPath[viewPath.length - 1];
@@ -886,19 +1016,18 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
 
   // Inward sync: only apply when initialNodes/initialEdges change AND we didn't cause the change
   useEffect(() => {
-    if (initialNodes === initialNodesRef.current) return;
+    const nodesChanged = initialNodes !== initialNodesRef.current;
+    const edgesChanged = initialEdges !== initialEdgesRef.current;
+    if (!nodesChanged && !edgesChanged) return;
     initialNodesRef.current = initialNodes;
-    if (isSavingRef.current) return;
-    setNodes(initialNodes);
-    setViewPath(['root']);
-  }, [initialNodes, setNodes]);
-
-  useEffect(() => {
-    if (initialEdges === initialEdgesRef.current) return;
     initialEdgesRef.current = initialEdges;
     if (isSavingRef.current) return;
-    setEdges(initialEdges);
-  }, [initialEdges, setEdges]);
+
+    const normalized = normalizeLegacyVLabGraph(initialNodes, initialEdges);
+    setNodes(normalized.nodes);
+    setEdges(normalized.edges);
+    setViewPath(['root']);
+  }, [initialNodes, initialEdges, setNodes, setEdges]);
 
   // --- Subsystem Port Synchronization ---
   useEffect(() => {
@@ -963,9 +1092,20 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
   const [history, setHistory] = useState<{ nodes: any[], edges: any[] }[]>([]);
   const [isSimulating, setIsSimulating] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
+  const isPausedRef = useRef(false);
+  const nodesRef = useRef(nodes);
+  const edgesRef = useRef(edges);
+  useEffect(() => { isPausedRef.current = isPaused; }, [isPaused]);
+  useEffect(() => { nodesRef.current = nodes; }, [nodes]);
+  useEffect(() => { edgesRef.current = edges; }, [edges]);
   const [simTime, setSimTime] = useState(0);
   const simTimeRef = useRef<number>(0);
   const simPhysicsStateRef = useRef<any>(null);
+  const hasSimulatedStepRef = useRef(false);
+  const solverJobRef = useRef<VLabSolverJob | null>(null);
+  const vlabWorkerRef = useRef<VLabWorkerClient | null>(null);
+  const [runDiagnostic, setRunDiagnostic] = useState<VLabDiagnostic | null>(null);
+  const diagnosticTargetMap = useMemo(() => diagnosticTargets(runDiagnostic), [runDiagnostic]);
   const [vlabLimitInput, setVlabLimitInput] = useState('');
   const vlabLimitRef = useRef<number | null>(null);
   const [simSpeed, setSimSpeed] = useState<number>(1);
@@ -986,11 +1126,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
     }
     const scNode = nodes.find(n => (n.data as any)?.type === 'solver_config' || (n.data as any)?.type === 'solver_configuration');
     if (scNode) {
-      const st = (scNode.data as any)?.params?.stopTime?.value ?? (scNode.data as any)?.params?.stop_time?.value;
-      const parsed = typeof st === 'number' ? st : parseFloat(st);
-      if (!isNaN(parsed) && parsed > 0) {
-        return parsed;
-      }
+      return normalizeSolverConfiguration(scNode).stopTime;
     }
     return null;
   }, [nodes]);
@@ -1085,7 +1221,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
     try {
       const electron = (window as any).require?.('electron');
       const payload = {
-        fileName: `vlab_model_${new Date().toISOString().slice(0,10)}.json`,
+        fileName: `vlab_model_${new Date().toISOString().slice(0,10)}.adia`,
         content: JSON.stringify({ nodes, edges }, null, 2),
         encoding: 'utf8',
         mimeType: 'application/json',
@@ -1114,8 +1250,9 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
       if (res.success && res.content) {
         const data = JSON.parse(res.content);
         if (data.nodes && data.edges) {
-          setNodes(data.nodes);
-          setEdges(data.edges);
+          const normalized = normalizeLegacyVLabGraph(data.nodes, data.edges);
+          setNodes(normalized.nodes);
+          setEdges(normalized.edges);
           setSyncStatus('success');
           setTimeout(() => setShow3dxSyncModal(false), 1500);
         } else {
@@ -1164,6 +1301,8 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
     startNodeX: number;
     startNodeY: number;
   } | null>(null);
+  const rightCopyGestureRef = useRef<ReturnType<typeof beginRightDragCopy> | null>(null);
+  const pendingRightCopyNodeRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!rightClickDrag) return;
@@ -1204,37 +1343,39 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
     };
   }, [rightClickDrag, reactFlowInstance, setNodes]);
 
+  useEffect(() => {
+    const handleMove = (event: MouseEvent) => {
+      const gesture = rightCopyGestureRef.current;
+      const nodeId = pendingRightCopyNodeRef.current;
+      if (!gesture || !nodeId || rightClickDrag) return;
+      const moved = moveRightDragCopy(gesture, { clientX: event.clientX, clientY: event.clientY });
+      rightCopyGestureRef.current = moved;
+      if (moved.phase !== 'dragging') return;
+      const node = nodes.find(candidate => candidate.id === nodeId);
+      if (!node) return;
+      const newNodeId = `${node.data.type}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+      setHistory(history => [...history, { nodes, edges }].slice(-20));
+      setNodes(current => [...current.map(candidate => ({ ...candidate, selected: false })), {
+        ...node, id: newNodeId, selected: true,
+        data: { ...node.data, id: newNodeId, selected: true },
+      }]);
+      setSelectedNodeId(newNodeId);
+      setRightClickDrag({ clonedNodeId: newNodeId, startMouseX: event.clientX, startMouseY: event.clientY, startNodeX: node.position.x, startNodeY: node.position.y });
+    };
+    const handleUp = () => { rightCopyGestureRef.current = null; pendingRightCopyNodeRef.current = null; };
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleUp);
+    return () => { window.removeEventListener('mousemove', handleMove); window.removeEventListener('mouseup', handleUp); };
+  }, [rightClickDrag, nodes, edges, setNodes]);
+
   const handleNodeMouseDown = useCallback((event: React.MouseEvent, node: Node) => {
     if (event.button === 2) {
       event.preventDefault();
       event.stopPropagation();
-      setHistory(h => [...h, { nodes, edges }].slice(-20));
-      const newNodeId = `${node.data.type}_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
-      const clonedNode: Node = {
-        ...node,
-        id: newNodeId,
-        position: {
-          x: node.position.x,
-          y: node.position.y
-        },
-        selected: true,
-        data: {
-          ...node.data,
-          id: newNodeId,
-          selected: true
-        }
-      };
-      setNodes(nds => [...nds.map(n => ({ ...n, selected: false })), clonedNode]);
-      setSelectedNodeId(newNodeId);
-      setRightClickDrag({
-        clonedNodeId: newNodeId,
-        startMouseX: event.clientX,
-        startMouseY: event.clientY,
-        startNodeX: node.position.x,
-        startNodeY: node.position.y
-      });
+      rightCopyGestureRef.current = beginRightDragCopy({ sourceIds: [node.id], clientX: event.clientX, clientY: event.clientY });
+      pendingRightCopyNodeRef.current = node.id;
     }
-  }, [nodes, edges, setNodes, setSelectedNodeId]);
+  }, []);
 
   const scopeParamsRef = useRef<any>({});
   useEffect(() => {
@@ -1259,6 +1400,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
     }
   }, [initialSelectedNodeId, reactFlowInstance, nodes]);
   const [invalidEdges, setInvalidEdges] = useState<Set<string>>(new Set());
+  const [snapEnabled, setSnapEnabled] = useState(false);
   const [status, setStatus] = useState<{ message: string; type: 'idle' | 'info' | 'success' | 'warning' | 'error' }>({
     message: 'System Ready',
     type: 'idle'
@@ -1269,9 +1411,17 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
    * Builds a domain-aware simulation step function from the current node graph.
    * Returns a function: (t, dt) => number  (the signal value at the scope)
    */
-  const buildSimEngine = useCallback(() => {
-    const engine = new VLabPhysicsEngine();
+  const buildSimEngine = useCallback((useWorker = false) => {
+    const solverJob = solverJobRef.current && isSimulating
+      ? solverJobRef.current
+      : createVLabSolverJob(nodes, edges);
+    if (isSimulating) {
+      updateVLabSolverJobConfiguration(solverJob, nodes, edges);
+    }
+    solverJobRef.current = solverJob;
+    const engine = solverJob.engine;
     let useFallback = false;
+    let engineFailure: unknown;
 
     // Helper: get a param value from a node by id for the fallback
     const param = (nodeId: string, key: string, fallback: number) => {
@@ -1538,15 +1688,44 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
         };
       }
 
-      return (_t: number, _dt: number) => 0;
+      // No hard-coded model matches: a constant 0 would be a silent "no readings", so the engine failure itself is reported.
+      return (_t: number, _dt: number) => {
+        if (engineFailure !== undefined) throw engineFailure;
+        return 0;
+      };
     };
 
     const fallbackStep = runFallbackSolver();
 
     return (t: number, dt: number) => {
       if (!useFallback) {
+        if (useWorker) {
+          if (!vlabWorkerRef.current) {
+            vlabWorkerRef.current = new VLabWorkerClient();
+            // WP-40: every failed worker step reaches the UI as a typed diagnostic (never a silent "no readings")
+            vlabWorkerRef.current.onDiagnostics((diagnostic) => { if (diagnostic.code !== 'CANCELLED') setRunDiagnostic(diagnostic); });
+          }
+          if (vlabWorkerRef.current.available) {
+            return vlabWorkerRef.current.step(nodesRef.current, edgesRef.current, solverJob.solverConfiguration, simPhysicsStateRef.current, dt)
+              .then((result) => {
+                simPhysicsStateRef.current = result;
+                if (result && result.scopeValues !== undefined && result.scopeValues !== null) {
+                  if (result.perScopeValues) {
+                    const val = result.scopeValues;
+                    if (typeof val === 'object' && val !== null) {
+                      val.__perScope = result.perScopeValues;
+                      return val;
+                    }
+                    return { value: val, in1: val, __perScope: result.perScopeValues };
+                  }
+                  return result.scopeValues;
+                }
+                return null;
+              });
+          }
+        }
         try {
-          const result = engine.simulateStep(nodes, edges, simPhysicsStateRef.current, dt);
+          const result = engine.simulateStep(nodesRef.current, edgesRef.current, simPhysicsStateRef.current, dt);
           simPhysicsStateRef.current = result;
           if (result && result.scopeValues !== undefined && result.scopeValues !== null) {
             if (result.perScopeValues) {
@@ -1561,49 +1740,87 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
             return result.scopeValues;
           }
         } catch (e) {
+          // A configured solver failure must reach the simulation diagnostic.
+          // Switching to a hardcoded model would discard the user's settings.
+          // An invalid topology must surface its diagnostic, never be hidden by the fallback model.
+          // Every typed V-Lab diagnostic (PARAM, DAE_STRUCTURE, BLOCK_EQUATION, ...) reaches the UI as well.
+          if (engine.getSolverConfiguration() || e instanceof MultibodyConstraintDiagnosticError || e instanceof TopologyValidationError || toRunDiagnostic(e).code !== 'UNKNOWN') throw e;
           console.warn("DAE Physics Engine failed, falling back to Euler model:", e);
+          engineFailure = e;
           useFallback = true;
         }
       }
       return fallbackStep(t, dt);
     };
-  }, [nodes, edges]);
+  }, [nodes, edges, isSimulating]);
 
   // Simulation Loop
   useEffect(() => {
     if (!isSimulating || isPaused) return;
 
-    // Build the physics engine once per simulation run
-    const step = buildSimEngine();
-    const DT = 0.05;   // seconds per tick (wall-clock 50 ms)
+    // Build the physics engine once per simulation run. Its configuration is
+    // refreshed below at every simulation-step boundary.
+    const step = buildSimEngine(true);
 
     let stepCount = 0;
     let lastSampleTime = 0;
+    let activeSolverConfiguration: SolverConfiguration | null = solverJobRef.current?.solverConfiguration ?? null;
+    let stepInFlight = false;
 
-    const interval = setInterval(() => {
+    const interval = setInterval(async () => {
+      if (isPausedRef.current || stepInFlight) return;
+      stepInFlight = true;
       try {
         const stepsToRun = Math.max(1, Math.min(5, simSpeedRef.current || 1));
         for (let s = 0; s < stepsToRun; s++) {
           const currentT = simTimeRef.current;
-          const limit = getEffectiveLimit();
+          const solverJob = solverJobRef.current;
+          if (!solverJob) return;
+          const refreshed = refreshVLabSolverJobAtStepBoundary(
+            solverJob,
+            nodesRef.current,
+            currentT,
+            !hasSimulatedStepRef.current,
+            edgesRef.current,
+          );
+          const toolbarLimit = vlabLimitRef.current;
+          if (toolbarLimit !== null) {
+            const toolbarConfiguration = { ...refreshed.solverConfiguration, stopTime: toolbarLimit };
+            solverJob.engine.updateConfiguration(toolbarConfiguration);
+            solverJob.solverConfiguration = toolbarConfiguration;
+          }
+          const boundary = resolveVLabStepBoundary(
+            solverJob.solverConfiguration,
+            currentT,
+            !hasSimulatedStepRef.current,
+          );
+          activeSolverConfiguration = solverJob.solverConfiguration;
+          // Learning-lab templates may not contain a Solver Configuration
+          // node. In that case the toolbar End Time must override the kernel's
+          // default stopTime instead of being display-only.
+          const limit = boundary.stopTime;
 
-          if (limit !== null && currentT >= limit - 1e-9) {
+          if (currentT >= limit) {
             setIsSimulating(false);
             clearInterval(interval);
             setStatus({ message: `Simulation reached limit of ${limit}s.`, type: 'success' });
             return;
           }
 
-          const dt = limit !== null ? Math.min(DT, Math.max(0, limit - currentT)) : DT;
-          if (dt <= 1e-12) {
+          const dt = Math.min(boundary.dt, Math.max(0, limit - currentT));
+          if (dt <= 0) {
             setIsSimulating(false);
             clearInterval(interval);
             setStatus({ message: `Simulation reached limit of ${limit}s.`, type: 'success' });
             return;
           }
 
-          const val = step(currentT, dt);
-          const nextT = parseFloat((currentT + dt).toFixed(6));
+          if (currentT + dt === currentT) throw new Error('Solver step is too small to advance simulation time.');
+
+          const val = await step(currentT, dt);
+          hasSimulatedStepRef.current = true;
+          // Keep simulation time at full precision; round only for display/export.
+          const nextT = currentT + dt;
           simTimeRef.current = nextT;
 
           if (val !== null && val !== undefined) {
@@ -1628,35 +1845,9 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
 
             if (shouldSample) {
               setScopeData(prev => {
-                let newPoint: any;
-                if (typeof val === 'number') {
-                  if (!Number.isFinite(val)) return prev;
-                  const num = parseFloat(val.toFixed(6));
-                  newPoint = { time: parseFloat(nextT.toFixed(3)), value: num, in1: num };
-                } else {
-                  const entries = Object.entries(val)
-                    .filter(([k]) => k !== '__perScope')
-                    .map(([k, v]) => {
-                      const numVal = parseFloat((v as number).toFixed(6));
-                      return [k, Number.isFinite(numVal) ? numVal : 0];
-                    });
-                  const obj = Object.fromEntries(entries);
-                  const values = Object.values(obj) as number[];
-                  newPoint = {
-                    time: parseFloat(nextT.toFixed(3)),
-                    ...obj,
-                    in1: obj.in1 !== undefined ? obj.in1 : (obj.value !== undefined ? obj.value : (values[0] ?? 0)),
-                    in2: obj.in2 !== undefined ? obj.in2 : (values[1] ?? 0),
-                    in3: obj.in3 !== undefined ? obj.in3 : (values[2] ?? 0),
-                    in4: obj.in4 !== undefined ? obj.in4 : (values[3] ?? 0),
-                    in5: obj.in5 !== undefined ? obj.in5 : (values[4] ?? 0),
-                    in6: obj.in6 !== undefined ? obj.in6 : (values[5] ?? 0),
-                    in7: obj.in7 !== undefined ? obj.in7 : (values[6] ?? 0),
-                    in8: obj.in8 !== undefined ? obj.in8 : (values[7] ?? 0),
-                  };
-                }
-                
-                const next = [...prev, newPoint];
+                const newPoint = buildScopePoint(nextT, val);
+                if (!newPoint) return prev;
+                                const next = [...prev, newPoint];
                 if (limitDataPoints) {
                   return next.slice(-bufferSize);
                 }
@@ -1669,34 +1860,8 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                 setPerScopeData(prevMap => {
                   const nextMap = { ...prevMap };
                   for (const [scopeId, scopeVal] of Object.entries(perScope)) {
-                    let point: any;
-                    if (typeof scopeVal === 'number') {
-                      if (!Number.isFinite(scopeVal)) continue;
-                      const num = parseFloat(scopeVal.toFixed(6));
-                      point = { time: parseFloat(nextT.toFixed(3)), value: num, in1: num };
-                    } else {
-                      const entries = Object.entries(scopeVal)
-                        .filter(([k]) => k !== '__perScope')
-                        .map(([k, v]) => {
-                          const numVal = parseFloat((v as number).toFixed(6));
-                          return [k, Number.isFinite(numVal) ? numVal : 0];
-                        });
-                      const obj = Object.fromEntries(entries);
-                      const values = Object.values(obj) as number[];
-                      point = {
-                        time: parseFloat(nextT.toFixed(3)),
-                        ...obj,
-                        in1: obj.in1 !== undefined ? obj.in1 : (obj.value !== undefined ? obj.value : (values[0] ?? 0)),
-                        in2: obj.in2 !== undefined ? obj.in2 : (values[1] ?? 0),
-                        in3: obj.in3 !== undefined ? obj.in3 : (values[2] ?? 0),
-                        in4: obj.in4 !== undefined ? obj.in4 : (values[3] ?? 0),
-                        in5: obj.in5 !== undefined ? obj.in5 : (values[4] ?? 0),
-                        in6: obj.in6 !== undefined ? obj.in6 : (values[5] ?? 0),
-                        in7: obj.in7 !== undefined ? obj.in7 : (values[6] ?? 0),
-                        in8: obj.in8 !== undefined ? obj.in8 : (values[7] ?? 0),
-                      };
-                    }
-                    const prev = nextMap[scopeId] || [];
+                    const point = buildScopePoint(nextT, scopeVal);
+                    if (!point) continue;                    const prev = nextMap[scopeId] || [];
                     const next = [...prev, point];
                     nextMap[scopeId] = limitDataPoints ? next.slice(-bufferSize) : next.slice(-20000);
                   }
@@ -1710,7 +1875,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
             }
           }
 
-          if (limit !== null && nextT >= limit - 1e-9) {
+          if (nextT >= limit - 1e-9) {
             setIsSimulating(false);
             clearInterval(interval);
             setStatus({ message: `Simulation reached limit of ${limit}s.`, type: 'success' });
@@ -1719,14 +1884,30 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
         }
         setSimTime(simTimeRef.current);
       } catch (err) {
-        console.error("Simulation step failed:", err);
+        if (activeSolverConfiguration?.enableDiagnostics) {
+          console.error("Simulation step failed:", err);
+        }
         setIsSimulating(false);
-        setStatus({ message: "Simulation crashed: Numerical instability or invalid configuration.", type: 'error' });
+        const failure = toRunDiagnostic(err);
+        if (failure.code !== 'CANCELLED') setRunDiagnostic(failure);
+        setStatus({
+          message: `Simulation crashed: ${err instanceof Error ? err.message : 'Numerical instability or invalid configuration.'}`,
+          type: 'error'
+        });
+      } finally {
+        stepInFlight = false;
       }
     }, 50);
 
-    return () => clearInterval(interval);
-  }, [isSimulating, isPaused, buildSimEngine, getEffectiveLimit]);
+    return () => {
+      clearInterval(interval);
+      vlabWorkerRef.current?.dispose();
+      vlabWorkerRef.current = null;
+    };
+  // The loop reads the latest graph through refs. Do not restart/dispose the
+  // worker on every scope-data/node-state render.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSimulating, isPaused]);
 
   // Keyboard Shortcuts
   useEffect(() => {
@@ -1933,69 +2114,37 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
       return;
     }
 
-    // Dynamic real-time connection check
-    const invalidErrors: string[] = [];
-    edges.forEach(edge => {
-      const sourceNode = nodes.find(n => n.id === edge.source);
-      const targetNode = nodes.find(n => n.id === edge.target);
-      if (!sourceNode || !targetNode) return;
-
-      const sourceData = sourceNode.data as any;
-      const targetData = targetNode.data as any;
-
-      const sPortId = edge.sourceHandle?.split('-').pop()?.replace(/_[st]$/, '');
-      const tPortId = edge.targetHandle?.split('-').pop()?.replace(/_[st]$/, '');
-      
-      const sourcePort = sourceData.ports?.find((p: any) => p.id === sPortId);
-      const targetPort = targetData.ports?.find((p: any) => p.id === tPortId);
-
-      const sDomain = sourcePort?.domain || sourceData.domain;
-      const tDomain = targetPort?.domain || targetData.domain;
-
-      const isUniversalBlock = (id: string) =>
-        id === 'scope' || id === 'vlab_probe' || id === 'conn_label' || id === 'ps_terminator' ||
-        id === 'subsystem' || id === 'Subsystem' ||
-        id === 'inport' || id === 'Inport' ||
-        id === 'outport' || id === 'Outport' ||
-        id === 'solver_config' || id === 'solver_configuration';
-      // Domain-bridge converters accept a connection from ANY domain on either
-      // side so they can join blocks from two different physical models.
-      const isDomainBridge = (id: string) =>
-        id === 'ps_simulink_conv' || id === 'simulink_ps_conv';
-      const isWildcardDomain = (d: any) =>
-        typeof d === 'string' && ['any', 'all', 'universal'].includes(d.toLowerCase());
-      const isRelaxed = isUniversalBlock(sourceData.type) || isUniversalBlock(targetData.type) ||
-        isDomainBridge(sourceData.type) || isDomainBridge(targetData.type) ||
-        isWildcardDomain(sDomain) || isWildcardDomain(tDomain);
-
-      if (sDomain && tDomain && !areDomainsCompatible(sDomain, tDomain) && !isRelaxed) {
-        const sLabel = sourceData.label || sourceData.type;
-        const tLabel = targetData.label || targetData.type;
-        invalidErrors.push(`${sLabel} (${sDomain}) ➔ ${tLabel} (${tDomain})`);
-      }
-    });
-
-    if (invalidEdges.size > 0 || invalidErrors.length > 0) {
-      const detail = invalidErrors.length > 0 ? ` Incompatible: ${invalidErrors.slice(0, 2).join('; ')}${invalidErrors.length > 2 ? ` (+${invalidErrors.length - 2} more)` : ''}` : '';
-      setStatus({ 
-        message: `CANNOT RUN SIMULATION: ${Math.max(invalidEdges.size, invalidErrors.length)} invalid connection(s) detected.${detail}`, 
-        type: 'error' 
+    // Pre-simulation topology validation: the same rules as the editor (vlabConnectionRules) re-run on the
+    // loaded model, plus unconnected REQUIRED ports. A model saved by an older editor may hold invalid wires;
+    // it loads and shows these diagnostics instead of crashing or solving garbage.
+    const topology = validateTopology(nodes as any, edges as any);
+    if (!topology.valid) {
+      const message = formatTopologyMessage(topology.diagnostics);
+      setRunDiagnostic(topologyRunDiagnostic(message, topology.diagnostics as any));
+      setStatus({
+        message: `CANNOT RUN SIMULATION: ${message}`,
+        type: 'error'
       });
       return;
     }
+    setRunDiagnostic(null);
 
+    // A run always begins with the current solver_config; pause/resume keeps
+    // this job and its physics state while live edits refresh it in the loop.
+    solverJobRef.current = createVLabSolverJob(nodes, edges);
+    hasSimulatedStepRef.current = false;
     setIsSimulating(true);
     setIsPaused(false);
-    simTimeRef.current = 0;
+    simTimeRef.current = solverJobRef.current?.solverConfiguration.startTime ?? 0;
     simPhysicsStateRef.current = null;
-    setSimTime(0);
+    setSimTime(simTimeRef.current);
     setScopeData([]);
     setPerScopeData({});
     setStatus({ message: 'Simulation started successfully.', type: 'success' });
-  }, [isSimulating, edges, nodes, invalidEdges]);
+  }, [isSimulating, edges, nodes]);
 
   const onConnect = useCallback((params: Connection) => {
-    // 1. Domain connection validation (Simscape connection safety parity)
+    // 1. Scope channel capacity / first-free-channel assignment (editor concern, not a wiring rule)
     const sourceNode = nodes.find(n => n.id === params.source);
     const targetNode = nodes.find(n => n.id === params.target);
     if (sourceNode && targetNode) {
@@ -2060,67 +2209,24 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
           return; // Block excess channel connection
         }
 
-        const alreadyConnected = edges.some(e => {
-          if (e.target === scopeId) {
-            let p = (e.targetHandle || '').replace(/_[st]$/, '');
-            if (p.startsWith(scopeId + '-')) p = p.slice(scopeId.length + 1);
-            return p === scopePortId;
-          }
-          if (e.source === scopeId) {
-            let p = (e.sourceHandle || '').replace(/_[st]$/, '');
-            if (p.startsWith(scopeId + '-')) p = p.slice(scopeId.length + 1);
-            return p === scopePortId;
-          }
-          return false;
-        });
-
-        if (alreadyConnected) {
-          setStatus({
-            message: `Channel ${chNum} on Scope '${scopeData.label || 'Scope'}' is already connected. Disconnect existing wire first.`,
-            type: 'error'
-          });
-          setTimeout(() => setStatus(s => s.type === 'error' ? { message: 'System Ready', type: 'idle' } : s), 5000);
-          return;
-        }
-      }
-
-      const sourcePort = sourceData.ports?.find((p: any) => p.id === sPortId);
-      const targetPort = targetData.ports?.find((p: any) => p.id === tPortId);
-
-      const sDomain = sourcePort?.domain || sourceData.domain;
-      const tDomain = targetPort?.domain || targetData.domain;
-
-      const isUniversalBlock = (id: string) =>
-        id === 'scope' || id === 'vlab_probe' || id === 'conn_label' || id === 'ps_terminator' ||
-        id === 'subsystem' || id === 'Subsystem' ||
-        id === 'inport' || id === 'Inport' ||
-        id === 'outport' || id === 'Outport' ||
-        id === 'solver_config' || id === 'solver_configuration';
-      // Domain-bridge converters accept a connection from ANY domain on either
-      // side so they can join blocks from two different physical models.
-      const isDomainBridge = (id: string) =>
-        id === 'ps_simulink_conv' || id === 'simulink_ps_conv';
-      const isWildcardDomain = (d: any) =>
-        typeof d === 'string' && ['any', 'all', 'universal'].includes(d.toLowerCase());
-      const isRelaxed = isUniversalBlock(sourceData.type) || isUniversalBlock(targetData.type) ||
-        isDomainBridge(sourceData.type) || isDomainBridge(targetData.type) ||
-        isWildcardDomain(sDomain) || isWildcardDomain(tDomain);
-
-      if (sDomain && tDomain && !areDomainsCompatible(sDomain, tDomain) && !isRelaxed) {
-        const sName = sourceData.label || sourceData.type;
-        const tName = targetData.label || targetData.type;
-        setStatus({
-          message: `Cannot connect ${sDomain} port (${sName}) to ${tDomain} port (${tName}). Use a domain converter block.`,
-          type: 'error'
-        });
-        setTimeout(() => setStatus(s => s.type === 'error' ? { message: 'System Ready', type: 'idle' } : s), 5000);
-        return; // Block the connection
+        // A channel that already has a source is rejected by the shared fan-in rule below.
       }
     }
+
+    // 2. Every wiring rule (domain, signal direction, fan-in, measurable-only scope inputs) lives in
+    //    vlabConnectionRules; the editor, the saved-model check and the engine all call that one module.
+    const result = validateConnection(nodes as any, edges as any, params);
+    if (!result.valid) {
+      setStatus({ message: result.message, type: 'error' });
+      setTimeout(() => setStatus(s => s.type === 'error' ? { message: 'System Ready', type: 'idle' } : s), 5000);
+      return; // Block the connection
+    }
+    if (result.duplicate) return; // identical wire already present (either drag direction)
 
     setHistory(h => [...h, { nodes, edges }].slice(-20)); // Keep last 20 steps
     const edge = {
       ...params,
+      ...result.edge, // normalised: A->B and B->A produce the identical edge
       animated: true,
       style: { stroke: '#6c9ac6', strokeWidth: 2 },
     };
@@ -2128,48 +2234,15 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
   }, [edges, nodes, setEdges]);
 
   useEffect(() => {
+    // Same rule engine as onConnect and the pre-simulation check (vlabConnectionRules)
     const invalid = new Set<string>();
-    edges.forEach(edge => {
-      const sourceNode = nodes.find(n => n.id === edge.source);
-      const targetNode = nodes.find(n => n.id === edge.target);
-      if (!sourceNode || !targetNode) return;
-
-      const sourceData = sourceNode.data as any;
-      const targetData = targetNode.data as any;
-
-      const sPortId = edge.sourceHandle?.split('-').pop()?.replace(/_[st]$/, '');
-      const tPortId = edge.targetHandle?.split('-').pop()?.replace(/_[st]$/, '');
-      
-      const sourcePort = sourceData.ports?.find((p: any) => p.id === sPortId);
-      const targetPort = targetData.ports?.find((p: any) => p.id === tPortId);
-
-      const sDomain = sourcePort?.domain || sourceData.domain;
-      const tDomain = targetPort?.domain || targetData.domain;
-
-      // Relaxed validation for scopes and probes to allow easy visualization
-      const isUniversalBlock = (id: string) =>
-        id === 'scope' || id === 'vlab_probe' || id === 'conn_label' || id === 'ps_terminator' ||
-        id === 'subsystem' || id === 'Subsystem' ||
-        id === 'inport' || id === 'Inport' ||
-        id === 'outport' || id === 'Outport' ||
-        id === 'solver_config' || id === 'solver_configuration';
-      // Domain-bridge converters accept a connection from ANY domain on either
-      // side so they can join blocks from two different physical models.
-      const isDomainBridge = (id: string) =>
-        id === 'ps_simulink_conv' || id === 'simulink_ps_conv';
-      const isWildcardDomain = (d: any) =>
-        typeof d === 'string' && ['any', 'all', 'universal'].includes(d.toLowerCase());
-      const isRelaxed = isUniversalBlock(sourceData.type) || isUniversalBlock(targetData.type) ||
-        isDomainBridge(sourceData.type) || isDomainBridge(targetData.type) ||
-        isWildcardDomain(sDomain) || isWildcardDomain(tDomain);
-
-      if (sDomain && tDomain && !areDomainsCompatible(sDomain, tDomain) && !isRelaxed) {
-        invalid.add(edge.id);
-      }
-    });
+    const edgeDiagnostics = checkEdgeSet(nodes as any, edges as any);
+    edgeDiagnostics.forEach(d => { if (d.edgeId) invalid.add(d.edgeId); });
     setInvalidEdges(invalid);
     if (invalid.size > 0) {
-      setStatus({ message: `${invalid.size} invalid connection(s) detected. Fix red pulse edges.`, type: 'warning' });
+      // a model saved by an older editor loads with its invalid wires marked and the first diagnostic shown
+      const first = edgeDiagnostics[0]?.reason;
+      setStatus({ message: `${invalid.size} invalid connection(s) detected. Fix red pulse edges.${first ? ` ${first}` : ''}`, type: 'warning' });
     } else if (status.type === 'warning') {
       setStatus({ message: 'Connections validated.', type: 'success' });
       setTimeout(() => setStatus(s => s.type === 'success' ? { message: 'System Ready', type: 'idle' } : s), 3000);
@@ -2375,6 +2448,9 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
       case 'pwm_3ph_2level':
       case 'pwm_3ph_3level':
       case 'microwave_cavity':
+        return { width: 80, height: 60 };
+      case 'pwm_vienna':
+        return { width: 80, height: 120 };
       case 'lms_adaptive_filter':
         return { width: 80, height: 60 };
       case 'im_foc_ctrl':
@@ -2604,20 +2680,32 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
           params: updatedParams
         };
 
+        if ((n.data.type === 'solver_config' || n.data.type === 'solver_configuration') && solverJobRef.current) {
+          const updatedSolverNode = {
+            ...n,
+            data: {
+              ...updatedData,
+              label: n.data.label
+            }
+          } as Node;
+          updateVLabSolverJobConfiguration(solverJobRef.current, [updatedSolverNode]);
+        }
+
         if (n.data.type === 'scope' && (paramKey === 'numSignals' || paramKey === 'numPorts')) {
           const num = Math.max(1, Math.min(8, Number(value) || 1));
           updatedData.ports = Array.from({ length: num }, (_, i) => ({
             id: `in${i + 1}`,
             pos: 'left',
             label: `${i + 1}`,
-            domain: 'Physical'
+            domain: 'Physical',
+            direction: 'in'
           }));
           // Prune any incoming edges to channels exceeding new capacity
           setEdges(eds => eds.filter(e => {
             if (e.target !== n.id) return true;
-            let t = (e.targetHandle || '').replace(/_[st]$/, '');
-            if (t.startsWith(n.id + '-')) t = t.slice(n.id.length + 1);
-            const ch = parseInt(t.replace(/\D/g, '')) || 1;
+            // exact scope channel id (same portIdFromHandle path as the assembler), not a suffix strip + digit scrape
+            const portId = portIdFromHandle({ id: n.id, data: { type: 'scope' } }, e.targetHandle) ?? 'in1';
+            const ch = Number(portId.match(/^in(\d+)$/)?.[1] ?? 1);
             return ch <= num;
           }));
         }
@@ -2740,11 +2828,14 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
   };
 
   return (
-    <div id="vlab-workspace-container" className="flex h-full w-full bg-[#050505] text-[#e0e0e0] overflow-hidden">
+    <div id="vlab-workspace-container" className="vlab-workspace flex h-full w-full bg-[var(--surface-canvas)] text-[var(--text-primary)] overflow-hidden">
       {/* Top Bar */}
-      <div className="absolute top-0 left-0 right-0 h-12 bg-[#0d0d0d] border-b border-[#222] flex items-center justify-between px-4 z-10">
+      <div data-help-feature="live:components/vlab/VLabWorkspace:2baeda448e81"
+        onWheel={handleHorizontalToolbarWheel}
+        className="vlab-panel absolute top-0 left-0 right-0 h-12 bg-[var(--surface-panel)] border-b border-[var(--border-default)] flex items-center justify-between px-4 z-10 overflow-x-auto overflow-y-hidden adia-toolbar-scrollbar [&>*]:shrink-0"
+      >
         <div className="flex items-center gap-4">
-          <button
+          <button data-help-feature="ui:vlab/VLabWorkspace:6e052e895d8f" data-help-source="src/components/vlab/VLabWorkspace.tsx"
             onClick={onBack}
             className="p-2 hover:bg-[#1a1a1a] rounded-lg transition-colors text-gray-400"
           >
@@ -2761,7 +2852,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
           <div className="flex items-center gap-2 bg-[#141414] border border-[#2d2d2d] rounded-lg px-2.5 py-1 text-xs font-bold text-gray-300 shadow-md">
             <span className="text-[9px] text-gray-500 uppercase font-black tracking-wider">End Time</span>
             <div className="relative flex items-center">
-              <input
+              <input data-help-feature="ui:vlab/VLabWorkspace:f385873ce067" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                 type="text"
                 value={vlabLimitInput}
                 onChange={e => handleVlabLimitChange(e.target.value)}
@@ -2773,7 +2864,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
             </div>
           </div>
 
-          <button
+          <button data-help-feature="ui:vlab/VLabWorkspace:500ee38c9f09" data-help-source="src/components/vlab/VLabWorkspace.tsx"
             onClick={handleStartSimulation}
             className={`flex items-center gap-2 ${isSimulating && !isPaused ? 'bg-amber-600 hover:bg-amber-500' : 'bg-purple-600 hover:bg-purple-500'} text-white px-4 py-1.5 rounded-lg text-xs font-bold transition-all shadow-lg shadow-purple-900/20`}
           >
@@ -2781,7 +2872,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
           </button>
 
           {isSimulating && (
-            <button
+            <button data-help-feature="ui:vlab/VLabWorkspace:6670138a2f1b" data-help-source="src/components/vlab/VLabWorkspace.tsx"
               onClick={() => {
                 setIsSimulating(false);
                 setIsPaused(false);
@@ -2796,7 +2887,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
           )}
 
           {(scopeData.length > 0 || Object.values(perScopeData).some(d => d.length > 0)) && (
-            <button
+            <button data-help-feature="ui:vlab/VLabWorkspace:e3bfae81ea5d" data-help-source="src/components/vlab/VLabWorkspace.tsx"
               onClick={exportToExcel}
               className="flex items-center gap-2 bg-emerald-600/20 border border-emerald-600/30 hover:bg-emerald-600/30 text-emerald-500 px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
               title="Export Results to Excel"
@@ -2805,14 +2896,14 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
             </button>
           )}
 
-          <button
+          <button data-help-feature="ui:vlab/VLabWorkspace:94a74c974df8" data-help-source="src/components/vlab/VLabWorkspace.tsx"
             onClick={() => onSendToDOE({ nodes, edges })}
             className="flex items-center gap-2 bg-[#1a1a1a] border border-[#333] hover:bg-[#222] text-gray-300 px-4 py-1.5 rounded-lg text-xs font-bold cursor-pointer"
           >
             <Send size={14} /> EXPORT TO DOE
           </button>
 
-          <button
+          <button data-help-feature="ui:vlab/VLabWorkspace:94332d92c330" data-help-source="src/components/vlab/VLabWorkspace.tsx"
             onClick={() => handle3dxSyncInit('push')}
             className="flex items-center gap-2 bg-blue-900/25 hover:bg-blue-900/45 text-[#4da6ff] border border-blue-800/30 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer"
             title="Push to 3DEXPERIENCE"
@@ -2820,7 +2911,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
             <Cloud size={14} /> PUSH 3DX
           </button>
 
-          <button
+          <button data-help-feature="ui:vlab/VLabWorkspace:92ab021123ff" data-help-source="src/components/vlab/VLabWorkspace.tsx"
             onClick={() => handle3dxSyncInit('pull')}
             className="flex items-center gap-2 bg-blue-900/25 hover:bg-blue-900/45 text-[#4da6ff] border border-blue-800/30 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer"
             title="Pull from 3DEXPERIENCE"
@@ -2832,7 +2923,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
 
       <div className="flex flex-1 mt-12 overflow-hidden">
         {/* Left Sidebar: Block Library / Learning Labs */}
-        <div className={`${isLibCollapsed ? 'w-12' : 'w-72'} bg-[#0d0d0d] border-r border-[#222] flex flex-col transition-all duration-500 ease-in-out relative group shrink-0`}>
+        <div className={`${isLibCollapsed ? 'w-12' : 'w-72'} vlab-panel border-r border-[var(--border-default)] flex flex-col transition-all duration-500 ease-in-out relative group shrink-0`}>
           {/* Header */}
           <div className="p-4 border-b border-[#222] flex items-center justify-between overflow-hidden shrink-0">
             {!isLibCollapsed && (
@@ -2841,7 +2932,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                 <h3 className="text-xs font-bold uppercase tracking-widest text-white">Library</h3>
               </div>
             )}
-            <button
+            <button data-help-feature="ui:vlab/VLabWorkspace:7a9a25d60b06" data-help-source="src/components/vlab/VLabWorkspace.tsx"
               onClick={() => setIsLibCollapsed(!isLibCollapsed)}
               className={`p-2 rounded-xl bg-[#181818] border border-[#2d2d2d] text-purple-400 hover:bg-purple-500/10 hover:border-purple-500/30 transition-all ${isLibCollapsed ? 'mx-auto' : ''}`}
               title={isLibCollapsed ? "Expand Library" : "Collapse Library"}
@@ -2854,7 +2945,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
             <>
               {/* Sidebar Tab Switcher */}
               <div className="p-3 border-b border-[#222] flex gap-1">
-                <button
+                <button data-help-feature="ui:vlab/VLabWorkspace:df8e33405a1b" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                   onClick={() => setActiveSidebarTab('library')}
                   className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${activeSidebarTab === 'library'
                       ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20 shadow-[0_0_15px_rgba(168,85,247,0.1)]'
@@ -2864,7 +2955,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                   <Layers size={14} />
                   Library
                 </button>
-                <button
+                <button data-help-feature="ui:vlab/VLabWorkspace:f7b09f5ba3ba" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                   onClick={() => setActiveSidebarTab('labs')}
                   className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${activeSidebarTab === 'labs'
                       ? 'bg-orange-500/10 text-orange-400 border border-orange-500/20 shadow-[0_0_15px_rgba(249,115,22,0.1)]'
@@ -2880,7 +2971,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                 <>
                   <div className="p-4 border-b border-[#222]">
                     <div className="relative">
-                      <input
+                      <input data-help-feature="ui:vlab/VLabWorkspace:184663a53b80" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                         type="text"
                         placeholder="Search blocks..."
                         value={searchQuery}
@@ -2904,7 +2995,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                       return (
                         <div key={domain.type} className="flex flex-col space-y-3">
                           {/* Domain Header Button */}
-                          <button
+                          <button data-help-feature="ui:vlab/VLabWorkspace:d21fceff29a1" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                             onClick={() => toggleDomain(domain.type)}
                             className={`flex items-center justify-between w-full px-3 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${
                               isDomainExpanded 
@@ -2929,7 +3020,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                                 return (
                                   <div key={catName} className="flex flex-col space-y-2 pl-2 border-l border-[#222]">
                                     {/* Category Header Button */}
-                                    <button
+                                    <button data-help-feature="ui:vlab/VLabWorkspace:acc7c067b6d4" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                                       onClick={() => toggleCategory(catKey)}
                                       className="flex items-center justify-between w-full py-1 text-left outline-none group text-gray-500 hover:text-gray-300 transition-colors"
                                     >
@@ -2945,8 +3036,9 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                                     {isCatExpanded && (
                                       <div className="grid grid-cols-2 gap-2 animate-in slide-in-from-top-1 duration-200">
                                         {catBlocks.map(block => (
-                                          <div
+                                          <div data-help-feature="ui:vlab/VLabWorkspace:bf1fd0b768fd" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                                             key={block.id}
+                                            data-block-id={block.id}
                                             draggable
                                             onDragStart={(e) => onDragStart(e, block)}
                                             onClick={() => addBlockToCenter(block)}
@@ -2985,7 +3077,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                   </div>
 
                   {LEARNING_LABS.map(lab => (
-                    <div
+                    <div data-help-feature="ui:vlab/VLabWorkspace:af8d7533e85f" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                       key={lab.id}
                       onClick={() => loadLabTemplate(lab.id)}
                       onMouseEnter={() => setHoveredLabId(lab.id)}
@@ -3035,14 +3127,16 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
         </div>
 
         {/* Center: Flow Canvas */}
-        <div className={`flex-1 relative bg-[#0a0a0a] ${isConnecting ? 'react-flow--connection-active' : ''}`} onDrop={onDrop} onDragOver={onDragOver} onContextMenu={(e) => e.preventDefault()}>
-          <ReactFlow
+        <div data-help-feature="ui:vlab/VLabWorkspace:f4ba75cf7913" data-help-source="src/components/vlab/VLabWorkspace.tsx" className={`flex-1 relative bg-[#0a0a0a] ${isConnecting ? 'react-flow--connection-active' : ''}`} onDrop={onDrop} onDragOver={onDragOver} onContextMenu={(e) => e.preventDefault()}>
+          <ReactFlow data-help-feature="live:components/vlab/VLabWorkspace:99dea21cf220"
             deleteKeyCode={null}
             proOptions={{ hideAttribution: true }}
             nodes={useMemo(() => nodes.filter(n => (n.data.parentId || 'root') === currentParentId).map(n => ({
               ...n,
               data: {
                 ...n.data,
+                // display-only (never saved): the blocks / ports a failed run points at
+                diagnosticPorts: diagnosticTargetMap.has(n.id) ? [...diagnosticTargetMap.get(n.id)!] : undefined,
                 onNodeMouseDown: (e: React.MouseEvent) => handleNodeMouseDown(e, n),
                 onRenameNode: (nodeId: string, newLabel: string) => {
                   setNodes(nds => nds.map(nd => {
@@ -3062,7 +3156,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                   }));
                 }
               }
-            })), [nodes, currentParentId, handleNodeMouseDown, setNodes])}
+            })), [nodes, currentParentId, handleNodeMouseDown, setNodes, diagnosticTargetMap])}
             edges={useMemo(() => edges.filter(e => {
               const sourceNode = nodes.find(n => n.id === e.source);
               return sourceNode && (sourceNode.data.parentId || 'root') === currentParentId;
@@ -3087,32 +3181,32 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
             connectionLineStyle={{ stroke: '#6c9ac6', strokeWidth: 2 }}
             connectionLineType={ConnectionLineType.Bezier}
             connectionMode={ConnectionMode.Loose}
-            colorMode="dark"
+            className="engineering-canvas"
             fitView
-            snapToGrid
+            snapToGrid={snapEnabled}
             snapGrid={[10, 10]}
           >
-            <Background color="#151515" gap={20} variant={BackgroundVariant.Lines} />
-            <Controls className="bg-[#1a1a1a] border-[#333] fill-white" />
+            <Background color="var(--diagram-grid)" gap={20} variant={BackgroundVariant.Lines} />
+            <Controls className="vlab-panel ui-control" />
 
             {/* Simulink Canvas Zoom HUD */}
             <Panel position="bottom-left" className="m-3 select-none">
               <div className="flex items-center gap-1 bg-[#121218]/90 border border-white/10 p-1 rounded-xl shadow-2xl backdrop-blur-md">
-                <button
+                <button data-help-feature="ui:vlab/VLabWorkspace:f12f39c3c738" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                   onClick={() => reactFlowInstance?.zoomOut({ duration: 300 })}
                   className="p-1.5 hover:bg-white/10 text-gray-400 hover:text-white rounded-lg transition-all active:scale-95"
                   title="Zoom Out (Ctrl + -)"
                 >
                   <ZoomOut size={14} />
                 </button>
-                <button
+                <button data-help-feature="ui:vlab/VLabWorkspace:9a920f3b8eb0" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                   onClick={() => reactFlowInstance?.zoomTo(1.0, { duration: 300 })}
                   className="px-2 py-1 text-[10px] font-mono font-bold text-purple-400 hover:bg-purple-500/10 rounded-lg transition-all"
                   title="Reset Zoom to 100% (Ctrl + 0)"
                 >
                   {Math.round((reactFlowInstance?.getZoom?.() || 1) * 100)}%
                 </button>
-                <button
+                <button data-help-feature="ui:vlab/VLabWorkspace:13965548ec0d" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                   onClick={() => reactFlowInstance?.zoomIn({ duration: 300 })}
                   className="p-1.5 hover:bg-white/10 text-gray-400 hover:text-white rounded-lg transition-all active:scale-95"
                   title="Zoom In (Ctrl + +)"
@@ -3120,13 +3214,26 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                   <ZoomIn size={14} />
                 </button>
                 <div className="w-px h-4 bg-white/10 mx-0.5" />
-                <button
+                <button data-help-feature="ui:vlab/VLabWorkspace:087b2d33dd04" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                   onClick={() => reactFlowInstance?.fitView({ padding: 0.2, duration: 400 })}
                   className="flex items-center gap-1 px-2 py-1 bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/30 rounded-lg text-[10px] font-bold transition-all active:scale-95"
                   title="Zoom to Fit (Space / F)"
                 >
                   <Maximize2 size={12} />
                   <span>Fit View</span>
+                </button>
+                <div className="w-px h-4 bg-white/10 mx-0.5" />
+                <button data-help-feature="live:components/vlab/VLabWorkspace:e25c5ed46212"
+                  type="button"
+                  onClick={() => setSnapEnabled(prev => !prev)}
+                  className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold transition-all active:scale-95 ${
+                    snapEnabled
+                      ? 'bg-purple-500/30 text-purple-200 border border-purple-500/50'
+                      : 'hover:bg-white/10 text-gray-400 hover:text-white'
+                  }`}
+                  title={snapEnabled ? 'Grid snap enabled (10px)' : 'Smooth pixel precision (Grid snap off)'}
+                >
+                  <span>{snapEnabled ? 'Snap: On' : 'Snap: Off'}</span>
                 </button>
               </div>
             </Panel>
@@ -3139,7 +3246,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                   return (
                     <React.Fragment key={pathId}>
                       {idx > 0 && <ChevronRight size={12} className="text-gray-600" />}
-                      <button
+                      <button data-help-feature="ui:vlab/VLabWorkspace:7ab8ac8f50ef" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                         type="button"
                         disabled={isLast}
                         onClick={() => setViewPath(viewPath.slice(0, idx + 1))}
@@ -3163,7 +3270,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
               >
                 <div className="flex items-center gap-2 p-2 border-b border-[#222]">
                   <Box size={14} className="text-purple-500" />
-                  <input
+                  <input data-help-feature="ui:vlab/VLabWorkspace:55e81977a373" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                     autoFocus
                     type="text"
                     placeholder="Quick insert..."
@@ -3180,7 +3287,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                 </div>
                 <div className="max-h-64 overflow-y-auto custom-scrollbar">
                   {quickSearchResults.map(block => (
-                    <button
+                    <button data-help-feature="ui:vlab/VLabWorkspace:365228c44a64" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                       key={block.id}
                       onClick={() => addBlockAtPos(block, quickSearchPos)}
                       className="w-full flex items-center gap-3 p-2 hover:bg-purple-600/10 transition-colors group text-left border-b border-white/5 last:border-0"
@@ -3223,6 +3330,17 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
               className="bg-[#1a1a1a] border border-[#333] rounded-lg"
             />
 
+            {/* WP-40: run diagnostics and one-time model-migration notices */}
+            <Panel position="top-center" className="mt-14 flex flex-col items-center gap-2">
+              <VLabDiagnosticsPanel
+                diagnostic={runDiagnostic}
+                labelOf={(blockId) => String((nodes.find(n => n.id === blockId)?.data as any)?.label || blockId)}
+                onDismiss={() => setRunDiagnostic(null)}
+                onSelectBlock={(blockId) => setSelectedNodeId(blockId)}
+              />
+              <VLabMigrationBanner nodes={nodes as any} onSelectBlock={(blockId) => setSelectedNodeId(blockId)} />
+            </Panel>
+
             {/* Premium Status Bar */}
             <Panel position="bottom-center" className="mb-6">
               <div className={`flex items-center gap-3 px-4 py-2 rounded-full border backdrop-blur-md shadow-2xl transition-all duration-500 ${
@@ -3257,7 +3375,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
             </Panel>
           </ReactFlow>
 
-          <button
+          <button data-help-feature="ui:vlab/VLabWorkspace:c8e97fc36c43" data-help-source="src/components/vlab/VLabWorkspace.tsx"
             onClick={() => setShowConfirmClear(true)}
             className="absolute top-4 right-4 z-50 bg-[#1a1a1a] border border-[#333] text-red-500 hover:bg-red-900/20 px-3 py-1.5 rounded text-xs font-bold shadow-md flex items-center gap-2 cursor-pointer"
           >
@@ -3267,7 +3385,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
         </div>
 
         {/* Right Sidebar: Properties & Equations */}
-        <div className={`${isPropsCollapsed ? 'w-12' : 'w-80'} bg-[#0d0d0d] border-l border-[#222] flex flex-col transition-all duration-500 ease-in-out relative group shrink-0`}>
+        <div className={`${isPropsCollapsed ? 'w-12' : 'w-80'} vlab-panel border-l border-[var(--border-default)] flex flex-col transition-all duration-500 ease-in-out relative group shrink-0`}>
           {/* Header */}
           <div className="p-4 border-b border-[#222] flex items-center justify-between overflow-hidden shrink-0">
             {!isPropsCollapsed && (
@@ -3276,7 +3394,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                 <h3 className="text-xs font-bold uppercase tracking-widest text-white">Properties</h3>
               </div>
             )}
-            <button
+            <button data-help-feature="ui:vlab/VLabWorkspace:9cd18a009a6c" data-help-source="src/components/vlab/VLabWorkspace.tsx"
               onClick={() => setIsPropsCollapsed(!isPropsCollapsed)}
               className={`p-2 rounded-xl bg-[#181818] border border-[#2d2d2d] text-purple-400 hover:bg-purple-500/10 hover:border-purple-500/30 transition-all ${isPropsCollapsed ? 'mx-auto' : ''}`}
               title={isPropsCollapsed ? "Expand Properties" : "Collapse Properties"}
@@ -3307,7 +3425,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                     <div className="space-y-2">
                       <div className="bg-[#141414] p-3 rounded-xl border border-[#222]">
                         <label className="text-[10px] text-gray-400 font-bold uppercase block mb-1">Block Name</label>
-                        <input
+                        <input data-help-feature="ui:vlab/VLabWorkspace:eec43190edff" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                           type="text"
                           value={(selectedNode.data as any).label || (selectedNode.data as any).type || ''}
                           onChange={(e) => {
@@ -3343,7 +3461,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                         {/* Segmented Solver Tab Switcher */}
                         <div className="grid grid-cols-4 gap-1 p-1 bg-[#141414] rounded-lg border border-[#222]">
                           {(['general', 'numerical', 'tolerances', 'diagnostics'] as const).map((tab) => (
-                            <button
+                            <button data-help-feature="ui:vlab/VLabWorkspace:76d07b3dab83" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                               key={tab}
                               onClick={() => setSolverConfigTab(tab)}
                               className={`py-1.5 px-1 text-[9px] font-bold uppercase rounded transition-all text-center ${
@@ -3362,7 +3480,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                           <div className="space-y-3 animate-in fade-in duration-200">
                             <div>
                               <label className="text-[10px] text-gray-400 font-bold uppercase block mb-1">Start Time (s)</label>
-                              <input
+                              <input data-help-feature="ui:vlab/VLabWorkspace:dba7a82e7dd6" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                                 type="number"
                                 value={(selectedNode.data as any).params?.startTime?.value ?? 0}
                                 onChange={(e) => updateParameter('startTime', parseFloat(e.target.value) || 0)}
@@ -3371,7 +3489,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                             </div>
                             <div>
                               <label className="text-[10px] text-gray-400 font-bold uppercase block mb-1">Stop Time (s)</label>
-                              <input
+                              <input data-help-feature="ui:vlab/VLabWorkspace:8ffd10eb2656" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                                 type="number"
                                 value={(selectedNode.data as any).params?.stopTime?.value ?? 10}
                                 onChange={(e) => updateParameter('stopTime', parseFloat(e.target.value) || 10)}
@@ -3391,7 +3509,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                                   SIMSCAPE KERNEL
                                 </span>
                               </div>
-                              <select
+                              <select data-help-feature="ui:vlab/VLabWorkspace:0393e6bfab9f" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                                 value={String((selectedNode.data as any).params?.solver?.value ?? 'auto')}
                                 onChange={(e) => updateParameter('solver', e.target.value)}
                                 className="w-full bg-[#1a1a1a] border border-purple-500/40 rounded-lg py-2 px-3 text-xs focus:border-purple-500 outline-none text-purple-300 font-bold cursor-pointer"
@@ -3427,7 +3545,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                           <div className="space-y-3 animate-in fade-in duration-200">
                             <div>
                               <label className="text-[10px] text-gray-400 font-bold uppercase block mb-1">Initial Step (s)</label>
-                              <input
+                              <input data-help-feature="ui:vlab/VLabWorkspace:030ea53c34df" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                                 type="number"
                                 step="any"
                                 value={(selectedNode.data as any).params?.initialStep?.value ?? 0.001}
@@ -3438,7 +3556,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                             <div className="grid grid-cols-2 gap-2">
                               <div>
                                 <label className="text-[9px] text-gray-400 font-bold uppercase block mb-1">Min Step (s)</label>
-                                <input
+                                <input data-help-feature="ui:vlab/VLabWorkspace:8e5f6baebb13" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                                   type="number"
                                   step="any"
                                   value={(selectedNode.data as any).params?.minimumStep?.value ?? 1e-6}
@@ -3448,7 +3566,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                               </div>
                               <div>
                                 <label className="text-[9px] text-gray-400 font-bold uppercase block mb-1">Max Step (s)</label>
-                                <input
+                                <input data-help-feature="ui:vlab/VLabWorkspace:0a6ca89cd9bb" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                                   type="number"
                                   step="any"
                                   value={(selectedNode.data as any).params?.maximumStep?.value ?? 0.05}
@@ -3460,7 +3578,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                             <div className="grid grid-cols-2 gap-2">
                               <div>
                                 <label className="text-[9px] text-gray-400 font-bold uppercase block mb-1">Relative Tol</label>
-                                <input
+                                <input data-help-feature="ui:vlab/VLabWorkspace:cba17cc9b835" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                                   type="number"
                                   step="any"
                                   value={(selectedNode.data as any).params?.relativeTolerance?.value ?? 1e-3}
@@ -3470,7 +3588,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                               </div>
                               <div>
                                 <label className="text-[9px] text-gray-400 font-bold uppercase block mb-1">Absolute Tol</label>
-                                <input
+                                <input data-help-feature="ui:vlab/VLabWorkspace:7c1f526065b1" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                                   type="number"
                                   step="any"
                                   value={(selectedNode.data as any).params?.absoluteTolerance?.value ?? 1e-6}
@@ -3487,7 +3605,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                           <div className="space-y-3 animate-in fade-in duration-200">
                             <div>
                               <label className="text-[10px] text-gray-400 font-bold uppercase block mb-1">Nonlinear Residual Tol</label>
-                              <input
+                              <input data-help-feature="ui:vlab/VLabWorkspace:67cafacfb7aa" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                                 type="number"
                                 step="any"
                                 value={(selectedNode.data as any).params?.nonlinearTolerance?.value ?? 1e-8}
@@ -3497,7 +3615,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                             </div>
                             <div>
                               <label className="text-[10px] text-gray-400 font-bold uppercase block mb-1">Max Newton Iterations</label>
-                              <input
+                              <input data-help-feature="ui:vlab/VLabWorkspace:c7d3a9c52e2a" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                                 type="number"
                                 value={(selectedNode.data as any).params?.maximumIterations?.value ?? 50}
                                 onChange={(e) => updateParameter('maximumIterations', parseInt(e.target.value) || 50)}
@@ -3507,7 +3625,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                             <div className="grid grid-cols-2 gap-2">
                               <div>
                                 <label className="text-[9px] text-gray-400 font-bold uppercase block mb-1">Diagnostics</label>
-                                <select
+                                <select data-help-feature="ui:vlab/VLabWorkspace:8edbaa90ead6" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                                   value={String((selectedNode.data as any).params?.enableDiagnostics?.value ?? 'on')}
                                   onChange={(e) => updateParameter('enableDiagnostics', e.target.value)}
                                   className="w-full bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-2 text-xs focus:border-purple-500 outline-none text-emerald-400 font-bold cursor-pointer"
@@ -3518,7 +3636,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                               </div>
                               <div>
                                 <label className="text-[9px] text-gray-400 font-bold uppercase block mb-1">Log Stats</label>
-                                <select
+                                <select data-help-feature="ui:vlab/VLabWorkspace:50f344e9e999" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                                   value={String((selectedNode.data as any).params?.enableLogging?.value ?? 'on')}
                                   onChange={(e) => updateParameter('enableLogging', e.target.value)}
                                   className="w-full bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-2 text-xs focus:border-purple-500 outline-none text-purple-400 font-bold cursor-pointer"
@@ -3561,7 +3679,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                                   Reference Pressure
                                 </label>
                                 <div className="flex gap-2">
-                                  <input
+                                  <input data-help-feature="ui:vlab/VLabWorkspace:4ea25147df29" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                                     type="number"
                                     step="any"
                                     value={pRef}
@@ -3571,7 +3689,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                                     }}
                                     className="flex-1 bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-3 text-xs focus:border-blue-500 outline-none text-white font-mono"
                                   />
-                                  <select
+                                  <select data-help-feature="ui:vlab/VLabWorkspace:b6cb9d1af7c7" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                                     value={pRefUnit}
                                     onChange={(e) => {
                                       updateParameter('referencePressure', { value: pRef, unit: e.target.value, label: 'Reference Pressure' } as any);
@@ -3595,7 +3713,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                                 </label>
                                 <div className="grid grid-cols-2 gap-1 p-1 bg-[#1a1a1a] rounded-lg border border-[#222]">
                                   {(['absolute', 'gauge'] as const).map((t) => (
-                                    <button
+                                    <button data-help-feature="ui:vlab/VLabWorkspace:6eaf413ec509" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                                       key={t}
                                       type="button"
                                       onClick={() => updateParameter('pressureType', { value: t, unit: '', label: 'Pressure Type' } as any)}
@@ -3624,7 +3742,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                                   )}
                                 </div>
                                 <div className="flex gap-2">
-                                  <input
+                                  <input data-help-feature="ui:vlab/VLabWorkspace:3646aa8222ca" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                                     type="number"
                                     step="any"
                                     value={pAtm}
@@ -3634,7 +3752,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                                     }}
                                     className="flex-1 bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-3 text-xs focus:border-blue-500 outline-none text-white font-mono"
                                   />
-                                  <select
+                                  <select data-help-feature="ui:vlab/VLabWorkspace:7ebd99388d8b" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                                     value={pAtmUnit}
                                     onChange={(e) => {
                                       updateParameter('atmosphericPressure', { value: pAtm, unit: e.target.value, label: 'Atmospheric Pressure' } as any);
@@ -3659,7 +3777,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                                   Elevation Settings
                                 </span>
                                 <label className="flex items-center gap-1.5 cursor-pointer">
-                                  <input
+                                  <input data-help-feature="ui:vlab/VLabWorkspace:b3d18aaa829b" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                                     type="checkbox"
                                     checked={elevCorr}
                                     onChange={(e) => {
@@ -3677,7 +3795,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                                     Reference Elevation (z_ref)
                                   </label>
                                   <div className="flex gap-2">
-                                    <input
+                                    <input data-help-feature="ui:vlab/VLabWorkspace:9398f30d2732" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                                       type="number"
                                       step="any"
                                       value={zRef}
@@ -3687,7 +3805,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                                       }}
                                       className="flex-1 bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-3 text-xs focus:border-blue-500 outline-none text-white font-mono"
                                     />
-                                    <select
+                                    <select data-help-feature="ui:vlab/VLabWorkspace:d38291631480" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                                       value={zRefUnit}
                                       onChange={(e) => {
                                         updateParameter('referenceElevation', { value: zRef, unit: e.target.value, label: 'Reference Elevation' } as any);
@@ -3716,7 +3834,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                                 <label className="text-[10px] text-gray-400 font-bold uppercase block mb-1">
                                   Initialization Priority
                                 </label>
-                                <select
+                                <select data-help-feature="ui:vlab/VLabWorkspace:0eb941175667" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                                   value={initPriority}
                                   onChange={(e) => updateParameter('initializationPriority', { value: e.target.value, unit: '', label: 'Initialization Priority' } as any)}
                                   className="w-full bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-3 text-xs focus:border-blue-500 outline-none text-blue-300 font-bold cursor-pointer"
@@ -3754,7 +3872,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                               <span className="text-[10px] text-gray-600">{param.unit || ''}</span>
                             </div>
                             {['limit_data_points', 'show_grid', 'show_legend'].includes(key) ? (
-                              <select
+                              <select data-help-feature="ui:vlab/VLabWorkspace:11c52a716a82" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                                 value={String(param.value ?? 'on')}
                                 onChange={(e) => updateParameter(key, e.target.value)}
                                 className="w-full bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-3 text-xs focus:border-purple-500 outline-none text-[#a855f7] font-bold cursor-pointer"
@@ -3763,7 +3881,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                                 <option value="off">Off (No)</option>
                               </select>
                             ) : key === 'time_range' ? (
-                              <select
+                              <select data-help-feature="ui:vlab/VLabWorkspace:7780cca042ce" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                                 value={String(param.value ?? '10')}
                                 onChange={(e) => {
                                   const val = e.target.value === 'auto' ? 'auto' : parseFloat(e.target.value);
@@ -3781,7 +3899,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                                 <option value="300">300s</option>
                               </select>
                             ) : key === 'numSignals' || key === 'numPorts' ? (
-                              <select
+                              <select data-help-feature="ui:vlab/VLabWorkspace:a6d74235390b" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                                 value={String(param.value ?? 1)}
                                 onChange={(e) => updateParameter(key, parseInt(e.target.value))}
                                 className="w-full bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-3 text-xs focus:border-purple-500 outline-none text-purple-400 font-bold cursor-pointer"
@@ -3791,7 +3909,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                                 ))}
                               </select>
                             ) : key === 'data_type' ? (
-                              <select
+                              <select data-help-feature="ui:vlab/VLabWorkspace:11c52a716a82" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                                 value={String(param.value ?? 'auto')}
                                 onChange={(e) => updateParameter(key, e.target.value)}
                                 className="w-full bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-3 text-xs focus:border-purple-500 outline-none text-purple-400 font-bold cursor-pointer"
@@ -3804,24 +3922,19 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                                 <option value="physical">Physical Signal</option>
                               </select>
                             ) : (
-                              (() => {
-                                const isPositivePhysical = ['C', 'heat_capacity', 'mass', 'm', 'R', 'resistance', 'k', 'conductivity', 'L', 'inductance', 'b', 'damping', 'J', 'inertia'].includes(key);
-                                return (
-                                  <input
-                                    type={typeof (param.value ?? 0) === 'number' ? "number" : "text"}
-                                    min={isPositivePhysical ? 0 : undefined}
-                                    value={param.value ?? ''}
-                                    onChange={(e) => {
-                                      let val = typeof (param.value ?? 0) === 'number' ? parseFloat(e.target.value) : e.target.value;
-                                      if (isPositivePhysical && typeof val === 'number' && !isNaN(val) && val < 0) {
-                                        val = 0;
-                                      }
-                                      updateParameter(key, val);
-                                    }}
-                                    className="w-full bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-3 text-xs focus:border-purple-500 outline-none"
+                              <VLabParamField
+                                key={`${selectedNode.id}:${key}`}
+                                blockType={String((selectedNode.data as any).type)}
+                                paramKey={key}
+                                param={param}
+                                onCommit={(val) => updateParameter(key, val)}
+                              >
+                                {(fieldProps) => (
+                                  <input data-help-feature="ui:vlab/VLabWorkspace:b5a7c9d05554" data-help-source="src/components/vlab/VLabWorkspace.tsx"
+                                    {...fieldProps}
                                   />
-                                );
-                              })()
+                                )}
+                              </VLabParamField>
                             )}
                           </div>
                         ))}
@@ -3850,7 +3963,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                             <div className="flex items-center gap-1.5">
                               <span className="text-[9px] font-mono text-emerald-500/70">[{port.id}]</span>
                               {selectedNode.data.type === 'subsystem' || selectedNode.data.type === 'Subsystem' ? (
-                                <input
+                                <input data-help-feature="ui:vlab/VLabWorkspace:80016a646238" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                                   type="text"
                                   value={port.label || ''}
                                   onChange={(e) => {
@@ -3980,14 +4093,15 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                       id: `in${i + 1}`,
                       pos: 'left',
                       label: `${i + 1}`,
-                      domain: 'Physical'
+                      domain: 'Physical',
+                      direction: 'in'
                     }));
                     // Prune any incoming edges to channels exceeding new capacity
                     setEdges(eds => eds.filter(e => {
                       if (e.target !== scopeId) return true;
-                      let t = (e.targetHandle || '').replace(/_[st]$/, '');
-                      if (t.startsWith(scopeId + '-')) t = t.slice(scopeId.length + 1);
-                      const ch = parseInt(t.replace(/\D/g, '')) || 1;
+                      // exact scope channel id (same portIdFromHandle path as the assembler), not a suffix strip + digit scrape
+                      const portId = portIdFromHandle({ id: scopeId, data: { type: 'scope' } }, e.targetHandle) ?? 'in1';
+                      const ch = Number(portId.match(/^in(\d+)$/)?.[1] ?? 1);
                       return ch <= num;
                     }));
                   }
@@ -4018,7 +4132,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                     {syncAction === 'push' ? 'Push Workspace to 3DX' : 'Pull Workspace from 3DX'}
                   </h3>
                 </div>
-                <button
+                <button data-help-feature="ui:vlab/VLabWorkspace:3e1101db01ef" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                   onClick={() => setShow3dxSyncModal(false)}
                   className="text-gray-500 hover:text-white p-1 hover:bg-white/5 rounded-md transition-colors cursor-pointer"
                 >
@@ -4050,7 +4164,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                     <div className="space-y-3">
                       <div>
                         <label className="text-[10px] text-gray-500 uppercase tracking-wider block mb-1">Target Workspace</label>
-                        <select
+                        <select data-help-feature="ui:vlab/VLabWorkspace:0a26bce5e017" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                           value={selectedTdxWorkspace}
                           onChange={(e) => setSelectedTdxWorkspace(e.target.value)}
                           className="w-full bg-[#06080c] border border-[#1e2a3a] rounded-lg px-3 py-2 text-xs text-white focus:outline-none"
@@ -4060,7 +4174,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                           ))}
                         </select>
                       </div>
-                      <button
+                      <button data-help-feature="ui:vlab/VLabWorkspace:83d213ec5d73" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                         onClick={handle3dxPush}
                         className="w-full py-2.5 bg-[#0056b3] hover:bg-[#0069d9] text-white rounded-lg text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer"
                       >
@@ -4075,7 +4189,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                       ) : (
                         <div className="max-h-[200px] overflow-y-auto border border-[#1a2133] rounded-lg divide-y divide-[#1a2133] bg-[#06080c]">
                           {tdxDocs.map(doc => (
-                            <div
+                            <div data-help-feature="ui:vlab/VLabWorkspace:3630bac82926" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                               key={doc.id}
                               onClick={() => handle3dxPull(doc.id)}
                               className="p-3 text-xs text-gray-400 hover:text-white hover:bg-white/5 cursor-pointer transition-all flex items-center justify-between"
@@ -4095,7 +4209,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
         )}
 
         {showConfirmClear && (
-          <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999]" onMouseDown={() => setShowConfirmClear(false)}>
+          <div data-help-feature="live:components/vlab/VLabWorkspace:f329ee58e245" className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999]" onMouseDown={() => setShowConfirmClear(false)}>
             <div className="bg-[#1a1a1a] border border-red-900 rounded-lg w-[550px] max-h-[90vh] flex flex-col relative" onMouseDown={e => e.stopPropagation()}>
               <div className="h-12 flex items-center px-5 border-b border-red-900/50">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ff6b6b" strokeWidth="2" className="mr-3">
@@ -4111,13 +4225,13 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
               </div>
 
               <div className="h-14 flex items-center justify-end px-5 border-t border-[#222] gap-3">
-                <button
+                <button data-help-feature="ui:vlab/VLabWorkspace:9aca4a179c45" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                   onClick={() => setShowConfirmClear(false)}
                   className="px-5 py-2 border border-[#333] text-[#a0a0a0] hover:text-[#e0e0e0] rounded bg-transparent text-sm transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
-                <button
+                <button data-help-feature="ui:vlab/VLabWorkspace:7e7b5ed84837" data-help-source="src/components/vlab/VLabWorkspace.tsx"
                   onClick={() => {
                     setIsSimulating(false);
                     setIsPaused(false);

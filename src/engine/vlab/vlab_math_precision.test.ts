@@ -65,7 +65,7 @@ describe('VLab Mathematical Model & Precision Suite', () => {
     ];
 
     const edges: Edge[] = [
-      makeEdge('e1', 'mass', 'gnd', 'p', 'a_t')
+      makeEdge('e1', 'mass', 'ref', 'p_s', 'p_t')
     ];
 
     let state: any = null;
@@ -79,13 +79,17 @@ describe('VLab Mathematical Model & Precision Suite', () => {
 
   // 3. Thermal Domain - Heat Transfer
   it('validates thermal conduction equation evaluation', () => {
+    // WP-15: an open thermal port is adiabatic and the Thermal Reference is 0 K, so a lone conductance has no datum (the old test
+    // relied on the open port being a 293.15 K sink). Q = k (T_A - T_B) between a 300 K source and the 0 K reference is 2.5 * 300 W.
     const nodes: Node[] = [
-      makeNode('gnd', 'ground'),
+      makeNode('src', 'temp_src', { T: 300 }),
       makeNode('heat', 'conductive_heat', { k: 2.5 }),
+      makeNode('tref', 'thermal_ref'),
     ];
 
     const edges: Edge[] = [
-      makeEdge('e1', 'heat', 'gnd', 'a', 'a_t')
+      makeEdge('e1', 'src', 'heat', 'a_s', 'a_t'),
+      makeEdge('e2', 'heat', 'tref', 'b_s', 'a_t'),
     ];
 
     let state: any = null;
@@ -95,6 +99,7 @@ describe('VLab Mathematical Model & Precision Suite', () => {
 
     expect(state).toBeDefined();
     expect(state.x.every(Number.isFinite)).toBe(true);
+    expect(state.x[state.variableNames.indexOf('heat_branch_heat_flow')]).toBeCloseTo(2.5 * 300, 6);
   });
 
   // 4. Sparse Solver Pivoted Solution Precision

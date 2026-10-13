@@ -8,28 +8,35 @@ export interface BlockDefinition {
 
 export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
   resistor: {
-    equations: ['I = (Vp - Vn)/R'],
-    latex: ['V = I \\cdot R'],
-    across: 'Voltage (V)', through: 'Current (I)',
-    description: 'Implements a linear resistor following Ohm\'s law. Connect to model energy dissipation in electrical networks.'
+    equations: ["I = (Vp - Vn)/R   [A = V/ohm]"],
+    latex: ["v = i \\cdot R \\quad [\\mathrm{V}]"],
+    across: "Voltage v = v_p - v_n [V]", through: "Current i, p -> n [A]",
+    description: "Linear resistor (Simscape Foundation Resistor): v = i R, with R > 0. Models energy dissipation P = i^2 R in electrical networks."
   },
   diode: {
-    equations: ['I = Is*(exp(V/n*Vt) - 1)', 'simplified: V = I*Ron when V > Vf'],
-    latex: ['I = I_s \\left(e^{V/nV_T} - 1\\right)'],
-    across: 'Voltage (V)', through: 'Current (I)',
-    description: 'Shockley diode model with smooth tanh transition. Parameters: Ron (forward resistance), Roff (reverse), Vf (forward drop).'
+    equations: ['On (V > Vf): I = (V - Vf)/Ron + Vf/Roff   [A]', 'Off (V <= Vf): I = V/Roff   [A]'],
+    latex: ['I = \\frac{V - V_f}{R_{on}} + \\frac{V_f}{R_{off}} \\; (V > V_f)', 'I = \\frac{V}{R_{off}} \\; (V \\le V_f)'],
+    across: 'Voltage V = v_A - v_K [V]', through: 'Current I, anode -> cathode [A]',
+    description: 'Piecewise-linear diode (Simscape Electrical Diode, piecewise linear model): forward voltage Vf [V], on resistance Ron [ohm], off conductance 1/Roff [S]. I(V) is continuous at V = Vf. Conducts A -> K only.'
   },
   nmos: {
-    equations: ['Id = kn/2*(Vgs-Vth)² (sat)', 'Id = kn*(Vov*Vds - Vds²/2) (lin)'],
-    latex: ['I_D = \\frac{k_n}{2}(V_{GS}-V_{th})^2(1+\\lambda V_{DS})'],
-    across: 'Voltage (V)', through: 'Current (I)',
-    description: 'SPICE Level-1 N-MOSFET. Three regions: cut-off, linear, saturation. Gate draws no current (infinite impedance).'
+    equations: [
+      'Cut-off (Vgs <= Vth): Id = 0   [A]',
+      'Linear (0 < Vds < Vgs-Vth): Id = kn*((Vgs-Vth)*Vds - Vds²/2)*(1 + lambda*Vds)   [A]',
+      'Saturation (Vds >= Vgs-Vth > 0): Id = kn/2*(Vgs-Vth)²*(1 + lambda*Vds)   [A]',
+    ],
+    latex: ['I_D = k_n\\left((V_{GS}-V_{th})V_{DS}-\\frac{V_{DS}^2}{2}\\right)(1+\\lambda V_{DS})', 'I_D = \\frac{k_n}{2}(V_{GS}-V_{th})^2(1+\\lambda V_{DS})'],
+    across: 'Vds = v_D - v_S, Vgs = v_G - v_S [V]', through: 'Drain current Id, D -> S [A]',
+    description: 'Shichman-Hodges (SPICE level 1) N-MOSFET: cut-off, linear and saturation with channel-length modulation lambda [1/V], kn = mu*Cox*W/L [A/V²]. Gate draws no current. Symmetric: drain and source swap roles for Vds < 0.'
   },
   igbt: {
-    equations: ['Ic = (Vce - Vce_sat)/Rd when Vge >= Vge_th', 'Ic = 0 when Vge < Vge_th'],
-    latex: ['I_C = \\frac{V_{CE} - V_{CE,sat}}{R_d} \\cdot g(V_{GE})'],
-    across: 'Voltage (V)', through: 'Current (I)',
-    description: 'IGBT power switch. Modeled as MOSFET-gated BJT. Dominant in motor drives and inverter bridges.'
+    equations: [
+      'On (Vge >= Vge_th, Vce >= Vce_sat): Ic = (Vce - Vce_sat)/Rd + Vce_sat/Roff   [A]',
+      'Otherwise (off, or Vce < Vce_sat): Ic = Vce/Roff   [A]',
+    ],
+    latex: ['I_C = \\frac{V_{CE}-V_{CE,sat}}{R_d} + \\frac{V_{CE,sat}}{R_{off}} \\; (V_{GE} \\ge V_{GE,th},\\ V_{CE} \\ge V_{CE,sat})', 'I_C = \\frac{V_{CE}}{R_{off}} \\; (\\text{otherwise})'],
+    across: 'Vce = v_C - v_E, Vge = v_G - v_E [V]', through: 'Collector current Ic, C -> E [A]',
+    description: 'Ideal switching IGBT (Simscape Electrical IGBT Ideal Switching): gate threshold Vge_th [V], saturation (forward) voltage Vce_sat [V], on resistance Rd [ohm], off resistance Roff [ohm]. Unidirectional: no reverse conduction (no anti-parallel diode).'
   },
   fluid_resistance: {
     equations: ['P1 - P2 = Rf * mdot'],
@@ -38,13 +45,13 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Models laminar flow resistance in a fluid pipe where pressure drop is proportional to mass flow.'
   },
   orifice: {
-    equations: ['mdot = Cd * A * sqrt(2*rho*|dP|)*sign(dP)'],
-    latex: ['\\dot{m} = C_d A \\sqrt{2 \\rho |\\Delta P|} \\text{sign}(\\Delta P)'],
+    equations: ['mdot = Cd*A*sqrt(2*rho)*dP/(dP^2 + dP_crit^2)^(1/4)', 'dP_crit = pi*Re_crit^2*mu^2/(8*rho*Cd^2*A)'],
+    latex: ['\\dot{m} = C_d A \\sqrt{2 \\rho} \\frac{\\Delta P}{(\\Delta P^2 + \\Delta P_{crit}^2)^{1/4}}'],
     across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
-    description: 'Models turbulent restriction or nozzle orifice flow according to Bernoulli\'s equation.'
+    description: 'Bernoulli orifice (Simscape Local Restriction) with the smooth laminar / turbulent transition at the critical Reynolds number; turbulent mdot = Cd A sqrt(2 rho |dP|), linear near dP = 0.'
   },
   fluid_capacitance: {
-    equations: ['mdot = Cf * dP/dt'],
+    equations: ['mdot = Cf * dp/dt', 'p(0) = P0'],
     latex: ['\\dot{m} = C_f \\frac{dP}{dt}'],
     across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
     description: 'Models fluid compressibility storage in a constant volume chamber.'
@@ -68,262 +75,263 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Maintains pressure potential equal to an input physical signal.'
   },
   mass_flow_source: {
-    equations: ['mdot = mdot_const'],
+    equations: ['mdot delivered into the network = mdot_const'],
     latex: ['\\dot{m} = \\dot{m}_0'],
     across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
     description: 'Injects a constant mass flow rate into the network.'
   },
   check_valve: {
-    equations: ['mdot = dP / Rf when dP > 0', 'mdot = 0 when dP <= 0'],
+    equations: ['mdot = (dP - P_crack) / Rf when dP > P_crack', 'mdot = 0 otherwise'],
     latex: ['\\dot{m} = \\frac{\\Delta P}{R_f} \\cdot H(\\Delta P)'],
     across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
     description: 'A one-way valve that only permits fluid flow in the positive direction.'
   },
   relief_valve: {
-    equations: ['dP = mdot * Rf_open when P1 > P_set', 'dP = mdot * Rf_closed when P1 <= P_set'],
+    equations: ['dP = mdot * R(dP), dP = p_p - p_n', 'R = Rf_open*s + Rf_closed*(1 - s), s = smooth step of (dP - P_set)'],
     latex: ['\\Delta P = \\dot{m} \\cdot R_{valve}(P)'],
     across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
     description: 'Safety valve that opens to vent pressure when the inlet pressure exceeds a set threshold.'
   },
   steam_generator_fluid: {
-    equations: ['mdot = Q / h_fg'],
+    equations: ['mdot_steam = Q / h_fg(T_sat(p))', 'steam leaves through p'],
     latex: ['\\dot{m} = \\frac{Q}{h_{fg}}'],
     across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
     description: 'Converts heating power (W) into steam mass flow rate using latent heat of vaporization.'
   },
   steam_accumulator: {
-    equations: ['P1 = P2', 'mdot_in - mdot_out = Cf * dP/dt'],
+    equations: ['P1 = P2', 'mdot_in - mdot_out = V * (d rho_g/dp)_sat * dp/dt'],
     latex: ['P_{in} = P_{out}', '\\dot{m}_{in} - \\dot{m}_{out} = C_f \\frac{dP}{dt}'],
     across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
     description: 'Models a steam pressure vessel or boiler drum accumulator. Combines mass storage and pressure equalization.'
   },
   steam_nozzle: {
-    equations: ['mdot = Cd * A * sqrt(2*rho*(P - P_atm))'],
-    latex: ['\\dot{m} = C_d A \\sqrt{2 \\rho (P - P_{atm})}'],
+    equations: ['mdot = Cd*A*Pp*sqrt(2*gamma/((gamma-1)*R*T0)) * sqrt(r^(2/gamma) - r^((gamma+1)/gamma)),  r = max(Pn/Pp, r*),  r* = (2/(gamma+1))^(gamma/(gamma-1)),  T0 = T_sat(Pp)'],
+    latex: ['\\dot{m} = C_d A P_p \\sqrt{\\frac{2\\gamma}{(\\gamma-1) R T_0}} \\sqrt{r^{2/\\gamma} - r^{(\\gamma+1)/\\gamma}}'],
     across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
-    description: 'Models steam discharging to atmosphere through a throttled nozzle outlet.'
+    description: 'Isentropic flow of saturated steam from upstream pressure Pp to downstream pressure Pn through a converging two-port nozzle, choked at the critical pressure ratio.'
   },
   pressure_sensor: {
-    equations: ['S = P'],
+    equations: ['out = p (absolute pressure of the node)'],
     latex: ['S = P'],
     across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
     description: 'Measures fluid pressure at its input and outputs it as a physical signal.'
   },
   flow_sensor: {
-    equations: ['P1 = P2', 'S = mdot'],
+    equations: ['P1 = P2', 'out = mdot (p -> n)'],
     latex: ['P_{in} = P_{out}', 'S = \\dot{m}'],
     across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
     description: 'Ideal flow meter with zero pressure drop that measures mass flow rate.'
   },
   variable_resistor: {
-    equations: ['I = (Vp - Vn)/R_ctrl'],
-    latex: ['V = I \\cdot R(r)'],
-    across: 'Voltage (V)', through: 'Current (I)',
-    description: 'A resistor whose resistance is modulated by a physical signal (PS). Used for modeling potentiometers or temperature-dependent loads.'
+    equations: ["I = (Vp - Vn)/max(R_ctrl, R_min)   [A]", "R_ctrl = signal at port r [ohm]"],
+    latex: ["v = i \\cdot \\max(R(r), R_{min}) \\quad [\\mathrm{V}]"],
+    across: "Voltage v = v_p - v_n [V]", through: "Current i, p -> n [A]",
+    description: "A resistor whose resistance is the physical signal at port r [ohm], limited below by the minimum resistance R_min (Simscape Variable Resistor). An unwired r reads 100 ohm."
   },
   infinite_resistance: {
-    equations: ['I = 0'],
-    latex: ['I = 0'],
-    across: 'Voltage (V)', through: 'Current (I)',
-    description: 'Models an ideal open circuit. Prevents current flow while maintaining voltage potential between terminals.'
+    equations: ["I = 0   [A]"],
+    latex: ["i = 0 \\quad (R \\to \\infty)"],
+    across: "Voltage v = v_p - v_n [V]", through: "Current i, p -> n [A]",
+    description: "Ideal open branch: no current flows (R -> infinity), the terminal voltage is set by the rest of the network."
   },
   capacitor: {
-    equations: ['I = C * d(Vp-Vn)/dt'],
-    latex: ['I = C \\frac{dV}{dt}'],
-    across: 'Voltage (V)', through: 'Current (I)',
-    description: 'Models energy storage in an electric field. The current is proportional to the rate of change of voltage.'
+    equations: ["I = C * d(Vp-Vn)/dt   [A = F*V/s]", "v(0) = v0   [V]"],
+    latex: ["i = C \\frac{dv}{dt}, \\quad v(0) = v_0"],
+    across: "Voltage v = v_p - v_n [V]", through: "Current i, p -> n [A]",
+    description: "Electric-field energy storage (Simscape Foundation Capacitor): the current is C times the rate of change of the voltage. The initial voltage v0 is honoured at t = 0."
   },
   inductor: {
-    equations: ['(Vp-Vn) = L * dI/dt'],
-    latex: ['V = L \\frac{dI}{dt}'],
-    across: 'Voltage (V)', through: 'Current (I)',
-    description: 'Models energy storage in a magnetic field. The voltage drop is proportional to the rate of change of current.'
+    equations: ["(Vp-Vn) = L * dI/dt   [V = H*A/s]", "i(0) = i0   [A]"],
+    latex: ["v = L \\frac{di}{dt}, \\quad i(0) = i_0"],
+    across: "Voltage v = v_p - v_n [V]", through: "Current i, p -> n [A]",
+    description: "Magnetic-field energy storage (Simscape Foundation Inductor): the voltage is L times the rate of change of the current. The initial current i0 is honoured at t = 0."
   },
   memristor: {
-    equations: ['V = M(w) * I', 'dw/dt = f(V, I)'],
-    latex: ['V = M(w) I', '\\frac{dw}{dt} = v(t)'],
-    across: 'Voltage (V)', through: 'Current (I)',
-    description: 'A non-linear resistive element with memory. Its resistance depends on the history of charge or flux.'
+    equations: ["V = M(w) * I,  M = M0 + 10*w   [V, ohm]", "dw/dt = I   [A]"],
+    latex: ["v = (M_0 + 10\\,w)\\, i", "\\frac{dw}{dt} = i"],
+    across: "Voltage v = v_p - v_n [V]", through: "Current i, p -> n [A]",
+    description: "Simplified linear-drift memristor (no Simscape analog): resistance M = M0 + 10 w, where w is the charge that has flowed through the device."
   },
   gyrator: {
-    equations: ['I1 = g * V2', 'I2 = -g * V1'],
-    latex: ['i_1 = G v_2', 'i_2 = -G v_1'],
-    across: 'Voltage (V)', through: 'Current (I)',
-    description: 'A two-port element that couples the current of one port to the voltage of the other. Used for dual-network modeling.'
+    equations: ["I1 = g * V2   [A = S*V]", "I2 = -g * V1   [A = S*V]"],
+    latex: ["i_1 = G v_2", "i_2 = -G v_1"],
+    across: "Voltage v1, v2 [V]", through: "Current i1, i2 into p1, p2 [A]",
+    description: "Lossless two-port (Simscape Gyrator): the current of one port is proportional to the voltage of the other, v1 i1 + v2 i2 = 0. Used for dual-network modeling."
   },
   transformer: {
-    equations: ['V2 = N * V1', 'I1 = -N * I2'],
-    latex: ['v_2 = N v_1', 'i_1 = -N i_2'],
-    across: 'Voltage (V)', through: 'Current (I)',
-    description: 'Ideal electromagnetic coupling between two electrical circuits. Scales voltage and current based on turns ratio.'
+    equations: ["V1 = N12 * V2   [V]", "I2 = -N12 * I1   [A],  N12 = N1/N2"],
+    latex: ["v_1 = N v_2", "i_2 = -N i_1"],
+    across: "Voltage v1, v2 [V]", through: "Current i1, i2 into p1, p2 [A]",
+    description: "Ideal lossless transformer (Simscape Ideal Transformer): voltage scales with the winding ratio N12 = N1/N2 and current inversely, v1 i1 + v2 i2 = 0."
   },
   opamp: {
-    equations: ['Vout = Gain * (Vp - Vn)'],
-    latex: ['V_{out} = A (V_+ - V_-)'],
-    across: 'Voltage (V)', through: 'Current (I)',
-    description: 'Models an ideal operational amplifier with high open-loop gain. Use for analog signal processing and active filters.'
+    equations: ["Vout = clamp(Gain * (V+ - V-), -Vsat, +Vsat)   [V]"],
+    latex: ["V_{out} = \\mathrm{clamp}\\left(A (V_+ - V_-), -V_{sat}, V_{sat}\\right)"],
+    across: "Potential V+, V-, Vout vs ground [V]", through: "Output current [A]",
+    description: "Operational amplifier with open-loop gain A and symmetric output saturation +/-Vsat. The inputs draw no current. With negative feedback it drives V+ - V- to about 0."
   },
   switch: {
-    equations: ['V = I * (S ? Ron : Roff)'],
-    latex: ['V = I \\cdot R_{switch}'],
-    across: 'Voltage (V)', through: 'Current (I)',
-    description: 'An ideal controlled switch. Toggles between low (Ron) and high (Roff) resistance based on a control signal.'
+    equations: ['V = I * R_sw   [V]', 'R_sw = (v > threshold) ? Ron : Roff   [ohm]'],
+    latex: ['V = I \\cdot R_{sw}', 'R_{sw} = R_{on} \\; (v > \\mathrm{threshold}), \\; R_{off} \\; (\\text{otherwise})'],
+    across: 'Voltage V = v_p - v_n [V]', through: 'Current I, p -> n [A]',
+    description: 'Ideal controlled switch (Simscape Foundation Switch): closed with resistance Ron [ohm] while the control signal v [V] exceeds threshold [V], open with resistance Roff = 1/Gopen [ohm] otherwise. The toggle is a zero-crossing event of the solver.'
   },
   rotational_electromechanical_converter: {
-    equations: ['V = K * omega', 'T = K * I'],
+    equations: ['V = R*I + K*omega', 'tau = K*I (delivered at R)', 'V*I = R*I^2 + tau*omega'],
     latex: ['v = K \\omega', '\tau = K i'],
     across: 'V, rad/s', through: 'I, N-m',
     description: 'Bridges the Electrical and Rotational domains. Models DC motors or generators where torque is proportional to current.'
   },
   translational_electromechanical_converter: {
-    equations: ['V = Bl * v', 'F = Bl * I'],
+    equations: ['V = R*I + Bl*v', 'F = Bl*I (delivered at R)', 'V*I = R*I^2 + F*v'],
     latex: ['v = (Bl) v_m', 'f = (Bl) i'],
     across: 'V, m/s', through: 'I, N',
     description: 'Bridges the Electrical and Translational domains. Models voice coils or solenoids where force is proportional to current.'
   },
   thermal_resistor: {
-    equations: ['Q = (Th - Tc) / Rth'],
-    latex: ['Q = \\frac{\Delta T}{R_{th}}'],
-    across: 'Temperature (K)', through: 'Heat Flow (W)',
-    description: 'Bridges Electrical and Thermal domains by modeling heat generation from power dissipation ($P = I^2 R$).'
+    equations: ['V = I * R', 'Q = I^2 * R'],
+    latex: ['V = I \\cdot R', 'Q = I^2 R'],
+    across: 'Voltage (V), Temperature (K)', through: 'Current (A), Heat Flow (W)',
+    description: 'Bridges Electrical and Thermal domains by modeling heat generation from electrical resistance ($P = I^2 R$).'
   },
   v_sensor: {
-    equations: ['V_sens = Vp - Vn', 'I = V_sens / R_int'],
-    latex: ['V_{out} = V_p - V_n', 'I_{leak} = \\frac{V_{sens}}{R_{int}}'],
-    across: 'Voltage (V)', through: 'Current (A)',
-    description: 'Measures voltage between two points. Includes a high internal resistance (R_int) to model a non-ideal voltmeter.'
+    equations: ["V_sens = Vp - Vn   [V]", "I_leak = V_sens / R_int   [A]"],
+    latex: ["V_{out} = V_p - V_n", "I_{leak} = \\frac{V_{sens}}{R_{int}}"],
+    across: "Voltage (V)", through: "Current (A)",
+    description: "Measures the voltage between two nodes and outputs it as a physical signal (Simscape Voltage Sensor). A finite input resistance R_int models a real meter."
   },
   i_sensor: {
-    equations: ['I_sens = I_p', 'V_sens = I_sens * R_int'],
-    latex: ['I_{out} = I_p', 'V_{drop} = I \cdot R_{int}'],
-    across: 'Voltage (V)', through: 'Current (A)',
-    description: 'Measures current flowing through the branch. Includes a low internal resistance (R_int) to model voltage drop across a shunt.'
+    equations: ["I_sens = I_p->n   [A]", "Vp - Vn = I_sens * R_int   [V]"],
+    latex: ["I_{out} = i_{p \\to n}", "V_{drop} = i \\cdot R_{int}"],
+    across: "Voltage (V)", through: "Current (A)",
+    description: "Measures the current through the branch (Simscape Current Sensor) and outputs it as a physical signal. A small series resistance R_int models the shunt drop; R_int = 0 is ideal."
   },
   dc_voltage: {
-    equations: ['Vp - Vn = V_const'],
-    latex: ['v = V_{dc}'],
-    across: 'Voltage (V)', through: 'Current (I)',
-    description: 'An ideal constant voltage source. Maintains a fixed potential regardless of the load current.'
+    equations: ["Vp - Vn = V + I * R_int   [V]"],
+    latex: ["v = V_{dc} + i R_{int}"],
+    across: "Voltage v = v_p - v_n [V]", through: "Current i, p -> n [A]",
+    description: "Constant voltage source (Simscape DC Voltage Source) with optional series resistance R_int. Current is positive p -> n, so a delivering source has i < 0."
   },
   ac_voltage: {
-    equations: ['Vp - Vn = Vpk * sin(2*pi*f*t)'],
-    latex: ['v = V_{pk} \sin(\omega t)'],
-    across: 'Voltage (V)', through: 'Current (I)',
-    description: 'An ideal sinusoidal voltage source. Used for modeling mains power or signal generators.'
+    equations: ["Vp - Vn = Vpk * sin(2*pi*f*t + phase) + I * R_int   [V]"],
+    latex: ["v = V_{pk} \\sin(2\\pi f t + \\phi) + i R_{int}"],
+    across: "Voltage v = v_p - v_n [V]", through: "Current i, p -> n [A]",
+    description: "Sinusoidal voltage source (Simscape AC Voltage Source): amplitude Vpk [V], frequency f [Hz], phase [rad], with optional series resistance R_int."
   },
   three_phase_source: {
     equations: [
-      'Va = Vpk * sin(w*t)',
-      'Vb = Vpk * sin(w*t - 2*pi/3)',
-      'Vc = Vpk * sin(w*t + 2*pi/3)'
+      'v_a - v_n = sqrt(2/3) * V_LL * sin(2*pi*f*t + phi)   [V]',
+      'v_b - v_n = sqrt(2/3) * V_LL * sin(2*pi*f*t + phi - 2*pi/3)   [V]',
+      'v_c - v_n = sqrt(2/3) * V_LL * sin(2*pi*f*t + phi + 2*pi/3)   [V]',
+      'i_n = -(i_a + i_b + i_c)   [A]'
     ],
-    latex: ['V_{abc} = V_{pk} \\sin(\\omega t - \\phi_{abc})'],
-    across: 'Voltage (V)', through: 'Current (I)',
-    description: 'A balanced 3-phase AC voltage source. Essential for modeling industrial power systems and multi-phase machines.'
+    latex: ['v_k - v_n = \\sqrt{\\tfrac{2}{3}}\\, V_{LL} \\sin(2\\pi f t + \\phi - k\\,2\\pi/3)'],
+    across: 'Phase-to-neutral voltage v_k - v_n [V]', through: 'Phase current i_k, abc,k -> n [A]',
+    description: 'Balanced wye three-phase source (Simscape Three-Phase Source): phase-to-phase RMS voltage V_LL, frequency f, phase angle phi of phase A (default 0 deg), positive a-b-c sequence. Composite port abc plus a real star-point terminal n.'
   },
   dc_motor: {
     equations: [
-      'Va = Ra*Ia + La*d(Ia)/dt + Ke*omega',
-      'Te = Kt*Ia',
-      'd(omega)/dt = (Te - T_load - B*omega) / J'
+      'Va = Ra*Ia + La*d(Ia)/dt + k*omega   [V]',
+      'tau_e = k*Ia   [N*m]',
+      'J*d(omega)/dt = tau_e - B*omega - tau_shaft   [N*m]'
     ],
-    latex: ['V_a = R_a i_a + L_a \\frac{di_a}{dt} + K_e \\omega', 'T_e = K_t i_a'],
-    across: 'Voltage, Ang. Vel', through: 'Current, Torque',
-    description: 'Models a standard Permanent Magnet DC Motor. Couples electrical power to mechanical rotation via Lorentz force.'
+    latex: ['V_a = R_a i_a + L_a \\frac{di_a}{dt} + k \\omega', '\\tau_e = k i_a'],
+    across: 'Voltage v_p - v_n [V], shaft speed omega [rad/s]', through: 'Current i, p -> n [A], shaft torque tau_shaft [N*m]',
+    description: 'Permanent-magnet DC motor (Simscape DC Motor). One electromechanical constant k [V*s/rad = N*m/A]: in SI the torque constant equals the back-EMF constant, so Va*Ia = Ra*Ia^2 + d(La*Ia^2/2)/dt + B*omega^2 + d(J*omega^2/2)/dt + tau_shaft*omega.'
   },
   ac_motor: {
     equations: [
-      'Valpha = (2*(Va-Vn) - (Vb-Vn) - (Vc-Vn)) / 3',
-      'Vbeta = ((Vb-Vn) - (Vc-Vn)) / 1.732',
-      'Vs = Valpha + j * Vbeta',
-      'Vs = Rs*Is + d(Psi_s)/dt',
-      '0 = Rr*Ir + d(Psi_r)/dt - j*w_slip*Psi_r',
-      'Te = 1.5 * P * Im(conj(Psi_s) * Is)'
+      'v_s = Rs*i_s + d(psi_s)/dt   [V]  (alpha-beta frame, amplitude-invariant Clarke)',
+      '0 = Rr*i_r + d(psi_r)/dt - j*P*omega*psi_r   [V]',
+      'psi_s = (Lls + Lm)*i_s + Lm*i_r,  psi_r = (Llr + Lm)*i_r + Lm*i_s   [Wb]',
+      'tau_e = 1.5*P*(psi_s_alpha*i_s_beta - psi_s_beta*i_s_alpha)   [N*m]',
+      'J*d(omega)/dt = tau_e - B*omega - tau_shaft   [N*m]'
     ],
-    latex: ['\\vec{v}_s = R_s \\vec{i}_s + \\frac{d\\vec{\\psi}_s}{dt}', 'T_e = \\frac{3}{2} p \\, \\text{Im}(\\psi_s^* \\vec{i}_s)'],
-    across: 'Voltage, Ang. Vel', through: 'Current, Torque',
-    description: 'Models a 3-phase Squirrel Cage Induction Motor in the stationary reference frame using complex space vectors. Internally performs Clarke transformation from A-B-C inputs.'
+    latex: ['\\vec{v}_s = R_s \\vec{i}_s + \\frac{d\\vec{\\psi}_s}{dt}', 'T_e = \\frac{3}{2} p (\\psi_{s\\alpha} i_{s\\beta} - \\psi_{s\\beta} i_{s\\alpha})'],
+    across: 'Phase voltage v_k - v_n [V], shaft speed omega [rad/s]', through: 'Phase current i_k, k -> n [A], shaft torque tau_shaft [N*m]',
+    description: 'Squirrel-cage induction motor, Krause dq0 model in the stationary alpha-beta frame with the rotor referred to the stator (same T-equivalent as Simscape Asynchronous Machine Squirrel Cage). Wye stator with a real star-point terminal n (open = floating star point: no zero-sequence current). Stator terminals: composite three-phase port abc.'
   },
   bldc_motor: {
     equations: [
-      'V_abc = R*I_abc + L*d(I_abc)/dt + E_abc(theta)',
-      'Te = sum(E_i * I_i) / omega'
+      'v_x - v_g = Rs*i_x + Ls*d(i_x)/dt + e_x   [V],  e_x = Ke*omega*f(P*theta - phi_x)',
+      'tau_e = (e_a*i_a + e_b*i_b + e_c*i_c)/omega = Ke*(f_a*i_a + f_b*i_b + f_c*i_c)   [N*m]',
+      'J*d(omega)/dt = tau_e - B*omega - tau_shaft   [N*m]'
     ],
-    latex: ['v_{ph} = R i_{ph} + L \\frac{di_{ph}}{dt} + e_{ph}(\\theta)'],
-    across: 'Voltage, Ang. Vel', through: 'Current, Torque',
-    description: 'Models a Brushless DC Motor with trapezoidal back-EMF. Requires a 6-step commutation inverter for operation.'
+    latex: ['v_{x} - v_g = R_s i_{x} + L_s \\frac{di_x}{dt} + K_e \\omega f(P\\theta - \\phi_x)'],
+    across: 'Phase voltage v_x - v_g [V], shaft speed omega [rad/s]', through: 'Phase current i_x, x -> g [A], shaft torque tau_shaft [N*m]',
+    description: 'Brushless DC motor with trapezoidal back-EMF (unit trapezoid: +-1 over 120 deg, 60 deg ramps). Wye stator with a real star-point terminal g; stator terminals: composite three-phase port abc. One constant Ke is both the back-EMF and torque constant. Requires a 6-step commutation inverter for operation.'
   },
   controlled_voltage: {
-    equations: ['Vp - Vn = S'],
-    latex: ['v = S(t)'],
-    across: 'Voltage (V)', through: 'Current (I)',
-    description: 'A voltage source whose output is driven by an external physical signal (PS).'
+    equations: ["Vp - Vn = S + I * R_int   [V]"],
+    latex: ["v = S(t) + i R_{int}"],
+    across: "Voltage v = v_p - v_n [V]", through: "Current i, p -> n [A]",
+    description: "Voltage source whose value is the physical signal S [V] at port s (Simscape Controlled Voltage Source), with optional series resistance R_int."
   },
   dc_current: {
-    equations: ['I = I_const'],
-    latex: ['i = I_{dc}'],
-    across: 'Voltage (V)', through: 'Current (I)',
-    description: 'An ideal constant current source. Maintains a fixed current flow regardless of the load voltage.'
+    equations: ["I (p -> n) = I_src   [A]"],
+    latex: ["i = I_{dc}"],
+    across: "Voltage v = v_p - v_n [V]", through: "Current i, p -> n [A]",
+    description: "Constant current source (Simscape DC Current Source): the current from p to n through the source is fixed regardless of the voltage across it."
   },
   vcvs: {
-    equations: ['Vp - Vn = gain * (Vcp - Vcn)'],
-    latex: ['v_{out} = A \cdot v_{in}'],
-    across: 'Voltage (V)', through: 'Current (I)',
-    description: 'Voltage-Controlled Voltage Source. A dependent source where output voltage is proportional to an input voltage.'
+    equations: ["Vp - Vn = gain * (Vcp - Vcn)   [V]", "I_ctrl = 0"],
+    latex: ["v_{out} = A \\cdot v_{in}"],
+    across: "Voltage v = v_p - v_n [V]", through: "Current i, p -> n [A]",
+    description: "Voltage-controlled voltage source: the output voltage is gain times the control voltage Vcp - Vcn; the control port draws no current."
   },
   vccs: {
-    equations: ['I = gain * (Vcp - Vcn)'],
-    latex: ['i_{out} = G \cdot v_{in}'],
-    across: 'Voltage (V)', through: 'Current (I)',
-    description: 'Voltage-Controlled Current Source. A dependent source where output current is proportional to an input voltage.'
+    equations: ["I (p -> n) = gain * (Vcp - Vcn)   [A = S*V]", "I_ctrl = 0"],
+    latex: ["i_{out} = G \\cdot v_{in}"],
+    across: "Voltage v = v_p - v_n [V]", through: "Current i, p -> n [A]",
+    description: "Voltage-controlled current source: the output current is the transconductance (gain, [S]) times the control voltage Vcp - Vcn; the control port draws no current."
   },
   cccs: {
-    equations: ['I_out = gain * I_in'],
-    latex: ['i_{out} = \beta \cdot i_{in}'],
-    across: 'Voltage (V)', through: 'Current (I)',
-    description: 'Current-Controlled Current Source. A dependent source where output current is proportional to an input current.'
+    equations: ["I_out (p -> n) = gain * I_ctrl   [A]", "Vcp - Vcn = R_in * I_ctrl   [V]"],
+    latex: ["i_{out} = \\beta \\cdot i_{in}"],
+    across: "Voltage v = v_p - v_n [V]", through: "Current i, p -> n [A]",
+    description: "Current-controlled current source: the output current is gain times the current I_ctrl flowing cp -> cn through the control port (an ammeter with series resistance R_in, default 0)."
   },
   ccvs: {
-    equations: ['Vp - Vn = gain * I_in'],
-    latex: ['v_{out} = r \cdot i_{in}'],
-    across: 'Voltage (V)', through: 'Current (I)',
-    description: 'Current-Controlled Voltage Source. A dependent source where output voltage is proportional to an input current.'
+    equations: ["Vp - Vn = gain * I_ctrl + R_out * I_out   [V = ohm*A]", "Vcp - Vcn = R_in * I_ctrl   [V]"],
+    latex: ["v_{out} = r \\cdot i_{in} + R_{out} i_{out}"],
+    across: "Voltage v = v_p - v_n [V]", through: "Current i, p -> n [A]",
+    description: "Current-controlled voltage source: the output voltage is the transresistance (gain, [ohm]) times the current I_ctrl through the control port, plus an optional output resistance R_out."
   },
   ground: {
-    equations: ['V = 0'],
-    latex: ['V = 0'],
-    across: 'Voltage (V)', through: 'Current (I)',
-    description: 'The zero-potential reference point for the electrical network. Every circuit must have at least one ground.'
+    equations: ["V = 0   [V]"],
+    latex: ["V = 0"],
+    across: "Voltage v = v_p - v_n [V]", through: "Current i, p -> n [A]",
+    description: "Electrical reference (Simscape Electrical Reference): defines 0 V for the network it is wired to. Every connected electrical network needs one; an unconnected electrical port is open, not grounded."
   },
   doe_custom: {
-    equations: ['y = evaluate_doe(u1, u2, ..., un)'],
+    equations: ['out = f_DOE(in1, in2, ..., inN)'],
     latex: ['y = f_{DOE}(\\mathbf{u})'],
     across: 'None', through: 'None',
-    description: 'A custom block generated from the DOE module. Implements a trained regression or neural model.'
+    description: 'A custom block generated from the DOE module. Implements a trained regression or neural model; each factor (in1..inN) and the response (out) is a scalar physical signal.'
   },
   busbar: {
-    equations: ['V1 = V2 = ... = Vn', 'Sum(I) = 0'],
-    latex: ['V_i = V_j', '\sum I_k = 0'],
-    across: 'Voltage (V)', through: 'Current (I)',
-    description: 'A low-impedance electrical conductor used to connect multiple branches. Models a common node with Kirchhoff\'s Current Law.'
+    equations: ["V1 = V2 = ... = Vn   [V]", "Sum(I_k) = 0   [A]"],
+    latex: ["V_i = V_j", "\\sum I_k = 0"],
+    across: "Voltage v = v_p - v_n [V]", through: "Current i, p -> n [A]",
+    description: "Ideal zero-impedance conductor joining all its terminals: equal potentials and a zero sum of the currents entering the bar (Kirchhoff's current law)."
   },
   phase_splitter: {
-    equations: ['Va = Vabc[0]', 'Vb = Vabc[1]', 'Vc = Vabc[2]'],
-    latex: ['\mathbf{V}_{abc} \\to V_a, V_b, V_c'],
+    equations: ['Va = Vabc[a]', 'Vb = Vabc[b]', 'Vc = Vabc[c]', 'I_abc,k = I_k (KCL per phase)'],
+    latex: ['\\mathbf{V}_{abc} \\to V_a, V_b, V_c'],
     across: 'Voltage (V)', through: 'Current (I)',
-    description: 'Decomposes a composite three-phase signal into three individual phase lines (A, B, and C).'
+    description: 'Splits the composite three-phase port abc (three nodes a, b, c, one KCL each) into three scalar electrical phase ports. The phases stay independent; a composite port connects only to another composite port.'
   },
   delta_ref: {
-    equations: ['V_delta = V_ref'],
-    latex: ['V_{\Delta} = 0'],
-    across: 'Voltage (V)', through: 'Current (I)',
-    description: 'Provides a reference potential specifically for Delta-connected three-phase loads.'
+    equations: ["V_a = 0   [V]"],
+    latex: ["V_{a} = 0"],
+    across: "Voltage v = v_p - v_n [V]", through: "Current i, p -> n [A]",
+    description: "Reference node for delta-connected three-phase networks: its terminal is held at 0 V, like an Electrical Reference."
   },
   open_circuit: {
-    equations: ['I = 0'],
-    latex: ['I = 0'],
-    across: 'Voltage (V)', through: 'Current (I)',
-    description: 'Models a floating terminal with no connected path. Essential for modeling unconnected three-phase ports.'
+    equations: ["I = 0   [A]"],
+    latex: ["i = 0"],
+    across: "Voltage v = v_p - v_n [V]", through: "Current i, p -> n [A]",
+    description: "Open terminal: no current flows at the connected port (the port is left floating, never grounded)."
   },
   ps_demux_3: {
     equations: ['y1 = u[0]', 'y2 = u[1]', 'y3 = u[2]'],
@@ -344,7 +352,7 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Models a gas-tight seal or cap. Prevents mass flow through the terminal.'
   },
   gas_chamber: {
-    equations: ['dm/dt = (V / (R*T)) * dP/dt'],
+    equations: ['dm/dt = (V / (R*T)) * dp/dt = mdot_a + mdot_b', 'p(0) = P0'],
     latex: ['\dot{m} = \frac{V}{RT} \frac{dP}{dt}'],
     across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
     description: 'Models a fixed-volume gas container. It accumulates mass based on pressure changes under isothermal conditions.'
@@ -362,16 +370,16 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Models linear pressure drop in a gas flow path, similar to a pipe or valve with low flow.'
   },
   gas_restriction: {
-    equations: ['mdot = Cd * A * P / sqrt(T)'],
+    equations: ['mdot = Cd*A*p_up*sqrt(2*gamma/((gamma-1)*R*T))*sqrt(r^(2/gamma) - r^((gamma+1)/gamma)), r = max(p_dn/p_up, r*)', 'choked: mdot = Cd*A*p_up*sqrt(gamma/(R*T))*(2/(gamma+1))^((gamma+1)/(2(gamma-1)))'],
     latex: ['\dot{m} = f(A, P, T)'],
     across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
-    description: 'Models an orifice or nozzle where flow is restricted based on geometry and gas state.'
+    description: 'Compressible ideal-gas orifice (isentropic Saint-Venant & Wantzel flow) that chokes at the critical pressure ratio.'
   },
   gas_pipe: {
-    equations: ['Pa - Pb = f(L, D, mdot)', 'Q_heat = h * A * (T_gas - T_wall)'],
+    equations: ['Pa - Pb = f_eff*(L/D)*rho*v^2/2, rho = p_mean/(R*T)', 'f_eff = max(f, 64/Re)'],
     latex: ['\Delta P = f(\dot{m})', 'Q = h A \Delta T'],
     across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
-    description: 'Models a cylindrical pipe with friction losses and optional heat exchange with the environment.'
+    description: 'Darcy-Weisbach friction in a straight pipe for an isothermal ideal gas, laminar Hagen-Poiseuille at low Reynolds number. No heat exchange.'
   },
   gas_fixed_res: {
     equations: ['P = P_const'],
@@ -380,13 +388,13 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'A constant pressure source representing a large tank or regulated gas supply.'
   },
   gas_rotational_conv: {
-    equations: ['mdot = (Pa * D / (R * T)) * omega', 'T_torque = D * (Pa - Ph)'],
+    equations: ['mdot(A->H) = (Pa * D / (R * T)) * omega', 'tau_delivered = D * (Pa - Ph)  (branch = -tau_delivered)'],
     latex: ['\dot{m} = \frac{P D}{RT} \omega', '\tau = D \Delta P'],
     across: 'P, rad/s', through: 'mdot, N-m',
     description: 'Bridges Gas and Rotational domains. Models pneumatic motors or compressors where mass flow is proportional to pressure and angular velocity.'
   },
   gas_translational_conv: {
-    equations: ['mdot = (Pa * A / (R * T)) * v', 'F_force = A * (Pa - Ph)'],
+    equations: ['mdot(A->H) = (Pa * A / (R * T)) * v', 'F_delivered = A * (Pa - Ph)  (branch = -F_delivered)'],
     latex: ['\dot{m} = \frac{P A}{RT} v', 'f = A \Delta P'],
     across: 'P, m/s', through: 'mdot, N',
     description: 'Bridges Gas and Translational domains. Models pneumatic cylinders where mass flow is proportional to pressure and linear velocity.'
@@ -398,22 +406,28 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'An ideal mass flow source that maintains a fixed flow rate regardless of back-pressure.'
   },
   gas_pressure_source: {
-    equations: ['Pa - Pb = S_p'],
+    equations: ['Pb - Pa = P*S'],
     latex: ['\Delta P = P_{src}'],
     across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
     description: 'Models a pump or compressor that maintains a constant pressure difference between ports.'
   },
-  gas_properties: {
-    equations: ['P = rho * R * T'],
-    latex: ['P = \rho R T'],
-    across: 'None', through: 'None',
-    description: 'Defines the working fluid properties (R, Cp, etc.) for the connected gas network.'
+  gas_pressure_sensor: {
+    equations: ['mass_flow = 0', 'out = P(p)'],
+    latex: ['\dot{m} = 0', 'y = P'],
+    across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
+    description: 'Measures gas pressure without drawing mass flow.'
+  },
+  gas_flow_sensor: {
+    equations: ['P(p) = P(n)', 'out = mdot'],
+    latex: ['P_p = P_n', 'y = \dot{m}'],
+    across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
+    description: 'Measures gas mass flow through an ideal zero-pressure-loss pass-through.'
   },
   mag_ref: {
     equations: ['mmf = 0'],
     latex: ['\\mathcal{F} = 0'],
     across: 'MMF (A-t)', through: 'Flux (Wb)',
-    description: 'The magnetic ground. Represents zero magneto-motive force in the magnetic circuit.'
+    description: 'The magnetic ground (Simscape Magnetic Reference). Defines zero magneto-motive force; every connected magnetic circuit needs one, and an unconnected magnetic port is open (zero flux), not grounded.'
   },
   reluctance: {
     equations: ['mmf = R * phi'],
@@ -422,16 +436,16 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Models resistance to magnetic flux, similar to electrical resistance. Depends on geometry and permeability.'
   },
   variable_reluctance: {
-    equations: ['mmf = R(ctrl) * phi'],
-    latex: ['\\mathcal{F} = \\mathcal{R}(u) \\phi'],
+    equations: ['mmf = max(Rmin, ctrl) * phi'],
+    latex: ['\\mathcal{F} = \\max(\\mathcal{R}_{min}, u)\\, \\phi'],
     across: 'MMF (A-t)', through: 'Flux (Wb)',
-    description: 'A magnetic reluctance whose value is modulated by an external physical signal (PS).'
+    description: 'A magnetic reluctance whose value is the external physical signal (PS) on port C, bounded below by Rmin; the parameter R is used while C is unwired.'
   },
   permanent_magnet: {
-    equations: ['mmf = Hc * L'],
-    latex: ['\\mathcal{F} = H_c L'],
+    equations: ['mmf = Hc * Lm - phi * Rm'],
+    latex: ['\\mathcal{F} = H_c L_m - \\phi R_m'],
     across: 'MMF (A-t)', through: 'Flux (Wb)',
-    description: 'Models a hard magnetic material providing constant magneto-motive force (MMF).'
+    description: 'Models a permanent magnet material providing MMF with coercive force Hc, length Lm, and internal reluctance Rm.'
   },
   em_converter: {
     equations: ['V = N * dphi/dt', 'mmf = N * I'],
@@ -440,10 +454,10 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Bridges Electrical and Magnetic domains. Models a coil with N turns.'
   },
   reluctance_force: {
-    equations: ['F = -0.5 * phi^2 * dR/dx'],
-    latex: ['f = -\\frac{1}{2} \\phi^2 \\frac{d\\mathcal{R}}{dx}'],
+    equations: ['R = R0 + K * x,  x = integral(v_R - v_C) dt', 'mmf = R * phi', 'F_R = -0.5 * phi^2 * K'],
+    latex: ['\\mathcal{R} = \\mathcal{R}_0 + K x', '\\mathcal{F} = \\mathcal{R} \\phi', 'F_R = -\\frac{1}{2} \\phi^2 \\frac{d\\mathcal{R}}{dx}'],
     across: 'A-t, m/s', through: 'Wb, N',
-    description: 'Bridges Magnetic and Translational domains. Models the attraction force in solenoids or relays. Force is directed to minimize reluctance.'
+    description: 'Bridges Magnetic and Translational domains. Maxwell reluctance force at fixed flux (F = -dW/dx, W = phi^2 R / 2) with initial reluctance R0 and reluctance gradient K; the air-gap position x is integrated from the relative velocity. The force on the body at R points toward lower reluctance.'
   },
   mag_flux_sensor: {
     equations: ['phi_out = phi'],
@@ -458,10 +472,10 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Measures the MMF difference between two magnetic nodes.'
   },
   mag_mmf_source: {
-    equations: ['mmf_n - mmf_s = MMF_src'],
-    latex: ['\\mathcal{F} = \\mathcal{F}_{src}'],
+    equations: ['mmf_n - mmf_s = MMF'],
+    latex: ['\\mathcal{F}_n - \\mathcal{F}_s = \\mathcal{F}_{src}'],
     across: 'MMF (A-t)', through: 'Flux (Wb)',
-    description: 'An ideal magneto-motive force source, representing a constant current winding.'
+    description: 'An ideal magneto-motive force source (the MMF rise from S to N), representing a constant current winding.'
   },
   mag_flux_source: {
     equations: ['phi = phi_src'],
@@ -473,7 +487,7 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     equations: ['mmf_n - mmf_s = S'],
     latex: ['\\mathcal{F} = S(t)'],
     across: 'MMF (A-t)', through: 'Flux (Wb)',
-    description: 'A magnetic source whose MMF is driven by an external physical signal (PS).'
+    description: 'A magnetic source whose MMF rise from S to N is driven by the external physical signal (PS) on port S; the parameter MMF is used while that port is unwired.'
   },
   force_sensor: {
     equations: ['F_out = F'],
@@ -501,24 +515,48 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
   },
   torque_source: {
     equations: ['T_r - T_c = T_src'],
-    latex: ['\tau = T_{src}'],
+    latex: ['\\tau = T_{src}'],
     across: 'Ang. Vel (rad/s)', through: 'Torque (N-m)',
     description: 'An ideal torque generator for rotational networks.'
   },
-  gear_box: {
-    equations: ['omega2 = ratio * omega1', 'tau1 = ratio * tau2'],
-    latex: ['\omega_2 = N \omega_1', '\tau_1 = N \tau_2'],
+  ang_vel_source: {
+    equations: ['omega_r - omega_c = omega'],
+    latex: ['\\omega_r - \\omega_c = \\omega'],
     across: 'Ang. Vel (rad/s)', through: 'Torque (N-m)',
-    description: 'Models a mechanical transmission that scales velocity and torque based on the gear ratio.'
+    description: 'An ideal angular velocity generator for rotational networks.'
+  },
+  gear_box: {
+    equations: ['omega1 = ratio * omega2', 'tau2_delivered = ratio * tau1_in  (P = tau1*omega1 + tau2*omega2 = 0)'],
+    latex: ['\\omega_1 = N \\omega_2', '\\tau_2 = N \\tau_1'],
+    across: 'Ang. Vel (rad/s)', through: 'Torque (N-m)',
+    description: 'Models a mechanical transmission that scales velocity and torque between shafts s1 and s2 based on the gear ratio.'
   },
   lever: {
-    equations: ['v_b = -(L2/L1) * v_a', 'f_a = (L2/L1) * f_b'],
-    latex: ['v_b = -\\frac{L_2}{L_1} v_a', 'f_a = \\frac{L_2}{L_1} f_b'],
+    equations: ['(v_a - v_c)*L2 + (v_b - v_c)*L1 = 0', 'f_a*L1 = f_b*L2', 'f_a + f_b + f_c = 0 (pivot reaction)'],
+    latex: ['(v_A - v_C) L_2 + (v_B - v_C) L_1 = 0', 'F_A L_1 = F_B L_2', 'F_A + F_B + F_C = 0'],
     across: 'Velocity (m/s)', through: 'Force (N)',
-    description: 'Models a mechanical lever. Scales translational velocity and force based on arm lengths.'
+    description: 'Ideal massless lever pivoting about port C with arm L1 at A and L2 at B on opposite sides of the pivot: v_A/v_B = -L1/L2 at a fixed pivot, moment balance F_A L1 = F_B L2 and pivot reaction F_C = -(F_A + F_B); lossless.'
+  },
+  wheel_axle: {
+    equations: ['v_p = Rw * omega_a', 'tau_a_in + Rw * F_p_in = 0  (P = 0)'],
+    latex: ['v = R_w \\omega', '\\tau = R_w F'],
+    across: 'Ang. Vel (rad/s), Velocity (m/s)', through: 'Torque (N-m), Force (N)',
+    description: 'Ideal wheel and axle (rolling without slip, lossless): the Translational port moves at Rw times the axle speed and the axle torque is Rw times the force.'
+  },
+  rot_multibody_interface: {
+    equations: ['omega_R - omega_C = a . (omega_F - omega_B),  a = R_B * axis', 'tau_F = T * a,  tau_B = -T * a  (P = T * omega_rel)'],
+    latex: ['\\omega_R - \\omega_C = \\mathbf{a}\\cdot(\\omega_F - \\omega_B)', '\\tau_F = T\\,\\mathbf{a}'],
+    across: 'Ang. Vel (rad/s), Frame pose', through: 'Torque (N-m), Frame wrench',
+    description: 'Scalar-to-Frame bridge for a Rotational network: imposes the relative angular velocity of F about B along the configured axis on R-C and applies the network torque as a couple along that axis on F (reaction on B). Lossless.'
+  },
+  trans_multibody_interface: {
+    equations: ['v_R - v_C = d/dt (a . (P_F - P_B)),  a = R_B * axis', 'f_F = F * a,  f_B = -F * a,  tau_B = -(P_F - P_B) x F * a  (P = F * v_rel)'],
+    latex: ['v_R - v_C = \\frac{d}{dt}\\mathbf{a}\\cdot(\\mathbf{P}_F-\\mathbf{P}_B)', '\\mathbf{f}_F = F\\,\\mathbf{a}'],
+    across: 'Velocity (m/s), Frame pose', through: 'Force (N), Frame wrench',
+    description: 'Scalar-to-Frame bridge for a Translational network: imposes the relative slide rate of F along the configured axis on R-C and applies the network force along that axis on F (reaction and lever-arm moment on B). Lossless.'
   },
   inertia: {
-    equations: ['T = J * d(omega)/dt'],
+    equations: ['T = J * d(omega)/dt  (+ B*omega drag to the inertial frame, default B = 0)'],
     latex: ['\\tau = J \\dot{\\omega}'],
     across: 'Ang. Vel (rad/s)', through: 'Torque (N-m)',
     description: 'Models rotational inertia. Opposes changes in angular velocity.'
@@ -530,7 +568,7 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'The rotational ground. Represents a stationary frame ($ \omega = 0 $).'
   },
   rot_spring: {
-    equations: ['T = k * (theta_r - theta_c)'],
+    equations: ['T = k * phi,  phi = theta0 + int(omega_R - omega_C) dt'],
     latex: ['\\tau = k \\Delta \\theta'],
     across: 'Ang. Vel (rad/s)', through: 'Torque (N-m)',
     description: 'Models a rotational torsion spring. Torque is proportional to angular displacement.'
@@ -542,19 +580,19 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Models rotational viscous friction. Torque is proportional to relative angular velocity.'
   },
   rot_friction: {
-    equations: ['T = f(omega, Ts, Tv)'],
-    latex: ['\\tau = \\tau_f(\\omega)'],
+    equations: ['T = [Tc + (Tbrk - Tc)*exp(-cv*|w|)]*tanh(4*w/wthr) + Tv*w,  w = omega_R - omega_C'],
+    latex: ['\\tau = [T_c + (T_{brk}-T_c)e^{-c_v|\\omega|}]\\tanh(4\\omega/\\omega_{thr}) + T_v\\omega'],
     across: 'Ang. Vel (rad/s)', through: 'Torque (N-m)',
     description: 'Models non-linear rotational friction, including static and kinetic effects.'
   },
   rot_hard_stop: {
-    equations: ['T = T_stop if theta out of range'],
+    equations: ['theta = int(omega_R - omega_C) dt', 'T = +/-max(0, k*p + c*w_out*S(p/w)),  p = penetration beyond lower/upper'],
     latex: ['\\tau = \\tau_{stop}(\\theta)'],
     across: 'Ang. Vel (rad/s)', through: 'Torque (N-m)',
     description: 'Restricts the range of motion of a rotational branch using spring-damper stop logic.'
   },
   mass: {
-    equations: ['F = m * dv/dt'],
+    equations: ['F = m * dv/dt  (+ b*v drag to the inertial frame, default b = 0)'],
     latex: ['f = m \\dot{v}'],
     across: 'Velocity (m/s)', through: 'Force (N)',
     description: 'Models translational mass. Opposes changes in linear velocity following Newton\'s second law.'
@@ -566,7 +604,7 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'The translational ground. Represents a stationary reference frame ($ v = 0 $).'
   },
   trans_spring: {
-    equations: ['F = k * (x_r - x_c)'],
+    equations: ['F = k * x,  x = x0 + int(v_R - v_C) dt'],
     latex: ['f = k \\Delta x'],
     across: 'Velocity (m/s)', through: 'Force (N)',
     description: 'Models a translational spring. Force is proportional to linear displacement.'
@@ -578,37 +616,37 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Models linear viscous damping. Force is proportional to relative velocity.'
   },
   trans_friction: {
-    equations: ['F = f(v, Fs, Fv)'],
-    latex: ['f = f_f(v)'],
+    equations: ['F = [Fc + (Fbrk - Fc)*exp(-cv*|v|)]*tanh(4*v/vthr) + Fv*v,  v = v_R - v_C'],
+    latex: ['f = [F_c + (F_{brk}-F_c)e^{-c_v|v|}]\\tanh(4v/v_{thr}) + F_v v'],
     across: 'Velocity (m/s)', through: 'Force (N)',
     description: 'Models complex translational friction, including Stribeck and Coulomb effects.'
   },
   trans_hard_stop: {
-    equations: ['F = F_stop if x out of range'],
+    equations: ['x = int(v_R - v_C) dt', 'F = +/-max(0, k*p + c*v_out*S(p/w)),  p = penetration beyond lower/upper'],
     latex: ['f = f_{stop}(x)'],
     across: 'Velocity (m/s)', through: 'Force (N)',
     description: 'Restricts linear travel distance using mechanical stop physics.'
   },
   ma_ref: {
-    equations: ['P = 0', 'T = 0', 'phi = 0'],
+    equations: ['p = 0 Pa (absolute pressure zero)'],
     latex: ['P, T, \phi = 0'],
     across: 'P, T, H', through: 'm, Q, mw',
     description: 'The reference point for moist air networks, representing zero pressure, temperature, and humidity.'
   },
   ma_chamber: {
-    equations: ['dm/dt = f(V, P, T)', 'dQ/dt = f(T, P)'],
+    equations: ['dm/dt = mdot_a + mdot_b, m = p*V/(R*T)', 'dp/dt = (R*T/V)*(mdot_a + mdot_b) + (p/T)*dT/dt', 'C dT/dt = Q_H - k_loss*(T - T_amb)'],
     latex: ['\dot{m}, \dot{Q} = f(V, P, T)'],
     across: 'P, T, H', through: 'm, Q, mw',
-    description: 'Models a fixed-volume moist air chamber. Tracks mass, energy, and vapor content over time.'
+    description: 'Models a fixed-volume moist air chamber. Tracks temperature in Kelvin with configurable ambient_temp (°C), heat_capacity (J/K), wall/food thermal mass, k_loss (W/K), and max_temp (°C).'
   },
   ma_pipe: {
-    equations: ['Delta P = f(L, m)', 'Delta T = f(h, Q)'],
+    equations: ['Pa - Pb = f*(L/D)*rho*v^2/2 + resistance*mdot', 'Q_H = UA*(T_H - T)', 'wd = dP*mdot/rho'],
     latex: ['\Delta P, \Delta T = f(\dot{m}, \dot{Q})'],
     across: 'P, T, H', through: 'm, Q, mw',
-    description: 'Models a cylindrical pipe for moist air flow. Accounts for pressure drop and heat transfer.'
+    description: 'Darcy-Weisbach pipe for moist air (laminar + Haaland turbulent friction) with wall heat exchange at H; wd is the friction power dissipated.'
   },
   ma_separator: {
-    equations: ['mw_removed = eff * mw_in'],
+    equations: ['(unsupported) mw_removed = efficiency * m_liquid'],
     latex: ['\dot{m}_{w,rem} = \eta \dot{m}_{w,in}'],
     across: 'P, T, H', through: 'm, Q, mw',
     description: 'Models a moisture separator. Removes water vapor from the air stream based on efficiency.'
@@ -620,31 +658,31 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Measures the total mass flow rate of the moist air mixture.'
   },
   ma_pt_sensor: {
-    equations: ['P_out = P', 'T_out = T'],
+    equations: ['p_out = p_a', 't_out = T (sensor parameter)'],
     latex: ['P_{out} = P, T_{out} = T'],
     across: 'P, T, H', through: 'None',
     description: 'Measures the pressure and temperature at a moist air node.'
   },
   ma_thermo_sensor: {
-    equations: ['rho_out = rho(P, T, H)'],
+    equations: ['rho = p/(R*T), R = (R_a + w*R_v)/(1 + w), p_v = phi*p_sat(T)'],
     latex: ['\rho_{out} = \rho(P, T, \phi)'],
     across: 'P, T, H', through: 'None',
     description: 'Calculates and outputs secondary thermodynamic properties like density or humidity ratio.'
   },
   ma_moisture_source: {
-    equations: ['mw = S_w'],
+    equations: ['mdot_added = rate*S into the node'],
     latex: ['\dot{m}_w = \dot{m}_{w,src}'],
     across: 'P, T, H', through: 'm, Q, mw',
     description: 'Injects water vapor or liquid moisture into the moist air stream.'
   },
   ma_flow_src: {
-    equations: ['m = S_m'],
+    equations: ['mdot = rate*S, A -> B'],
     latex: ['\dot{m} = \dot{m}_{src}'],
     across: 'P, T, H', through: 'm, Q, mw',
     description: 'An ideal mass flow source for the air-vapor mixture.'
   },
   ma_pres_src: {
-    equations: ['Pa - Pb = S_p'],
+    equations: ['Pb - Pa = P*S'],
     latex: ['\Delta P = P_{src}'],
     across: 'P, T, H', through: 'm, Q, mw',
     description: 'Models a pump or fan that maintains a pressure difference in a moist air network.'
@@ -686,10 +724,10 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Divides one physical signal by another.'
   },
   ps_delay: {
-    equations: ['y(t) = u(t - delay)'],
+    equations: ['y(t) = u(t - delay) for t >= delay', 'y(t) = initial for t < delay'],
     latex: ['y(t) = u(t - \\tau)'],
     across: 'None', through: 'None',
-    description: 'Implements a time-shift or transport delay in a physical signal path.'
+    description: 'Implements a constant time-shift (transport delay) in a physical signal path: the output is the input delay seconds ago, and the Initial output before the delay has elapsed.'
   },
   ps_math: {
     equations: ['y = f(u)'],
@@ -728,10 +766,10 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Limits the signal between a configurable upper and lower bound.'
   },
   ps_dead_zone: {
-    equations: ['y = 0 if lower < u < upper else u'],
-    latex: ['y = \\text{deadzone}(u)'],
+    equations: ['y = u - upper if u > upper', 'y = 0 if lower <= u <= upper', 'y = u - lower if u < lower'],
+    latex: ['y = \\begin{cases} u - u_{up} & u > u_{up} \\\\ 0 & u_{low} \\le u \\le u_{up} \\\\ u - u_{low} & u < u_{low} \\end{cases}'],
     across: 'None', through: 'None',
-    description: 'Models a region where the signal has no effect (outputs zero).'
+    description: 'Models a region where the signal has no effect (outputs zero). Outside the zone the output is the input measured from the zone edge, so it is continuous (Simulink Dead Zone).'
   },
   ps_switch: {
     equations: ['y = u1 if ctrl > threshold else u2'],
@@ -752,10 +790,10 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Generates a sinusoidal physical signal.'
   },
   ps_rms: {
-    equations: ['y = sqrt(avg(u^2))'],
-    latex: ['y = \\sqrt{\\frac{1}{T} \\int u^2 dt}'],
+    equations: ['y = sqrt((1/W) * integral_{t-W}^{t} u(tau)^2 dtau), W = window'],
+    latex: ['y = \\sqrt{\\frac{1}{W} \\int_{t-W}^{t} u^2 d\\tau}'],
     across: 'None', through: 'None',
-    description: 'Estimates the Root Mean Square of a signal over a sliding window.'
+    description: 'Computes the Root Mean Square of a signal over the sliding window of the last W seconds. The signal before t = 0 counts as 0, so a periodic signal reads exactly after one window.'
   },
   bldc_commutation: {
     equations: ['Logic based on Hall [H1 H2 H3]', 'Step 1: A+, B-', 'Step 2: A+, C-', '...'],
@@ -800,28 +838,28 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'A discrete-time Proportional-Integral controller with anti-windup. Essential for closed-loop regulation of physical systems.'
   },
   ps_lpf: {
-    equations: ['y(k) = alpha*u(k) + (1-alpha)*y(k-1)'],
+    equations: ['T*dy/dt + y = u, T = 1/(2*pi*f_cut)', 'y(k) = alpha*u(k) + (1-alpha)*y(k-1)  (backward Euler)'],
     latex: ['Y(s) = \\frac{1}{Ts+1} U(s)'],
     across: 'None', through: 'None',
     description: 'A first-order low-pass filter. Attenuates high-frequency noise from sensors and control signals.'
   },
   ps_integrator_gen: {
-    equations: ['y(k) = y(k-1) + Ts*u(k)'],
-    latex: ['y = \\int u dt'],
+    equations: ['dy/dt = u, y(0) = initial', 'y = initial while reset > 0.5 (level reset)'],
+    latex: ['y = y_0 + \\int u dt'],
     across: 'None', through: 'None',
-    description: 'A generalized integrator with reset capability. Computes the accumulation of a signal over time.'
+    description: 'A generalized integrator with level reset (Simulink Integrator, external reset): while the reset input is above 0.5 the output is held at the initial condition; otherwise it accumulates the input over time.'
   },
   ps_moving_avg: {
-    equations: ['y(k) = sum(u(k-N+1:k)) / N'],
+    equations: ['y(k) = sum(u(k-N+1:k)) / N, u(k) = u(k*ts), N = window'],
     latex: ['y = \\frac{1}{N} \\sum_{i=0}^{N-1} u_{k-i}'],
     across: 'None', through: 'None',
-    description: 'Computes the arithmetic mean of the input signal over a sliding window of N samples.'
+    description: 'Computes the arithmetic mean of the input signal over a sliding window of N samples taken every ts seconds (held between samples; samples before t = 0 are 0).'
   },
   ps_sr_flipflop: {
-    equations: ['Q = (S or Q) and (not R)'],
+    equations: ['Q = S or (Q and not R)  (set dominant)', 'nQ = 1 - Q', 'S, R high when > 0.5'],
     latex: ['Q_{next} = S \\lor (Q \\land \\neg R)'],
     across: 'None', through: 'None',
-    description: 'A standard Set-Reset latch. Sets output high on S signal and resets on R signal.'
+    description: 'A standard Set-Reset latch. Sets output high on S signal and resets on R signal; when neither is high the output keeps its value, and S wins when both are high.'
   },
   ps_sample_hold: {
     equations: ['y = u if S > 0.5 else y_prev'],
@@ -836,10 +874,10 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'An advanced dead-time compensation controller. Predicts the plant output to eliminate the instability caused by transport delays.'
   },
   ps_sine_3phase: {
-    equations: ['Va = m * sin(wt)', 'Vb = m * sin(wt - 120)', 'Vc = m * sin(wt + 120)'],
+    equations: ['Va = m*Vpk * sin(wt)', 'Vb = m*Vpk * sin(wt - 120 deg)', 'Vc = m*Vpk * sin(wt + 120 deg)', 'wt = 2*pi*f*t + ang  (m = 1, ang = 0 when unwired)'],
     latex: ['V_{abc} = M \\begin{bmatrix} \\sin(\\omega t) \\\\ \\sin(\\omega t - 120^\\circ) \\\\ \\sin(\\omega t + 120^\\circ) \\end{bmatrix}'],
     across: 'None', through: 'None',
-    description: 'Generates a three-phase sinusoidal physical signal vector with configurable amplitude and frequency.'
+    description: 'Generates a balanced positive-sequence three-phase sinusoidal signal vector (width-3 output abc) with configurable peak amplitude and frequency, plus the instantaneous angle wt.'
   },
   ps_second_order_filter: {
     equations: ['d2y/dt2 + 2*zeta*wn*dy/dt + wn^2*y = wn^2*u'],
@@ -926,123 +964,125 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Transforms 2-phase stationary coordinates back to 3-phase stationary coordinates.'
   },
   park_transform: {
-    equations: ['d = cos(th)*alpha + sin(th)*beta', 'q = -sin(th)*alpha + cos(th)*beta', '0 = zero'],
+    equations: ['d = cos(th)*alpha + sin(th)*beta', 'q = -sin(th)*alpha + cos(th)*beta', '0 = zero', '(90 deg behind A: th -> th - pi/2)'],
     latex: ['\mathbf{x}_{dq0} = \mathbf{T}_{park}(\\theta) \mathbf{x}_{\\alpha\\beta0}'],
     across: 'None', through: 'None',
-    description: 'Converts 2-phase stationary coordinates (alpha-beta) to rotating coordinates (dq) based on the rotor alignment convention.'
+    description: 'Converts the abc vector (through the amplitude-invariant Clarke transform) to rotating dq0 coordinates; the Alignment parameter selects whether the d axis is aligned with phase A or 90 degrees behind it.'
   },
   inv_park_transform: {
-    equations: ['alpha = cos(th)*d - sin(th)*q', 'beta = sin(th)*d + cos(th)*q', 'zero = 0'],
+    equations: ['alpha = cos(th)*d - sin(th)*q', 'beta = sin(th)*d + cos(th)*q', 'a = alpha + zero', 'b = -alpha/2 + sqrt(3)/2*beta + zero', 'c = -alpha/2 - sqrt(3)/2*beta + zero'],
     latex: ['\mathbf{x}_{\\alpha\\beta0} = \mathbf{T}_{park}^{-1}(\\theta) \mathbf{x}_{dq0}'],
     across: 'None', through: 'None',
-    description: 'Transforms rotating dq coordinates back to stationary alpha-beta coordinates.'
+    description: 'Transforms rotating dq0 coordinates back to the stationary abc vector (inverse of the Park transform with the same Alignment).'
   },
   sym_comp_transform: {
-    equations: ['pos = 1/3 * (a + a^1*b + a^2*c)', 'neg = 1/3 * (a + a^2*b + a^1*c)', 'zero = 1/3 * (a + b + c)'],
+    equations: ['V1 = 1/3 * (A + a*B + a^2*C)', 'V2 = 1/3 * (A + a^2*B + a*C)', 'V0 = 1/3 * (A + B + C)', 'a = exp(j*2*pi/3), A = (2/T) * integral_{t-T}^{t} x_a(tau)*exp(-j*w*tau) dtau, w = 2*pi*freq, T = 1/freq', 'seq = [|V1|, |V2|, |V0|]'],
     latex: ['\mathbf{x}_{+-0} = \mathbf{T}_{sym} \mathbf{x}_{abc}'],
     across: 'None', through: 'None',
-    description: 'Decomposes an unbalanced three-phase system into positive, negative, and zero sequence components using Symmetrical Components theory.'
+    description: 'Decomposes an unbalanced three-phase system into positive, negative and zero sequence components (Fortescue) with the Simscape Sequence Analyzer method: a running one-cycle Fourier analysis of the fundamental at the base frequency. The width-3 output carries the real peak magnitudes of the three sequence phasors. The signal before t = 0 counts as 0, so the output is exact one period after the start.'
   },
   inv_sym_comp_transform: {
-    equations: ['a = p + n + z', 'b = a^2*p + a*n + z', 'c = a*p + a^2*n + z'],
+    equations: ['a = (V1 + V2 + V0)*cos(wt)', 'b = V1*cos(wt - 2*pi/3) + V2*cos(wt + 2*pi/3) + V0*cos(wt)', 'c = V1*cos(wt + 2*pi/3) + V2*cos(wt - 2*pi/3) + V0*cos(wt)'],
     latex: ['\mathbf{x}_{abc} = \mathbf{T}_{sym}^{-1} \mathbf{x}_{+-0}'],
     across: 'None', through: 'None',
-    description: 'Synthesizes three-phase $abc$ signals from their positive, negative, and zero sequence components.'
+    description: 'Synthesizes the three-phase abc signals at the base frequency from the magnitudes of their positive, negative and zero sequence components (phase a is the cos(wt) reference).'
   },
   im_flux_observer: {
-    equations: ['d(phi_r)/dt = -(1/Tr - j*w_r)*phi_r + (Lm/Tr)*is', 'theta = atan2(phi_beta, phi_alpha)'],
+    equations: ['dpsi_r/dt = -psi_r/Tr + j*P*wr*psi_r + (Lm/Tr)*is,  Tr = Lr/Rr', 'imr = |psi_r|/Lm,  theta = atan2(psi_beta, psi_alpha)', 'we = P*wr + (Lm/Tr)*i_sq/|psi_r|'],
     latex: ['\dot{\hat{\Psi}}_r = -(\frac{1}{T_r} - j\omega_r) \hat{\Psi}_r + \frac{L_m}{T_r} \mathbf{i}_s'],
     across: 'None', through: 'None',
-    description: 'Estimates the rotor flux magnitude and angle for an induction machine in the stationary frame. Essential for sensorless FOC or flux-oriented regulation.'
+    description: 'Rotor-flux observer of an induction machine, current model in the stationary frame (Krause; Vas). Outputs the magnetizing current, the flux angle, the synchronous speed and the stator current in field coordinates.'
   },
   luenberger_observer: {
-    equations: ['dx_hat/dt = A*x_hat + B*u + L*(y - C*x_hat)'],
+    equations: ['dx_hat/dt = A*x_hat + B*u + L*(y - C*x_hat)', 'de/dt = (A - L*C)*e'],
     latex: ['\dot{\hat{\mathbf{x}}} = \mathbf{A}\hat{\mathbf{x}} + \mathbf{B}\mathbf{u} + \mathbf{L}(\mathbf{y} - \mathbf{C}\hat{\mathbf{x}})'],
     across: 'None', through: 'None',
-    description: 'A classic Luenberger state observer. Estimates internal system states (x_hat) by combining a plant model with an error correction term based on output measurements (y).'
+    description: 'Luenberger state observer of a 2-state plant with the matrices A, B, C and the gain L. The estimation error decays at the eigenvalues of A - L*C.'
   },
   quad_decoder: {
-    equations: ['count = count + (A_edge ? (B ? -1 : 1) : 0)', 'theta = 2*pi * count / PPR'],
+    equations: ['count = count + 1 (00 -> 10 -> 11 -> 01), count - 1 (reverse); Z rising edge: count = 0', 'theta = 2*pi*count/(4*PPR),  omega = 2*pi*dcount/(4*PPR*ts)'],
     latex: ['\theta = \frac{2\pi \cdot N_{pulses}}{PPR}'],
     across: 'None', through: 'None',
-    description: 'Decodes signals from a quadrature incremental encoder. Calculates precise shaft position and angular velocity from Phase A and B pulse sequences.'
+    description: 'Quadrature (incremental encoder) decoder with 4x counting, index reset and an M-method velocity over the sample time ts.'
   },
   resolver_to_digital: {
-    equations: ['theta = atan2(Vy, Vx)', 'omega = d(theta)/dt'],
+    equations: ['eps = 2*(Vx*cos(phi) - Vy*sin(phi))*Vp/vp_pk^2,  d ef/dt = 2*pi*(freq/5)*(eps - ef)', 'd w/dt = wn^2*ef,  d phi/dt = w + 2*zeta*wn*ef'],
     latex: ['\theta = \arctan\left(\frac{V_{sin}}{V_{cos}}\right)'],
     across: 'None', through: 'None',
-    description: 'Models a Resolver-to-Digital (R/D) conversion loop. Extracts rotor position and speed from high-frequency carrier signals (Sine/Cosine envelopes).'
+    description: 'Resolver-to-digital converter with a type II tracking loop (synchronous demodulation, PI + integrator): zero steady-state error for a ramp angle.'
   },
   pmsm_curr_ctrl: {
-    equations: ['Vd = PI(id_err) - w*Lq*iq', 'Vq = PI(iq_err) + w*(Ld*id + Flux)'],
+    equations: ['v_dq = Kp*(idq* - idq) + I + vdq_ff,  |v_dq| <= VphMax', 'dI/dt = Ki*e + (Ki/Kp)*(v_lim - v)'],
     latex: ['\mathbf{V}_{dq}^* = PI(\mathbf{I}_{dq}^* - \mathbf{I}_{dq}) + \mathbf{V}_{decoupling}'],
     across: 'None', through: 'None',
-    description: 'A dedicated dq-axis current regulator for PMSM machines. Includes cross-coupling decoupling and voltage feed-forward to maintain torque control at high speeds.'
+    description: 'dq-axis current regulator of a PMSM: PI per axis, decoupling and back-EMF feed-forward through vdq_ff, circular voltage limit and back-calculation anti-windup.'
   },
   pmsm_ref_gen: {
-    equations: ['id_ref = f(MTPA, TqRef)', 'iq_ref = TqRef / (1.5*P*(Flux + (Ld-Lq)*id))'],
+    equations: ['min id^2 + iq^2  s.t.  Tq = 1.5*p*iq*(flux + (Ld - Lq)*id),  id^2 + iq^2 <= i_max^2', 'we^2*((Ld*id + flux)^2 + (Lq*iq)^2) <= (vdc/2)^2  (MTPA / field weakening)'],
     latex: ['i_{dq}^* = f_{MTPA}(T_{ref})'],
     across: 'None', through: 'None',
-    description: 'Generates optimal d-axis and q-axis current references for a PMSM. Implements Maximum Torque Per Ampere (MTPA) trajectories to maximize efficiency.'
+    description: 'Torque-to-current map of a PMSM: maximum torque per ampere inside the current and voltage limits, with the torque limit as an output.'
   },
   pmsm_foc: {
-    equations: ['dq = ClarkePark(abc, theta)', 'Vabc = InvParkClarke(Vdq, theta)'],
+    equations: ['iq* = Tq*/(1.5*p*(flux + (Ld - Lq)*id*)),  id* = 0,  (id, iq) = Park(Clarke(iabc), p*theta)', 'vd = Kp*ed + I + Rs*id* - we*Lq*iq,  vq = Kp*eq + I + Rs*iq* + we*(Ld*id + flux)', 'm_abc = clamp(InvPark(v)/(vdc/2), -1, 1)'],
     latex: ['\mathbf{V}_{abc} = \mathbf{T}^{-1} \mathbf{V}_{dq}'],
     across: 'None', through: 'None',
-    description: 'Complete Field-Oriented Control (FOC) system for Permanent Magnet machines. Coordinates transformations, current loops, and speed regulation.'
+    description: 'Field-oriented control of a PMSM: torque reference to q-axis current, dq PI loops with decoupling, voltage limit and inverse Park to the inverter modulation vector.'
   },
   pmsm_field_weakening: {
-    equations: ['V_mag = sqrt(Vd^2 + Vq^2)', 'id_fw = id_ref - PI(V_max - V_mag)'],
+    equations: ['e = v_margin*VphMax - |vdq|,  d = clamp(Kp*e + I, -id_fw_max, 0)', 'id_fw = id* + d'],
     latex: ['i_d^* = i_{d,ref} + \Delta i_{d,fw}'],
     across: 'None', through: 'None',
-    description: 'Extends the operating range of a PMSM above rated speed. Injecting negative d-axis current opposes the permanent magnet flux to limit terminal voltage.'
+    description: 'Voltage-feedback field weakening: reduces the d-axis current reference when the stator voltage reaches the limit.'
   },
   pmsm_tq_est: {
-    equations: ['Tq = 1.5 * P * (Flux*iq + (Ld - Lq)*id*iq)'],
+    equations: ['Tq = 1.5*p*(flux*iq + (Ld - Lq)*id*iq)'],
     latex: ['T_e = \\frac{3}{2} p [\\Psi_m i_q + (L_d - L_q) i_d i_q]'],
     across: 'None', through: 'None',
-    description: 'Estimates the electromagnetic torque produced by a PMSM based on measured currents and known machine parameters (flux, inductances).'
+    description: 'Electromagnetic torque of a PMSM from the measured dq currents.'
   },
   pmsm: {
     equations: [
-      'Vd = Rs*id + Ld*d(id)/dt - w_elec*Lq*iq',
-      'Vq = Rs*iq + Lq*d(iq)/dt + w_elec*(Ld*id + Flux)',
-      'Te = 1.5 * P * (Flux*iq + (Ld-Lq)*id*iq)',
-      'd(w_mech)/dt = (Te - T_load) / J'
+      'v_d = Rs*i_d + Ld*d(i_d)/dt - w_e*Lq*i_q   [V]',
+      'v_q = Rs*i_q + Lq*d(i_q)/dt + w_e*(Ld*i_d + lambda_m)   [V]',
+      'v_0 = Rs*i_0 + L0*d(i_0)/dt   [V]',
+      'tau_e = 1.5*p*(lambda_m*i_q + (Ld - Lq)*i_d*i_q)   [N*m],  w_e = p*omega',
+      'J*d(omega)/dt = tau_e - B*omega - tau_shaft   [N*m]'
     ],
     latex: [
       '\\mathbf{V}_{dq} = R_s \\mathbf{i}_{dq} + \\mathbf{L}_{dq} \\frac{d\\mathbf{i}_{dq}}{dt} + \\omega_e \\mathbf{\\Psi}_{dq}',
-      'T_e = \\frac{3}{2} p [\\Psi_m i_q + (L_d - L_q) i_d i_q]'
+      'T_e = \\frac{3}{2} p [\\lambda_m i_q + (L_d - L_q) i_d i_q]'
     ],
-    across: 'Voltage, Ang. Vel', through: 'Current, Torque',
-    description: 'Models a Permanent Magnet Synchronous Motor (PMSM) in the rotor-fixed dq-reference frame. Connect to an inverter for high-performance motion control.'
+    across: 'Phase voltage v_k - v_n [V], shaft speed omega [rad/s]', through: 'Phase current i_k, k -> n [A], shaft torque tau_shaft [N*m]',
+    description: 'Permanent Magnet Synchronous Motor in the rotor-fixed dq-reference frame (amplitude-invariant Clarke/Park). Wye stator with a real star-point terminal n; stator terminals: composite three-phase port abc. Phase back-EMF amplitude is lambda_m*w_e. Connect to an inverter for high-performance motion control.'
   },
   ps_pid_ctrl: {
-    equations: ['u = Kp*e + Ki*integral(e) + Kd*de/dt'],
+    equations: ['u = clamp(Kp*e + I + Kd*N*(e - F), -limit, limit)', 'dI/dt = Ki*e + Kb*(u - v),  dF/dt = N*(e - F)'],
     latex: ['U(s) = (K_p + \\frac{K_i}{s} + \\frac{K_d s}{1 + Ns}) E(s)'],
-    across: 'Input Error', through: 'Control Output',
-    description: 'Implements a standard Proportional-Integral-Derivative controller with anti-windup and derivative filtering.'
+    across: 'None', through: 'None',
+    description: 'Parallel-form PID controller with derivative filter, output saturation and back-calculation anti-windup (Simulink PID Controller).'
   },
   im_foc_ctrl: {
-    equations: ['iq_ref = PI(w_ref - w)', 'id_ref = Constant', 'Vdq = CurrentCtrl(idq_ref, idq)'],
+    equations: ['Tq* = PI(w* - wr),  id* = imr*,  iq* = (2/3)*(1/P)*(Lr/Lm)*Tq*/(Lm*imr*)', 'theta_f: d theta/dt = P*wr + (Rr/Lr)*iq*/id*', 'Vdq = PI(idq* - idq) + decoupling, |v| <= vdc/2;  mode 0: open-loop V/f'],
     latex: ['i_q^* = k_p (\\omega^* - \\omega) + k_i \\int (\\omega^* - \\omega) dt'],
-    across: 'Reference Speed, Feedback', through: 'Gate Signals',
-    description: 'High-performance Field-Oriented Controller for Induction Machines. Decouples torque and flux control for precise speed regulation.'
+    across: 'None', through: 'None',
+    description: 'Indirect rotor-flux-oriented control of an induction machine (or open-loop V/f in mode 0) with speed and current loops.'
   },
   washing_basket: {
     equations: [
-      'J_total = J_basket + (load_mass + unbalance) * radius^2',
-      'T_load = J_total * d(omega)/dt + 0.02 * omega'
+      'J_total = J_basket + (load_mass + unbalance) * radius^2   [kg*m^2]',
+      'tau = J_total * d(omega)/dt + damping * omega   [N*m]',
+      'vis = tau   [N*m]'
     ],
-    latex: ['J_{total} \\ddot{\\theta} + B \\dot{\\theta} = T_e'],
-    across: 'Angular Velocity', through: 'Load Torque',
-    description: 'Models the mechanical dynamics of a washing machine drum, including load inertia and dynamic unbalance forces.'
+    latex: ['\\tau = \\left(J_b + (m_l + m_u) r^2\\right) \\dot{\\omega} + b\\,\\omega'],
+    across: 'Angular velocity omega [rad/s]', through: 'Load torque tau [N*m]',
+    description: 'Washing-machine drum on a vertical axis: basket inertia plus laundry and unbalance mass at the drum radius, viscous bearing damping. Vis outputs the load torque.'
   },
   washing_fluid: {
-    equations: ['T_slosh = drag_coeff * (water_level/10) * omega^2'],
-    latex: ['T_{slosh} = C_d \\cdot V_{water} \\cdot \\omega^2'],
-    across: 'Angular Velocity', through: 'Slosh Torque',
-    description: 'Simulates the non-linear fluid drag and sloshing effects of water and detergent during the wash cycle.'
+    equations: ['tau = (drag_coeff + 0.02*detergent + 0.005*water_level) * omega + 0.01 * omega * |omega|   [N*m]'],
+    latex: ['\\tau = (b_d + 0.02\\,c_{det} + 0.005\\,V_w)\\,\\omega + 0.01\\,\\omega|\\omega|'],
+    across: 'Angular velocity omega [rad/s]', through: 'Drag torque tau [N*m]',
+    description: 'Viscous plus quadratic slosh drag of the wash liquor on the drum (purely dissipative).'
   },
   constant: {
     equations: ['y = value'],
@@ -1057,68 +1097,91 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Generates a constant physical signal. Use to set fixed setpoints or parameters in control loops.'
   },
   ps_step: {
-    equations: ['y = t > step_time ? final : initial'],
+    equations: ['y = t >= step_time ? final : initial'],
     latex: ['y(t) = y_0 + (y_f - y_0) u(t - t_s)'],
     across: 'None', through: 'Signal',
     description: 'Generates a step change in a physical signal at a specified time. Useful for analyzing system step response.'
   },
   pwm_3ph_2level: {
     equations: [
-      'Va = Vn + (Vp - Vn) * Vabc[0]',
-      'Vb = Vn + (Vp - Vn) * Vabc[1]',
-      'Vc = Vn + (Vp - Vn) * Vabc[2]'
+      'v_k - v_n = d_k * Vdc - R_out * i_k,out   [V],  k = a, b, c',
+      'i_dc = d_a*i_a,out + d_b*i_b,out + d_c*i_c,out   [A]',
+      'd_k = (1 + m_k) / 2,  m_k = M * sin(2*pi*f_out*t - k*2*pi/3)  or the vabc / duty inputs',
+      'switching mode: d_k = 1 if d_k,ref >= carrier(f_sw*t) else 0'
     ],
-    latex: ['V_a = V_n + (V_p - V_n) \\cdot m_a'],
-    across: 'Voltage (V)', through: 'Duty Cycle',
-    description: '3-Phase Inverter Bridge using Averaged Model. Converts DC input power to AC potentials based on modulation indices (Vabc).'
+    latex: ['v_k - v_n = d_k V_{dc} - R_{out} i_{k,out}', 'i_{dc} = \\sum_k d_k i_{k,out}', 'd_k = (1 + m_k)/2'],
+    across: 'Voltage v_k - v_n [V], DC link Vdc [V]', through: 'Phase current into the block i_k [A], DC link current i_dc [A]',
+    description: 'Two-level three-phase inverter. Averaged model (default, Simscape Average-Value Inverter): continuous duty d_k, no switching ripple. Switching model: ideal legs with anti-parallel diodes switch at f_sw when the duty reference crosses a triangular carrier; the crossings are located by the solver events. The fundamental pole voltage amplitude is M*Vdc/2 and the line-to-line rms fundamental (sqrt(3)/(2*sqrt(2)))*M*Vdc for M <= 1. AC terminals: composite three-phase port ABC. A floating wye load has no zero-sequence current.'
   },
   pwm_3ph_3level: {
-    equations: ['g = 1 if Vabc > C1 else 0 if Vabc < C2 else 0.5'],
-    latex: ['g \\in \\{-1, 0, 1\\}'],
-    across: 'None', through: 'None',
-    description: 'Generates gate signals for three-level inverters (e.g., NPC). Uses two vertically offset carriers to create three output voltage levels.'
+    equations: [
+      'r_x = clamp(m_x + Δ_neut, -1, 1),  m = vabc in [-1, 1]',
+      'g_x = +1 if r_x >= C_upper (in [0, 1])',
+      'g_x = -1 if r_x <= C_lower = C_upper - 1',
+      'g_x = 0 otherwise  =>  <g_x> = r_x'
+    ],
+    latex: ['g_x \\in \\{-1, 0, 1\\}', '\\langle g_x \\rangle = r_x', '\\Delta_{neut} = clamp(k_{neut} v_{neut}/max(|v_{dc}|,1), -0.15, 0.15)'],
+    across: 'Physical Inputs', through: 'Physical Outputs',
+    description: 'Three-level phase-disposition PWM generator: input vabc is the width-3 reference vector m_abc in [-1, 1] (unit = Vdc/2); two in-phase triangular carriers at f_sw give the level commands ga/gb/gc in {-1, 0, +1} (phase voltage {-Vdc/2, 0, +Vdc/2}); ma/mb/mc echo the references. The carrier average of each level equals its reference, so the fundamental phase voltage is m*Vdc/2. vneut adds a bounded neutral-point correction. Signal generator, no power stage.'
   },
   pwm_vienna: {
-    equations: ['g = f(Vabc, Iabc, Vdc, Neutral)'],
-    latex: ['g = \\text{Logic}(V, I, V_{dc})'],
-    across: 'None', through: 'None',
-    description: 'Specialized PWM generator for Vienna Rectifiers. Ensures sinusoidal input currents and neutral-point balance.'
+    equations: [
+      'I^* = max(0, kp_v * (vdc_ref - vdc))',
+      'Δ_neut = clamp(k_neut * v_neut / max(|vdc|, 1), -0.2, 0.2)',
+      'm_x = clamp(2*v_x/max(|vdc|, 1) + 0.05 * e_ix + Δ_neut, -1, 1)',
+      'g_x = 1 if C_tri(f_sw, t) < (1 - |m_x|) else 0'
+    ],
+    latex: [
+      'g_x \\in \\{0, 1\\}',
+      'd_x = 1 - |m_x|',
+      '\\Delta_{neut} = \\text{clamp}(k_{neut} v_{neut} / \\max(|v_{dc}|, 1), -0.2, 0.2)'
+    ],
+    across: 'Physical Inputs', through: 'Physical Outputs',
+    description: 'Three-phase Vienna Rectifier PWM generator with explicit ga/gb/gc switching gates and ma/mb/mc modulation indices. Uses carrier-based PWM at f_sw, DC voltage regulation, and neutral-point midpoint balancing.'
   },
   thyristor_6pulse: {
-    equations: ['Trigger if theta > alpha + phase_offset'],
-    latex: ['G = \\delta(t - t_{\\alpha})'],
-    across: 'None', through: 'None',
-    description: 'Generates firing pulses for a 6-pulse thyristor bridge (Graetz circuit). Controlled by the firing angle alpha.'
+    equations: ['g_k = 1 if wrap(theta - (alpha + 60k)) < pulse_width else 0', 'k = 0..5'],
+    latex: ['g_k = \\mathbf{1}_{[0, w_p)}(\\mathrm{wrap}(\\theta - (\\alpha + 60k)))'],
+    across: 'Physical Inputs', through: 'Physical Outputs',
+    description: 'Generates six staggered firing pulses g1..g6 for a 6-pulse thyristor bridge (Graetz circuit). Firing angle alpha (deg) is read from the alpha port, counted from the natural commutation point of thyristor 1, and the absolute synchronisation angle theta (deg) from the theta port (own ramp 360*freq*t when unwired; the 12-pulse block differs on purpose: its theta is a radian offset added to its own ramp); each pulse has a defined width (pulse_width_deg) and fires 60° apart. A bridge fired at alpha has the mean DC voltage (3*sqrt(2)/pi)*V_LL*cos(alpha). Signal generator only (no thyristor device in the library).'
   },
   thyristor_12pulse: {
-    equations: ['G_delta = Trigger(alpha)', 'G_wye = Trigger(alpha + 30)'],
-    latex: ['G_{12} = \\{G_{\\Delta}, G_{Y}\\}'],
-    across: 'None', through: 'None',
-    description: 'Generates coordinated firing pulses for a 12-pulse converter, consisting of delta and wye connected bridges with a 30-degree phase shift.'
+    equations: [
+      'theta(t) = theta_0 + 2*pi*freq*t',
+      'delta_g[k] = pulse(theta - (alpha + 60*k), pulse_width)',
+      'wye_g[k] = pulse(theta - (alpha + 30 + 60*k), pulse_width), k = 0..5'
+    ],
+    latex: [
+      '\\theta(t) = \\theta_0 + 2\\pi f t',
+      'G_{\\Delta,k} = \\operatorname{pulse}(\\theta - (\\alpha + 60k))',
+      'G_{Y,k} = \\operatorname{pulse}(\\theta - (\\alpha + 30 + 60k))'
+    ],
+    across: 'Physical Inputs', through: 'Physical Gate Outputs',
+    description: 'Generates twelve independent, finite-width thyristor firing pulses: six delta gates and six wye gates. The wye bridge is shifted by 30 degrees and successive gates in each bridge are separated by 60 degrees. theta is a phase offset in radians added to the internal ramp 2*pi*freq*t. Two six-pulse bridges 30 degrees apart in series give twice the six-pulse mean DC voltage with the ripple at 12 times the line frequency. Signal generator only.'
   },
   belt_properties: {
-    equations: ['E = youngs', 'rho = density'],
+    equations: ['rho = density', 'E = youngs', 'c = damping', 'publish(belt_density, belt_youngs, belt_damping)'],
     latex: ['E, \rho = \\text{const}'],
-    across: 'None', through: 'None',
-    description: 'Defines the material and physical properties for a connected belt or cable network, such as elasticity and linear mass density.'
+    across: 'None', through: 'Belt Properties',
+    description: 'Property-link block for a belt/cable network. Publishes linear density (kg/m), Young modulus (Pa) and belt damping (N*s/m) to ctx.parameters and, at assembly time, injects them into explicitly wired (P port) belt_end / belt_spool / pulley blocks, where they drive stiffness k = E*A/L, the belt-end damping c and wrapped-belt inertia.'
   },
   belt_end: {
-    equations: ['F = k * x', 'v = dx/dt'],
+    equations: ['dx/dt = v_e - v_r  (x = x_e - x_r)', 'f = max(0, k*x + c*dx/dt)  (tension-only)', 'k = E*A/L (material) or stiffness', 'c = linked belt damping or damping', 'F_r->e = -f'],
     latex: ['F = k \Delta x'],
-    across: 'Velocity (m/s)', through: 'Force (N)',
-    description: 'Models the termination point of a belt or cable, typically connected to a translational reference or load.'
+    across: 'Translational Velocity (m/s)', through: 'Force (N)',
+    description: 'Compliant termination of a belt/cable. Axial stiffness and damping come from the linked belt_properties block (k = youngs*area/length, c = belt damping); a belt end not wired to it uses its own stiffness and damping params.'
   },
   belt_spool: {
-    equations: ['v = omega * R', 'T = F * R'],
+    equations: ['v = omega * R', 'T + F*R = J*dw/dt', 'J = inertia + 2*pi*rho*R^3'],
     latex: ['v = \omega R', '\\tau = F R'],
-    across: 'Velocity, Ang. Vel', through: 'Force, Torque',
-    description: 'Converts between rotational and translational motion using a spool or winch mechanism. The coupling is defined by the spool radius.'
+    across: 'Ang. Vel (rad/s), Velocity (m/s)', through: 'Torque (N-m), Force (N)',
+    description: 'Converts between rotational and translational motion using a spool or winch mechanism. Torque balance includes spool inertia plus wrapped-belt inertia from the linked belt_properties density (one circumference: m = rho*2*pi*R).'
   },
   pulley: {
-    equations: ['vA = omega * R', 'vB = -omega * R', 'T = (FA - FB) * R'],
+    equations: ['vA = omega * R', 'vB = -omega * R', 'T + (FA - FB)*R = J*dw/dt'],
     latex: ['v = \pm \omega R', '\\tau = (F_A - F_B) R'],
-    across: 'Velocity, Ang. Vel', through: 'Force, Torque',
-    description: 'Models a physical pulley with inertia. Transfers force between two belt segments while converting rotational motion to linear travel.'
+    across: 'Ang. Vel (rad/s), Velocity (m/s)', through: 'Torque (N-m), Force (N)',
+    description: 'Models a physical pulley with inertia. Transfers force between two belt segments while converting rotational motion to linear travel; inertia adds the wrapped-belt term from the linked belt_properties density.'
   },
   world_frame: {
     equations: ['R = Identity', 'P = [0 0 0]'],
@@ -1138,143 +1201,149 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     across: 'Frame', through: 'None',
     description: 'Applies a fixed translation and rotation between two frames. Models rigid connections between multibody parts.'
   },
+  transform_sensor: {
+    equations: ['P = P_f - P_b', 'R = R_f - R_b'],
+    latex: ['\Delta \mathbf{P} = \mathbf{P}_f - \mathbf{P}_b', '\Delta \mathbf{\theta} = \mathbf{\theta}_f - \mathbf{\theta}_b'],
+    across: 'Frame', through: 'None',
+    description: 'Measures relative 3D position (m) and the Euler-angle difference (rad, SI) between follower and base frames.'
+  },
   dist_constraint: {
-    equations: ['dist(b, f) = L_set', 'Force = lambda * Grad(dist)'],
-    latex: ['\|\mathbf{P}_f - \mathbf{P}_b\| = L'],
+    equations: ['|Pf - Pb| = L_set', 'Ff = lambda * (Pf - Pb) / |Pf - Pb|', 'Fb = -Ff'],
+    latex: ['\\|\\mathbf{P}_f - \\mathbf{P}_b\\| = L', '\\mathbf{F}_f = \\lambda \\dfrac{\\mathbf{P}_f - \\mathbf{P}_b}{\\|\\mathbf{P}_f - \\mathbf{P}_b\\|}', '\\mathbf{F}_b = -\\mathbf{F}_f'],
     across: 'Frame', through: 'Force (N)',
-    description: 'Maintains a constant distance between two frames. Implements a kinematic constraint using Lagrange multipliers.'
+    description: 'Maintains a constant 3D distance between frames B and F using a Lagrange multiplier. The reaction force acts along the line between them, equal and opposite at each end; outputs are the measured distance and the reaction force magnitude.'
   },
   angle_constraint: {
-    equations: ['angle(b, f) = Theta_set'],
-    latex: ['\\theta_{bf} = \Theta_{const}'],
+    equations: ['angle(transpose(Rb) * Rf) = Theta_set', 'Tf = lambda * axis(Rrel)', 'Tb = -Tf'],
+    latex: ['\\mathrm{angle}(\\mathbf{R}_b^\\mathsf{T} \\mathbf{R}_f) = \\Theta_{set}', '\\mathbf{T}_f = \\lambda \\, \\mathrm{axis}(\\mathbf{R}_{rel})', '\\mathbf{T}_b = -\\mathbf{T}_f'],
     across: 'Frame', through: 'Torque (N-m)',
-    description: 'Maintains a fixed angular relationship between two frames.'
+    description: 'Maintains a fixed relative 3D orientation between frames B and F using a Lagrange multiplier. The reaction torque acts along the relative rotation axis, equal and opposite at each end; outputs are the measured angle and the reaction torque magnitude.'
   },
   grav_field: {
-    equations: ['F = m * g'],
-    latex: ['\mathbf{F}_g = m \mathbf{g}'],
+    equations: ['F = m * g * dir / |dir|', '|F| = m * g'],
+    latex: ['\\mathbf{F}_g = m \\, g \\, \\hat{\\mathbf{d}}'],
     across: 'Frame', through: 'Force (N)',
-    description: 'Applies a uniform gravitational force to all mass-bearing components in the multibody system.'
+    description: 'Applies the weight F = m·g along the (normalized) direction vector to follower frame F, with the reaction on B when connected. Output |F| reports the force magnitude.'
   },
   spring_damper_force: {
-    equations: ['F = k*(x - x0) + b*v'],
-    latex: ['F = k \Delta x + b \dot{x}'],
+    equations: ['F = k*(x - x0) + b*(v1 - v2)', 'x = |P_f - P_b|', 'v = d/dt(x)'],
+    latex: ['F = k (x - x_0) + b (v_1 - v_2)'],
     across: 'Frame', through: 'Force (N)',
-    description: 'Models a linear spring and damper acting between two frames. Opposes displacement and relative velocity.'
+    description: 'Linear spring and damper acting along the line between frames B and F. Positive F is tension. Outputs separation x, relative velocity v and force F.'
   },
   external_force: {
-    equations: ['F_total = F_ext + T_ext'],
-    latex: ['\mathbf{F}_{ext} = \mathbf{f}(t)'],
+    equations: ['F = force_scale * [Fx Fy Fz]', 'T = torque_scale * [Tx Ty Tz]'],
+    latex: ['\\mathbf{F} = s_F \\mathbf{f}(t)', '\\mathbf{T} = s_T \\boldsymbol{\\tau}(t)'],
     across: 'Frame', through: 'Force, Torque',
-    description: 'Allows for the application of time-varying forces and torques from external physical signals (PS).'
+    description: 'Applies force and torque vectors from physical-signal inputs (Fx..Tz), scaled by force_scale and torque_scale, to frame F. Outputs |F| and |T|.'
   },
   revolute_joint: {
-    equations: ['theta = angle(b, f)', 'Tau = J*alpha + b*omega'],
-    latex: ['\\tau = J \dot{\omega} + B \omega'],
-    across: 'Ang. Vel', through: 'Torque (N-m)',
-    description: 'A 1-DOF rotational joint that allows rotation about a single axis. Constrains all translational and remaining rotational degrees of freedom.'
+    equations: ['Pf - Pb = 0', '(Rb t_j) . (Rf a) = 0, t_j perpendicular to a (j = 1, 2)', 'Ff = -Fb', 'Tf = sum_j lambda_j ((Rf a) x (Rb t_j)) - c w (Rb a)', 'Tb = -Tf'],
+    latex: ['\\mathbf{P}_f = \\mathbf{P}_b', '(\\mathbf{R}_b \\mathbf{t}_j) \\cdot (\\mathbf{R}_f \\mathbf{a}) = 0', '\\boldsymbol{\\tau}_f = \\sum_j \\lambda_j\\, (\\mathbf{R}_f \\mathbf{a}) \\times (\\mathbf{R}_b \\mathbf{t}_j) - c\\, w\\, \\mathbf{R}_b \\mathbf{a}'],
+    across: 'Frame', through: 'Force (N), Torque (N*m)',
+    description: 'A 1-DOF joint that rotates about the normalized B-local axis a. It constrains the 3 relative translations and the 2 rotations perpendicular to a; the reactions are the Lagrange multipliers of those constraints (force on F, equal and opposite on B, and a constrained torque perpendicular to a). Damping acts only on the free rotation; 0 is accepted. Outputs: joint angle q (rad), rate w (rad/s), reaction force and torque.'
   },
   prismatic_joint: {
-    equations: ['v = dx/dt', 'F = m*a + b*v'],
-    latex: ['F = m \ddot{x} + B \dot{x}'],
-    across: 'Velocity', through: 'Force (N)',
-    description: 'A 1-DOF translational joint that allows sliding along a single axis while constraining all other motions.'
+    equations: ['(Rb c_j) . (Pf - Pb) = 0, c_j perpendicular to a (j = 1, 2)', 'Rf = Rb', 'Ff = sum_j lambda_j (Rb c_j) - c v (Rb a)', 'Tb = -Tf - (Pf - Pb) x Ff'],
+    latex: ['(\\mathbf{R}_b \\mathbf{c}_j) \\cdot (\\mathbf{P}_f - \\mathbf{P}_b) = 0', '\\mathbf{F}_f = \\sum_j \\lambda_j\\, \\mathbf{R}_b \\mathbf{c}_j - c\\, v\\, \\mathbf{R}_b \\mathbf{a}', '\\boldsymbol{\\tau}_b = -\\boldsymbol{\\tau}_f - (\\mathbf{P}_f - \\mathbf{P}_b) \\times \\mathbf{F}_f'],
+    across: 'Frame', through: 'Force (N), Torque (N*m)',
+    description: 'A 1-DOF joint that slides along the normalized B-local axis a. It constrains the 2 translations perpendicular to a and all 3 rotations; the reactions are the Lagrange multipliers of those constraints, and the torque on B includes the lever arm of the displacement. Damping acts only on the slide; 0 is accepted. Outputs: displacement x (m), velocity v (m/s), reaction force and torque.'
   },
   spherical_joint: {
-    equations: ['P_b = P_f', 'v_b = v_f'],
-    latex: ['\mathbf{P}_b = \mathbf{P}_f'],
+    equations: ['P_f - P_b = 0', 'F_f = [Fx, Fy, Fz] (3 multipliers)', 'F_b = -F_f', 'T_b = T_f = 0'],
+    latex: ['\\mathbf{P}_b = \\mathbf{P}_f'],
     across: 'Frame', through: 'Force (N)',
-    description: 'A 3-DOF "ball-and-socket" joint. Constrains the relative translation between two frames while allowing free rotation.'
+    description: 'A 3-DOF "ball-and-socket" joint. Constrains the relative translation between two frames while allowing free rotation; it transmits no torque (no rotational damping or friction). Outputs: the 3 reaction force components and magnitude (N) and the relative rotation vector (rad).'
   },
   universal_joint: {
-    equations: ['DOF = 2 (Rotation)'],
+    equations: ['P_f - P_b = 0', '(R_b axis1) dot (R_f axis2) = 0', 'F_b = -F_f', 'T_f = lambda (a1 cross a2) - damping (w1 a1 + w2 a2)', 'T_b = -T_f'],
     latex: ['\\text{DOF} = 2'],
-    across: 'Frame', through: 'Torque (N-m)',
-    description: 'A 2-DOF joint that transmits rotation between non-parallel axes, common in drive shafts.'
+    across: 'Frame', through: 'Force (N), Torque (N*m)',
+    description: 'Locks translation and permits rotation about B-local axis1 and F-local axis2. Nonparallel input axes are orthonormalized. Damping opposes only the permitted angular rates; zero disables it. Angles are signed principal radians, and t_reac is the constrained reaction on F.'
   },
   weld_joint: {
-    equations: ['Tb = Tf', 'vb = vf', 'wb = wf'],
-    latex: ['\mathbf{T}_b = \mathbf{T}_f'],
-    across: 'Frame', through: 'Force, Torque',
-    description: 'A 0-DOF constraint that rigidly locks two frames together. No relative motion is permitted.'
+    equations: ['Pf - Pb - Rb p0 = 0', 'Rf = Rb R0', 'Ff = -Fb', 'Tb = -Tf - (Pf - Pb) x Ff'],
+    latex: ['\\mathbf{P}_f - \\mathbf{P}_b = \\mathbf{R}_b \\mathbf{p}_0', '\\mathbf{R}_f = \\mathbf{R}_b \\mathbf{R}_0', '\\boldsymbol{\\tau}_b = -\\boldsymbol{\\tau}_f - (\\mathbf{P}_f - \\mathbf{P}_b) \\times \\mathbf{F}_f'],
+    across: 'Frame', through: 'Force (N), Torque (N*m)',
+    description: 'A 0-DOF constraint that rigidly locks all 6 relative coordinates to a fixed reference pose (offset p0 and rotation R0; coincident by default). The reactions are the 6 multipliers (force and torque on F, and the torque on B about B, which carries the moment of an offset load). Outputs: reaction wrench and the relative pose error (m, rad). The constraint is ideal: there is no stiffness.'
   },
   common_gear: {
-    equations: ['omega_f = ratio * omega_b', 'Tau_b = ratio * Tau_f'],
+    equations: ['omega_f = ratio * omega_b', 'Tau_b_in + ratio * Tau_f_in = 0  (P = 0)'],
     latex: ['\omega_f = N \omega_b', '\\tau_b = N \\tau_f'],
     across: 'Ang. Vel', through: 'Torque (N-m)',
     description: 'Models a kinematic coupling between two rotational axes (gears). Transmits torque based on the specified gear ratio.'
   },
   rack_pinion: {
-    equations: ['v_f = omega_b * R', 'Tau_b = F_f * R'],
+    equations: ['v_f = omega_b * R', 'Tau_b_in + R * F_f_in = 0  (P = 0)'],
     latex: ['v_l = \omega R', '\\tau = F R'],
     across: 'Velocity, Ang. Vel', through: 'Force, Torque',
     description: 'Converts rotational motion from a pinion gear into linear motion of a rack. The coupling is defined by the pinion radius.'
   },
   mech_config: {
-    equations: ['g = gravity_vector'],
-    latex: ['\mathbf{g} = [g_x, g_y, g_z]'],
-    across: 'None', through: 'None',
-    description: 'Defines global parameters for the mechanical mechanism, including the gravity vector and uniform linearization parameters.'
+    equations: ['g = [gx gy gz] (uniform gravity of the connected mechanism)'],
+    latex: ['\\mathbf{g} = [g_x, g_y, g_z]'],
+    across: 'Frame', through: 'None',
+    description: 'Mechanism Configuration. Its single port C is a Frame connection attaching the uniform gravity vector (m/s2) to the mechanism it is wired to; it adds no wrench and no constraint. A malformed gravity vector is rejected.'
+  },
+  thermal_ref: {
+    equations: ['T = 0 K'],
+    latex: ['T = 0\\,\\mathrm{K}'],
+    across: 'T (K)', through: 'Q (W)',
+    description: 'Simscape Thermal Reference: absolute zero, the datum of the thermal network. All thermal temperatures are absolute (K).'
   },
   conductive_heat: {
     equations: ['Q = k * (Ta - Tb)'],
-    latex: ['Q = G \Delta T'],
-    across: 'T', through: 'Q',
-    description: 'Models heat conduction through a material (Fourier\'s Law).'
+    latex: ['Q = k\\,(T_a - T_b)'],
+    across: 'T (K)', through: 'Q (W)',
+    description: 'Models heat conduction through a material (Fourier\'s law), lumped as a thermal conductance k = kappa A / D [W/K].'
   },
   convective_heat: {
     equations: ['Q = h * A * (Ta - Tb)'],
-    latex: ['Q = h A \Delta T'],
-    across: 'T', through: 'Q',
-    description: 'Models heat transfer between a surface and a fluid (Newton\'s Law of Cooling).'
+    latex: ['Q = h A\\,(T_a - T_b)'],
+    across: 'T (K)', through: 'Q (W)',
+    description: 'Models heat transfer between a surface and a fluid (Newton\'s Law of Cooling), h in W/(m^2 K), A in m^2.'
   },
   radiative_heat: {
     equations: ['Q = eps * sigma * A * (Ta^4 - Tb^4)'],
-    latex: ['Q = \epsilon \sigma A (T_a^4 - T_b^4)'],
-    across: 'T', through: 'Q',
-    description: 'Models thermal radiation between surfaces (Stefan-Boltzmann Law).'
+    latex: ['Q = \\epsilon \\sigma A\\,(T_a^4 - T_b^4)'],
+    across: 'T (K, absolute)', through: 'Q (W)',
+    description: 'Models grey-body thermal radiation between surfaces (Stefan-Boltzmann law). Temperatures are absolute kelvin (referred to the 0 K Thermal Reference), sigma = 5.670374e-8 W/(m^2 K^4).'
   },
   thermal_mass: {
-    equations: ['Q = C * dTa/dt'],
-    latex: ['Q = C \frac{dT}{dt}'],
-    across: 'T', through: 'Q',
-    description: 'Models energy storage in a material based on its specific heat capacity.'
+    equations: ['Q = C * dTa/dt', 'Ta(0) = T0'],
+    latex: ['Q = C \\frac{dT}{dt}', 'T(0) = T_0'],
+    across: 'T (K)', through: 'Q (W)',
+    description: 'Models energy storage in a material, C = m c_p [J/K]. Q is the heat flow into the port; the temperature starts at T0 (default 293.15 K).'
   },
   temp_sensor: {
     equations: ['T_out = Ta - Tb'],
-    latex: ['T_{out} = \Delta T'],
-    across: 'T', through: 'None',
-    description: 'Measures the temperature difference between two nodes.'
-  },
-  heat_sensor: {
-    equations: ['Q_out = Q'],
-    latex: ['Q_{out} = Q'],
-    across: 'None', through: 'Q',
-    description: 'Measures the heat flow rate through a thermal branch.'
+    latex: ['T_{out} = T_a - T_b'],
+    across: 'T (K)', through: 'None',
+    description: 'Measures T_A - T_B in kelvin. With B on the (0 K) Thermal Reference, or left open, it reads the absolute temperature.'
   },
   heat_src: {
-    equations: ['Q = S_q'],
+    equations: ['Q = Q_src'],
     latex: ['Q = Q_{src}'],
-    across: 'T', through: 'Q',
-    description: 'An ideal heat flow source that injects a fixed power into the network.'
+    across: 'T (K)', through: 'Q (W)',
+    description: 'An ideal heat flow source forcing the heat flow rate Q [W] from port A to port B whatever the temperature difference.'
   },
   temp_src: {
-    equations: ['T = S_t'],
-    latex: ['T = T_{src}'],
-    across: 'T', through: 'Q',
-    description: 'An ideal temperature source that maintains a fixed potential node.'
+    equations: ['Ta = T'],
+    latex: ['T_a = T'],
+    across: 'T (K)', through: 'Q (W)',
+    description: 'An ideal temperature source holding its port at the absolute temperature T [K]; it supplies whatever heat flow is demanded.'
   },
   ctrl_heat_src: {
-    equations: ['Q = S_input'],
-    latex: ['Q = f(S_{ctrl})'],
-    across: 'T', through: 'Q',
-    description: 'A heat flow source driven by an external physical signal (PS).'
+    equations: ['Q = S'],
+    latex: ['Q = S'],
+    across: 'T (K)', through: 'Q (W)',
+    description: 'A heat flow source: Q [W] from port A to port B equals the physical signal S wired to port S.'
   },
   ctrl_temp_src: {
-    equations: ['T = S_input'],
-    latex: ['T = f(S_{ctrl})'],
-    across: 'T', through: 'Q',
-    description: 'A temperature source driven by an external physical signal (PS).'
+    equations: ['Ta - Tb = S'],
+    latex: ['T_a - T_b = S'],
+    across: 'T (K)', through: 'Q (W)',
+    description: 'A temperature source maintaining T_A - T_B (K) equal to the physical signal S wired to port S.'
   },
   solver_config: {
     equations: ['f(x) = 0'],
@@ -1301,28 +1370,31 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Visualizes signal time-histories in a dedicated window.'
   },
   magnetron: {
-    equations: ['P_elec = power_rating * ((Vp - Vn)/4000)^2', 'I = P_elec / (Vp - Vn)', 'Qh = -power_rating * (efficiency/100) * ((Vp - Vn)/4000)^2'],
-    latex: ['P_{elec} = P_{rated} \left(\frac{V}{4000}\right)^2', 'I = \frac{P_{elec}}{V}', 'Q = -P_{rated} \eta \left(\frac{V}{4000}\right)^2'],
-    across: 'Voltage (V)', through: 'Heat Flow (W)',
-    description: 'Converts high-voltage electrical energy into microwave thermal power. At the nominal 4000 V anode voltage it consumes the rated power and outputs rated_power * efficiency as heat. Negative through-value at port indicates heat injection into the connected node.'
+    equations: ['i = power_rating * (Vp - Vn) / v_nominal^2   [A]', 'P_elec = (Vp - Vn) * i   [W]', 'Q_H = (efficiency/100) * P_elec   [W] (into H)', 'P_loss = (1 - efficiency/100) * P_elec   [W] (to ambient)'],
+    latex: ['i = \\frac{P_{rated}}{V_{nom}^2} v', 'Q_H = \\eta\\, v\\, i'],
+    across: 'Voltage v = Vp - Vn [V]', through: 'Current i [A]; heat Q_H into H [W]',
+    description: 'Lumped magnetron: square-law anode characteristic (rated power at the nominal anode voltage); RF power eta*P_elec is delivered as heat through H, the anode loss is rejected to ambient.'
   },
   upper_heater: {
-    equations: ['Qh = -((Vp - Vn)^2) / resistance'],
-    latex: ['Q = -\frac{(V_p-V_n)^2}{R}'],
-    across: 'Voltage (V)', through: 'Heat Flow (W)',
-    description: 'Model for a radiant/resistive heating element. Injects thermal energy (negative through-flow) based on dissipated electrical power.'
+    equations: ['i = (Vp - Vn) / resistance   [A]', 'Q_H = efficiency * (Vp - Vn)^2 / resistance   [W] (into H)'],
+    latex: ['Q_H = \\eta \\frac{(V_p-V_n)^2}{R}'],
+    across: 'Voltage v = Vp - Vn [V]', through: 'Current i [A]; heat Q_H into H [W]',
+    description: 'Radiant resistive heating element: Joule heat, the fraction efficiency radiated into the cavity through H (negligible element heat capacity), the rest lost to the housing.'
   },
   steam_generator: {
-    equations: ['Qs = -power'],
+    equations: ['m_w*c_w*dT_w/dt = eta*P_el - k_loss*(T_w - T_amb) - Q_s', 'T_w >= T_boil: Q_s = max(0, eta*P_el - k_loss*(T_w - T_amb)), mdot_steam = Q_s/h_fg'],
     latex: ['Q = -P'],
     across: 'Voltage (V)', through: 'Heat Flow (W)',
-    description: 'Models electrical heating of water and subsequent phase change to steam.'
+    description: 'Electric boiler: heats a water tank to the boiling temperature, then evaporates water at mdot = (Q - losses)/h_fg and delivers the latent heat through port S.'
   },
   microwave_inverter: {
-    equations: ['Vhv_out = Vac_in * (v_out / v_in)'],
-    latex: ['V_{hv} = V_{ac} \cdot \frac{V_{out}}{V_{in}}'],
+    equations: [
+      'V_hv = ctrl * v_out   [V]',
+      'i_in = (V_hv * i_out / v_in^2) * v_ac   [A]  (P_in = P_out on average, unity power factor)'
+    ],
+    latex: ['V_{hv} = \\mathrm{ctrl}\\, v_{out}', 'i_{in} = \\frac{V_{hv} i_{out}}{v_{in}^2} v_{ac}'],
     across: 'Voltage (V)', through: 'Current (A)',
-    description: 'High-frequency switching power supply for generating magnetron drive voltage.'
+    description: 'Averaged, loss-free high-voltage supply for the magnetron: regulated HV output and a unity-power-factor input (loss-free resistor). The cycle-averaged input power equals the output power when the supply rms equals the nominal v_in. Single-ended AC and HV terminals measured against the Electrical Reference.'
   },
   microwave_cavity: {
     equations: [
@@ -1332,13 +1404,13 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
       'C = C_air + m_wall*Cp_wall + m_food*Cp_food',
       'A = 6 * (V/1000)^(2/3)',
       'Q_conv = h_conv * A * (Th1 - T_amb)',
-      'Q_rad = eps * sigma * A * (Th1^4 - T_amb^4)',
-      'cutout = 0.5 * (1 + tanh((T_max - Th1)/3))',
-      'dTh1/dt = (cutout*(Q1+Q2+Q3) - Q_conv - Q_rad) / C'
+      'Q_rad = eps * sigma * A * (Th1^4 - T_amb^4),  sigma = 5.670374419e-8 W/(m^2 K^4)',
+      'cutout = 0.5 * (1 + tanh((T_max - Th1)/3)),  Q_vent = (1 - cutout)*(Q1+Q2+Q3)',
+      'C dTh1/dt = (Q1+Q2+Q3) - Q_vent - Q_conv - Q_rad   [W]'
     ],
-    latex: ['T = T_0 + \\int \\frac{cutout \\cdot \\Sigma Q - Q_{conv} - Q_{rad}}{C} dt'],
+    latex: ['C \\dot{T} = \\Sigma Q - Q_{vent} - Q_{conv} - Q_{rad}'],
     across: 'Temperature (K)', through: 'Heat Flow (W)',
-    description: 'Thermal mass model for the microwave cavity (25L/55L). Includes air, wall, and optional food/water thermal mass, convective and Stefan-Boltzmann radiative cooling scaled by cavity surface area, and a smooth thermal cutout that gradually reduces heat input near the safety limit.'
+    description: 'Lumped thermal model of the microwave cavity: air, wall and food heat capacity, convective and Stefan-Boltzmann radiative loss to the ambient (cube surface area), and a smooth thermal cutout that vents the heat input to ambient near the safety limit. T_amb and T_max are degC parameters; the cavity starts at T_amb.'
   },
   lms_adaptive_filter: {
     equations: [
@@ -1427,12 +1499,6 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
     description: 'Establishes the absolute pressure reference datum for an isothermal liquid hydraulic network.'
   },
-  reservoir_il: {
-    equations: ['p_A = p_absolute + rho*g*(z_ref - z_A)'],
-    latex: ['p_A = p_{absolute} + \\rho g (z_{ref} - z_A)'],
-    across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
-    description: 'Reservoir maintaining a specified reference pressure in an isothermal liquid network.'
-  },
   pump_il: {
     equations: ['p_B - p_A = delta_p'],
     latex: ['p_B - p_A = \\Delta p'],
@@ -1446,9 +1512,9 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Hydraulic pipe with laminar flow resistance in an isothermal liquid network.'
   },
   restriction_il: {
-    equations: ['mdot = Cd * A * sqrt(2*rho*|dp|) * sign(dp)'],
+    equations: ['mdot = Cd*A*sqrt(2*rho)*dp/(dp^2 + dp_crit^2)^(1/4)'],
     latex: ['\\dot{m} = C_d A \\sqrt{2 \\rho |\\Delta p|} \\operatorname{sign}(\\Delta p)'],
     across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
-    description: 'Hydraulic restriction or orifice obeying Bernoulli flow.'
+    description: 'Hydraulic orifice (Local Restriction): Bernoulli flow with the smooth laminar / turbulent transition.'
   }
 };

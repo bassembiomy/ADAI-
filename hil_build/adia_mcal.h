@@ -18,7 +18,7 @@ typedef enum {
 } adia_mcal_status_t;
 
 typedef enum adia_mcal_gpio_channel_t {
-  ADIA_MCAL_GPIO_1087003D_EC33_460C_8E0F_C1A9CAC26411,
+  ADIA_MCAL_GPIO_34D93ED7_4309_4EA8_B6E3_2CECEA48F7A9,
 } adia_mcal_gpio_channel_t;
 
 #ifdef __cplusplus

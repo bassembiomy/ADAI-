@@ -1,0 +1,245 @@
+{
+  "schemaVersion": 5,
+  "tickMs": 10,
+  "states": [
+    {
+      "id": "a",
+      "name": "A",
+      "x": 0,
+      "y": 0,
+      "width": 100,
+      "height": 60,
+      "entry": "",
+      "during": "",
+      "exit": "",
+      "isActive": false,
+      "color": "#000000",
+      "parentId": null,
+      "children": [],
+      "priority": 1,
+      "isParallel": false,
+      "regionId": null,
+      "autostart": true
+    },
+    {
+      "id": "b",
+      "name": "B",
+      "x": 0,
+      "y": 0,
+      "width": 100,
+      "height": 60,
+      "entry": "",
+      "during": "",
+      "exit": "",
+      "isActive": false,
+      "color": "#000000",
+      "parentId": null,
+      "children": [],
+      "priority": 2,
+      "isParallel": false,
+      "regionId": null,
+      "autostart": false
+    }
+  ],
+  "junctions": [],
+  "transitions": [
+    {
+      "id": "t_ab",
+      "sourceId": "a",
+      "targetId": "b",
+      "condition": "go",
+      "action": "ratio = total / count;",
+      "afterTicks": null,
+      "type": "condition",
+      "hasControlPoint": false,
+      "order": 1
+    }
+  ],
+  "variables": [
+    {
+      "id": "go",
+      "name": "go",
+      "type": "bool",
+      "initialValue": "false",
+      "currentValue": false,
+      "visibleInScope": true
+    },
+    {
+      "id": "total",
+      "name": "total",
+      "type": "double",
+      "initialValue": "0",
+      "currentValue": 0,
+      "visibleInScope": true
+    },
+    {
+      "id": "count",
+      "name": "count",
+      "type": "double",
+      "initialValue": "1",
+      "currentValue": 1,
+      "visibleInScope": true
+    },
+    {
+      "id": "ratio",
+      "name": "ratio",
+      "type": "double",
+      "initialValue": "0",
+      "currentValue": 0,
+      "visibleInScope": true
+    }
+  ],
+  "layers": [
+    {
+      "id": "root",
+      "name": "root",
+      "parentStateId": null,
+      "decomposition": "OR",
+      "stateIds": [
+        "a",
+        "b"
+      ],
+      "transitionIds": [
+        "t_ab"
+      ],
+      "junctionIds": []
+    }
+  ],
+  "safetyMode": false,
+  "verification": {
+    "cStandard": "c11",
+    "tickToleranceMs": 0,
+    "timerPolicy": "logical-tick",
+    "resetPolicy": "always-authorized",
+    "watchdogAfterCriticalFault": "do-not-service",
+    "statementCoverageTarget": 100,
+    "branchCoverageTarget": 100,
+    "requireMcdc": false,
+    "repeatedExecutionCycles": 100000,
+    "staticAnalysisToolId": null,
+    "misraToolId": null,
+    "targetId": null
+  },
+  "projectName": "HMI Verification",
+  "hmiComponents": [
+    {
+      "id": "h0",
+      "type": "button",
+      "name": "Request",
+      "x": 30,
+      "y": 30,
+      "width": 180,
+      "height": 90,
+      "variableId": "go",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "precision": 2,
+      "writable": true,
+      "stateId": "b",
+      "command": "step"
+    },
+    {
+      "id": "h1",
+      "type": "lamp",
+      "name": "Go lamp",
+      "x": 260,
+      "y": 30,
+      "width": 180,
+      "height": 90,
+      "variableId": "go",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "precision": 2,
+      "writable": false,
+      "stateId": "b",
+      "command": "step"
+    },
+    {
+      "id": "h2",
+      "type": "active-state-indicator",
+      "name": "State B",
+      "x": 490,
+      "y": 30,
+      "width": 180,
+      "height": 90,
+      "variableId": "go",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "precision": 2,
+      "writable": false,
+      "stateId": "b",
+      "command": "step"
+    },
+    {
+      "id": "h3",
+      "type": "dashboard-scope",
+      "name": "Go scope",
+      "x": 30,
+      "y": 160,
+      "width": 320,
+      "height": 200,
+      "variableId": "go",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "precision": 2,
+      "writable": false,
+      "stateId": "b",
+      "command": "step"
+    },
+    {
+      "id": "h4",
+      "type": "input",
+      "name": "Set total",
+      "x": 380,
+      "y": 160,
+      "width": 180,
+      "height": 90,
+      "variableId": "total",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "precision": 2,
+      "writable": true,
+      "stateId": "b",
+      "command": "step"
+    },
+    {
+      "id": "h5",
+      "type": "lcd",
+      "name": "Total",
+      "x": 600,
+      "y": 160,
+      "width": 180,
+      "height": 90,
+      "variableId": "total",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "precision": 2,
+      "writable": false,
+      "stateId": "b",
+      "command": "step"
+    },
+    {
+      "id": "h6",
+      "type": "simulation-command",
+      "name": "Step command",
+      "x": 380,
+      "y": 300,
+      "width": 180,
+      "height": 90,
+      "variableId": "go",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "precision": 2,
+      "writable": false,
+      "command": "step",
+      "stateId": "b"
+    }
+  ]
+}

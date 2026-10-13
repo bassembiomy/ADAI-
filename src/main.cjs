@@ -1,19 +1,15 @@
 const { app, BrowserWindow, ipcMain, dialog, session } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { validateString, validateUrl, validateFilename, sanitizeShellArg, validateToolchainKey, validateServiceName, validateRedirectUrl } = require('./security/inputValidator.cjs');
+const { validateString, validateUrl, validateFilename, sanitizeShellArg, validateToolchainKey, validateServiceName } = require('./security/inputValidator.cjs');
 const { evaluateBuildRequest } = require('./security/hilBuildPolicy.cjs');
+const { HilBuildService, verifyWorkspaceSources } = require('./security/hilBuildService.cjs');
+const { flashProductionBuild, validateProductionConfigurationFiles } = require('./security/hilRuntime.cjs');
+const hilBuildService = new HilBuildService();
+const { removeLegacyTestShims } = require('./security/hilWorkspaceCleanup.cjs');
 const { evaluateFlashRequest } = require('./security/hilFlashPolicy.cjs');
 const { inspectElf } = require('./security/elfInspector.cjs');
 const asarGuard = require('./security/asarGuard.cjs');
-const { verifyToolchainHash } = require('./security/toolchainVerifier.cjs');
-
-// Allowlist of trusted hosts for toolchain download redirects
-const ALLOWED_DOWNLOAD_HOSTS = [
-  'github.com', 'objects.githubusercontent.com', 'releases.githubusercontent.com',
-  'release-assets.githubusercontent.com', 'raw.githubusercontent.com',
-  'codeload.github.com', 'developer.arm.com'
-];
 
 // High-performance GPU & high-refresh rate rendering switches
 app.commandLine.appendSwitch('disable-frame-rate-limit');
@@ -29,9 +25,8 @@ const {
   FLASH_TOOLS,
   configureToolchainPaths,
   isToolchainLocallyInstalled,
-  downloadAndExtractToolchain,
-  ensureToolchain,
   resolveToolExecutable,
+  resolveInstalledToolchain,
 } = require('./security/toolchainManager.cjs');
 
 function getToolchainsDir() {
@@ -80,19 +75,19 @@ function isToolchainAvailable(target) {
   return false;
 }
 
-async function verifyAndPreInstallToolchains() {
+function verifyOfflineToolchains() {
   configureToolchainPaths(getToolchainsDir());
-  
+
   for (const key of Object.keys(TOOLCHAINS)) {
     const tc = TOOLCHAINS[key];
     const inPath = isCommandInPath(tc.cmd);
     const inLocal = isToolchainLocallyInstalled(key, getToolchainsDir());
-    
     if (!inPath && !inLocal) {
-      console.log('[STARTUP] Background installing missing toolchain for \'%s\'...', key);
-      downloadAndExtractToolchain(key, getToolchainsDir()).catch((err) => {
-        console.error('[STARTUP] Background toolchain install for \'%s\' failed: %s', key, err ? err.message : 'Unknown error');
-      });
+      console.error(
+        '[STARTUP] OFFLINE_TOOLCHAIN_MISSING: %s (%s). Run "npm run provision:hil" before starting ADIA.',
+        key,
+        tc.checkFile || tc.cmd,
+      );
     }
   }
 }
@@ -119,7 +114,7 @@ function createWindow() {
         `default-src 'self'${devSources};`,
         `script-src 'self'${scriptInline}${devScriptSources} https://*.3dexperience.3ds.com https://iam.3dexperience.3ds.com;`,
         // AI provider origins added — Gemini, OpenAI, n8n (webhook), local LLM
-        `connect-src 'self' https://*.3dexperience.3ds.com https://iam.3dexperience.3ds.com http://127.0.0.1:7410 http://127.0.0.1:1234 https://generativelanguage.googleapis.com https://api.openai.com${devSources};`,
+        `connect-src 'self' https://*.3dexperience.3ds.com https://iam.3dexperience.3ds.com http://127.0.0.1:7410 http://127.0.0.1:1234 http://127.0.0.1:11434 http://localhost:11434 https://generativelanguage.googleapis.com https://api.openai.com${devSources};`,
         `img-src 'self' data: https://*.3dexperience.3ds.com https://iam.3dexperience.3ds.com${isPackaged ? '' : ' http://localhost:3000 http://127.0.0.1:3000'};`,
         `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com${isPackaged ? '' : ' http://localhost:3000 http://127.0.0.1:3000'};`,
         `font-src 'self' data: https://fonts.gstatic.com${isPackaged ? '' : ' http://localhost:3000 http://127.0.0.1:3000'};`,
@@ -142,16 +137,6 @@ function createWindow() {
       });
     });
 
-    // Certificate pinning check / dynamic cert verification
-    session.defaultSession.setCertificateVerifyProc((request, callback) => {
-      const { hostname } = request;
-      if (hostname.includes('3dexperience.3ds.com')) {
-        // Production validation - accept secure connection
-        callback(0); // 0 = accept certificate
-      } else {
-        callback(-2); // Use default validation
-      }
-    });
   }
 
   const appIconPath = (process.platform === 'win32' && fs.existsSync(path.join(__dirname, '../icon.ico')))
@@ -173,26 +158,21 @@ function createWindow() {
     icon: appIconPath,
   });
 
-  // In production, we load the bundled index.html from the dist folder
-  // In development, we could load from localhost:3000 if vite is running
+  // Load a dev server only when explicitly requested. The default `npm start`
+  // path has just rebuilt dist and must load that exact bundle.
+  const devServerUrl = process.env.ADIA_DEV_SERVER_URL;
   if (app.isPackaged) {
     win.webContents.on('devtools-opened', () => {
       win.webContents.closeDevTools();
     });
-    win.loadFile(path.join(__dirname, '../dist/index.html')).catch(err => {
-      console.error('Failed to load file:', err);
+  }
+  if (!app.isPackaged && devServerUrl) {
+    win.loadURL(devServerUrl).catch(err => {
+      console.error(`[ADIA] Failed to load explicit development server ${devServerUrl}:`, err);
     });
   } else {
-    win.loadURL('http://localhost:3000').catch(err => {
-      console.warn('[ADIA] Vite dev server not detected on http://localhost:3000. Attempting fallback to dist/index.html...');
-      const distIndexPath = path.join(__dirname, '../dist/index.html');
-      if (fs.existsSync(distIndexPath)) {
-        win.loadFile(distIndexPath).catch(fileErr => {
-          console.error('[ADIA] Failed to load fallback dist/index.html:', fileErr);
-        });
-      } else {
-        console.error('[ADIA] Failed to load http://localhost:3000 and no build found in dist/index.html. Run "npm run dev" or "npm run build" first.', err);
-      }
+    win.loadFile(path.join(__dirname, '../dist/index.html')).catch(err => {
+      console.error('[ADIA] Failed to load current dist/index.html:', err);
     });
   }
 
@@ -271,7 +251,7 @@ function createWindow() {
   return win;
 }
 
-const { extractAdiaPath } = require('./projectFiles/projectFileService.cjs');
+const { extractAdiaPath, writeProjectFile } = require('./projectFiles/projectFileService.cjs');
 const { createProjectFileController } = require('./projectFiles/projectFileController.cjs');
 const { registerAdiaAssociation } = require('./projectFiles/windowsFileAssociation.cjs');
 const projectFiles = createProjectFileController({ ipcMain, dialog });
@@ -322,11 +302,7 @@ if (hasSingleInstanceLock) {
     }
 
     createWindow();
-    setTimeout(() => {
-      verifyAndPreInstallToolchains().catch(err => {
-        console.error('Failed to preinstall toolchains:', err);
-      });
-    }, 5000);
+    verifyOfflineToolchains();
   }).catch(err => {
     console.error('App startup failed:', err);
   });
@@ -344,10 +320,50 @@ app.on('activate', () => {
   }
 });
 
+// IPC Handlers for Offline Engineering Pattern Store
+const patternStoreBaseDir = path.join(__dirname, '..', 'resources', 'engineering-patterns');
+
+ipcMain.handle('pattern-store-get', async (_event, id) => {
+  if (!id || typeof id !== 'string' || id.includes('..') || id.includes('\0')) {
+    throw new Error('INVALID_PATTERN_ID');
+  }
+  const manifestPath = path.join(patternStoreBaseDir, 'manifest.json');
+  if (!fs.existsSync(manifestPath)) return null;
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  const entry = manifest.patterns && manifest.patterns[id];
+  if (!entry) return null;
+  const patternFile = path.resolve(patternStoreBaseDir, entry.filePath);
+  if (!patternFile.startsWith(path.resolve(patternStoreBaseDir))) {
+    throw new Error('PATH_TRAVERSAL_BLOCKED');
+  }
+  if (!fs.existsSync(patternFile)) return null;
+  return JSON.parse(fs.readFileSync(patternFile, 'utf8'));
+});
+
+ipcMain.handle('pattern-store-list', async (_event, filter) => {
+  const manifestPath = path.join(patternStoreBaseDir, 'manifest.json');
+  if (!fs.existsSync(manifestPath)) return [];
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  const results = [];
+  for (const [id, entry] of Object.entries(manifest.patterns || {})) {
+    if (filter && filter.lifecycle && entry.lifecycle !== filter.lifecycle) continue;
+    const patternFile = path.resolve(patternStoreBaseDir, entry.filePath);
+    if (!patternFile.startsWith(path.resolve(patternStoreBaseDir))) continue;
+    if (fs.existsSync(patternFile)) {
+      try {
+        const pattern = JSON.parse(fs.readFileSync(patternFile, 'utf8'));
+        if (filter && filter.domain && pattern.domain !== filter.domain) continue;
+        results.push(pattern);
+      } catch {}
+    }
+  }
+  return results.sort((a, b) => a.id.localeCompare(b.id));
+});
+
 // IPC Handlers for Project persistence
 ipcMain.handle('import-json', async () => {
   const { canceled, filePaths } = await dialog.showOpenDialog({
-    filters: [{ name: 'ADIA Project', extensions: ['json'] }],
+    filters: [{ name: 'ADIA Project', extensions: ['adia', 'json'] }],
     properties: ['openFile']
   });
 
@@ -371,14 +387,14 @@ ipcMain.handle('import-json', async () => {
 
 ipcMain.handle('save-json', async (event, data) => {
   const { canceled, filePath } = await dialog.showSaveDialog({
-    filters: [{ name: 'ADIA Project', extensions: ['json'] }],
-    defaultPath: `adia_project_${new Date().toISOString().replace(/[:.]/g, '-')}.json`
+    filters: [{ name: 'ADIA Project', extensions: ['adia'] }],
+    defaultPath: `adia_project_${new Date().toISOString().replace(/[:.]/g, '-')}.adia`
   });
 
   if (canceled) return false;
 
   try {
-    fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+    writeProjectFile(filePath, data);
     return true;
   } catch (error) {
     console.error('Failed to save file:', error);
@@ -407,7 +423,7 @@ ipcMain.handle('save-project-folder', async (event, files) => {
         console.error('Path traversal attempt blocked:', filename);
         continue;
       }
-      fs.writeFileSync(fullPath, JSON.stringify(data, null, 2));
+      writeProjectFile(fullPath, data);
     }
     return true;
   } catch (error) {
@@ -520,9 +536,21 @@ ipcMain.handle('hil-save-build-files', async (event, { files }) => {
       }
       seenNames.add(safeName);
     }
+    const incomingManifestFile = files.find(file => file.name === 'integration_manifest.json');
+    if (!incomingManifestFile) return { success: false, code: 'MISSING_INTEGRATION_MANIFEST', error: 'Generated project has no integration manifest.' };
+    let incomingManifest;
+    try { incomingManifest = JSON.parse(incomingManifestFile.content); }
+    catch { return { success: false, code: 'INVALID_INTEGRATION_MANIFEST', error: 'Integration manifest is not valid JSON.' }; }
+    const candidate = { buildId: 'build-validation', sourceManifestHash: 'sha256:' + '0'.repeat(64), targetSelection: incomingManifest.targetSelection, flashBlocked: incomingManifest.flashBlocked !== false, files: files.map(file => file.name) };
+    const candidatePolicy = evaluateBuildRequest({buildId:candidate.buildId, sourceManifestHash:candidate.sourceManifestHash, targetSelection:candidate.targetSelection}, candidate);
+    if (!candidatePolicy.allowed) return { success: false, ...candidatePolicy };
+    if (candidate.targetSelection.targetId !== 'generic-host' && !seenNames.has('platformio.ini')) return { success: false, code: 'HIL_PROJECT_CONFIG_MISSING', error: 'Production project requires platformio.ini.' };
+    const incomingShim = files.find(file => ['Arduino.h','Arduino.cpp','SPI.h','Wire.h','SoftwareSerial.h','stm32f1xx_hal.h','stm32f4xx_hal.h'].includes(file.name));
+    if (incomingShim) return { success: false, code: 'TEST_SHIM_IN_PRODUCTION', error: 'Production save rejects test shim: ' + incomingShim.name };
+    validateProductionConfigurationFiles(files, candidate.targetSelection.targetId);
     const buildDir = (currentHilWorkspace && currentHilWorkspace.buildDir)
       ? currentHilWorkspace.buildDir
-      : path.join(process.cwd(), 'hil_build');
+      : path.join(app.isPackaged ? app.getPath('userData') : process.cwd(), 'hil_build');
     if (!fs.existsSync(buildDir)) {
       fs.mkdirSync(buildDir, { recursive: true });
     }
@@ -586,6 +614,7 @@ ipcMain.handle('hil-save-build-files', async (event, { files }) => {
     } catch {
       return { success: false, code: 'INVALID_INTEGRATION_MANIFEST', error: 'Integration manifest is not valid JSON.' };
     }
+    removeLegacyTestShims(buildDir);
     const canonicalSources = writtenFiles
       .slice()
       .sort((left, right) => left.name.localeCompare(right.name))
@@ -620,262 +649,30 @@ let currentVerifiedHilBuild = null;
 
 // HIL Compile IPC handler
 ipcMain.handle('hil-run-compile', async (event, request = {}) => {
-  // RLS check: at least engineer role required to compile firmware
   const role = await getCurrentRole();
-  const perm = checkPermission(role, 'hil', 'compile');
-  if (!perm.allowed) return rlsDenied('hil', 'compile', perm.reason);
+  const permission = checkPermission(role, 'hil', 'compile');
+  if (!permission.allowed) return rlsDenied('hil', 'compile', permission.reason);
   const rateLimit = checkRateLimit('hil-run-compile', event.sender.id);
-  if (!rateLimit.allowed) {
-    return { success: false, code: 'RATE_LIMITED', retryAfterMs: rateLimit.retryAfterMs };
-  }
+  if (!rateLimit.allowed) return { success: false, code: 'RATE_LIMITED', retryAfterMs: rateLimit.retryAfterMs };
   const buildPolicy = evaluateBuildRequest(request, currentHilWorkspace);
   if (!buildPolicy.allowed) return { success: false, ...buildPolicy };
-
-  const targetById = {
-    stm32f103c8t6: 'STM32F1',
-    stm32f407vgt6: 'STM32F4',
-    atmega328p: 'Arduino_Uno',
-    atmega2560: 'Arduino_Mega',
-    'esp32-wroom-32': 'ESP32',
-  };
-  const target = targetById[request.targetSelection.targetId];
-  const optimization = buildPolicy.compilerFlags.find(flag => /^-O(?:[0-3s])$/.test(flag)) || '-Os';
-  const warningLevel = '-Wall -Wextra -Werror';
-  const debugLevel = 'None';
-
-  return new Promise((resolve) => {
-    const allowedTargets = ['Generic', 'Arduino_Uno', 'Arduino_Mega', 'ESP32', 'STM32F1', 'STM32F4'];
-    if (!target || !allowedTargets.includes(target)) {
-      return resolve({ success: false, error: 'Invalid compilation target' });
-    }
-
-    const buildDir = path.join(process.cwd(), 'hil_build');
-    if (!fs.existsSync(buildDir)) {
-      return resolve({ success: false, error: 'Build directory not found. Save files first.' });
-    }
-
-    const runCompilation = () => {
-      let cmd = 'gcc';
-      let args = [];
-      const dbg = debugLevel === 'None' ? [] : [debugLevel || '-g'];
-      const warningFlags = warningLevel ? warningLevel.split(/\s+/) : ['-Wall'];
-      
-      if (target === 'Generic') {
-        cmd = 'gcc';
-        args = [
-          optimization || '-O2',
-          ...warningFlags,
-          ...dbg,
-          'hal_drivers.c',
-          'hil_interface.c',
-          'main_hil.c',
-          'sm_mapping.c',
-          'sm_core.c',
-          'sm_safety.c',
-          'sm_user_logic.c',
-          'mcal_dio_hil.c',
-          'adia_mcal.c',
-          'adia_component.c',
-          '-o',
-          'adia_hil.exe'
-        ];
-      } else if (target === 'Arduino_Uno') {
-        cmd = 'avr-g++';
-        const arduinoSources = [
-          'Arduino.cpp',
-          'hal_drivers.c',
-          'hil_interface.c',
-          'main_hil.ino',
-          'sm_mapping.c',
-          'sm_core.c',
-          'sm_safety.c',
-          'sm_user_logic.c',
-          'mcal_dio_hil.c',
-          'adia_mcal.c',
-          'adia_component.c'
-        ];
-        const srcArgs = arduinoSources.flatMap(f => ['-x', 'c++', f]);
-        args = [
-          '-mmcu=atmega328p',
-          '-DF_CPU=16000000UL',
-          '-DADIA_BARE_ARDUINO_MAIN',
-          '-I.',
-          optimization || '-Os',
-          ...warningFlags,
-          ...dbg,
-          ...srcArgs,
-          '-o',
-          'adia_hil.elf'
-        ];
-      } else if (target === 'Arduino_Mega') {
-        cmd = 'avr-g++';
-        const arduinoSources = [
-          'Arduino.cpp',
-          'hal_drivers.c',
-          'hil_interface.c',
-          'main_hil.ino',
-          'sm_mapping.c',
-          'sm_core.c',
-          'sm_safety.c',
-          'sm_user_logic.c',
-          'mcal_dio_hil.c',
-          'adia_mcal.c',
-          'adia_component.c'
-        ];
-        const srcArgs = arduinoSources.flatMap(f => ['-x', 'c++', f]);
-        args = [
-          '-mmcu=atmega2560',
-          '-DF_CPU=16000000UL',
-          '-DADIA_BARE_ARDUINO_MAIN',
-          '-I.',
-          optimization || '-Os',
-          ...warningFlags,
-          ...dbg,
-          ...srcArgs,
-          '-o',
-          'adia_hil.elf'
-        ];
-      } else if (target.startsWith('STM32')) {
-        cmd = 'arm-none-eabi-gcc';
-        const cpu = target === 'STM32F4' ? '-mcpu=cortex-m4' : '-mcpu=cortex-m3';
-        args = [
-          cpu,
-          '-mthumb',
-          '--specs=nosys.specs',
-          optimization || '-Os',
-          ...warningFlags,
-          ...dbg,
-          'hal_drivers.c',
-          'hil_interface.c',
-          'main_hil.c',
-          'sm_mapping.c',
-          'sm_core.c',
-          'sm_safety.c',
-          'sm_user_logic.c',
-          'mcal_dio_hil.c',
-          'adia_mcal.c',
-          'adia_component.c',
-          '-o',
-          'adia_hil.elf'
-        ];
-      } else {
-        return resolve({ success: false, code: 'TRUSTED_RECIPE_NOT_IMPLEMENTED', error: `Linked image recipe is not implemented for ${target}.` });
-      }
-
-      event.sender.send('hil-compiler-log-line', `> Executing compile command: ${cmd} ${args.join(' ')}\n`);
-      
-      // Sanitize parameters to mitigate command injection
-      const sanitizedArgs = args.map(arg => sanitizeShellArg(String(arg)));
-      const proc = spawn(cmd, sanitizedArgs, { cwd: buildDir, shell: false });
-      
-      proc.stdout.on('data', (data) => {
-        event.sender.send('hil-compiler-log-line', data.toString());
-      });
-      
-      proc.stderr.on('data', (data) => {
-        event.sender.send('hil-compiler-log-line', data.toString());
-      });
-      
-      proc.on('error', (err) => {
-        event.sender.send('hil-compiler-log-line', `[ERROR] Failed to start compiler process: ${err.message}\n`);
-        event.sender.send('hil-compiler-log-line', `[TIP] Make sure '${cmd}' is installed on your system and added to your environmental variables PATH.\n`);
-        resolve({ success: false, error: err.message });
-      });
-      
-      proc.on('close', async (code) => {
-        if (code === 0) {
-          event.sender.send('hil-compiler-log-line', `[SUCCESS] Compilation complete. Build binary generated.\n`);
-          const elfName = target === 'Generic' ? 'adia_hil.exe' : 'adia_hil.elf';
-          const elfPath = path.join(buildDir, elfName);
-          const targetId = currentHilWorkspace.targetSelection?.targetId || (target === 'Arduino_Mega' ? 'atmega2560' : target === 'Arduino_Uno' ? 'atmega328p' : target === 'STM32F4' ? 'stm32f407vgt6' : target === 'STM32F1' ? 'stm32f103c8t6' : target === 'ESP32' ? 'esp32-wroom-32' : 'generic-host');
-          
-          try {
-            const inspection = await inspectElf(elfPath, targetId);
-            const linkedImageVerified = Boolean(inspection.valid);
-            if (linkedImageVerified && inspection.memory) {
-              event.sender.send('hil-compiler-log-line', `[VERIFY] Linked image verified. Flash: ${inspection.memory.flashUsed} / ${inspection.memory.flashTotal} B, RAM: ${inspection.memory.ramUsed} / ${inspection.memory.ramTotal} B.\n`);
-            }
-            currentVerifiedHilBuild = Object.freeze({
-              buildId: currentHilWorkspace.buildId,
-              sourceManifestHash: currentHilWorkspace.sourceManifestHash,
-              targetSelection: currentHilWorkspace.targetSelection,
-              recipeId: buildPolicy.recipeId,
-              status: linkedImageVerified ? 'LINKED_IMAGE_VERIFIED' : 'BUILD_FAILED',
-              flashBlocked: !linkedImageVerified,
-              artifacts: Object.freeze({
-                elfPath,
-                hashes: inspection.hashes,
-              }),
-              memory: inspection.memory,
-            });
-            resolve({
-              success: true,
-              binary: elfName,
-              buildId: currentHilWorkspace.buildId,
-              sourceManifestHash: currentHilWorkspace.sourceManifestHash,
-              targetSelection: currentHilWorkspace.targetSelection,
-              recipeId: buildPolicy.recipeId,
-              linkedImageVerified,
-              flashBlocked: !linkedImageVerified,
-              blockReasons: linkedImageVerified ? [] : [inspection.code || 'LINKED_IMAGE_VERIFICATION_FAILED'],
-              measuredFlashBytes: inspection.memory?.flashUsed,
-              measuredRamBytes: inspection.memory?.ramUsed,
-              artifacts: currentVerifiedHilBuild.artifacts,
-              memory: inspection.memory,
-            });
-          } catch (e) {
-            currentVerifiedHilBuild = Object.freeze({
-              buildId: currentHilWorkspace.buildId,
-              sourceManifestHash: currentHilWorkspace.sourceManifestHash,
-              targetSelection: currentHilWorkspace.targetSelection,
-              recipeId: buildPolicy.recipeId,
-              status: 'LINKED_IMAGE_VERIFIED',
-              flashBlocked: false,
-              artifacts: Object.freeze({
-                elfPath,
-              }),
-            });
-            resolve({
-              success: true,
-              binary: elfName,
-              buildId: currentHilWorkspace.buildId,
-              sourceManifestHash: currentHilWorkspace.sourceManifestHash,
-              targetSelection: currentHilWorkspace.targetSelection,
-              recipeId: buildPolicy.recipeId,
-              linkedImageVerified: true,
-              flashBlocked: false,
-              blockReasons: [],
-              measuredFlashBytes: 0,
-              measuredRamBytes: 0,
-            });
-          }
-        } else {
-          event.sender.send('hil-compiler-log-line', `[ERROR] Compiler exited with code ${code}.\n`);
-          resolve({ success: false, exitCode: code });
-        }
-      });
-    };
-
-    // Check if compiler toolchain is available
-    const tcKey = getToolchainKeyForTarget(target);
-    if (tcKey && !isToolchainAvailable(target)) {
-      event.sender.send('hil-compiler-log-line', `[SYSTEM] Required compiler toolchain for target '${target}' is missing.\n`);
-      event.sender.send('hil-compiler-log-line', `[SYSTEM] Initiating automatic toolchain installation in background...\n`);
-      
-      downloadAndExtractToolchain(tcKey, getToolchainsDir())
-        .then(() => {
-          broadcastLog(`[SYSTEM] Compiler toolchain for '${target}' ready. Resuming compilation.`);
-          runCompilation();
-        })
-        .catch((err) => {
-          event.sender.send('hil-compiler-log-line', `[ERROR] Automatic toolchain installation failed: ${err.message}\n`);
-          resolve({ success: false, error: `Missing toolchain and auto-installation failed: ${err.message}` });
-        });
-    } else {
-      configureToolchainPaths(getToolchainsDir());
-      runCompilation();
-    }
-  });
+  const workspace = currentHilWorkspace;
+  currentVerifiedHilBuild = null;
+  try {
+    const record = await hilBuildService.build(request, workspace, {
+      resourcesPath: app.isPackaged ? process.resourcesPath : undefined, repoRoot: app.isPackaged ? undefined : app.getAppPath(),
+      cacheDir: path.join(app.getPath('userData'), 'hil-runtime-cache'),
+      onLog: line => event.sender.send('hil-compiler-log-line', String(line)),
+    });
+    if (currentHilWorkspace !== workspace) return { success: false, code: 'STALE_BUILD', error: 'Project changed while building; rebuild the current project.' };
+    const linkedImageVerified = record.status === 'LINKED_IMAGE_VERIFIED';
+    const hostSimulationVerified = record.status === 'HOST_SIMULATION_VERIFIED';
+    const success = linkedImageVerified || hostSimulationVerified;
+    if (linkedImageVerified) currentVerifiedHilBuild = record;
+    return { ...record, success, linkedImageVerified, hostSimulationVerified, measuredFlashBytes: success ? record.memory?.flashUsed ?? null : null, measuredRamBytes: success ? record.memory?.ramUsed ?? null : null, flashBlocked: !success || record.flashBlocked, error: success ? undefined : record.error || 'Production build or linked-image verification failed.' };
+  } catch (error) {
+    return { success: false, linkedImageVerified: false, measuredFlashBytes: null, measuredRamBytes: null, flashBlocked: true, code: error.code || 'BUILD_FAILED', error: error.message };
+  }
 });
 
 // HIL Flash IPC handler
@@ -884,142 +681,30 @@ ipcMain.handle('hil-run-flash', async (event, request = {}) => {
   const permission = checkPermission(role, 'hil', 'flash');
   if (!permission.allowed) return rlsDenied('hil', 'flash', permission.reason);
   const rateLimit = checkRateLimit('hil-run-flash', event.sender.id);
-  if (!rateLimit.allowed) {
-    return { success: false, code: 'RATE_LIMITED', retryAfterMs: rateLimit.retryAfterMs };
-  }
-
-  const target = request.target || 'Generic';
-  const targetSelection = currentVerifiedHilBuild?.targetSelection || request.targetSelection || {
-    targetId: target === 'Arduino_Mega' ? 'atmega2560' : target === 'Arduino_Uno' ? 'atmega328p' : target === 'STM32F4' ? 'stm32f407vgt6' : target === 'STM32F1' ? 'stm32f103c8t6' : target === 'ESP32' ? 'esp32-wroom-32' : 'generic-host',
-    packVersion: '1.0.0',
-    driverMode: target.startsWith('Arduino') ? 'vendor' : 'bare-metal',
-    boardRevision: 'A',
-  };
-  const buildId = currentVerifiedHilBuild?.buildId || request.buildId || 'build-current';
-  const artifactHash = currentVerifiedHilBuild?.artifactHash || currentVerifiedHilBuild?.artifacts?.hashes?.elf || request.artifactHash || 'sha256:0000000000000000000000000000000000000000000000000000000000000000';
-  const programmerId = request.programmerId || (target.startsWith('Arduino') ? 'avrdude' : target.startsWith('STM32') ? 'openocd' : 'esptool');
-
-  const populatedRequest = {
-    ...request,
-    target,
-    targetSelection,
-    buildId,
-    artifactHash,
-    programmerId,
-    probeId: request.probeId || request.commPort || 'COM3',
-    confirmationToken: request.confirmationToken || 'user-confirmed-flash-token-2026',
-  };
-
-  if (currentVerifiedHilBuild) {
-    const policy = evaluateFlashRequest(populatedRequest, currentVerifiedHilBuild);
+  if (!rateLimit.allowed) return { success: false, code: 'RATE_LIMITED', retryAfterMs: rateLimit.retryAfterMs };
+  const build = currentVerifiedHilBuild;
+  if (!build || build.status !== 'LINKED_IMAGE_VERIFIED') return { success: false, code: 'NO_VERIFIED_BUILD', error: 'Save and successfully compile the project before flashing.' };
+  if (!currentHilWorkspace || build.buildId !== currentHilWorkspace.buildId || build.sourceManifestHash !== currentHilWorkspace.sourceManifestHash) return { success: false, code: 'STALE_BUILD', error: 'Saved project changed; compile it again before flashing.' };
+  try {
+    verifyWorkspaceSources(currentHilWorkspace);
+    const targetId = build.targetSelection.targetId;
+    const supportedProgrammer = targetId.startsWith('atmega') ? {id:'avrdude',names:['avrdude (Arduino Bootloader)','avrdude','arduino','wiring']} : targetId.startsWith('stm32') ? {id:'openocd',names:['ST-LINK V2/V3 (OpenOCD)','openocd']} : targetId === 'esp32-wroom-32' ? {id:'esptool',names:['esptool.py (ESP Web/Serial)','esptool.py','esptool']} : null;
+    if (!supportedProgrammer || (request.programmer && !supportedProgrammer.names.includes(request.programmer)) || (request.programmerId && request.programmerId !== supportedProgrammer.id)) return { success:false, code:'UNSUPPORTED_PROGRAMMER', error:'Selected programmer is unsupported for this target; use the bundled ' + (supportedProgrammer?.id || 'target programmer') + ' path.' };
+    const populatedRequest = {
+      ...request,
+      targetSelection: request.targetSelection || build.targetSelection,
+      buildId: request.buildId || build.buildId,
+      artifactHash: request.artifactHash || build.artifactHash,
+      programmerId: supportedProgrammer.id,
+      probeId: request.probeId || request.commPort,
+      confirmationToken: request.confirmationToken || 'user-confirmed-flash-token-2026',
+    };
+    const policy = evaluateFlashRequest(populatedRequest, build);
     if (!policy.allowed) return { success: false, ...policy };
+    return await flashProductionBuild({build, targetId: build.targetSelection.targetId, port: request.commPort, baudRate: request.baudRate, resourcesPath: app.isPackaged ? process.resourcesPath : undefined, repoRoot: app.isPackaged ? undefined : app.getAppPath(), onLog: line => event.sender.send('hil-flasher-log-line', String(line))});
+  } catch (error) {
+    return { success: false, code: error.code || 'FLASH_FAILED', error: error.message };
   }
-
-  const { programmer, flashAddress, commPort, baudRate } = populatedRequest;
-  return new Promise((resolve) => {
-    const allowedTargets = ['Generic', 'Arduino_Uno', 'Arduino_Mega', 'ESP32', 'STM32F1', 'STM32F4'];
-    const allowedProgrammers = [
-      'arduino', 'wiring', 'esptool.py', 'STM32_Programmer_CLI', 'None',
-      'avrdude (Arduino Bootloader)', 'ST-LINK V2/V3 (OpenOCD)', 'J-Link (SEGGER)',
-      'esptool.py (ESP Web/Serial)', 'Host PC GDB Simulator'
-    ];
-    const portRegex = /^[a-zA-Z0-9_\s()./\\-]+$/;
-    const hexRegex = /^0x[0-9a-fA-F]+$/;
-
-    if (!target || (!allowedTargets.includes(target) && !target.startsWith('STM32'))) {
-      return resolve({ success: false, error: 'Invalid flashing target' });
-    }
-    if (programmer && !allowedProgrammers.includes(programmer)) {
-      return resolve({ success: false, error: 'Invalid programmer utility' });
-    }
-    if (flashAddress && !hexRegex.test(flashAddress)) {
-      return resolve({ success: false, error: 'Invalid flash memory address' });
-    }
-    if (commPort && !portRegex.test(commPort)) {
-      return resolve({ success: false, error: 'Invalid COM port name' });
-    }
-    if (baudRate !== undefined) {
-      const parsedBaud = parseInt(baudRate, 10);
-      if (isNaN(parsedBaud) || parsedBaud <= 0) {
-        return resolve({ success: false, error: 'Invalid baud rate' });
-      }
-    }
-
-    const buildDir = path.join(process.cwd(), 'hil_build');
-    let cmd = '';
-    let args = [];
-
-    if (target === 'Arduino_Uno') {
-      cmd = resolveToolExecutable('avrdude', 'avrdude') || 'avrdude';
-      args = [
-        '-c', 'arduino',
-        '-p', 'm328p',
-        '-P', commPort || 'COM3',
-        '-b', '115200',
-        '-U', 'flash:w:adia_hil.elf:e'
-      ];
-    } else if (target === 'Arduino_Mega') {
-      cmd = resolveToolExecutable('avrdude', 'avrdude') || 'avrdude';
-      args = [
-        '-c', 'wiring',
-        '-p', 'm2560',
-        '-P', commPort || 'COM3',
-        '-b', '115200',
-        '-D',
-        '-U', 'flash:w:adia_hil.elf:e'
-      ];
-    } else if (target === 'ESP32') {
-      cmd = 'esptool.py';
-      args = [
-        '--chip', 'esp32',
-        '--port', commPort || 'COM3',
-        '--baud', baudRate ? baudRate.toString() : '921600',
-        'write_flash', '-z', flashAddress || '0x10000',
-        'adia_hil.bin'
-      ];
-    } else if (target.startsWith('STM32')) {
-      cmd = 'STM32_Programmer_CLI';
-      args = [
-        '-c', 'port=SWD', 'mode=UR',
-        '-w', 'adia_hil.elf',
-        flashAddress || '0x08000000',
-        '-v', '-rst'
-      ];
-    } else {
-      event.sender.send('hil-flasher-log-line', `[INFO] Host PC simulation target detected. Bypassing flash sector write.\n`);
-      return resolve({ success: true, bypassed: true });
-    }
-
-    event.sender.send('hil-flasher-log-line', `> Executing programmer command: ${cmd} ${args.join(' ')}\n`);
-
-    // Sanitize parameters to mitigate command injection
-    const sanitizedArgs = args.map(arg => sanitizeShellArg(String(arg)));
-    const proc = spawn(cmd, sanitizedArgs, { cwd: buildDir, shell: false });
-
-    proc.stdout.on('data', (data) => {
-      event.sender.send('hil-flasher-log-line', data.toString());
-    });
-
-    proc.stderr.on('data', (data) => {
-      event.sender.send('hil-flasher-log-line', data.toString());
-    });
-
-    proc.on('error', (err) => {
-      event.sender.send('hil-flasher-log-line', `[ERROR] Failed to start programmer: ${err.message}\n`);
-      event.sender.send('hil-flasher-log-line', `[TIP] Make sure '${cmd}' is installed on your system and added to your environmental variables PATH.\n`);
-      resolve({ success: false, error: err.message });
-    });
-
-    proc.on('close', (code) => {
-      if (code === 0) {
-        event.sender.send('hil-flasher-log-line', `[SUCCESS] Target flash programming completed successfully.\n`);
-        resolve({ success: true });
-      } else {
-        event.sender.send('hil-flasher-log-line', `[ERROR] Programmer utility exited with code ${code}.\n`);
-        resolve({ success: false, exitCode: code });
-      }
-    });
-  });
 });
 
 // HIL Erase IPC handler
@@ -1720,7 +1405,7 @@ ipcMain.handle('3dx-search-documents', async (_, { query, workspaceId, limit = 5
     return {
       total: 2,
       documents: [
-        { id: 'demo-doc-1', title: 'ADIA_Demo_Project.json', fileType: 'json', mimeType: 'application/json', size: 24576, modified: new Date().toISOString(), created: new Date().toISOString(), downloadUrl: '', workspaceId: 'demo-ws-1', description: 'Demo ADIA project (offline)', authorName: 'ADIA Team' },
+        { id: 'demo-doc-1', title: 'ADIA_Demo_Project.adia', fileType: 'json', mimeType: 'application/json', size: 24576, modified: new Date().toISOString(), created: new Date().toISOString(), downloadUrl: '', workspaceId: 'demo-ws-1', description: 'Demo ADIA project (offline)', authorName: 'ADIA Team' },
         { id: 'demo-doc-2', title: 'Simulation_Report.pdf', fileType: 'pdf', mimeType: 'application/pdf', size: 102400, modified: new Date().toISOString(), created: new Date().toISOString(), downloadUrl: '', workspaceId: 'demo-ws-1', description: 'Demo simulation report (offline)', authorName: 'ADIA Team' },
       ],
     };

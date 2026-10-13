@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Activity, AlertTriangle, Cpu, Database, Eye, Gauge, Layers, ShieldCheck, Zap } from 'lucide-react';
 import type { NormalizedSysmlStore } from '../../engine/sysml/normalizedStore';
 import type { SysmlWorkerDiagnostics } from '../../services/sysmlWorkerClient';
+import type { ImpactSeverity } from '../../engine/sysml/mutations';
 
 export interface PerformanceLimitsConfig {
   virtualizationThreshold: number;
@@ -47,6 +48,21 @@ export function saveStoredPerformanceLimits(limits: PerformanceLimitsConfig): vo
   }
 }
 
+export interface PatchHistorySummary {
+  pastDepth: number;
+  futureDepth: number;
+  checkpointCount: number;
+  totalBytes: number;
+}
+
+export interface DeletionRecoverySummary {
+  lastDeletedCount: number;
+  lastUnresolvedCount: number;
+  lastInvalidatedEvidenceCount: number;
+  lastSeverity?: ImpactSeverity;
+  inversePatchOperations: number;
+}
+
 export interface LargeModelDiagnosticsProps {
   store?: NormalizedSysmlStore;
   activeDiagramId?: string;
@@ -63,6 +79,8 @@ export interface LargeModelDiagnosticsProps {
   isOpen: boolean;
   onClose: () => void;
   workerDiagnostics?: SysmlWorkerDiagnostics;
+  patchHistorySummary?: PatchHistorySummary;
+  deletionRecoverySummary?: DeletionRecoverySummary;
 }
 
 export const LargeModelDiagnostics: React.FC<LargeModelDiagnosticsProps> = ({
@@ -79,6 +97,8 @@ export const LargeModelDiagnostics: React.FC<LargeModelDiagnosticsProps> = ({
   isOpen,
   onClose,
   workerDiagnostics,
+  patchHistorySummary,
+  deletionRecoverySummary,
 }) => {
   const [limits, setLimits] = useState<PerformanceLimitsConfig>(loadStoredPerformanceLimits);
 
@@ -115,7 +135,7 @@ export const LargeModelDiagnostics: React.FC<LargeModelDiagnosticsProps> = ({
             <Gauge className="w-5 h-5 text-orange-500" />
             <h2 className="text-sm font-semibold text-[#f0f0f0]">SysML Large Model Diagnostics & Limits</h2>
           </div>
-          <button
+          <button data-help-feature="ui:sysml/LargeModelDiagnostics:151ed7616191" data-help-source="src/components/sysml/LargeModelDiagnostics.tsx"
             onClick={onClose}
             className="text-xs text-[#888] hover:text-[#eee] px-2.5 py-1 rounded bg-[#242428] hover:bg-[#333] transition-colors"
           >
@@ -230,7 +250,7 @@ export const LargeModelDiagnostics: React.FC<LargeModelDiagnosticsProps> = ({
                 <div className="text-xs font-semibold text-[#eee]">Performance Mode Override</div>
                 <div className="text-[10px] text-[#888]">Omit complex node shadows & defer non-essential labels during pan</div>
               </div>
-              <input
+              <input data-help-feature="ui:sysml/LargeModelDiagnostics:6f0272015f0f" data-help-source="src/components/sysml/LargeModelDiagnostics.tsx"
                 type="checkbox"
                 checked={Boolean(limits.forcePerformanceMode)}
                 onChange={(e) => handleForcePerformanceToggle(e.target.checked)}
@@ -259,6 +279,49 @@ export const LargeModelDiagnostics: React.FC<LargeModelDiagnosticsProps> = ({
             <div className="flex items-center justify-between text-[11px] text-[#888] px-1">
               <span>Last Snapshot Saved:</span>
               <span className="font-mono text-[#aaa]">{lastSaveTimestamp}</span>
+            </div>
+          )}
+
+          {/* Deletion & Recovery Diagnostics */}
+          {(patchHistorySummary || deletionRecoverySummary) && (
+            <div className="bg-[#1a1a1e] border border-[#242428] rounded-lg p-4 space-y-2" data-testid="deletion-recovery-diagnostics">
+              <div className="flex items-center gap-2 text-[#888]">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="text-xs font-semibold text-[#eee]">Deletion & Recovery</span>
+              </div>
+              {patchHistorySummary && (
+                <div className="flex items-center justify-between text-xs text-[#ddd]">
+                  <span>Undo depth: <strong className="text-[#eee]">{patchHistorySummary.pastDepth}</strong></span>
+                  <span>Redo depth: <strong className="text-[#eee]">{patchHistorySummary.futureDepth}</strong></span>
+                  <span>Checkpoints: <strong className="text-[#eee]">{patchHistorySummary.checkpointCount}</strong></span>
+                </div>
+              )}
+              {deletionRecoverySummary && (
+                <div className="text-[11px] text-[#888] space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span>Last cascade deleted:</span>
+                    <span className="font-mono text-[#aaa]">{deletionRecoverySummary.lastDeletedCount} element(s)</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>Unresolved usages kept explicit:</span>
+                    <span className="font-mono text-[#aaa]">{deletionRecoverySummary.lastUnresolvedCount}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>Evidence invalidated:</span>
+                    <span className="font-mono text-[#aaa]">{deletionRecoverySummary.lastInvalidatedEvidenceCount}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>Inverse patch operations:</span>
+                    <span className="font-mono text-[#aaa]">{deletionRecoverySummary.inversePatchOperations}</span>
+                  </div>
+                  {deletionRecoverySummary.lastSeverity && (
+                    <div className="flex items-center justify-between">
+                      <span>Last impact severity:</span>
+                      <span className="font-mono text-[#aaa]">{deletionRecoverySummary.lastSeverity}</span>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>

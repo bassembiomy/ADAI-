@@ -2,12 +2,40 @@ import { describe, it, expect, afterAll } from 'vitest';
 import { VLabPhysicsEngine } from './vlabPhysics';
 import { VLAB_LIBRARY } from '../../utils/vlabLibrary';
 import { blockEquations } from './vlabEquations';
-import { Node, Edge } from '@xyflow/react';
+import { buildDomainFixture } from './vlabDomainFixture';
+import { UNSUPPORTED_BLOCKS } from './vlabStructure';
 
 // Helper to check if a block has an equation factory
 const hasEquationFactory = (blockId: string): boolean => {
   return !!blockEquations[blockId];
 };
+
+// Per-block limits: 3 steps per block, each bounded to 3 s wall clock / 2000 step attempts,
+// plus a vitest timeout as a backstop for the async path.
+const PER_STEP_ATTEMPT_LIMIT = 2000;
+// WP-31b: 3 s -> 20 s; WP-31c: back to 3 s (the engine is ~15x faster). The limit only has to stop a non-convergent block. The step error control now covers every differentiated unknown (F-103);
+// before, pmsm_foc advanced 0.1 s in 10 steps (0.4 s, only _state_ variables controlled), now it resolves its 3-phase signals with ~500 steps of ~8 ms.
+const PER_STEP_WALL_CLOCK_MS = 3000;
+const PER_BLOCK_TIMEOUT_MS = 30000;
+
+// F-012: blocks whose minimal fixture is well-posed enough yet the solver still fails.
+// Not fixed here; the equations belong to the named domain work package.
+const KNOWN_SOLVER_FAILURES: Record<string, { finding: string; wp: string; diagnosis: string }> = {
+  // WP-19a: dist_constraint and the five joints now simulate in a well-posed fixture (World frame on B, weight on F).
+  // WP-07: the fixture now wires every signal input by its declared direction (library `direction`). These blocks used to
+  // pass only because the old name-vocabulary fixture put a Scope on an input port and left the real input unwired.
+
+};
+
+// WP-09a: blocks the assembler rejects with an explicit missing-spec diagnostic (vlabStructure.UNSUPPORTED_BLOCKS).
+// Their solver error is the intended behaviour; the entry maps each one to the work package that owns the missing spec.
+for (const [id, spec] of Object.entries(UNSUPPORTED_BLOCKS)) {
+  KNOWN_SOLVER_FAILURES[id] ??= {
+    finding: id.startsWith('ma_') ? 'F-035' : 'F-025',
+    wp: spec.wp,
+    diagnosis: `explicitly unsupported (VLabUnsupportedBlockError): ${spec.missingSpec}`,
+  };
+}
 
 describe('VLab All Blocks, Solver, and Scope Diagnostic Test Suite', () => {
   const allBlocks = VLAB_LIBRARY.flatMap(d => d.blocks);
@@ -21,239 +49,25 @@ describe('VLab All Blocks, Solver, and Scope Diagnostic Test Suite', () => {
       return;
     }
 
-    it(`Tests block: ${block.id} (${block.name})`, () => {
-      const engine = new VLabPhysicsEngine();
-      const nodes: Node[] = [];
-      const edges: Edge[] = [];
+    // Documented, still-failing blocks run under it.fails so the suite stays green while
+    // any NEW solver error (or a fix that makes one of these pass) is a loud failure.
+    const known = KNOWN_SOLVER_FAILURES[block.id];
+    const run = known ? it.fails : it;
 
-      // 1. Create the Device Under Test (DUT) node
+    run(`Tests block: ${block.id} (${block.name})${known ? ` [known failure ${known.finding} -> ${known.wp}]` : ''}`, () => {
+      const engine = new VLabPhysicsEngine();
+      // A synchronous solver loop cannot be interrupted by vitest's test timeout, so
+      // bound every simulateStep inside the engine: a non-convergent block must throw
+      // a diagnosable error (recorded as a solver error below) instead of hanging the suite.
+      engine.setStepBudget({ maxStepAttempts: PER_STEP_ATTEMPT_LIMIT, wallClockMs: PER_STEP_WALL_CLOCK_MS });
+      // 1-2. Domain-correct network (shared with the validation harness, vlabDomainFixture.ts, F-028): the DUT plus the
+      // sources/loads/references of ITS OWN domains, wired by exact port id and signal direction, every required
+      // port connected, a scope on a measurable output. Passes the pre-simulation topology validation.
       const dutParams: Record<string, any> = {};
       Object.entries(block.params || {}).forEach(([k, v]: [string, any]) => {
         dutParams[k] = v.value;
       });
-
-      nodes.push({
-        id: 'dut',
-        type: 'default',
-        position: { x: 200, y: 200 },
-        data: {
-          type: block.id,
-          params: dutParams,
-          ports: block.ports
-        }
-      } as any);
-
-      // 2. Identify ports and setup support nodes (sources/references/scopes)
-      let scopeConnected = false;
-
-      block.ports.forEach((port, idx) => {
-        const portId = port.id;
-        const domain = (port.domain || VLAB_LIBRARY.find(d => d.blocks.some(b => b.id === block.id))?.type || 'Electrical').toLowerCase();
-        
-        const portKey = `dut_${portId}`;
-
-        if (domain === 'electrical') {
-          if (['p', 'p1', 'a', 'in_p', 'c', 'd'].includes(portId)) {
-            // Electrical source node
-            const srcId = `src_elec_${portId}`;
-            nodes.push({
-              id: srcId,
-              type: 'default',
-              position: { x: 50, y: 100 * idx },
-              data: { type: 'dc_voltage', params: { V: 12 } }
-            } as any);
-            // Ground node
-            if (!nodes.some(n => n.id === 'gnd')) {
-              nodes.push({
-                id: 'gnd',
-                type: 'default',
-                position: { x: 50, y: 400 },
-                data: { type: 'ground' }
-              } as any);
-            }
-            // Connections
-            edges.push({ id: `e_src_${portId}`, source: srcId, target: 'dut', sourceHandle: 'p_s', targetHandle: `${portId}_t` });
-            edges.push({ id: `e_gnd_${portId}`, source: srcId, target: 'gnd', sourceHandle: 'n_s', targetHandle: 'a_t' });
-          } else {
-            // Connect to ground
-            if (!nodes.some(n => n.id === 'gnd')) {
-              nodes.push({
-                id: 'gnd',
-                type: 'default',
-                position: { x: 50, y: 400 },
-                data: { type: 'ground' }
-              } as any);
-            }
-            edges.push({ id: `e_gnd_conn_${portId}`, source: 'dut', target: 'gnd', sourceHandle: `${portId}_s`, targetHandle: 'a_t' });
-          }
-        } 
-        else if (domain === 'rotational') {
-          if (['r', 'r1', 'r2'].includes(portId)) {
-            const srcId = `src_rot_${portId}`;
-            nodes.push({
-              id: srcId,
-              type: 'default',
-              position: { x: 50, y: 100 * idx },
-              data: { type: 'torque_source', params: { T: 5 } }
-            } as any);
-            if (!nodes.some(n => n.id === 'ref_rot')) {
-              nodes.push({
-                id: 'ref_rot',
-                type: 'default',
-                position: { x: 50, y: 500 },
-                data: { type: 'rot_ref' }
-              } as any);
-            }
-            edges.push({ id: `e_rot_src_${portId}`, source: srcId, target: 'dut', sourceHandle: 'r_s', targetHandle: `${portId}_t` });
-            edges.push({ id: `e_rot_ref_${portId}`, source: srcId, target: 'ref_rot', sourceHandle: 'c_s', targetHandle: 'r_t' });
-          } else {
-            if (!nodes.some(n => n.id === 'ref_rot')) {
-              nodes.push({
-                id: 'ref_rot',
-                type: 'default',
-                position: { x: 50, y: 500 },
-                data: { type: 'rot_ref' }
-              } as any);
-            }
-            edges.push({ id: `e_rot_ref_conn_${portId}`, source: 'dut', target: 'ref_rot', sourceHandle: `${portId}_s`, targetHandle: 'r_t' });
-          }
-        } 
-        else if (domain === 'translational') {
-          if (['r', 'p', 'a'].includes(portId)) {
-            const srcId = `src_trans_${portId}`;
-            nodes.push({
-              id: srcId,
-              type: 'default',
-              position: { x: 50, y: 100 * idx },
-              data: { type: 'force_source', params: { F: 10 } }
-            } as any);
-            if (!nodes.some(n => n.id === 'ref_trans')) {
-              nodes.push({
-                id: 'ref_trans',
-                type: 'default',
-                position: { x: 50, y: 600 },
-                data: { type: 'trans_ref' }
-              } as any);
-            }
-            edges.push({ id: `e_trans_src_${portId}`, source: srcId, target: 'dut', sourceHandle: 'a_s', targetHandle: `${portId}_t` });
-            edges.push({ id: `e_trans_ref_${portId}`, source: srcId, target: 'ref_trans', sourceHandle: 'b_s', targetHandle: 'p_t' });
-          } else {
-            if (!nodes.some(n => n.id === 'ref_trans')) {
-              nodes.push({
-                id: 'ref_trans',
-                type: 'default',
-                position: { x: 50, y: 600 },
-                data: { type: 'trans_ref' }
-              } as any);
-            }
-            edges.push({ id: `e_trans_ref_conn_${portId}`, source: 'dut', target: 'ref_trans', sourceHandle: `${portId}_s`, targetHandle: 'p_t' });
-          }
-        }
-        else if (domain === 'thermal') {
-          if (['a', 'h'].includes(portId)) {
-            const srcId = `src_thermal_${portId}`;
-            nodes.push({
-              id: srcId,
-              type: 'default',
-              position: { x: 50, y: 100 * idx },
-              data: { type: 'temp_src', params: { T: 350 } }
-            } as any);
-            edges.push({ id: `e_thermal_src_${portId}`, source: srcId, target: 'dut', sourceHandle: 'a_s', targetHandle: `${portId}_t` });
-          } else {
-            if (!nodes.some(n => n.id === 'ref_thermal')) {
-              nodes.push({
-                id: 'ref_thermal',
-                type: 'default',
-                position: { x: 50, y: 700 },
-                data: { type: 'thermal_ref' }
-              } as any);
-            }
-            edges.push({ id: `e_thermal_ref_conn_${portId}`, source: 'dut', target: 'ref_thermal', sourceHandle: `${portId}_s`, targetHandle: 'a_t' });
-          }
-        }
-        else if (domain === 'physical') {
-          const isInput = ['u', 'u1', 'u2', 'e', 'ref', 'ctrl', 'in', 'in1', 'in2', 'in3', 'vgs', 'vds', 'vge', 'vce', 'wr_ref', 'target_rpm', 'x1', 'x2', 'target', 'lr', 'error', 'reward', 'reset', 'w_ref', 'tl'].includes(portId.toLowerCase());
-          
-          if (isInput) {
-            const srcId = `src_ps_${portId}`;
-            nodes.push({
-              id: srcId,
-              type: 'default',
-              position: { x: 50, y: 100 * idx },
-              data: { type: 'ps_constant', params: { value: 5.0 } }
-            } as any);
-            edges.push({ id: `e_ps_src_${portId}`, source: srcId, target: 'dut', sourceHandle: 'y_s', targetHandle: `${portId}_t` });
-          } else {
-            // Output port! Connect to a scope
-            if (!scopeConnected) {
-              if (!nodes.some(n => n.id === 'diag_scope')) {
-                nodes.push({
-                  id: 'diag_scope',
-                  type: 'default',
-                  position: { x: 400, y: 200 },
-                  data: { type: 'scope' }
-                } as any);
-              }
-              edges.push({ id: `e_scope_${portId}`, source: 'dut', target: 'diag_scope', sourceHandle: `${portId}_s`, targetHandle: 'in1_t' });
-              scopeConnected = true;
-            }
-          }
-        }
-      });
-
-      // If no scope is connected yet, we connect a sensor to measure its output port
-      if (!scopeConnected && block.ports.length > 0) {
-        const firstPort = block.ports[0];
-        const domain = (firstPort.domain || VLAB_LIBRARY.find(d => d.blocks.some(b => b.id === block.id))?.type || 'Electrical').toLowerCase();
-        
-        if (!nodes.some(n => n.id === 'diag_scope')) {
-          nodes.push({
-            id: 'diag_scope',
-            type: 'default',
-            position: { x: 400, y: 200 },
-            data: { type: 'scope' }
-          } as any);
-        }
-
-        if (domain === 'electrical') {
-          nodes.push({
-            id: 'diag_v_sensor',
-            type: 'default',
-            position: { x: 300, y: 150 },
-            data: { type: 'v_sensor' }
-          } as any);
-          edges.push({ id: 'e_sensor_to_dut', source: 'dut', target: 'diag_v_sensor', sourceHandle: `${firstPort.id}_s`, targetHandle: 'p_t' });
-          edges.push({ id: 'e_sensor_to_scope', source: 'diag_v_sensor', target: 'diag_scope', sourceHandle: 'v_s', targetHandle: 'in1_t' });
-        } else if (domain === 'rotational') {
-          nodes.push({
-            id: 'diag_w_sensor',
-            type: 'default',
-            position: { x: 300, y: 150 },
-            data: { type: 'rot_motion_sensor' }
-          } as any);
-          edges.push({ id: 'e_sensor_to_dut', source: 'dut', target: 'diag_w_sensor', sourceHandle: `${firstPort.id}_s`, targetHandle: 'r_t' });
-          edges.push({ id: 'e_sensor_to_scope', source: 'diag_w_sensor', target: 'diag_scope', sourceHandle: 'w_s', targetHandle: 'in1_t' });
-        } else if (domain === 'translational') {
-          nodes.push({
-            id: 'diag_v_sensor',
-            type: 'default',
-            position: { x: 300, y: 150 },
-            data: { type: 'trans_motion_sensor' }
-          } as any);
-          edges.push({ id: 'e_sensor_to_dut', source: 'dut', target: 'diag_v_sensor', sourceHandle: `${firstPort.id}_s`, targetHandle: 'r_t' });
-          edges.push({ id: 'e_sensor_to_scope', source: 'diag_v_sensor', target: 'diag_scope', sourceHandle: 'v_s', targetHandle: 'in1_t' });
-        } else if (domain === 'thermal') {
-          nodes.push({
-            id: 'diag_t_sensor',
-            type: 'default',
-            position: { x: 300, y: 150 },
-            data: { type: 'temp_sensor' }
-          } as any);
-          edges.push({ id: 'e_sensor_to_dut', source: 'dut', target: 'diag_t_sensor', sourceHandle: `${firstPort.id}_s`, targetHandle: 'a_t' });
-          edges.push({ id: 'e_sensor_to_scope', source: 'diag_t_sensor', target: 'diag_scope', sourceHandle: 't_s', targetHandle: 'in1_t' });
-        }
-      }
-
+      const { nodes, edges } = buildDomainFixture(block, dutParams);
       // 3. Simulate and collect diagnostic data
       let state: any = null;
       let errorOccurred = false;
@@ -286,8 +100,9 @@ describe('VLab All Blocks, Solver, and Scope Diagnostic Test Suite', () => {
       };
 
       diagnosticResults.push(status);
-      expect(true).toBe(true); // Always pass test so the loop continues diagnostics
-    });
+      // F-012: a solver error is a test failure (it used to be swallowed).
+      expect(errorOccurred, `solver error for ${block.id}: ${errorMessage}`).toBe(false);
+    }, PER_BLOCK_TIMEOUT_MS);
   });
 
   afterAll(() => {

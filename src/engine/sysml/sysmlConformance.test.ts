@@ -60,11 +60,21 @@ describe('SysML 1.6 BDD/IBD/Requirements/RTM representative lifecycle', () => {
     repo = loadRepository(serializeRepository(second.repository)).repository;
     expect(repo.definitions.Controller.name).toBe('Renamed Controller');
 
-    const deletion = applyCommand(repo, { kind: 'deleteElements', elementIds: ['System'] });
-    expect(deletion.repository.usages.controller).toBeUndefined();
+    // Task 6: the repo carries frozen protected baselines (BL-1/BL-2), so the
+    // destructive mutation requires explicit baseline authorization; the
+    // cascade itself is unchanged (composite-only, definitions preserved).
+    const deletion = applyCommand(repo, { kind: 'deleteElements', elementIds: ['System'] }, { authorizedBaselineIds: ['BL-1', 'BL-2'] });
+    expect(deletion.applied).toBe(true);
+    // Format 5: the saved and reloaded model holds `controller` as a property of System, not as a usage
+    // record, so it goes with System; the Controller definition that types it is preserved.
+    const controllerPartId = (repo.definitions.System as BlockDefinition).properties.map(property => property.id)[0];
+    expect(Object.keys(repo.usages)).toEqual([]);
+    expect(deletion.repository.definitions.System).toBeUndefined();
+    expect(deletion.impact.deletedElementIds).not.toContain(controllerPartId);
+    expect(deletion.repository.relationships.comp).toBeUndefined();
     expect(deletion.repository.definitions.Controller).toBeDefined();
     const history = { past: [repo], present: deletion.repository, future: [] };
-    expect(undo(history).present.usages.controller).toBeDefined();
-    expect(redo(undo(history)).present.usages.controller).toBeUndefined();
+    expect((undo(history).present.definitions.System as BlockDefinition).properties.map(property => property.name)).toEqual(['controller']);
+    expect(redo(undo(history)).present.definitions.System).toBeUndefined();
   });
 });

@@ -1,0 +1,10 @@
+{
+  "id": "tank_drain",
+  "class": "linear_smooth",
+  "stopTime": 40,
+  "dt": 0.05,
+  "signals": [
+    { "name": "dp_drained", "unit": "Pa", "vlabProbe": { "nodeId": "diff", "handle": "y_s", "variableName": "dp_drained" } }
+  ],
+  "analytic": { "type": "first_order_step", "final": 50000, "tau": 10 }
+}

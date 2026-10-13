@@ -36,6 +36,8 @@ describe('DOEManager UI component & persistence', () => {
     );
 
     expect(html).toContain('data-testid="doe-manager"');
+    expect(html).toContain('doe-workspace');
+    expect(html).toContain('engineering-table');
     expect(html).toContain('data-testid="doe-matrix-table"');
     expect(html).toContain('X1');
     expect(html).toContain('X2');

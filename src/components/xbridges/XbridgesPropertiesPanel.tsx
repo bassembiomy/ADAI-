@@ -366,7 +366,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
   return (
     <div className={
       (isCollapsed ? 'w-12' : 'w-80') + 
-      ' bg-[#1a1a1a] border-l border-[#333] flex flex-col h-full shadow-2xl z-50 text-[#e0e0e0] transition-all duration-300 overflow-hidden select-text'
+      ' xbridges-panel ui-card bg-[#1a1a1a] border-l border-[#333] flex flex-col h-full shadow-2xl z-50 text-[#e0e0e0] transition-all duration-300 overflow-hidden select-text'
     }>
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-[#333] bg-[#0a0a0a]">
@@ -377,7 +377,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
           </div>
         )}
         <div className={`flex items-center gap-2 ${isCollapsed ? 'flex-col w-full' : ''}`}>
-          <button 
+          <button data-help-feature="ui:xbridges/XbridgesPropertiesPanel:a873cfabfbf4" data-help-source="src/components/xbridges/XbridgesPropertiesPanel.tsx"
             onClick={handleToggleCollapse} 
             className="p-1.5 rounded bg-[#222] border border-[#333] text-[#c9a86c] hover:bg-[#c9a86c]/15 transition-all"
             title={isCollapsed ? "Expand Properties" : "Collapse Properties"}
@@ -385,14 +385,14 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
             <Triangle size={12} className={`transition-transform duration-300 ${isCollapsed ? '-rotate-90' : 'rotate-90'}`} fill="currentColor" />
           </button>
           {!isCollapsed && (
-            <button onClick={onClose} className="text-slate-400 hover:text-slate-250 transition-colors p-1">
+            <button data-help-feature="ui:xbridges/XbridgesPropertiesPanel:151ed7616191" data-help-source="src/components/xbridges/XbridgesPropertiesPanel.tsx" onClick={onClose} className="text-slate-400 hover:text-slate-100 transition-colors p-1">
               <X size={16} />
             </button>
           )}
         </div>
       </div>
 
-      <div 
+      <div data-help-feature="live:components/xbridges/XbridgesPropertiesPanel:e722b62485a3"
         ref={containerRef}
         onMouseDown={handleMouseDown}
         onMouseLeave={handleMouseLeave}
@@ -403,10 +403,10 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
       >
         {/* General */}
         <section className="space-y-3">
-          <h3 className="text-[10px] font-bold text-slate-455 uppercase tracking-wider">General</h3>
+          <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">General</h3>
           <div>
-            <label className="block text-xs font-medium text-slate-455 mb-1">Block Name</label>
-            <input 
+            <label className="block text-xs font-medium text-slate-400 mb-1">Block Name</label>
+            <input data-help-feature="ui:xbridges/XbridgesPropertiesPanel:b4ae3422ba65" data-help-source="src/components/xbridges/XbridgesPropertiesPanel.tsx"
               type="text" 
               value={localLabel}
               onChange={handleLabelChange}
@@ -424,7 +424,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
             </div>
           )}
           {block.type === 'DOE_MODULE' && onLaunchDoe && (
-            <button 
+            <button data-help-feature="ui:xbridges/XbridgesPropertiesPanel:4d28c038eb43" data-help-source="src/components/xbridges/XbridgesPropertiesPanel.tsx"
               onClick={onLaunchDoe}
               className="w-full p-3 bg-[#c9a86c] text-white rounded font-bold text-xs flex items-center justify-center gap-2 hover:bg-[#b8975a] transition-all shadow-md"
             >
@@ -435,7 +435,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
 
         {/* Parameters */}
         <section className="space-y-3">
-          <h3 className="text-[10px] font-bold text-slate-450 uppercase tracking-wider">Parameters</h3>
+          <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Parameters</h3>
 
           {/* ── SUM_JUNCTION / Sum Sign Editor ── */}
           {(block.type === 'SUM_JUNCTION' || block.type === 'Sum') && (() => {
@@ -497,8 +497,8 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
             return (
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold text-slate-455">Input Signs</label>
-                  <button
+                  <label className="text-xs font-semibold text-slate-400">Input Signs</label>
+                  <button data-help-feature="ui:xbridges/XbridgesPropertiesPanel:e64dffeb0e77" data-help-source="src/components/xbridges/XbridgesPropertiesPanel.tsx"
                     onClick={addSignedInput}
                     className="flex items-center gap-1 text-[10px] font-bold text-[#28a745] bg-[#28a745]/10 px-2 py-1 rounded hover:bg-[#28a745]/20 transition-all border border-[#28a745]/20"
                   >
@@ -516,7 +516,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
                         In {idx + 1}
                       </span>
                       {/* Sign toggle */}
-                      <button
+                      <button data-help-feature="ui:xbridges/XbridgesPropertiesPanel:712551550c35" data-help-source="src/components/xbridges/XbridgesPropertiesPanel.tsx"
                         onClick={() => toggleSign(idx)}
                         className="flex-1 flex items-center justify-center gap-1.5 py-1 rounded-md font-black text-sm transition-all duration-200"
                         style={{
@@ -531,7 +531,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
                       </button>
                       {/* Remove button (only if > 2 inputs) */}
                       {numInputs > 2 && (
-                        <button
+                        <button data-help-feature="ui:xbridges/XbridgesPropertiesPanel:d75d51cda4ba" data-help-source="src/components/xbridges/XbridgesPropertiesPanel.tsx"
                           onClick={() => removeSignedInput(idx)}
                           className="text-slate-500 hover:text-red-500 p-1 rounded transition-colors shrink-0"
                           title="Remove this input"
@@ -561,8 +561,8 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
               {/* Numerator */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold text-slate-455">Numerator Coefficients</label>
-                  <button 
+                  <label className="text-xs font-semibold text-slate-400">Numerator Coefficients</label>
+                  <button data-help-feature="ui:xbridges/XbridgesPropertiesPanel:717c63f4f67b" data-help-source="src/components/xbridges/XbridgesPropertiesPanel.tsx"
                     onClick={() => addArrayParam('numerator')}
                     className="text-emerald-400 hover:text-emerald-300 text-[10px] font-bold bg-emerald-950/20 px-2 py-0.5 rounded border border-emerald-900/30 transition-all"
                   >
@@ -572,7 +572,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
                 <div className="flex flex-wrap gap-1.5 p-2 bg-[#0a0a0a] border border-[#333] rounded-lg">
                   {(block.params.numerator || [1]).map((val: number, idx: number) => (
                     <div key={idx} className="flex items-center bg-[#222] border border-[#333] rounded px-1.5 py-0.5 gap-1">
-                      <input 
+                      <input data-help-feature="ui:xbridges/XbridgesPropertiesPanel:b16f17bb6594" data-help-source="src/components/xbridges/XbridgesPropertiesPanel.tsx"
                         type="number" 
                         step="any"
                         value={val}
@@ -580,7 +580,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
                         className="w-10 bg-transparent text-xs text-[#e0e0e0] outline-none border-none text-center font-mono"
                       />
                       {(block.params.numerator || [1]).length > 1 && (
-                        <button 
+                        <button data-help-feature="ui:xbridges/XbridgesPropertiesPanel:596fceb5b95a" data-help-source="src/components/xbridges/XbridgesPropertiesPanel.tsx"
                           onClick={() => removeArrayParam('numerator', idx)}
                           className="text-red-500 hover:text-red-400 p-0.5 rounded"
                         >
@@ -590,7 +590,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
                     </div>
                   ))}
                 </div>
-                <input 
+                <input data-help-feature="ui:xbridges/XbridgesPropertiesPanel:679a245e50fd" data-help-source="src/components/xbridges/XbridgesPropertiesPanel.tsx"
                   type="text"
                   placeholder="Or type raw array, e.g. [1, 2, 1]"
                   defaultValue={JSON.stringify(block.params.numerator || [1])}
@@ -602,8 +602,8 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
               {/* Denominator */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold text-slate-455">Denominator Coefficients</label>
-                  <button 
+                  <label className="text-xs font-semibold text-slate-400">Denominator Coefficients</label>
+                  <button data-help-feature="ui:xbridges/XbridgesPropertiesPanel:abb9a54ccb74" data-help-source="src/components/xbridges/XbridgesPropertiesPanel.tsx"
                     onClick={() => addArrayParam('denominator')}
                     className="text-emerald-400 hover:text-emerald-300 text-[10px] font-bold bg-emerald-950/20 px-2 py-0.5 rounded border border-emerald-900/30 transition-all"
                   >
@@ -613,7 +613,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
                 <div className="flex flex-wrap gap-1.5 p-2 bg-[#0a0a0a] border border-[#333] rounded-lg">
                   {(block.params.denominator || [1, 1]).map((val: number, idx: number) => (
                     <div key={idx} className="flex items-center bg-[#222] border border-[#333] rounded px-1.5 py-0.5 gap-1">
-                      <input 
+                      <input data-help-feature="ui:xbridges/XbridgesPropertiesPanel:74c3d4d01ae7" data-help-source="src/components/xbridges/XbridgesPropertiesPanel.tsx"
                         type="number" 
                         step="any"
                         value={val}
@@ -621,7 +621,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
                         className="w-10 bg-transparent text-xs text-[#e0e0e0] outline-none border-none text-center font-mono"
                       />
                       {(block.params.denominator || [1, 1]).length > 1 && (
-                        <button 
+                        <button data-help-feature="ui:xbridges/XbridgesPropertiesPanel:2d1cf475650c" data-help-source="src/components/xbridges/XbridgesPropertiesPanel.tsx"
                           onClick={() => removeArrayParam('denominator', idx)}
                           className="text-red-500 hover:text-red-400 p-0.5 rounded"
                         >
@@ -631,7 +631,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
                     </div>
                   ))}
                 </div>
-                <input 
+                <input data-help-feature="ui:xbridges/XbridgesPropertiesPanel:08323e88070c" data-help-source="src/components/xbridges/XbridgesPropertiesPanel.tsx"
                   type="text"
                   placeholder="Or type raw array, e.g. [1, 2, 1]"
                   defaultValue={JSON.stringify(block.params.denominator || [1, 1])}
@@ -646,7 +646,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
                   <div className="space-y-2">
                     <label className="text-xs font-semibold text-slate-400 block">Feedback Gain (K)</label>
                     <div className="flex items-center gap-3">
-                      <input 
+                      <input data-help-feature="ui:xbridges/XbridgesPropertiesPanel:971a06aebb3d" data-help-source="src/components/xbridges/XbridgesPropertiesPanel.tsx"
                         type="range"
                         min="0"
                         max={block.params.maxGain || 100}
@@ -655,12 +655,12 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
                         onChange={(e) => onUpdate(block.id, { params: { ...block.params, gain: Number(e.target.value) } })}
                         className="flex-1 accent-[#c9a86c] h-1 bg-[#111] border border-[#333] rounded-lg appearance-none cursor-pointer"
                       />
-                      <input 
+                      <input data-help-feature="ui:xbridges/XbridgesPropertiesPanel:971a06aebb3d" data-help-source="src/components/xbridges/XbridgesPropertiesPanel.tsx"
                         type="number"
                         step="any"
                         value={block.params.gain !== undefined ? block.params.gain : 1}
                         onChange={(e) => onUpdate(block.id, { params: { ...block.params, gain: Number(e.target.value) } })}
-                        className="w-16 text-xs text-center font-mono py-1 border border-[#333] bg-[#0a0a0a] text-emerald-450 font-bold rounded outline-none focus:border-[#c9a86c]"
+                        className="w-16 text-xs text-center font-mono py-1 border border-[#333] bg-[#0a0a0a] text-emerald-400 font-bold rounded outline-none focus:border-[#c9a86c]"
                       />
                     </div>
                   </div>
@@ -668,7 +668,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
                   {/* Max Gain */}
                   <div className="space-y-1">
                     <label className="block text-[10px] font-bold text-slate-500 uppercase">Max Gain Sweep Range</label>
-                    <input 
+                    <input data-help-feature="ui:xbridges/XbridgesPropertiesPanel:c65984266d94" data-help-source="src/components/xbridges/XbridgesPropertiesPanel.tsx"
                       type="number"
                       value={block.params.maxGain || 100}
                       onChange={(e) => onUpdate(block.id, { params: { ...block.params, maxGain: Math.max(1, Number(e.target.value)) } })}
@@ -686,8 +686,8 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
  
               {/* Gain (K) */}
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-455">Gain (K)</label>
-                <input 
+                <label className="text-xs font-semibold text-slate-400">Gain (K)</label>
+                <input data-help-feature="ui:xbridges/XbridgesPropertiesPanel:01ba05cee838" data-help-source="src/components/xbridges/XbridgesPropertiesPanel.tsx"
                   type="number" 
                   step="any"
                   value={block.params.gain ?? 1}
@@ -699,8 +699,8 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
               {/* Zeros */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold text-slate-455">Zeros</label>
-                  <button 
+                  <label className="text-xs font-semibold text-slate-400">Zeros</label>
+                  <button data-help-feature="ui:xbridges/XbridgesPropertiesPanel:b9094162f862" data-help-source="src/components/xbridges/XbridgesPropertiesPanel.tsx"
                     onClick={() => addArrayParam('zeros')}
                     className="text-emerald-400 hover:text-emerald-300 text-[10px] font-bold bg-emerald-950/20 px-2 py-0.5 rounded border border-emerald-900/30 transition-all"
                   >
@@ -713,14 +713,14 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
                   ) : (
                     (block.params.zeros || []).map((val: number, idx: number) => (
                       <div key={idx} className="flex items-center bg-[#222] border border-[#333] rounded px-1.5 py-0.5 gap-1">
-                        <input 
+                        <input data-help-feature="ui:xbridges/XbridgesPropertiesPanel:63109ffbd3e5" data-help-source="src/components/xbridges/XbridgesPropertiesPanel.tsx"
                           type="number" 
                           step="any"
                           value={val}
                           onChange={(e) => updateArrayParam('zeros', idx, Number(e.target.value))}
                           className="w-10 bg-transparent text-xs text-[#e0e0e0] outline-none border-none text-center font-mono"
                         />
-                        <button 
+                        <button data-help-feature="ui:xbridges/XbridgesPropertiesPanel:373981c67b7a" data-help-source="src/components/xbridges/XbridgesPropertiesPanel.tsx"
                           onClick={() => removeArrayParam('zeros', idx)}
                           className="text-red-500 hover:text-red-400 p-0.5 rounded"
                         >
@@ -730,7 +730,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
                     ))
                   )}
                 </div>
-                <input 
+                <input data-help-feature="ui:xbridges/XbridgesPropertiesPanel:adcd0f14a290" data-help-source="src/components/xbridges/XbridgesPropertiesPanel.tsx"
                   type="text"
                   placeholder="Or type raw array, e.g. [-1, -2]"
                   defaultValue={JSON.stringify(block.params.zeros || [])}
@@ -742,8 +742,8 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
               {/* Poles */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold text-slate-455">Poles</label>
-                  <button 
+                  <label className="text-xs font-semibold text-slate-400">Poles</label>
+                  <button data-help-feature="ui:xbridges/XbridgesPropertiesPanel:c23d17a28083" data-help-source="src/components/xbridges/XbridgesPropertiesPanel.tsx"
                     onClick={() => addArrayParam('poles')}
                     className="text-emerald-400 hover:text-emerald-300 text-[10px] font-bold bg-emerald-950/20 px-2 py-0.5 rounded border border-emerald-900/30 transition-all"
                   >
@@ -753,7 +753,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
                 <div className="flex flex-wrap gap-1.5 p-2 bg-[#0a0a0a] border border-[#333] rounded-lg">
                   {(block.params.poles || [-1]).map((val: number, idx: number) => (
                     <div key={idx} className="flex items-center bg-[#222] border border-[#333] rounded px-1.5 py-0.5 gap-1">
-                      <input 
+                      <input data-help-feature="ui:xbridges/XbridgesPropertiesPanel:26b88b61838a" data-help-source="src/components/xbridges/XbridgesPropertiesPanel.tsx"
                         type="number" 
                         step="any"
                         value={val}
@@ -761,7 +761,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
                         className="w-10 bg-transparent text-xs text-[#e0e0e0] outline-none border-none text-center font-mono"
                       />
                       {(block.params.poles || [-1]).length > 1 && (
-                        <button 
+                        <button data-help-feature="ui:xbridges/XbridgesPropertiesPanel:1731212bac4e" data-help-source="src/components/xbridges/XbridgesPropertiesPanel.tsx"
                           onClick={() => removeArrayParam('poles', idx)}
                           className="text-red-500 hover:text-red-400 p-0.5 rounded"
                         >
@@ -771,7 +771,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
                     </div>
                   ))}
                 </div>
-                <input 
+                <input data-help-feature="ui:xbridges/XbridgesPropertiesPanel:2665cd1de280" data-help-source="src/components/xbridges/XbridgesPropertiesPanel.tsx"
                   type="text"
                   placeholder="Or type raw array, e.g. [-2, -3]"
                   defaultValue={JSON.stringify(block.params.poles || [-1])}
@@ -808,7 +808,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
                 return (
                     <div key={key}>
                       <label className="block text-xs font-medium text-slate-400 mb-1">Source/Target SM Variable</label>
-                      <select
+                      <select data-help-feature="ui:xbridges/XbridgesPropertiesPanel:88a33bdfacc4" data-help-source="src/components/xbridges/XbridgesPropertiesPanel.tsx"
                         value={displayValue as string}
                         onChange={(e) => onUpdate(block.id, { params: { ...block.params, [key]: e.target.value } })}
                         className="w-full text-sm px-2.5 py-1.5 border border-[#333] bg-[#0a0a0a] text-[#e0e0e0] rounded focus:border-[#c9a86c] outline-none transition-all cursor-pointer"
@@ -826,7 +826,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
                 return (
                   <div key={key}>
                     <label className="block text-xs font-medium text-slate-400 mb-1">Fuzzy Inference System (FIS)</label>
-                    <select
+                    <select data-help-feature="ui:xbridges/XbridgesPropertiesPanel:88a33bdfacc4" data-help-source="src/components/xbridges/XbridgesPropertiesPanel.tsx"
                       value={typeof displayValue === 'string' ? displayValue : ''}
                       onChange={(e) => onUpdate(block.id, { params: { ...block.params, [key]: e.target.value } })}
                       className="w-full text-sm px-2.5 py-1.5 border border-[#333] bg-[#0a0a0a] text-purple-400 font-bold rounded focus:border-[#c9a86c] outline-none transition-all cursor-pointer"
@@ -848,7 +848,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
                   
                    {['representation', 'mode', 'method', 'criteria', 'operation', 'angle_unit', 'output_type', 'rounding', 'overflow', 'type', 'numCases', 'numSignals', 'bufferSize', 'andMethod', 'orMethod', 'defuzzMethod', 'operator', 'implication', 'limitDataPoints', 'showGrid', 'showLegend', 'timeRange', 'diagMode', 'axis', 'carrierType', 'simulationType'].includes(key) && 
                   (key !== 'type' || block.type === 'WaveformGen' || block.type === 'FUZZY_INFERENCE_SYSTEM') ? (
-                    <select
+                    <select data-help-feature="ui:xbridges/XbridgesPropertiesPanel:efa3cb1669d5" data-help-source="src/components/xbridges/XbridgesPropertiesPanel.tsx"
                       value={String(displayValue)}
                       onChange={(e) => {
                         let val: any = e.target.value;
@@ -1133,7 +1133,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
                       )}
                     </select>
                   ) : key === 'text' ? (
-                    <textarea
+                    <textarea data-help-feature="ui:xbridges/XbridgesPropertiesPanel:fb4ff8adc517" data-help-source="src/components/xbridges/XbridgesPropertiesPanel.tsx"
                       value={localInputValues[key] !== undefined ? localInputValues[key] : String(displayValue)}
                       onChange={(e) => {
                         setLocalInputValues(prev => ({ ...prev, [key]: e.target.value }));
@@ -1143,7 +1143,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
                       placeholder="Type notes here..."
                     />
                   ) : (
-                    <input
+                    <input data-help-feature="ui:xbridges/XbridgesPropertiesPanel:0f948317825a" data-help-source="src/components/xbridges/XbridgesPropertiesPanel.tsx"
                       type="text"
                       value={localInputValues[key] !== undefined ? localInputValues[key] : String(displayValue)}
                       onChange={(e) => {
@@ -1221,9 +1221,9 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
         {/* Ports */}
         <section className="space-y-3">
           <div className="flex items-center justify-between">
-            <h3 className="text-[10px] font-bold text-slate-455 uppercase tracking-wider">Input Ports</h3>
+            <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Input Ports</h3>
             {block.allowDynamicInputs && block.type !== 'SUM_JUNCTION' && (
-              <button onClick={handleAddInput} className="text-[#c9a86c] hover:text-[#b8975a] flex items-center gap-1 text-[10px] font-bold bg-[#c9a86c]/10 px-2 py-1 rounded transition-colors">
+              <button data-help-feature="ui:xbridges/XbridgesPropertiesPanel:f6620423b036" data-help-source="src/components/xbridges/XbridgesPropertiesPanel.tsx" onClick={handleAddInput} className="text-[#c9a86c] hover:text-[#b8975a] flex items-center gap-1 text-[10px] font-bold bg-[#c9a86c]/10 px-2 py-1 rounded transition-colors">
                 <Plus size={10} /> Add
               </button>
             )}
@@ -1243,7 +1243,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
                    </span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <input 
+                  <input data-help-feature="ui:xbridges/XbridgesPropertiesPanel:3e5f9d193f5e" data-help-source="src/components/xbridges/XbridgesPropertiesPanel.tsx"
                     type="text" 
                     value={port.name}
                     onChange={(e) => updatePortName(port.id, e.target.value, true)}
@@ -1251,7 +1251,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
                     placeholder="Port Label"
                   />
                   {block.allowDynamicInputs && block.type !== 'SUM_JUNCTION' && (block.inputs || []).length > 2 && (
-                    <button onClick={() => handleRemoveInput(port.id)} className="text-slate-500 hover:text-red-500 p-1 transition-colors">
+                    <button data-help-feature="ui:xbridges/XbridgesPropertiesPanel:6505ac2daea9" data-help-source="src/components/xbridges/XbridgesPropertiesPanel.tsx" onClick={() => handleRemoveInput(port.id)} className="text-slate-500 hover:text-red-500 p-1 transition-colors">
                       <Trash2 size={12} />
                     </button>
                   )}
@@ -1262,9 +1262,9 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
           </div>
 
           <div className="flex items-center justify-between mt-4">
-            <h3 className="text-[10px] font-bold text-slate-455 uppercase tracking-wider">Output Ports</h3>
+            <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Output Ports</h3>
             {block.allowDynamicOutputs && (
-              <button onClick={handleAddOutput} className="text-[#c9a86c] hover:text-[#b8975a] flex items-center gap-1 text-[10px] font-bold bg-[#c9a86c]/10 px-2 py-1 rounded transition-colors">
+              <button data-help-feature="ui:xbridges/XbridgesPropertiesPanel:8160c11051aa" data-help-source="src/components/xbridges/XbridgesPropertiesPanel.tsx" onClick={handleAddOutput} className="text-[#c9a86c] hover:text-[#b8975a] flex items-center gap-1 text-[10px] font-bold bg-[#c9a86c]/10 px-2 py-1 rounded transition-colors">
                 <Plus size={10} /> Add
               </button>
             )}
@@ -1284,7 +1284,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
                    </span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <input 
+                  <input data-help-feature="ui:xbridges/XbridgesPropertiesPanel:63bd2ac5b736" data-help-source="src/components/xbridges/XbridgesPropertiesPanel.tsx"
                     type="text" 
                     value={port.name}
                     onChange={(e) => updatePortName(port.id, e.target.value, false)}
@@ -1292,7 +1292,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
                     placeholder="Port Label"
                   />
                   {block.allowDynamicOutputs && (block.outputs || []).length > 2 && (
-                    <button onClick={() => handleRemoveOutput(port.id)} className="text-slate-500 hover:text-red-500 p-1 transition-colors">
+                    <button data-help-feature="ui:xbridges/XbridgesPropertiesPanel:998450b2fe87" data-help-source="src/components/xbridges/XbridgesPropertiesPanel.tsx" onClick={() => handleRemoveOutput(port.id)} className="text-slate-500 hover:text-red-500 p-1 transition-colors">
                       <Trash2 size={12} />
                     </button>
                   )}
@@ -1312,11 +1312,13 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
               
               <div className="bg-emerald-900/10 border border-emerald-800/30 rounded-xl p-4 space-y-3">
                  <div className="grid grid-cols-2 gap-4">
+                    {typeof (block as any).metrics.R2 === 'number' && Number.isFinite((block as any).metrics.R2) && (
                     <div className="space-y-0.5">
                        <span className="text-[8px] text-emerald-400/80 uppercase font-black">R-Squared</span>
-                       <div className="text-xl font-black text-[#e0e0e0] leading-none">{(block as any).metrics.R2 ? ((block as any).metrics.R2 * 100).toFixed(2) : '0.00'}%</div>
+                       <div className="text-xl font-black text-[#e0e0e0] leading-none">{((block as any).metrics.R2 * 100).toFixed(2)}%</div>
                     </div>
-                    {(block as any).metrics.R2Adj !== undefined && (
+                    )}
+                    {typeof (block as any).metrics.R2Adj === 'number' && Number.isFinite((block as any).metrics.R2Adj) && (
                        <div className="space-y-0.5">
                           <span className="text-[8px] text-emerald-400/80 uppercase font-black">Adj. R-Squared</span>
                           <div className="text-xl font-black text-[#c0c0c0] leading-none">{((block as any).metrics.R2Adj * 100).toFixed(2)}%</div>

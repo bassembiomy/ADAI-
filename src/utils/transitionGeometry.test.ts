@@ -3,7 +3,8 @@ import {
   calculateControlPointFromMidpoint,
   screenToWorld,
   getDefaultControlPoint,
-  isDragThresholdExceeded
+  isDragThresholdExceeded,
+  accumulateDragPosition
 } from './transitionGeometry';
 
 describe('transitionGeometry', () => {
@@ -56,4 +57,29 @@ describe('transitionGeometry', () => {
     const loopCp = getDefaultControlPoint(sp, sp, true);
     expect(loopCp.y).toBeLessThan(sp.y);
   });
+
+  it('accumulates sub-grid mouse deltas across small movements without dropping precision or freezing', () => {
+    let raw = { x: 100, y: 100 };
+
+    // Move by +2px 5 times (total +10px). With snapping at gridSize=20:
+    for (let i = 0; i < 4; i++) {
+      const res = accumulateDragPosition(raw, 2, 0, true, 20);
+      raw = res.raw;
+      expect(res.snapped.x).toBe(100); // Has not crossed threshold yet
+    }
+    expect(raw.x).toBe(108);
+
+    // 5th move: reaches 110, which snaps to 120
+    const res5 = accumulateDragPosition(raw, 2, 0, true, 20);
+    expect(res5.raw.x).toBe(110);
+    expect(res5.snapped.x).toBe(120);
+
+    // Smooth movement with snap disabled:
+    const smoothRes = accumulateDragPosition({ x: 55.4, y: 32.1 }, 1.2, 2.3, false, 20);
+    expect(smoothRes.raw.x).toBeCloseTo(56.6);
+    expect(smoothRes.raw.y).toBeCloseTo(34.4);
+    expect(smoothRes.snapped.x).toBeCloseTo(56.6);
+    expect(smoothRes.snapped.y).toBeCloseTo(34.4);
+  });
 });
+

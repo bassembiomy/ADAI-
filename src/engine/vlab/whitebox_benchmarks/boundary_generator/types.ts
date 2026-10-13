@@ -5,6 +5,8 @@ export interface VLabProbe {
   sourceNodeId: string;
   sourceHandle: string;
   variableName: string;
+  /** Exact engine variable name to read (checked first); signals are still keyed by variableName. */
+  engineVariable?: string;
   unit: string;
 }
 

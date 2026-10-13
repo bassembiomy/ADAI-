@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { RtmRow, RtmStatus, RtmChangeKind } from '../../engine/sysml/rtm';
+import { sysmlObjectLabel } from '../../features/sysml/sysmlDisplayLabel';
 
 export interface VirtualWindowParams {
   totalRows: number;
@@ -60,6 +61,7 @@ export interface VirtualGridColumn {
 
 export interface VirtualizedTraceabilityGridProps {
   rows: RtmRow[];
+  resolveLabel?: (id: string, fallbackKind?: string) => string;
   containerHeight?: number;
   rowHeight?: number;
   scrollTop?: number;
@@ -69,6 +71,7 @@ export interface VirtualizedTraceabilityGridProps {
 
 export function VirtualizedTraceabilityGrid({
   rows,
+  resolveLabel,
   containerHeight = 400,
   rowHeight = 40,
   scrollTop: controlledScrollTop,
@@ -180,7 +183,7 @@ export function VirtualizedTraceabilityGrid({
       </div>
 
       {/* Virtual Scroll Area */}
-      <div
+      <div data-help-feature="live:components/sysml/VirtualizedTraceabilityGrid:9f410c2dcf23"
         ref={containerRef}
         onScroll={handleScroll}
         className="flex-1 overflow-y-auto overflow-x-hidden relative focus:outline-none"
@@ -206,7 +209,7 @@ export function VirtualizedTraceabilityGrid({
               const changeInfo = row.changeKind ? changeBadges[row.changeKind] : undefined;
 
               return (
-                <div
+                <div data-help-feature="ui:sysml/VirtualizedTraceabilityGrid:76f07b051462" data-help-source="src/components/sysml/VirtualizedTraceabilityGrid.tsx"
                   key={row.requirement.id}
                   ref={el => { rowRefs.current[absoluteIdx] = el; }}
                   role="row"
@@ -230,7 +233,7 @@ export function VirtualizedTraceabilityGrid({
                   >
                     <div className="flex items-center gap-1.5 truncate">
                       <span className="font-mono text-orange-400 font-semibold">{row.requirement.requirementId}</span>
-                      <span className="font-medium text-neutral-200 truncate">{row.requirement.name}</span>
+                      <span className="font-medium text-neutral-200 truncate">{sysmlObjectLabel(row.requirement, 'Requirement')}</span>
                     </div>
                     {row.requirement.text && (
                       <span className="text-[10px] text-neutral-500 truncate" title={row.requirement.text}>
@@ -247,16 +250,33 @@ export function VirtualizedTraceabilityGrid({
                     style={{ width: headers[1].width }}
                   >
                     <div className="flex flex-col gap-0.5 truncate">
-                      {row.parents && row.parents.length > 0 && (
+                      {/* Containment Parents */}
+                      {row.containmentParents && row.containmentParents.length > 0 ? (
                         <div className="flex items-center gap-1 truncate">
-                          <span className="text-[9px] text-neutral-500 uppercase shrink-0">P:</span>
-                          {row.parents.map(p => (
-                            <button
+                          <span className="text-[9px] text-neutral-500 uppercase shrink-0">Contained:</span>
+                          {row.containmentParents.map(p => (
+                            <button data-help-feature="ui:sysml/VirtualizedTraceabilityGrid:6441f08f4a3f" data-help-source="src/components/sysml/VirtualizedTraceabilityGrid.tsx"
                               key={p.id}
                               type="button"
                               onClick={(e) => { e.stopPropagation(); onNavigate?.(p.id); }}
                               className="inline-flex items-center gap-0.5 rounded border border-blue-900/50 bg-blue-950/40 px-1 text-blue-300 text-[10px] truncate hover:border-blue-500"
-                              title={`Parent: [${p.requirementId}] ${p.name} («${p.kind}»)`}
+                              title={`Contained By: [${p.requirementId}] ${sysmlObjectLabel({ name: p.name }, 'Requirement')}`}
+                            >
+                              <span className="font-mono text-[9px] text-blue-400">«containment»</span>
+                              <span className="font-mono text-orange-300">{p.requirementId}</span>
+                            </button>
+                          ))}
+                        </div>
+                      ) : row.parents && row.parents.length > 0 && (
+                        <div className="flex items-center gap-1 truncate">
+                          <span className="text-[9px] text-neutral-500 uppercase shrink-0">P:</span>
+                          {row.parents.map(p => (
+                            <button data-help-feature="ui:sysml/VirtualizedTraceabilityGrid:6441f08f4a3f" data-help-source="src/components/sysml/VirtualizedTraceabilityGrid.tsx"
+                              key={p.id}
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); onNavigate?.(p.id); }}
+                              className="inline-flex items-center gap-0.5 rounded border border-blue-900/50 bg-blue-950/40 px-1 text-blue-300 text-[10px] truncate hover:border-blue-500"
+                              title={`Parent: [${p.requirementId}] ${sysmlObjectLabel({ name: p.name }, 'Requirement')} («${p.kind}»)`}
                             >
                               <span className="font-mono text-[9px] text-blue-400">«{p.kind === 'requirementContainment' ? 'containment' : p.kind}»</span>
                               <span className="font-mono text-orange-300">{p.requirementId}</span>
@@ -264,16 +284,34 @@ export function VirtualizedTraceabilityGrid({
                           ))}
                         </div>
                       )}
-                      {row.children && row.children.length > 0 && (
+
+                      {/* Containment Children */}
+                      {row.containmentChildren && row.containmentChildren.length > 0 ? (
                         <div className="flex items-center gap-1 truncate">
-                          <span className="text-[9px] text-neutral-500 uppercase shrink-0">C:</span>
-                          {row.children.map(c => (
-                            <button
+                          <span className="text-[9px] text-neutral-500 uppercase shrink-0">Contains:</span>
+                          {row.containmentChildren.map(c => (
+                            <button data-help-feature="ui:sysml/VirtualizedTraceabilityGrid:3367894a7935" data-help-source="src/components/sysml/VirtualizedTraceabilityGrid.tsx"
                               key={c.id}
                               type="button"
                               onClick={(e) => { e.stopPropagation(); onNavigate?.(c.id); }}
                               className="inline-flex items-center gap-0.5 rounded border border-purple-900/50 bg-purple-950/40 px-1 text-purple-300 text-[10px] truncate hover:border-purple-500"
-                              title={`Child: [${c.requirementId}] ${c.name} («${c.kind}»)`}
+                              title={`Contains: [${c.requirementId}] ${sysmlObjectLabel({ name: c.name }, 'Requirement')}`}
+                            >
+                              <span className="font-mono text-[9px] text-purple-400">«containment»</span>
+                              <span className="font-mono text-orange-300">{c.requirementId}</span>
+                            </button>
+                          ))}
+                        </div>
+                      ) : row.children && row.children.length > 0 && (
+                        <div className="flex items-center gap-1 truncate">
+                          <span className="text-[9px] text-neutral-500 uppercase shrink-0">C:</span>
+                          {row.children.map(c => (
+                            <button data-help-feature="ui:sysml/VirtualizedTraceabilityGrid:3367894a7935" data-help-source="src/components/sysml/VirtualizedTraceabilityGrid.tsx"
+                              key={c.id}
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); onNavigate?.(c.id); }}
+                              className="inline-flex items-center gap-0.5 rounded border border-purple-900/50 bg-purple-950/40 px-1 text-purple-300 text-[10px] truncate hover:border-purple-500"
+                              title={`Child: [${c.requirementId}] ${sysmlObjectLabel({ name: c.name }, 'Requirement')} («${c.kind}»)`}
                             >
                               <span className="font-mono text-[9px] text-purple-400">«{c.kind === 'requirementContainment' ? 'containment' : c.kind}»</span>
                               <span className="font-mono text-orange-300">{c.requirementId}</span>
@@ -281,7 +319,131 @@ export function VirtualizedTraceabilityGrid({
                           ))}
                         </div>
                       )}
-                      {(!row.parents || row.parents.length === 0) && (!row.children || row.children.length === 0) && (
+
+                      {/* Derived From */}
+                      {row.derivedFrom && row.derivedFrom.length > 0 && (
+                        <div className="flex items-center gap-1 truncate">
+                          <span className="text-[9px] text-neutral-500 uppercase shrink-0">Derived:</span>
+                          {row.derivedFrom.map(d => (
+                            <button data-help-feature="ui:sysml/VirtualizedTraceabilityGrid:880ab36c5c69" data-help-source="src/components/sysml/VirtualizedTraceabilityGrid.tsx"
+                              key={d.id}
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); onNavigate?.(d.id); }}
+                              className="inline-flex items-center gap-0.5 rounded border border-cyan-900/50 bg-cyan-950/40 px-1 text-cyan-300 text-[10px] truncate hover:border-cyan-500"
+                              title={`Derived From: [${d.requirementId}] ${sysmlObjectLabel({ name: d.name }, 'Requirement')}`}
+                            >
+                              <span className="font-mono text-[9px] text-cyan-400">«deriveReqt»</span>
+                              <span className="font-mono text-orange-300">{d.requirementId}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Derived Requirements */}
+                      {row.derivedRequirements && row.derivedRequirements.length > 0 && (
+                        <div className="flex items-center gap-1 truncate">
+                          <span className="text-[9px] text-neutral-500 uppercase shrink-0">DerivedReq:</span>
+                          {row.derivedRequirements.map(d => (
+                            <button data-help-feature="ui:sysml/VirtualizedTraceabilityGrid:880ab36c5c69" data-help-source="src/components/sysml/VirtualizedTraceabilityGrid.tsx"
+                              key={d.id}
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); onNavigate?.(d.id); }}
+                              className="inline-flex items-center gap-0.5 rounded border border-cyan-900/50 bg-cyan-950/40 px-1 text-cyan-300 text-[10px] truncate hover:border-cyan-500"
+                              title={`Derived Req: [${d.requirementId}] ${sysmlObjectLabel({ name: d.name }, 'Requirement')}`}
+                            >
+                              <span className="font-mono text-[9px] text-cyan-400">«deriveReqt»</span>
+                              <span className="font-mono text-orange-300">{d.requirementId}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Copied From */}
+                      {row.copiedFrom && row.copiedFrom.length > 0 && (
+                        <div className="flex items-center gap-1 truncate">
+                          <span className="text-[9px] text-neutral-500 uppercase shrink-0">Copied:</span>
+                          {row.copiedFrom.map(cp => (
+                            <button data-help-feature="ui:sysml/VirtualizedTraceabilityGrid:b16838464ec3" data-help-source="src/components/sysml/VirtualizedTraceabilityGrid.tsx"
+                              key={cp.id}
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); onNavigate?.(cp.id); }}
+                              className="inline-flex items-center gap-0.5 rounded border border-pink-900/50 bg-pink-950/40 px-1 text-pink-300 text-[10px] truncate hover:border-pink-500"
+                              title={`Copied From: [${cp.requirementId}] ${sysmlObjectLabel({ name: cp.name }, 'Requirement')}`}
+                            >
+                              <span className="font-mono text-[9px] text-pink-400">«copy»</span>
+                              <span className="font-mono text-orange-300">{cp.requirementId}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Copied Requirements */}
+                      {row.copiedRequirements && row.copiedRequirements.length > 0 && (
+                        <div className="flex items-center gap-1 truncate">
+                          <span className="text-[9px] text-neutral-500 uppercase shrink-0">Copies:</span>
+                          {row.copiedRequirements.map(cp => (
+                            <button data-help-feature="ui:sysml/VirtualizedTraceabilityGrid:b16838464ec3" data-help-source="src/components/sysml/VirtualizedTraceabilityGrid.tsx"
+                              key={cp.id}
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); onNavigate?.(cp.id); }}
+                              className="inline-flex items-center gap-0.5 rounded border border-pink-900/50 bg-pink-950/40 px-1 text-pink-300 text-[10px] truncate hover:border-pink-500"
+                              title={`Copy Req: [${cp.requirementId}] ${sysmlObjectLabel({ name: cp.name }, 'Requirement')}`}
+                            >
+                              <span className="font-mono text-[9px] text-pink-400">«copy»</span>
+                              <span className="font-mono text-orange-300">{cp.requirementId}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Refined By */}
+                      {row.refinedBy && row.refinedBy.length > 0 && (
+                        <div className="flex items-center gap-1 truncate">
+                          <span className="text-[9px] text-neutral-500 uppercase shrink-0">Refined:</span>
+                          {row.refinedBy.map(rf => (
+                            <button data-help-feature="ui:sysml/VirtualizedTraceabilityGrid:c40929791e7e" data-help-source="src/components/sysml/VirtualizedTraceabilityGrid.tsx"
+                              key={rf.id}
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); onNavigate?.(rf.id); }}
+                              className="inline-flex items-center gap-0.5 rounded border border-amber-900/50 bg-amber-950/40 px-1 text-amber-300 text-[10px] truncate hover:border-amber-500"
+                              title={`Refined By: ${resolveLabel?.(rf.id) ?? sysmlObjectLabel(rf)}`}
+                            >
+                              <span className="font-mono text-[9px] text-amber-400">«refine»</span>
+                              <span>{resolveLabel?.(rf.id) ?? sysmlObjectLabel(rf)}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Traced Elements */}
+                      {row.tracedElements && row.tracedElements.length > 0 && (
+                        <div className="flex items-center gap-1 truncate">
+                          <span className="text-[9px] text-neutral-500 uppercase shrink-0">Traced:</span>
+                          {row.tracedElements.map(tr => (
+                            <button data-help-feature="ui:sysml/VirtualizedTraceabilityGrid:5314802ebbb0" data-help-source="src/components/sysml/VirtualizedTraceabilityGrid.tsx"
+                              key={tr.id}
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); onNavigate?.(tr.id); }}
+                              className="inline-flex items-center gap-0.5 rounded border border-teal-900/50 bg-teal-950/40 px-1 text-teal-300 text-[10px] truncate hover:border-teal-500"
+                              title={`Traced: ${resolveLabel?.(tr.id) ?? sysmlObjectLabel(tr)}`}
+                            >
+                              <span className="font-mono text-[9px] text-teal-400">«trace»</span>
+                              <span>{resolveLabel?.(tr.id) ?? sysmlObjectLabel(tr)}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      {(!row.parents || row.parents.length === 0) &&
+                       (!row.children || row.children.length === 0) &&
+                       (!row.containmentParents || row.containmentParents.length === 0) &&
+                       (!row.containmentChildren || row.containmentChildren.length === 0) &&
+                       (!row.derivedFrom || row.derivedFrom.length === 0) &&
+                       (!row.derivedRequirements || row.derivedRequirements.length === 0) &&
+                       (!row.copiedFrom || row.copiedFrom.length === 0) &&
+                       (!row.copiedRequirements || row.copiedRequirements.length === 0) &&
+                       (!row.refinedBy || row.refinedBy.length === 0) &&
+                       (!row.tracedElements || row.tracedElements.length === 0) && (
                         <span className="text-neutral-600 italic text-[10px]">None</span>
                       )}
                     </div>
@@ -329,29 +491,43 @@ export function VirtualizedTraceabilityGrid({
                     className="px-3 flex items-center gap-1 border-r border-neutral-900 truncate"
                     style={{ width: headers[4].width }}
                   >
-                    {row.coveringBlocks && row.coveringBlocks.length > 0 ? (
+                    {row.satisfiedBy && row.satisfiedBy.length > 0 ? (
                       <div className="flex flex-wrap gap-1 truncate">
-                        {row.coveringBlocks.map(cb => (
-                          <button
+                        {row.satisfiedBy.map(cb => (
+                          <button data-help-feature="ui:sysml/VirtualizedTraceabilityGrid:7ebfd9c08959" data-help-source="src/components/sysml/VirtualizedTraceabilityGrid.tsx"
                             key={cb.id}
                             type="button"
                             onClick={e => { e.stopPropagation(); onNavigate?.(cb.id); }}
                             className="inline-flex items-center gap-0.5 rounded border border-emerald-900/50 bg-emerald-950/40 px-1 text-emerald-300 text-[10px] truncate hover:border-emerald-500"
                           >
                             <span className="text-[9px] text-emerald-400 font-mono">«{cb.kind}»</span>
-                            <span>{cb.name}</span>
+                            <span>{resolveLabel?.(cb.id, cb.type) ?? sysmlObjectLabel({ name: cb.name }, cb.type)}</span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : row.coveringBlocks && row.coveringBlocks.length > 0 ? (
+                      <div className="flex flex-wrap gap-1 truncate">
+                        {row.coveringBlocks.map(cb => (
+                          <button data-help-feature="ui:sysml/VirtualizedTraceabilityGrid:7ebfd9c08959" data-help-source="src/components/sysml/VirtualizedTraceabilityGrid.tsx"
+                            key={cb.id}
+                            type="button"
+                            onClick={e => { e.stopPropagation(); onNavigate?.(cb.id); }}
+                            className="inline-flex items-center gap-0.5 rounded border border-emerald-900/50 bg-emerald-950/40 px-1 text-emerald-300 text-[10px] truncate hover:border-emerald-500"
+                          >
+                            <span className="text-[9px] text-emerald-400 font-mono">«{cb.kind}»</span>
+                            <span>{resolveLabel?.(cb.id, cb.type) ?? sysmlObjectLabel({ name: cb.name }, cb.type)}</span>
                           </button>
                         ))}
                       </div>
                     ) : row.blocks.length > 0 ? (
                       row.blocks.map(id => (
-                        <button
+                        <button data-help-feature="ui:sysml/VirtualizedTraceabilityGrid:330586d4cc6c" data-help-source="src/components/sysml/VirtualizedTraceabilityGrid.tsx"
                           key={id}
                           type="button"
                           onClick={e => { e.stopPropagation(); onNavigate?.(id); }}
                           className="px-1.5 py-0.5 rounded border border-neutral-700 bg-neutral-900 text-[10px] text-neutral-300 hover:border-orange-500"
                         >
-                          {id}
+                          {resolveLabel?.(id, 'Block') ?? 'Block'}
                         </button>
                       ))
                     ) : (
@@ -383,15 +559,27 @@ export function VirtualizedTraceabilityGrid({
                     className="px-3 flex items-center gap-1 border-r border-neutral-900 truncate text-[11px]"
                     style={{ width: headers[6].width }}
                   >
-                    {row.verificationCases.length > 0 ? (
+                    {row.verifiedBy && row.verifiedBy.length > 0 ? (
+                      row.verifiedBy.map(v => (
+                        <button data-help-feature="ui:sysml/VirtualizedTraceabilityGrid:ca7a2fbb6655" data-help-source="src/components/sysml/VirtualizedTraceabilityGrid.tsx"
+                          key={v.id}
+                          type="button"
+                          onClick={e => { e.stopPropagation(); onNavigate?.(v.id); }}
+                          className="inline-flex items-center gap-0.5 rounded border border-cyan-900/50 bg-cyan-950/40 px-1 text-cyan-300 text-[10px] truncate hover:border-cyan-500"
+                        >
+                          <span className="text-[9px] text-cyan-400 font-mono">«verify»</span>
+                          <span>{resolveLabel?.(v.id, 'Verification Case') ?? sysmlObjectLabel(v, 'Verification Case')}</span>
+                        </button>
+                      ))
+                    ) : row.verificationCases.length > 0 ? (
                       row.verificationCases.map(vc => (
-                        <button
+                        <button data-help-feature="ui:sysml/VirtualizedTraceabilityGrid:cbe04bf06916" data-help-source="src/components/sysml/VirtualizedTraceabilityGrid.tsx"
                           key={vc}
                           type="button"
                           onClick={e => { e.stopPropagation(); onNavigate?.(vc); }}
                           className="px-1 py-0.5 rounded border border-neutral-700 bg-neutral-900 text-[10px] text-neutral-300 hover:border-orange-500"
                         >
-                          {vc}
+                          {resolveLabel?.(vc, 'Verification Case') ?? 'Verification Case'}
                         </button>
                       ))
                     ) : (

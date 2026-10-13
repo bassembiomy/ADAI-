@@ -85,3 +85,49 @@ export interface ModelDiagnostic {
   blockIds?: string[];
 }
 
+export interface XbridgesPortCapability {
+  readonly id: string;
+  readonly name: string;
+  readonly direction: 'input' | 'output';
+  readonly type: string;
+  readonly unit: string;
+  readonly position?: 'left' | 'right' | 'top' | 'bottom';
+  readonly dimensions?: readonly number[];
+}
+
+export interface XbridgesParameterCapability {
+  readonly name: string;
+  readonly type: string;
+  readonly defaultValue: unknown;
+  readonly unit: string;
+}
+
+export interface XbridgesBlockCapability {
+  readonly id: string;
+  readonly type: string;
+  readonly label: string;
+  readonly category: string;
+  readonly description: string;
+  readonly ports: readonly XbridgesPortCapability[];
+  readonly inputs: readonly XbridgesPortCapability[];
+  readonly outputs: readonly XbridgesPortCapability[];
+  readonly parameterNames: readonly string[];
+  readonly parameters: Readonly<Record<string, XbridgesParameterCapability>>;
+  readonly isStateful: boolean;
+  readonly hasDerivative: boolean;
+  readonly hasZeroCrossing: boolean;
+  readonly allowDynamicInputs: boolean;
+  readonly allowDynamicOutputs: boolean;
+  readonly aliases: readonly string[];
+  readonly equation?: string;
+  readonly solverFeatures: readonly string[];
+}
+
+export interface XbridgesCapabilityIndex {
+  readonly catalogFingerprint: string;
+  readonly totalBlocks: number;
+  readonly blocks: ReadonlyMap<string, XbridgesBlockCapability>;
+  readonly aliases: ReadonlyMap<string, string>;
+  readonly categories: readonly string[];
+}
+

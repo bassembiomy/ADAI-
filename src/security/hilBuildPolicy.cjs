@@ -23,21 +23,18 @@ const RECIPES = Object.freeze({
   }),
   atmega328p: Object.freeze({
     recipeId: 'avr-gcc-atmega328p-v1',
-    compilerFlags: Object.freeze(['-mmcu=atmega328p', '-DF_CPU=16000000UL', '-DADIA_BARE_ARDUINO_MAIN', '-Os', '-Wall', '-Wextra', '-Werror']),
+    compilerFlags: Object.freeze(['-mmcu=atmega328p', '-DF_CPU=16000000UL', '-Os', '-Wall', '-Wextra', '-Werror']),
     main: 'main_hil.ino',
-    extraSources: Object.freeze(['Arduino.cpp']),
   }),
   atmega2560: Object.freeze({
     recipeId: 'avr-gcc-atmega2560-v1',
-    compilerFlags: Object.freeze(['-mmcu=atmega2560', '-DF_CPU=16000000UL', '-DADIA_BARE_ARDUINO_MAIN', '-Os', '-Wall', '-Wextra', '-Werror']),
+    compilerFlags: Object.freeze(['-mmcu=atmega2560', '-DF_CPU=16000000UL', '-Os', '-Wall', '-Wextra', '-Werror']),
     main: 'main_hil.ino',
-    extraSources: Object.freeze(['Arduino.cpp']),
   }),
   'esp32-wroom-32': Object.freeze({
     recipeId: 'esp-idf-esp32-wroom-32-v1',
-    compilerFlags: Object.freeze(['-DADIA_BARE_ARDUINO_MAIN', '-Os', '-Wall', '-Wextra', '-Werror']),
+    compilerFlags: Object.freeze(['-Os', '-Wall', '-Wextra', '-Werror']),
     main: 'main_hil.ino',
-    extraSources: Object.freeze(['Arduino.cpp']),
   }),
   'generic-host': Object.freeze({
     recipeId: 'gcc-generic-host-v1',
@@ -84,7 +81,7 @@ function evaluateBuildRequest(request, workspace) {
   if (!workspace.targetSelection || !sameSelection(request.targetSelection, workspace.targetSelection)) {
     return denied('TARGET_MISMATCH', 'Exact target selection does not match the saved workspace');
   }
-  if (workspace.flashBlocked) return denied('INTEGRATION_STUBBED', 'One or more required target providers are stubbed');
+  if (workspace.flashBlocked && request.targetSelection.targetId !== 'generic-host') return denied('INTEGRATION_STUBBED', 'One or more required target providers are stubbed');
   const recipe = RECIPES[request.targetSelection.targetId];
   if (!recipe) return denied('NO_TRUSTED_RECIPE', 'No application-owned build recipe exists for this exact target');
   const present = new Set(Array.isArray(workspace.files) ? workspace.files : []);

@@ -8,6 +8,7 @@ import {
   type SemanticRuntime,
 } from './smInterpreter';
 import { buildSemanticModel } from './smSemanticBuilder';
+import { parseHmiVariableValue } from '../../features/hmi/hmiModel';
 
 export type StandaloneInputValue = number | boolean;
 
@@ -26,6 +27,7 @@ export const applyInputs = (
 };
 
 export {
+  parseHmiVariableValue,
   buildSemanticModel,
   createRuntime,
   initializeRuntime,
@@ -35,6 +37,7 @@ export {
 };
 
 export const ADIAStateMachineRuntime = Object.freeze({
+  parseHmiVariableValue,
   buildSemanticModel,
   createRuntime,
   initializeRuntime,

@@ -1,0 +1,16 @@
+.adia-help .ui-control[aria-current='page'],
+.adia-help .ui-control[aria-pressed='true'] {
+  border-color: var(--focus-ring);
+  background-color: color-mix(in srgb, var(--focus-ring) 12%, var(--surface-panel));
+}
+
+.adia-help .ui-control:focus-visible,
+.adia-help input:focus-visible,
+.adia-help select:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.adia-help th {
+  color: var(--text-primary);
+}

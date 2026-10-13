@@ -1,10 +1,15 @@
+// @vitest-environment jsdom
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it, vi } from 'vitest';
+import { cleanup, render, fireEvent, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BlockFeatureEditor } from './BlockFeatureEditor';
 import type { BlockDefinition, SysmlDefinition } from '../../engine/sysml/model';
 
 describe('BlockFeatureEditor', () => {
+  afterEach(() => {
+    cleanup();
+  });
   const definitions: Record<string, SysmlDefinition> = {
     Real: { id: 'Real', name: 'Real', namespace: [], kind: 'valueType', unit: 'kg', dimension: 'mass' },
     PowerIF: { id: 'PowerIF', name: 'PowerIF', namespace: [], kind: 'interface', features: ['voltage'] },
@@ -48,6 +53,9 @@ describe('BlockFeatureEditor', () => {
       />
     );
 
+    // Semantic editor class
+    expect(html).toContain('sysml-editor');
+
     // Property kind selector
     expect(html).toContain('value');
     expect(html).toContain('part');
@@ -69,5 +77,195 @@ describe('BlockFeatureEditor', () => {
     expect(html).toContain('chassisId');
     expect(html).toContain('Redefine');
     expect(html).toContain('Subset');
+  });
+
+  it('exposes inherited features with annotated origin, read-only state, and redefine/subset actions', () => {
+    const html = renderToStaticMarkup(
+      <BlockFeatureEditor
+        block={currentBlock}
+        definitions={definitions}
+        inheritedFeatures={{
+          ...inheritedFeatures,
+          annotatedProperties: [
+            { id: 'ip1', name: 'chassisId', kind: 'value', typeId: 'Real', multiplicity: { lower: 1, upper: 1, ordered: false, unique: true }, originId: 'BaseVehicle', originName: 'BaseVehicle', isInherited: true },
+          ],
+        }}
+        onChange={vi.fn()}
+      />
+    );
+
+    expect(html).toContain('Inherited from BaseVehicle');
+    expect(html).toContain('aria-readonly="true"');
+    expect(html).toContain('Redefine');
+    expect(html).toContain('Subset');
+  });
+
+  it('renders an inheritance panel with parent chain, cycle/leaf diagnostics, and abstract guidance in deterministic order', () => {
+    const html = renderToStaticMarkup(
+      <BlockFeatureEditor
+        block={currentBlock}
+        definitions={definitions}
+        inheritedFeatures={{
+          ...inheritedFeatures,
+          annotatedProperties: [
+            { id: 'ip2', name: 'zProp', kind: 'value', typeId: 'Real', multiplicity: { lower: 1, upper: 1, ordered: false, unique: true }, originId: 'Mid', originName: 'Mid', isInherited: true },
+            { id: 'ip1', name: 'aProp', kind: 'value', typeId: 'Real', multiplicity: { lower: 1, upper: 1, ordered: false, unique: true }, originId: 'Base', originName: 'Base', isInherited: true },
+          ],
+        }}
+        parentChain={[{ id: 'Base', name: 'Base' }, { id: 'Mid', name: 'Mid' }]}
+        diagnostics={[
+          { code: 'LEAF_SPECIALIZATION', severity: 'error', elementId: 'Vehicle', propertyPath: 'supertypeIds', message: 'Leaf block Base cannot be specialized' },
+          { code: 'INHERITANCE_CYCLE', severity: 'error', elementId: 'Vehicle', propertyPath: 'supertypeIds', message: 'Inheritance cycle includes Vehicle' },
+        ]}
+        onChange={vi.fn()}
+      />
+    );
+
+    expect(html).toContain('Inheritance panel');
+    expect(html).toContain('Base');
+    expect(html).toContain('Mid');
+    expect(html).toContain('[LEAF_SPECIALIZATION]');
+    expect(html).toContain('[INHERITANCE_CYCLE]');
+    expect(html).toContain('[ABSTRACT_INSTANTIATION]');
+    // Deterministic ordering: aProp renders before zProp
+    expect(html.indexOf('aProp')).toBeLessThan(html.indexOf('zProp'));
+  });
+
+  it('renders canonical diagnostic codes for type, multiplicity, and unit validation', () => {
+    const html = renderToStaticMarkup(
+      <BlockFeatureEditor
+        block={currentBlock}
+        definitions={definitions}
+        inheritedFeatures={inheritedFeatures}
+        diagnostics={[
+          { code: 'MISSING_PROPERTY_TYPE', severity: 'error', elementId: 'p1', propertyPath: 'typeId', message: 'Property type Real is missing or incompatible with value' },
+          { code: 'INCOMPATIBLE_REDEFINITION', severity: 'error', elementId: 'p1', propertyPath: 'redefinesId', message: 'Property does not conform to redefined feature ip1' },
+          { code: 'INVALID_SUBSETTING_MULTIPLICITY', severity: 'error', elementId: 'p1', propertyPath: 'subsetsId', message: 'Property is not a valid subset of ip1' },
+        ]}
+        onChange={vi.fn()}
+      />
+    );
+
+    expect(html).toContain('[MISSING_PROPERTY_TYPE]');
+    expect(html).toContain('[INCOMPATIBLE_REDEFINITION]');
+    expect(html).toContain('[INVALID_SUBSETTING_MULTIPLICITY]');
+  });
+
+  it('supports keyboard navigation on inherited rows and announces an empty state', () => {
+    const withRows = renderToStaticMarkup(
+      <BlockFeatureEditor
+        block={currentBlock}
+        definitions={definitions}
+        inheritedFeatures={inheritedFeatures}
+        onChange={vi.fn()}
+      />
+    );
+    expect(withRows).toContain('tabindex="0"');
+
+    const emptyBlock: BlockDefinition = { ...currentBlock, properties: [], ports: [] };
+    const empty = renderToStaticMarkup(
+      <BlockFeatureEditor block={emptyBlock} definitions={definitions} onChange={vi.fn()} />
+    );
+    expect(empty).toContain('No inherited features');
+  });
+
+  it('caps large inherited-feature lists deterministically with a count', () => {
+    const many = Array.from({ length: 120 }, (_, i) => ({
+      id: `ip${i}`, name: `prop${String(i).padStart(3, '0')}`, kind: 'value' as const, typeId: 'Real',
+      multiplicity: { lower: 1, upper: 1 as const, ordered: false, unique: true },
+      originId: 'Base', originName: 'Base', isInherited: true,
+    }));
+    const html = renderToStaticMarkup(
+      <BlockFeatureEditor
+        block={currentBlock}
+        definitions={definitions}
+        inheritedFeatures={{ properties: [], ports: [], operations: [], constraints: [], annotatedProperties: many }}
+        onChange={vi.fn()}
+      />
+    );
+    expect(html).toContain('120 total');
+    expect(html).toContain('more inherited features');
+    expect(html).not.toContain('prop119');
+  });
+
+  it('creates a property directly from the inspector without a type dialog', () => {
+    const onDispatchCommand = vi.fn();
+    render(
+      <BlockFeatureEditor
+        block={currentBlock}
+        definitions={definitions}
+        onDispatchCommand={onDispatchCommand}
+        onChange={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByText('+ Add Property'));
+    expect(screen.queryByRole('dialog', { name: /Select Type/i })).toBeNull();
+    expect(onDispatchCommand).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'createOwnedFeature',
+      intent: expect.objectContaining({ featureKind: 'property', ownerBlockId: 'Vehicle', propertyKind: 'part' }),
+    }));
+    expect(onDispatchCommand.mock.calls[0][0].intent.typeId).toBeUndefined();
+  });
+
+  it.each([
+    ['ProxyPort', 'proxyPort'],
+    ['FullPort', 'fullPort'],
+    ['Legacy FlowPort', 'flowPort'],
+  ])('creates a %s directly on the block after choosing the port kind', (label, portKind) => {
+    const onDispatchCommand = vi.fn();
+    const onChange = vi.fn();
+    render(<BlockFeatureEditor block={currentBlock} definitions={definitions} onDispatchCommand={onDispatchCommand} onChange={onChange} />);
+    fireEvent.click(screen.getByText('+ Add Port'));
+    fireEvent.click(screen.getByRole('button', { name: new RegExp(`^${label}`) }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(onDispatchCommand).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'createOwnedFeature',
+      intent: expect.objectContaining({ featureKind: 'port', ownerBlockId: 'Vehicle', portKind }),
+    }));
+    expect(onDispatchCommand.mock.calls[0][0].intent.typeId).toBeUndefined();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('dispatches an untyped Standard UML Port without conversion to a SysML stereotype', () => {
+    const onDispatchCommand = vi.fn();
+    render(<BlockFeatureEditor block={currentBlock} definitions={definitions} onDispatchCommand={onDispatchCommand} onChange={vi.fn()} />);
+    fireEvent.click(screen.getByText('+ Add Port'));
+    fireEvent.click(screen.getByRole('button', { name: /Standard UML Port/ }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(onDispatchCommand).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'createOwnedFeature',
+      intent: expect.objectContaining({
+        featureKind: 'port',
+        ownerBlockId: 'Vehicle',
+        portKind: 'umlPort',
+      }),
+    }));
+    const dispatched = onDispatchCommand.mock.calls[0][0];
+    expect(dispatched.intent.portKind).not.toBe('proxyPort');
+    expect(dispatched.intent.portKind).not.toBe('fullPort');
+    expect(dispatched.intent.typeId).toBeUndefined();
+  });
+
+  it('cancels the port kind chooser without mutation', () => {
+    const onDispatchCommand = vi.fn();
+    const onChange = vi.fn();
+    render(<BlockFeatureEditor block={currentBlock} definitions={definitions} onDispatchCommand={onDispatchCommand} onChange={onChange} />);
+    fireEvent.click(screen.getByText('+ Add Port'));
+    fireEvent.click(screen.getByRole('button', { name: /^Cancel$/i }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(onDispatchCommand).not.toHaveBeenCalled();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('applies a FullPort locally without a command bus', () => {
+    const onChange = vi.fn();
+    render(<BlockFeatureEditor block={currentBlock} definitions={definitions} onChange={onChange} />);
+    fireEvent.click(screen.getByText('+ Add Port'));
+    fireEvent.click(screen.getByRole('button', { name: /FullPort/ }));
+    expect(onChange).toHaveBeenCalledTimes(1);
+    const next = onChange.mock.calls[0][0];
+    const added = next.ports[next.ports.length - 1];
+    expect(added).toMatchObject({ kind: 'full', typeId: '' });
   });
 });

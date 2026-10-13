@@ -13,6 +13,18 @@ const part = (id: string, ownerId: string, typeId: string, aggregation: PartUsag
 });
 
 describe('validateSysmlRepository', () => {
+  it('diagnoses missing and cyclic package owners in a loaded repository', () => {
+    const repo = createEmptyRepository();
+    repo.packages.a = { id: 'a', kind: 'package', name: 'A', namespace: [], ownerId: 'b' };
+    repo.packages.b = { id: 'b', kind: 'package', name: 'B', namespace: [], ownerId: 'a' };
+    repo.packages.c = { id: 'c', kind: 'package', name: 'C', namespace: [], ownerId: 'absent' };
+
+    const report = validateSysmlRepository(repo);
+    expect(report.diagnostics.map(d => d.code)).toEqual(expect.arrayContaining([
+      'PACKAGE_OWNERSHIP_CYCLE', 'INVALID_PACKAGE_OWNER',
+    ]));
+    expect(report.valid).toBe(false);
+  });
   it('accepts a valid definition and composite part usage', () => {
     const repo = createEmptyRepository();
     repo.definitions.whole = block('whole');
@@ -93,6 +105,39 @@ describe('validateSysmlRepository', () => {
     expect(report.canVerify).toBe(false);
   });
 
+  it('checks Package and Diagram IDs in the global repository identity space', () => {
+    const repo = createEmptyRepository();
+    repo.packages['pkg-shared'] = { id: 'pkg-shared', kind: 'package', name: 'Package', namespace: [], ownerId: 'model' };
+    repo.diagrams['pkg-shared'] = { id: 'pkg-shared', kind: 'diagram', diagramKind: 'package', name: 'Diagram', namespace: [], ownerId: 'model' };
+    expect(validateSysmlRepository(repo).diagnostics.map(diagnostic => diagnostic.code)).toContain('DUPLICATE_ELEMENT_ID');
+  });
+
+  it('reports central-policy errors for resolvable relationships without removing them', () => {
+    const repo = createEmptyRepository();
+    repo.definitions.system = block('system');
+    repo.definitions.temperature = {
+      id: 'temperature', name: 'Temperature', namespace: [], kind: 'valueType',
+    };
+    repo.requirements.req = {
+      id: 'req', name: 'Requirement', namespace: [], kind: 'requirement', requirementId: 'REQ-1',
+      text: 'x', status: 'draft', version: '1',
+    };
+    repo.relationships.badAggregation = {
+      id: 'badAggregation', kind: 'sharedAggregation', sourceId: 'system', targetId: 'temperature',
+    };
+    repo.relationships.badAssociation = {
+      id: 'badAssociation', kind: 'association', sourceId: 'req', targetId: 'system',
+    };
+
+    const report = validateSysmlRepository(repo);
+
+    expect(repo.relationships.badAggregation).toBeDefined();
+    expect(repo.relationships.badAssociation).toBeDefined();
+    expect(report.diagnostics.map(d => d.code)).toEqual(expect.arrayContaining([
+      'INVALID_AGGREGATION_ENDPOINTS', 'INCOMPATIBLE_RELATIONSHIP_ENDPOINTS',
+    ]));
+  });
+
   it('validates SysML requirement containment rules in repository', () => {
     const repo = createEmptyRepository();
     repo.definitions.b = block('b');
@@ -132,5 +177,136 @@ describe('validateSysmlRepository', () => {
     repo.relationships.cycleRc = { id: 'cycleRc', kind: 'requirementContainment', sourceId: 'r2', targetId: 'r1' };
     expect(validateSysmlRepository(repo).diagnostics.map(d => d.code)).toContain('REQUIREMENT_CONTAINMENT_CYCLE');
   });
+
+  it('validates external State relationship endpoints only when resolvable through context', () => {
+    const repo = createEmptyRepository();
+    repo.requirements.req1 = {
+      id: 'req1', name: 'Req 1', namespace: [], kind: 'requirement', requirementId: 'REQ-1',
+      text: 'Must be fast', status: 'draft', version: '1',
+    };
+    repo.relationships.rel1 = {
+      id: 'rel1',
+      kind: 'satisfy',
+      sourceId: 'state-active',
+      targetId: 'req1',
+      sourceFamily: 'state',
+      targetFamily: 'requirement',
+    };
+
+    // Without external context, relationship to nonexistent state is missing an endpoint
+    const withoutContext = validateSysmlRepository(repo);
+    expect(withoutContext.diagnostics.map(d => d.code)).toContain('MISSING_RELATIONSHIP_ENDPOINT');
+
+    // With external context containing state-active, validation passes
+    const context = {
+      externalEndpoints: new Map([
+        ['state-active', { id: 'state-active', name: 'Active', family: 'state' as const }],
+      ]),
+    };
+    const withContext = validateSysmlRepository(repo, context);
+    expect(withContext.valid).toBe(true);
+  });
+
+  it('Task 4: keeps a valid State-to-Requirement link valid across unrelated mutations with context', () => {
+    const repo = createEmptyRepository();
+    repo.requirements.req1 = {
+      id: 'req1', name: 'Req 1', namespace: [], kind: 'requirement', requirementId: 'REQ-1',
+      text: 'Must be fast', status: 'draft', version: '1',
+    };
+    repo.relationships.rel1 = {
+      id: 'rel1',
+      kind: 'satisfy',
+      sourceId: 'state-active',
+      targetId: 'req1',
+    };
+    const context = {
+      externalEndpoints: new Map([
+        ['state-active', { id: 'state-active', name: 'Active', family: 'state' as const }],
+      ]),
+    };
+
+    expect(validateSysmlRepository(repo, context).valid).toBe(true);
+
+    // An unrelated repository mutation must not invalidate the link.
+    repo.definitions.unrelated = block('unrelated');
+    const after = validateSysmlRepository(repo, context);
+    expect(after.diagnostics.map(d => d.code)).not.toContain('MISSING_RELATIONSHIP_ENDPOINT');
+    expect(after.valid).toBe(true);
+    expect(repo.relationships.rel1).toMatchObject({ sourceId: 'state-active', targetId: 'req1' });
+  });
+
+  it('Task 4: reports a structured INVALID_RELATIONSHIP_DIRECTION for reversed Requirement-to-State satisfy', () => {
+    const repo = createEmptyRepository();
+    repo.requirements.req1 = {
+      id: 'req1', name: 'Req 1', namespace: [], kind: 'requirement', requirementId: 'REQ-1',
+      text: 'Must be fast', status: 'draft', version: '1',
+    };
+    repo.relationships.bad = {
+      id: 'bad',
+      kind: 'satisfy',
+      sourceId: 'req1',
+      targetId: 'state-active',
+    };
+    const context = {
+      externalEndpoints: new Map([
+        ['state-active', { id: 'state-active', name: 'Active', family: 'state' as const }],
+      ]),
+    };
+
+    const report = validateSysmlRepository(repo, context);
+    const diagnostic = report.diagnostics.find(d => d.code === 'INVALID_RELATIONSHIP_DIRECTION');
+    expect(diagnostic).toBeDefined();
+    expect(report.valid).toBe(false);
+    expect(diagnostic!.message).toContain('satisfy');
+    expect(diagnostic!.message).toContain('req1');
+    expect(diagnostic!.message).toContain('requirement');
+    expect(diagnostic!.message).toContain('state-active');
+    expect(diagnostic!.message).toContain('state');
+    // Error diagnosis never mutates the repository.
+    expect(repo.relationships.bad).toMatchObject({ sourceId: 'req1', targetId: 'state-active' });
+  });
+
+  it('validates repository nested ports and reports INVALID_NESTED_PROXY_PORT for non-proxy port in proxy port', () => {
+    const repo = createEmptyRepository();
+    repo.definitions.iface = {
+      id: 'iface',
+      name: 'CANInterface',
+      kind: 'interface',
+      namespace: [],
+      ownerId: 'model',
+      features: [],
+    };
+    repo.definitions.b1 = {
+      ...block('b1'),
+      ports: [
+        {
+          id: 'parent-proxy',
+          name: 'parentPort',
+          kind: 'proxy',
+          portKind: 'proxyPort',
+          typeId: 'iface',
+          direction: 'inout',
+          isConjugated: false,
+          multiplicity: { lower: 1, upper: 1, ordered: false, unique: true },
+        },
+        {
+          id: 'child-standard',
+          name: 'childPort',
+          kind: 'standard',
+          portKind: 'umlPort',
+          ownerPortId: 'parent-proxy',
+          nestedPortPathIds: ['parent-proxy', 'child-standard'],
+          typeId: '',
+          direction: 'inout',
+          isConjugated: false,
+          multiplicity: { lower: 1, upper: 1, ordered: false, unique: true },
+        },
+      ],
+    };
+
+    const report = validateSysmlRepository(repo);
+    expect(report.diagnostics.some(d => d.code === 'INVALID_NESTED_PROXY_PORT')).toBe(true);
+  });
 });
+
 

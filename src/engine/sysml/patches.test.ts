@@ -13,9 +13,10 @@ import {
   type SysmlPatch,
   type PatchOperation,
 } from './patches';
+import { applyCommand } from './mutations';
 import { createEmptyNormalizedStore, upsertEntity, getById, toRepository, fromRepository } from './normalizedStore';
 import { generate1kModel } from './largeModelGenerator';
-import type { BlockDefinition, SysmlRelationship } from './model';
+import { createEmptyRepository, type BlockDefinition, type PartUsage, type SysmlRelationship } from './model';
 
 describe('Sysml Patches and Inverse Patch History', () => {
   it('applies add, replace, remove, and batch operations correctly', () => {
@@ -422,5 +423,78 @@ describe('Sysml Patches and Inverse Patch History', () => {
     // Final replayed state must match store at revision 12
     expect(replayedStore.revision).toBe(12);
     expect((getById(replayedStore, 'blk_chk') as BlockDefinition).name).toBe('Name_12');
+  });
+
+  it('Task 6: deletion forward/inverse patches round-trip every cascade member and evidence state via undo/redo', () => {
+    const block = (id: string): BlockDefinition => ({
+      id, name: id, namespace: [], kind: 'block', isAbstract: false, isLeaf: false,
+      properties: [], ports: [], operations: [], constraints: [],
+    });
+    const part = (id: string, ownerId: string, typeId: string, aggregation: PartUsage['aggregation']): PartUsage => ({
+      id, ownerId, typeId, aggregation, kind: 'part', name: id,
+      multiplicity: { lower: 1, upper: 1, ordered: false, unique: true },
+    });
+    const repo = createEmptyRepository();
+    repo.definitions.whole = block('whole');
+    repo.definitions.childType = block('childType');
+    repo.usages.owned = part('owned', 'whole', 'childType', 'composite');
+    repo.usages.nested = part('nested', 'owned', 'childType', 'composite');
+    repo.relationships.assoc = { id: 'assoc', kind: 'association', sourceId: 'whole', targetId: 'childType' };
+    repo.requirements.r = { id: 'r', name: 'R', namespace: [], kind: 'requirement', requirementId: 'REQ-1', text: 'x', status: 'verified', version: '1' };
+    repo.verificationCases.v = { id: 'v', name: 'V', namespace: [], kind: 'verificationCase', method: 'test', verifiesRequirementIds: ['r'] };
+    repo.evidence.e = { id: 'e', verificationCaseId: 'v', requirementId: 'r', revision: 0, result: 'passed', executedAt: '2026-09-12', status: 'current' };
+    repo.relationships.s = { id: 's', kind: 'satisfy', sourceId: 'owned', targetId: 'r' };
+
+    // Deleting the requirement itself exercises the verifiesRequirementIds
+    // invalidation path (the list is filtered, not just the evidence row).
+    const deletion = applyCommand(repo, { kind: 'deleteElements', elementIds: ['whole', 'r'] });
+    expect(deletion.applied).toBe(true);
+    expect(deletion.forwardPatch).toBeDefined();
+    expect(deletion.inversePatch).toBeDefined();
+
+    const store = fromRepository(repo);
+    const history = createPatchHistory();
+    const patch = createSysmlPatch({
+      revision: deletion.repository.revision,
+      forward: deletion.forwardPatch!.forward,
+      inverse: deletion.forwardPatch!.inverse,
+      description: 'deleteElements',
+    });
+
+    // Apply the atomic deletion through the patch pipeline.
+    applyPatch(store, patch.forward);
+    pushPatch(history, patch, store);
+    expect(getById(store, 'whole')).toBeUndefined();
+    expect(getById(store, 'owned')).toBeUndefined();
+    expect(getById(store, 'nested')).toBeUndefined();
+    expect(getById(store, 'assoc')).toBeUndefined();
+    expect(getById(store, 's')).toBeUndefined();
+    expect(getById(store, 'e')).toBeUndefined();
+
+    // Undo restores every cascade member AND the evidence invalidation
+    // state: the evidence record (with its current/passed status) and the
+    // verification case's verifiesRequirementIds list.
+    const undone = undoPatch(history, store);
+    expect(undone).toBeDefined();
+    expect((getById(store, 'whole') as BlockDefinition).name).toBe('whole');
+    expect(getById(store, 'owned')).toBeDefined();
+    expect(getById(store, 'nested')).toBeDefined();
+    expect(getById(store, 'assoc')).toBeDefined();
+    expect(getById(store, 's')).toBeDefined();
+    expect(getById(store, 'r')).toBeDefined();
+    const restoredEvidence = getById(store, 'e') as unknown as Record<string, unknown>;
+    expect(restoredEvidence).toBeDefined();
+    expect(restoredEvidence.status).toBe('current');
+    expect(restoredEvidence.result).toBe('passed');
+    const restoredCase = getById(store, 'v') as unknown as { verifiesRequirementIds: string[] };
+    expect(restoredCase.verifiesRequirementIds).toEqual(['r']);
+    expect(toRepository(store).evidence.e).toEqual(repo.evidence.e);
+
+    // Redo re-applies the full cascade atomically.
+    const redone = redoPatch(history, store);
+    expect(redone).toBeDefined();
+    expect(getById(store, 'whole')).toBeUndefined();
+    expect(getById(store, 'e')).toBeUndefined();
+    expect((getById(store, 'v') as unknown as { verifiesRequirementIds: string[] }).verifiesRequirementIds).toEqual([]);
   });
 });

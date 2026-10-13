@@ -1,0 +1,31 @@
+{
+  "name": "dc_motor_speed_pi",
+  "nodes": [
+    { "id": "ref", "type": "default", "position": { "x": 0, "y": 0 }, "data": { "type": "ps_constant", "params": { "value": 50 } } },
+    { "id": "sub", "type": "default", "position": { "x": 0, "y": 0 }, "data": { "type": "ps_subtract", "params": {} } },
+    { "id": "pi", "type": "default", "position": { "x": 0, "y": 0 }, "data": { "type": "ps_pi_ctrl", "params": { "Kp": 1, "Ki": 10, "limit": 1000, "Kb": 0 } } },
+    { "id": "cv", "type": "default", "position": { "x": 0, "y": 0 }, "data": { "type": "controlled_voltage", "params": { "R_int": 0 } } },
+    { "id": "motor", "type": "default", "position": { "x": 0, "y": 0 }, "data": { "type": "dc_motor", "params": { "Ra": 1, "La": 0.001, "Ke": 0.1, "J": 0.001, "B": 0.001 } } },
+    { "id": "load", "type": "default", "position": { "x": 0, "y": 0 }, "data": { "type": "inertia", "params": { "J": 0.01, "B": 0 } } },
+    { "id": "damp", "type": "default", "position": { "x": 0, "y": 0 }, "data": { "type": "rot_damper", "params": { "b": 0.02 } } },
+    { "id": "sens", "type": "default", "position": { "x": 0, "y": 0 }, "data": { "type": "rot_motion_sensor", "params": {} } },
+    { "id": "gnd", "type": "default", "position": { "x": 0, "y": 0 }, "data": { "type": "ground", "params": {} } },
+    { "id": "rref", "type": "default", "position": { "x": 0, "y": 0 }, "data": { "type": "rot_ref", "params": {} } },
+    { "id": "scope", "type": "default", "position": { "x": 0, "y": 0 }, "data": { "type": "scope", "params": {} } }
+  ],
+  "edges": [
+    { "id": "ref-sub", "source": "ref", "sourceHandle": "y_s", "target": "sub", "targetHandle": "u1_t" },
+    { "id": "sens-sub", "source": "sens", "sourceHandle": "w_s", "target": "sub", "targetHandle": "u2_t" },
+    { "id": "sub-pi", "source": "sub", "sourceHandle": "y_s", "target": "pi", "targetHandle": "e_t" },
+    { "id": "pi-cv", "source": "pi", "sourceHandle": "u_s", "target": "cv", "targetHandle": "s_t" },
+    { "id": "cv-motor", "source": "cv", "sourceHandle": "p_s", "target": "motor", "targetHandle": "p_t" },
+    { "id": "motor-gnd", "source": "motor", "sourceHandle": "n_s", "target": "gnd", "targetHandle": "a_t" },
+    { "id": "cv-gnd", "source": "cv", "sourceHandle": "n_s", "target": "gnd", "targetHandle": "a_t" },
+    { "id": "motor-load", "source": "motor", "sourceHandle": "r_s", "target": "load", "targetHandle": "r_t" },
+    { "id": "motor-damp", "source": "motor", "sourceHandle": "r_s", "target": "damp", "targetHandle": "r_t" },
+    { "id": "damp-rref", "source": "damp", "sourceHandle": "c_s", "target": "rref", "targetHandle": "r_t" },
+    { "id": "motor-sens", "source": "motor", "sourceHandle": "r_s", "target": "sens", "targetHandle": "r_t" },
+    { "id": "sens-rref", "source": "sens", "sourceHandle": "c_s", "target": "rref", "targetHandle": "r_t" },
+    { "id": "sens-scope", "source": "sens", "sourceHandle": "w_s", "target": "scope", "targetHandle": "in1_t" }
+  ]
+}

@@ -4,7 +4,7 @@ import { join, relative, resolve } from 'path';
 import type { SMCStandard } from './smModel';
 import type { SMTestManifest } from './smTestManifest';
 import type { ActivityEvidence } from './smVerificationEvidence';
-import { runTool } from './smToolRunner';
+import { getToolExecutionEnv, runTool } from './smToolRunner';
 import { createGeneratedCodeTestWorkspace } from '../generatedCodeTestWorkspace';
 import {
   coerceSemanticValue,
@@ -52,7 +52,7 @@ export const compileAndRunCProgram = (
   options: CProgramOptions,
 ): string | null => {
   try {
-    execFileSync('gcc', ['--version'], { stdio: 'pipe' });
+    execFileSync('gcc', ['--version'], { stdio: 'pipe', env: getToolExecutionEnv() });
   } catch (error) {
     if (options.allowMissingCompiler) return null;
     throw error;
@@ -88,11 +88,27 @@ export const compileAndRunCProgram = (
     '-lm',
     '-o',
     executable,
-  ], { cwd: options.directory, stdio: 'pipe' });
+  ], { cwd: options.directory, stdio: 'pipe', env: getToolExecutionEnv() });
   return execFileSync(executable, [], {
     cwd: options.directory,
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
+  });
+};
+
+/**
+ * Asynchronous wrapper around compileAndRunCProgram to prevent blocking UI callers.
+ */
+export const compileAndRunCProgramAsync = async (
+  options: CProgramOptions,
+): Promise<string | null> => {
+  return new Promise((resolve, reject) => {
+    try {
+      const res = compileAndRunCProgram(options);
+      resolve(res);
+    } catch (err) {
+      reject(err);
+    }
   });
 };
 
@@ -127,7 +143,7 @@ export function compileGeneratedCSyntax(
   ];
 
   try {
-    execFileSync('gcc', flags, { cwd: workspace.directory, stdio: 'pipe' });
+    execFileSync('gcc', flags, { cwd: workspace.directory, stdio: 'pipe', env: getToolExecutionEnv() });
     return { success: true, errors: [] };
   } catch (err: any) {
     const errorMsg = err.stderr ? err.stderr.toString() : String(err);

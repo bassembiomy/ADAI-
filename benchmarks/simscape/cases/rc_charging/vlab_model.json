@@ -1,0 +1,20 @@
+{
+  "name": "rc_charging",
+  "nodes": [
+    { "id": "src", "type": "default", "position": { "x": 0, "y": 0 }, "data": { "type": "dc_voltage", "params": { "V": 10 } } },
+    { "id": "res", "type": "default", "position": { "x": 0, "y": 0 }, "data": { "type": "resistor", "params": { "R": 1000 } } },
+    { "id": "cap", "type": "default", "position": { "x": 0, "y": 0 }, "data": { "type": "capacitor", "params": { "C": 0.001 } } },
+    { "id": "sensor", "type": "default", "position": { "x": 0, "y": 0 }, "data": { "type": "v_sensor", "params": {} } },
+    { "id": "scope", "type": "default", "position": { "x": 0, "y": 0 }, "data": { "type": "scope", "params": {} } },
+    { "id": "gnd", "type": "default", "position": { "x": 0, "y": 0 }, "data": { "type": "ground", "params": {} } }
+  ],
+  "edges": [
+    { "id": "src-res", "source": "src", "sourceHandle": "p_s", "target": "res", "targetHandle": "p_t" },
+    { "id": "res-cap", "source": "res", "sourceHandle": "n_s", "target": "cap", "targetHandle": "p_t" },
+    { "id": "cap-gnd", "source": "cap", "sourceHandle": "n_s", "target": "gnd", "targetHandle": "a_t" },
+    { "id": "src-gnd", "source": "src", "sourceHandle": "n_s", "target": "gnd", "targetHandle": "a_t" },
+    { "id": "cap-sensor", "source": "cap", "sourceHandle": "p_s", "target": "sensor", "targetHandle": "p_t" },
+    { "id": "sensor-gnd", "source": "sensor", "sourceHandle": "n_s", "target": "gnd", "targetHandle": "a_t" },
+    { "id": "sensor-scope", "source": "sensor", "sourceHandle": "v_s", "target": "scope", "targetHandle": "in1_t" }
+  ]
+}

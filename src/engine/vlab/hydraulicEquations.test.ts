@@ -1,5 +1,24 @@
 import { describe, it, expect } from 'vitest';
 import { blockEquations } from './vlabEquations';
+
+describe('controlled hydraulic pressure source', () => {
+  it('uses the connected ctrl port value as the output pressure', () => {
+    const residual = blockEquations.ctrl_pressure_source({
+      across: [250000, 180000],
+      dAcross: [0, 0],
+      branch: [0],
+      dBranch: [0],
+      state: [],
+      dState: [],
+      ctx: {} as any,
+      params: {},
+      ports: ['p', 'ctrl'],
+      nodeId: 'ctrl-source'
+    });
+
+    expect(residual[0]).toBe(70000);
+  });
+});
 import { DAEAssembler } from './DAEAssembler';
 
 describe('Isothermal Liquid Equations & DAE Assembly', () => {

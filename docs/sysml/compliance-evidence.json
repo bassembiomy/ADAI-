@@ -1,0 +1,1069 @@
+{
+  "profile": "ADIA SysML v1.6 repository/presentation evidence",
+  "reviewedOn": "2026-09-25",
+  "status": "PARTIAL",
+  "authorities": [
+    "OMG_SYSML_1_6",
+    "UML_FOUNDATION",
+    "CAMEO_TOOLING",
+    "ADIA_EXTENSION"
+  ],
+  "complianceRule": "Each feature is assessed at element, properties, relationships, and constraints levels. COMPLIANT is reserved for claims with passing automated semantic evidence at all applicable levels.",
+  "authorityNote": "Cameo is an implementation benchmark only. No Cameo product behavior is asserted as an OMG SysML requirement in this evidence set.",
+  "evidence": [
+    {
+      "id": "SYSML-REQ-DIAGRAM-BLOCK-SATISFY-001",
+      "feature": "Requirement Diagram presentation of a Block, Requirement, and their Satisfy relationship",
+      "authority": "OMG_SYSML_1_6",
+      "specification": {
+        "document": "OMG Systems Modeling Language (SysML), Version 1.6",
+        "documentId": "formal/19-11-01",
+        "section": "§16.3.1.1 Requirement Diagram",
+        "url": "https://www.omg.org/spec/SysML/1.6/PDF"
+      },
+      "implementation": {
+        "sourceFiles": [
+          "src/engine/sysml/model.ts",
+          "src/services/sysmlCommandGateway.ts",
+          "src/services/sysmlCreationRules.ts",
+          "src/services/sysmlProjectionState.ts"
+        ],
+        "domainTypes": [
+          "BlockDefinition",
+          "RequirementDefinition",
+          "SysmlRelationship"
+        ],
+        "commands": [
+          "createAndPresent",
+          "createElement",
+          "addToDiagram"
+        ],
+        "validator": [
+          "validateSysmlRepository",
+          "validateCanonicalRelationshipCandidate"
+        ],
+        "persistenceMapping": "SysmlRepository.definitions, requirements, and relationships; diagramPresentations[diagramId].elementIds and presentations reference semantic IDs.",
+        "projection": [
+          "projectLegacyDiagram",
+          "projectDiagramScopedCanvasView"
+        ],
+        "automatedTests": [
+          "src/services/sysmlDiagramCreation.test.ts",
+          "src/services/sysmlCreationRules.test.ts",
+          "tests/e2e/sysml-requirements-existing-block.spec.ts",
+          "src/engine/sysml/semanticIdentityReleaseGate.test.ts"
+        ]
+      },
+      "fourLevelCompliance": {
+        "element": {
+          "status": "PASS",
+          "evidence": "Automated tests create and present one Block and one Requirement."
+        },
+        "properties": {
+          "status": "PASS",
+          "evidence": "Block identity/name and Requirement requirementId/text are represented in the domain model and asserted by the semantic identity release gate."
+        },
+        "relationships": {
+          "status": "PASS",
+          "evidence": "Satisfy is stored with semantic sourceId/targetId endpoints and rendered when both endpoint presentations exist."
+        },
+        "constraints": {
+          "status": "PARTIAL",
+          "evidence": "Endpoint and duplicate relationship admission are tested; this evidence does not cover the complete Requirement Diagram notation and constraint set in §16.3.1.1."
+        }
+      },
+      "overallStatus": "PARTIAL"
+    },
+    {
+      "id": "ADIA-REPOSITORY-PRESENTATION-LIFECYCLE-001",
+      "feature": "One canonical semantic Block with independent diagram-scoped presentations, positions, and remove-from-diagram behavior",
+      "authority": "ADIA_EXTENSION",
+      "specification": {
+        "document": "Cameo-Style Repository and Diagram Presentation Design",
+        "sourceFile": "docs/superpowers/specs/2026-09-25-cameo-repository-presentation-design.md",
+        "sections": [
+          "Authority and terminology",
+          "Semantic and presentation model",
+          "Model Explorer command behavior",
+          "Verification and release gates"
+        ]
+      },
+      "implementation": {
+        "sourceFiles": [
+          "src/engine/sysml/model.ts",
+          "src/engine/sysml/presentationState.ts",
+          "src/services/sysmlCommandGateway.ts",
+          "src/services/sysmlProjectionState.ts",
+          "src/App.tsx"
+        ],
+        "domainTypes": [
+          "BlockDefinition",
+          "DiagramPresentation"
+        ],
+        "commands": [
+          "createAndPresent",
+          "addToDiagram",
+          "updatePresentation",
+          "removeFromDiagram"
+        ],
+        "validator": "executeSysmlCommand; validateSysmlRepository; the addToDiagram gateway branch rejects duplicate membership with PRESENTATION_ALREADY_EXISTS.",
+        "persistenceMapping": "buildCanonicalSysmlProjectPayload writes sysmlRepository, sysmlCoordinates, and diagramPresentations; each diagram presentation record stores semanticElementId and bounds under diagramPresentations[diagramId].presentations[elementId].",
+        "projection": [
+          "projectLegacyDiagram produces the complete semantic lookup projection",
+          "projectDiagramScopedCanvasView filters canvas membership by diagram ID",
+          "App.tsx renders the scoped canvas view while repository-backed controls retain the complete projection"
+        ],
+        "automatedTests": [
+          "src/engine/sysml/repositoryPresentationReleaseGate.test.ts",
+          "src/services/sysmlProjectionState.test.ts",
+          "tests/e2e/sysml-repository-presentation.spec.ts"
+        ]
+      },
+      "fourLevelCompliance": {
+        "element": {
+          "status": "PASS",
+          "evidence": "The release gate asserts one repository Block definition across Requirements and BDD."
+        },
+        "properties": {
+          "status": "PASS",
+          "evidence": "The release gate serializes/reloads different bounds for the same semantic ID on Requirements and BDD; the browser test verifies the positions remain independent after switching viewpoints."
+        },
+        "relationships": {
+          "status": "PASS",
+          "evidence": "Presentation records point to the same semantic ID; semantic identity and Satisfy endpoint preservation are independently tested by semanticIdentityReleaseGate.test.ts."
+        },
+        "constraints": {
+          "status": "PASS",
+          "evidence": "Canvas membership is scoped to its diagram; removeFromDiagram preserves the semantic definition and the other diagram presentation; duplicate membership is rejected by the gateway."
+        }
+      },
+      "overallStatus": "COMPLIANT"
+    },
+    {
+      "id": "ADIA-DELETE-MATERIAL-IMPACT-001",
+      "feature": "Deleting a Block with an owned PartUsage (PartProperty representation), Satisfy relationship, and presentation requires impact confirmation and reports those impacts",
+      "authority": "ADIA_EXTENSION",
+      "specification": {
+        "document": "Cameo-Style Repository and Diagram Presentation Design",
+        "sourceFile": "docs/superpowers/specs/2026-09-25-cameo-repository-presentation-design.md",
+        "sections": [
+          "Model Explorer command behavior",
+          "Deletion and hierarchy rules",
+          "Diagnostics and user feedback"
+        ]
+      },
+      "implementation": {
+        "sourceFiles": [
+          "src/engine/sysml/mutations.ts",
+          "src/services/sysmlCommandGateway.ts",
+          "src/services/sysmlTransactionAdapter.ts",
+          "src/features/modelExplorer/adapters/sysmlExplorerAdapter.ts",
+          "src/features/modelExplorer/modelExplorerTypes.ts",
+          "src/components/modelExplorer/MoveImpactDialog.tsx"
+        ],
+        "domainTypes": [
+          "BlockDefinition",
+          "PartUsage",
+          "SysmlRelationship",
+          "MutationImpact",
+          "ExplorerImpact"
+        ],
+        "commands": [
+          "createElement",
+          "ModelExplorerCommand.createRelationship",
+          "deleteElements"
+        ],
+        "validator": "analyzeMutation computes descendants, removedRelationshipIds, and affected presentations; requiresDeletionConfirmation and executeSysmlCommand require a matching confirmedImpactHash before commit; validateSysmlRepository validates the resulting repository.",
+        "persistenceMapping": "SysmlRepository.definitions, usages, relationships, and diagramPresentations; deletion removes owned semantic descendants, affected relationship IDs, and presentations in one gateway transaction.",
+        "projection": "toExplorerImpact maps gateway impact into ExplorerImpact; MoveImpactDialog displays descendant, relationship, and presentation impacts before confirmation.",
+        "automatedTests": [
+          "src/engine/sysml/mutations.test.ts",
+          "src/features/modelExplorer/adapters/sysmlExplorerAdapter.test.ts",
+          "src/components/modelExplorer/MoveImpactDialog.test.tsx",
+          "tests/e2e/sysml-tree-delete-impact.spec.ts"
+        ]
+      },
+      "fourLevelCompliance": {
+        "element": {
+          "status": "PASS",
+          "evidence": "The browser test creates a Block, owned PartUsage (the V3 repository's PartProperty representation), Requirement, and Satisfy relationship; after confirmed deletion, the Block and owned PartUsage are absent while the Requirement remains."
+        },
+        "properties": {
+          "status": "PASS",
+          "evidence": "The PartUsage is created with the Block as owner and a valid Block type through the Model Explorer adapter; deletion impact reports it as a descendant."
+        },
+        "relationships": {
+          "status": "PASS",
+          "evidence": "The Satisfy relationship is displayed before deletion, included in Affected Relationships in the confirmation, and absent after confirmed deletion."
+        },
+        "constraints": {
+          "status": "PASS",
+          "evidence": "Unconfirmed material deletion is rejected with impact; the browser confirms using the returned impact hash, after which the single gateway transaction commits."
+        }
+      },
+      "overallStatus": "COMPLIANT"
+    },
+    {
+      "id": "ADIA-REJECTED-TREE-ACTION-DIAGNOSTIC-001",
+      "feature": "A duplicate Satisfy relationship requested from a Model Explorer tree action is rejected without creating a duplicate and exposes its diagnostic",
+      "authority": "ADIA_EXTENSION",
+      "specification": {
+        "document": "Cameo-Style Repository and Diagram Presentation Design",
+        "sourceFile": "docs/superpowers/specs/2026-09-25-cameo-repository-presentation-design.md",
+        "sections": [
+          "Model Explorer command behavior",
+          "Diagnostics and user feedback"
+        ]
+      },
+      "implementation": {
+        "sourceFiles": [
+          "src/services/sysmlCreationRules.ts",
+          "src/services/sysmlCommandGateway.ts",
+          "src/features/modelExplorer/adapters/sysmlExplorerAdapter.ts",
+          "src/components/modelExplorer/AppModelExplorer.tsx",
+          "src/App.tsx"
+        ],
+        "domainTypes": [
+          "SysmlRelationship",
+          "ExplorerDiagnostic",
+          "ExplorerCommandResult"
+        ],
+        "commands": "ModelExplorerCommand.createRelationship is translated by sysmlExplorerAdapter to SysmlEditorCommand.createElement.",
+        "validator": "validateCanonicalRelationshipCandidate returns DUPLICATE_RELATIONSHIP; executeSysmlCommand returns a non-committed diagnostic and preserves repository revision.",
+        "persistenceMapping": "Accepted relationships are stored in SysmlRepository.relationships; the duplicate rejection commits no relationship and does not advance semantic revision.",
+        "projection": "AppModelExplorer forwards ExplorerCommandResult through onCommandResult; App.tsx handleExplorerCommandResult routes error diagnostics to the visible error alert.",
+        "automatedTests": [
+          "src/services/sysmlCreationRules.test.ts",
+          "src/features/modelExplorer/adapters/sysmlExplorerAdapter.test.ts",
+          "tests/e2e/sysml-tree-delete-impact.spec.ts"
+        ]
+      },
+      "fourLevelCompliance": {
+        "element": {
+          "status": "PASS",
+          "evidence": "One valid Satisfy relationship remains after the duplicate request; the browser asserts exactly one relationship presentation."
+        },
+        "properties": {
+          "status": "PASS",
+          "evidence": "The original relationship retains its source, target, and kind; duplicate admission checks those identity-defining fields."
+        },
+        "relationships": {
+          "status": "PASS",
+          "evidence": "The rejected duplicate does not add a second relationship to the repository or diagram."
+        },
+        "constraints": {
+          "status": "PASS",
+          "evidence": "The gateway returns DUPLICATE_RELATIONSHIP and the browser verifies that code in a visible alertdialog."
+        }
+      },
+      "overallStatus": "COMPLIANT"
+    },
+    {
+      "id": "ADIA-SEMANTIC-IDENTITY-RELEASE-GATE-001",
+      "feature": "Motor semantic identity is preserved across BDD-A, BDD-B, Vehicle IBD, Requirement Diagram, Satisfy linkage, rename, and persistence round trip",
+      "authority": "ADIA_EXTENSION",
+      "specification": {
+        "document": "SysML v1.6 Backend-First Compliance Design",
+        "sourceFile": "docs/superpowers/specs/2026-09-24-sysml-v1-6-backend-first-compliance-design.md",
+        "section": "Mandatory repository identity release gate"
+      },
+      "implementation": {
+        "sourceFiles": [
+          "src/engine/sysml/domain/index.ts",
+          "src/engine/sysml/commands/dispatcher.ts",
+          "src/engine/sysml/projection/canonicalProjections.ts",
+          "src/engine/sysml/persistence/migrateV3ToV4.ts"
+        ],
+        "domainTypes": [
+          "Block",
+          "PartProperty",
+          "Requirement",
+          "SemanticRelationship",
+          "DiagramPresentation"
+        ],
+        "commands": [
+          "CreateElement",
+          "CreateRelationship",
+          "DisplayExistingElement",
+          "RenameElement"
+        ],
+        "validator": "dispatchSysmlCommand checks element existence, diagram metaclass compatibility, duplicate presentation identity, and relationship endpoint/type validity before committing.",
+        "persistenceMapping": "serializeRepositoryV4 and deserializeRepositoryV4 persist elements, relationships, diagrams, and presentations while preserving semantic IDs.",
+        "projection": [
+          "projectBddDiagram",
+          "projectIbdDiagram",
+          "projectRequirementsDiagram"
+        ],
+        "automatedTests": [
+          "src/engine/sysml/semanticIdentityReleaseGate.test.ts"
+        ]
+      },
+      "fourLevelCompliance": {
+        "element": {
+          "status": "PASS",
+          "evidence": "The release gate asserts exactly one Motor Block, one leftMotor PartProperty, one REQ-001 Requirement, and one Satisfy relationship."
+        },
+        "properties": {
+          "status": "PASS",
+          "evidence": "Motor rename preserves its ID; leftMotor typeId remains Motor's ID; requirementId remains REQ-001 after round trip."
+        },
+        "relationships": {
+          "status": "PASS",
+          "evidence": "The Satisfy relationship retains its source and target IDs; BDD, IBD, and Requirement Diagram presentations reference the same semantic elements."
+        },
+        "constraints": {
+          "status": "PASS",
+          "evidence": "The release test verifies unique semantic counts, distinct diagram presentations, dynamic renamed-name resolution, and serialization/reload without duplication."
+        }
+      },
+      "overallStatus": "COMPLIANT"
+    },
+    {
+      "id": "UML-PORT-STANDARD-001",
+      "feature": "Standard UML Port created without SysML proxy/full stereotyping",
+      "authority": "UML_FOUNDATION",
+      "specification": {
+        "document": "ISO/IEC 19505-2 (UML 2.5.1)",
+        "section": "§11.3 Ports",
+        "url": "https://www.omg.org/spec/UML/2.5.1/PDF"
+      },
+      "implementation": {
+        "sourceFiles": [
+          "src/engine/sysml/domain/ports.ts",
+          "src/engine/sysml/model.ts",
+          "src/services/sysmlOwnedFeatureCommands.ts"
+        ],
+        "domainTypes": [
+          "Port",
+          "PortDefinition",
+          "CanonicalPortKind"
+        ],
+        "commands": [
+          "createOwnedPort",
+          "buildCreateOwnedPortCommand"
+        ],
+        "validator": [
+          "validatePort",
+          "PORT_DIAGNOSTICS"
+        ],
+        "persistenceMapping": "SysmlRepository.definitions[blockId].ports",
+        "projection": [
+          "projectLegacyDiagram",
+          "projectDiagramScopedCanvasView"
+        ],
+        "automatedTests": [
+          "src/engine/sysml/diagramInteractionCorrections.test.ts",
+          "src/services/sysmlOwnedFeatureCommands.test.ts",
+          "src/engine/sysml/validation/portRules.test.ts"
+        ],
+        "executableCases": [
+          "PORT_UML_STANDARD_OWNED",
+          "PORT_PERSISTENCE_STABLE"
+        ]
+      },
+      "fourLevelCompliance": {
+        "element": {
+          "status": "PASS",
+          "evidence": "Standard Port creates owned feature with canonical portKind umlPort without stereotypes.",
+          "executableCases": [
+            "PORT_UML_STANDARD_OWNED"
+          ]
+        },
+        "properties": {
+          "status": "PASS",
+          "evidence": "PortDefinition retains id, name, direction, multiplicity, and stable persistence.",
+          "executableCases": [
+            "PORT_PERSISTENCE_STABLE"
+          ]
+        },
+        "relationships": {
+          "status": "PASS",
+          "evidence": "Standard port is contained strictly within owning BlockDefinition.",
+          "executableCases": [
+            "PORT_UML_STANDARD_OWNED"
+          ]
+        },
+        "constraints": {
+          "status": "PASS",
+          "evidence": "Persistence and serialization round trip cleanly without forced stereotypes.",
+          "executableCases": [
+            "PORT_PERSISTENCE_STABLE"
+          ]
+        }
+      },
+      "overallStatus": "COMPLIANT",
+      "executableEvidence": [
+        {
+          "caseId": "PORT_UML_STANDARD_OWNED",
+          "testFile": "src/engine/sysml/diagramInteractionCorrections.test.ts",
+          "testName": "PORT_UML_STANDARD_OWNED: creates standard UML Port as owned feature without proxy/full stereotype"
+        },
+        {
+          "caseId": "PORT_PERSISTENCE_STABLE",
+          "testFile": "src/engine/sysml/diagramInteractionCorrections.test.ts",
+          "testName": "PORT_PERSISTENCE_STABLE: port definitions and kinds survive serialization round trip"
+        }
+      ],
+      "verification": {
+        "runner": "vitest",
+        "suite": "src/engine/sysml/diagramInteractionCorrections.test.ts",
+        "gate": "src/engine/sysml/diagramInteractionCompliance.test.ts",
+        "revision": "1bb84100091cc2f3d4e9da12a50a74944f0bbd4b",
+        "runId": "8f094ab9-dd18-46aa-8417-353970f6c79d",
+        "evaluatedAt": "2026-09-27T12:41:54.098Z",
+        "summary": {
+          "passed": 2,
+          "failed": 0,
+          "skipped": 0
+        },
+        "note": "Compliance is bound to live test-run results: the gate re-executes the suite and requires passing outcomes on the current revision and run identity. The pinned revision/runId record the last full verification of this file."
+      }
+    },
+    {
+      "id": "SYSML-PORT-CREATE-001",
+      "feature": "BDD ProxyPort, FullPort, and FlowPort typed creation and stereotype separation",
+      "authority": "OMG_SYSML_1_6",
+      "specification": {
+        "document": "OMG Systems Modeling Language (SysML), Version 1.6",
+        "documentId": "formal/19-11-01",
+        "section": "§9.3.2.8 FullPort, §9.3.2.12 ProxyPort, §9.3.2.7 FlowPort; UML 2.5.1 §11.3 Ports",
+        "url": "https://www.omg.org/spec/SysML/1.6/PDF"
+      },
+      "implementation": {
+        "sourceFiles": [
+          "src/engine/sysml/domain/ports.ts",
+          "src/engine/sysml/model.ts",
+          "src/engine/sysml/validation/portRules.ts",
+          "src/services/sysmlOwnedFeatureCommands.ts"
+        ],
+        "domainTypes": [
+          "Port",
+          "PortDefinition",
+          "CanonicalPortKind"
+        ],
+        "commands": [
+          "createOwnedPort",
+          "buildCreateOwnedPortCommand"
+        ],
+        "validator": [
+          "validatePort",
+          "PORT_DIAGNOSTICS"
+        ],
+        "persistenceMapping": "SysmlRepository.definitions[blockId].ports",
+        "projection": [
+          "projectLegacyDiagram",
+          "projectDiagramScopedCanvasView"
+        ],
+        "automatedTests": [
+          "src/engine/sysml/diagramInteractionCorrections.test.ts",
+          "src/services/sysmlOwnedFeatureCommands.test.ts",
+          "src/engine/sysml/validation/portRules.test.ts"
+        ],
+        "executableCases": [
+          "PORT_PROXY_INTERFACE_TYPING",
+          "PORT_PROXY_WRONG_TYPE_REJECTED",
+          "PORT_FULL_BLOCK_TYPING",
+          "PORT_FLOW_LEGACY_OWNED",
+          "PORT_NESTED_PROXY_VALIDATED",
+          "PORT_PERSISTENCE_STABLE"
+        ]
+      },
+      "fourLevelCompliance": {
+        "element": {
+          "status": "PASS",
+          "evidence": "CanonicalPortKind separates proxyPort, fullPort, and flowPort into distinct owned features.",
+          "executableCases": [
+            "PORT_FULL_BLOCK_TYPING",
+            "PORT_FLOW_LEGACY_OWNED"
+          ]
+        },
+        "properties": {
+          "status": "PASS",
+          "evidence": "PortDefinition preserves direction, typeId, isConjugated, multiplicity, and portKind.",
+          "executableCases": [
+            "PORT_PERSISTENCE_STABLE"
+          ]
+        },
+        "relationships": {
+          "status": "PASS",
+          "evidence": "Owned port is strictly contained within owning BlockDefinition with atomic rollback.",
+          "executableCases": [
+            "PORT_PROXY_INTERFACE_TYPING"
+          ]
+        },
+        "constraints": {
+          "status": "PASS",
+          "evidence": "ProxyPort enforces InterfaceBlock typing; missing types reject without silent creation.",
+          "executableCases": [
+            "PORT_PROXY_WRONG_TYPE_REJECTED",
+            "PORT_NESTED_PROXY_VALIDATED"
+          ]
+        }
+      },
+      "overallStatus": "COMPLIANT",
+      "executableEvidence": [
+        {
+          "caseId": "PORT_PROXY_INTERFACE_TYPING",
+          "testFile": "src/engine/sysml/diagramInteractionCorrections.test.ts",
+          "testName": "PORT_PROXY_INTERFACE_TYPING: creates ProxyPort typed by InterfaceBlock"
+        },
+        {
+          "caseId": "PORT_PROXY_WRONG_TYPE_REJECTED",
+          "testFile": "src/engine/sysml/diagramInteractionCorrections.test.ts",
+          "testName": "PORT_PROXY_WRONG_TYPE_REJECTED: rejects ProxyPort typed by non-interface Block with INVALID_PROXY_PORT_TYPE"
+        },
+        {
+          "caseId": "PORT_FULL_BLOCK_TYPING",
+          "testFile": "src/engine/sysml/diagramInteractionCorrections.test.ts",
+          "testName": "PORT_FULL_BLOCK_TYPING: creates FullPort typed by Block"
+        },
+        {
+          "caseId": "PORT_FLOW_LEGACY_OWNED",
+          "testFile": "src/engine/sysml/diagramInteractionCorrections.test.ts",
+          "testName": "PORT_FLOW_LEGACY_OWNED: creates legacy FlowPort with direction"
+        },
+        {
+          "caseId": "PORT_NESTED_PROXY_VALIDATED",
+          "testFile": "src/engine/sysml/diagramInteractionCorrections.test.ts",
+          "testName": "PORT_NESTED_PROXY_VALIDATED: nested proxy ports validate against repository definitions"
+        },
+        {
+          "caseId": "PORT_PERSISTENCE_STABLE",
+          "testFile": "src/engine/sysml/diagramInteractionCorrections.test.ts",
+          "testName": "PORT_PERSISTENCE_STABLE: port definitions and kinds survive serialization round trip"
+        }
+      ],
+      "verification": {
+        "runner": "vitest",
+        "suite": "src/engine/sysml/diagramInteractionCorrections.test.ts",
+        "gate": "src/engine/sysml/diagramInteractionCompliance.test.ts",
+        "revision": "1bb84100091cc2f3d4e9da12a50a74944f0bbd4b",
+        "runId": "8f094ab9-dd18-46aa-8417-353970f6c79d",
+        "evaluatedAt": "2026-09-27T12:41:54.098Z",
+        "summary": {
+          "passed": 6,
+          "failed": 0,
+          "skipped": 0
+        },
+        "note": "Compliance is bound to live test-run results: the gate re-executes the suite and requires passing outcomes on the current revision and run identity. The pinned revision/runId record the last full verification of this file."
+      }
+    },
+    {
+      "id": "SYSML-IBD-DELEGATION-001",
+      "feature": "IBD boundary-to-part delegation and part-to-part assembly connector resolution and creation",
+      "authority": "OMG_SYSML_1_6",
+      "specification": {
+        "document": "OMG Systems Modeling Language (SysML), Version 1.6",
+        "documentId": "formal/19-11-01",
+        "section": "§9.3.1.2 Internal Block Diagram, Clause 9.3.2 Connectors",
+        "url": "https://www.omg.org/spec/SysML/1.6/PDF"
+      },
+      "implementation": {
+        "sourceFiles": [
+          "src/engine/sysml/ibd.ts",
+          "src/services/sysmlIbdConnectorCommands.ts"
+        ],
+        "domainTypes": [
+          "ConnectorUsage",
+          "PortUsage"
+        ],
+        "commands": [
+          "createIbdConnector",
+          "buildCreateIbdConnectorCommand"
+        ],
+        "validator": [
+          "validateConnector",
+          "validateConnectorCandidate"
+        ],
+        "persistenceMapping": "SysmlRepository.connectors",
+        "projection": [
+          "deriveIbdView",
+          "projectLegacyDiagram"
+        ],
+        "automatedTests": [
+          "src/engine/sysml/diagramInteractionCorrections.test.ts",
+          "src/services/sysmlIbdConnectorCommands.test.ts",
+          "src/components/sysml/IbdConnectorEndpoint.test.tsx"
+        ],
+        "executableCases": [
+          "IBD_BOUNDARY_DELEGATION_PERSISTS",
+          "IBD_ASSEMBLY_PART_TO_PART",
+          "IBD_ASSEMBLY_BOUNDARY_REJECTED",
+          "IBD_CONNECTOR_PERSISTENCE"
+        ]
+      },
+      "fourLevelCompliance": {
+        "element": {
+          "status": "PASS",
+          "evidence": "Resolves context boundary ports and part occurrence ports distinctly.",
+          "executableCases": [
+            "IBD_ASSEMBLY_PART_TO_PART"
+          ]
+        },
+        "properties": {
+          "status": "PASS",
+          "evidence": "Delegation and assembly kinds validated with occurrence port endpoints.",
+          "executableCases": [
+            "IBD_CONNECTOR_PERSISTENCE"
+          ]
+        },
+        "relationships": {
+          "status": "PASS",
+          "evidence": "Boundary-to-internal delegation and internal part-to-part assembly connectors created atomically.",
+          "executableCases": [
+            "IBD_BOUNDARY_DELEGATION_PERSISTS"
+          ]
+        },
+        "constraints": {
+          "status": "PASS",
+          "evidence": "Assembly between boundary port and part port rejected with INVALID_ASSEMBLY_ENDPOINTS.",
+          "executableCases": [
+            "IBD_ASSEMBLY_BOUNDARY_REJECTED"
+          ]
+        }
+      },
+      "overallStatus": "COMPLIANT",
+      "executableEvidence": [
+        {
+          "caseId": "IBD_BOUNDARY_DELEGATION_PERSISTS",
+          "testFile": "src/engine/sysml/diagramInteractionCorrections.test.ts",
+          "testName": "IBD_BOUNDARY_DELEGATION_PERSISTS: creates and persists boundary port to internal part port delegation connector"
+        },
+        {
+          "caseId": "IBD_ASSEMBLY_PART_TO_PART",
+          "testFile": "src/engine/sysml/diagramInteractionCorrections.test.ts",
+          "testName": "IBD_ASSEMBLY_PART_TO_PART: creates internal part to part assembly connector"
+        },
+        {
+          "caseId": "IBD_ASSEMBLY_BOUNDARY_REJECTED",
+          "testFile": "src/engine/sysml/diagramInteractionCorrections.test.ts",
+          "testName": "IBD_ASSEMBLY_BOUNDARY_REJECTED: rejects assembly connector on boundary port with INVALID_CONNECTOR_CONTEXT"
+        },
+        {
+          "caseId": "IBD_CONNECTOR_PERSISTENCE",
+          "testFile": "src/engine/sysml/diagramInteractionCorrections.test.ts",
+          "testName": "IBD_CONNECTOR_PERSISTENCE: connector and endpoints preserved across serialization"
+        }
+      ],
+      "verification": {
+        "runner": "vitest",
+        "suite": "src/engine/sysml/diagramInteractionCorrections.test.ts",
+        "gate": "src/engine/sysml/diagramInteractionCompliance.test.ts",
+        "revision": "1bb84100091cc2f3d4e9da12a50a74944f0bbd4b",
+        "runId": "8f094ab9-dd18-46aa-8417-353970f6c79d",
+        "evaluatedAt": "2026-09-27T12:41:54.098Z",
+        "summary": {
+          "passed": 4,
+          "failed": 0,
+          "skipped": 0
+        },
+        "note": "Compliance is bound to live test-run results: the gate re-executes the suite and requires passing outcomes on the current revision and run identity. The pinned revision/runId record the last full verification of this file."
+      }
+    },
+    {
+      "id": "SYSML-REQ-TESTCASE-001",
+      "feature": "Requirement Diagram TestCase create, project, and explicit navigation behavior without Block double-click drilldown",
+      "authority": "OMG_SYSML_1_6",
+      "specification": {
+        "document": "OMG Systems Modeling Language (SysML), Version 1.6",
+        "documentId": "formal/19-11-01",
+        "section": "§16.3.2.4 TestCase, §16.3.1.1 Requirement Diagram",
+        "url": "https://www.omg.org/spec/SysML/1.6/PDF"
+      },
+      "implementation": {
+        "sourceFiles": [
+          "src/services/sysmlDiagramCreation.ts",
+          "src/engine/sysml/requirementsDiagramScope.ts",
+          "src/services/sysmlProjectionState.ts"
+        ],
+        "domainTypes": [
+          "TestCase",
+          "VerificationCase"
+        ],
+        "commands": [
+          "createAndPresentElement",
+          "createVerificationCase"
+        ],
+        "validator": [
+          "validateSysmlRepository"
+        ],
+        "persistenceMapping": "SysmlRepository.verificationCases normalized to TestCase",
+        "projection": [
+          "projectLegacyDiagram",
+          "projectDiagramScopedCanvasView"
+        ],
+        "automatedTests": [
+          "src/engine/sysml/diagramInteractionCorrections.test.ts",
+          "src/services/sysmlDiagramCreation.test.ts",
+          "src/engine/sysml/requirementsDiagramScope.test.ts"
+        ],
+        "executableCases": [
+          "REQ_TESTCASE_STABLE_IDENTITY",
+          "REQ_TESTCASE_VERIFIES_PERSISTED",
+          "REQ_BLOCK_NO_DRILLDOWN"
+        ]
+      },
+      "fourLevelCompliance": {
+        "element": {
+          "status": "PASS",
+          "evidence": "Normalized TestCase stereotype projected from repository verificationCases under stable identity.",
+          "executableCases": [
+            "REQ_TESTCASE_STABLE_IDENTITY"
+          ]
+        },
+        "properties": {
+          "status": "PASS",
+          "evidence": "verifiesRequirementIds and testCase presentation properties preserved.",
+          "executableCases": [
+            "REQ_TESTCASE_STABLE_IDENTITY"
+          ]
+        },
+        "relationships": {
+          "status": "PASS",
+          "evidence": "Verify relationship between TestCase and Requirement preserved on requirements diagrams.",
+          "executableCases": [
+            "REQ_TESTCASE_VERIFIES_PERSISTED"
+          ]
+        },
+        "constraints": {
+          "status": "PASS",
+          "evidence": "Double-clicking Block on Requirement Diagram is a no-op; explicit context navigation supported.",
+          "executableCases": [
+            "REQ_BLOCK_NO_DRILLDOWN"
+          ]
+        }
+      },
+      "overallStatus": "COMPLIANT",
+      "executableEvidence": [
+        {
+          "caseId": "REQ_TESTCASE_STABLE_IDENTITY",
+          "testFile": "src/engine/sysml/diagramInteractionCorrections.test.ts",
+          "testName": "REQ_TESTCASE_STABLE_IDENTITY: TestCase exists under stable canonical identity"
+        },
+        {
+          "caseId": "REQ_TESTCASE_VERIFIES_PERSISTED",
+          "testFile": "src/engine/sysml/diagramInteractionCorrections.test.ts",
+          "testName": "REQ_TESTCASE_VERIFIES_PERSISTED: TestCase verifiesRequirementIds preserved"
+        },
+        {
+          "caseId": "REQ_BLOCK_NO_DRILLDOWN",
+          "testFile": "src/engine/sysml/diagramInteractionCorrections.test.ts",
+          "testName": "REQ_BLOCK_NO_DRILLDOWN: double-clicking Block on Requirement Diagram is no-op"
+        }
+      ],
+      "verification": {
+        "runner": "vitest",
+        "suite": "src/engine/sysml/diagramInteractionCorrections.test.ts",
+        "gate": "src/engine/sysml/diagramInteractionCompliance.test.ts",
+        "revision": "1bb84100091cc2f3d4e9da12a50a74944f0bbd4b",
+        "runId": "8f094ab9-dd18-46aa-8417-353970f6c79d",
+        "evaluatedAt": "2026-09-27T12:41:54.098Z",
+        "summary": {
+          "passed": 3,
+          "failed": 0,
+          "skipped": 0
+        },
+        "note": "Compliance is bound to live test-run results: the gate re-executes the suite and requires passing outcomes on the current revision and run identity. The pinned revision/runId record the last full verification of this file."
+      }
+    },
+    {
+      "id": "ADIA-VERIFICATIONCASE-NORMALIZATION-001",
+      "feature": "Legacy VerificationCase schema normalization to SysML v1.6 TestCase semantic representation",
+      "authority": "ADIA_EXTENSION",
+      "specification": {
+        "document": "ADIA VerificationCase Normalization & Transition Architecture",
+        "section": "SysML 1.6 TestCase mapping and legacy verificationCase projection"
+      },
+      "implementation": {
+        "sourceFiles": [
+          "src/engine/sysml/model.ts",
+          "src/services/sysmlDiagramCreation.ts"
+        ],
+        "domainTypes": [
+          "VerificationCase",
+          "TestCase"
+        ],
+        "commands": [
+          "createVerificationCase"
+        ],
+        "validator": [
+          "validateSysmlRepository"
+        ],
+        "persistenceMapping": "SysmlRepository.verificationCases",
+        "projection": [
+          "projectLegacyDiagram"
+        ],
+        "automatedTests": [
+          "src/engine/sysml/diagramInteractionCorrections.test.ts",
+          "src/services/sysmlDiagramCreation.test.ts"
+        ],
+        "executableCases": [
+          "ADIA_LEGACY_VERIFICATION_NORMALIZATION"
+        ]
+      },
+      "fourLevelCompliance": {
+        "element": {
+          "status": "PASS",
+          "evidence": "Legacy verificationCase entities map cleanly to canonical TestCase element.",
+          "executableCases": [
+            "ADIA_LEGACY_VERIFICATION_NORMALIZATION"
+          ]
+        },
+        "properties": {
+          "status": "PASS",
+          "evidence": "method, parameters, and verifiesRequirementIds retained across normalization.",
+          "executableCases": [
+            "ADIA_LEGACY_VERIFICATION_NORMALIZATION"
+          ]
+        },
+        "relationships": {
+          "status": "PASS",
+          "evidence": "Requirement verification links preserved without schema divergence.",
+          "executableCases": [
+            "ADIA_LEGACY_VERIFICATION_NORMALIZATION"
+          ]
+        },
+        "constraints": {
+          "status": "PASS",
+          "evidence": "Atomic normalization during repository loading and command dispatch.",
+          "executableCases": [
+            "ADIA_LEGACY_VERIFICATION_NORMALIZATION"
+          ]
+        }
+      },
+      "overallStatus": "COMPLIANT",
+      "executableEvidence": [
+        {
+          "caseId": "ADIA_LEGACY_VERIFICATION_NORMALIZATION",
+          "testFile": "src/engine/sysml/diagramInteractionCorrections.test.ts",
+          "testName": "ADIA_LEGACY_VERIFICATION_NORMALIZATION: legacy VerificationCase normalized to TestCase under ADIA_EXTENSION"
+        }
+      ],
+      "verification": {
+        "runner": "vitest",
+        "suite": "src/engine/sysml/diagramInteractionCorrections.test.ts",
+        "gate": "src/engine/sysml/diagramInteractionCompliance.test.ts",
+        "revision": "1bb84100091cc2f3d4e9da12a50a74944f0bbd4b",
+        "runId": "8f094ab9-dd18-46aa-8417-353970f6c79d",
+        "evaluatedAt": "2026-09-27T12:41:54.098Z",
+        "summary": {
+          "passed": 1,
+          "failed": 0,
+          "skipped": 0
+        },
+        "note": "Compliance is bound to live test-run results: the gate re-executes the suite and requires passing outcomes on the current revision and run identity. The pinned revision/runId record the last full verification of this file."
+      }
+    },
+    {
+      "id": "SYSML-REQ-SATISFY-STATE-001",
+      "feature": "State Machine State to Requirement Satisfy relationship evaluation and creation",
+      "authority": "OMG_SYSML_1_6",
+      "specification": {
+        "document": "OMG Systems Modeling Language (SysML), Version 1.6",
+        "documentId": "formal/19-11-01",
+        "section": "§16.3.2.3 Satisfy; ISO/IEC 19514:2017",
+        "url": "https://www.omg.org/spec/SysML/1.6/PDF"
+      },
+      "implementation": {
+        "sourceFiles": [
+          "src/engine/sysml/connectionPolicy.ts",
+          "src/services/sysmlConnectionUi.ts",
+          "src/services/sysmlCreationRules.ts",
+          "src/engine/sysml/policy.ts"
+        ],
+        "domainTypes": [
+          "ConnectionEndpoint",
+          "SysmlRelationship"
+        ],
+        "commands": [
+          "createAndPresentRelationship",
+          "createRelationship"
+        ],
+        "validator": [
+          "evaluateSysmlConnection",
+          "validateCanonicalRelationshipCandidate"
+        ],
+        "persistenceMapping": "SysmlRepository.relationships",
+        "projection": [
+          "projectLegacyDiagram"
+        ],
+        "automatedTests": [
+          "src/engine/sysml/diagramInteractionCorrections.test.ts",
+          "src/engine/sysml/connectionPolicy.test.ts",
+          "src/services/sysmlConnectionUi.test.ts",
+          "src/services/sysmlCreationRules.test.ts"
+        ],
+        "executableCases": [
+          "STATE_SATISFY_REAL_ID_REQUIRED",
+          "STATE_SATISFY_DIRECTION_ENFORCED",
+          "STATE_SATISFY_RELATIONSHIP_PERSISTS"
+        ]
+      },
+      "fourLevelCompliance": {
+        "element": {
+          "status": "PASS",
+          "evidence": "State recognized as valid connection endpoint across UI and canonical layers.",
+          "executableCases": [
+            "STATE_SATISFY_REAL_ID_REQUIRED"
+          ]
+        },
+        "properties": {
+          "status": "PASS",
+          "evidence": "Satisfy relationship kind properties validated with sourceFamily state.",
+          "executableCases": [
+            "STATE_SATISFY_RELATIONSHIP_PERSISTS"
+          ]
+        },
+        "relationships": {
+          "status": "PASS",
+          "evidence": "State to Requirement directional Satisfy allowed across canvas, state machine, and RTM.",
+          "executableCases": [
+            "STATE_SATISFY_RELATIONSHIP_PERSISTS"
+          ]
+        },
+        "constraints": {
+          "status": "PASS",
+          "evidence": "Requirement to State reversed Satisfy rejected with INVALID_SATISFY_DIRECTION and corrective guidance.",
+          "executableCases": [
+            "STATE_SATISFY_DIRECTION_ENFORCED"
+          ]
+        }
+      },
+      "overallStatus": "COMPLIANT",
+      "executableEvidence": [
+        {
+          "caseId": "STATE_SATISFY_REAL_ID_REQUIRED",
+          "testFile": "src/engine/sysml/diagramInteractionCorrections.test.ts",
+          "testName": "STATE_SATISFY_REAL_ID_REQUIRED: requires resolvable canonical State endpoint identity"
+        },
+        {
+          "caseId": "STATE_SATISFY_DIRECTION_ENFORCED",
+          "testFile": "src/engine/sysml/diagramInteractionCorrections.test.ts",
+          "testName": "STATE_SATISFY_DIRECTION_ENFORCED: reversed Requirement-to-State satisfy rejected with INVALID_SATISFY_DIRECTION"
+        },
+        {
+          "caseId": "STATE_SATISFY_RELATIONSHIP_PERSISTS",
+          "testFile": "src/engine/sysml/diagramInteractionCorrections.test.ts",
+          "testName": "STATE_SATISFY_RELATIONSHIP_PERSISTS: State-to-Requirement satisfy relationship valid and persists"
+        }
+      ],
+      "verification": {
+        "runner": "vitest",
+        "suite": "src/engine/sysml/diagramInteractionCorrections.test.ts",
+        "gate": "src/engine/sysml/diagramInteractionCompliance.test.ts",
+        "revision": "1bb84100091cc2f3d4e9da12a50a74944f0bbd4b",
+        "runId": "8f094ab9-dd18-46aa-8417-353970f6c79d",
+        "evaluatedAt": "2026-09-27T12:41:54.098Z",
+        "summary": {
+          "passed": 3,
+          "failed": 0,
+          "skipped": 0
+        },
+        "note": "Compliance is bound to live test-run results: the gate re-executes the suite and requires passing outcomes on the current revision and run identity. The pinned revision/runId record the last full verification of this file."
+      }
+    },
+    {
+      "id": "CAMEO-DIAGRAM-ACTIVATE-001",
+      "feature": "Deterministic Package Diagram activation by persisted repository ID and last-active tracking",
+      "authority": "CAMEO_TOOLING",
+      "specification": {
+        "document": "Cameo Systems Modeler Tooling Benchmark",
+        "section": "Package Diagram activation, tree double-click, and last-active diagram restoration"
+      },
+      "implementation": {
+        "sourceFiles": [
+          "src/services/sysmlDiagramActivation.ts",
+          "src/features/modelExplorer/modelDiagramRegistry.ts",
+          "src/App.tsx"
+        ],
+        "domainTypes": [
+          "PackageDiagramActivation",
+          "ModelDiagramDefinition"
+        ],
+        "commands": [
+          "resolvePackageDiagramActivation"
+        ],
+        "validator": [
+          "validateSysmlRepository"
+        ],
+        "persistenceMapping": "SysmlRepository.diagrams",
+        "projection": [
+          "ModelDiagramRegistry"
+        ],
+        "automatedTests": [
+          "src/engine/sysml/diagramInteractionCorrections.test.ts",
+          "src/services/sysmlDiagramActivation.test.ts",
+          "src/features/modelExplorer/modelDiagramRegistry.test.ts",
+          "src/features/modelExplorer/adapters/sysmlExplorerAdapter.test.ts"
+        ],
+        "executableCases": [
+          "CAMEO_DIAGRAM_ACTIVATE_ZERO_CREATES",
+          "CAMEO_DIAGRAM_ACTIVATE_ONE_OPENS",
+          "CAMEO_DIAGRAM_ACTIVATE_MANY_CHOOSER"
+        ]
+      },
+      "fourLevelCompliance": {
+        "element": {
+          "status": "PASS",
+          "evidence": "Zero diagrams returns create, one opens exact diagram ID, many opens last-active or chooser.",
+          "executableCases": [
+            "CAMEO_DIAGRAM_ACTIVATE_ZERO_CREATES"
+          ]
+        },
+        "properties": {
+          "status": "PASS",
+          "evidence": "Persisted diagramId preserved without synthetic string fallback.",
+          "executableCases": [
+            "CAMEO_DIAGRAM_ACTIVATE_ONE_OPENS"
+          ]
+        },
+        "relationships": {
+          "status": "PASS",
+          "evidence": "Package diagram owner package association preserved and tree double-click opens exact ID.",
+          "executableCases": [
+            "CAMEO_DIAGRAM_ACTIVATE_MANY_CHOOSER"
+          ]
+        },
+        "constraints": {
+          "status": "PASS",
+          "evidence": "Deterministic candidate sorting by name then ID; failed creation preserves diagram state.",
+          "executableCases": [
+            "CAMEO_DIAGRAM_ACTIVATE_MANY_CHOOSER"
+          ]
+        }
+      },
+      "overallStatus": "COMPLIANT",
+      "executableEvidence": [
+        {
+          "caseId": "CAMEO_DIAGRAM_ACTIVATE_ZERO_CREATES",
+          "testFile": "src/engine/sysml/diagramInteractionCorrections.test.ts",
+          "testName": "CAMEO_DIAGRAM_ACTIVATE_ZERO_CREATES: zero package diagrams returns create"
+        },
+        {
+          "caseId": "CAMEO_DIAGRAM_ACTIVATE_ONE_OPENS",
+          "testFile": "src/engine/sysml/diagramInteractionCorrections.test.ts",
+          "testName": "CAMEO_DIAGRAM_ACTIVATE_ONE_OPENS: single package diagram opens directly without chooser"
+        },
+        {
+          "caseId": "CAMEO_DIAGRAM_ACTIVATE_MANY_CHOOSER",
+          "testFile": "src/engine/sysml/diagramInteractionCorrections.test.ts",
+          "testName": "CAMEO_DIAGRAM_ACTIVATE_MANY_CHOOSER: multiple diagrams opens chooser or last active"
+        }
+      ],
+      "verification": {
+        "runner": "vitest",
+        "suite": "src/engine/sysml/diagramInteractionCorrections.test.ts",
+        "gate": "src/engine/sysml/diagramInteractionCompliance.test.ts",
+        "revision": "1bb84100091cc2f3d4e9da12a50a74944f0bbd4b",
+        "runId": "8f094ab9-dd18-46aa-8417-353970f6c79d",
+        "evaluatedAt": "2026-09-27T12:41:54.098Z",
+        "summary": {
+          "passed": 3,
+          "failed": 0,
+          "skipped": 0
+        },
+        "note": "Compliance is bound to live test-run results: the gate re-executes the suite and requires passing outcomes on the current revision and run identity. The pinned revision/runId record the last full verification of this file."
+      }
+    }
+  ]
+}

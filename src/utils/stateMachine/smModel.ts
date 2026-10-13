@@ -6,6 +6,7 @@ import type {
   StateData,
   TransitionData,
   VariableDef,
+  StateMachineDiagramData,
 } from '../../types/sm_types';
 
 export const CURRENT_SM_SCHEMA_VERSION = 5 as const;
@@ -74,6 +75,7 @@ export interface StateMachineModelV5 {
   safetyMode: boolean;
   hilConfig?: HILConfig;
   verification: SMVerificationConfig;
+  diagrams?: StateMachineDiagramData[];
 }
 
 export type StateMachineModel = StateMachineModelV5;
@@ -90,6 +92,7 @@ export interface LegacyStateMachineModel {
   safetyMode?: boolean;
   hilConfig?: HILConfig;
   verification?: Partial<SMVerificationConfig>;
+  diagrams?: StateMachineDiagramData[];
 }
 
 export interface ModelDiagnostic {

@@ -4,16 +4,16 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const BUILTIN_FALLBACK_LIMITS = Object.freeze({
-  'atmega328p': { flash: 32256, sram: 2048 },
+  'atmega328p': { flash: 32768, sram: 2048 },
   'atmega2560': { flash: 262144, sram: 8192 },
   'stm32f103c8t6': { flash: 65536, sram: 20480 },
-  'stm32f407vgt6': { flash: 524288, sram: 131072 },
-  'esp32-wroom-32': { flash: 4194304, sram: 532480 },
-  'Arduino_Uno': { flash: 32256, sram: 2048 },
+  'stm32f407vgt6': { flash: 1048576, sram: 131072 },
+  'esp32-wroom-32': { flash: 4194304, sram: 327680 },
+  'Arduino_Uno': { flash: 32768, sram: 2048 },
   'Arduino_Mega': { flash: 262144, sram: 8192 },
   'STM32F1': { flash: 65536, sram: 20480 },
-  'STM32F4': { flash: 524288, sram: 131072 },
-  'ESP32': { flash: 4194304, sram: 532480 },
+  'STM32F4': { flash: 1048576, sram: 131072 },
+  'ESP32': { flash: 4194304, sram: 327680 },
   'Generic': { flash: 1048576, sram: 262144 },
 });
 
@@ -30,7 +30,9 @@ function normalizeTargetId(targetId) {
   return map[tid] || tid;
 }
 
-function loadTargetPackManifest(targetId, targetPacksDir = path.join(process.cwd(), 'target-packs')) {
+function loadTargetPackManifest(targetId, targetPacksDir = process.resourcesPath
+  ? path.join(process.resourcesPath, 'target-packs')
+  : path.resolve(__dirname, '../../target-packs')) {
   const normId = normalizeTargetId(targetId);
   const manifestPath = path.join(targetPacksDir, normId, 'manifest.json');
   if (fs.existsSync(manifestPath)) {

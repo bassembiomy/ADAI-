@@ -4,7 +4,7 @@ import { createEmptyRepository, parseMultiplicity, qualifiedName, type SysmlRepo
 describe('canonical SysML repository', () => {
   it('creates a versioned repository with the declared profile', () => {
     const repo = createEmptyRepository();
-    expect(repo).toMatchObject({ schemaVersion: 2, profileId: 'OMG-SysML-1.6-ADIA', revision: 0 });
+    expect(repo).toMatchObject({ schemaVersion: 3, profileId: 'OMG-SysML-1.6-ADIA', revision: 0 });
     expect(JSON.parse(JSON.stringify(repo))).toEqual(repo);
   });
 

@@ -5,6 +5,8 @@ import { DAEAssembler } from './DAEAssembler';
 import { blockEquations, type BlockEquationArgs } from './vlabEquations';
 import { VLabPhysicsEngine } from './vlabPhysics';
 import { VLAB_VALIDATION_CONTRACTS } from './vlabValidationContracts';
+import { isValidVLabPortDomain } from './vlabPortDomains';
+import { widthOf } from './vlabVectorPorts';
 
 interface CatalogEntry {
   domain: string;
@@ -101,17 +103,7 @@ const collectCatalogIssues = (): CertificationIssue[] => {
 };
 
 const VALID_PORT_POSITIONS = new Set(['left', 'right', 'top', 'bottom']);
-const VALID_PORT_DOMAINS = new Set([
-  'Any',
-  'Electrical',
-  'Fluid',
-  'isothermal_liquid',
-  'Physical',
-  'Rotational',
-  'Thermal',
-  'Translational',
-]);
-const ZERO_PORT_BLOCKS = new Set(['gas_properties', 'ma_properties', 'subsystem', 'doe_custom']);
+const ZERO_PORT_BLOCKS = new Set(['ma_properties', 'subsystem', 'doe_custom']);
 
 const collectPortIssues = (): CertificationIssue[] => {
   const issues: CertificationIssue[] = [];
@@ -128,7 +120,7 @@ const collectPortIssues = (): CertificationIssue[] => {
       if (portIds.has(port.id)) issues.push(issue(domain, block.id, 'ports', `duplicate port ID "${port.id}"`));
       if (!VALID_PORT_POSITIONS.has(port.pos)) issues.push(issue(domain, block.id, 'ports', `invalid position "${port.pos}"`));
       if (port.label !== undefined && !port.label.trim()) issues.push(issue(domain, block.id, 'ports', `port "${port.id}" has an empty label`));
-      if (port.domain !== undefined && !VALID_PORT_DOMAINS.has(port.domain)) {
+      if (port.domain !== undefined && !isValidVLabPortDomain(port.domain)) {
         issues.push(issue(domain, block.id, 'ports', `port "${port.id}" has unknown domain "${port.domain}"`));
       }
       portIds.add(port.id);
@@ -162,19 +154,26 @@ const collectPortIssues = (): CertificationIssue[] => {
 
 const ZERO_RESIDUAL_FACTORIES = new Set([
   'ground', 'delta_ref', 'open_circuit', 'subsystem', 'inport', 'outport', 'rot_ref', 'trans_ref',
-  'thermal_ref', 'ma_ref', 'gas_ref', 'gas_properties', 'mag_ref', 'world_frame',
+  'thermal_ref', 'ma_ref', 'gas_ref', 'mag_ref', 'world_frame',
   'ref_frame', 'ps_terminator', 'fluid_ref', 'scope', 'solver_config', 'mech_config',
   'belt_properties', 'ma_properties', 'hydraulic_reference_il', 'reservoir_il',
+  // WP-09a: a net label has no through variable, and a DOE instance without an `out` port has nothing to drive
+  'conn_label', 'doe_custom',
 ]);
 
 const numericParams = (block: VLabBlock): Record<string, number | string> =>
   Object.fromEntries(Object.entries(block.params).map(([name, parameter]) => [name, parameter.value]));
 
-const makeEquationArgs = (ports: string[], params: Record<string, unknown> = {}): BlockEquationArgs => ({
-  across: Array.from({ length: Math.max(16, ports.length + 4) }, (_, index) => 1 + index * 0.25),
-  dAcross: Array.from({ length: Math.max(16, ports.length + 4) }, (_, index) => 0.1 + index * 0.01),
-  branch: Array.from({ length: Math.max(16, ports.length + 4) }, (_, index) => 0.5 + index * 0.05),
-  dBranch: Array.from({ length: Math.max(16, ports.length + 4) }, (_, index) => 0.2 + index * 0.02),
+// ranches is the number of branch unknowns the DAE assembler really allocates for the block (a joint with many signal
+// outputs allocates more than the historical 16-entry sample array).
+// widths[i] > 1: port i is a vector / composite port (WP-09c) and its across value is an array of that width.
+const makeEquationArgs = (ports: string[], params: Record<string, unknown> = {}, branches = 0, widths: number[] = []): BlockEquationArgs => ({
+  across: Array.from({ length: Math.max(16, ports.length + 4) }, (_, index) => (widths[index] ?? 1) > 1
+    ? Array.from({ length: widths[index] }, (_, k) => 1 + index * 0.25 + k * 0.1) : 1 + index * 0.25),
+  dAcross: Array.from({ length: Math.max(16, ports.length + 4) }, (_, index) => (widths[index] ?? 1) > 1
+    ? Array.from({ length: widths[index] }, (_, k) => 0.1 + index * 0.01 + k * 0.01) : 0.1 + index * 0.01),
+  branch: Array.from({ length: Math.max(16, ports.length + 4, branches) }, (_, index) => 0.5 + index * 0.05),
+  dBranch: Array.from({ length: Math.max(16, ports.length + 4, branches) }, (_, index) => 0.2 + index * 0.02),
   state: Array.from({ length: 16 }, (_, index) => 0.25 + index * 0.01),
   dState: Array.from({ length: 16 }, (_, index) => 0.05 + index * 0.005),
   ctx: {
@@ -223,9 +222,17 @@ const collectEquationIssues = (): CertificationIssue[] => {
       numericParams(block),
       ...(contract?.boundaryParameters ?? []),
     ];
+    const allocated = (() => {
+      try {
+        const probe = new DAEAssembler().assemble([{ id: 'alloc', type: 'default', position: { x: 0, y: 0 }, data: { type: block.id, params: block.params, ports: block.ports } } as Node], []);
+        return probe.variableNames.filter((name) => name.startsWith('alloc_branch_')).length;
+      } catch {
+        return 0;
+      }
+    })();
 
     cases.forEach((params, caseIndex) => {
-      const args = makeEquationArgs(block.ports.map((port) => port.id), params);
+      const args = makeEquationArgs(block.ports.map((port) => port.id), params, allocated, block.ports.map((port) => widthOf(port)));
       const before = cloneArgs(args);
       const immutableBefore = immutableInputs(args);
       try {

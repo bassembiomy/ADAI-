@@ -10,11 +10,17 @@ import type {
   ModelBaseline,
   TraceArtifact,
   ModelChangeRecord,
+  ActorDefinition,
+  SubjectDefinition,
+  UseCaseDefinition,
+  ExtensionPoint,
+  DiagramReference,
 } from './model';
 import type { NormalizedSysmlStore } from './normalizedStore';
 import type { SysmlValidationReport } from './validation';
 import type { MutationImpact } from './mutations';
-import type { PresentationCoordinates } from '../../services/sysmlCommandGateway';
+import type { ExternalSemanticEndpoint, SemanticEndpointContext } from './semanticEndpointIndex';
+import type { DiagramPresentationInput, PresentationCoordinates } from './presentationState';
 
 export const SYSML_WORKER_PROTOCOL_VERSION = '1.0.0';
 
@@ -38,8 +44,13 @@ export interface WorkerStoreSnapshot {
   baselines?: Record<string, ModelBaseline>;
   artifacts?: Record<string, TraceArtifact>;
   auditTrail?: ModelChangeRecord[];
+  actors?: Record<string, ActorDefinition>;
+  subjects?: Record<string, SubjectDefinition>;
+  useCases?: Record<string, UseCaseDefinition>;
+  extensionPoints?: Record<string, ExtensionPoint>;
+  diagramReferences?: Record<string, DiagramReference>;
   coordinates?: Record<string, PresentationCoordinates>;
-  diagramPresentations?: Record<string, { elementIds: string[] }>;
+  diagramPresentations?: Record<string, DiagramPresentationInput>;
   activeDiagramId?: string;
   activeDiagramElementIds?: string[];
 }
@@ -51,6 +62,19 @@ export interface WorkerBaseRequest {
   taskType: WorkerTaskType;
   /** Worker-safe snapshot or normalized store / repository */
   payload: WorkerStoreSnapshot | SysmlRepository | NormalizedSysmlStore;
+  /**
+   * Task 4 worker endpoint context (Finding 1 review fix): optional State
+   * endpoint context so validate/project resolve external State endpoints
+   * by stable semantic ID. Accepts the live Map shape or the plain-object
+   * shape produced by postMessage/JSON round-trips (coerced to Map in
+   * sysmlWorker). Absent context behaves exactly as before (context-blind).
+   */
+  endpointContext?: SemanticEndpointContext | SerializedSemanticEndpointContext;
+}
+
+/** Plain-object endpoint context (postMessage/JSON-safe; no Map/Set). */
+export interface SerializedSemanticEndpointContext {
+  externalEndpoints?: Record<string, ExternalSemanticEndpoint>;
 }
 
 export interface WorkerValidateRequest extends WorkerBaseRequest {

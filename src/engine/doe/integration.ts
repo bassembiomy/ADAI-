@@ -258,6 +258,18 @@ function resolveDeploymentModel(
   const factorOrder: string[] = raw.factorNames || (Array.isArray(raw.headers) ? raw.headers.slice(0, -1) : []);
   const responseName: string = raw.responseName || (Array.isArray(raw.headers) ? raw.headers[raw.headers.length - 1] : 'Y');
 
+  // Real training row count from whichever per-row array the legacy result carries; 0 = unknown.
+  const rowSource = [raw.actuals, raw.predictions, raw.residuals, raw.details?.actuals, raw.details?.predictions, raw.details?.residuals, raw.data, raw.rows]
+    .find(a => Array.isArray(a) && a.length > 0);
+  const trainingRowCount: number = rowSource ? rowSource.length : 0;
+  // Only carry metrics that actually exist; never fabricate R² = 0.
+  const finiteOrUndef = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) ? v : undefined);
+  const rSq = finiteOrUndef(raw.rSquared) ?? finiteOrUndef(raw.R2) ?? finiteOrUndef(raw.details?.rSquared) ?? finiteOrUndef(raw.details?.R2);
+  const adjRSq = finiteOrUndef(raw.adjustedRSquared) ?? finiteOrUndef(raw.R2Adj) ?? finiteOrUndef(raw.details?.adjustedRSquared) ?? finiteOrUndef(raw.details?.R2Adj);
+  const legacyMetrics: { rSquared?: number; adjustedRSquared?: number } = {};
+  if (rSq !== undefined) legacyMetrics.rSquared = rSq;
+  if (adjRSq !== undefined) legacyMetrics.adjustedRSquared = adjRSq;
+
   if (mType === 'RSM') {
     const beta = raw.Beta || raw.details?.Beta || raw.details?.physicalCoefficients;
     if (Array.isArray(beta) && beta.length > 0) {
@@ -287,8 +299,8 @@ function resolveDeploymentModel(
         modelType: 'RSM',
         factorOrder,
         responseName,
-        trainingRowCount: raw.actuals?.length || 4,
-        metrics: { rSquared: raw.rSquared ?? raw.R2 ?? 0 },
+        trainingRowCount,
+        metrics: legacyMetrics,
         rsm: { intercept: beta[0] || 0, terms }
       };
     }
@@ -300,8 +312,8 @@ function resolveDeploymentModel(
         modelType: 'GMDH',
         factorOrder,
         responseName,
-        trainingRowCount: raw.actuals?.length || 5,
-        metrics: { rSquared: raw.rSquared ?? raw.R2 ?? 0 },
+        trainingRowCount,
+        metrics: legacyMetrics,
         gmdh: { polyOrder: gmdhModel.polynomialOrder || 2, layers: gmdhModel.layers }
       };
     }
@@ -313,8 +325,8 @@ function resolveDeploymentModel(
         modelType: 'Taguchi',
         factorOrder,
         responseName,
-        trainingRowCount: raw.actuals?.length || 2,
-        metrics: { rSquared: raw.rSquared ?? raw.R2 ?? 0 },
+        trainingRowCount,
+        metrics: legacyMetrics,
         taguchi: {
           grandMean: raw.grandMean ?? raw.details?.grandMeanY ?? 0,
           factorLevels: factorLevels.map((fl: any) => ({
@@ -331,6 +343,8 @@ function resolveDeploymentModel(
   }
   return null;
 }
+
+let xbExportSeq = 0;
 
 /**
  * Creates an X-Bridges block from a canonical DOE result.
@@ -361,7 +375,9 @@ export function createXBridgesDOEBlock(
 
   const factorOrder = deployment.factorOrder;
   const responseName = deployment.responseName;
-  const id = nodeId || `doe_xb_${Date.now()}`;
+  // Unique id + staggered position so repeated exports in the same millisecond never collide or stack.
+  const seq = ++xbExportSeq;
+  const id = nodeId || `doe_xb_${Date.now()}_${seq}`;
   const modelType = deployment.modelType;
   const equation = ('equation' in result && result.equation) ? result.equation : `${responseName} = f_${modelType}(${factorOrder.join(', ')})`;
 
@@ -388,7 +404,7 @@ export function createXBridgesDOEBlock(
   return {
     id,
     type: 'xblock',
-    position: { x: 400, y: 300 },
+    position: { x: 400 + ((seq - 1) % 8) * 40, y: 300 + ((seq - 1) % 8) * 40 },
     data: {
       id,
       name: `${modelType} Model`,
@@ -399,6 +415,7 @@ export function createXBridgesDOEBlock(
       inputNames: [...factorOrder],
       outputName: responseName,
       deploymentModel: deployment,
+      metrics: { R2: deployment.metrics?.rSquared, R2Adj: deployment.metrics?.adjustedRSquared },
       inputs,
       outputs,
       params: {
@@ -446,6 +463,8 @@ export function createVLabDOEBlock(
   const modelType = deployment.modelType;
   const equation = ('equation' in result && result.equation) ? result.equation : `${responseName} = f_${modelType}(${factorOrder.join(', ')})`;
 
+  // V-Lab port contract (F-040): every factor/response is a scalar physical signal with an explicit direction. The
+  // quantity is the factor/response name; the deployment model carries no units, so no unit is claimed.
   const ports = [
     ...factorOrder.map((name, i) => ({
       id: `in${i + 1}`,
@@ -453,7 +472,9 @@ export function createVLabDOEBlock(
       type: 'input' as const,
       pos: 'left',
       position: 'left',
-      domain: 'General'
+      domain: 'Physical',
+      direction: 'in' as const,
+      quantity: name
     })),
     {
       id: 'out',
@@ -461,7 +482,9 @@ export function createVLabDOEBlock(
       type: 'output' as const,
       pos: 'right',
       position: 'right',
-      domain: 'General'
+      domain: 'Physical',
+      direction: 'out' as const,
+      quantity: responseName
     }
   ];
 

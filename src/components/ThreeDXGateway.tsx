@@ -148,8 +148,8 @@ export const ThreeDXGateway: React.FC<ThreeDXGatewayProps> = ({
     { id: 'requirements', name: 'Requirements Diagram', type: 'requirements', selector: '#adia-diagram-canvas', fileName: 'requirements_diagram.png', status: 'idle', direction: 'push' },
     { id: 'statemachine', name: 'State Machine Diagram', type: 'state_machine', selector: '#adia-diagram-canvas', fileName: 'state_machine.png', status: 'idle', direction: 'push' },
     { id: 'codegen', name: 'Generated C Code (ZIP)', type: 'code_generation', selector: '', fileName: 'generated_code.zip', status: 'idle', direction: 'push' },
-    { id: 'xbridges', name: 'XBridges Model (JSON)', type: 'xbridges_model', selector: '#xbridges-workspace-container', fileName: 'xbridges_model.json', status: 'idle', direction: 'push' },
-    { id: 'vlab', name: 'VLab Simulation Model (JSON)', type: 'vlab_model', selector: '#vlab-workspace-container', fileName: 'vlab_model.json', status: 'idle', direction: 'bidirectional' },
+    { id: 'xbridges', name: 'XBridges Model (.adia)', type: 'xbridges_model', selector: '#xbridges-workspace-container', fileName: 'xbridges_model.adia', status: 'idle', direction: 'push' },
+    { id: 'vlab', name: 'VLab Simulation Model (.adia)', type: 'vlab_model', selector: '#vlab-workspace-container', fileName: 'vlab_model.adia', status: 'idle', direction: 'bidirectional' },
   ]);
 
   const [isLivePanelOpen, setIsLivePanelOpen] = useState(false);
@@ -473,7 +473,7 @@ export const ThreeDXGateway: React.FC<ThreeDXGatewayProps> = ({
               </div>
             </div>
           </div>
-          <button
+          <button data-help-feature="ui:ThreeDXGateway:916f041609f2" data-help-source="src/components/ThreeDXGateway.tsx"
             id="3dx-gateway-close"
             onClick={handleClose}
             className="p-2 rounded-lg text-gray-500 hover:text-white hover:bg-white/10 transition-colors"
@@ -484,15 +484,15 @@ export const ThreeDXGateway: React.FC<ThreeDXGatewayProps> = ({
 
         {/* ── Tab Bar ─────────────────────────────────────────────────── */}
         <div className="flex items-center gap-2 px-6 py-3 border-b border-[#1a2133] bg-[#0a0d14]/50 flex-shrink-0">
-          <TabButton id="auth" active={activeTab === 'auth'} onClick={() => setActiveTab('auth')}
+          <TabButton data-help-feature="ui:ThreeDXGateway:4716ed628f75" data-help-source="src/components/ThreeDXGateway.tsx" id="auth" active={activeTab === 'auth'} onClick={() => setActiveTab('auth')}
             icon={<ShieldCheck size={14} />} label="Authentication" />
-          <TabButton id="browser" active={activeTab === 'browser'} onClick={() => setActiveTab('browser')}
+          <TabButton data-help-feature="ui:ThreeDXGateway:2ac2d79bd754" data-help-source="src/components/ThreeDXGateway.tsx" id="browser" active={activeTab === 'browser'} onClick={() => setActiveTab('browser')}
             icon={<Globe size={14} />} label="Browser" disabled={!isConnected} />
-          <TabButton id="sync" active={activeTab === 'sync'} onClick={() => setActiveTab('sync')}
+          <TabButton data-help-feature="ui:ThreeDXGateway:01ca102bc2f2" data-help-source="src/components/ThreeDXGateway.tsx" id="sync" active={activeTab === 'sync'} onClick={() => setActiveTab('sync')}
             icon={<Layers size={14} />} label="Dashboard Sync" disabled={!isConnected} />
-          <TabButton id="upload" active={activeTab === 'upload'} onClick={() => setActiveTab('upload')}
+          <TabButton data-help-feature="ui:ThreeDXGateway:bcd2be18cc3c" data-help-source="src/components/ThreeDXGateway.tsx" id="upload" active={activeTab === 'upload'} onClick={() => setActiveTab('upload')}
             icon={<Upload size={14} />} label="Upload" disabled={!isConnected} />
-          <TabButton id="download" active={activeTab === 'download'} onClick={() => setActiveTab('download')}
+          <TabButton data-help-feature="ui:ThreeDXGateway:33bd184ce1ef" data-help-source="src/components/ThreeDXGateway.tsx" id="download" active={activeTab === 'download'} onClick={() => setActiveTab('download')}
             icon={<Download size={14} />} label="Download" disabled={!isConnected} />
         </div>
 
@@ -544,7 +544,7 @@ export const ThreeDXGateway: React.FC<ThreeDXGatewayProps> = ({
                     )}
                   </div>
                   <div className="flex gap-2">
-                    <button
+                    <button data-help-feature="ui:ThreeDXGateway:347f92ca92b6" data-help-source="src/components/ThreeDXGateway.tsx"
                       id="3dx-go-browser"
                       onClick={() => setActiveTab('browser')}
                       className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-[#0056b3]/20 hover:bg-[#0056b3]/30 text-[#4da6ff] rounded-lg text-sm font-medium border border-[#0056b3]/40 transition-colors"
@@ -552,7 +552,7 @@ export const ThreeDXGateway: React.FC<ThreeDXGatewayProps> = ({
                       <Globe size={15} />
                       Open 3DX Browser
                     </button>
-                    <button
+                    <button data-help-feature="ui:ThreeDXGateway:ec7b9e8083ee" data-help-source="src/components/ThreeDXGateway.tsx"
                       id="3dx-refresh-token"
                       onClick={async () => { await ThreeDXService.refreshOAuthToken(); }}
                       className="flex items-center justify-center gap-2 px-3 py-2.5 bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white rounded-lg text-sm border border-white/10 transition-colors"
@@ -560,7 +560,7 @@ export const ThreeDXGateway: React.FC<ThreeDXGatewayProps> = ({
                     >
                       <RefreshCw size={14} />
                     </button>
-                    <button
+                    <button data-help-feature="ui:ThreeDXGateway:f3d77c9a9443" data-help-source="src/components/ThreeDXGateway.tsx"
                       id="3dx-logout"
                       onClick={handleLogout}
                       className="flex items-center justify-center gap-2 px-3 py-2.5 bg-red-900/20 hover:bg-red-900/30 text-red-400 rounded-lg text-sm border border-red-800/30 transition-colors"
@@ -595,7 +595,7 @@ export const ThreeDXGateway: React.FC<ThreeDXGatewayProps> = ({
                       <label className="text-xs text-gray-400 font-medium block mb-1.5">
                         3DEXPERIENCE Tenant URL
                       </label>
-                      <input
+                      <input data-help-feature="ui:ThreeDXGateway:4d21b0104bab" data-help-source="src/components/ThreeDXGateway.tsx"
                         id="3dx-tenant-url"
                         type="url"
                         value={tenantUrl}
@@ -611,7 +611,7 @@ export const ThreeDXGateway: React.FC<ThreeDXGatewayProps> = ({
                       <label className="text-xs text-gray-400 font-medium block mb-1.5">
                         OAuth 2.0 Client ID
                       </label>
-                      <input
+                      <input data-help-feature="ui:ThreeDXGateway:7d2710c4e6ea" data-help-source="src/components/ThreeDXGateway.tsx"
                         id="3dx-client-id"
                         type="text"
                         value={clientId}
@@ -625,7 +625,7 @@ export const ThreeDXGateway: React.FC<ThreeDXGatewayProps> = ({
                     </div>
                   </div>
 
-                  <button
+                  <button data-help-feature="ui:ThreeDXGateway:17d511c70100" data-help-source="src/components/ThreeDXGateway.tsx"
                     id="3dx-connect-btn"
                     onClick={handleConnect}
                     disabled={authLoading || !tenantUrl || !clientId}
@@ -652,7 +652,7 @@ export const ThreeDXGateway: React.FC<ThreeDXGatewayProps> = ({
             <div className="flex flex-col h-full p-4 gap-3">
               {/* Navigation bar */}
               <div className="flex items-center gap-2 p-2 bg-[#0a0d14] rounded-xl border border-[#1a2133]">
-                <button
+                <button data-help-feature="ui:ThreeDXGateway:e1ec5a8cd638" data-help-source="src/components/ThreeDXGateway.tsx"
                   id="3dx-browser-back"
                   onClick={() => ThreeDXService.browserGoBack()}
                   disabled={!browserState.canGoBack}
@@ -660,7 +660,7 @@ export const ThreeDXGateway: React.FC<ThreeDXGatewayProps> = ({
                 >
                   <ArrowLeft size={15} />
                 </button>
-                <button
+                <button data-help-feature="ui:ThreeDXGateway:9923a9ac88bf" data-help-source="src/components/ThreeDXGateway.tsx"
                   id="3dx-browser-forward"
                   onClick={() => ThreeDXService.browserGoForward()}
                   disabled={!browserState.canGoForward}
@@ -668,14 +668,14 @@ export const ThreeDXGateway: React.FC<ThreeDXGatewayProps> = ({
                 >
                   <ArrowRight size={15} />
                 </button>
-                <button
+                <button data-help-feature="ui:ThreeDXGateway:fb78e6a9f1cd" data-help-source="src/components/ThreeDXGateway.tsx"
                   id="3dx-browser-reload"
                   onClick={() => ThreeDXService.browserReload()}
                   className="p-1.5 rounded-md text-gray-500 hover:text-white hover:bg-white/10 transition-colors"
                 >
                   <RotateCcw size={15} className={browserState.isLoading ? 'animate-spin' : ''} />
                 </button>
-                <form
+                <form data-help-feature="ui:ThreeDXGateway:fee32a8bb89b" data-help-source="src/components/ThreeDXGateway.tsx"
                   className="flex-1 flex items-center gap-2"
                   onSubmit={(e) => { e.preventDefault(); handleBrowserNavigate(); }}
                 >
@@ -683,7 +683,7 @@ export const ThreeDXGateway: React.FC<ThreeDXGatewayProps> = ({
                     {browserState.isLoading
                       ? <Loader2 size={12} className="text-gray-500 animate-spin flex-shrink-0" />
                       : <Globe size={12} className="text-gray-500 flex-shrink-0" />}
-                    <input
+                    <input data-help-feature="ui:ThreeDXGateway:f576158bb07f" data-help-source="src/components/ThreeDXGateway.tsx"
                       id="3dx-url-bar"
                       type="text"
                       value={browserUrlInput}
@@ -692,10 +692,10 @@ export const ThreeDXGateway: React.FC<ThreeDXGatewayProps> = ({
                       className="flex-1 bg-transparent text-xs text-gray-300 font-mono placeholder-gray-600 focus:outline-none"
                     />
                   </div>
-                  <button type="submit" className="sr-only">Go</button>
+                  <button data-help-feature="ui:ThreeDXGateway:1f8f0faf7fee" data-help-source="src/components/ThreeDXGateway.tsx" type="submit" className="sr-only">Go</button>
                 </form>
                 {/* Quick shortcut: open at platform home */}
-                <button
+                <button data-help-feature="ui:ThreeDXGateway:7b258a10039e" data-help-source="src/components/ThreeDXGateway.tsx"
                   id="3dx-go-home"
                   onClick={() => handleBrowserNavigate(ThreeDXService.buildPlatformUrl(creds?.tenantUrl ?? tenantUrl))}
                   className="p-1.5 rounded-md text-gray-500 hover:text-[#4da6ff] hover:bg-[#0056b3]/10 transition-colors"
@@ -724,7 +724,7 @@ export const ThreeDXGateway: React.FC<ThreeDXGatewayProps> = ({
                       </p>
                       <p className="text-[#4da6ff] text-xs font-mono mt-2 truncate max-w-xs">{browserState.url}</p>
                     </div>
-                    <button
+                    <button data-help-feature="ui:ThreeDXGateway:c83b90d06744" data-help-source="src/components/ThreeDXGateway.tsx"
                       id="3dx-open-external"
                       onClick={() => window.open(browserState.url, '_blank')}
                       className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-white transition-colors mt-1"
@@ -743,7 +743,7 @@ export const ThreeDXGateway: React.FC<ThreeDXGatewayProps> = ({
                         Enter a URL above or click below to navigate to your 3DEXPERIENCE platform.
                       </p>
                     </div>
-                    <button
+                    <button data-help-feature="ui:ThreeDXGateway:7b258a10039e" data-help-source="src/components/ThreeDXGateway.tsx"
                       id="3dx-launch-browser"
                       onClick={() => handleBrowserNavigate(ThreeDXService.buildPlatformUrl(creds?.tenantUrl ?? tenantUrl))}
                       className="flex items-center gap-2 px-4 py-2 bg-[#0056b3] hover:bg-[#0069d9] text-white rounded-lg text-sm font-medium transition-colors"
@@ -778,7 +778,7 @@ export const ThreeDXGateway: React.FC<ThreeDXGatewayProps> = ({
                   </div>
                 ) : (
                   <div className="flex items-center gap-2">
-                    <select
+                    <select data-help-feature="ui:ThreeDXGateway:acd8a5438545" data-help-source="src/components/ThreeDXGateway.tsx"
                       id="3dx-workspace-select"
                       value={selectedWorkspace}
                       onChange={(e) => setSelectedWorkspace(e.target.value)}
@@ -793,7 +793,7 @@ export const ThreeDXGateway: React.FC<ThreeDXGatewayProps> = ({
                         </option>
                       ))}
                     </select>
-                    <button
+                    <button data-help-feature="ui:ThreeDXGateway:6e5c9ebfe436" data-help-source="src/components/ThreeDXGateway.tsx"
                       id="3dx-refresh-workspaces"
                       onClick={fetchWorkspaces}
                       className="p-2 rounded-lg text-gray-500 hover:text-white hover:bg-white/10 border border-[#1a2133] transition-colors"
@@ -823,7 +823,7 @@ export const ThreeDXGateway: React.FC<ThreeDXGatewayProps> = ({
                             : 'border-[#111520] bg-[#080b12] opacity-40 cursor-not-allowed'
                         }`}
                       >
-                        <input
+                        <input data-help-feature="ui:ThreeDXGateway:1b4769fff040" data-help-source="src/components/ThreeDXGateway.tsx"
                           type="checkbox"
                           id={`3dx-export-${exp.type}`}
                           checked={!!selectedExports[exp.type]}
@@ -856,7 +856,7 @@ export const ThreeDXGateway: React.FC<ThreeDXGatewayProps> = ({
                 </div>
               </div>
 
-              <button
+              <button data-help-feature="ui:ThreeDXGateway:fa15b8034489" data-help-source="src/components/ThreeDXGateway.tsx"
                 id="3dx-upload-btn"
                 onClick={handleUpload}
                 disabled={
@@ -889,7 +889,7 @@ export const ThreeDXGateway: React.FC<ThreeDXGatewayProps> = ({
               <div className="flex items-center gap-2">
                 <div className="flex-1 flex items-center gap-2 px-3 py-2.5 bg-[#0a0d14] rounded-lg border border-[#1e2a3a] focus-within:border-[#0056b3]/50 transition-colors">
                   <Search size={14} className="text-gray-500 flex-shrink-0" />
-                  <input
+                  <input data-help-feature="ui:ThreeDXGateway:49aeeeed066a" data-help-source="src/components/ThreeDXGateway.tsx"
                     id="3dx-search-input"
                     type="text"
                     value={searchQuery}
@@ -899,7 +899,7 @@ export const ThreeDXGateway: React.FC<ThreeDXGatewayProps> = ({
                     className="flex-1 bg-transparent text-sm text-white placeholder-gray-600 focus:outline-none"
                   />
                 </div>
-                <button
+                <button data-help-feature="ui:ThreeDXGateway:9c8796a32108" data-help-source="src/components/ThreeDXGateway.tsx"
                   id="3dx-search-btn"
                   onClick={handleSearch}
                   disabled={searchLoading}
@@ -954,7 +954,7 @@ export const ThreeDXGateway: React.FC<ThreeDXGatewayProps> = ({
                             </span>
                           </div>
                         </div>
-                        <button
+                        <button data-help-feature="ui:ThreeDXGateway:621f327ce310" data-help-source="src/components/ThreeDXGateway.tsx"
                           id={`3dx-download-${doc.id}`}
                           onClick={() => handleDownload(doc)}
                           disabled={prog === 'downloading'}
@@ -990,7 +990,7 @@ export const ThreeDXGateway: React.FC<ThreeDXGatewayProps> = ({
                     Capture, package, and sync all engineering diagrams and models with your Collaborative Space.
                   </p>
                 </div>
-                <button
+                <button data-help-feature="ui:ThreeDXGateway:b4c3546a831e" data-help-source="src/components/ThreeDXGateway.tsx"
                   onClick={() => setIsLivePanelOpen(!isLivePanelOpen)}
                   className="flex items-center gap-2 px-3 py-1.5 bg-[#0056b3]/25 hover:bg-[#0056b3]/40 border border-[#0056b3]/40 text-[#4da6ff] rounded-lg text-xs font-bold transition-all cursor-pointer"
                 >
@@ -1063,7 +1063,7 @@ export const ThreeDXGateway: React.FC<ThreeDXGatewayProps> = ({
                         {/* Sync Direction Toggle */}
                         <div className="flex items-center bg-[#111520] border border-[#1a2133] rounded-lg p-0.5">
                           {(['push', 'pull', 'bidirectional'] as const).map((dir) => (
-                            <button
+                            <button data-help-feature="ui:ThreeDXGateway:218e255dc327" data-help-source="src/components/ThreeDXGateway.tsx"
                               key={dir}
                               onClick={() => {
                                 setSyncItems(prev => prev.map(i => i.id === item.id ? { ...i, direction: dir } : i));
@@ -1081,7 +1081,7 @@ export const ThreeDXGateway: React.FC<ThreeDXGatewayProps> = ({
 
                         {/* Actions */}
                         {item.selector && (
-                          <button
+                          <button data-help-feature="ui:ThreeDXGateway:7208bcf3b096" data-help-source="src/components/ThreeDXGateway.tsx"
                             onClick={() => handleCapture(item)}
                             disabled={item.status === 'capturing' || item.status === 'syncing'}
                             className="px-2.5 py-1.5 bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white border border-white/10 rounded-lg text-[10px] font-bold transition-all cursor-pointer"
@@ -1090,7 +1090,7 @@ export const ThreeDXGateway: React.FC<ThreeDXGatewayProps> = ({
                           </button>
                         )}
 
-                        <button
+                        <button data-help-feature="ui:ThreeDXGateway:13ead9404ed2" data-help-source="src/components/ThreeDXGateway.tsx"
                           onClick={() => handleSyncItem(item)}
                           disabled={item.status === 'syncing' || !selectedWorkspace}
                           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all border cursor-pointer ${

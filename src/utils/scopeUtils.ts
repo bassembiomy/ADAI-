@@ -1,3 +1,6 @@
+import { blockTypeOf, libraryBlock, portIdFromHandle } from '../engine/vlab/vlabConnectionRules';
+import { portShape, scopeTraceKey, traceLabel } from '../engine/vlab/vlabVectorPorts';
+
 // src/utils/scopeUtils.ts
 
 export interface VLabSignalInfo {
@@ -7,6 +10,21 @@ export interface VLabSignalInfo {
   portName: string;
   blockLabel: string;
   fullName: string;
+  /** exact id of the source port the channel is wired to */
+  portId?: string;
+  /** measured quantity / SI unit of that port (library metadata, WP-09b) */
+  quantity?: string;
+  unit?: string;
+  /** `<block name>.<port label> - <quantity> [<unit>]` */
+  channelLabel: string;
+  /**
+   * Traces this channel draws (WP-09c). A scalar channel has one trace keyed `in<k>`; a width-N signal has N traces keyed
+   * `in<k>[<channel name>]` (a, b, c / d, q, 0 / alpha, beta, 0), labelled `<block>.<port>[<name>] - <quantity> [<unit>]`.
+   */
+  width: number;
+  channelNames: string[];
+  traceKeys: string[];
+  traceLabels: string[];
 }
 
 export interface SignalStatistics {
@@ -40,6 +58,17 @@ export const SIMULINK_SCOPE_COLORS = [
 // Fallback compatibility export
 export const VLAB_SIGNAL_COLORS = SIMULINK_SCOPE_COLORS;
 
+/**
+ * Scope channel caption: `<block name>.<port label> - <quantity> [<unit>]` (user section 9). `unit` `*` marks a
+ * unit-polymorphic block (the channel has the unit of the signal wired to the block's input), `1` is dimensionless.
+ */
+export function formatChannelLabel(blockName: string, portLabel: string, quantity?: string, unit?: string): string {
+  const base = `${blockName}.${portLabel}`;
+  if (!quantity) return base;
+  const u = !unit ? '' : unit === '*' ? ' [unit of input]' : ` [${unit}]`;
+  return `${base} — ${quantity}${u}`;
+}
+
 export function getVLabSignalInfo(
   scopeNodeId: string,
   channelIndex: number,
@@ -48,16 +77,10 @@ export function getVLabSignalInfo(
   history: any[] = []
 ): VLabSignalInfo {
   const targetPortId = `in${channelIndex + 1}`;
-  const edge = edges?.find(
-    (e: any) => {
-      if (e.target !== scopeNodeId) return false;
-      let t = (e.targetHandle || '').replace(/_[st]$/, '');
-      if (t.startsWith(scopeNodeId + '-')) {
-        t = t.slice(scopeNodeId.length + 1);
-      }
-      return t === targetPortId || (channelIndex === 0 && (t === 'p' || t === 'in' || t === 'in1' || t === ''));
-    }
-  );
+  // The scope port behind an edge handle is resolved by its EXACT port id (the same portIdFromHandle path the
+  // assembler uses), never by stripping a `_s`/`_t` suffix.
+  const scopeNode = nodes?.find((n: any) => n.id === scopeNodeId) ?? { id: scopeNodeId, data: { type: 'scope' } };
+  const edge = edges?.find((e: any) => e.target === scopeNodeId && portIdFromHandle(scopeNode, e.targetHandle) === targetPortId);
 
   if (!edge) {
     return {
@@ -66,7 +89,12 @@ export function getVLabSignalInfo(
       dataType: 'auto',
       portName: targetPortId,
       blockLabel: 'Unconnected',
-      fullName: `Channel ${channelIndex + 1}: Unconnected (auto)`
+      fullName: `Channel ${channelIndex + 1}: Unconnected (auto)`,
+      channelLabel: `Channel ${channelIndex + 1}: Unconnected`,
+      width: 1,
+      channelNames: [],
+      traceKeys: [targetPortId],
+      traceLabels: [`Channel ${channelIndex + 1}: Unconnected`],
     };
   }
 
@@ -75,12 +103,16 @@ export function getVLabSignalInfo(
     ? sourceNode.data?.label || sourceNode.data?.name || sourceNode.data?.type || edge.source
     : edge.source;
 
-  const sourcePortObj = sourceNode?.data?.outputs?.find(
-    (p: any) => p.id === edge.sourceHandle || p.name === edge.sourceHandle
-  );
-  const portName = sourcePortObj?.name || sourcePortObj?.label || edge.sourceHandle || 'out';
+  // The source port is the exact port the wire is attached to: instance metadata first, then the library definition.
+  const sourcePortId = sourceNode ? portIdFromHandle(sourceNode, edge.sourceHandle) : undefined;
+  const instancePort = Array.isArray(sourceNode?.data?.ports) ? sourceNode.data.ports.find((p: any) => p?.id === sourcePortId) : undefined;
+  const libPort = sourceNode ? libraryBlock(blockTypeOf(sourceNode))?.ports.find(p => p.id === sourcePortId) : undefined;
+  const legacyPort = sourceNode?.data?.outputs?.find((p: any) => p.id === edge.sourceHandle || p.name === edge.sourceHandle);
+  const portName: string = legacyPort?.name || legacyPort?.label || instancePort?.label || libPort?.label || sourcePortId || edge.sourceHandle || 'out';
+  const quantity: string | undefined = libPort?.quantity ?? instancePort?.quantity;
+  const unit: string | undefined = libPort?.quantity !== undefined ? libPort.unit : instancePort?.unit;
 
-  let baseType = sourcePortObj?.dataType || 'double';
+  let baseType = legacyPort?.dataType || 'double';
 
   // Check dimension info if history exists
   let dimensionsStr = '';
@@ -97,6 +129,14 @@ export function getVLabSignalInfo(
   }
 
   const dataType = `${baseType}${dimensionsStr}`;
+  // width / channel names come from the library port (an instance copy only for a block the library does not know)
+  let shape = { width: 1, channelNames: [] as string[] };
+  try { shape = portShape(libPort ?? instancePort); } catch { /* malformed metadata: draw it as a scalar */ }
+  const channelLabel = formatChannelLabel(sourceBlockLabel, portName, quantity, unit);
+  const traceKeys = shape.width > 1 ? shape.channelNames.map(n => scopeTraceKey(targetPortId, n)) : [targetPortId];
+  const traceLabels = shape.width > 1
+    ? shape.channelNames.map(n => formatChannelLabel(sourceBlockLabel, traceLabel(portName, n), quantity, unit))
+    : [channelLabel];
 
   return {
     connected: true,
@@ -104,9 +144,18 @@ export function getVLabSignalInfo(
     dataType,
     portName,
     blockLabel: sourceBlockLabel,
-    fullName: `Channel ${channelIndex + 1}: ${sourceBlockLabel}.${portName} (${dataType})`
+    fullName: `Channel ${channelIndex + 1}: ${sourceBlockLabel}.${portName} (${dataType})`,
+    portId: sourcePortId,
+    quantity,
+    unit,
+    channelLabel,
+    width: shape.width,
+    channelNames: shape.channelNames,
+    traceKeys,
+    traceLabels,
   };
 }
+
 
 export function calculateSignalStatistics(data: any[], signalKey: string): SignalStatistics {
   if (!data || data.length === 0) {
@@ -198,13 +247,18 @@ export function exportScopeToCSV(
   displayData: any[],
   signalInfos: VLabSignalInfo[]
 ): string {
-  const headers = ['Time (s)', ...signalInfos.map(s => `"${s.fullName.replace(/"/g, '""')}"`)].join(',');
+  // one column per trace: a width-N channel contributes N columns `in<k>[<name>]` (WP-09c)
+  const columns = signalInfos.flatMap((s, i) => (s.traceKeys && s.traceKeys.length > 1
+    ? s.traceKeys.map((key, k) => ({ key, label: s.traceLabels[k], scalarFirst: false }))
+    : [{ key: `in${i + 1}`, label: s.channelLabel || s.fullName, scalarFirst: i === 0 }]));
+  const headers = ['Time (s)', ...columns.map(c => `"${c.label.replace(/"/g, '""')}"`)].join(',');
   const rows = displayData.map(pt => {
     const timeVal = (pt.time !== undefined ? pt.time : pt.t || 0).toFixed(3);
-    const signalVals = signalInfos.map((_, i) => {
-      const key = `in${i + 1}`;
-      const val = pt[key] !== undefined ? pt[key] : (i === 0 && pt.value !== undefined ? pt.value : 0);
-      return typeof val === 'number' ? val : (val ? 1 : 0);
+    const signalVals = columns.map(col => {
+      const key = col.key;
+      const val = pt[key] !== undefined ? pt[key] : (col.scalarFirst && pt.value !== undefined ? pt.value : undefined);
+      // A missing channel sample is an empty cell, never a fabricated 0.
+      return typeof val === 'number' ? val : (val === undefined || val === null ? '' : (val ? 1 : 0));
     });
     return [timeVal, ...signalVals].join(',');
   });

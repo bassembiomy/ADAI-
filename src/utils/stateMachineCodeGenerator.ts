@@ -2698,6 +2698,7 @@ typedef enum {
 #define ADC_CLOCK_SYNC_PCLK_DIV4 4
 #define ADC_RESOLUTION_12B 12
 #define ADC_SAMPLETIME_15CYCLES 15
+#define ADC_SAMPLETIME_71CYCLES_5 71
 #define DISABLE 0
 #define ENABLE 1
 #define ADC_DATAALIGN_RIGHT 0
@@ -2968,9 +2969,13 @@ export const generateMISRACCode = (
   }
 
   const hilWarnings: string[] = [];
+  const hilErrors: string[] = [];
   const hilFiles = chart.hilConfig?.enabled === true
-    ? generateHALCode(chart.hilConfig, chart.variables, hilWarnings)
+    ? generateHALCode(chart.hilConfig, chart.variables, hilWarnings, options.includeTestShims === true ? undefined : hilErrors)
     : [];
+  if (hilErrors.length > 0) {
+    return { files: [], errors: hilErrors.map(message => ({ id: uuidv4(), type: 'error' as const, message, timestamp: new Date(), source: 'HIL Production Validator' })), warnings: [...warnings, ...hilWarnings] };
+  }
   const testShimFiles = chart.hilConfig?.enabled === true
     && options.includeTestShims === true
     ? generateLegacyMISRACCode({
@@ -3016,7 +3021,14 @@ export const generateMISRACCode = (
         name: file.name.slice('production/'.length),
       }));
   return {
-    files: [...combinedFiles, ...flatAliases],
+    files: [...combinedFiles, ...flatAliases].map((file) => {
+      if (options.includeTestShims === true && file.name.endsWith('integration_manifest.json')) {
+        const manifest = JSON.parse(file.content);
+        return { ...file, content: JSON.stringify({ ...manifest, flashBlocked: true, blockReasons: [...new Set([...(manifest.blockReasons ?? []), 'SIMULATION_TEST_SHIMS'])] }, null, 2) + '\n' };
+      }
+      if (chart.hilConfig?.enabled !== true || !file.name.endsWith('sm_core.h')) return file;
+      return { ...file, content: file.content.replace('#include "sm_config.h"', '#include "sm_config.h"\n#ifdef __cplusplus\nextern "C" {\n#endif').replace('#endif /* SM_CORE_H */', '#ifdef __cplusplus\n}\n#endif\n#endif /* SM_CORE_H */') };
+    }),
     errors: [...errors, ...rendered.errors],
     warnings: [...warnings, ...rendered.warnings, ...hilWarnings],
   };

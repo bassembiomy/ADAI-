@@ -46,13 +46,13 @@ export const VibeDashboard: React.FC<VibeDashboardProps> = ({ status, diffLog, o
         </div>
 
         <div className="flex gap-2">
-          <button
+          <button data-help-feature="ui:VibeDashboard:8d398faf82c2" data-help-source="src/components/VibeDashboard.tsx"
             onClick={() => setShowExplain(true)}
             className="px-3 py-1.5 text-xs bg-slate-800 hover:bg-slate-700 rounded border border-slate-700 transition"
           >
             👁️ Explain the Vibe
           </button>
-          <button
+          <button data-help-feature="ui:VibeDashboard:cda2f695a32d" data-help-source="src/components/VibeDashboard.tsx"
             onClick={() => setShowSync(true)}
             className="px-3 py-1.5 text-xs bg-indigo-600 hover:bg-indigo-500 text-white rounded font-medium transition"
           >

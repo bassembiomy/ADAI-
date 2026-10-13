@@ -30,6 +30,8 @@ export class ThermalFixtures {
         edge('e4', 'sensor', 'b_s', 'reference', 'a_t'),
         edge('e5', 'sensor', 't_s', 'scope', 'in1_t'),
       ],
+      // temp_sensor outputs T_a - T_b; thermal_ref is absolute zero (WP-15, F-011), so the sensor signal is the absolute
+      // temperature (K) and the probe reads the sensor output again.
       probes: [{ id: 'p1', sourceNodeId: 'sensor', sourceHandle: 't_s', variableName: 'T_sensor', unit: 'K' }],
     };
   }
@@ -57,6 +59,7 @@ export class ThermalFixtures {
         edge('e4', 'sensor', 'b_s', 'reference', 'a_t'),
         edge('e5', 'sensor', 't_s', 'scope', 'in1_t'),
       ],
+      // Absolute mass temperature through the sensor output (see note in createThermalConductionCircuit).
       probes: [{ id: 'p1', sourceNodeId: 'sensor', sourceHandle: 't_s', variableName: 'T_mass', unit: 'K' }],
     };
   }

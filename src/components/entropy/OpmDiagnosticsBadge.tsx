@@ -59,7 +59,7 @@ export const OpmDiagnosticsBadge: React.FC<OpmDiagnosticsBadgeProps> = ({
       className="absolute bottom-4 left-4 z-40 bg-[#121212]/95 border border-[#333] rounded-lg shadow-2xl p-2 text-xs font-mono text-gray-200 max-w-sm select-none"
     >
       <div className="flex items-center justify-between gap-2">
-        <button
+        <button data-help-feature="opm:opmdiagnosticsbadge:diagnostics:3c1359131f" data-help-module="entropy"
           onClick={() => setExpanded(!expanded)}
           aria-label="Toggle diagnostics details"
           className="flex items-center gap-1.5 font-bold hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 rounded"
@@ -75,7 +75,7 @@ export const OpmDiagnosticsBadge: React.FC<OpmDiagnosticsBadgeProps> = ({
             </span>
           ) : null}
         </button>
-        <button
+        <button data-help-feature="opm:opmdiagnosticsbadge:diagnostics:8708d9c8ef" data-help-module="entropy"
           onClick={() => setExpanded(!expanded)}
           aria-label={expanded ? 'Collapse diagnostics' : 'Expand diagnostics'}
           className="text-gray-400 hover:text-white p-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 rounded"
@@ -87,7 +87,7 @@ export const OpmDiagnosticsBadge: React.FC<OpmDiagnosticsBadgeProps> = ({
       {expanded && (
         <div className="mt-2 space-y-1 max-h-48 overflow-y-auto pt-1 border-t border-[#2d2d2d]">
           {diagnostics.map((d, idx) => (
-            <div
+            <div data-help-feature="opm:opmdiagnosticsbadge:diagnostics:1d2e414912" data-help-module="entropy"
               key={idx}
               role="button"
               tabIndex={0}

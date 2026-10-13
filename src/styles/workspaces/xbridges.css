@@ -1,0 +1,59 @@
+/* Scoped theme rules for X-Bridges Workspace */
+
+.xbridges-workspace {
+  background-color: var(--surface-canvas);
+  color: var(--text-primary);
+}
+
+.xbridges-workspace .xbridges-panel,
+.xbridges-panel {
+  background-color: var(--surface-panel);
+  border-color: var(--border-default);
+  color: var(--text-primary);
+}
+
+.xbridges-workspace .xbridges-node,
+.xbridges-node {
+  background-color: var(--diagram-node);
+  border-color: var(--border-default);
+  color: var(--text-primary);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.xbridges-workspace .xbridges-node:hover,
+.xbridges-node:hover {
+  border-color: var(--border-strong);
+}
+
+.xbridges-workspace .xbridges-node.selected,
+.xbridges-workspace .xbridges-node[data-selected="true"],
+.xbridges-node[data-selected="true"] {
+  border-color: var(--diagram-node-selected);
+  box-shadow: 0 0 0 1px var(--diagram-node-selected);
+}
+
+.xbridges-workspace .react-flow__background {
+  background-color: var(--surface-canvas);
+}
+
+.xbridges-workspace .react-flow__controls {
+  background-color: var(--surface-panel);
+  border-color: var(--border-default);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.xbridges-workspace .react-flow__controls-button {
+  background-color: var(--surface-panel);
+  border-color: var(--border-default);
+  color: var(--text-secondary);
+}
+
+.xbridges-workspace .react-flow__controls-button:hover {
+  background-color: var(--surface-raised);
+  color: var(--text-primary);
+}
+
+.xbridges-workspace .react-flow__minimap {
+  background-color: var(--surface-panel);
+  border-color: var(--border-default);
+}

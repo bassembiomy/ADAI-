@@ -1,0 +1,14 @@
+{
+  "flows": [
+    "F1 launch",
+    "full-text section search",
+    "self call/reply and alt diagram",
+    "Actor specialization diagram",
+    "qualified block reference",
+    "parameter bounds",
+    "state execution branches",
+    "mobile layout",
+    "Escape close"
+  ],
+  "pageErrors": []
+}

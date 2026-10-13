@@ -8,13 +8,17 @@ import {
 import { runBlockValidationHarness } from './vlabValidationHarness';
 
 describe('V-Lab Engineering Readiness Gate', () => {
-  it('GATE-01: Bidirectional Catalog & Equation Factory Completeness (246 Blocks)', () => {
+  it('GATE-01: Bidirectional Catalog & Equation Factory Completeness (every VLAB_LIBRARY block)', () => {
     const coverage = assertBidirectionalCatalogCoverage(VLAB_LIBRARY, blockEquations);
+    // VLAB_LIBRARY is the single source of truth for the block count (it was a stale hard-coded 246, WP-03).
+    const libraryBlocks = VLAB_LIBRARY.flatMap((domain) => domain.blocks);
 
     expect(coverage.missingContracts).toEqual([]);
     expect(coverage.orphanContracts).toEqual([]);
     expect(coverage.missingEquationFactories).toEqual([]);
-    expect(coverage.totalBlocks).toBe(246);
+    expect(libraryBlocks.length).toBeGreaterThan(0);
+    expect(new Set(libraryBlocks.map((b) => b.id)).size).toBe(libraryBlocks.length);
+    expect(coverage.totalBlocks).toBe(libraryBlocks.length);
     expect(coverage.isComplete).toBe(true);
   });
 

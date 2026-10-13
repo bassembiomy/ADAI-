@@ -1,6 +1,7 @@
 import type { ModelBaseline, RequirementDefinition, SysmlRelationship, SysmlRepository } from './model';
 import type { SysmlDiagnostic } from './validation';
 import { deriveEvidenceStatus } from './evidence';
+import { resolveRepositoryEndpoint } from './semanticEndpointIndex';
 
 export type VerificationStatus = 'verified' | 'failed' | 'stale' | 'unverified';
 
@@ -163,16 +164,10 @@ export function synchronizeRequirementCopy(
   if (!masterReq) return { repository: repo, diff: [] };
 
   const diff: { field: string; from: any; to: any }[] = [];
-  const fields: Array<keyof RequirementDefinition> = [
-    'name',
-    'text',
-    'status',
-    'version',
-    'source',
-    'rationale',
-    'priority',
-    'risk',
-  ];
+  // SysML 1.6 §16.3.2.2: a «copy» requirement carries a read-only copy of the
+  // master's text only. Name, ID, status, version, owner, risk and priority
+  // belong to the copy and must never be overwritten by synchronisation.
+  const fields: Array<keyof RequirementDefinition> = ['text'];
 
   for (const field of fields) {
     if (copyReq[field] !== masterReq[field] && masterReq[field] !== undefined) {
@@ -321,7 +316,7 @@ function validDirection(repo: SysmlRepository, relationship: SysmlRelationship):
     case 'copy':
     case 'requirementContainment': return sourceReq && targetReq;
     case 'satisfy': return !sourceReq && targetReq;
-    case 'verify': return Boolean(repo.verificationCases[relationship.sourceId]) && targetReq;
+    case 'verify': return (Boolean(repo.verificationCases[relationship.sourceId]) || resolveRepositoryEndpoint(repo, relationship.sourceId)?.family === 'interaction') && targetReq;
     case 'refine': return !sourceReq && targetReq;
     case 'trace': return sourceReq || targetReq;
     default: return true;
@@ -356,6 +351,38 @@ function cycleDiagnostics(repo: SysmlRepository, relationships: SysmlRelationshi
 
 function diag(code: string, elementId: string, propertyPath: string | undefined, message: string): SysmlDiagnostic {
   return { code, severity: 'error', elementId, propertyPath, message };
+}
+
+export function cloneProtectedBaselineAsWorkingCopy(
+  repo: SysmlRepository,
+  baselineId: string,
+  name: string,
+): { repository: SysmlRepository; baseline: ModelBaseline; diagnostics: SysmlDiagnostic[] } {
+  const source = repo.baselines[baselineId];
+  if (!source) {
+    return { repository: repo, baseline: source as unknown as ModelBaseline, diagnostics: [diag('BASELINE_NOT_FOUND', baselineId, undefined, `Baseline ${baselineId} does not exist`)] };
+  }
+  const next = structuredClone(repo);
+  const id = `baseline-${next.revision}-clone-${Object.keys(next.baselines).length + 1}`;
+  const baseline: ModelBaseline = {
+    id,
+    name,
+    revision: next.revision,
+    createdAt: new Date().toISOString(),
+    protected: false,
+    contentHash: source.contentHash,
+    elementHashes: source.elementHashes ? { ...source.elementHashes } : undefined,
+  };
+  next.baselines[id] = baseline;
+  next.revision += 1;
+  next.auditTrail.push({
+    id: `change-${next.revision}-clone-baseline-${id}`,
+    revision: next.revision,
+    timestamp: baseline.createdAt,
+    command: 'cloneBaselineAsWorkingCopy',
+    elementIds: [baselineId, id],
+  });
+  return { repository: next, baseline, diagnostics: [] };
 }
 
 export function stableStringify(value: unknown): string {

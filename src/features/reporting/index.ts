@@ -9,3 +9,4 @@ export * from './generators/createMotorDriveTestReport';
 export * from './reportHierarchyEngine';
 export * from './reportSnapshot';
 export * from './generateArchitectureReport';
+export * from './systemReport';

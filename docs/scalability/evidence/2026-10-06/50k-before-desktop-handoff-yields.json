@@ -1,0 +1,515 @@
+{
+  "size": 50000,
+  "timestamp": "2026-10-06T12:35:57.657Z",
+  "samplesCount": 5,
+  "productionUrl": "http://127.0.0.1:3115?perfTelemetry=1",
+  "workflows": {
+    "rename": {
+      "samples": [
+        {
+          "handlerMs": 41.19999999925494,
+          "paintDelayMs": 222.40000000223517,
+          "settleMs": 277.1000000014901,
+          "heartbeatGapMs": 115.59999999776483,
+          "longTasksMs": [
+            59,
+            50
+          ]
+        },
+        {
+          "handlerMs": 35.899999998509884,
+          "paintDelayMs": 205.89999999850988,
+          "settleMs": 262.80000000074506,
+          "heartbeatGapMs": 108.70000000298023,
+          "longTasksMs": [
+            54
+          ]
+        },
+        {
+          "handlerMs": 69.80000000074506,
+          "paintDelayMs": 325.5999999977648,
+          "settleMs": 390,
+          "heartbeatGapMs": 176.69999999925494,
+          "longTasksMs": [
+            97,
+            72
+          ]
+        },
+        {
+          "handlerMs": 47.19999999925494,
+          "paintDelayMs": 240.10000000149012,
+          "settleMs": 302.80000000074506,
+          "heartbeatGapMs": 90.19999999925494,
+          "longTasksMs": [
+            67
+          ]
+        },
+        {
+          "handlerMs": 43.5,
+          "paintDelayMs": 207.10000000149012,
+          "settleMs": 260.80000000074506,
+          "heartbeatGapMs": 116.09999999776483,
+          "longTasksMs": [
+            54,
+            56
+          ]
+        }
+      ]
+    },
+    "undo": {
+      "samples": [
+        {
+          "handlerMs": 27.399999998509884,
+          "paintDelayMs": 176.39999999850988,
+          "settleMs": 231.30000000074506,
+          "heartbeatGapMs": 98.80000000074506,
+          "longTasksMs": [
+            52
+          ]
+        },
+        {
+          "handlerMs": 36.100000001490116,
+          "paintDelayMs": 222.60000000149012,
+          "settleMs": 274.30000000074506,
+          "heartbeatGapMs": 133,
+          "longTasksMs": [
+            54,
+            73
+          ]
+        },
+        {
+          "handlerMs": 31.199999999254942,
+          "paintDelayMs": 181,
+          "settleMs": 245.79999999701977,
+          "heartbeatGapMs": 105.30000000074506,
+          "longTasksMs": [
+            58
+          ]
+        },
+        {
+          "handlerMs": 40.80000000074506,
+          "paintDelayMs": 213.80000000074506,
+          "settleMs": 270.80000000074506,
+          "heartbeatGapMs": 77.30000000074506,
+          "longTasksMs": [
+            52
+          ]
+        },
+        {
+          "handlerMs": 30.699999999254942,
+          "paintDelayMs": 185.60000000149012,
+          "settleMs": 241.19999999925494,
+          "heartbeatGapMs": 101.90000000223517,
+          "longTasksMs": [
+            54
+          ]
+        }
+      ]
+    },
+    "redo": {
+      "samples": [
+        {
+          "handlerMs": 44.599999997764826,
+          "paintDelayMs": 247,
+          "settleMs": 304.3999999985099,
+          "heartbeatGapMs": 81.80000000074506,
+          "longTasksMs": [
+            54,
+            64
+          ]
+        },
+        {
+          "handlerMs": 28.400000002235174,
+          "paintDelayMs": 176.60000000149012,
+          "settleMs": 231.90000000223517,
+          "heartbeatGapMs": 99.90000000223517,
+          "longTasksMs": [
+            51
+          ]
+        },
+        {
+          "handlerMs": 27.399999998509884,
+          "paintDelayMs": 187.30000000074506,
+          "settleMs": 252.5,
+          "heartbeatGapMs": 53.5,
+          "longTasksMs": [
+            51
+          ]
+        },
+        {
+          "handlerMs": 34.100000001490116,
+          "paintDelayMs": 194.60000000149012,
+          "settleMs": 256.5,
+          "heartbeatGapMs": 70.30000000074506,
+          "longTasksMs": [
+            52
+          ]
+        },
+        {
+          "handlerMs": 26.599999997764826,
+          "paintDelayMs": 177.39999999850988,
+          "settleMs": 230.69999999925494,
+          "heartbeatGapMs": 102.19999999925494,
+          "longTasksMs": [
+            55
+          ]
+        }
+      ]
+    },
+    "property-edit": {
+      "samples": [
+        {
+          "handlerMs": 59,
+          "paintDelayMs": 214,
+          "settleMs": 264.6000000014901,
+          "heartbeatGapMs": 106.10000000149012,
+          "longTasksMs": [
+            53
+          ]
+        },
+        {
+          "handlerMs": 45.399999998509884,
+          "paintDelayMs": 243.10000000149012,
+          "settleMs": 301.3999999985099,
+          "heartbeatGapMs": 128.70000000298023,
+          "longTasksMs": [
+            78
+          ]
+        },
+        {
+          "handlerMs": 37.80000000074506,
+          "paintDelayMs": 202.89999999850988,
+          "settleMs": 258.19999999925494,
+          "heartbeatGapMs": 122.90000000223517,
+          "longTasksMs": [
+            59,
+            58
+          ]
+        },
+        {
+          "handlerMs": 41.600000001490116,
+          "paintDelayMs": 196.90000000223517,
+          "settleMs": 258.5,
+          "heartbeatGapMs": 103.30000000074506,
+          "longTasksMs": [
+            52
+          ]
+        },
+        {
+          "handlerMs": 39.099999997764826,
+          "paintDelayMs": 206.39999999850988,
+          "settleMs": 258.3999999985099,
+          "heartbeatGapMs": 101.80000000074506,
+          "longTasksMs": [
+            52
+          ]
+        }
+      ]
+    },
+    "create-delete": {
+      "samples": [
+        {
+          "handlerMs": 49.5,
+          "paintDelayMs": 203.19999999925494,
+          "settleMs": 263.6000000014901,
+          "heartbeatGapMs": 100.19999999925494,
+          "longTasksMs": [
+            50
+          ]
+        },
+        {
+          "handlerMs": 97.60000000149012,
+          "paintDelayMs": 264.20000000298023,
+          "settleMs": 323,
+          "heartbeatGapMs": 117.40000000223517,
+          "longTasksMs": [
+            58
+          ]
+        },
+        {
+          "handlerMs": 52,
+          "paintDelayMs": 209.10000000149012,
+          "settleMs": 268.5,
+          "heartbeatGapMs": 117.40000000223517,
+          "longTasksMs": [
+            54,
+            58
+          ]
+        },
+        {
+          "handlerMs": 96.5,
+          "paintDelayMs": 248.5,
+          "settleMs": 314.19999999925494,
+          "heartbeatGapMs": 113.19999999925494,
+          "longTasksMs": [
+            57
+          ]
+        },
+        {
+          "handlerMs": 51.5,
+          "paintDelayMs": 213.19999999925494,
+          "settleMs": 264.19999999925494,
+          "heartbeatGapMs": 101.90000000223517,
+          "longTasksMs": [
+            55
+          ]
+        }
+      ]
+    },
+    "tree-expand": {
+      "samples": [
+        {
+          "handlerMs": 0,
+          "paintDelayMs": 23.799999997019768,
+          "settleMs": 87.59999999776483,
+          "heartbeatGapMs": 18.899999998509884,
+          "longTasksMs": []
+        },
+        {
+          "handlerMs": 0,
+          "paintDelayMs": 20.300000000745058,
+          "settleMs": 77.59999999776483,
+          "heartbeatGapMs": 16.799999997019768,
+          "longTasksMs": []
+        },
+        {
+          "handlerMs": 0,
+          "paintDelayMs": 29.5,
+          "settleMs": 94.89999999850988,
+          "heartbeatGapMs": 16.899999998509884,
+          "longTasksMs": []
+        },
+        {
+          "handlerMs": 0,
+          "paintDelayMs": 28.099999997764826,
+          "settleMs": 85.29999999701977,
+          "heartbeatGapMs": 17,
+          "longTasksMs": []
+        },
+        {
+          "handlerMs": 0,
+          "paintDelayMs": 25.100000001490116,
+          "settleMs": 89.69999999925494,
+          "heartbeatGapMs": 16.699999999254942,
+          "longTasksMs": []
+        }
+      ]
+    },
+    "tree-search": {
+      "samples": [
+        {
+          "handlerMs": 0,
+          "paintDelayMs": 22.399999998509884,
+          "settleMs": 79,
+          "heartbeatGapMs": 16.299999997019768,
+          "longTasksMs": []
+        },
+        {
+          "handlerMs": 0,
+          "paintDelayMs": 18.199999999254942,
+          "settleMs": 69.5,
+          "heartbeatGapMs": 18.100000001490116,
+          "longTasksMs": []
+        },
+        {
+          "handlerMs": 0,
+          "paintDelayMs": 29.099999997764826,
+          "settleMs": 86.39999999850988,
+          "heartbeatGapMs": 16,
+          "longTasksMs": []
+        },
+        {
+          "handlerMs": 0,
+          "paintDelayMs": 26.5,
+          "settleMs": 78.80000000074506,
+          "heartbeatGapMs": 18.899999998509884,
+          "longTasksMs": []
+        },
+        {
+          "handlerMs": 0,
+          "paintDelayMs": 22.300000000745058,
+          "settleMs": 80.5,
+          "heartbeatGapMs": 16.699999999254942,
+          "longTasksMs": []
+        }
+      ]
+    },
+    "diagram-switch": {
+      "samples": [
+        {
+          "handlerMs": 0.10000000149011612,
+          "paintDelayMs": 86.10000000149012,
+          "settleMs": 210.70000000298023,
+          "heartbeatGapMs": 77.5,
+          "longTasksMs": [
+            91,
+            77
+          ]
+        },
+        {
+          "handlerMs": 0.10000000149011612,
+          "paintDelayMs": 170.69999999925494,
+          "settleMs": 227,
+          "heartbeatGapMs": 70.40000000223517,
+          "longTasksMs": [
+            52,
+            57
+          ]
+        },
+        {
+          "handlerMs": 0.19999999925494194,
+          "paintDelayMs": 202.80000000074506,
+          "settleMs": 257.19999999925494,
+          "heartbeatGapMs": 80.30000000074506,
+          "longTasksMs": [
+            51,
+            62
+          ]
+        },
+        {
+          "handlerMs": 0.09999999776482582,
+          "paintDelayMs": 145,
+          "settleMs": 199.19999999925494,
+          "heartbeatGapMs": 68,
+          "longTasksMs": [
+            52
+          ]
+        },
+        {
+          "handlerMs": 0.10000000149011612,
+          "paintDelayMs": 186.39999999850988,
+          "settleMs": 241.69999999925494,
+          "heartbeatGapMs": 83.19999999925494,
+          "longTasksMs": [
+            57,
+            54
+          ]
+        }
+      ]
+    },
+    "stress-diagram": {
+      "samples": [
+        {
+          "handlerMs": 0.10000000149011612,
+          "paintDelayMs": 81.80000000074506,
+          "settleMs": 138.39999999850988,
+          "heartbeatGapMs": 81.10000000149012,
+          "longTasksMs": [
+            72
+          ]
+        },
+        {
+          "handlerMs": 0.20000000298023224,
+          "paintDelayMs": 72.80000000074506,
+          "settleMs": 126.90000000223517,
+          "heartbeatGapMs": 72.40000000223517,
+          "longTasksMs": [
+            59
+          ]
+        },
+        {
+          "handlerMs": 0.10000000149011612,
+          "paintDelayMs": 57.900000002235174,
+          "settleMs": 117.60000000149012,
+          "heartbeatGapMs": 57.5,
+          "longTasksMs": []
+        },
+        {
+          "handlerMs": 0,
+          "paintDelayMs": 56.5,
+          "settleMs": 107.69999999925494,
+          "heartbeatGapMs": 56.099999997764826,
+          "longTasksMs": []
+        },
+        {
+          "handlerMs": 0.10000000149011612,
+          "paintDelayMs": 64.80000000074506,
+          "settleMs": 127.80000000074506,
+          "heartbeatGapMs": 64.39999999850988,
+          "longTasksMs": [
+            56
+          ]
+        }
+      ]
+    },
+    "save-reopen": {
+      "samples": [
+        {
+          "handlerMs": 10483.199999999255,
+          "paintDelayMs": 10748.599999997765,
+          "settleMs": 10808,
+          "heartbeatGapMs": 168.89999999850988,
+          "longTasksMs": [
+            112,
+            51,
+            64,
+            53,
+            51
+          ]
+        },
+        {
+          "handlerMs": 10415.5,
+          "paintDelayMs": 10800.5,
+          "settleMs": 10857,
+          "heartbeatGapMs": 200.5,
+          "longTasksMs": [
+            132,
+            50,
+            94,
+            82,
+            87,
+            70
+          ]
+        },
+        {
+          "handlerMs": 10175.79999999702,
+          "paintDelayMs": 10452.099999997765,
+          "settleMs": 10506.89999999851,
+          "heartbeatGapMs": 185.69999999925494,
+          "longTasksMs": [
+            129,
+            51,
+            64,
+            59,
+            62
+          ]
+        },
+        {
+          "handlerMs": 10413.79999999702,
+          "paintDelayMs": 10664.89999999851,
+          "settleMs": 10720.29999999702,
+          "heartbeatGapMs": 314.9000000022352,
+          "longTasksMs": [
+            187,
+            107,
+            67,
+            51,
+            51
+          ]
+        },
+        {
+          "handlerMs": 9921.70000000298,
+          "paintDelayMs": 10190.300000000745,
+          "settleMs": 10251.5,
+          "heartbeatGapMs": 206.89999999850988,
+          "longTasksMs": [
+            132,
+            63,
+            65,
+            57,
+            52
+          ]
+        }
+      ]
+    }
+  },
+  "load": {
+    "durationMs": 6984,
+    "heartbeatGapMs": 153.10000000149012,
+    "longTasksMs": [
+      55,
+      91
+    ],
+    "activeDiagramId": "diagram-ordinary"
+  }
+}

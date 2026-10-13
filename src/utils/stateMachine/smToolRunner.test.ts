@@ -126,7 +126,7 @@ describe('smToolRunner and canonical evidence', () => {
     const outFile = join(testDir, 'output.txt');
     writeFileSync(inFile, 'input content 123');
 
-    const script = join(testDir, 'transform.js');
+    const script = join(testDir, 'transform.cjs');
     writeFileSync(
       script,
       `const fs = require('fs');\n` +

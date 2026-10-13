@@ -16,7 +16,7 @@ describe('offline PlantUML renderer boundary', () => {
     const svg = renderVisualDiagramToSvg({
       version: 1,
       id: 'diagram-1',
-      type: 'use-case',
+      type: 'sequence',
       title: 'Offline test',
       elements: [{ id: 'actor-1', kind: 'actor', label: 'Operator', position: { x: 40, y: 40 }, size: { width: 140, height: 72 }, style: {} }],
       relationships: [],

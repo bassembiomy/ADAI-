@@ -56,13 +56,39 @@ export interface VerificationBundle {
   activities: Readonly<Record<VerificationActivity, ActivityEvidence>>;
 }
 
-export const computeFileSha256 = (filePath: string): string => {
+const getNodeBuiltin = (name: string): any => {
   if (typeof process !== 'undefined' && process.versions?.node) {
+    if (typeof (process as any).getBuiltinModule === 'function') {
+      try {
+        return (process as any).getBuiltinModule(name);
+      } catch {
+        // fallback
+      }
+    }
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-implied-eval
-      const nodeFs = eval("require('node:fs')");
-      // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-implied-eval
-      const nodeCrypto = eval("require('node:crypto')");
+      if (typeof require === 'function') {
+        return require(name);
+      }
+    } catch {
+      // fallback
+    }
+    try {
+      const req = (globalThis as any).require;
+      if (typeof req === 'function') {
+        return req(name);
+      }
+    } catch {
+      // fallback
+    }
+  }
+  return null;
+};
+
+export const computeFileSha256 = (filePath: string): string => {
+  const nodeFs = getNodeBuiltin('node:fs') || getNodeBuiltin('fs');
+  const nodeCrypto = getNodeBuiltin('node:crypto') || getNodeBuiltin('crypto');
+  if (nodeFs && nodeCrypto) {
+    try {
       if (nodeFs.existsSync(filePath)) {
         const content = nodeFs.readFileSync(filePath);
         return nodeCrypto.createHash('sha256').update(content).digest('hex');
@@ -75,10 +101,9 @@ export const computeFileSha256 = (filePath: string): string => {
 };
 
 export const computeContentSha256 = (content: string | Buffer): string => {
-  if (typeof process !== 'undefined' && process.versions?.node) {
+  const nodeCrypto = getNodeBuiltin('node:crypto') || getNodeBuiltin('crypto');
+  if (nodeCrypto) {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-implied-eval
-      const nodeCrypto = eval("require('node:crypto')");
       return nodeCrypto.createHash('sha256').update(content).digest('hex');
     } catch {
       // Fallback

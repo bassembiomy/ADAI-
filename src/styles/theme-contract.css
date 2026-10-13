@@ -1,0 +1,86 @@
+:root,
+:root[data-theme='dark'],
+:root.dark {
+  --surface-canvas: #181818;
+  --surface-panel: #242424;
+  --surface-raised: #2b2b2b;
+  --surface-terminal: #0d1117;
+  --text-primary: #f8fafc;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
+  --border-default: #3f3f46;
+  --border-strong: #64748b;
+  --focus-ring: #fb923c;
+  --status-success: #10b981;
+  --status-warning: #f59e0b;
+  --status-danger: #ef4444;
+  --diagram-grid: rgba(148, 163, 184, 0.14);
+  --diagram-node: #242424;
+  --diagram-node-selected: #fb923c;
+}
+
+:root[data-theme='light'],
+:root.light {
+  --surface-canvas: #eef3f5;
+  --surface-panel: #ffffff;
+  --surface-raised: #f4f7f8;
+  --surface-terminal: #111827;
+  --text-primary: #172a35;
+  --text-secondary: #405661;
+  --text-muted: #667b85;
+  --border-default: #c9d6db;
+  --border-strong: #8ca3ab;
+  --focus-ring: #c45d0a;
+  --status-success: #087f73;
+  --status-warning: #a16207;
+  --status-danger: #b91c1c;
+  --diagram-grid: rgba(31, 94, 104, 0.16);
+  --diagram-node: #ffffff;
+  --diagram-node-selected: #c45d0a;
+}
+
+.ui-surface {
+  background-color: var(--surface-canvas);
+  color: var(--text-primary);
+}
+
+.ui-card {
+  background-color: var(--surface-panel);
+  color: var(--text-primary);
+  border: 1px solid var(--border-default);
+}
+
+.ui-control {
+  background-color: var(--surface-panel);
+  color: var(--text-primary);
+  border: 1px solid var(--border-default);
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.ui-control:hover:not(:disabled) {
+  background-color: var(--surface-raised);
+  border-color: var(--border-strong);
+}
+
+.ui-control:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ui-focus-ring:focus-visible,
+.ui-control:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.ui-terminal {
+  background-color: var(--surface-terminal);
+  color: #f8fafc;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+.engineering-canvas {
+  background-color: var(--surface-canvas);
+  background-image: radial-gradient(var(--diagram-grid) 1px, transparent 1px);
+  background-size: 20px 20px;
+}

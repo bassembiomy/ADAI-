@@ -127,13 +127,18 @@ describe('governed SysML requirements', () => {
       priority: 'low',
     };
 
+    model.requirements.master.name = 'Master Name';
+    model.requirements.master.status = 'approved';
+
     const { repository, diff } = synchronizeRequirementCopy(model, 'copyReq');
+    // SysML «copy»: only the text is a read-only copy of the master.
     expect(repository.requirements.copyReq.text).toBe('Updated master requirement text');
-    expect(repository.requirements.copyReq.priority).toBe('critical');
-    expect(diff).toEqual(expect.arrayContaining([
+    expect(repository.requirements.copyReq.priority).toBe('low');
+    expect(repository.requirements.copyReq.name).not.toBe('Master Name');
+    expect(repository.requirements.copyReq.status).not.toBe('approved');
+    expect(diff).toEqual([
       expect.objectContaining({ field: 'text', from: 'Old outdated text', to: 'Updated master requirement text' }),
-      expect.objectContaining({ field: 'priority', from: 'low', to: 'critical' }),
-    ]));
+    ]);
   });
 });
 

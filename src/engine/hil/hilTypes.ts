@@ -40,6 +40,18 @@ export function applyTargetSelection(
   };
 }
 
+export function applyLegacyTargetSelection(
+  config: HILConfig,
+  target: TargetMCU,
+): HILConfig {
+  const selection = LEGACY_TARGET_SELECTIONS[target];
+  return {
+    ...config,
+    target,
+    targetSelection: selection ? { ...selection } : undefined,
+  };
+}
+
 export type PeripheralType = 'GPIO' | 'ADC' | 'DAC' | 'PWM' | 'UART' | 'SPI' | 'I2C' | 'CAN' | 'Timer';
 
 export interface DriverChannel {

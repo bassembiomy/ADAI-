@@ -110,9 +110,18 @@ interface DelayedTransitionRecord {
   priority: number;
 }
 
+export interface OpmRuntimeIndexes {
+  eventIds: Set<string>;
+  stateToOwner: Map<string, string>;
+  processIds: Set<string>;
+  statesById: Map<string, any>;
+  objectStateSets: Map<string, Set<string>>;
+}
+
 export interface OpmRuntime {
   readonly modelFingerprint: string;
   readonly model: ExecutableOpmModel;
+  readonly indexes: OpmRuntimeIndexes;
   stepIndex: number;
   timeMs: number;
   values: Record<string, boolean | number | string>;
@@ -239,6 +248,30 @@ export function tryEvaluateExpression(
   return { ok: true, value };
 }
 
+export function buildOpmRuntimeIndexes(model: ExecutableOpmModel): OpmRuntimeIndexes {
+  const eventIds = new Set(model.events.map(e => e.id));
+  const stateToOwner = new Map<string, string>();
+  const statesById = new Map<string, any>();
+  for (const st of model.states) {
+    stateToOwner.set(st.id, st.parentObjectId);
+    statesById.set(st.id, st);
+  }
+  const processIds = new Set(model.processes.map(p => p.id));
+  const objectStateSets = new Map<string, Set<string>>();
+  for (const obj of model.objects) {
+    if (obj.stateIds && obj.stateIds.length > 0) {
+      objectStateSets.set(obj.id, new Set(obj.stateIds));
+    }
+  }
+  return {
+    eventIds,
+    stateToOwner,
+    processIds,
+    statesById,
+    objectStateSets,
+  };
+}
+
 export function createOpmRuntime(model: ExecutableOpmModel): OpmRuntime {
   const values: Record<string, boolean | number | string> = {};
   const activeStates: Record<string, string> = {};
@@ -263,9 +296,12 @@ export function createOpmRuntime(model: ExecutableOpmModel): OpmRuntime {
     }
   }
 
+  const indexes = buildOpmRuntimeIndexes(model);
+
   const runtime: OpmRuntime = {
     modelFingerprint: model.fingerprint,
     model,
+    indexes,
     stepIndex: 0,
     timeMs: 0,
     values,
@@ -302,7 +338,8 @@ export function dispatchOpmEvent(
   eventId: string,
   diagnostics?: OpmDiagnostic[],
 ): 'accepted' | 'overflow' | 'unknownEvent' {
-  const eventExists = runtime.model.events.some(e => e.id === eventId);
+  const indexes = runtime.indexes ?? buildOpmRuntimeIndexes(runtime.model);
+  const eventExists = indexes.eventIds.has(eventId);
   if (!eventExists) {
     return 'unknownEvent';
   }
@@ -425,11 +462,13 @@ export function stepOpmRuntime(runtime: OpmRuntime, input: OpmStepInput = 10): O
     return buildFaultedResult(runtime, diagnostics, trace);
   }
 
+  const indexes = runtime.indexes ?? buildOpmRuntimeIndexes(model);
+
   // Validate initial/active states of stateful objects
   for (const obj of model.objects) {
     if (obj.stateIds && obj.stateIds.length > 0) {
       const activeState = runtime.activeStates[obj.id];
-      const isValid = activeState && obj.stateIds.includes(activeState);
+      const isValid = activeState && indexes.objectStateSets.get(obj.id)?.has(activeState);
       if (!isValid) {
         diagnostics.push({
           code: OPM_DIAGNOSTIC_CODES.INVALID_INITIAL_STATE,
@@ -480,7 +519,7 @@ export function stepOpmRuntime(runtime: OpmRuntime, input: OpmStepInput = 10): O
   // Advance state timeouts
   for (const [objId, stId] of Object.entries(runtime.activeStates)) {
     void objId;
-    const st = model.states.find(s => s.id === stId);
+    const st = indexes.statesById.get(stId);
     if (st && st.timeoutMs && st.timeoutEventId) {
       const currentElapsed = Math.min(UINT32_MAX, (runtime.stateTimeouts[stId] ?? 0) + deltaMs);
       runtime.stateTimeouts[stId] = currentElapsed;
@@ -530,17 +569,13 @@ export function stepOpmRuntime(runtime: OpmRuntime, input: OpmStepInput = 10): O
   const eligibleProcessSet = new Set<string>();
   const blockedProcessIds: string[] = [];
 
-  const processIds = new Set(model.processes.map(p => p.id));
-
-  // Map state to parent object
-  const stateToOwner = new Map<string, string>();
-  for (const st of model.states) {
-    stateToOwner.set(st.id, st.parentObjectId);
-  }
+  const processIds = indexes.processIds;
+  const stateToOwner = indexes.stateToOwner;
+  const queuedEventSet = new Set(queuedEvents);
 
   const markConsumed = (eventId: string): void => {
     // Consume only accepted (actually queued) events.
-    if (queuedEvents.includes(eventId) && !consumedEvents.includes(eventId)) {
+    if (queuedEventSet.has(eventId) && !consumedEvents.includes(eventId)) {
       consumedEvents.push(eventId);
     }
   };
@@ -560,7 +595,7 @@ export function stepOpmRuntime(runtime: OpmRuntime, input: OpmStepInput = 10): O
       }
     }
     if (link.eventId) {
-      if (!queuedEvents.includes(link.eventId)) {
+      if (!queuedEventSet.has(link.eventId)) {
         return false;
       }
     }
@@ -1145,5 +1180,68 @@ export function stepOpmRuntime(runtime: OpmRuntime, input: OpmStepInput = 10): O
     diagnosticsDelta: [...diagnostics],
     trace,
     snapshot,
+  };
+}
+
+export interface OpmSimulationAsyncOptions {
+  ticks?: number;
+  untilFinished?: boolean;
+  deltaMs?: number;
+  yieldInterval?: number;
+  shouldCancel?: () => boolean;
+}
+
+/**
+ * Executes OPM runtime steps asynchronously with cooperative yield boundaries
+ * and cancellation checks to prevent blocking the UI thread.
+ */
+export async function runOpmSimulationAsync(
+  runtime: OpmRuntime,
+  options: OpmSimulationAsyncOptions = {},
+): Promise<{
+  steps: OpmStepResult[];
+  finished: boolean;
+  cancelled: boolean;
+  lastStep?: OpmStepResult;
+}> {
+  const {
+    ticks = 100,
+    untilFinished = false,
+    deltaMs = 10,
+    yieldInterval = 50,
+    shouldCancel,
+  } = options;
+
+  const steps: OpmStepResult[] = [];
+  let stepCount = 0;
+  let finished = false;
+  let cancelled = false;
+
+  while (untilFinished ? !finished : stepCount < ticks) {
+    if (shouldCancel && shouldCancel()) {
+      cancelled = true;
+      break;
+    }
+
+    const stepResult = stepOpmRuntime(runtime, deltaMs);
+    steps.push(stepResult);
+    stepCount++;
+    finished = stepResult.finished;
+
+    if (finished || stepResult.status === 'error') {
+      break;
+    }
+
+    // Cooperative yield to keep event loop and UI responsive
+    if (stepCount % yieldInterval === 0) {
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
+  }
+
+  return {
+    steps,
+    finished,
+    cancelled,
+    lastStep: steps[steps.length - 1],
   };
 }
