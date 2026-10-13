@@ -2,6 +2,8 @@ import type { HelpDiagram, HelpSection, HelpTopic } from './helpTypes';
 import type { InspectorSchema } from '../features/sysml/inspectorSchema';
 import { getSupportedElementKinds } from '../engine/sysml/capabilities/catalog';
 import { OWNERSHIP_MATRIX } from '../engine/sysml/capabilities/ownershipPolicy';
+import { behaviorNotation, diagramNotation, elementNotation, extraDiagramNotation, relationshipNotation } from './notationReference';
+import { diagramRecipes } from './diagramRecipes';
 
 // Authored examples supplement catalog/schema facts; unknown kinds never get invented instructions.
 const ELEMENT_EXAMPLES: Record<string, [string, string, string]> = {
@@ -134,7 +136,9 @@ function schematic(labels: string[], caption: string, edgeLabel = 'reference / c
 export function attachReferenceTopics(topics: Record<string, HelpTopic>, schemas: InspectorSchema[]): void {
   for (const [id, reference] of Object.entries(BEHAVIOR_ELEMENT_REFERENCES)) {
     topics[`behavior-element-${id}`] = { title: reference.title, category: 'Behavior Elements', description: reference.body, content: reference.body,
-      sections: [{ id: 'use', title: 'Meaning and use', body: reference.body }, { id: 'example', title: 'Worked example', body: reference.example }], related: [reference.chapter, 'diagram-reference'] };
+      sections: [{ id: 'use', title: 'Meaning and use', body: reference.body },
+        { id: 'notation', title: 'Shape and connections', body: 'This is a schematic glyph of the named editor item; the chapter shows the complete diagram context. Check its semantic owner and supported runtime before treating a drawn line as executable.', notation: behaviorNotation[id] ? [{ label: reference.title, meaning: reference.body, ...behaviorNotation[id] }] : [] },
+        { id: 'example', title: 'Worked example', body: reference.example }], related: [reference.chapter, 'diagram-reference', 'modeling-philosophy'] };
     const chapter = topics[reference.chapter];
     if (chapter) chapter.related = [...new Set([...(chapter.related ?? []), `behavior-element-${id}`])];
   }
@@ -149,6 +153,7 @@ export function attachReferenceTopics(topics: Record<string, HelpTopic>, schemas
         topics[`inspector-field-${field.key}`]?.content ?? field.readOnlyReason ?? 'Inspect the supported editor for this field.']) } };
     const supplements: HelpSection[] = [
       { id: 'context', title: 'Ownership and modeling context', body: `Modeling basis: ${definition.authority === 'OMG_SYSML_1_6' ? 'SysML 1.6' : definition.authority === 'UML_FOUNDATION' ? 'UML foundation' : 'ADIA extension'}. ${kind === 'Model' ? 'The Model is the fixed root of ownership.' : `Allowed owners: ${owners.join(', ') || 'use the supported contextual editor'}.`} Use an eligible owner in the Model Explorer; an unavailable action may indicate an incompatible context. A diagram presentation references the existing element.` },
+      { id: 'notation', title: 'Shape and connections', body: 'Some semantic definitions live in the Model Browser and do not have a free-standing canvas shape. This preview identifies the applicable editor context, not an executable block.', notation: elementNotation[kind] ? [{ label: definition.label, meaning: topic.description, ...elementNotation[kind] }] : [] },
       properties,
       { id: 'example', title: 'Worked example', body: example[2], diagram: schematic([example[1], example[0], definition.category === 'feature' ? 'Typed feature /\ncontaining definition' : 'Model view /\nrelated references'], 'Reference-context schematic. Plain lines describe context/references, not UML containment notation or executable signal wiring.') },
       { id: 'validation', title: 'Validation and related editors', body: 'Inspect the committed owner, type and relationship references after editing. Use the domain diagnostics for rejected commands and dangling references. Remove from Diagram removes a presentation; Delete from Model has semantic impact. Review the active editor for fields beyond the general inspector.' },
@@ -161,14 +166,22 @@ export function attachReferenceTopics(topics: Record<string, HelpTopic>, schemas
     const topic = topics[`sysml-relationship-${kind}`];
     if (!topic) continue;
     const schema = schemas.find(item => item.metaclass === kind);
-    topic.sections = [...(topic.sections ?? []), { id: 'example', title: 'Worked example', body: example[2], diagram: schematic([example[0], example[1]], `Endpoint concept schematic for ${kind}; consult the editor and chapter for its actual arrowhead and endpoint notation.`, kind) },
+    topic.sections = [...(topic.sections ?? []),
+      { id: 'notation', title: 'Line, marker and direction', body: 'Schematic line-style key for the named diagram context. The relationship records a semantic reference; inspect the chosen endpoints and owning diagram before expecting an effect.', notation: relationshipNotation[kind] ? [{ label: kind, meaning: topic.description, ...relationshipNotation[kind] }] : [] },
+      { id: 'example', title: 'Worked example', body: example[2], diagram: schematic([example[0], example[1]], `Endpoint concept schematic for ${kind}; consult the notation key and editor for its actual arrowhead and endpoint style.`, kind) },
       { id: 'properties', title: 'Endpoint properties', body: 'Direction, role and type compatibility are checked by the command gateway. The reference sample shows schema fields; choose actual existing endpoint identities in your model.', table: { columns: ['Property', 'Access', 'Meaning'], rows: (schema?.fields ?? []).map(field => [field.label, field.mode, topics[`inspector-field-${field.key}`]?.content ?? field.readOnlyReason ?? 'Review the relationship editor.']) } }];
     topic.related = [...new Set([...(topic.related ?? []), 'diagram-reference'])];
   }
   for (const [id, reference] of Object.entries(DIAGRAM_REFERENCES)) {
+    const notation = reference.symbols.flatMap(([label, meaning]) => {
+      const spec = diagramNotation[id]?.[label];
+      return spec ? [{ label, meaning, ...spec }] : [];
+    });
     const sections: HelpSection[] = [
       { id: 'workflow', title: 'Create and review', body: reference.steps },
+      { id: 'build', title: 'Build this diagram: step by step', body: 'Follow the actions in order, then inspect both the saved semantic IDs and any diagnostic or runtime evidence. Creating a drawing alone does not establish an executable model.', list: diagramRecipes[id] ?? [] },
       { id: 'symbols', title: 'Elements and connections', body: reference.overview, table: { columns: ['Element / connection', 'Meaning and use'], rows: reference.symbols } },
+      { id: 'notation', title: 'Notation, shapes and connection rules', body: 'Simplified glyphs identify the editor notation and the direction/meaning of each connection. Resize or configuration can change the appearance of an instance; follow the linked element or block reference for its exact properties. Conceptual diagrams do not automatically execute.', notation: [...notation, ...(extraDiagramNotation[id] ?? [])] },
       { id: 'reference-example', title: 'Reference example', body: reference.example, diagram: schematic([reference.symbols[0][0], reference.symbols[1][0], 'Inspect references /\nreview diagnostics'], 'Conceptual reference workflow; use the chapter examples for concrete domain notation.') },
     ];
     if (topics[id]) {
@@ -177,11 +190,12 @@ export function attachReferenceTopics(topics: Record<string, HelpTopic>, schemas
         if (existing) { if (section.table) existing.table = section.table; }
         else (topics[id].sections ??= []).push(section);
       }
-      topics[id].related = [...new Set([...(topics[id].related ?? []), ...reference.related, 'diagram-reference'])];
-    } else topics[id] = { title: reference.title, category: 'Diagram Reference', description: reference.overview, content: reference.overview, sections, related: reference.related };
+      topics[id].related = [...new Set([...(topics[id].related ?? []), ...reference.related, 'diagram-reference', 'modeling-philosophy'])];
+    } else topics[id] = { title: reference.title, category: 'Diagram Reference', description: reference.overview, content: reference.overview, sections, related: [...reference.related, 'modeling-philosophy'] };
   }
-  topics['diagram-reference'] = { title: 'Diagram reference', category: 'Getting Started', description: 'Choose the diagram or execution workspace that matches your engineering task.', content: 'Start with the model meaning: structural definitions, internal usages, requirements, behavioral descriptions, executable charts, directed control graphs or conserving physical networks. Each reference chapter explains its elements, connections, example and execution context.',
-    sections: [{ id: 'choose', title: 'Choose a diagram', body: 'Open a related chapter below for its workflow, notation and worked examples.', table: { columns: ['Diagram / workspace', 'Use it for'], rows: Object.values(DIAGRAM_REFERENCES).map(reference => [reference.title, reference.overview]) } }], related: Object.keys(DIAGRAM_REFERENCES) };
+  topics['diagram-reference'] = { title: 'Diagram reference', category: 'Getting Started', description: 'Choose the diagram or execution workspace that matches your engineering task.', content: 'Start with the model meaning: structural definitions, internal usages, requirements, behavioral descriptions, executable charts, directed control graphs or conserving physical networks. Each chapter supplies a build checklist, notation key, connection rules and worked example. Modeling Philosophy links the chapters, and Diagram, Simulation and Code Boundaries clarifies which steps actually run.',
+    sections: [{ id: 'choose', title: 'Choose a diagram', body: 'Open a related chapter below for step-by-step construction, palette symbols, connection rules and execution limits. Use Block reference for the actual X-Bridges and V-Lab catalog glyphs, ports and parameters.', table: { columns: ['Diagram / workspace', 'Use it for'], rows: Object.values(DIAGRAM_REFERENCES).map(reference => [reference.title, reference.overview]) } },
+      { id: 'semantics', title: 'Check the execution boundary', body: 'A SysML presentation and its semantic element are distinct; a diagram edge is not automatically a runtime wire. State Machine, X-Bridges, V-Lab and ENTROPY OPM each have their own executor and supported subset. Read the capability matrix and validate an actual run before interpreting a plot or generated artifact.' }], related: ['modeling-philosophy', 'execution-boundaries', ...Object.keys(DIAGRAM_REFERENCES)] };
   // Reuse reviewed concrete schematics in the dedicated structural chapters.
   for (const [id, sectionId] of [['bdd-reference', 'bdd'], ['ibd-reference', 'ibd'], ['requirements-reference', 'requirements']]) {
     const diagram = topics['model-browser']?.sections?.find(section => section.id === sectionId)?.diagram;

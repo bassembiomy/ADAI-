@@ -6,6 +6,7 @@ import { LEGACY_TOPIC_CORRECTIONS } from './help/legacyTopicCorrections';
 import { attachHelpDiagrams } from './help/helpDiagrams';
 import { attachReferenceTopics } from './help/referenceTopics';
 import { getHelpInspectorSchemas } from './help/helpFeatures';
+import { MODELING_HELP_TOPICS, attachStateMachineExecutionGuide } from './help/modelingTopics';
 export const adia_architecture_diagram = new URL('./assets/adia_architecture_diagram_1778580699379.png', import.meta.url).href;
 export const adia_vlab_simulation = new URL('./assets/adia_vlab_simulation_1778580716413.png', import.meta.url).href;
 export const adia_doe_analysis = new URL('./assets/adia_doe_analysis_1778580732166.png', import.meta.url).href;
@@ -45,6 +46,7 @@ const legacyTopicOrder = [
   "robot-vacuum-digital-twin"
 ];
 export const HELP_DATA: Record<string,HelpTopic> = Object.fromEntries(legacyTopicOrder.map(id=>[id,reviewedTopics[id]]));
-Object.assign(HELP_DATA,ADDITIONAL_HELP_TOPICS,HELP_FEATURE_TOPICS,HMI_HELP_TOPICS);
+Object.assign(HELP_DATA,ADDITIONAL_HELP_TOPICS,HELP_FEATURE_TOPICS,HMI_HELP_TOPICS,MODELING_HELP_TOPICS);
 attachHelpDiagrams(HELP_DATA);
 attachReferenceTopics(HELP_DATA, getHelpInspectorSchemas());
+attachStateMachineExecutionGuide(HELP_DATA);

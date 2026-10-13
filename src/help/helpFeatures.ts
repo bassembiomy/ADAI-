@@ -215,13 +215,13 @@ for (const reference of getBlockHelpReferences()) HELP_FEATURE_TOPICS[reference.
     { id: 'parameters', title: 'Parameters', body: reference.parameters.map(parameter => `${parameter.name}: default ${JSON.stringify(parameter.defaultValue)} ${parameter.unit ?? ''}. ${parameter.description}${parameter.bounds ? ' Declared bounds: '+JSON.stringify(parameter.bounds) : ''}`).join('\n') || 'This catalog entry has no editable parameters.' }],
   sources: [reference.sourcePath],
 };
-for (const type of getBlockHelpGaps().paletteOnly) HELP_FEATURE_TOPICS[`xbridges:${type}`] = {
-  title: `X-Bridges: ${type} (palette only)`, category: 'Component References',
-  description: 'This palette entry has no registered block factory and is unavailable for normal insertion.',
-  content: 'This palette entry has no registered block factory and is unavailable for normal insertion.',
-  sections: [{id:'availability',title:'Implementation status',body:`${type} appears in the X-Bridges palette but BLOCK_LIBRARY has no factory for it. No execution behavior or parameter/port contract is invented here. Inspect the supported factory catalog when choosing an equivalent model.`}],
-  sources: ['src/engine/xbridges/BlockDefinitions.ts'], related:['xbridges-ref'],
-};
+// Keep the full block page and its unavailable-state note together: the block feature
+// resolves #behavior, while the palette-availability feature resolves #availability.
+for (const type of getBlockHelpGaps().paletteOnly) {
+  const topic = HELP_FEATURE_TOPICS[`xbridges:${type}`];
+  topic.sections?.unshift({ id: 'availability', title: 'Implementation status',
+    body: `${type} appears in the palette but BLOCK_LIBRARY has no factory for it. No execution behavior or port/parameter contract is invented here; use a factory-backed equivalent after validating it.` });
+}
 
 export function getHelpFeatures(): HelpFeature[] {
   const features: HelpFeature[] = getSupportedElementKinds().map(def => ({ id: `sysml:element:${def.metaclass}`, label: def.label,

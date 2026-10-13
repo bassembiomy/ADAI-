@@ -1,3 +1,5 @@
+import type { NotationItem } from './notationReference';
+
 export interface HelpDiagram {
   kind: 'flow' | 'sequence' | 'usecase' | 'blocks';
   nodes: { id: string; label: string; role?: 'actor' | 'usecase'; x?: number; y?: number }[];
@@ -13,6 +15,7 @@ export interface HelpSection {
   code?: string;
   list?: string[];
   diagram?: HelpDiagram;
+  notation?: NotationItem[];
   sources?: string[];
   table?: { columns: string[]; rows: string[][] };
 }

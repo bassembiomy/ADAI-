@@ -14,6 +14,10 @@ export function useContextualHelp(mode: string, openHelp: (topicId: string, sect
       event.preventDefault(); event.stopImmediatePropagation();
       const focus = document.activeElement instanceof HTMLElement ? document.activeElement.closest<HTMLElement>(controlSelector) : null;
       const control = focus ?? hovered.current;
+      // A field inside a block/widget may have a generic editor binding. The enclosing
+      // qualified model item is the most useful F1 destination for that instance.
+      const item = control?.closest<HTMLElement>('[data-help-topic^="xbridges:"],[data-help-topic^="vlab:"],[data-help-topic^="hmi-component-"]');
+      if (item?.dataset.helpTopic) { openHelp(item.dataset.helpTopic, item.dataset.helpSection); return; }
       const explicit = control?.closest<HTMLElement>('[data-help-topic],[data-help-feature]');
       if (explicit?.dataset.helpTopic) { openHelp(explicit.dataset.helpTopic, explicit.dataset.helpSection); return; }
       const feature = findHelpFeature({

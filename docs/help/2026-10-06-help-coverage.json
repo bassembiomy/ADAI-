@@ -1,7 +1,7 @@
 {
   "scope": "Registered semantic features; UI source candidates reported separately.",
-  "total": 2090,
-  "documented": 2090,
+  "total": 2091,
+  "documented": 2091,
   "missing": 0,
   "coverage": 100,
   "duplicateFeatureIds": [],
@@ -16727,6 +16727,16 @@
       "topicId": "xbridges:Note",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
+      "kind": "block",
+      "module": "xbridges",
+      "documentationGaps": []
+    },
+    {
+      "id": "block:xbridges:COSEC",
+      "label": "Cosecant",
+      "topicId": "xbridges:COSEC",
+      "sectionId": "behavior",
+      "sourcePath": "src/utils/xbridges/XbridgesLibrary.ts",
       "kind": "block",
       "module": "xbridges",
       "documentationGaps": []

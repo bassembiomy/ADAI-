@@ -3,7 +3,7 @@ interface SearchableTopic {
   category: string;
   description: string;
   content: string;
-  sections?: { id?: string; title: string; body: string; code?: string; list?: string[]; table?: { columns: string[]; rows: string[][] } }[];
+  sections?: { id?: string; title: string; body: string; code?: string; list?: string[]; table?: { columns: string[]; rows: string[][] }; notation?: { label: string; meaning: string; appearance: string; connect: string }[] }[];
 }
 
 export interface HelpSearchResult {
@@ -27,7 +27,7 @@ export function searchHelpTopics(topics: Record<string, SearchableTopic>, query:
     const header = `${topic.title} ${topic.category} ${topic.description} ${topic.content}`;
     if (matches(header)) results.push({ topicId, title: topic.title, excerpt: topic.description, score: matches(topic.title) ? 100 : 40 });
     topic.sections?.forEach((section, index) => {
-      const text = `${section.title} ${section.body} ${section.code ?? ''} ${(section.list ?? []).join(' ')} ${section.table?.rows.flat().join(' ') ?? ''}`;
+      const text = `${section.title} ${section.body} ${section.code ?? ''} ${(section.list ?? []).join(' ')} ${section.table?.rows.flat().join(' ') ?? ''} ${(section.notation ?? []).map(item => `${item.label} ${item.appearance} ${item.meaning} ${item.connect}`).join(' ')}`;
       if (matches(text)) results.push({ topicId, sectionId: helpSectionId(section, index), title: `${topic.title} › ${section.title}`, excerpt: section.body.slice(0, 180), score: matches(section.title) ? 80 : 30 });
     });
   }
