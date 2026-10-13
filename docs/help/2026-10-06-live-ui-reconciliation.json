@@ -1,6 +1,6 @@
 {
-  "files": 97,
-  "fingerprint": "2356c45dd8d0258bbd400d1bbd844ccb8f24fc0668e13a18ed9432767d63db9d",
+  "files": 99,
+  "fingerprint": "14b0c476dcb6d78325cb3f7ee8f249e9a34985e46892f3012cb021b9636c8002",
   "items": [
     {
       "source": "src/App.tsx",
@@ -8180,7 +8180,7 @@
       "tag": "button",
       "signature": "button|onClick:{(e)=>{e.stopPropagation();onToggle();}}",
       "handlers": {
-        "onClick": "{(e) => {\r\n        e.stopPropagation();\r\n        onToggle();\r\n      }}"
+        "onClick": "{(e) => {\n        e.stopPropagation();\n        onToggle();\n      }}"
       },
       "feature": "ui:common/ResizableSplitPane:e660ac9d94ae",
       "status": "documented",
@@ -8360,7 +8360,7 @@
       "tag": "OpmRightPanelContent",
       "signature": "OpmRightPanelContent|onAddAttribute:{handleAddAttribute}|onAddPort:{handleAddPort}|onAddStateToObject:{handleAddStateToObject}|onCloseInspector:{()=>{setSelectedNode(null);setSelectedEdge(null);}}|onConvertEdgeType:{handleConvertEdgeType}|onConvertNodeType:{handleConvertNodeType}|onDeleteSelectedNode:{handleDeleteSelectedNode}|onDeleteState:{handleDeleteState}|onManualActivateState:{handleManualActivateState}|onOpmConfigChange:{(updater:any)=>{if(typeofupdater==='function'){constnext=updater(activeOpmConfig);if(next&&next.tickMs!==undefined)handleConfigFieldChange('tickMs',next.tickMs);}elseif(updater&&updater.tickMs!==undefined){handleConfigFieldChange('tickMs',updater.tickMs);}}}|onRemovePort:{handleRemovePort}|onResetSimulation:{resetSimulation}|onRightTabChange:{(t)=>setRightTab(tasany)}|onRunSimTick:{runSimTick}|onToggleSimulation:{toggleSimulation}|onUpdateNodeProp:{handleUpdateNodeProp}|onUpdateSelectionExecution:{handleUpdateSelectionExecution}|onZoomInNode:{handleZoomInNode}",
       "handlers": {
-        "onCloseInspector": "{() => {\r\n        setSelectedNode(null);\r\n        setSelectedEdge(null);\r\n      }}",
+        "onCloseInspector": "{() => {\n        setSelectedNode(null);\n        setSelectedEdge(null);\n      }}",
         "onUpdateNodeProp": "{handleUpdateNodeProp}",
         "onConvertNodeType": "{handleConvertNodeType}",
         "onAddStateToObject": "{handleAddStateToObject}",
@@ -8376,7 +8376,7 @@
         "onToggleSimulation": "{toggleSimulation}",
         "onRunSimTick": "{runSimTick}",
         "onResetSimulation": "{resetSimulation}",
-        "onOpmConfigChange": "{(updater: any) => {\r\n        if (typeof updater === 'function') {\r\n          const next = updater(activeOpmConfig);\r\n          if (next && next.tickMs !== undefined) handleConfigFieldChange('tickMs', next.tickMs);\r\n        } else if (updater && updater.tickMs !== undefined) {\r\n          handleConfigFieldChange('tickMs', updater.tickMs);\r\n        }\r\n      }}",
+        "onOpmConfigChange": "{(updater: any) => {\n        if (typeof updater === 'function') {\n          const next = updater(activeOpmConfig);\n          if (next && next.tickMs !== undefined) handleConfigFieldChange('tickMs', next.tickMs);\n        } else if (updater && updater.tickMs !== undefined) {\n          handleConfigFieldChange('tickMs', updater.tickMs);\n        }\n      }}",
         "onUpdateSelectionExecution": "{handleUpdateSelectionExecution}"
       },
       "id": "live:components/entropy/EntropyWorkspace:e6179ce9664f",
@@ -8463,7 +8463,7 @@
       "tag": "button",
       "signature": "button|onClick:{()=>{setIsEditingText(false);constgenerated=generateOpl(nodes,edges);setOplText(generated);}}",
       "handlers": {
-        "onClick": "{() => {\r\n                    setIsEditingText(false);\r\n                    const generated = generateOpl(nodes, edges);\r\n                    setOplText(generated);\r\n                  }}"
+        "onClick": "{() => {\n                    setIsEditingText(false);\n                    const generated = generateOpl(nodes, edges);\n                    setOplText(generated);\n                  }}"
       },
       "feature": "opm:entropyworkspace:opl:a374e71beb",
       "status": "documented",
@@ -8478,7 +8478,7 @@
       "tag": "textarea",
       "signature": "textarea|onChange:{(e)=>{setOplText(e.target.value);setIsEditingText(true);}}",
       "handlers": {
-        "onChange": "{(e) => {\r\n                setOplText(e.target.value);\r\n                setIsEditingText(true);\r\n              }}"
+        "onChange": "{(e) => {\n                setOplText(e.target.value);\n                setIsEditingText(true);\n              }}"
       },
       "feature": "opm:entropyworkspace:opl:224fcf5d00",
       "status": "documented",
@@ -8493,8 +8493,8 @@
       "tag": "SmartShowPanel",
       "signature": "SmartShowPanel|onSelectElement:{(elemId)=>{constnode=nodes.find(n=>n.id===elemId);if(node){setSelectedNode(node);setSelectedEdge(null);return;}constedge=edges.find(e=>e.id===elemId);if(edge){setSelectedEdge(edge);setSelectedNode(null);return;}for(constnofnodes){consthasPort=(n.data?.inputs||[]).some(p=>p.id===elemId)||(n.data?.outputs||[]).some(p=>p.id===elemId);if(hasPort){setSelectedNode(n);setSelectedEdge(null);return;}}}}|onSelectProcess:{(pid)=>{constp=nodes.find(n=>n.id===pid);if(p){setSelectedNode(p);setSelectedEdge(null);}}}",
       "handlers": {
-        "onSelectProcess": "{(pid) => {\r\n              const p = nodes.find(n => n.id === pid);\r\n              if (p) {\r\n                setSelectedNode(p);\r\n                setSelectedEdge(null);\r\n              }\r\n            }}",
-        "onSelectElement": "{(elemId) => {\r\n              const node = nodes.find(n => n.id === elemId);\r\n              if (node) {\r\n                setSelectedNode(node);\r\n                setSelectedEdge(null);\r\n                return;\r\n              }\r\n              const edge = edges.find(e => e.id === elemId);\r\n              if (edge) {\r\n                setSelectedEdge(edge);\r\n                setSelectedNode(null);\r\n                return;\r\n              }\r\n              for (const n of nodes) {\r\n                const hasPort = (n.data?.inputs || []).some(p => p.id === elemId) || (n.data?.outputs || []).some(p => p.id === elemId);\r\n                if (hasPort) {\r\n                  setSelectedNode(n);\r\n                  setSelectedEdge(null);\r\n                  return;\r\n                }\r\n              }\r\n            }}"
+        "onSelectProcess": "{(pid) => {\n              const p = nodes.find(n => n.id === pid);\n              if (p) {\n                setSelectedNode(p);\n                setSelectedEdge(null);\n              }\n            }}",
+        "onSelectElement": "{(elemId) => {\n              const node = nodes.find(n => n.id === elemId);\n              if (node) {\n                setSelectedNode(node);\n                setSelectedEdge(null);\n                return;\n              }\n              const edge = edges.find(e => e.id === elemId);\n              if (edge) {\n                setSelectedEdge(edge);\n                setSelectedNode(null);\n                return;\n              }\n              for (const n of nodes) {\n                const hasPort = (n.data?.inputs || []).some(p => p.id === elemId) || (n.data?.outputs || []).some(p => p.id === elemId);\n                if (hasPort) {\n                  setSelectedNode(n);\n                  setSelectedEdge(null);\n                  return;\n                }\n              }\n            }}"
       },
       "id": "live:components/entropy/EntropyWorkspace:a81e3cff33a3",
       "status": "excluded",
@@ -8508,9 +8508,9 @@
       "signature": "OpmCodeGenerationWorkspace|onDownload:{(files)=>{onAddError?.('info',`VerifiedOPMbundleready:${files.length}files.`,'OPM');}}|onNavigateToDiagnostic:{(src)=>{if(src.elementId){constnode=nodes.find(n=>n.id===src.elementId);if(node){setSelectedNode(node);setSelectedEdge(null);return;}constedge=edges.find(e=>e.id===src.elementId);if(edge){setSelectedEdge(edge);setSelectedNode(null);return;}}onAddError?.('info',`Diagnosticreference:${src.elementId||src.propertyPath||'unknownsource'}`,'OPM');}}|onRunHil:{(files)=>{onAddError?.('info',`VerifiedOPMbundlesenttoHIL:${files.length}files.`,'OPM');}}|onStateChange:{setOpmArtifactState}",
       "handlers": {
         "onStateChange": "{setOpmArtifactState}",
-        "onNavigateToDiagnostic": "{(src) => {\r\n              if (src.elementId) {\r\n                const node = nodes.find(n => n.id === src.elementId);\r\n                if (node) {\r\n                  setSelectedNode(node);\r\n                  setSelectedEdge(null);\r\n                  return;\r\n                }\r\n                const edge = edges.find(e => e.id === src.elementId);\r\n                if (edge) {\r\n                  setSelectedEdge(edge);\r\n                  setSelectedNode(null);\r\n                  return;\r\n                }\r\n              }\r\n              onAddError?.('info', `Diagnostic reference: ${src.elementId || src.propertyPath || 'unknown source'}`, 'OPM');\r\n            }}",
-        "onDownload": "{(files) => {\r\n              onAddError?.('info', `Verified OPM bundle ready: ${files.length} files.`, 'OPM');\r\n            }}",
-        "onRunHil": "{(files) => {\r\n              onAddError?.('info', `Verified OPM bundle sent to HIL: ${files.length} files.`, 'OPM');\r\n            }}"
+        "onNavigateToDiagnostic": "{(src) => {\n              if (src.elementId) {\n                const node = nodes.find(n => n.id === src.elementId);\n                if (node) {\n                  setSelectedNode(node);\n                  setSelectedEdge(null);\n                  return;\n                }\n                const edge = edges.find(e => e.id === src.elementId);\n                if (edge) {\n                  setSelectedEdge(edge);\n                  setSelectedNode(null);\n                  return;\n                }\n              }\n              onAddError?.('info', `Diagnostic reference: ${src.elementId || src.propertyPath || 'unknown source'}`, 'OPM');\n            }}",
+        "onDownload": "{(files) => {\n              onAddError?.('info', `Verified OPM bundle ready: ${files.length} files.`, 'OPM');\n            }}",
+        "onRunHil": "{(files) => {\n              onAddError?.('info', `Verified OPM bundle sent to HIL: ${files.length} files.`, 'OPM');\n            }}"
       },
       "id": "live:components/entropy/EntropyWorkspace:de094ac835fb",
       "status": "excluded",
@@ -8523,7 +8523,7 @@
       "tag": "OpmDockShell",
       "signature": "OpmDockShell|onDocksChange:{(nextDocks)=>{if(isRightFloating&&nextDocks.right){setIsRightFloating(false);}handleDocksChange(nextDocks);}}",
       "handlers": {
-        "onDocksChange": "{(nextDocks) => {\r\n          if (isRightFloating && nextDocks.right) {\r\n            setIsRightFloating(false);\r\n          }\r\n          handleDocksChange(nextDocks);\r\n        }}"
+        "onDocksChange": "{(nextDocks) => {\n          if (isRightFloating && nextDocks.right) {\n            setIsRightFloating(false);\n          }\n          handleDocksChange(nextDocks);\n        }}"
       },
       "id": "live:components/entropy/EntropyWorkspace:72813b503ece",
       "status": "excluded",
@@ -8671,7 +8671,7 @@
       "tag": "select",
       "signature": "select|onChange:{(e)=>{constval=e.target.value;if(val&&OPM_EXAMPLES[val]){constselectedExample=OPM_EXAMPLES[val];const{nodes:parsedNodes,edges:parsedEdges,errors}=parseOpl(selectedExample.oplText);simStateRef.current=initializeSimulation(parsedNodes);constinitializedNodes=applySimResultToNodes(parsedNodes,simStateRef.current,[]);constlayoutedNodes=layoutOpmGraph(initializedNodes,parsedEdges);saveHistory(nodes,edges);setNodes(layoutedNodes);setEdges(parsedEdges);setOplText(selectedExample.oplText);setOplErrors(errors);logSim('success',`Loadedexamplemodel:${selectedExample.name}`);if(onSave)onSave(layoutedNodes,parsedEdges);}}}",
       "handlers": {
-        "onChange": "{(e) => {\r\n                const val = e.target.value;\r\n                if (val && OPM_EXAMPLES[val]) {\r\n                  const selectedExample = OPM_EXAMPLES[val];\r\n                  const { nodes: parsedNodes, edges: parsedEdges, errors } = parseOpl(selectedExample.oplText);\r\n                  simStateRef.current = initializeSimulation(parsedNodes);\r\n                  const initializedNodes = applySimResultToNodes(parsedNodes, simStateRef.current, []);\r\n                  const layoutedNodes = layoutOpmGraph(initializedNodes, parsedEdges);\r\n                  saveHistory(nodes, edges);\r\n                  setNodes(layoutedNodes);\r\n                  setEdges(parsedEdges);\r\n                  setOplText(selectedExample.oplText);\r\n                  setOplErrors(errors);\r\n                  logSim('success', `Loaded example model: ${selectedExample.name}`);\r\n                  if (onSave) onSave(layoutedNodes, parsedEdges);\r\n                }\r\n              }}"
+        "onChange": "{(e) => {\n                const val = e.target.value;\n                if (val && OPM_EXAMPLES[val]) {\n                  const selectedExample = OPM_EXAMPLES[val];\n                  const { nodes: parsedNodes, edges: parsedEdges, errors } = parseOpl(selectedExample.oplText);\n                  simStateRef.current = initializeSimulation(parsedNodes);\n                  const initializedNodes = applySimResultToNodes(parsedNodes, simStateRef.current, []);\n                  const layoutedNodes = layoutOpmGraph(initializedNodes, parsedEdges);\n                  saveHistory(nodes, edges);\n                  setNodes(layoutedNodes);\n                  setEdges(parsedEdges);\n                  setOplText(selectedExample.oplText);\n                  setOplErrors(errors);\n                  logSim('success', `Loaded example model: ${selectedExample.name}`);\n                  if (onSave) onSave(layoutedNodes, parsedEdges);\n                }\n              }}"
       },
       "feature": "opm:entropyworkspace:opl:453dfe06bf",
       "status": "documented",
@@ -8686,7 +8686,7 @@
       "tag": "button",
       "signature": "button|onClick:{()=>{const{nodes:impNodes,edges:impEdges,warnings}=importSysmlToOpm(sysmlState);constcandidateSnapshot:OpmModelSnapshot=normalizeContainment({nodes:impNodes,edges:impEdges});constvalidation=validateOpmModelLifecycle(candidateSnapshot);if(!validation.valid){constfirstErr=validation.diagnostics.find(d=>d.severity==='error');constmsg=firstErr?.message||'SysMLimportviolateslifecycleintegrityrules.';if(onAddError)onAddError('error',msg,'OPM');logSim('error',msg);return;}commitModelMutation(()=>({snapshot:candidateSnapshot,invalidatesSimulation:true,invalidatesEvidence:true,impactSummary:`Imported${impNodes.length}OPMelementsfromtheSysMLmodel.`,}));setOplText('');warnings.forEach(w=>logSim('warning',w));}}",
       "handlers": {
-        "onClick": "{() => {\r\n                  const { nodes: impNodes, edges: impEdges, warnings } = importSysmlToOpm(sysmlState);\r\n                  const candidateSnapshot: OpmModelSnapshot = normalizeContainment({ nodes: impNodes, edges: impEdges });\r\n                  const validation = validateOpmModelLifecycle(candidateSnapshot);\r\n                  if (!validation.valid) {\r\n                    const firstErr = validation.diagnostics.find(d => d.severity === 'error');\r\n                    const msg = firstErr?.message || 'SysML import violates lifecycle integrity rules.';\r\n                    if (onAddError) onAddError('error', msg, 'OPM');\r\n                    logSim('error', msg);\r\n                    return;\r\n                  }\r\n\r\n                  commitModelMutation(() => ({\r\n                    snapshot: candidateSnapshot,\r\n                    invalidatesSimulation: true,\r\n                    invalidatesEvidence: true,\r\n                    impactSummary: `Imported ${impNodes.length} OPM elements from the SysML model.`,\r\n                  }));\r\n                  setOplText('');\r\n                  warnings.forEach(w => logSim('warning', w));\r\n                }}"
+        "onClick": "{() => {\n                  const { nodes: impNodes, edges: impEdges, warnings } = importSysmlToOpm(sysmlState);\n                  const candidateSnapshot: OpmModelSnapshot = normalizeContainment({ nodes: impNodes, edges: impEdges });\n                  const validation = validateOpmModelLifecycle(candidateSnapshot);\n                  if (!validation.valid) {\n                    const firstErr = validation.diagnostics.find(d => d.severity === 'error');\n                    const msg = firstErr?.message || 'SysML import violates lifecycle integrity rules.';\n                    if (onAddError) onAddError('error', msg, 'OPM');\n                    logSim('error', msg);\n                    return;\n                  }\n\n                  commitModelMutation(() => ({\n                    snapshot: candidateSnapshot,\n                    invalidatesSimulation: true,\n                    invalidatesEvidence: true,\n                    impactSummary: `Imported ${impNodes.length} OPM elements from the SysML model.`,\n                  }));\n                  setOplText('');\n                  warnings.forEach(w => logSim('warning', w));\n                }}"
       },
       "feature": "opm:entropyworkspace:opl:cc0b98f7fe",
       "status": "documented",
@@ -8861,8 +8861,8 @@
         "onInit": "{(inst) => { reactFlowInstanceRef.current = inst; }}",
         "onPaneClick": "{handlePaneClick}",
         "onNodeClick": "{handleNodeClick}",
-        "onNodesDelete": "{(deleted) => {\r\n                executeDeletion({ nodeIds: deleted.map(n => n.id) });\r\n              }}",
-        "onEdgesDelete": "{(deleted) => {\r\n                executeDeletion({ edgeIds: deleted.map(e => e.id) });\r\n              }}"
+        "onNodesDelete": "{(deleted) => {\n                executeDeletion({ nodeIds: deleted.map(n => n.id) });\n              }}",
+        "onEdgesDelete": "{(deleted) => {\n                executeDeletion({ edgeIds: deleted.map(e => e.id) });\n              }}"
       },
       "feature": "live:components/entropy/EntropyWorkspace:7f1236c98c39",
       "status": "documented",
@@ -9041,7 +9041,7 @@
       "tag": "select",
       "signature": "select|onChange:{(e)=>{e.stopPropagation();if(data?.onTypeChange){(data.onTypeChangeasany)(e.target.value);}}}",
       "handlers": {
-        "onChange": "{(e) => {\r\n                  e.stopPropagation();\r\n                  if (data?.onTypeChange) {\r\n                    (data.onTypeChange as any)(e.target.value);\r\n                  }\r\n                }}"
+        "onChange": "{(e) => {\n                  e.stopPropagation();\n                  if (data?.onTypeChange) {\n                    (data.onTypeChange as any)(e.target.value);\n                  }\n                }}"
       },
       "feature": "opm:opmedgecomponents:links:c0b76b3104",
       "status": "documented",
@@ -9056,7 +9056,7 @@
       "tag": "button",
       "signature": "button|onClick:{(e)=>{e.stopPropagation();(data?.onDeleteasany)();}}",
       "handlers": {
-        "onClick": "{(e) => {\r\n                    e.stopPropagation();\r\n                    (data?.onDelete as any)();\r\n                  }}"
+        "onClick": "{(e) => {\n                    e.stopPropagation();\n                    (data?.onDelete as any)();\n                  }}"
       },
       "feature": "opm:opmedgecomponents:links:4a64608ecb",
       "status": "documented",
@@ -9207,7 +9207,7 @@
       "signature": "div|onClick:{()=>handleSelect(d.source)}|onKeyDown:{(e)=>{if(e.key==='Enter'||e.key==='')handleSelect(d.source);}}",
       "handlers": {
         "onClick": "{() => handleSelect(d.source)}",
-        "onKeyDown": "{(e) => {\r\n                if (e.key === 'Enter' || e.key === ' ') handleSelect(d.source);\r\n              }}"
+        "onKeyDown": "{(e) => {\n                if (e.key === 'Enter' || e.key === ' ') handleSelect(d.source);\n              }}"
       },
       "feature": "opm:opmdiagnosticsbadge:diagnostics:1d2e414912",
       "status": "documented",
@@ -9300,7 +9300,7 @@
       "tag": "select",
       "signature": "select|onChange:{(e)=>{constmember=enumOptions.find((m)=>m.id===e.target.value);if(member){onChange({enumId:type.enumId,memberId:member.id,cIdentifier:member.cIdentifier});}}}",
       "handlers": {
-        "onChange": "{(e) => {\r\n          const member = enumOptions.find((m) => m.id === e.target.value);\r\n          if (member) {\r\n            onChange({ enumId: type.enumId, memberId: member.id, cIdentifier: member.cIdentifier });\r\n          }\r\n        }}"
+        "onChange": "{(e) => {\n          const member = enumOptions.find((m) => m.id === e.target.value);\n          if (member) {\n            onChange({ enumId: type.enumId, memberId: member.id, cIdentifier: member.cIdentifier });\n          }\n        }}"
       },
       "feature": "opm:opmexecutionpropertiespanel:events-enums:09c2e433da",
       "status": "documented",
@@ -9315,7 +9315,7 @@
       "tag": "input",
       "signature": "input|onChange:{(e)=>{constparsed=Number(e.target.value);if(Number.isFinite(parsed))onChange(parsed);}}",
       "handlers": {
-        "onChange": "{(e) => {\r\n        const parsed = Number(e.target.value);\r\n        if (Number.isFinite(parsed)) onChange(parsed);\r\n      }}"
+        "onChange": "{(e) => {\n        const parsed = Number(e.target.value);\n        if (Number.isFinite(parsed)) onChange(parsed);\n      }}"
       },
       "feature": "opm:opmexecutionpropertiespanel:events-enums:2c504f94aa",
       "status": "documented",
@@ -9450,7 +9450,7 @@
       "tag": "input",
       "signature": "input|onChange:{(e)=>updateEvent(idx,{displayName:e.target.value,cIdentifier:toCIdentifier(e.target.value,ev.id),})}",
       "handlers": {
-        "onChange": "{(e) =>\r\n                    updateEvent(idx, {\r\n                      displayName: e.target.value,\r\n                      cIdentifier: toCIdentifier(e.target.value, ev.id),\r\n                    })\r\n                  }"
+        "onChange": "{(e) =>\n                    updateEvent(idx, {\n                      displayName: e.target.value,\n                      cIdentifier: toCIdentifier(e.target.value, ev.id),\n                    })\n                  }"
       },
       "feature": "opm:opmexecutionpropertiespanel:events-enums:77f92fbb35",
       "status": "documented",
@@ -9495,7 +9495,7 @@
       "tag": "input",
       "signature": "input|onChange:{(e)=>updateEnum(idx,{displayName:e.target.value,cIdentifier:toCIdentifier(e.target.value,en.id),})}",
       "handlers": {
-        "onChange": "{(e) =>\r\n                    updateEnum(idx, {\r\n                      displayName: e.target.value,\r\n                      cIdentifier: toCIdentifier(e.target.value, en.id),\r\n                    })\r\n                  }"
+        "onChange": "{(e) =>\n                    updateEnum(idx, {\n                      displayName: e.target.value,\n                      cIdentifier: toCIdentifier(e.target.value, en.id),\n                    })\n                  }"
       },
       "feature": "opm:opmexecutionpropertiespanel:events-enums:cd71bc0d6c",
       "status": "documented",
@@ -9555,7 +9555,7 @@
       "tag": "input",
       "signature": "input|onChange:{(e)=>handleUpdateAttribute(idx,{displayName:e.target.value,cIdentifier:toCIdentifier(e.target.value,attr.id),})}",
       "handlers": {
-        "onChange": "{(e) =>\r\n                      handleUpdateAttribute(idx, {\r\n                        displayName: e.target.value,\r\n                        cIdentifier: toCIdentifier(e.target.value, attr.id),\r\n                      })\r\n                    }"
+        "onChange": "{(e) =>\n                      handleUpdateAttribute(idx, {\n                        displayName: e.target.value,\n                        cIdentifier: toCIdentifier(e.target.value, attr.id),\n                      })\n                    }"
       },
       "feature": "opm:opmexecutionpropertiespanel:attributes:d5d821127f",
       "status": "documented",
@@ -9615,7 +9615,7 @@
       "tag": "select",
       "signature": "select|onChange:{(e)=>{constv=e.target.value;if(v.startsWith('enum:')){handleUpdateAttribute(idx,{type:{kind:'enum',enumId:v.slice(5)},initialValue:'',});}else{handleUpdateAttribute(idx,{type:{kind:vasany},initialValue:v==='bool'?false:0,});}}}",
       "handlers": {
-        "onChange": "{(e) => {\r\n                      const v = e.target.value;\r\n                      if (v.startsWith('enum:')) {\r\n                        handleUpdateAttribute(idx, {\r\n                          type: { kind: 'enum', enumId: v.slice(5) },\r\n                          initialValue: '',\r\n                        });\r\n                      } else {\r\n                        handleUpdateAttribute(idx, {\r\n                          type: { kind: v as any },\r\n                          initialValue: v === 'bool' ? false : 0,\r\n                        });\r\n                      }\r\n                    }}"
+        "onChange": "{(e) => {\n                      const v = e.target.value;\n                      if (v.startsWith('enum:')) {\n                        handleUpdateAttribute(idx, {\n                          type: { kind: 'enum', enumId: v.slice(5) },\n                          initialValue: '',\n                        });\n                      } else {\n                        handleUpdateAttribute(idx, {\n                          type: { kind: v as any },\n                          initialValue: v === 'bool' ? false : 0,\n                        });\n                      }\n                    }}"
       },
       "feature": "opm:opmexecutionpropertiespanel:attributes:fab81ae353",
       "status": "documented",
@@ -9649,7 +9649,7 @@
       "tag": "select",
       "signature": "select|onChange:{(e)=>handleUpdateAttribute(idx,{access:e.target.valueasany})}",
       "handlers": {
-        "onChange": "{(e) =>\r\n                        handleUpdateAttribute(idx, { access: e.target.value as any })\r\n                      }"
+        "onChange": "{(e) =>\n                        handleUpdateAttribute(idx, { access: e.target.value as any })\n                      }"
       },
       "feature": "opm:opmexecutionpropertiespanel:attributes:02ee5a3094",
       "status": "documented",
@@ -9664,7 +9664,7 @@
       "tag": "input",
       "signature": "input|onChange:{(e)=>handleUpdateAttribute(idx,{persistent:e.target.checked})}",
       "handlers": {
-        "onChange": "{(e) =>\r\n                        handleUpdateAttribute(idx, { persistent: e.target.checked })\r\n                      }"
+        "onChange": "{(e) =>\n                        handleUpdateAttribute(idx, { persistent: e.target.checked })\n                      }"
       },
       "feature": "opm:opmexecutionpropertiespanel:attributes:114af4fa0d",
       "status": "documented",
@@ -9679,7 +9679,7 @@
       "tag": "select",
       "signature": "select|onChange:{(e)=>onUpdateSelectionExecution({...exec,activation:e.target.valueasany})}",
       "handlers": {
-        "onChange": "{(e) =>\r\n                onUpdateSelectionExecution({ ...exec, activation: e.target.value as any })\r\n              }"
+        "onChange": "{(e) =>\n                onUpdateSelectionExecution({ ...exec, activation: e.target.value as any })\n              }"
       },
       "feature": "opm:opmexecutionpropertiespanel:processes:9dd645f168",
       "status": "documented",
@@ -9694,7 +9694,7 @@
       "tag": "input",
       "signature": "input|onChange:{(e)=>onUpdateSelectionExecution({...exec,periodMs:e.target.value?Number(e.target.value):undefined,})}",
       "handlers": {
-        "onChange": "{(e) =>\r\n                  onUpdateSelectionExecution({\r\n                    ...exec,\r\n                    periodMs: e.target.value ? Number(e.target.value) : undefined,\r\n                  })\r\n                }"
+        "onChange": "{(e) =>\n                  onUpdateSelectionExecution({\n                    ...exec,\n                    periodMs: e.target.value ? Number(e.target.value) : undefined,\n                  })\n                }"
       },
       "feature": "opm:opmexecutionpropertiespanel:processes:81db4962bb",
       "status": "documented",
@@ -9709,7 +9709,7 @@
       "tag": "input",
       "signature": "input|onChange:{(e)=>onUpdateSelectionExecution({...exec,priority:Number(e.target.value)})}",
       "handlers": {
-        "onChange": "{(e) =>\r\n                  onUpdateSelectionExecution({ ...exec, priority: Number(e.target.value) })\r\n                }"
+        "onChange": "{(e) =>\n                  onUpdateSelectionExecution({ ...exec, priority: Number(e.target.value) })\n                }"
       },
       "feature": "opm:opmexecutionpropertiespanel:processes:60a1e00cf8",
       "status": "documented",
@@ -9788,7 +9788,7 @@
       "tag": "input",
       "signature": "input|onChange:{(e)=>onUpdateSelectionExecution({...exec,terminal:e.target.checked})}",
       "handlers": {
-        "onChange": "{(e) =>\r\n                  onUpdateSelectionExecution({ ...exec, terminal: e.target.checked })\r\n                }"
+        "onChange": "{(e) =>\n                  onUpdateSelectionExecution({ ...exec, terminal: e.target.checked })\n                }"
       },
       "feature": "opm:opmexecutionpropertiespanel:states:b1d65e62dc",
       "status": "documented",
@@ -9803,7 +9803,7 @@
       "tag": "input",
       "signature": "input|onChange:{(e)=>onUpdateSelectionExecution({...exec,timeoutMs:e.target.value?Number(e.target.value):undefined,})}",
       "handlers": {
-        "onChange": "{(e) =>\r\n                onUpdateSelectionExecution({\r\n                  ...exec,\r\n                  timeoutMs: e.target.value ? Number(e.target.value) : undefined,\r\n                })\r\n              }"
+        "onChange": "{(e) =>\n                onUpdateSelectionExecution({\n                  ...exec,\n                  timeoutMs: e.target.value ? Number(e.target.value) : undefined,\n                })\n              }"
       },
       "feature": "opm:opmexecutionpropertiespanel:states:e0a079a11d",
       "status": "documented",
@@ -9818,7 +9818,7 @@
       "tag": "select",
       "signature": "select|onChange:{(e)=>onUpdateSelectionExecution({...exec,timeoutEventId:e.target.value||undefined})}",
       "handlers": {
-        "onChange": "{(e) =>\r\n                onUpdateSelectionExecution({ ...exec, timeoutEventId: e.target.value || undefined })\r\n              }"
+        "onChange": "{(e) =>\n                onUpdateSelectionExecution({ ...exec, timeoutEventId: e.target.value || undefined })\n              }"
       },
       "feature": "opm:opmexecutionpropertiespanel:states:89744f46f7",
       "status": "documented",
@@ -9901,7 +9901,7 @@
       "tag": "select",
       "signature": "select|onChange:{(e)=>onUpdateSelectionExecution({...exec,eventId:e.target.value||undefined})}",
       "handlers": {
-        "onChange": "{(e) =>\r\n                onUpdateSelectionExecution({ ...exec, eventId: e.target.value || undefined })\r\n              }"
+        "onChange": "{(e) =>\n                onUpdateSelectionExecution({ ...exec, eventId: e.target.value || undefined })\n              }"
       },
       "feature": "opm:opmexecutionpropertiespanel:link-execution:1f1da0ddc2",
       "status": "documented",
@@ -9931,7 +9931,7 @@
       "tag": "input",
       "signature": "input|onChange:{(e)=>onUpdateSelectionExecution({...exec,priority:Number(e.target.value)})}",
       "handlers": {
-        "onChange": "{(e) =>\r\n                  onUpdateSelectionExecution({ ...exec, priority: Number(e.target.value) })\r\n                }"
+        "onChange": "{(e) =>\n                  onUpdateSelectionExecution({ ...exec, priority: Number(e.target.value) })\n                }"
       },
       "feature": "opm:opmexecutionpropertiespanel:link-execution:6935d89b40",
       "status": "documented",
@@ -9946,7 +9946,7 @@
       "tag": "input",
       "signature": "input|onChange:{(e)=>onUpdateSelectionExecution({...exec,delayMs:Number(e.target.value)})}",
       "handlers": {
-        "onChange": "{(e) =>\r\n                  onUpdateSelectionExecution({ ...exec, delayMs: Number(e.target.value) })\r\n                }"
+        "onChange": "{(e) =>\n                  onUpdateSelectionExecution({ ...exec, delayMs: Number(e.target.value) })\n                }"
       },
       "feature": "opm:opmexecutionpropertiespanel:link-execution:d820608c16",
       "status": "documented",
@@ -9961,7 +9961,7 @@
       "tag": "input",
       "signature": "input|onChange:{(e)=>onUpdateSelectionExecution({...exec,transition:{ownerObjectId:e.target.value,targetStateId:exec.transition?.targetStateId||'',sourceStateId:exec.transition?.sourceStateId,},})}",
       "handlers": {
-        "onChange": "{(e) =>\r\n                  onUpdateSelectionExecution({\r\n                    ...exec,\r\n                    transition: {\r\n                      ownerObjectId: e.target.value,\r\n                      targetStateId: exec.transition?.targetStateId || '',\r\n                      sourceStateId: exec.transition?.sourceStateId,\r\n                    },\r\n                  })\r\n                }"
+        "onChange": "{(e) =>\n                  onUpdateSelectionExecution({\n                    ...exec,\n                    transition: {\n                      ownerObjectId: e.target.value,\n                      targetStateId: exec.transition?.targetStateId || '',\n                      sourceStateId: exec.transition?.sourceStateId,\n                    },\n                  })\n                }"
       },
       "feature": "opm:opmexecutionpropertiespanel:link-execution:8c011839aa",
       "status": "documented",
@@ -9976,7 +9976,7 @@
       "tag": "input",
       "signature": "input|onChange:{(e)=>onUpdateSelectionExecution({...exec,transition:{ownerObjectId:exec.transition?.ownerObjectId||'',targetStateId:exec.transition?.targetStateId||'',sourceStateId:e.target.value||undefined,},})}",
       "handlers": {
-        "onChange": "{(e) =>\r\n                    onUpdateSelectionExecution({\r\n                      ...exec,\r\n                      transition: {\r\n                        ownerObjectId: exec.transition?.ownerObjectId || '',\r\n                        targetStateId: exec.transition?.targetStateId || '',\r\n                        sourceStateId: e.target.value || undefined,\r\n                      },\r\n                    })\r\n                  }"
+        "onChange": "{(e) =>\n                    onUpdateSelectionExecution({\n                      ...exec,\n                      transition: {\n                        ownerObjectId: exec.transition?.ownerObjectId || '',\n                        targetStateId: exec.transition?.targetStateId || '',\n                        sourceStateId: e.target.value || undefined,\n                      },\n                    })\n                  }"
       },
       "feature": "opm:opmexecutionpropertiespanel:link-execution:69b1d5bf82",
       "status": "documented",
@@ -9991,7 +9991,7 @@
       "tag": "input",
       "signature": "input|onChange:{(e)=>onUpdateSelectionExecution({...exec,transition:{ownerObjectId:exec.transition?.ownerObjectId||'',targetStateId:e.target.value,sourceStateId:exec.transition?.sourceStateId,},})}",
       "handlers": {
-        "onChange": "{(e) =>\r\n                    onUpdateSelectionExecution({\r\n                      ...exec,\r\n                      transition: {\r\n                        ownerObjectId: exec.transition?.ownerObjectId || '',\r\n                        targetStateId: e.target.value,\r\n                        sourceStateId: exec.transition?.sourceStateId,\r\n                      },\r\n                    })\r\n                  }"
+        "onChange": "{(e) =>\n                    onUpdateSelectionExecution({\n                      ...exec,\n                      transition: {\n                        ownerObjectId: exec.transition?.ownerObjectId || '',\n                        targetStateId: e.target.value,\n                        sourceStateId: exec.transition?.sourceStateId,\n                      },\n                    })\n                  }"
       },
       "feature": "opm:opmexecutionpropertiespanel:link-execution:42688bca5c",
       "status": "documented",
@@ -10006,7 +10006,7 @@
       "tag": "button",
       "signature": "button|onClick:{()=>onUpdateSelectionExecution({...exec,transition:undefined})}",
       "handlers": {
-        "onClick": "{() =>\r\n                  onUpdateSelectionExecution({ ...exec, transition: undefined })\r\n                }"
+        "onClick": "{() =>\n                  onUpdateSelectionExecution({ ...exec, transition: undefined })\n                }"
       },
       "feature": "opm:opmexecutionpropertiespanel:link-execution:a4b082dd05",
       "status": "documented",
@@ -10076,7 +10076,7 @@
       "signature": "div|onDoubleClick:{()=>{setIsMaximized((prev)=>!prev);setIsMinimized(false);}}|onMouseDown:{handleTitleMouseDown}",
       "handlers": {
         "onMouseDown": "{handleTitleMouseDown}",
-        "onDoubleClick": "{() => {\r\n          setIsMaximized((prev) => !prev);\r\n          setIsMinimized(false);\r\n        }}"
+        "onDoubleClick": "{() => {\n          setIsMaximized((prev) => !prev);\n          setIsMinimized(false);\n        }}"
       },
       "feature": "opm:opmfloatingwindow:layout-panels:1f5be2d049",
       "status": "documented",
@@ -10121,7 +10121,7 @@
       "tag": "button",
       "signature": "button|onClick:{()=>{setIsMaximized((prev)=>!prev);setIsMinimized(false);}}",
       "handlers": {
-        "onClick": "{() => {\r\n              setIsMaximized((prev) => !prev);\r\n              setIsMinimized(false);\r\n            }}"
+        "onClick": "{() => {\n              setIsMaximized((prev) => !prev);\n              setIsMinimized(false);\n            }}"
       },
       "feature": "opm:opmfloatingwindow:layout-panels:89288fc942",
       "status": "documented",
@@ -10331,7 +10331,7 @@
       "tag": "input",
       "signature": "input|onChange:{(e)=>handleUpdateStateExecution({timeoutMs:e.target.value?Number(e.target.value):undefined,})}",
       "handlers": {
-        "onChange": "{(e) =>\r\n                          handleUpdateStateExecution({\r\n                            timeoutMs: e.target.value ? Number(e.target.value) : undefined,\r\n                          })\r\n                        }"
+        "onChange": "{(e) =>\n                          handleUpdateStateExecution({\n                            timeoutMs: e.target.value ? Number(e.target.value) : undefined,\n                          })\n                        }"
       },
       "feature": "opm:opmrightpanelcontent:states:32059ab5f5",
       "status": "documented",
@@ -10346,7 +10346,7 @@
       "tag": "select",
       "signature": "select|onChange:{(e)=>handleUpdateStateExecution({timeoutEventId:e.target.value||undefined})}",
       "handlers": {
-        "onChange": "{(e) =>\r\n                          handleUpdateStateExecution({ timeoutEventId: e.target.value || undefined })\r\n                        }"
+        "onChange": "{(e) =>\n                          handleUpdateStateExecution({ timeoutEventId: e.target.value || undefined })\n                        }"
       },
       "feature": "opm:opmrightpanelcontent:states:f4278be795",
       "status": "documented",
@@ -10444,7 +10444,7 @@
       "tag": "input",
       "signature": "input|onChange:{(e)=>handleUpdateProcExec({periodMs:e.target.value?Number(e.target.value):undefined,})}",
       "handlers": {
-        "onChange": "{(e) =>\r\n                          handleUpdateProcExec({\r\n                            periodMs: e.target.value ? Number(e.target.value) : undefined,\r\n                          })\r\n                        }"
+        "onChange": "{(e) =>\n                          handleUpdateProcExec({\n                            periodMs: e.target.value ? Number(e.target.value) : undefined,\n                          })\n                        }"
       },
       "feature": "opm:opmrightpanelcontent:processes:85f51a93e9",
       "status": "documented",
@@ -10568,7 +10568,7 @@
       "tag": "input",
       "signature": "input|onKeyDown:{(e)=>{if(e.key==='Enter'&&e.currentTarget.value.trim()){onAddStateToObject(selectedNode.id,e.currentTarget.value.trim());e.currentTarget.value='';}}}",
       "handlers": {
-        "onKeyDown": "{(e) => {\r\n                        if (e.key === 'Enter' && e.currentTarget.value.trim()) {\r\n                          onAddStateToObject(selectedNode.id, e.currentTarget.value.trim());\r\n                          e.currentTarget.value = '';\r\n                        }\r\n                      }}"
+        "onKeyDown": "{(e) => {\n                        if (e.key === 'Enter' && e.currentTarget.value.trim()) {\n                          onAddStateToObject(selectedNode.id, e.currentTarget.value.trim());\n                          e.currentTarget.value = '';\n                        }\n                      }}"
       },
       "feature": "opm:opmrightpanelcontent:states:08da47b48b",
       "status": "documented",
@@ -10583,7 +10583,7 @@
       "tag": "button",
       "signature": "button|onClick:{()=>{constinputEl=document.getElementById('new-state-name-input')asHTMLInputElement;if(inputEl&&inputEl.value.trim()){onAddStateToObject(selectedNode.id,inputEl.value.trim());inputEl.value='';}}}",
       "handlers": {
-        "onClick": "{() => {\r\n                        const inputEl = document.getElementById('new-state-name-input') as HTMLInputElement;\r\n                        if (inputEl && inputEl.value.trim()) {\r\n                          onAddStateToObject(selectedNode.id, inputEl.value.trim());\r\n                          inputEl.value = '';\r\n                        }\r\n                      }}"
+        "onClick": "{() => {\n                        const inputEl = document.getElementById('new-state-name-input') as HTMLInputElement;\n                        if (inputEl && inputEl.value.trim()) {\n                          onAddStateToObject(selectedNode.id, inputEl.value.trim());\n                          inputEl.value = '';\n                        }\n                      }}"
       },
       "feature": "opm:opmrightpanelcontent:states:0f86e8f132",
       "status": "documented",
@@ -10613,7 +10613,7 @@
       "tag": "button",
       "signature": "button|onClick:{(e)=>{e.stopPropagation();handleAddTypedAttribute();}}",
       "handlers": {
-        "onClick": "{(e) => {\r\n                        e.stopPropagation();\r\n                        handleAddTypedAttribute();\r\n                      }}"
+        "onClick": "{(e) => {\n                        e.stopPropagation();\n                        handleAddTypedAttribute();\n                      }}"
       },
       "feature": "opm:opmrightpanelcontent:attributes:aaeb379ff0",
       "status": "documented",
@@ -10628,7 +10628,7 @@
       "tag": "input",
       "signature": "input|onChange:{(e)=>handleUpdateTypedAttr(idx,{displayName:e.target.value,cIdentifier:toCIdentifier(e.target.value,attr.id),})}",
       "handlers": {
-        "onChange": "{(e) =>\r\n                                  handleUpdateTypedAttr(idx, {\r\n                                    displayName: e.target.value,\r\n                                    cIdentifier: toCIdentifier(e.target.value, attr.id),\r\n                                  })\r\n                                }"
+        "onChange": "{(e) =>\n                                  handleUpdateTypedAttr(idx, {\n                                    displayName: e.target.value,\n                                    cIdentifier: toCIdentifier(e.target.value, attr.id),\n                                  })\n                                }"
       },
       "feature": "opm:opmrightpanelcontent:attributes:2841abe0ac",
       "status": "documented",
@@ -10643,7 +10643,7 @@
       "tag": "select",
       "signature": "select|onChange:{(e)=>{constval=e.target.value;if(val.startsWith('enum:')){constenumId=val.replace('enum:','');handleUpdateTypedAttr(idx,{type:{kind:'enum',enumId},initialValue:null});}else{constkind=valas'bool'|'int32'|'uint32'|'float32';handleUpdateTypedAttr(idx,{type:{kind},initialValue:kind==='bool'?false:0,});}}}",
       "handlers": {
-        "onChange": "{(e) => {\r\n                                  const val = e.target.value;\r\n                                  if (val.startsWith('enum:')) {\r\n                                    const enumId = val.replace('enum:', '');\r\n                                    handleUpdateTypedAttr(idx, { type: { kind: 'enum', enumId }, initialValue: null });\r\n                                  } else {\r\n                                    const kind = val as 'bool' | 'int32' | 'uint32' | 'float32';\r\n                                    handleUpdateTypedAttr(idx, {\r\n                                      type: { kind },\r\n                                      initialValue: kind === 'bool' ? false : 0,\r\n                                    });\r\n                                  }\r\n                                }}"
+        "onChange": "{(e) => {\n                                  const val = e.target.value;\n                                  if (val.startsWith('enum:')) {\n                                    const enumId = val.replace('enum:', '');\n                                    handleUpdateTypedAttr(idx, { type: { kind: 'enum', enumId }, initialValue: null });\n                                  } else {\n                                    const kind = val as 'bool' | 'int32' | 'uint32' | 'float32';\n                                    handleUpdateTypedAttr(idx, {\n                                      type: { kind },\n                                      initialValue: kind === 'bool' ? false : 0,\n                                    });\n                                  }\n                                }}"
       },
       "feature": "opm:opmrightpanelcontent:attributes:1f011dac80",
       "status": "documented",
@@ -10692,7 +10692,7 @@
       "tag": "input",
       "signature": "input|onKeyDown:{(e)=>{if(e.key==='Enter'){constvalEl=document.getElementById('new-attr-val')asHTMLInputElement;if(e.currentTarget.value&&valEl.value){onAddAttribute(e.currentTarget.value,valEl.value);e.currentTarget.value='';valEl.value='';}}}}",
       "handlers": {
-        "onKeyDown": "{(e) => {\r\n                            if (e.key === 'Enter') {\r\n                              const valEl = document.getElementById('new-attr-val') as HTMLInputElement;\r\n                              if (e.currentTarget.value && valEl.value) {\r\n                                onAddAttribute(e.currentTarget.value, valEl.value);\r\n                                e.currentTarget.value = '';\r\n                                valEl.value = '';\r\n                              }\r\n                            }\r\n                          }}"
+        "onKeyDown": "{(e) => {\n                            if (e.key === 'Enter') {\n                              const valEl = document.getElementById('new-attr-val') as HTMLInputElement;\n                              if (e.currentTarget.value && valEl.value) {\n                                onAddAttribute(e.currentTarget.value, valEl.value);\n                                e.currentTarget.value = '';\n                                valEl.value = '';\n                              }\n                            }\n                          }}"
       },
       "feature": "opm:opmrightpanelcontent:attributes:9a6e1c1066",
       "status": "documented",
@@ -10812,7 +10812,7 @@
       "tag": "button",
       "signature": "button|onClick:{()=>{if(newPortName.trim()){onAddPort(newPortName.trim(),newPortDir,newPortPos,newPortType);setNewPortName('');}}}",
       "handlers": {
-        "onClick": "{() => {\r\n                        if (newPortName.trim()) {\r\n                          onAddPort(newPortName.trim(), newPortDir, newPortPos, newPortType);\r\n                          setNewPortName('');\r\n                        }\r\n                      }}"
+        "onClick": "{() => {\n                        if (newPortName.trim()) {\n                          onAddPort(newPortName.trim(), newPortDir, newPortPos, newPortType);\n                          setNewPortName('');\n                        }\n                      }}"
       },
       "feature": "opm:opmrightpanelcontent:ports:cd6ab25210",
       "status": "documented",
@@ -10857,7 +10857,7 @@
       "tag": "button",
       "signature": "button|onClick:{()=>{setConfirmDelete(false);onDeleteSelectedNode();}}",
       "handlers": {
-        "onClick": "{() => {\r\n                      setConfirmDelete(false);\r\n                      onDeleteSelectedNode();\r\n                    }}"
+        "onClick": "{() => {\n                      setConfirmDelete(false);\n                      onDeleteSelectedNode();\n                    }}"
       },
       "feature": "opm:opmrightpanelcontent:deletion:60f15d2e07",
       "status": "documented",
@@ -10872,7 +10872,7 @@
       "tag": "button",
       "signature": "button|onClick:{()=>{if(deleteImpact?.isHighImpact){setConfirmDelete(true);}else{onDeleteSelectedNode();}}}",
       "handlers": {
-        "onClick": "{() => {\r\n                  if (deleteImpact?.isHighImpact) {\r\n                    setConfirmDelete(true);\r\n                  } else {\r\n                    onDeleteSelectedNode();\r\n                  }\r\n                }}"
+        "onClick": "{() => {\n                  if (deleteImpact?.isHighImpact) {\n                    setConfirmDelete(true);\n                  } else {\n                    onDeleteSelectedNode();\n                  }\n                }}"
       },
       "feature": "opm:opmrightpanelcontent:deletion:5438991d85",
       "status": "documented",
@@ -10977,7 +10977,7 @@
       "tag": "input",
       "signature": "input|onChange:{(e)=>handleUpdateLinkExecution({transition:{ownerObjectId:e.target.value,targetStateId:linkExec.transition?.targetStateId||'',sourceStateId:linkExec.transition?.sourceStateId,},})}",
       "handlers": {
-        "onChange": "{(e) =>\r\n                      handleUpdateLinkExecution({\r\n                        transition: {\r\n                          ownerObjectId: e.target.value,\r\n                          targetStateId: linkExec.transition?.targetStateId || '',\r\n                          sourceStateId: linkExec.transition?.sourceStateId,\r\n                        },\r\n                      })\r\n                    }"
+        "onChange": "{(e) =>\n                      handleUpdateLinkExecution({\n                        transition: {\n                          ownerObjectId: e.target.value,\n                          targetStateId: linkExec.transition?.targetStateId || '',\n                          sourceStateId: linkExec.transition?.sourceStateId,\n                        },\n                      })\n                    }"
       },
       "feature": "opm:opmrightpanelcontent:link-execution:df72b3eaf7",
       "status": "documented",
@@ -10992,7 +10992,7 @@
       "tag": "input",
       "signature": "input|onChange:{(e)=>handleUpdateLinkExecution({transition:{ownerObjectId:linkExec.transition?.ownerObjectId||'',targetStateId:linkExec.transition?.targetStateId||'',sourceStateId:e.target.value||undefined,},})}",
       "handlers": {
-        "onChange": "{(e) =>\r\n                        handleUpdateLinkExecution({\r\n                          transition: {\r\n                            ownerObjectId: linkExec.transition?.ownerObjectId || '',\r\n                            targetStateId: linkExec.transition?.targetStateId || '',\r\n                            sourceStateId: e.target.value || undefined,\r\n                          },\r\n                        })\r\n                      }"
+        "onChange": "{(e) =>\n                        handleUpdateLinkExecution({\n                          transition: {\n                            ownerObjectId: linkExec.transition?.ownerObjectId || '',\n                            targetStateId: linkExec.transition?.targetStateId || '',\n                            sourceStateId: e.target.value || undefined,\n                          },\n                        })\n                      }"
       },
       "feature": "opm:opmrightpanelcontent:link-execution:1f2e44165e",
       "status": "documented",
@@ -11007,7 +11007,7 @@
       "tag": "input",
       "signature": "input|onChange:{(e)=>handleUpdateLinkExecution({transition:{ownerObjectId:linkExec.transition?.ownerObjectId||'',targetStateId:e.target.value,sourceStateId:linkExec.transition?.sourceStateId,},})}",
       "handlers": {
-        "onChange": "{(e) =>\r\n                        handleUpdateLinkExecution({\r\n                          transition: {\r\n                            ownerObjectId: linkExec.transition?.ownerObjectId || '',\r\n                            targetStateId: e.target.value,\r\n                            sourceStateId: linkExec.transition?.sourceStateId,\r\n                          },\r\n                        })\r\n                      }"
+        "onChange": "{(e) =>\n                        handleUpdateLinkExecution({\n                          transition: {\n                            ownerObjectId: linkExec.transition?.ownerObjectId || '',\n                            targetStateId: e.target.value,\n                            sourceStateId: linkExec.transition?.sourceStateId,\n                          },\n                        })\n                      }"
       },
       "feature": "opm:opmrightpanelcontent:link-execution:2a845491d6",
       "status": "documented",
@@ -11176,7 +11176,7 @@
       "tag": "select",
       "signature": "select|onChange:{(e)=>onOpmConfigChange((prev:any)=>({...prev,tickMs:Number(e.target.value),}))}",
       "handlers": {
-        "onChange": "{(e) =>\r\n                        onOpmConfigChange((prev: any) => ({\r\n                          ...prev,\r\n                          tickMs: Number(e.target.value),\r\n                        }))\r\n                      }"
+        "onChange": "{(e) =>\n                        onOpmConfigChange((prev: any) => ({\n                          ...prev,\n                          tickMs: Number(e.target.value),\n                        }))\n                      }"
       },
       "feature": "opm:opmrightpanelcontent:simulation:45abd8a41f",
       "status": "documented",
@@ -11191,7 +11191,7 @@
       "tag": "select",
       "signature": "select|onChange:{(e)=>onOpmConfigChange((prev:any)=>({...prev,executionMode:e.target.value,}))}",
       "handlers": {
-        "onChange": "{(e) =>\r\n                        onOpmConfigChange((prev: any) => ({\r\n                          ...prev,\r\n                          executionMode: e.target.value,\r\n                        }))\r\n                      }"
+        "onChange": "{(e) =>\n                        onOpmConfigChange((prev: any) => ({\n                          ...prev,\n                          executionMode: e.target.value,\n                        }))\n                      }"
       },
       "feature": "opm:opmrightpanelcontent:simulation:6143e650bd",
       "status": "documented",
@@ -11431,7 +11431,7 @@
       "tag": "button",
       "signature": "button|onClick:{()=>{constchecked=validateTargetSettings(form);if(checked.diagnostics.some((d)=>d.severity==='error'))return;onSave(checked.settings??form);onClose();}}",
       "handlers": {
-        "onClick": "{() => {\r\n                const checked = validateTargetSettings(form);\r\n                if (checked.diagnostics.some((d) => d.severity === 'error')) return;\r\n                onSave(checked.settings ?? form);\r\n                onClose();\r\n              }}"
+        "onClick": "{() => {\n                const checked = validateTargetSettings(form);\n                if (checked.diagnostics.some((d) => d.severity === 'error')) return;\n                onSave(checked.settings ?? form);\n                onClose();\n              }}"
       },
       "feature": "opm:opmtargetsettingsmodal:targets:bc6f6a60cb",
       "status": "documented",
@@ -11630,7 +11630,7 @@
     },
     {
       "source": "src/components/help/HelpModal.tsx",
-      "line": 102,
+      "line": 114,
       "tag": "div",
       "signature": "div|onMouseDown:{event=>{if(event.target===event.currentTarget)onClose();}}",
       "handlers": {
@@ -11645,7 +11645,7 @@
     },
     {
       "source": "src/components/help/HelpModal.tsx",
-      "line": 103,
+      "line": 115,
       "tag": "div",
       "signature": "div|onKeyDown:{event=>{if(event.key==='Escape'){event.stopPropagation();onClose();}if(event.key==='Tab'){constcontrols=Array.from(dialogRef.current?.querySelectorAll<HTMLElement>('button:not([disabled]),input,select,a[href],[tabindex=\"0\"]')??[]);constfirst=controls[0],last=controls.at(-1);if(event.shiftKey&&document.activeElement===first){event.preventDefault();last?.focus();}elseif(!event.shiftKey&&document.activeElement===last){event.preventDefault();first?.focus();}}}}",
       "handlers": {
@@ -11660,7 +11660,7 @@
     },
     {
       "source": "src/components/help/HelpModal.tsx",
-      "line": 114,
+      "line": 126,
       "tag": "input",
       "signature": "input|onChange:{event=>setQuery(event.target.value)}",
       "handlers": {
@@ -11675,7 +11675,7 @@
     },
     {
       "source": "src/components/help/HelpModal.tsx",
-      "line": 115,
+      "line": 127,
       "tag": "button",
       "signature": "button|onClick:{()=>{setBlockMode(false);setElementMode(false);setArchitecture(false);}}",
       "handlers": {
@@ -11688,7 +11688,7 @@
     },
     {
       "source": "src/components/help/HelpModal.tsx",
-      "line": 116,
+      "line": 128,
       "tag": "button",
       "signature": "button|onClick:{()=>{setBlockMode(false);setElementMode(true);setArchitecture(false);setQuery('');}}",
       "handlers": {
@@ -11701,7 +11701,7 @@
     },
     {
       "source": "src/components/help/HelpModal.tsx",
-      "line": 117,
+      "line": 129,
       "tag": "button",
       "signature": "button|onClick:{()=>{setBlockMode(true);setElementMode(false);setArchitecture(false);}}",
       "handlers": {
@@ -11716,7 +11716,7 @@
     },
     {
       "source": "src/components/help/HelpModal.tsx",
-      "line": 118,
+      "line": 130,
       "tag": "button",
       "signature": "button|onClick:{onClose}",
       "handlers": {
@@ -11731,7 +11731,7 @@
     },
     {
       "source": "src/components/help/HelpModal.tsx",
-      "line": 123,
+      "line": 135,
       "tag": "select",
       "signature": "select|onChange:{event=>{setSourceFilter(event.target.value);setCategoryFilter('All');}}",
       "handlers": {
@@ -11746,7 +11746,7 @@
     },
     {
       "source": "src/components/help/HelpModal.tsx",
-      "line": 124,
+      "line": 136,
       "tag": "select",
       "signature": "select|onChange:{event=>setCategoryFilter(event.target.value)}",
       "handlers": {
@@ -11761,7 +11761,7 @@
     },
     {
       "source": "src/components/help/HelpModal.tsx",
-      "line": 126,
+      "line": 138,
       "tag": "button",
       "signature": "button|onClick:{()=>{setSelectedBlockId(block.id);contentRef.current?.scrollTo?.({top:0});}}",
       "handlers": {
@@ -11776,7 +11776,7 @@
     },
     {
       "source": "src/components/help/HelpModal.tsx",
-      "line": 130,
+      "line": 142,
       "tag": "button",
       "signature": "button|onClick:{()=>openTopic(result.topicId,result.sectionId)}",
       "handlers": {
@@ -11791,7 +11791,7 @@
     },
     {
       "source": "src/components/help/HelpModal.tsx",
-      "line": 132,
+      "line": 144,
       "tag": "button",
       "signature": "button|onClick:{()=>openTopic(id)}",
       "handlers": {
@@ -11806,20 +11806,23 @@
     },
     {
       "source": "src/components/help/HelpModal.tsx",
-      "line": 138,
+      "line": 152,
       "tag": "button",
       "signature": "button|onClick:{()=>scrollToSection(`block-${label.toLowerCase()}`)}",
       "handlers": {
         "onClick": "{() => scrollToSection(`block-${label.toLowerCase()}`)}"
       },
-      "topic": "xbridges-ref",
+      "feature": "live:components/help/HelpModal:324900354f85",
+      "dynamicTopic": "{selectedBlock.id}",
       "status": "documented",
-      "featureIds": [],
-      "reason": "Direct topic binding resolves to an authored destination."
+      "featureIds": [
+        "live:components/help/HelpModal:324900354f85"
+      ],
+      "reason": "Direct stable feature binding resolves to a live instructional destination."
     },
     {
       "source": "src/components/help/HelpModal.tsx",
-      "line": 151,
+      "line": 168,
       "tag": "button",
       "signature": "button|onClick:{()=>openTopic(selectedBlock.source==='V-Lab'?'vlab-fundamentals':'xbridges-ref')}",
       "handlers": {
@@ -11834,7 +11837,7 @@
     },
     {
       "source": "src/components/help/HelpModal.tsx",
-      "line": 152,
+      "line": 169,
       "tag": "SoftwareArchitectureExplorer",
       "signature": "SoftwareArchitectureExplorer|onClose:{()=>setArchitecture(false)}",
       "handlers": {
@@ -11847,7 +11850,7 @@
     },
     {
       "source": "src/components/help/HelpModal.tsx",
-      "line": 155,
+      "line": 172,
       "tag": "button",
       "signature": "button|onClick:{()=>setArchitecture(true)}",
       "handlers": {
@@ -11862,7 +11865,7 @@
     },
     {
       "source": "src/components/help/HelpModal.tsx",
-      "line": 157,
+      "line": 174,
       "tag": "button",
       "signature": "button|onClick:{()=>scrollToSection(helpSectionId(section,index))}",
       "handlers": {
@@ -11877,7 +11880,7 @@
     },
     {
       "source": "src/components/help/HelpModal.tsx",
-      "line": 159,
+      "line": 176,
       "tag": "button",
       "signature": "button|onClick:{()=>openTopic(id)}",
       "handlers": {
@@ -11892,7 +11895,7 @@
     },
     {
       "source": "src/components/help/HelpModal.tsx",
-      "line": 160,
+      "line": 177,
       "tag": "button",
       "signature": "button|onClick:{()=>openTopic(adjacent.previous!)}",
       "handlers": {
@@ -11907,7 +11910,7 @@
     },
     {
       "source": "src/components/help/HelpModal.tsx",
-      "line": 160,
+      "line": 177,
       "tag": "button",
       "signature": "button|onClick:{()=>openTopic(adjacent.next!)}",
       "handlers": {
@@ -12001,7 +12004,7 @@
       "tag": "select",
       "signature": "select|onChange:{async(e)=>{constval=e.target.value;if(val==='ADD_NEW_PORT'){if((navigatorasany).serial){try{constport=await(navigatorasany).serial.requestPort();constpaired=await(navigatorasany).serial.getPorts();constpairedPaths=paired.map((p:any,idx:number)=>`WebSerialPort${idx+1}`);constallPorts=[...pairedPaths];setPorts(allPorts);constnewPortIndex=paired.indexOf(port);if(newPortIndex!==-1){onChangeCommPort(`WebSerialPort${newPortIndex+1}`);}}catch(err){console.error('FailedtopairWebSerialport:',err);}}else{alert('WebSerialAPIisnotsupportedinthisbrowser.PleaseuseChrome,EdgeorruninsideElectron.');}}else{onChangeCommPort(val);}}}",
       "handlers": {
-        "onChange": "{async (e) => {\r\n                const val = e.target.value;\r\n                if (val === 'ADD_NEW_PORT') {\r\n                  if ((navigator as any).serial) {\r\n                    try {\r\n                      const port = await (navigator as any).serial.requestPort();\r\n                      const paired = await (navigator as any).serial.getPorts();\r\n                      const pairedPaths = paired.map((p: any, idx: number) => `Web Serial Port ${idx + 1}`);\r\n                      const allPorts = [...pairedPaths];\r\n                      setPorts(allPorts);\r\n                      const newPortIndex = paired.indexOf(port);\r\n                      if (newPortIndex !== -1) {\r\n                        onChangeCommPort(`Web Serial Port ${newPortIndex + 1}`);\r\n                      }\r\n                    } catch (err) {\r\n                      console.error('Failed to pair Web Serial port:', err);\r\n                    }\r\n                  } else {\r\n                    alert('Web Serial API is not supported in this browser. Please use Chrome, Edge or run inside Electron.');\r\n                  }\r\n                } else {\r\n                  onChangeCommPort(val);\r\n                }\r\n              }}"
+        "onChange": "{async (e) => {\n                const val = e.target.value;\n                if (val === 'ADD_NEW_PORT') {\n                  if ((navigator as any).serial) {\n                    try {\n                      const port = await (navigator as any).serial.requestPort();\n                      const paired = await (navigator as any).serial.getPorts();\n                      const pairedPaths = paired.map((p: any, idx: number) => `Web Serial Port ${idx + 1}`);\n                      const allPorts = [...pairedPaths];\n                      setPorts(allPorts);\n                      const newPortIndex = paired.indexOf(port);\n                      if (newPortIndex !== -1) {\n                        onChangeCommPort(`Web Serial Port ${newPortIndex + 1}`);\n                      }\n                    } catch (err) {\n                      console.error('Failed to pair Web Serial port:', err);\n                    }\n                  } else {\n                    alert('Web Serial API is not supported in this browser. Please use Chrome, Edge or run inside Electron.');\n                  }\n                } else {\n                  onChangeCommPort(val);\n                }\n              }}"
       },
       "feature": "ui:hil/HILDashboard:288533755639",
       "status": "documented",
@@ -12074,7 +12077,7 @@
       "tag": "button",
       "signature": "button|onClick:{()=>{setIsRecording(!isRecording);if(!isRecording){setRecordedData([]);addLog('info','Startedrecordingtracedata...');}else{addLog('success',`Tracecomplete.Recorded${recordedData.length}samples.`);}}}",
       "handlers": {
-        "onClick": "{() => {\r\n                    setIsRecording(!isRecording);\r\n                    if (!isRecording) {\r\n                      setRecordedData([]);\r\n                      addLog('info', 'Started recording trace data...');\r\n                    } else {\r\n                      addLog('success', `Trace complete. Recorded ${recordedData.length} samples.`);\r\n                    }\r\n                  }}"
+        "onClick": "{() => {\n                    setIsRecording(!isRecording);\n                    if (!isRecording) {\n                      setRecordedData([]);\n                      addLog('info', 'Started recording trace data...');\n                    } else {\n                      addLog('success', `Trace complete. Recorded ${recordedData.length} samples.`);\n                    }\n                  }}"
       },
       "feature": "ui:hil/HILDashboard:8219279ae7b0",
       "status": "documented",
@@ -12149,7 +12152,7 @@
       "tag": "input",
       "signature": "input|onChange:{(e)=>{constval=parseFloat(e.target.value);toggleFault(ch.id,'override',val);}}",
       "handlers": {
-        "onChange": "{(e) => {\r\n                              const val = parseFloat(e.target.value);\r\n                              toggleFault(ch.id, 'override', val);\r\n                            }}"
+        "onChange": "{(e) => {\n                              const val = parseFloat(e.target.value);\n                              toggleFault(ch.id, 'override', val);\n                            }}"
       },
       "feature": "ui:hil/HILDashboard:922f822493d0",
       "status": "documented",
@@ -12209,7 +12212,7 @@
       "tag": "select",
       "signature": "select|onChange:{(e)=>{constval=e.target.valueasPeripheralType;letdirection=ch.direction;letdataType=ch.dataType;if(val==='ADC'){direction='In';dataType='uint16_t';}elseif(val==='DAC'||val==='PWM'){direction='Out';dataType='uint8_t';}//AutopickfirstavailablepinfornewperipheralconstnewPins=TARGET_PIN_MAPS[mcuTarget]?.[val]||TARGET_PIN_MAPS.Generic[val]||[];constusedPins=newSet(channels.filter(c=>c.id!==ch.id).map(c=>c.pin));constfirstFree=newPins.find(p=>!usedPins.has(p))||newPins[0]||'PA0';updateChannel(ch.id,{peripheral:val,direction,dataType,pin:firstFree});}}",
       "handlers": {
-        "onChange": "{(e) => {\r\n                          const val = e.target.value as PeripheralType;\r\n                          let direction = ch.direction;\r\n                          let dataType = ch.dataType;\r\n                          if (val === 'ADC') {\r\n                            direction = 'In';\r\n                            dataType = 'uint16_t';\r\n                          } else if (val === 'DAC' || val === 'PWM') {\r\n                            direction = 'Out';\r\n                            dataType = 'uint8_t';\r\n                          }\r\n                          // Auto pick first available pin for new peripheral\r\n                          const newPins = TARGET_PIN_MAPS[mcuTarget]?.[val] || TARGET_PIN_MAPS.Generic[val] || [];\r\n                          const usedPins = new Set(channels.filter(c => c.id !== ch.id).map(c => c.pin));\r\n                          const firstFree = newPins.find(p => !usedPins.has(p)) || newPins[0] || 'PA0';\r\n\r\n                          updateChannel(ch.id, { peripheral: val, direction, dataType, pin: firstFree });\r\n                        }}"
+        "onChange": "{(e) => {\n                          const val = e.target.value as PeripheralType;\n                          let direction = ch.direction;\n                          let dataType = ch.dataType;\n                          if (val === 'ADC') {\n                            direction = 'In';\n                            dataType = 'uint16_t';\n                          } else if (val === 'DAC' || val === 'PWM') {\n                            direction = 'Out';\n                            dataType = 'uint8_t';\n                          }\n                          // Auto pick first available pin for new peripheral\n                          const newPins = TARGET_PIN_MAPS[mcuTarget]?.[val] || TARGET_PIN_MAPS.Generic[val] || [];\n                          const usedPins = new Set(channels.filter(c => c.id !== ch.id).map(c => c.pin));\n                          const firstFree = newPins.find(p => !usedPins.has(p)) || newPins[0] || 'PA0';\n\n                          updateChannel(ch.id, { peripheral: val, direction, dataType, pin: firstFree });\n                        }}"
       },
       "feature": "ui:hil/HILDriverPanel:4a776fe6181e",
       "status": "documented",
@@ -12344,7 +12347,7 @@
       "tag": "select",
       "signature": "select|onChange:{(e)=>{setSelectedChannel(e.target.value);setSafeValueError(null);constch=channels.find(c=>c.id===e.target.value);if(ch){//Pre-aligndirectionifchanneldictatesitsetDirection(ch.direction==='In'?'read':'write');}}}",
       "handlers": {
-        "onChange": "{(e) => {\r\n                setSelectedChannel(e.target.value);\r\n                setSafeValueError(null);\r\n                const ch = channels.find(c => c.id === e.target.value);\r\n                if (ch) {\r\n                  // Pre-align direction if channel dictates it\r\n                  setDirection(ch.direction === 'In' ? 'read' : 'write');\r\n                }\r\n              }}"
+        "onChange": "{(e) => {\n                setSelectedChannel(e.target.value);\n                setSafeValueError(null);\n                const ch = channels.find(c => c.id === e.target.value);\n                if (ch) {\n                  // Pre-align direction if channel dictates it\n                  setDirection(ch.direction === 'In' ? 'read' : 'write');\n                }\n              }}"
       },
       "feature": "ui:hil/HILSignalMapper:2b47561058c3",
       "status": "documented",
@@ -12359,7 +12362,7 @@
       "tag": "select",
       "signature": "select|onChange:{(e)=>{setDirection(e.target.valueas'read'|'write');setSafeValueError(null);}}",
       "handlers": {
-        "onChange": "{(e) => {\r\n                setDirection(e.target.value as 'read' | 'write');\r\n                setSafeValueError(null);\r\n              }}"
+        "onChange": "{(e) => {\n                setDirection(e.target.value as 'read' | 'write');\n                setSafeValueError(null);\n              }}"
       },
       "feature": "ui:hil/HILSignalMapper:ac76ab9eb11f",
       "status": "documented",
@@ -12569,7 +12572,7 @@
       "tag": "TargetPackSelector",
       "signature": "TargetPackSelector|onSelectTarget:{(targetId,mode,manifest)=>{onChangeConfig(applyTargetSelection(config,{targetId,packVersion:manifest.packVersion,driverMode:mode,boardRevision:manifest.deviceRevision,}));}}",
       "handlers": {
-        "onSelectTarget": "{(targetId, mode, manifest) => {\r\n                      onChangeConfig(applyTargetSelection(config, {\r\n                        targetId,\r\n                        packVersion: manifest.packVersion,\r\n                        driverMode: mode,\r\n                        boardRevision: manifest.deviceRevision,\r\n                      }));\r\n                    }}"
+        "onSelectTarget": "{(targetId, mode, manifest) => {\n                      onChangeConfig(applyTargetSelection(config, {\n                        targetId,\n                        packVersion: manifest.packVersion,\n                        driverMode: mode,\n                        boardRevision: manifest.deviceRevision,\n                      }));\n                    }}"
       },
       "feature": "live:components/hil/HILWorkspace:2dc49710c9e7",
       "status": "documented",
@@ -12966,7 +12969,7 @@
     },
     {
       "source": "src/components/hmi/HmiWorkspace.tsx",
-      "line": 61,
+      "line": 64,
       "tag": "input",
       "signature": "input|onChange:{e=>send(Number(e.target.value))}",
       "handlers": {
@@ -12979,7 +12982,7 @@
     },
     {
       "source": "src/components/hmi/HmiWorkspace.tsx",
-      "line": 65,
+      "line": 68,
       "tag": "button",
       "signature": "button|onClick:{()=>send(press,'pulse')}",
       "handlers": {
@@ -12992,7 +12995,7 @@
     },
     {
       "source": "src/components/hmi/HmiWorkspace.tsx",
-      "line": 66,
+      "line": 69,
       "tag": "button",
       "signature": "button|onClick:{()=>onSimulationCommand(comp.command||'step')}",
       "handlers": {
@@ -13005,7 +13008,7 @@
     },
     {
       "source": "src/components/hmi/HmiWorkspace.tsx",
-      "line": 67,
+      "line": 70,
       "tag": "input",
       "signature": "input|onChange:{e=>send(e.target.checked?press:release)}",
       "handlers": {
@@ -13018,7 +13021,7 @@
     },
     {
       "source": "src/components/hmi/HmiWorkspace.tsx",
-      "line": 71,
+      "line": 74,
       "tag": "select",
       "signature": "select|onChange:{e=>send(opts[Number(e.target.value)].value)}",
       "handlers": {
@@ -13031,7 +13034,7 @@
     },
     {
       "source": "src/components/hmi/HmiWorkspace.tsx",
-      "line": 72,
+      "line": 75,
       "tag": "input",
       "signature": "input|onChange:{()=>send(o.value)}",
       "handlers": {
@@ -13044,7 +13047,7 @@
     },
     {
       "source": "src/components/hmi/HmiWorkspace.tsx",
-      "line": 79,
+      "line": 82,
       "tag": "button",
       "signature": "button|onClick:{()=>choose(i)}",
       "handlers": {
@@ -13057,7 +13060,7 @@
     },
     {
       "source": "src/components/hmi/HmiWorkspace.tsx",
-      "line": 84,
+      "line": 87,
       "tag": "button",
       "signature": "button|onClick:{()=>rotate(-1)}",
       "handlers": {
@@ -13070,7 +13073,7 @@
     },
     {
       "source": "src/components/hmi/HmiWorkspace.tsx",
-      "line": 84,
+      "line": 87,
       "tag": "button",
       "signature": "button|onClick:{()=>rotate(1)}",
       "handlers": {
@@ -13083,7 +13086,7 @@
     },
     {
       "source": "src/components/hmi/HmiWorkspace.tsx",
-      "line": 86,
+      "line": 89,
       "tag": "button",
       "signature": "button|onClick:{()=>send(o.value)}",
       "handlers": {
@@ -13096,7 +13099,7 @@
     },
     {
       "source": "src/components/hmi/HmiWorkspace.tsx",
-      "line": 86,
+      "line": 89,
       "tag": "button",
       "signature": "button|onClick:{()=>send(i)}",
       "handlers": {
@@ -13109,7 +13112,7 @@
     },
     {
       "source": "src/components/hmi/HmiWorkspace.tsx",
-      "line": 87,
+      "line": 90,
       "tag": "button",
       "signature": "button|onClick:{()=>send(comp.targetValue??'1')}",
       "handlers": {
@@ -13122,7 +13125,7 @@
     },
     {
       "source": "src/components/hmi/HmiWorkspace.tsx",
-      "line": 130,
+      "line": 133,
       "tag": "select",
       "signature": "select|onChange:{e=>update({[key]:e.target.value||null})}",
       "handlers": {
@@ -13135,7 +13138,7 @@
     },
     {
       "source": "src/components/hmi/HmiWorkspace.tsx",
-      "line": 131,
+      "line": 134,
       "tag": "button",
       "signature": "button|onClick:{()=>setEditMode(v=>!v)}",
       "handlers": {
@@ -13148,7 +13151,7 @@
     },
     {
       "source": "src/components/hmi/HmiWorkspace.tsx",
-      "line": 131,
+      "line": 134,
       "tag": "button",
       "signature": "button|onClick:{()=>props.onSimulationCommand(command)}",
       "handlers": {
@@ -13161,7 +13164,7 @@
     },
     {
       "source": "src/components/hmi/HmiWorkspace.tsx",
-      "line": 131,
+      "line": 134,
       "tag": "button",
       "signature": "button|onClick:{props.onClose}",
       "handlers": {
@@ -13174,7 +13177,7 @@
     },
     {
       "source": "src/components/hmi/HmiWorkspace.tsx",
-      "line": 132,
+      "line": 135,
       "tag": "input",
       "signature": "input|onChange:{e=>setSearch(e.target.value)}",
       "handlers": {
@@ -13187,7 +13190,7 @@
     },
     {
       "source": "src/components/hmi/HmiWorkspace.tsx",
-      "line": 132,
+      "line": 135,
       "tag": "button",
       "signature": "button|onClick:{()=>add(t)}",
       "handlers": {
@@ -13200,7 +13203,7 @@
     },
     {
       "source": "src/components/hmi/HmiWorkspace.tsx",
-      "line": 133,
+      "line": 136,
       "tag": "main",
       "signature": "main|onPointerCancel:{()=>{drag.current=null;}}|onPointerMove:{e=>{if(!drag.current)return;constd=drag.current;setComponents(list=>list.map(c=>c.id===d.id?{...c,x:Math.max(0,d.x+e.clientX-d.cx),y:Math.max(0,d.y+e.clientY-d.cy)}:c));}}|onPointerUp:{()=>{drag.current=null;}}",
       "handlers": {
@@ -13215,7 +13218,7 @@
     },
     {
       "source": "src/components/hmi/HmiWorkspace.tsx",
-      "line": 133,
+      "line": 136,
       "tag": "section",
       "signature": "section|onClick:{()=>{if(editMode)setSelected(c.id);}}",
       "handlers": {
@@ -13228,7 +13231,7 @@
     },
     {
       "source": "src/components/hmi/HmiWorkspace.tsx",
-      "line": 133,
+      "line": 136,
       "tag": "div",
       "signature": "div|onPointerDown:{e=>{if(!editMode)return;setSelected(c.id);e.currentTarget.setPointerCapture?.(e.pointerId);drag.current={id:c.id,x:c.x,y:c.y,cx:e.clientX,cy:e.clientY};}}",
       "handlers": {
@@ -13241,7 +13244,7 @@
     },
     {
       "source": "src/components/hmi/HmiWorkspace.tsx",
-      "line": 133,
+      "line": 136,
       "tag": "button",
       "signature": "button|onClick:{()=>setActiveTabs(v=>({...v,[c.id]:t.id}))}",
       "handlers": {
@@ -13254,7 +13257,7 @@
     },
     {
       "source": "src/components/hmi/HmiWorkspace.tsx",
-      "line": 134,
+      "line": 137,
       "tag": "input",
       "signature": "input|onChange:{e=>update({name:e.target.value})}",
       "handlers": {
@@ -13267,7 +13270,7 @@
     },
     {
       "source": "src/components/hmi/HmiWorkspace.tsx",
-      "line": 134,
+      "line": 137,
       "tag": "input",
       "signature": "input|onChange:{e=>update({[key]:e.target.value===''?undefined:Number(e.target.value)})}",
       "handlers": {
@@ -13280,7 +13283,7 @@
     },
     {
       "source": "src/components/hmi/HmiWorkspace.tsx",
-      "line": 134,
+      "line": 137,
       "tag": "input",
       "signature": "input|onChange:{e=>update({[key]:e.target.value})}",
       "handlers": {
@@ -13293,7 +13296,7 @@
     },
     {
       "source": "src/components/hmi/HmiWorkspace.tsx",
-      "line": 134,
+      "line": 137,
       "tag": "select",
       "signature": "select|onChange:{e=>update({color:e.target.valueasHmiComponent['color']})}",
       "handlers": {
@@ -13306,7 +13309,7 @@
     },
     {
       "source": "src/components/hmi/HmiWorkspace.tsx",
-      "line": 134,
+      "line": 137,
       "tag": "input",
       "signature": "input|onChange:{e=>update({writable:e.target.checked})}",
       "handlers": {
@@ -13319,7 +13322,7 @@
     },
     {
       "source": "src/components/hmi/HmiWorkspace.tsx",
-      "line": 134,
+      "line": 137,
       "tag": "select",
       "signature": "select|onChange:{e=>update({stateId:e.target.value})}",
       "handlers": {
@@ -13332,7 +13335,7 @@
     },
     {
       "source": "src/components/hmi/HmiWorkspace.tsx",
-      "line": 134,
+      "line": 137,
       "tag": "select",
       "signature": "select|onChange:{e=>update({command:e.target.valueasHmiComponent['command']})}",
       "handlers": {
@@ -13345,7 +13348,7 @@
     },
     {
       "source": "src/components/hmi/HmiWorkspace.tsx",
-      "line": 134,
+      "line": 137,
       "tag": "select",
       "signature": "select|onChange:{e=>update({parentId:e.target.value||undefined,tabId:components.find(c=>c.id===e.target.value)?.tabs?.[0]?.id})}",
       "handlers": {
@@ -13358,7 +13361,7 @@
     },
     {
       "source": "src/components/hmi/HmiWorkspace.tsx",
-      "line": 134,
+      "line": 137,
       "tag": "select",
       "signature": "select|onChange:{e=>update({tabId:e.target.value})}",
       "handlers": {
@@ -13371,7 +13374,7 @@
     },
     {
       "source": "src/components/hmi/HmiWorkspace.tsx",
-      "line": 134,
+      "line": 137,
       "tag": "select",
       "signature": "select|onChange:{e=>update({variableIds:Array.from(e.target.selectedOptions,o=>o.value)})}",
       "handlers": {
@@ -13384,7 +13387,7 @@
     },
     {
       "source": "src/components/hmi/HmiWorkspace.tsx",
-      "line": 134,
+      "line": 137,
       "tag": "JsonProperty",
       "signature": "JsonProperty|onChange:{v=>update({options:v})}",
       "handlers": {
@@ -13397,7 +13400,7 @@
     },
     {
       "source": "src/components/hmi/HmiWorkspace.tsx",
-      "line": 134,
+      "line": 137,
       "tag": "JsonProperty",
       "signature": "JsonProperty|onChange:{v=>update({tabs:v})}",
       "handlers": {
@@ -13410,7 +13413,7 @@
     },
     {
       "source": "src/components/hmi/HmiWorkspace.tsx",
-      "line": 134,
+      "line": 137,
       "tag": "input",
       "signature": "input|onChange:{e=>update({[chosen.type==='encoder'?'encoderValues':'hybridValues']:e.target.value.split(',').map(s=>s.trim())})}",
       "handlers": {
@@ -13423,7 +13426,7 @@
     },
     {
       "source": "src/components/hmi/HmiWorkspace.tsx",
-      "line": 134,
+      "line": 137,
       "tag": "select",
       "signature": "select|onChange:{e=>update({soundType:e.target.valueasHmiComponent['soundType']})}",
       "handlers": {
@@ -13436,7 +13439,7 @@
     },
     {
       "source": "src/components/hmi/HmiWorkspace.tsx",
-      "line": 134,
+      "line": 137,
       "tag": "JsonProperty",
       "signature": "JsonProperty|onChange:{v=>update({oledIndicatorEmojis:v})}",
       "handlers": {
@@ -13449,7 +13452,7 @@
     },
     {
       "source": "src/components/hmi/HmiWorkspace.tsx",
-      "line": 134,
+      "line": 137,
       "tag": "JsonProperty",
       "signature": "JsonProperty|onChange:{v=>update({oledIndicatorVarIds:v})}",
       "handlers": {
@@ -13462,7 +13465,7 @@
     },
     {
       "source": "src/components/hmi/HmiWorkspace.tsx",
-      "line": 134,
+      "line": 137,
       "tag": "JsonProperty",
       "signature": "JsonProperty|onChange:{v=>update({oledIndicatorLabels:v})}",
       "handlers": {
@@ -13475,7 +13478,7 @@
     },
     {
       "source": "src/components/hmi/HmiWorkspace.tsx",
-      "line": 134,
+      "line": 137,
       "tag": "button",
       "signature": "button|onClick:{()=>update(axis==='Left'?{x:0}:{y:0})}",
       "handlers": {
@@ -13488,7 +13491,7 @@
     },
     {
       "source": "src/components/hmi/HmiWorkspace.tsx",
-      "line": 134,
+      "line": 137,
       "tag": "button",
       "signature": "button|onClick:{()=>{setComponents(list=>list.filter(c=>c.id!==chosen.id).map(c=>c.parentId===chosen.id?{...c,...position(c),parentId:undefined,tabId:undefined}:c));setSelected(undefined);}}",
       "handlers": {
@@ -13501,7 +13504,7 @@
     },
     {
       "source": "src/components/hmi/HmiWorkspace.tsx",
-      "line": 137,
+      "line": 140,
       "tag": "textarea",
       "signature": "textarea|onBlur:{()=>{try{constparsed=JSON.parse(text);if(!Array.isArray(parsed))thrownewError('UseaJSONarray.');if(label.startsWith('Options')&&parsed.some(o=>!o||typeofo.label!=='string'||!(typeofo.value==='boolean'||typeofo.value==='number'&&Number.isFinite(o.value))))thrownewError('Invalidoption');if(label.startsWith('Tabs')&&parsed.some(t=>!t||typeoft.id!=='string'||typeoft.label!=='string'))thrownewError('Invalidtab');if(label.startsWith('OLED')&&parsed.some(v=>typeofv!=='string'&&!(label.includes('variableIDs')&&v===null)))thrownewError('Invalidindicator');onChange(parsedasT);setError('');}catch{setError('InvalidJSONarray.');}}}|onChange:{e=>setText(e.target.value)}",
       "handlers": {
@@ -13558,7 +13561,7 @@
         "onActivateNode": "{handleActivateNode}",
         "onExecuteCapability": "{handleExecuteCapability}",
         "onMoveNode": "{handleMoveNode}",
-        "onRenameCommit": "{(nodeId, newName) => {\r\n          const node = projection.nodes[nodeId];\r\n          if (!node) return;\r\n          const bus = createModelExplorerCommandBus(explorerAdapterDomain(node) === 'stateMachine' ? smAdapter : sysmlAdapter);\r\n          const res = bus.dispatch({\r\n            type: 'rename',\r\n            elementId: node.semanticId,\r\n            name: newName,\r\n          });\r\n          acceptResult(res, {\r\n            type: 'rename',\r\n            elementId: node.semanticId,\r\n            name: newName,\r\n          });\r\n        }}"
+        "onRenameCommit": "{(nodeId, newName) => {\n          const node = projection.nodes[nodeId];\n          if (!node) return;\n          const bus = createModelExplorerCommandBus(explorerAdapterDomain(node) === 'stateMachine' ? smAdapter : sysmlAdapter);\n          const res = bus.dispatch({\n            type: 'rename',\n            elementId: node.semanticId,\n            name: newName,\n          });\n          acceptResult(res, {\n            type: 'rename',\n            elementId: node.semanticId,\n            name: newName,\n          });\n        }}"
       },
       "id": "live:components/modelExplorer/AppModelExplorer:1d442671cecc",
       "status": "excluded",
@@ -13601,7 +13604,7 @@
       "signature": "RelationshipWizard|onClose:{()=>setRelationshipWizardState(null)}|onCreateRelationship:{(kind,targetSemanticId)=>{constisIncoming=relationshipWizardState.direction==='incoming';constsourceId=isIncoming?targetSemanticId:relationshipWizardState.sourceNode.semanticId;consttargetId=isIncoming?relationshipWizardState.sourceNode.semanticId:targetSemanticId;constcmd:ModelExplorerCommand={type:'createRelationship',relationshipKind:kind,sourceId,targetId,};constbus=createModelExplorerCommandBus(activeAdapter);constres=bus.dispatch(cmd);acceptResult(res);setRelationshipWizardState(null);}}",
       "handlers": {
         "onClose": "{() => setRelationshipWizardState(null)}",
-        "onCreateRelationship": "{(kind, targetSemanticId) => {\r\n            const isIncoming = relationshipWizardState.direction === 'incoming';\r\n            const sourceId = isIncoming ? targetSemanticId : relationshipWizardState.sourceNode.semanticId;\r\n            const targetId = isIncoming ? relationshipWizardState.sourceNode.semanticId : targetSemanticId;\r\n            const cmd: ModelExplorerCommand = {\r\n              type: 'createRelationship',\r\n              relationshipKind: kind,\r\n              sourceId,\r\n              targetId,\r\n            };\r\n            const bus = createModelExplorerCommandBus(activeAdapter);\r\n            const res = bus.dispatch(cmd);\r\n            acceptResult(res);\r\n            setRelationshipWizardState(null);\r\n          }}"
+        "onCreateRelationship": "{(kind, targetSemanticId) => {\n            const isIncoming = relationshipWizardState.direction === 'incoming';\n            const sourceId = isIncoming ? targetSemanticId : relationshipWizardState.sourceNode.semanticId;\n            const targetId = isIncoming ? relationshipWizardState.sourceNode.semanticId : targetSemanticId;\n            const cmd: ModelExplorerCommand = {\n              type: 'createRelationship',\n              relationshipKind: kind,\n              sourceId,\n              targetId,\n            };\n            const bus = createModelExplorerCommandBus(activeAdapter);\n            const res = bus.dispatch(cmd);\n            acceptResult(res);\n            setRelationshipWizardState(null);\n          }}"
       },
       "id": "live:components/modelExplorer/AppModelExplorer:9828e639537c",
       "status": "excluded",
@@ -13699,7 +13702,7 @@
       "tag": "input",
       "signature": "input|onChange:{e=>{setFilterQuery(e.target.value);setFocusedIndex(0);}}",
       "handlers": {
-        "onChange": "{e => {\r\n              setFilterQuery(e.target.value);\r\n              setFocusedIndex(0);\r\n            }}"
+        "onChange": "{e => {\n              setFilterQuery(e.target.value);\n              setFocusedIndex(0);\n            }}"
       },
       "feature": "ui:modelExplorer/ModelExplorerMenu:f316f965e6c6",
       "status": "documented",
@@ -13714,7 +13717,7 @@
       "tag": "button",
       "signature": "button|onClick:{()=>{if(cap.enabled){onSelectCapability(cap);onClose();}}}|onMouseEnter:{()=>setFocusedIndex(globalIndex)}",
       "handlers": {
-        "onClick": "{() => {\r\n                      if (cap.enabled) {\r\n                        onSelectCapability(cap);\r\n                        onClose();\r\n                      }\r\n                    }}",
+        "onClick": "{() => {\n                      if (cap.enabled) {\n                        onSelectCapability(cap);\n                        onClose();\n                      }\n                    }}",
         "onMouseEnter": "{() => setFocusedIndex(globalIndex)}"
       },
       "feature": "ui:modelExplorer/ModelExplorerMenu:962a952fba5e",
@@ -13850,7 +13853,7 @@
       "tag": "div",
       "signature": "div|onClick:{onSelect}|onContextMenu:{onContextMenu}|onDoubleClick:{onDoubleClick}|onDragOver:{onDragOver}|onDragStart:{onDragStart}|onDrop:{onDrop}|onKeyDown:{(e)=>{if(e.key==='F2'&&!node.readOnly){e.preventDefault();e.stopPropagation();onStartRename?.();}}}",
       "handlers": {
-        "onKeyDown": "{(e) => {\r\n        if (e.key === 'F2' && !node.readOnly) {\r\n          e.preventDefault();\r\n          e.stopPropagation();\r\n          onStartRename?.();\r\n        }\r\n      }}",
+        "onKeyDown": "{(e) => {\n        if (e.key === 'F2' && !node.readOnly) {\n          e.preventDefault();\n          e.stopPropagation();\n          onStartRename?.();\n        }\n      }}",
         "onClick": "{onSelect}",
         "onDoubleClick": "{onDoubleClick}",
         "onContextMenu": "{onContextMenu}",
@@ -13871,7 +13874,7 @@
       "tag": "button",
       "signature": "button|onClick:{e=>{e.stopPropagation();onToggleExpand(e);}}",
       "handlers": {
-        "onClick": "{e => {\r\n              e.stopPropagation();\r\n              onToggleExpand(e);\r\n            }}"
+        "onClick": "{e => {\n              e.stopPropagation();\n              onToggleExpand(e);\n            }}"
       },
       "feature": "ui:modelExplorer/ModelTreeRow:91139e7ad725",
       "status": "documented",
@@ -13886,7 +13889,7 @@
       "tag": "input",
       "signature": "input|onBlur:{handleBlur}|onChange:{e=>{setLocalRename(e.target.value);onRenameChange?.(e.target.value);}}|onClick:{e=>e.stopPropagation()}|onKeyDown:{handleKeyDown}",
       "handlers": {
-        "onChange": "{e => {\r\n              setLocalRename(e.target.value);\r\n              onRenameChange?.(e.target.value);\r\n            }}",
+        "onChange": "{e => {\n              setLocalRename(e.target.value);\n              onRenameChange?.(e.target.value);\n            }}",
         "onKeyDown": "{handleKeyDown}",
         "onBlur": "{handleBlur}",
         "onClick": "{e => e.stopPropagation()}"
@@ -15217,7 +15220,7 @@
       "tag": "input",
       "signature": "input|onChange:{e=>{consttext=e.target.value.trim();constparts=text.split('..');constlower=parseInt(parts[0],10)||0;constupper=parts[1]==='*'?'*':parseInt(parts[1]||parts[0],10)||1;updateProperty(index,{multiplicity:{...prop.multiplicity,lower,upper}});}}",
       "handlers": {
-        "onChange": "{e => {\r\n                    const text = e.target.value.trim();\r\n                    const parts = text.split('..');\r\n                    const lower = parseInt(parts[0], 10) || 0;\r\n                    const upper = parts[1] === '*' ? '*' : parseInt(parts[1] || parts[0], 10) || 1;\r\n                    updateProperty(index, { multiplicity: { ...prop.multiplicity, lower, upper } });\r\n                  }}"
+        "onChange": "{e => {\n                    const text = e.target.value.trim();\n                    const parts = text.split('..');\n                    const lower = parseInt(parts[0], 10) || 0;\n                    const upper = parts[1] === '*' ? '*' : parseInt(parts[1] || parts[0], 10) || 1;\n                    updateProperty(index, { multiplicity: { ...prop.multiplicity, lower, upper } });\n                  }}"
       },
       "feature": "ui:sysml/BlockFeatureEditor:96f86cd35d6c",
       "status": "documented",
@@ -15427,7 +15430,7 @@
       "tag": "div",
       "signature": "div|onKeyDown:{event=>{if(event.key==='Enter'||event.key===''){event.preventDefault();handleRedefine(ip);}}}",
       "handlers": {
-        "onKeyDown": "{event => {\r\n                  if (event.key === 'Enter' || event.key === ' ') {\r\n                    event.preventDefault();\r\n                    handleRedefine(ip);\r\n                  }\r\n                }}"
+        "onKeyDown": "{event => {\n                  if (event.key === 'Enter' || event.key === ' ') {\n                    event.preventDefault();\n                    handleRedefine(ip);\n                  }\n                }}"
       },
       "feature": "live:components/sysml/BlockFeatureEditor:98264639931e",
       "status": "documented",
@@ -15577,7 +15580,7 @@
       "tag": "select",
       "signature": "select|onChange:{event=>{constselected=typeOptions.find(option=>option.id===event.target.value);constnextKind=adaptPropertyKindForType(property.kind,selected?.stereotype);update(index,{typeId:event.target.value,type:selected?.name||event.target.value,kind:nextKind});}}",
       "handlers": {
-        "onChange": "{event => {\r\n          const selected = typeOptions.find(option => option.id === event.target.value);\r\n          const nextKind = adaptPropertyKindForType(property.kind, selected?.stereotype);\r\n          update(index, { typeId: event.target.value, type: selected?.name || event.target.value, kind: nextKind });\r\n        }}"
+        "onChange": "{event => {\n          const selected = typeOptions.find(option => option.id === event.target.value);\n          const nextKind = adaptPropertyKindForType(property.kind, selected?.stereotype);\n          update(index, { typeId: event.target.value, type: selected?.name || event.target.value, kind: nextKind });\n        }}"
       },
       "feature": "ui:sysml/BlockPropertiesEditor:ccb59fe7ed51",
       "status": "documented",
@@ -15757,7 +15760,7 @@
       "tag": "div",
       "signature": "div|onKeyDown:{event=>{if(event.key==='Enter'||event.key===''){event.preventDefault();handleRedefine(inherited);}}}",
       "handlers": {
-        "onKeyDown": "{event => {\r\n                if (event.key === 'Enter' || event.key === ' ') {\r\n                  event.preventDefault();\r\n                  handleRedefine(inherited);\r\n                }\r\n              }}"
+        "onKeyDown": "{event => {\n                if (event.key === 'Enter' || event.key === ' ') {\n                  event.preventDefault();\n                  handleRedefine(inherited);\n                }\n              }}"
       },
       "feature": "live:components/sysml/BlockPropertiesEditor:42bdf4f49b6f",
       "status": "documented",
@@ -16154,7 +16157,7 @@
       "handlers": {
         "onChange": "{e => { committedDraft.current = null; setDraft(e.target.value); }}",
         "onBlur": "{commit}",
-        "onKeyDown": "{e => {\r\n        if (e.key === 'Enter') commit();\r\n        if (e.key === 'Escape') { committedDraft.current = null; setDraft(value); }\r\n        rest.onKeyDown?.(e);\r\n      }}"
+        "onKeyDown": "{e => {\n        if (e.key === 'Enter') commit();\n        if (e.key === 'Escape') { committedDraft.current = null; setDraft(value); }\n        rest.onKeyDown?.(e);\n      }}"
       },
       "feature": "ui:sysml/RelationshipEndEditor:87c283f6d992",
       "status": "documented",
@@ -17426,7 +17429,7 @@
       "signature": "tr|onDoubleClick:{()=>onNavigate?.(row.requirement.id)}|onKeyDown:{event=>{if(event.key==='Enter')returnonNavigate?.(row.requirement.id);constnext=nextRtmFocusIndex(index,event.key,matrix.rows.length);if(next!==index){event.preventDefault();rowRefs.current[next]?.focus();}}}",
       "handlers": {
         "onDoubleClick": "{() => onNavigate?.(row.requirement.id)}",
-        "onKeyDown": "{event => {\r\n                    if (event.key === 'Enter') return onNavigate?.(row.requirement.id);\r\n                    const next = nextRtmFocusIndex(index, event.key, matrix.rows.length);\r\n                    if (next !== index) { event.preventDefault(); rowRefs.current[next]?.focus(); }\r\n                  }}"
+        "onKeyDown": "{event => {\n                    if (event.key === 'Enter') return onNavigate?.(row.requirement.id);\n                    const next = nextRtmFocusIndex(index, event.key, matrix.rows.length);\n                    if (next !== index) { event.preventDefault(); rowRefs.current[next]?.focus(); }\n                  }}"
       },
       "feature": "ui:sysml/TraceabilityMatrix:8611f1af7af0",
       "status": "documented",
@@ -17763,7 +17766,7 @@
       "tag": "button",
       "signature": "button|onClick:{()=>{if(hasValidSelection)onSelectType(selectedId);}}",
       "handlers": {
-        "onClick": "{() => {\r\n                if (hasValidSelection) onSelectType(selectedId);\r\n              }}"
+        "onClick": "{() => {\n                if (hasValidSelection) onSelectType(selectedId);\n              }}"
       },
       "feature": "ui:sysml/TypeSelectionPrompt:cc6c71b2187c",
       "status": "documented",
@@ -18672,7 +18675,7 @@
       "tag": "div",
       "signature": "div|onDoubleClick:{(e)=>{e.stopPropagation();setIsEditingLabel(true);}}",
       "handlers": {
-        "onDoubleClick": "{(e) => {\r\n              e.stopPropagation();\r\n              setIsEditingLabel(true);\r\n            }}"
+        "onDoubleClick": "{(e) => {\n              e.stopPropagation();\n              setIsEditingLabel(true);\n            }}"
       },
       "feature": "ui:vlab/VLabNode:58a354c5be90",
       "status": "documented",
@@ -18898,7 +18901,7 @@
       "tag": "button",
       "signature": "button|onClick:{()=>{onSpeedChange?.(s);setShowSpeedMenu(false);}}",
       "handlers": {
-        "onClick": "{() => {\r\n                          onSpeedChange?.(s);\r\n                          setShowSpeedMenu(false);\r\n                        }}"
+        "onClick": "{() => {\n                          onSpeedChange?.(s);\n                          setShowSpeedMenu(false);\n                        }}"
       },
       "feature": "ui:vlab/VLabSimulinkScope:f618584e549f",
       "status": "documented",
@@ -18943,7 +18946,7 @@
       "tag": "select",
       "signature": "select|onChange:{(e)=>{constval=Math.max(1,Math.min(8,parseInt(e.target.value)||1));onUpdate({numSignals:{...params.numSignals,value:val}});}}",
       "handlers": {
-        "onChange": "{(e) => {\r\n                      const val = Math.max(1, Math.min(8, parseInt(e.target.value) || 1));\r\n                      onUpdate({ numSignals: { ...params.numSignals, value: val } });\r\n                    }}"
+        "onChange": "{(e) => {\n                      const val = Math.max(1, Math.min(8, parseInt(e.target.value) || 1));\n                      onUpdate({ numSignals: { ...params.numSignals, value: val } });\n                    }}"
       },
       "feature": "ui:vlab/VLabSimulinkScope:4cd7c19ec85d",
       "status": "documented",
@@ -18958,7 +18961,7 @@
       "tag": "select",
       "signature": "select|onChange:{(e)=>{constval=e.target.value==='auto'?'auto':parseFloat(e.target.value);onUpdate({time_range:{...params.time_range,value:val}});}}",
       "handlers": {
-        "onChange": "{(e) => {\r\n                      const val = e.target.value === 'auto' ? 'auto' : parseFloat(e.target.value);\r\n                      onUpdate({ time_range: { ...params.time_range, value: val } });\r\n                    }}"
+        "onChange": "{(e) => {\n                      const val = e.target.value === 'auto' ? 'auto' : parseFloat(e.target.value);\n                      onUpdate({ time_range: { ...params.time_range, value: val } });\n                    }}"
       },
       "feature": "ui:vlab/VLabSimulinkScope:a71f82e76e1b",
       "status": "documented",
@@ -19048,7 +19051,7 @@
       "tag": "AreaChart",
       "signature": "AreaChart|onClick:{(e)=>{if(!showCursors||!e)return;constclickedTime=e.activeLabel??e.activePayload?.[0]?.payload?.time;if(typeofclickedTime==='number'&&Number.isFinite(clickedTime)){if(activeCursor==='C1'){setCursor1Time(clickedTime);}else{setCursor2Time(clickedTime);}}}}",
       "handlers": {
-        "onClick": "{(e) => {\r\n                            if (!showCursors || !e) return;\r\n                            const clickedTime = e.activeLabel ?? e.activePayload?.[0]?.payload?.time;\r\n                            if (typeof clickedTime === 'number' && Number.isFinite(clickedTime)) {\r\n                              if (activeCursor === 'C1') {\r\n                                setCursor1Time(clickedTime);\r\n                              } else {\r\n                                setCursor2Time(clickedTime);\r\n                              }\r\n                            }\r\n                          }}"
+        "onClick": "{(e) => {\n                            if (!showCursors || !e) return;\n                            const clickedTime = e.activeLabel ?? e.activePayload?.[0]?.payload?.time;\n                            if (typeof clickedTime === 'number' && Number.isFinite(clickedTime)) {\n                              if (activeCursor === 'C1') {\n                                setCursor1Time(clickedTime);\n                              } else {\n                                setCursor2Time(clickedTime);\n                              }\n                            }\n                          }}"
       },
       "feature": "ui:vlab/VLabSimulinkScope:f3b4d1ccb3dd",
       "status": "documented",
@@ -20557,7 +20560,7 @@
       "tag": "Handle",
       "signature": "Handle|onClick:{(e)=>{e.stopPropagation();data.onPortClick?.(id,port.id,isInput?'target':'source',port.type);}}",
       "handlers": {
-        "onClick": "{(e) => {\r\n            e.stopPropagation();\r\n            data.onPortClick?.(id, port.id, isInput ? 'target' : 'source', port.type);\r\n          }}"
+        "onClick": "{(e) => {\n            e.stopPropagation();\n            data.onPortClick?.(id, port.id, isInput ? 'target' : 'source', port.type);\n          }}"
       },
       "feature": "ui:xbridges/XBlockNode:f43fa12ef7fb",
       "status": "documented",
@@ -20573,29 +20576,20 @@
       "signature": "div|onContextMenu:{(e)=>e.preventDefault()}|onMouseDown:{(e)=>{if(workspaceContext?.onNodeMouseDown)workspaceContext.onNodeMouseDown(e,id);elseif(data.onNodeMouseDown)data.onNodeMouseDown(e);}}",
       "handlers": {
         "onContextMenu": "{(e) => e.preventDefault()}",
-        "onMouseDown": "{(e) => {\r\n          if (workspaceContext?.onNodeMouseDown) workspaceContext.onNodeMouseDown(e, id);\r\n          else if (data.onNodeMouseDown) data.onNodeMouseDown(e);\r\n        }}"
+        "onMouseDown": "{(e) => {\n          if (workspaceContext?.onNodeMouseDown) workspaceContext.onNodeMouseDown(e, id);\n          else if (data.onNodeMouseDown) data.onNodeMouseDown(e);\n        }}"
       },
-      "candidateId": "src/components/xbridges/XBlockNode.tsx:2123",
-      "sourcePath": "src/components/xbridges/XBlockNode.tsx",
-      "snapshotLine": 2123,
-      "label": "",
-      "status": "mapped",
-      "featureIds": [
-        "ui:xbridges/XBlockNode:b15945ae32ea"
-      ],
-      "reason": "Source-specific instructions grounded in this callback’s selected field/command/action.",
-      "sourceEvidence": [
-        "src/components/xbridges/XBlockNode.tsx",
-        "{(e) => e.preventDefault()} {(e) => {\r\n        if (workspaceContext?.onNodeMouseDown) workspaceContext.onNodeMouseDown(e, id);\r\n        else if (data.onNodeMouseDown) data.onNodeMouseDown(e);\r\n      }}"
-      ]
+      "dynamicTopic": "{`xbridges:${data.type}`}",
+      "status": "documented",
+      "featureIds": [],
+      "reason": "Dynamic component type resolves through the complete qualified catalog; catalog equality is tested."
     },
     {
       "source": "src/components/xbridges/XBlockNode.tsx",
-      "line": 2103,
+      "line": 2104,
       "tag": "textarea",
       "signature": "textarea|onChange:{(e)=>{if(workspaceContext?.updateBlock){workspaceContext.updateBlock(id,{params:{...data.params,text:e.target.value}});}else{data.onUpdate?.({params:{...data.params,text:e.target.value}});}}}",
       "handlers": {
-        "onChange": "{(e) => {\r\n              if (workspaceContext?.updateBlock) {\r\n                workspaceContext.updateBlock(id, { params: { ...data.params, text: e.target.value } });\r\n              } else {\r\n                data.onUpdate?.({ params: { ...data.params, text: e.target.value } });\r\n              }\r\n            }}"
+        "onChange": "{(e) => {\n              if (workspaceContext?.updateBlock) {\n                workspaceContext.updateBlock(id, { params: { ...data.params, text: e.target.value } });\n              } else {\n                data.onUpdate?.({ params: { ...data.params, text: e.target.value } });\n              }\n            }}"
       },
       "feature": "ui:xbridges/XBlockNode:3524288df7a4",
       "status": "documented",
@@ -20606,12 +20600,12 @@
     },
     {
       "source": "src/components/xbridges/XBlockNode.tsx",
-      "line": 2123,
+      "line": 2124,
       "tag": "div",
       "signature": "div|onContextMenu:{(e)=>e.preventDefault()}|onMouseDown:{(e)=>{if(workspaceContext?.onNodeMouseDown)workspaceContext.onNodeMouseDown(e,id);elseif(data.onNodeMouseDown)data.onNodeMouseDown(e);}}",
       "handlers": {
         "onContextMenu": "{(e) => e.preventDefault()}",
-        "onMouseDown": "{(e) => {\r\n        if (workspaceContext?.onNodeMouseDown) workspaceContext.onNodeMouseDown(e, id);\r\n        else if (data.onNodeMouseDown) data.onNodeMouseDown(e);\r\n      }}"
+        "onMouseDown": "{(e) => {\n        if (workspaceContext?.onNodeMouseDown) workspaceContext.onNodeMouseDown(e, id);\n        else if (data.onNodeMouseDown) data.onNodeMouseDown(e);\n      }}"
       },
       "dynamicTopic": "{`xbridges:${data.type}`}",
       "status": "documented",
@@ -20620,11 +20614,11 @@
     },
     {
       "source": "src/components/xbridges/XBlockNode.tsx",
-      "line": 2173,
+      "line": 2174,
       "tag": "button",
       "signature": "button|onClick:{(e)=>{e.stopPropagation();if(workspaceContext?.onOpenScope)workspaceContext.onOpenScope(id);elseif(data.onOpenScope)data.onOpenScope(id);}}",
       "handlers": {
-        "onClick": "{(e) => { \r\n                  e.stopPropagation(); \r\n                  if (workspaceContext?.onOpenScope) workspaceContext.onOpenScope(id);\r\n                  else if (data.onOpenScope) data.onOpenScope(id); \r\n                }}"
+        "onClick": "{(e) => { \n                  e.stopPropagation(); \n                  if (workspaceContext?.onOpenScope) workspaceContext.onOpenScope(id);\n                  else if (data.onOpenScope) data.onOpenScope(id); \n                }}"
       },
       "feature": "ui:xbridges/XBlockNode:55df02f9d2ed",
       "status": "documented",
@@ -20635,7 +20629,7 @@
     },
     {
       "source": "src/components/xbridges/XBlockNode.tsx",
-      "line": 2185,
+      "line": 2186,
       "tag": "button",
       "signature": "button|onClick:{(e)=>{e.stopPropagation();downloadCSV();}}",
       "handlers": {
@@ -21107,7 +21101,7 @@
       "tag": "select",
       "signature": "select|onChange:{(e)=>{letval:any=e.target.value;if(val==='true')val=true;if(val==='false')val=false;onUpdate(block.id,{params:{...block.params,[key]:val}});}}",
       "handlers": {
-        "onChange": "{(e) => {\r\n                        let val: any = e.target.value;\r\n                        if (val === 'true') val = true;\r\n                        if (val === 'false') val = false;\r\n                        onUpdate(block.id, { params: { ...block.params, [key]: val } });\r\n                      }}"
+        "onChange": "{(e) => {\n                        let val: any = e.target.value;\n                        if (val === 'true') val = true;\n                        if (val === 'false') val = false;\n                        onUpdate(block.id, { params: { ...block.params, [key]: val } });\n                      }}"
       },
       "feature": "ui:xbridges/XbridgesPropertiesPanel:efa3cb1669d5",
       "status": "documented",
@@ -21122,7 +21116,7 @@
       "tag": "textarea",
       "signature": "textarea|onChange:{(e)=>{setLocalInputValues(prev=>({...prev,[key]:e.target.value}));onUpdate(block.id,{params:{...block.params,[key]:e.target.value}});}}",
       "handlers": {
-        "onChange": "{(e) => {\r\n                        setLocalInputValues(prev => ({ ...prev, [key]: e.target.value }));\r\n                        onUpdate(block.id, { params: { ...block.params, [key]: e.target.value } });\r\n                      }}"
+        "onChange": "{(e) => {\n                        setLocalInputValues(prev => ({ ...prev, [key]: e.target.value }));\n                        onUpdate(block.id, { params: { ...block.params, [key]: e.target.value } });\n                      }}"
       },
       "feature": "ui:xbridges/XbridgesPropertiesPanel:fb4ff8adc517",
       "status": "documented",
@@ -21137,9 +21131,9 @@
       "tag": "input",
       "signature": "input|onBlur:{(e)=>{//Onblur,alwayscommitthefinalvalueconstraw=normalizeNumerals(e.target.value);consttrimmedRaw=raw.trim();letval:any=raw;if(trimmedRaw!==''&&!isNaN(Number(trimmedRaw))){val=Number(trimmedRaw);}elseif(trimmedRaw.startsWith('[')||trimmedRaw.startsWith('{')){try{val=VectorUtils.parseMatlabArray(trimmedRaw);}catch{val=raw;}}letfinalVal=val;if(isObjectParam){finalVal={...block.params[key],value:val};}onUpdate(block.id,{params:{...block.params,[key]:finalVal}});//SynclocaldisplaytocommittedvaluesoitshowscleanformsetLocalInputValues(prev=>({...prev,[key]:String(typeoffinalVal==='object'?JSON.stringify(finalVal):finalVal)}));}}|onChange:{(e)=>{constraw=normalizeNumerals(e.target.value);//UpdatethelocaldisplaystringimmediatelysetLocalInputValues(prev=>({...prev,[key]:raw}));consttrimmedRaw=raw.trim();//1.Donotcommitarrays/matricesormulti-wordinputsmid-typingif(trimmedRaw.startsWith('[')||trimmedRaw.includes('')||trimmedRaw.includes(';')){return;}//2.Donotcommitincompletenumbersmid-typingif(raw===''||raw==='-'||raw.endsWith('.')||raw.endsWith('e')||raw.endsWith('e-')||raw.endsWith('e+')){return;}//3.Commitvalidscalarnumberstoallowreal-timetuningif(!isNaN(Number(trimmedRaw))){constval=Number(trimmedRaw);letfinalVal=val;if(isObjectParam){finalVal={...block.params[key],value:val};}onUpdate(block.id,{params:{...block.params,[key]:finalVal}});}}}|onKeyDown:{(e)=>{if(e.key==='Enter'){(e.targetasHTMLInputElement).blur();}}}",
       "handlers": {
-        "onChange": "{(e) => {\r\n                        const raw = normalizeNumerals(e.target.value);\r\n                        // Update the local display string immediately\r\n                        setLocalInputValues(prev => ({ ...prev, [key]: raw }));\r\n\r\n                        const trimmedRaw = raw.trim();\r\n                        \r\n                        // 1. Do not commit arrays/matrices or multi-word inputs mid-typing\r\n                        if (trimmedRaw.startsWith('[') || trimmedRaw.includes(' ') || trimmedRaw.includes(';')) {\r\n                          return;\r\n                        }\r\n\r\n                        // 2. Do not commit incomplete numbers mid-typing\r\n                        if (raw === '' || raw === '-' || raw.endsWith('.') || raw.endsWith('e') || raw.endsWith('e-') || raw.endsWith('e+')) {\r\n                          return;\r\n                        }\r\n\r\n                        // 3. Commit valid scalar numbers to allow real-time tuning\r\n                        if (!isNaN(Number(trimmedRaw))) {\r\n                          const val = Number(trimmedRaw);\r\n                          let finalVal = val;\r\n                          if (isObjectParam) {\r\n                            finalVal = { ...block.params[key], value: val };\r\n                          }\r\n                          onUpdate(block.id, { params: { ...block.params, [key]: finalVal } });\r\n                        }\r\n                      }}",
-        "onBlur": "{(e) => {\r\n                        // On blur, always commit the final value\r\n                        const raw = normalizeNumerals(e.target.value);\r\n                        const trimmedRaw = raw.trim();\r\n                        let val: any = raw;\r\n                        if (trimmedRaw !== '' && !isNaN(Number(trimmedRaw))) {\r\n                          val = Number(trimmedRaw);\r\n                        } else if (trimmedRaw.startsWith('[') || trimmedRaw.startsWith('{')) {\r\n                           try {\r\n                             val = VectorUtils.parseMatlabArray(trimmedRaw);\r\n                           } catch {\r\n                             val = raw;\r\n                           }\r\n                        }\r\n                        let finalVal = val;\r\n                        if (isObjectParam) {\r\n                          finalVal = { ...block.params[key], value: val };\r\n                        }\r\n                        onUpdate(block.id, { params: { ...block.params, [key]: finalVal } });\r\n                        // Sync local display to committed value so it shows clean form\r\n                        setLocalInputValues(prev => ({ ...prev, [key]: String(typeof finalVal === 'object' ? JSON.stringify(finalVal) : finalVal) }));\r\n                      }}",
-        "onKeyDown": "{(e) => {\r\n                        if (e.key === 'Enter') {\r\n                          (e.target as HTMLInputElement).blur();\r\n                        }\r\n                      }}"
+        "onChange": "{(e) => {\n                        const raw = normalizeNumerals(e.target.value);\n                        // Update the local display string immediately\n                        setLocalInputValues(prev => ({ ...prev, [key]: raw }));\n\n                        const trimmedRaw = raw.trim();\n                        \n                        // 1. Do not commit arrays/matrices or multi-word inputs mid-typing\n                        if (trimmedRaw.startsWith('[') || trimmedRaw.includes(' ') || trimmedRaw.includes(';')) {\n                          return;\n                        }\n\n                        // 2. Do not commit incomplete numbers mid-typing\n                        if (raw === '' || raw === '-' || raw.endsWith('.') || raw.endsWith('e') || raw.endsWith('e-') || raw.endsWith('e+')) {\n                          return;\n                        }\n\n                        // 3. Commit valid scalar numbers to allow real-time tuning\n                        if (!isNaN(Number(trimmedRaw))) {\n                          const val = Number(trimmedRaw);\n                          let finalVal = val;\n                          if (isObjectParam) {\n                            finalVal = { ...block.params[key], value: val };\n                          }\n                          onUpdate(block.id, { params: { ...block.params, [key]: finalVal } });\n                        }\n                      }}",
+        "onBlur": "{(e) => {\n                        // On blur, always commit the final value\n                        const raw = normalizeNumerals(e.target.value);\n                        const trimmedRaw = raw.trim();\n                        let val: any = raw;\n                        if (trimmedRaw !== '' && !isNaN(Number(trimmedRaw))) {\n                          val = Number(trimmedRaw);\n                        } else if (trimmedRaw.startsWith('[') || trimmedRaw.startsWith('{')) {\n                           try {\n                             val = VectorUtils.parseMatlabArray(trimmedRaw);\n                           } catch {\n                             val = raw;\n                           }\n                        }\n                        let finalVal = val;\n                        if (isObjectParam) {\n                          finalVal = { ...block.params[key], value: val };\n                        }\n                        onUpdate(block.id, { params: { ...block.params, [key]: finalVal } });\n                        // Sync local display to committed value so it shows clean form\n                        setLocalInputValues(prev => ({ ...prev, [key]: String(typeof finalVal === 'object' ? JSON.stringify(finalVal) : finalVal) }));\n                      }}",
+        "onKeyDown": "{(e) => {\n                        if (e.key === 'Enter') {\n                          (e.target as HTMLInputElement).blur();\n                        }\n                      }}"
       },
       "feature": "ui:xbridges/XbridgesPropertiesPanel:0f948317825a",
       "status": "documented",
@@ -21272,7 +21266,7 @@
       "tag": "input",
       "signature": "input|onChange:{(e)=>{setNumInput(e.target.value);handleArrayUpdate('numerator',e.target.value);}}",
       "handlers": {
-        "onChange": "{(e) => {\r\n                      setNumInput(e.target.value);\r\n                      handleArrayUpdate('numerator', e.target.value);\r\n                    }}"
+        "onChange": "{(e) => {\n                      setNumInput(e.target.value);\n                      handleArrayUpdate('numerator', e.target.value);\n                    }}"
       },
       "feature": "ui:xbridges/XbridgesRootLocusWindow:8eb3b389d687",
       "status": "documented",
@@ -21287,7 +21281,7 @@
       "tag": "input",
       "signature": "input|onChange:{(e)=>{setDenInput(e.target.value);handleArrayUpdate('denominator',e.target.value);}}",
       "handlers": {
-        "onChange": "{(e) => {\r\n                      setDenInput(e.target.value);\r\n                      handleArrayUpdate('denominator', e.target.value);\r\n                    }}"
+        "onChange": "{(e) => {\n                      setDenInput(e.target.value);\n                      handleArrayUpdate('denominator', e.target.value);\n                    }}"
       },
       "feature": "ui:xbridges/XbridgesRootLocusWindow:cb6ee13ce34f",
       "status": "documented",
@@ -21317,7 +21311,7 @@
       "tag": "input",
       "signature": "input|onChange:{(e)=>{setMaxGainInput(e.target.value);constval=Number(e.target.value);if(val>0&&onUpdate){onUpdate({...block.params,maxGain:val});}}}",
       "handlers": {
-        "onChange": "{(e) => {\r\n                      setMaxGainInput(e.target.value);\r\n                      const val = Number(e.target.value);\r\n                      if (val > 0 && onUpdate) {\r\n                        onUpdate({ ...block.params, maxGain: val });\r\n                      }\r\n                    }}"
+        "onChange": "{(e) => {\n                      setMaxGainInput(e.target.value);\n                      const val = Number(e.target.value);\n                      if (val > 0 && onUpdate) {\n                        onUpdate({ ...block.params, maxGain: val });\n                      }\n                    }}"
       },
       "feature": "ui:xbridges/XbridgesRootLocusWindow:048e0c6787d3",
       "status": "documented",
@@ -22324,8 +22318,7 @@
     }
   ],
   "statusCounts": {
-    "documented": 1334,
-    "excluded": 142,
-    "mapped": 1
+    "documented": 1335,
+    "excluded": 142
   }
 }

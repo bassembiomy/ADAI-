@@ -5,8 +5,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { HelpModal } from './HelpModal';
 
 vi.mock('../../help/blockReference', () => ({ getBlockHelpGaps: () => ({paletteOnly: [], instructional: []}), getBlockHelpReferences: () => [
-  { id: 'xbridges:same', typeId: 'same', name: 'Control Same', source: 'X-Bridges', category: 'Control', description: 'Multiplies the input.', behavior: 'Apply the gain.', example: 'Connect a constant to gain.', inputs: [], outputs: [], ports: [], parameters: [] },
-  { id: 'vlab:same', typeId: 'same', name: 'Physical Same', source: 'V-Lab', category: 'Electrical', description: 'Physical component.', behavior: 'Conserves energy.', example: 'Connect to ground.', inputs: [], outputs: [], ports: [], parameters: [] },
+  { id: 'xbridges:same', typeId: 'same', name: 'Control Same', source: 'X-Bridges', category: 'Control', icon: 'plus', availability: 'available', description: 'Multiplies the input.', behavior: 'Apply the gain.', connection: 'Connect output to input.', embedded: { eligible: true, description: 'Eligible after validation.' }, example: 'Connect a constant to gain.', inputs: [], outputs: [], ports: [], parameters: [] },
+  { id: 'vlab:same', typeId: 'same', name: 'Physical Same', source: 'V-Lab', category: 'Electrical', icon: 'resistor', availability: 'available', description: 'Physical component.', behavior: 'Conserves energy.', connection: 'Wire conserving terminals.', example: 'Connect to ground.', inputs: [], outputs: [], ports: [], parameters: [] },
+  { id: 'xbridges:COSEC', typeId: 'COSEC', name: 'Cosecant', source: 'X-Bridges', category: 'Math', icon: 'trending-up', availability: 'palette-only', description: 'Unavailable palette item.', behavior: 'Not executable.', connection: 'No registered factory ports.', example: 'Choose an available equivalent.', inputs: [], outputs: [], ports: [], parameters: [] },
 ] }));
 
 const topics = {
@@ -26,12 +27,37 @@ describe('HelpModal navigation', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Documentation' }));
     expect(screen.getByRole('button', { name: 'Documentation' }).getAttribute('aria-pressed')).toBe('true');
   });
-  it('offers section navigation for a selected block reference', () => {
+  it('offers symbol, connection, deployment and parameter sections on a selected block', () => {
     render(<HelpModal isOpen onClose={() => {}} topics={topics} />);
     fireEvent.click(screen.getByRole('button', { name: 'Block reference' }));
     fireEvent.click(screen.getByRole('button', { name: /Control Same/ }));
-    expect(within(screen.getByRole('navigation', { name: 'On this page' })).getByRole('button', { name: 'Parameters' })).toBeTruthy();
-    expect(document.getElementById('help-section-block-parameters')).toBeTruthy();
+    for (const title of ['Symbol', 'Connection', 'Deployment', 'Parameters']) {
+      expect(within(screen.getByRole('navigation', { name: 'On this page' })).getByRole('button', { name: title })).toBeTruthy();
+      expect(document.getElementById(`help-section-block-${title.toLowerCase()}`)).toBeTruthy();
+    }
+    expect(screen.getByRole('figure', { name: 'Symbol for Control Same' })).toBeTruthy();
+    expect(screen.getByText('Eligible after validation.')).toBeTruthy();
+  });
+  it('opens F1 qualified V-Lab and X-Bridges nodes on their exact pages', () => {
+    const view = render(<HelpModal isOpen onClose={() => {}} topics={topics} initialTopic="vlab:same" />);
+    expect(screen.getByRole('heading', { name: 'Physical Same', level: 1 })).toBeTruthy();
+    view.rerender(<HelpModal isOpen onClose={() => {}} topics={topics} initialTopic="xbridges:same" />);
+    expect(screen.getByRole('heading', { name: 'Control Same', level: 1 })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Getting Started', level: 1 })).toBeNull();
+  });
+  it('takes search results for qualified block topics to the live symbol reference', () => {
+    const searchableTopics = { ...topics, 'xbridges:same': { title: 'X-Bridges: Control Same', category: 'Component References', description: 'Multiplies the input.', content: 'Control Same gain' } };
+    render(<HelpModal isOpen onClose={() => {}} topics={searchableTopics} />);
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search Help' }), { target: { value: 'Control Same' } });
+    fireEvent.click(screen.getByRole('button', { name: /X-Bridges: Control Same/ }));
+    expect(screen.getByRole('heading', { name: 'Control Same', level: 1 })).toBeTruthy();
+    expect(screen.getByRole('figure', { name: 'Symbol for Control Same' })).toBeTruthy();
+  });
+  it('warns explicitly when a palette glyph cannot be inserted', () => {
+    render(<HelpModal isOpen onClose={() => {}} topics={topics} initialTopic="xbridges:COSEC" />);
+    expect(screen.getByRole('heading', { name: 'Cosecant', level: 1 })).toBeTruthy();
+    expect(screen.getByText(/not available for normal insertion/i)).toBeTruthy();
+    expect(screen.getByText('No registered factory ports.')).toBeTruthy();
   });
   it('searches chapter content and opens the matching section', () => {
     render(<HelpModal isOpen onClose={() => {}} topics={topics} />);

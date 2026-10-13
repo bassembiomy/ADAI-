@@ -5,6 +5,8 @@ import { getBlockHelpReferences } from '../../help/blockReference';
 import { getAdjacentHelpTopics, helpSectionId, searchHelpTopics } from '../../help/helpNavigation';
 import type { HelpTopic } from '../../help/helpTypes';
 import { HelpDiagram } from './HelpDiagram';
+import { HelpBlockSymbol } from './HelpBlockSymbol';
+import { HelpNotation } from './HelpNotation';
 import { SoftwareArchitectureExplorer } from './SoftwareArchitectureExplorer';
 import './help.css';
 
@@ -68,7 +70,7 @@ export function HelpModal({ isOpen, onClose, initialTopic, initialSection, topic
   const words = query.toLocaleLowerCase().trim().split(/\s+/).filter(Boolean);
   const filteredBlocks = blocks.filter(block => (sourceFilter === 'All' || block.source === sourceFilter)
     && (categoryFilter === 'All' || block.category === categoryFilter)
-    && words.every(word => `${block.name} ${block.typeId} ${block.source} ${block.category} ${block.description} ${block.behavior} ${block.example} ${block.equation ?? ''} ${JSON.stringify(block.parameters)} ${JSON.stringify(block.ports)}`.toLocaleLowerCase().includes(word)));
+    && words.every(word => `${block.name} ${block.typeId} ${block.source} ${block.category} ${block.icon} ${block.description} ${block.behavior} ${block.connection} ${block.embedded?.description ?? ''} ${block.example} ${block.equation ?? ''} ${JSON.stringify(block.parameters)} ${JSON.stringify(block.ports)}`.toLocaleLowerCase().includes(word)));
   const navigationTopics = useMemo(() => Object.fromEntries(Object.entries(topics).filter(([, item]) => categories.includes(item.category))), [topics, categories]);
   const adjacent = getAdjacentHelpTopics(navigationTopics, topicId);
 
@@ -78,6 +80,13 @@ export function HelpModal({ isOpen, onClose, initialTopic, initialSection, topic
     element?.scrollIntoView?.({ block: 'start' });
   };
   const openTopic = (id: string, sectionId?: string) => {
+    const block = blocks.find(item => item.id === id);
+    if (block) {
+      setBlockMode(true); setElementMode(false); setArchitecture(false);
+      setSourceFilter(block.source); setCategoryFilter('All'); setQuery(''); setSelectedBlockId(id);
+      requestAnimationFrame(() => scrollToSection(undefined));
+      return;
+    }
     if (!topics[id]) return;
     setActiveTopic(id); setBlockMode(false); setArchitecture(false);
     requestAnimationFrame(() => scrollToSection(sectionId));
@@ -85,11 +94,14 @@ export function HelpModal({ isOpen, onClose, initialTopic, initialSection, topic
 
   useEffect(() => {
     if (!isOpen) return;
-    setActiveTopic(initialTopic ?? 'getting-started'); setBlockMode(false); setElementMode(false); setArchitecture(false);
-    setQuery(''); setSelectedBlockId(null);
-    const frame = requestAnimationFrame(() => scrollToSection(initialSection));
+    const contextualBlock = blocks.find(block => block.id === initialTopic);
+    setActiveTopic(contextualBlock ? 'getting-started' : initialTopic ?? 'getting-started');
+    setBlockMode(Boolean(contextualBlock)); setElementMode(false); setArchitecture(false);
+    setSourceFilter(contextualBlock?.source ?? 'All'); setCategoryFilter('All');
+    setQuery(''); setSelectedBlockId(contextualBlock?.id ?? null);
+    const frame = requestAnimationFrame(() => scrollToSection(contextualBlock ? undefined : initialSection));
     return () => cancelAnimationFrame(frame);
-  }, [isOpen, initialTopic, initialSection]);
+  }, [isOpen, initialTopic, initialSection, blocks]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -123,7 +135,7 @@ export function HelpModal({ isOpen, onClose, initialTopic, initialSection, topic
             <label className="mb-3 block text-xs">Source<select data-help-feature="live:components/help/HelpModal:b7d960843f6e" aria-label="Block source" className={`${controlClass} mt-1 w-full bg-[var(--surface-canvas)]`} value={sourceFilter} onChange={event => { setSourceFilter(event.target.value); setCategoryFilter('All'); }}><option>All</option><option>X-Bridges</option><option>V-Lab</option></select></label>
             <label className="mb-3 block text-xs">Category<select data-help-feature="live:components/help/HelpModal:22e21793ae47" aria-label="Block category" className={`${controlClass} mt-1 w-full bg-[var(--surface-canvas)]`} value={categoryFilter} onChange={event => setCategoryFilter(event.target.value)}><option>All</option>{blockCategories.map(category => <option key={category}>{category}</option>)}</select></label>
             <p className="mb-3 text-xs text-[var(--text-secondary)]">{filteredBlocks.length} references</p>
-            <div className="space-y-1">{filteredBlocks.map(block => <button data-help-feature="live:components/help/HelpModal:963004dc3b8c" key={block.id} aria-current={selectedBlockId === block.id ? 'page' : undefined} className={`${controlClass} w-full text-left ${selectedBlockId === block.id ? selectedClass : ''}`} onClick={() => { setSelectedBlockId(block.id); contentRef.current?.scrollTo?.({ top: 0 }); }}><span className="block font-medium">{block.name}</span><span className="text-xs text-[var(--text-secondary)]">{block.source} · {block.category}</span></button>)}</div>
+            <div className="space-y-1">{filteredBlocks.map(block => <button data-help-feature="live:components/help/HelpModal:963004dc3b8c" key={block.id} aria-current={selectedBlockId === block.id ? 'page' : undefined} className={`${controlClass} w-full text-left ${selectedBlockId === block.id ? selectedClass : ''}`} onClick={() => { setSelectedBlockId(block.id); contentRef.current?.scrollTo?.({ top: 0 }); }}><span className="block font-medium">{block.name}</span><span className="text-xs text-[var(--text-secondary)]">{block.source} · {block.category}{block.availability === 'palette-only' ? ' · Unavailable' : block.availability === 'factory-only' ? ' · Factory only' : ''}</span></button>)}</div>
             {!filteredBlocks.length && <p role="status">No blocks match your search or filter.</p>}
           </> : query.trim() ? <>
             <p className="mb-3 text-xs text-[var(--text-secondary)]">{searchResults.length} matching topics and sections</p>
@@ -135,17 +147,22 @@ export function HelpModal({ isOpen, onClose, initialTopic, initialSection, topic
           {blockMode ? selectedBlock ? <article className="mx-auto max-w-5xl">
             <p className="mb-2 text-xs text-[var(--text-secondary)]">{selectedBlock.source} / {selectedBlock.category} / {selectedBlock.typeId}</p>
             <h1 className="mb-4 text-3xl font-bold">{selectedBlock.name}</h1>
-            <nav aria-label="On this page" className="my-6 rounded-xl border border-[var(--border-default)] bg-[var(--surface-panel)] p-4"><h2 className="mb-2 font-bold">On this page</h2><div className="flex flex-wrap gap-2">{['Purpose', 'Behavior', 'Ports', 'Parameters', 'Example'].map(label => <button data-help-topic="xbridges-ref" key={label} className={controlClass} onClick={() => scrollToSection(`block-${label.toLowerCase()}`)}>{label}</button>)}</div></nav>
+            {selectedBlock.availability === 'palette-only' && <p role="status" className="rounded-lg border border-[var(--border-strong)] bg-[var(--surface-panel)] p-3 text-sm font-semibold">Not available for normal insertion: this palette entry has no registered block factory.</p>}
+            {selectedBlock.availability === 'factory-only' && <p className="text-sm text-[var(--text-secondary)]">Factory entry only: this type is not listed in the current palette.</p>}
+            <nav aria-label="On this page" className="my-6 rounded-xl border border-[var(--border-default)] bg-[var(--surface-panel)] p-4"><h2 className="mb-2 font-bold">On this page</h2><div className="flex flex-wrap gap-2">{['Purpose', 'Symbol', 'Behavior', 'Ports', 'Connection', 'Parameters', 'Deployment', 'Example'].map(label => <button data-help-feature="live:components/help/HelpModal:324900354f85" data-help-topic={selectedBlock.id} key={label} className={controlClass} onClick={() => scrollToSection(`block-${label.toLowerCase()}`)}>{label}</button>)}</div></nav>
             <h2 id="help-section-block-purpose" className="mb-2 mt-6 scroll-mt-6 text-xl font-semibold">Purpose</h2><HelpText text={selectedBlock.description} />
+            <h2 id="help-section-block-symbol" className="mb-2 mt-6 scroll-mt-6 text-xl font-semibold">Symbol</h2><HelpBlockSymbol block={selectedBlock} />
             <h2 id="help-section-block-behavior" className="mb-2 mt-6 scroll-mt-6 text-xl font-semibold">Behavior</h2><HelpText text={selectedBlock.behavior} />
             {selectedBlock.equation && <pre className="my-4 overflow-auto rounded-xl bg-[var(--surface-panel)] p-4 font-mono text-xs whitespace-pre-wrap">{selectedBlock.equation}</pre>}
             <h2 id="help-section-block-ports" className="mb-2 mt-6 scroll-mt-6 text-xl font-semibold">Inputs, outputs and ports</h2>
             {(selectedBlock.across || selectedBlock.through) && <div className="mb-4 rounded-lg border border-[var(--border-default)] bg-[var(--surface-panel)] p-4 text-sm leading-7 text-[var(--text-secondary)]"><p><strong>Across quantity:</strong> {selectedBlock.across}</p><p><strong>Through quantity:</strong> {selectedBlock.through}</p><p>Conserving connections couple these quantities. Follow the component's documented orientation for positive flow.</p></div>}
-            <div className="overflow-auto"><table className="w-full text-left text-sm"><thead><tr><th className="p-2">Port</th><th className="p-2">Direction / domain</th><th className="p-2">Type</th></tr></thead><tbody>{selectedBlock.ports.map((port, i) => <tr key={`${port.id}:${i}`} className="border-t border-[var(--border-default)]"><td className="p-2">{port.name ?? port.id}<code className="ml-2 text-xs text-[var(--text-muted)]">{port.id}</code></td><td className="p-2">{port.direction ?? port.domain ?? 'Conserving'}</td><td className="p-2">{port.type ?? port.domain ?? 'Physical'}{port.unit && ` / ${port.unit}`}{port.width && ` / width ${port.width}`}{port.dimensions && ` / shape ${port.dimensions.join(' × ')}`}{port.composite && ` / ${port.composite}`}{port.channelNames?.length ? ` / channels ${port.channelNames.join(', ')}` : ''}{port.quantity && ` / ${port.quantity}`}</td></tr>)}</tbody></table></div>
-            {!selectedBlock.ports.length && <p className="text-sm">This block has no connection ports.</p>}
+            <div className="overflow-auto"><table className="w-full text-left text-sm"><thead><tr><th className="p-2">Port</th><th className="p-2">Direction / domain</th><th className="p-2">Type</th></tr></thead><tbody>{selectedBlock.ports.map((port, i) => <tr key={`${port.id}:${i}`} className="border-t border-[var(--border-default)]"><td className="p-2">{port.name ?? port.id}<code className="ml-2 text-xs text-[var(--text-muted)]">{port.id}</code></td><td className="p-2">{port.direction} · {port.position ?? 'contextual'}{(selectedBlock.typeId === 'Inport' && port.id === 'in') || (selectedBlock.typeId === 'Outport' && port.id === 'out') ? ' (virtual, not drawn)' : ''}</td><td className="p-2">{port.type ?? port.domain ?? 'Physical'}{port.unit && ` / ${port.unit}`}{port.width && ` / width ${port.width}`}{port.dimensions && ` / shape ${port.dimensions.join(' × ')}`}{port.composite && ` / ${port.composite}`}{port.channelNames?.length ? ` / channels ${port.channelNames.join(', ')}` : ''}{port.quantity && ` / ${port.quantity}`}</td></tr>)}</tbody></table></div>
+            {!selectedBlock.ports.length && <p className="text-sm">{selectedBlock.availability === 'palette-only' ? 'No factory port definitions are available.' : 'This block has no connection ports.'}</p>}
+            <h2 id="help-section-block-connection" className="mb-2 mt-6 scroll-mt-6 text-xl font-semibold">Connection</h2><HelpText text={selectedBlock.connection} />
             <h2 id="help-section-block-parameters" className="mb-2 mt-6 scroll-mt-6 text-xl font-semibold">Parameters</h2>
             <div className="overflow-auto"><table className="w-full text-left text-sm"><thead><tr><th className="p-2">Parameter</th><th className="p-2">Default / unit</th><th className="p-2">Meaning and valid values</th></tr></thead><tbody>{selectedBlock.parameters.map(parameter => <tr key={parameter.name} className="border-t border-[var(--border-default)]"><td className="p-2">{parameter.label ?? parameter.name}</td><td className="p-2"><code>{typeof parameter.defaultValue === 'object' ? JSON.stringify(parameter.defaultValue) : String(parameter.defaultValue)}</code> {parameter.unit}</td><td className="p-2">{parameter.description}{parameter.bounds && <div className="mt-1 text-xs">{parameter.bounds.min !== undefined && `Minimum ${parameter.bounds.exclusiveMin ? '>' : '≥'} ${parameter.bounds.min}. `}{parameter.bounds.max !== undefined && `Maximum ${parameter.bounds.exclusiveMax ? '<' : '≤'} ${parameter.bounds.max}. `}{parameter.bounds.nonZero && 'Must be nonzero.'}</div>}</td></tr>)}</tbody></table></div>
-            {!selectedBlock.parameters.length && <p className="text-sm">No configurable parameters.</p>}
+            {!selectedBlock.parameters.length && <p className="text-sm">{selectedBlock.availability === 'palette-only' ? 'No factory parameter definitions are available.' : 'No configurable parameters.'}</p>}
+            <h2 id="help-section-block-deployment" className="mb-2 mt-6 scroll-mt-6 text-xl font-semibold">Deployment</h2><HelpText text={selectedBlock.embedded?.description ?? 'V-Lab is a physical-network simulation reference. This component is not an X-Bridges embedded State Machine block; do not infer target-code support from its presence in this library.'} />
             <h2 id="help-section-block-example" className="mb-2 mt-6 scroll-mt-6 text-xl font-semibold">Example</h2><HelpText text={selectedBlock.example} />
             {selectedBlock.diagram && <HelpDiagram diagram={selectedBlock.diagram} />}
             <button data-help-feature="live:components/help/HelpModal:f18426c65bd3" className={`${controlClass} mt-8`} onClick={() => openTopic(selectedBlock.source === 'V-Lab' ? 'vlab-fundamentals' : 'xbridges-ref')}>Read Full {selectedBlock.source} Theory Guide</button>
@@ -155,7 +172,7 @@ export function HelpModal({ isOpen, onClose, initialTopic, initialSection, topic
             {topicId === 'software-architecture' && <button data-help-feature="live:components/help/HelpModal:6aaab003a445" className={`${controlClass} my-6`} onClick={() => setArchitecture(true)}>Open Architecture Explorer</button>}
             {topic.image && <img src={topic.image} alt={topic.title} className="my-6 max-h-96 w-full rounded-xl object-contain" />}
             <nav aria-label="On this page" className="my-6 rounded-xl border border-[var(--border-default)] bg-[var(--surface-panel)] p-4"><h2 className="mb-2 font-bold">On this page</h2><div className="flex flex-wrap gap-2">{topic.sections?.map((section, index) => <button data-help-feature="live:components/help/HelpModal:324900354f85" key={index} className={controlClass} onClick={() => scrollToSection(helpSectionId(section, index))}>{section.title}</button>)}</div></nav>
-            {topic.sections?.map((section, index) => <section key={helpSectionId(section, index)} id={`help-section-${helpSectionId(section, index)}`} className="scroll-mt-6 border-t border-[var(--border-default)] py-6"><h2 className="mb-4 text-xl font-bold">{section.title}</h2><HelpText text={section.body} /><ReferenceTable table={section.table} />{section.list && <ul className="my-4 list-disc space-y-2 pl-6 text-sm leading-7 text-[var(--text-secondary)]">{section.list.map((item, i) => <li key={i}><InlineHelpText text={item} /></li>)}</ul>}{section.code && <pre className="my-4 overflow-x-auto rounded-xl bg-[var(--surface-panel)] p-4 font-mono text-xs whitespace-pre">{section.code}</pre>}{section.diagram && <HelpDiagram diagram={section.diagram} />}</section>)}
+            {topic.sections?.map((section, index) => <section key={helpSectionId(section, index)} id={`help-section-${helpSectionId(section, index)}`} className="scroll-mt-6 border-t border-[var(--border-default)] py-6"><h2 className="mb-4 text-xl font-bold">{section.title}</h2><HelpText text={section.body} /><ReferenceTable table={section.table} />{section.notation && <HelpNotation items={section.notation} />}{section.list && <ul className="my-4 list-disc space-y-2 pl-6 text-sm leading-7 text-[var(--text-secondary)]">{section.list.map((item, i) => <li key={i}><InlineHelpText text={item} /></li>)}</ul>}{section.code && <pre className="my-4 overflow-x-auto rounded-xl bg-[var(--surface-panel)] p-4 font-mono text-xs whitespace-pre">{section.code}</pre>}{section.diagram && <HelpDiagram diagram={section.diagram} />}</section>)}
             {!!topic.related?.length && <nav aria-label="Related topics" className="mt-8 border-t border-[var(--border-default)] pt-5"><h2 className="mb-3 text-lg font-bold">Related topics</h2><div className="flex flex-wrap gap-2">{topic.related.filter(id => topics[id]).map(id => <button data-help-feature="live:components/help/HelpModal:f627721dbe61" key={id} className={controlClass} onClick={() => openTopic(id)}>{topics[id].title}</button>)}</div></nav>}
             <nav aria-label="Previous and next topics" className="mt-8 flex justify-between gap-4">{adjacent.previous ? <button data-help-feature="live:components/help/HelpModal:c46385b163b0" className={controlClass} onClick={() => openTopic(adjacent.previous!)}><ChevronLeft size={14} className="mr-1 inline" />Previous: {topics[adjacent.previous].title}</button> : <span />}{adjacent.next && <button data-help-feature="live:components/help/HelpModal:04ac6564bcbc" className={controlClass} onClick={() => openTopic(adjacent.next!)}>Next: {topics[adjacent.next].title}<ChevronRight size={14} className="ml-1 inline" /></button>}</nav>
           </article>}

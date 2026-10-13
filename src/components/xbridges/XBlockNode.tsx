@@ -2064,7 +2064,8 @@ export const XBlockNode = React.memo(({ data, selected, id }: any) => {
 
   if (data.type === 'Note') {
     return (
-      <div 
+      <div
+        data-help-topic={`xbridges:${data.type}`}
         ref={nodeRef}
         className={`relative rounded-md transition-all duration-500 border-2 p-3 xbridges-node ui-card ${selected ? 'ring-4 ring-orange-500/20 scale-105 z-50' : 'hover:border-[var(--border-strong)]'}`}
         onContextMenu={(e) => e.preventDefault()}

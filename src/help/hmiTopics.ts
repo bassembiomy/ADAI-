@@ -47,17 +47,65 @@ const widgetDetails: Record<HmiComponentType, [string, string]> = {
   tabs: ['Configure tabs as stable id/label pairs and associate children using parentId and tabId.', 'Create Operation and Diagnostics pages with stable tab IDs.'],
 };
 
+// Widget shapes follow the actual HmiWidget switch; these are controls/displays, not signal-flow block ports.
+const widgetAppearance: Record<HmiComponentType, string> = {
+  toggle: 'Labeled checkbox switch with On/Off state.',
+  button: 'Labeled momentary push button (press and release).',
+  slider: 'Horizontal range slider with numerical output.',
+  input: 'Labeled numeric/Boolean entry field.',
+  rotary: 'Circular dial and +/- controls; multi-variable one-hot configuration uses a button row instead.',
+  'hybrid-rotary': 'Circular dial with configured discrete positions and +/- controls.',
+  encoder: 'Circular dial, +/- controls and a separate Press button.',
+  'mode-selector': 'Row of labeled mode buttons.',
+  'mode-icon': 'Single selectable icon button.',
+  checkbox: 'Labeled checkbox switch.',
+  'combo-box': 'Dropdown of labeled options.',
+  'radio-group': 'Labeled fieldset of mutually exclusive radio buttons.',
+  'rocker-switch': 'Two-position labeled rocker-style switch.',
+  'slide-switch': 'Two-position labeled slider-style switch.',
+  knob: 'Circular dial with +/- controls and horizontal range slider.',
+  'vertical-slider': 'Vertical range slider with numerical output.',
+  'latching-button': 'Labeled two-position switch that retains the active value.',
+  'pulse-button': 'Single labeled pulse button.',
+  'simulation-command': 'Button labeled with the selected Start/Pause/Resume/Step/Reset command.',
+  lamp: 'Colored lamp output with a status glyph.',
+  led: 'Compact colored LED/status glyph.',
+  lcd: 'Numeric output field with precision and optional unit.',
+  gauge: 'Circular 270-degree arc with needle and numerical output.',
+  buzzer: 'Text/audio status output: Sounding or Silent; no drawn speaker meter.',
+  oled: 'Multiline status panel with title, mode, value, progress and indicators.',
+  'half-gauge': 'Semicircular arc with needle and numerical output.',
+  'quarter-gauge': 'Quarter-circle arc with needle and numerical output.',
+  'linear-gauge': 'Horizontal filled level meter with numerical output.',
+  'vertical-gauge': 'Vertical filled level meter with numerical output.',
+  'dashboard-scope': 'Time-series SVG plot from committed samples.',
+  'xy-plot': 'XY SVG plot pairing two variables from each committed sample.',
+  'multi-state-image': 'Image with a caption for the committed state; caption-only without an image URL.',
+  'active-state-indicator': 'Active/Inactive dot and selected state name.',
+  'alarm-list': 'List of current committed alarms or No active alarms.',
+  'progress-bar': 'Horizontal filled progress meter with numerical output.',
+  thermometer: 'Vertical filled level meter with temperature output.',
+  'tank-level': 'Vertical filled tank-level meter with numerical output.',
+  'seven-segment': 'Numeric SVG digits drawn with seven light segments.',
+  label: 'Plain explanatory text.',
+  image: 'Configured image or a text prompt to set an image URL.',
+  panel: 'Named container with a visible header for child widgets.',
+  tabs: 'Tabbed container; tab buttons switch the visible child page.',
+};
+
 const binding = 'Choose an existing chart variable for a data binding. Inputs require writable permission and are disabled when unbound, invalid or externally owned by hardware/Factory I/O. Boolean input accepts true, false, 1 and 0; numerical input rejects empty and non-finite values and follows the variable type and overflow policy. Displays never write variables. Simulation commands and layout widgets need no data binding.';
 const properties = 'Name and x/y/width/height control placement. Numeric controls use minimum, maximum and positive step; precision controls displayed decimals (0–20). Unit is presentation text and does not convert values. Writable applies to input controls; display and layout components stay read-only. Labeled options store finite numeric or Boolean values. Parent and tab IDs describe layout membership. Configure only fields relevant to this widget.';
 const semantics = 'The semantic interpreter decides state transitions, actions and timers. HMI commands are applied at tick boundaries after external reads. While paused, accepted input stays staged until Step or Resume. Displays, active-state indicators and traces use committed frames; editing a binding does not change the active state configuration. Reset or model replacement clears staged commands and history.';
 
 export const HMI_HELP_TOPICS: Record<string, HelpTopic> = Object.fromEntries(HMI_CATALOG.map(entry => {
   const [details, example] = widgetDetails[entry.type];
+  const appearance = `Visible shape: ${widgetAppearance[entry.type]} Default footprint: ${entry.width} × ${entry.height} CSS pixels; position and size can be edited. This widget has no block-style signal or conserving terminals. ${entry.role === 'input' ? 'Bind a writable chart variable; changes are staged for a semantic tick.' : entry.role === 'display' ? 'Read committed chart variables only; never drive the chart.' : entry.role === 'command' ? 'Calls the chart lifecycle command rather than binding a variable.' : 'Use parent and tab IDs to organize other widgets, not to connect signals.'}`;
   return [`hmi-component-${entry.type}`, {
     title: `HMI: ${entry.label}`, category: 'HMI', description: entry.description,
-    content: [entry.description, details, binding, properties, example, semantics].join('\n\n'),
+    content: [entry.description, appearance, details, binding, properties, example, semantics].join('\n\n'),
     sections: [
       { id: 'use', title: 'Behavior', body: `${entry.description} ${details}` },
+      { id: 'appearance', title: 'Visible shape and connections', body: appearance },
       { id: 'binding', title: 'Bindings and ownership', body: binding },
       { id: 'properties', title: 'Properties and limits', body: `${details} ${properties}` },
       { id: 'example', title: 'Example', body: example },

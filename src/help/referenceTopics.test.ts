@@ -3,6 +3,7 @@ import { HELP_DATA } from '../HelpData';
 import { getSupportedElementKinds } from '../engine/sysml/capabilities/catalog';
 import { getHelpInspectorSchemas } from './helpFeatures';
 import { ACTIVITY_NODE_KINDS } from '../engine/sysml/activity';
+import { DIAGRAM_REFERENCES } from './referenceTopics';
 
 describe('engineering reference completeness', () => {
   it('covers every activity palette node with individual instructions', () => {
@@ -28,7 +29,9 @@ describe('engineering reference completeness', () => {
       expect(topic.sections?.some(s => s.diagram), id).toBe(true);
       expect(topic.sections?.find(s => s.id === 'symbols')?.table?.rows.length, id).toBeGreaterThan(0);
     }
-    expect(HELP_DATA['diagram-reference'].related).toHaveLength(13);
+    expect(HELP_DATA['diagram-reference'].related?.filter(id => id in DIAGRAM_REFERENCES)).toHaveLength(13);
+    expect(HELP_DATA['diagram-reference'].related).toContain('modeling-philosophy');
+    expect(HELP_DATA['diagram-reference'].related).toContain('execution-boundaries');
   });
   it('documents relationship examples and preserves contextual endpoint instructions', () => {
     for (const [id, topic] of Object.entries(HELP_DATA).filter(([id]) => id.startsWith('sysml-relationship-'))) {

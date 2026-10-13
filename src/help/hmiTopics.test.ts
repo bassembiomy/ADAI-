@@ -8,7 +8,9 @@ describe('HMI Help coverage', () => {
     for (const entry of HMI_CATALOG) {
       const topic = HMI_HELP_TOPICS[`hmi-component-${entry.type}`];
       expect(topic.title).toBe(`HMI: ${entry.label}`);
-      expect(topic.sections?.map(section => section.id)).toEqual(['use', 'binding', 'properties', 'example', 'semantics']);
+      expect(topic.sections?.map(section => section.id)).toEqual(['use', 'appearance', 'binding', 'properties', 'example', 'semantics']);
+      expect(topic.sections?.find(section => section.id === 'appearance')?.body).toContain(`${entry.width} × ${entry.height}`);
+      expect(topic.sections?.find(section => section.id === 'appearance')?.body).toMatch(/visible|shape|render/i);
       expect(topic.content).toContain('committed');
       expect(topic.content).not.toMatch(/(?:forces?|directly activates?) (?:a |the )?state/i);
     }

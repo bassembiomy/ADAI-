@@ -17,6 +17,8 @@ export default defineConfig({
   server: {
     port: 3000,
     host: true,
+    // Arena's proxied live-preview host is a subdomain of e2b.app.
+    allowedHosts: ['.e2b.app'],
   },
   test: {
     exclude: ['**/node_modules/**', '**/dist/**', '**/.worktrees/**', '**/.agents/**', '**/tests/e2e/**', '**/.kilo/**'],
