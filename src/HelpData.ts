@@ -1,3 +1,6 @@
+import type { HelpTopic } from './help/types';
+import { CONCEPT_TOPICS } from './help';
+
 export const adia_architecture_diagram = new URL('./assets/adia_architecture_diagram_1778580699379.png', import.meta.url).href;
 export const adia_vlab_simulation = new URL('./assets/adia_vlab_simulation_1778580716413.png', import.meta.url).href;
 export const adia_doe_analysis = new URL('./assets/adia_doe_analysis_1778580732166.png', import.meta.url).href;
@@ -7,15 +10,7 @@ export const state_machine_simulation_diagram = new URL('./assets/state_machine_
 export const hil_architecture_diagram = new URL('./assets/hil_architecture_diagram.png', import.meta.url).href;
 export const entropy_opm_architecture_diagram = new URL('./assets/entropy_opm_architecture_diagram.svg', import.meta.url).href;
 
-export const HELP_DATA: Record<string, {
-  title: string;
-  category: string;
-  description: string;
-  content: string;
-  image?: string;
-  sections?: { title: string; body: string; code?: string; list?: string[] }[];
-  related?: string[];
-}> = {
+const CORE_HELP_TOPICS: Record<string, HelpTopic> = {
   "software-architecture": {
     title: "Software Architecture Explorer",
     category: "System",
@@ -64,7 +59,7 @@ export const HELP_DATA: Record<string, {
         ]
       }
     ],
-    related: ["architecture-guide", "entropy-opm", "state-machine-fundamentals", "vlab-fundamentals", "xbridges-ref", "hil-fundamentals"]
+    related: ["architecture-guide", "entropy-opm", "state-machine-fundamentals", "vlab-fundamentals", "xbridges-ref", "hil-fundamentals", "adia-philosophy", "module-interconnection", "reading-block-reference"]
   },
 
   "architecture-guide": {
@@ -131,7 +126,7 @@ export const HELP_DATA: Record<string, {
         body: "OPM provides a dual conceptual modeling approach using Object-Process Diagrams (OPD) and Object-Process Language (OPL) text:\n\n1. Click **+ Add Object** (rectangular node) to represent physical or informatical entities.\n2. Click **+ Add Process** (oval node) to represent transformations that create, consume, or change the state of objects.\n3. Connect objects and processes using procedural links (consumption, effect, instrument, agent) or structural links.\n4. Click **View OPL** to inspect automatically generated formal English specifications matching ISO 19450 standards."
       }
     ],
-    related: ["getting-started", "entropy-opm", "air-fryer-sysml", "state-machine-fundamentals"]
+    related: ["getting-started", "entropy-opm", "air-fryer-sysml", "state-machine-fundamentals", "adia-philosophy", "module-interconnection"]
   },
 
   "entropy-opm": {
@@ -239,7 +234,7 @@ Semantic Validator  (one initial state per object, reachability, write-conflict 
         ]
       }
     ],
-    related: ["architecture-guide", "getting-started", "code-generation"]
+    related: ["architecture-guide", "getting-started", "code-generation", "build-opm-model"]
   },
 
   "air-fryer-sysml": {
@@ -266,7 +261,7 @@ Semantic Validator  (one initial state per object, reachability, write-conflict 
         body: "1. Return to the BDD view.\n2. Draw a **Satisfy** relationship from `[REQ-AF-01]` to `ControlUnit` (PID controller satisfies temperature stability).\n3. Draw a **Satisfy** relationship from `[REQ-AF-02]` to `SafetyInterlock` state logic.\n4. Draw a **Satisfy** relationship from `[REQ-AF-03]` to `HeatingElement` (1800W rated element)."
       }
     ],
-    related: ["architecture-guide", "vlab-fundamentals", "learning-labs"]
+    related: ["architecture-guide", "vlab-fundamentals", "learning-labs", "build-sysml-diagrams"]
   },
 
   "state-machine-fundamentals": {
@@ -304,7 +299,7 @@ Semantic Validator  (one initial state per object, reachability, write-conflict 
         body: "Click the **Variables** button in the left sidebar to manage the state machine's context memory table:\n\n1. Click **+ Add Variable**.\n2. Specify the **Name**, **Data Type** (`bool`, `int`, `float`, `enum`), **Initial Value**, and **Scope**:\n   - **Input (Read-Only)**: Read from physical sensors, V-Lab plant signals, X-Bridges controllers, or HIL hardware pins.\n   - **Output (Write-Only)**: Drives physical actuators, PWM channels, indicator LEDs, or plant inputs.\n   - **Local (Read/Write)**: Internal state machine variables used for counters, elapsed timers, and intermediate calculations."
       }
     ],
-    related: ["state-machine-transitions", "state-machine-simulation", "state-machine-tutorial", "code-generation"]
+    related: ["state-machine-transitions", "state-machine-simulation", "state-machine-tutorial", "code-generation", "build-state-machine", "state-machine-semantics"]
   },
 
   "state-machine-transitions": {
@@ -344,7 +339,7 @@ Semantic Validator  (one initial state per object, reachability, write-conflict 
         body: "Internal transitions execute actions while keeping the state active, without triggering the state's `exit` or `entry` actions:\n1. Select a state on the canvas.\n2. In the sidebar, click **+ Add Internal Transition**.\n3. Format as `[Condition] / Action`. Example: `[tickCount > 10] / tickCount = 0; pingHeartbeat();`."
       }
     ],
-    related: ["state-machine-fundamentals", "state-machine-simulation", "code-generation"]
+    related: ["state-machine-fundamentals", "state-machine-simulation", "code-generation", "state-machine-semantics"]
   },
 
   "state-machine-simulation": {
@@ -378,7 +373,7 @@ Semantic Validator  (one initial state per object, reachability, write-conflict 
         body: "When exporting to embedded C99 firmware, the generated scheduler strictly replicates the simulation step loop:\n\n```c\n/* Deterministic Embedded Execution Contract */\nSM_ReadInputs(&instance);    /* 1. Sample ADC / GPIO / MCAL channels */\nSM_Step(&instance, 10U);     /* 2. Advance state logic by 10ms */\nSM_WriteOutputs(&instance);  /* 3. Commit PWM / DAC / Actuator commands */\n```"
       }
     ],
-    related: ["state-machine-fundamentals", "state-machine-transitions", "hil-fundamentals", "code-generation"]
+    related: ["state-machine-fundamentals", "state-machine-transitions", "hil-fundamentals", "code-generation", "state-machine-semantics", "simulation-execution-order", "embedded-execution-order"]
   },
 
   "state-machine-tutorial": {
@@ -404,7 +399,7 @@ Semantic Validator  (one initial state per object, reachability, write-conflict 
         body: "1. Click **Start** in the top simulation toolbar.\n2. In the Variables panel, click `btnPress` to toggle it to `true`.\n3. Observe the active state transition to `On` and `lightState` switch to `1`.\n4. Watch `onCounter` increment on each tick.\n5. After 5 seconds, watch the state return automatically to `Off`."
       }
     ],
-    related: ["state-machine-fundamentals", "state-machine-transitions", "state-machine-simulation"]
+    related: ["state-machine-fundamentals", "state-machine-transitions", "state-machine-simulation", "build-state-machine"]
   },
 
   "vlab-fundamentals": {
@@ -444,7 +439,7 @@ Semantic Validator  (one initial state per object, reachability, write-conflict 
         body: "1. Navigate to the **V-Lab** tab.\n2. In the left component library, expand the desired domain (e.g. `Electrical`).\n3. Click and drag a `DC Voltage Source`, `Resistor`, `Capacitor`, and `Electrical Ground` onto the canvas.\n4. Hover over port pins (orange/blue circles) and drag connection wires between matching terminals.\n5. Double-click any component to configure parameters (e.g., set `R = 1000 Ohms`, `C = 10uF`).\n6. Click the **Scope** button on a component to view real-time across/through variable plots.\n7. Click **Start Simulation** in the top bar to run the physical solver."
       }
     ],
-    related: ["vlab-physics", "vlab-fluid-dynamics", "vlab-blocks-reference", "motor-models"]
+    related: ["vlab-physics", "vlab-fluid-dynamics", "vlab-blocks-reference", "motor-models", "build-vlab-model", "reading-block-reference", "simulation-execution-order"]
   },
 
   "vlab-physics": {
@@ -553,7 +548,7 @@ Semantic Validator  (one initial state per object, reachability, write-conflict 
         ]
       }
     ],
-    related: ["vlab-fundamentals", "vlab-physics", "motor-models", "vfd-control"]
+    related: ["vlab-fundamentals", "vlab-physics", "motor-models", "vfd-control", "build-vlab-model", "reading-block-reference"]
   },
 
   "motor-models": {
@@ -628,7 +623,7 @@ Semantic Validator  (one initial state per object, reachability, write-conflict 
         body: "1. **LMS Adaptive Filter**: Least Mean Squares online weight update for active noise cancellation: $w(k+1) = w(k) + \\mu \\cdot e(k) \\cdot x(k)$.\n2. **Online Neural Neuron**: Single-neuron gradient descent using tanh activation.\n3. **Q-Learning RL Controller**: Discrete Q-table agent with $\\epsilon$-greedy exploration for adaptive control under model uncertainty."
       }
     ],
-    related: ["vfd-control", "code-generation", "motor-models", "hil-fundamentals"]
+    related: ["vfd-control", "code-generation", "motor-models", "hil-fundamentals", "build-xbridges-model", "reading-block-reference", "simulation-execution-order"]
   },
 
   "hil-fundamentals": {
@@ -658,7 +653,7 @@ Semantic Validator  (one initial state per object, reachability, write-conflict 
         ]
       }
     ],
-    related: ["hil-configuration", "hil-dashboard", "hil-code-generation", "state-machine-simulation"]
+    related: ["hil-configuration", "hil-dashboard", "hil-code-generation", "state-machine-simulation", "build-hil-setup", "embedded-execution-order"]
   },
 
   "hil-configuration": {
@@ -726,7 +721,7 @@ Semantic Validator  (one initial state per object, reachability, write-conflict 
         body: "1. **STM32**: Open the generated folder in STM32CubeIDE, click **Build Project**, then click **Run / Flash**.\n2. **Arduino**: Open `main_hil.ino` in Arduino IDE, select board & COM port, and click **Upload**.\n3. **ESP32**: Build and flash using ESP-IDF or PlatformIO (`pio run --target upload`).\n4. Once flashed, return to the ADIA HIL Dashboard and click **Connect** to start real-time testing."
       }
     ],
-    related: ["hil-fundamentals", "hil-configuration", "hil-dashboard", "code-generation"]
+    related: ["hil-fundamentals", "hil-configuration", "hil-dashboard", "code-generation", "embedded-execution-order"]
   },
 
   "doe-discovery": {
@@ -771,7 +766,7 @@ Semantic Validator  (one initial state per object, reachability, write-conflict 
         body: "Generated reports clearly categorize verification statuses:\n- **Structural PASS**: Topology and hierarchy validated.\n- **Semantic PASS**: IR expressions and state behaviors validated.\n- **Host Runtime PASS**: Verified in local PC test harness.\n- **Embedded Target PENDING**: Target MCU validation required on physical hardware."
       }
     ],
-    related: ["getting-started", "state-machine-simulation", "hil-code-generation"]
+    related: ["getting-started", "state-machine-simulation", "hil-code-generation", "embedded-execution-order", "simulation-execution-order"]
   },
 
   "industrial-automation": {
@@ -847,4 +842,10 @@ Semantic Validator  (one initial state per object, reachability, write-conflict 
     ],
     related: ["learning-labs", "xbridges-ref", "vlab-fundamentals"]
   }
+};
+
+// Concept / foundation topics from src/help (existing keys above take precedence).
+export const HELP_DATA: Record<string, HelpTopic> = {
+  ...CORE_HELP_TOPICS,
+  ...Object.fromEntries(Object.entries(CONCEPT_TOPICS).filter(([key]) => !(key in CORE_HELP_TOPICS))),
 };
