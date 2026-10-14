@@ -12,7 +12,7 @@ const { inspectElf } = require('./security/elfInspector.cjs');
 const asarGuard = require('./security/asarGuard.cjs');
 
 // High-performance GPU & high-refresh rate rendering switches
-app.commandLine.appendSwitch('disable-frame-rate-limit');
+// app.commandLine.appendSwitch('disable-frame-rate-limit'); // disabled: causes GPU pegging and UI starvation
 app.commandLine.appendSwitch('enable-gpu-rasterization');
 app.commandLine.appendSwitch('enable-zero-copy');
 
