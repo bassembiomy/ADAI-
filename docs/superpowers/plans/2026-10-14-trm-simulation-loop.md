@@ -186,8 +186,8 @@ interface SimScenario { id: string; verificationCaseId: string; duration: number
 | 14 | RTM latest-evidence and model currency (7.2): `rtm.ts`, `TraceabilityMatrix.tsx`, App wiring | 12 |
 | 15 | Condition language (7.3): `simExpression.ts` | 12 |
 | 16 | Engine sessions (7.4) + runners on sessions | 13 |
-| 17 | Scenario model and validation (7.5): `simScenario.ts`, `model.ts` field | 15, 16 |
-| 18a | Temporal evaluation (7.6): `simTemporal.ts` | 15 |
+| 18a | Temporal evaluation (7.6): `simTemporal.ts`; creates the 7.5 type declarations in `simScenario.ts` | 15, 16 |
+| 17 | Scenario model and validation (7.5): functions in `simScenario.ts`, `model.ts` field | 15, 16, 18a |
 | 18b | Coupled runner (7.7): `simScenarioRunner.ts` | 17, 18a |
 | 19 | Scenario evidence and controller (7.8) | 14, 18b |
 | 20 | UI (7.9) | 19 |
@@ -208,4 +208,4 @@ Couplings: `heaterOn -> heaterGain.u` (same step), `heaterGain.y -> power.value`
 | REQ-T5 | The heater turns on (the user's `x == 1` case) | `heating == 1` | eventually |
 
 Expected values come from an independent reference model written in the test (plain arithmetic of the documented semantics: one SM transition per tick, GAIN, backward-Euler LPF `y_k = a*u + (1 - a)*y_(k-1)`, a = dt/(T + dt)). The run must match it at every sample (1e-9). First `dT >= 60` at t = 4.59 s.
-Negative path: upper threshold 75 -> REQ-T2 fails at the reference model's first sample above 70, REQ-T3 inconclusive (no evidence); the RTM shows failed. Restore -> re-run -> verified (latest evidence wins). Model edit -> stale in the panel and the RTM. Save/load keeps the scenario and evidence. Two runs are identical (determinism).
+Negative path: upper threshold 75 -> REQ-T2 fails at the reference model's first sample above 70 after 15 s; REQ-T3 fails at its first trigger + 0.2 s (the heater stays on until 75); the RTM shows failed. Restore -> re-run -> verified (latest evidence wins). Model edit -> stale in the panel and the RTM. Save/load keeps the scenario and evidence. Two runs are identical (determinism).
