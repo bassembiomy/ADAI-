@@ -11,8 +11,7 @@ const { evaluateFlashRequest } = require('./security/hilFlashPolicy.cjs');
 const { inspectElf } = require('./security/elfInspector.cjs');
 const asarGuard = require('./security/asarGuard.cjs');
 
-// High-performance GPU & high-refresh rate rendering switches
-// app.commandLine.appendSwitch('disable-frame-rate-limit'); // disabled: causes GPU pegging and UI starvation
+// GPU rasterization and zero-copy texture upload for smoother rendering
 app.commandLine.appendSwitch('enable-gpu-rasterization');
 app.commandLine.appendSwitch('enable-zero-copy');
 
@@ -26,6 +25,7 @@ const {
   configureToolchainPaths,
   isToolchainLocallyInstalled,
   resolveToolExecutable,
+  resolveToolExecutableAsync,
   resolveInstalledToolchain,
 } = require('./security/toolchainManager.cjs');
 
@@ -57,6 +57,10 @@ function isCommandInPath(cmd) {
   return resolveToolExecutable(cmd, getToolchainsDir()) !== null;
 }
 
+async function isCommandInPathAsync(cmd) {
+  return (await resolveToolExecutableAsync(cmd, getToolchainsDir())) !== null;
+}
+
 function getToolchainKeyForTarget(target) {
   if (target === 'Generic') return 'Generic';
   if (target === 'Arduino_Uno' || target === 'Arduino_Mega') return 'Arduino';
@@ -75,12 +79,12 @@ function isToolchainAvailable(target) {
   return false;
 }
 
-function verifyOfflineToolchains() {
+async function verifyOfflineToolchains() {
   configureToolchainPaths(getToolchainsDir());
 
   for (const key of Object.keys(TOOLCHAINS)) {
     const tc = TOOLCHAINS[key];
-    const inPath = isCommandInPath(tc.cmd);
+    const inPath = await isCommandInPathAsync(tc.cmd);
     const inLocal = isToolchainLocallyInstalled(key, getToolchainsDir());
     if (!inPath && !inLocal) {
       console.error(
@@ -286,7 +290,7 @@ if (hasSingleInstanceLock) {
     }
 
     // ASAR integrity check must run before creating any window
-    const integrityResult = asarGuard.verifyAsarIntegrity();
+    const integrityResult = await asarGuard.verifyAsarIntegrity();
     if (!integrityResult.ok) {
       // Show error dialog and refuse to start if ASAR has been tampered with
       const { dialog: electronDialog } = require('electron');
@@ -301,8 +305,17 @@ if (hasSingleInstanceLock) {
       return;
     }
 
-    createWindow();
-    verifyOfflineToolchains();
+    const mainWin = createWindow();
+    const runToolchainCheck = () => {
+      verifyOfflineToolchains().catch(err => {
+        console.error('[STARTUP] Toolchain verification failed:', err);
+      });
+    };
+    if (mainWin && mainWin.webContents && !mainWin.isDestroyed()) {
+      mainWin.webContents.once('did-finish-load', runToolchainCheck);
+    } else {
+      setTimeout(runToolchainCheck, 0);
+    }
   }).catch(err => {
     console.error('App startup failed:', err);
   });
@@ -480,7 +493,8 @@ ipcMain.handle('sync-factory-io', async (event, { actuators }) => {
 // =============================================================================
 // HIL HARDWARE-IN-THE-LOOP IPC HANDLERS
 // =============================================================================
-const { execFileSync, spawn } = require('child_process');
+const { execFile, spawn } = require('child_process');
+const execFileAsync = require('util').promisify(execFile);
 let serialPort = null;
 let virtualInterval = null;
 let activePsProcess = null;
@@ -488,10 +502,11 @@ let activePsProcess = null;
 async function getRealPorts() {
   if (process.platform === 'win32') {
     try {
-      const stdout = execFileSync('powershell.exe', ['-NoProfile', '-Command', '[System.IO.Ports.SerialPort]::GetPortNames()'], {
+      const { stdout } = await execFileAsync('powershell.exe', ['-NoProfile', '-Command', '[System.IO.Ports.SerialPort]::GetPortNames()'], {
         encoding: 'utf8',
-        timeout: 5000
-      }).toString();
+        timeout: 5000,
+        windowsHide: true
+      });
       const ports = stdout.split(/[\r\n]+/).map(p => p.trim()).filter(Boolean);
       return Array.from(new Set(ports));
     } catch (e) {
@@ -500,8 +515,7 @@ async function getRealPorts() {
     }
   } else if (process.platform === 'darwin' || process.platform === 'linux') {
     try {
-      const fs = require('fs');
-      const files = fs.readdirSync('/dev');
+      const files = await fs.promises.readdir('/dev');
       return files
         .filter(f => f.startsWith('tty.usb') || f.startsWith('ttyUSB') || f.startsWith('ttyACM') || f.startsWith('cu.usb'))
         .map(f => '/dev/' + f);
