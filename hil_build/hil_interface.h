@@ -10,9 +10,16 @@
 
 #include "sm_config.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 void HIL_Sync_Inputs(ADIA_Instance_t* instance);
+void HIL_ApplyOverrides(ADIA_Instance_t* instance);
 void HIL_Sync_Outputs(ADIA_Instance_t* instance);
 void HIL_ProcessMessage(const char* msg);
 void HIL_SendTelemetry(ADIA_Instance_t* instance);
 
+#ifdef __cplusplus
+}
+#endif
 #endif /* HIL_INTERFACE_H */

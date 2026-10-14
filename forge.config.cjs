@@ -9,6 +9,21 @@ if (!fs.existsSync(localTmp)) {
 process.env.TEMP = localTmp;
 process.env.TMP = localTmp;
 
+// Redirect SquirrelTemp in LocalAppData to project tmp directory via NTFS junction
+// to prevent disk-space exhaustion on C: when unpacking/repacking multi-gigabyte toolchain payloads
+const localAppData = process.env.LOCALAPPDATA || path.join(process.env.USERPROFILE || 'C:\\Users\\EL-Dawlia', 'AppData', 'Local');
+const squirrelTempDir = path.join(localAppData, 'SquirrelTemp');
+const redirectedSquirrelTemp = path.join(localTmp, 'SquirrelTemp');
+if (!fs.existsSync(redirectedSquirrelTemp)) {
+  fs.mkdirSync(redirectedSquirrelTemp, { recursive: true });
+}
+if (!fs.existsSync(squirrelTempDir)) {
+  try {
+    const { execSync } = require('child_process');
+    execSync(`cmd /c mklink /J "${squirrelTempDir}" "${redirectedSquirrelTemp}"`, { stdio: 'ignore' });
+  } catch {}
+}
+
 module.exports = {
   packagerConfig: {
     executableName: 'ADIA',
@@ -64,6 +79,18 @@ module.exports = {
   },
   rebuildConfig: {},
   hooks: {
+    prePackage: async () => {
+      const toolchainsDir = path.resolve(__dirname, 'toolchains');
+      if (fs.existsSync(toolchainsDir)) {
+        const strayZips = fs.readdirSync(toolchainsDir).filter(f => f.endsWith('.zip') || f.endsWith('.tar.gz'));
+        for (const f of strayZips) {
+          try {
+            fs.unlinkSync(path.join(toolchainsDir, f));
+            console.log('[Forge PrePackage] Purged stray archive from toolchains: ' + f);
+          } catch {}
+        }
+      }
+    },
     postPackage: async (forgeConfig, options) => {
       if (!options || !Array.isArray(options.outputPaths)) return;
       const rceditPath = path.resolve(__dirname, 'node_modules/electron-winstaller/vendor/rcedit.exe');
@@ -102,6 +129,7 @@ module.exports = {
         setupExe: 'ADIA Setup.exe',
         exe: 'ADIA.exe',
         setupIcon: path.resolve(__dirname, 'icon.ico'),
+        noDelta: true,
       },
     },
     {

@@ -7,17 +7,17 @@
 | States | 2 |
 | Transitions | 1 |
 | Junctions | 0 |
-| Variables | 2 |
+| Variables | 1 |
 | Layers | 1 |
 | OR layers | 1 |
 | AND layers | 0 |
 | Active configuration slots | 1 |
-| Fixed step | 500 ms |
+| Fixed step | 50 ms |
 
 ## Shared behavioral analysis
 
 - State reachability: 100.0%
-- Reachable state IDs: c00e5706-9069-434b-abe0-239fb4101411, c10ea879-22fb-4440-9bc7-5c73603d14f8
+- Reachable state IDs: fc452778-f368-4f41-81bd-b1a3d3e2fac9, 71cb93e8-e357-4659-b62f-a3145823df82
 - Unreachable state IDs: None
 - Terminal state IDs: None
 - Enumerated paths: 1
@@ -30,10 +30,10 @@
 
 | Metric | Value |
 |---|---:|
-| Files measured | 26 |
-| Total lines | 1778 |
-| Functional lines | 1471 |
-| Comment/blank density | 17.3% |
+| Files measured | 21 |
+| Total lines | 1400 |
+| Functional lines | 1124 |
+| Comment/blank density | 19.7% |
 
 ## X-Bridges static code-generation metrics
 

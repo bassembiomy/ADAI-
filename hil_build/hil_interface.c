@@ -15,8 +15,15 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <ctype.h>
+#include <math.h>
 
 
+
+void HIL_ApplyOverrides(ADIA_Instance_t* instance) {
+    if (instance == NULL) { return; }
+    (void)instance;
+}
 
 void HIL_Sync_Inputs(ADIA_Instance_t* instance) {
     (void)instance;
@@ -36,6 +43,7 @@ void HIL_Sync_Outputs(ADIA_Instance_t* instance) {
 
 void HIL_ProcessMessage(const char* msg) {
     char temp[256];
+    if (msg == NULL) { return; }
     strncpy(temp, msg, sizeof(temp));
     temp[sizeof(temp)-1] = '\0';
     
@@ -51,8 +59,18 @@ void HIL_ProcessMessage(const char* msg) {
         }
         
         char name[64];
-        float val = 0.0f;
-        if (sscanf(token, "%63[^=]=%f", name, &val) == 2) {
+        char* separator = strchr(token, '=');
+        if (separator == NULL) { continue; }
+        size_t nameLength = (size_t)(separator - token);
+        if (nameLength == 0U || nameLength >= sizeof(name)) { continue; }
+        memcpy(name, token, nameLength);
+        name[nameLength] = '\0';
+        char* end = NULL;
+        float val = (float)strtod(separator + 1, &end);
+        if (end == separator + 1) { continue; }
+        while (*end != '\0' && isspace((unsigned char)*end)) { ++end; }
+        (void)val;
+        if (*end == '\0' && isfinite(val)) {
             /* No input channels */
         }
     }

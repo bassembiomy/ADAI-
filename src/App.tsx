@@ -5249,10 +5249,8 @@ const ADIA = () => {
     const result = executeSysmlCommand(currentState, cmd, activeSysmlDiagramId, externalEndpointContext);
     if (result.committed) {
       sysmlGatewayStateRef.current = { ...currentState, ...result, context: externalEndpointContext };
-      startTransition(() => {
-        setCanonicalSysmlRepository(result.repository);
-        setSysmlStore(result.store ? { ...result.store } : fromRepository(result.repository, result.coordinates, result.diagramPresentations));
-      });
+      setCanonicalSysmlRepository(result.repository);
+      setSysmlStore(result.store ? { ...result.store } : fromRepository(result.repository, result.coordinates, result.diagramPresentations));
     }
     return result;
   }, [canonicalSysmlRepository, sysmlStore, externalEndpointContext, activeSysmlDiagramId]);
