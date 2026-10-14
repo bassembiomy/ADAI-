@@ -66,6 +66,8 @@ export interface VirtualizedTraceabilityGridProps {
   rowHeight?: number;
   scrollTop?: number;
   onNavigate?: (elementId: string) => void;
+  /** Optional row action: open simulation verification for a requirement. */
+  onSimulate?: (requirementId: string) => void;
   className?: string;
 }
 
@@ -76,6 +78,7 @@ export function VirtualizedTraceabilityGrid({
   rowHeight = 40,
   scrollTop: controlledScrollTop,
   onNavigate,
+  onSimulate,
   className = '',
 }: VirtualizedTraceabilityGridProps) {
   const [internalScrollTop, setInternalScrollTop] = useState(0);
@@ -234,6 +237,18 @@ export function VirtualizedTraceabilityGrid({
                     <div className="flex items-center gap-1.5 truncate">
                       <span className="font-mono text-orange-400 font-semibold">{row.requirement.requirementId}</span>
                       <span className="font-medium text-neutral-200 truncate">{sysmlObjectLabel(row.requirement, 'Requirement')}</span>
+                      {onSimulate && (
+                        <button
+                          type="button"
+                          aria-label={`Simulate ${row.requirement.requirementId}`}
+                          onClick={e => { e.stopPropagation(); onSimulate(row.requirement.id); }}
+                          onDoubleClick={e => e.stopPropagation()}
+                          onKeyDown={e => e.stopPropagation()}
+                          className="shrink-0 rounded border border-orange-700 px-1.5 text-[10px] text-orange-300 hover:bg-orange-950"
+                        >
+                          Simulate
+                        </button>
+                      )}
                     </div>
                     {row.requirement.text && (
                       <span className="text-[10px] text-neutral-500 truncate" title={row.requirement.text}>

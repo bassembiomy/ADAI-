@@ -258,8 +258,10 @@ export interface VerificationCase extends NamedElement {
   kind: 'verificationCase'; method: string; verifiesRequirementIds: string[];
   /** The Activity or Interaction that is this test case's procedure (additive). */
   behaviorId?: string;
+  /** Executable simulation criterion for method 'simulation' (additive). */
+  simulationCriterion?: import('../trmSim/simCriterion').SimCriterion;
 }
-export interface VerificationEvidence { id: string; verificationCaseId: string; requirementId: string; revision: number; result: 'passed' | 'failed'; executedAt: string; artifactUri?: string; semanticFingerprint?: string; status?: 'current' | 'stale'; }
+export interface VerificationEvidence { id: string; verificationCaseId: string; requirementId: string; revision: number; result: 'passed' | 'failed'; executedAt: string; artifactUri?: string; semanticFingerprint?: string; status?: 'current' | 'stale'; simulation?: { criterionId: string; modelFingerprint: string; trace: import('../trmSim/simEvaluate').SimTraceSample[]; firstViolation?: import('../trmSim/simEvaluate').SimViolation }; }
 export interface ModelBaseline { id: string; name: string; revision: number; createdAt: string; protected: boolean; contentHash?: string; elementHashes?: Record<string, string>; }
 export interface TraceArtifact { id: string; name: string; kind: 'behavior' | 'simulation' | 'generatedArtifact' | 'source'; ownerId?: string; revision: number; uri?: string; }
 export interface ModelChangeRecord { id: string; revision: number; timestamp: string; command: string; elementIds: string[]; actor?: string; }

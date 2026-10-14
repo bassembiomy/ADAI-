@@ -2,7 +2,8 @@ import { loadCanonicalSysmlProject } from '../../../services/sysmlCommandGateway
 import { serializeSysmlProjectState } from '../persistence';
 import type { SysmlRepository } from '../model';
 import { stripCanonicalPayloadForHydration } from './projectIoPayload';
-import { projectStateEndpoints, projectStateEndpointSignature } from './projectIoPayload';
+import { projectStateEndpointSignature } from './projectIoPayload';
+import { projectExternalEndpoints, projectExternalEndpointSignature } from '../../trmSim/simEndpoints';
 import { appendCoordinateChunk, appendRepositoryChunk } from './projectIoPayload';
 import type { SysmlEntityCollection } from '../model';
 import { createStreamedNormalizedStore, type NormalizedSysmlStore } from '../normalizedStore';
@@ -85,8 +86,8 @@ export async function loadProjectInWorker(
     checkAborted(options?.signal);
 
     options?.onProgress?.('normalize');
-    const loaded = loadCanonicalSysmlProject(parsed, { externalEndpoints: projectStateEndpoints(parsed.states) });
-    const stateEndpointSignature = projectStateEndpointSignature(parsed.states);
+    const loaded = loadCanonicalSysmlProject(parsed, { externalEndpoints: projectExternalEndpoints(parsed) });
+    const stateEndpointSignature = projectExternalEndpointSignature(parsed);
 
     options?.onProgress?.('validate');
     checkAborted(options?.signal);
@@ -100,7 +101,7 @@ export async function loadProjectInWorker(
       diagnostics: loaded.diagnostics,
       upgradeReport: loaded.upgradeReport,
       interchangeReport: loaded.interchangeReport,
-      rawPayload: stripCanonicalPayloadForHydration(parsed, loaded.valid, stateEndpointSignature),
+      rawPayload: stripCanonicalPayloadForHydration(parsed, loaded.valid, projectStateEndpointSignature(parsed.states)),
     };
   }
 

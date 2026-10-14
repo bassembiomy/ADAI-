@@ -2918,6 +2918,7 @@ export const generateMISRACCode = (
     verificationEvidence?: VerificationEvidence;
     includeVerificationPackage?: boolean;
     legacyFlatLayout?: boolean;
+    requirementLinks?: ReadonlyMap<string, readonly string[]>;
   } = {},
 ): { files: { name: string; content: string }[]; errors: ErrorItem[]; warnings: string[] } => {
   if (
@@ -2955,7 +2956,7 @@ export const generateMISRACCode = (
       invalidInputPolicies: policies,
     } as typeof migrated.model.verification;
   }
-  const built = buildSemanticModel(migrated.model);
+  const built = buildSemanticModel(migrated.model, { requirementLinks: options.requirementLinks });
   const diagnostics = [...migrated.diagnostics, ...built.diagnostics];
   const errors = diagnostics
     .filter((item) => item.severity === 'error')

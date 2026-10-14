@@ -1,0 +1,190 @@
+{
+  "plan": "docs/superpowers/plans/2026-10-14-trm-simulation-loop.md",
+  "baseline": {
+    "date": "2026-10-14",
+    "commit": "0a4decd",
+    "command": "npx vitest run src/engine/sysml/rtm.test.ts src/engine/sysml/traceabilityIndex.test.ts src/engine/sysml/evidence.test.ts src/engine/sysml/requirementsEndToEnd.test.ts src/utils/stateMachine/smTestPlanBuilder.test.ts src/utils/stateMachine/xbBoundaryMappings.test.ts src/utils/stateMachine/smXBridgesAppIntegration.test.ts src/engine/doe/vlabIntegration.test.ts --reporter=dot",
+    "result": "8 files / 59 tests passed"
+  },
+  "wps": [
+    {
+      "id": "WP-00",
+      "title": "Set up loop and baseline",
+      "deps": [],
+      "status": "done"
+    },
+    {
+      "id": "WP-01",
+      "title": "Target reference",
+      "deps": [
+        "WP-00"
+      ],
+      "status": "done",
+      "result": "20/20 acceptance tests; tsc clean for trmSim"
+    },
+    {
+      "id": "WP-02",
+      "title": "State machine interface",
+      "deps": [
+        "WP-01"
+      ],
+      "status": "done",
+      "result": "7/7; planner test corrected: HEATER is internal (read by internalTransitions guards)"
+    },
+    {
+      "id": "WP-03",
+      "title": "X-Bridges interface",
+      "deps": [
+        "WP-01"
+      ],
+      "status": "done",
+      "result": "7/7 acceptance tests; tsc clean"
+    },
+    {
+      "id": "WP-04",
+      "title": "V-Lab interface",
+      "deps": [
+        "WP-01"
+      ],
+      "status": "done",
+      "result": "6/6 acceptance tests; tsc clean"
+    },
+    {
+      "id": "WP-05",
+      "title": "Assign requirements to any target",
+      "deps": [
+        "WP-01"
+      ],
+      "status": "done",
+      "result": "12/12 + 221 related tests; test:sysml only the 3 known base failures; review: shared external element list, report deps"
+    },
+    {
+      "id": "WP-06",
+      "title": "Real requirement ids in generated C",
+      "deps": [
+        "WP-05"
+      ],
+      "status": "done",
+      "result": "9/9; no new failures in stateMachine suites (6 pre-existing toolchain/e2e failures); review added C comment sanitizing"
+    },
+    {
+      "id": "WP-07",
+      "title": "Criterion and evaluator",
+      "deps": [
+        "WP-01"
+      ],
+      "status": "done",
+      "result": "13/13 acceptance tests; tsc clean"
+    },
+    {
+      "id": "WP-08a",
+      "title": "State machine runner",
+      "deps": [
+        "WP-02",
+        "WP-07"
+      ],
+      "status": "done",
+      "result": "10/10; review added stimulus timing and t=0 tests, fixed"
+    },
+    {
+      "id": "WP-08b",
+      "title": "X-Bridges runner",
+      "deps": [
+        "WP-03",
+        "WP-07"
+      ],
+      "status": "done",
+      "result": "11/11; review added unit check and UNKNOWN_BLOCK, fixed"
+    },
+    {
+      "id": "WP-08c",
+      "title": "V-Lab runner",
+      "deps": [
+        "WP-04",
+        "WP-07"
+      ],
+      "status": "done",
+      "result": "10/10; review added unit check, fixed"
+    },
+    {
+      "id": "WP-09",
+      "title": "Evidence and staleness",
+      "deps": [
+        "WP-08a",
+        "WP-08b",
+        "WP-08c"
+      ],
+      "status": "done",
+      "result": "13/13; sysml suite no regressions; review: params never stripped from fingerprint"
+    },
+    {
+      "id": "WP-10",
+      "title": "Assignment panel and Run button",
+      "deps": [
+        "WP-05",
+        "WP-09"
+      ],
+      "status": "done",
+      "result": "controller 11/11, panel 10/10; review: by-value criterion compare, no engine-side impact confirmation"
+    },
+    {
+      "id": "WP-10b",
+      "title": "Assign from model inspectors (state, X-Bridges, V-Lab)",
+      "deps": [
+        "WP-10"
+      ],
+      "status": "done",
+      "result": "RequirementAssignmentsPanel in the state inspector, X-Bridges (global canvas) and V-Lab properties; commits via handleSimVerificationRepositoryChange; 40 files / 395 tests green, tsc clean"
+    },
+    {
+      "id": "WP-11",
+      "title": "End to end",
+      "deps": [
+        "WP-10"
+      ],
+      "status": "done",
+      "result": "trmSimLoop.e2e 7/7 through the real SysML gateway: link, criterion, run, evidence, stale, save/load, C trace ids, unlink"
+    },
+    {
+      "id": "WP-12",
+      "title": "Close-out",
+      "deps": [
+        "WP-11"
+      ],
+      "status": "done",
+      "result": "trmSim+panel 152 tests green; test:sysml 1232 passed, only the 3 App.sysmlLabels failures that also fail on co-work"
+    }
+  ],
+  "findings": [
+    {
+      "wp": "WP-01",
+      "severity": "low",
+      "summary": "parseSimTarget accepts a literal $param in block position as a block id (non-canonical, never produced by formatSimTarget)"
+    },
+    {
+      "wp": "WP-03",
+      "severity": "low",
+      "summary": "label/port readers duplicated from simExternalElements.ts; consolidate when a later WP touches both"
+    },
+    {
+      "wp": "WP-04",
+      "severity": "low",
+      "summary": "a V-Lab port with neither domain nor direction is listed as conserving with no across/through"
+    },
+    {
+      "wp": "WP-08b",
+      "severity": "medium",
+      "summary": "coffee global X-Bridges model (AC_MOTOR_PID_CONTROL) diverges to ~1e58 headless with RK4 at dt 0.01 from t=0.2; not used as a fixture; inferred from a probe, not root-caused"
+    },
+    {
+      "wp": "WP-05",
+      "severity": "low",
+      "summary": "reportSnapshotAdapter builds its snapshot without external elements, so report diagnostics may still list UNRESOLVED_ENDPOINT for state and sim links (pre-existing for states); pick up in WP-10"
+    },
+    {
+      "wp": "WP-10",
+      "severity": "low",
+      "summary": "Simulate button only in the standard RTM table, not the virtualized grid; X-Bridges/V-Lab runs cover the global canvas only (workspace-file canvases not yet)"
+    }
+  ]
+}
