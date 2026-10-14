@@ -50,7 +50,9 @@ async function buildProtectedElectron() {
   });
 
   // Step 2: Apply runtime-efficient JavaScript obfuscation
-  // Disables control-flow flattening and slow RC4 string decoding to maintain full V8 JIT optimization
+  // Control-flow flattening stays disabled because it prevents V8 from optimizing hot paths
+  // and inflates bytecode roughly 8x; the string array uses plain base64 encoding only (no RC4),
+  // which has no measurable runtime cost.
   console.log('🌀 [2/5] Obfuscating main process JavaScript bundle...');
   const rawBundleCode = fs.readFileSync(bundlePath, 'utf8');
 
@@ -74,7 +76,7 @@ async function buildProtectedElectron() {
     stringArrayIndexShift: true,
     stringArrayRotate: true,
     stringArrayShuffle: true,
-    stringArrayThreshold: 0.5,
+    stringArrayThreshold: 0.8,
     transformObjectKeys: false,
     unicodeEscapeSequence: false
   });
@@ -133,7 +135,7 @@ try {
     identifierNamesGenerator: 'hexadecimal',
     stringArray: true,
     stringArrayEncoding: ['base64'],
-    stringArrayThreshold: 0.5,
+    stringArrayThreshold: 0.8,
   });
 
   fs.writeFileSync(path.join(DIST_ELECTRON_DIR, 'preload.cjs'), obfuscatedPreload.getObfuscatedCode(), 'utf8');

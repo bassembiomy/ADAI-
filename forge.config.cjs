@@ -10,18 +10,26 @@ process.env.TEMP = localTmp;
 process.env.TMP = localTmp;
 
 // Redirect SquirrelTemp in LocalAppData to project tmp directory via NTFS junction
-// to prevent disk-space exhaustion on C: when unpacking/repacking multi-gigabyte toolchain payloads
-const localAppData = process.env.LOCALAPPDATA || path.join(process.env.USERPROFILE || 'C:\\Users\\EL-Dawlia', 'AppData', 'Local');
-const squirrelTempDir = path.join(localAppData, 'SquirrelTemp');
-const redirectedSquirrelTemp = path.join(localTmp, 'SquirrelTemp');
-if (!fs.existsSync(redirectedSquirrelTemp)) {
-  fs.mkdirSync(redirectedSquirrelTemp, { recursive: true });
-}
-if (!fs.existsSync(squirrelTempDir)) {
-  try {
-    const { execSync } = require('child_process');
-    execSync(`cmd /c mklink /J "${squirrelTempDir}" "${redirectedSquirrelTemp}"`, { stdio: 'ignore' });
-  } catch {}
+// to prevent disk-space exhaustion on C: when unpacking/repacking multi-gigabyte toolchain payloads.
+// Opt-in only: the junction is machine-wide (lives outside this project) and dangles if the
+// project tmp directory is later deleted, so it only runs on Windows when explicitly requested.
+if (process.platform === 'win32' && process.env.ADIA_REDIRECT_SQUIRREL_TEMP === '1') {
+  if (!process.env.LOCALAPPDATA) {
+    console.warn('[Forge SquirrelTemp] LOCALAPPDATA is not set; skipping SquirrelTemp redirection.');
+  } else {
+    const squirrelTempDir = path.join(process.env.LOCALAPPDATA, 'SquirrelTemp');
+    const redirectedSquirrelTemp = path.join(localTmp, 'SquirrelTemp');
+    if (!fs.existsSync(redirectedSquirrelTemp)) {
+      fs.mkdirSync(redirectedSquirrelTemp, { recursive: true });
+    }
+    if (!fs.existsSync(squirrelTempDir)) {
+      try {
+        execFileSync('cmd', ['/c', 'mklink', '/J', squirrelTempDir, redirectedSquirrelTemp], { stdio: 'ignore', windowsHide: true });
+      } catch (e) {
+        console.warn('[Forge SquirrelTemp] Failed to create junction:', e.message);
+      }
+    }
+  }
 }
 
 module.exports = {
