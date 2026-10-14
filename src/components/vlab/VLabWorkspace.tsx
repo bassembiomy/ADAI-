@@ -978,7 +978,8 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
   onBack,
   onSaveAll,
   onNavigateToXbridges,
-  initialSelectedNodeId
+  initialSelectedNodeId,
+  renderRequirementAssignments
 }) => {
   const initialGraphRef = useRef(normalizeLegacyVLabGraph(initialNodes, initialEdges));
   const [nodes, setNodes, onLocalNodesChange] = useNodesState<AppVLabNode>(initialGraphRef.current.nodes);
@@ -3454,6 +3455,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                         <span className="text-[9px] text-gray-500 font-bold uppercase">Block ID</span>
                         <span className="text-[10px] font-mono text-purple-400/80">{selectedNode.id}</span>
                       </div>
+                      {renderRequirementAssignments?.(selectedNode.id)}
                     </div>
 
                     {selectedNode.data.type === 'solver_config' ? (

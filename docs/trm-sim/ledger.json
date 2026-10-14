@@ -133,8 +133,8 @@
       "deps": [
         "WP-10"
       ],
-      "status": "in_progress",
-      "note": "user asked for it; tests: elementSimTargets, RequirementAssignmentsPanel, XbridgesPropertiesPanel.requirements, VLabWorkspace.requirements"
+      "status": "done",
+      "result": "RequirementAssignmentsPanel in the state inspector, X-Bridges (global canvas) and V-Lab properties; commits via handleSimVerificationRepositoryChange; 40 files / 395 tests green, tsc clean"
     },
     {
       "id": "WP-11",

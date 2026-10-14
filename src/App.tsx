@@ -144,7 +144,8 @@ import { AllocationMatrix as CanonicalAllocationMatrix } from './components/sysm
 import { IbdConnectorEditor } from './components/sysml/IbdConnectorEditor';
 import { RequirementGovernancePanel } from './components/sysml/RequirementGovernancePanel';
 import { resolveSysmlReferenceLabel, sysmlObjectLabel } from './features/sysml/sysmlDisplayLabel';
-import { StateRequirementTraceability } from './components/statemachine/StateRequirementTraceability';
+import { RequirementAssignmentsPanel } from './components/trmSim/RequirementAssignmentsPanel';
+import { elementSimTargets } from './engine/trmSim/elementSimTargets';
 import { StateMachineCanvasContextMenu } from './components/statemachine/StateMachineCanvasContextMenu';
 import { validateAssociationEnds } from './engine/sysml/bdd';
 import { validateRequirementContainment } from './engine/sysml/validation';
@@ -15416,6 +15417,15 @@ const ADIA = () => {
                   workspaceFiles={workspaceFiles}
                   isSmSimulating={isRunning}
                   simulationTime={simulationTime}
+                  renderRequirementAssignments={xBridgesStateId ? undefined : (blockId: string) => (
+                    <RequirementAssignmentsPanel
+                      repository={canonicalSysmlRepository}
+                      elementName={String(globalXBridgesNodes.find((n: any) => n.id === blockId)?.data?.label || blockId)}
+                      targets={elementSimTargets(simVerificationProject, { engine: 'xb', blockId })}
+                      onRepositoryChange={handleSimVerificationRepositoryChange}
+                      newId={uuidv4}
+                    />
+                  )}
                 />
               )}
 
@@ -15481,6 +15491,15 @@ const ADIA = () => {
                   }}
                   onBack={() => setDiagramMode('statemachine')}
                   initialSelectedNodeId={vlabSelectedNodeId}
+                  renderRequirementAssignments={(blockId: string) => (
+                    <RequirementAssignmentsPanel
+                      repository={canonicalSysmlRepository}
+                      elementName={String(vlabNodes.find((n: any) => n.id === blockId)?.data?.label || blockId)}
+                      targets={elementSimTargets(simVerificationProject, { engine: 'vlab', blockId })}
+                      onRepositoryChange={handleSimVerificationRepositoryChange}
+                      newId={uuidv4}
+                    />
+                  )}
                   onNavigateToXbridges={(nodeId?: string) => {
                     const findMatchingNode = (targetNodes: any[], sourceNodeId?: string): any => {
                       if (!sourceNodeId) return null;
@@ -16838,16 +16857,12 @@ const ADIA = () => {
                     />
                   </div>
 
-                  <StateRequirementTraceability
-                    stateId={selectedState.id}
-                    stateName={selectedState.name}
-                    canonicalRepository={canonicalSysmlRepository}
-                    onLinkRequirement={(requirementId, kind) => {
-                      createRelationship(selectedState.id, requirementId, kind);
-                    }}
-                    onUnlinkRelationship={(relationshipId) => {
-                      deleteRelationship(relationshipId);
-                    }}
+                  <RequirementAssignmentsPanel
+                    repository={canonicalSysmlRepository}
+                    elementName={selectedState.name}
+                    targets={elementSimTargets(simVerificationProject, { engine: 'sm', stateId: selectedState.id })}
+                    onRepositoryChange={handleSimVerificationRepositoryChange}
+                    newId={uuidv4}
                   />
 
                   <Button data-help-feature="app-state-layer" data-help-source="src/App.tsx"

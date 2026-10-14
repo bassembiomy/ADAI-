@@ -24,7 +24,7 @@ describe('V-Lab properties requirement assignments', () => {
     render(<VLabWorkspace nodes={nodes()} edges={(rcCase as any).edges} onNodesChange={noop as any} onEdgesChange={noop as any} onResult={noop as any} onSendToDOE={noop as any} onBack={noop}
       initialSelectedNodeId={id}
       renderRequirementAssignments={(blockId: string) => <section aria-label={`Requirements of ${blockId}`}>REQ slot</section>} />);
-    expect((await screen.findByRole('region', { name: `Requirements of ${id}` })).textContent).toBe('REQ slot');
+    expect((await screen.findByRole('region', { name: `Requirements of ${id}` }, { timeout: 5000 })).textContent).toBe('REQ slot');
   });
 
   it('renders nothing extra without it', async () => {

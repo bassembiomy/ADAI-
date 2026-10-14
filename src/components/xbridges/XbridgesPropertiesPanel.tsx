@@ -14,6 +14,7 @@ interface Props {
   onClose: () => void;
   isCollapsed?: boolean;
   onCollapseToggle?: (collapsed: boolean) => void;
+  requirementAssignments?: React.ReactNode;
 }
 
 const normalizeNumerals = (val: string) => {
@@ -36,7 +37,8 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
   onLaunchDoe, 
   onClose,
   isCollapsed: isCollapsedExternal,
-  onCollapseToggle
+  onCollapseToggle,
+  requirementAssignments
 }) => {
   if (!block) return null;
 
@@ -1337,6 +1339,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
               </div>
             </section>
         )}
+        {requirementAssignments}
       </div>
     </div>
   );
