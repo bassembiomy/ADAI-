@@ -3,7 +3,7 @@
 // ADIA Anti-Extraction Build Script
 // ============================================================================
 // 1. Bundles main process & security modules with esbuild
-// 2. Obfuscates bundled JavaScript (control flow flattening + string array encryption)
+// 2. Obfuscates bundled JavaScript (optimized for V8 JIT & bytecode compilation)
 // 3. Compiles obfuscated JS to native V8 bytecode (.jsc) via bytenode
 // 4. Deletes intermediate plain JS bundles
 // 5. Generates the index.cjs bytecode loader and obfuscates preload.cjs
@@ -49,39 +49,33 @@ async function buildProtectedElectron() {
     minify: true,
   });
 
-  // Step 2: Apply heavy JavaScript obfuscation
+  // Step 2: Apply runtime-efficient JavaScript obfuscation
+  // Disables control-flow flattening and slow RC4 string decoding to maintain full V8 JIT optimization
   console.log('🌀 [2/5] Obfuscating main process JavaScript bundle...');
   const rawBundleCode = fs.readFileSync(bundlePath, 'utf8');
 
   const obfuscatedResult = JavaScriptObfuscator.obfuscate(rawBundleCode, {
     compact: true,
-    controlFlowFlattening: true,
-    controlFlowFlatteningThreshold: 0.75,
+    controlFlowFlattening: false,
     deadCodeInjection: false,
     debugProtection: false,
     disableConsoleOutput: false,
     identifierNamesGenerator: 'hexadecimal',
     log: false,
-    numbersToExpressions: true,
+    numbersToExpressions: false,
     renameGlobals: false,
     selfDefending: false,
     simplify: true,
-    splitStrings: true,
-    splitStringsChunkLength: 5,
+    splitStrings: false,
     stringArray: true,
-    stringArrayCallsTransform: true,
-    stringArrayCallsTransformThreshold: 0.75,
-    stringArrayEncoding: ['base64', 'rc4'],
+    stringArrayCallsTransform: false,
+    stringArrayEncoding: ['base64'],
     stringArrayIndexesType: ['hexadecimal-number'],
     stringArrayIndexShift: true,
     stringArrayRotate: true,
     stringArrayShuffle: true,
-    stringArrayWrappersCount: 2,
-    stringArrayWrappersChainedCalls: true,
-    stringArrayWrappersParametersMaxCount: 4,
-    stringArrayWrappersType: 'function',
-    stringArrayThreshold: 0.8,
-    transformObjectKeys: true,
+    stringArrayThreshold: 0.5,
+    transformObjectKeys: false,
     unicodeEscapeSequence: false
   });
 
@@ -130,16 +124,16 @@ try {
 `;
   fs.writeFileSync(path.join(DIST_ELECTRON_DIR, 'index.cjs'), loaderCode, 'utf8');
 
-  // Step 5: Obfuscate preload.cjs
+  // Step 5: Obfuscate preload.cjs (keep IPC bridge lightweight without control-flow loops)
   console.log('🛡️  [5/5] Obfuscating preload.cjs...');
   const rawPreloadCode = fs.readFileSync(path.join(SRC_DIR, 'preload.cjs'), 'utf8');
   const obfuscatedPreload = JavaScriptObfuscator.obfuscate(rawPreloadCode, {
     compact: true,
-    controlFlowFlattening: true,
+    controlFlowFlattening: false,
     identifierNamesGenerator: 'hexadecimal',
     stringArray: true,
     stringArrayEncoding: ['base64'],
-    stringArrayThreshold: 0.8,
+    stringArrayThreshold: 0.5,
   });
 
   fs.writeFileSync(path.join(DIST_ELECTRON_DIR, 'preload.cjs'), obfuscatedPreload.getObfuscatedCode(), 'utf8');
