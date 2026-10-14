@@ -202,8 +202,9 @@
         "WP-16",
         "WP-18a"
       ],
-      "status": "in_progress",
-      "phase": 2
+      "status": "done",
+      "phase": 2,
+      "result": "20/20 (+54 related); tsc clean"
     },
     {
       "id": "WP-18a",
@@ -224,7 +225,7 @@
         "WP-17",
         "WP-18a"
       ],
-      "status": "todo",
+      "status": "in_progress",
       "phase": 2
     },
     {

@@ -260,6 +260,8 @@ export interface VerificationCase extends NamedElement {
   behaviorId?: string;
   /** Executable simulation criterion for method 'simulation' (additive). */
   simulationCriterion?: import('../trmSim/simCriterion').SimCriterion;
+  /** Executable multi-engine simulation scenario (additive). */
+  simulationScenario?: import('../trmSim/simScenario').SimScenario;
 }
 export interface VerificationEvidence { id: string; verificationCaseId: string; requirementId: string; revision: number; result: 'passed' | 'failed'; executedAt: string; artifactUri?: string; semanticFingerprint?: string; status?: 'current' | 'stale'; simulation?: { criterionId: string; modelFingerprint: string; trace: import('../trmSim/simEvaluate').SimTraceSample[]; firstViolation?: import('../trmSim/simEvaluate').SimViolation }; }
 export interface ModelBaseline { id: string; name: string; revision: number; createdAt: string; protected: boolean; contentHash?: string; elementHashes?: Record<string, string>; }
