@@ -125,12 +125,11 @@ const loadXlsx = () => import('xlsx');
 const loadJsPdf = () => import('jspdf').then(m => m.jsPDF);
 const loadHtml2Canvas = () => import('html2canvas').then(m => m.default);
 const loadJsZip = () => import('jszip').then(m => m.default);
-import {
-  createReportSnapshot,
-  toHierarchySource,
-  buildSystemReport,
-  renderStateMachineAnalysisHtml,
-} from './features/reporting';
+// Import report helpers from their modules, not the './features/reporting' barrel:
+// the barrel re-exports the PDF/DOCX exporters, which would pull jspdf and docx into the startup bundle.
+import { createReportSnapshot, toHierarchySource } from './features/reporting/reportSnapshot';
+import { buildSystemReport } from './features/reporting/systemReport/buildSystemReport';
+import { renderStateMachineAnalysisHtml } from './features/reporting/systemReport/stateMachineAnalysisSection';
 import { TraceabilityMatrix as CanonicalTraceabilityMatrix } from './components/sysml/TraceabilityMatrix';
 import { BlockPropertiesEditor } from './components/sysml/BlockPropertiesEditor';
 import { SysmlPropertyPanel } from './components/sysml/SysmlPropertyPanel';

@@ -1,8 +1,6 @@
 import React, { useState } from 'react';
 import { FileText, Download, Printer, X, ZoomIn, ZoomOut } from 'lucide-react';
 import type { ReportDocument } from '../../features/reporting/reportDocumentModel';
-import { saveReportAsPdf } from '../../features/reporting/exportReportToPdf';
-import { saveReportAsDocx } from '../../features/reporting/exportReportToDocx';
 
 export interface ReportViewerModalProps {
   isOpen: boolean;
@@ -16,13 +14,15 @@ export const ReportViewerModal: React.FC<ReportViewerModalProps> = ({ isOpen, on
 
   if (!isOpen) return null;
 
-  const handleExportPdf = () => {
+  const handleExportPdf = async () => {
+    const { saveReportAsPdf } = await import('../../features/reporting/exportReportToPdf');
     saveReportAsPdf(document, `${document.header.documentTitle.replace(/\s+/g, '_')}.pdf`);
   };
 
   const handleExportDocx = async () => {
     setIsExporting(true);
     try {
+      const { saveReportAsDocx } = await import('../../features/reporting/exportReportToDocx');
       await saveReportAsDocx(document, `${document.header.documentTitle.replace(/\s+/g, '_')}.docx`);
     } finally {
       setIsExporting(false);

@@ -51,3 +51,18 @@ WP-A, WP-B1, WP-B2, WP-C and WP-D touch disjoint files and run in parallel.
   pass; protected Electron build completes.
 - No `execFileSync`, `execSync`, `spawnSync` or whole-asar `readFileSync` reachable from startup or
   from `ipcMain.handle` handlers in `src/main.cjs`.
+
+## Phase 2 (after Phase 1 landed: startup JS 15.29 MB -> 10.05 MB)
+
+Remaining startup cost is the 8.5 MB `index` chunk, mostly `App.tsx` and the workspaces it imports
+statically. All workspaces render only when their `diagramMode` is active (default `statemachine`)
+or their window is open, so they can load on first use.
+
+| WP | Files | Goal |
+|---|---|---|
+| WP-E | `src/App.tsx` | `React.lazy` for X-Bridges, V-Lab, HIL, Entropy/OPM, PlantUML, Use Case, Activity, Sequence and HMI workspaces; `Suspense` placeholder; idle-time prefetch after first paint so the first switch has no visible load |
+| WP-F | `src/security/elfInspector.cjs` | `size`/`objdump` via async `execFile` and `resolveToolExecutableAsync` instead of `spawnSync` (up to 30 s blocking the main process during HIL builds) |
+
+Decision: keep the synchronous SysML store update from `92d31a25`. Deferring it with
+`startTransition` let the drag draft clear before the committed position rendered, so blocks
+snapped back for a frame on drop (covered by `sysmlProjectionState.test.ts`).
