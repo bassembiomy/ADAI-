@@ -131,6 +131,31 @@ describe('SimVerificationPanel: scenario cases', () => {
   });
 });
 
+describe('SimVerificationPanel: one scenario verifies several requirements', () => {
+  afterEach(cleanup);
+
+  it('adds the requirement chosen for an assertion to the case on Save', () => {
+    const r = repo(null);
+    (r.verificationCases['vc-thermo'] as any).verifiesRequirementIds = ['req-t1'];
+    const onChange = renderPanel(r);
+    fireEvent.click(screen.getByRole('button', { name: 'Define scenario for Thermostat loop' }));
+    fireEvent.change(screen.getByLabelText('Duration (s)'), { target: { value: '1' } });
+    fireEvent.change(screen.getByLabelText('Step (s)'), { target: { value: '0.01' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add signal' }));
+    fireEvent.change(screen.getByLabelText('Signal 1 alias'), { target: { value: 'x' } });
+    fireEvent.change(screen.getByLabelText('Signal 1 target'), { target: { value: T.heaterOn } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add assertion' }));
+    expect((screen.getByLabelText('Assertion 1 requirement') as HTMLSelectElement).value).toBe('req-t1');
+    fireEvent.change(screen.getByLabelText('Assertion 1 requirement'), { target: { value: 'req-t5' } });
+    fireEvent.change(screen.getByLabelText('Assertion 1 condition'), { target: { value: 'x == 0' } });
+    fireEvent.change(screen.getByLabelText('Assertion 1 mode'), { target: { value: 'always' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save scenario' }));
+    const saved = (onChange.mock.calls[0][0] as SysmlRepository).verificationCases['vc-thermo'] as any;
+    expect(saved.verifiesRequirementIds).toEqual(['req-t1', 'req-t5']);
+    expect(saved.simulationScenario.assertions[0].requirementId).toBe('req-t5');
+  });
+});
+
 describe('TraceabilityMatrix: run all simulation tests', () => {
   afterEach(cleanup);
 

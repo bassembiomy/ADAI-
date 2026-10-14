@@ -166,14 +166,15 @@ interface SimScenario { id: string; verificationCaseId: string; duration: number
 - `simEvidenceStatusFor` uses `scenarioModelFingerprint(project, evidence.simulation.engines)` when `engines` is present.
 - `simVerification.ts`:
   - `createSimulationCase(repo, requirementId, { id, name? })`: method `simulation`, verifies [requirementId], owner and namespace taken from the requirement.
-  - `verifyRequirementsByScenario(repo, project, caseId, { newId, executedAt })`.
+  - `verifyRequirementsByScenario(repo, project, caseId, { newId, executedAt }) -> { repository, run?, evidence[], skipped[], error? }` (`run` = the `runSimScenario` result whenever a run was attempted).
   - `runAllSimulationCases(repo, project, { newId, executedAt })`: scenario first, else legacy criterion, else skipped.
-  - `repositoryChangeCommands` also emits `createElement` for new verification cases and `updateElement` for `simulationScenario` changes.
+  - `repositoryChangeCommands` also emits `createElement` for new verification cases, and ONE `updateElement` per changed existing case whose patch holds exactly the changed fields among `simulationCriterion`, `simulationScenario` and `verifiesRequirementIds` (in that key order).
 
 ### 7.9 UI (WP-20)
 - `SimVerificationPanel`:
   - a "New simulation test case" button;
   - a per-case `ScenarioEditor`, with run settings, execution order, signals, stimuli, couplings with a same-step / one-step-delay badge, and assertions;
+  - each assertion picks its requirement from all requirements (default: the panel's requirement); Save adds any requirement the assertions use to the case's `verifiesRequirementIds`;
   - live validation: errors block Save, warnings are shown;
   - Run results per assertion (verdict, t, values, reason) and per requirement, plus skipped requirements;
   - a `SimTracePlot` (inline SVG, no dependencies).

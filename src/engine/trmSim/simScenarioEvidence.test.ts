@@ -157,4 +157,15 @@ describe('repositoryChangeCommands', () => {
       { type: 'updateElement', elementId: 'vc-thermo', patch: { simulationScenario: (edited.verificationCases['vc-thermo'] as any).simulationScenario } },
     ]);
   });
+
+  it('puts every changed field of one case into one update (scenario + verified requirements)', () => {
+    const repo = createSimulationCase(seed(), 'req-t1', { id: 'vc-new' });
+    const next = structuredClone(repo);
+    const vc = next.verificationCases['vc-new'] as any;
+    vc.verifiesRequirementIds = ['req-t1', 'req-t2'];
+    vc.simulationScenario = thermostatScenario({ verificationCaseId: 'vc-new' });
+    expect(repositoryChangeCommands(repo, next)).toEqual([
+      { type: 'updateElement', elementId: 'vc-new', patch: { simulationScenario: vc.simulationScenario, verifiesRequirementIds: ['req-t1', 'req-t2'] } },
+    ]);
+  });
 });
