@@ -115,6 +115,24 @@ describe('SimVerificationPanel', () => {
     expect(screen.getByRole('alert').textContent).toMatch(/duration/i);
   });
 
+  it('links the requirement to any port, variable or parameter of the models', () => {
+    const onChange = renderPanel();
+    const target = screen.getByLabelText('Link target') as HTMLSelectElement;
+    expect([...target.options].map(o => o.value)).toEqual(expect.arrayContaining([POWER, HEATER]));
+    fireEvent.change(target, { target: { value: POWER } });
+    fireEvent.change(screen.getByLabelText('Link kind'), { target: { value: 'verify' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Link' }));
+    expect(onChange).toHaveBeenCalledTimes(1);
+    const rels = Object.values(onChange.mock.calls[0][0].relationships) as any[];
+    expect(rels).toContainEqual(expect.objectContaining({ kind: 'verify', sourceId: POWER, targetId: 'req1' }));
+  });
+
+  it('removes a link', () => {
+    const onChange = renderPanel();
+    fireEvent.click(screen.getByRole('button', { name: 'Unlink HEATER' }));
+    expect(onChange.mock.calls[0][0].relationships.a).toBeUndefined();
+  });
+
   it('says so when no simulation case verifies the requirement', () => {
     const r = repo();
     delete r.verificationCases.vc1;
