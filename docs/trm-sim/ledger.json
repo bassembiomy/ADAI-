@@ -37,7 +37,8 @@
       "deps": [
         "WP-01"
       ],
-      "status": "todo"
+      "status": "done",
+      "result": "7/7 acceptance tests; tsc clean"
     },
     {
       "id": "WP-04",
@@ -45,7 +46,8 @@
       "deps": [
         "WP-01"
       ],
-      "status": "todo"
+      "status": "done",
+      "result": "6/6 acceptance tests; tsc clean"
     },
     {
       "id": "WP-05",
@@ -69,7 +71,8 @@
       "deps": [
         "WP-01"
       ],
-      "status": "in_progress"
+      "status": "done",
+      "result": "13/13 acceptance tests; tsc clean"
     },
     {
       "id": "WP-08a",
@@ -139,6 +142,16 @@
       "wp": "WP-01",
       "severity": "low",
       "summary": "parseSimTarget accepts a literal $param in block position as a block id (non-canonical, never produced by formatSimTarget)"
+    },
+    {
+      "wp": "WP-03",
+      "severity": "low",
+      "summary": "label/port readers duplicated from simExternalElements.ts; consolidate when a later WP touches both"
+    },
+    {
+      "wp": "WP-04",
+      "severity": "low",
+      "summary": "a V-Lab port with neither domain nor direction is listed as conserving with no across/through"
     }
   ]
 }
