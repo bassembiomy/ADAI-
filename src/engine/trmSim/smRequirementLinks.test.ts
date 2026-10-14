@@ -79,6 +79,14 @@ describe('requirement ids flow into the semantic model, test plan and generated 
     expect(c).toContain('requirements=REQ-HEAT-1,REQ-HEAT-2');
   });
 
+  it('never lets a requirement id break out of the C comment', () => {
+    const evil = new Map([[HEATER_UP, ['REQ 1 */ int x; /*', 'REQ-\nNEXT']]]);
+    const c = generateMISRACCode(heater, { requirementLinks: evil }).files.filter(f => f.name.endsWith('.c')).map(f => f.content).join('\n');
+    const marker = c.split('\n').find(l => l.includes('TRACE-BEGIN') && l.includes('requirements='))!;
+    expect(marker.match(/\*\//g)).toHaveLength(1);
+    expect(marker).toMatch(/requirements=[A-Za-z0-9_.,:-]+ \*\/$/);
+  });
+
   it('leaves generated C unchanged when nothing is linked', () => {
     const a = generateMISRACCode(heater).files.map(f => f.content).join('\n');
     const b = generateMISRACCode(heater, { requirementLinks: new Map() }).files.map(f => f.content).join('\n');
