@@ -20,6 +20,32 @@ export default defineConfig({
       { find: '@', replacement: path.resolve(__dirname, './src') },
     ],
   },
+  build: {
+    chunkSizeWarningLimit: 2500,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('three') || id.includes('plotly.js') || id.includes('recharts') || id.includes('gsap')) {
+              return 'vendor-viz';
+            }
+            if (id.includes('@xyflow')) {
+              return 'vendor-flow';
+            }
+            if (id.includes('mathjs')) {
+              return 'vendor-math';
+            }
+            if (id.includes('xlsx') || id.includes('jspdf') || id.includes('docx') || id.includes('jszip') || id.includes('html2canvas')) {
+              return 'vendor-docs';
+            }
+            if (id.includes('react') || id.includes('@radix-ui') || id.includes('lucide-react')) {
+              return 'vendor-react';
+            }
+          }
+        },
+      },
+    },
+  },
   server: {
     port: 3000,
     host: true,
