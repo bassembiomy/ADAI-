@@ -64,6 +64,21 @@ describe('RTM: only the latest evidence per verification case counts', () => {
   });
 });
 
+describe('RTM: a case that verifies several requirements (finding L10)', () => {
+  it("one requirement's failure does not fail the other requirements of the same case", () => {
+    const repo = seed();
+    repo.requirements.req2 = { id: 'req2', name: 'Other', namespace: [], kind: 'requirement', requirementId: 'REQ-2', text: 'Other', status: 'approved', version: '1' } as any;
+    (repo.verificationCases.vcA as any).verifiesRequirementIds = ['req1', 'req2'];
+    const next = withEvidence(repo, [{ id: 'e1', verificationCaseId: 'vcA', result: 'passed', executedAt: '2026-10-14T10:00:00.000Z' }]);
+    next.evidence.e2 = { id: 'e2', verificationCaseId: 'vcA', requirementId: 'req2', result: 'failed', executedAt: '2026-10-14T10:00:00.000Z', revision: next.revision, status: 'current' } as any;
+    const rows = Object.fromEntries(buildTraceabilityMatrix(next).rows.map(r => [r.requirement.id, r]));
+    expect(rows.req1.status).toBe('verified');
+    expect(rows.req1.evidence).toEqual(['e1']);
+    expect(rows.req2.status).toBe('failed');
+    expect(rows.req2.evidence).toEqual(['e2']);
+  });
+});
+
 describe('RTM: simulated-model currency', () => {
   const sim = { criterionId: 'c', modelFingerprint: 'old', trace: [] };
 

@@ -82,6 +82,9 @@ run, and see pass/fail in the TRM. Several models run in one simulation in a fix
 - L6 SM runner passes `step*1000` ms as ONE tick (`smRunner.ts:82`); the interpreter rejects anything outside tickMs ± tolerance (`smTiming.ts:21`) -> every step other than the chart tick is a `TIMING` runtime error.
 - L7 One observed signal and five fixed checks only; no `x == 1`, no logic, no multi-signal condition.
 - L9 `stimulusValue` compares `t >= at` exactly: with step 0.03, `11*0.03 = 0.32999999999999996 < 0.33`, so a step at 0.33 s is applied one step late.
+- L10 (found in WP-19) `rtm.ts:370` gives a requirement every evidence of its verification cases, including evidence recorded for OTHER requirements of the same case: one case verifying REQ-T1 and REQ-T2 fails REQ-T1 when REQ-T2 fails. Status and the evidence column must use only evidence whose `requirementId` is the row's requirement.
+- L11 (found in WP-21) `connectionPolicy.ts:48` and `validation.ts:330` accept a simulation target as a verify source, `policy.ts:238` (gateway direction check) rejects it: the panel offers `verify` and the gateway refuses it.
+- L12 (found in WP-21) `simExternalElements.ts` lists X-Bridges ports only when saved in the node, `simCandidates` rebuilds them from BLOCK_LIBRARY: the scenario editor offers a port that cannot be linked to a requirement.
 - L8 Each model runs alone (`simVerification.ts:128`); no run respects an execution order across models.
 
 ## 7. Contracts (phase 2, fixed) — `src/engine/trmSim/`
