@@ -67,6 +67,19 @@ describe('runXbVerification', () => {
     expect(r.diagnostics).toContainEqual(expect.objectContaining({ code: 'UNSUPPORTED_TARGET' }));
   });
 
+  it('checks the criterion unit against the unit of the observed port', () => {
+    const withUnit = { canvas: 'global', nodes: [...nodes.slice(0, 2), { ...node('g', 'GAIN', { gain: 2 }), data: { id: 'g', type: 'GAIN', params: { gain: 2 }, outputs: [{ id: 'y', direction: 'output', unit: 'V' }] } }], edges };
+    const r = runXbVerification(withUnit, crit({ observe: 'sim:xb/global/g/y', unit: 'A', stimuli: [] }));
+    expect(r.diagnostics.map(d => d.code)).toContain('UNIT_MISMATCH');
+    expect(r.trace).toEqual([]);
+  });
+
+  it('refuses to run a canvas with a block it cannot rebuild instead of silently dropping it', () => {
+    const r = runXbVerification({ ...source, nodes: [...nodes, node('mystery', 'NOT_A_BLOCK', {})] }, crit({}));
+    expect(r.diagnostics).toContainEqual(expect.objectContaining({ code: 'UNKNOWN_BLOCK' }));
+    expect(r.trace).toEqual([]);
+  });
+
   it('does not run an invalid criterion', () => {
     const r = runXbVerification(source, crit({ duration: -1 }));
     expect(r.trace).toEqual([]);
