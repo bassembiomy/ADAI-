@@ -48,7 +48,7 @@ criteria stored on the SysML verification case (method `simulation`); feature br
 | 02 | SM interface `smInterface.ts` (direction from HIL/XB mappings, else script read/write scan; undeclared-identifier diagnostic) | 01 |
 | 03 | X-Bridges interface `xbInterface.ts` (both shapes; ports from saved nodes; unknown unit stays unknown) | 01 |
 | 04 | V-Lab interface `vlabInterface.ts` (signal ports with quantity/unit; conserving ports as across/through pair; params with bounds; solver variables) | 01 |
-| 05 | Assign: `sim:` endpoints accepted for satisfy/verify/refine/trace (`App.tsx:9479` createRelationship, `resolveUiConnectionEndpoint`, SysML command validator); external elements to TRM window and report index | 01 |
+| 05 | Assign: new endpoint family `simulationTarget` (connectionPolicy, ExternalSemanticEndpoint) accepted only for satisfy/verify/refine/trace; `simEndpoints.ts` (`projectSimSources`, `buildSimEndpoints`, `projectExternalEndpoints`, `projectExternalEndpointSignature`) feeding App `externalEndpointContext`, project hydration (App, projectIo worker/client) and `resolveUiConnectionEndpoint`; sim external elements to TRM window and report index | 01 |
 | 06 | Real requirement ids in SM codegen (`smSemanticBuilder.ts:785`, `smTestPlanBuilder.ts:87`; placeholder only when none linked) | 05 |
 | 07 | Criterion type + pure evaluator `simEvaluate.ts` | 01 |
 | 08a/b/c | Runners: SM (`smAppAdapter.ts`), X-Bridges (`XbridgesEngine` global / `xbInterpreter` state-embedded), V-Lab (`VLabPhysicsEngine`, `vlabScopeRead.ts`) | 02,03,04,07 |
