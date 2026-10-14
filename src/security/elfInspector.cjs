@@ -3,6 +3,9 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const { execFile } = require('node:child_process');
+const { promisify } = require('node:util');
+const execFileAsync = promisify(execFile);
 const { getTargetLimits } = require('./targetPackLoader.cjs');
 
 function sha256File(filePath) {
@@ -72,23 +75,28 @@ async function inspectElf(elfPath, packOrTargetId, opts = {}) {
   const fail = code => ({ valid: false, code, error: code, hashes });
   const targetId = require('./targetPackLoader.cjs').normalizeTargetId(typeof packOrTargetId === 'string' ? packOrTargetId : packOrTargetId?.targetId);
   const prefix = targetId.startsWith('atmega') ? 'avr-' : targetId.startsWith('stm32') ? 'arm-none-eabi-' : targetId.startsWith('esp32') ? 'xtensa-esp32-elf-' : '';
-  function runTool(kind, args) {
+  async function runTool(kind, args) {
     let executable = opts[`${kind}Executable`];
     if (!executable) {
-      const { resolveToolExecutable } = require('./toolchainManager.cjs');
-      const compiler = resolveToolExecutable(prefix === 'avr-' ? 'avr-g++' : `${prefix}gcc`, opts.toolchainsDir);
+      const { resolveToolExecutableAsync } = require('./toolchainManager.cjs');
+      const compiler = await resolveToolExecutableAsync(prefix === 'avr-' ? 'avr-g++' : `${prefix}gcc`, opts.toolchainsDir);
       const companion = compiler && path.join(path.dirname(compiler), `${prefix}${kind}${process.platform === 'win32' ? '.exe' : ''}`);
-      executable = companion && fs.existsSync(companion) ? companion : resolveToolExecutable(`${prefix}${kind}`, opts.toolchainsDir);
+      executable = companion && fs.existsSync(companion) ? companion : await resolveToolExecutableAsync(`${prefix}${kind}`, opts.toolchainsDir);
     }
     if (!executable) throw new Error(`${kind.toUpperCase()}_TOOL_NOT_FOUND`);
-    const result = require('node:child_process').spawnSync(executable, args, { encoding: 'utf8', timeout: 30000, windowsHide: true });
-    if (result.error || result.status !== 0 || !result.stdout) throw new Error(`${kind.toUpperCase()}_TOOL_FAILED`);
-    return result.stdout;
+    let stdout;
+    try {
+      ({ stdout } = await execFileAsync(executable, args, { encoding: 'utf8', timeout: 30000, windowsHide: true, maxBuffer: 16 * 1024 * 1024 }));
+    } catch {
+      throw new Error(`${kind.toUpperCase()}_TOOL_FAILED`);
+    }
+    if (!stdout) throw new Error(`${kind.toUpperCase()}_TOOL_FAILED`);
+    return stdout;
   }
   const injected = opts.mockSizeOutput !== undefined || opts.sizeOutput !== undefined;
   let sizeOutput = opts.mockSizeOutput ?? opts.sizeOutput;
   if (!injected) {
-    try { sizeOutput = runTool('size', [elfPath]); }
+    try { sizeOutput = await runTool('size', [elfPath]); }
     catch (error) { return fail(error.message); }
   }
   let memory;
@@ -97,7 +105,7 @@ async function inspectElf(elfPath, packOrTargetId, opts = {}) {
   // Injected measurements support simulation fixtures; production always verifies architecture.
   if (!injected || opts.objdumpOutput !== undefined || opts.objdumpExecutable !== undefined) {
     let output;
-    try { output = opts.objdumpOutput ?? runTool('objdump', ['-f', elfPath]); }
+    try { output = opts.objdumpOutput ?? await runTool('objdump', ['-f', elfPath]); }
     catch (error) { return fail(error.message); }
     const architecture = output.match(/architecture:\s*([^,\r\n]+)/)?.[1].trim();
     const format = output.match(/file format\s+(\S+)/)?.[1];
