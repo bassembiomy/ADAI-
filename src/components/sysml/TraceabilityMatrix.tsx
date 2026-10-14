@@ -7,6 +7,7 @@ import {
   exportRtmCsv,
   type RtmStatus,
   type RtmChangeKind,
+  type RtmOptions,
 } from '../../engine/sysml/rtm';
 import { VirtualizedTraceabilityGrid } from './VirtualizedTraceabilityGrid';
 import { resolveSysmlReferenceLabel, sysmlObjectLabel } from '../../features/sysml/sysmlDisplayLabel';
@@ -18,6 +19,8 @@ export interface TraceabilityMatrixProps {
   /** Optional row action: open simulation verification for a requirement. */
   onSimulate?: (requirementId: string) => void;
   onExport?: (csv: string) => void;
+  /** Optional resolver marking evidence stale (e.g. simulated model changed). */
+  evidenceCurrency?: RtmOptions['evidenceCurrency'];
 }
 
 export function nextRtmFocusIndex(current: number, key: string, count: number): number {
@@ -29,7 +32,7 @@ export function nextRtmFocusIndex(current: number, key: string, count: number): 
   return current;
 }
 
-export function TraceabilityMatrix({ repository, externalElements = [], onNavigate, onSimulate, onExport }: TraceabilityMatrixProps) {
+export function TraceabilityMatrix({ repository, externalElements = [], onNavigate, onSimulate, onExport, evidenceCurrency }: TraceabilityMatrixProps) {
   const [status, setStatus] = useState<RtmStatus | ''>('');
   const [owner, setOwner] = useState('');
   const [risk, setRisk] = useState('');
@@ -45,7 +48,7 @@ export function TraceabilityMatrix({ repository, externalElements = [], onNaviga
   const complete = useMemo(() => buildTraceabilityMatrix(repository, {
     compareBaselineId: compareBaselineId || undefined,
     changeType: (changeType as any) || undefined,
-  }, undefined, externalElements), [repository, compareBaselineId, changeType, externalElements]);
+  }, undefined, externalElements, { evidenceCurrency }), [repository, compareBaselineId, changeType, externalElements, evidenceCurrency]);
 
   const matrix = useMemo(() => ({
     ...complete,

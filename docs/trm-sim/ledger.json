@@ -169,8 +169,9 @@
       "deps": [
         "WP-12"
       ],
-      "status": "in_progress",
-      "phase": 2
+      "status": "done",
+      "phase": 2,
+      "result": "44/44 + test:sysml only the pre-existing App.sysmlLabels failure; review: verificationStatus = latest result regardless of currency (keeps rtm.test.ts:329)"
     },
     {
       "id": "WP-15",
