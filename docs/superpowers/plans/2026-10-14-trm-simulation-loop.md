@@ -24,13 +24,20 @@ criteria stored on the SysML verification case (method `simulation`); feature br
 - F8 No V-Lab <-> X-Bridges / SM link exists (phase 2).
 
 ## 2. Contracts (fixed) — `src/engine/trmSim/`
-1. Target reference `simTarget.ts`:
-   - SM: `sim:sm/<stateId>`, `sim:sm/<transitionId>`, `sim:sm/var/<variableId>`
-   - X-Bridges: `sim:xb/<canvas>/<blockId>/<portId>`, `sim:xb/<canvas>/<blockId>/param/<name>`; `<canvas>` = `global` | workspace file id | `state:<stateId>`
-   - V-Lab: `sim:vlab/<canvas>/<nodeId>/<portId>`, `sim:vlab/<canvas>/<nodeId>/param/<name>`, `sim:vlab/<canvas>/var/<solverVariable>`
-2. Simulation interface `simInterface.ts`: `extractSimInterface(model)` -> signals {id, name, direction stimulus|observe, dataType, width, unit?}.
+1. Target reference `simTarget.ts` (as built in WP-01; segments `encodeURIComponent`-ed):
+   - SM: states and junctions keep their raw id; `sim:sm/transition/<id>`, `sim:sm/var/<variableId>`
+   - X-Bridges: `sim:xb/<canvas>/<blockId>[/<portId>]`, `sim:xb/<canvas>/<blockId>/$param/<name>`; `<canvas>` = `global` | workspace file id | `state:<stateId>`
+   - V-Lab: `sim:vlab/<canvas>/<nodeId>[/<portId>]`, `sim:vlab/<canvas>/<nodeId>/$param/<name>`, `sim:vlab/<canvas>/$var/<solverVariable>`
+2. Simulation interfaces (WP-02/03/04): `extractSmInterface`, `extractXbInterface`, `extractVlabInterface` -> signals {target, name, direction, dataType/unit, width, ...}, parameters, diagnostics.
 3. Acceptance criterion `simCriterion.ts`: on a verification case (method `simulation`): stimuli (constant|step|ramp), one observed signal, check (`<=`, `>=`, `within`, `reaches`, `settles`) with value, unit, tolerance, time window; duration, step.
-4. Headless runner `simRunner.ts`: `runSimVerification(criterion, model)` -> {result, trace, firstViolation}; no workers, no UI.
+4. Headless runners, one per engine (WP-08a/b/c): `run<Sm|Xb|Vlab>Verification(model, criterion)` -> `{ trace: SimTraceSample[]; evaluation: SimEvaluation; diagnostics }`; no workers, no UI.
+   - Sampling: stimuli are written at t = 0, then one sample at t = 0 (initial state; SM and X-Bridges only, V-Lab has no t = 0 solve), then for k = 1..round(duration/step): apply stimuli at t = (k-1)*step, advance one step, record at t = k*step.
+   - X-Bridges (WP-08b): global/workspace canvases only (React Flow nodes rebuilt through BLOCK_LIBRARY like XbridgesWorkspace, RK4 at `step`); `state:` canvases run inside the SM runner. Stimuli: `$param` (patchBlockParams) or an unconnected input port; output ports and wired inputs are `NOT_STIMULABLE`.
+   - V-Lab (WP-08c): observe a signal output (through a hidden probe scope) or `$var/<name>`; conserving ports are `NOT_OBSERVABLE` (use a sensor block). Stimuli: `$param` only, kept inside library bounds (`OUT_OF_BOUNDS`). Solver exceptions become `RUNTIME_ERROR`.
+   - Inputs are never mutated.
+   - A stimulus is written at t = 0 and afterwards only when its profile value changes, so model logic may overwrite it in between.
+   - Booleans and active states are observed as 1/0.
+   - An invalid criterion (`validateCriterion`), a target missing from the model (`UNKNOWN_TARGET`) or a target of another engine (`UNSUPPORTED_TARGET`) means no run: empty trace, `passed: false`, diagnostics `{code, message, target?}`. A runtime error stops the run with `RUNTIME_ERROR` and fails it.
 5. Evidence `simEvidence.ts`: `recordVerificationEvidence` + `simulation` trace artifact holding the trace; fingerprint includes target model hash.
 
 ## 3. Work packages

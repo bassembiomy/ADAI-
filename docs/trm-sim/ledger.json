@@ -81,7 +81,7 @@
         "WP-02",
         "WP-07"
       ],
-      "status": "todo"
+      "status": "in_progress"
     },
     {
       "id": "WP-08b",
@@ -90,7 +90,7 @@
         "WP-03",
         "WP-07"
       ],
-      "status": "todo"
+      "status": "in_progress"
     },
     {
       "id": "WP-08c",
@@ -99,7 +99,7 @@
         "WP-04",
         "WP-07"
       ],
-      "status": "todo"
+      "status": "in_progress"
     },
     {
       "id": "WP-09",
@@ -152,6 +152,11 @@
       "wp": "WP-04",
       "severity": "low",
       "summary": "a V-Lab port with neither domain nor direction is listed as conserving with no across/through"
+    },
+    {
+      "wp": "WP-08b",
+      "severity": "medium",
+      "summary": "coffee global X-Bridges model (AC_MOTOR_PID_CONTROL) diverges to ~1e58 headless with RK4 at dt 0.01 from t=0.2; not used as a fixture; inferred from a probe, not root-caused"
     }
   ]
 }
