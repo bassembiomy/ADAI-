@@ -64,7 +64,8 @@
       "deps": [
         "WP-05"
       ],
-      "status": "todo"
+      "status": "done",
+      "result": "9/9; no new failures in stateMachine suites (6 pre-existing toolchain/e2e failures); review added C comment sanitizing"
     },
     {
       "id": "WP-07",

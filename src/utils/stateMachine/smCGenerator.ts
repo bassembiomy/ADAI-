@@ -702,7 +702,7 @@ const renderTransitionPhase = (
       );
       if (isUnconditional) {
         blocks.push(lines(
-          `    /* TRACE-BEGIN: traceId=${transTraceId} symbol=sm_trans_${toCIdentifier(transition.id).toLowerCase()} */`,
+          `    /* TRACE-BEGIN: traceId=${transTraceId} symbol=sm_trans_${toCIdentifier(transition.id).toLowerCase()}${traceRequirementsSuffix(ir, transition.id)} */`,
           commit,
           '    return true;',
           `    /* TRACE-END: traceId=${transTraceId} */`
@@ -710,7 +710,7 @@ const renderTransitionPhase = (
         return blocks.join('\n');
       }
       blocks.push(lines(
-        `    /* TRACE-BEGIN: traceId=${transTraceId} symbol=sm_trans_${toCIdentifier(transition.id).toLowerCase()} */`,
+        `    /* TRACE-BEGIN: traceId=${transTraceId} symbol=sm_trans_${toCIdentifier(transition.id).toLowerCase()}${traceRequirementsSuffix(ir, transition.id)} */`,
         `    if (${condition}) {`,
         commit,
         '        return true;',
@@ -720,6 +720,13 @@ const renderTransitionPhase = (
     }
   }
   return blocks.join('\n');
+};
+
+const traceRequirementsSuffix = (ir: SemanticModel, id: string): string => {
+  const ids = ir.traceableElements?.find((element) => element.id === id)?.requirementIds ?? [];
+  return ids.length > 0
+    ? ` requirements=${ids.map((id) => id.replace(/[^A-Za-z0-9_.:-]/g, '_')).join(',')}`
+    : '';
 };
 
 const renderExecuteFunctions = (
@@ -744,7 +751,7 @@ const renderExecuteFunctions = (
     ).trimEnd()).join('\n');
     const stateTraceId = `TRACE-STATE-${toCIdentifier(state.id).toUpperCase()}`;
     return lines(
-      `/* TRACE-BEGIN: traceId=${stateTraceId} symbol=SM_ST_${toCIdentifier(state.id).toUpperCase()} */`,
+      `/* TRACE-BEGIN: traceId=${stateTraceId} symbol=SM_ST_${toCIdentifier(state.id).toUpperCase()}${traceRequirementsSuffix(ir, state.id)} */`,
       `static bool ${stateFunction(index, 'SM_Execute_State', state.id)}(ADIA_Instance_t *instance)`,
       '{',
       state.childLayerIds.length > 0 ? '    bool transitioned = false;' : null,
