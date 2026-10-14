@@ -19,6 +19,8 @@ export interface TraceabilityMatrixProps {
   /** Optional row action: open simulation verification for a requirement. */
   onSimulate?: (requirementId: string) => void;
   onExport?: (csv: string) => void;
+  /** Optional header action: run every simulation test case. */
+  onRunAllSimulations?: () => void;
   /** Optional resolver marking evidence stale (e.g. simulated model changed). */
   evidenceCurrency?: RtmOptions['evidenceCurrency'];
 }
@@ -32,7 +34,7 @@ export function nextRtmFocusIndex(current: number, key: string, count: number): 
   return current;
 }
 
-export function TraceabilityMatrix({ repository, externalElements = [], onNavigate, onSimulate, onExport, evidenceCurrency }: TraceabilityMatrixProps) {
+export function TraceabilityMatrix({ repository, externalElements = [], onNavigate, onSimulate, onExport, onRunAllSimulations, evidenceCurrency }: TraceabilityMatrixProps) {
   const [status, setStatus] = useState<RtmStatus | ''>('');
   const [owner, setOwner] = useState('');
   const [risk, setRisk] = useState('');
@@ -95,6 +97,9 @@ export function TraceabilityMatrix({ repository, externalElements = [], onNaviga
             >
               {renderVirtualGrid ? 'Standard View' : 'Virtualized Grid'}
             </button>
+            {onRunAllSimulations && (
+              <button type="button" onClick={onRunAllSimulations} className="rounded border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs text-neutral-300 hover:text-neutral-100">Run all simulation tests</button>
+            )}
             <button data-help-feature="ui:sysml/TraceabilityMatrix:72c56515f6ca" data-help-source="src/components/sysml/TraceabilityMatrix.tsx" type="button" onClick={exportCsv} className="rounded border border-orange-700 px-3 py-1 text-xs text-orange-300 hover:bg-orange-950">Export CSV</button>
           </div>
         </div>

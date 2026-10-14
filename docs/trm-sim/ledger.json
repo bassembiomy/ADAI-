@@ -246,8 +246,9 @@
       "deps": [
         "WP-19"
       ],
-      "status": "in_progress",
-      "phase": 2
+      "status": "done",
+      "phase": 2,
+      "result": "48/48; review: fixed double-counted inconclusive verdicts and \"no assertion\" shown as not tested (1 rework)"
     },
     {
       "id": "WP-21",
@@ -255,9 +256,10 @@
       "deps": [
         "WP-20"
       ],
-      "status": "todo",
+      "status": "done",
       "phase": 2,
-      "note": "test passes since WP-19; planner fixed its trm() helper to pass App external elements"
+      "note": "test passes since WP-19; planner fixed its trm() helper to pass App external elements",
+      "result": "thermostatScenario.e2e 9/9 through the SysML gateway"
     },
     {
       "id": "WP-22",
@@ -265,7 +267,7 @@
       "deps": [
         "WP-21"
       ],
-      "status": "todo",
+      "status": "in_progress",
       "phase": 2
     }
   ],

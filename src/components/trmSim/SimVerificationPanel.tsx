@@ -3,7 +3,11 @@ import type { SysmlRepository, VerificationCase } from '../../engine/sysml/model
 import { validateCriterion, type SimCheck, type SimCriterion, type SimStimulusProfile } from '../../engine/trmSim/simCriterion';
 import { buildSimExternalElements } from '../../engine/trmSim/simExternalElements';
 import { projectSimSources } from '../../engine/trmSim/simEndpoints';
-import { linkedSimTargets, simCandidates, simEvidenceStatusFor, simulationCases, verifyRequirementBySimulation } from '../../engine/trmSim/simVerification';
+import { createSimulationCase, linkedSimTargets, simCandidates, simEvidenceStatusFor, simulationCases, verifyRequirementBySimulation, verifyRequirementsByScenario } from '../../engine/trmSim/simVerification';
+import { scenarioSchedule } from '../../engine/trmSim/simScenario';
+import type { SimScenarioRun } from '../../engine/trmSim/simScenarioRunner';
+import { ScenarioEditor } from './ScenarioEditor';
+import { SimTracePlot } from './SimTracePlot';
 
 export interface SimVerificationPanelProps {
   repository: SysmlRepository;
@@ -68,6 +72,9 @@ function criterionOf(d: Draft, requirementId: string, vc: VerificationCase): Sim
   };
 }
 
+const ENGINE_NAMES: Record<string, string> = { sm: 'State machine', xb: 'X-Bridges', vlab: 'V-Lab' };
+const r4 = (n: number): number => Math.round(n * 10000) / 10000;
+
 const field = 'rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-xs';
 const btn = 'rounded border border-neutral-700 px-2 py-1 text-xs text-neutral-300 hover:bg-neutral-900';
 
@@ -81,6 +88,8 @@ export function SimVerificationPanel({ repository, requirementId, project, onRep
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [errors, setErrors] = useState<string[]>([]);
+  const [scenarioEditing, setScenarioEditing] = useState<string | null>(null);
+  const [runs, setRuns] = useState<Record<string, { run?: SimScenarioRun; notTested: number; error?: string }>>({});
   const [linkTarget, setLinkTarget] = useState('');
   const [linkKind, setLinkKind] = useState<(typeof LINK_KINDS)[number]>('satisfy');
 
@@ -103,7 +112,21 @@ export function SimVerificationPanel({ repository, requirementId, project, onRep
     commit(r => { const id = makeId(); r.relationships[id] = { id, kind: linkKind, sourceId: target, targetId: requirementId } as any; });
   };
 
+  const runScenario = (vc: VerificationCase) => {
+    const out = verifyRequirementsByScenario(repository, project, vc.id, { newId: () => makeId(), executedAt: stamp() });
+    setRuns(prev => ({ ...prev, [vc.id]: { ...(out.run ? { run: out.run } : {}), notTested: out.skipped.filter(k => !k.reason.startsWith('inconclusive')).length, ...(out.error !== undefined ? { error: out.error } : {}) } }));
+    if (out.error === undefined) onRepositoryChange(out.repository);
+  };
+
+  const saveScenario = (vc: VerificationCase, scenario: NonNullable<VerificationCase['simulationScenario']>, verifies: string[]) => {
+    commit(r => { r.verificationCases[vc.id] = { ...r.verificationCases[vc.id], simulationScenario: scenario, verifiesRequirementIds: verifies }; });
+    setScenarioEditing(null);
+  };
+
+  const nameOf = (target: string, list: { target: string; name: string }[]): string => list.find(c => c.target === target)?.name ?? target;
+
   const run = (vc: VerificationCase) => {
+    if (vc.simulationScenario) { runScenario(vc); return; }
     const out = verifyRequirementBySimulation(repository, project, vc.id, { id: makeId(), executedAt: stamp() });
     let text: string;
     if (out.error) {
@@ -178,22 +201,81 @@ export function SimVerificationPanel({ repository, requirementId, project, onRep
         </div>
       </div>
 
+      <div>
+        <button type="button" className={btn} onClick={() => onRepositoryChange(createSimulationCase(repository, requirementId, { id: makeId() }))}>New simulation test case</button>
+      </div>
       {cases.length === 0 && <p className="text-neutral-400">No simulation verification case verifies this requirement.</p>}
       {cases.map(vc => {
         const ev = latestEvidence(vc.id);
+        const scenario = vc.simulationScenario;
+        const schedule = scenario ? scenarioSchedule(scenario) : undefined;
+        const outcome = runs[vc.id];
+        const counts = outcome?.run ? (() => {
+          const verdicts = Object.values(outcome.run.requirements).map(r => r.verdict);
+          const passed = verdicts.filter(v => v === 'passed').length;
+          const failed = verdicts.filter(v => v === 'failed').length;
+          return { passed, failed, inconclusive: verdicts.length - passed - failed, notTested: outcome.notTested };
+        })() : undefined;
+        const resultText = outcome?.error !== undefined ? outcome.error
+          : counts ? `${counts.passed} passed, ${counts.failed} failed, ${counts.inconclusive} inconclusive, ${counts.notTested} not tested` : (results[vc.id] ?? '');
         return (
           <section key={vc.id} className="rounded border border-neutral-800 p-2" aria-label={vc.name}>
             <div className="flex items-center gap-2">
               <h3 className="font-semibold">{vc.name}</h3>
-              <button type="button" className={btn} aria-label={`Run ${vc.name}`} disabled={!vc.simulationCriterion} onClick={() => run(vc)}>Run</button>
+              <button type="button" className={btn} aria-label={`Run ${vc.name}`} disabled={!vc.simulationCriterion && !vc.simulationScenario} onClick={() => run(vc)}>Run</button>
               {vc.simulationCriterion && (
                 <button type="button" className={btn} onClick={() => openEditor(vc, true)} aria-label={`Edit criterion for ${vc.name}`}>Edit criterion</button>
               )}
               <button type="button" className={btn} onClick={() => openEditor(vc, false)} aria-label={`Define criterion for ${vc.name}`}>
                 {vc.simulationCriterion ? 'Define new criterion' : 'Define criterion'}
               </button>
+              <button type="button" className={btn} onClick={() => setScenarioEditing(vc.id)}
+                aria-label={scenario ? `Edit scenario for ${vc.name}` : `Define scenario for ${vc.name}`}>
+                {scenario ? 'Edit scenario' : 'Define scenario'}
+              </button>
             </div>
-            <div role="status" aria-label={`${vc.name} result`} className="mt-1 text-neutral-300">{results[vc.id] ?? ''}</div>
+            {scenario && schedule && (
+              <div className="mt-1 text-neutral-300">
+                <p>Execution order: {schedule.order.map(e => ENGINE_NAMES[e] ?? e).join(' → ')}</p>
+                <ul aria-label="Couplings" className="list-disc pl-4">
+                  {schedule.couplings.map((c, i) => (
+                    <li key={i}>{nameOf(c.from, candidates.observe)} → {nameOf(c.to, candidates.stimulus)} · {c.delayed ? 'one-step delay' : 'same step'}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            <div role="status" aria-label={`${vc.name} result`} className="mt-1 text-neutral-300">{resultText}</div>
+            {outcome?.run && (
+              <>
+                <table aria-label={`${vc.name} assertions`} className="mt-1 w-full text-left text-[11px]">
+                  <thead><tr><th>Requirement</th><th>Assertion</th><th>Verdict</th><th>Time</th><th>Values</th><th>Reason</th></tr></thead>
+                  <tbody>
+                    {outcome.run.assertions.map(a => {
+                      const def = scenario?.assertions.find(x => x.id === a.assertionId);
+                      return (
+                        <tr key={a.assertionId}>
+                          <td>{repository.requirements[a.requirementId]?.requirementId ?? a.requirementId}</td>
+                          <td>{def ? (def.name ? `${def.name}: ${def.condition}` : def.condition) : a.assertionId}</td>
+                          <td>{a.verdict}</td>
+                          <td>{a.at ? `t = ${r4(a.at.t)}` : ''}</td>
+                          <td>{a.at ? Object.entries(a.at.values).map(([k, v]) => `${k} = ${r4(v)}`).join(', ') : ''}</td>
+                          <td>{a.reason}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+                <div className="mt-2 flex flex-wrap gap-3">
+                  {(scenario?.signals ?? []).map(sg => (
+                    <SimTracePlot key={sg.alias} alias={sg.alias} times={outcome.run!.series.times} values={outcome.run!.series.values[sg.alias] ?? []} />
+                  ))}
+                </div>
+              </>
+            )}
+            {scenarioEditing === vc.id && (
+              <ScenarioEditor verificationCase={vc} repository={repository} project={project} requirementId={requirementId}
+                onSave={(sc, verifies) => saveScenario(vc, sc, verifies)} onCancel={() => setScenarioEditing(null)} />
+            )}
             <p className="text-neutral-500">Evidence: {ev ? simEvidenceStatusFor(repository, ev.id, project) : 'none'}</p>
             {editing === vc.id && (
               <div className="mt-2 flex flex-col gap-2">

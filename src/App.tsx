@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo, MouseEvent, KeyboardEvent, ChangeEvent, Profiler, startTransition, lazy, Suspense } from 'react';
 import { recordRenderCommit, resetProjectLoadTelemetry } from './features/sysml/performance/renderTelemetry';
 import { projectExternalEndpoints, projectExternalEndpointSignature, projectSimSources, buildSimEndpoints } from './engine/trmSim/simEndpoints';
-import { repositoryChangeCommands, simEvidenceStatusFor } from './engine/trmSim/simVerification';
+import { repositoryChangeCommands, runAllSimulationCases, simEvidenceStatusFor } from './engine/trmSim/simVerification';
 import { SimVerificationPanel } from './components/trmSim/SimVerificationPanel';
 import { buildSimExternalElements } from './engine/trmSim/simExternalElements';
 import { buildTraceabilityIndex } from './engine/sysml/traceabilityIndex';
@@ -6376,6 +6376,12 @@ const ADIA = () => {
       }
     }
   }, [canonicalSysmlRepository, executeConfirmedDeletion, handleExecuteSysmlCommand, addError]);
+  const handleRunAllSimulations = useCallback(() => {
+    const out = runAllSimulationCases(sysmlGatewayStateRef.current?.repository ?? canonicalSysmlRepository, simVerificationProject, { newId: () => uuidv4(), executedAt: new Date().toISOString() });
+    handleSimVerificationRepositoryChange(out.repository);
+    const count = (o: string) => out.results.filter(r => r.outcome === o).length;
+    addError('info', `Simulation tests: ${count('passed')} passed, ${count('failed')} failed, ${count('inconclusive')} inconclusive, ${count('error')} errors, ${count('skipped')} skipped`, 'Simulation verification');
+  }, [canonicalSysmlRepository, simVerificationProject, handleSimVerificationRepositoryChange, addError]);
 
   const handleExplorerCommandResult = useCallback((result: ExplorerCommandResult) => {
     for (const diagnostic of result.diagnostics) {
@@ -18885,6 +18891,7 @@ const ADIA = () => {
               externalElements={traceabilityExternalElements}
               evidenceCurrency={simEvidenceCurrency}
               onSimulate={setSimVerificationRequirementId}
+              onRunAllSimulations={handleRunAllSimulations}
               onNavigate={(elementId) => {
                 setSelectedIds([elementId]);
                 if (blocks.some(block => block.id === elementId && block.stereotype === 'requirement')) setDiagramMode('requirements');

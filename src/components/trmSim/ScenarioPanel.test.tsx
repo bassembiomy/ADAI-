@@ -84,6 +84,17 @@ describe('SimVerificationPanel: scenario cases', () => {
     expect(screen.getByRole('status', { name: 'Thermostat loop result' }).textContent).toMatch(/2 failed/);
   });
 
+  it('counts an inconclusive requirement once, and a requirement without assertion as not tested', () => {
+    const scenario = thermostatScenario();
+    (scenario.assertions as any[])[2] = { ...scenario.assertions[2], temporal: { kind: 'response', trigger: 'dT >= 200', within: 0.2 } };
+    const r = repo(scenario);
+    r.requirements['req-x'] = { id: 'req-x', requirementId: 'REQ-X', name: 'Extra', text: 'x', namespace: [], kind: 'requirement', status: 'approved', version: '1' } as any;
+    (r.verificationCases['vc-thermo'] as any).verifiesRequirementIds.push('req-x');
+    renderPanel(r);
+    fireEvent.click(screen.getByRole('button', { name: 'Run Thermostat loop' }));
+    expect(screen.getByRole('status', { name: 'Thermostat loop result' }).textContent).toBe('4 passed, 0 failed, 1 inconclusive, 1 not tested');
+  });
+
   it('draws a trace plot of the scenario signals after a run', () => {
     renderPanel();
     fireEvent.click(screen.getByRole('button', { name: 'Run Thermostat loop' }));
