@@ -28,7 +28,8 @@
       "deps": [
         "WP-01"
       ],
-      "status": "in_progress"
+      "status": "done",
+      "result": "7/7; planner test corrected: HEATER is internal (read by internalTransitions guards)"
     },
     {
       "id": "WP-03",

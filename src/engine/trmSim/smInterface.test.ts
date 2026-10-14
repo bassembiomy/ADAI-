@@ -19,9 +19,21 @@ describe('extractSmInterface', () => {
 
   it('infers direction from scripts: read only = input, written only = output, both = internal', () => {
     expect(dir(iface, 'cof')).toBe('input');      // only read, in a transition condition
-    expect(dir(iface, 'HEATER')).toBe('output');  // only written; `HEATER=HEATER+10` is a self update, not a read
+    expect(dir(iface, 'HEATER')).toBe('internal'); // written in entries, read by the internalTransitions guards `[HEATER>100]`
     expect(dir(iface, 'POWER')).toBe('internal'); // written in IDLE entry, read in conditions
     expect(dir(iface, 'ir')).toBe('internal');    // `ir=ir+1` and `ir>50`
+  });
+
+  it('treats a self update as a write only, so a variable only ever updated from itself is an output', () => {
+    const m = {
+      states: [{ id: 'a', name: 'A', entry: 'count = count + 1; level += 2;', during: '', exit: '' }],
+      transitions: [{ id: 't', sourceId: 'a', targetId: 'a', condition: 'go', action: 'count++' }],
+      variables: [{ id: 'vc', name: 'count', type: 'int' }, { id: 'vl', name: 'level', type: 'int' }, { id: 'vg', name: 'go', type: 'bool' }],
+    };
+    const i = extractSmInterface(m as any);
+    expect(dir(i, 'count')).toBe('output');
+    expect(dir(i, 'level')).toBe('output');
+    expect(dir(i, 'go')).toBe('input');
   });
 
   it('lets an enabled HIL mapping override the scan (read = input, write = output)', () => {
