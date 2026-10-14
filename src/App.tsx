@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo, MouseEvent, KeyboardEvent, ChangeEvent, Profiler, startTransition, lazy, Suspense } from 'react';
 import { recordRenderCommit, resetProjectLoadTelemetry } from './features/sysml/performance/renderTelemetry';
 import { projectExternalEndpoints, projectExternalEndpointSignature, projectSimSources, buildSimEndpoints } from './engine/trmSim/simEndpoints';
-import { repositoryChangeCommands } from './engine/trmSim/simVerification';
+import { repositoryChangeCommands, simEvidenceStatusFor } from './engine/trmSim/simVerification';
 import { SimVerificationPanel } from './components/trmSim/SimVerificationPanel';
 import { buildSimExternalElements } from './engine/trmSim/simExternalElements';
 import { buildTraceabilityIndex } from './engine/sysml/traceabilityIndex';
@@ -6363,6 +6363,9 @@ const ADIA = () => {
     states, junctions, transitions, variables, layers, tickMs, hilConfig, safetyMode,
     globalXBridgesNodes, globalXBridgesEdges, vlabNodes, vlabEdges,
   }), [states, junctions, transitions, variables, layers, tickMs, hilConfig, safetyMode, globalXBridgesNodes, globalXBridgesEdges, vlabNodes, vlabEdges]);
+  const simEvidenceCurrency = useCallback((evidence: { id: string; simulation?: unknown }): 'current' | 'stale' =>
+    evidence.simulation && simEvidenceStatusFor(canonicalSysmlRepository, evidence.id, simVerificationProject) === 'stale' ? 'stale' : 'current',
+  [canonicalSysmlRepository, simVerificationProject]);
   const handleSimVerificationRepositoryChange = useCallback((next: SysmlRepository) => {
     const previous = sysmlGatewayStateRef.current?.repository ?? canonicalSysmlRepository;
     for (const command of repositoryChangeCommands(previous, next)) {
@@ -11673,6 +11676,8 @@ const ADIA = () => {
       canonicalSysmlRepository,
       {},
       buildTraceabilityIndex(canonicalSysmlRepository, traceabilityExternalElements),
+      traceabilityExternalElements,
+      { evidenceCurrency: simEvidenceCurrency },
     );
     const traceabilityMetrics = computeCoverageMetrics(traceabilityMatrix);
 
@@ -12529,7 +12534,7 @@ const ADIA = () => {
     setShowGlobalReportPreview(true);
     setShowReportDialog(false);
     addError('info', 'Report preview ready');
-  }, [blocks, parts, connectors, relationships, states, transitions, junctions, hmiComponents, variables, activeStates, addError, setShowReportDialog, layers, tickMs, safetyMode, canonicalSysmlRepository, traceabilityExternalElements]);
+  }, [blocks, parts, connectors, relationships, states, transitions, junctions, hmiComponents, variables, activeStates, addError, setShowReportDialog, layers, tickMs, safetyMode, canonicalSysmlRepository, traceabilityExternalElements, simEvidenceCurrency]);
 
   // KEYBOARD SHORTCUTS
   useEffect(() => {
@@ -18878,6 +18883,7 @@ const ADIA = () => {
             <CanonicalTraceabilityMatrix
               repository={canonicalSysmlRepository}
               externalElements={traceabilityExternalElements}
+              evidenceCurrency={simEvidenceCurrency}
               onSimulate={setSimVerificationRequirementId}
               onNavigate={(elementId) => {
                 setSelectedIds([elementId]);

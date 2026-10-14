@@ -1,5 +1,5 @@
-import type { RequirementDefinition, SysmlRelationship, SysmlRepository } from './model';
-import { deriveEvidenceStatus } from './evidence';
+import type { RequirementDefinition, SysmlRelationship, SysmlRepository, VerificationEvidence } from './model';
+import { deriveEvidenceStatus, type EvidenceCurrency } from './evidence';
 import { hash, stableStringify } from './requirements';
 import { buildTraceabilityIndex, type TraceabilityExternalElement, type TraceabilityIndex } from './traceabilityIndex';
 import { resolvePartLike } from './partOccurrences';
@@ -107,15 +107,44 @@ export interface CoverageMetrics {
   verificationPercent: number;
 }
 
+export interface RtmOptions {
+  evidenceCurrency?: (evidence: VerificationEvidence) => EvidenceCurrency;
+}
+
+interface LatestEvidence { item: VerificationEvidence; currency: 'current' | 'stale'; }
+
+function latestEvidence(repo: SysmlRepository, ids: string[], options: RtmOptions): LatestEvidence[] {
+  const best = new Map<string, VerificationEvidence>();
+  const newer = (a: VerificationEvidence, b: VerificationEvidence) => {
+    const ta = a.executedAt ?? '';
+    const tb = b.executedAt ?? '';
+    if (ta !== tb) return ta > tb;
+    if (a.revision !== b.revision) return a.revision > b.revision;
+    return a.id > b.id;
+  };
+  for (const id of ids) {
+    const item = repo.evidence[id];
+    if (!item) continue;
+    const key = `${item.verificationCaseId}\u0000${item.requirementId}`;
+    const current = best.get(key);
+    if (!current || newer(item, current)) best.set(key, item);
+  }
+  return [...best.values()].map(item => ({
+    item,
+    currency: deriveEvidenceStatus(repo, item.id) === 'stale' || options.evidenceCurrency?.(item) === 'stale' ? 'stale' : 'current',
+  }));
+}
+
 export function buildTraceabilityMatrix(
   repo: SysmlRepository,
   filters: RtmFilters = {},
   suppliedIndex?: TraceabilityIndex,
   externalElements: TraceabilityExternalElement[] = [],
+  options: RtmOptions = {},
 ): TraceabilityMatrix {
   const index = suppliedIndex ?? buildTraceabilityIndex(repo, externalElements);
   const rows = Object.values(repo.requirements)
-    .map(requirement => buildRow(repo, requirement, filters.compareBaselineId, index))
+    .map(requirement => buildRow(repo, requirement, filters.compareBaselineId, index, options))
     .filter(row => matchesFilters(repo, row, filters))
     .sort((a, b) => a.requirement.requirementId.localeCompare(b.requirement.requirementId) || a.requirement.id.localeCompare(b.requirement.id));
   return { revision: repo.revision, filters: { ...filters }, rows };
@@ -218,7 +247,7 @@ export function exportRtmCsv(matrix: TraceabilityMatrix, repository?: SysmlRepos
   return [headers.join(','), ...rows.map(columns => columns.map(csv).join(','))].join('\r\n');
 }
 
-function buildRow(repo: SysmlRepository, requirement: RequirementDefinition, compareBaselineId: string | undefined, index: TraceabilityIndex): RtmRow {
+function buildRow(repo: SysmlRepository, requirement: RequirementDefinition, compareBaselineId: string | undefined, index: TraceabilityIndex, options: RtmOptions = {}): RtmRow {
   const relationships = index.relationshipsByEndpoint.get(requirement.id) ?? [];
   const relatedIds = relationships.map(r => r.sourceId === requirement.id ? r.targetId : r.sourceId);
   const blocks: string[] = [];
@@ -369,12 +398,13 @@ function buildRow(repo: SysmlRepository, requirement: RequirementDefinition, com
   ]);
 
   let verificationStatus: VerificationStatus = 'not-verified';
-  const evidenceItems = evidence.map(id => repo.evidence[id]).filter(Boolean);
-  if (evidenceItems.some(item => item.result === 'failed')) {
+  const latest = latestEvidence(repo, evidence, options);
+  const latestCurrent = latest.map(entry => entry.item);
+  if (latestCurrent.some(item => item.result === 'failed')) {
     verificationStatus = 'failed';
-  } else if (evidenceItems.some(item => item.result === 'passed')) {
+  } else if (latestCurrent.some(item => item.result === 'passed')) {
     verificationStatus = 'passed';
-  } else if (allVerificationIds.length > 0) {
+  } else if (allVerificationIds.length > 0 || evidence.length > 0) {
     verificationStatus = 'not-run';
   }
 
@@ -402,7 +432,7 @@ function buildRow(repo: SysmlRepository, requirement: RequirementDefinition, com
     behaviors: sortedUnique(behaviors), simulations: sortedUnique(simulations), verificationCases: sortedUnique(verificationCases),
     evidence: sortedUnique(evidence), artifacts: sortedUnique(artifacts), unresolvedEndpointIds: sortedUnique(unresolvedEndpointIds),
   };
-  return { ...row, status: deriveStatus(repo, requirement, relationships, row) };
+  return { ...row, status: deriveStatus(repo, requirement, relationships, row, options) };
 }
 
 function deriveStatus(
@@ -410,13 +440,14 @@ function deriveStatus(
   requirement: RequirementDefinition,
   relationships: SysmlRelationship[],
   row: Omit<RtmRow, 'status'>,
+  options: RtmOptions = {},
 ): RtmStatus {
   if (row.unresolvedEndpointIds.length) return 'unresolved';
   if (relationships.some(relationship => relationship.suspect)) return 'suspect';
-  const evidence = row.evidence.map(id => repo.evidence[id]).filter(Boolean);
-  if (evidence.some(item => item.result === 'failed')) return 'failed';
-  if (requirement.status === 'stale' || evidence.some(item => item.result === 'passed' && deriveEvidenceStatus(repo, item.id) === 'stale')) return 'stale';
-  if (evidence.some(item => item.result === 'passed' && deriveEvidenceStatus(repo, item.id) === 'current')) return 'verified';
+  const latest = latestEvidence(repo, row.evidence, options);
+  if (latest.some(e => e.currency === 'current' && e.item.result === 'failed')) return 'failed';
+  if (requirement.status === 'stale' || latest.some(e => e.currency === 'stale')) return 'stale';
+  if (latest.some(e => e.currency === 'current' && e.item.result === 'passed')) return 'verified';
   if (relationships.some(relationship => relationship.kind === 'satisfy')) return 'covered';
   if (relationships.length || row.verificationCases.length || row.evidence.length) return 'uncovered';
   return 'orphan';
