@@ -13,9 +13,6 @@ import { createVLabDOEBlock, createXBridgesDOEBlock } from './engine/doe/integra
 import { fitRSM, fitGMDH, fitTaguchi } from './engine/doe/statistics';
 import DOMPurify from 'dompurify';
 import { v4 as uuidv4 } from 'uuid';
-import * as XLSX from 'xlsx';
-import { jsPDF } from 'jspdf';
-import html2canvas from 'html2canvas';
 import { XbridgesWorkspace } from './components/xbridges/XbridgesWorkspace';
 import { VLabWorkspace } from './components/vlab/VLabWorkspace';
 import { HILWorkspace } from './components/hil/HILWorkspace';
@@ -123,7 +120,11 @@ import { parseModelExplorerDragData } from './features/modelExplorer/modelExplor
 import type { ActiveDiagramContext, ExplorerCommandResult } from './features/modelExplorer/modelExplorerTypes';
 import { VLAB_LIBRARY } from './utils/vlabLibrary';
 import { BLOCK_LIBRARY as XBRIDGES_LIBRARY } from './engine/xbridges/BlockDefinitions';
-import JSZip from 'jszip';
+// Heavy export libraries are loaded on demand to keep them out of the startup bundle.
+const loadXlsx = () => import('xlsx');
+const loadJsPdf = () => import('jspdf').then(m => m.jsPDF);
+const loadHtml2Canvas = () => import('html2canvas').then(m => m.default);
+const loadJsZip = () => import('jszip').then(m => m.default);
 import {
   createReportSnapshot,
   toHierarchySource,
@@ -888,7 +889,7 @@ const LegacyTraceabilityMatrix = ({
     roots.forEach(r => traverse(r, 0));
   }
 
-  const exportExcel = () => {
+  const exportExcel = async () => {
     const referenceLabel = (id: string, fallbackKind = 'Element') => {
       const block = blocks.find(b => b.id === id);
       if (block) return sysmlObjectLabel(block, block.stereotype || 'Block');
@@ -978,6 +979,7 @@ const LegacyTraceabilityMatrix = ({
         Links: outgoing,
       };
     });
+    const XLSX = await loadXlsx();
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "RTM");
@@ -1236,6 +1238,7 @@ const CodeGenerationDialog = ({
           <Button data-help-feature="app-code-download" data-help-source="src/App.tsx"
             onClick={async () => {
               try {
+                const JSZip = await loadJsZip();
                 const zip = new JSZip();
                 files.forEach(f => {
                   zip.file(f.name, f.content);
@@ -1399,6 +1402,7 @@ const PidWorkspaceDialog = ({
     // Download PID files together as a ZIP
     (async () => {
       try {
+        const JSZip = await loadJsZip();
         const zip = new JSZip();
         zip.file('pid_controller.h', h_content);
         zip.file('pid_controller.c', c_content);
@@ -2525,9 +2529,10 @@ const DoeWorkspace = ({
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (evt) => {
+    reader.onload = async (evt) => {
       try {
         const bstr = evt.target?.result;
+        const XLSX = await loadXlsx();
         const wb = XLSX.read(bstr, { type: 'binary' });
         const ws = wb.Sheets[wb.SheetNames[0]];
         const jsonData = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
@@ -4143,6 +4148,7 @@ const ReportPreviewModal = ({
       try {
         const plot = originalPlots[i] as any;
         if (plot.data && plot.layout) {
+             const html2canvas = await loadHtml2Canvas();
              const canvas = await html2canvas(plot);
              const imgData = canvas.toDataURL('image/png');
              const img = document.createElement('img');
@@ -4171,6 +4177,8 @@ const ReportPreviewModal = ({
   const exportToPDF = async () => {
     if (!previewRef.current) return;
     try {
+      const html2canvas = await loadHtml2Canvas();
+      const jsPDF = await loadJsPdf();
       const canvas = await html2canvas(previewRef.current, { scale: 2, backgroundColor: '#1a1a1a' });
       const imgData = canvas.toDataURL('image/jpeg', 0.95);
       const pdf = new jsPDF('p', 'mm', 'a4');
@@ -6493,12 +6501,13 @@ const ADIA = () => {
   // === Professional Report Generation ===
   const [showReportPreview, setShowReportPreview] = useState(false);
 
-  const generateReport = useCallback(() => {
+  const generateReport = useCallback(async () => {
     if (!results) {
       addError('warning', 'No model results to export. Run a model first.');
       return;
     }
 
+    const jsPDF = await loadJsPdf();
     const pdf = new jsPDF('p', 'mm', 'a4');
     const pageW = pdf.internal.pageSize.getWidth();
     const margin = 20;
