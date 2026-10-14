@@ -368,7 +368,7 @@ function buildRow(repo: SysmlRepository, requirement: RequirementDefinition, com
   const evidence = sortedUnique([
     ...(index.evidenceByRequirement.get(requirement.id) ?? []),
     ...verificationCases.flatMap(id => index.evidenceByVerificationCase.get(id) ?? []),
-  ]);
+  ]).filter(id => repo.evidence[id]?.requirementId === requirement.id);
 
   let changeKind: RtmChangeKind | undefined = undefined;
   if (compareBaselineId && repo.baselines[compareBaselineId]) {

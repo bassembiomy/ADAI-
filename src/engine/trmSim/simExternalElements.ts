@@ -6,6 +6,7 @@ import type { TraceabilityExternalElement } from '../sysml/traceabilityIndex';
 import { blockTypeOf, libraryBlock } from '../vlab/vlabConnectionRules';
 import { formatChannelLabel } from '../../utils/scopeUtils';
 import { formatSimTarget } from './simTarget';
+import { BLOCK_LIBRARY } from '../xbridges/BlockDefinitions';
 
 export interface SimModelSources {
   stateMachine?: {
@@ -21,6 +22,24 @@ export interface SimModelSources {
 type Rec = Record<string, unknown>;
 const isRec = (v: unknown): v is Rec => typeof v === 'object' && v !== null && !Array.isArray(v);
 const str = (v: unknown): string | null => (typeof v === 'string' && v.trim().length > 0 ? v : null);
+
+/** Rebuild X-Bridges nodes without saved ports through the block library, like the runner does. */
+export function withPorts(nodes: any[]): any[] {
+  return nodes.map(n => {
+    const d = n && typeof n.data === 'object' && n.data ? n.data : null;
+    if (!d || Array.isArray(d.inputs) || Array.isArray(d.outputs) || (n.parameters && typeof n.parameters === 'object')) return n;
+    const type = typeof d.type === 'string' ? d.type : n.type;
+    const id = typeof d.id === 'string' ? d.id : n.id;
+    const make = BLOCK_LIBRARY[type];
+    if (!make || typeof id !== 'string') return n;
+    try {
+      const fresh: any = make(id, JSON.parse(JSON.stringify(d.params ?? {})));
+      return { ...n, data: { ...d, inputs: fresh.inputs ?? [], outputs: fresh.outputs ?? [] } };
+    } catch {
+      return n;
+    }
+  });
+}
 
 export function buildSimExternalElements(sources: SimModelSources): TraceabilityExternalElement[] {
   const out: TraceabilityExternalElement[] = [];
@@ -54,7 +73,7 @@ export function buildSimExternalElements(sources: SimModelSources): Traceability
   }
 
   for (const canvas of sources.xbridges ?? []) {
-    for (const raw of canvas.nodes) {
+    for (const raw of withPorts([...canvas.nodes])) {
       if (!isRec(raw)) continue;
       const blockId = str(raw.id);
       if (blockId === null) continue;

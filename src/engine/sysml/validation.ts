@@ -327,7 +327,7 @@ function checkRelationshipDirection(
     case 'satisfy': return !sourceRequirement && targetRequirement
       ? { valid: true, reason: '' }
       : { valid: false, reason: 'Satisfy requires a non-Requirement source and a Requirement target.' };
-    case 'verify': return (Boolean(repo.verificationCases[relationship.sourceId]) || resolveRepositoryEndpoint(repo, relationship.sourceId)?.family === 'interaction' || context?.externalEndpoints?.get(relationship.sourceId)?.family === 'simulationTarget') && targetRequirement
+    case 'verify': return (Boolean(repo.verificationCases[relationship.sourceId]) || resolveRepositoryEndpoint(repo, relationship.sourceId)?.family === 'interaction' || ['simulationTarget', 'state'].includes(context?.externalEndpoints?.get(relationship.sourceId)?.family ?? '')) && targetRequirement
       ? { valid: true, reason: '' }
       : { valid: false, reason: 'Verify requires a Verification Case, Interaction or simulation target source and a Requirement target.' };
     case 'refine': return !sourceRequirement && targetRequirement

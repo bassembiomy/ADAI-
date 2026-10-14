@@ -7,7 +7,8 @@ import { computeImpactHash, createSysmlGatewayState, executeSysmlCommand, loadCa
 import { createEmptyRepository, type SysmlRepository } from '../sysml/model';
 import { buildTraceabilityMatrix } from '../sysml/rtm';
 import { serializeSysmlProjectState } from '../sysml/persistence';
-import { projectExternalEndpoints } from './simEndpoints';
+import { projectExternalEndpoints, projectSimSources } from './simEndpoints';
+import { buildSimExternalElements } from './simExternalElements';
 import { validateScenario } from './simScenario';
 import {
   createSimulationCase, linkedSimTargets, repositoryChangeCommands, runAllSimulationCases, simEvidenceStatusFor, verifyRequirementsByScenario,
@@ -40,8 +41,14 @@ const commit = (state: SysmlGatewayState, next: SysmlRepository, proj: unknown =
 
 const currencyFor = (repo: SysmlRepository, proj: unknown) => (e: any) =>
   (e.simulation && simEvidenceStatusFor(repo, e.id, proj) === 'stale' ? 'stale' : 'current') as 'stale' | 'current';
-const trm = (repo: SysmlRepository, proj: unknown = project) => Object.fromEntries(
-  buildTraceabilityMatrix(repo, {}, undefined, [], { evidenceCurrency: currencyFor(repo, proj) }).rows.map(r => [r.requirement.requirementId, r.status]),
+/** The external elements exactly as App.tsx builds traceabilityExternalElements (App.tsx:5272). */
+const externalElements = (p: any) => [
+  ...p.states.map((s: any) => ({ id: s.id, name: s.name, kind: 'state' })),
+  ...p.junctions.map((j: any) => ({ id: j.id, name: j.name, kind: j.type ?? 'pseudostate' })),
+  ...buildSimExternalElements(projectSimSources(p)).filter(e => e.id.startsWith('sim:')),
+];
+const trm = (repo: SysmlRepository, proj: any = project) => Object.fromEntries(
+  buildTraceabilityMatrix(repo, {}, undefined, externalElements(proj), { evidenceCurrency: currencyFor(repo, proj) }).rows.map(r => [r.requirement.requirementId, r.status]),
 );
 const ALL = (status: string) => Object.fromEntries(THERMO_REQUIREMENTS.map(q => [q.requirementId, status]));
 

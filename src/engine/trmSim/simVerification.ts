@@ -3,7 +3,7 @@ import type { SysmlRepository, VerificationCase, VerificationEvidence } from '..
 import type { EvidenceCurrency } from '../sysml/evidence';
 import { BLOCK_LIBRARY } from '../xbridges/BlockDefinitions';
 import type { SimCriterion } from './simCriterion';
-import { buildSimExternalElements } from './simExternalElements';
+import { buildSimExternalElements, withPorts } from './simExternalElements';
 import { projectSimSources } from './simEndpoints';
 import { parseSimTarget } from './simTarget';
 import { extractSmInterface } from './smInterface';
@@ -12,7 +12,8 @@ import { extractVlabInterface } from './vlabInterface';
 import { runSmVerification } from './smRunner';
 import { runXbVerification } from './xbRunner';
 import { runVlabVerification } from './vlabRunner';
-import { deriveSimEvidenceStatus, recordSimulationEvidence, simModelFingerprint } from './simEvidence';
+import { deriveSimEvidenceStatus, recordScenarioEvidence, recordSimulationEvidence, simModelFingerprint } from './simEvidence';
+import { runSimScenario, scenarioModelFingerprint, type SimScenarioRun } from './simScenarioRunner';
 import type { SimEvaluation, SimTraceSample } from './simEvaluate';
 
 import { engineModelOf, engineOfSimTarget } from './simSession';
@@ -61,24 +62,6 @@ export function simulationCases(repo: SysmlRepository, requirementId: string): V
 }
 
 export interface SimCandidate { target: string; name: string; engine: SimEngine; unit?: string }
-
-/** Rebuild X-Bridges nodes without saved ports through the block library, like the runner does. */
-function withPorts(nodes: any[]): any[] {
-  return nodes.map(n => {
-    const d = n && typeof n.data === 'object' && n.data ? n.data : null;
-    if (!d || Array.isArray(d.inputs) || Array.isArray(d.outputs) || (n.parameters && typeof n.parameters === 'object')) return n;
-    const type = typeof d.type === 'string' ? d.type : n.type;
-    const id = typeof d.id === 'string' ? d.id : n.id;
-    const make = BLOCK_LIBRARY[type];
-    if (!make || typeof id !== 'string') return n;
-    try {
-      const fresh: any = make(id, JSON.parse(JSON.stringify(d.params ?? {})));
-      return { ...n, data: { ...d, inputs: fresh.inputs ?? [], outputs: fresh.outputs ?? [] } };
-    } catch {
-      return n;
-    }
-  });
-}
 
 export function simCandidates(project: any): { stimulus: SimCandidate[]; observe: SimCandidate[] } {
   const stimulus: SimCandidate[] = [];
@@ -161,8 +144,83 @@ export function simEvidenceStatusFor(repo: SysmlRepository, evidenceId: string, 
   const evidence = repo.evidence[evidenceId];
   if (!evidence) return 'missing';
   const criterion = repo.verificationCases[evidence.verificationCaseId]?.simulationCriterion;
-  const fingerprint = criterion ? simModelFingerprint(engineModelOf(project, engineOfTarget(criterion.observe))) : '';
+  const fingerprint = evidence.simulation?.engines ? scenarioModelFingerprint(project, evidence.simulation.engines) : criterion ? simModelFingerprint(engineModelOf(project, engineOfTarget(criterion.observe))) : '';
   return deriveSimEvidenceStatus(repo, evidenceId, fingerprint);
+}
+
+export function createSimulationCase(repo: SysmlRepository, requirementId: string, input: { id: string; name?: string }): SysmlRepository {
+  const requirement = repo.requirements[requirementId];
+  if (!requirement) throw new Error(`Requirement ${requirementId} does not exist`);
+  const id = input.id;
+  if (repo.verificationCases[id] || repo.requirements[id] || repo.relationships[id] || repo.evidence[id]) throw new Error(`Element ${id} already exists`);
+  const next = structuredClone(repo);
+  next.verificationCases[id] = {
+    id, name: input.name ?? `${requirement.requirementId} simulation test`, kind: 'verificationCase', method: 'simulation',
+    verifiesRequirementIds: [requirementId], namespace: [...requirement.namespace],
+    ...(requirement.ownerId ? { ownerId: requirement.ownerId } : {}),
+  } as VerificationCase;
+  return next;
+}
+
+export interface ScenarioVerifyOutcome {
+  repository: SysmlRepository;
+  run?: SimScenarioRun;
+  evidence: VerificationEvidence[];
+  skipped: { requirementId: string; reason: string }[];
+  error?: string;
+}
+
+export function verifyRequirementsByScenario(
+  repo: SysmlRepository, project: any, caseId: string, input: { newId: (requirementId: string) => string; executedAt: string },
+): ScenarioVerifyOutcome {
+  const vc = repo.verificationCases[caseId];
+  const scenario = vc?.simulationScenario;
+  if (!vc) return { repository: repo, evidence: [], skipped: [], error: `Verification case ${caseId} does not exist` };
+  if (!scenario) return { repository: repo, evidence: [], skipped: [], error: 'The verification case has no simulation scenario' };
+  const run = runSimScenario(project, scenario, { repository: repo, verificationCase: vc });
+  const errors = run.diagnostics.filter(d => d.severity === 'error');
+  if (errors.length > 0) return { repository: repo, run, evidence: [], skipped: [], error: errors.map(d => `${d.code}: ${d.message}`).join('; ') };
+  try {
+    const rec = recordScenarioEvidence(repo, { newId: input.newId, scenario, run, executedAt: input.executedAt });
+    return { repository: rec.repository, run, evidence: rec.evidence, skipped: rec.skipped };
+  } catch (e) {
+    return { repository: repo, run, evidence: [], skipped: [], error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+export interface SimCaseResult {
+  caseId: string;
+  kind: 'scenario' | 'criterion' | 'none';
+  outcome: 'passed' | 'failed' | 'inconclusive' | 'error' | 'skipped';
+  message?: string;
+}
+
+export function runAllSimulationCases(
+  repo: SysmlRepository, project: any, input: { newId: (requirementId?: string) => string; executedAt: string },
+): { repository: SysmlRepository; results: SimCaseResult[] } {
+  let repository = repo;
+  const results: SimCaseResult[] = [];
+  const cases = Object.values(repo.verificationCases).filter(c => c.method === 'simulation').sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  for (const c of cases) {
+    const current = repository.verificationCases[c.id] ?? c;
+    if (current.simulationScenario) {
+      const out = verifyRequirementsByScenario(repository, project, c.id, { newId: input.newId, executedAt: input.executedAt });
+      repository = out.repository;
+      if (out.error) { results.push({ caseId: c.id, kind: 'scenario', outcome: 'error', message: out.error }); continue; }
+      const inconclusive = out.skipped.find(s => s.reason.startsWith('inconclusive'));
+      const outcome: SimCaseResult['outcome'] = out.evidence.some(e => e.result === 'failed') ? 'failed'
+        : inconclusive ? 'inconclusive'
+        : out.evidence.length === 0 ? 'skipped' : 'passed';
+      const message = outcome === 'inconclusive' ? inconclusive!.reason : outcome === 'skipped' ? 'no assertion for any requirement' : undefined;
+      results.push({ caseId: c.id, kind: 'scenario', outcome, ...(message !== undefined ? { message } : {}) });
+    } else if (current.simulationCriterion) {
+      const out = verifyRequirementBySimulation(repository, project, c.id, { id: input.newId(current.simulationCriterion.requirementId), executedAt: input.executedAt });
+      repository = out.repository;
+      if (out.error || !out.evidence) results.push({ caseId: c.id, kind: 'criterion', outcome: 'error', message: out.error ?? 'no evidence' });
+      else results.push({ caseId: c.id, kind: 'criterion', outcome: out.evidence.result === 'passed' ? 'passed' : 'failed' });
+    } else results.push({ caseId: c.id, kind: 'none', outcome: 'skipped', message: 'no scenario or criterion' });
+  }
+  return { repository, results };
 }
 
 function stable(v: unknown): string {
@@ -183,10 +241,15 @@ export function repositoryChangeCommands(prev: SysmlRepository, next: SysmlRepos
   const removed = Object.keys(prev.relationships).filter(id => !next.relationships[id]);
   if (removed.length > 0) out.push({ type: 'deleteElements', elementIds: removed });
   for (const [id, rel] of Object.entries(next.relationships)) if (!prev.relationships[id]) out.push({ type: 'createElement', element: rel });
+  for (const [id, vc] of Object.entries(next.verificationCases)) if (!prev.verificationCases[id]) out.push({ type: 'createElement', element: vc });
   for (const [id, vc] of Object.entries(next.verificationCases)) {
-    if (prev.verificationCases[id] && !sameValue(prev.verificationCases[id].simulationCriterion, vc.simulationCriterion)) {
-      out.push({ type: 'updateElement', elementId: id, patch: { simulationCriterion: vc.simulationCriterion } });
+    const before = prev.verificationCases[id];
+    if (!before) continue;
+    const patch: Record<string, unknown> = {};
+    for (const key of ['simulationCriterion', 'simulationScenario', 'verifiesRequirementIds'] as const) {
+      if (!sameValue(before[key], vc[key])) patch[key] = vc[key];
     }
+    if (Object.keys(patch).length > 0) out.push({ type: 'updateElement', elementId: id, patch });
   }
   for (const [id, ev] of Object.entries(next.evidence)) if (!prev.evidence[id]) out.push({ type: 'createElement', element: ev });
   return out;
