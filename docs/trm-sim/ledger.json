@@ -7,21 +7,137 @@
     "result": "8 files / 59 tests passed"
   },
   "wps": [
-    {"id": "WP-00", "title": "Set up loop and baseline", "deps": [], "status": "done"},
-    {"id": "WP-01", "title": "Target reference", "deps": ["WP-00"], "status": "todo"},
-    {"id": "WP-02", "title": "State machine interface", "deps": ["WP-01"], "status": "todo"},
-    {"id": "WP-03", "title": "X-Bridges interface", "deps": ["WP-01"], "status": "todo"},
-    {"id": "WP-04", "title": "V-Lab interface", "deps": ["WP-01"], "status": "todo"},
-    {"id": "WP-05", "title": "Assign requirements to any target", "deps": ["WP-01"], "status": "todo"},
-    {"id": "WP-06", "title": "Real requirement ids in generated C", "deps": ["WP-05"], "status": "todo"},
-    {"id": "WP-07", "title": "Criterion and evaluator", "deps": ["WP-01"], "status": "todo"},
-    {"id": "WP-08a", "title": "State machine runner", "deps": ["WP-02", "WP-07"], "status": "todo"},
-    {"id": "WP-08b", "title": "X-Bridges runner", "deps": ["WP-03", "WP-07"], "status": "todo"},
-    {"id": "WP-08c", "title": "V-Lab runner", "deps": ["WP-04", "WP-07"], "status": "todo"},
-    {"id": "WP-09", "title": "Evidence and staleness", "deps": ["WP-08a", "WP-08b", "WP-08c"], "status": "todo"},
-    {"id": "WP-10", "title": "Assignment panel and Run button", "deps": ["WP-05", "WP-09"], "status": "todo"},
-    {"id": "WP-11", "title": "End to end", "deps": ["WP-10"], "status": "todo"},
-    {"id": "WP-12", "title": "Close-out", "deps": ["WP-11"], "status": "todo"}
+    {
+      "id": "WP-00",
+      "title": "Set up loop and baseline",
+      "deps": [],
+      "status": "done"
+    },
+    {
+      "id": "WP-01",
+      "title": "Target reference",
+      "deps": [
+        "WP-00"
+      ],
+      "status": "done",
+      "result": "20/20 acceptance tests; tsc clean for trmSim"
+    },
+    {
+      "id": "WP-02",
+      "title": "State machine interface",
+      "deps": [
+        "WP-01"
+      ],
+      "status": "in_progress"
+    },
+    {
+      "id": "WP-03",
+      "title": "X-Bridges interface",
+      "deps": [
+        "WP-01"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "WP-04",
+      "title": "V-Lab interface",
+      "deps": [
+        "WP-01"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "WP-05",
+      "title": "Assign requirements to any target",
+      "deps": [
+        "WP-01"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "WP-06",
+      "title": "Real requirement ids in generated C",
+      "deps": [
+        "WP-05"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "WP-07",
+      "title": "Criterion and evaluator",
+      "deps": [
+        "WP-01"
+      ],
+      "status": "in_progress"
+    },
+    {
+      "id": "WP-08a",
+      "title": "State machine runner",
+      "deps": [
+        "WP-02",
+        "WP-07"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "WP-08b",
+      "title": "X-Bridges runner",
+      "deps": [
+        "WP-03",
+        "WP-07"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "WP-08c",
+      "title": "V-Lab runner",
+      "deps": [
+        "WP-04",
+        "WP-07"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "WP-09",
+      "title": "Evidence and staleness",
+      "deps": [
+        "WP-08a",
+        "WP-08b",
+        "WP-08c"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "WP-10",
+      "title": "Assignment panel and Run button",
+      "deps": [
+        "WP-05",
+        "WP-09"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "WP-11",
+      "title": "End to end",
+      "deps": [
+        "WP-10"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "WP-12",
+      "title": "Close-out",
+      "deps": [
+        "WP-11"
+      ],
+      "status": "todo"
+    }
   ],
-  "findings": []
+  "findings": [
+    {
+      "wp": "WP-01",
+      "severity": "low",
+      "summary": "parseSimTarget accepts a literal $param in block position as a block id (non-canonical, never produced by formatSimTarget)"
+    }
+  ]
 }
