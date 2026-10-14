@@ -87,7 +87,7 @@ describe('X-Bridges session', () => {
 });
 
 describe('V-Lab session', () => {
-  it('has no t = 0 value and follows the backward-Euler low-pass filter', () => {
+  it('has no t = 0 value, starts with one BDF1 step and follows the low-pass filter', () => {
     const s = open('vlab', thermostatProject(), [T.chamberOut], [T.powerValue]);
     expect(s.hasInitialSample).toBe(false);
     expect(s.initialize()).toBeNull();
@@ -96,7 +96,8 @@ describe('V-Lab session', () => {
     expect(s.step(0, DT)).toBeNull();
     expect(s.read(T.chamberOut)).toBeCloseTo(100 * ALPHA, 12);
     expect(s.step(DT, DT)).toBeNull();
-    expect(s.read(T.chamberOut)).toBeCloseTo(100 * (1 - (1 - ALPHA) ** 2), 12);
+    // V-Lab continues with variable-step BDF2 after its BDF1 start: compare with the exact solution of T*y' + y = u.
+    expect(Math.abs(s.read(T.chamberOut)! - 100 * (1 - Math.exp(-2 * DT / 5)))).toBeLessThan(1e-3);
   });
 
   it('checks library bounds on every write', () => {

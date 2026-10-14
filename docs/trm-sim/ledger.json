@@ -190,8 +190,9 @@
       "deps": [
         "WP-13"
       ],
-      "status": "in_progress",
-      "phase": 2
+      "status": "done",
+      "phase": 2,
+      "result": "94/94 incl. all WP-08 parity tests; review: planner test corrected (V-Lab is variable-step BDF2 after a BDF1 start, not fixed backward Euler)"
     },
     {
       "id": "WP-17",
@@ -293,6 +294,11 @@
       "wp": "WP-10",
       "severity": "low",
       "summary": "Simulate button only in the standard RTM table, not the virtualized grid; X-Bridges/V-Lab runs cover the global canvas only (workspace-file canvases not yet)"
+    },
+    {
+      "wp": "WP-16",
+      "severity": "med",
+      "summary": "V-Lab integrates with BDF1 at start/after input events then variable-step BDF2 with error control: a plain-arithmetic reference cannot be bit-exact. Phase-2 tests verify ordering bit-exactly against a manual session loop and physics against the exact first-order-lag solution with a tolerance."
     }
   ]
 }

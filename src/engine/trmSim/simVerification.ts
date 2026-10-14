@@ -15,7 +15,10 @@ import { runVlabVerification } from './vlabRunner';
 import { deriveSimEvidenceStatus, recordSimulationEvidence, simModelFingerprint } from './simEvidence';
 import type { SimEvaluation, SimTraceSample } from './simEvaluate';
 
-export type SimEngine = 'sm' | 'xb' | 'vlab';
+import { engineModelOf, engineOfSimTarget } from './simSession';
+import type { SimEngine } from './simSession';
+
+export type { SimEngine } from './simSession';
 
 const LINK_KINDS = new Set(['satisfy', 'verify', 'refine', 'trace']);
 const arr = (v: unknown): any[] => (Array.isArray(v) ? v : []);
@@ -31,8 +34,7 @@ export interface LinkedSimTarget {
 }
 
 export function engineOfTarget(target: string): SimEngine {
-  const p = parseSimTarget(target);
-  return p && (p.domain === 'xb' || p.domain === 'vlab') ? p.domain : 'sm';
+  return engineOfSimTarget(target);
 }
 
 export function linkedSimTargets(repo: SysmlRepository, requirementId: string, project: unknown): LinkedSimTarget[] {
@@ -114,18 +116,6 @@ export function simCandidates(project: any): { stimulus: SimCandidate[]; observe
   return { stimulus, observe };
 }
 
-function engineModel(project: any, engine: SimEngine): unknown {
-  if (engine === 'sm') {
-    return {
-      states: arr(project?.states), junctions: arr(project?.junctions), transitions: arr(project?.transitions),
-      variables: arr(project?.variables), layers: project?.layers, tickMs: project?.tickMs,
-      hilConfig: project?.hilConfig, safetyMode: project?.safetyMode,
-    };
-  }
-  if (engine === 'xb') return { globalXBridgesNodes: arr(project?.globalXBridgesNodes), globalXBridgesEdges: arr(project?.globalXBridgesEdges) };
-  return { vlabNodes: arr(project?.vlabNodes), vlabEdges: arr(project?.vlabEdges) };
-}
-
 export interface SimCriterionRun {
   engine: SimEngine;
   run: { trace: SimTraceSample[]; evaluation: SimEvaluation; diagnostics: { code: string; message: string; target?: string }[] };
@@ -134,7 +124,7 @@ export interface SimCriterionRun {
 
 export function runSimCriterion(project: any, criterion: SimCriterion): SimCriterionRun {
   const engine = engineOfTarget(criterion.observe);
-  const model: any = engineModel(project, engine);
+  const model: any = engineModelOf(project, engine);
   const run = engine === 'sm' ? runSmVerification(model, criterion)
     : engine === 'xb' ? runXbVerification({ canvas: 'global', nodes: model.globalXBridgesNodes, edges: model.globalXBridgesEdges }, criterion)
     : runVlabVerification({ canvas: 'global', nodes: model.vlabNodes, edges: model.vlabEdges }, criterion);
@@ -171,7 +161,7 @@ export function simEvidenceStatusFor(repo: SysmlRepository, evidenceId: string, 
   const evidence = repo.evidence[evidenceId];
   if (!evidence) return 'missing';
   const criterion = repo.verificationCases[evidence.verificationCaseId]?.simulationCriterion;
-  const fingerprint = criterion ? simModelFingerprint(engineModel(project, engineOfTarget(criterion.observe))) : '';
+  const fingerprint = criterion ? simModelFingerprint(engineModelOf(project, engineOfTarget(criterion.observe))) : '';
   return deriveSimEvidenceStatus(repo, evidenceId, fingerprint);
 }
 

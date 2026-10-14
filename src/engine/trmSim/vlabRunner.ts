@@ -1,6 +1,5 @@
 // WP-08c: V-Lab verification runner. Contract: plan §2 item 4
-import { VLabPhysicsEngine } from '../vlab/vlabPhysics';
-import { scalarSample } from '../vlab/vlabScopeRead';
+import { createSimSessionFromSource } from './simSession';
 import { extractVlabInterface } from './vlabInterface';
 import { parseSimTarget } from './simTarget';
 import { stepCount, stimulusValue, validateCriterion } from './simCriterion';
@@ -10,8 +9,6 @@ import type { SimEvaluation, SimTraceSample } from './simEvaluate';
 
 type Diag = { code: string; message: string; target?: string };
 export interface VlabRunResult { trace: SimTraceSample[]; evaluation: SimEvaluation; diagnostics: Diag[] }
-
-const PROBE = '__trm_probe';
 
 export function runVlabVerification(source: { canvas: string; nodes: any[]; edges?: any[] }, criterion: SimCriterion): VlabRunResult {
   const trace: SimTraceSample[] = [];
@@ -33,17 +30,15 @@ export function runVlabVerification(source: { canvas: string; nodes: any[]; edge
   if (obs.domain !== 'vlab') return bad('UNSUPPORTED_TARGET', `Target "${criterion.observe}" is not a V-Lab target`, criterion.observe);
   if (!canvasOk(obs)) return bad('UNKNOWN_TARGET', `Canvas "${obs.canvas}" is not "${source.canvas}"`, criterion.observe);
   let probeNode: string | undefined;
-  let probePort: string | undefined;
-  let varName: string | undefined;
   let observedUnit: string | undefined;
   if (obs.kind === 'solverVariable') {
-    varName = obs.name;
+    // solver variables need no probe
   } else if (obs.kind === 'port') {
     const sig = iface.signals.find(s => s.blockId === obs.blockId && s.portId === obs.portId);
     if (!sig) return bad('UNKNOWN_TARGET', `Unknown port "${criterion.observe}"`, criterion.observe);
     if (sig.kind === 'conserving') return bad('NOT_OBSERVABLE', `Port "${criterion.observe}" is conserving; observe it through a sensor block`, criterion.observe);
     if (sig.direction !== 'observe') return bad('NOT_OBSERVABLE', `Port "${criterion.observe}" is an input`, criterion.observe);
-    probeNode = obs.blockId; probePort = obs.portId; observedUnit = sig.unit;
+    probeNode = obs.blockId; observedUnit = sig.unit;
   } else {
     return bad('UNKNOWN_TARGET', `Target "${criterion.observe}" is not an observable signal or solver variable`, criterion.observe);
   }
@@ -57,7 +52,7 @@ export function runVlabVerification(source: { canvas: string; nodes: any[]; edge
   // stimuli
   const N = stepCount(criterion.duration, criterion.step);
   const step = criterion.step;
-  const stim: { blockId: string; name: string; profile: SimCriterion['stimuli'][number]['profile'] }[] = [];
+  const stim: { blockId: string; name: string; target: string; profile: SimCriterion['stimuli'][number]['profile'] }[] = [];
   for (const s of criterion.stimuli) {
     const t = parseSimTarget(s.target);
     if (!t) return bad('UNKNOWN_TARGET', `Cannot parse stimulus target "${s.target}"`, s.target);
@@ -78,7 +73,7 @@ export function runVlabVerification(source: { canvas: string; nodes: any[]; edge
         || (p.nonZero === true && v === 0);
       if (violates) return bad('OUT_OF_BOUNDS', `Value ${v} at t=${(k - 1) * step} violates the bounds of "${s.target}"`, s.target);
     }
-    stim.push({ blockId: t.blockId, name: t.name, profile: s.profile });
+    stim.push({ blockId: t.blockId, name: t.name, target: s.target, profile: s.profile });
   }
 
   if (probeNode !== undefined && !source.nodes.some(n => n && n.id === probeNode)) {
@@ -86,36 +81,31 @@ export function runVlabVerification(source: { canvas: string; nodes: any[]; edge
   }
 
   try {
-    const engine = new VLabPhysicsEngine();
-    const baseEdges: any[] = [...(source.edges ?? [])];
-    if (probeNode !== undefined) {
-      baseEdges.push({ id: '__trm_probe_e', source: probeNode, sourceHandle: probePort + '_s', target: PROBE, targetHandle: 'in1_t' });
+    const created = createSimSessionFromSource('vlab', source, {
+      observe: [criterion.observe], drive: stim.map(s => s.target), step,
+    });
+    if (!created.session) {
+      diagnostics.push(...created.diagnostics);
+      return fail();
     }
-    let state: any = undefined;
+    const session = created.session;
+    session.initialize();
     for (let k = 1; k <= N; k++) {
       const tIn = (k - 1) * step;
-      const nodes: any[] = source.nodes.map(n => {
-        const mine = stim.filter(s => s.blockId === n.id);
-        if (mine.length === 0) return n;
-        const params = { ...(n.data?.params ?? {}) };
-        for (const s of mine) params[s.name] = stimulusValue(s.profile, tIn);
-        return { ...n, data: { ...n.data, params } };
-      });
-      if (probeNode !== undefined) {
-        nodes.push({ id: PROBE, type: 'default', position: { x: 0, y: 0 }, data: { type: 'scope', params: { numSignals: 1 } } });
+      for (const s of stim) {
+        const w = session.write(s.target, stimulusValue(s.profile, tIn));
+        if (w) return bad(w.code, w.message, w.target);
       }
-      state = engine.simulateStep(nodes, baseEdges, state, step);
-      let raw: unknown;
-      if (varName !== undefined) {
-        const idx = (state.variableNames ?? []).indexOf(varName);
-        if (idx < 0) return bad('UNKNOWN_TARGET', `Unknown solver variable "${varName}"`, criterion.observe);
-        raw = state.x[idx];
-      } else {
-        const pv = state.perScopeValues?.[PROBE];
-        raw = pv !== null && typeof pv === 'object' && !Array.isArray(pv) && 'value' in pv ? (pv as any).value : pv;
+      const err = session.step(tIn, step);
+      if (err) {
+        if (err.code === 'RUNTIME_ERROR') {
+          // the session names its probe scope per observed port; the runner always had a single probe
+          diagnostics.push({ code: 'RUNTIME_ERROR', message: err.message.split('__trm_probe_0').join('__trm_probe') });
+          return { trace, evaluation: { passed: false, samplesChecked: trace.length }, diagnostics };
+        }
+        return bad(err.code, err.message, err.target);
       }
-      const value = scalarSample(raw, { scopeId: PROBE, channel: 0, variable: varName });
-      trace.push({ t: k * step, value });
+      trace.push({ t: k * step, value: session.read(criterion.observe) as number });
     }
   } catch (e) {
     diagnostics.push({ code: 'RUNTIME_ERROR', message: e instanceof Error ? e.message : String(e) });

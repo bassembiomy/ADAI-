@@ -1,5 +1,5 @@
 // WP-08a: state machine verification runner. Contract: plan §2 item 4
-import { createAppSimulationSession, setSessionVariableValue, stepAppSimulationSession } from '../../utils/stateMachine/smAppAdapter';
+import { createSimSessionFromSource } from './simSession';
 import { parseSimTarget } from './simTarget';
 import { stepCount, stimulusValue, validateCriterion } from './simCriterion';
 import type { SimCriterion } from './simCriterion';
@@ -23,14 +23,14 @@ export function runSmVerification(model: any, criterion: SimCriterion): SmRunRes
   const stateIds = new Set<string>((model?.states ?? []).map((s: any) => s.id));
   const diagnostics: SmRunDiagnostic[] = [];
 
-  const stimuli: { id: string; profile: SimCriterion['stimuli'][number]['profile'] }[] = [];
+  const stimuli: { id: string; target: string; profile: SimCriterion['stimuli'][number]['profile'] }[] = [];
   for (const s of criterion.stimuli) {
     const p = parseSimTarget(s.target);
     if (!p || p.domain !== 'sm' || p.kind !== 'variable') {
       diagnostics.push({ code: 'UNSUPPORTED_TARGET', message: `stimulus target "${s.target}" is not a state machine variable`, target: s.target });
     } else if (!varIds.has(p.id)) {
       diagnostics.push({ code: 'UNKNOWN_TARGET', message: `variable "${p.id}" is not in the model`, target: s.target });
-    } else stimuli.push({ id: p.id, profile: s.profile });
+    } else stimuli.push({ id: p.id, target: s.target, profile: s.profile });
   }
 
   let observed: { kind: 'var' | 'state'; id: string } | null = null;
@@ -58,7 +58,11 @@ export function runSmVerification(model: any, criterion: SimCriterion): SmRunRes
   });
 
   try {
-    const session = createAppSimulationSession(model);
+    const created = createSimSessionFromSource('sm', model, {
+      observe: [criterion.observe], drive: stimuli.map(s => s.target), step: criterion.step,
+    });
+    if (!created.session) return failed(created.diagnostics);
+    const session = created.session;
     const last = new Map<string, number>();
     const writeStimuli = (t: number) => {
       stimuli.forEach((s, i) => {
@@ -66,38 +70,24 @@ export function runSmVerification(model: any, criterion: SimCriterion): SmRunRes
         const key = String(i);
         if (last.get(key) === v) return;
         last.set(key, v);
-        setSessionVariableValue(session, s.id, v);
+        session.write(s.target, v);
       });
     };
-    const sample = (t: number, frame: typeof session.initialFrame) => {
-      let value: number;
-      if (observed!.kind === 'state') value = frame.activeStateIds.includes(observed!.id) ? 1 : 0;
-      else {
-        const raw = t === 0 ? session.runtime.data[observed!.id] : frame.data[observed!.id];
-        value = typeof raw === 'boolean' ? (raw ? 1 : 0) : Number(raw);
-      }
-      trace.push({ t, value });
+    const sample = (t: number) => {
+      trace.push({ t, value: session.read(criterion.observe) as number });
     };
 
-    const tickMs = session.ir.tickMs;
-    const ticks = Math.round(criterion.step * 1000 / tickMs);
-    if (!(ticks >= 1) || Math.abs(ticks * tickMs - criterion.step * 1000) > 1e-6) {
-      return failed([{ code: 'STEP_NOT_TICK_MULTIPLE', message: `step ${criterion.step}s is not a whole multiple of the model tick (${tickMs} ms)` }]);
-    }
-
     writeStimuli(0);
-    if (session.initialFrame.error) return runtimeError(session.initialFrame.error);
-    sample(0, session.initialFrame);
+    const init = session.initialize();
+    if (init) return runtimeError(init.message);
+    sample(0);
     const n = stepCount(criterion.duration, criterion.step);
     for (let k = 1; k <= n; k++) {
       const t = k * criterion.step;
       writeStimuli((k - 1) * criterion.step);
-      let frame = session.initialFrame;
-      for (let i = 0; i < ticks; i++) {
-        frame = stepAppSimulationSession(session, tickMs);
-        if (frame.error) return runtimeError(frame.error);
-      }
-      sample(t, frame);
+      const err = session.step((k - 1) * criterion.step, criterion.step);
+      if (err) return runtimeError(err.message);
+      sample(t);
     }
   } catch (e) {
     return runtimeError(e instanceof Error ? e.message : String(e));

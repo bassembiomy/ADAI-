@@ -1,6 +1,5 @@
 // WP-08b: headless X-Bridges verification runner. Contract: plan §2 item 4.
-import { XbridgesEngine } from '../xbridges/XbridgesEngine';
-import { Solvers } from '../xbridges/Solvers';
+import { createSimSessionFromSource } from './simSession';
 import { BLOCK_LIBRARY } from '../xbridges/BlockDefinitions';
 import { parseSimTarget } from './simTarget';
 import { extractXbInterface } from './xbInterface';
@@ -100,7 +99,7 @@ export function runXbVerification(
     } else bad('UNKNOWN_TARGET', 'observe must name a block port', observeRaw);
   }
 
-  const drives: { drive: Drive; profile: SimCriterion['stimuli'][number]['profile'] }[] = [];
+  const drives: { drive: Drive; target: string; profile: SimCriterion['stimuli'][number]['profile'] }[] = [];
   for (const s of criterion.stimuli) {
     const t = parseSimTarget(s.target);
     if (!t) { bad('UNKNOWN_TARGET', 'stimulus is not a valid sim target', s.target); continue; }
@@ -110,7 +109,7 @@ export function runXbVerification(
       const b = blockById.get(t.blockId);
       if (!b) bad('UNKNOWN_TARGET', `block "${t.blockId}" not found`, s.target);
       else if (!b.params || !(t.name in b.params)) bad('UNKNOWN_TARGET', `parameter "${t.name}" not found on block "${t.blockId}"`, s.target);
-      else drives.push({ drive: { kind: 'param', blockId: t.blockId, name: t.name }, profile: s.profile });
+      else drives.push({ drive: { kind: 'param', blockId: t.blockId, name: t.name }, target: s.target, profile: s.profile });
     } else if (t.kind === 'port') {
       const b = blockById.get(t.blockId);
       if (!b) { bad('UNKNOWN_TARGET', `block "${t.blockId}" not found`, s.target); continue; }
@@ -119,7 +118,7 @@ export function runXbVerification(
       if (!isInput && !isOutput) bad('UNKNOWN_TARGET', `port "${t.portId}" not found on block "${t.blockId}"`, s.target);
       else if (!isInput || connections.some(c => c.targetBlock === t.blockId && c.targetPort === t.portId)) {
         bad('NOT_STIMULABLE', 'only unconnected input ports and block parameters can be driven', s.target);
-      } else drives.push({ drive: { kind: 'input', blockId: t.blockId, portId: t.portId }, profile: s.profile });
+      } else drives.push({ drive: { kind: 'input', blockId: t.blockId, portId: t.portId }, target: s.target, profile: s.profile });
     } else bad('NOT_STIMULABLE', 'stimulus must be a block parameter or an unconnected input port', s.target);
   }
   if (diagnostics.length > 0 || !observed) return fail(diagnostics);
@@ -127,12 +126,11 @@ export function runXbVerification(
   const runtime = (message: string): XbRunResult => fail([{ code: 'RUNTIME_ERROR', message, target: observeRaw }], message);
 
   try {
-    const engine = new XbridgesEngine({ blocks, connections } as any);
-    const compileDiags = engine.compile(0);
-    const errors = compileDiags.filter(d => d.severity === 'error');
-    if (errors.length > 0) {
-      return fail(errors.map(d => ({ code: 'RUNTIME_ERROR', message: `${d.code}: ${d.message}` })), 'compile failed');
-    }
+    const created = createSimSessionFromSource('xb', { canvas: source.canvas, nodes, edges }, {
+      observe: [observeRaw], drive: drives.map(d => d.target), step: criterion.step,
+    });
+    if (!created.session) return fail(created.diagnostics);
+    const session = created.session;
 
     const last = new Map<number, number>();
     const apply = (t: number) => {
@@ -140,18 +138,14 @@ export function runXbVerification(
         const v = stimulusValue(d.profile, t);
         if (last.has(i) && last.get(i) === v) return;
         last.set(i, v);
-        if (d.drive.kind === 'param') engine.patchBlockParams(d.drive.blockId, { [d.drive.name]: v });
-        else {
-          const port = engine.getBlock(d.drive.blockId)?.inputs.find(p => p.id === (d.drive as any).portId);
-          if (port) port.value = v;
-        }
+        session.write(d.target, v);
       });
     };
 
     const trace: SimTraceSample[] = [];
     let error: string | null = null;
     const sample = (t: number) => {
-      const v = engine.getSignalValue(observed!.blockId, observed!.portId);
+      const v = session.read(observeRaw);
       if (typeof v !== 'number') {
         error = `observed value at t=${t} is not a number`;
         return;
@@ -160,13 +154,14 @@ export function runXbVerification(
     };
 
     apply(0);
-    engine.computeOutputs(0);
+    const init = session.initialize();
+    if (init) return init.details ? fail(init.details, 'compile failed') : runtime(init.message);
     sample(0);
     const n = stepCount(criterion.duration, criterion.step);
     for (let k = 1; k <= n && error === null; k++) {
       apply((k - 1) * criterion.step);
-      Solvers.stepRK4(engine, (k - 1) * criterion.step, criterion.step);
-      engine.computeOutputs(k * criterion.step);
+      const err = session.step((k - 1) * criterion.step, criterion.step);
+      if (err) return runtime(err.message);
       sample(k * criterion.step);
     }
     if (error !== null) return runtime(error);
