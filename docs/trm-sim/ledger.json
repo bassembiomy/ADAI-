@@ -133,8 +133,8 @@
       "deps": [
         "WP-10"
       ],
-      "status": "todo",
-      "note": "optional follow-up: requirements can already be linked from the requirement side (Simulate panel)"
+      "status": "in_progress",
+      "note": "user asked for it; tests: elementSimTargets, RequirementAssignmentsPanel, XbridgesPropertiesPanel.requirements, VLabWorkspace.requirements"
     },
     {
       "id": "WP-11",
