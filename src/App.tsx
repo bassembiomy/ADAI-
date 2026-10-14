@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo, MouseEvent, KeyboardEvent, ChangeEvent, Profiler, startTransition } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo, MouseEvent, KeyboardEvent, ChangeEvent, Profiler, startTransition, lazy, Suspense } from 'react';
 import { recordRenderCommit, resetProjectLoadTelemetry } from './features/sysml/performance/renderTelemetry';
 import { projectExternalEndpoints, projectExternalEndpointSignature, projectSimSources, buildSimEndpoints } from './engine/trmSim/simEndpoints';
 import { repositoryChangeCommands, simEvidenceStatusFor } from './engine/trmSim/simVerification';
@@ -13,14 +13,6 @@ import { createVLabDOEBlock, createXBridgesDOEBlock } from './engine/doe/integra
 import { fitRSM, fitGMDH, fitTaguchi } from './engine/doe/statistics';
 import DOMPurify from 'dompurify';
 import { v4 as uuidv4 } from 'uuid';
-import { XbridgesWorkspace } from './components/xbridges/XbridgesWorkspace';
-import { VLabWorkspace } from './components/vlab/VLabWorkspace';
-import { HILWorkspace } from './components/hil/HILWorkspace';
-import { EntropyWorkspace } from './components/entropy/EntropyWorkspace';
-import { PlantUmlWorkspace } from './components/plantuml/PlantUmlWorkspace';
-import { UseCaseWorkspace } from './components/sysml/UseCaseWorkspace';
-import { ActivityWorkspace } from './components/sysml/ActivityWorkspace';
-import { SequenceWorkspace } from './components/sysml/SequenceWorkspace';
 import { buildCreateInteractionFromContextCommand } from './services/sysmlInteractionCommands';
 import { buildSetVerificationBehaviorCommand, listTestProcedures } from './services/sysmlVerificationCommands';
 import { InteractionElementInspector } from './components/sysml/InteractionElementInspector';
@@ -109,7 +101,6 @@ import type { SemanticTraceFrame } from './utils/stateMachine/smTrace';
 import { STATE_MACHINE_RUNTIME_BUNDLE } from './generated/stateMachineRuntimeBundle';
 import { analyzeStateMachine } from './utils/smAnalysisEngine';
 import { HelpModal } from './components/help/HelpModal';
-import { HmiWorkspace } from './components/hmi/HmiWorkspace';
 import { normalizeHmiComponents, parseHmiVariableValue, validateHmiInput, type HmiInputCommand, type HmiInputResult } from './features/hmi/hmiModel';
 import { createHmiInputQueue, getPortableHmiInputQueueScript } from './features/hmi/hmiInputQueue';
 import { renderHmiWidgetSvg, renderPortableHmiMarkup, getPortableHmiScript, resolveHmiReportComponents } from './features/hmi/hmiReport';
@@ -120,6 +111,29 @@ import { parseModelExplorerDragData } from './features/modelExplorer/modelExplor
 import type { ActiveDiagramContext, ExplorerCommandResult } from './features/modelExplorer/modelExplorerTypes';
 import { VLAB_LIBRARY } from './utils/vlabLibrary';
 import { BLOCK_LIBRARY as XBRIDGES_LIBRARY } from './engine/xbridges/BlockDefinitions';
+// Workspaces load on first use (prefetched when idle) to keep them out of the startup bundle.
+const loadXbridgesWorkspace = () => import('./components/xbridges/XbridgesWorkspace');
+const XbridgesWorkspace = lazy(() => loadXbridgesWorkspace().then(m => ({ default: m.XbridgesWorkspace })));
+const loadVLabWorkspace = () => import('./components/vlab/VLabWorkspace');
+const VLabWorkspace = lazy(() => loadVLabWorkspace().then(m => ({ default: m.VLabWorkspace })));
+const loadHILWorkspace = () => import('./components/hil/HILWorkspace');
+const HILWorkspace = lazy(() => loadHILWorkspace().then(m => ({ default: m.HILWorkspace })));
+const loadEntropyWorkspace = () => import('./components/entropy/EntropyWorkspace');
+const EntropyWorkspace = lazy(() => loadEntropyWorkspace().then(m => ({ default: m.EntropyWorkspace })));
+const loadPlantUmlWorkspace = () => import('./components/plantuml/PlantUmlWorkspace');
+const PlantUmlWorkspace = lazy(() => loadPlantUmlWorkspace().then(m => ({ default: m.PlantUmlWorkspace })));
+const loadUseCaseWorkspace = () => import('./components/sysml/UseCaseWorkspace');
+const UseCaseWorkspace = lazy(() => loadUseCaseWorkspace().then(m => ({ default: m.UseCaseWorkspace })));
+const loadActivityWorkspace = () => import('./components/sysml/ActivityWorkspace');
+const ActivityWorkspace = lazy(() => loadActivityWorkspace().then(m => ({ default: m.ActivityWorkspace })));
+const loadSequenceWorkspace = () => import('./components/sysml/SequenceWorkspace');
+const SequenceWorkspace = lazy(() => loadSequenceWorkspace().then(m => ({ default: m.SequenceWorkspace })));
+const loadHmiWorkspace = () => import('./components/hmi/HmiWorkspace');
+const HmiWorkspace = lazy(() => loadHmiWorkspace().then(m => ({ default: m.HmiWorkspace })));
+const WorkspaceLoading = () => (
+  <div className="absolute inset-0 flex items-center justify-center text-sm text-gray-500">Loading workspace…</div>
+);
+const WORKSPACE_PREFETCH_LOADERS = [loadXbridgesWorkspace, loadVLabWorkspace, loadHILWorkspace, loadEntropyWorkspace, loadPlantUmlWorkspace, loadUseCaseWorkspace, loadActivityWorkspace, loadSequenceWorkspace, loadHmiWorkspace];
 // Heavy export libraries are loaded on demand to keep them out of the startup bundle.
 const loadXlsx = () => import('xlsx');
 const loadJsPdf = () => import('jspdf').then(m => m.jsPDF);
@@ -4494,6 +4508,27 @@ type WorkspaceTarget =
   | { kind: 'file'; fileId: string };
 
 const ADIA = () => {
+  // Warm the workspace chunks one per idle slot, so module evaluation never competes with input.
+  useEffect(() => {
+    const w = window as any;
+    const hasIdle = typeof w.requestIdleCallback === 'function';
+    let cancelled = false;
+    let handle: any = null;
+    let index = 0;
+    const schedule = () => {
+      if (cancelled || index >= WORKSPACE_PREFETCH_LOADERS.length) return;
+      const run = () => {
+        const load = WORKSPACE_PREFETCH_LOADERS[index++];
+        load().catch(() => { /* prefetch is best effort */ }).finally(schedule);
+      };
+      handle = hasIdle ? w.requestIdleCallback(run, { timeout: 1000 }) : setTimeout(run, index === 0 ? 2000 : 250);
+    };
+    schedule();
+    return () => {
+      cancelled = true;
+      if (hasIdle) w.cancelIdleCallback?.(handle); else clearTimeout(handle);
+    };
+  }, []);
   const [currentTheme, setCurrentTheme] = useState<AppTheme>(getStoredTheme);
 
   useEffect(() => {
@@ -15404,6 +15439,7 @@ const ADIA = () => {
           <div style={{ display: isMobile && mobileTab !== 'canvas' ? 'none' : 'flex' }} className="flex-1 flex flex-col min-w-0">
             <main className="flex-1 relative overflow-hidden bg-[#0a0a0a]">
             {(xBridgesStateId || diagramMode === 'xbridges') && (
+                <Suspense fallback={<WorkspaceLoading />}>
                 <XbridgesWorkspace
                   key={xBridgesStateId || activeFileId}
                   initialNodes={syncXBBoundaryNodeMetadata(
@@ -15438,18 +15474,22 @@ const ADIA = () => {
                     />
                   )}
                 />
+                </Suspense>
               )}
 
               {diagramMode === 'plantuml' && (
+                <Suspense fallback={<WorkspaceLoading />}>
                 <PlantUmlWorkspace
                   diagram={plantUmlDiagram}
                   onChange={setPlantUmlDiagram}
                   onSave={() => addError('info', 'PlantUML diagram saved in the current project session.')}
                   onExport={exportPlantUmlSource}
                 />
+                </Suspense>
               )}
 
               {diagramMode === 'useCase' && (
+                <Suspense fallback={<WorkspaceLoading />}>
                 <UseCaseWorkspace
                   key={activeSysmlDiagramId}
                   repository={canonicalSysmlRepository}
@@ -15460,9 +15500,11 @@ const ADIA = () => {
                   onSelect={setSelectedIds}
                   authorizedBaselineIds={authorizedBaselineIds}
                 />
+                </Suspense>
               )}
 
               {diagramMode === 'activity' && (
+                <Suspense fallback={<WorkspaceLoading />}>
                 <ActivityWorkspace
                   key={activeSysmlDiagramId}
                   repository={canonicalSysmlRepository}
@@ -15473,9 +15515,11 @@ const ADIA = () => {
                   onSelect={setSelectedIds}
                   authorizedBaselineIds={authorizedBaselineIds}
                 />
+                </Suspense>
               )}
 
               {diagramMode === 'sequence' && (
+                <Suspense fallback={<WorkspaceLoading />}>
                 <SequenceWorkspace
                   key={activeSysmlDiagramId}
                   repository={canonicalSysmlRepository}
@@ -15488,9 +15532,11 @@ const ADIA = () => {
                   endpoints={externalEndpointContext}
                   transitions={transitions}
                 />
+                </Suspense>
               )}
 
               {diagramMode === 'vlab' && (
+                <Suspense fallback={<WorkspaceLoading />}>
                 <VLabWorkspace
                   nodes={vlabNodes}
                   edges={vlabEdges}
@@ -15554,9 +15600,11 @@ const ADIA = () => {
                     setTimeout(() => setXBridgesSelectedNodeId(null), 1000);
                   }}
                 />
+                </Suspense>
               )}
 
               {diagramMode === 'hil' && (
+                <Suspense fallback={<WorkspaceLoading />}>
                 <HILWorkspace
                   config={hilConfig}
                   onChangeConfig={setHilConfig}
@@ -15571,9 +15619,11 @@ const ADIA = () => {
                   tickMs={tickMs}
                   onBack={() => setDiagramMode('statemachine')}
                 />
+                </Suspense>
               )}
 
               {diagramMode === 'entropy' && (
+                <Suspense fallback={<WorkspaceLoading />}>
                 <EntropyWorkspace
                   initialNodes={entropyNodes}
                   initialEdges={entropyEdges}
@@ -15600,6 +15650,7 @@ const ADIA = () => {
                     ports: blocks.flatMap(b => b.ports || []),
                   }}
                 />
+                </Suspense>
               )}
 
               {!xBridgesStateId && !['xbridges', 'vlab', 'hil', 'entropy', 'useCase', 'activity', 'sequence'].includes(diagramMode) && (
@@ -18881,6 +18932,7 @@ const ADIA = () => {
             onClose={() => toggleWindow('hmi')}
             onUpdate={updateManagedWindow}
           >
+            <Suspense fallback={<WorkspaceLoading />}>
             <HmiWorkspace data-help-topic="hmi_dashboard"
               variables={variables}
               components={hmiComponents}
@@ -18901,6 +18953,7 @@ const ADIA = () => {
               }}
               onClose={() => toggleWindow('hmi')}
             />
+            </Suspense>
           </FloatingWindow>
         )}
 
