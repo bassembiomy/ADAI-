@@ -1,3 +1,4 @@
+import { createSimSession } from '../simSession';
 // Phase 2 end-to-end fixture (planner-owned): a closed-loop thermostat across all three models.
 //   State machine (thermostat, 10 ms tick): OFF <-> HEATING with a 55..65 hysteresis band on dT.
 //   X-Bridges (global canvas): GAIN `heaterGain` (gain 100) turns heaterOn (0/1) into a power command [%].
@@ -104,21 +105,78 @@ export const THERMO_REQUIREMENTS = [
 ] as const;
 
 /**
- * Independent reference of the documented coupled semantics (plan §7.7, §9), plain arithmetic only:
- * per step: SM (one tick, reads dT from the previous step) -> GAIN -> backward-Euler LPF.
+ * Check 1 (execution order, bit-exact): the documented Gauss-Seidel schedule (plan §7.7) written out by hand on the
+ * engine sessions, for the §9 couplings and any engine order. runSimScenario must reproduce it exactly.
  */
-export function thermostatReference(options: ThermostatOptions & { duration?: number; step?: number } = {}) {
-  const upper = options.upper ?? 65, lower = options.lower ?? 55, gain = options.gain ?? 100;
-  const step = options.step ?? 0.01, n = Math.round((options.duration ?? 30) / step);
-  const a = step / (TAU_S + step);
-  const dT: (number | null)[] = [null], heaterOn = [0], power = [0], heating = [0];
-  let on = 0, y = 0, smDT = 0; // smDT: the value the chart sees (0 = its initial value until V-Lab has solved once)
+export function manualCoupledRun(project: any, opts: { order?: ('sm' | 'xb' | 'vlab')[]; duration?: number; step?: number; enable?: (t: number) => number } = {}) {
+  const order = opts.order ?? ['sm', 'xb', 'vlab'];
+  const step = opts.step ?? 0.01, n = Math.round((opts.duration ?? 30) / step);
+  const enable = opts.enable ?? (() => 1);
+  const open = (engine: 'sm' | 'xb' | 'vlab', observe: string[], drive: string[]) => {
+    const r = createSimSession(engine, project, { observe, drive, step });
+    if (!r.session) throw new Error(JSON.stringify(r.diagnostics));
+    return r.session;
+  };
+  const s = {
+    sm: open('sm', [T.heaterOn, T.heating], [T.enable, T.dT]),
+    xb: open('xb', [T.gainOut], [T.gainIn]),
+    vlab: open('vlab', [T.chamberOut], [T.powerValue]),
+  };
+  const incoming: Record<string, [keyof typeof s, string, string][]> = {
+    sm: [['vlab', T.chamberOut, T.dT]], xb: [['sm', T.heaterOn, T.gainIn]], vlab: [['xb', T.gainOut, T.powerValue]],
+  };
+  const last = new Map<string, number>();
+  const put = (e: keyof typeof s, target: string, v: number | null) => {
+    if (v === null || last.get(target) === v) return;
+    last.set(target, v);
+    const d = s[e].write(target, v);
+    if (d) throw new Error(JSON.stringify(d));
+  };
+  const out = { dT: [] as (number | null)[], heaterOn: [] as (number | null)[], power: [] as (number | null)[], heating: [] as (number | null)[] };
+  const sample = () => {
+    out.dT.push(s.vlab.read(T.chamberOut)); out.heaterOn.push(s.sm.read(T.heaterOn));
+    out.power.push(s.xb.read(T.gainOut)); out.heating.push(s.sm.read(T.heating));
+  };
+  put('sm', T.enable, enable(0));
+  for (const e of order) { for (const [src, from, to] of incoming[e]) put(e, to, s[src].read(from)); s[e].initialize(); }
+  sample();
   for (let k = 1; k <= n; k++) {
-    if (on === 0 && smDT < lower) on = 1; else if (on === 1 && smDT >= upper) on = 0;
-    const p = gain * on;
-    y = a * p + (1 - a) * y;
-    smDT = y;
-    dT.push(y); heaterOn.push(on); power.push(p); heating.push(on);
+    const t = (k - 1) * step;
+    put('sm', T.enable, enable(t));
+    for (const e of order) {
+      for (const [src, from, to] of incoming[e]) put(e, to, s[src].read(from));
+      const d = s[e].step(t, step);
+      if (d) throw new Error(JSON.stringify(d));
+    }
+    sample();
   }
-  return { times: Array.from({ length: n + 1 }, (_, k) => k * step), dT, heaterOn, power, heating };
+  return { times: Array.from({ length: n + 1 }, (_, k) => k * step), ...out };
+}
+
+/**
+ * Check 2a (state machine logic, exact, independent of the engines): with SM first, the chart decides at step k from the
+ * dT it was given = dT(k-1) (0 until V-Lab has solved once). Returns the first index that breaks the hysteresis rule, or -1.
+ */
+export function firstHysteresisViolation(series: { dT: (number | null)[]; heaterOn: (number | null)[] }, lower = 55, upper = 65): number {
+  for (let k = 1; k < series.heaterOn.length; k++) {
+    const seen = series.dT[k - 1] ?? 0, prev = series.heaterOn[k - 1];
+    const expected = prev === 0 ? (seen < lower ? 1 : 0) : (seen >= upper ? 0 : 1);
+    if (series.heaterOn[k] !== expected) return k;
+  }
+  return -1;
+}
+
+/**
+ * Check 2b (plant physics, independent of V-Lab): exact solution of T*y' + y = u for the piecewise-constant power the
+ * run applied (u held over each step). Returns the largest |dT - exact| over the run.
+ */
+export function maxLagDeviation(series: { dT: (number | null)[]; power: (number | null)[] }, step = 0.01): number {
+  const decay = Math.exp(-step / TAU_S);
+  let y = 0, worst = 0;
+  for (let k = 1; k < series.dT.length; k++) {
+    const u = series.power[k] as number;
+    y = u + (y - u) * decay;
+    worst = Math.max(worst, Math.abs((series.dT[k] as number) - y));
+  }
+  return worst;
 }

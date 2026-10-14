@@ -207,5 +207,8 @@ Couplings: `heaterOn -> heaterGain.u` (same step), `heaterGain.y -> power.value`
 | REQ-T4 | Power command never exceeds 100 % | `power > 100` | never |
 | REQ-T5 | The heater turns on (the user's `x == 1` case) | `heating == 1` | eventually |
 
-Expected values come from an independent reference model written in the test (plain arithmetic of the documented semantics: one SM transition per tick, GAIN, backward-Euler LPF `y_k = a*u + (1 - a)*y_(k-1)`, a = dt/(T + dt)). The run must match it at every sample (1e-9). First `dT >= 60` at t = 4.59 s.
+Verification is split in two (V-Lab is variable-step BDF2 with BDF1 restarts, so no plain-arithmetic model is bit-exact):
+1. Execution order, bit-exact: `manualCoupledRun` in the fixture writes the 7.7 Gauss-Seidel schedule out by hand on the engine sessions, for any order; `runSimScenario` must reproduce it at every sample (1e-9).
+2. Physics, independent of the engines: `firstHysteresisViolation` checks every chart decision against the 55..65 rule applied to the dT it was given (exact); `maxLagDeviation` compares dT with the exact solution of T*y' + y = u under the applied power (< 0.15, i.e. < 0.15 % of full scale).
+First `dT >= 60` at t = 4.59 s (continuous: 0.01 - 5 ln 0.4 = 4.591 s).
 Negative path: upper threshold 75 -> REQ-T2 fails at the reference model's first sample above 70 after 15 s; REQ-T3 fails at its first trigger + 0.2 s (the heater stays on until 75); the RTM shows failed. Restore -> re-run -> verified (latest evidence wins). Model edit -> stale in the panel and the RTM. Save/load keeps the scenario and evidence. Two runs are identical (determinism).

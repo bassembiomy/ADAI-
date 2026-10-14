@@ -7,7 +7,10 @@ import { criterionToScenario, type SimScenario } from './simScenario';
 import { runXbVerification } from './xbRunner';
 import { runVlabVerification } from './vlabRunner';
 import { runSmVerification } from './smRunner';
-import { TAU_S, thermostatProject, thermostatReference, thermostatScenario, T } from './__fixtures__/thermostatProject';
+import { firstHysteresisViolation, manualCoupledRun, maxLagDeviation, thermostatProject, thermostatScenario, T } from './__fixtures__/thermostatProject';
+
+/** Plant tolerance: V-Lab's BDF restarts at each heater switch cost < 0.1 % of full scale against the exact solution. */
+const LAG_TOL = 0.15;
 
 const scn = (over: Record<string, unknown> = {}) => thermostatScenario(over) as unknown as SimScenario;
 const close = (a: (number | null)[], b: (number | null)[]) => {
@@ -21,7 +24,7 @@ const close = (a: (number | null)[], b: (number | null)[]) => {
 describe('coupled thermostat run (SM -> X-Bridges -> V-Lab)', () => {
   const project = thermostatProject();
   const run = runSimScenario(project, scn());
-  const ref = thermostatReference();
+  const ref = manualCoupledRun(project);
 
   it('runs without diagnostics on the documented time grid', () => {
     expect(run.diagnostics.filter(d => d.severity === 'error')).toEqual([]);
@@ -31,22 +34,27 @@ describe('coupled thermostat run (SM -> X-Bridges -> V-Lab)', () => {
     expect(run.schedule.couplings.map(c => c.delayed)).toEqual([false, false, true]);
   });
 
-  it('matches the independent reference at every sample', () => {
+  it('reproduces the hand-written Gauss-Seidel schedule at every sample (bit-exact)', () => {
     close(run.series.values.dT, ref.dT);
     close(run.series.values.heaterOn, ref.heaterOn);
     close(run.series.values.power, ref.power);
     close(run.series.values.heating, ref.heating);
   });
 
+  it('is physically right: exact hysteresis logic and the exact first-order lag within tolerance', () => {
+    const v = run.series.values as any;
+    expect(firstHysteresisViolation({ dT: v.dT, heaterOn: v.heaterOn })).toBe(-1);
+    expect(maxLagDeviation({ dT: v.dT, power: v.power })).toBeLessThan(LAG_TOL);
+    v.power.forEach((p: number, k: number) => expect(p).toBe(100 * v.heaterOn[k]));
+  });
+
   it('verifies all five requirements with the expected witnesses', () => {
     const by = Object.fromEntries(run.assertions.map(a => [a.assertionId, a]));
     expect(Object.values(by).map(a => a.verdict)).toEqual(['passed', 'passed', 'passed', 'passed', 'passed']);
-    const first60 = ref.dT.findIndex(v => v !== null && v >= 60);
+    const first60 = (run.series.values.dT as (number | null)[]).findIndex(v => v !== null && v >= 60);
     expect(by['as-t1'].at?.t).toBe(first60 * 0.01);
-    // closed form of the backward-Euler LPF from rest under a constant 100 % command
-    const a = 0.01 / (TAU_S + 0.01);
-    expect(first60).toBe(Math.ceil(Math.log(0.4) / Math.log(1 - a)));
-    expect(by['as-t1'].at?.t).toBeCloseTo(4.59, 9);
+    // continuous first-order lag from rest under 100 %, heater on from the first step: 0.01 - 5 ln(0.4) = 4.591 s
+    expect(Math.abs(by['as-t1'].at!.t - (0.01 - 5 * Math.log(0.4)))).toBeLessThanOrEqual(0.02);
     expect(by['as-t5'].at?.t).toBe(0.01);
     expect(run.requirements).toEqual({
       'req-t1': { verdict: 'passed', assertionIds: ['as-t1'] },
@@ -76,22 +84,17 @@ describe('coupled thermostat run (SM -> X-Bridges -> V-Lab)', () => {
 
 describe('the execution order is respected (Gauss-Seidel)', () => {
   it('V-Lab -> X-Bridges -> SM: forward couplings use this step, backward ones the previous step', () => {
-    const run = runSimScenario(thermostatProject(), scn({ order: ['vlab', 'xb', 'sm'] }));
+    const project = thermostatProject();
+    const run = runSimScenario(project, scn({ order: ['vlab', 'xb', 'sm'] }));
     expect(run.diagnostics.filter(d => d.severity === 'error')).toEqual([]);
     expect(run.schedule.couplings.map(c => c.delayed)).toEqual([true, true, false]);
-    // Reference for this order: VLab uses p(k-1), XB uses on(k-1), SM sees dT(k) of the same step.
-    const a = 0.01 / (TAU_S + 0.01);
-    let y = 0, p = 0, on = 0;
-    const dT: (number | null)[] = [null], heaterOn = [0], power = [0];
-    for (let k = 1; k <= 3000; k++) {
-      y = a * p + (1 - a) * y;
-      p = 100 * on;
-      if (on === 0 && y < 55) on = 1; else if (on === 1 && y >= 65) on = 0;
-      dT.push(y); heaterOn.push(on); power.push(p);
-    }
-    close(run.series.values.dT, dT);
-    close(run.series.values.heaterOn, heaterOn);
-    close(run.series.values.power, power);
+    const ref = manualCoupledRun(project, { order: ['vlab', 'xb', 'sm'] });
+    close(run.series.values.dT, ref.dT);
+    close(run.series.values.heaterOn, ref.heaterOn);
+    close(run.series.values.power, ref.power);
+    // SM now sees dT of the same step and XB the chart output of the previous step: power lags heaterOn by one step.
+    expect(run.series.values.heaterOn.slice(0, 4)).toEqual([0, 1, 1, 1]);
+    expect(run.series.values.power.slice(0, 4)).toEqual([0, 0, 100, 100]);
   });
 });
 
@@ -105,9 +108,11 @@ describe('stimuli', () => {
 
 describe('failures', () => {
   it('fails REQ-T2 and REQ-T3 when the upper threshold is 75, at the reference times', () => {
-    const run = runSimScenario(thermostatProject({ upper: 75 }), scn());
-    const ref = thermostatReference({ upper: 75 });
+    const project = thermostatProject({ upper: 75 });
+    const run = runSimScenario(project, scn());
+    const ref = manualCoupledRun(project);
     close(run.series.values.dT, ref.dT);
+    expect(firstHysteresisViolation(ref, 55, 75)).toBe(-1);
     const by = Object.fromEntries(run.assertions.map(a => [a.assertionId, a]));
     const over70 = ref.dT.findIndex((v, k) => k >= 1500 && v !== null && v > 70);
     expect(by['as-t2'].verdict).toBe('failed');
