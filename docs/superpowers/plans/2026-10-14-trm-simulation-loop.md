@@ -63,3 +63,149 @@ Per-WP acceptance tests are written by Opus before dispatch (see the living plan
 ## 4. Loop
 See `.claude/skills/trm-sim-loop/SKILL.md` and `.claude/agents/trm-executor.md`. Opus never writes
 production code; Sonnet never edits acceptance tests or the ledger.
+
+---
+
+# Phase 2: coupled scenarios, expressions, logic corrections (2026-10-14)
+
+## 5. User mandate (phase 2)
+"Make a full scenario with its testing, make sure it will fit, and make this loop professional with no logical errors."
+The user's flow: link model variables/ports/parameters to a requirement, write a condition such as `x == 1`,
+run, and see pass/fail in the TRM. Several models run in one simulation in a fixed execution order.
+
+## 6. Findings that phase 2 must fix (verified against co-work 9493efc)
+- L1 Dead end: the panel lists only cases with `method === 'simulation'` (`simVerification.ts:58`), but every UI path creates `automated`/`Test` cases (`contextualCreation.ts:220`, `modelExplorerFactories.ts:366`). A user can never reach Run.
+- L2 RTM counts ALL historical evidence (`rtm.ts:373`, `:417`): one old failure keeps a requirement `failed` forever after a later pass.
+- L3 RTM ignores the simulated-model fingerprint: after a model edit the panel says stale but the TRM still says `verified`.
+- L4 Step count differs per runner (`smRunner` floor, `xbRunner`/`vlabRunner` round): with duration 1 / step 0.4, X-Bridges and V-Lab run to t = 1.2 > duration.
+- L5 Float time boundaries: samples are at `k*step`; `0.1*3 = 0.30000000000000004 > 0.3`, so `simEvaluate.ts` drops the boundary sample of a window or `by`.
+- L6 SM runner passes `step*1000` ms as ONE tick (`smRunner.ts:82`); the interpreter rejects anything outside tickMs ± tolerance (`smTiming.ts:21`) -> every step other than the chart tick is a `TIMING` runtime error.
+- L7 One observed signal and five fixed checks only; no `x == 1`, no logic, no multi-signal condition.
+- L9 `stimulusValue` compares `t >= at` exactly: with step 0.03, `11*0.03 = 0.32999999999999996 < 0.33`, so a step at 0.33 s is applied one step late.
+- L8 Each model runs alone (`simVerification.ts:128`); no run respects an execution order across models.
+
+## 7. Contracts (phase 2, fixed) — `src/engine/trmSim/`
+### 7.1 Time base (WP-13)
+- `simCriterion.ts`: `MAX_SIM_STEPS = 20000`; `stepCount(duration, step) = Math.round(duration / step)`;
+  `TIME_EPS = 1e-9`; `timeLE(a, b) = a <= b + TIME_EPS * Math.max(1, Math.abs(b))`, `timeGE(a, b) = timeLE(b, a)`.
+- `validateCriterion` adds `STEP` errors: duration not a whole multiple of step (|N*step - duration| > TIME_EPS*max(1, duration)); N > MAX_SIM_STEPS.
+- `simEvaluate.ts` compares sample times only with `timeLE`/`timeGE`.
+- `stimulusValue`: step switches when `timeGE(t, at)`; ramp is `from` until `timeGE(t, start)`, then `from + slope * Math.max(0, t - start)`.
+- All runners use `stepCount`; sample k is at `t = k*step`.
+- State machine: one major step = `ticks = round(step*1000 / tickMs)` interpreter ticks of exactly `tickMs`; `ticks < 1` or `|ticks*tickMs - step*1000| > 1e-6` -> `STEP_NOT_TICK_MULTIPLE` (no run). Stimuli are written once per major step, before its first tick.
+
+### 7.2 RTM evidence currency (WP-14)
+- `buildTraceabilityMatrix(repo, filters, index, externalElements, options?: RtmOptions)`,
+  `RtmOptions = { evidenceCurrency?: (evidence: VerificationEvidence) => EvidenceCurrency }`.
+- Only the LATEST evidence per (verificationCaseId, requirementId) counts (max `executedAt`, then `revision`). Older evidence stays listed in `row.evidence`.
+- Evidence is stale when `deriveEvidenceStatus` says stale OR `options.evidenceCurrency` says stale.
+- Status order on the latest set: any current failed -> `failed`; else requirement stale or any stale -> `stale`; else any current passed -> `verified`; else the existing fallbacks.
+- `verificationStatus` is the latest RESULT regardless of currency (staleness is shown by `status`): any latest failed -> `failed`; else any latest passed -> `passed`; else `not-run` when cases or evidence exist; else `not-verified`. (Kept compatible with `rtm.test.ts:329`.)
+- `TraceabilityMatrix.tsx` takes `evidenceCurrency?` and passes it on; App passes `simEvidenceStatusFor`-based currency at both RTM call sites (TRM window and report).
+
+### 7.3 Condition language (WP-15) `simExpression.ts`
+- `parseSimExpression(src) -> { ok: true; ast; aliases: string[] } | { ok: false; error: string; at: number }`; `evaluateSimExpression(ast, env) -> number`; `isTruthy(v) = v !== 0`.
+- Grammar (lowest first): `||`, `&&`, `== !=`, `< <= > >=`, `+ -`, `* /`, unary `! -`, primary = number | `true` | `false` | alias | `abs(x)` | `min(a, b, ...)` | `max(a, b, ...)` | `( expr )`.
+- Alias = `[A-Za-z_][A-Za-z0-9_]*`, not `true`/`false`/`abs`/`min`/`max`. `aliases` = distinct, in first-appearance order.
+- Booleans are 1/0. Comparisons and logic return 1/0. A single `=`, `&` or `|` is a parse error with a hint.
+- Strictness: any non-finite operand of a comparison, logical operator or `!` gives `NaN` (never a silent false); `==` is exact.
+
+### 7.4 Engine sessions (WP-16) `simSession.ts`
+- `SimEngine = 'sm' | 'xb' | 'vlab'` (re-exported by `simVerification.ts`); `engineOfSimTarget(target)` (raw state ids -> `sm`); `engineModelOf(project, engine)` (moved from `simVerification.ts`).
+- `createSimSession(engine, project, { observe, drive, step }) -> { session: SimEngineSession | null; diagnostics }`. Resolution diagnostics and codes are the WP-08 ones (`UNKNOWN_TARGET`, `UNSUPPORTED_TARGET`, `NOT_STIMULABLE`, `NOT_OBSERVABLE`, `UNKNOWN_BLOCK`) plus `STEP_NOT_TICK_MULTIPLE`.
+- `SimEngineSession`: `engine`; `hasInitialSample` (sm, xb true; vlab false); `initialize()` after the t = 0 writes; `read(target) -> number | null` (null before initialize, and for V-Lab before its first solve); `write(target, value)` (V-Lab checks library bounds -> `OUT_OF_BOUNDS`); `step(t, dt)` (-> `RUNTIME_ERROR`); `signalInfo(target) -> { unit?: string; discrete: boolean }` (`discrete` for SM bool/int* variables and states).
+- V-Lab: one hidden probe scope per observed port. The project is never mutated.
+- The WP-08 runners are re-implemented on sessions; their existing tests are the parity guard and are not edited.
+
+### 7.5 Scenario (WP-17) `simScenario.ts`, stored as `VerificationCase.simulationScenario?: SimScenario`
+```ts
+interface SimSignalRef { alias: string; target: string }
+type SimTemporal =
+  | { kind: 'always' | 'never' | 'eventually'; window?: [number, number] }
+  | { kind: 'response'; trigger: string; within: number; window?: [number, number] };
+interface SimAssertion { id: string; requirementId: string; name?: string; condition: string; temporal: SimTemporal }
+interface SimCoupling { from: string; to: string }   // observable target -> drivable target of ANOTHER engine
+interface SimScenario { id: string; verificationCaseId: string; duration: number; step: number;
+  order?: SimEngine[]; signals: SimSignalRef[]; stimuli: SimStimulus[]; couplings: SimCoupling[]; assertions: SimAssertion[] }
+```
+- `DEFAULT_ENGINE_ORDER = ['sm', 'xb', 'vlab']`. Window defaults to `[0, duration]`.
+- `validateScenario(scenario, { project, repository?, verificationCase? }) -> { severity: 'error' | 'warning'; code; message; path?; target? }[]`.
+  Errors: `DURATION`, `STEP` (7.1 rules), `STEP_NOT_TICK_MULTIPLE`, `ALIAS` (syntax, reserved, duplicate), `SIGNAL` (session resolution; the session code is in the message), `EXPRESSION` (parse error or unknown alias), `WINDOW` (start > end, outside [0, duration], or no grid sample: `ceil(t0/step - 1e-9) > floor(t1/step + 1e-9)`), `RESPONSE` (within not finite or <= 0, bad trigger), `REQUIREMENT` (assertion requirement not in `verificationCase.verifiesRequirementIds`), `ORDER` (duplicate, unknown, or missing a participating engine), `DRIVE_CONFLICT` (one target driven twice by stimuli/couplings), `SAME_ENGINE_COUPLING`, `COUPLING` (from not observable or to not drivable), `STIMULUS`, `NO_ASSERTIONS`.
+  Warnings: `FLOAT_EQUALITY` (`==`/`!=` with an operand alias whose signal is not discrete), `UNLINKED_SIGNAL` (with `repository`: an assertion's alias target is not linked to that assertion's requirement by satisfy/verify/refine/trace).
+- `scenarioSchedule(scenario) -> { order; engines; steps; couplings: { from, to, fromEngine, toEngine, delayed }[] }`. Participating engines = engines of signals, stimuli and both coupling ends. `order` = the configured order filtered to participating engines. A coupling is `delayed` when its source engine comes after its target engine in `order`.
+- `criterionToScenario(criterion)`: alias `y` for `observe`. `<=`/`>=` -> always over window, `y <= v` / `y >= v`; `within` -> always over window, `abs(y - v) <= tol`; `reaches` -> eventually over [0, by], `y >= v` (falling: `y <= v`); `settles` -> always over [by, duration], `abs(y - v) <= tol`.
+
+### 7.6 Temporal evaluation (WP-18a) `simTemporal.ts`
+- Series: `{ times: number[]; values: Record<alias, (number | null)[]> }` with `times[k] = k*step`.
+- Samples considered = window samples (by `timeLE`/`timeGE`) where every alias used by the condition and trigger is non-null.
+- A non-finite condition or trigger value -> `failed` at that sample ("non-finite value").
+- `always`: first false -> failed; else passed. `never`: first true -> failed; else passed. `eventually`: first true -> passed (witness); else failed at the last sample.
+- `response`: rising edge of the trigger (true now, and false at the previous considered sample, or no previous sample); deadline = t_edge + within. Answered when the condition is true at some sample in [t_edge, deadline]. Unanswered with deadline <= last considered sample -> failed at the last sample <= deadline. Unanswered with deadline beyond the window -> pending. Result: failed (earliest failure) > inconclusive (pending, or the trigger never rose: vacuous) > passed.
+- No considered samples -> inconclusive.
+- `evaluateAssertion(assertion, series, duration) -> { assertionId, requirementId, verdict: 'passed' | 'failed' | 'inconclusive', samplesChecked, at?: { t, values }, reason }`; `at.values` holds every alias the assertion uses.
+- `aggregateRequirementVerdicts(results)`: per requirement, failed > inconclusive > passed.
+
+### 7.7 Coupled run (WP-18b) `simScenarioRunner.ts`
+`runSimScenario(project, scenario, ctx?) -> { schedule, series, assertions, requirements, diagnostics, modelFingerprint, engines }`
+1. Any validation error -> no run (empty series, no assertions).
+2. One session per participating engine. observe = its signals + coupling sources; drive = its stimuli + coupling targets.
+3. t = 0: write all stimuli at 0. Then for each engine in `order`: write its incoming couplings whose source value is non-null, then `initialize()`. Then sample every alias (null allowed).
+4. For k = 1..N with t' = (k-1)*step: write stimuli at t'. Then for each engine in `order`: write its incoming couplings from the sources' current values (Gauss-Seidel: an earlier engine already holds t_k values, a later one still holds t_(k-1) values = one step delay), then `step(t', step)`. Then sample every alias at t = k*step.
+5. A target is written only when its value differs from the last value written to it (model logic may overwrite it in between).
+6. A session error stops the run: `RUNTIME_ERROR` / `OUT_OF_BOUNDS` diagnostic, series up to the failure, no assertions, no requirement verdicts.
+7. `modelFingerprint` = `simModelFingerprint` over `{engine: engineModelOf(project, engine)}` for the participating engines only (`scenarioModelFingerprint(project, engines)`).
+8. Deterministic: no clock, no randomness. The project is never mutated.
+
+### 7.8 Evidence and controller (WP-19)
+- Additive `VerificationEvidence.simulation` fields: `scenarioId?`, `engines?`, `assertions?`, `series?`, `decimated?`. `criterionId` = scenario id for scenario evidence. `trace` = [].
+- `recordScenarioEvidence(repo, { newId: (requirementId) => string, scenario, run, executedAt }) -> { repository, evidence[], skipped: { requirementId, reason }[] }`. Throws when the run has error diagnostics or an empty series.
+  - One evidence per requirement of the case with at least one assertion: `passed` iff its aggregate verdict is passed, `failed` iff failed.
+  - Inconclusive or assertion-less requirements are skipped, with no evidence.
+  - The series is reduced to that requirement's aliases, at most 2000 samples (even stride, always keeping index 0, the last index and every `at` sample), with `decimated` true when reduced.
+  - `firstViolation` = the earliest failed assertion's `at` (value of its first alias).
+- `simEvidenceStatusFor` uses `scenarioModelFingerprint(project, evidence.simulation.engines)` when `engines` is present.
+- `simVerification.ts`:
+  - `createSimulationCase(repo, requirementId, { id, name? })`: method `simulation`, verifies [requirementId], owner and namespace taken from the requirement.
+  - `verifyRequirementsByScenario(repo, project, caseId, { newId, executedAt })`.
+  - `runAllSimulationCases(repo, project, { newId, executedAt })`: scenario first, else legacy criterion, else skipped.
+  - `repositoryChangeCommands` also emits `createElement` for new verification cases and `updateElement` for `simulationScenario` changes.
+
+### 7.9 UI (WP-20)
+- `SimVerificationPanel`:
+  - a "New simulation test case" button;
+  - a per-case `ScenarioEditor`, with run settings, execution order, signals, stimuli, couplings with a same-step / one-step-delay badge, and assertions;
+  - live validation: errors block Save, warnings are shown;
+  - Run results per assertion (verdict, t, values, reason) and per requirement, plus skipped requirements;
+  - a `SimTracePlot` (inline SVG, no dependencies).
+- `TraceabilityMatrix`: "Run all simulation tests" (`onRunAllSimulations`). App commits the result through the gateway.
+
+## 8. Work packages (phase 2)
+| WP | Scope | Deps |
+| --- | --- | --- |
+| 13 | Time base and runner fixes (7.1): `simCriterion.ts`, `simEvaluate.ts`, `smRunner.ts`, `xbRunner.ts`, `vlabRunner.ts` | 12 |
+| 14 | RTM latest-evidence and model currency (7.2): `rtm.ts`, `TraceabilityMatrix.tsx`, App wiring | 12 |
+| 15 | Condition language (7.3): `simExpression.ts` | 12 |
+| 16 | Engine sessions (7.4) + runners on sessions | 13 |
+| 17 | Scenario model and validation (7.5): `simScenario.ts`, `model.ts` field | 15, 16 |
+| 18a | Temporal evaluation (7.6): `simTemporal.ts` | 15 |
+| 18b | Coupled runner (7.7): `simScenarioRunner.ts` | 17, 18a |
+| 19 | Scenario evidence and controller (7.8) | 14, 18b |
+| 20 | UI (7.9) | 19 |
+| 21 | E2E thermostat scenario across all three models through the SysML gateway (planner test; see 9) | 20 |
+| 22 | Close-out: trmSim + sysml suites, `tsc --noEmit`, help topic, push | 21 |
+
+## 9. The full scenario (WP-21): closed-loop thermostat
+Fixture `src/engine/trmSim/__fixtures__/thermostatProject.ts` (SM 10 ms tick, hysteresis 55..65; X-Bridges GAIN 100; V-Lab ps_constant -> ps_lpf, T = 5 s).
+Scenario: duration 30 s, step 0.01 s, order SM -> X-Bridges -> V-Lab; stimulus `enable` = 1.
+Couplings: `heaterOn -> heaterGain.u` (same step), `heaterGain.y -> power.value` (same step), `chamber.y -> dT` (one step delay).
+
+| Req | Text | Condition | Mode |
+| --- | --- | --- | --- |
+| REQ-T1 | Warm-up: dT reaches 60 within 10 s | `dT >= 60` | eventually [0, 10] |
+| REQ-T2 | Regulation: dT stays within 50..70 after 15 s | `dT >= 50 && dT <= 70` | always [15, 30] |
+| REQ-T3 | Over-temperature: heater off within 0.2 s of dT >= 65 | trigger `dT >= 65`, condition `heaterOn == 0` | response, within 0.2 |
+| REQ-T4 | Power command never exceeds 100 % | `power > 100` | never |
+| REQ-T5 | The heater turns on (the user's `x == 1` case) | `heating == 1` | eventually |
+
+Expected values come from an independent reference model written in the test (plain arithmetic of the documented semantics: one SM transition per tick, GAIN, backward-Euler LPF `y_k = a*u + (1 - a)*y_(k-1)`, a = dt/(T + dt)). The run must match it at every sample (1e-9). First `dT >= 60` at t = 4.59 s.
+Negative path: upper threshold 75 -> REQ-T2 fails at the reference model's first sample above 70, REQ-T3 inconclusive (no evidence); the RTM shows failed. Restore -> re-run -> verified (latest evidence wins). Model edit -> stale in the panel and the RTM. Save/load keeps the scenario and evidence. Two runs are identical (determinism).

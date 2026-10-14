@@ -153,6 +153,108 @@
       ],
       "status": "done",
       "result": "trmSim+panel 152 tests green; test:sysml 1232 passed, only the 3 App.sysmlLabels failures that also fail on co-work"
+    },
+    {
+      "id": "WP-13",
+      "title": "Time base and runner fixes",
+      "deps": [
+        "WP-12"
+      ],
+      "status": "in_progress",
+      "phase": 2
+    },
+    {
+      "id": "WP-14",
+      "title": "RTM latest evidence and model currency",
+      "deps": [
+        "WP-12"
+      ],
+      "status": "in_progress",
+      "phase": 2
+    },
+    {
+      "id": "WP-15",
+      "title": "Condition language",
+      "deps": [
+        "WP-12"
+      ],
+      "status": "in_progress",
+      "phase": 2
+    },
+    {
+      "id": "WP-16",
+      "title": "Engine sessions",
+      "deps": [
+        "WP-13"
+      ],
+      "status": "todo",
+      "phase": 2
+    },
+    {
+      "id": "WP-17",
+      "title": "Scenario model and validation",
+      "deps": [
+        "WP-15",
+        "WP-16"
+      ],
+      "status": "todo",
+      "phase": 2
+    },
+    {
+      "id": "WP-18a",
+      "title": "Temporal evaluation",
+      "deps": [
+        "WP-15"
+      ],
+      "status": "todo",
+      "phase": 2
+    },
+    {
+      "id": "WP-18b",
+      "title": "Coupled runner",
+      "deps": [
+        "WP-17",
+        "WP-18a"
+      ],
+      "status": "todo",
+      "phase": 2
+    },
+    {
+      "id": "WP-19",
+      "title": "Scenario evidence and controller",
+      "deps": [
+        "WP-14",
+        "WP-18b"
+      ],
+      "status": "todo",
+      "phase": 2
+    },
+    {
+      "id": "WP-20",
+      "title": "Scenario UI",
+      "deps": [
+        "WP-19"
+      ],
+      "status": "todo",
+      "phase": 2
+    },
+    {
+      "id": "WP-21",
+      "title": "E2E thermostat scenario",
+      "deps": [
+        "WP-20"
+      ],
+      "status": "todo",
+      "phase": 2
+    },
+    {
+      "id": "WP-22",
+      "title": "Phase 2 close-out",
+      "deps": [
+        "WP-21"
+      ],
+      "status": "todo",
+      "phase": 2
     }
   ],
   "findings": [
