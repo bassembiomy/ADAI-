@@ -124,7 +124,8 @@
         "WP-05",
         "WP-09"
       ],
-      "status": "in_progress"
+      "status": "done",
+      "result": "controller 11/11, panel 10/10; review: by-value criterion compare, no engine-side impact confirmation"
     },
     {
       "id": "WP-10b",
@@ -132,7 +133,8 @@
       "deps": [
         "WP-10"
       ],
-      "status": "todo"
+      "status": "todo",
+      "note": "optional follow-up: requirements can already be linked from the requirement side (Simulate panel)"
     },
     {
       "id": "WP-11",
@@ -140,7 +142,8 @@
       "deps": [
         "WP-10"
       ],
-      "status": "todo"
+      "status": "done",
+      "result": "trmSimLoop.e2e 7/7 through the real SysML gateway: link, criterion, run, evidence, stale, save/load, C trace ids, unlink"
     },
     {
       "id": "WP-12",
@@ -148,7 +151,8 @@
       "deps": [
         "WP-11"
       ],
-      "status": "todo"
+      "status": "done",
+      "result": "trmSim+panel 152 tests green; test:sysml 1232 passed, only the 3 App.sysmlLabels failures that also fail on co-work"
     }
   ],
   "findings": [
@@ -176,6 +180,11 @@
       "wp": "WP-05",
       "severity": "low",
       "summary": "reportSnapshotAdapter builds its snapshot without external elements, so report diagnostics may still list UNRESOLVED_ENDPOINT for state and sim links (pre-existing for states); pick up in WP-10"
+    },
+    {
+      "wp": "WP-10",
+      "severity": "low",
+      "summary": "Simulate button only in the standard RTM table, not the virtualized grid; X-Bridges/V-Lab runs cover the global canvas only (workspace-file canvases not yet)"
     }
   ]
 }

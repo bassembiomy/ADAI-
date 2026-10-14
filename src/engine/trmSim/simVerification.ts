@@ -175,6 +175,13 @@ export function simEvidenceStatusFor(repo: SysmlRepository, evidenceId: string, 
   return deriveSimEvidenceStatus(repo, evidenceId, fingerprint);
 }
 
+function stable(v: unknown): string {
+  if (Array.isArray(v)) return `[${v.map(stable).join(',')}]`;
+  if (v && typeof v === 'object') return `{${Object.keys(v as object).sort().filter(k => (v as any)[k] !== undefined).map(k => `${JSON.stringify(k)}:${stable((v as any)[k])}`).join(',')}}`;
+  return JSON.stringify(v) ?? 'undefined';
+}
+const sameValue = (a: unknown, b: unknown): boolean => a === b || stable(a) === stable(b);
+
 export type RepositoryChangeCommand =
   | { type: 'createElement'; element: any }
   | { type: 'updateElement'; elementId: string; patch: Record<string, unknown> }
@@ -187,7 +194,7 @@ export function repositoryChangeCommands(prev: SysmlRepository, next: SysmlRepos
   if (removed.length > 0) out.push({ type: 'deleteElements', elementIds: removed });
   for (const [id, rel] of Object.entries(next.relationships)) if (!prev.relationships[id]) out.push({ type: 'createElement', element: rel });
   for (const [id, vc] of Object.entries(next.verificationCases)) {
-    if (prev.verificationCases[id] && prev.verificationCases[id].simulationCriterion !== vc.simulationCriterion) {
+    if (prev.verificationCases[id] && !sameValue(prev.verificationCases[id].simulationCriterion, vc.simulationCriterion)) {
       out.push({ type: 'updateElement', elementId: id, patch: { simulationCriterion: vc.simulationCriterion } });
     }
   }
