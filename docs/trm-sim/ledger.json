@@ -1,0 +1,27 @@
+{
+  "plan": "docs/superpowers/plans/2026-10-14-trm-simulation-loop.md",
+  "baseline": {
+    "date": "2026-10-14",
+    "commit": "0a4decd",
+    "command": "npx vitest run src/engine/sysml/rtm.test.ts src/engine/sysml/traceabilityIndex.test.ts src/engine/sysml/evidence.test.ts src/engine/sysml/requirementsEndToEnd.test.ts src/utils/stateMachine/smTestPlanBuilder.test.ts src/utils/stateMachine/xbBoundaryMappings.test.ts src/utils/stateMachine/smXBridgesAppIntegration.test.ts src/engine/doe/vlabIntegration.test.ts --reporter=dot",
+    "result": "8 files / 59 tests passed"
+  },
+  "wps": [
+    {"id": "WP-00", "title": "Set up loop and baseline", "deps": [], "status": "done"},
+    {"id": "WP-01", "title": "Target reference", "deps": ["WP-00"], "status": "todo"},
+    {"id": "WP-02", "title": "State machine interface", "deps": ["WP-01"], "status": "todo"},
+    {"id": "WP-03", "title": "X-Bridges interface", "deps": ["WP-01"], "status": "todo"},
+    {"id": "WP-04", "title": "V-Lab interface", "deps": ["WP-01"], "status": "todo"},
+    {"id": "WP-05", "title": "Assign requirements to any target", "deps": ["WP-01"], "status": "todo"},
+    {"id": "WP-06", "title": "Real requirement ids in generated C", "deps": ["WP-05"], "status": "todo"},
+    {"id": "WP-07", "title": "Criterion and evaluator", "deps": ["WP-01"], "status": "todo"},
+    {"id": "WP-08a", "title": "State machine runner", "deps": ["WP-02", "WP-07"], "status": "todo"},
+    {"id": "WP-08b", "title": "X-Bridges runner", "deps": ["WP-03", "WP-07"], "status": "todo"},
+    {"id": "WP-08c", "title": "V-Lab runner", "deps": ["WP-04", "WP-07"], "status": "todo"},
+    {"id": "WP-09", "title": "Evidence and staleness", "deps": ["WP-08a", "WP-08b", "WP-08c"], "status": "todo"},
+    {"id": "WP-10", "title": "Assignment panel and Run button", "deps": ["WP-05", "WP-09"], "status": "todo"},
+    {"id": "WP-11", "title": "End to end", "deps": ["WP-10"], "status": "todo"},
+    {"id": "WP-12", "title": "Close-out", "deps": ["WP-11"], "status": "todo"}
+  ],
+  "findings": []
+}
