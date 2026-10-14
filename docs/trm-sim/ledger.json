@@ -202,7 +202,7 @@
         "WP-16",
         "WP-18a"
       ],
-      "status": "todo",
+      "status": "in_progress",
       "phase": 2
     },
     {
@@ -212,9 +212,10 @@
         "WP-15",
         "WP-16"
       ],
-      "status": "todo",
+      "status": "done",
       "phase": 2,
-      "note": "creates the \u00a77.5 type declarations in simScenario.ts; WP-17 adds the functions"
+      "note": "creates the \u00a77.5 type declarations in simScenario.ts; WP-17 adds the functions",
+      "result": "16/16; tsc clean; review: response = earliest failure > pending/vacuous > passed"
     },
     {
       "id": "WP-18b",
