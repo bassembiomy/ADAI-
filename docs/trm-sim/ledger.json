@@ -114,7 +114,8 @@
         "WP-08b",
         "WP-08c"
       ],
-      "status": "todo"
+      "status": "done",
+      "result": "13/13; sysml suite no regressions; review: params never stripped from fingerprint"
     },
     {
       "id": "WP-10",
@@ -122,6 +123,14 @@
       "deps": [
         "WP-05",
         "WP-09"
+      ],
+      "status": "in_progress"
+    },
+    {
+      "id": "WP-10b",
+      "title": "Assign from model inspectors (state, X-Bridges, V-Lab)",
+      "deps": [
+        "WP-10"
       ],
       "status": "todo"
     },
