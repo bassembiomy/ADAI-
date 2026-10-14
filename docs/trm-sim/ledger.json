@@ -267,8 +267,9 @@
       "deps": [
         "WP-21"
       ],
-      "status": "in_progress",
-      "phase": 2
+      "status": "done",
+      "phase": 2,
+      "result": "trmSim+components+help+SM/VLab integration 421/422 (helpCoverage live-UI fingerprint fails already at 9493efc, before phase 2); test:sysml 1238/1239 (pre-existing App.sysmlLabels); tsc clean except missing xlsx package in the cloud env; user guide docs/trm-sim/USER_GUIDE.md"
     }
   ],
   "findings": [
@@ -311,6 +312,11 @@
       "wp": "WP-19",
       "severity": "low",
       "summary": "test:sysml shows 'ReferenceError: loadXlsx is not defined' in App.sysmlLabels.test.tsx, coming from the on-demand xlsx loading commits of another session (3a90985), not from trm-sim."
+    },
+    {
+      "wp": "WP-22",
+      "severity": "low",
+      "summary": "src/help/helpCoverage.test.ts live-UI fingerprint already fails on co-work 9493efc; regenerate docs/help/2026-10-06-live-ui-reconciliation.json (npm run help:coverage) once all parallel UI work has landed, and map the new TRM simulation controls then."
     }
   ]
 }
