@@ -128,6 +128,7 @@ export function TraceabilityMatrix({ repository, externalElements = [], onNaviga
             rows={matrix.rows}
             resolveLabel={referenceLabel}
             onNavigate={onNavigate}
+            onSimulate={onSimulate}
             containerHeight={500}
             rowHeight={42}
           />
