@@ -3,7 +3,7 @@ import { VLabPhysicsEngine } from '../vlab/vlabPhysics';
 import { scalarSample } from '../vlab/vlabScopeRead';
 import { extractVlabInterface } from './vlabInterface';
 import { parseSimTarget } from './simTarget';
-import { stimulusValue, validateCriterion } from './simCriterion';
+import { stepCount, stimulusValue, validateCriterion } from './simCriterion';
 import type { SimCriterion } from './simCriterion';
 import { evaluateCriterion } from './simEvaluate';
 import type { SimEvaluation, SimTraceSample } from './simEvaluate';
@@ -55,7 +55,7 @@ export function runVlabVerification(source: { canvas: string; nodes: any[]; edge
   }
 
   // stimuli
-  const N = Math.round(criterion.duration / criterion.step);
+  const N = stepCount(criterion.duration, criterion.step);
   const step = criterion.step;
   const stim: { blockId: string; name: string; profile: SimCriterion['stimuli'][number]['profile'] }[] = [];
   for (const s of criterion.stimuli) {

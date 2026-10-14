@@ -4,7 +4,7 @@ import { Solvers } from '../xbridges/Solvers';
 import { BLOCK_LIBRARY } from '../xbridges/BlockDefinitions';
 import { parseSimTarget } from './simTarget';
 import { extractXbInterface } from './xbInterface';
-import { stimulusValue, validateCriterion } from './simCriterion';
+import { stepCount, stimulusValue, validateCriterion } from './simCriterion';
 import type { SimCriterion } from './simCriterion';
 import { evaluateCriterion } from './simEvaluate';
 import type { SimEvaluation, SimTraceSample } from './simEvaluate';
@@ -162,7 +162,7 @@ export function runXbVerification(
     apply(0);
     engine.computeOutputs(0);
     sample(0);
-    const n = Math.round(criterion.duration / criterion.step);
+    const n = stepCount(criterion.duration, criterion.step);
     for (let k = 1; k <= n && error === null; k++) {
       apply((k - 1) * criterion.step);
       Solvers.stepRK4(engine, (k - 1) * criterion.step, criterion.step);

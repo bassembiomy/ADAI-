@@ -32,10 +32,16 @@ export interface SimCriterionDiagnostic {
 export function stimulusValue(p: SimStimulusProfile, t: number): number {
   switch (p.kind) {
     case 'constant': return p.value;
-    case 'step': return t >= p.at ? p.after : p.before;
-    case 'ramp': return t < p.start ? p.from : p.from + p.slope * (t - p.start);
+    case 'step': return timeGE(t, p.at) ? p.after : p.before;
+    case 'ramp': return !timeGE(t, p.start) ? p.from : p.from + p.slope * Math.max(0, t - p.start);
   }
 }
+
+export const MAX_SIM_STEPS = 20000;
+export const TIME_EPS = 1e-9;
+export function stepCount(duration: number, step: number): number { return Math.round(duration / step); }
+export function timeLE(a: number, b: number): boolean { return a <= b + TIME_EPS * Math.max(1, Math.abs(b)); }
+export function timeGE(a: number, b: number): boolean { return timeLE(b, a); }
 
 export function validateCriterion(c: SimCriterion, observedUnit?: string): SimCriterionDiagnostic[] {
   const out: SimCriterionDiagnostic[] = [];
@@ -46,12 +52,19 @@ export function validateCriterion(c: SimCriterion, observedUnit?: string): SimCr
   if (!durOk) add('DURATION', 'duration must be a finite number > 0');
   if (!(fin(c.step) && c.step > 0)) add('STEP', 'step must be a finite number > 0');
   else if (durOk && c.step > c.duration) add('STEP', 'step must be <= duration');
+  else if (durOk) {
+    const n = stepCount(c.duration, c.step);
+    if (Math.abs(n * c.step - c.duration) > TIME_EPS * Math.max(1, c.duration)) {
+      add('STEP', 'duration must be a whole multiple of step');
+    }
+    if (n > MAX_SIM_STEPS) add('STEP', `too many steps (${n} > ${MAX_SIM_STEPS})`);
+  }
 
-  const inRange = (x: number) => fin(x) && x >= 0 && (!durOk || x <= c.duration);
+  const inRange = (x: number) => fin(x) && timeGE(x, 0) && (!durOk || timeLE(x, c.duration));
   const k = c.check;
   if ('window' in k) {
     const [t0, t1] = k.window;
-    if (!fin(t0) || !fin(t1) || t0 > t1) add('WINDOW', 'window must be finite with start <= end');
+    if (!fin(t0) || !fin(t1) || !timeLE(t0, t1)) add('WINDOW', 'window must be finite with start <= end');
     else if (!inRange(t0) || !inRange(t1)) add('WINDOW', 'window must lie within [0, duration]');
   } else if (!inRange(k.by)) {
     add('WINDOW', '"by" must lie within [0, duration]');

@@ -1,7 +1,7 @@
 // WP-08a: state machine verification runner. Contract: plan §2 item 4
 import { createAppSimulationSession, setSessionVariableValue, stepAppSimulationSession } from '../../utils/stateMachine/smAppAdapter';
 import { parseSimTarget } from './simTarget';
-import { stimulusValue, validateCriterion } from './simCriterion';
+import { stepCount, stimulusValue, validateCriterion } from './simCriterion';
 import type { SimCriterion } from './simCriterion';
 import { evaluateCriterion } from './simEvaluate';
 import type { SimEvaluation, SimTraceSample } from './simEvaluate';
@@ -79,15 +79,24 @@ export function runSmVerification(model: any, criterion: SimCriterion): SmRunRes
       trace.push({ t, value });
     };
 
+    const tickMs = session.ir.tickMs;
+    const ticks = Math.round(criterion.step * 1000 / tickMs);
+    if (!(ticks >= 1) || Math.abs(ticks * tickMs - criterion.step * 1000) > 1e-6) {
+      return failed([{ code: 'STEP_NOT_TICK_MULTIPLE', message: `step ${criterion.step}s is not a whole multiple of the model tick (${tickMs} ms)` }]);
+    }
+
     writeStimuli(0);
     if (session.initialFrame.error) return runtimeError(session.initialFrame.error);
     sample(0, session.initialFrame);
-    const n = Math.floor(criterion.duration / criterion.step + 1e-9);
+    const n = stepCount(criterion.duration, criterion.step);
     for (let k = 1; k <= n; k++) {
       const t = k * criterion.step;
       writeStimuli((k - 1) * criterion.step);
-      const frame = stepAppSimulationSession(session, criterion.step * 1000);
-      if (frame.error) return runtimeError(frame.error);
+      let frame = session.initialFrame;
+      for (let i = 0; i < ticks; i++) {
+        frame = stepAppSimulationSession(session, tickMs);
+        if (frame.error) return runtimeError(frame.error);
+      }
       sample(t, frame);
     }
   } catch (e) {

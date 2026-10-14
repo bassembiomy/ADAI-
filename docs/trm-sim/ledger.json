@@ -160,8 +160,9 @@
       "deps": [
         "WP-12"
       ],
-      "status": "in_progress",
-      "phase": 2
+      "status": "done",
+      "phase": 2,
+      "result": "trmSim 184/184; fixes L4 L5 L6 L9; review: planner test corrected (V-Lab refines a 0.1 s step internally: value bounded by backward Euler and exact solution)"
     },
     {
       "id": "WP-14",
@@ -197,7 +198,8 @@
       "title": "Scenario model and validation",
       "deps": [
         "WP-15",
-        "WP-16"
+        "WP-16",
+        "WP-18a"
       ],
       "status": "todo",
       "phase": 2
@@ -206,10 +208,12 @@
       "id": "WP-18a",
       "title": "Temporal evaluation",
       "deps": [
-        "WP-15"
+        "WP-15",
+        "WP-16"
       ],
       "status": "todo",
-      "phase": 2
+      "phase": 2,
+      "note": "creates the \u00a77.5 type declarations in simScenario.ts; WP-17 adds the functions"
     },
     {
       "id": "WP-18b",

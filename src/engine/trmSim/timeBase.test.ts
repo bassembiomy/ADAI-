@@ -144,7 +144,9 @@ describe('X-Bridges and V-Lab runners never run past the duration', () => {
     expect(r.diagnostics).toEqual([]);
     expect(r.trace).toHaveLength(3);
     expect(r.trace[2].t).toBeCloseTo(0.3, 12);
-    // backward Euler LPF, T = 5 s, dt = 0.1: y1 = 100 * a, a = dt / (T + dt)
-    expect(r.trace[0].value).toBeCloseTo(100 * (0.1 / 5.1), 9);
+    // First sample after one 0.1 s step of the T = 5 s low-pass from rest: between one backward-Euler step
+    // (100 * 0.1 / 5.1) and the exact solution 100 * (1 - exp(-0.1 / 5)); V-Lab refines large steps internally.
+    expect(r.trace[0].value).toBeGreaterThanOrEqual(100 * (0.1 / 5.1) - 1e-9);
+    expect(r.trace[0].value).toBeLessThanOrEqual(100 * (1 - Math.exp(-0.1 / 5)) + 1e-9);
   });
 });

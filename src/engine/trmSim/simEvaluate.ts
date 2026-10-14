@@ -1,4 +1,5 @@
 // WP-07: criterion evaluation over a sampled trace. Contract: plan §2.3
+import { timeGE, timeLE } from './simCriterion';
 import type { SimCheck } from './simCriterion';
 
 export interface SimTraceSample { t: number; value: number }
@@ -33,7 +34,7 @@ export function evaluateCriterion(check: SimCheck, trace: readonly SimTraceSampl
     case '>=':
     case 'within': {
       const [t0, t1] = check.window;
-      const inWin = trace.filter(s => s.t >= t0 && s.t <= t1);
+      const inWin = trace.filter(s => timeGE(s.t, t0) && timeLE(s.t, t1));
       if (inWin.length === 0) return noSamples(t0);
       if (check.kind === '<=') return scan(inWin, v => v <= check.value, v => `${v} > ${check.value}`);
       if (check.kind === '>=') return scan(inWin, v => v >= check.value, v => `${v} < ${check.value}`);
@@ -42,7 +43,7 @@ export function evaluateCriterion(check: SimCheck, trace: readonly SimTraceSampl
       return scan(inWin, v => Math.abs(v - value) <= tolerance, v => `${v} outside ${value} ± ${tolerance}`);
     }
     case 'reaches': {
-      const early = trace.filter(s => s.t <= check.by);
+      const early = trace.filter(s => timeLE(s.t, check.by));
       if (early.length === 0) return noSamples(check.by);
       const falling = check.direction === 'falling';
       let n = 0;
@@ -64,7 +65,7 @@ export function evaluateCriterion(check: SimCheck, trace: readonly SimTraceSampl
       };
     }
     case 'settles': {
-      const late = trace.filter(s => s.t >= check.by);
+      const late = trace.filter(s => timeGE(s.t, check.by));
       if (late.length === 0) return noSamples(check.by);
       return scan(late, v => Math.abs(v - check.value) <= check.tolerance,
         v => `${v} outside ${check.value} ± ${check.tolerance} after t=${check.by}`);
