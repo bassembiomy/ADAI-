@@ -35,6 +35,18 @@ describe('runSmVerification', () => {
     expect(r.trace.at(-1)?.value).toBe(60);
   });
 
+  it('applies the stimulus value of t = (k-1)*step during the step that ends at k*step', () => {
+    // POWER rises at 0.005 -> first written for the step from 0.01 to 0.02 (State_4, HEATER 50 one tick later);
+    // UP rises at 0.03 -> written for the step from 0.03 to 0.04 (HEATER_UP, HEATER 60).
+    const r = runSmVerification(heater, crit({}));
+    expect(r.trace.map(s => s.value).slice(0, 6)).toEqual([0, 0, 0, 50, 60, 60]);
+  });
+
+  it('writes the t = 0 stimuli before the t = 0 sample', () => {
+    const r = runSmVerification(heater, crit({ stimuli: [{ target: POWER, profile: { kind: 'constant', value: 1 } }], observe: POWER, check: { kind: '<=', value: 1, window: [0, 0.1] } }));
+    expect(r.trace[0].value).toBe(1);
+  });
+
   it('fails with the first violating sample when the bound is exceeded', () => {
     const r = runSmVerification(heater, crit({ check: { kind: '<=', value: 55, window: [0, 0.1] } }));
     expect(r.evaluation.passed).toBe(false);
