@@ -23,14 +23,39 @@ const renderCounts: Record<RenderArea, number> = {
 };
 
 let testEnabledOverride: boolean | null = null;
+let profileWarningEmitted = false;
+
+function warnIfNotProfilingBuild(): void {
+  if (profileWarningEmitted) return;
+  // Development builds use React's dev runtime, where Profiler callbacks fire.
+  let profilerActive = true;
+  try {
+    const env = (import.meta as any).env;
+    profilerActive = !env?.PROD || env.VITE_PROFILE === 'true';
+  } catch {
+    profilerActive = true;
+  }
+  if (profilerActive) return;
+  profileWarningEmitted = true;
+  console.warn(
+    '[ADIA perf] Render telemetry was requested, but this is not a profiling build. ' +
+      'React Profiler callbacks do not fire in production builds, so no data will be recorded. ' +
+      'Rebuild with VITE_PROFILE=true to enable them.'
+  );
+}
 
 export function isRenderTelemetryEnabled(): boolean {
   if (testEnabledOverride !== null) return testEnabledOverride;
   if (typeof window === 'undefined') return false;
-  if ((window as any).__ADIA_PERF_ENABLED__ === true) return true;
+  if ((window as any).__ADIA_PERF_ENABLED__ === true) {
+    warnIfNotProfilingBuild();
+    return true;
+  }
   try {
     const params = new URLSearchParams(window.location?.search ?? '');
-    return params.get('perfTelemetry') === '1';
+    const enabled = params.get('perfTelemetry') === '1';
+    if (enabled) warnIfNotProfilingBuild();
+    return enabled;
   } catch {
     return false;
   }
