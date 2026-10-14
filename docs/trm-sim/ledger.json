@@ -55,7 +55,7 @@
       "deps": [
         "WP-01"
       ],
-      "status": "todo"
+      "status": "in_progress"
     },
     {
       "id": "WP-06",
@@ -81,7 +81,8 @@
         "WP-02",
         "WP-07"
       ],
-      "status": "in_progress"
+      "status": "done",
+      "result": "10/10; review added stimulus timing and t=0 tests, fixed"
     },
     {
       "id": "WP-08b",
@@ -90,7 +91,8 @@
         "WP-03",
         "WP-07"
       ],
-      "status": "in_progress"
+      "status": "done",
+      "result": "11/11; review added unit check and UNKNOWN_BLOCK, fixed"
     },
     {
       "id": "WP-08c",
@@ -99,7 +101,8 @@
         "WP-04",
         "WP-07"
       ],
-      "status": "in_progress"
+      "status": "done",
+      "result": "10/10; review added unit check, fixed"
     },
     {
       "id": "WP-09",
