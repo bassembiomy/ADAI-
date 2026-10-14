@@ -44,6 +44,13 @@ describe('simModelFingerprint', () => {
     expect(simModelFingerprint(edited)).not.toBe(simModelFingerprint(heater));
   });
 
+  it('still sees block parameters that happen to share a layout key name', () => {
+    const pulse = (width: number) => ({ canvas: 'global', nodes: [{ id: 'p', position: { x: 0, y: 0 }, data: { type: 'PULSE', params: { width, x: 1, color: 2 } } }], edges: [] });
+    expect(simModelFingerprint(pulse(2))).not.toBe(simModelFingerprint(pulse(1)));
+    const withParam = (x: number) => ({ ...pulse(1), nodes: [{ id: 'p', data: { type: 'PULSE', params: { width: 1, x, color: 2 } } }] });
+    expect(simModelFingerprint(withParam(5))).not.toBe(simModelFingerprint(withParam(6)));
+  });
+
   it('works for canvas sources too', () => {
     const canvas = { canvas: 'global', nodes: [{ id: 'g', position: { x: 0, y: 0 }, data: { type: 'GAIN', params: { gain: 2 } } }], edges: [] };
     const movedCanvas = { ...canvas, nodes: [{ ...canvas.nodes[0], position: { x: 40, y: 1 }, selected: true }] };
@@ -92,6 +99,12 @@ describe('deriveSimEvidenceStatus', () => {
   it('goes stale when the requirement changes', () => {
     const changed = structuredClone(repository);
     changed.requirements.req1.text = 'Heater reaches 70';
+    expect(deriveSimEvidenceStatus(changed, 'ev1', simModelFingerprint(heater))).toBe('stale');
+  });
+
+  it('goes stale when the criterion of the verification case is edited', () => {
+    const changed = structuredClone(repository);
+    (changed.verificationCases.vc1 as any).simulationCriterion = criterion({ check: { kind: 'reaches', value: 50, by: 0.1 } });
     expect(deriveSimEvidenceStatus(changed, 'ev1', simModelFingerprint(heater))).toBe('stale');
   });
 
