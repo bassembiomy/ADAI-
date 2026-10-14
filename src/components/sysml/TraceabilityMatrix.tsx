@@ -15,6 +15,8 @@ export interface TraceabilityMatrixProps {
   repository: SysmlRepository;
   externalElements?: TraceabilityExternalElement[];
   onNavigate?: (elementId: string) => void;
+  /** Optional row action: open simulation verification for a requirement. */
+  onSimulate?: (requirementId: string) => void;
   onExport?: (csv: string) => void;
 }
 
@@ -27,7 +29,7 @@ export function nextRtmFocusIndex(current: number, key: string, count: number): 
   return current;
 }
 
-export function TraceabilityMatrix({ repository, externalElements = [], onNavigate, onExport }: TraceabilityMatrixProps) {
+export function TraceabilityMatrix({ repository, externalElements = [], onNavigate, onSimulate, onExport }: TraceabilityMatrixProps) {
   const [status, setStatus] = useState<RtmStatus | ''>('');
   const [owner, setOwner] = useState('');
   const [risk, setRisk] = useState('');
@@ -149,7 +151,7 @@ export function TraceabilityMatrix({ repository, externalElements = [], onNaviga
                     if (next !== index) { event.preventDefault(); rowRefs.current[next]?.focus(); }
                   }}
                 >
-                  <td className="p-2"><button data-help-feature="ui:sysml/TraceabilityMatrix:42bd19a061b8" data-help-source="src/components/sysml/TraceabilityMatrix.tsx" type="button" onClick={() => onNavigate?.(row.requirement.id)} className="text-left"><span className="block font-mono text-orange-300">{row.requirement.requirementId}</span><span className="font-medium">{sysmlObjectLabel(row.requirement, 'Requirement')}</span><span className="block max-w-xs truncate text-neutral-500">{row.requirement.text}</span></button></td>
+                  <td className="p-2"><button data-help-feature="ui:sysml/TraceabilityMatrix:42bd19a061b8" data-help-source="src/components/sysml/TraceabilityMatrix.tsx" type="button" onClick={() => onNavigate?.(row.requirement.id)} className="text-left"><span className="block font-mono text-orange-300">{row.requirement.requirementId}</span><span className="font-medium">{sysmlObjectLabel(row.requirement, 'Requirement')}</span><span className="block max-w-xs truncate text-neutral-500">{row.requirement.text}</span></button>{onSimulate && <button type="button" aria-label={`Simulate ${row.requirement.requirementId}`} onClick={() => onSimulate(row.requirement.id)} className="mt-1 rounded border border-orange-700 px-2 py-0.5 text-[11px] text-orange-300 hover:bg-orange-950">Simulate</button>}</td>
                   <td className="p-2">
                     <div className="flex flex-col gap-1 max-w-xs">
                       {/* Containment Parents (Contained By) */}

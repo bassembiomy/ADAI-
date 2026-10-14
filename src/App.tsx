@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo, MouseEvent, KeyboardEvent, ChangeEvent, Profiler, startTransition } from 'react';
 import { recordRenderCommit, resetProjectLoadTelemetry } from './features/sysml/performance/renderTelemetry';
 import { projectExternalEndpoints, projectExternalEndpointSignature, projectSimSources, buildSimEndpoints } from './engine/trmSim/simEndpoints';
+import { repositoryChangeCommands } from './engine/trmSim/simVerification';
+import { SimVerificationPanel } from './components/trmSim/SimVerificationPanel';
 import { buildSimExternalElements } from './engine/trmSim/simExternalElements';
 import { buildTraceabilityIndex } from './engine/sysml/traceabilityIndex';
 import { parseProjectJsonBuffer } from './utils/projectJsonBuffer';
@@ -152,7 +154,7 @@ import { resolveBlockDoubleClickAction, resolveExplicitBlockNavigation } from '.
 import { analyzeMutation } from './engine/sysml/mutations';
 import { loadRepository, serializeRepository, serializeSysmlProjectState, type V5UpgradeReport } from './engine/sysml/persistence';
 import { SysmlUpgradeReportDialog } from './components/sysml/SysmlUpgradeReportDialog';
-import { createEmptyRepository, parseMultiplicity, type SysmlRelationship, type ConnectorUsage, type ModelDiagramDefinition } from './engine/sysml/model';
+import { createEmptyRepository, parseMultiplicity, type SysmlRelationship, type SysmlRepository, type ConnectorUsage, type ModelDiagramDefinition } from './engine/sysml/model';
 import { evaluateSysmlOperationGate } from './engine/sysml/evidence';
 import { buildTraceabilityMatrix, computeCoverageMetrics } from './engine/sysml/rtm';
 import { buildCanonicalTraceabilitySnapshot } from './engine/sysml/reportSnapshotAdapter';
@@ -6313,6 +6315,23 @@ const ADIA = () => {
       setIsRunning(false);
     }
   }, [setIsRunning, setErrors, setCurrentError, setShowErrorDialog]);
+
+  // TRM simulation verification: the panel edits a repository copy; changes reach the model only as gateway commands.
+  const [simVerificationRequirementId, setSimVerificationRequirementId] = useState<string | null>(null);
+  const simVerificationProject = useMemo(() => ({
+    states, junctions, transitions, variables, layers, tickMs, hilConfig, safetyMode,
+    globalXBridgesNodes, globalXBridgesEdges, vlabNodes, vlabEdges,
+  }), [states, junctions, transitions, variables, layers, tickMs, hilConfig, safetyMode, globalXBridgesNodes, globalXBridgesEdges, vlabNodes, vlabEdges]);
+  const handleSimVerificationRepositoryChange = useCallback((next: SysmlRepository) => {
+    const previous = sysmlGatewayStateRef.current?.repository ?? canonicalSysmlRepository;
+    for (const command of repositoryChangeCommands(previous, next)) {
+      const result = command.type === 'deleteElements' ? executeConfirmedDeletion(command.elementIds) : handleExecuteSysmlCommand(command as SysmlEditorCommand);
+      if (!result.committed) {
+        addError('error', result.diagnostics.map(d => d.message).join('; ') || 'The simulation verification change was rejected.', 'Simulation verification');
+        break;
+      }
+    }
+  }, [canonicalSysmlRepository, executeConfirmedDeletion, handleExecuteSysmlCommand, addError]);
 
   const handleExplorerCommandResult = useCallback((result: ExplorerCommandResult) => {
     for (const diagnostic of result.diagnostics) {
@@ -18782,9 +18801,12 @@ const ADIA = () => {
             onClose={() => toggleWindow('rtm')}
             onUpdate={updateManagedWindow}
           >
+            <div className="flex h-full min-h-0 flex-col">
+            <div className="min-h-0 flex-1">
             <CanonicalTraceabilityMatrix
               repository={canonicalSysmlRepository}
               externalElements={traceabilityExternalElements}
+              onSimulate={setSimVerificationRequirementId}
               onNavigate={(elementId) => {
                 setSelectedIds([elementId]);
                 if (blocks.some(block => block.id === elementId && block.stereotype === 'requirement')) setDiagramMode('requirements');
@@ -18792,6 +18814,20 @@ const ADIA = () => {
                 else if (parts.some(part => part.id === elementId) || connectors.some(connector => connector.id === elementId)) setDiagramMode('ibd');
               }}
             />
+            </div>
+            {simVerificationRequirementId && canonicalSysmlRepository.requirements[simVerificationRequirementId] && (
+              <div className="max-h-[50%] overflow-auto border-t border-[var(--border-default)]">
+                <button type="button" aria-label="Close simulation verification" onClick={() => setSimVerificationRequirementId(null)} className="float-right m-2 rounded border border-neutral-700 px-2 py-0.5 text-xs text-neutral-300">Close</button>
+                <SimVerificationPanel
+                  repository={canonicalSysmlRepository}
+                  requirementId={simVerificationRequirementId}
+                  project={simVerificationProject}
+                  onRepositoryChange={handleSimVerificationRepositoryChange}
+                  newId={uuidv4}
+                />
+              </div>
+            )}
+            </div>
           </FloatingWindow>
         )}
 

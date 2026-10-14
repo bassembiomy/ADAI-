@@ -2,13 +2,14 @@
 // WP-10 acceptance tests, panel (planner-owned). Contract: docs/superpowers/plans/2026-10-14-trm-simulation-loop.md §3 WP-10
 import React from 'react';
 import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SimVerificationPanel } from './SimVerificationPanel';
 import { createEmptyRepository } from '../../engine/sysml/model';
 import type { SimCriterion } from '../../engine/trmSim/simCriterion';
 
-const heater = JSON.parse(readFileSync(new URL('../../../inductance_heater.json', import.meta.url), 'utf8'));
+const heater = JSON.parse(readFileSync(join(process.cwd(), 'inductance_heater.json'), 'utf8'));
 const POWER = 'sim:sm/var/6178d014-831f-4339-8dac-f275360b1222';
 const UP = 'sim:sm/var/1d1ef5eb-3e8d-4e62-9f78-10f3eeb228a3';
 const HEATER = 'sim:sm/var/a002ce43-8aaa-4ebe-b84b-b872033fb4ea';
@@ -22,7 +23,7 @@ const crit = (over: Partial<SimCriterion> = {}): SimCriterion => ({
   observe: HEATER, check: { kind: 'reaches', value: 60, by: 0.1 }, duration: 0.1, step: 0.01, ...over,
 });
 
-const repo = (c: SimCriterion | undefined = crit()) => {
+const repo = (c: SimCriterion | null = crit()) => {
   const r = createEmptyRepository();
   r.requirements.req1 = { id: 'req1', name: 'Heat up', namespace: [], kind: 'requirement', requirementId: 'REQ-1', text: 'Heater reaches 60', status: 'draft', version: '1' } as any;
   r.verificationCases.vc1 = { id: 'vc1', name: 'Heat test', namespace: [], kind: 'verificationCase', method: 'simulation', verifiesRequirementIds: ['req1'], ...(c ? { simulationCriterion: c } : {}) } as any;
@@ -81,7 +82,7 @@ describe('SimVerificationPanel', () => {
   });
 
   it('lets the user define a criterion on a case without one, from the model ports and variables', () => {
-    const onChange = renderPanel(repo(undefined));
+    const onChange = renderPanel(repo(null));
     fireEvent.click(screen.getByRole('button', { name: 'Define criterion for Heat test' }));
     const observe = screen.getByLabelText('Observe') as HTMLSelectElement;
     expect([...observe.options].map(o => o.value)).toEqual(expect.arrayContaining([HEATER, POWER]));
@@ -106,7 +107,7 @@ describe('SimVerificationPanel', () => {
   });
 
   it('does not save an invalid criterion and says why', () => {
-    const onChange = renderPanel(repo(undefined));
+    const onChange = renderPanel(repo(null));
     fireEvent.click(screen.getByRole('button', { name: 'Define criterion for Heat test' }));
     fireEvent.change(screen.getByLabelText('Observe'), { target: { value: HEATER } });
     fireEvent.change(screen.getByLabelText('Duration (s)'), { target: { value: '0' } });
