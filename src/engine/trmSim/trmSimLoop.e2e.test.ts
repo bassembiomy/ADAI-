@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { createSysmlGatewayState, executeSysmlCommand, loadCanonicalSysmlProject, type SysmlGatewayState } from '../../services/sysmlCommandGateway';
+import { computeImpactHash, createSysmlGatewayState, executeSysmlCommand, loadCanonicalSysmlProject, type SysmlGatewayState } from '../../services/sysmlCommandGateway';
 import { createEmptyRepository, type SysmlRepository } from '../sysml/model';
 import { serializeSysmlProjectState } from '../sysml/persistence';
 import { projectExternalEndpoints } from './simEndpoints';
@@ -39,7 +39,11 @@ const commit = (state: SysmlGatewayState, next: SysmlRepository, project: unknow
   const context = { externalEndpoints: projectExternalEndpoints(project) };
   let current = state;
   for (const command of repositoryChangeCommands(current.repository, next)) {
-    const result = executeSysmlCommand(current, command as any, undefined, context);
+    // deleteElements goes through the same preflight + confirmed-impact step as App's executeConfirmedDeletion.
+    let result = executeSysmlCommand(current, command as any, undefined, context);
+    if (command.type === 'deleteElements' && !result.committed && result.impact) {
+      result = executeSysmlCommand(current, { ...command, confirmedImpactHash: computeImpactHash(result.impact) } as any, undefined, context);
+    }
     expect(result.diagnostics.filter(d => d.severity === 'error')).toEqual([]);
     expect(result.committed).toBe(true);
     current = { ...current, ...result, context } as SysmlGatewayState;
@@ -103,7 +107,7 @@ describe('TRM simulation loop end to end', () => {
     const next = structuredClone(state.repository);
     delete next.relationships.l2;
     const cmds = repositoryChangeCommands(state.repository, next);
-    expect(cmds).toEqual([expect.objectContaining({ type: 'deleteElements', elementIds: ['l2'] })]);
+    expect(cmds).toEqual([{ type: 'deleteElements', elementIds: ['l2'] }]);
     state = commit(state, next, heater);
     expect(state.repository.relationships.l2).toBeUndefined();
   });
