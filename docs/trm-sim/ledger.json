@@ -55,7 +55,8 @@
       "deps": [
         "WP-01"
       ],
-      "status": "in_progress"
+      "status": "done",
+      "result": "12/12 + 221 related tests; test:sysml only the 3 known base failures; review: shared external element list, report deps"
     },
     {
       "id": "WP-06",
@@ -160,6 +161,11 @@
       "wp": "WP-08b",
       "severity": "medium",
       "summary": "coffee global X-Bridges model (AC_MOTOR_PID_CONTROL) diverges to ~1e58 headless with RK4 at dt 0.01 from t=0.2; not used as a fixture; inferred from a probe, not root-caused"
+    },
+    {
+      "wp": "WP-05",
+      "severity": "low",
+      "summary": "reportSnapshotAdapter builds its snapshot without external elements, so report diagnostics may still list UNRESOLVED_ENDPOINT for state and sim links (pre-existing for states); pick up in WP-10"
     }
   ]
 }

@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo, MouseEvent, KeyboardEvent, ChangeEvent, Profiler, startTransition } from 'react';
 import { recordRenderCommit, resetProjectLoadTelemetry } from './features/sysml/performance/renderTelemetry';
-import { projectStateEndpoints, hasMatchingProjectStateContext } from './engine/sysml/workers/projectIoPayload';
+import { projectExternalEndpoints, projectExternalEndpointSignature, projectSimSources, buildSimEndpoints } from './engine/trmSim/simEndpoints';
+import { buildSimExternalElements } from './engine/trmSim/simExternalElements';
+import { buildTraceabilityIndex } from './engine/sysml/traceabilityIndex';
 import { parseProjectJsonBuffer } from './utils/projectJsonBuffer';
 import * as math from 'mathjs';
 import Plot from './components/doe/PlotlyRenderer';
@@ -5209,13 +5211,24 @@ const ADIA = () => {
     });
   }, [canonicalSysmlRepository, sysmlStore]);
 
+  const [globalXBridgesNodes, setGlobalXBridgesNodes] = useState<any[]>([]);
+  const [vlabNodes, setVlabNodes] = useState<any[]>([]);
   const externalEndpointContext = useMemo<SemanticEndpointContext>(() => {
     const map = new Map<string, ExternalSemanticEndpoint>();
     for (const s of states) {
       map.set(s.id, { id: s.id, name: s.name, family: 'state' });
     }
+    for (const [id, endpoint] of buildSimEndpoints(projectSimSources({ states, junctions, transitions, variables, globalXBridgesNodes, vlabNodes }))) {
+      map.set(id, endpoint);
+    }
     return { externalEndpoints: map };
-  }, [states]);
+  }, [states, junctions, transitions, variables, globalXBridgesNodes, vlabNodes]);
+
+  const traceabilityExternalElements = useMemo(() => [
+    ...states.map(state => ({ id: state.id, name: state.name, kind: 'state' })),
+    ...junctions.map(junction => ({ id: junction.id, name: junction.name, kind: junction.type ?? 'pseudostate' })),
+    ...buildSimExternalElements(projectSimSources({ states, junctions, transitions, variables, globalXBridgesNodes, vlabNodes })).filter(e => e.id.startsWith('sim:')),
+  ], [states, junctions, transitions, variables, globalXBridgesNodes, vlabNodes]);
 
   const handleExecuteSysmlCommand = useCallback((cmd: SysmlEditorCommand) => {
     const currentRepo = sysmlGatewayStateRef.current?.repository ?? canonicalSysmlRepository;
@@ -5421,7 +5434,6 @@ const ADIA = () => {
   const [draggedPort, setDraggedPort] = useState<{ elementId: string, portId: string } | null>(null);
 
   // Global X-Bridges persistence
-  const [globalXBridgesNodes, setGlobalXBridgesNodes] = useState<any[]>([]);
   const [globalXBridgesEdges, setGlobalXBridgesEdges] = useState<any[]>([]);
   const globalXBridgesNodesRef = useRef<any[]>(globalXBridgesNodes);
   const globalXBridgesEdgesRef = useRef<any[]>(globalXBridgesEdges);
@@ -5435,7 +5447,6 @@ const ADIA = () => {
   }, [globalXBridgesEdges]);
 
   // V-Lab STATE
-  const [vlabNodes, setVlabNodes] = useState<any[]>([]);
   const [vlabEdges, setVlabEdges] = useState<any[]>([]);
   const [vlabSelectedNodeId, setVlabSelectedNodeId] = useState<string | null>(null);
   const [xBridgesSelectedNodeId, setXBridgesSelectedNodeId] = useState<string | null>(null);
@@ -6814,9 +6825,9 @@ const ADIA = () => {
       // remains valid after hydration instead of being quarantined as an
       // unresolved endpoint. No stale State copies are persisted: only live
       // endpoint identities from the incoming model are supplied.
-      const hydrationEndpoints = projectStateEndpoints(importedData.states);
+      const hydrationEndpoints = projectExternalEndpoints(importedData);
       const hydratedRepository = applyCanonicalProjectLoad(
-        preloadedResult && preloadedResult.valid && hasMatchingProjectStateContext(preloadedResult.stateEndpointSignature, importedData.states)
+        preloadedResult && preloadedResult.valid && preloadedResult.stateEndpointSignature === projectExternalEndpointSignature(importedData)
           ? preloadedResult
           : loadCanonicalSysmlProject({
               ...importedData,
@@ -11600,7 +11611,7 @@ const ADIA = () => {
     const traceabilityMatrix = buildTraceabilityMatrix(
       canonicalSysmlRepository,
       {},
-      traceabilitySnapshot.index,
+      buildTraceabilityIndex(canonicalSysmlRepository, traceabilityExternalElements),
     );
     const traceabilityMetrics = computeCoverageMetrics(traceabilityMatrix);
 
@@ -12457,7 +12468,7 @@ const ADIA = () => {
     setShowGlobalReportPreview(true);
     setShowReportDialog(false);
     addError('info', 'Report preview ready');
-  }, [blocks, parts, connectors, relationships, states, transitions, junctions, hmiComponents, variables, activeStates, addError, setShowReportDialog, layers, tickMs, safetyMode, canonicalSysmlRepository]);
+  }, [blocks, parts, connectors, relationships, states, transitions, junctions, hmiComponents, variables, activeStates, addError, setShowReportDialog, layers, tickMs, safetyMode, canonicalSysmlRepository, traceabilityExternalElements]);
 
   // KEYBOARD SHORTCUTS
   useEffect(() => {
@@ -18773,10 +18784,7 @@ const ADIA = () => {
           >
             <CanonicalTraceabilityMatrix
               repository={canonicalSysmlRepository}
-              externalElements={[
-                ...states.map(state => ({ id: state.id, name: state.name, kind: 'state' })),
-                ...junctions.map(junction => ({ id: junction.id, name: junction.name, kind: junction.type ?? 'pseudostate' })),
-              ]}
+              externalElements={traceabilityExternalElements}
               onNavigate={(elementId) => {
                 setSelectedIds([elementId]);
                 if (blocks.some(block => block.id === elementId && block.stereotype === 'requirement')) setDiagramMode('requirements');

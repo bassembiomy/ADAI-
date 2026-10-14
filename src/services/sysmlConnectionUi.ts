@@ -24,6 +24,7 @@ export function resolveUiConnectionEndpoint(
   if (state) return { id: state.id, name: state.name, family: 'state' };
   const block = model.blocks.find(item => item.id === id);
   if (block) return classifyLegacyEndpoint(block);
+  if (id.startsWith('sim:')) return { id, name: id, family: 'simulationTarget' };
   for (const b of model.blocks) {
     const prop = b.properties?.find(p => p.id === id);
     if (prop) {
