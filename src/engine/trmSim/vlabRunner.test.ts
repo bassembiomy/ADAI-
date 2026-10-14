@@ -65,6 +65,13 @@ describe('runVlabVerification', () => {
     expect(bad.trace).toEqual([]);
   });
 
+  it('checks the criterion unit against the unit of the observed signal', () => {
+    const sensed = { canvas: 'global', nodes: [...nodes, node('vs', 'v_sensor')], edges };
+    const r = runVlabVerification(sensed, crit({ observe: 'sim:vlab/global/vs/v', unit: 'A' }));
+    expect(r.diagnostics.map(d => d.code)).toContain('UNIT_MISMATCH');
+    expect(r.trace).toEqual([]);
+  });
+
   it('reports unknown targets, other engines and invalid criteria without running', () => {
     expect(runVlabVerification(source, crit({ observe: 'sim:vlab/global/zz/y' })).diagnostics).toContainEqual(expect.objectContaining({ code: 'UNKNOWN_TARGET' }));
     expect(runVlabVerification(source, crit({ observe: 'sim:xb/global/i/y' })).diagnostics).toContainEqual(expect.objectContaining({ code: 'UNSUPPORTED_TARGET' }));
