@@ -225,8 +225,9 @@
         "WP-17",
         "WP-18a"
       ],
-      "status": "in_progress",
-      "phase": 2
+      "status": "done",
+      "phase": 2,
+      "result": "14/14 bit-exact vs manual Gauss-Seidel schedule in both orders; review: two planner test inputs corrected (0.3 divides 30; 2 s run kept 30 s windows)"
     },
     {
       "id": "WP-19",
@@ -235,7 +236,7 @@
         "WP-14",
         "WP-18b"
       ],
-      "status": "todo",
+      "status": "in_progress",
       "phase": 2
     },
     {

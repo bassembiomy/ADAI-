@@ -111,7 +111,7 @@ describe('inconclusive and invalid runs record nothing for the affected requirem
   });
 
   it('returns an error and an unchanged repository for an invalid scenario', () => {
-    const repo = seed(thermostatScenario({ step: 0.3 }));
+    const repo = seed(thermostatScenario({ step: 0.7 }));
     const out = verifyRequirementsByScenario(repo, thermostatProject(), 'vc-thermo', { newId: ids('ev'), executedAt: AT });
     expect(out.error).toMatch(/STEP/);
     expect(out.repository).toEqual(repo);
@@ -119,7 +119,7 @@ describe('inconclusive and invalid runs record nothing for the affected requirem
   });
 
   it('recordScenarioEvidence refuses a run that did not complete', () => {
-    const scenario = thermostatScenario({ step: 0.3 }) as any;
+    const scenario = thermostatScenario({ step: 0.7 }) as any;
     const run = runSimScenario(thermostatProject(), scenario);
     expect(() => recordScenarioEvidence(seed(scenario), { newId: ids('x'), scenario, run, executedAt: AT })).toThrow();
   });

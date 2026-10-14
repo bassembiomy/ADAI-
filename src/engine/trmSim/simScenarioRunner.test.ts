@@ -100,7 +100,8 @@ describe('the execution order is respected (Gauss-Seidel)', () => {
 
 describe('stimuli', () => {
   it('holds a stimulus value over each step (applied at t = (k-1)*step)', () => {
-    const run = runSimScenario(thermostatProject(), scn({ duration: 2, stimuli: [{ target: T.enable, profile: { kind: 'step', before: 0, after: 1, at: 1 } }] }));
+    const run = runSimScenario(thermostatProject(), scn({ duration: 2, stimuli: [{ target: T.enable, profile: { kind: 'step', before: 0, after: 1, at: 1 } }],
+      assertions: [{ id: 'as-t5', requirementId: 'req-t5', condition: 'heating == 1', temporal: { kind: 'eventually' } }] }));
     const firstOn = run.series.values.heaterOn.findIndex(v => v === 1);
     expect(firstOn).toBe(101);
   });
@@ -125,7 +126,7 @@ describe('failures', () => {
   });
 
   it('does not run an invalid scenario', () => {
-    const run = runSimScenario(thermostatProject(), scn({ step: 0.3 }));
+    const run = runSimScenario(thermostatProject(), scn({ step: 0.7 })); // 30 / 0.7 is not a whole number of steps
     expect(run.diagnostics.map(d => d.code)).toContain('STEP');
     expect(run.series.times).toEqual([]);
     expect(run.assertions).toEqual([]);
