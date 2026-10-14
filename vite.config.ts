@@ -3,14 +3,20 @@ import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 
+const isProfiling = process.env.VITE_PROFILE === 'true';
+
 export default defineConfig({
   base: './',
   plugins: [react()],
   resolve: {
     alias: [
-      { find: /^react-dom\/client$/, replacement: 'react-dom/profiling' },
-      { find: /^react-dom$/, replacement: 'react-dom/profiling' },
-      { find: 'scheduler/tracing', replacement: 'scheduler/tracing-profiling' },
+      ...(isProfiling
+        ? [
+            { find: /^react-dom\/client$/, replacement: 'react-dom/profiling' },
+            { find: /^react-dom$/, replacement: 'react-dom/profiling' },
+            { find: 'scheduler/tracing', replacement: 'scheduler/tracing-profiling' },
+          ]
+        : []),
       { find: '@', replacement: path.resolve(__dirname, './src') },
     ],
   },
