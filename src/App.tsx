@@ -3,6 +3,7 @@ import { recordRenderCommit, resetProjectLoadTelemetry } from './features/sysml/
 import { projectExternalEndpoints, projectExternalEndpointSignature, projectSimSources, buildSimEndpoints } from './engine/trmSim/simEndpoints';
 import { repositoryChangeCommands, runAllSimulationCases, simEvidenceStatusFor } from './engine/trmSim/simVerification';
 import { SimVerificationPanel } from './components/trmSim/SimVerificationPanel';
+import { useXBridgesWorkspaceInputs } from './components/xbridges/xbridgesWorkspaceInputs';
 import { buildSimExternalElements } from './engine/trmSim/simExternalElements';
 import { buildTraceabilityIndex } from './engine/sysml/traceabilityIndex';
 import { parseProjectJsonBuffer } from './utils/projectJsonBuffer';
@@ -6363,6 +6364,8 @@ const ADIA = () => {
     states, junctions, transitions, variables, layers, tickMs, hilConfig, safetyMode,
     globalXBridgesNodes, globalXBridgesEdges, vlabNodes, vlabEdges,
   }), [states, junctions, transitions, variables, layers, tickMs, hilConfig, safetyMode, globalXBridgesNodes, globalXBridgesEdges, vlabNodes, vlabEdges]);
+  // Stable XbridgesWorkspace inputs: a fresh array per render re-imports the stored model over unsaved edits.
+  const xBridgesWorkspaceInputs = useXBridgesWorkspaceInputs(states, xBridgesStateId, globalXBridgesNodes, globalXBridgesEdges);
   const simEvidenceCurrency = useCallback((evidence: { id: string; simulation?: unknown }): 'current' | 'stale' =>
     evidence.simulation && simEvidenceStatusFor(canonicalSysmlRepository, evidence.id, simVerificationProject) === 'stale' ? 'stale' : 'current',
   [canonicalSysmlRepository, simVerificationProject]);
@@ -15448,12 +15451,9 @@ const ADIA = () => {
                 <Suspense fallback={<WorkspaceLoading />}>
                 <XbridgesWorkspace
                   key={xBridgesStateId || activeFileId}
-                  initialNodes={syncXBBoundaryNodeMetadata(
-                    xBridgesStateId ? Array.from(states.find(s => s.id === xBridgesStateId)?.xBridgesModel?.nodes || []) : globalXBridgesNodes,
-                    xBridgesStateId ? Array.from(states.find(s => s.id === xBridgesStateId)?.xBridgesModel?.mappings || []) : [],
-                  )}
-                  initialEdges={xBridgesStateId ? Array.from(states.find(s => s.id === xBridgesStateId)?.xBridgesModel?.edges || []) : globalXBridgesEdges}
-                  initialMappings={xBridgesStateId ? Array.from(states.find(s => s.id === xBridgesStateId)?.xBridgesModel?.mappings || []) : []}
+                  initialNodes={xBridgesWorkspaceInputs.initialNodes}
+                  initialEdges={xBridgesWorkspaceInputs.initialEdges}
+                  initialMappings={xBridgesWorkspaceInputs.initialMappings}
                   availableVariables={variables}
                   tickMs={tickMs}
                   onLaunchDoe={() => toggleWindow('doe')}
