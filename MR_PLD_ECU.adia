@@ -1,0 +1,2204 @@
+{
+  "version": "v2.4 ENGINE",
+  "projectName": "MR_PLD_ECU",
+  "openTabs": [
+    "statemachine",
+    "bdd",
+    "ibd",
+    "hmi"
+  ],
+  "tickMs": 10,
+  "safetyMode": false,
+  "states": [
+    {
+      "id": "st_Off",
+      "name": "Off",
+      "x": 0,
+      "y": 0,
+      "width": 170,
+      "height": 100,
+      "entry": "",
+      "during": "",
+      "exit": "",
+      "isActive": false,
+      "color": "#6c9ac6",
+      "parentId": "root",
+      "children": [],
+      "priority": 10,
+      "isParallel": false,
+      "regionId": null,
+      "autostart": true,
+      "historyType": "none",
+      "internalTransitions": ""
+    },
+    {
+      "id": "st_Powered",
+      "name": "Powered",
+      "x": 320,
+      "y": -40,
+      "width": 240,
+      "height": 180,
+      "entry": "",
+      "during": "",
+      "exit": "starter=false;",
+      "isActive": false,
+      "color": "#f59e0b",
+      "parentId": "root",
+      "children": [],
+      "priority": 20,
+      "isParallel": false,
+      "regionId": null,
+      "autostart": false,
+      "historyType": "none",
+      "internalTransitions": ""
+    },
+    {
+      "id": "st_Running",
+      "name": "Running",
+      "x": 760,
+      "y": -40,
+      "width": 240,
+      "height": 180,
+      "entry": "starter=false;",
+      "during": "injMode=2;",
+      "exit": "",
+      "isActive": false,
+      "color": "#22c55e",
+      "parentId": "root",
+      "children": [],
+      "priority": 30,
+      "isParallel": false,
+      "regionId": null,
+      "autostart": false,
+      "historyType": "none",
+      "internalTransitions": ""
+    },
+    {
+      "id": "st_Stopping",
+      "name": "Stopping",
+      "x": 760,
+      "y": 320,
+      "width": 170,
+      "height": 100,
+      "entry": "",
+      "during": "injMode=0;",
+      "exit": "",
+      "isActive": false,
+      "color": "#a855f7",
+      "parentId": "root",
+      "children": [],
+      "priority": 40,
+      "isParallel": false,
+      "regionId": null,
+      "autostart": false,
+      "historyType": "none",
+      "internalTransitions": ""
+    },
+    {
+      "id": "st_AfterRun",
+      "name": "AfterRun",
+      "x": 320,
+      "y": 320,
+      "width": 170,
+      "height": 100,
+      "entry": "dtcStored=true;",
+      "during": "",
+      "exit": "powerLatch=false;",
+      "isActive": false,
+      "color": "#a855f7",
+      "parentId": "root",
+      "children": [],
+      "priority": 50,
+      "isParallel": false,
+      "regionId": null,
+      "autostart": false,
+      "historyType": "none",
+      "internalTransitions": ""
+    },
+    {
+      "id": "st_Init_SelfTest",
+      "name": "Init_SelfTest",
+      "x": 0,
+      "y": 0,
+      "width": 170,
+      "height": 100,
+      "entry": "powerLatch=true;",
+      "during": "",
+      "exit": "",
+      "isActive": false,
+      "color": "#f59e0b",
+      "parentId": "lay_Powered",
+      "children": [],
+      "priority": 60,
+      "isParallel": false,
+      "regionId": null,
+      "autostart": true,
+      "historyType": "none",
+      "internalTransitions": ""
+    },
+    {
+      "id": "st_ImmoCheck",
+      "name": "ImmoCheck",
+      "x": 280,
+      "y": 0,
+      "width": 170,
+      "height": 100,
+      "entry": "",
+      "during": "",
+      "exit": "",
+      "isActive": false,
+      "color": "#f59e0b",
+      "parentId": "lay_Powered",
+      "children": [],
+      "priority": 70,
+      "isParallel": false,
+      "regionId": null,
+      "autostart": false,
+      "historyType": "none",
+      "internalTransitions": ""
+    },
+    {
+      "id": "st_StartInhibit",
+      "name": "StartInhibit",
+      "x": 280,
+      "y": 260,
+      "width": 170,
+      "height": 100,
+      "entry": "dtcImmo=true;",
+      "during": "",
+      "exit": "",
+      "isActive": false,
+      "color": "#ef4444",
+      "parentId": "lay_Powered",
+      "children": [],
+      "priority": 80,
+      "isParallel": false,
+      "regionId": null,
+      "autostart": false,
+      "historyType": "none",
+      "internalTransitions": ""
+    },
+    {
+      "id": "st_Standby",
+      "name": "Standby",
+      "x": 560,
+      "y": 0,
+      "width": 170,
+      "height": 100,
+      "entry": "starter=false;injMode=0;",
+      "during": "",
+      "exit": "",
+      "isActive": false,
+      "color": "#f59e0b",
+      "parentId": "lay_Powered",
+      "children": [],
+      "priority": 90,
+      "isParallel": false,
+      "regionId": null,
+      "autostart": false,
+      "historyType": "none",
+      "internalTransitions": ""
+    },
+    {
+      "id": "st_Crank_SyncSearch",
+      "name": "Crank_SyncSearch",
+      "x": 560,
+      "y": 260,
+      "width": 170,
+      "height": 100,
+      "entry": "starter=true;",
+      "during": "",
+      "exit": "",
+      "isActive": false,
+      "color": "#f59e0b",
+      "parentId": "lay_Powered",
+      "children": [],
+      "priority": 100,
+      "isParallel": false,
+      "regionId": null,
+      "autostart": false,
+      "historyType": "none",
+      "internalTransitions": ""
+    },
+    {
+      "id": "st_Crank_StartFuel",
+      "name": "Crank_StartFuel",
+      "x": 840,
+      "y": 260,
+      "width": 170,
+      "height": 100,
+      "entry": "",
+      "during": "injMode=1;",
+      "exit": "injMode=0;",
+      "isActive": false,
+      "color": "#f59e0b",
+      "parentId": "lay_Powered",
+      "children": [],
+      "priority": 110,
+      "isParallel": false,
+      "regionId": null,
+      "autostart": false,
+      "historyType": "none",
+      "internalTransitions": ""
+    },
+    {
+      "id": "st_Idle",
+      "name": "Idle",
+      "x": 0,
+      "y": 0,
+      "width": 170,
+      "height": 100,
+      "entry": "",
+      "during": "",
+      "exit": "",
+      "isActive": false,
+      "color": "#22c55e",
+      "parentId": "lay_Running",
+      "children": [],
+      "priority": 120,
+      "isParallel": false,
+      "regionId": null,
+      "autostart": true,
+      "historyType": "none",
+      "internalTransitions": ""
+    },
+    {
+      "id": "st_Drive",
+      "name": "Drive",
+      "x": 300,
+      "y": 0,
+      "width": 170,
+      "height": 100,
+      "entry": "",
+      "during": "",
+      "exit": "",
+      "isActive": false,
+      "color": "#22c55e",
+      "parentId": "lay_Running",
+      "children": [],
+      "priority": 130,
+      "isParallel": false,
+      "regionId": null,
+      "autostart": false,
+      "historyType": "none",
+      "internalTransitions": ""
+    },
+    {
+      "id": "st_EngineBrake",
+      "name": "EngineBrake",
+      "x": 600,
+      "y": 0,
+      "width": 170,
+      "height": 100,
+      "entry": "pv=true;",
+      "during": "",
+      "exit": "pv=false;",
+      "isActive": false,
+      "color": "#22c55e",
+      "parentId": "lay_Running",
+      "children": [],
+      "priority": 140,
+      "isParallel": false,
+      "regionId": null,
+      "autostart": false,
+      "historyType": "none",
+      "internalTransitions": ""
+    },
+    {
+      "id": "st_LimpHome",
+      "name": "LimpHome",
+      "x": 300,
+      "y": 260,
+      "width": 170,
+      "height": 100,
+      "entry": "",
+      "during": "derate=true;",
+      "exit": "derate=false;",
+      "isActive": false,
+      "color": "#ef4444",
+      "parentId": "lay_Running",
+      "children": [],
+      "priority": 150,
+      "isParallel": false,
+      "regionId": null,
+      "autostart": false,
+      "historyType": "none",
+      "internalTransitions": ""
+    }
+  ],
+  "junctions": [],
+  "transitions": [
+    {
+      "id": "off_init",
+      "sourceId": "st_Off",
+      "targetId": "st_Powered",
+      "condition": "kl15==true",
+      "action": "",
+      "afterTicks": null,
+      "type": "condition",
+      "hasControlPoint": false,
+      "order": 0,
+      "isInternal": false
+    },
+    {
+      "id": "pow_after",
+      "sourceId": "st_Powered",
+      "targetId": "st_AfterRun",
+      "condition": "kl15==false",
+      "action": "",
+      "afterTicks": null,
+      "type": "condition",
+      "hasControlPoint": false,
+      "order": 0,
+      "isInternal": false
+    },
+    {
+      "id": "sf_run",
+      "sourceId": "st_Crank_StartFuel",
+      "targetId": "st_Running",
+      "condition": "rpm>450",
+      "action": "",
+      "afterTicks": null,
+      "type": "condition",
+      "hasControlPoint": false,
+      "order": 0,
+      "isInternal": false
+    },
+    {
+      "id": "run_stop",
+      "sourceId": "st_Running",
+      "targetId": "st_Stopping",
+      "condition": "kl15==false || synced==false",
+      "action": "",
+      "afterTicks": null,
+      "type": "condition",
+      "hasControlPoint": false,
+      "order": 0,
+      "isInternal": false
+    },
+    {
+      "id": "stop_ready",
+      "sourceId": "st_Stopping",
+      "targetId": "st_Standby",
+      "condition": "rpm==0 && kl15==true",
+      "action": "",
+      "afterTicks": null,
+      "type": "condition",
+      "hasControlPoint": false,
+      "order": 0,
+      "isInternal": false
+    },
+    {
+      "id": "stop_after",
+      "sourceId": "st_Stopping",
+      "targetId": "st_AfterRun",
+      "condition": "rpm==0 && kl15==false",
+      "action": "",
+      "afterTicks": null,
+      "type": "condition",
+      "hasControlPoint": false,
+      "order": 1,
+      "isInternal": false
+    },
+    {
+      "id": "after_off",
+      "sourceId": "st_AfterRun",
+      "targetId": "st_Off",
+      "condition": "",
+      "action": "",
+      "afterTicks": 160,
+      "type": "after",
+      "hasControlPoint": false,
+      "order": 0,
+      "isInternal": false
+    },
+    {
+      "id": "init_immo",
+      "sourceId": "st_Init_SelfTest",
+      "targetId": "st_ImmoCheck",
+      "condition": "",
+      "action": "",
+      "afterTicks": 70,
+      "type": "after",
+      "hasControlPoint": false,
+      "order": 0,
+      "isInternal": false
+    },
+    {
+      "id": "immo_ready",
+      "sourceId": "st_ImmoCheck",
+      "targetId": "st_Standby",
+      "condition": "keyValid==true",
+      "action": "",
+      "afterTicks": null,
+      "type": "condition",
+      "hasControlPoint": false,
+      "order": 0,
+      "isInternal": false
+    },
+    {
+      "id": "immo_block",
+      "sourceId": "st_ImmoCheck",
+      "targetId": "st_StartInhibit",
+      "condition": "keyValid==false",
+      "action": "",
+      "afterTicks": null,
+      "type": "condition",
+      "hasControlPoint": false,
+      "order": 1,
+      "isInternal": false
+    },
+    {
+      "id": "block_immo",
+      "sourceId": "st_StartInhibit",
+      "targetId": "st_ImmoCheck",
+      "condition": "keyValid==true",
+      "action": "",
+      "afterTicks": null,
+      "type": "condition",
+      "hasControlPoint": false,
+      "order": 0,
+      "isInternal": false
+    },
+    {
+      "id": "ready_sync",
+      "sourceId": "st_Standby",
+      "targetId": "st_Crank_SyncSearch",
+      "condition": "kl50==true && rpm==0",
+      "action": "",
+      "afterTicks": null,
+      "type": "condition",
+      "hasControlPoint": false,
+      "order": 0,
+      "isInternal": false
+    },
+    {
+      "id": "sync_ready",
+      "sourceId": "st_Crank_SyncSearch",
+      "targetId": "st_Standby",
+      "condition": "kl50==false",
+      "action": "",
+      "afterTicks": null,
+      "type": "condition",
+      "hasControlPoint": false,
+      "order": 0,
+      "isInternal": false
+    },
+    {
+      "id": "sync_sf",
+      "sourceId": "st_Crank_SyncSearch",
+      "targetId": "st_Crank_StartFuel",
+      "condition": "synced==true",
+      "action": "",
+      "afterTicks": null,
+      "type": "condition",
+      "hasControlPoint": false,
+      "order": 1,
+      "isInternal": false
+    },
+    {
+      "id": "sf_ready",
+      "sourceId": "st_Crank_StartFuel",
+      "targetId": "st_Standby",
+      "condition": "",
+      "action": "",
+      "afterTicks": 400,
+      "type": "after",
+      "hasControlPoint": false,
+      "order": 1,
+      "isInternal": false
+    },
+    {
+      "id": "idle_limp",
+      "sourceId": "st_Idle",
+      "targetId": "st_LimpHome",
+      "condition": "fault==true",
+      "action": "",
+      "afterTicks": null,
+      "type": "condition",
+      "hasControlPoint": false,
+      "order": 0,
+      "isInternal": false
+    },
+    {
+      "id": "idle_drive",
+      "sourceId": "st_Idle",
+      "targetId": "st_Drive",
+      "condition": "pedal>0",
+      "action": "",
+      "afterTicks": null,
+      "type": "condition",
+      "hasControlPoint": false,
+      "order": 1,
+      "isInternal": false
+    },
+    {
+      "id": "drive_limp",
+      "sourceId": "st_Drive",
+      "targetId": "st_LimpHome",
+      "condition": "fault==true",
+      "action": "",
+      "afterTicks": null,
+      "type": "condition",
+      "hasControlPoint": false,
+      "order": 0,
+      "isInternal": false
+    },
+    {
+      "id": "drive_brake",
+      "sourceId": "st_Drive",
+      "targetId": "st_EngineBrake",
+      "condition": "ebReq==true && rpm>900",
+      "action": "",
+      "afterTicks": null,
+      "type": "condition",
+      "hasControlPoint": false,
+      "order": 1,
+      "isInternal": false
+    },
+    {
+      "id": "drive_idle",
+      "sourceId": "st_Drive",
+      "targetId": "st_Idle",
+      "condition": "pedal==0",
+      "action": "",
+      "afterTicks": null,
+      "type": "condition",
+      "hasControlPoint": false,
+      "order": 2,
+      "isInternal": false
+    },
+    {
+      "id": "brake_drive",
+      "sourceId": "st_EngineBrake",
+      "targetId": "st_Drive",
+      "condition": "ebReq==false",
+      "action": "",
+      "afterTicks": null,
+      "type": "condition",
+      "hasControlPoint": false,
+      "order": 0,
+      "isInternal": false
+    },
+    {
+      "id": "limp_idle",
+      "sourceId": "st_LimpHome",
+      "targetId": "st_Idle",
+      "condition": "fault==false",
+      "action": "",
+      "afterTicks": null,
+      "type": "condition",
+      "hasControlPoint": false,
+      "order": 0,
+      "isInternal": false
+    }
+  ],
+  "variables": [
+    {
+      "id": "v_kl15",
+      "name": "kl15",
+      "type": "bool",
+      "initialValue": "false",
+      "currentValue": false,
+      "visibleInScope": true,
+      "overflowPolicy": "saturate"
+    },
+    {
+      "id": "v_kl50",
+      "name": "kl50",
+      "type": "bool",
+      "initialValue": "false",
+      "currentValue": false,
+      "visibleInScope": true,
+      "overflowPolicy": "saturate"
+    },
+    {
+      "id": "v_keyValid",
+      "name": "keyValid",
+      "type": "bool",
+      "initialValue": "false",
+      "currentValue": false,
+      "visibleInScope": true,
+      "overflowPolicy": "saturate"
+    },
+    {
+      "id": "v_synced",
+      "name": "synced",
+      "type": "bool",
+      "initialValue": "false",
+      "currentValue": false,
+      "visibleInScope": true,
+      "overflowPolicy": "saturate"
+    },
+    {
+      "id": "v_fault",
+      "name": "fault",
+      "type": "bool",
+      "initialValue": "false",
+      "currentValue": false,
+      "visibleInScope": true,
+      "overflowPolicy": "saturate"
+    },
+    {
+      "id": "v_ebReq",
+      "name": "ebReq",
+      "type": "bool",
+      "initialValue": "false",
+      "currentValue": false,
+      "visibleInScope": true,
+      "overflowPolicy": "saturate"
+    },
+    {
+      "id": "v_rpm",
+      "name": "rpm",
+      "type": "double",
+      "initialValue": "0",
+      "currentValue": 0,
+      "visibleInScope": true,
+      "overflowPolicy": "saturate"
+    },
+    {
+      "id": "v_pedal",
+      "name": "pedal",
+      "type": "double",
+      "initialValue": "0",
+      "currentValue": 0,
+      "visibleInScope": true,
+      "overflowPolicy": "saturate"
+    },
+    {
+      "id": "v_powerLatch",
+      "name": "powerLatch",
+      "type": "bool",
+      "initialValue": "false",
+      "currentValue": false,
+      "visibleInScope": true,
+      "overflowPolicy": "saturate"
+    },
+    {
+      "id": "v_starter",
+      "name": "starter",
+      "type": "bool",
+      "initialValue": "false",
+      "currentValue": false,
+      "visibleInScope": true,
+      "overflowPolicy": "saturate"
+    },
+    {
+      "id": "v_injMode",
+      "name": "injMode",
+      "type": "int",
+      "initialValue": "0",
+      "currentValue": 0,
+      "visibleInScope": true,
+      "overflowPolicy": "saturate"
+    },
+    {
+      "id": "v_pv",
+      "name": "pv",
+      "type": "bool",
+      "initialValue": "false",
+      "currentValue": false,
+      "visibleInScope": true,
+      "overflowPolicy": "saturate"
+    },
+    {
+      "id": "v_derate",
+      "name": "derate",
+      "type": "bool",
+      "initialValue": "false",
+      "currentValue": false,
+      "visibleInScope": true,
+      "overflowPolicy": "saturate"
+    },
+    {
+      "id": "v_dtcImmo",
+      "name": "dtcImmo",
+      "type": "bool",
+      "initialValue": "false",
+      "currentValue": false,
+      "visibleInScope": true,
+      "overflowPolicy": "saturate"
+    },
+    {
+      "id": "v_dtcStored",
+      "name": "dtcStored",
+      "type": "bool",
+      "initialValue": "false",
+      "currentValue": false,
+      "visibleInScope": true,
+      "overflowPolicy": "saturate"
+    }
+  ],
+  "layers": [
+    {
+      "id": "root",
+      "name": "Root",
+      "parentStateId": null,
+      "stateIds": [
+        "st_Off",
+        "st_Powered",
+        "st_Running",
+        "st_Stopping",
+        "st_AfterRun"
+      ],
+      "transitionIds": [
+        "off_init",
+        "pow_after",
+        "run_stop",
+        "stop_ready",
+        "stop_after",
+        "after_off"
+      ],
+      "junctionIds": [],
+      "decomposition": "OR"
+    },
+    {
+      "id": "lay_Powered",
+      "name": "Powered",
+      "parentStateId": "st_Powered",
+      "stateIds": [
+        "st_Init_SelfTest",
+        "st_ImmoCheck",
+        "st_StartInhibit",
+        "st_Standby",
+        "st_Crank_SyncSearch",
+        "st_Crank_StartFuel"
+      ],
+      "transitionIds": [
+        "sf_run",
+        "init_immo",
+        "immo_ready",
+        "immo_block",
+        "block_immo",
+        "ready_sync",
+        "sync_ready",
+        "sync_sf",
+        "sf_ready"
+      ],
+      "junctionIds": [],
+      "decomposition": "OR"
+    },
+    {
+      "id": "lay_Running",
+      "name": "Running",
+      "parentStateId": "st_Running",
+      "stateIds": [
+        "st_Idle",
+        "st_Drive",
+        "st_EngineBrake",
+        "st_LimpHome"
+      ],
+      "transitionIds": [
+        "idle_limp",
+        "idle_drive",
+        "drive_limp",
+        "drive_brake",
+        "drive_idle",
+        "brake_drive",
+        "limp_idle"
+      ],
+      "junctionIds": [],
+      "decomposition": "OR"
+    }
+  ],
+  "view": {
+    "scale": 0.8,
+    "offsetX": 120,
+    "offsetY": 160
+  },
+  "interfaceRealizations": [],
+  "customStereotypes": [],
+  "hmiComponents": [
+    {
+      "id": "h_title",
+      "type": "label",
+      "name": "MR-PLD ECU - OM 501 LA operating modes",
+      "x": 20,
+      "y": 10,
+      "width": 520,
+      "height": 40,
+      "variableId": null,
+      "min": 0,
+      "max": 100,
+      "text": "MR-PLD ECU (A 541 446 53 40) - OM 501 LA operating modes"
+    },
+    {
+      "id": "h_start",
+      "type": "simulation-command",
+      "name": "Start",
+      "x": 560,
+      "y": 10,
+      "width": 110,
+      "height": 50,
+      "variableId": null,
+      "min": 0,
+      "max": 100,
+      "command": "start"
+    },
+    {
+      "id": "h_reset",
+      "type": "simulation-command",
+      "name": "Reset",
+      "x": 680,
+      "y": 10,
+      "width": 110,
+      "height": 50,
+      "variableId": null,
+      "min": 0,
+      "max": 100,
+      "command": "reset"
+    },
+    {
+      "id": "h_in_kl15",
+      "type": "toggle",
+      "name": "KL15 ignition",
+      "x": 20,
+      "y": 70,
+      "width": 150,
+      "height": 80,
+      "variableId": "v_kl15",
+      "min": 0,
+      "max": 100,
+      "color": "green"
+    },
+    {
+      "id": "h_in_kl50",
+      "type": "toggle",
+      "name": "KL50 start",
+      "x": 190,
+      "y": 70,
+      "width": 150,
+      "height": 80,
+      "variableId": "v_kl50",
+      "min": 0,
+      "max": 100,
+      "color": "orange"
+    },
+    {
+      "id": "h_in_keyValid",
+      "type": "toggle",
+      "name": "Immo key valid",
+      "x": 360,
+      "y": 70,
+      "width": 150,
+      "height": 80,
+      "variableId": "v_keyValid",
+      "min": 0,
+      "max": 100,
+      "color": "blue"
+    },
+    {
+      "id": "h_in_synced",
+      "type": "toggle",
+      "name": "CKP/CMP synced",
+      "x": 20,
+      "y": 170,
+      "width": 150,
+      "height": 80,
+      "variableId": "v_synced",
+      "min": 0,
+      "max": 100,
+      "color": "blue"
+    },
+    {
+      "id": "h_in_ebReq",
+      "type": "toggle",
+      "name": "Engine brake req",
+      "x": 190,
+      "y": 170,
+      "width": 150,
+      "height": 80,
+      "variableId": "v_ebReq",
+      "min": 0,
+      "max": 100,
+      "color": "yellow"
+    },
+    {
+      "id": "h_in_fault",
+      "type": "toggle",
+      "name": "Inject fault",
+      "x": 360,
+      "y": 170,
+      "width": 150,
+      "height": 80,
+      "variableId": "v_fault",
+      "min": 0,
+      "max": 100,
+      "color": "red"
+    },
+    {
+      "id": "h_rpm",
+      "type": "slider",
+      "name": "Engine speed [rpm]",
+      "x": 20,
+      "y": 280,
+      "width": 330,
+      "height": 90,
+      "variableId": "v_rpm",
+      "min": 0,
+      "max": 2500,
+      "step": 10,
+      "precision": 0,
+      "unit": "rpm"
+    },
+    {
+      "id": "h_pedal",
+      "type": "slider",
+      "name": "Pedal [%]",
+      "x": 20,
+      "y": 380,
+      "width": 330,
+      "height": 90,
+      "variableId": "v_pedal",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "precision": 0,
+      "unit": "%"
+    },
+    {
+      "id": "h_rpm_gauge",
+      "type": "gauge",
+      "name": "rpm",
+      "x": 370,
+      "y": 280,
+      "width": 180,
+      "height": 160,
+      "variableId": "v_rpm",
+      "min": 0,
+      "max": 2500,
+      "precision": 0,
+      "unit": "rpm"
+    },
+    {
+      "id": "h_out_powerLatch",
+      "type": "lamp",
+      "name": "Main relay latch",
+      "x": 580,
+      "y": 80,
+      "width": 150,
+      "height": 80,
+      "variableId": "v_powerLatch",
+      "min": 0,
+      "max": 100,
+      "color": "green"
+    },
+    {
+      "id": "h_out_starter",
+      "type": "lamp",
+      "name": "Starter (X2-18)",
+      "x": 740,
+      "y": 80,
+      "width": 150,
+      "height": 80,
+      "variableId": "v_starter",
+      "min": 0,
+      "max": 100,
+      "color": "orange"
+    },
+    {
+      "id": "h_out_pv",
+      "type": "lamp",
+      "name": "PV engine brake",
+      "x": 900,
+      "y": 80,
+      "width": 150,
+      "height": 80,
+      "variableId": "v_pv",
+      "min": 0,
+      "max": 100,
+      "color": "yellow"
+    },
+    {
+      "id": "h_out_derate",
+      "type": "lamp",
+      "name": "Limp-home derate",
+      "x": 580,
+      "y": 180,
+      "width": 150,
+      "height": 80,
+      "variableId": "v_derate",
+      "min": 0,
+      "max": 100,
+      "color": "red"
+    },
+    {
+      "id": "h_out_dtcImmo",
+      "type": "lamp",
+      "name": "Immo DTC",
+      "x": 740,
+      "y": 180,
+      "width": 150,
+      "height": 80,
+      "variableId": "v_dtcImmo",
+      "min": 0,
+      "max": 100,
+      "color": "red"
+    },
+    {
+      "id": "h_out_dtcStored",
+      "type": "lamp",
+      "name": "DTC stored",
+      "x": 900,
+      "y": 180,
+      "width": 150,
+      "height": 80,
+      "variableId": "v_dtcStored",
+      "min": 0,
+      "max": 100,
+      "color": "grey"
+    },
+    {
+      "id": "h_inj",
+      "type": "lcd",
+      "name": "Injection mode (0 cut / 1 start / 2 PLD)",
+      "x": 580,
+      "y": 290,
+      "width": 300,
+      "height": 70,
+      "variableId": "v_injMode",
+      "min": 0,
+      "max": 2,
+      "precision": 0
+    },
+    {
+      "id": "h_st_st_Off",
+      "type": "active-state-indicator",
+      "name": "Off",
+      "x": 20,
+      "y": 500,
+      "width": 205,
+      "height": 50,
+      "variableId": null,
+      "min": 0,
+      "max": 100,
+      "stateId": "st_Off"
+    },
+    {
+      "id": "h_st_st_Init_SelfTest",
+      "type": "active-state-indicator",
+      "name": "Init_SelfTest",
+      "x": 235,
+      "y": 500,
+      "width": 205,
+      "height": 50,
+      "variableId": null,
+      "min": 0,
+      "max": 100,
+      "stateId": "st_Init_SelfTest"
+    },
+    {
+      "id": "h_st_st_ImmoCheck",
+      "type": "active-state-indicator",
+      "name": "ImmoCheck",
+      "x": 450,
+      "y": 500,
+      "width": 205,
+      "height": 50,
+      "variableId": null,
+      "min": 0,
+      "max": 100,
+      "stateId": "st_ImmoCheck"
+    },
+    {
+      "id": "h_st_st_StartInhibit",
+      "type": "active-state-indicator",
+      "name": "StartInhibit",
+      "x": 665,
+      "y": 500,
+      "width": 205,
+      "height": 50,
+      "variableId": null,
+      "min": 0,
+      "max": 100,
+      "stateId": "st_StartInhibit"
+    },
+    {
+      "id": "h_st_st_Standby",
+      "type": "active-state-indicator",
+      "name": "Standby",
+      "x": 20,
+      "y": 560,
+      "width": 205,
+      "height": 50,
+      "variableId": null,
+      "min": 0,
+      "max": 100,
+      "stateId": "st_Standby"
+    },
+    {
+      "id": "h_st_st_Crank_SyncSearch",
+      "type": "active-state-indicator",
+      "name": "Crank_SyncSearch",
+      "x": 235,
+      "y": 560,
+      "width": 205,
+      "height": 50,
+      "variableId": null,
+      "min": 0,
+      "max": 100,
+      "stateId": "st_Crank_SyncSearch"
+    },
+    {
+      "id": "h_st_st_Crank_StartFuel",
+      "type": "active-state-indicator",
+      "name": "Crank_StartFuel",
+      "x": 450,
+      "y": 560,
+      "width": 205,
+      "height": 50,
+      "variableId": null,
+      "min": 0,
+      "max": 100,
+      "stateId": "st_Crank_StartFuel"
+    },
+    {
+      "id": "h_st_st_Idle",
+      "type": "active-state-indicator",
+      "name": "Idle",
+      "x": 665,
+      "y": 560,
+      "width": 205,
+      "height": 50,
+      "variableId": null,
+      "min": 0,
+      "max": 100,
+      "stateId": "st_Idle"
+    },
+    {
+      "id": "h_st_st_Drive",
+      "type": "active-state-indicator",
+      "name": "Drive",
+      "x": 20,
+      "y": 620,
+      "width": 205,
+      "height": 50,
+      "variableId": null,
+      "min": 0,
+      "max": 100,
+      "stateId": "st_Drive"
+    },
+    {
+      "id": "h_st_st_EngineBrake",
+      "type": "active-state-indicator",
+      "name": "EngineBrake",
+      "x": 235,
+      "y": 620,
+      "width": 205,
+      "height": 50,
+      "variableId": null,
+      "min": 0,
+      "max": 100,
+      "stateId": "st_EngineBrake"
+    },
+    {
+      "id": "h_st_st_LimpHome",
+      "type": "active-state-indicator",
+      "name": "LimpHome",
+      "x": 450,
+      "y": 620,
+      "width": 205,
+      "height": 50,
+      "variableId": null,
+      "min": 0,
+      "max": 100,
+      "stateId": "st_LimpHome"
+    },
+    {
+      "id": "h_st_st_Stopping",
+      "type": "active-state-indicator",
+      "name": "Stopping",
+      "x": 665,
+      "y": 620,
+      "width": 205,
+      "height": 50,
+      "variableId": null,
+      "min": 0,
+      "max": 100,
+      "stateId": "st_Stopping"
+    },
+    {
+      "id": "h_st_st_AfterRun",
+      "type": "active-state-indicator",
+      "name": "AfterRun",
+      "x": 20,
+      "y": 680,
+      "width": 205,
+      "height": 50,
+      "variableId": null,
+      "min": 0,
+      "max": 100,
+      "stateId": "st_AfterRun"
+    },
+    {
+      "id": "h_scope",
+      "type": "dashboard-scope",
+      "name": "Trace",
+      "x": 900,
+      "y": 280,
+      "width": 360,
+      "height": 220,
+      "variableId": null,
+      "min": 0,
+      "max": 100,
+      "variableIds": [
+        "v_rpm",
+        "v_injMode",
+        "v_starter",
+        "v_pv"
+      ]
+    }
+  ],
+  "vlabNodes": [],
+  "vlabEdges": [],
+  "globalXBridgesNodes": [],
+  "globalXBridgesEdges": [],
+  "entropyNodes": [],
+  "entropyEdges": [],
+  "diagramWorkspace": {
+    "tabs": [
+      {
+        "kind": "sysmlDiagram",
+        "diagramId": "bdd_context"
+      },
+      {
+        "kind": "sysmlDiagram",
+        "diagramId": "ibd_context"
+      },
+      {
+        "kind": "sysmlDiagram",
+        "diagramId": "ibd_ecu"
+      },
+      {
+        "kind": "sysmlDiagram",
+        "diagramId": "bdd_ecu"
+      },
+      {
+        "kind": "sysmlDiagram",
+        "diagramId": "bdd_engine"
+      },
+      {
+        "kind": "sysmlDiagram",
+        "diagramId": "bdd_items_ports"
+      },
+      {
+        "kind": "sysmlDiagram",
+        "diagramId": "ibd_engine"
+      }
+    ],
+    "activeTab": {
+      "kind": "sysmlDiagram",
+      "diagramId": "bdd_context"
+    }
+  },
+  "activeSysmlDiagramId": "bdd_context",
+  "diagramNavigationStack": [],
+  "sysmlRepository": "{\"checksum\":\"8a697f59\",\"format\":\"ADIA-SysML\",\"repository\":{\"actors\":{},\"artifacts\":{},\"auditTrail\":[{\"command\":\"migrateLegacy\",\"elementIds\":[],\"id\":\"change-0-legacy-import\",\"revision\":0,\"timestamp\":\"1970-01-01T00:00:00.000Z\"},{\"command\":\"createDiagram\",\"elementIds\":[\"bdd_context\"],\"id\":\"change-1-createDiagram\",\"revision\":1,\"timestamp\":\"2026-10-15T10:26:02.064Z\"},{\"command\":\"createDiagram\",\"elementIds\":[\"bdd_ecu\"],\"id\":\"change-2-createDiagram\",\"revision\":2,\"timestamp\":\"2026-10-15T10:26:02.067Z\"},{\"command\":\"createDiagram\",\"elementIds\":[\"bdd_engine\"],\"id\":\"change-3-createDiagram\",\"revision\":3,\"timestamp\":\"2026-10-15T10:26:02.070Z\"},{\"command\":\"createDiagram\",\"elementIds\":[\"bdd_items_ports\"],\"id\":\"change-4-createDiagram\",\"revision\":4,\"timestamp\":\"2026-10-15T10:26:02.073Z\"},{\"command\":\"createDiagram\",\"elementIds\":[\"ibd_context\"],\"id\":\"change-5-createDiagram\",\"revision\":5,\"timestamp\":\"2026-10-15T10:26:02.078Z\"},{\"command\":\"createDiagram\",\"elementIds\":[\"ibd_ecu\"],\"id\":\"change-6-createDiagram\",\"revision\":6,\"timestamp\":\"2026-10-15T10:26:02.081Z\"},{\"command\":\"createDiagram\",\"elementIds\":[\"ibd_engine\"],\"id\":\"change-7-createDiagram\",\"revision\":7,\"timestamp\":\"2026-10-15T10:26:02.084Z\"}],\"baselines\":{},\"connectors\":{\"c_can\":{\"id\":\"c_can\",\"itemFlowId\":\"TorqueRequest\",\"kind\":\"assembly\",\"ownerId\":\"blk_System\",\"sourceEnd\":{\"path\":[\"property:p_fr\"],\"portId\":\"blk_FR.can\"},\"sourcePortId\":\"property:p_fr#blk_FR.can\",\"targetEnd\":{\"path\":[\"property:p_mr\"],\"portId\":\"blk_ECU.X1_can\"},\"targetPortId\":\"property:p_mr#blk_ECU.X1_can\"},\"c_i_analog\":{\"id\":\"c_i_analog\",\"itemFlowId\":\"AnalogSignal\",\"kind\":\"delegation\",\"ownerId\":\"blk_ECU\",\"sourceEnd\":{\"path\":[],\"portId\":\"blk_ECU.X2_analog\"},\"sourcePortId\":\"#blk_ECU.X2_analog\",\"targetEnd\":{\"path\":[\"property:p_sigc\"],\"portId\":\"blk_SigC.analogIn\"},\"targetPortId\":\"property:p_sigc#blk_SigC.analogIn\"},\"c_i_bank1\":{\"id\":\"c_i_bank1\",\"itemFlowId\":\"SolenoidCurrent\",\"kind\":\"delegation\",\"ownerId\":\"blk_ECU\",\"sourceEnd\":{\"path\":[\"property:p_pstage\"],\"portId\":\"blk_PStage.bank1\"},\"sourcePortId\":\"property:p_pstage#blk_PStage.bank1\",\"targetEnd\":{\"path\":[],\"portId\":\"blk_ECU.X2_bank1\"},\"targetPortId\":\"#blk_ECU.X2_bank1\"},\"c_i_bank2\":{\"id\":\"c_i_bank2\",\"itemFlowId\":\"SolenoidCurrent\",\"kind\":\"delegation\",\"ownerId\":\"blk_ECU\",\"sourceEnd\":{\"path\":[\"property:p_pstage\"],\"portId\":\"blk_PStage.bank2\"},\"sourcePortId\":\"property:p_pstage#blk_PStage.bank2\",\"targetEnd\":{\"path\":[],\"portId\":\"blk_ECU.X2_bank2\"},\"targetPortId\":\"#blk_ECU.X2_bank2\"},\"c_i_can\":{\"id\":\"c_i_can\",\"itemFlowId\":\"TorqueRequest\",\"kind\":\"delegation\",\"ownerId\":\"blk_ECU\",\"sourceEnd\":{\"path\":[],\"portId\":\"blk_ECU.X1_can\"},\"sourcePortId\":\"#blk_ECU.X1_can\",\"targetEnd\":{\"path\":[\"property:p_comm\"],\"portId\":\"blk_Comm.can\"},\"targetPortId\":\"property:p_comm#blk_Comm.can\"},\"c_i_ckp\":{\"id\":\"c_i_ckp\",\"itemFlowId\":\"CrankPulse\",\"kind\":\"delegation\",\"ownerId\":\"blk_ECU\",\"sourceEnd\":{\"path\":[],\"portId\":\"blk_ECU.X2_ckp\"},\"sourcePortId\":\"#blk_ECU.X2_ckp\",\"targetEnd\":{\"path\":[\"property:p_sigc\"],\"portId\":\"blk_SigC.ckpIn\"},\"targetPortId\":\"property:p_sigc#blk_SigC.ckpIn\"},\"c_i_cmp\":{\"id\":\"c_i_cmp\",\"itemFlowId\":\"CamPulse\",\"kind\":\"delegation\",\"ownerId\":\"blk_ECU\",\"sourceEnd\":{\"path\":[],\"portId\":\"blk_ECU.X2_cmp\"},\"sourcePortId\":\"#blk_ECU.X2_cmp\",\"targetEnd\":{\"path\":[\"property:p_sigc\"],\"portId\":\"blk_SigC.cmpIn\"},\"targetPortId\":\"property:p_sigc#blk_SigC.cmpIn\"},\"c_i_comm_mcu\":{\"id\":\"c_i_comm_mcu\",\"kind\":\"assembly\",\"ownerId\":\"blk_ECU\",\"sourceEnd\":{\"path\":[\"property:p_comm\"],\"portId\":\"blk_Comm.mcuBus\"},\"sourcePortId\":\"property:p_comm#blk_Comm.mcuBus\",\"targetEnd\":{\"path\":[\"property:p_mcu\"],\"portId\":\"blk_MCU.commBus\"},\"targetPortId\":\"property:p_mcu#blk_MCU.commBus\"},\"c_i_fan\":{\"id\":\"c_i_fan\",\"itemFlowId\":\"Electrical\",\"kind\":\"delegation\",\"ownerId\":\"blk_ECU\",\"sourceEnd\":{\"path\":[\"property:p_aux\"],\"portId\":\"blk_Aux.fan\"},\"sourcePortId\":\"property:p_aux#blk_Aux.fan\",\"targetEnd\":{\"path\":[],\"portId\":\"blk_ECU.X2_fan\"},\"targetPortId\":\"#blk_ECU.X2_fan\"},\"c_i_kl30\":{\"id\":\"c_i_kl30\",\"itemFlowId\":\"Electrical\",\"kind\":\"delegation\",\"ownerId\":\"blk_ECU\",\"sourceEnd\":{\"path\":[],\"portId\":\"blk_ECU.X1_KL30\"},\"sourcePortId\":\"#blk_ECU.X1_KL30\",\"targetEnd\":{\"path\":[\"property:p_psu\"],\"portId\":\"blk_PSU.KL30_in\"},\"targetPortId\":\"property:p_psu#blk_PSU.KL30_in\"},\"c_i_kline\":{\"id\":\"c_i_kline\",\"itemFlowId\":\"DiagRequest\",\"kind\":\"delegation\",\"ownerId\":\"blk_ECU\",\"sourceEnd\":{\"path\":[],\"portId\":\"blk_ECU.X1_kLine\"},\"sourcePortId\":\"#blk_ECU.X1_kLine\",\"targetEnd\":{\"path\":[\"property:p_comm\"],\"portId\":\"blk_Comm.kLine\"},\"targetPortId\":\"property:p_comm#blk_Comm.kLine\"},\"c_i_mcu_aux\":{\"id\":\"c_i_mcu_aux\",\"kind\":\"assembly\",\"ownerId\":\"blk_ECU\",\"sourceEnd\":{\"path\":[\"property:p_mcu\"],\"portId\":\"blk_MCU.auxOut\"},\"sourcePortId\":\"property:p_mcu#blk_MCU.auxOut\",\"targetEnd\":{\"path\":[\"property:p_aux\"],\"portId\":\"blk_Aux.cmdIn\"},\"targetPortId\":\"property:p_aux#blk_Aux.cmdIn\"},\"c_i_mcu_coproc\":{\"id\":\"c_i_mcu_coproc\",\"kind\":\"assembly\",\"ownerId\":\"blk_ECU\",\"sourceEnd\":{\"path\":[\"property:p_mcu\"],\"portId\":\"blk_MCU.coprocLink\"},\"sourcePortId\":\"property:p_mcu#blk_MCU.coprocLink\",\"targetEnd\":{\"path\":[\"property:p_coproc\"],\"portId\":\"blk_CoProc.link\"},\"targetPortId\":\"property:p_coproc#blk_CoProc.link\"},\"c_i_mcu_eeprom\":{\"id\":\"c_i_mcu_eeprom\",\"kind\":\"assembly\",\"ownerId\":\"blk_ECU\",\"sourceEnd\":{\"path\":[\"property:p_mcu\"],\"portId\":\"blk_MCU.spi\"},\"sourcePortId\":\"property:p_mcu#blk_MCU.spi\",\"targetEnd\":{\"path\":[\"property:p_eeprom\"],\"portId\":\"blk_EEPROM.spi\"},\"targetPortId\":\"property:p_eeprom#blk_EEPROM.spi\"},\"c_i_mcu_flash\":{\"id\":\"c_i_mcu_flash\",\"kind\":\"assembly\",\"ownerId\":\"blk_ECU\",\"sourceEnd\":{\"path\":[\"property:p_mcu\"],\"portId\":\"blk_MCU.extBus\"},\"sourcePortId\":\"property:p_mcu#blk_MCU.extBus\",\"targetEnd\":{\"path\":[\"property:p_flash\"],\"portId\":\"blk_Flash.bus\"},\"targetPortId\":\"property:p_flash#blk_Flash.bus\"},\"c_i_mcu_tlog\":{\"id\":\"c_i_mcu_tlog\",\"itemFlowId\":\"InjectionCmd\",\"kind\":\"assembly\",\"ownerId\":\"blk_ECU\",\"sourceEnd\":{\"path\":[\"property:p_mcu\"],\"portId\":\"blk_MCU.timingOut\"},\"sourcePortId\":\"property:p_mcu#blk_MCU.timingOut\",\"targetEnd\":{\"path\":[\"property:p_tlog\"],\"portId\":\"blk_TLog.cmdIn\"},\"targetPortId\":\"property:p_tlog#blk_TLog.cmdIn\"},\"c_i_psu_mcu\":{\"id\":\"c_i_psu_mcu\",\"itemFlowId\":\"Electrical\",\"kind\":\"assembly\",\"ownerId\":\"blk_ECU\",\"sourceEnd\":{\"path\":[\"property:p_psu\"],\"portId\":\"blk_PSU.vcc5\"},\"sourcePortId\":\"property:p_psu#blk_PSU.vcc5\",\"targetEnd\":{\"path\":[\"property:p_mcu\"],\"portId\":\"blk_MCU.vcc\"},\"targetPortId\":\"property:p_mcu#blk_MCU.vcc\"},\"c_i_pv\":{\"id\":\"c_i_pv\",\"itemFlowId\":\"Electrical\",\"kind\":\"delegation\",\"ownerId\":\"blk_ECU\",\"sourceEnd\":{\"path\":[\"property:p_aux\"],\"portId\":\"blk_Aux.pv\"},\"sourcePortId\":\"property:p_aux#blk_Aux.pv\",\"targetEnd\":{\"path\":[],\"portId\":\"blk_ECU.X2_pv\"},\"targetPortId\":\"#blk_ECU.X2_pv\"},\"c_i_sigc_mcu\":{\"id\":\"c_i_sigc_mcu\",\"itemFlowId\":\"AnalogSignal\",\"kind\":\"assembly\",\"ownerId\":\"blk_ECU\",\"sourceEnd\":{\"path\":[\"property:p_sigc\"],\"portId\":\"blk_SigC.toMcu\"},\"sourcePortId\":\"property:p_sigc#blk_SigC.toMcu\",\"targetEnd\":{\"path\":[\"property:p_mcu\"],\"portId\":\"blk_MCU.sensorIn\"},\"targetPortId\":\"property:p_mcu#blk_MCU.sensorIn\"},\"c_i_starter\":{\"id\":\"c_i_starter\",\"itemFlowId\":\"Electrical\",\"kind\":\"delegation\",\"ownerId\":\"blk_ECU\",\"sourceEnd\":{\"path\":[\"property:p_aux\"],\"portId\":\"blk_Aux.starter\"},\"sourcePortId\":\"property:p_aux#blk_Aux.starter\",\"targetEnd\":{\"path\":[],\"portId\":\"blk_ECU.X2_starter\"},\"targetPortId\":\"#blk_ECU.X2_starter\"},\"c_i_tlog_ps\":{\"id\":\"c_i_tlog_ps\",\"kind\":\"assembly\",\"ownerId\":\"blk_ECU\",\"sourceEnd\":{\"path\":[\"property:p_tlog\"],\"portId\":\"blk_TLog.gateOut\"},\"sourcePortId\":\"property:p_tlog#blk_TLog.gateOut\",\"targetEnd\":{\"path\":[\"property:p_pstage\"],\"portId\":\"blk_PStage.gateIn\"},\"targetPortId\":\"property:p_pstage#blk_PStage.gateIn\"},\"c_kl15\":{\"id\":\"c_kl15\",\"itemFlowId\":\"Electrical\",\"kind\":\"assembly\",\"ownerId\":\"blk_System\",\"sourceEnd\":{\"path\":[\"property:p_ignition\"],\"portId\":\"blk_Ignition.KL15\"},\"sourcePortId\":\"property:p_ignition#blk_Ignition.KL15\",\"targetEnd\":{\"path\":[\"property:p_mr\"],\"portId\":\"blk_ECU.X1_KL15\"},\"targetPortId\":\"property:p_mr#blk_ECU.X1_KL15\"},\"c_kl30\":{\"id\":\"c_kl30\",\"itemFlowId\":\"Electrical\",\"kind\":\"assembly\",\"ownerId\":\"blk_System\",\"sourceEnd\":{\"path\":[\"property:p_battery\"],\"portId\":\"blk_Battery.KL30\"},\"sourcePortId\":\"property:p_battery#blk_Battery.KL30\",\"targetEnd\":{\"path\":[\"property:p_mr\"],\"portId\":\"blk_ECU.X1_KL30\"},\"targetPortId\":\"property:p_mr#blk_ECU.X1_KL30\"},\"c_kl50\":{\"id\":\"c_kl50\",\"itemFlowId\":\"Electrical\",\"kind\":\"assembly\",\"ownerId\":\"blk_System\",\"sourceEnd\":{\"path\":[\"property:p_ignition\"],\"portId\":\"blk_Ignition.KL50\"},\"sourcePortId\":\"property:p_ignition#blk_Ignition.KL50\",\"targetEnd\":{\"path\":[\"property:p_mr\"],\"portId\":\"blk_ECU.X1_KL50\"},\"targetPortId\":\"property:p_mr#blk_ECU.X1_KL50\"},\"c_kline\":{\"id\":\"c_kline\",\"itemFlowId\":\"DiagRequest\",\"kind\":\"assembly\",\"ownerId\":\"blk_System\",\"sourceEnd\":{\"path\":[\"property:p_tester\"],\"portId\":\"blk_Tester.kLine\"},\"sourcePortId\":\"property:p_tester#blk_Tester.kLine\",\"targetEnd\":{\"path\":[\"property:p_mr\"],\"portId\":\"blk_ECU.X1_kLine\"},\"targetPortId\":\"property:p_mr#blk_ECU.X1_kLine\"},\"c_x2_analog\":{\"id\":\"c_x2_analog\",\"itemFlowId\":\"AnalogSignal\",\"kind\":\"assembly\",\"ownerId\":\"blk_System\",\"sourceEnd\":{\"path\":[\"property:p_engine\"],\"portId\":\"blk_Engine.harness_analog\"},\"sourcePortId\":\"property:p_engine#blk_Engine.harness_analog\",\"targetEnd\":{\"path\":[\"property:p_mr\"],\"portId\":\"blk_ECU.X2_analog\"},\"targetPortId\":\"property:p_mr#blk_ECU.X2_analog\"},\"c_x2_bank1\":{\"id\":\"c_x2_bank1\",\"itemFlowId\":\"SolenoidCurrent\",\"kind\":\"assembly\",\"ownerId\":\"blk_System\",\"sourceEnd\":{\"path\":[\"property:p_mr\"],\"portId\":\"blk_ECU.X2_bank1\"},\"sourcePortId\":\"property:p_mr#blk_ECU.X2_bank1\",\"targetEnd\":{\"path\":[\"property:p_engine\"],\"portId\":\"blk_Engine.harness_bank1\"},\"targetPortId\":\"property:p_engine#blk_Engine.harness_bank1\"},\"c_x2_bank2\":{\"id\":\"c_x2_bank2\",\"itemFlowId\":\"SolenoidCurrent\",\"kind\":\"assembly\",\"ownerId\":\"blk_System\",\"sourceEnd\":{\"path\":[\"property:p_mr\"],\"portId\":\"blk_ECU.X2_bank2\"},\"sourcePortId\":\"property:p_mr#blk_ECU.X2_bank2\",\"targetEnd\":{\"path\":[\"property:p_engine\"],\"portId\":\"blk_Engine.harness_bank2\"},\"targetPortId\":\"property:p_engine#blk_Engine.harness_bank2\"},\"c_x2_ckp\":{\"id\":\"c_x2_ckp\",\"itemFlowId\":\"CrankPulse\",\"kind\":\"assembly\",\"ownerId\":\"blk_System\",\"sourceEnd\":{\"path\":[\"property:p_engine\"],\"portId\":\"blk_Engine.harness_ckp\"},\"sourcePortId\":\"property:p_engine#blk_Engine.harness_ckp\",\"targetEnd\":{\"path\":[\"property:p_mr\"],\"portId\":\"blk_ECU.X2_ckp\"},\"targetPortId\":\"property:p_mr#blk_ECU.X2_ckp\"},\"c_x2_cmp\":{\"id\":\"c_x2_cmp\",\"itemFlowId\":\"CamPulse\",\"kind\":\"assembly\",\"ownerId\":\"blk_System\",\"sourceEnd\":{\"path\":[\"property:p_engine\"],\"portId\":\"blk_Engine.harness_cmp\"},\"sourcePortId\":\"property:p_engine#blk_Engine.harness_cmp\",\"targetEnd\":{\"path\":[\"property:p_mr\"],\"portId\":\"blk_ECU.X2_cmp\"},\"targetPortId\":\"property:p_mr#blk_ECU.X2_cmp\"},\"c_x2_fan\":{\"id\":\"c_x2_fan\",\"itemFlowId\":\"Electrical\",\"kind\":\"assembly\",\"ownerId\":\"blk_System\",\"sourceEnd\":{\"path\":[\"property:p_mr\"],\"portId\":\"blk_ECU.X2_fan\"},\"sourcePortId\":\"property:p_mr#blk_ECU.X2_fan\",\"targetEnd\":{\"path\":[\"property:p_engine\"],\"portId\":\"blk_Engine.harness_fan\"},\"targetPortId\":\"property:p_engine#blk_Engine.harness_fan\"},\"c_x2_pv\":{\"id\":\"c_x2_pv\",\"itemFlowId\":\"Electrical\",\"kind\":\"assembly\",\"ownerId\":\"blk_System\",\"sourceEnd\":{\"path\":[\"property:p_mr\"],\"portId\":\"blk_ECU.X2_pv\"},\"sourcePortId\":\"property:p_mr#blk_ECU.X2_pv\",\"targetEnd\":{\"path\":[\"property:p_engine\"],\"portId\":\"blk_Engine.harness_pv\"},\"targetPortId\":\"property:p_engine#blk_Engine.harness_pv\"},\"c_x2_starter\":{\"id\":\"c_x2_starter\",\"itemFlowId\":\"Electrical\",\"kind\":\"assembly\",\"ownerId\":\"blk_System\",\"sourceEnd\":{\"path\":[\"property:p_mr\"],\"portId\":\"blk_ECU.X2_starter\"},\"sourcePortId\":\"property:p_mr#blk_ECU.X2_starter\",\"targetEnd\":{\"path\":[\"property:p_engine\"],\"portId\":\"blk_Engine.harness_starter\"},\"targetPortId\":\"property:p_engine#blk_Engine.harness_starter\"}},\"definitions\":{\"blk_Analog\":{\"constraints\":[],\"id\":\"blk_Analog\",\"isAbstract\":false,\"isLeaf\":false,\"kind\":\"block\",\"name\":\"AnalogSensor\",\"namespace\":[\"MR_PLD_Model\",\"Structure\"],\"operations\":[],\"ownerId\":\"model\",\"ports\":[{\"direction\":\"out\",\"id\":\"blk_Analog.out_\",\"isConjugated\":false,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"out_\",\"typeId\":\"pdef_AnalogPort\"}],\"properties\":[{\"id\":\"blk_Analog.id\",\"isDerived\":false,\"kind\":\"value\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"id\",\"typeId\":\"String\"}]},\"blk_Aux\":{\"constraints\":[],\"id\":\"blk_Aux\",\"isAbstract\":false,\"isLeaf\":false,\"kind\":\"block\",\"name\":\"AuxDrivers\",\"namespace\":[\"MR_PLD_Model\",\"Structure\"],\"operations\":[],\"ownerId\":\"model\",\"ports\":[{\"direction\":\"in\",\"id\":\"blk_Aux.cmdIn\",\"isConjugated\":true,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"cmdIn\",\"typeId\":\"pdef_DigitalPort\"},{\"direction\":\"out\",\"id\":\"blk_Aux.starter\",\"isConjugated\":false,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"starter\",\"typeId\":\"pdef_PowerPort\"},{\"direction\":\"out\",\"id\":\"blk_Aux.pv\",\"isConjugated\":false,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"pv\",\"typeId\":\"pdef_PowerPort\"},{\"direction\":\"out\",\"id\":\"blk_Aux.fan\",\"isConjugated\":false,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"fan\",\"typeId\":\"pdef_PowerPort\"}],\"properties\":[]},\"blk_Battery\":{\"constraints\":[],\"id\":\"blk_Battery\",\"isAbstract\":false,\"isLeaf\":false,\"kind\":\"block\",\"name\":\"VehicleBattery\",\"namespace\":[\"MR_PLD_Model\",\"Structure\"],\"operations\":[],\"ownerId\":\"model\",\"ports\":[{\"direction\":\"out\",\"id\":\"blk_Battery.KL30\",\"isConjugated\":false,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"KL30\",\"typeId\":\"pdef_PowerPort\"}],\"properties\":[{\"id\":\"blk_Battery.nominal\",\"isDerived\":false,\"kind\":\"value\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"nominal\",\"typeId\":\"Real\",\"unit\":\"V\"}]},\"blk_CKP\":{\"constraints\":[],\"id\":\"blk_CKP\",\"isAbstract\":false,\"isLeaf\":false,\"kind\":\"block\",\"name\":\"CKP_Sensor\",\"namespace\":[\"MR_PLD_Model\",\"Structure\"],\"operations\":[],\"ownerId\":\"model\",\"ports\":[{\"direction\":\"out\",\"id\":\"blk_CKP.out_\",\"isConjugated\":false,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"out_\",\"typeId\":\"pdef_VRSensorPort\"}],\"properties\":[{\"id\":\"blk_CKP.coilOhm\",\"isDerived\":false,\"kind\":\"value\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"coilOhm\",\"typeId\":\"Real\",\"unit\":\"Ohm\"},{\"id\":\"blk_CKP.pattern\",\"isDerived\":false,\"kind\":\"value\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"pattern\",\"typeId\":\"String\"}]},\"blk_CMP\":{\"constraints\":[],\"id\":\"blk_CMP\",\"isAbstract\":false,\"isLeaf\":false,\"kind\":\"block\",\"name\":\"CMP_Sensor\",\"namespace\":[\"MR_PLD_Model\",\"Structure\"],\"operations\":[],\"ownerId\":\"model\",\"ports\":[{\"direction\":\"out\",\"id\":\"blk_CMP.out_\",\"isConjugated\":false,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"out_\",\"typeId\":\"pdef_CamSensorPort\"}],\"properties\":[{\"id\":\"blk_CMP.pattern\",\"isDerived\":false,\"kind\":\"value\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"pattern\",\"typeId\":\"String\"}]},\"blk_CoProc\":{\"constraints\":[],\"id\":\"blk_CoProc\",\"isAbstract\":false,\"isLeaf\":false,\"kind\":\"block\",\"name\":\"CoProcessor\",\"namespace\":[\"MR_PLD_Model\",\"Structure\"],\"operations\":[],\"ownerId\":\"model\",\"ports\":[{\"direction\":\"inout\",\"id\":\"blk_CoProc.link\",\"isConjugated\":false,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"link\",\"typeId\":\"DataBus\"}],\"properties\":[{\"id\":\"blk_CoProc.chip\",\"isDerived\":false,\"kind\":\"value\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"chip\",\"typeId\":\"String\"}]},\"blk_Comm\":{\"constraints\":[],\"id\":\"blk_Comm\",\"isAbstract\":false,\"isLeaf\":false,\"kind\":\"block\",\"name\":\"CommInterface\",\"namespace\":[\"MR_PLD_Model\",\"Structure\"],\"operations\":[],\"ownerId\":\"model\",\"ports\":[{\"direction\":\"inout\",\"id\":\"blk_Comm.can\",\"isConjugated\":true,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"can\",\"typeId\":\"pdef_CAN_Port\"},{\"direction\":\"inout\",\"id\":\"blk_Comm.kLine\",\"isConjugated\":false,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"kLine\",\"typeId\":\"pdef_KLinePort\"},{\"direction\":\"inout\",\"id\":\"blk_Comm.mcuBus\",\"isConjugated\":true,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"mcuBus\",\"typeId\":\"pdef_CAN_Port\"}],\"properties\":[{\"id\":\"blk_Comm.canTransceiver\",\"isDerived\":false,\"kind\":\"value\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"canTransceiver\",\"typeId\":\"String\"},{\"id\":\"blk_Comm.kLineIC\",\"isDerived\":false,\"kind\":\"value\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"kLineIC\",\"typeId\":\"String\"},{\"id\":\"blk_Comm.canRate_kbps\",\"isDerived\":false,\"kind\":\"value\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"canRate_kbps\",\"typeId\":\"Integer\",\"unit\":\"kbit/s\"}]},\"blk_ECU\":{\"constraints\":[\"X1 : CabConnector16 (cab, 16-pin)\",\"X2 : EngConnector55 (engine, 55-pin)\"],\"id\":\"blk_ECU\",\"isAbstract\":false,\"isLeaf\":false,\"kind\":\"block\",\"name\":\"MR_PLD_ECU\",\"namespace\":[\"MR_PLD_Model\",\"Structure\"],\"operations\":[],\"ownerId\":\"model\",\"ports\":[{\"direction\":\"in\",\"id\":\"blk_ECU.X1_KL30\",\"isConjugated\":true,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"X1_KL30\",\"typeId\":\"pdef_PowerPort\"},{\"direction\":\"in\",\"id\":\"blk_ECU.X1_KL15\",\"isConjugated\":true,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"X1_KL15\",\"typeId\":\"pdef_DigitalPort\"},{\"direction\":\"in\",\"id\":\"blk_ECU.X1_KL50\",\"isConjugated\":true,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"X1_KL50\",\"typeId\":\"pdef_DigitalPort\"},{\"direction\":\"inout\",\"id\":\"blk_ECU.X1_can\",\"isConjugated\":true,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"X1_can\",\"typeId\":\"pdef_CAN_Port\"},{\"direction\":\"inout\",\"id\":\"blk_ECU.X1_kLine\",\"isConjugated\":false,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"X1_kLine\",\"typeId\":\"pdef_KLinePort\"},{\"direction\":\"in\",\"id\":\"blk_ECU.X2_ckp\",\"isConjugated\":true,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"X2_ckp\",\"typeId\":\"pdef_VRSensorPort\"},{\"direction\":\"in\",\"id\":\"blk_ECU.X2_cmp\",\"isConjugated\":true,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"X2_cmp\",\"typeId\":\"pdef_CamSensorPort\"},{\"direction\":\"in\",\"id\":\"blk_ECU.X2_analog\",\"isConjugated\":true,\"kind\":\"standard\",\"multiplicity\":{\"lower\":8,\"ordered\":false,\"unique\":true,\"upper\":8},\"name\":\"X2_analog\",\"typeId\":\"pdef_AnalogPort\"},{\"direction\":\"out\",\"id\":\"blk_ECU.X2_bank1\",\"isConjugated\":true,\"kind\":\"standard\",\"multiplicity\":{\"lower\":3,\"ordered\":false,\"unique\":true,\"upper\":3},\"name\":\"X2_bank1\",\"typeId\":\"pdef_SolenoidPort\"},{\"direction\":\"out\",\"id\":\"blk_ECU.X2_bank2\",\"isConjugated\":true,\"kind\":\"standard\",\"multiplicity\":{\"lower\":3,\"ordered\":false,\"unique\":true,\"upper\":3},\"name\":\"X2_bank2\",\"typeId\":\"pdef_SolenoidPort\"},{\"direction\":\"out\",\"id\":\"blk_ECU.X2_starter\",\"isConjugated\":false,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"X2_starter\",\"typeId\":\"pdef_PowerPort\"},{\"direction\":\"out\",\"id\":\"blk_ECU.X2_pv\",\"isConjugated\":false,\"kind\":\"standard\",\"multiplicity\":{\"lower\":2,\"ordered\":false,\"unique\":true,\"upper\":2},\"name\":\"X2_pv\",\"typeId\":\"pdef_PowerPort\"},{\"direction\":\"out\",\"id\":\"blk_ECU.X2_fan\",\"isConjugated\":false,\"kind\":\"standard\",\"multiplicity\":{\"lower\":2,\"ordered\":false,\"unique\":true,\"upper\":2},\"name\":\"X2_fan\",\"typeId\":\"pdef_PowerPort\"}],\"properties\":[{\"id\":\"blk_ECU.partNo\",\"isDerived\":false,\"kind\":\"value\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"partNo\",\"typeId\":\"String\"},{\"id\":\"blk_ECU.zgs\",\"isDerived\":false,\"kind\":\"value\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"zgs\",\"typeId\":\"String\"},{\"id\":\"property:p_psu\",\"kind\":\"part\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"psu\",\"typeId\":\"blk_PSU\"},{\"id\":\"property:p_mcu\",\"kind\":\"part\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"mcu\",\"typeId\":\"blk_MCU\"},{\"id\":\"property:p_flash\",\"kind\":\"part\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"flash\",\"typeId\":\"blk_Flash\"},{\"id\":\"property:p_eeprom\",\"kind\":\"part\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"eeprom\",\"typeId\":\"blk_EEPROM\"},{\"id\":\"property:p_coproc\",\"kind\":\"part\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"coproc\",\"typeId\":\"blk_CoProc\"},{\"id\":\"property:p_tlog\",\"kind\":\"part\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"tlog\",\"typeId\":\"blk_TLog\"},{\"id\":\"property:p_sigc\",\"kind\":\"part\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"sigc\",\"typeId\":\"blk_SigC\"},{\"id\":\"property:p_comm\",\"kind\":\"part\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"comm\",\"typeId\":\"blk_Comm\"},{\"id\":\"property:p_pstage\",\"kind\":\"part\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"pstage\",\"typeId\":\"blk_PStage\"},{\"id\":\"property:p_aux\",\"kind\":\"part\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"aux\",\"typeId\":\"blk_Aux\"}]},\"blk_EEPROM\":{\"constraints\":[],\"id\":\"blk_EEPROM\",\"isAbstract\":false,\"isLeaf\":false,\"kind\":\"block\",\"name\":\"ConfigEEPROM\",\"namespace\":[\"MR_PLD_Model\",\"Structure\"],\"operations\":[],\"ownerId\":\"model\",\"ports\":[{\"direction\":\"inout\",\"id\":\"blk_EEPROM.spi\",\"isConjugated\":false,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"spi\",\"typeId\":\"DataBus\"}],\"properties\":[{\"id\":\"blk_EEPROM.chip\",\"isDerived\":false,\"kind\":\"value\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"chip\",\"typeId\":\"String\"},{\"id\":\"blk_EEPROM.sizeBytes\",\"isDerived\":false,\"kind\":\"value\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"sizeBytes\",\"typeId\":\"Integer\",\"unit\":\"B\"},{\"id\":\"blk_EEPROM.codes\",\"isDerived\":false,\"kind\":\"value\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"codes\",\"typeId\":\"String\"}]},\"blk_Engine\":{\"constraints\":[\"harness : ~EngConnector55\"],\"id\":\"blk_Engine\",\"isAbstract\":false,\"isLeaf\":false,\"kind\":\"block\",\"name\":\"OM501LA_Engine\",\"namespace\":[\"MR_PLD_Model\",\"Structure\"],\"operations\":[],\"ownerId\":\"model\",\"ports\":[{\"direction\":\"out\",\"id\":\"blk_Engine.harness_ckp\",\"isConjugated\":false,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"harness_ckp\",\"typeId\":\"pdef_VRSensorPort\"},{\"direction\":\"out\",\"id\":\"blk_Engine.harness_cmp\",\"isConjugated\":false,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"harness_cmp\",\"typeId\":\"pdef_CamSensorPort\"},{\"direction\":\"out\",\"id\":\"blk_Engine.harness_analog\",\"isConjugated\":false,\"kind\":\"standard\",\"multiplicity\":{\"lower\":8,\"ordered\":false,\"unique\":true,\"upper\":8},\"name\":\"harness_analog\",\"typeId\":\"pdef_AnalogPort\"},{\"direction\":\"in\",\"id\":\"blk_Engine.harness_bank1\",\"isConjugated\":false,\"kind\":\"standard\",\"multiplicity\":{\"lower\":3,\"ordered\":false,\"unique\":true,\"upper\":3},\"name\":\"harness_bank1\",\"typeId\":\"pdef_SolenoidPort\"},{\"direction\":\"in\",\"id\":\"blk_Engine.harness_bank2\",\"isConjugated\":false,\"kind\":\"standard\",\"multiplicity\":{\"lower\":3,\"ordered\":false,\"unique\":true,\"upper\":3},\"name\":\"harness_bank2\",\"typeId\":\"pdef_SolenoidPort\"},{\"direction\":\"in\",\"id\":\"blk_Engine.harness_starter\",\"isConjugated\":true,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"harness_starter\",\"typeId\":\"pdef_PowerPort\"},{\"direction\":\"in\",\"id\":\"blk_Engine.harness_pv\",\"isConjugated\":true,\"kind\":\"standard\",\"multiplicity\":{\"lower\":2,\"ordered\":false,\"unique\":true,\"upper\":2},\"name\":\"harness_pv\",\"typeId\":\"pdef_PowerPort\"},{\"direction\":\"in\",\"id\":\"blk_Engine.harness_fan\",\"isConjugated\":true,\"kind\":\"standard\",\"multiplicity\":{\"lower\":2,\"ordered\":false,\"unique\":true,\"upper\":2},\"name\":\"harness_fan\",\"typeId\":\"pdef_PowerPort\"}],\"properties\":[{\"id\":\"blk_Engine.cylinders\",\"isDerived\":false,\"kind\":\"value\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"cylinders\",\"typeId\":\"Integer\"},{\"id\":\"blk_Engine.firingOrder\",\"isDerived\":false,\"kind\":\"value\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"firingOrder\",\"typeId\":\"String\"},{\"id\":\"property:p_eng_ckp\",\"kind\":\"part\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"ckp\",\"typeId\":\"blk_CKP\"},{\"id\":\"property:p_eng_cmp\",\"kind\":\"part\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"cmp\",\"typeId\":\"blk_CMP\"},{\"id\":\"property:p_eng_sensors\",\"kind\":\"part\",\"multiplicity\":{\"lower\":8,\"ordered\":false,\"unique\":true,\"upper\":8},\"name\":\"sensors\",\"typeId\":\"blk_Analog\"},{\"id\":\"property:p_eng_pump\",\"kind\":\"part\",\"multiplicity\":{\"lower\":6,\"ordered\":false,\"unique\":true,\"upper\":6},\"name\":\"pump\",\"typeId\":\"blk_Pump\"},{\"id\":\"property:p_eng_starter\",\"kind\":\"part\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"starter\",\"typeId\":\"blk_Starter\"},{\"id\":\"property:p_eng_pv\",\"kind\":\"part\",\"multiplicity\":{\"lower\":2,\"ordered\":false,\"unique\":true,\"upper\":2},\"name\":\"pv\",\"typeId\":\"blk_PV\"},{\"id\":\"property:p_eng_fan\",\"kind\":\"part\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"fan\",\"typeId\":\"blk_Fan\"}]},\"blk_FR\":{\"constraints\":[],\"id\":\"blk_FR\",\"isAbstract\":false,\"isLeaf\":false,\"kind\":\"block\",\"name\":\"FR_DriveController\",\"namespace\":[\"MR_PLD_Model\",\"Structure\"],\"operations\":[],\"ownerId\":\"model\",\"ports\":[{\"direction\":\"inout\",\"id\":\"blk_FR.can\",\"isConjugated\":false,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"can\",\"typeId\":\"pdef_CAN_Port\"}],\"properties\":[{\"id\":\"blk_FR.pedal\",\"isDerived\":false,\"kind\":\"value\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"pedal\",\"typeId\":\"Real\"},{\"id\":\"blk_FR.engBrakeReq\",\"isDerived\":false,\"kind\":\"value\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"engBrakeReq\",\"typeId\":\"Boolean\"}]},\"blk_Fan\":{\"constraints\":[],\"id\":\"blk_Fan\",\"isAbstract\":false,\"isLeaf\":false,\"kind\":\"block\",\"name\":\"FanClutch\",\"namespace\":[\"MR_PLD_Model\",\"Structure\"],\"operations\":[],\"ownerId\":\"model\",\"ports\":[{\"direction\":\"in\",\"id\":\"blk_Fan.cmd\",\"isConjugated\":true,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"cmd\",\"typeId\":\"pdef_PowerPort\"}],\"properties\":[]},\"blk_Flash\":{\"constraints\":[],\"id\":\"blk_Flash\",\"isAbstract\":false,\"isLeaf\":false,\"kind\":\"block\",\"name\":\"FlashMemory\",\"namespace\":[\"MR_PLD_Model\",\"Structure\"],\"operations\":[],\"ownerId\":\"model\",\"ports\":[{\"direction\":\"inout\",\"id\":\"blk_Flash.bus\",\"isConjugated\":false,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"bus\",\"typeId\":\"DataBus\"}],\"properties\":[{\"id\":\"blk_Flash.chip\",\"isDerived\":false,\"kind\":\"value\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"chip\",\"typeId\":\"String\"},{\"id\":\"blk_Flash.sizeKB\",\"isDerived\":false,\"kind\":\"value\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"sizeKB\",\"typeId\":\"Integer\",\"unit\":\"KB\"}]},\"blk_Ignition\":{\"constraints\":[],\"id\":\"blk_Ignition\",\"isAbstract\":false,\"isLeaf\":false,\"kind\":\"block\",\"name\":\"IgnitionSwitch\",\"namespace\":[\"MR_PLD_Model\",\"Structure\"],\"operations\":[],\"ownerId\":\"model\",\"ports\":[{\"direction\":\"out\",\"id\":\"blk_Ignition.KL15\",\"isConjugated\":false,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"KL15\",\"typeId\":\"pdef_DigitalPort\"},{\"direction\":\"out\",\"id\":\"blk_Ignition.KL50\",\"isConjugated\":false,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"KL50\",\"typeId\":\"pdef_DigitalPort\"},{\"direction\":\"out\",\"id\":\"blk_Ignition.immo\",\"isConjugated\":false,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"immo\",\"typeId\":\"pdef_ImmoPort\"}],\"properties\":[]},\"blk_MCU\":{\"constraints\":[],\"id\":\"blk_MCU\",\"isAbstract\":false,\"isLeaf\":false,\"kind\":\"block\",\"name\":\"MainMCU\",\"namespace\":[\"MR_PLD_Model\",\"Structure\"],\"operations\":[],\"ownerId\":\"model\",\"ports\":[{\"direction\":\"in\",\"id\":\"blk_MCU.vcc\",\"isConjugated\":true,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"vcc\",\"typeId\":\"pdef_PowerPort\"},{\"direction\":\"inout\",\"id\":\"blk_MCU.commBus\",\"isConjugated\":false,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"commBus\",\"typeId\":\"pdef_CAN_Port\"},{\"direction\":\"inout\",\"id\":\"blk_MCU.extBus\",\"isConjugated\":false,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"extBus\",\"typeId\":\"DataBus\"},{\"direction\":\"inout\",\"id\":\"blk_MCU.spi\",\"isConjugated\":false,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"spi\",\"typeId\":\"DataBus\"},{\"direction\":\"inout\",\"id\":\"blk_MCU.coprocLink\",\"isConjugated\":false,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"coprocLink\",\"typeId\":\"DataBus\"},{\"direction\":\"in\",\"id\":\"blk_MCU.sensorIn\",\"isConjugated\":true,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"sensorIn\",\"typeId\":\"pdef_AnalogPort\"},{\"direction\":\"out\",\"id\":\"blk_MCU.timingOut\",\"isConjugated\":false,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"timingOut\",\"typeId\":\"item_InjectionCmd\"},{\"direction\":\"out\",\"id\":\"blk_MCU.auxOut\",\"isConjugated\":false,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"auxOut\",\"typeId\":\"pdef_DigitalPort\"}],\"properties\":[{\"id\":\"blk_MCU.chip\",\"isDerived\":false,\"kind\":\"value\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"chip\",\"typeId\":\"String\"},{\"id\":\"blk_MCU.adcChannels\",\"isDerived\":false,\"kind\":\"value\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"adcChannels\",\"typeId\":\"Integer\"},{\"id\":\"blk_MCU.capcomChannels\",\"isDerived\":false,\"kind\":\"value\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"capcomChannels\",\"typeId\":\"Integer\"}]},\"blk_Mosfet\":{\"constraints\":[],\"id\":\"blk_Mosfet\",\"isAbstract\":false,\"isLeaf\":false,\"kind\":\"block\",\"name\":\"MosfetSwitch\",\"namespace\":[\"MR_PLD_Model\",\"Structure\"],\"operations\":[],\"ownerId\":\"model\",\"ports\":[],\"properties\":[{\"id\":\"blk_Mosfet.partNo\",\"isDerived\":false,\"kind\":\"value\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"partNo\",\"typeId\":\"String\"},{\"id\":\"blk_Mosfet.vds\",\"isDerived\":false,\"kind\":\"value\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"vds\",\"typeId\":\"Real\",\"unit\":\"V\"},{\"id\":\"blk_Mosfet.id\",\"isDerived\":false,\"kind\":\"value\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"id\",\"typeId\":\"Real\",\"unit\":\"A\"}]},\"blk_PSU\":{\"constraints\":[],\"id\":\"blk_PSU\",\"isAbstract\":false,\"isLeaf\":false,\"kind\":\"block\",\"name\":\"PowerSupplyUnit\",\"namespace\":[\"MR_PLD_Model\",\"Structure\"],\"operations\":[\"powerLatch()\"],\"ownerId\":\"model\",\"ports\":[{\"direction\":\"in\",\"id\":\"blk_PSU.KL30_in\",\"isConjugated\":true,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"KL30_in\",\"typeId\":\"pdef_PowerPort\"},{\"direction\":\"out\",\"id\":\"blk_PSU.vcc5\",\"isConjugated\":false,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"vcc5\",\"typeId\":\"pdef_PowerPort\"}],\"properties\":[{\"id\":\"blk_PSU.vOut\",\"isDerived\":false,\"kind\":\"value\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"vOut\",\"typeId\":\"Real\",\"unit\":\"V\"},{\"id\":\"blk_PSU.regulator\",\"isDerived\":false,\"kind\":\"value\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"regulator\",\"typeId\":\"String\"}]},\"blk_PStage\":{\"constraints\":[],\"id\":\"blk_PStage\",\"isAbstract\":false,\"isLeaf\":false,\"kind\":\"block\",\"name\":\"InjectionPowerStage\",\"namespace\":[\"MR_PLD_Model\",\"Structure\"],\"operations\":[],\"ownerId\":\"model\",\"ports\":[{\"direction\":\"in\",\"id\":\"blk_PStage.gateIn\",\"isConjugated\":true,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"gateIn\",\"typeId\":\"pdef_DigitalPort\"},{\"direction\":\"out\",\"id\":\"blk_PStage.bank1\",\"isConjugated\":true,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"bank1\",\"typeId\":\"pdef_SolenoidPort\"},{\"direction\":\"out\",\"id\":\"blk_PStage.bank2\",\"isConjugated\":true,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"bank2\",\"typeId\":\"pdef_SolenoidPort\"}],\"properties\":[{\"id\":\"blk_PStage.iPeak\",\"isDerived\":false,\"kind\":\"value\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"iPeak\",\"typeId\":\"Real\",\"unit\":\"A\"},{\"id\":\"blk_PStage.iHold\",\"isDerived\":false,\"kind\":\"value\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"iHold\",\"typeId\":\"Real\",\"unit\":\"A\"},{\"id\":\"blk_PStage.rShunt\",\"isDerived\":false,\"kind\":\"value\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"rShunt\",\"typeId\":\"Real\",\"unit\":\"Ohm\"},{\"id\":\"property:p_highSide\",\"kind\":\"part\",\"multiplicity\":{\"lower\":2,\"ordered\":false,\"unique\":true,\"upper\":2},\"name\":\"highSide\",\"typeId\":\"blk_Mosfet\"},{\"id\":\"property:p_lowSide\",\"kind\":\"part\",\"multiplicity\":{\"lower\":8,\"ordered\":false,\"unique\":true,\"upper\":8},\"name\":\"lowSide\",\"typeId\":\"blk_Mosfet\"}]},\"blk_PV\":{\"constraints\":[],\"id\":\"blk_PV\",\"isAbstract\":false,\"isLeaf\":false,\"kind\":\"block\",\"name\":\"ProportionalValve\",\"namespace\":[\"MR_PLD_Model\",\"Structure\"],\"operations\":[],\"ownerId\":\"model\",\"ports\":[{\"direction\":\"in\",\"id\":\"blk_PV.cmd\",\"isConjugated\":true,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"cmd\",\"typeId\":\"pdef_PowerPort\"}],\"properties\":[{\"id\":\"blk_PV.coilOhm\",\"isDerived\":false,\"kind\":\"value\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"coilOhm\",\"typeId\":\"Real\",\"unit\":\"Ohm\"}]},\"blk_Pump\":{\"constraints\":[],\"id\":\"blk_Pump\",\"isAbstract\":false,\"isLeaf\":false,\"kind\":\"block\",\"name\":\"UnitPump\",\"namespace\":[\"MR_PLD_Model\",\"Structure\"],\"operations\":[],\"ownerId\":\"model\",\"ports\":[{\"direction\":\"in\",\"id\":\"blk_Pump.drive\",\"isConjugated\":false,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"drive\",\"typeId\":\"pdef_SolenoidPort\"}],\"properties\":[{\"id\":\"blk_Pump.coilOhm\",\"isDerived\":false,\"kind\":\"value\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"coilOhm\",\"typeId\":\"Real\",\"unit\":\"Ohm\"},{\"id\":\"blk_Pump.bank\",\"isDerived\":false,\"kind\":\"value\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"bank\",\"typeId\":\"Integer\"}]},\"blk_SigC\":{\"constraints\":[],\"id\":\"blk_SigC\",\"isAbstract\":false,\"isLeaf\":false,\"kind\":\"block\",\"name\":\"SensorConditioning\",\"namespace\":[\"MR_PLD_Model\",\"Structure\"],\"operations\":[],\"ownerId\":\"model\",\"ports\":[{\"direction\":\"in\",\"id\":\"blk_SigC.ckpIn\",\"isConjugated\":true,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"ckpIn\",\"typeId\":\"pdef_VRSensorPort\"},{\"direction\":\"in\",\"id\":\"blk_SigC.cmpIn\",\"isConjugated\":true,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"cmpIn\",\"typeId\":\"pdef_CamSensorPort\"},{\"direction\":\"in\",\"id\":\"blk_SigC.analogIn\",\"isConjugated\":true,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"analogIn\",\"typeId\":\"pdef_AnalogPort\"},{\"direction\":\"out\",\"id\":\"blk_SigC.toMcu\",\"isConjugated\":false,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"toMcu\",\"typeId\":\"pdef_AnalogPort\"}],\"properties\":[{\"id\":\"blk_SigC.vrConditioner\",\"isDerived\":false,\"kind\":\"value\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"vrConditioner\",\"typeId\":\"String\"}]},\"blk_Starter\":{\"constraints\":[],\"id\":\"blk_Starter\",\"isAbstract\":false,\"isLeaf\":false,\"kind\":\"block\",\"name\":\"StarterMotor\",\"namespace\":[\"MR_PLD_Model\",\"Structure\"],\"operations\":[],\"ownerId\":\"model\",\"ports\":[{\"direction\":\"in\",\"id\":\"blk_Starter.cmd\",\"isConjugated\":true,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"cmd\",\"typeId\":\"pdef_PowerPort\"}],\"properties\":[]},\"blk_System\":{\"constraints\":[],\"id\":\"blk_System\",\"isAbstract\":false,\"isLeaf\":false,\"kind\":\"block\",\"name\":\"Actros_EngineMgmt_System\",\"namespace\":[\"MR_PLD_Model\",\"Structure\"],\"operations\":[],\"ownerId\":\"model\",\"ports\":[],\"properties\":[{\"id\":\"property:p_battery\",\"kind\":\"part\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"battery\",\"typeId\":\"blk_Battery\"},{\"id\":\"property:p_ignition\",\"kind\":\"part\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"ignition\",\"typeId\":\"blk_Ignition\"},{\"id\":\"property:p_fr\",\"kind\":\"part\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"fr\",\"typeId\":\"blk_FR\"},{\"id\":\"property:p_tester\",\"kind\":\"part\",\"multiplicity\":{\"lower\":0,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"tester\",\"typeId\":\"blk_Tester\"},{\"id\":\"property:p_mr\",\"kind\":\"part\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"mr\",\"typeId\":\"blk_ECU\"},{\"id\":\"property:p_engine\",\"kind\":\"part\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"engine\",\"typeId\":\"blk_Engine\"}]},\"blk_TLog\":{\"constraints\":[],\"id\":\"blk_TLog\",\"isAbstract\":false,\"isLeaf\":false,\"kind\":\"block\",\"name\":\"TimingLogic\",\"namespace\":[\"MR_PLD_Model\",\"Structure\"],\"operations\":[],\"ownerId\":\"model\",\"ports\":[{\"direction\":\"in\",\"id\":\"blk_TLog.cmdIn\",\"isConjugated\":false,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"cmdIn\",\"typeId\":\"item_InjectionCmd\"},{\"direction\":\"out\",\"id\":\"blk_TLog.gateOut\",\"isConjugated\":false,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"gateOut\",\"typeId\":\"pdef_DigitalPort\"}],\"properties\":[{\"id\":\"blk_TLog.chip\",\"isDerived\":false,\"kind\":\"value\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"chip\",\"typeId\":\"String\"}]},\"blk_Tester\":{\"constraints\":[],\"id\":\"blk_Tester\",\"isAbstract\":false,\"isLeaf\":false,\"kind\":\"block\",\"name\":\"DiagnosticTester\",\"namespace\":[\"MR_PLD_Model\",\"Structure\"],\"operations\":[],\"ownerId\":\"model\",\"ports\":[{\"direction\":\"inout\",\"id\":\"blk_Tester.kLine\",\"isConjugated\":true,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"kLine\",\"typeId\":\"pdef_KLinePort\"}],\"properties\":[{\"id\":\"blk_Tester.tool\",\"isDerived\":false,\"kind\":\"value\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"tool\",\"typeId\":\"String\"}]},\"item_AnalogSignal\":{\"constraints\":[],\"id\":\"item_AnalogSignal\",\"isAbstract\":false,\"isLeaf\":false,\"kind\":\"block\",\"name\":\"AnalogSignal\",\"namespace\":[\"MR_PLD_Model\",\"Items\"],\"operations\":[],\"ownerId\":\"model\",\"ports\":[],\"properties\":[{\"id\":\"item_AnalogSignal.volts\",\"isDerived\":false,\"kind\":\"value\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"volts\",\"typeId\":\"Real\"}]},\"item_CamPulse\":{\"constraints\":[],\"id\":\"item_CamPulse\",\"isAbstract\":false,\"isLeaf\":false,\"kind\":\"block\",\"name\":\"CamPulse\",\"namespace\":[\"MR_PLD_Model\",\"Items\"],\"operations\":[],\"ownerId\":\"model\",\"ports\":[],\"properties\":[{\"id\":\"item_CamPulse.refTooth\",\"isDerived\":false,\"kind\":\"value\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"refTooth\",\"typeId\":\"Boolean\"}]},\"item_CrankPulse\":{\"constraints\":[],\"id\":\"item_CrankPulse\",\"isAbstract\":false,\"isLeaf\":false,\"kind\":\"block\",\"name\":\"CrankPulse\",\"namespace\":[\"MR_PLD_Model\",\"Items\"],\"operations\":[],\"ownerId\":\"model\",\"ports\":[],\"properties\":[{\"id\":\"item_CrankPulse.toothIndex\",\"isDerived\":false,\"kind\":\"value\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"toothIndex\",\"typeId\":\"Integer\"}]},\"item_DiagRequest\":{\"constraints\":[],\"id\":\"item_DiagRequest\",\"isAbstract\":false,\"isLeaf\":false,\"kind\":\"block\",\"name\":\"DiagRequest\",\"namespace\":[\"MR_PLD_Model\",\"Items\"],\"operations\":[],\"ownerId\":\"model\",\"ports\":[],\"properties\":[]},\"item_Electrical\":{\"constraints\":[],\"id\":\"item_Electrical\",\"isAbstract\":false,\"isLeaf\":false,\"kind\":\"block\",\"name\":\"Electrical\",\"namespace\":[\"MR_PLD_Model\",\"Items\"],\"operations\":[],\"ownerId\":\"model\",\"ports\":[],\"properties\":[{\"id\":\"item_Electrical.volts\",\"isDerived\":false,\"kind\":\"value\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"volts\",\"typeId\":\"Real\"}]},\"item_EngineStatus\":{\"constraints\":[],\"id\":\"item_EngineStatus\",\"isAbstract\":false,\"isLeaf\":false,\"kind\":\"block\",\"name\":\"EngineStatus\",\"namespace\":[\"MR_PLD_Model\",\"Items\"],\"operations\":[],\"ownerId\":\"model\",\"ports\":[],\"properties\":[{\"id\":\"item_EngineStatus.rpm\",\"isDerived\":false,\"kind\":\"value\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"rpm\",\"typeId\":\"Real\"},{\"id\":\"item_EngineStatus.ect\",\"isDerived\":false,\"kind\":\"value\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"ect\",\"typeId\":\"Real\"},{\"id\":\"item_EngineStatus.dtc\",\"isDerived\":false,\"kind\":\"value\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"dtc\",\"typeId\":\"String[*]\"}]},\"item_InjectionCmd\":{\"constraints\":[],\"id\":\"item_InjectionCmd\",\"isAbstract\":false,\"isLeaf\":false,\"kind\":\"block\",\"name\":\"InjectionCmd\",\"namespace\":[\"MR_PLD_Model\",\"Items\"],\"operations\":[],\"ownerId\":\"model\",\"ports\":[],\"properties\":[{\"id\":\"item_InjectionCmd.cylinder\",\"isDerived\":false,\"kind\":\"value\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"cylinder\",\"typeId\":\"Integer\"},{\"id\":\"item_InjectionCmd.soiDeg\",\"isDerived\":false,\"kind\":\"value\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"soiDeg\",\"typeId\":\"Real\"},{\"id\":\"item_InjectionCmd.durationMs\",\"isDerived\":false,\"kind\":\"value\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"durationMs\",\"typeId\":\"Real\"}]},\"item_KeyCode\":{\"constraints\":[],\"id\":\"item_KeyCode\",\"isAbstract\":false,\"isLeaf\":false,\"kind\":\"block\",\"name\":\"KeyCode\",\"namespace\":[\"MR_PLD_Model\",\"Items\"],\"operations\":[],\"ownerId\":\"model\",\"ports\":[],\"properties\":[{\"id\":\"item_KeyCode.code\",\"isDerived\":false,\"kind\":\"value\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"code\",\"typeId\":\"String\"}]},\"item_SolenoidCurrent\":{\"constraints\":[],\"id\":\"item_SolenoidCurrent\",\"isAbstract\":false,\"isLeaf\":false,\"kind\":\"block\",\"name\":\"SolenoidCurrent\",\"namespace\":[\"MR_PLD_Model\",\"Items\"],\"operations\":[],\"ownerId\":\"model\",\"ports\":[],\"properties\":[{\"id\":\"item_SolenoidCurrent.peakA\",\"isDerived\":false,\"kind\":\"value\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"peakA\",\"typeId\":\"Real\"},{\"id\":\"item_SolenoidCurrent.holdA\",\"isDerived\":false,\"kind\":\"value\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"holdA\",\"typeId\":\"Real\"}]},\"item_TorqueRequest\":{\"constraints\":[],\"id\":\"item_TorqueRequest\",\"isAbstract\":false,\"isLeaf\":false,\"kind\":\"block\",\"name\":\"TorqueRequest\",\"namespace\":[\"MR_PLD_Model\",\"Items\"],\"operations\":[],\"ownerId\":\"model\",\"ports\":[],\"properties\":[{\"id\":\"item_TorqueRequest.pedal\",\"isDerived\":false,\"kind\":\"value\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"pedal\",\"typeId\":\"Real\"},{\"id\":\"item_TorqueRequest.engineBrake\",\"isDerived\":false,\"kind\":\"value\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"engineBrake\",\"typeId\":\"Boolean\"}]},\"pdef_AnalogPort\":{\"constraints\":[],\"id\":\"pdef_AnalogPort\",\"isAbstract\":false,\"isLeaf\":false,\"kind\":\"block\",\"name\":\"AnalogPort\",\"namespace\":[\"MR_PLD_Model\",\"Ports\"],\"operations\":[],\"ownerId\":\"model\",\"ports\":[{\"direction\":\"out\",\"id\":\"pdef_AnalogPort.value\",\"isConjugated\":false,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"value\",\"typeId\":\"item_AnalogSignal\"}],\"properties\":[]},\"pdef_CAN_Port\":{\"constraints\":[],\"id\":\"pdef_CAN_Port\",\"isAbstract\":false,\"isLeaf\":false,\"kind\":\"block\",\"name\":\"CAN_Port\",\"namespace\":[\"MR_PLD_Model\",\"Ports\"],\"operations\":[],\"ownerId\":\"model\",\"ports\":[{\"direction\":\"in\",\"id\":\"pdef_CAN_Port.rx\",\"isConjugated\":false,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"rx\",\"typeId\":\"item_TorqueRequest\"},{\"direction\":\"out\",\"id\":\"pdef_CAN_Port.tx\",\"isConjugated\":false,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"tx\",\"typeId\":\"item_EngineStatus\"}],\"properties\":[]},\"pdef_CabConnector16\":{\"constraints\":[\"X1-5/6 KL30\",\"X1-15 KL15\",\"X1-8 KL50\",\"X1-1 CAN-H, X1-2 CAN-L\",\"X1-13 K-Line\"],\"id\":\"pdef_CabConnector16\",\"isAbstract\":false,\"isLeaf\":false,\"kind\":\"block\",\"name\":\"CabConnector16\",\"namespace\":[\"MR_PLD_Model\",\"Ports\"],\"operations\":[],\"ownerId\":\"model\",\"ports\":[{\"direction\":\"in\",\"id\":\"pdef_CabConnector16.KL30\",\"isConjugated\":true,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"KL30\",\"typeId\":\"pdef_PowerPort\"},{\"direction\":\"in\",\"id\":\"pdef_CabConnector16.KL15\",\"isConjugated\":true,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"KL15\",\"typeId\":\"pdef_DigitalPort\"},{\"direction\":\"in\",\"id\":\"pdef_CabConnector16.KL50\",\"isConjugated\":true,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"KL50\",\"typeId\":\"pdef_DigitalPort\"},{\"direction\":\"inout\",\"id\":\"pdef_CabConnector16.can\",\"isConjugated\":true,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"can\",\"typeId\":\"pdef_CAN_Port\"},{\"direction\":\"inout\",\"id\":\"pdef_CabConnector16.kLine\",\"isConjugated\":false,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"kLine\",\"typeId\":\"pdef_KLinePort\"}],\"properties\":[]},\"pdef_CamSensorPort\":{\"constraints\":[],\"id\":\"pdef_CamSensorPort\",\"isAbstract\":false,\"isLeaf\":false,\"kind\":\"block\",\"name\":\"CamSensorPort\",\"namespace\":[\"MR_PLD_Model\",\"Ports\"],\"operations\":[],\"ownerId\":\"model\",\"ports\":[{\"direction\":\"out\",\"id\":\"pdef_CamSensorPort.pulse\",\"isConjugated\":false,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"pulse\",\"typeId\":\"item_CamPulse\"}],\"properties\":[]},\"pdef_DigitalPort\":{\"constraints\":[],\"id\":\"pdef_DigitalPort\",\"isAbstract\":false,\"isLeaf\":false,\"kind\":\"block\",\"name\":\"DigitalPort\",\"namespace\":[\"MR_PLD_Model\",\"Ports\"],\"operations\":[],\"ownerId\":\"model\",\"ports\":[{\"direction\":\"out\",\"id\":\"pdef_DigitalPort.level\",\"isConjugated\":false,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"level\",\"typeId\":\"item_Electrical\"}],\"properties\":[]},\"pdef_EngConnector55\":{\"constraints\":[\"X2-19/2 CKP\",\"X2-20/1 CMP\",\"X2-29,32,34,36,39,48,33 analog\",\"X2-16 + 54,53,47 bank1\",\"X2-9 + 45,44,38 bank2\",\"X2-18 starter\",\"X2-12/51, X2-52/50 PV\",\"X2-41, X2-43 fan\"],\"id\":\"pdef_EngConnector55\",\"isAbstract\":false,\"isLeaf\":false,\"kind\":\"block\",\"name\":\"EngConnector55\",\"namespace\":[\"MR_PLD_Model\",\"Ports\"],\"operations\":[],\"ownerId\":\"model\",\"ports\":[{\"direction\":\"in\",\"id\":\"pdef_EngConnector55.ckp\",\"isConjugated\":true,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"ckp\",\"typeId\":\"pdef_VRSensorPort\"},{\"direction\":\"in\",\"id\":\"pdef_EngConnector55.cmp\",\"isConjugated\":true,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"cmp\",\"typeId\":\"pdef_CamSensorPort\"},{\"direction\":\"in\",\"id\":\"pdef_EngConnector55.analog\",\"isConjugated\":true,\"kind\":\"standard\",\"multiplicity\":{\"lower\":8,\"ordered\":false,\"unique\":true,\"upper\":8},\"name\":\"analog\",\"typeId\":\"pdef_AnalogPort\"},{\"direction\":\"out\",\"id\":\"pdef_EngConnector55.bank1\",\"isConjugated\":true,\"kind\":\"standard\",\"multiplicity\":{\"lower\":3,\"ordered\":false,\"unique\":true,\"upper\":3},\"name\":\"bank1\",\"typeId\":\"pdef_SolenoidPort\"},{\"direction\":\"out\",\"id\":\"pdef_EngConnector55.bank2\",\"isConjugated\":true,\"kind\":\"standard\",\"multiplicity\":{\"lower\":3,\"ordered\":false,\"unique\":true,\"upper\":3},\"name\":\"bank2\",\"typeId\":\"pdef_SolenoidPort\"},{\"direction\":\"out\",\"id\":\"pdef_EngConnector55.starter\",\"isConjugated\":false,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"starter\",\"typeId\":\"pdef_PowerPort\"},{\"direction\":\"out\",\"id\":\"pdef_EngConnector55.pv\",\"isConjugated\":false,\"kind\":\"standard\",\"multiplicity\":{\"lower\":2,\"ordered\":false,\"unique\":true,\"upper\":2},\"name\":\"pv\",\"typeId\":\"pdef_PowerPort\"},{\"direction\":\"out\",\"id\":\"pdef_EngConnector55.fan\",\"isConjugated\":false,\"kind\":\"standard\",\"multiplicity\":{\"lower\":2,\"ordered\":false,\"unique\":true,\"upper\":2},\"name\":\"fan\",\"typeId\":\"pdef_PowerPort\"}],\"properties\":[]},\"pdef_ImmoPort\":{\"constraints\":[],\"id\":\"pdef_ImmoPort\",\"isAbstract\":false,\"isLeaf\":false,\"kind\":\"block\",\"name\":\"ImmoPort\",\"namespace\":[\"MR_PLD_Model\",\"Ports\"],\"operations\":[],\"ownerId\":\"model\",\"ports\":[{\"direction\":\"out\",\"id\":\"pdef_ImmoPort.key\",\"isConjugated\":false,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"key\",\"typeId\":\"item_KeyCode\"}],\"properties\":[]},\"pdef_KLinePort\":{\"constraints\":[],\"id\":\"pdef_KLinePort\",\"isAbstract\":false,\"isLeaf\":false,\"kind\":\"block\",\"name\":\"KLinePort\",\"namespace\":[\"MR_PLD_Model\",\"Ports\"],\"operations\":[],\"ownerId\":\"model\",\"ports\":[{\"direction\":\"inout\",\"id\":\"pdef_KLinePort.diag\",\"isConjugated\":false,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"diag\",\"typeId\":\"item_DiagRequest\"}],\"properties\":[]},\"pdef_PowerPort\":{\"constraints\":[],\"id\":\"pdef_PowerPort\",\"isAbstract\":false,\"isLeaf\":false,\"kind\":\"block\",\"name\":\"PowerPort\",\"namespace\":[\"MR_PLD_Model\",\"Ports\"],\"operations\":[],\"ownerId\":\"model\",\"ports\":[{\"direction\":\"out\",\"id\":\"pdef_PowerPort.supply\",\"isConjugated\":false,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"supply\",\"typeId\":\"item_Electrical\"}],\"properties\":[]},\"pdef_SolenoidPort\":{\"constraints\":[],\"id\":\"pdef_SolenoidPort\",\"isAbstract\":false,\"isLeaf\":false,\"kind\":\"block\",\"name\":\"SolenoidPort\",\"namespace\":[\"MR_PLD_Model\",\"Ports\"],\"operations\":[],\"ownerId\":\"model\",\"ports\":[{\"direction\":\"in\",\"id\":\"pdef_SolenoidPort.drive\",\"isConjugated\":false,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"drive\",\"typeId\":\"item_SolenoidCurrent\"}],\"properties\":[]},\"pdef_VRSensorPort\":{\"constraints\":[],\"id\":\"pdef_VRSensorPort\",\"isAbstract\":false,\"isLeaf\":false,\"kind\":\"block\",\"name\":\"VRSensorPort\",\"namespace\":[\"MR_PLD_Model\",\"Ports\"],\"operations\":[],\"ownerId\":\"model\",\"ports\":[{\"direction\":\"out\",\"id\":\"pdef_VRSensorPort.pulse\",\"isConjugated\":false,\"kind\":\"standard\",\"multiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"name\":\"pulse\",\"typeId\":\"item_CrankPulse\"}],\"properties\":[]}},\"diagramReferences\":{},\"diagrams\":{\"adia-default-bdd\":{\"diagramKind\":\"bdd\",\"id\":\"adia-default-bdd\",\"kind\":\"diagram\",\"name\":\"Main SysML BDD\",\"namespace\":[\"model\"],\"ownerId\":\"model\"},\"adia-default-requirements\":{\"diagramKind\":\"requirements\",\"id\":\"adia-default-requirements\",\"kind\":\"diagram\",\"name\":\"Main Requirements Diagram\",\"namespace\":[\"model\"],\"ownerId\":\"model\"},\"bdd_context\":{\"diagramKind\":\"bdd\",\"id\":\"bdd_context\",\"kind\":\"diagram\",\"name\":\"BDD 1 - System context\",\"namespace\":[\"model\"],\"ownerId\":\"model\"},\"bdd_ecu\":{\"diagramKind\":\"bdd\",\"id\":\"bdd_ecu\",\"kind\":\"diagram\",\"name\":\"BDD 2 - MR-PLD ECU internals\",\"namespace\":[\"model\"],\"ownerId\":\"model\"},\"bdd_engine\":{\"diagramKind\":\"bdd\",\"id\":\"bdd_engine\",\"kind\":\"diagram\",\"name\":\"BDD 3 - OM 501 LA engine\",\"namespace\":[\"model\"],\"ownerId\":\"model\"},\"bdd_items_ports\":{\"diagramKind\":\"bdd\",\"id\":\"bdd_items_ports\",\"kind\":\"diagram\",\"name\":\"BDD 4 - Items and port definitions\",\"namespace\":[\"model\"],\"ownerId\":\"model\"},\"ibd_context\":{\"contextElementId\":\"blk_System\",\"diagramKind\":\"ibd\",\"id\":\"ibd_context\",\"kind\":\"diagram\",\"name\":\"IBD - Actros_EngineMgmt_System\",\"namespace\":[\"model\"],\"ownerId\":\"blk_System\"},\"ibd_ecu\":{\"contextElementId\":\"blk_ECU\",\"diagramKind\":\"ibd\",\"id\":\"ibd_ecu\",\"kind\":\"diagram\",\"name\":\"IBD - MR_PLD_ECU\",\"namespace\":[\"model\"],\"ownerId\":\"blk_ECU\"},\"ibd_engine\":{\"contextElementId\":\"blk_Engine\",\"diagramKind\":\"ibd\",\"id\":\"ibd_engine\",\"kind\":\"diagram\",\"name\":\"IBD - OM501LA_Engine\",\"namespace\":[\"model\"],\"ownerId\":\"blk_Engine\"}},\"evidence\":{},\"extensionPoints\":{},\"packages\":{\"model\":{\"id\":\"model\",\"kind\":\"package\",\"name\":\"Model\",\"namespace\":[],\"ownerId\":\"\"}},\"profileId\":\"OMG-SysML-1.6-ADIA\",\"relationships\":{\"comp_blk_ECU_aux\":{\"id\":\"comp_blk_ECU_aux\",\"kind\":\"composition\",\"name\":\"aux\",\"sourceId\":\"blk_ECU\",\"sourceMultiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"targetId\":\"blk_Aux\",\"targetMultiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1}},\"comp_blk_ECU_comm\":{\"id\":\"comp_blk_ECU_comm\",\"kind\":\"composition\",\"name\":\"comm\",\"sourceId\":\"blk_ECU\",\"sourceMultiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"targetId\":\"blk_Comm\",\"targetMultiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1}},\"comp_blk_ECU_coproc\":{\"id\":\"comp_blk_ECU_coproc\",\"kind\":\"composition\",\"name\":\"coproc\",\"sourceId\":\"blk_ECU\",\"sourceMultiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"targetId\":\"blk_CoProc\",\"targetMultiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1}},\"comp_blk_ECU_eeprom\":{\"id\":\"comp_blk_ECU_eeprom\",\"kind\":\"composition\",\"name\":\"eeprom\",\"sourceId\":\"blk_ECU\",\"sourceMultiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"targetId\":\"blk_EEPROM\",\"targetMultiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1}},\"comp_blk_ECU_flash\":{\"id\":\"comp_blk_ECU_flash\",\"kind\":\"composition\",\"name\":\"flash\",\"sourceId\":\"blk_ECU\",\"sourceMultiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"targetId\":\"blk_Flash\",\"targetMultiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1}},\"comp_blk_ECU_mcu\":{\"id\":\"comp_blk_ECU_mcu\",\"kind\":\"composition\",\"name\":\"mcu\",\"sourceId\":\"blk_ECU\",\"sourceMultiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"targetId\":\"blk_MCU\",\"targetMultiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1}},\"comp_blk_ECU_pstage\":{\"id\":\"comp_blk_ECU_pstage\",\"kind\":\"composition\",\"name\":\"pstage\",\"sourceId\":\"blk_ECU\",\"sourceMultiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"targetId\":\"blk_PStage\",\"targetMultiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1}},\"comp_blk_ECU_psu\":{\"id\":\"comp_blk_ECU_psu\",\"kind\":\"composition\",\"name\":\"psu\",\"sourceId\":\"blk_ECU\",\"sourceMultiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"targetId\":\"blk_PSU\",\"targetMultiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1}},\"comp_blk_ECU_sigc\":{\"id\":\"comp_blk_ECU_sigc\",\"kind\":\"composition\",\"name\":\"sigc\",\"sourceId\":\"blk_ECU\",\"sourceMultiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"targetId\":\"blk_SigC\",\"targetMultiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1}},\"comp_blk_ECU_tlog\":{\"id\":\"comp_blk_ECU_tlog\",\"kind\":\"composition\",\"name\":\"tlog\",\"sourceId\":\"blk_ECU\",\"sourceMultiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"targetId\":\"blk_TLog\",\"targetMultiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1}},\"comp_blk_Engine_ckp\":{\"id\":\"comp_blk_Engine_ckp\",\"kind\":\"composition\",\"name\":\"ckp\",\"sourceId\":\"blk_Engine\",\"sourceMultiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"targetId\":\"blk_CKP\",\"targetMultiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1}},\"comp_blk_Engine_cmp\":{\"id\":\"comp_blk_Engine_cmp\",\"kind\":\"composition\",\"name\":\"cmp\",\"sourceId\":\"blk_Engine\",\"sourceMultiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"targetId\":\"blk_CMP\",\"targetMultiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1}},\"comp_blk_Engine_fan\":{\"id\":\"comp_blk_Engine_fan\",\"kind\":\"composition\",\"name\":\"fan\",\"sourceId\":\"blk_Engine\",\"sourceMultiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"targetId\":\"blk_Fan\",\"targetMultiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1}},\"comp_blk_Engine_pump\":{\"id\":\"comp_blk_Engine_pump\",\"kind\":\"composition\",\"name\":\"pump\",\"sourceId\":\"blk_Engine\",\"sourceMultiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"targetId\":\"blk_Pump\",\"targetMultiplicity\":{\"lower\":6,\"ordered\":false,\"unique\":true,\"upper\":6}},\"comp_blk_Engine_pv\":{\"id\":\"comp_blk_Engine_pv\",\"kind\":\"composition\",\"name\":\"pv\",\"sourceId\":\"blk_Engine\",\"sourceMultiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"targetId\":\"blk_PV\",\"targetMultiplicity\":{\"lower\":2,\"ordered\":false,\"unique\":true,\"upper\":2}},\"comp_blk_Engine_sensors\":{\"id\":\"comp_blk_Engine_sensors\",\"kind\":\"composition\",\"name\":\"sensors\",\"sourceId\":\"blk_Engine\",\"sourceMultiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"targetId\":\"blk_Analog\",\"targetMultiplicity\":{\"lower\":8,\"ordered\":false,\"unique\":true,\"upper\":8}},\"comp_blk_Engine_starter\":{\"id\":\"comp_blk_Engine_starter\",\"kind\":\"composition\",\"name\":\"starter\",\"sourceId\":\"blk_Engine\",\"sourceMultiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"targetId\":\"blk_Starter\",\"targetMultiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1}},\"comp_blk_PStage_highSide\":{\"id\":\"comp_blk_PStage_highSide\",\"kind\":\"composition\",\"name\":\"highSide\",\"sourceId\":\"blk_PStage\",\"sourceMultiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"targetId\":\"blk_Mosfet\",\"targetMultiplicity\":{\"lower\":2,\"ordered\":false,\"unique\":true,\"upper\":2}},\"comp_blk_PStage_lowSide\":{\"id\":\"comp_blk_PStage_lowSide\",\"kind\":\"composition\",\"name\":\"lowSide\",\"sourceId\":\"blk_PStage\",\"sourceMultiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"targetId\":\"blk_Mosfet\",\"targetMultiplicity\":{\"lower\":8,\"ordered\":false,\"unique\":true,\"upper\":8}},\"comp_blk_System_battery\":{\"id\":\"comp_blk_System_battery\",\"kind\":\"composition\",\"name\":\"battery\",\"sourceId\":\"blk_System\",\"sourceMultiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"targetId\":\"blk_Battery\",\"targetMultiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1}},\"comp_blk_System_engine\":{\"id\":\"comp_blk_System_engine\",\"kind\":\"composition\",\"name\":\"engine\",\"sourceId\":\"blk_System\",\"sourceMultiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"targetId\":\"blk_Engine\",\"targetMultiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1}},\"comp_blk_System_fr\":{\"id\":\"comp_blk_System_fr\",\"kind\":\"composition\",\"name\":\"fr\",\"sourceId\":\"blk_System\",\"sourceMultiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"targetId\":\"blk_FR\",\"targetMultiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1}},\"comp_blk_System_ignition\":{\"id\":\"comp_blk_System_ignition\",\"kind\":\"composition\",\"name\":\"ignition\",\"sourceId\":\"blk_System\",\"sourceMultiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"targetId\":\"blk_Ignition\",\"targetMultiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1}},\"comp_blk_System_mr\":{\"id\":\"comp_blk_System_mr\",\"kind\":\"composition\",\"name\":\"mr\",\"sourceId\":\"blk_System\",\"sourceMultiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"targetId\":\"blk_ECU\",\"targetMultiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1}},\"ref_blk_System_tester\":{\"id\":\"ref_blk_System_tester\",\"kind\":\"association\",\"name\":\"tester\",\"sourceId\":\"blk_System\",\"sourceMultiplicity\":{\"lower\":1,\"ordered\":false,\"unique\":true,\"upper\":1},\"targetId\":\"blk_Tester\",\"targetMultiplicity\":{\"lower\":0,\"ordered\":false,\"unique\":true,\"upper\":1}}},\"requirements\":{},\"revision\":7,\"schemaVersion\":5,\"subjects\":{},\"usages\":{},\"useCases\":{},\"verificationCases\":{}},\"schemaVersion\":5}",
+  "sysmlCoordinates": {},
+  "diagramPresentations": {
+    "adia-default-bdd": {
+      "elementIds": [],
+      "presentations": {}
+    },
+    "adia-default-requirements": {
+      "elementIds": [],
+      "presentations": {}
+    },
+    "bdd_context": {
+      "elementIds": [
+        "blk_System",
+        "blk_Battery",
+        "blk_Ignition",
+        "blk_FR",
+        "blk_ECU",
+        "blk_Engine",
+        "blk_Tester"
+      ],
+      "presentations": {
+        "blk_System": {
+          "id": "presentation:bdd_context:blk_System",
+          "diagramId": "bdd_context",
+          "semanticElementId": "blk_System",
+          "bounds": {
+            "x": 790,
+            "y": 40,
+            "width": 300,
+            "height": 110
+          }
+        },
+        "blk_Battery": {
+          "id": "presentation:bdd_context:blk_Battery",
+          "diagramId": "bdd_context",
+          "semanticElementId": "blk_Battery",
+          "bounds": {
+            "x": 40,
+            "y": 290,
+            "width": 230,
+            "height": 110
+          }
+        },
+        "blk_Ignition": {
+          "id": "presentation:bdd_context:blk_Ignition",
+          "diagramId": "bdd_context",
+          "semanticElementId": "blk_Ignition",
+          "bounds": {
+            "x": 340,
+            "y": 290,
+            "width": 230,
+            "height": 114
+          }
+        },
+        "blk_FR": {
+          "id": "presentation:bdd_context:blk_FR",
+          "diagramId": "bdd_context",
+          "semanticElementId": "blk_FR",
+          "bounds": {
+            "x": 640,
+            "y": 290,
+            "width": 230,
+            "height": 114
+          }
+        },
+        "blk_ECU": {
+          "id": "presentation:bdd_context:blk_ECU",
+          "diagramId": "bdd_context",
+          "semanticElementId": "blk_ECU",
+          "bounds": {
+            "x": 940,
+            "y": 290,
+            "width": 300,
+            "height": 330
+          }
+        },
+        "blk_Engine": {
+          "id": "presentation:bdd_context:blk_Engine",
+          "diagramId": "bdd_context",
+          "semanticElementId": "blk_Engine",
+          "bounds": {
+            "x": 1240,
+            "y": 290,
+            "width": 280,
+            "height": 240
+          }
+        },
+        "blk_Tester": {
+          "id": "presentation:bdd_context:blk_Tester",
+          "diagramId": "bdd_context",
+          "semanticElementId": "blk_Tester",
+          "bounds": {
+            "x": 1540,
+            "y": 290,
+            "width": 230,
+            "height": 110
+          }
+        }
+      }
+    },
+    "bdd_ecu": {
+      "elementIds": [
+        "blk_ECU",
+        "blk_PSU",
+        "blk_MCU",
+        "blk_Flash",
+        "blk_EEPROM",
+        "blk_CoProc",
+        "blk_TLog",
+        "blk_SigC",
+        "blk_Comm",
+        "blk_PStage",
+        "blk_Aux",
+        "blk_Mosfet"
+      ],
+      "presentations": {
+        "blk_ECU": {
+          "id": "presentation:bdd_ecu:blk_ECU",
+          "diagramId": "bdd_ecu",
+          "semanticElementId": "blk_ECU",
+          "bounds": {
+            "x": 790,
+            "y": 40,
+            "width": 300,
+            "height": 330
+          }
+        },
+        "blk_PSU": {
+          "id": "presentation:bdd_ecu:blk_PSU",
+          "diagramId": "bdd_ecu",
+          "semanticElementId": "blk_PSU",
+          "bounds": {
+            "x": 40,
+            "y": 510,
+            "width": 230,
+            "height": 132
+          }
+        },
+        "blk_MCU": {
+          "id": "presentation:bdd_ecu:blk_MCU",
+          "diagramId": "bdd_ecu",
+          "semanticElementId": "blk_MCU",
+          "bounds": {
+            "x": 340,
+            "y": 510,
+            "width": 230,
+            "height": 258
+          }
+        },
+        "blk_Flash": {
+          "id": "presentation:bdd_ecu:blk_Flash",
+          "diagramId": "bdd_ecu",
+          "semanticElementId": "blk_Flash",
+          "bounds": {
+            "x": 640,
+            "y": 510,
+            "width": 230,
+            "height": 114
+          }
+        },
+        "blk_EEPROM": {
+          "id": "presentation:bdd_ecu:blk_EEPROM",
+          "diagramId": "bdd_ecu",
+          "semanticElementId": "blk_EEPROM",
+          "bounds": {
+            "x": 940,
+            "y": 510,
+            "width": 230,
+            "height": 132
+          }
+        },
+        "blk_CoProc": {
+          "id": "presentation:bdd_ecu:blk_CoProc",
+          "diagramId": "bdd_ecu",
+          "semanticElementId": "blk_CoProc",
+          "bounds": {
+            "x": 1240,
+            "y": 510,
+            "width": 230,
+            "height": 110
+          }
+        },
+        "blk_TLog": {
+          "id": "presentation:bdd_ecu:blk_TLog",
+          "diagramId": "bdd_ecu",
+          "semanticElementId": "blk_TLog",
+          "bounds": {
+            "x": 1540,
+            "y": 510,
+            "width": 230,
+            "height": 114
+          }
+        },
+        "blk_SigC": {
+          "id": "presentation:bdd_ecu:blk_SigC",
+          "diagramId": "bdd_ecu",
+          "semanticElementId": "blk_SigC",
+          "bounds": {
+            "x": 40,
+            "y": 828,
+            "width": 230,
+            "height": 150
+          }
+        },
+        "blk_Comm": {
+          "id": "presentation:bdd_ecu:blk_Comm",
+          "diagramId": "bdd_ecu",
+          "semanticElementId": "blk_Comm",
+          "bounds": {
+            "x": 340,
+            "y": 828,
+            "width": 230,
+            "height": 168
+          }
+        },
+        "blk_PStage": {
+          "id": "presentation:bdd_ecu:blk_PStage",
+          "diagramId": "bdd_ecu",
+          "semanticElementId": "blk_PStage",
+          "bounds": {
+            "x": 640,
+            "y": 828,
+            "width": 230,
+            "height": 168
+          }
+        },
+        "blk_Aux": {
+          "id": "presentation:bdd_ecu:blk_Aux",
+          "diagramId": "bdd_ecu",
+          "semanticElementId": "blk_Aux",
+          "bounds": {
+            "x": 940,
+            "y": 828,
+            "width": 230,
+            "height": 132
+          }
+        },
+        "blk_Mosfet": {
+          "id": "presentation:bdd_ecu:blk_Mosfet",
+          "diagramId": "bdd_ecu",
+          "semanticElementId": "blk_Mosfet",
+          "bounds": {
+            "x": 1240,
+            "y": 828,
+            "width": 230,
+            "height": 114
+          }
+        }
+      }
+    },
+    "bdd_engine": {
+      "elementIds": [
+        "blk_Engine",
+        "blk_CKP",
+        "blk_CMP",
+        "blk_Analog",
+        "blk_Pump",
+        "blk_Starter",
+        "blk_PV",
+        "blk_Fan"
+      ],
+      "presentations": {
+        "blk_Engine": {
+          "id": "presentation:bdd_engine:blk_Engine",
+          "diagramId": "bdd_engine",
+          "semanticElementId": "blk_Engine",
+          "bounds": {
+            "x": 500,
+            "y": 40,
+            "width": 280,
+            "height": 240
+          }
+        },
+        "blk_CKP": {
+          "id": "presentation:bdd_engine:blk_CKP",
+          "diagramId": "bdd_engine",
+          "semanticElementId": "blk_CKP",
+          "bounds": {
+            "x": 40,
+            "y": 420,
+            "width": 230,
+            "height": 114
+          }
+        },
+        "blk_CMP": {
+          "id": "presentation:bdd_engine:blk_CMP",
+          "diagramId": "bdd_engine",
+          "semanticElementId": "blk_CMP",
+          "bounds": {
+            "x": 340,
+            "y": 420,
+            "width": 230,
+            "height": 110
+          }
+        },
+        "blk_Analog": {
+          "id": "presentation:bdd_engine:blk_Analog",
+          "diagramId": "bdd_engine",
+          "semanticElementId": "blk_Analog",
+          "bounds": {
+            "x": 640,
+            "y": 420,
+            "width": 230,
+            "height": 110
+          }
+        },
+        "blk_Pump": {
+          "id": "presentation:bdd_engine:blk_Pump",
+          "diagramId": "bdd_engine",
+          "semanticElementId": "blk_Pump",
+          "bounds": {
+            "x": 940,
+            "y": 420,
+            "width": 230,
+            "height": 114
+          }
+        },
+        "blk_Starter": {
+          "id": "presentation:bdd_engine:blk_Starter",
+          "diagramId": "bdd_engine",
+          "semanticElementId": "blk_Starter",
+          "bounds": {
+            "x": 40,
+            "y": 594,
+            "width": 230,
+            "height": 110
+          }
+        },
+        "blk_PV": {
+          "id": "presentation:bdd_engine:blk_PV",
+          "diagramId": "bdd_engine",
+          "semanticElementId": "blk_PV",
+          "bounds": {
+            "x": 340,
+            "y": 594,
+            "width": 230,
+            "height": 110
+          }
+        },
+        "blk_Fan": {
+          "id": "presentation:bdd_engine:blk_Fan",
+          "diagramId": "bdd_engine",
+          "semanticElementId": "blk_Fan",
+          "bounds": {
+            "x": 640,
+            "y": 594,
+            "width": 230,
+            "height": 110
+          }
+        }
+      }
+    },
+    "bdd_items_ports": {
+      "elementIds": [
+        "item_TorqueRequest",
+        "item_EngineStatus",
+        "item_CrankPulse",
+        "item_CamPulse",
+        "item_AnalogSignal",
+        "item_InjectionCmd",
+        "item_SolenoidCurrent",
+        "item_Electrical",
+        "item_DiagRequest",
+        "item_KeyCode",
+        "pdef_PowerPort",
+        "pdef_DigitalPort",
+        "pdef_ImmoPort",
+        "pdef_CAN_Port",
+        "pdef_KLinePort",
+        "pdef_VRSensorPort",
+        "pdef_CamSensorPort",
+        "pdef_AnalogPort",
+        "pdef_SolenoidPort",
+        "pdef_CabConnector16",
+        "pdef_EngConnector55"
+      ],
+      "presentations": {
+        "item_TorqueRequest": {
+          "id": "presentation:bdd_items_ports:item_TorqueRequest",
+          "diagramId": "bdd_items_ports",
+          "semanticElementId": "item_TorqueRequest",
+          "bounds": {
+            "x": 40,
+            "y": 40,
+            "width": 220,
+            "height": 110
+          }
+        },
+        "item_EngineStatus": {
+          "id": "presentation:bdd_items_ports:item_EngineStatus",
+          "diagramId": "bdd_items_ports",
+          "semanticElementId": "item_EngineStatus",
+          "bounds": {
+            "x": 300,
+            "y": 40,
+            "width": 220,
+            "height": 114
+          }
+        },
+        "item_CrankPulse": {
+          "id": "presentation:bdd_items_ports:item_CrankPulse",
+          "diagramId": "bdd_items_ports",
+          "semanticElementId": "item_CrankPulse",
+          "bounds": {
+            "x": 560,
+            "y": 40,
+            "width": 220,
+            "height": 110
+          }
+        },
+        "item_CamPulse": {
+          "id": "presentation:bdd_items_ports:item_CamPulse",
+          "diagramId": "bdd_items_ports",
+          "semanticElementId": "item_CamPulse",
+          "bounds": {
+            "x": 820,
+            "y": 40,
+            "width": 220,
+            "height": 110
+          }
+        },
+        "item_AnalogSignal": {
+          "id": "presentation:bdd_items_ports:item_AnalogSignal",
+          "diagramId": "bdd_items_ports",
+          "semanticElementId": "item_AnalogSignal",
+          "bounds": {
+            "x": 1080,
+            "y": 40,
+            "width": 220,
+            "height": 110
+          }
+        },
+        "item_InjectionCmd": {
+          "id": "presentation:bdd_items_ports:item_InjectionCmd",
+          "diagramId": "bdd_items_ports",
+          "semanticElementId": "item_InjectionCmd",
+          "bounds": {
+            "x": 1340,
+            "y": 40,
+            "width": 220,
+            "height": 114
+          }
+        },
+        "item_SolenoidCurrent": {
+          "id": "presentation:bdd_items_ports:item_SolenoidCurrent",
+          "diagramId": "bdd_items_ports",
+          "semanticElementId": "item_SolenoidCurrent",
+          "bounds": {
+            "x": 40,
+            "y": 204,
+            "width": 220,
+            "height": 110
+          }
+        },
+        "item_Electrical": {
+          "id": "presentation:bdd_items_ports:item_Electrical",
+          "diagramId": "bdd_items_ports",
+          "semanticElementId": "item_Electrical",
+          "bounds": {
+            "x": 300,
+            "y": 204,
+            "width": 220,
+            "height": 110
+          }
+        },
+        "item_DiagRequest": {
+          "id": "presentation:bdd_items_ports:item_DiagRequest",
+          "diagramId": "bdd_items_ports",
+          "semanticElementId": "item_DiagRequest",
+          "bounds": {
+            "x": 560,
+            "y": 204,
+            "width": 220,
+            "height": 110
+          }
+        },
+        "item_KeyCode": {
+          "id": "presentation:bdd_items_ports:item_KeyCode",
+          "diagramId": "bdd_items_ports",
+          "semanticElementId": "item_KeyCode",
+          "bounds": {
+            "x": 820,
+            "y": 204,
+            "width": 220,
+            "height": 110
+          }
+        },
+        "pdef_PowerPort": {
+          "id": "presentation:bdd_items_ports:pdef_PowerPort",
+          "diagramId": "bdd_items_ports",
+          "semanticElementId": "pdef_PowerPort",
+          "bounds": {
+            "x": 1080,
+            "y": 204,
+            "width": 220,
+            "height": 110
+          }
+        },
+        "pdef_DigitalPort": {
+          "id": "presentation:bdd_items_ports:pdef_DigitalPort",
+          "diagramId": "bdd_items_ports",
+          "semanticElementId": "pdef_DigitalPort",
+          "bounds": {
+            "x": 1340,
+            "y": 204,
+            "width": 220,
+            "height": 110
+          }
+        },
+        "pdef_ImmoPort": {
+          "id": "presentation:bdd_items_ports:pdef_ImmoPort",
+          "diagramId": "bdd_items_ports",
+          "semanticElementId": "pdef_ImmoPort",
+          "bounds": {
+            "x": 40,
+            "y": 364,
+            "width": 220,
+            "height": 110
+          }
+        },
+        "pdef_CAN_Port": {
+          "id": "presentation:bdd_items_ports:pdef_CAN_Port",
+          "diagramId": "bdd_items_ports",
+          "semanticElementId": "pdef_CAN_Port",
+          "bounds": {
+            "x": 300,
+            "y": 364,
+            "width": 220,
+            "height": 110
+          }
+        },
+        "pdef_KLinePort": {
+          "id": "presentation:bdd_items_ports:pdef_KLinePort",
+          "diagramId": "bdd_items_ports",
+          "semanticElementId": "pdef_KLinePort",
+          "bounds": {
+            "x": 560,
+            "y": 364,
+            "width": 220,
+            "height": 110
+          }
+        },
+        "pdef_VRSensorPort": {
+          "id": "presentation:bdd_items_ports:pdef_VRSensorPort",
+          "diagramId": "bdd_items_ports",
+          "semanticElementId": "pdef_VRSensorPort",
+          "bounds": {
+            "x": 820,
+            "y": 364,
+            "width": 220,
+            "height": 110
+          }
+        },
+        "pdef_CamSensorPort": {
+          "id": "presentation:bdd_items_ports:pdef_CamSensorPort",
+          "diagramId": "bdd_items_ports",
+          "semanticElementId": "pdef_CamSensorPort",
+          "bounds": {
+            "x": 1080,
+            "y": 364,
+            "width": 220,
+            "height": 110
+          }
+        },
+        "pdef_AnalogPort": {
+          "id": "presentation:bdd_items_ports:pdef_AnalogPort",
+          "diagramId": "bdd_items_ports",
+          "semanticElementId": "pdef_AnalogPort",
+          "bounds": {
+            "x": 1340,
+            "y": 364,
+            "width": 220,
+            "height": 110
+          }
+        },
+        "pdef_SolenoidPort": {
+          "id": "presentation:bdd_items_ports:pdef_SolenoidPort",
+          "diagramId": "bdd_items_ports",
+          "semanticElementId": "pdef_SolenoidPort",
+          "bounds": {
+            "x": 40,
+            "y": 524,
+            "width": 220,
+            "height": 110
+          }
+        },
+        "pdef_CabConnector16": {
+          "id": "presentation:bdd_items_ports:pdef_CabConnector16",
+          "diagramId": "bdd_items_ports",
+          "semanticElementId": "pdef_CabConnector16",
+          "bounds": {
+            "x": 300,
+            "y": 524,
+            "width": 260,
+            "height": 150
+          }
+        },
+        "pdef_EngConnector55": {
+          "id": "presentation:bdd_items_ports:pdef_EngConnector55",
+          "diagramId": "bdd_items_ports",
+          "semanticElementId": "pdef_EngConnector55",
+          "bounds": {
+            "x": 560,
+            "y": 524,
+            "width": 260,
+            "height": 204
+          }
+        }
+      }
+    },
+    "ibd_context": {
+      "elementIds": [
+        "property:p_battery",
+        "property:p_ignition",
+        "property:p_fr",
+        "property:p_tester",
+        "property:p_mr",
+        "property:p_engine"
+      ],
+      "presentations": {
+        "property:p_battery": {
+          "id": "presentation:ibd_context:property%3Ap_battery",
+          "diagramId": "ibd_context",
+          "semanticElementId": "property:p_battery",
+          "bounds": {
+            "x": 200,
+            "y": 100,
+            "width": 200,
+            "height": 120
+          }
+        },
+        "property:p_ignition": {
+          "id": "presentation:ibd_context:property%3Ap_ignition",
+          "diagramId": "ibd_context",
+          "semanticElementId": "property:p_ignition",
+          "bounds": {
+            "x": 200,
+            "y": 300,
+            "width": 200,
+            "height": 120
+          }
+        },
+        "property:p_fr": {
+          "id": "presentation:ibd_context:property%3Ap_fr",
+          "diagramId": "ibd_context",
+          "semanticElementId": "property:p_fr",
+          "bounds": {
+            "x": 200,
+            "y": 500,
+            "width": 200,
+            "height": 120
+          }
+        },
+        "property:p_tester": {
+          "id": "presentation:ibd_context:property%3Ap_tester",
+          "diagramId": "ibd_context",
+          "semanticElementId": "property:p_tester",
+          "bounds": {
+            "x": 200,
+            "y": 700,
+            "width": 200,
+            "height": 120
+          }
+        },
+        "property:p_mr": {
+          "id": "presentation:ibd_context:property%3Ap_mr",
+          "diagramId": "ibd_context",
+          "semanticElementId": "property:p_mr",
+          "bounds": {
+            "x": 600,
+            "y": 160,
+            "width": 280,
+            "height": 600
+          }
+        },
+        "property:p_engine": {
+          "id": "presentation:ibd_context:property%3Ap_engine",
+          "diagramId": "ibd_context",
+          "semanticElementId": "property:p_engine",
+          "bounds": {
+            "x": 1080,
+            "y": 160,
+            "width": 280,
+            "height": 600
+          }
+        }
+      }
+    },
+    "ibd_ecu": {
+      "elementIds": [
+        "property:p_psu",
+        "property:p_mcu",
+        "property:p_flash",
+        "property:p_eeprom",
+        "property:p_coproc",
+        "property:p_tlog",
+        "property:p_sigc",
+        "property:p_comm",
+        "property:p_pstage",
+        "property:p_aux"
+      ],
+      "presentations": {
+        "property:p_psu": {
+          "id": "presentation:ibd_ecu:property%3Ap_psu",
+          "diagramId": "ibd_ecu",
+          "semanticElementId": "property:p_psu",
+          "bounds": {
+            "x": 240,
+            "y": 320,
+            "width": 200,
+            "height": 120
+          }
+        },
+        "property:p_mcu": {
+          "id": "presentation:ibd_ecu:property%3Ap_mcu",
+          "diagramId": "ibd_ecu",
+          "semanticElementId": "property:p_mcu",
+          "bounds": {
+            "x": 580,
+            "y": 260,
+            "width": 200,
+            "height": 200
+          }
+        },
+        "property:p_flash": {
+          "id": "presentation:ibd_ecu:property%3Ap_flash",
+          "diagramId": "ibd_ecu",
+          "semanticElementId": "property:p_flash",
+          "bounds": {
+            "x": 920,
+            "y": 100,
+            "width": 200,
+            "height": 120
+          }
+        },
+        "property:p_eeprom": {
+          "id": "presentation:ibd_ecu:property%3Ap_eeprom",
+          "diagramId": "ibd_ecu",
+          "semanticElementId": "property:p_eeprom",
+          "bounds": {
+            "x": 920,
+            "y": 280,
+            "width": 200,
+            "height": 120
+          }
+        },
+        "property:p_coproc": {
+          "id": "presentation:ibd_ecu:property%3Ap_coproc",
+          "diagramId": "ibd_ecu",
+          "semanticElementId": "property:p_coproc",
+          "bounds": {
+            "x": 920,
+            "y": 460,
+            "width": 200,
+            "height": 120
+          }
+        },
+        "property:p_tlog": {
+          "id": "presentation:ibd_ecu:property%3Ap_tlog",
+          "diagramId": "ibd_ecu",
+          "semanticElementId": "property:p_tlog",
+          "bounds": {
+            "x": 580,
+            "y": 540,
+            "width": 200,
+            "height": 120
+          }
+        },
+        "property:p_sigc": {
+          "id": "presentation:ibd_ecu:property%3Ap_sigc",
+          "diagramId": "ibd_ecu",
+          "semanticElementId": "property:p_sigc",
+          "bounds": {
+            "x": 240,
+            "y": 540,
+            "width": 200,
+            "height": 120
+          }
+        },
+        "property:p_comm": {
+          "id": "presentation:ibd_ecu:property%3Ap_comm",
+          "diagramId": "ibd_ecu",
+          "semanticElementId": "property:p_comm",
+          "bounds": {
+            "x": 240,
+            "y": 100,
+            "width": 200,
+            "height": 120
+          }
+        },
+        "property:p_pstage": {
+          "id": "presentation:ibd_ecu:property%3Ap_pstage",
+          "diagramId": "ibd_ecu",
+          "semanticElementId": "property:p_pstage",
+          "bounds": {
+            "x": 920,
+            "y": 640,
+            "width": 200,
+            "height": 120
+          }
+        },
+        "property:p_aux": {
+          "id": "presentation:ibd_ecu:property%3Ap_aux",
+          "diagramId": "ibd_ecu",
+          "semanticElementId": "property:p_aux",
+          "bounds": {
+            "x": 580,
+            "y": 760,
+            "width": 200,
+            "height": 120
+          }
+        }
+      }
+    },
+    "ibd_engine": {
+      "elementIds": [
+        "property:p_eng_ckp",
+        "property:p_eng_cmp",
+        "property:p_eng_sensors",
+        "property:p_eng_pump",
+        "property:p_eng_starter",
+        "property:p_eng_pv",
+        "property:p_eng_fan"
+      ],
+      "presentations": {
+        "property:p_eng_ckp": {
+          "id": "presentation:ibd_engine:property%3Ap_eng_ckp",
+          "diagramId": "ibd_engine",
+          "semanticElementId": "property:p_eng_ckp",
+          "bounds": {
+            "x": 200,
+            "y": 100,
+            "width": 200,
+            "height": 120
+          }
+        },
+        "property:p_eng_cmp": {
+          "id": "presentation:ibd_engine:property%3Ap_eng_cmp",
+          "diagramId": "ibd_engine",
+          "semanticElementId": "property:p_eng_cmp",
+          "bounds": {
+            "x": 460,
+            "y": 100,
+            "width": 200,
+            "height": 120
+          }
+        },
+        "property:p_eng_sensors": {
+          "id": "presentation:ibd_engine:property%3Ap_eng_sensors",
+          "diagramId": "ibd_engine",
+          "semanticElementId": "property:p_eng_sensors",
+          "bounds": {
+            "x": 720,
+            "y": 100,
+            "width": 200,
+            "height": 120
+          }
+        },
+        "property:p_eng_pump": {
+          "id": "presentation:ibd_engine:property%3Ap_eng_pump",
+          "diagramId": "ibd_engine",
+          "semanticElementId": "property:p_eng_pump",
+          "bounds": {
+            "x": 980,
+            "y": 100,
+            "width": 200,
+            "height": 120
+          }
+        },
+        "property:p_eng_starter": {
+          "id": "presentation:ibd_engine:property%3Ap_eng_starter",
+          "diagramId": "ibd_engine",
+          "semanticElementId": "property:p_eng_starter",
+          "bounds": {
+            "x": 200,
+            "y": 320,
+            "width": 200,
+            "height": 120
+          }
+        },
+        "property:p_eng_pv": {
+          "id": "presentation:ibd_engine:property%3Ap_eng_pv",
+          "diagramId": "ibd_engine",
+          "semanticElementId": "property:p_eng_pv",
+          "bounds": {
+            "x": 460,
+            "y": 320,
+            "width": 200,
+            "height": 120
+          }
+        },
+        "property:p_eng_fan": {
+          "id": "presentation:ibd_engine:property%3Ap_eng_fan",
+          "diagramId": "ibd_engine",
+          "semanticElementId": "property:p_eng_fan",
+          "bounds": {
+            "x": 720,
+            "y": 320,
+            "width": 200,
+            "height": 120
+          }
+        }
+      }
+    }
+  },
+  "timestamp": "2026-10-15T00:00:00.000Z"
+}
