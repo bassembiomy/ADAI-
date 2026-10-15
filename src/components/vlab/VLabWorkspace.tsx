@@ -38,7 +38,6 @@ import { TopologyValidationError, formatTopologyMessage, validateTopology } from
 import { SolverConfiguration, validateSolverConfiguration } from '../../engine/vlab/kernel/types';
 import { Settings2, Play, Pause, Square, Send, ChevronLeft, ChevronDown, ChevronRight, Box, Activity, FlaskConical, LineChart, X, Maximize2, FileSpreadsheet, Info, GraduationCap, BookOpen, Layers, Settings, RefreshCcw, Zap, ZoomIn, ZoomOut, Minus, Network, Cloud, Download, CheckCircle2, AlertCircle, Triangle, Trash2 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import * as XLSX from 'xlsx';
 import { isInputFocused } from '../../utils/domUtils';
 import { handleHorizontalToolbarWheel } from '../../utils/toolbarScroll';
 import { getVLabSignalInfo, exportScopeToCSV, VLAB_SIGNAL_COLORS } from '../../utils/scopeUtils';
@@ -978,7 +977,8 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
   onBack,
   onSaveAll,
   onNavigateToXbridges,
-  initialSelectedNodeId
+  initialSelectedNodeId,
+  renderRequirementAssignments
 }) => {
   const initialGraphRef = useRef(normalizeLegacyVLabGraph(initialNodes, initialEdges));
   const [nodes, setNodes, onLocalNodesChange] = useNodesState<AppVLabNode>(initialGraphRef.current.nodes);
@@ -2762,8 +2762,10 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
     onResult(result, nodes);
   };
 
-  const exportToExcel = () => {
+  const exportToExcel = async () => {
     if (scopeData.length === 0 && Object.keys(perScopeData).length === 0) return;
+
+    const XLSX = await import('xlsx');
 
     const wb = XLSX.utils.book_new();
 
@@ -3454,6 +3456,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                         <span className="text-[9px] text-gray-500 font-bold uppercase">Block ID</span>
                         <span className="text-[10px] font-mono text-purple-400/80">{selectedNode.id}</span>
                       </div>
+                      {renderRequirementAssignments?.(selectedNode.id)}
                     </div>
 
                     {selectedNode.data.type === 'solver_config' ? (

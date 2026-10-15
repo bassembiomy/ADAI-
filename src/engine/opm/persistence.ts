@@ -8,7 +8,6 @@
  * the bundle must be re-verified before export gating re-opens.
  */
 
-import JSZip from 'jszip';
 import type { OpmExecutionConfig } from './executableTypes';
 import type { OpmDiagnostic } from './executableTypes';
 import { compileExecutableOpm } from './pipeline';
@@ -51,6 +50,7 @@ export interface OpmReloadedVerification {
 }
 
 export async function exportProjectZip(payload: OpmProjectPayload): Promise<Uint8Array> {
+  const JSZip = (await import('jszip')).default;
   const zip = new JSZip();
 
   // Save main model files (execution config + optional verification metadata)
@@ -90,6 +90,7 @@ export async function importProjectZip(zipInput: Uint8Array | ArrayBuffer | Blob
   // run resolvePersistedVerification() to recompute the model fingerprint and
   // regenerate artifacts (Task 8). The metadata is carried through only so the
   // UI can report it as stale.
+  const JSZip = (await import('jszip')).default;
   const zip = await JSZip.loadAsync(zipInput);
 
   // Read adia_project_unified.json first if available

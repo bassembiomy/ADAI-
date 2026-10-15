@@ -1,0 +1,322 @@
+{
+  "plan": "docs/superpowers/plans/2026-10-14-trm-simulation-loop.md",
+  "baseline": {
+    "date": "2026-10-14",
+    "commit": "0a4decd",
+    "command": "npx vitest run src/engine/sysml/rtm.test.ts src/engine/sysml/traceabilityIndex.test.ts src/engine/sysml/evidence.test.ts src/engine/sysml/requirementsEndToEnd.test.ts src/utils/stateMachine/smTestPlanBuilder.test.ts src/utils/stateMachine/xbBoundaryMappings.test.ts src/utils/stateMachine/smXBridgesAppIntegration.test.ts src/engine/doe/vlabIntegration.test.ts --reporter=dot",
+    "result": "8 files / 59 tests passed"
+  },
+  "wps": [
+    {
+      "id": "WP-00",
+      "title": "Set up loop and baseline",
+      "deps": [],
+      "status": "done"
+    },
+    {
+      "id": "WP-01",
+      "title": "Target reference",
+      "deps": [
+        "WP-00"
+      ],
+      "status": "done",
+      "result": "20/20 acceptance tests; tsc clean for trmSim"
+    },
+    {
+      "id": "WP-02",
+      "title": "State machine interface",
+      "deps": [
+        "WP-01"
+      ],
+      "status": "done",
+      "result": "7/7; planner test corrected: HEATER is internal (read by internalTransitions guards)"
+    },
+    {
+      "id": "WP-03",
+      "title": "X-Bridges interface",
+      "deps": [
+        "WP-01"
+      ],
+      "status": "done",
+      "result": "7/7 acceptance tests; tsc clean"
+    },
+    {
+      "id": "WP-04",
+      "title": "V-Lab interface",
+      "deps": [
+        "WP-01"
+      ],
+      "status": "done",
+      "result": "6/6 acceptance tests; tsc clean"
+    },
+    {
+      "id": "WP-05",
+      "title": "Assign requirements to any target",
+      "deps": [
+        "WP-01"
+      ],
+      "status": "done",
+      "result": "12/12 + 221 related tests; test:sysml only the 3 known base failures; review: shared external element list, report deps"
+    },
+    {
+      "id": "WP-06",
+      "title": "Real requirement ids in generated C",
+      "deps": [
+        "WP-05"
+      ],
+      "status": "done",
+      "result": "9/9; no new failures in stateMachine suites (6 pre-existing toolchain/e2e failures); review added C comment sanitizing"
+    },
+    {
+      "id": "WP-07",
+      "title": "Criterion and evaluator",
+      "deps": [
+        "WP-01"
+      ],
+      "status": "done",
+      "result": "13/13 acceptance tests; tsc clean"
+    },
+    {
+      "id": "WP-08a",
+      "title": "State machine runner",
+      "deps": [
+        "WP-02",
+        "WP-07"
+      ],
+      "status": "done",
+      "result": "10/10; review added stimulus timing and t=0 tests, fixed"
+    },
+    {
+      "id": "WP-08b",
+      "title": "X-Bridges runner",
+      "deps": [
+        "WP-03",
+        "WP-07"
+      ],
+      "status": "done",
+      "result": "11/11; review added unit check and UNKNOWN_BLOCK, fixed"
+    },
+    {
+      "id": "WP-08c",
+      "title": "V-Lab runner",
+      "deps": [
+        "WP-04",
+        "WP-07"
+      ],
+      "status": "done",
+      "result": "10/10; review added unit check, fixed"
+    },
+    {
+      "id": "WP-09",
+      "title": "Evidence and staleness",
+      "deps": [
+        "WP-08a",
+        "WP-08b",
+        "WP-08c"
+      ],
+      "status": "done",
+      "result": "13/13; sysml suite no regressions; review: params never stripped from fingerprint"
+    },
+    {
+      "id": "WP-10",
+      "title": "Assignment panel and Run button",
+      "deps": [
+        "WP-05",
+        "WP-09"
+      ],
+      "status": "done",
+      "result": "controller 11/11, panel 10/10; review: by-value criterion compare, no engine-side impact confirmation"
+    },
+    {
+      "id": "WP-10b",
+      "title": "Assign from model inspectors (state, X-Bridges, V-Lab)",
+      "deps": [
+        "WP-10"
+      ],
+      "status": "done",
+      "result": "RequirementAssignmentsPanel in the state inspector, X-Bridges (global canvas) and V-Lab properties; commits via handleSimVerificationRepositoryChange; 40 files / 395 tests green, tsc clean"
+    },
+    {
+      "id": "WP-11",
+      "title": "End to end",
+      "deps": [
+        "WP-10"
+      ],
+      "status": "done",
+      "result": "trmSimLoop.e2e 7/7 through the real SysML gateway: link, criterion, run, evidence, stale, save/load, C trace ids, unlink"
+    },
+    {
+      "id": "WP-12",
+      "title": "Close-out",
+      "deps": [
+        "WP-11"
+      ],
+      "status": "done",
+      "result": "trmSim+panel 152 tests green; test:sysml 1232 passed, only the 3 App.sysmlLabels failures that also fail on co-work"
+    },
+    {
+      "id": "WP-13",
+      "title": "Time base and runner fixes",
+      "deps": [
+        "WP-12"
+      ],
+      "status": "done",
+      "phase": 2,
+      "result": "trmSim 184/184; fixes L4 L5 L6 L9; review: planner test corrected (V-Lab refines a 0.1 s step internally: value bounded by backward Euler and exact solution)"
+    },
+    {
+      "id": "WP-14",
+      "title": "RTM latest evidence and model currency",
+      "deps": [
+        "WP-12"
+      ],
+      "status": "done",
+      "phase": 2,
+      "result": "44/44 + test:sysml only the pre-existing App.sysmlLabels failure; review: verificationStatus = latest result regardless of currency (keeps rtm.test.ts:329)"
+    },
+    {
+      "id": "WP-15",
+      "title": "Condition language",
+      "deps": [
+        "WP-12"
+      ],
+      "status": "done",
+      "phase": 2,
+      "result": "simExpression 100% acceptance; tsc clean; review: no eval, strict non-finite"
+    },
+    {
+      "id": "WP-16",
+      "title": "Engine sessions",
+      "deps": [
+        "WP-13"
+      ],
+      "status": "done",
+      "phase": 2,
+      "result": "94/94 incl. all WP-08 parity tests; review: planner test corrected (V-Lab is variable-step BDF2 after a BDF1 start, not fixed backward Euler)"
+    },
+    {
+      "id": "WP-17",
+      "title": "Scenario model and validation",
+      "deps": [
+        "WP-15",
+        "WP-16",
+        "WP-18a"
+      ],
+      "status": "done",
+      "phase": 2,
+      "result": "20/20 (+54 related); tsc clean"
+    },
+    {
+      "id": "WP-18a",
+      "title": "Temporal evaluation",
+      "deps": [
+        "WP-15",
+        "WP-16"
+      ],
+      "status": "done",
+      "phase": 2,
+      "note": "creates the \u00a77.5 type declarations in simScenario.ts; WP-17 adds the functions",
+      "result": "16/16; tsc clean; review: response = earliest failure > pending/vacuous > passed"
+    },
+    {
+      "id": "WP-18b",
+      "title": "Coupled runner",
+      "deps": [
+        "WP-17",
+        "WP-18a"
+      ],
+      "status": "done",
+      "phase": 2,
+      "result": "14/14 bit-exact vs manual Gauss-Seidel schedule in both orders; review: two planner test inputs corrected (0.3 divides 30; 2 s run kept 30 s windows)"
+    },
+    {
+      "id": "WP-19",
+      "title": "Scenario evidence and controller",
+      "deps": [
+        "WP-14",
+        "WP-18b"
+      ],
+      "status": "done",
+      "phase": 2,
+      "result": "trmSim 337/337 incl. thermostat e2e 9/9 and linkPolicy; test:sysml 1238/1239 (pre-existing App.sysmlLabels); fixed L10 (rtm per-requirement evidence), L11 (verify from simulation target/state through the gateway), L12 (unsaved X-Bridges ports linkable); 2 reworks"
+    },
+    {
+      "id": "WP-20",
+      "title": "Scenario UI",
+      "deps": [
+        "WP-19"
+      ],
+      "status": "done",
+      "phase": 2,
+      "result": "48/48; review: fixed double-counted inconclusive verdicts and \"no assertion\" shown as not tested (1 rework)"
+    },
+    {
+      "id": "WP-21",
+      "title": "E2E thermostat scenario",
+      "deps": [
+        "WP-20"
+      ],
+      "status": "done",
+      "phase": 2,
+      "note": "test passes since WP-19; planner fixed its trm() helper to pass App external elements",
+      "result": "thermostatScenario.e2e 9/9 through the SysML gateway"
+    },
+    {
+      "id": "WP-22",
+      "title": "Phase 2 close-out",
+      "deps": [
+        "WP-21"
+      ],
+      "status": "done",
+      "phase": 2,
+      "result": "trmSim+components+help+SM/VLab integration 421/422 (helpCoverage live-UI fingerprint fails already at 9493efc, before phase 2); test:sysml 1238/1239 (pre-existing App.sysmlLabels); tsc clean except missing xlsx package in the cloud env; user guide docs/trm-sim/USER_GUIDE.md"
+    }
+  ],
+  "findings": [
+    {
+      "wp": "WP-01",
+      "severity": "low",
+      "summary": "parseSimTarget accepts a literal $param in block position as a block id (non-canonical, never produced by formatSimTarget)"
+    },
+    {
+      "wp": "WP-03",
+      "severity": "low",
+      "summary": "label/port readers duplicated from simExternalElements.ts; consolidate when a later WP touches both"
+    },
+    {
+      "wp": "WP-04",
+      "severity": "low",
+      "summary": "a V-Lab port with neither domain nor direction is listed as conserving with no across/through"
+    },
+    {
+      "wp": "WP-08b",
+      "severity": "medium",
+      "summary": "coffee global X-Bridges model (AC_MOTOR_PID_CONTROL) diverges to ~1e58 headless with RK4 at dt 0.01 from t=0.2; not used as a fixture; inferred from a probe, not root-caused"
+    },
+    {
+      "wp": "WP-05",
+      "severity": "low",
+      "summary": "reportSnapshotAdapter builds its snapshot without external elements, so report diagnostics may still list UNRESOLVED_ENDPOINT for state and sim links (pre-existing for states); pick up in WP-10"
+    },
+    {
+      "wp": "WP-10",
+      "severity": "low",
+      "summary": "Simulate button only in the standard RTM table, not the virtualized grid; X-Bridges/V-Lab runs cover the global canvas only (workspace-file canvases not yet)"
+    },
+    {
+      "wp": "WP-16",
+      "severity": "med",
+      "summary": "V-Lab integrates with BDF1 at start/after input events then variable-step BDF2 with error control: a plain-arithmetic reference cannot be bit-exact. Phase-2 tests verify ordering bit-exactly against a manual session loop and physics against the exact first-order-lag solution with a tolerance."
+    },
+    {
+      "wp": "WP-19",
+      "severity": "low",
+      "summary": "test:sysml shows 'ReferenceError: loadXlsx is not defined' in App.sysmlLabels.test.tsx, coming from the on-demand xlsx loading commits of another session (3a90985), not from trm-sim."
+    },
+    {
+      "wp": "WP-22",
+      "severity": "low",
+      "summary": "src/help/helpCoverage.test.ts live-UI fingerprint already fails on co-work 9493efc; regenerate docs/help/2026-10-06-live-ui-reconciliation.json (npm run help:coverage) once all parallel UI work has landed, and map the new TRM simulation controls then."
+    }
+  ]
+}

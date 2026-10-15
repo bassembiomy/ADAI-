@@ -2,6 +2,9 @@
 #define SM_CORE_H
 
 #include "sm_config.h"
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 SM_Error_t SM_Init(ADIA_Instance_t *instance);
 SM_Error_t SM_Reset(ADIA_Instance_t *instance);
@@ -30,4 +33,7 @@ SM_Error_t SM_Test_SetHistoryState(ADIA_Instance_t *instance, uint32_t slot, SM_
 SM_Error_t SM_Test_SetDeepHistory(ADIA_Instance_t *instance, uint32_t layer, SM_Node_t state, bool active);
 #endif
 
+#ifdef __cplusplus
+}
+#endif
 #endif /* SM_CORE_H */

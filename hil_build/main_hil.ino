@@ -5,9 +5,15 @@
 /*  Do not modify this file manually                             */
 /* ============================================================= */
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 #include "sm_core.h"
 #include "hal_drivers.h"
 #include "hil_interface.h"
+#ifdef __cplusplus
+}
+#endif
 #include "Arduino.h"
 
 
@@ -28,6 +34,7 @@ void loop(void) {
 
     /* Read explicitly mapped hardware inputs into the State Machine */
     (void)SM_ReadInputs(&sm_instance);
+    HIL_ApplyOverrides(&sm_instance);
 
     /* Tick the State Machine */
     (void)SM_Step(&sm_instance, SM_TICK_MS);

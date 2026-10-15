@@ -1,6 +1,11 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo, MouseEvent, KeyboardEvent, ChangeEvent, Profiler, startTransition } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo, MouseEvent, KeyboardEvent, ChangeEvent, Profiler, startTransition, lazy, Suspense } from 'react';
 import { recordRenderCommit, resetProjectLoadTelemetry } from './features/sysml/performance/renderTelemetry';
-import { projectStateEndpoints, hasMatchingProjectStateContext } from './engine/sysml/workers/projectIoPayload';
+import { projectExternalEndpoints, projectExternalEndpointSignature, projectSimSources, buildSimEndpoints } from './engine/trmSim/simEndpoints';
+import { repositoryChangeCommands, runAllSimulationCases, simEvidenceStatusFor } from './engine/trmSim/simVerification';
+import { SimVerificationPanel } from './components/trmSim/SimVerificationPanel';
+import { useXBridgesWorkspaceInputs } from './components/xbridges/xbridgesWorkspaceInputs';
+import { buildSimExternalElements } from './engine/trmSim/simExternalElements';
+import { buildTraceabilityIndex } from './engine/sysml/traceabilityIndex';
 import { parseProjectJsonBuffer } from './utils/projectJsonBuffer';
 import * as math from 'mathjs';
 import Plot from './components/doe/PlotlyRenderer';
@@ -9,17 +14,6 @@ import { createVLabDOEBlock, createXBridgesDOEBlock } from './engine/doe/integra
 import { fitRSM, fitGMDH, fitTaguchi } from './engine/doe/statistics';
 import DOMPurify from 'dompurify';
 import { v4 as uuidv4 } from 'uuid';
-import * as XLSX from 'xlsx';
-import { jsPDF } from 'jspdf';
-import html2canvas from 'html2canvas';
-import { XbridgesWorkspace } from './components/xbridges/XbridgesWorkspace';
-import { VLabWorkspace } from './components/vlab/VLabWorkspace';
-import { HILWorkspace } from './components/hil/HILWorkspace';
-import { EntropyWorkspace } from './components/entropy/EntropyWorkspace';
-import { PlantUmlWorkspace } from './components/plantuml/PlantUmlWorkspace';
-import { UseCaseWorkspace } from './components/sysml/UseCaseWorkspace';
-import { ActivityWorkspace } from './components/sysml/ActivityWorkspace';
-import { SequenceWorkspace } from './components/sysml/SequenceWorkspace';
 import { buildCreateInteractionFromContextCommand } from './services/sysmlInteractionCommands';
 import { buildSetVerificationBehaviorCommand, listTestProcedures } from './services/sysmlVerificationCommands';
 import { InteractionElementInspector } from './components/sysml/InteractionElementInspector';
@@ -108,7 +102,6 @@ import type { SemanticTraceFrame } from './utils/stateMachine/smTrace';
 import { STATE_MACHINE_RUNTIME_BUNDLE } from './generated/stateMachineRuntimeBundle';
 import { analyzeStateMachine } from './utils/smAnalysisEngine';
 import { HelpModal } from './components/help/HelpModal';
-import { HmiWorkspace } from './components/hmi/HmiWorkspace';
 import { normalizeHmiComponents, parseHmiVariableValue, validateHmiInput, type HmiInputCommand, type HmiInputResult } from './features/hmi/hmiModel';
 import { createHmiInputQueue, getPortableHmiInputQueueScript } from './features/hmi/hmiInputQueue';
 import { renderHmiWidgetSvg, renderPortableHmiMarkup, getPortableHmiScript, resolveHmiReportComponents } from './features/hmi/hmiReport';
@@ -119,13 +112,39 @@ import { parseModelExplorerDragData } from './features/modelExplorer/modelExplor
 import type { ActiveDiagramContext, ExplorerCommandResult } from './features/modelExplorer/modelExplorerTypes';
 import { VLAB_LIBRARY } from './utils/vlabLibrary';
 import { BLOCK_LIBRARY as XBRIDGES_LIBRARY } from './engine/xbridges/BlockDefinitions';
-import JSZip from 'jszip';
-import {
-  createReportSnapshot,
-  toHierarchySource,
-  buildSystemReport,
-  renderStateMachineAnalysisHtml,
-} from './features/reporting';
+// Workspaces load on first use (prefetched when idle) to keep them out of the startup bundle.
+const loadXbridgesWorkspace = () => import('./components/xbridges/XbridgesWorkspace');
+const XbridgesWorkspace = lazy(() => loadXbridgesWorkspace().then(m => ({ default: m.XbridgesWorkspace })));
+const loadVLabWorkspace = () => import('./components/vlab/VLabWorkspace');
+const VLabWorkspace = lazy(() => loadVLabWorkspace().then(m => ({ default: m.VLabWorkspace })));
+const loadHILWorkspace = () => import('./components/hil/HILWorkspace');
+const HILWorkspace = lazy(() => loadHILWorkspace().then(m => ({ default: m.HILWorkspace })));
+const loadEntropyWorkspace = () => import('./components/entropy/EntropyWorkspace');
+const EntropyWorkspace = lazy(() => loadEntropyWorkspace().then(m => ({ default: m.EntropyWorkspace })));
+const loadPlantUmlWorkspace = () => import('./components/plantuml/PlantUmlWorkspace');
+const PlantUmlWorkspace = lazy(() => loadPlantUmlWorkspace().then(m => ({ default: m.PlantUmlWorkspace })));
+const loadUseCaseWorkspace = () => import('./components/sysml/UseCaseWorkspace');
+const UseCaseWorkspace = lazy(() => loadUseCaseWorkspace().then(m => ({ default: m.UseCaseWorkspace })));
+const loadActivityWorkspace = () => import('./components/sysml/ActivityWorkspace');
+const ActivityWorkspace = lazy(() => loadActivityWorkspace().then(m => ({ default: m.ActivityWorkspace })));
+const loadSequenceWorkspace = () => import('./components/sysml/SequenceWorkspace');
+const SequenceWorkspace = lazy(() => loadSequenceWorkspace().then(m => ({ default: m.SequenceWorkspace })));
+const loadHmiWorkspace = () => import('./components/hmi/HmiWorkspace');
+const HmiWorkspace = lazy(() => loadHmiWorkspace().then(m => ({ default: m.HmiWorkspace })));
+const WorkspaceLoading = () => (
+  <div className="absolute inset-0 flex items-center justify-center text-sm text-gray-500">Loading workspace…</div>
+);
+const WORKSPACE_PREFETCH_LOADERS = [loadXbridgesWorkspace, loadVLabWorkspace, loadHILWorkspace, loadEntropyWorkspace, loadPlantUmlWorkspace, loadUseCaseWorkspace, loadActivityWorkspace, loadSequenceWorkspace, loadHmiWorkspace];
+// Heavy export libraries are loaded on demand to keep them out of the startup bundle.
+const loadXlsx = () => import('xlsx');
+const loadJsPdf = () => import('jspdf').then(m => m.jsPDF);
+const loadHtml2Canvas = () => import('html2canvas').then(m => m.default);
+const loadJsZip = () => import('jszip').then(m => m.default);
+// Import report helpers from their modules, not the './features/reporting' barrel:
+// the barrel re-exports the PDF/DOCX exporters, which would pull jspdf and docx into the startup bundle.
+import { createReportSnapshot, toHierarchySource } from './features/reporting/reportSnapshot';
+import { buildSystemReport } from './features/reporting/systemReport/buildSystemReport';
+import { renderStateMachineAnalysisHtml } from './features/reporting/systemReport/stateMachineAnalysisSection';
 import { TraceabilityMatrix as CanonicalTraceabilityMatrix } from './components/sysml/TraceabilityMatrix';
 import { BlockPropertiesEditor } from './components/sysml/BlockPropertiesEditor';
 import { SysmlPropertyPanel } from './components/sysml/SysmlPropertyPanel';
@@ -140,7 +159,8 @@ import { AllocationMatrix as CanonicalAllocationMatrix } from './components/sysm
 import { IbdConnectorEditor } from './components/sysml/IbdConnectorEditor';
 import { RequirementGovernancePanel } from './components/sysml/RequirementGovernancePanel';
 import { resolveSysmlReferenceLabel, sysmlObjectLabel } from './features/sysml/sysmlDisplayLabel';
-import { StateRequirementTraceability } from './components/statemachine/StateRequirementTraceability';
+import { RequirementAssignmentsPanel } from './components/trmSim/RequirementAssignmentsPanel';
+import { elementSimTargets } from './engine/trmSim/elementSimTargets';
 import { StateMachineCanvasContextMenu } from './components/statemachine/StateMachineCanvasContextMenu';
 import { validateAssociationEnds } from './engine/sysml/bdd';
 import { validateRequirementContainment } from './engine/sysml/validation';
@@ -150,7 +170,7 @@ import { resolveBlockDoubleClickAction, resolveExplicitBlockNavigation } from '.
 import { analyzeMutation } from './engine/sysml/mutations';
 import { loadRepository, serializeRepository, serializeSysmlProjectState, type V5UpgradeReport } from './engine/sysml/persistence';
 import { SysmlUpgradeReportDialog } from './components/sysml/SysmlUpgradeReportDialog';
-import { createEmptyRepository, parseMultiplicity, type SysmlRelationship, type ConnectorUsage, type ModelDiagramDefinition } from './engine/sysml/model';
+import { createEmptyRepository, parseMultiplicity, type SysmlRelationship, type SysmlRepository, type ConnectorUsage, type ModelDiagramDefinition } from './engine/sysml/model';
 import { evaluateSysmlOperationGate } from './engine/sysml/evidence';
 import { buildTraceabilityMatrix, computeCoverageMetrics } from './engine/sysml/rtm';
 import { buildCanonicalTraceabilitySnapshot } from './engine/sysml/reportSnapshotAdapter';
@@ -883,7 +903,7 @@ const LegacyTraceabilityMatrix = ({
     roots.forEach(r => traverse(r, 0));
   }
 
-  const exportExcel = () => {
+  const exportExcel = async () => {
     const referenceLabel = (id: string, fallbackKind = 'Element') => {
       const block = blocks.find(b => b.id === id);
       if (block) return sysmlObjectLabel(block, block.stereotype || 'Block');
@@ -973,6 +993,7 @@ const LegacyTraceabilityMatrix = ({
         Links: outgoing,
       };
     });
+    const XLSX = await loadXlsx();
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "RTM");
@@ -1231,6 +1252,7 @@ const CodeGenerationDialog = ({
           <Button data-help-feature="app-code-download" data-help-source="src/App.tsx"
             onClick={async () => {
               try {
+                const JSZip = await loadJsZip();
                 const zip = new JSZip();
                 files.forEach(f => {
                   zip.file(f.name, f.content);
@@ -1394,6 +1416,7 @@ const PidWorkspaceDialog = ({
     // Download PID files together as a ZIP
     (async () => {
       try {
+        const JSZip = await loadJsZip();
         const zip = new JSZip();
         zip.file('pid_controller.h', h_content);
         zip.file('pid_controller.c', c_content);
@@ -2520,9 +2543,10 @@ const DoeWorkspace = ({
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (evt) => {
+    reader.onload = async (evt) => {
       try {
         const bstr = evt.target?.result;
+        const XLSX = await loadXlsx();
         const wb = XLSX.read(bstr, { type: 'binary' });
         const ws = wb.Sheets[wb.SheetNames[0]];
         const jsonData = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
@@ -4138,6 +4162,7 @@ const ReportPreviewModal = ({
       try {
         const plot = originalPlots[i] as any;
         if (plot.data && plot.layout) {
+             const html2canvas = await loadHtml2Canvas();
              const canvas = await html2canvas(plot);
              const imgData = canvas.toDataURL('image/png');
              const img = document.createElement('img');
@@ -4166,6 +4191,8 @@ const ReportPreviewModal = ({
   const exportToPDF = async () => {
     if (!previewRef.current) return;
     try {
+      const html2canvas = await loadHtml2Canvas();
+      const jsPDF = await loadJsPdf();
       const canvas = await html2canvas(previewRef.current, { scale: 2, backgroundColor: '#1a1a1a' });
       const imgData = canvas.toDataURL('image/jpeg', 0.95);
       const pdf = new jsPDF('p', 'mm', 'a4');
@@ -4482,6 +4509,27 @@ type WorkspaceTarget =
   | { kind: 'file'; fileId: string };
 
 const ADIA = () => {
+  // Warm the workspace chunks one per idle slot, so module evaluation never competes with input.
+  useEffect(() => {
+    const w = window as any;
+    const hasIdle = typeof w.requestIdleCallback === 'function';
+    let cancelled = false;
+    let handle: any = null;
+    let index = 0;
+    const schedule = () => {
+      if (cancelled || index >= WORKSPACE_PREFETCH_LOADERS.length) return;
+      const run = () => {
+        const load = WORKSPACE_PREFETCH_LOADERS[index++];
+        load().catch(() => { /* prefetch is best effort */ }).finally(schedule);
+      };
+      handle = hasIdle ? w.requestIdleCallback(run, { timeout: 1000 }) : setTimeout(run, index === 0 ? 2000 : 250);
+    };
+    schedule();
+    return () => {
+      cancelled = true;
+      if (hasIdle) w.cancelIdleCallback?.(handle); else clearTimeout(handle);
+    };
+  }, []);
   const [currentTheme, setCurrentTheme] = useState<AppTheme>(getStoredTheme);
 
   useEffect(() => {
@@ -5209,13 +5257,24 @@ const ADIA = () => {
     });
   }, [canonicalSysmlRepository, sysmlStore]);
 
+  const [globalXBridgesNodes, setGlobalXBridgesNodes] = useState<any[]>([]);
+  const [vlabNodes, setVlabNodes] = useState<any[]>([]);
   const externalEndpointContext = useMemo<SemanticEndpointContext>(() => {
     const map = new Map<string, ExternalSemanticEndpoint>();
     for (const s of states) {
       map.set(s.id, { id: s.id, name: s.name, family: 'state' });
     }
+    for (const [id, endpoint] of buildSimEndpoints(projectSimSources({ states, junctions, transitions, variables, globalXBridgesNodes, vlabNodes }))) {
+      map.set(id, endpoint);
+    }
     return { externalEndpoints: map };
-  }, [states]);
+  }, [states, junctions, transitions, variables, globalXBridgesNodes, vlabNodes]);
+
+  const traceabilityExternalElements = useMemo(() => [
+    ...states.map(state => ({ id: state.id, name: state.name, kind: 'state' })),
+    ...junctions.map(junction => ({ id: junction.id, name: junction.name, kind: junction.type ?? 'pseudostate' })),
+    ...buildSimExternalElements(projectSimSources({ states, junctions, transitions, variables, globalXBridgesNodes, vlabNodes })).filter(e => e.id.startsWith('sim:')),
+  ], [states, junctions, transitions, variables, globalXBridgesNodes, vlabNodes]);
 
   const handleExecuteSysmlCommand = useCallback((cmd: SysmlEditorCommand) => {
     const currentRepo = sysmlGatewayStateRef.current?.repository ?? canonicalSysmlRepository;
@@ -5233,10 +5292,8 @@ const ADIA = () => {
     const result = executeSysmlCommand(currentState, cmd, activeSysmlDiagramId, externalEndpointContext);
     if (result.committed) {
       sysmlGatewayStateRef.current = { ...currentState, ...result, context: externalEndpointContext };
-      startTransition(() => {
-        setCanonicalSysmlRepository(result.repository);
-        setSysmlStore(result.store ? { ...result.store } : fromRepository(result.repository, result.coordinates, result.diagramPresentations));
-      });
+      setCanonicalSysmlRepository(result.repository);
+      setSysmlStore(result.store ? { ...result.store } : fromRepository(result.repository, result.coordinates, result.diagramPresentations));
     }
     return result;
   }, [canonicalSysmlRepository, sysmlStore, externalEndpointContext, activeSysmlDiagramId]);
@@ -5421,7 +5478,6 @@ const ADIA = () => {
   const [draggedPort, setDraggedPort] = useState<{ elementId: string, portId: string } | null>(null);
 
   // Global X-Bridges persistence
-  const [globalXBridgesNodes, setGlobalXBridgesNodes] = useState<any[]>([]);
   const [globalXBridgesEdges, setGlobalXBridgesEdges] = useState<any[]>([]);
   const globalXBridgesNodesRef = useRef<any[]>(globalXBridgesNodes);
   const globalXBridgesEdgesRef = useRef<any[]>(globalXBridgesEdges);
@@ -5435,7 +5491,6 @@ const ADIA = () => {
   }, [globalXBridgesEdges]);
 
   // V-Lab STATE
-  const [vlabNodes, setVlabNodes] = useState<any[]>([]);
   const [vlabEdges, setVlabEdges] = useState<any[]>([]);
   const [vlabSelectedNodeId, setVlabSelectedNodeId] = useState<string | null>(null);
   const [xBridgesSelectedNodeId, setXBridgesSelectedNodeId] = useState<string | null>(null);
@@ -6303,6 +6358,34 @@ const ADIA = () => {
     }
   }, [setIsRunning, setErrors, setCurrentError, setShowErrorDialog]);
 
+  // TRM simulation verification: the panel edits a repository copy; changes reach the model only as gateway commands.
+  const [simVerificationRequirementId, setSimVerificationRequirementId] = useState<string | null>(null);
+  const simVerificationProject = useMemo(() => ({
+    states, junctions, transitions, variables, layers, tickMs, hilConfig, safetyMode,
+    globalXBridgesNodes, globalXBridgesEdges, vlabNodes, vlabEdges,
+  }), [states, junctions, transitions, variables, layers, tickMs, hilConfig, safetyMode, globalXBridgesNodes, globalXBridgesEdges, vlabNodes, vlabEdges]);
+  // Stable XbridgesWorkspace inputs: a fresh array per render re-imports the stored model over unsaved edits.
+  const xBridgesWorkspaceInputs = useXBridgesWorkspaceInputs(states, xBridgesStateId, globalXBridgesNodes, globalXBridgesEdges);
+  const simEvidenceCurrency = useCallback((evidence: { id: string; simulation?: unknown }): 'current' | 'stale' =>
+    evidence.simulation && simEvidenceStatusFor(canonicalSysmlRepository, evidence.id, simVerificationProject) === 'stale' ? 'stale' : 'current',
+  [canonicalSysmlRepository, simVerificationProject]);
+  const handleSimVerificationRepositoryChange = useCallback((next: SysmlRepository) => {
+    const previous = sysmlGatewayStateRef.current?.repository ?? canonicalSysmlRepository;
+    for (const command of repositoryChangeCommands(previous, next)) {
+      const result = command.type === 'deleteElements' ? executeConfirmedDeletion(command.elementIds) : handleExecuteSysmlCommand(command as SysmlEditorCommand);
+      if (!result.committed) {
+        addError('error', result.diagnostics.map(d => d.message).join('; ') || 'The simulation verification change was rejected.', 'Simulation verification');
+        break;
+      }
+    }
+  }, [canonicalSysmlRepository, executeConfirmedDeletion, handleExecuteSysmlCommand, addError]);
+  const handleRunAllSimulations = useCallback(() => {
+    const out = runAllSimulationCases(sysmlGatewayStateRef.current?.repository ?? canonicalSysmlRepository, simVerificationProject, { newId: () => uuidv4(), executedAt: new Date().toISOString() });
+    handleSimVerificationRepositoryChange(out.repository);
+    const count = (o: string) => out.results.filter(r => r.outcome === o).length;
+    addError('info', `Simulation tests: ${count('passed')} passed, ${count('failed')} failed, ${count('inconclusive')} inconclusive, ${count('error')} errors, ${count('skipped')} skipped`, 'Simulation verification');
+  }, [canonicalSysmlRepository, simVerificationProject, handleSimVerificationRepositoryChange, addError]);
+
   const handleExplorerCommandResult = useCallback((result: ExplorerCommandResult) => {
     for (const diagnostic of result.diagnostics) {
       addError(diagnostic.severity, `${diagnostic.code}: ${diagnostic.message}`, 'Model Explorer', diagnostic.semanticId);
@@ -6464,12 +6547,13 @@ const ADIA = () => {
   // === Professional Report Generation ===
   const [showReportPreview, setShowReportPreview] = useState(false);
 
-  const generateReport = useCallback(() => {
+  const generateReport = useCallback(async () => {
     if (!results) {
       addError('warning', 'No model results to export. Run a model first.');
       return;
     }
 
+    const jsPDF = await loadJsPdf();
     const pdf = new jsPDF('p', 'mm', 'a4');
     const pageW = pdf.internal.pageSize.getWidth();
     const margin = 20;
@@ -6814,9 +6898,9 @@ const ADIA = () => {
       // remains valid after hydration instead of being quarantined as an
       // unresolved endpoint. No stale State copies are persisted: only live
       // endpoint identities from the incoming model are supplied.
-      const hydrationEndpoints = projectStateEndpoints(importedData.states);
+      const hydrationEndpoints = projectExternalEndpoints(importedData);
       const hydratedRepository = applyCanonicalProjectLoad(
-        preloadedResult && preloadedResult.valid && hasMatchingProjectStateContext(preloadedResult.stateEndpointSignature, importedData.states)
+        preloadedResult && preloadedResult.valid && preloadedResult.stateEndpointSignature === projectExternalEndpointSignature(importedData)
           ? preloadedResult
           : loadCanonicalSysmlProject({
               ...importedData,
@@ -11600,7 +11684,9 @@ const ADIA = () => {
     const traceabilityMatrix = buildTraceabilityMatrix(
       canonicalSysmlRepository,
       {},
-      traceabilitySnapshot.index,
+      buildTraceabilityIndex(canonicalSysmlRepository, traceabilityExternalElements),
+      traceabilityExternalElements,
+      { evidenceCurrency: simEvidenceCurrency },
     );
     const traceabilityMetrics = computeCoverageMetrics(traceabilityMatrix);
 
@@ -12457,7 +12543,7 @@ const ADIA = () => {
     setShowGlobalReportPreview(true);
     setShowReportDialog(false);
     addError('info', 'Report preview ready');
-  }, [blocks, parts, connectors, relationships, states, transitions, junctions, hmiComponents, variables, activeStates, addError, setShowReportDialog, layers, tickMs, safetyMode, canonicalSysmlRepository]);
+  }, [blocks, parts, connectors, relationships, states, transitions, junctions, hmiComponents, variables, activeStates, addError, setShowReportDialog, layers, tickMs, safetyMode, canonicalSysmlRepository, traceabilityExternalElements, simEvidenceCurrency]);
 
   // KEYBOARD SHORTCUTS
   useEffect(() => {
@@ -15362,14 +15448,12 @@ const ADIA = () => {
           <div style={{ display: isMobile && mobileTab !== 'canvas' ? 'none' : 'flex' }} className="flex-1 flex flex-col min-w-0">
             <main className="flex-1 relative overflow-hidden bg-[#0a0a0a]">
             {(xBridgesStateId || diagramMode === 'xbridges') && (
+                <Suspense fallback={<WorkspaceLoading />}>
                 <XbridgesWorkspace
                   key={xBridgesStateId || activeFileId}
-                  initialNodes={syncXBBoundaryNodeMetadata(
-                    xBridgesStateId ? Array.from(states.find(s => s.id === xBridgesStateId)?.xBridgesModel?.nodes || []) : globalXBridgesNodes,
-                    xBridgesStateId ? Array.from(states.find(s => s.id === xBridgesStateId)?.xBridgesModel?.mappings || []) : [],
-                  )}
-                  initialEdges={xBridgesStateId ? Array.from(states.find(s => s.id === xBridgesStateId)?.xBridgesModel?.edges || []) : globalXBridgesEdges}
-                  initialMappings={xBridgesStateId ? Array.from(states.find(s => s.id === xBridgesStateId)?.xBridgesModel?.mappings || []) : []}
+                  initialNodes={xBridgesWorkspaceInputs.initialNodes}
+                  initialEdges={xBridgesWorkspaceInputs.initialEdges}
+                  initialMappings={xBridgesWorkspaceInputs.initialMappings}
                   availableVariables={variables}
                   tickMs={tickMs}
                   onLaunchDoe={() => toggleWindow('doe')}
@@ -15386,19 +15470,32 @@ const ADIA = () => {
                   workspaceFiles={workspaceFiles}
                   isSmSimulating={isRunning}
                   simulationTime={simulationTime}
+                  renderRequirementAssignments={xBridgesStateId ? undefined : (blockId: string) => (
+                    <RequirementAssignmentsPanel
+                      repository={canonicalSysmlRepository}
+                      elementName={String(globalXBridgesNodes.find((n: any) => n.id === blockId)?.data?.label || blockId)}
+                      targets={elementSimTargets(simVerificationProject, { engine: 'xb', blockId })}
+                      onRepositoryChange={handleSimVerificationRepositoryChange}
+                      newId={uuidv4}
+                    />
+                  )}
                 />
+                </Suspense>
               )}
 
               {diagramMode === 'plantuml' && (
+                <Suspense fallback={<WorkspaceLoading />}>
                 <PlantUmlWorkspace
                   diagram={plantUmlDiagram}
                   onChange={setPlantUmlDiagram}
                   onSave={() => addError('info', 'PlantUML diagram saved in the current project session.')}
                   onExport={exportPlantUmlSource}
                 />
+                </Suspense>
               )}
 
               {diagramMode === 'useCase' && (
+                <Suspense fallback={<WorkspaceLoading />}>
                 <UseCaseWorkspace
                   key={activeSysmlDiagramId}
                   repository={canonicalSysmlRepository}
@@ -15409,9 +15506,11 @@ const ADIA = () => {
                   onSelect={setSelectedIds}
                   authorizedBaselineIds={authorizedBaselineIds}
                 />
+                </Suspense>
               )}
 
               {diagramMode === 'activity' && (
+                <Suspense fallback={<WorkspaceLoading />}>
                 <ActivityWorkspace
                   key={activeSysmlDiagramId}
                   repository={canonicalSysmlRepository}
@@ -15422,9 +15521,11 @@ const ADIA = () => {
                   onSelect={setSelectedIds}
                   authorizedBaselineIds={authorizedBaselineIds}
                 />
+                </Suspense>
               )}
 
               {diagramMode === 'sequence' && (
+                <Suspense fallback={<WorkspaceLoading />}>
                 <SequenceWorkspace
                   key={activeSysmlDiagramId}
                   repository={canonicalSysmlRepository}
@@ -15437,9 +15538,11 @@ const ADIA = () => {
                   endpoints={externalEndpointContext}
                   transitions={transitions}
                 />
+                </Suspense>
               )}
 
               {diagramMode === 'vlab' && (
+                <Suspense fallback={<WorkspaceLoading />}>
                 <VLabWorkspace
                   nodes={vlabNodes}
                   edges={vlabEdges}
@@ -15451,6 +15554,15 @@ const ADIA = () => {
                   }}
                   onBack={() => setDiagramMode('statemachine')}
                   initialSelectedNodeId={vlabSelectedNodeId}
+                  renderRequirementAssignments={(blockId: string) => (
+                    <RequirementAssignmentsPanel
+                      repository={canonicalSysmlRepository}
+                      elementName={String(vlabNodes.find((n: any) => n.id === blockId)?.data?.label || blockId)}
+                      targets={elementSimTargets(simVerificationProject, { engine: 'vlab', blockId })}
+                      onRepositoryChange={handleSimVerificationRepositoryChange}
+                      newId={uuidv4}
+                    />
+                  )}
                   onNavigateToXbridges={(nodeId?: string) => {
                     const findMatchingNode = (targetNodes: any[], sourceNodeId?: string): any => {
                       if (!sourceNodeId) return null;
@@ -15494,9 +15606,11 @@ const ADIA = () => {
                     setTimeout(() => setXBridgesSelectedNodeId(null), 1000);
                   }}
                 />
+                </Suspense>
               )}
 
               {diagramMode === 'hil' && (
+                <Suspense fallback={<WorkspaceLoading />}>
                 <HILWorkspace
                   config={hilConfig}
                   onChangeConfig={setHilConfig}
@@ -15511,9 +15625,11 @@ const ADIA = () => {
                   tickMs={tickMs}
                   onBack={() => setDiagramMode('statemachine')}
                 />
+                </Suspense>
               )}
 
               {diagramMode === 'entropy' && (
+                <Suspense fallback={<WorkspaceLoading />}>
                 <EntropyWorkspace
                   initialNodes={entropyNodes}
                   initialEdges={entropyEdges}
@@ -15540,6 +15656,7 @@ const ADIA = () => {
                     ports: blocks.flatMap(b => b.ports || []),
                   }}
                 />
+                </Suspense>
               )}
 
               {!xBridgesStateId && !['xbridges', 'vlab', 'hil', 'entropy', 'useCase', 'activity', 'sequence'].includes(diagramMode) && (
@@ -16808,16 +16925,12 @@ const ADIA = () => {
                     />
                   </div>
 
-                  <StateRequirementTraceability
-                    stateId={selectedState.id}
-                    stateName={selectedState.name}
-                    canonicalRepository={canonicalSysmlRepository}
-                    onLinkRequirement={(requirementId, kind) => {
-                      createRelationship(selectedState.id, requirementId, kind);
-                    }}
-                    onUnlinkRelationship={(relationshipId) => {
-                      deleteRelationship(relationshipId);
-                    }}
+                  <RequirementAssignmentsPanel
+                    repository={canonicalSysmlRepository}
+                    elementName={selectedState.name}
+                    targets={elementSimTargets(simVerificationProject, { engine: 'sm', stateId: selectedState.id })}
+                    onRepositoryChange={handleSimVerificationRepositoryChange}
+                    newId={uuidv4}
                   />
 
                   <Button data-help-feature="app-state-layer" data-help-source="src/App.tsx"
@@ -18771,12 +18884,14 @@ const ADIA = () => {
             onClose={() => toggleWindow('rtm')}
             onUpdate={updateManagedWindow}
           >
+            <div className="flex h-full min-h-0 flex-col">
+            <div className="min-h-0 flex-1">
             <CanonicalTraceabilityMatrix
               repository={canonicalSysmlRepository}
-              externalElements={[
-                ...states.map(state => ({ id: state.id, name: state.name, kind: 'state' })),
-                ...junctions.map(junction => ({ id: junction.id, name: junction.name, kind: junction.type ?? 'pseudostate' })),
-              ]}
+              externalElements={traceabilityExternalElements}
+              evidenceCurrency={simEvidenceCurrency}
+              onSimulate={setSimVerificationRequirementId}
+              onRunAllSimulations={handleRunAllSimulations}
               onNavigate={(elementId) => {
                 setSelectedIds([elementId]);
                 if (blocks.some(block => block.id === elementId && block.stereotype === 'requirement')) setDiagramMode('requirements');
@@ -18784,6 +18899,20 @@ const ADIA = () => {
                 else if (parts.some(part => part.id === elementId) || connectors.some(connector => connector.id === elementId)) setDiagramMode('ibd');
               }}
             />
+            </div>
+            {simVerificationRequirementId && canonicalSysmlRepository.requirements[simVerificationRequirementId] && (
+              <div className="max-h-[50%] overflow-auto border-t border-[var(--border-default)]">
+                <button type="button" aria-label="Close simulation verification" onClick={() => setSimVerificationRequirementId(null)} className="float-right m-2 rounded border border-neutral-700 px-2 py-0.5 text-xs text-neutral-300">Close</button>
+                <SimVerificationPanel
+                  repository={canonicalSysmlRepository}
+                  requirementId={simVerificationRequirementId}
+                  project={simVerificationProject}
+                  onRepositoryChange={handleSimVerificationRepositoryChange}
+                  newId={uuidv4}
+                />
+              </div>
+            )}
+            </div>
           </FloatingWindow>
         )}
 
@@ -18810,6 +18939,7 @@ const ADIA = () => {
             onClose={() => toggleWindow('hmi')}
             onUpdate={updateManagedWindow}
           >
+            <Suspense fallback={<WorkspaceLoading />}>
             <HmiWorkspace data-help-topic="hmi_dashboard"
               variables={variables}
               components={hmiComponents}
@@ -18830,6 +18960,7 @@ const ADIA = () => {
               }}
               onClose={() => toggleWindow('hmi')}
             />
+            </Suspense>
           </FloatingWindow>
         )}
 

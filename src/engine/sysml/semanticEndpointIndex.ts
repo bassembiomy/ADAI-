@@ -5,7 +5,7 @@ import type { SysmlRepository } from './model';
 export interface ExternalSemanticEndpoint {
   id: string;
   name: string;
-  family: 'state';
+  family: 'state' | 'simulationTarget';
   ownerId?: string;
 }
 

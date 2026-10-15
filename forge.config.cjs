@@ -9,6 +9,29 @@ if (!fs.existsSync(localTmp)) {
 process.env.TEMP = localTmp;
 process.env.TMP = localTmp;
 
+// Redirect SquirrelTemp in LocalAppData to project tmp directory via NTFS junction
+// to prevent disk-space exhaustion on C: when unpacking/repacking multi-gigabyte toolchain payloads.
+// Opt-in only: the junction is machine-wide (lives outside this project) and dangles if the
+// project tmp directory is later deleted, so it only runs on Windows when explicitly requested.
+if (process.platform === 'win32' && process.env.ADIA_REDIRECT_SQUIRREL_TEMP === '1') {
+  if (!process.env.LOCALAPPDATA) {
+    console.warn('[Forge SquirrelTemp] LOCALAPPDATA is not set; skipping SquirrelTemp redirection.');
+  } else {
+    const squirrelTempDir = path.join(process.env.LOCALAPPDATA, 'SquirrelTemp');
+    const redirectedSquirrelTemp = path.join(localTmp, 'SquirrelTemp');
+    if (!fs.existsSync(redirectedSquirrelTemp)) {
+      fs.mkdirSync(redirectedSquirrelTemp, { recursive: true });
+    }
+    if (!fs.existsSync(squirrelTempDir)) {
+      try {
+        execFileSync('cmd', ['/c', 'mklink', '/J', squirrelTempDir, redirectedSquirrelTemp], { stdio: 'ignore', windowsHide: true });
+      } catch (e) {
+        console.warn('[Forge SquirrelTemp] Failed to create junction:', e.message);
+      }
+    }
+  }
+}
+
 module.exports = {
   packagerConfig: {
     executableName: 'ADIA',
@@ -64,6 +87,18 @@ module.exports = {
   },
   rebuildConfig: {},
   hooks: {
+    prePackage: async () => {
+      const toolchainsDir = path.resolve(__dirname, 'toolchains');
+      if (fs.existsSync(toolchainsDir)) {
+        const strayZips = fs.readdirSync(toolchainsDir).filter(f => f.endsWith('.zip') || f.endsWith('.tar.gz'));
+        for (const f of strayZips) {
+          try {
+            fs.unlinkSync(path.join(toolchainsDir, f));
+            console.log('[Forge PrePackage] Purged stray archive from toolchains: ' + f);
+          } catch {}
+        }
+      }
+    },
     postPackage: async (forgeConfig, options) => {
       if (!options || !Array.isArray(options.outputPaths)) return;
       const rceditPath = path.resolve(__dirname, 'node_modules/electron-winstaller/vendor/rcedit.exe');
@@ -102,6 +137,7 @@ module.exports = {
         setupExe: 'ADIA Setup.exe',
         exe: 'ADIA.exe',
         setupIcon: path.resolve(__dirname, 'icon.ico'),
+        noDelta: true,
       },
     },
     {

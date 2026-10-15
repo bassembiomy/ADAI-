@@ -158,4 +158,28 @@ describe('applyCanonicalSysmlResult', () => {
     });
     expect(result.current.parts[0]).toMatchObject({ x: 300, y: 400, width: 80, height: 60 });
   });
+
+  it('seamlessly transitions block coordinates from presentationDrafts to committed presentations without position rollback', () => {
+    const complete: LegacySysmlView = {
+      packages: [],
+      blocks: [{ id: 'blk-1', name: 'SensorBlock', stereotype: 'block', x: 10, y: 10, width: 100, height: 80, properties: [], operations: [], constraints: [], classes: [], ports: [] }],
+      relationships: [],
+      parts: [],
+      connectors: [],
+    };
+    const initialDiagrams = {
+      bdd: { elementIds: ['blk-1'], presentations: { 'blk-1': { id: 'p1', diagramId: 'bdd', semanticElementId: 'blk-1', bounds: { x: 10, y: 10, width: 100, height: 80 } } } },
+    };
+
+    // Step 1: During drag, presentationDrafts reflects the active drag coordinates
+    const duringDragView = projectDiagramScopedCanvasView(complete, 'bdd', initialDiagrams, [], { 'blk-1': { x: 250, y: 350 } });
+    expect(duringDragView.blocks[0]).toMatchObject({ x: 250, y: 350 });
+
+    // Step 2: On drop, the committed presentation is updated and presentationDrafts is cleared
+    const committedDiagrams = {
+      bdd: { elementIds: ['blk-1'], presentations: { 'blk-1': { id: 'p1', diagramId: 'bdd', semanticElementId: 'blk-1', bounds: { x: 250, y: 350, width: 100, height: 80 } } } },
+    };
+    const postDropView = projectDiagramScopedCanvasView(complete, 'bdd', committedDiagrams, [], {});
+    expect(postDropView.blocks[0]).toMatchObject({ x: 250, y: 350 });
+  });
 });

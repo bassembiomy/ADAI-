@@ -1,6 +1,8 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { Suspense, useEffect, useRef, useState } from 'react';
 import { Sparkles, Activity } from 'lucide-react';
-import { GalaxyStandbyCanvas } from './standby/GalaxyStandbyCanvas';
+const GalaxyStandbyCanvas = React.lazy(() =>
+  import('./standby/GalaxyStandbyCanvas').then(m => ({ default: m.GalaxyStandbyCanvas }))
+);
 
 interface IntroStandbyOverlayProps {
   mode: 'intro' | 'standby';
@@ -109,7 +111,9 @@ export const IntroStandbyOverlay: React.FC<IntroStandbyOverlayProps> = ({ mode, 
       }`}
     >
       {/* 3D Particle Galaxy Canvas */}
-      <GalaxyStandbyCanvas />
+      <Suspense fallback={null}>
+        <GalaxyStandbyCanvas />
+      </Suspense>
 
       {/* Subtle atmospheric ambient glow */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">

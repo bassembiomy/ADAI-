@@ -2,7 +2,8 @@ import { loadCanonicalSysmlProject } from '../../../services/sysmlCommandGateway
 import { serializeSysmlProjectState } from '../persistence';
 import type { SysmlRepository } from '../model';
 import { stripCanonicalPayloadForHydration } from './projectIoPayload';
-import { projectStateEndpoints, projectStateEndpointSignature } from './projectIoPayload';
+import { projectStateEndpointSignature } from './projectIoPayload';
+import { projectExternalEndpoints, projectExternalEndpointSignature } from '../../trmSim/simEndpoints';
 import { appendCoordinateChunk, appendRepositoryChunk } from './projectIoPayload';
 import type { SysmlEntityCollection } from '../model';
 import { createStreamedNormalizedStore, type NormalizedSysmlStore } from '../normalizedStore';
@@ -85,8 +86,8 @@ export async function loadProjectInWorker(
     checkAborted(options?.signal);
 
     options?.onProgress?.('normalize');
-    const loaded = loadCanonicalSysmlProject(parsed, { externalEndpoints: projectStateEndpoints(parsed.states) });
-    const stateEndpointSignature = projectStateEndpointSignature(parsed.states);
+    const loaded = loadCanonicalSysmlProject(parsed, { externalEndpoints: projectExternalEndpoints(parsed) });
+    const stateEndpointSignature = projectExternalEndpointSignature(parsed);
 
     options?.onProgress?.('validate');
     checkAborted(options?.signal);
@@ -100,7 +101,7 @@ export async function loadProjectInWorker(
       diagnostics: loaded.diagnostics,
       upgradeReport: loaded.upgradeReport,
       interchangeReport: loaded.interchangeReport,
-      rawPayload: stripCanonicalPayloadForHydration(parsed, loaded.valid, stateEndpointSignature),
+      rawPayload: stripCanonicalPayloadForHydration(parsed, loaded.valid, projectStateEndpointSignature(parsed.states)),
     };
   }
 
@@ -211,6 +212,34 @@ export async function loadProjectInWorker(
   });
 }
 
+/** Copy of `value` holding exactly what JSON.stringify would write: functions, symbols and undefined are dropped
+ * from objects and become null in arrays; toJSON is honoured. Values are not mutated. */
+export function toJsonCloneable(value: unknown, seen: WeakSet<object> = new WeakSet()): unknown {
+  if (value === null || typeof value !== 'object') {
+    return typeof value === 'function' || typeof value === 'symbol' || typeof value === 'bigint' ? undefined : value;
+  }
+  const withJson = value as { toJSON?: () => unknown };
+  if (typeof withJson.toJSON === 'function') return toJsonCloneable(withJson.toJSON(), seen);
+  if (seen.has(value)) throw new TypeError('Converting circular structure to JSON');
+  seen.add(value);
+  let out: unknown;
+  if (Array.isArray(value)) {
+    out = value.map(item => {
+      const v = toJsonCloneable(item, seen);
+      return v === undefined ? null : v;
+    });
+  } else {
+    const obj: Record<string, unknown> = {};
+    for (const key of Object.keys(value)) {
+      const v = toJsonCloneable((value as Record<string, unknown>)[key], seen);
+      if (v !== undefined) obj[key] = v;
+    }
+    out = obj;
+  }
+  seen.delete(value);
+  return out;
+}
+
 export async function serializeProjectInWorker(
   payload: any,
   options?: ProjectWorkerOptions,
@@ -309,9 +338,20 @@ export async function serializeProjectInWorker(
     worker.addEventListener('message', handleMessage);
     worker.addEventListener('error', handleError);
 
+    const post = (body: unknown) => worker.postMessage({ id, type: 'serialize', payload: body, includeSnapshot: Boolean(options?.onSnapshot) });
     try {
-      worker.postMessage({ id, type: 'serialize', payload, includeSnapshot: Boolean(options?.onSnapshot) });
+      post(payload);
     } catch (err) {
+      // Live editor objects (e.g. X-Bridges node data with block execute functions and UI callbacks) cannot be
+      // structured-cloned. The saved file is JSON anyway, so retry with exactly what JSON.stringify keeps.
+      if ((err as { name?: string } | null)?.name === 'DataCloneError') {
+        try {
+          post(toJsonCloneable(payload));
+          return;
+        } catch (retryErr) {
+          err = retryErr;
+        }
+      }
       cleanup();
       reject(err);
     }

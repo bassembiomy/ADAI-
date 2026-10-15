@@ -364,6 +364,7 @@ export const validateVerificationConfig = (
 
 export const buildSemanticModel = (
   model: StateMachineModelV4 | StateMachineModelV5,
+  options?: { requirementLinks?: ReadonlyMap<string, readonly string[]> },
 ): SemanticBuildResult => {
   const diagnostics = validateModelStructure(model as StateMachineModelV4);
   diagnostics.push(...validateVerificationConfig(model));
@@ -787,7 +788,7 @@ export const buildSemanticModel = (
     traceableElements.push({
       id: state.id,
       kind: 'state',
-      requirementIds: [],
+      requirementIds: [...(options?.requirementLinks?.get(state.id) ?? [])],
       modelPath: `states.${state.id}`,
       traceId: `TRACE-STATE-${toCIdentifier(state.id).toUpperCase()}`,
     });
@@ -796,7 +797,7 @@ export const buildSemanticModel = (
     traceableElements.push({
       id: trans.id,
       kind: 'transition',
-      requirementIds: [],
+      requirementIds: [...(options?.requirementLinks?.get(trans.id) ?? [])],
       modelPath: `transitions.${trans.id}`,
       traceId: `TRACE-TRANS-${toCIdentifier(trans.id).toUpperCase()}`,
     });
