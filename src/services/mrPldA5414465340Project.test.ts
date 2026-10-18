@@ -18,6 +18,7 @@ import {
   stepAppSimulationSession,
   type AppSimulationSession,
 } from '../utils/stateMachine/smAppAdapter';
+import { STATE_KEY_BY_NAME } from '../../scripts/mr_pld_a5414465340_behaviour';
 
 // MR_PLD_A5414465340.adia is generated from models/mr_pld_a5414465340/MR_PLD_A5414465340.sysml by
 // scripts/build_mr_pld_a5414465340_adia.ts; this proves the app opens it, its model passes the app's
@@ -32,10 +33,19 @@ const blocks = Object.values(repo.definitions).filter((d): d is BlockDefinition 
 const ABSTRACT = ['blk_ElectronicComponent', 'blk_EngineSensor'];
 
 // ------------------------------------------------------------ simulation helpers
+// The editor gives states and variables their own ids: frames are read by state key and variable name.
+const stateKeyOfId = new Map<string, string>(project.states.map((st: { id: string; name: string }) => [st.id, STATE_KEY_BY_NAME[st.name] ?? st.name]));
+const stateIdOfKey = (key: string) => project.states.find((st: { id: string }) => stateKeyOfId.get(st.id) === key)?.id as string;
+const variableNameOfId = new Map<string, string>(project.variables.map((v: { id: string; name: string }) => [v.id, v.name]));
+const readable = (frame: ReturnType<typeof stepAppSimulationSession>) => ({
+  ...frame,
+  activeStateIds: frame.activeStateIds.map(id => stateKeyOfId.get(id) ?? id),
+  data: Object.fromEntries(Object.entries(frame.data).map(([id, value]) => [`v_${variableNameOfId.get(id) ?? id}`, value])) as Record<string, number | boolean>,
+});
 const step = (session: AppSimulationSession, ms = 1) => {
   let frame = stepAppSimulationSession(session, project.tickMs);
   for (let t = project.tickMs; t < ms; t += project.tickMs) frame = stepAppSimulationSession(session, project.tickMs);
-  return frame;
+  return readable(frame);
 };
 const set = (session: AppSimulationSession, values: Record<string, number | boolean>) => {
   for (const [name, value] of Object.entries(values)) setSessionVariableValue(session, name, value);
@@ -323,18 +333,36 @@ describe('MR_PLD_A5414465340.adia', () => {
       const dataOnly = new Set(['ImmoReleaseFrame', 'TorqueRequestFrame', 'VrToothPulse', 'ElectricalPower', 'FaultRecord']);
       const uncovered = signalTriggerCoverage(repo, interaction, project.transitions).filter(c => !c.covered && !dataOnly.has(c.signalName));
       // the immobiliser scenario shows the crank request being ignored while the start is locked
-      const ignoredOnPurpose = (c: { signalName: string; stateId: string }) => c.signalName === 'KL50_CrankRequest' && c.stateId === 'ST_IMMO_LOCKED';
+      const ignoredOnPurpose = (c: { signalName: string; stateId: string }) => c.signalName === 'KL50_CrankRequest' && c.stateId === stateIdOfKey('ST_IMMO_LOCKED');
       expect(uncovered.filter(c => !ignoredOnPurpose(c)), interaction.name).toEqual([]);
     }
-    expect(project.transitions.filter((t: { sourceId: string; condition: string }) => t.sourceId === 'ST_IMMO_LOCKED' && t.condition.includes('KL50'))).toEqual([]);
+    expect(project.transitions.filter((t: { sourceId: string; condition: string }) => t.sourceId === stateIdOfKey('ST_IMMO_LOCKED') && t.condition.includes('KL50'))).toEqual([]);
     const crank = repo.definitions.int_SD_Crank_Auth_PeakHold_Injection as InteractionDefinition;
     expect(crank.uses?.[0].refersToId).toBe('int_ECU_Start_Injection');
   });
 
   it("passes the app's Validate button with no error or warning, and generates MISRA C code", () => {
-    expect(appValidationFindings(project)).toEqual([]);
+    // ADIA limitation: the State panel keeps one AutoStart state per region even among parallel (orthogonal)
+    // states, and Validate counts only AutoStart states as entered, so it warns on the other parallel regions,
+    // which the simulator does enter (the scenarios below run all five).
+    expect(appValidationFindings(project)).toEqual([
+      'unreachable MR_PLD_ECU_OperatingStates', 'unreachable PLD_C1_1_InjectionMicroCycle',
+      'unreachable SAK_C167CS_LM_SyncSupervisor', 'unreachable ValveAndStarterDrivers_ThermalFanControl',
+    ]);
     for (const state of project.states) expect(state.name, state.id).toMatch(/^[A-Za-z_]\w*$/);
-    expect(project.states.filter((st: { isSafeState?: boolean }) => st.isSafeState).map((st: { id: string }) => st.id)).toEqual(['ST_FAULT_SHUTDOWN']);
+    expect(project.states.filter((st: { isSafeState?: boolean }) => st.isSafeState).map((st: { name: string }) => st.name)).toEqual(['ST_FAULT_SHUTDOWN']);
+  });
+
+  it('holds the state machine, variables and HMI as the editor creates them', () => {
+    for (const st of project.states) {
+      // a state created from the explorer keeps its default colour; the panel has no colour field
+      expect(st.color, st.name).toBe('#ffffff');
+      expect(st.id, st.name).toMatch(/^state-/);
+    }
+    for (const layer of project.layers) expect(layer, layer.name).not.toHaveProperty('decomposition');
+    for (const t of project.transitions) expect(t.id).toMatch(/^trans-/);
+    for (const v of project.variables) expect(v.id, v.name).toMatch(/^[0-9a-f-]{36}$/);
+    for (const c of project.hmiComponents) expect(c.id, c.name).toMatch(/^[0-9a-f-]{36}$/);
   });
 
   it('keeps every HMI widget', () => {

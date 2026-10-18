@@ -20,6 +20,8 @@
  * levels, so the chain sensor -> event -> operating mode runs on its own.
  */
 import type { JunctionData, Layer, StateData, TransitionData, VariableDef } from '../src/types/sm_types';
+import type { HmiComponentType } from '../src/types/sysml_types';
+import { createHmiDashboard, createStateMachineEditor, createVariablesPanel, type HmiPanelEdit } from './lib/adiaEditorSession';
 
 export const TICK_MS = 1;
 
@@ -59,35 +61,49 @@ const VARIABLES: Array<[string, VarType, string]> = [
   ['dtcSensor', 'bool', 'false'], ['useSubstitute', 'bool', 'false'],
 ];
 
-export const variables: VariableDef[] = VARIABLES.map(([name, type, initialValue]) => ({
-  id: `v_${name}`, name, type, initialValue,
-  currentValue: type === 'bool' ? initialValue === 'true' : Number(initialValue),
-  visibleInScope: true, overflowPolicy: 'saturate',
-}));
+// Built with the editor's own operations (scripts/lib/adiaEditorSession.ts), as a user builds it.
+const panel = createVariablesPanel();
+for (const [name, type, initialValue] of VARIABLES) panel.add(name, type, initialValue);
+export const variables: VariableDef[] = panel.variables;
 
 // ------------------------------------------------------------ state machine
-export const states: StateData[] = [];
-export const transitions: TransitionData[] = [];
-const COLORS = { region: '#64748b', pow: '#f59e0b', run: '#22c55e', warn: '#ef4444', stop: '#a855f7', idle: '#6c9ac6', inj: '#0ea5e9' };
-let priority = 0;
+const editor = createStateMachineEditor();
+/** the region (layer) id behind each key, the state id behind each key, and the state key behind each name */
+const regionId: Record<string, string> = { root: 'root' };
+const stateId: Record<string, string> = {};
+/** the id the editor gave the state of each key */
+export const STATE_ID: Readonly<Record<string, string>> = stateId;
+export const STATE_KEY_BY_NAME: Record<string, string> = {};
+const lastPriority: Record<string, number> = {};
 
-interface StateOptions { w?: number; h?: number; entry?: string; during?: string; exit?: string; auto?: boolean; color?: keyof typeof COLORS; safe?: boolean; parallel?: boolean }
-function state(id: string, name: string, layer: string, x: number, y: number, o: StateOptions = {}) {
-  priority += 10;
-  states.push({
-    id, name, x, y, width: o.w ?? 190, height: o.h ?? 110, entry: o.entry ?? '', during: o.during ?? '', exit: o.exit ?? '',
-    isActive: false, color: COLORS[o.color ?? 'idle'], parentId: layer, children: [], priority, isParallel: o.parallel ?? false, regionId: null,
-    autostart: o.auto ?? false, historyType: 'none', internalTransitions: '', ...(o.safe ? { isSafeState: true } : {}),
+interface StateOptions { w?: number; h?: number; entry?: string; during?: string; exit?: string; auto?: boolean; safe?: boolean; parallel?: boolean; internal?: string }
+/** "New State" in a region, then the State panel (and the canvas position / size). */
+function state(key: string, name: string, region: string, x: number, y: number, o: StateOptions = {}) {
+  const id = editor.createState(regionId[region], name);
+  stateId[key] = id;
+  STATE_KEY_BY_NAME[name] = key;
+  // the canvas gives every new state of a region the next priority
+  lastPriority[region] = (lastPriority[region] ?? 0) + 10;
+  editor.editState(id, {
+    x, y, width: o.w ?? 190, height: o.h ?? 110, priority: lastPriority[region],
+    ...(o.entry ? { entry: o.entry } : {}), ...(o.during ? { during: o.during } : {}), ...(o.exit ? { exit: o.exit } : {}),
+    ...(o.auto ? { autostart: true } : {}), ...(o.parallel ? { isParallel: true } : {}), ...(o.safe ? { isSafeState: true } : {}),
+    ...(o.internal ? { internalTransitions: o.internal } : {}),
   });
+}
+/** Opening a state on the canvas gives it its region, named after the state. */
+function region(key: string, ofState: string, name: string) {
+  regionId[key] = editor.createRegion(stateId[ofState], name);
 }
 
 /** `accept <event> [if guard]`: the event is consumed by the transition that accepts it. */
-function accept(id: string, source: string, target: string, event: string | null, guard = '', o: { order?: number; action?: string; afterS?: number } = {}) {
+function accept(_key: string, source: string, target: string, event: string | null, guard = '', o: { order?: number; action?: string; afterS?: number } = {}) {
   const condition = [event ? `${event}==true` : '', guard].filter(Boolean).join(' && ');
   const afterTicks = o.afterS === undefined ? null : Math.max(1, Math.round((o.afterS * 1000) / TICK_MS));
   const type: TransitionData['type'] = afterTicks === null ? 'condition' : condition ? 'and' : 'after';
   const action = [event ? `${event}=false;` : '', o.action ?? ''].filter(Boolean).join(' ');
-  transitions.push({ id, sourceId: source, targetId: target, condition, action, afterTicks, type, hasControlPoint: false, order: o.order ?? 0, isInternal: false });
+  const id = editor.createTransition(stateId[source], stateId[target]);
+  editor.editTransition(id, { condition, action, type, afterTicks, order: o.order ?? 0 });
 }
 
 // Root: one orthogonal region per behaviour owner. Every region starts with the machine (AutoStart on all
@@ -107,26 +123,27 @@ const REGIONS: Array<[string, string, string, number, number, number, number, st
     '[useSubstitute==true && sensorFaultMode==0] / useSubstitute=false;'],
 ];
 // isParallel marks the children of an AND layer (the loader derives the decomposition from it)
-for (const [id, name, , x, y, w, h, internal] of REGIONS) {
-  state(id, name, 'root', x, y, { w, h, color: 'region', parallel: true, auto: true });
-  states[states.length - 1].internalTransitions = internal;
+for (const [key, name, layerKey, x, y, w, h, internal] of REGIONS) {
+  state(key, name, 'root', x, y, { w, h, parallel: true, auto: true, internal });
+  region(layerKey, key, name);
 }
 
 // ---- MR_PLD_OperatingStates (exhibited by MR_PLD_ECU)
 const OP = 'lay_OperatingStates';
 state('ST_STANDBY', 'ST_STANDBY', OP, 0, 0, { auto: true, entry: 'powerLatch=0; injEnable=0; starter=false;' });
-state('ST_INIT_IMMO', 'ST_INIT_IMMO', OP, 280, 0, { color: 'pow', entry: 'powerLatch=1; dtcImmo=false; driversTristated=0;' });
-state('ST_IMMO_LOCKED', 'ST_IMMO_LOCKED', OP, 280, 260, { color: 'warn', entry: 'dtcImmo=true; starter=false; injEnable=0;' });
-state('ST_READY', 'ST_READY', OP, 560, 0, { color: 'pow', entry: 'starter=false; injEnable=0;' });
-state('ST_CRANK_SYNC', 'ST_CRANK_SYNC', OP, 840, 0, { color: 'pow', entry: 'starter=true; injEnable=1;', exit: 'starter=false;' });
-state('ST_RUN', 'ST_RUN', OP, 840, 260, { w: 560, h: 220, color: 'run', entry: 'injEnable=1;' });
-state('ST_LIMP_DERATE', 'ST_LIMP_DERATE', OP, 560, 560, { color: 'warn', entry: 'torqueLimitPct=65; speedLimited=true; injEnable=1;', exit: 'torqueLimitPct=100; speedLimited=false;' });
-state('ST_FAULT_SHUTDOWN', 'ST_FAULT_SHUTDOWN', OP, 980, 560, { color: 'warn', entry: 'driversTristated=1; injEnable=0;', safe: true });
-state('ST_AFTERRUN', 'ST_AFTERRUN', OP, 0, 560, { color: 'stop', entry: 'injEnable=0; starter=false;', during: 'eepromWrite=true;', exit: 'eepromWrite=false; driversTristated=0;' });
+state('ST_INIT_IMMO', 'ST_INIT_IMMO', OP, 280, 0, { entry: 'powerLatch=1; dtcImmo=false; driversTristated=0;' });
+state('ST_IMMO_LOCKED', 'ST_IMMO_LOCKED', OP, 280, 260, { entry: 'dtcImmo=true; starter=false; injEnable=0;' });
+state('ST_READY', 'ST_READY', OP, 560, 0, { entry: 'starter=false; injEnable=0;' });
+state('ST_CRANK_SYNC', 'ST_CRANK_SYNC', OP, 840, 0, { entry: 'starter=true; injEnable=1;', exit: 'starter=false;' });
+state('ST_RUN', 'ST_RUN', OP, 840, 260, { w: 560, h: 220, entry: 'injEnable=1;' });
+state('ST_LIMP_DERATE', 'ST_LIMP_DERATE', OP, 560, 560, { entry: 'torqueLimitPct=65; speedLimited=true; injEnable=1;', exit: 'torqueLimitPct=100; speedLimited=false;' });
+state('ST_FAULT_SHUTDOWN', 'ST_FAULT_SHUTDOWN', OP, 980, 560, { entry: 'driversTristated=1; injEnable=0;', safe: true });
+state('ST_AFTERRUN', 'ST_AFTERRUN', OP, 0, 560, { entry: 'injEnable=0; starter=false;', during: 'eepromWrite=true;', exit: 'eepromWrite=false; driversTristated=0;' });
 // ST_RUN region
 const RUN = 'lay_RUN';
-state('ST_RUN_NORMAL', 'ST_RUN_NORMAL', RUN, 0, 0, { auto: true, color: 'run', entry: 'torqueLimitPct=100; speedLimited=false; injEnable=1;' });
-state('ST_ENGINE_BRAKE', 'ST_ENGINE_BRAKE', RUN, 300, 0, { color: 'run', entry: 'engineBrakeValves=true; injEnable=0;', exit: 'engineBrakeValves=false; injEnable=1;' });
+region(RUN, 'ST_RUN', 'ST_RUN');
+state('ST_RUN_NORMAL', 'ST_RUN_NORMAL', RUN, 0, 0, { auto: true, entry: 'torqueLimitPct=100; speedLimited=false; injEnable=1;' });
+state('ST_ENGINE_BRAKE', 'ST_ENGINE_BRAKE', RUN, 300, 0, { entry: 'engineBrakeValves=true; injEnable=0;', exit: 'engineBrakeValves=false; injEnable=1;' });
 
 accept('brakeOn', 'ST_RUN_NORMAL', 'ST_ENGINE_BRAKE', 'EngineBrakeRequest');
 accept('brakeOff', 'ST_ENGINE_BRAKE', 'ST_RUN_NORMAL', 'EngineBrakeRelease');
@@ -165,12 +182,12 @@ accept('g06_stopBtnLimp', 'ST_LIMP_DERATE', 'ST_AFTERRUN', 'BlockStopButton', ''
 
 // ---- InjectionMicroCycle (executed by PLD_C1_1 with LM2901D feedback)
 const INJ = 'lay_InjectionMicroCycle';
-state('INJ_IDLE', 'IDLE', INJ, 0, 0, { auto: true, color: 'inj', entry: 'hsGate=false; lsGate=false;' });
-state('INJ_PEAK', 'PEAK', INJ, 260, 0, { color: 'inj', entry: 'hsGate=true; lsGate=true;' });
-state('INJ_BIP_WAIT', 'BIP_WAIT', INJ, 520, 0, { color: 'inj', entry: 'hsGate=false;' });
-state('INJ_HOLD', 'HOLD', INJ, 780, 0, { color: 'inj', entry: 'holdChop=true;', exit: 'holdChop=false;' });
-state('INJ_SPILL', 'SPILL', INJ, 780, 220, { color: 'inj', entry: 'hsGate=false; lsGate=false;' });
-state('INJ_CYL_CUTOFF', 'CYL_CUTOFF', INJ, 390, 220, { color: 'warn', entry: 'hsGate=false; lsGate=false; cylCutoff=true;', exit: 'cylCutoff=false;' });
+state('INJ_IDLE', 'IDLE', INJ, 0, 0, { auto: true, entry: 'hsGate=false; lsGate=false;' });
+state('INJ_PEAK', 'PEAK', INJ, 260, 0, { entry: 'hsGate=true; lsGate=true;' });
+state('INJ_BIP_WAIT', 'BIP_WAIT', INJ, 520, 0, { entry: 'hsGate=false;' });
+state('INJ_HOLD', 'HOLD', INJ, 780, 0, { entry: 'holdChop=true;', exit: 'holdChop=false;' });
+state('INJ_SPILL', 'SPILL', INJ, 780, 220, { entry: 'hsGate=false; lsGate=false;' });
+state('INJ_CYL_CUTOFF', 'CYL_CUTOFF', INJ, 390, 220, { entry: 'hsGate=false; lsGate=false; cylCutoff=true;', exit: 'cylCutoff=false;' });
 accept('i01_soi', 'INJ_IDLE', 'INJ_PEAK', 'SoiTrigger', 'injEnable==1 && driversTristated==0');
 accept('i02_peak', 'INJ_PEAK', 'INJ_BIP_WAIT', 'PeakCurrentReached', '', { order: 1 });
 accept('i03_bip', 'INJ_BIP_WAIT', 'INJ_HOLD', 'BipDetected', '', { order: 0 });
@@ -185,10 +202,10 @@ accept('i10_powerDown', 'INJ_CYL_CUTOFF', 'INJ_IDLE', null, 'powerLatch==0');
 
 // ---- SyncSupervisor (CAPCOM of SAK_C167CS_LM, enum SyncMode)
 const SYN = 'lay_SyncSupervisor';
-state('SYNC_BOTH', 'BOTH', SYN, 0, 0, { auto: true, color: 'run', entry: 'syncMode=0;' });
-state('SYNC_CMP_ONLY', 'CMP_ONLY', SYN, 280, 0, { color: 'warn', entry: 'syncMode=1;' });
-state('SYNC_CKP_ONLY', 'CKP_ONLY', SYN, 0, 220, { color: 'warn', entry: 'syncMode=2;' });
-state('SYNC_NONE', 'NONE', SYN, 280, 220, { color: 'warn', entry: 'syncMode=3;' });
+state('SYNC_BOTH', 'BOTH', SYN, 0, 0, { auto: true, entry: 'syncMode=0;' });
+state('SYNC_CMP_ONLY', 'CMP_ONLY', SYN, 280, 0, { entry: 'syncMode=1;' });
+state('SYNC_CKP_ONLY', 'CKP_ONLY', SYN, 0, 220, { entry: 'syncMode=2;' });
+state('SYNC_NONE', 'NONE', SYN, 280, 220, { entry: 'syncMode=3;' });
 accept('s01_bothLost', 'SYNC_BOTH', 'SYNC_NONE', null, 'ckpValid==0 && cmpValid==0', { order: 0, action: 'SyncLost=true;' });
 accept('s02_ckpLost', 'SYNC_BOTH', 'SYNC_CMP_ONLY', null, 'ckpValid==0', { order: 1, action: 'CkpLost=true; CkpRestored=false;' });
 accept('s03_cmpLost', 'SYNC_BOTH', 'SYNC_CKP_ONLY', null, 'cmpValid==0', { order: 2, action: 'CmpLost=true;' });
@@ -202,10 +219,10 @@ accept('s10_ckpOnly', 'SYNC_NONE', 'SYNC_CKP_ONLY', null, 'ckpValid==1', { order
 
 // ---- ThermalFanControl (PV3 fan clutch of ValveAndStarterDrivers, REQ-THM-08)
 const FAN = 'lay_ThermalFanControl';
-state('FAN_OFF', 'FAN_OFF', FAN, 0, 0, { auto: true, color: 'idle', entry: 'pv3DutyPct=0;' });
-state('FAN_PWM', 'FAN_PWM', FAN, 260, 0, { color: 'pow', during: 'pv3DutyPct=(coolantC-92)*12.5;' });
-state('FAN_FULL', 'FAN_FULL', FAN, 520, 0, { color: 'pow', entry: 'pv3DutyPct=100;' });
-state('FAN_OVERTEMP', 'OVERTEMP', FAN, 780, 0, { color: 'warn', entry: 'pv3DutyPct=100; warnLamp=true;', exit: 'warnLamp=false;' });
+state('FAN_OFF', 'FAN_OFF', FAN, 0, 0, { auto: true, entry: 'pv3DutyPct=0;' });
+state('FAN_PWM', 'FAN_PWM', FAN, 260, 0, { during: 'pv3DutyPct=(coolantC-92)*12.5;' });
+state('FAN_FULL', 'FAN_FULL', FAN, 520, 0, { entry: 'pv3DutyPct=100;' });
+state('FAN_OVERTEMP', 'OVERTEMP', FAN, 780, 0, { entry: 'pv3DutyPct=100; warnLamp=true;', exit: 'warnLamp=false;' });
 accept('f01_on', 'FAN_OFF', 'FAN_PWM', null, 'coolantC>=92');
 accept('f02_full', 'FAN_PWM', 'FAN_FULL', null, 'coolantC>=100', { order: 0 });
 accept('f03_off', 'FAN_PWM', 'FAN_OFF', null, 'coolantC<92', { order: 1 });
@@ -216,11 +233,11 @@ accept('f06_cooled', 'FAN_OVERTEMP', 'FAN_FULL', null, 'coolantC<100', { action:
 // ---- SensorDiagnostics (B65 ECT channel of SensorAFE, enum SensorFaultMode, REQ-DIAG-07)
 const DIA = 'lay_SensorDiagnostics';
 const inWindow = 'vEctPin>=0.18 && vEctPin<=4.82 && sensorDrift==0';
-state('DIAG_NORMAL', 'NORMAL', DIA, 0, 0, { auto: true, color: 'run', entry: 'sensorFaultMode=0; useSubstitute=false;' });
-state('DIAG_OPEN', 'OPEN', DIA, 280, 0, { color: 'warn', entry: 'sensorFaultMode=1; dtcSensor=true; useSubstitute=true;' });
-state('DIAG_SCG', 'SCG', DIA, 280, 140, { color: 'warn', entry: 'sensorFaultMode=2; dtcSensor=true; useSubstitute=true;' });
-state('DIAG_SCB', 'SCB', DIA, 280, 280, { color: 'warn', entry: 'sensorFaultMode=3; dtcSensor=true; useSubstitute=true;' });
-state('DIAG_DRIFT', 'DRIFT', DIA, 0, 280, { color: 'warn', entry: 'sensorFaultMode=4; dtcSensor=true; useSubstitute=true;' });
+state('DIAG_NORMAL', 'NORMAL', DIA, 0, 0, { auto: true, entry: 'sensorFaultMode=0; useSubstitute=false;' });
+state('DIAG_OPEN', 'OPEN', DIA, 280, 0, { entry: 'sensorFaultMode=1; dtcSensor=true; useSubstitute=true;' });
+state('DIAG_SCG', 'SCG', DIA, 280, 140, { entry: 'sensorFaultMode=2; dtcSensor=true; useSubstitute=true;' });
+state('DIAG_SCB', 'SCB', DIA, 280, 280, { entry: 'sensorFaultMode=3; dtcSensor=true; useSubstitute=true;' });
+state('DIAG_DRIFT', 'DRIFT', DIA, 0, 280, { entry: 'sensorFaultMode=4; dtcSensor=true; useSubstitute=true;' });
 accept('d01_scg', 'DIAG_NORMAL', 'DIAG_SCG', null, 'vEctPin<0.18', { order: 0 });
 accept('d02_scb', 'DIAG_NORMAL', 'DIAG_SCB', null, 'vEctPin>5.0', { order: 1 });
 accept('d03_open', 'DIAG_NORMAL', 'DIAG_OPEN', null, 'vEctPin>4.82', { order: 2 });
@@ -229,26 +246,18 @@ for (const [id, from] of [['d05_okOpen', 'DIAG_OPEN'], ['d06_okScg', 'DIAG_SCG']
   accept(id, from, 'DIAG_NORMAL', null, inWindow);
 }
 
-// ---- layers
-const layerOf = new Map(states.map(s => [s.id, s.parentId]));
-const layer = (id: string, name: string, parentStateId: string | null, decomposition: 'OR' | 'AND'): Layer & { decomposition: 'OR' | 'AND' } => ({
-  id, name, parentStateId, decomposition,
-  stateIds: states.filter(s => s.parentId === id).map(s => s.id),
-  transitionIds: transitions.filter(t => layerOf.get(t.sourceId) === id).map(t => t.id),
-  junctionIds: [],
-});
-export const layers = [
-  layer('root', 'MR_PLD_A5414465340_behaviour', null, 'AND'),
-  ...REGIONS.map(([stateId, , layerId]) => layer(layerId, stateId.slice(3), stateId, 'OR')),
-  layer(RUN, 'ST_RUN', 'ST_RUN', 'OR'),
-];
-export const junctions: JunctionData[] = [];
+// ---- the machine as the editor holds it
+export const states: StateData[] = editor.snapshot.states;
+export const transitions: TransitionData[] = editor.snapshot.transitions;
+export const layers: Layer[] = editor.snapshot.layers;
+export const junctions: JunctionData[] = editor.snapshot.junctions;
 
 // ------------------------------------------------------------------- HMI
-type Widget = Record<string, unknown>;
-export const hmiComponents: Widget[] = [];
-const widget = (id: string, type: string, name: string, x: number, y: number, variable: string | null, w = 150, h = 70, extra: Widget = {}) => {
-  hmiComponents.push({ id, type, name, x, y, width: w, height: h, variableId: variable ? `v_${variable}` : null, min: 0, max: 100, ...extra });
+// The HMI Dashboard: a palette entry per widget, then its Properties (name, binding, position, size, ...).
+const dashboard = createHmiDashboard();
+export const hmiComponents = dashboard.components;
+const widget = (_key: string, type: HmiComponentType, name: string, x: number, y: number, variable: string | null, w = 150, h = 70, extra: HmiPanelEdit = {}) => {
+  dashboard.add(type, { name, x, y, width: w, height: h, ...(variable ? { variableId: panel.idOf(variable) } : {}), ...extra });
 };
 // Laid out for the HMI Dashboard window (about 840 px wide): inputs, outputs, active states, trace.
 widget('h_title', 'label', 'MR-PLD A 541 446 53 40 - OM 501 LA', 20, 10, null, 560, 40, { text: 'MR-PLD ECU A 541 446 53 40 (TEMIC 287699.01 B) - OM 501 LA.II/2-00 V6' });
@@ -262,7 +271,7 @@ EVENT_BUTTONS.forEach((event, i) => widget(`h_ev_${event}`, 'pulse-button', even
 widget('h_rpm', 'slider', 'Engine speed [rpm]', 20, 380, 'rpm', 265, 80, { max: 2500, step: 10, precision: 0, unit: 'rpm' });
 widget('h_ect', 'slider', 'Coolant [°C]', 295, 380, 'coolantC', 265, 80, { min: -40, max: 130, step: 1, precision: 0, unit: '°C' });
 widget('h_vect', 'slider', 'ECT pin X2-34 [V]', 570, 380, 'vEctPin', 265, 80, { max: 5.5, step: 0.01, precision: 2, unit: 'V' });
-const LAMPS: Array<[string, string]> = [['powerLatch', 'green'], ['starter', 'orange'], ['injEnable', 'green'], ['engineBrakeValves', 'yellow'],
+const LAMPS: Array<[string, NonNullable<HmiPanelEdit['color']>]> = [['powerLatch', 'green'], ['starter', 'orange'], ['injEnable', 'green'], ['engineBrakeValves', 'yellow'],
   ['speedLimited', 'red'], ['dtcImmo', 'red'], ['driversTristated', 'red'], ['eepromWrite', 'blue'], ['hsGate', 'blue'], ['lsGate', 'blue'],
   ['holdChop', 'blue'], ['cylCutoff', 'red'], ['warnLamp', 'red'], ['dtcSensor', 'red'], ['useSubstitute', 'yellow']];
 LAMPS.forEach(([name, color], i) => widget(`h_out_${name}`, 'lamp', name, 20 + (i % 5) * 165, 480 + Math.floor(i / 5) * 76, name, 155, 66, { color }));
@@ -272,5 +281,5 @@ widget('h_sync', 'lcd', 'SyncMode (0 BOTH 1 CMP 2 CKP 3 NONE)', 440, 715, 'syncM
 widget('h_diag', 'lcd', 'SensorFaultMode (0 OK 1 OPEN 2 SCG 3 SCB 4 DRIFT)', 440, 800, 'sensorFaultMode', 395, 74, { max: 4, precision: 0 });
 const INDICATED = ['ST_STANDBY', 'ST_INIT_IMMO', 'ST_IMMO_LOCKED', 'ST_READY', 'ST_CRANK_SYNC', 'ST_RUN_NORMAL', 'ST_ENGINE_BRAKE',
   'ST_LIMP_DERATE', 'ST_FAULT_SHUTDOWN', 'ST_AFTERRUN', 'INJ_IDLE', 'INJ_PEAK', 'INJ_BIP_WAIT', 'INJ_HOLD', 'INJ_SPILL', 'INJ_CYL_CUTOFF'];
-INDICATED.forEach((stateId, i) => widget(`h_st_${stateId}`, 'active-state-indicator', stateId, 20 + (i % 4) * 205, 890 + Math.floor(i / 4) * 52, null, 195, 44, { stateId }));
-widget('h_scope', 'dashboard-scope', 'Trace', 20, 1105, null, 815, 220, { variableIds: ['v_rpm', 'v_coolantC', 'v_torqueLimitPct', 'v_pv3DutyPct', 'v_syncMode'] });
+INDICATED.forEach((key, i) => widget(`h_st_${key}`, 'active-state-indicator', key, 20 + (i % 4) * 205, 890 + Math.floor(i / 4) * 52, null, 195, 44, { stateId: stateId[key] }));
+widget('h_scope', 'dashboard-scope', 'Trace', 20, 1105, null, 815, 220, { variableIds: ['rpm', 'coolantC', 'torqueLimitPct', 'pv3DutyPct', 'syncMode'].map(panel.idOf) });

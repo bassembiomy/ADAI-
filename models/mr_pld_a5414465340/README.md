@@ -68,6 +68,11 @@ highlighted in the tree when its row is shown (its branch expanded).
 
 ## State machine — one region per behaviour owner
 
+The state machine, its variables and the HMI are built with the editor's own operations
+(`scripts/lib/adiaEditorSession.ts`): states, regions and transitions through the State Machine model-explorer
+commands, their properties only through the fields of the State and Transition panels, variables through the
+Variables panel's Add, HMI widgets from the HMI Dashboard palette with the fields of its Properties panel.
+
 All five regions are orthogonal (parallel) regions of the root, start with the machine and are named
 `<owner block>_<behaviour>` so the generated C identifiers stay valid.
 
@@ -79,7 +84,11 @@ All five regions are orthogonal (parallel) regions of the root, start with the m
 | `ValveAndStarterDrivers_ThermalFanControl` | `ValveAndStarterDrivers` | REQ-THM-08 (PV3 from 92 C, 100 % at 100 C, 103 C warning); raises `OvertempDetected` / `OvertempCleared` |
 | `SensorAFE_SensorDiagnostics` | `SensorAFE` | `enum SensorFaultMode`, REQ-DIAG-07 window 0.18..4.82 V on the B65 ECT pin |
 
-The only safe state is `ST_FAULT_SHUTDOWN`. **Validate** reports no finding and **Generate C/H** produces the code.
+The only safe state is `ST_FAULT_SHUTDOWN`. **Generate C/H** produces the code. **Validate** reports no error and
+four warnings, an ADIA limitation: the State panel keeps one AutoStart state per region even among parallel
+(orthogonal) states, and Validate counts only AutoStart states as entered, so it warns that four of the five
+parallel regions are unreachable. The simulator enters all five (UML: every orthogonal region is active), as the
+scenarios show.
 
 `accept Signal` is a Boolean event variable named after the Signal, consumed by the transition that accepts it
 (a Signal no state accepts is lost); `if guard` stays a guard on the state def attributes; `accept after t` is an

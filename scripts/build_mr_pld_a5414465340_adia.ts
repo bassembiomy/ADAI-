@@ -711,7 +711,7 @@ const interaction = (id: string, name: string, owner: string, lifelines: Array<[
       interactionId: id, id: m.id, sort: 'asynchSignal', sourceLifelineId: ll(id, m.from), targetLifelineId: ll(id, m.to), name: m.signal, signatureId: sig(m.signal),
       ...(m.connector ? { connectorId: m.connector } : {}), ...(m.args ?? ITEM_ATTRIBUTES[m.signal] ? { arguments: m.args ?? ITEM_ATTRIBUTES[m.signal] } : {}),
     }), `message ${m.id}`);
-    if (m.inState && ecuLifeline) applyPlan(buildAddStateInvariantCommand(state.repository, { interactionId: id, id: `inv_${m.id}`, lifelineId: ll(id, ecuLifeline), stateId: m.inState, afterMessageId: m.id }), `invariant ${m.id}`);
+    if (m.inState && ecuLifeline) applyPlan(buildAddStateInvariantCommand(state.repository, { interactionId: id, id: `inv_${m.id}`, lifelineId: ll(id, ecuLifeline), stateId: SM.STATE_ID[m.inState], afterMessageId: m.id }), `invariant ${m.id}`);
   }
   extra(id);
   const sd = `sd_${id.slice(4)}`;
@@ -720,7 +720,7 @@ const interaction = (id: string, name: string, owner: string, lifelines: Array<[
   if (useCaseId) run({ type: 'updateElement', elementId: useCaseId, patch: { behaviorArtifactIds: [...(state.repository.useCases[useCaseId].behaviorArtifactIds ?? []), id] } });
 };
 const firstInvariant = (iid: string, lifeline: string, stateId: string) =>
-  applyPlan(buildAddStateInvariantCommand(state.repository, { interactionId: iid, id: `inv_${iid}_start`, lifelineId: ll(iid, lifeline), stateId, afterMessageId: null }), 'initial invariant');
+  applyPlan(buildAddStateInvariantCommand(state.repository, { interactionId: iid, id: `inv_${iid}_start`, lifelineId: ll(iid, lifeline), stateId: SM.STATE_ID[stateId], afterMessageId: null }), 'initial invariant');
 const C = (id: string) => { if (!state.repository.connectors[id]) throw new Error(`no connector ${id}`); return id; };
 
 // ECU-internal collaboration (referenced from the system-level sequence diagrams)
