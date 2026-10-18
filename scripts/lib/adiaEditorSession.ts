@@ -4,7 +4,7 @@
  *
  *   states, regions, transitions, renames  -> the State Machine model-explorer adapter (its commands)
  *   state / transition properties          -> only the fields the State and Transition panels edit,
- *                                             with the panel's rule that one state per region is AutoStart
+ *                                             with the panel's AutoStart rule (one per region, all parallel states)
  *   variables                              -> the Variables panel's "Add" (name rule, unique name, initial value)
  *   HMI widgets                            -> the HMI Dashboard's palette (createHmiComponent) and the fields its
  *                                             Properties panel edits
@@ -15,6 +15,7 @@ import type { StateMachineExplorerSnapshot } from '../../src/utils/stateMachine/
 import type { StateData, TransitionData, VariableDef, VariableType } from '../../src/types/sm_types';
 import { validateInitialValue } from '../../src/utils/stateMachineCodeGenerator';
 import { createHmiComponent } from '../../src/features/hmi/hmiCatalog';
+import { applyAutostartEdit } from '../../src/utils/stateMachine/smOrthogonalRegions';
 import type { HmiComponent, HmiComponentType } from '../../src/types/sysml_types';
 
 /** State panel fields, plus the geometry a state gets by moving / resizing it on the canvas. */
@@ -50,17 +51,10 @@ export function createStateMachineEditor() {
 
   const editState = (id: string, edit: StatePanelEdit) => {
     only(edit, STATE_FIELDS, 'state');
-    const target = snapshot.states.find(s => s.id === id);
-    if (!target) throw new Error(`no state ${id}`);
-    snapshot = {
-      ...snapshot,
-      states: snapshot.states.map(s => {
-        if (s.id === id) return { ...s, ...edit };
-        // the panel keeps one AutoStart state per region
-        if (edit.autostart && s.parentId === target.parentId && s.autostart) return { ...s, autostart: false };
-        return s;
-      }),
-    };
+    if (!snapshot.states.some(s => s.id === id)) throw new Error(`no state ${id}`);
+    const states = snapshot.states.map(s => s.id === id ? { ...s, ...edit } : s);
+    // the panel keeps one AutoStart state per region, except among parallel states
+    snapshot = { ...snapshot, states: edit.autostart ? applyAutostartEdit(states, id, true) : states };
   };
   const editTransition = (id: string, edit: TransitionPanelEdit) => {
     only(edit, TRANSITION_FIELDS, 'transition');

@@ -84,11 +84,9 @@ All five regions are orthogonal (parallel) regions of the root, start with the m
 | `ValveAndStarterDrivers_ThermalFanControl` | `ValveAndStarterDrivers` | REQ-THM-08 (PV3 from 92 C, 100 % at 100 C, 103 C warning); raises `OvertempDetected` / `OvertempCleared` |
 | `SensorAFE_SensorDiagnostics` | `SensorAFE` | `enum SensorFaultMode`, REQ-DIAG-07 window 0.18..4.82 V on the B65 ECT pin |
 
-The only safe state is `ST_FAULT_SHUTDOWN`. **Generate C/H** produces the code. **Validate** reports no error and
-four warnings, an ADIA limitation: the State panel keeps one AutoStart state per region even among parallel
-(orthogonal) states, and Validate counts only AutoStart states as entered, so it warns that four of the five
-parallel regions are unreachable. The simulator enters all five (UML: every orthogonal region is active), as the
-scenarios show.
+The only safe state is `ST_FAULT_SHUTDOWN`. **Validate** reports no finding and **Generate C/H** produces the code.
+The five regions are parallel states of the root, all AutoStart: entering the machine enters every orthogonal
+region (SysML 1.6 / UML 2.5 §14.2.3.4.3).
 
 `accept Signal` is a Boolean event variable named after the Signal, consumed by the transition that accepts it
 (a Signal no state accepts is lost); `if guard` stays a guard on the state def attributes; `accept after t` is an

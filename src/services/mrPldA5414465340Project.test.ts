@@ -10,6 +10,7 @@ import { projectStateEndpoints } from '../engine/sysml/workers/projectIoPayload'
 import type { BlockDefinition, InteractionDefinition } from '../engine/sysml/model';
 import { normalizeHmiComponents } from '../features/hmi/hmiModel';
 import { generateMISRACCode } from '../utils/stateMachineCodeGenerator';
+import { findUnreachableStates } from '../utils/stateMachine/smOrthogonalRegions';
 import { fromRepository } from '../engine/sysml/normalizedStore';
 import { buildUnifiedModelProjection } from '../features/modelExplorer/unifiedModelExplorerProjection';
 import {
@@ -140,13 +141,10 @@ function appValidationFindings(p: typeof project): string[] {
     const orders = list.map(t => t.order);
     if (new Set(orders).size < orders.length) findings.push(`same priority from ${nameOf(source)}`);
   }
-  const reached = new Set<string>(states.filter((x: { autostart: boolean }) => x.autostart).map((x: { id: string }) => x.id));
-  for (let grew = true; grew;) {
-    grew = false;
-    for (const t of transitions) if (reached.has(t.sourceId) && !reached.has(t.targetId)) { reached.add(t.targetId); grew = true; }
-  }
+  // the Validate button's reachability rule
+  const unreachable = new Set(findUnreachableStates(states, transitions).map(st => st.id));
   for (const st of states) {
-    if (!reached.has(st.id)) findings.push(`unreachable ${st.name}`);
+    if (unreachable.has(st.id)) findings.push(`unreachable ${st.name}`);
     if (!transitions.some((t: { sourceId: string }) => t.sourceId === st.id) && !(st.internalTransitions ?? '').trim() && !st.isSafeState && !st.isTerminalState) findings.push(`dead end ${st.name}`);
   }
   const generated = generateMISRACCode({ tickMs: p.tickMs, states, junctions: p.junctions, transitions, variables, layers, safetyMode: p.safetyMode, hilConfig: { enabled: false, mappings: [], channels: [] } } as never);
@@ -342,13 +340,9 @@ describe('MR_PLD_A5414465340.adia', () => {
   });
 
   it("passes the app's Validate button with no error or warning, and generates MISRA C code", () => {
-    // ADIA limitation: the State panel keeps one AutoStart state per region even among parallel (orthogonal)
-    // states, and Validate counts only AutoStart states as entered, so it warns on the other parallel regions,
-    // which the simulator does enter (the scenarios below run all five).
-    expect(appValidationFindings(project)).toEqual([
-      'unreachable MR_PLD_ECU_OperatingStates', 'unreachable PLD_C1_1_InjectionMicroCycle',
-      'unreachable SAK_C167CS_LM_SyncSupervisor', 'unreachable ValveAndStarterDrivers_ThermalFanControl',
-    ]);
+    expect(appValidationFindings(project)).toEqual([]);
+    // all five orthogonal regions are AutoStart, as entering the machine enters each of them
+    expect(project.states.filter((st: { parentId: string; autostart: boolean }) => st.parentId === 'root' && st.autostart)).toHaveLength(5);
     for (const state of project.states) expect(state.name, state.id).toMatch(/^[A-Za-z_]\w*$/);
     expect(project.states.filter((st: { isSafeState?: boolean }) => st.isSafeState).map((st: { name: string }) => st.name)).toEqual(['ST_FAULT_SHUTDOWN']);
   });

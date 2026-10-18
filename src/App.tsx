@@ -64,6 +64,7 @@ import {
 import { createStateMachineClipboard, pasteStateMachineClipboard, StateMachineClipboardData } from './utils/stateMachineClipboard';
 import { pruneStateHierarchy, pruneMultipleStatesHierarchy, countDescendants } from './utils/stateMachine/smStatePruner';
 import { generateMISRACCode, getCTimeType, validateInitialValue } from './utils/stateMachineCodeGenerator';
+import { applyAutostartEdit, findUnreachableStates } from './utils/stateMachine/smOrthogonalRegions';
 import { coerceTypedValue } from './utils/stateMachine/smTypedValue';
 import { isInputFocused } from './utils/domUtils';
 import { validateImportedJson, ValidationResult } from './utils/jsonImportValidator';
@@ -8180,38 +8181,15 @@ const ADIA = () => {
       priorities.forEach((group, order) => { if (group.length > 1) group.forEach(t => newErrors.push({ id: uuidv4(), type: 'warning', message: `Multiple transitions from '${sourceName}' have the same priority (${order}). Execution order may be non-deterministic.`, timestamp: new Date(), source: 'Validation', elementId: t.id })); });
     });
 
-    const reachable = new Set<string>();
-    const queue = states.filter(s => s.autostart).map(s => s.id);
-
-    if (queue.length === 0 && states.length > 0) {
-      queue.push(states[0].id);
-    }
-
-    queue.forEach(id => reachable.add(id));
-
-    let head = 0;
-    while (head < queue.length) {
-      const currentId = queue[head++];
-      const outgoing = transitions.filter(t => t.sourceId === currentId);
-      outgoing.forEach(t => {
-        if (!reachable.has(t.targetId)) {
-          reachable.add(t.targetId);
-          queue.push(t.targetId);
-        }
+    findUnreachableStates(states, transitions).forEach(s => {
+      newErrors.push({
+        id: uuidv4(),
+        type: 'warning',
+        message: `State '${s.name}' appears to be unreachable. Tip: Ensure there is a transition path from an initial state to this state, or mark it as 'Auto-start'.`,
+        timestamp: new Date(),
+        source: 'Validation',
+        elementId: s.id
       });
-    }
-
-    states.forEach(s => {
-      if (!reachable.has(s.id)) {
-        newErrors.push({
-          id: uuidv4(),
-          type: 'warning',
-          message: `State '${s.name}' appears to be unreachable. Tip: Ensure there is a transition path from an initial state to this state, or mark it as 'Auto-start'.`,
-          timestamp: new Date(),
-          source: 'Validation',
-          elementId: s.id
-        });
-      }
     });
 
     states.forEach(s => {
@@ -8927,14 +8905,8 @@ const ADIA = () => {
   const updateState = useCallback((id: string, updates: Partial<StateData>) => {
     setStates(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s));
     if (updates.autostart) {
-      setStates(prev => {
-        const target = prev.find(s => s.id === id);
-        if (!target) return prev;
-        return prev.map(s => {
-          if (s.id !== id && s.parentId === target.parentId && s.autostart) return { ...s, autostart: false };
-          return s;
-        });
-      });
+      // one AutoStart state per region, except among parallel states (orthogonal regions are all entered)
+      setStates(prev => applyAutostartEdit(prev, id, true));
       setJunctions(prev => {
         const targetState = states.find(s => s.id === id);
         if (!targetState) return prev;
