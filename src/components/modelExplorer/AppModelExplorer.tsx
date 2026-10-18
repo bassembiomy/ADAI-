@@ -45,7 +45,6 @@ import {
 } from '../../features/modelExplorer/modelExplorerMultiSelect';
 import { projectModelTree } from '../../features/modelExplorer/modelExplorerProjection';
 import { buildUnifiedModelProjection } from '../../features/modelExplorer/unifiedModelExplorerProjection';
-import { expandedIdsToReveal } from '../../features/modelExplorer/revealInTree';
 import type { ExternalModelDescriptor } from '../../features/modelExplorer/unifiedModelExplorerProjection';
 import { resolveDiagramSemanticOwner } from '../../features/modelExplorer/diagramTreeContext';
 import { getDiagramKindLabel, getElementKindLabel } from '../../features/modelExplorer/modelExplorerCapabilities';
@@ -568,19 +567,17 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
     });
   }, [diagramPresentations, expandedNodeIds, externalModels, smAdapter, stateMachineSnapshot, sysmlAdapter, sysmlRepository, sysmlStore]);
 
-  // A nested part selected on an IBD is a property path ("ecu/core/mcu"); its tree row is the last property.
-  const treeSelectedIds = useMemo(() => selectedIds.map(id => (id.includes('/') ? id.slice(id.lastIndexOf('/') + 1) : id)), [selectedIds]);
   const selectedNodeIds = useMemo(() => {
     const set = new Set<string>();
-    const selSet = new Set(treeSelectedIds);
-    for (const id of treeSelectedIds) {
+    const selSet = new Set(selectedIds);
+    for (const id of selectedIds) {
       if (projection.nodes[id]) set.add(id);
       const sysmlId = `sysml:element:${id}`;
       if (projection.nodes[sysmlId]) set.add(sysmlId);
       const smId = `sm:state:${id}`;
       if (projection.nodes[smId]) set.add(smId);
     }
-    if (set.size < treeSelectedIds.length) {
+    if (set.size < selectedIds.length) {
       for (const nodeId in projection.nodes) {
         const node = projection.nodes[nodeId];
         if (selSet.has(node.semanticId) || selSet.has(nodeId)) {
@@ -589,27 +586,7 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
       }
     }
     return set;
-  }, [projection.nodes, treeSelectedIds]);
-
-  // Reveal what is selected on the canvas: expand the tree down to its rows. Runs on a change of
-  // selection only, so collapsing a folder afterwards is respected.
-  const revealInputRef = React.useRef({ sysmlRepository, sysmlStore, stateMachineSnapshot, externalModels, diagramPresentations, expandedNodeIds });
-  revealInputRef.current = { sysmlRepository, sysmlStore, stateMachineSnapshot, externalModels, diagramPresentations, expandedNodeIds };
-  const selectedKey = treeSelectedIds.join('|');
-  useEffect(() => {
-    if (treeSelectedIds.length === 0 || treeSelectedIds.length > 50) return;
-    const current = revealInputRef.current;
-    const next = expandedIdsToReveal({
-      sysml: current.sysmlRepository,
-      sysmlStore: current.sysmlStore,
-      stateMachine: current.stateMachineSnapshot,
-      externalModels: current.externalModels,
-      revision: current.sysmlStore?.revision ?? 0,
-      diagramPresentations: current.diagramPresentations,
-    }, treeSelectedIds, current.expandedNodeIds);
-    if (next !== current.expandedNodeIds) setExpandedNodeIds(new Set(next));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedKey]);
+  }, [projection.nodes, selectedIds]);
 
   const handleSelectNode = useCallback(
     (node: ModelTreeNode, multiSelect?: boolean, rangeSelect?: boolean) => {

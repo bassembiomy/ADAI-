@@ -7,12 +7,12 @@
  *
  *   attribute def / enum def   -> ValueTypes / Enumerations («modelLibrary» Types, Identification, Signals)
  *   item def                   -> Signals (the payload of every item flow and sequence message)
- *   port def / interface def   -> InterfaceBlocks; X1 (16) / X2 (55) are ports with one nested port per pin
+ *   port def / interface def   -> InterfaceBlocks; every wired X1 / X2 pin is a proxy port of MR_PLD_ECU
  *   part def                   -> Blocks with values, parts (+ composition), proxy ports, operations, receptions
  *   :>> redefinitions          -> redefining value properties on the specialised component / sensor blocks
  *   connect / interface / flow -> IBD connectors of OM501LA_EngineSystem, MR_PLD_ECU and its subsystems
  *   requirement def / satisfy  -> Requirements (+ per-block derived requirements) and one requirements diagram per block
- *   constraint def / calc def  -> ConstraintBlocks; SensorChainContext + MR_PLD_ECU parametric diagrams
+ *   constraint def / calc def  -> ConstraintBlocks (BDD 12; ADIA has no parametric canvas)
  *   state def                  -> the executable state machine (scripts/mr_pld_a5414465340_behaviour.ts)
  *   action def                 -> Activities with swimlanes allocated to the blocks
  *   occurrence def (sd)        -> Interactions + sequence diagrams over the IBD connectors
@@ -25,9 +25,9 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createSysmlGatewayState, executeSysmlCommand, type SysmlEditorCommand, type SysmlGatewayState } from '../src/services/sysmlCommandGateway';
+import { createSysmlGatewayState, executeSysmlCommand, type SysmlEditorCommand, type SysmlElement, type SysmlGatewayState } from '../src/services/sysmlCommandGateway';
 import { buildCreatePathIbdConnectorCommand } from '../src/services/sysmlIbdConnectorCommands';
-import { buildCreateParametricBindingCommand } from '../src/services/sysmlParametricCommands';
+import { buildRelationshipUpdateCommand } from '../src/services/sysmlPropertyCommands';
 import { buildCreateUseCaseRelationshipCommand } from '../src/services/sysmlUseCaseCommands';
 import { buildCreateAllocationCommand } from '../src/services/sysmlAllocationCommands';
 import {
@@ -38,11 +38,11 @@ import {
   buildAddLifelineCommand, buildAddStateInvariantCommand, type InteractionCommandPlan,
 } from '../src/services/sysmlInteractionCommands';
 import {
-  createActivity, createActor, createDiagramDefinition, createInteraction, createRequirement, createSubject, createUseCase,
-  createVerificationCase,
+  createActivity, createActor, createBlock, createConstraintBlock, createDiagramDefinition, createEnumeration, createInteraction, createInterface,
+  createPackage, createQuantityKind, createRequirement, createSignal, createSubject, createUnit, createUseCase, createValueType, createVerificationCase,
 } from '../src/features/modelExplorer/adapters/modelExplorerFactories';
 import {
-  createEmptyRepository, type BlockDefinition, type Multiplicity, type PortDefinition, type PropertyDefinition, type SysmlRepository,
+  createEmptyRepository, type BlockDefinition, type Multiplicity, type PortDefinition, type PropertyDefinition,
 } from '../src/engine/sysml/model';
 import { serializeSysmlProjectState } from '../src/engine/sysml/persistence';
 import { getCachedLegacyView } from '../src/engine/sysml/normalizedStore';
@@ -86,7 +86,17 @@ const between = (text: string, start: string, end: string) => {
   return text.slice(from, to < 0 ? undefined : to);
 };
 
-const repo: SysmlRepository = createEmptyRepository();
+// Every element is created the way the editor creates it: model-explorer factories + gateway commands
+// (createElement, createOwnedFeature, updateElement with the fields the property panel edits).
+let state: SysmlGatewayState = createSysmlGatewayState(createEmptyRepository(), {}, {}, undefined, stateContext);
+const run = (command: SysmlEditorCommand, diagramId?: string) => {
+  const result = executeSysmlCommand(state, command, diagramId, stateContext);
+  if (!result.committed) throw new Error(`${command.type} rejected: ${JSON.stringify(result.diagnostics.slice(0, 3))}`);
+  state = { ...state, ...result } as SysmlGatewayState;
+};
+const create = (element: SysmlElement) => run({ type: 'createElement', element });
+const update = (elementId: string, patch: Record<string, unknown>) => run({ type: 'updateElement', elementId, patch });
+const R = () => state.repository;
 const NS = 'MercedesBenz_MR_PLD_A5414465340';
 const P = {
   root: 'pkg_MR_PLD', types: 'pkg_Types', ident: 'pkg_Identification', signals: 'pkg_Signals', ifaces: 'pkg_Interfaces',
@@ -94,47 +104,48 @@ const P = {
   beh: 'pkg_OperationalBehavior', sd: 'pkg_Interactions', ana: 'pkg_AnalysisAndSimulation', trace: 'pkg_Traceability',
   variants: 'pkg_Variants', views: 'pkg_Views', uc: 'pkg_UseCases',
 };
-repo.packages[P.root] = { id: P.root, kind: 'package', name: NS, namespace: [], ownerId: 'model' };
+create(createPackage({ id: P.root, name: NS, ownerId: 'model' }));
 const PACKAGE_NAMES: Array<[string, string, 'modelLibrary'?]> = [
   [P.types, '00_Types', 'modelLibrary'], [P.ident, '01_Identification'], [P.signals, '02_Signals'], [P.ifaces, '03_Interfaces'],
   [P.reqs, '04_Requirements'], [P.hw, '05_HardwareStructure'], [P.ibd, '06_InternalStructure'], [P.par, '07_Parametrics'],
   [P.beh, '08_OperationalBehavior'], [P.sd, '09_Interactions'], [P.ana, '10_AnalysisAndSimulation'], [P.trace, '11_Traceability'],
   [P.variants, '12_Variants'], [P.views, '13_Views'], [P.uc, '14_UseCases'],
 ];
-for (const [id, name, stereotype] of PACKAGE_NAMES) {
-  repo.packages[id] = { id, kind: 'package', name, namespace: [NS], ownerId: P.root, ...(stereotype ? { stereotype } : {}) };
-}
-const ns = (pkgId: string) => [NS, repo.packages[pkgId].name];
+for (const [id, name, stereotype] of PACKAGE_NAMES) create(createPackage({ id, name, ownerId: P.root, stereotype }));
+const ns = (pkgId: string) => [NS, R().packages[pkgId].name];
 
 // ------------------------------------------- 00 Types: ScalarValues / ISQ / SI
 const QK: Array<[string, string, string]> = [
   ['qk_ElectricPotential', 'ElectricPotential', 'U'], ['qk_ElectricCurrent', 'ElectricCurrent', 'I'], ['qk_Frequency', 'Frequency', 'f'],
 ];
-for (const [id, name, symbol] of QK) repo.definitions[id] = { id, kind: 'quantityKind', name, symbol, namespace: ns(P.types), ownerId: P.types };
+for (const [id, name, symbol] of QK) create(createQuantityKind({ id, name, ownerId: P.types, symbol }));
 const UNITS: Array<[string, string, string, string]> = [['u_V', 'volt', 'V', 'qk_ElectricPotential'], ['u_A', 'ampere', 'A', 'qk_ElectricCurrent'], ['u_Hz', 'hertz', 'Hz', 'qk_Frequency']];
-for (const [id, name, symbol, quantityKindId] of UNITS) repo.definitions[id] = { id, kind: 'unit', name, symbol, quantityKindId, namespace: ns(P.types), ownerId: P.types };
-const VT: Array<[string, string, string?, string?, string?]> = [
+for (const [id, name, symbol, quantityKindId] of UNITS) create(createUnit({ id, name, ownerId: P.types, symbol, quantityKindId }));
+const VT: Array<[string, string, string?, string?]> = [
   ['vt_Real', 'Real'], ['vt_Integer', 'Integer'], ['vt_Boolean', 'Boolean'], ['vt_String', 'String'],
-  ['vt_ElectricPotentialValue', 'ElectricPotentialValue', 'u_V', 'qk_ElectricPotential', 'V'],
-  ['vt_ElectricCurrentValue', 'ElectricCurrentValue', 'u_A', 'qk_ElectricCurrent', 'A'],
-  ['vt_FrequencyValue', 'FrequencyValue', 'u_Hz', 'qk_Frequency', 'Hz'],
+  ['vt_ElectricPotentialValue', 'ElectricPotentialValue', 'u_V', 'qk_ElectricPotential'],
+  ['vt_ElectricCurrentValue', 'ElectricCurrentValue', 'u_A', 'qk_ElectricCurrent'],
+  ['vt_FrequencyValue', 'FrequencyValue', 'u_Hz', 'qk_Frequency'],
 ];
-for (const [id, name, unitId, quantityKindId, unit] of VT) {
-  repo.definitions[id] = { id, kind: 'valueType', name, namespace: ns(P.types), ownerId: P.types, ...(unitId ? { unitId, unit, quantityKindId } : {}) };
+for (const [id, name, unitId, quantityKindId] of VT) {
+  create(createValueType({ id, name, ownerId: P.types }));
+  if (unitId) update(id, { unitId, quantityKindId }); // the inspector's Unit / Quantity Kind pickers
 }
 // 01 Identification: attribute def ECU_Label, enum def EngineVariant
-repo.definitions.vt_ECU_Label = { id: 'vt_ECU_Label', kind: 'valueType', name: 'ECU_Label', namespace: ns(P.ident), ownerId: P.ident };
+create(createValueType({ id: 'vt_ECU_Label', name: 'ECU_Label', ownerId: P.ident }));
 const ENUMS: Array<[string, string, string[]]> = [
   [P.ident, 'EngineVariant', ['OM501LA_V6', 'OM502LA_V8']],
   [P.signals, 'KeyState', ['OFF', 'IGN', 'CRANK', 'RUN', 'BRAKE']], [P.signals, 'SyncMode', ['BOTH', 'CMP_ONLY', 'CKP_ONLY', 'NONE']],
   [P.signals, 'Severity', ['CRITICAL', 'DERATE', 'WARNING', 'DRIFT']], [P.signals, 'SensorFaultMode', ['NORMAL', 'OPEN', 'SCG', 'SCB', 'DRIFT']],
   [P.signals, 'PinDirection', ['IN', 'OUT', 'INOUT', 'GND', 'NC']], [P.signals, 'InjectionPhase', ['IDLE', 'PEAK', 'BIP_WAIT', 'HOLD', 'SPILL']],
 ];
-for (const [pkg, name, literals] of ENUMS) repo.definitions[`enum_${name}`] = { id: `enum_${name}`, kind: 'enumeration', name, literals, namespace: ns(pkg), ownerId: pkg };
+for (const [pkg, name, literals] of ENUMS) create(createEnumeration({ id: `enum_${name}`, name, ownerId: pkg, literals }));
+// A value property is typed by a ValueType (the editor refuses an Enumeration), so enum-valued attributes are
+// String values whose default is the literal of the source.
 const TYPE: Record<string, string> = {
   Real: 'vt_Real', Integer: 'vt_Integer', Boolean: 'vt_Boolean', String: 'vt_String', ElectricPotentialValue: 'vt_ElectricPotentialValue',
   ElectricCurrentValue: 'vt_ElectricCurrentValue', FrequencyValue: 'vt_FrequencyValue', ECU_Label: 'vt_ECU_Label',
-  EngineVariant: 'enum_EngineVariant', KeyState: 'enum_KeyState', Severity: 'enum_Severity', PinDirection: 'enum_PinDirection',
+  EngineVariant: 'vt_String', KeyState: 'vt_String', Severity: 'vt_String', PinDirection: 'vt_String',
 };
 const typeId = (name: string) => { const id = TYPE[name]; if (!id) throw new Error(`unknown type ${name}`); return id; };
 
@@ -146,9 +157,9 @@ const SIGNALS = ['KL15_On', 'KL15_Off', 'KL50_CrankRequest', 'BlockStartButton',
   'VrToothPulse', 'FaultRecord', 'ElectricalPower', 'Fuel'];
 for (const name of SIGNALS) {
   if (!new RegExp(`item def ${name}\\b`).test(SOURCE)) throw new Error(`item def ${name} missing in the source`);
-  repo.definitions[`sig_${name}`] = { id: `sig_${name}`, kind: 'signal', name, namespace: ns(P.signals), ownerId: P.signals };
+  create(createSignal({ id: `sig_${name}`, name, ownerId: P.signals }));
 }
-const sig = (name: string) => { const id = `sig_${name}`; if (!repo.definitions[id]) throw new Error(`unknown signal ${name}`); return id; };
+const sig = (name: string) => { const id = `sig_${name}`; if (!R().definitions[id]) throw new Error(`unknown signal ${name}`); return id; };
 /** Attributes of the item defs that carry data (Signals have no attributes in the ADIA metamodel: shown as message arguments). */
 const ITEM_ATTRIBUTES: Record<string, string> = {
   CanFrame: 'identifier, dlc', ImmoReleaseFrame: 'identifier, dlc, authCode', TorqueRequestFrame: 'identifier, dlc, pedalPct',
@@ -159,30 +170,23 @@ const ITEM_ATTRIBUTES: Record<string, string> = {
 // ------------------------------------------------ 03 Interfaces (port defs)
 const interfaceIds: Record<string, string> = {};
 const nominal: Record<string, PortDefinition['direction']> = {};
-const iface = (name: string, direction: PortDefinition['direction'], features: string[]) => {
+const iface = (name: string, direction: PortDefinition['direction']) => {
   const id = `if_${name}`;
-  repo.definitions[id] = { id, kind: 'interface', name, features, namespace: ns(P.ifaces), ownerId: P.ifaces };
+  create(createInterface({ id, name, ownerId: P.ifaces }));
   interfaceIds[name] = id;
   nominal[id] = direction;
 };
-iface('SupplyPort', 'out', ['out voltage : ElectricPotentialValue', 'out power : ElectricalPower']);
-iface('GroundPort', 'inout', []);
-iface('AnalogSignalPort', 'out', ['out voltage : ElectricPotentialValue']);
-iface('VRSignalPort', 'out', ['out vpp : ElectricPotentialValue', 'out frequency : FrequencyValue', 'out tooth : VrToothPulse']);
-iface('DigitalInputPort', 'out', ['out active : Boolean']);
-iface('CanPort', 'inout', ['bitRate : Real = 250000.0', 'inout canFrame : CanFrame']);
-iface('KLinePort', 'inout', ['protocol : String = "ISO 14230 (KWP2000)"']);
-iface('SolenoidDrivePort', 'out', ['out current : ElectricCurrentValue']);
-iface('ValveDrivePort', 'out', ['out dutyCyclePct : Real']);
-iface('RelayDrivePort', 'out', ['out energised : Boolean']);
-iface('GateDrivePort', 'out', ['out gateOn : Boolean', 'out trigger : SoiTrigger']);
-iface('CurrentSensePort', 'out', ['out senseVoltage : ElectricPotentialValue']);
-iface('MemoryBusPort', 'inout', ['widthBits : Integer']);
-iface('SerialMemoryPort', 'inout', ['protocol : String = "Microwire"']);
-iface('FuelPort', 'inout', ['inout fuel : Fuel']);
-iface('ConnectorPin', 'inout', ['pinNo : Integer', 'direction : PinDirection', 'signalName : String', 'function : String', 'testValue : String']);
+// port defs (the direction is the one a port typed by it has; conjugated ports reverse it)
+for (const [name, direction] of [['SupplyPort', 'out'], ['GroundPort', 'inout'], ['AnalogSignalPort', 'out'], ['VRSignalPort', 'out'],
+  ['DigitalInputPort', 'out'], ['CanPort', 'inout'], ['KLinePort', 'inout'], ['SolenoidDrivePort', 'out'], ['ValveDrivePort', 'out'],
+  ['RelayDrivePort', 'out'], ['GateDrivePort', 'out'], ['CurrentSensePort', 'out'], ['MemoryBusPort', 'inout'], ['SerialMemoryPort', 'inout'],
+  ['FuelPort', 'inout'], ['ConnectorPin', 'inout'], ['X1_CabConnector16', 'inout'], ['X2_EngineConnector55', 'inout'],
+  // interface defs (connection definitions)
+  ['CanBusLink', 'inout'], ['AnalogSensorLink', 'inout'], ['VRSensorLink', 'inout'], ['SolenoidLink', 'inout'], ['ValveLink', 'inout'],
+  ['SupplyLink', 'inout']] as const) iface(name, direction);
 
-// X1 / X2 pin tables, read from the port defs of the source
+// X1 / X2 pin tables of the source port defs: every pin a harness wire or a driver output reaches is a port of
+// MR_PLD_ECU named <connector>_<pin>_<signal> (X2_19_CKP_SIG)
 interface Pin { no: number; dir: string; signal: string; fn: string; test: string }
 const pinsOf = (portDef: string): Pin[] => {
   const body = between(SOURCE, `port def ${portDef}`, '\n        }\n');
@@ -193,16 +197,13 @@ const X1 = pinsOf('X1_CabConnector16');
 const X2 = pinsOf('X2_EngineConnector55');
 if (X1.length !== 16 || X2.length !== 55) throw new Error(`pin tables: X1 ${X1.length}, X2 ${X2.length}`);
 const pinName = (no: number) => `pin_${String(no).padStart(2, '0')}`;
-const pinFeature = (p: Pin) => `port ${pinName(p.no)} : ${p.dir} ${p.signal} - ${p.fn} - ${p.test}`;
-iface('X1_CabConnector16', 'inout', X1.map(pinFeature));
-iface('X2_EngineConnector55', 'inout', X2.map(pinFeature));
-// interface defs (connection definitions)
-iface('CanBusLink', 'inout', ['end port nodeA : CanPort', 'end port nodeB : CanPort', 'IES-CAN 250 kbit/s, 120 Ohm termination per node end']);
-iface('AnalogSensorLink', 'inout', ['end port sensor : AnalogSignalPort', 'end port ecu : ~AnalogSignalPort']);
-iface('VRSensorLink', 'inout', ['end port sensor : VRSignalPort', 'end port ecu : ~VRSignalPort']);
-iface('SolenoidLink', 'inout', ['end port driver : SolenoidDrivePort', 'end port coil : ~SolenoidDrivePort']);
-iface('ValveLink', 'inout', ['end port driver : ValveDrivePort', 'end port valve : ~ValveDrivePort']);
-iface('SupplyLink', 'inout', ['end port source : SupplyPort', 'end port sink : ~SupplyPort']);
+// the pins the source wires: harness connects of the engine system and the pin functions of the drivers
+const DRIVER_PINS = [['x2.pin_18', 'starterOut'], ['x1.pin_12', 'starterOut'], ['x2.pin_51', 'pvOut'], ['x2.pin_50', 'pvOut'],
+  ['x2.pin_41', 'pvOut'], ['x2.pin_43', 'pvOut'], ['x1.pin_14', 'pvOut'], ['x1.pin_16', 'pvOut']] as const;
+const WIRED_PINS = new Set([
+  ...[...between(SOURCE, 'part engineSystem : OM501LA_EngineSystem {', '\n        }\n').matchAll(/ecu\.(x[12]\.pin_\d+)/g)].map(m => m[1]),
+  ...DRIVER_PINS.map(([pin]) => pin),
+]);
 
 /**
  * The interface each pin carries. In the source every pin is a ConnectorPin; the pins a harness connector
@@ -221,144 +222,115 @@ const PIN_TYPE: Record<string, Record<number, string>> = {
     52: 'SupplyPort', 53: 'SolenoidDrivePort', 54: 'SolenoidDrivePort' },
 };
 
-const port = (owner: string, name: string, type: string, multiplicity = '1', ownerPortId?: string): PortDefinition => {
-  const tid = interfaceIds[type.replace('~', '')];
-  if (!tid) throw new Error(`unknown port type ${type}`);
-  return {
-    id: ownerPortId ? `${ownerPortId}.${name}` : `${owner}.${name}`, name, kind: 'proxy', portKind: 'proxyPort', typeId: tid,
-    direction: nominal[tid], isConjugated: type.startsWith('~'), multiplicity: mult(multiplicity),
-    ...(ownerPortId ? { ownerPortId, nestedPortPathIds: [ownerPortId, `${ownerPortId}.${name}`] } : {}),
-  };
-};
-
 // ------------------------------------------------------------------- blocks
 type Value = [name: string, type: string, defaultValue?: string | number, multiplicity?: string];
 interface BlockSpec {
-  name: string; pkg: string; abstract?: boolean; general?: string; doc?: string;
+  name: string; pkg: string; abstract?: boolean; general?: string;
   values?: Value[]; redefines?: Array<[string, string | number]>; parts?: Array<[string, string, string?]>;
-  ports?: Array<[string, string, string?]>; operations?: string[]; receptions?: string[]; constraints?: string[];
+  ports?: Array<[string, string, string?]>; operations?: string[]; receptions?: string[];
 }
 const blockId = (name: string) => `blk_${name}`;
-/** A block description as compartment lines of at most `width` characters (the canvas does not wrap). */
-const wrap = (text: string, width: number): string[] => {
-  const lines: string[] = [];
-  let line = '';
-  for (const word of text.split(/\s+/)) {
-    if (line && line.length + word.length + 1 > width) { lines.push(line); line = word; } else line = line ? `${line} ${word}` : word;
-  }
-  return line ? [...lines, line] : lines;
-};
 const compositions: Array<[owner: string, type: string, role: string, multiplicity: string]> = [];
-const generalizations: Array<[string, string]> = [];
-const value = (owner: string, [name, type, defaultValue, multiplicity]: Value): PropertyDefinition => ({
-  id: `${owner}.${name}`, name, kind: 'value', typeId: typeId(type), multiplicity: mult(multiplicity),
-  ...(defaultValue !== undefined ? { defaultValue: String(defaultValue) } : {}),
-});
-const findValue = (general: string, name: string): PropertyDefinition => {
-  const def = repo.definitions[blockId(general)] as BlockDefinition;
-  const found = def.properties.find(p => p.name === name);
-  if (!found) throw new Error(`${general} has no ${name} to redefine`);
-  return found;
+/** A proxy port as "+ Proxy" on the block creates it, then typed / conjugated / directed in the port editor. */
+const addPort = (owner: string, id: string, name: string, type: string, multiplicity = '1') => {
+  const tid = interfaceIds[type.replace('~', '')];
+  if (!tid) throw new Error(`unknown port type ${type}`);
+  run({ type: 'createOwnedFeature', intent: { featureKind: 'port', ownerBlockId: owner, portKind: 'proxyPort', typeId: tid, name, featureId: id } });
+  const block = R().definitions[owner] as BlockDefinition;
+  update(owner, { ports: block.ports.map(p => p.id === id ? { ...p, direction: nominal[tid], isConjugated: type.startsWith('~'), multiplicity: mult(multiplicity) } : p) });
 };
 const block = (spec: BlockSpec) => {
   const id = blockId(spec.name);
-  const properties: PropertyDefinition[] = [
-    ...(spec.redefines ?? []).map(([name, v]) => {
-      const inherited = findValue(spec.general!, name);
-      return { ...inherited, id: `${id}.${name}`, defaultValue: String(v), redefinesId: inherited.id };
-    }),
-    ...(spec.values ?? []).map(v => value(id, v)),
-    ...(spec.parts ?? []).map(([name, type, m]) => {
-      compositions.push([id, blockId(type), name, m ?? '1']);
-      return { id: `${id}.${name}`, name, kind: 'part' as const, typeId: blockId(type), multiplicity: mult(m) };
-    }),
-  ];
-  const def: BlockDefinition = {
-    id, kind: 'block', name: spec.name, namespace: ns(spec.pkg), ownerId: spec.pkg, isAbstract: spec.abstract ?? false, isLeaf: false,
-    properties, ports: (spec.ports ?? []).map(([name, type, m]) => port(id, name, type, m)), operations: spec.operations ?? [],
-    constraints: [...(spec.doc ? wrap(spec.doc, 60) : []), ...(spec.constraints ?? [])],
-    ...(spec.receptions ? { receptions: spec.receptions.map(sig) } : {}),
-  };
-  repo.definitions[id] = def;
-  if (spec.general) generalizations.push([id, blockId(spec.general)]);
-  return def;
+  create(createBlock({ id, name: spec.name, ownerId: spec.pkg }));
+  if (spec.abstract) update(id, { isAbstract: true });
+  // the generalization is drawn first: a redefinition needs the inherited property
+  if (spec.general) create({ id: `gen_${id}`, sourceId: id, targetId: blockId(spec.general), kind: 'generalization', name: '', sourceFamily: 'block', targetFamily: 'block' });
+  // value properties are identified by their qualified name (Block::value), the text the editor shows for a redefinition
+  const featureId = (name: string, propertyKind: 'value' | 'part') => propertyKind === 'value' ? `${spec.name}::${name}` : `${id}.${name}`;
+  const property = (name: string, propertyKind: 'value' | 'part', type: string) =>
+    run({ type: 'createOwnedFeature', intent: { featureKind: 'property', ownerBlockId: id, propertyKind, typeId: type, name, featureId: featureId(name, propertyKind) } });
+  // the property editor: default values, multiplicities and redefinitions of inherited values
+  const edits: Record<string, Partial<PropertyDefinition>> = {};
+  for (const [name, v] of spec.redefines ?? []) {
+    const general = R().definitions[blockId(spec.general!)] as BlockDefinition;
+    const inherited = general.properties.find(p => p.name === name);
+    if (!inherited) throw new Error(`${spec.general} has no ${name} to redefine`);
+    property(name, 'value', inherited.typeId);
+    edits[featureId(name, 'value')] = { defaultValue: String(v), redefinesId: inherited.id };
+  }
+  for (const [name, type, defaultValue, multiplicity] of spec.values ?? []) {
+    property(name, 'value', typeId(type));
+    edits[featureId(name, 'value')] = { ...(defaultValue !== undefined ? { defaultValue: String(defaultValue) } : {}), ...(multiplicity ? { multiplicity: mult(multiplicity) } : {}) };
+  }
+  for (const [name, type, m] of spec.parts ?? []) {
+    property(name, 'part', blockId(type));
+    if (m) edits[`${id}.${name}`] = { multiplicity: mult(m) };
+    compositions.push([id, blockId(type), name, m ?? '1']);
+  }
+  const current = R().definitions[id] as BlockDefinition;
+  if (Object.keys(edits).length) update(id, { properties: current.properties.map(p => edits[p.id] ? { ...p, ...edits[p.id] } : p) });
+  for (const [name, type, m] of spec.ports ?? []) addPort(id, `${id}.${name}`, name, type, m);
+  if (spec.operations?.length) update(id, { operations: spec.operations });
+  if (spec.receptions?.length) update(id, { receptions: spec.receptions.map(sig) });
 };
 const HW = P.hw;
 const EC = 'ElectronicComponent';
 block({ name: EC, pkg: HW, abstract: true, values: [['refDes', 'String'], ['partNumber', 'String'], ['packageType', 'String']] });
 // compute core
-block({ name: 'SAK_C167CS_LM', pkg: HW, general: EC, doc: 'Siemens/Infineon C167CS, ROM-less, MQFP-144 (mounted at 45 deg).',
-  redefines: [['partNumber', 'SAK-C167CS-LM'], ['packageType', 'P-MQFP-144']],
+block({ name: 'SAK_C167CS_LM', pkg: HW, general: EC, redefines: [['partNumber', 'SAK-C167CS-LM'], ['packageType', 'P-MQFP-144']],
   values: [['adcBits', 'Integer', 10], ['adcInputs', 'Integer', 24], ['canModules', 'Integer', 2], ['capcomChannels', 'Integer', 32]],
   ports: [['vdd', '~SupplyPort'], ['extBus', 'MemoryBusPort'], ['microwire', 'SerialMemoryPort'], ['capcomIn', '~VRSignalPort'], ['soiOut', 'GateDrivePort'],
     ['can', 'CanPort'], ['asc0', 'KLinePort'], ['adcIn', '~AnalogSignalPort', '12']],
   operations: ['computeQuantity()', 'computeSoi()', 'armCapcom()', 'synchronise()', 'authorise()', 'rampToIdle()'],
   receptions: ['ImmoReleaseFrame', 'TorqueRequestFrame', 'VrToothPulse', 'CkpLost', 'CanTimeout', 'FaultRecord', 'BipDetected', 'EngineBrakeRequest'] });
-block({ name: 'TEMIC_845AW', pkg: HW, general: EC, doc: 'Co-processor / watchdog / digital input supervisor (PLCC-68). Function TBV.',
-  redefines: [['packageType', 'PLCC-68']], ports: [['vdd', '~SupplyPort'], ['digIn', '~DigitalInputPort', '6']], operations: ['selfTest()'] });
+block({ name: 'TEMIC_845AW', pkg: HW, general: EC, redefines: [['packageType', 'PLCC-68']], ports: [['vdd', '~SupplyPort'], ['digIn', '~DigitalInputPort', '6']], operations: ['selfTest()'] });
 block({ name: 'AM29F400BB', pkg: HW, general: EC,
-  doc: '4 Mbit (512 KB) bottom-boot flash. Map: 0x00000-0x03FFF boot, 0x04000-0x5FFFF code, 0x60000-0x7FEFF data set (maps), 0x7FF00-0x7FFFF checksums. BSL entry: DQ4 (pin 24) to GND via 1 kOhm at reset = C167 P0L.4 low (TBV).',
   redefines: [['partNumber', 'AM29F400BB'], ['packageType', 'PSOP-44']], values: [['capacityKB', 'Integer', 512]], ports: [['bus', '~MemoryBusPort']] });
-block({ name: 'M93C86', pkg: HW, general: EC, doc: '16 kbit (2 KB) Microwire EEPROM: immobiliser pairing, engine no., device codes.',
-  redefines: [['partNumber', '93C86'], ['packageType', 'SOIC-8']], values: [['capacityBytes', 'Integer', 2048]], ports: [['microwire', '~SerialMemoryPort']],
+block({ name: 'M93C86', pkg: HW, general: EC, redefines: [['partNumber', '93C86'], ['packageType', 'SOIC-8']], values: [['capacityBytes', 'Integer', 2048]], ports: [['microwire', '~SerialMemoryPort']],
   receptions: ['FaultRecord'] });
-block({ name: 'PLD_C1_1', pkg: HW, general: EC, doc: 'TEMIC PLD_C1.1 (PLCC-44): gate sequencer and peak/hold chopper logic. Executes InjectionMicroCycle.',
-  redefines: [['packageType', 'PLCC-44']], ports: [['soiIn', '~GateDrivePort'], ['gateOut', 'GateDrivePort', '10'], ['currentTripIn', '~CurrentSensePort', '2']],
+block({ name: 'PLD_C1_1', pkg: HW, general: EC, redefines: [['packageType', 'PLCC-44']], ports: [['soiIn', '~GateDrivePort'], ['gateOut', 'GateDrivePort', '10'], ['currentTripIn', '~CurrentSensePort', '2']],
   operations: ['pullIn()', 'detectBip()', 'holdChop()', 'release()'],
   receptions: ['SoiTrigger', 'EoiTrigger', 'PeakCurrentReached', 'BipDetected', 'OvercurrentTrip'] });
 block({ name: 'Crystal4MHz', pkg: HW, general: EC, values: [['frequencyMHz', 'Real', 4.0]] });
 // analogue front-end
-block({ name: 'LM2903D', pkg: HW, general: EC, doc: 'Dual comparator - VR zero-crossing detector.', redefines: [['partNumber', 'LM2903D']],
+block({ name: 'LM2903D', pkg: HW, general: EC, redefines: [['partNumber', 'LM2903D']],
   ports: [['vrIn', '~VRSignalPort'], ['output', 'VRSignalPort']], receptions: ['VrToothPulse'] });
-block({ name: 'LM2904D', pkg: HW, general: EC, doc: 'Dual op-amp - ratiometric sensor buffer.', redefines: [['partNumber', 'LM2904D']],
+block({ name: 'LM2904D', pkg: HW, general: EC, redefines: [['partNumber', 'LM2904D']],
   ports: [['inp', '~AnalogSignalPort'], ['output', 'AnalogSignalPort']] });
-block({ name: 'LM2901D', pkg: HW, general: EC, doc: 'Quad comparator - shunt current thresholds (peak / hold / overcurrent / open).',
-  redefines: [['partNumber', 'LM2901D']], ports: [['senseIn', '~CurrentSensePort'], ['trip', 'CurrentSensePort']] });
-block({ name: 'NtcPullUpNetwork', pkg: HW, general: EC, doc: '2.49 kOhm 0.1 % pull-up to VAREF + RC low-pass.', values: [['rPullUpOhm', 'Real', 2490.0]],
+block({ name: 'LM2901D', pkg: HW, general: EC, redefines: [['partNumber', 'LM2901D']], ports: [['senseIn', '~CurrentSensePort'], ['trip', 'CurrentSensePort']] });
+block({ name: 'NtcPullUpNetwork', pkg: HW, general: EC, values: [['rPullUpOhm', 'Real', 2490.0]],
   ports: [['vref', '~SupplyPort'], ['sensor', '~AnalogSignalPort'], ['toAdc', 'AnalogSignalPort']] });
-block({ name: 'OnboardBaroSensor', pkg: HW, general: EC, doc: 'Absolute MEMS barometric sensor on PCB, 0.50-1.15 bar -> 0.5-4.5 V (TBV).',
-  ports: [['vdd', '~SupplyPort'], ['output', 'AnalogSignalPort']] });
+block({ name: 'OnboardBaroSensor', pkg: HW, general: EC, ports: [['vdd', '~SupplyPort'], ['output', 'AnalogSignalPort']] });
 // power & comms
-block({ name: 'TLE4275', pkg: HW, general: EC, doc: '5 V / 450 mA LDO with reset; output 4.90 .. 5.10 V.', redefines: [['partNumber', 'TLE4275']],
+block({ name: 'TLE4275', pkg: HW, general: EC, redefines: [['partNumber', 'TLE4275']],
   values: [['vOutNom', 'Real', 5.0], ['vOutTolPct', 'Real', 2.0]], ports: [['vin', '~SupplyPort'], ['wake', '~DigitalInputPort'], ['vout', 'SupplyPort']],
   operations: ['wakeUp()'] });
 block({ name: 'EmiChoke', pkg: HW, general: EC, redefines: [['partNumber', 'S+M 882590']] });
-block({ name: 'CanTransceiver', pkg: HW, general: EC, doc: 'PCA82C250 / B10011S class transceiver.', ports: [['bus', 'CanPort'], ['mcu', '~CanPort']],
+block({ name: 'CanTransceiver', pkg: HW, general: EC, ports: [['bus', 'CanPort'], ['mcu', '~CanPort']],
   receptions: ['ImmoReleaseFrame', 'TorqueRequestFrame', 'FaultRecord', 'EngineDataFrame', 'CanFrame'] });
 block({ name: 'L9637D', pkg: HW, general: EC, redefines: [['partNumber', 'L9637D']], ports: [['line', 'KLinePort'], ['mcu', '~KLinePort']] });
 // power stage
-block({ name: 'BUZ102SL', pkg: HW, general: EC, doc: 'High-side MOSFET, D2PAK.', redefines: [['partNumber', 'BUZ102SL'], ['packageType', 'TO-263']],
+block({ name: 'BUZ102SL', pkg: HW, general: EC, redefines: [['partNumber', 'BUZ102SL'], ['packageType', 'TO-263']],
   ports: [['gate', '~GateDrivePort'], ['output', 'SolenoidDrivePort']] });
-block({ name: 'SUD25N06_45L', pkg: HW, general: EC, doc: 'Low-side solenoid MOSFET, DPAK.', redefines: [['partNumber', 'SUD25N06-45L'], ['packageType', 'TO-252']],
+block({ name: 'SUD25N06_45L', pkg: HW, general: EC, redefines: [['partNumber', 'SUD25N06-45L'], ['packageType', 'TO-252']],
   ports: [['gate', '~GateDrivePort'], ['drain', 'SolenoidDrivePort']], receptions: ['SoiTrigger', 'PeakCurrentReached'] });
 block({ name: 'DaleShunt', pkg: HW, general: EC, redefines: [['partNumber', 'Vishay DALE R033F']], values: [['resistanceOhm', 'Real', 0.033]],
   ports: [['sense', 'CurrentSensePort']] });
 block({ name: 'FreewheelNetwork', pkg: HW, general: EC, redefines: [['packageType', 'SMB + 0805']] });
 // ECU subsystems
-block({ name: 'ComputeCore', pkg: HW, parts: [['mcu', 'SAK_C167CS_LM'], ['coProcessor', 'TEMIC_845AW'], ['flash', 'AM29F400BB'], ['eeprom', 'M93C86'], ['crystals', 'Crystal4MHz', '2']],
-  constraints: ['mcu.refDes = "U1"', 'coProcessor.refDes = "U4"', 'flash.refDes = "U2"', 'eeprom.refDes = "U5"'] });
+block({ name: 'ComputeCore', pkg: HW, parts: [['mcu', 'SAK_C167CS_LM'], ['coProcessor', 'TEMIC_845AW'], ['flash', 'AM29F400BB'], ['eeprom', 'M93C86'], ['crystals', 'Crystal4MHz', '2']] });
 block({ name: 'SensorAFE', pkg: HW, parts: [['vrComparators', 'LM2903D', '2'], ['buffers', 'LM2904D', '2'], ['ntcNetworks', 'NtcPullUpNetwork', '4'], ['baro', 'OnboardBaroSensor']] });
 block({ name: 'InjectionPowerStage', pkg: HW,
   parts: [['gateCpld', 'PLD_C1_1'], ['hsBank1', 'BUZ102SL'], ['hsBank2', 'BUZ102SL'], ['lowSide', 'SUD25N06_45L', '8'], ['shuntBank1', 'DaleShunt'],
     ['shuntBank2', 'DaleShunt'], ['currentComparators', 'LM2901D', '3'], ['freewheel', 'FreewheelNetwork', '8']],
-  constraints: ['gateCpld.refDes = "U3"', 'hsBank1.refDes = "Q_HS1"', 'hsBank2.refDes = "Q_HS2"', 'shuntBank1.refDes = "R_SH1"', 'shuntBank2.refDes = "R_SH2"',
-    'lowSide: Q_LS1..3 cyl 1-3, Q_LS5..7 cyl 4-6, Q_LS4 / Q_LS8 cyl 7 / 8 (V8 only)'],
   receptions: ['SoiTrigger', 'PeakCurrentReached'] });
 block({ name: 'ValveAndStarterDrivers', pkg: HW, parts: [['hsValveSupply', 'BUZ102SL'], ['hsStarter', 'BUZ102SL'], ['hsAux', 'BUZ102SL']],
-  ports: [['starterOut', 'RelayDrivePort'], ['pvOut', 'ValveDrivePort', '4']],
-  constraints: ['hsValveSupply.refDes = "Q_HS3"', 'hsStarter.refDes = "Q_HS4"', 'hsAux.refDes = "Q_HS5"'], operations: ['engageStarter()'] });
-block({ name: 'PowerSupplyAndComms', pkg: HW, parts: [['regulator', 'TLE4275'], ['choke', 'EmiChoke'], ['canPhy', 'CanTransceiver', '2'], ['kLinePhy', 'L9637D']],
-  constraints: ['regulator.refDes = "U16"', 'choke.refDes = "L_FILT1"', 'kLinePhy.refDes = "U15"'] });
+  ports: [['starterOut', 'RelayDrivePort'], ['pvOut', 'ValveDrivePort', '4']], operations: ['engageStarter()'] });
+block({ name: 'PowerSupplyAndComms', pkg: HW, parts: [['regulator', 'TLE4275'], ['choke', 'EmiChoke'], ['canPhy', 'CanTransceiver', '2'], ['kLinePhy', 'L9637D']] });
 // the ECU
 const label = 'A 541 446 53 40 | ZGS 001 | TEMIC 287699.01 B | OM 501 LA.II/2-00 (V6, Euro II) | 541.922-00-063818 | 1061 1047 1034 1026';
 const ECU = blockId('MR_PLD_ECU');
-const x1 = port(ECU, 'x1', 'X1_CabConnector16');
-const x2 = port(ECU, 'x2', 'X2_EngineConnector55');
-// Pin ports keep the source id (x2.pin_19) and are named <connector>_<pin>_<signal> (X2_19_CKP_SIG): names must be unique in the block.
-const pinPorts = (connector: PortDefinition, key: 'x1' | 'x2', pins: Pin[]) =>
-  pins.map(p => ({ ...port(ECU, pinName(p.no), PIN_TYPE[key][p.no] ?? 'ConnectorPin', '1', connector.id), name: `${key.toUpperCase()}_${String(p.no).padStart(2, '0')}_${p.signal}` }));
-block({ name: 'MR_PLD_ECU', pkg: HW, doc: 'Engine controller MR (Motor-Regelung) for PLD unit-pump injection. Exhibits MR_PLD_OperatingStates.',
-  values: [['label', 'ECU_Label', label], ['engineVariant', 'EngineVariant', 'OM501LA_V6'], ['rShuntOhm', 'Real', 0.033], ['iPeakA', 'Real', 16.0],
+block({ name: 'MR_PLD_ECU', pkg: HW, values: [['label', 'ECU_Label', label], ['engineVariant', 'EngineVariant', 'OM501LA_V6'], ['rShuntOhm', 'Real', 0.033], ['iPeakA', 'Real', 16.0],
     ['iHoldA', 'Real', 8.0], ['iOvercurrentA', 'Real', 24.0], ['vRefV', 'Real', 5.0], ['rPullUpOhm', 'Real', 2490.0],
     ['firingOrder', 'Integer', '(1, 4, 2, 5, 3, 6)', '6'], ['firingIntervalDeg', 'Real', 120.0]],
   parts: [['core', 'ComputeCore'], ['afe', 'SensorAFE'], ['injStage', 'InjectionPowerStage'], ['drivers', 'ValveAndStarterDrivers'], ['pwrCom', 'PowerSupplyAndComms']],
@@ -368,10 +340,15 @@ block({ name: 'MR_PLD_ECU', pkg: HW, doc: 'Engine controller MR (Motor-Regelung)
     'CkpLost', 'CkpRestored', 'CmpLost', 'EngineRunning', 'EngineStopped', 'AfterrunComplete', 'EngineBrakeRequest', 'EngineBrakeRelease',
     'OvertempDetected', 'OvertempCleared', 'BankShortDetected', 'CanTimeout', 'CanRestored', 'ImmoReleaseFrame', 'TorqueRequestFrame',
     'VrToothPulse', 'ElectricalPower'] });
-(repo.definitions[ECU] as BlockDefinition).ports.push(x1, ...pinPorts(x1, 'x1', X1), x2, ...pinPorts(x2, 'x2', X2));
+for (const [key, pins] of [['x1', X1], ['x2', X2]] as const) {
+  for (const pin of pins) {
+    const path = `${key}.${pinName(pin.no)}`;
+    if (!WIRED_PINS.has(path)) continue;
+    addPort(ECU, `${ECU}.${path}`, `${key.toUpperCase()}_${String(pin.no).padStart(2, '0')}_${pin.signal}`, PIN_TYPE[key][pin.no] ?? 'ConnectorPin');
+  }
+}
 // external blocks
-block({ name: 'FR_CabECU', pkg: HW, doc: 'Vehicle controller FR (Fahrregelung) - pedal, immobiliser authorisation.',
-  ports: [['can', 'CanPort'], ['kl15', 'DigitalInputPort'], ['kl50', 'DigitalInputPort']],
+block({ name: 'FR_CabECU', pkg: HW, ports: [['can', 'CanPort'], ['kl15', 'DigitalInputPort'], ['kl50', 'DigitalInputPort']],
   receptions: ['KL15_On', 'KL15_Off', 'KL50_CrankRequest', 'FaultRecord', 'EngineDataFrame', 'EngineStopped'] });
 block({ name: 'Battery24V', pkg: HW, ports: [['kl30', 'SupplyPort'], ['kl31', 'GroundPort']] });
 block({ name: 'DiagnosticTester', pkg: HW, ports: [['kLine', 'KLinePort']], receptions: ['FaultRecord'] });
@@ -384,47 +361,44 @@ block({ name: 'RatiometricPressureSensor', pkg: HW, general: 'EngineSensor', red
   values: [['pMin', 'Real'], ['pMax', 'Real']], ports: [['supply', '~SupplyPort'], ['sig', 'AnalogSignalPort']] });
 block({ name: 'ThermalOilLevelSensor', pkg: HW, general: 'EngineSensor', redefines: [['kind', 'Hot-wire']],
   values: [['ohmMin', 'Real', 18.0], ['ohmMax', 'Real', 26.0]], ports: [['sig', 'AnalogSignalPort']] });
-block({ name: 'UnitPump', pkg: HW, doc: 'PLD unit pump (Pumpe-Leitung-Duese) with solenoid valve.',
-  values: [['cylinder', 'Integer'], ['coilOhm', 'Real', 0.6], ['coilInductanceH', 'Real', 0.0003]], ports: [['coil', '~SolenoidDrivePort'], ['fuelIn', 'FuelPort']],
-  constraints: ['coilInductanceH: TBV - used by the RL simulation'], receptions: ['SoiTrigger', 'EoiTrigger'] });
+block({ name: 'UnitPump', pkg: HW, values: [['cylinder', 'Integer'], ['coilOhm', 'Real', 0.6], ['coilInductanceH', 'Real', 0.0003]], ports: [['coil', '~SolenoidDrivePort'], ['fuelIn', 'FuelPort']], receptions: ['SoiTrigger', 'EoiTrigger'] });
 block({ name: 'ProportionalValve', pkg: HW, values: [['name', 'String'], ['coilOhmMin', 'Real', 30.0], ['coilOhmMax', 'Real', 50.0]], ports: [['drive', '~ValveDrivePort']],
   receptions: ['ElectricalPower'] });
 block({ name: 'StarterRelay', pkg: HW, ports: [['coil', '~RelayDrivePort']], receptions: ['KL50_CrankRequest'] });
 const SYS = blockId('OM501LA_EngineSystem');
-block({ name: 'OM501LA_EngineSystem', pkg: HW, doc: 'System context: the ECU with everything wired to X1 / X2.',
-  parts: [['ecu', 'MR_PLD_ECU'], ['fr', 'FR_CabECU'], ['battery', 'Battery24V'], ['tester', 'DiagnosticTester'], ['b15_ckp', 'VRSensor'], ['b16_cmp', 'VRSensor'],
+block({ name: 'OM501LA_EngineSystem', pkg: HW, parts: [['ecu', 'MR_PLD_ECU'], ['fr', 'FR_CabECU'], ['battery', 'Battery24V'], ['tester', 'DiagnosticTester'], ['b15_ckp', 'VRSensor'], ['b16_cmp', 'VRSensor'],
     ['b111_boost', 'RatiometricPressureSensor'], ['b111_iat', 'NTCSensor'], ['b65_ect', 'NTCSensor'], ['b10_fuel', 'NTCSensor'],
     ['b110_oilP', 'RatiometricPressureSensor'], ['b11_oilT', 'NTCSensor'], ['b14_oilLvl', 'ThermalOilLevelSensor'], ['unitPumps', 'UnitPump', '6'],
     ['pv1_decompression', 'ProportionalValve'], ['pv2_exhaustBrake', 'ProportionalValve'], ['pv3_fanClutch', 'ProportionalValve'],
-    ['pv4_aux', 'ProportionalValve'], ['starter', 'StarterRelay']],
-  constraints: ['b15_ckp.reference = "B15"; b15_ckp.teeth = 36', 'b16_cmp.reference = "B16"; b16_cmp.teeth = 12',
-    'b111_boost.reference = "B111-P"; pMin = 0.6; pMax = 3.4', 'b111_iat.reference = "B111-T"', 'b65_ect.reference = "B65"', 'b10_fuel.reference = "B10"',
-    'b110_oilP.reference = "B110"; pMin = 0.0; pMax = 5.0', 'b11_oilT.reference = "B11"', 'b14_oilLvl.reference = "B14"',
-    'pv1_decompression.name = "PV1 constant throttle"', 'pv2_exhaustBrake.name = "PV2 exhaust brake flap"', 'pv3_fanClutch.name = "PV3 fan clutch"',
-    'pv4_aux.name = "PV4 aux / fan stage"', 'firing order 1-4-2-5-3-6, 120 deg'] });
+    ['pv4_aux', 'ProportionalValve'], ['starter', 'StarterRelay']] });
 // 07 Parametrics: SensorChainContext; 10 Analysis: SimulationScenario; 12 Variants: EngineConfiguration
-block({ name: 'SensorChainContext', pkg: P.par, doc: 'Binds the ECU constants to the sensor transfer functions.',
-  values: [['vRef', 'Real', 5.0], ['rPullUp', 'Real', 2490.0], ['rShunt', 'Real', 0.033], ['ectOhm', 'Real'], ['ectVolt', 'Real'], ['boostBar', 'Real'],
+block({ name: 'SensorChainContext', pkg: P.par, values: [['vRef', 'Real', 5.0], ['rPullUp', 'Real', 2490.0], ['rShunt', 'Real', 0.033], ['ectOhm', 'Real'], ['ectVolt', 'Real'], ['boostBar', 'Real'],
     ['boostVolt', 'Real'], ['coilA', 'Real'], ['shuntVolt', 'Real'], ['pMinBoost', 'Real', 0.6], ['pMaxBoost', 'Real', 3.4], ['vMinBoost', 'Real', 0.5],
     ['vMaxBoost', 'Real', 4.5]] });
-block({ name: 'SimulationScenario', pkg: P.ana, doc: 'Stimulus + expected final state; executed by mrpld_sim.py and by the ADIA state machine.',
-  values: [['keyState', 'KeyState'], ['pedalPct', 'Real'], ['coolantC', 'Real'], ['boostBar', 'Real'], ['immoValid', 'Boolean'], ['ckpValid', 'Boolean'],
+block({ name: 'SimulationScenario', pkg: P.ana, values: [['keyState', 'KeyState'], ['pedalPct', 'Real'], ['coolantC', 'Real'], ['boostBar', 'Real'], ['immoValid', 'Boolean'], ['ckpValid', 'Boolean'],
     ['cmpValid', 'Boolean'], ['bank1Short', 'Boolean'], ['canValid', 'Boolean'], ['expectedState', 'String']] });
-block({ name: 'EngineConfiguration', pkg: P.variants, doc: '«variation» Same ECU hardware, harness decides V6 / V8.',
-  parts: [['om501_V6', 'OM501LA_EngineSystem', '0..1'], ['om502_V8', 'OM501LA_EngineSystem', '0..1']],
-  constraints: ['om501_V6: X2-46 / X2-37 unused', 'om502_V8: adds unit pumps G (cyl 7, X2-46) and H (cyl 8, X2-37)', 'exactly one variant is selected'] });
+block({ name: 'EngineConfiguration', pkg: P.variants, parts: [['om501_V6', 'OM501LA_EngineSystem', '0..1'], ['om502_V8', 'OM501LA_EngineSystem', '0..1']] });
 
+// one composition per (whole, part type), as the BDD allows only one; it carries the role when a single part has that type
+const compositionGroups = new Map<string, Array<[string, string]>>();
 for (const [owner, type, role, m] of compositions) {
-  repo.relationships[`comp_${owner}_${role}`] = { id: `comp_${owner}_${role}`, kind: 'composition', sourceId: owner, targetId: type, name: role,
-    targetRole: role, sourceMultiplicity: one, targetMultiplicity: mult(m), sourceAggregation: 'composite' };
+  const key = `${owner}|${type}`;
+  compositionGroups.set(key, [...(compositionGroups.get(key) ?? []), [role, m]]);
 }
-for (const [sub, sup] of generalizations) repo.relationships[`gen_${sub}`] = { id: `gen_${sub}`, kind: 'generalization', sourceId: sub, targetId: sup };
+for (const [key, roles] of compositionGroups) {
+  const [owner, type] = key.split('|');
+  const id = `comp_${owner}_${type}`;
+  create({ id, sourceId: owner, targetId: type, kind: 'composition', name: '', sourceFamily: 'block', targetFamily: 'block' });
+  const ends = roles.length === 1 ? { targetRole: roles[0][0], targetMultiplicity: roles[0][1] } : {};
+  const plan = buildRelationshipUpdateCommand(R(), id, { sourceMultiplicity: '1', sourceAggregation: 'composite', ...ends });
+  if (!plan.ok) throw new Error(plan.diagnostic.message);
+  run(plan.command);
+}
 
 // ------------------------------------------------ 07 constraint defs + calc defs
 const cblock = (pkg: string, name: string, params: string[], expression: string) => {
   const id = `cb_${name}`;
-  repo.definitions[id] = { id, kind: 'constraintBlock', name, namespace: ns(pkg), ownerId: pkg, constraints: [expression],
-    parameters: params.map(p => ({ id: `${id}.${p}`, name: p, typeId: 'vt_Real' })) };
+  create(createConstraintBlock({ id, name, ownerId: pkg, constraints: [expression], parameters: params.map(p => ({ id: `${id}.${p}`, name: p, typeId: 'vt_Real' })) }));
 };
 cblock(P.par, 'NtcDivider', ['rNtc', 'rPullUp', 'vRef', 'vPin'], 'vPin == vRef * rNtc / (rNtc + rPullUp)');
 cblock(P.par, 'RatiometricTransfer', ['p', 'pMin', 'pMax', 'vMin', 'vMax', 'v'], 'v == vMin + (p - pMin) * (vMax - vMin) / (pMax - pMin)');
@@ -442,22 +416,8 @@ cblock(P.ana, 'OilPressureVoltage', ['pBar', 'v'], 'v = 0.5 + pBar * 0.8');
 cblock(P.ana, 'AdcCode', ['v', 'code'], 'code = v / 5.00 * 1023.0');
 cblock(P.ana, 'ShuntVoltage', ['i', 'v'], 'v = i * 0.033');
 cblock(P.ana, 'InjectedQuantity', ['pedalPct', 'pBoostBar', 'torqueLimitPct', 'q'], 'q = min(22.0 + 1.6 * pedalPct, 55.0 + 65.0 * (pBoostBar - 1.0)) * torqueLimitPct / 100.0');
-const constraintProperty = (owner: string, name: string, cb: string) =>
-  (repo.definitions[owner] as BlockDefinition).properties.push({ id: `${owner}.${name}`, name, kind: 'constraint', typeId: `cb_${cb}`, multiplicity: one });
 const SCC = blockId('SensorChainContext');
-constraintProperty(SCC, 'ect', 'NtcDivider');
-constraintProperty(SCC, 'boost', 'RatiometricTransfer');
-constraintProperty(SCC, 'shunt', 'ShuntSense');
-constraintProperty(ECU, 'shuntSense', 'ShuntSense');
-constraintProperty(ECU, 'firing', 'VrFrequency');
 
-// ---------------------------------------------------------- gateway state
-let state: SysmlGatewayState = createSysmlGatewayState(repo, {}, {}, undefined, stateContext);
-const run = (command: SysmlEditorCommand, diagramId?: string) => {
-  const result = executeSysmlCommand(state, command, diagramId, stateContext);
-  if (!result.committed) throw new Error(`${command.type} rejected: ${JSON.stringify(result.diagnostics.slice(0, 3))}`);
-  state = { ...state, ...result } as SysmlGatewayState;
-};
 const applyPlan = (plan: InteractionCommandPlan | ActivityCommandPlan, what: string) => {
   if (!plan.ok) throw new Error(`${what} refused: ${JSON.stringify(plan.diagnostics)}`);
   run(plan.command);
@@ -469,7 +429,7 @@ const tabs: string[] = [];
 
 // -------------------------------------------------------------------- IBDs
 const typeOfPart = (blockIdValue: string, partName: string) => {
-  const found = (repo.definitions[blockIdValue] as BlockDefinition).properties.find(p => p.name === partName && p.kind === 'part');
+  const found = (R().definitions[blockIdValue] as BlockDefinition).properties.find(p => p.name === partName && p.kind === 'part');
   return found ? { id: found.id, typeId: found.typeId } : undefined;
 };
 /** `a.b.port` / `a.b.x2.pin_19` / `unitPumps[3].coil` under `context` -> property path + port id. */
@@ -487,7 +447,7 @@ const endOf = (context: string, dotted: string) => {
   const rest = segments.slice(i);
   if (rest.length === 0) return { path };
   const portId = `${current}.${rest.join('.')}`;
-  const def = repo.definitions[current] as BlockDefinition;
+  const def = R().definitions[current] as BlockDefinition;
   if (!def.ports.some(p => p.id === portId)) throw new Error(`${dotted}: ${def.name} has no port ${rest.join('.')}`);
   return { path, portId };
 };
@@ -503,14 +463,14 @@ const connect = (context: string, diagramId: string, id: string, from: string, t
   (connectorIds[context] ??= []).push(id);
 };
 const ibd = (diagramId: string, context: string, layout: Record<string, PresentationCoordinates>) => {
-  diagram(diagramId, `IBD - ${repo.definitions[context].name}`, 'ibd', context, context);
+  diagram(diagramId, `IBD - ${R().definitions[context].name}`, 'ibd', context, context);
   // a key with '/' is a nested part path (e.g. the ECU subsystems drawn inside the ecu part)
   const coordinates = Object.fromEntries(Object.entries(layout).map(([name, bounds]) => [name.includes('/') ? name : `${context}.${name}`, bounds]));
   // The frame (the context block's own presentation) encloses every part, with room for the boundary-port
   // labels drawn inside its left and right edges.
   const right = Math.max(...Object.values(layout).map(b => b.x + (b.width ?? 0)));
   const bottom = Math.max(...Object.values(layout).map(b => b.y + (b.height ?? 0)));
-  const ports = (repo.definitions[context] as BlockDefinition).ports.length;
+  const ports = (R().definitions[context] as BlockDefinition).ports.length;
   const frame = box(40, 30, Math.max(900, right + (ports > 0 ? 320 : 80)), Math.max(600, bottom + 80, 60 + ports * 22));
   run({ type: 'addToDiagram', diagramId, elementIds: [context, ...Object.keys(coordinates)], coordinates: { [context]: frame, ...coordinates } }, diagramId);
   tabs.push(diagramId);
@@ -519,7 +479,7 @@ const grid = (names: string[], columns: number, x0 = 220, y0 = 100, dx = 300, dy
   Object.fromEntries(names.map((name, i) => [name, box(x0 + (i % columns) * dx, y0 + Math.floor(i / columns) * dy, w, h)]));
 
 // IBD of OM501LA_EngineSystem (package InternalStructure, part engineSystem)
-const sysParts = (repo.definitions[SYS] as BlockDefinition).properties.filter(p => p.kind === 'part').map(p => p.name).filter(n => n !== 'ecu');
+const sysParts = (R().definitions[SYS] as BlockDefinition).properties.filter(p => p.kind === 'part').map(p => p.name).filter(n => n !== 'ecu');
 // ECU in the middle: its X1 / X2 pin labels run down its left edge, its five subsystems sit to the right of them
 const ecuSub = (name: string) => `${SYS}.ecu/${ECU}.${name}`;
 ibd('ibd_engine_system', SYS, {
@@ -559,29 +519,6 @@ for (const [, from, to] of ecuBody.matchAll(/^\s*connect (\S+) to (\S+);/gm)) {
 for (const [pin, target] of [['x2.pin_18', 'starterOut'], ['x1.pin_12', 'starterOut'], ['x2.pin_51', 'pvOut'], ['x2.pin_50', 'pvOut'],
   ['x2.pin_41', 'pvOut'], ['x2.pin_43', 'pvOut'], ['x1.pin_14', 'pvOut'], ['x1.pin_16', 'pvOut']] as const) {
   connect(ECU, 'ibd_ecu', `c_ecu_${pin.replace('.', '_')}`, pin, `drivers.${target}`);
-}
-
-// --------------------------------------------------------------- parametric
-const bind = (context: string, id: string, source: { propertyId: string; parameterId?: string }, target: { propertyId: string; parameterId?: string }) => {
-  const plan = buildCreateParametricBindingCommand(state.repository, { contextId: context, source, target, connectorId: id });
-  if (!plan.ok || !plan.command) throw new Error(`binding ${id} refused: ${JSON.stringify(plan.diagnostics)}`);
-  run(plan.command);
-};
-const pv = (owner: string, name: string) => ({ propertyId: `${owner}.${name}` });
-const pc = (owner: string, cp: string, cb: string, param: string) => ({ propertyId: `${owner}.${cp}`, parameterId: `cb_${cb}.${param}` });
-for (const [v, p] of [['ectOhm', 'rNtc'], ['rPullUp', 'rPullUp'], ['vRef', 'vRef'], ['ectVolt', 'vPin']]) bind(SCC, `b_ect_${p}`, pv(SCC, v), pc(SCC, 'ect', 'NtcDivider', p));
-for (const [v, p] of [['boostBar', 'p'], ['pMinBoost', 'pMin'], ['pMaxBoost', 'pMax'], ['vMinBoost', 'vMin'], ['vMaxBoost', 'vMax'], ['boostVolt', 'v']]) bind(SCC, `b_boost_${p}`, pv(SCC, v), pc(SCC, 'boost', 'RatiometricTransfer', p));
-for (const [v, p] of [['coilA', 'iCoil'], ['rShunt', 'rShunt'], ['shuntVolt', 'vSense']]) bind(SCC, `b_shunt_${p}`, pv(SCC, v), pc(SCC, 'shunt', 'ShuntSense', p));
-bind(ECU, 'b_ecu_shunt_i', pv(ECU, 'iPeakA'), pc(ECU, 'shuntSense', 'ShuntSense', 'iCoil'));
-bind(ECU, 'b_ecu_shunt_r', pv(ECU, 'rShuntOhm'), pc(ECU, 'shuntSense', 'ShuntSense', 'rShunt'));
-for (const [context, id, name, props] of [
-  [SCC, 'par_sensor_chain', 'PAR - SensorChainContext', ['ect', 'boost', 'shunt', 'vRef', 'rPullUp', 'rShunt', 'ectOhm', 'ectVolt', 'boostBar', 'boostVolt', 'coilA', 'shuntVolt', 'pMinBoost', 'pMaxBoost', 'vMinBoost', 'vMaxBoost']],
-  [ECU, 'par_ecu_constants', 'PAR - MR_PLD_ECU constants', ['shuntSense', 'firing', 'iPeakA', 'rShuntOhm']],
-] as const) {
-  diagram(id, name, 'parametric', context, context);
-  const coordinates = Object.fromEntries(props.map((p, i) => [`${context}.${p}`, box(60 + (i % 4) * 280, 60 + Math.floor(i / 4) * 170, 240, 130)]));
-  run({ type: 'addToDiagram', diagramId: id, elementIds: Object.keys(coordinates), coordinates }, id);
-  // no workspace tab: the canvas has no parametric mode; the diagrams live in the model tree and the Report renders them
 }
 
 // ------------------------------------------------------------- requirements
@@ -625,8 +562,8 @@ for (const blk of blockIds) {
   const reqs = satisfiedBy(blk);
   if (reqs.length === 0) throw new Error(`block ${blk} satisfies no requirement`);
   const parents = [...new Set(reqs.flatMap(derivedFrom))].filter(id => !reqs.includes(id));
-  const id = `req_blk_${repo.definitions[blk].name}`;
-  diagram(id, `REQ - ${repo.definitions[blk].name}`, 'requirements', P.reqs);
+  const id = `req_blk_${R().definitions[blk].name}`;
+  diagram(id, `REQ - ${R().definitions[blk].name}`, 'requirements', P.reqs);
   const coordinates: Record<string, PresentationCoordinates> = { [blk]: box(60, 60, 380, 200) };
   reqs.forEach((r, i) => { coordinates[r] = box(620 + (i % 3) * 340, 60 + Math.floor(i / 3) * 240, 310, 190); });
   const rows = Math.ceil(reqs.length / 3);
@@ -994,7 +931,7 @@ const bdd = (id: string, name: string, pkg: string, rows: string[][], options: {
 };
 const B = (...names: string[]) => names.map(blockId);
 const chunk = <T,>(items: T[], size: number) => Array.from({ length: Math.ceil(items.length / size) }, (_, i) => items.slice(i * size, i * size + size));
-const components = generalizations.filter(([, sup]) => sup === blockId(EC)).map(([sub]) => sub);
+const components = Object.values(R().relationships).filter(r => r.kind === 'generalization' && r.targetId === blockId(EC)).map(r => r.sourceId);
 bdd('bdd_07_component_taxonomy', 'BDD 07 - Electronic component taxonomy', HW, [[blockId(EC)], ...chunk(components, 4)]);
 bdd('bdd_08_engine_sensors', 'BDD 08 - Engine sensor taxonomy', HW, [B('EngineSensor'), B('VRSensor', 'NTCSensor', 'RatiometricPressureSensor', 'ThermalOilLevelSensor')]);
 bdd('bdd_13_analysis_variants', 'BDD 13 - Analysis context and variants', P.ana, [B('EngineConfiguration', 'SimulationScenario'), B('OM501LA_EngineSystem')]);
@@ -1008,7 +945,7 @@ bdd('bdd_06_drivers_power_comms', 'BDD 06 - Drivers, power supply and communicat
 bdd('bdd_09_signals', 'BDD 09 - Signals (item defs) and enumerations', P.signals, [...chunk(SIGNALS.map(s => `sig_${s}`), 7), ENUMS.map(([, name]) => `enum_${name}`)], { gapX: 40, gapY: 50 });
 bdd('bdd_10_interfaces', 'BDD 10 - Port and interface definitions', P.ifaces, chunk(Object.values(interfaceIds), 6), { gapX: 50, gapY: 60 });
 bdd('bdd_11_types', 'BDD 11 - Value types and units', P.types, [VT.map(([id]) => id).concat('vt_ECU_Label'), UNITS.map(([id]) => id).concat(QK.map(([id]) => id))], { gapX: 40, gapY: 50 });
-bdd('bdd_12_constraints', 'BDD 12 - Constraint blocks and calculations', P.par, [B('SensorChainContext'), ...chunk(Object.keys(repo.definitions).filter(id => id.startsWith('cb_')), 6)], { gapX: 50, gapY: 60 });
+bdd('bdd_12_constraints', 'BDD 12 - Constraint blocks and calculations', P.par, [B('SensorChainContext'), ...chunk(Object.keys(R().definitions).filter(id => id.startsWith('cb_')), 6)], { gapX: 50, gapY: 60 });
 
 // ------------------------------------------------------- views / package diagram
 diagram('pkg_01_model', 'PKG 01 - Model organisation', 'package', P.root);

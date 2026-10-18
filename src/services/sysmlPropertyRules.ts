@@ -128,9 +128,6 @@ export function inheritedProperties(blocks: readonly BlockData[], relationships:
   return result;
 }
 
-/** SysML shows a redefined / subsetted feature by its name; feature ids are `<owner>.<name>`. */
-const featureName = (featureId: string) => featureId.slice(featureId.lastIndexOf('.') + 1) || featureId;
-
 export function formatLegacyProperty(property: ValuePropertyData): string {
   const modifiers = [property.ordered ? 'ordered' : '', property.unique === false ? 'nonunique' : property.unique ? 'unique' : ''].filter(Boolean);
   return [
@@ -139,8 +136,8 @@ export function formatLegacyProperty(property: ValuePropertyData): string {
     `«${property.kind || 'value'}»`,
     property.unit ? `{unit=${property.unit}}` : '',
     property.dimension ? `{dimension=${property.dimension}}` : '',
-    property.redefinesId ? `{redefines ${featureName(property.redefinesId)}}` : '',
-    property.subsetsId ? `{subsets ${featureName(property.subsetsId)}}` : '',
+    property.redefinesId ? `redefines ${property.redefinesId}` : '',
+    property.subsetsId ? `subsets ${property.subsetsId}` : '',
   ].filter(Boolean).join(' ');
 }
 

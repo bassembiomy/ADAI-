@@ -214,10 +214,11 @@ describe('MR_PLD_A5414465340.adia', () => {
     }
   });
 
-  it('models all 71 connector pins and every connect of the source IBDs', () => {
+  it('gives MR_PLD_ECU a port for every X1 / X2 pin the source wires, and models every connect of the source IBDs', () => {
     const ecu = repo.definitions.blk_MR_PLD_ECU as BlockDefinition;
-    expect(ecu.ports.filter(p => p.ownerPortId === 'blk_MR_PLD_ECU.x1')).toHaveLength(16);
-    expect(ecu.ports.filter(p => p.ownerPortId === 'blk_MR_PLD_ECU.x2')).toHaveLength(55);
+    const engineBody = source.slice(source.indexOf('part engineSystem'), source.indexOf('package Parametrics'));
+    const wired = new Set([...engineBody.matchAll(/ecu\.(x[12]\.pin_\d+)/g)].map(m => m[1]));
+    for (const pin of wired) expect(ecu.ports.some(p => p.id === `blk_MR_PLD_ECU.${pin}`), pin).toBe(true);
     const count = (body: string) => [...body.matchAll(/^\s*(connect|interface : )/gm)].length;
     const engineSystem = source.slice(source.indexOf('part engineSystem'), source.indexOf('package Parametrics'));
     const mrPld = source.slice(source.indexOf('part mrPld'), source.indexOf('part engineSystem'));
@@ -226,6 +227,24 @@ describe('MR_PLD_A5414465340.adia', () => {
     // the source connects plus the 8 pin -> driver delegations taken from the pin functions
     expect(owned('blk_MR_PLD_ECU')).toHaveLength(count(mrPld) + 8);
     expect(Object.values(repo.connectors).filter(c => c.itemFlowId).length).toBeGreaterThanOrEqual(8);
+  });
+
+  it('holds only what the editor itself can create and show', () => {
+    for (const block of blocks) {
+      expect(block.constraints, block.name).toEqual([]);
+      for (const port of block.ports) {
+        expect(port.ownerPortId, `${block.name}.${port.name}`).toBeUndefined();
+        expect(port.appliedStereotypeIds, `${block.name}.${port.name}`).toEqual(['ProxyPort']);
+      }
+      expect(block.properties.filter(p => p.kind === 'constraint'), block.name).toEqual([]);
+      // double-click on a block opens the one diagram it owns: its IBD
+      const owned = Object.values(repo.diagrams).filter(d => d.ownerId === block.id);
+      expect(owned.length, block.name).toBeLessThanOrEqual(1);
+      for (const d of owned) expect([d.diagramKind, d.contextElementId], block.name).toEqual(['ibd', block.id]);
+    }
+    for (const def of Object.values(repo.definitions)) if (def.kind === 'interface') expect(def.features, def.name).toEqual([]);
+    expect(Object.values(repo.diagrams).filter(d => d.diagramKind === 'parametric')).toEqual([]);
+    expect(Object.values(repo.connectors).filter(c => c.kind === 'binding')).toEqual([]);
   });
 
   it('gives every block a requirements diagram with the requirements it satisfies', () => {
@@ -332,7 +351,6 @@ describe('MR_PLD_A5414465340.adia', () => {
 
   it('runs one peak & hold injection and cuts a cylinder on overcurrent', () => {
     const { session } = runScenario(SCENARIOS.find(s => s.name === 'scn04_NormalRun')!);
-    set(session, { peakCurrentSense: 0 });
     let frame = fire(session, 'SoiTrigger');
     expect(frame.activeStateIds).toContain('INJ_PEAK');
     expect([frame.data.v_hsGate, frame.data.v_lsGate]).toEqual([true, true]);
@@ -353,26 +371,12 @@ describe('MR_PLD_A5414465340.adia', () => {
 
   it('declares an open coil when the peak current is never reached and holds without BIP after 2 ms', () => {
     const { session } = runScenario(SCENARIOS.find(s => s.name === 'scn04_NormalRun')!);
-    set(session, { peakCurrentSense: 0 });
     fire(session, 'SoiTrigger');
     expect(step(session, 3).activeStateIds).toContain('INJ_CYL_CUTOFF');
     const second = runScenario(SCENARIOS.find(s => s.name === 'scn04_NormalRun')!).session;
-    set(second, { peakCurrentSense: 0 });
     fire(second, 'SoiTrigger');
     fire(second, 'PeakCurrentReached');
     expect(step(second, 3).activeStateIds).toContain('INJ_HOLD');
-  });
-
-  it('follows the micro-cycle at HMI speed while the peak comparator reports a healthy coil', () => {
-    const { session } = runScenario(SCENARIOS.find(s => s.name === 'scn04_NormalRun')!);
-    fire(session, 'SoiTrigger');
-    let frame = step(session, 500);
-    expect(frame.activeStateIds).toContain('INJ_HOLD');
-    expect(frame.activeStateIds).not.toContain('INJ_CYL_CUTOFF');
-    fire(session, 'EoiTrigger');
-    frame = step(session, 2);
-    expect(frame.activeStateIds).toContain('INJ_IDLE');
-    expect(frame.data.v_cylCutoff).toBe(false);
   });
 
   it('never injects outside the operating modes that allow it', () => {

@@ -36,9 +36,6 @@ const VARIABLES: Array<[string, VarType, string]> = [
   // ---- Signals accepted by InjectionMicroCycle (events)
   ['SoiTrigger', 'bool', 'false'], ['PeakCurrentReached', 'bool', 'false'], ['BipDetected', 'bool', 'false'],
   ['EoiTrigger', 'bool', 'false'], ['OvercurrentTrip', 'bool', 'false'],
-  // PLD peak-current comparator output (0/1 level): 1 = the coil reaches the peak current on its own, so the
-  // micro-cycle can be followed by hand at HMI speed; 0 = open coil (peak never reached -> cylinder cut-off)
-  ['peakCurrentSense', 'uint8', '1'],
   // ---- attributes of state def MR_PLD_OperatingStates (guards). Validity flags and the flags one region
   //      reads from another are 0/1 levels (uint8), not events: they stay set while the condition holds.
   ['rpm', 'double', '0'], ['coolantC', 'double', '20'], ['immoValid', 'uint8', '0'],
@@ -176,8 +173,6 @@ state('INJ_SPILL', 'SPILL', INJ, 780, 220, { color: 'inj', entry: 'hsGate=false;
 state('INJ_CYL_CUTOFF', 'CYL_CUTOFF', INJ, 390, 220, { color: 'warn', entry: 'hsGate=false; lsGate=false; cylCutoff=true;', exit: 'cylCutoff=false;' });
 accept('i01_soi', 'INJ_IDLE', 'INJ_PEAK', 'SoiTrigger', 'injEnable==1 && driversTristated==0');
 accept('i02_peak', 'INJ_PEAK', 'INJ_BIP_WAIT', 'PeakCurrentReached', '', { order: 1 });
-const i02 = transitions[transitions.length - 1];
-i02.condition = '(PeakCurrentReached==true || peakCurrentSense==1)';
 accept('i03_bip', 'INJ_BIP_WAIT', 'INJ_HOLD', 'BipDetected', '', { order: 0 });
 accept('i04_bipTimeout', 'INJ_BIP_WAIT', 'INJ_HOLD', null, '', { order: 1, afterS: 0.002 });
 accept('i05_eoi', 'INJ_HOLD', 'INJ_SPILL', 'EoiTrigger', '', { order: 1 });
@@ -263,7 +258,7 @@ const EVENT_BUTTONS = ['KL15_On', 'KL15_Off', 'KL50_CrankRequest', 'BlockStartBu
   'EngineRunning', 'EngineStopped', 'EngineBrakeRequest', 'EngineBrakeRelease', 'BankShortDetected', 'CanTimeout', 'CanRestored',
   'AfterrunComplete', 'SoiTrigger', 'PeakCurrentReached', 'BipDetected', 'EoiTrigger', 'OvercurrentTrip'];
 EVENT_BUTTONS.forEach((event, i) => widget(`h_ev_${event}`, 'pulse-button', event, 20 + (i % 5) * 165, 70 + Math.floor(i / 5) * 58, event, 155, 50));
-['immoValid', 'ckpValid', 'cmpValid', 'sensorDrift', 'peakCurrentSense'].forEach((name, i) => widget(`h_in_${name}`, 'toggle', name, 20 + i * 165, 310, name, 155, 60));
+['immoValid', 'ckpValid', 'cmpValid', 'sensorDrift'].forEach((name, i) => widget(`h_in_${name}`, 'toggle', name, 20 + i * 205, 310, name, 195, 60));
 widget('h_rpm', 'slider', 'Engine speed [rpm]', 20, 380, 'rpm', 265, 80, { max: 2500, step: 10, precision: 0, unit: 'rpm' });
 widget('h_ect', 'slider', 'Coolant [°C]', 295, 380, 'coolantC', 265, 80, { min: -40, max: 130, step: 1, precision: 0, unit: '°C' });
 widget('h_vect', 'slider', 'ECT pin X2-34 [V]', 570, 380, 'vEctPin', 265, 80, { max: 5.5, step: 0.01, precision: 2, unit: 'V' });
