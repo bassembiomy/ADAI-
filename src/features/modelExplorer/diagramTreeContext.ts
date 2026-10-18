@@ -195,8 +195,6 @@ export function resolveTreeOpenTarget(
     ?? stateMachine.layers.find(l => l.transitionIds.includes(semanticId))?.id
     ?? undefined;
   if (regionOf) {
-    const diagram = stateMachine.diagrams?.find(d => d.contextRegionId === regionOf);
-    if (diagram) return { kind: 'diagram', diagramId: diagram.id, selectId: semanticId };
     const context = resolveRegionCanvasContext(regionOf, stateMachine);
     return context ? { kind: 'region', context, selectId: semanticId } : null;
   }

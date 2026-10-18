@@ -14579,8 +14579,14 @@ const ADIA = () => {
     if (target.kind === 'diagram') {
       if (target.diagramId !== shownDiagramId) openExactDiagramByIdImmediate(target.diagramId, { preserveReturnStack: true });
     } else {
-      const rootDiagram = seededStateMachineDiagrams.find(diagram => diagram.contextRegionId === 'root');
-      if (rootDiagram && rootDiagram.id !== shownDiagramId) openExactDiagramByIdImmediate(rootDiagram.id);
+      // the canvas always moves to the region that holds the element, even when the machine is already open
+      if (diagramMode !== 'statemachine') {
+        // the project's State Machine tab, else the machine's root diagram
+        const stateMachineFile = workspaceFiles.find(file => file.type === 'statemachine');
+        const rootDiagram = seededStateMachineDiagrams.find(diagram => diagram.contextRegionId === 'root');
+        if (stateMachineFile) switchActiveFile(stateMachineFile.id);
+        else if (rootDiagram) openExactDiagramByIdImmediate(rootDiagram.id);
+      }
       setCurrentLayerId(target.context.layerId);
       setLayerStack(target.context.layerStack);
       setLayerPath(target.context.layerPath);

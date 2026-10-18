@@ -597,7 +597,8 @@ describe('AppModelExplorer diagram-context creation', () => {
     expect(onCommit).toHaveBeenCalledTimes(1);
     const committed = onCommit.mock.calls[0][0];
     const created = committed.states.find((state: { id: string }) => state.id !== 's1');
-    expect(created).toMatchObject({ parentId: 'region-1', regionId: 'region-1' });
+    // in the region (parentId), without a region label, as the canvas creates a state
+    expect(created).toMatchObject({ parentId: 'region-1', regionId: null });
     expect(committed.layers.find((layer: { id: string }) => layer.id === 'region-1').stateIds).toContain(created.id);
     // State-machine diagram membership is derived from the region, so no
     // SysML presentation command may be issued.

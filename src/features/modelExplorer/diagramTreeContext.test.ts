@@ -214,7 +214,9 @@ describe('resolveTreeOpenTarget', () => {
   });
 
   it('opens a state in the region that holds it', () => {
-    expect(resolveTreeOpenTarget('outer', repo(), presentations, sm)).toEqual({ kind: 'diagram', diagramId: 'smRoot', selectId: 'outer' });
+    expect(resolveTreeOpenTarget('outer', repo(), presentations, sm)).toEqual({
+      kind: 'region', selectId: 'outer', context: { layerId: 'root', layerStack: [], layerPath: ['Root'] },
+    });
     expect(resolveTreeOpenTarget('inner', repo(), presentations, sm)).toEqual({
       kind: 'region', selectId: 'inner', context: { layerId: 'outerRegion', layerStack: ['root'], layerPath: ['Root', 'Outer'] },
     });
