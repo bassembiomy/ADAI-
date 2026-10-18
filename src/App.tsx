@@ -14580,7 +14580,11 @@ const ADIA = () => {
       if (target.diagramId !== shownDiagramId) openExactDiagramByIdImmediate(target.diagramId, { preserveReturnStack: true });
     } else {
       // the canvas always moves to the region that holds the element, even when the machine is already open
-      if (diagramMode !== 'statemachine') {
+      // the state machine is on screen only in its own tab: the project's State Machine file (no diagram tab
+      // in front of it) or a State Machine diagram tab; a use case, sequence or other diagram tab is not it
+      const activeFile = workspaceFiles.find(file => file.id === activeFileId);
+      const stateMachineShown = activeTab ? activeTab.kind === 'stateMachineDiagram' : activeFile?.type === 'statemachine';
+      if (!stateMachineShown) {
         // the project's State Machine tab, else the machine's root diagram
         const stateMachineFile = workspaceFiles.find(file => file.type === 'statemachine');
         const rootDiagram = seededStateMachineDiagrams.find(diagram => diagram.contextRegionId === 'root');
@@ -14590,6 +14594,19 @@ const ADIA = () => {
       setCurrentLayerId(target.context.layerId);
       setLayerStack(target.context.layerStack);
       setLayerPath(target.context.layerPath);
+      // centre the canvas on the state / junction, as the error list's "go to element" does
+      const shownState = states.find(state => state.id === target.selectId);
+      const shownJunction = junctions.find(junction => junction.id === target.selectId);
+      const centre = shownState
+        ? { x: shownState.x + shownState.width / 2, y: shownState.y + shownState.height / 2 }
+        : shownJunction ? { x: shownJunction.x, y: shownJunction.y } : null;
+      if (centre) {
+        // after the State Machine tab has rendered, so the canvas measured is the one shown
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          const rect = canvasRef.current?.getBoundingClientRect();
+          if (rect) setView({ scale: 1, offsetX: rect.width / (2 * uiZoom) - centre.x, offsetY: rect.height / (2 * uiZoom) - centre.y });
+        }));
+      }
     }
     setSelectedIds([target.selectId]);
   };
