@@ -152,6 +152,24 @@ describe('buildUnifiedModelProjection', () => {
     expect(lazy.nodes['sysml:element:sat'].parentNodeId).toBe('sysml:element:b1');
   });
 
+  it('lists what an expanded diagram presents as reference rows, without taking ownership', () => {
+    const repository = createEmptyRepository();
+    repository.packages.reqs = { id: 'reqs', name: 'Requirements', kind: 'package', namespace: [], ownerId: 'model' };
+    repository.requirements.r1 = {
+      id: 'r1', name: 'R1', namespace: [], ownerId: 'reqs', kind: 'requirement', requirementId: 'REQ-1', text: 't', status: 'draft', version: '1',
+    };
+    repository.diagrams.rd = { id: 'rd', name: 'REQ', namespace: [], ownerId: 'reqs', kind: 'diagram', diagramKind: 'requirements' };
+    const tree = buildUnifiedModelProjection({
+      sysml: repository, sysmlStore: fromRepository(repository, {}, {}), stateMachine: emptyStateMachine(), externalModels: [], revision: 1,
+      diagramPresentations: { rd: { elementIds: ['r1', 'gone'] } },
+      expandedNodeIds: new Set(['project:model', 'project:pillar:requirements', 'sysml:element:reqs', 'sysml:element:rd']),
+    });
+    expect(tree.nodes['sysml:element:rd'].childNodeIds).toEqual(['sysml:ref:rd:r1']);
+    expect(tree.nodes['sysml:ref:rd:r1']).toMatchObject({ semanticId: 'r1', presentedOnDiagramId: 'rd', ownerSemanticId: 'reqs', readOnly: true });
+    // the requirement keeps its own row under its owner
+    expect(tree.nodes['sysml:element:r1'].parentNodeId).toBe('sysml:element:reqs');
+  });
+
   it('nests requirements according to requirement containment relationships', () => {
     const repository = createEmptyRepository();
     repository.requirements.parent = {

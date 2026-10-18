@@ -285,7 +285,14 @@ describe('stateMachineExplorerAdapter', () => {
     expect(harness.snapshot!.states[0]).toMatchObject({
       isXBridges: true,
       parentId: 'root',
-      regionId: 'root',
+      regionId: null,
     });
+  });
+
+  it('creates a state like the canvas does: in its region, without a region label', () => {
+    const harness = createSmHarness();
+    const adapter = createStateMachineExplorerAdapter(harness);
+    expect(adapter.execute({ type: 'createElement', ownerId: 'root', elementKind: 'state', name: 'Idle' }).committed).toBe(true);
+    expect(harness.snapshot!.states[0]).toMatchObject({ name: 'Idle', parentId: 'root', regionId: null });
   });
 });

@@ -110,6 +110,28 @@ export interface ExactDiagramCanvasContext {
 }
 
 /** Resolves the canvas and breadcrumb state of an exact diagram before it opens. */
+/** The canvas context (layer, breadcrumb stack and path) that shows a State Machine region. */
+export function resolveRegionCanvasContext(contextRegionId: string, stateMachine: StateMachineExplorerSnapshot): ExactDiagramCanvasContext | null {
+  const layerStack: string[] = [];
+  const names: string[] = [];
+  const visited = new Set<string>();
+  let regionId = contextRegionId;
+  while (regionId !== 'root') {
+    if (visited.has(regionId)) return null;
+    visited.add(regionId);
+    const layer = stateMachine.layers.find(candidate => candidate.id === regionId);
+    const state = stateMachine.states.find(candidate => candidate.id === layer?.parentStateId);
+    if (!layer || !state) return null;
+    const parentRegionId = state.parentId ?? 'root';
+    if (!stateMachine.layers.some(candidate => candidate.id === parentRegionId)) return null;
+    layerStack.unshift(parentRegionId);
+    names.unshift(state.name);
+    regionId = parentRegionId;
+  }
+  if (!stateMachine.layers.some(layer => layer.id === contextRegionId)) return null;
+  return { layerId: contextRegionId, layerStack, layerPath: ['Root', ...names] };
+}
+
 export function resolveExactDiagramCanvasContext(
   diagramId: string,
   repository: SysmlRepository,
@@ -117,25 +139,7 @@ export function resolveExactDiagramCanvasContext(
 ): ExactDiagramCanvasContext | null {
   const stateMachineDiagram = stateMachine?.diagrams?.find(diagram => diagram.id === diagramId);
   if (stateMachineDiagram && stateMachine) {
-    const contextRegionId = stateMachineDiagram.contextRegionId;
-    const layerStack: string[] = [];
-    const names: string[] = [];
-    const visited = new Set<string>();
-    let regionId = contextRegionId;
-    while (regionId !== 'root') {
-      if (visited.has(regionId)) return null;
-      visited.add(regionId);
-      const layer = stateMachine.layers.find(candidate => candidate.id === regionId);
-      const state = stateMachine.states.find(candidate => candidate.id === layer?.parentStateId);
-      if (!layer || !state) return null;
-      const parentRegionId = state.parentId ?? 'root';
-      if (!stateMachine.layers.some(candidate => candidate.id === parentRegionId)) return null;
-      layerStack.unshift(parentRegionId);
-      names.unshift(state.name);
-      regionId = parentRegionId;
-    }
-    if (!stateMachine.layers.some(layer => layer.id === contextRegionId)) return null;
-    return { layerId: contextRegionId, layerStack, layerPath: ['Root', ...names] };
+    return resolveRegionCanvasContext(stateMachineDiagram.contextRegionId, stateMachine);
   }
 
   const diagram = repository.diagrams[diagramId];
@@ -146,4 +150,71 @@ export function resolveExactDiagramCanvasContext(
   return block?.kind === 'block'
     ? { layerId: block.id, layerStack: ['root'], layerPath: ['Root', block.name] }
     : null;
+}
+
+/** The SysML elements a diagram presents that have a row of their own in the tree. */
+export function diagramMemberIds(
+  diagramId: string,
+  repository: SysmlRepository,
+  diagramPresentations: Record<string, { elementIds?: string[] }> | undefined,
+): string[] {
+  const ids = diagramPresentations?.[diagramId]?.elementIds ?? [];
+  return ids.filter(id => id !== diagramId && Boolean(
+    repository.definitions[id] || repository.requirements[id] || repository.verificationCases?.[id]
+    || repository.actors?.[id] || repository.useCases?.[id] || repository.subjects?.[id]
+    || (repository.packages[id] && id !== 'model'),
+  ));
+}
+
+export type TreeOpenTarget =
+  | { kind: 'diagram'; diagramId: string; selectId: string }
+  | { kind: 'region'; context: ExactDiagramCanvasContext; selectId: string };
+
+/**
+ * Where a tree row opens in the workspace: a diagram row opens that diagram; an element opens a diagram
+ * that presents it (the diagram of the reference row clicked, else the active one when it shows the element,
+ * else the last diagram that presents it, else the diagram the element owns) with the element selected; a
+ * feature opens through its block; a state, junction or transition opens the region that holds it.
+ */
+export function resolveTreeOpenTarget(
+  semanticId: string,
+  repository: SysmlRepository,
+  diagramPresentations: Record<string, { elementIds?: string[] }> | undefined,
+  stateMachine: StateMachineExplorerSnapshot,
+  options: { preferredDiagramId?: string; activeDiagramId?: string } = {},
+): TreeOpenTarget | null {
+  if (repository.diagrams[semanticId] || stateMachine.diagrams?.some(d => d.id === semanticId)) {
+    return { kind: 'diagram', diagramId: semanticId, selectId: semanticId };
+  }
+
+  // State Machine elements: a region opens itself, a state / junction / transition the region that holds it
+  const isRegion = stateMachine.layers.some(l => l.id === semanticId);
+  const regionOf = (isRegion ? semanticId : undefined)
+    ?? stateMachine.states.find(s => s.id === semanticId)?.parentId
+    ?? stateMachine.junctions.find(j => j.id === semanticId)?.parentId
+    ?? stateMachine.layers.find(l => l.transitionIds.includes(semanticId))?.id
+    ?? undefined;
+  if (regionOf) {
+    const diagram = stateMachine.diagrams?.find(d => d.contextRegionId === regionOf);
+    if (diagram) return { kind: 'diagram', diagramId: diagram.id, selectId: semanticId };
+    const context = resolveRegionCanvasContext(regionOf, stateMachine);
+    return context ? { kind: 'region', context, selectId: semanticId } : null;
+  }
+
+  // a block feature (property / port) opens through its block
+  let target = semanticId;
+  for (const definition of Object.values(repository.definitions)) {
+    if (definition.kind !== 'block') continue;
+    if (definition.properties.some(p => p.id === semanticId) || definition.ports.some(p => p.id === semanticId)) target = definition.id;
+  }
+  const relationship = repository.relationships[target];
+  const presents = (diagramId: string) => {
+    const ids = diagramPresentations?.[diagramId]?.elementIds ?? [];
+    return ids.includes(target) || Boolean(relationship && ids.includes(relationship.sourceId) && ids.includes(relationship.targetId));
+  };
+  const candidates = Object.keys(diagramPresentations ?? {}).filter(id => repository.diagrams[id] && presents(id));
+  const chosen = [options.preferredDiagramId, options.activeDiagramId].find(id => id && candidates.includes(id))
+    ?? candidates[candidates.length - 1]
+    ?? Object.values(repository.diagrams).find(d => d.ownerId === target)?.id;
+  return chosen ? { kind: 'diagram', diagramId: chosen, selectId: target } : null;
 }

@@ -536,7 +536,7 @@ export function createStateMachineExplorerAdapter(harness: StateMachineAdapterHa
               children: [],
               priority: 0,
               isParallel: false,
-              regionId: ownerId,
+              regionId: null, // as the canvas creates it: a region label is set only on parallel states
               autostart: false,
             };
 
@@ -580,7 +580,7 @@ export function createStateMachineExplorerAdapter(harness: StateMachineAdapterHa
               children: [],
               priority: 0,
               isParallel: false,
-              regionId: ownerId,
+              regionId: null,
               autostart: false,
               isXBridges: true,
               xBridgesModel: {

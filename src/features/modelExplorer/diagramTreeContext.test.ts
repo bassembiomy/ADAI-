@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createEmptyRepository, type SysmlRepository } from '../../engine/sysml/model';
 import type { ModelTreeNode } from './modelExplorerTypes';
 import type { StateMachineExplorerSnapshot } from './adapters/stateMachineExplorerAdapter';
-import { resolveCanvasSymbolDiagramTarget, resolveCanvasSymbolDiagramTargets, resolveDiagramSemanticOwner, resolveExactDiagramCanvasContext } from './diagramTreeContext';
+import { resolveCanvasSymbolDiagramTarget, resolveCanvasSymbolDiagramTargets, resolveDiagramSemanticOwner, resolveExactDiagramCanvasContext, resolveTreeOpenTarget } from './diagramTreeContext';
 
 function diagramNode(id: string, domain: 'sysml' | 'stateMachine'): ModelTreeNode {
   return {
@@ -165,5 +165,58 @@ describe('resolveExactDiagramCanvasContext', () => {
     expect(resolveExactDiagramCanvasContext('missing', createEmptyRepository(), snapshot)).toBeNull();
     snapshot.diagrams!.push({ id: 'stale-sm', name: 'Stale SM', ownerId: 'absent', contextRegionId: 'absent' });
     expect(resolveExactDiagramCanvasContext('stale-sm', createEmptyRepository(), snapshot)).toBeNull();
+  });
+});
+
+describe('resolveTreeOpenTarget', () => {
+  const repo = () => {
+    const r = createEmptyRepository();
+    r.packages.reqs = { id: 'reqs', name: 'Reqs', kind: 'package', namespace: [], ownerId: 'model' };
+    r.definitions.b1 = {
+      id: 'b1', name: 'B1', namespace: [], ownerId: 'model', kind: 'block', isAbstract: false, isLeaf: false,
+      properties: [{ id: 'b1.p', name: 'p', kind: 'value', typeId: '', multiplicity: { lower: 1, upper: 1, ordered: false, unique: true } }],
+      ports: [], operations: [], constraints: [],
+    };
+    r.requirements.r1 = { id: 'r1', name: 'R1', namespace: [], ownerId: 'reqs', kind: 'requirement', requirementId: 'R-1', text: 't', status: 'draft', version: '1' };
+    r.relationships.sat = { id: 'sat', kind: 'satisfy', sourceId: 'b1', targetId: 'r1' };
+    r.diagrams.bdd = { id: 'bdd', name: 'BDD', namespace: [], ownerId: 'model', kind: 'diagram', diagramKind: 'bdd' };
+    r.diagrams.reqA = { id: 'reqA', name: 'REQ A', namespace: [], ownerId: 'reqs', kind: 'diagram', diagramKind: 'requirements' };
+    r.diagrams.reqB = { id: 'reqB', name: 'REQ B', namespace: [], ownerId: 'reqs', kind: 'diagram', diagramKind: 'requirements' };
+    return r;
+  };
+  const presentations = { bdd: { elementIds: ['b1'] }, reqA: { elementIds: ['b1', 'r1'] }, reqB: { elementIds: ['r1'] } };
+  const sm: StateMachineExplorerSnapshot = {
+    states: [
+      { id: 'outer', name: 'Outer', parentId: 'root' } as never,
+      { id: 'inner', name: 'Inner', parentId: 'outerRegion' } as never,
+    ],
+    layers: [
+      { id: 'root', name: 'Root', parentStateId: null, stateIds: ['outer'], transitionIds: [], junctionIds: [] },
+      { id: 'outerRegion', name: 'Outer', parentStateId: 'outer', stateIds: ['inner'], transitionIds: [], junctionIds: [] },
+    ],
+    transitions: [], junctions: [], revision: 1,
+    diagrams: [{ id: 'smRoot', name: 'Main', ownerId: 'root', contextRegionId: 'root' }],
+  };
+
+  it('opens a diagram row as itself', () => {
+    expect(resolveTreeOpenTarget('reqA', repo(), presentations, sm)).toEqual({ kind: 'diagram', diagramId: 'reqA', selectId: 'reqA' });
+  });
+
+  it('opens an element on the diagram of the clicked reference row, else on the shown diagram, else on the last that presents it', () => {
+    expect(resolveTreeOpenTarget('r1', repo(), presentations, sm, { preferredDiagramId: 'reqA' })).toMatchObject({ diagramId: 'reqA', selectId: 'r1' });
+    expect(resolveTreeOpenTarget('r1', repo(), presentations, sm, { activeDiagramId: 'reqA' })).toMatchObject({ diagramId: 'reqA' });
+    expect(resolveTreeOpenTarget('r1', repo(), presentations, sm)).toMatchObject({ diagramId: 'reqB' });
+  });
+
+  it('opens a feature through its block and a relationship where both ends are shown', () => {
+    expect(resolveTreeOpenTarget('b1.p', repo(), presentations, sm, { activeDiagramId: 'bdd' })).toEqual({ kind: 'diagram', diagramId: 'bdd', selectId: 'b1' });
+    expect(resolveTreeOpenTarget('sat', repo(), presentations, sm)).toEqual({ kind: 'diagram', diagramId: 'reqA', selectId: 'sat' });
+  });
+
+  it('opens a state in the region that holds it', () => {
+    expect(resolveTreeOpenTarget('outer', repo(), presentations, sm)).toEqual({ kind: 'diagram', diagramId: 'smRoot', selectId: 'outer' });
+    expect(resolveTreeOpenTarget('inner', repo(), presentations, sm)).toEqual({
+      kind: 'region', selectId: 'inner', context: { layerId: 'outerRegion', layerStack: ['root'], layerPath: ['Root', 'Outer'] },
+    });
   });
 });

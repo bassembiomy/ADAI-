@@ -12,6 +12,7 @@ import { lifelineBlock, messageLabel, orderedMessages } from '../../engine/sysml
 import type { DiagramPresentationInput } from '../../engine/sysml/presentationState';
 import type { StateMachineExplorerSnapshot } from './adapters/stateMachineExplorerAdapter';
 import { getElementKindLabel } from './modelExplorerCapabilities';
+import { diagramMemberIds } from './diagramTreeContext';
 import { friendlySysmlKind, hasSysmlReference, resolveSysmlReferenceLabel, sysmlObjectLabel } from '../sysml/sysmlDisplayLabel';
 import type {
   ModelPillar,
@@ -195,6 +196,40 @@ const pillarForPackageContent = (childPillars: Iterable<ModelPillar>): ModelPill
   }
   return found ?? 'structural';
 };
+
+/**
+ * An expanded diagram row lists what the diagram presents as reference rows. The diagram owns none of them
+ * (each element keeps its row under its owner); a reference row selects and opens the element on that diagram.
+ */
+const registerDiagramMembers = (
+  nodes: Record<string, ModelTreeNode>,
+  input: UnifiedExplorerInput,
+  diagramId: string,
+  expanded: ReadonlySet<string> | undefined,
+) => {
+  const diagramNodeId = `sysml:element:${diagramId}`;
+  if (!expanded?.has(diagramNodeId)) return;
+  const sysml = input.sysml;
+  for (const id of diagramMemberIds(diagramId, sysml, input.diagramPresentations)) {
+    const element = (sysml.definitions[id] ?? sysml.requirements[id] ?? sysml.verificationCases?.[id] ?? sysml.actors?.[id]
+      ?? sysml.useCases?.[id] ?? sysml.subjects?.[id] ?? sysml.packages[id]) as { kind: string; ownerId?: string; name?: string };
+    register(nodes, {
+      nodeId: `sysml:ref:${diagramId}:${id}`,
+      semanticId: id,
+      domain: 'sysml',
+      kind: element.kind,
+      label: sysmlObjectLabel(element as never, 'Element'),
+      parentNodeId: diagramNodeId,
+      ownerSemanticId: element.ownerId || 'model',
+      childNodeIds: [],
+      hasChildren: false,
+      readOnly: true,
+      presentedOnDiagramId: diagramId,
+    });
+  }
+};
+const diagramHasMembers = (input: UnifiedExplorerInput, diagramId: string) =>
+  diagramMemberIds(diagramId, input.sysml, input.diagramPresentations).length > 0;
 
 const register = (nodes: Record<string, ModelTreeNode>, node: ModelTreeNode) => {
   nodes[node.nodeId] = node;
@@ -425,8 +460,9 @@ function buildLazyStoreProjection(
           parentNodeId: pillarNodeId,
           ownerSemanticId: 'model',
           childNodeIds: [],
-          hasChildren: false,
+          hasChildren: diagramHasMembers(input, dId),
         });
+        registerDiagramMembers(nodes, input, dId, expanded);
       }
     }
   }
@@ -523,9 +559,11 @@ function buildLazyStoreProjection(
             parentNodeId: expandedNodeId,
             ownerSemanticId: semanticId,
             childNodeIds: [],
-            hasChildren: false,
+            hasChildren: diagramHasMembers(input, dId),
           });
         }
+        nodes[sysmlNodeId(dId)].hasChildren = diagramHasMembers(input, dId);
+        registerDiagramMembers(nodes, input, dId, expanded);
       }
     }
   }
@@ -967,6 +1005,8 @@ export function buildUnifiedModelProjection(input: UnifiedExplorerInput): ModelT
       childNodeIds: [],
       hasChildren: false,
     });
+    if (diagramHasMembers(input, diagram.id)) ownersWithChildren.add(diagram.id);
+    registerDiagramMembers(nodes, input, diagram.id, input.expandedNodeIds);
   }
 
   const rootLayer = input.stateMachine.layers.find(layer => layer.id === 'root') ?? input.stateMachine.layers[0];

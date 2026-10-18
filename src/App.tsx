@@ -264,7 +264,7 @@ import {
   type DiagramWorkspaceTab,
 } from './services/sysmlDiagramWorkspace';
 import { ensureRootStateMachineDiagram } from './features/modelExplorer/adapters/stateMachineExplorerAdapter';
-import { resolveCanvasSymbolDiagramTargets, resolveExactDiagramCanvasContext } from './features/modelExplorer/diagramTreeContext';
+import { resolveCanvasSymbolDiagramTargets, resolveExactDiagramCanvasContext, resolveTreeOpenTarget } from './features/modelExplorer/diagramTreeContext';
 import type { StateMachineDiagramData } from './types/sm_types';
 import { resolveActiveSysmlDiagramTarget } from './services/sysmlDiagramTarget';
 import { planContextualCreation } from './features/sysml/contextualCreation';
@@ -14565,7 +14565,30 @@ const ADIA = () => {
    * exact-ID diagrams open their exact canvas, blocks enter their IBD context,
    * and states enter their nested layer.
    */
-  const activateHierarchyNode = (id: string, kind?: string) => {
+  /** A tree row opens in the workspace: the diagram that shows the element, with the element selected. */
+  const openTreeElementInWorkspace = (id: string, contextDiagramId?: string) => {
+    const stateMachine = { states, layers, transitions, junctions, diagrams: seededStateMachineDiagrams };
+    const activeTab = diagramWorkspace.activeTab;
+    const shownDiagramId = activeTab && (activeTab.kind === 'sysmlDiagram' || activeTab.kind === 'stateMachineDiagram') ? activeTab.diagramId : undefined;
+    const target = resolveTreeOpenTarget(id, canonicalSysmlRepository, sysmlDiagramPresentations, stateMachine,
+      { preferredDiagramId: contextDiagramId, activeDiagramId: shownDiagramId });
+    if (!target) {
+      setSelectedIds([id]);
+      return;
+    }
+    if (target.kind === 'diagram') {
+      if (target.diagramId !== shownDiagramId) openExactDiagramByIdImmediate(target.diagramId, { preserveReturnStack: true });
+    } else {
+      const rootDiagram = seededStateMachineDiagrams.find(diagram => diagram.contextRegionId === 'root');
+      if (rootDiagram && rootDiagram.id !== shownDiagramId) openExactDiagramByIdImmediate(rootDiagram.id);
+      setCurrentLayerId(target.context.layerId);
+      setLayerStack(target.context.layerStack);
+      setLayerPath(target.context.layerPath);
+    }
+    setSelectedIds([target.selectId]);
+  };
+
+  const activateHierarchyNode = (id: string, kind?: string, contextDiagramId?: string) => {
     const externalModelFile = workspaceFiles.find(file => file.id === id && (file.type === 'xbridges' || file.type === 'vlab'));
     if (externalModelFile) {
       openFileInTab(externalModelFile.id);
@@ -14583,8 +14606,10 @@ const ADIA = () => {
       }
     } else if (kind === 'block' || canonicalSysmlRepository.definitions[id]?.kind === 'block') {
       enterBlock(id);
-    } else if (diagramMode === "statemachine") {
-      enterLayer(id);
+    } else {
+      // a state with inner states opens its region, as a double-click on the canvas does
+      const innerRegion = layers.find(layer => layer.parentStateId === id);
+      openTreeElementInWorkspace(innerRegion?.id ?? id, contextDiagramId);
     }
   };
 
@@ -15233,13 +15258,17 @@ const ADIA = () => {
                     externalModels={hierarchyExternalModels}
                     canonicalSysmlRepository={canonicalSysmlRepository}
                     sysmlStore={sysmlStore}
-                    onSelect={(id: string, multiSelect?: boolean) => {
-                      if (!multiSelect && isDiagramHierarchyNode(id)) {
+                    onSelect={(id: string, multiSelect?: boolean, contextDiagramId?: string) => {
+                      if (multiSelect) {
+                        setSelectedIds([id]);
+                      } else if (isDiagramHierarchyNode(id)) {
                         activateHierarchyNode(id, 'diagram');
+                        setSelectedIds([id]);
+                      } else {
+                        openTreeElementInWorkspace(id, contextDiagramId);
                       }
-                      setSelectedIds([id]);
                     }}
-                    onDoubleClick={(id: string, kind?: string) => activateHierarchyNode(id, kind)}
+                    onDoubleClick={(id: string, kind?: string, contextDiagramId?: string) => activateHierarchyNode(id, kind, contextDiagramId)}
                     selectedIds={selectedIds}
                     onCommitStateMachineSnapshot={handleCommitStateMachineSnapshot}
 

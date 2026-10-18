@@ -50,6 +50,8 @@ export interface ModelTreeNode {
   ownerSemanticId?: string | null;
   diagramId?: string;
   targetSemanticId?: string;
+  /** A reference row listing an element a diagram presents (the diagram does not own it). */
+  presentedOnDiagramId?: string;
 }
 
 export interface ModelTreeProjection {
