@@ -1,0 +1,607 @@
+{
+ "checks": [
+  {
+   "check": "NTC calibration table (13 rows) vs divider + ADC",
+   "pass": true,
+   "detail": "13/13 rows consistent"
+  },
+  {
+   "check": "Boost table (7 rows) vs canonical transfer function",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "Oil-pressure table (7 rows) vs transfer function",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "Shunt sense: 16 A / 8 A on 0.033 Ohm",
+   "pass": true,
+   "detail": "528 mV / 264 mV"
+  },
+  {
+   "check": "Battery divider 24 V -> ADC 749",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "CKP frequency f = 0.6 x rpm (36 slots)",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "CMP frequency f = 0.1 x rpm (12 teeth, cam = crank/2)",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "Device codes decimal -> hex",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "Pin-out completeness X1 16 / X2 55",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "Fault codes unique per function",
+   "pass": true,
+   "detail": "no collisions"
+  },
+  {
+   "check": "SysML model constants == simulation data",
+   "pass": true,
+   "detail": "5/5 equal"
+  },
+  {
+   "check": "SysML connector ports modelled",
+   "pass": true,
+   "detail": "71 pins"
+  },
+  {
+   "check": "scn01_KeyOff           expected ST_STANDBY        ",
+   "pass": true,
+   "detail": "got ST_STANDBY; rpm=0 q=0.0 mg"
+  },
+  {
+   "check": "scn02_IgnitionOn       expected ST_READY          ",
+   "pass": true,
+   "detail": "got ST_READY; rpm=0 q=0.0 mg"
+  },
+  {
+   "check": "scn03_ColdCrank        expected ST_CRANK_SYNC     ",
+   "pass": true,
+   "detail": "got ST_CRANK_SYNC; rpm=220 q=64.0 mg"
+  },
+  {
+   "check": "scn04_NormalRun        expected ST_RUN_NORMAL     ",
+   "pass": true,
+   "detail": "got ST_RUN_NORMAL; rpm=1185.0 q=94.0 mg"
+  },
+  {
+   "check": "scn05_FullLoad         expected ST_RUN_NORMAL     ",
+   "pass": true,
+   "detail": "got ST_RUN_NORMAL; rpm=1900.0 q=182.0 mg"
+  },
+  {
+   "check": "scn06_EngineBrake      expected ST_ENGINE_BRAKE   ",
+   "pass": true,
+   "detail": "got ST_ENGINE_BRAKE; rpm=1400 q=0.0 mg"
+  },
+  {
+   "check": "scn07_ImmoMismatch     expected ST_IMMO_LOCKED    ",
+   "pass": true,
+   "detail": "got ST_IMMO_LOCKED; rpm=0 q=0.0 mg"
+  },
+  {
+   "check": "scn08_CkpLossLimp      expected ST_LIMP_DERATE    ",
+   "pass": true,
+   "detail": "got ST_LIMP_DERATE; rpm=1640.0 q=84.0 mg"
+  },
+  {
+   "check": "scn09_CmpLossRun       expected ST_LIMP_DERATE    ",
+   "pass": true,
+   "detail": "got ST_LIMP_DERATE; rpm=1185.0 q=65.8 mg"
+  },
+  {
+   "check": "scn10_TotalSyncLoss    expected ST_FAULT_SHUTDOWN ",
+   "pass": true,
+   "detail": "got ST_FAULT_SHUTDOWN; rpm=0 q=0.0 mg"
+  },
+  {
+   "check": "scn11_Overheat         expected ST_LIMP_DERATE    ",
+   "pass": true,
+   "detail": "got ST_LIMP_DERATE; rpm=1640.0 q=102.2 mg"
+  },
+  {
+   "check": "scn12_Bank1Short       expected ST_LIMP_DERATE    ",
+   "pass": true,
+   "detail": "got ST_LIMP_DERATE; rpm=1250.0 q=66.3 mg"
+  },
+  {
+   "check": "scn13_CanTimeout       expected ST_LIMP_DERATE    ",
+   "pass": true,
+   "detail": "got ST_LIMP_DERATE; rpm=1250.0 q=66.3 mg"
+  },
+  {
+   "check": "scn14_LowBoostSmoke    expected ST_RUN_NORMAL     ",
+   "pass": true,
+   "detail": "got ST_RUN_NORMAL; rpm=1900.0 q=68.0 mg"
+  },
+  {
+   "check": "Time to 16 A peak < 0.3 ms",
+   "pass": true,
+   "detail": "0.273 ms"
+  },
+  {
+   "check": "Hold current within 7.5 .. 8.5 A",
+   "pass": true,
+   "detail": "7.50 .. 8.50 A"
+  },
+  {
+   "check": "Peak shunt voltage = 0.528 V",
+   "pass": true,
+   "detail": "max V_shunt 0.528 V"
+  },
+  {
+   "check": "Spill: current decays to 0 within 0.3 ms",
+   "pass": true,
+   "detail": "58 us"
+  },
+  {
+   "check": "Shorted coil reaches 24 A trip (hardware cut-off)",
+   "pass": true,
+   "detail": "trip after 5.49 us"
+  },
+  {
+   "check": "Firing order 1-4-2-5-3-6 at 120\u00b0 spacing",
+   "pass": true,
+   "detail": "TDC angles {1: 0, 4: 120, 2: 240, 5: 360, 3: 480, 6: 600}"
+  },
+  {
+   "check": "Injection windows do not overlap within a bank",
+   "pass": true,
+   "detail": "1.661 ms per event"
+  },
+  {
+   "check": "OPEN / SCG / SCB detected electrically on all 6 analog sensors; DRIFT not (needs plausibility)",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "Fuel never exceeds smoke limit / 185 mg during drive cycle",
+   "pass": true,
+   "detail": "max q 166.0 mg"
+  },
+  {
+   "check": "CKP loss window: rpm <= 1800",
+   "pass": true,
+   "detail": "max 1188 rpm"
+  },
+  {
+   "check": "Overtemp >= 103 C triggers derate in drive cycle",
+   "pass": true,
+   "detail": "at t=22.0 s"
+  },
+  {
+   "check": "Drive cycle visits all major modes",
+   "pass": true,
+   "detail": "ST_STANDBY > ST_INIT_IMMO > ST_READY > ST_CRANK_SYNC > ST_RUN_NORMAL > ST_LIMP_DERATE > ST_RUN_NORMAL > ST_ENGINE_BRAKE > ST_RUN_NORMAL > ST_LIMP_DERATE > ST_RUN_NORMAL > ST_AFTERRUN > ST_STANDBY"
+  },
+  {
+   "check": "Ratiometric NTC chain immune to Vref \u00b12 %",
+   "pass": true,
+   "detail": "max error 0.0000 \u00b0C"
+  }
+ ],
+ "scenarios": [
+  {
+   "name": "scn01_KeyOff",
+   "keyState": "OFF",
+   "pedalPct": 0.0,
+   "coolantC": 20.0,
+   "boostBar": 1.0,
+   "immoValid": true,
+   "ckpValid": true,
+   "cmpValid": true,
+   "bank1Short": false,
+   "canValid": true,
+   "expectedState": "ST_STANDBY",
+   "finalState": "ST_STANDBY",
+   "pass": true,
+   "path": "ST_STANDBY",
+   "rpm": 0,
+   "q": 0.0,
+   "qSmoke": null,
+   "soi": null,
+   "torqueLimit": 0
+  },
+  {
+   "name": "scn02_IgnitionOn",
+   "keyState": "IGN",
+   "pedalPct": 0.0,
+   "coolantC": 20.0,
+   "boostBar": 1.0,
+   "immoValid": true,
+   "ckpValid": true,
+   "cmpValid": true,
+   "bank1Short": false,
+   "canValid": true,
+   "expectedState": "ST_READY",
+   "finalState": "ST_READY",
+   "pass": true,
+   "path": "ST_STANDBY > ST_INIT_IMMO > ST_READY",
+   "rpm": 0,
+   "q": 0.0,
+   "qSmoke": null,
+   "soi": null,
+   "torqueLimit": 0
+  },
+  {
+   "name": "scn03_ColdCrank",
+   "keyState": "CRANK",
+   "pedalPct": 20.0,
+   "coolantC": -5.0,
+   "boostBar": 1.0,
+   "immoValid": true,
+   "ckpValid": true,
+   "cmpValid": true,
+   "bank1Short": false,
+   "canValid": true,
+   "expectedState": "ST_CRANK_SYNC",
+   "finalState": "ST_CRANK_SYNC",
+   "pass": true,
+   "path": "ST_STANDBY > ST_INIT_IMMO > ST_READY > ST_CRANK_SYNC",
+   "rpm": 220,
+   "q": 64.0,
+   "qSmoke": null,
+   "soi": 16.5,
+   "torqueLimit": 100
+  },
+  {
+   "name": "scn04_NormalRun",
+   "keyState": "RUN",
+   "pedalPct": 45.0,
+   "coolantC": 85.0,
+   "boostBar": 2.0,
+   "immoValid": true,
+   "ckpValid": true,
+   "cmpValid": true,
+   "bank1Short": false,
+   "canValid": true,
+   "expectedState": "ST_RUN_NORMAL",
+   "finalState": "ST_RUN_NORMAL",
+   "pass": true,
+   "path": "ST_STANDBY > ST_INIT_IMMO > ST_READY > ST_CRANK_SYNC > ST_RUN_NORMAL",
+   "rpm": 1185.0,
+   "q": 94.0,
+   "qSmoke": 120.0,
+   "soi": 13.75,
+   "torqueLimit": 100.0
+  },
+  {
+   "name": "scn05_FullLoad",
+   "keyState": "RUN",
+   "pedalPct": 100.0,
+   "coolantC": 88.0,
+   "boostBar": 3.2,
+   "immoValid": true,
+   "ckpValid": true,
+   "cmpValid": true,
+   "bank1Short": false,
+   "canValid": true,
+   "expectedState": "ST_RUN_NORMAL",
+   "finalState": "ST_RUN_NORMAL",
+   "pass": true,
+   "path": "ST_STANDBY > ST_INIT_IMMO > ST_READY > ST_CRANK_SYNC > ST_RUN_NORMAL",
+   "rpm": 1900.0,
+   "q": 182.0,
+   "qSmoke": 185.0,
+   "soi": 16.5,
+   "torqueLimit": 100.0
+  },
+  {
+   "name": "scn06_EngineBrake",
+   "keyState": "BRAKE",
+   "pedalPct": 0.0,
+   "coolantC": 85.0,
+   "boostBar": 1.0,
+   "immoValid": true,
+   "ckpValid": true,
+   "cmpValid": true,
+   "bank1Short": false,
+   "canValid": true,
+   "expectedState": "ST_ENGINE_BRAKE",
+   "finalState": "ST_ENGINE_BRAKE",
+   "pass": true,
+   "path": "ST_STANDBY > ST_INIT_IMMO > ST_READY > ST_CRANK_SYNC > ST_RUN_NORMAL > ST_ENGINE_BRAKE",
+   "rpm": 1400,
+   "q": 0.0,
+   "qSmoke": null,
+   "soi": null,
+   "torqueLimit": 100
+  },
+  {
+   "name": "scn07_ImmoMismatch",
+   "keyState": "CRANK",
+   "pedalPct": 0.0,
+   "coolantC": 20.0,
+   "boostBar": 1.0,
+   "immoValid": false,
+   "ckpValid": true,
+   "cmpValid": true,
+   "bank1Short": false,
+   "canValid": true,
+   "expectedState": "ST_IMMO_LOCKED",
+   "finalState": "ST_IMMO_LOCKED",
+   "pass": true,
+   "path": "ST_STANDBY > ST_INIT_IMMO > ST_IMMO_LOCKED",
+   "rpm": 0,
+   "q": 0.0,
+   "qSmoke": null,
+   "soi": null,
+   "torqueLimit": 0
+  },
+  {
+   "name": "scn08_CkpLossLimp",
+   "keyState": "RUN",
+   "pedalPct": 80.0,
+   "coolantC": 85.0,
+   "boostBar": 2.0,
+   "immoValid": true,
+   "ckpValid": false,
+   "cmpValid": true,
+   "bank1Short": false,
+   "canValid": true,
+   "expectedState": "ST_LIMP_DERATE",
+   "finalState": "ST_LIMP_DERATE",
+   "pass": true,
+   "path": "ST_STANDBY > ST_INIT_IMMO > ST_READY > ST_CRANK_SYNC > ST_RUN_NORMAL > ST_LIMP_DERATE",
+   "rpm": 1640.0,
+   "q": 84.0,
+   "qSmoke": 120.0,
+   "soi": 15.5,
+   "torqueLimit": 70.0
+  },
+  {
+   "name": "scn09_CmpLossRun",
+   "keyState": "RUN",
+   "pedalPct": 45.0,
+   "coolantC": 85.0,
+   "boostBar": 2.0,
+   "immoValid": true,
+   "ckpValid": true,
+   "cmpValid": false,
+   "bank1Short": false,
+   "canValid": true,
+   "expectedState": "ST_LIMP_DERATE",
+   "finalState": "ST_LIMP_DERATE",
+   "pass": true,
+   "path": "ST_STANDBY > ST_INIT_IMMO > ST_READY > ST_CRANK_SYNC > ST_RUN_NORMAL > ST_LIMP_DERATE",
+   "rpm": 1185.0,
+   "q": 65.8,
+   "qSmoke": 120.0,
+   "soi": 13.75,
+   "torqueLimit": 70.0
+  },
+  {
+   "name": "scn10_TotalSyncLoss",
+   "keyState": "RUN",
+   "pedalPct": 45.0,
+   "coolantC": 85.0,
+   "boostBar": 2.0,
+   "immoValid": true,
+   "ckpValid": false,
+   "cmpValid": false,
+   "bank1Short": false,
+   "canValid": true,
+   "expectedState": "ST_FAULT_SHUTDOWN",
+   "finalState": "ST_FAULT_SHUTDOWN",
+   "pass": true,
+   "path": "ST_STANDBY > ST_INIT_IMMO > ST_READY > ST_CRANK_SYNC > ST_RUN_NORMAL > ST_FAULT_SHUTDOWN",
+   "rpm": 0,
+   "q": 0.0,
+   "qSmoke": null,
+   "soi": null,
+   "torqueLimit": 0
+  },
+  {
+   "name": "scn11_Overheat",
+   "keyState": "RUN",
+   "pedalPct": 80.0,
+   "coolantC": 106.0,
+   "boostBar": 2.4,
+   "immoValid": true,
+   "ckpValid": true,
+   "cmpValid": true,
+   "bank1Short": false,
+   "canValid": true,
+   "expectedState": "ST_LIMP_DERATE",
+   "finalState": "ST_LIMP_DERATE",
+   "pass": true,
+   "path": "ST_STANDBY > ST_INIT_IMMO > ST_READY > ST_CRANK_SYNC > ST_RUN_NORMAL > ST_LIMP_DERATE",
+   "rpm": 1640.0,
+   "q": 102.2,
+   "qSmoke": 146.0,
+   "soi": 15.5,
+   "torqueLimit": 70.0
+  },
+  {
+   "name": "scn12_Bank1Short",
+   "keyState": "RUN",
+   "pedalPct": 50.0,
+   "coolantC": 85.0,
+   "boostBar": 2.0,
+   "immoValid": true,
+   "ckpValid": true,
+   "cmpValid": true,
+   "bank1Short": true,
+   "canValid": true,
+   "expectedState": "ST_LIMP_DERATE",
+   "finalState": "ST_LIMP_DERATE",
+   "pass": true,
+   "path": "ST_STANDBY > ST_INIT_IMMO > ST_READY > ST_CRANK_SYNC > ST_RUN_NORMAL > ST_LIMP_DERATE",
+   "rpm": 1250.0,
+   "q": 66.3,
+   "qSmoke": 120.0,
+   "soi": 14.0,
+   "torqueLimit": 65.0
+  },
+  {
+   "name": "scn13_CanTimeout",
+   "keyState": "RUN",
+   "pedalPct": 50.0,
+   "coolantC": 85.0,
+   "boostBar": 2.0,
+   "immoValid": true,
+   "ckpValid": true,
+   "cmpValid": true,
+   "bank1Short": false,
+   "canValid": false,
+   "expectedState": "ST_LIMP_DERATE",
+   "finalState": "ST_LIMP_DERATE",
+   "pass": true,
+   "path": "ST_STANDBY > ST_INIT_IMMO > ST_READY > ST_CRANK_SYNC > ST_RUN_NORMAL > ST_LIMP_DERATE",
+   "rpm": 1250.0,
+   "q": 66.3,
+   "qSmoke": 120.0,
+   "soi": 14.0,
+   "torqueLimit": 65.0
+  },
+  {
+   "name": "scn14_LowBoostSmoke",
+   "keyState": "RUN",
+   "pedalPct": 100.0,
+   "coolantC": 85.0,
+   "boostBar": 1.2,
+   "immoValid": true,
+   "ckpValid": true,
+   "cmpValid": true,
+   "bank1Short": false,
+   "canValid": true,
+   "expectedState": "ST_RUN_NORMAL",
+   "finalState": "ST_RUN_NORMAL",
+   "pass": true,
+   "path": "ST_STANDBY > ST_INIT_IMMO > ST_READY > ST_CRANK_SYNC > ST_RUN_NORMAL",
+   "rpm": 1900.0,
+   "q": 68.0,
+   "qSmoke": 68.0,
+   "soi": 16.5,
+   "torqueLimit": 100.0
+  }
+ ],
+ "requirements": {
+  "REQ-ADC-12": {
+   "pass": true,
+   "evidence": "tables reproduce 10-bit codes"
+  },
+  "REQ-SEC-06": {
+   "pass": true,
+   "evidence": "scn07 immo mismatch never reaches ST_CRANK_SYNC (starter off)"
+  },
+  "REQ-SYNC-02": {
+   "pass": true,
+   "evidence": "inject on CKP xor CMP; stop only when both lost"
+  },
+  "REQ-LIMP-09": {
+   "pass": true,
+   "evidence": "scn08 rpm limited to 1640.0; drive-cycle CKP-loss window <= 1800 rpm"
+  },
+  "REQ-THM-08": {
+   "pass": true,
+   "evidence": "scn11 106 C -> derate; drive cycle coolant ramp -> ST_LIMP_DERATE"
+  },
+  "REQ-SAF-05": {
+   "pass": true,
+   "evidence": "scn14 low boost: q=68.0 <= smoke 68.0; drive cycle q <= smoke limit"
+  },
+  "REQ-COM-11": {
+   "pass": true,
+   "evidence": "CAN timeout -> limp torque"
+  },
+  "REQ-INJ-03": {
+   "pass": true,
+   "evidence": "peak 0.273 ms, hold 7.50-8.50 A"
+  },
+  "REQ-INJ-04": {
+   "pass": true,
+   "evidence": "short-circuit trip in 5.5 us"
+  },
+  "REQ-FIRE-10": {
+   "pass": true,
+   "evidence": "6 TDCs at 0,120..600 deg"
+  },
+  "REQ-DIAG-07": {
+   "pass": true,
+   "evidence": "18/18 hard faults detected, 6/6 drifts flagged for plausibility"
+  },
+  "REQ-PWR-01": {
+   "pass": true,
+   "evidence": "TLE4275 4.90..5.10 V; ratiometric chain error <0.01 \u00b0C"
+  }
+ },
+ "driveCycleEvents": [
+  [
+   1.0,
+   "KL15_On",
+   "ST_INIT_IMMO"
+  ],
+  [
+   1.5,
+   "SelfTestPassed",
+   "ST_READY"
+  ],
+  [
+   3.0,
+   "KL50_CrankRequest",
+   "ST_CRANK_SYNC"
+  ],
+  [
+   3.65,
+   "EngineRunning",
+   "ST_RUN_NORMAL"
+  ],
+  [
+   22.0,
+   "OvertempDetected",
+   "ST_LIMP_DERATE"
+  ],
+  [
+   26.8,
+   "OvertempCleared",
+   "ST_RUN_NORMAL"
+  ],
+  [
+   30.0,
+   "EngineBrakeRequest",
+   "ST_ENGINE_BRAKE"
+  ],
+  [
+   34.0,
+   "EngineBrakeRelease",
+   "ST_RUN_NORMAL"
+  ],
+  [
+   40.0,
+   "CkpLost",
+   "ST_LIMP_DERATE"
+  ],
+  [
+   46.0,
+   "CkpRestored",
+   "ST_RUN_NORMAL"
+  ],
+  [
+   52.0,
+   "KL15_Off",
+   "ST_AFTERRUN"
+  ],
+  [
+   54.0,
+   "AfterrunComplete",
+   "ST_STANDBY"
+  ]
+ ]
+}
