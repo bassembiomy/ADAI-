@@ -655,7 +655,7 @@ describe('AppModelExplorer diagram-context creation', () => {
   });
 });
 
-describe('Model Explorer diagram grouping lifecycle', () => {
+describe('Model Explorer diagram membership lifecycle', () => {
   it('keeps diagram membership undoable, redoable, and persistent across a project round trip', () => {
     const repository = repositoryWithDiagrams();
     const created: BlockDefinition = {
@@ -686,8 +686,8 @@ describe('Model Explorer diagram grouping lifecycle', () => {
     const afterRedo = executeSysmlCommand(afterUndo, { type: 'redo' });
     expect(afterRedo.diagramPresentations['bdd-1'].elementIds).toContain(created.id);
 
-    // The presentation survives the project persistence path and still drives
-    // the containment grouping after a reload.
+    // The presentation survives the project persistence path; the containment
+    // tree keeps listing the element under its owner (a diagram owns nothing).
     const payload = JSON.parse(JSON.stringify(
       buildCanonicalSysmlProjectPayload(afterRedo, { version: '1.0', projectName: 'Grouping' }),
     ));
@@ -701,8 +701,9 @@ describe('Model Explorer diagram grouping lifecycle', () => {
       diagramPresentations: loaded.diagramPresentations,
     });
 
+    expect(loaded.diagramPresentations['bdd-1'].elementIds).toContain(created.id);
     expect(projection.nodes[`sysml:element:${created.id}`]).toMatchObject({
-      parentNodeId: 'sysml:element:bdd-1',
+      parentNodeId: 'project:pillar:structural',
       ownerSemanticId: 'model',
     });
   });

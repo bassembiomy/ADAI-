@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createEmptyRepository, type SysmlRepository } from '../../engine/sysml/model';
 import type { ModelTreeNode } from './modelExplorerTypes';
 import type { StateMachineExplorerSnapshot } from './adapters/stateMachineExplorerAdapter';
-import { buildDiagramVisualParentIndex, resolveCanvasSymbolDiagramTarget, resolveCanvasSymbolDiagramTargets, resolveDiagramSemanticOwner, resolveExactDiagramCanvasContext } from './diagramTreeContext';
+import { resolveCanvasSymbolDiagramTarget, resolveCanvasSymbolDiagramTargets, resolveDiagramSemanticOwner, resolveExactDiagramCanvasContext } from './diagramTreeContext';
 
 function diagramNode(id: string, domain: 'sysml' | 'stateMachine'): ModelTreeNode {
   return {
@@ -78,128 +78,6 @@ describe('resolveDiagramSemanticOwner', () => {
     };
     expect(resolveDiagramSemanticOwner(diagramNode('ghost', 'sysml'), repository, stateMachine)).toBe('model');
     expect(resolveDiagramSemanticOwner(diagramNode('ghost-sm', 'stateMachine'), repository, stateMachine)).toBe('root');
-  });
-});
-
-describe('buildDiagramVisualParentIndex', () => {
-  it('maps presented SysML elements to their diagram node', () => {
-    const index = buildDiagramVisualParentIndex({
-      sysml: repositoryWithDiagrams(),
-      stateMachine: stateMachineWithNestedDiagram(),
-      diagramPresentations: {
-        'bdd-1': { elementIds: ['block-1'] },
-        'req-diagram-1': { elementIds: ['req-1'] },
-        'parametric-1': { elementIds: ['constraint-1'] },
-      },
-    });
-
-    expect(index.get('block-1')).toBe('sysml:element:bdd-1');
-    expect(index.get('req-1')).toBe('sysml:element:req-diagram-1');
-    expect(index.get('constraint-1')).toBe('sysml:element:parametric-1');
-  });
-
-  it('maps states and junctions of a state-machine diagram to that diagram node', () => {
-    const index = buildDiagramVisualParentIndex({
-      sysml: createEmptyRepository(),
-      stateMachine: stateMachineWithNestedDiagram(),
-      diagramPresentations: {},
-    });
-
-    expect(index.get('s2')).toBe('sm:diagram:nested-sm-1');
-    expect(index.get('j1')).toBe('sm:diagram:nested-sm-1');
-  });
-
-  it('ignores presentations whose diagram or element no longer resolves', () => {
-    const index = buildDiagramVisualParentIndex({
-      sysml: repositoryWithDiagrams(),
-      stateMachine: stateMachineWithNestedDiagram(),
-      diagramPresentations: {
-        'deleted-diagram': { elementIds: ['block-1'] },
-        'bdd-1': { elementIds: ['ghost-1', ''] },
-      },
-    });
-
-    expect(index.get('ghost-1')).toBeUndefined();
-    expect(index.has('')).toBe(false);
-    // A stale diagram ID must not capture a semantic element that still exists.
-    expect(index.has('block-1')).toBe(false);
-  });
-
-  it('lets the later diagram entry win deterministically', () => {
-    const index = buildDiagramVisualParentIndex({
-      sysml: repositoryWithDiagrams(),
-      stateMachine: stateMachineWithNestedDiagram(),
-      diagramPresentations: {
-        'bdd-1': { elementIds: ['block-1'] },
-        'req-diagram-1': { elementIds: ['block-1'] },
-      },
-    });
-
-    expect(index.get('block-1')).toBe('sysml:element:req-diagram-1');
-  });
-
-  it('correctly maps relationships when explicitly presented, inferred from endpoints, or hidden', () => {
-    const repo = repositoryWithDiagrams();
-    repo.definitions['block-2'] = {
-      id: 'block-2', name: 'Gearbox', namespace: ['model'], ownerId: 'model', kind: 'block',
-      isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
-    };
-    repo.relationships['rel-explicit'] = {
-      id: 'rel-explicit', kind: 'association', sourceId: 'block-1', targetId: 'block-2',
-    } as any;
-    repo.relationships['rel-inferred'] = {
-      id: 'rel-inferred', kind: 'dependency', sourceId: 'block-1', targetId: 'block-2',
-    } as any;
-    repo.relationships['rel-hidden'] = {
-      id: 'rel-hidden', kind: 'generalization', sourceId: 'block-1', targetId: 'block-2',
-    } as any;
-    repo.relationships['rel-stale-endpoint'] = {
-      id: 'rel-stale-endpoint', kind: 'association', sourceId: 'block-1', targetId: 'missing-block',
-    } as any;
-
-    const index = buildDiagramVisualParentIndex({
-      sysml: repo,
-      stateMachine: stateMachineWithNestedDiagram(),
-      diagramPresentations: {
-        'bdd-1': {
-          elementIds: ['block-1', 'block-2', 'rel-explicit'],
-          hiddenElementIds: ['rel-hidden'],
-        },
-      },
-    });
-
-    // rel-explicit is explicitly presented
-    expect(index.get('rel-explicit')).toBe('sysml:element:bdd-1');
-    // rel-inferred has both endpoints presented and is not hidden
-    expect(index.get('rel-inferred')).toBe('sysml:element:bdd-1');
-    // rel-hidden is hidden despite both endpoints presented
-    expect(index.get('rel-hidden')).toBeUndefined();
-    // rel-stale-endpoint does not have both endpoints presented
-    expect(index.get('rel-stale-endpoint')).toBeUndefined();
-  });
-
-  it('handles multiple diagrams with later precedence for relationships and ignores missing diagrams', () => {
-    const repo = repositoryWithDiagrams();
-    repo.definitions['block-2'] = {
-      id: 'block-2', name: 'Gearbox', namespace: ['model'], ownerId: 'model', kind: 'block',
-      isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
-    };
-    repo.relationships['rel-shared'] = {
-      id: 'rel-shared', kind: 'association', sourceId: 'block-1', targetId: 'block-2',
-    } as any;
-
-    const index = buildDiagramVisualParentIndex({
-      sysml: repo,
-      stateMachine: stateMachineWithNestedDiagram(),
-      diagramPresentations: {
-        'bdd-1': { elementIds: ['block-1', 'block-2'] },
-        'missing-diagram': { elementIds: ['block-1', 'block-2', 'rel-shared'] },
-        'req-diagram-1': { elementIds: ['block-1', 'block-2'] },
-      },
-    });
-
-    // req-diagram-1 comes after bdd-1; missing-diagram is ignored because it does not exist in repo.diagrams
-    expect(index.get('rel-shared')).toBe('sysml:element:req-diagram-1');
   });
 });
 

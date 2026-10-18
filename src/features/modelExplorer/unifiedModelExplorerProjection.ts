@@ -1,4 +1,4 @@
-import type { SysmlRepository } from '../../engine/sysml/model';
+import type { ModelDiagramDefinition, SysmlRepository } from '../../engine/sysml/model';
 import type { NormalizedSysmlStore } from '../../engine/sysml/normalizedStore';
 import type { SemanticElement } from '../../engine/sysml/domain/base';
 import type {
@@ -11,7 +11,6 @@ import { resolvePortUsage } from '../../engine/sysml/ibd';
 import { lifelineBlock, messageLabel, orderedMessages } from '../../engine/sysml/interaction';
 import type { DiagramPresentationInput } from '../../engine/sysml/presentationState';
 import type { StateMachineExplorerSnapshot } from './adapters/stateMachineExplorerAdapter';
-import { buildDiagramVisualParentIndex } from './diagramTreeContext';
 import { getElementKindLabel } from './modelExplorerCapabilities';
 import { friendlySysmlKind, hasSysmlReference, resolveSysmlReferenceLabel, sysmlObjectLabel } from '../sysml/sysmlDisplayLabel';
 import type {
@@ -165,19 +164,36 @@ const pillarOrder: Array<[ModelPillar, string]> = [
 
 const pillarForSysmlKind = (kind: string): ModelPillar => {
   if (kind === 'requirement' || kind === 'verificationCase') return 'requirements';
-  if (kind === 'activity' || kind === 'interaction') return 'behavior';
+  if (kind === 'activity' || kind === 'interaction' || kind === 'useCase') return 'behavior';
   return 'structural';
 };
 
 /**
- * Diagrams are viewpoints: a parametric diagram belongs under the Parametric
- * pillar, requirements and traceability views under Requirements, everything
- * else (BDD, IBD, Package) under Structural.
+ * Diagrams are viewpoints (SysML 1.6 Annex A diagram taxonomy): a parametric
+ * diagram belongs under the Parametric pillar, requirements and traceability
+ * views under Requirements, the behavior diagrams (activity, sequence, use case)
+ * under Behavior, everything else (BDD, IBD, Package) under Structural.
  */
 const pillarForDiagramKind = (diagramKind: string): ModelPillar => {
   if (diagramKind === 'requirements' || diagramKind === 'rtm') return 'requirements';
   if (diagramKind === 'parametric') return 'parametric';
+  if (diagramKind === 'activity' || diagramKind === 'sequence' || diagramKind === 'useCase' || diagramKind === 'usecase') return 'behavior';
   return 'structural';
+};
+
+/**
+ * A top-level package sits under the pillar of what it directly holds (a package of
+ * requirements and requirements diagrams under Requirements, of activities and
+ * interactions under Behavior); a mixed or empty package stays under Structural.
+ * The pillars only arrange the navigation: no element changes owner.
+ */
+const pillarForPackageContent = (childPillars: Iterable<ModelPillar>): ModelPillar => {
+  let found: ModelPillar | undefined;
+  for (const pillar of childPillars) {
+    if (found && found !== pillar) return 'structural';
+    found = pillar;
+  }
+  return found ?? 'structural';
 };
 
 const register = (nodes: Record<string, ModelTreeNode>, node: ModelTreeNode) => {
@@ -352,6 +368,20 @@ function buildLazyStoreProjection(
     });
   };
 
+  const diagramsByOwner = new Map<string, Array<[string, ModelDiagramDefinition]>>();
+  for (const [dId, diag] of store.diagrams.entries()) {
+    const owner = diag.ownerId || 'model';
+    const owned = diagramsByOwner.get(owner);
+    if (owned) owned.push([dId, diag]); else diagramsByOwner.set(owner, [[dId, diag]]);
+  }
+  const packagePillar = (pkgId: string): ModelPillar => pillarForPackageContent([
+    ...[...(store.indexes.ownerId.get(pkgId) ?? [])].filter(id => !store.diagrams.has(id)).map(id => {
+      const child = store.entities.get(id) as any;
+      return pillarForSysmlKind(child?.kind ?? child?.metaclass ?? 'element');
+    }),
+    ...(diagramsByOwner.get(pkgId) ?? []).map(([, diag]) => pillarForDiagramKind(diag.diagramKind)),
+  ]);
+
   // 1. Check pillars in expanded
   const topLevelChildren = store.indexes.ownerId.get('model');
   if (topLevelChildren && topLevelChildren.size > 0) {
@@ -359,7 +389,7 @@ function buildLazyStoreProjection(
       const entity = store.entities.get(id);
       if (!entity) continue;
       const kind = 'kind' in entity ? entity.kind : (entity as any).metaclass ?? 'element';
-      const pillar = pillarForSysmlKind(kind);
+      const pillar = kind === 'package' ? packagePillar(id) : pillarForSysmlKind(kind);
       const pillarNodeId = `project:pillar:${pillar}`;
       if (expanded.has(pillarNodeId)) {
         projectSysmlEntity(id, entity, pillarNodeId);
@@ -371,7 +401,7 @@ function buildLazyStoreProjection(
   for (const [pkgId, pkg] of store.packages.entries()) {
     if (pkgId === 'model') continue;
     if (!pkg.ownerId || pkg.ownerId === 'model') {
-      const pillarNodeId = 'project:pillar:structural';
+      const pillarNodeId = `project:pillar:${packagePillar(pkgId)}`;
       if (expanded.has(pillarNodeId) && !nodes[sysmlNodeId(pkgId)]) {
         projectSysmlEntity(pkgId, pkg, pillarNodeId);
       }
@@ -471,9 +501,17 @@ function buildLazyStoreProjection(
         }
       }
 
+      // Relationships no element owns are listed under their source (client) element
+      for (const relId of store.indexes.sourceId.get(semanticId) ?? []) {
+        const rel = input.sysml.relationships[relId];
+        if (rel && (!(rel as any).ownerId || (rel as any).ownerId === 'model') && !nodes[sysmlNodeId(relId)]) {
+          register(nodes, { ...projectRelationship(rel as any, input.sysml), parentNodeId: expandedNodeId });
+        }
+      }
+
       // Diagrams owned by semanticId
-      for (const [dId, diag] of store.diagrams.entries()) {
-        if (diag.ownerId === semanticId && !nodes[sysmlNodeId(dId)]) {
+      for (const [dId, diag] of diagramsByOwner.get(semanticId) ?? []) {
+        if (!nodes[sysmlNodeId(dId)]) {
           register(nodes, {
             nodeId: sysmlNodeId(dId),
             semanticId: dId,
@@ -573,16 +611,6 @@ function buildLazyStoreProjection(
 
   registerExternalModels(nodes, input);
 
-  // 4. Diagram presentations & visual parents (if any)
-  if (input.diagramPresentations && Object.keys(input.diagramPresentations).length > 0) {
-    const visualParentBySemanticId = buildDiagramVisualParentIndex({
-      sysml: input.sysml,
-      stateMachine: input.stateMachine,
-      diagramPresentations: input.diagramPresentations,
-    });
-    applyDiagramVisualParents(nodes, visualParentBySemanticId);
-  }
-
   // 5. Rebuild children without wiping hasChildren on collapsed nodes
   for (const nodeId in nodes) {
     nodes[nodeId].childNodeIds = [];
@@ -603,11 +631,6 @@ export function buildUnifiedModelProjection(input: UnifiedExplorerInput): ModelT
     return buildLazyStoreProjection(input, input.sysmlStore, input.expandedNodeIds);
   }
   const nodes: Record<string, ModelTreeNode> = {};
-  const visualParentBySemanticId = buildDiagramVisualParentIndex({
-    sysml: input.sysml,
-    stateMachine: input.stateMachine,
-    diagramPresentations: input.diagramPresentations ?? {},
-  });
   const modelId = 'project:model';
   register(nodes, {
     nodeId: modelId,
@@ -662,9 +685,6 @@ export function buildUnifiedModelProjection(input: UnifiedExplorerInput): ModelT
   for (const [, source] of requirementParents) {
     ownersWithChildren.add(source);
   }
-  for (const [, visualParentId] of visualParentBySemanticId) {
-    ownersWithChildren.add(visualParentId);
-  }
 
   const ownerNodeId = (ownerId: string | undefined, pillar: ModelPillar) => {
     if (ownerId && ownerId !== 'model') {
@@ -692,22 +712,22 @@ export function buildUnifiedModelProjection(input: UnifiedExplorerInput): ModelT
     ...Object.values(input.sysml.subjects ?? {}),
     ...Object.values(input.sysml.useCases ?? {}),
   ];
+  const childPillars = new Map<string, ModelPillar[]>();
+  const addChildPillar = (ownerId: string | undefined, pillar: ModelPillar) => {
+    if (!ownerId) return;
+    const pillars = childPillars.get(ownerId);
+    if (pillars) pillars.push(pillar); else childPillars.set(ownerId, [pillar]);
+  };
+  for (const item of sysmlEntries) addChildPillar(item.ownerId, pillarForSysmlKind(item.kind));
+  for (const diagram of Object.values(input.sysml.diagrams ?? {})) addChildPillar(diagram.ownerId, pillarForDiagramKind(diagram.diagramKind));
   for (const item of sysmlEntries) {
-    const pillar = pillarForSysmlKind(item.kind);
+    const pillar = item.kind === 'package' ? pillarForPackageContent(childPillars.get(item.id) ?? []) : pillarForSysmlKind(item.kind);
     const ownerId = item.kind === 'requirement'
       ? requirementParents.get(item.id) ?? item.ownerId
       : item.ownerId;
     const parentNode = ownerNodeId(ownerId, pillar);
 
-    const visualParentSemantic = visualParentBySemanticId.get(item.id);
-    const visualParentNode = visualParentSemantic ? sysmlNodeId(visualParentSemantic) : undefined;
-    if (
-      input.expandedNodeIds &&
-      !input.expandedNodeIds.has(parentNode) &&
-      (!visualParentNode || !input.expandedNodeIds.has(visualParentNode))
-    ) {
-      continue;
-    }
+    if (input.expandedNodeIds && !input.expandedNodeIds.has(parentNode)) continue;
 
     const resolvedPort = item.kind === 'port' ? resolvePortUsage(input.sysml, item.id) : undefined;
     register(nodes, {
@@ -904,6 +924,11 @@ export function buildUnifiedModelProjection(input: UnifiedExplorerInput): ModelT
   // Relationships
   for (const rel of Object.values(input.sysml.relationships ?? {})) {
     const relNode = projectRelationship(rel as any, input.sysml);
+    // a relationship no element owns is listed under its source (client) element
+    if (!(rel as any).ownerId && nodes[sysmlNodeId(rel.sourceId)]) {
+      relNode.parentNodeId = sysmlNodeId(rel.sourceId);
+      ownersWithChildren.add(rel.sourceId);
+    }
     if (!nodes[relNode.nodeId]) {
       register(nodes, relNode);
     }
@@ -1036,64 +1061,7 @@ export function buildUnifiedModelProjection(input: UnifiedExplorerInput): ModelT
 
   registerExternalModels(nodes, input);
 
-  applyDiagramVisualParents(nodes, visualParentBySemanticId);
   rebuildChildren(nodes, ownersWithChildren);
   return { roots: [modelId], nodes, revision: input.revision };
 }
 
-/**
- * Moves presented elements under the diagram that shows them. The diagram node
- * must already exist, and a rewrite is skipped whenever it would close a
- * containment cycle (a diagram owned by an element it also presents), so the
- * primary containment projection stays a forest.
- */
-function applyDiagramVisualParents(
-  nodes: Record<string, ModelTreeNode>,
-  visualParentBySemanticId: Map<string, string>,
-): void {
-  const isDiagramMember = (node: ModelTreeNode): boolean =>
-    (node.domain === 'sysml' || node.domain === 'stateMachine')
-    && !node.virtualKind
-    && node.kind !== 'diagram'
-    && node.kind !== 'group'
-    && node.kind !== 'model'
-    && node.kind !== 'pillar'
-    && node.kind !== 'port'
-    && !node.kind.endsWith('Port')
-    && !node.kind.endsWith('Property')
-    && node.kind !== 'connectorEnd'
-    && node.kind !== 'Operation'
-    // Interaction content always stays under its Interaction.
-    && !(node.readOnly && node.ownerSemanticId && node.parentNodeId?.startsWith('sysml:group:'))
-    && nodes[node.nodeId] === node;
-
-  const wouldCreateCycle = (childId: string, parentId: string): boolean => {
-    let current: string | null | undefined = parentId;
-    const seen = new Set<string>();
-    while (current && !seen.has(current)) {
-      if (current === childId) return true;
-      seen.add(current);
-      current = nodes[current]?.parentNodeId;
-    }
-    return false;
-  };
-
-  const semanticToNodeId = new Map<string, string>();
-  for (const nodeId in nodes) {
-    const node = nodes[nodeId];
-    if (node.semanticId && !semanticToNodeId.has(node.semanticId)) {
-      semanticToNodeId.set(node.semanticId, nodeId);
-    }
-  }
-
-  for (const [semanticId, visualParentId] of visualParentBySemanticId) {
-    if (!visualParentId || !nodes[visualParentId]) continue;
-    const nodeId = semanticToNodeId.get(semanticId);
-    if (!nodeId) continue;
-    const node = nodes[nodeId];
-    if (!node || !isDiagramMember(node)) continue;
-    if (node.parentNodeId === visualParentId) continue;
-    if (wouldCreateCycle(node.nodeId, visualParentId)) continue;
-    node.parentNodeId = visualParentId;
-  }
-}

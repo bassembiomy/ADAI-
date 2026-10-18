@@ -99,12 +99,13 @@ const update = (elementId: string, patch: Record<string, unknown>) => run({ type
 const R = () => state.repository;
 const NS = 'MercedesBenz_MR_PLD_A5414465340';
 const P = {
-  root: 'pkg_MR_PLD', types: 'pkg_Types', ident: 'pkg_Identification', signals: 'pkg_Signals', ifaces: 'pkg_Interfaces',
+  root: 'model', types: 'pkg_Types', ident: 'pkg_Identification', signals: 'pkg_Signals', ifaces: 'pkg_Interfaces',
   reqs: 'pkg_Requirements', hw: 'pkg_HardwareStructure', ibd: 'pkg_InternalStructure', par: 'pkg_Parametrics',
   beh: 'pkg_OperationalBehavior', sd: 'pkg_Interactions', ana: 'pkg_AnalysisAndSimulation', trace: 'pkg_Traceability',
   variants: 'pkg_Variants', views: 'pkg_Views', uc: 'pkg_UseCases',
 };
-create(createPackage({ id: P.root, name: NS, ownerId: 'model' }));
+// the project root (Model) carries the name of the source's root package, which owns the 15 packages
+update(P.root, { name: NS });
 const PACKAGE_NAMES: Array<[string, string, 'modelLibrary'?]> = [
   [P.types, '00_Types', 'modelLibrary'], [P.ident, '01_Identification'], [P.signals, '02_Signals'], [P.ifaces, '03_Interfaces'],
   [P.reqs, '04_Requirements'], [P.hw, '05_HardwareStructure'], [P.ibd, '06_InternalStructure'], [P.par, '07_Parametrics'],
@@ -112,7 +113,7 @@ const PACKAGE_NAMES: Array<[string, string, 'modelLibrary'?]> = [
   [P.variants, '12_Variants'], [P.views, '13_Views'], [P.uc, '14_UseCases'],
 ];
 for (const [id, name, stereotype] of PACKAGE_NAMES) create(createPackage({ id, name, ownerId: P.root, stereotype }));
-const ns = (pkgId: string) => [NS, R().packages[pkgId].name];
+const ns = (ownerId: string) => R().packages[ownerId] ? [NS, R().packages[ownerId].name] : [NS, R().packages[P.reqs].name, R().requirements[ownerId].name];
 
 // ------------------------------------------- 00 Types: ScalarValues / ISQ / SI
 const QK: Array<[string, string, string]> = [
@@ -536,13 +537,15 @@ const requirement = (rid: string, name: string, text: string, owner = P.reqs, ex
 const relate = (kind: 'requirementContainment' | 'deriveReqt' | 'satisfy' | 'verify' | 'refine' | 'trace' | 'allocation', sourceId: string, targetId: string) =>
   run({ type: 'createElement', element: { id: `${kind}_${sourceId}_${targetId}`, kind, sourceId, targetId } });
 requirement('REQ-SPEC-00', 'mrPldSpecification', 'Top-level specification grouping all ECU requirements (subject: MR_PLD_ECU).', P.reqs, { priority: 'high' });
+// requirement containment (SysML 1.6 §16.3.2.4): the specification owns the requirements it contains
+const SPEC = reqId('REQ-SPEC-00');
 for (const r of TOP) {
-  requirement(r.id, r.name, `${r.text}${r.constraints.length ? ` [${r.constraints.join('; ')}]` : ''}`, P.reqs, { source: 'MR_PLD_A5414465340.sysml', risk: 'high', priority: 'high' });
+  requirement(r.id, r.name, `${r.text}${r.constraints.length ? ` [${r.constraints.join('; ')}]` : ''}`, SPEC, { source: 'MR_PLD_A5414465340.sysml', risk: 'high', priority: 'high' });
   relate('requirementContainment', reqId('REQ-SPEC-00'), reqId(r.id));
   for (const blk of TOP_SATISFIED_BY[r.id]) relate('satisfy', blk, reqId(r.id));
 }
 for (const r of SUPPLEMENTARY) {
-  requirement(r.id, r.name, r.text, P.reqs, { source: 'MR_PLD_A5414465340.sysml part / state docs', priority: 'medium' });
+  requirement(r.id, r.name, r.text, SPEC, { source: 'MR_PLD_A5414465340.sysml part / state docs', priority: 'medium' });
   relate('requirementContainment', reqId('REQ-SPEC-00'), reqId(r.id));
   for (const blk of r.satisfiedBy) relate('satisfy', blk, reqId(r.id));
 }

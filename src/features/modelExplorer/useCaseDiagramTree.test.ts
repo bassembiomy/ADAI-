@@ -21,41 +21,30 @@ const stateMachine = {
   transitions: [], junctions: [], diagrams: [], revision: 1,
 } as any;
 
-describe('Use Case diagram grouping in the model tree', () => {
-  it('shows presented actors, use cases and connecting relationships under the diagram', () => {
+describe('Use Case diagram content in the containment tree', () => {
+  it('lists presented actors and use cases under their owner and the diagram as a leaf of that owner', () => {
     const projection = buildUnifiedModelProjection({
       sysml: useCaseModel(), stateMachine, externalModels: [], revision: 1,
       diagramPresentations: { ucd: { elementIds: ['actor1', 'uc1'] } },
     });
-    const diagram = projection.nodes['sysml:element:ucd'];
-    expect(diagram.childNodeIds).toEqual(expect.arrayContaining([
-      'sysml:element:actor1', 'sysml:element:uc1', 'sysml:element:assoc',
-    ]));
-    // Only one end of `other` is presented, so it is not drawn on this diagram.
-    expect(diagram.childNodeIds).not.toContain('sysml:element:other');
-    // Extension points stay with their owning Use Case, not the diagram.
-    expect(projection.nodes['sysml:element:uc1'].childNodeIds).toContain('sysml:element:ep1');
-    expect(diagram.childNodeIds).not.toContain('sysml:element:ep1');
-  });
-
-  it('keeps semantic ownership unchanged when grouping under the diagram', () => {
-    const projection = buildUnifiedModelProjection({
-      sysml: useCaseModel(), stateMachine, externalModels: [], revision: 1,
-      diagramPresentations: { ucd: { elementIds: ['actor1', 'uc1'] } },
-    });
+    const pkg = projection.nodes['sysml:element:pkg'];
+    expect(pkg.childNodeIds).toEqual(expect.arrayContaining(['sysml:element:actor1', 'sysml:element:uc1', 'sysml:element:ucd']));
+    expect(projection.nodes['sysml:element:ucd'].childNodeIds).toEqual([]);
     expect(projection.nodes['sysml:element:actor1'].ownerSemanticId).toBe('pkg');
-    expect(projection.nodes['sysml:element:uc1'].parentNodeId).toBe('sysml:element:ucd');
+    // Extension points stay with their owning Use Case.
+    expect(projection.nodes['sysml:element:uc1'].childNodeIds).toContain('sysml:element:ep1');
   });
 
-  it('does not draw an explicitly hidden relationship under the diagram', () => {
+  it('lists a relationship no element owns under its source (client) element', () => {
     const projection = buildUnifiedModelProjection({
       sysml: useCaseModel(), stateMachine, externalModels: [], revision: 1,
       diagramPresentations: { ucd: { elementIds: ['actor1', 'uc1'], hiddenElementIds: ['assoc'] } },
     });
-    expect(projection.nodes['sysml:element:ucd'].childNodeIds).not.toContain('sysml:element:assoc');
+    expect(projection.nodes['sysml:element:assoc'].parentNodeId).toBe('sysml:element:actor1');
+    expect(projection.nodes['sysml:element:other'].parentNodeId).toBe('sysml:element:actor2');
   });
 
-  it('still lists actors and use cases that no diagram presents, under their owner', () => {
+  it('lists actors and use cases that no diagram presents under their owner', () => {
     const projection = buildUnifiedModelProjection({ sysml: useCaseModel(), stateMachine, externalModels: [], revision: 1 });
     expect(projection.nodes['sysml:element:actor1'].parentNodeId).toBe('sysml:element:pkg');
     expect(projection.nodes['sysml:element:uc1'].parentNodeId).toBe('sysml:element:pkg');

@@ -18,7 +18,7 @@ Everything added to make the model complete is a requirement, use case, diagram,
 
 | SysML v2 source | ADIA model element |
 | --- | --- |
-| 11 packages | `00_Types` («modelLibrary») … `14_UseCases` under `MercedesBenz_MR_PLD_A5414465340` |
+| root package + 11 packages | the project root (Model) is `MercedesBenz_MR_PLD_A5414465340`; `00_Types` («modelLibrary») … `14_UseCases` are its packages |
 | `ScalarValues`, `ISQ`, `SI` | ValueTypes `Real`, `Integer`, `Boolean`, `String`, `ElectricPotentialValue` [V], `ElectricCurrentValue` [A], `FrequencyValue` [Hz] with QUDV units / quantity kinds |
 | `attribute def ECU_Label`, `enum def`s | ValueType `ECU_Label`; Enumerations `EngineVariant`, `KeyState`, `SyncMode`, `Severity`, `SensorFaultMode`, `PinDirection`, `InjectionPhase` (ADIA types a value property only by a ValueType, so `engineVariant` / `keyState` are String values holding the literal) |
 | 35 `item def`s | Signals (frame / trigger attributes are carried as message arguments) |
@@ -55,12 +55,16 @@ Everything added to make the model complete is a requirement, use case, diagram,
 
 ## Model tree and navigation
 
-ADIA files each element under the last diagram that shows it, so the build creates the diagrams in an order that
-gives every element its natural home: components under their subsystem BDD, subsystems and the ECU under BDD 02,
-context blocks and sensors under BDD 01, top-level requirements under REQ 00, derived requirements under their
-block's requirements diagram. A block owns at most one diagram (its IBD), which is what a double-click on the block
-opens; requirements, use case, sequence and activity diagrams are owned by their package / interaction / activity.
-A selected element is highlighted in the tree when its row is shown (its branch expanded).
+The containment tree is ownership only, as in Cameo: every element is listed under its owner, a diagram is a leaf
+under its owner, and a relationship that no element owns is listed under its source (client) element. The top-level
+packages sit under the pillar of their content: `04_Requirements` (requirements, the 43 requirements diagrams)
+under **Requirements**, `08_OperationalBehavior` (activities) under **Behavior**, the others under **Structural**.
+Requirement containment is ownership: `mrPldSpecification` owns the 18 requirements it contains; the 52 derived
+requirements and the diagrams are owned by `04_Requirements`.
+
+A block owns at most one diagram (its IBD), which is what a double-click on the block opens; requirements, use case,
+sequence and activity diagrams are owned by their package / interaction / activity. A selected element is
+highlighted in the tree when its row is shown (its branch expanded).
 
 ## State machine — one region per behaviour owner
 

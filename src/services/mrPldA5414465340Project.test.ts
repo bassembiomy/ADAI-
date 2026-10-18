@@ -10,6 +10,8 @@ import { projectStateEndpoints } from '../engine/sysml/workers/projectIoPayload'
 import type { BlockDefinition, InteractionDefinition } from '../engine/sysml/model';
 import { normalizeHmiComponents } from '../features/hmi/hmiModel';
 import { generateMISRACCode } from '../utils/stateMachineCodeGenerator';
+import { fromRepository } from '../engine/sysml/normalizedStore';
+import { buildUnifiedModelProjection } from '../features/modelExplorer/unifiedModelExplorerProjection';
 import {
   createAppSimulationSession,
   setSessionVariableValue,
@@ -245,6 +247,23 @@ describe('MR_PLD_A5414465340.adia', () => {
     for (const def of Object.values(repo.definitions)) if (def.kind === 'interface') expect(def.features, def.name).toEqual([]);
     expect(Object.values(repo.diagrams).filter(d => d.diagramKind === 'parametric')).toEqual([]);
     expect(Object.values(repo.connectors).filter(c => c.kind === 'binding')).toEqual([]);
+  });
+
+  it('shows the requirements package, its requirements and every requirements diagram under the Requirements pillar', () => {
+    const expandedNodeIds = new Set(['project:model', 'project:pillar:requirements', 'sysml:element:pkg_Requirements', 'sysml:element:req_REQ_SPEC_00']);
+    const tree = buildUnifiedModelProjection({
+      sysml: repo, sysmlStore: fromRepository(repo, {}, {}), expandedNodeIds, externalModels: [], revision: 1,
+      stateMachine: { states: [], layers: [], transitions: [], junctions: [], diagrams: [], revision: 1 },
+      diagramPresentations: project.diagramPresentations,
+    });
+    expect(tree.nodes['project:model'].label).toBe('MercedesBenz_MR_PLD_A5414465340');
+    expect(tree.nodes['sysml:element:pkg_Requirements'].parentNodeId).toBe('project:pillar:requirements');
+    const listed = new Set(tree.nodes['sysml:element:pkg_Requirements'].childNodeIds);
+    const requirementDiagrams = Object.values(repo.diagrams).filter(d => d.diagramKind === 'requirements' && d.ownerId === 'pkg_Requirements');
+    expect(requirementDiagrams).toHaveLength(43);
+    for (const d of requirementDiagrams) expect(listed.has(`sysml:element:${d.id}`), d.name).toBe(true);
+    // requirement containment is ownership: the specification owns the 18 requirements it contains
+    expect(tree.nodes['sysml:element:req_REQ_SPEC_00'].childNodeIds.filter(id => repo.requirements[id.slice('sysml:element:'.length)])).toHaveLength(18);
   });
 
   it('gives every block a requirements diagram with the requirements it satisfies', () => {

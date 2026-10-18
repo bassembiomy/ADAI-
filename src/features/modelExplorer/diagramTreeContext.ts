@@ -1,24 +1,14 @@
 import type { SysmlRepository } from '../../engine/sysml/model';
-import type { DiagramPresentationInput } from '../../engine/sysml/presentationState';
 import { resolvePartLike } from '../../engine/sysml/partOccurrences';
 import type { ModelTreeNode } from './modelExplorerTypes';
 import type { StateMachineExplorerSnapshot } from './adapters/stateMachineExplorerAdapter';
 
 /**
- * A diagram is a view over the model. It can group what it presents in the
- * tree, but it never becomes the semantic owner of those elements, so every
- * helper here keeps "where is this shown" strictly separate from "who owns
- * this".
+ * A diagram is a view over the model, never the semantic owner of what it
+ * presents (SysML 1.6 / UML 2.5 §A.1: diagrams are not model elements), so the
+ * containment tree lists every element under its owner and a diagram as a leaf
+ * under its own owner.
  */
-export interface DiagramTreeContextInput {
-  sysml: SysmlRepository;
-  stateMachine: StateMachineExplorerSnapshot;
-  diagramPresentations: Record<string, DiagramPresentationInput>;
-}
-
-export const sysmlElementNodeId = (semanticId: string): string => `sysml:element:${semanticId}`;
-export const sysmlDiagramNodeId = sysmlElementNodeId;
-export const stateMachineDiagramNodeId = (diagramId: string): string => `sm:diagram:${diagramId}`;
 
 /**
  * Resolves the element that may legally own a new child created from a diagram
@@ -156,62 +146,4 @@ export function resolveExactDiagramCanvasContext(
   return block?.kind === 'block'
     ? { layerId: block.id, layerStack: ['root'], layerPath: ['Root', block.name] }
     : null;
-}
-
-/**
- * Builds `semanticId -> diagram tree node` for every element a diagram
- * presents. Later entries win deterministically because the tree shows one
- * primary location per semantic element.
- */
-export function buildDiagramVisualParentIndex(input: DiagramTreeContextInput): Map<string, string> {
-  const result = new Map<string, string>();
-
-  for (const [diagramId, presentation] of Object.entries(input.diagramPresentations ?? {})) {
-    if (!input.sysml.diagrams[diagramId]) continue;
-    for (const semanticId of presentation.elementIds ?? []) {
-      if (!semanticId || !sysmlHasSemanticId(input.sysml, semanticId)) continue;
-      result.set(semanticId, sysmlElementNodeId(diagramId));
-    }
-  }
-
-  // Pre-calculate presented and hidden sets once per valid diagram in insertion order.
-  // This preserves deterministic "later diagram wins" behavior while eliminating
-  // repeated O(R * D) Set allocations and linear hiddenElementIds lookups.
-  const validDiagramSets: Array<{
-    diagramId: string;
-    presented: Set<string>;
-    hidden: Set<string>;
-    nodeId: string;
-  }> = [];
-
-  for (const [diagramId, presentation] of Object.entries(input.diagramPresentations ?? {})) {
-    if (!input.sysml.diagrams[diagramId]) continue;
-    validDiagramSets.push({
-      diagramId,
-      presented: new Set(presentation.elementIds ?? []),
-      hidden: new Set(presentation.hiddenElementIds ?? []),
-      nodeId: sysmlElementNodeId(diagramId),
-    });
-  }
-
-  // A relationship is shown by a diagram when it is presented itself, or when
-  // both of its ends are presented there and it is not explicitly hidden
-  // (the canvas draws connecting edges implicitly, so they are rarely listed
-  // in `elementIds`). It is grouped under that diagram like any other symbol.
-  for (const relationship of Object.values(input.sysml.relationships ?? {})) {
-    for (const diag of validDiagramSets) {
-      if (diag.hidden.has(relationship.id)) continue;
-      if (diag.presented.has(relationship.id) || (diag.presented.has(relationship.sourceId) && diag.presented.has(relationship.targetId))) {
-        result.set(relationship.id, diag.nodeId);
-      }
-    }
-  }
-
-  for (const diagram of input.stateMachine.diagrams ?? []) {
-    const layer = input.stateMachine.layers.find(candidate => candidate.id === diagram.contextRegionId);
-    for (const stateId of layer?.stateIds ?? []) result.set(stateId, stateMachineDiagramNodeId(diagram.id));
-    for (const junctionId of layer?.junctionIds ?? []) result.set(junctionId, stateMachineDiagramNodeId(diagram.id));
-  }
-
-  return result;
 }
