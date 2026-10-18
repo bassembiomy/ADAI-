@@ -24,7 +24,7 @@ Everything added to make the model complete is a requirement, use case, diagram,
 | X1 (16) / X2 (55) pins | Nested proxy ports of `MR_PLD_ECU.x1` / `.x2`, named `X2_19_CKP_SIG` etc.; a pin a harness wire reaches is typed by the port def at the other end (conjugated where the ECU receives) so the IBD rules check direction and interface |
 | `part def` + `:>>` | Blocks with values, parts (+ composition), proxy ports, operations, receptions; `:>> partNumber = …` are redefining values of the component specialisations; per-usage values (`refDes`, sensor `reference`) are block constraints |
 | `connect` / `interface` / `flow of` | 32 connectors of `OM501LA_EngineSystem`, 18 of `MR_PLD_ECU` (+ 8 pin → driver delegations from the pin functions); CAN, unit-pump and SOI connectors carry item flows |
-| `requirement def`s + `satisfy` | 12 requirements in `mrPldSpecification`, 6 supplementary (engine brake, memory, pin-out, variants, BOM, after-run) and 52 derived requirements (71 in all), each «deriveReqt» from its source and «satisfy»-ed by the block whose doc / attributes / pins state it; states of the state machine satisfy the behavioural ones |
+| `requirement def`s + `satisfy` | 12 requirements in `mrPldSpecification`, 6 supplementary (engine brake, memory, pin-out, variants, BOM, after-run) and 52 derived requirements (71 in all), each «deriveReqt» from its source and «satisfy»-ed by the block whose doc / attributes / pins state it (every relationship joins two SysML elements, so the Report validates cleanly) |
 | `constraint def` / `calc def` | 16 ConstraintBlocks; `SensorChainContext` (13 bindings) and `MR_PLD_ECU` (2) parametric diagrams |
 | `state def`s | the executable state machine (below) |
 | `action def`s | Activities `InjectionEvent`, `EngineStartProcedure` with swimlanes; every action «allocate»d to its block |
@@ -52,6 +52,14 @@ Everything added to make the model complete is a requirement, use case, diagram,
 - **PAR**: `SensorChainContext`, `MR_PLD_ECU` constants. The app's canvas has no parametric mode yet, so these two are
   listed in the model tree and drawn by **Report**, not opened as tabs.
 - **PKG 01**: model organisation.
+
+## Model tree
+
+ADIA files each element under the last diagram that shows it, so the build creates the diagrams in an order that
+gives every element its natural home: components under their subsystem BDD, subsystems and the ECU under BDD 02,
+context blocks and sensors under BDD 01, top-level requirements under REQ 00, derived requirements under their
+block's requirements diagram. Selecting an element, part (also a nested IBD part) or relationship line on a diagram
+expands the tree to its row and highlights it.
 
 ## State machine — one region per behaviour owner
 

@@ -172,11 +172,3 @@ export const DERIVED: DerivedRequirement[] = [
   { id: 'REQ-SYNC-02.5', name: 'ScenarioCoverage', from: 'REQ-SYNC-02', satisfiedBy: ['blk_SimulationScenario'],
     text: 'Each simulation scenario shall state key state, pedal, coolant, boost, immobiliser, CKP, CMP, bank-1 short and CAN validity and the expected final operating state.' },
 ];
-
-/** Requirements an engine-system state of the state machine satisfies (cross-domain «satisfy»). */
-export const STATE_SATISFIES: Array<[string, string]> = [
-  ['ST_IMMO_LOCKED', 'REQ-SEC-06'], ['ST_CRANK_SYNC', 'REQ-SEC-06.3'], ['ST_LIMP_DERATE', 'REQ-LIMP-09'],
-  ['ST_LIMP_DERATE', 'REQ-THM-08'], ['ST_FAULT_SHUTDOWN', 'REQ-SYNC-02'], ['ST_ENGINE_BRAKE', 'REQ-BRK-13'],
-  ['ST_AFTERRUN', 'REQ-AFT-18'], ['INJ_HOLD', 'REQ-INJ-03'], ['INJ_CYL_CUTOFF', 'REQ-INJ-04'],
-  ['SYNC_CMP_ONLY', 'REQ-SYNC-02.3'], ['FAN_PWM', 'REQ-THM-08.1'], ['DIAG_SCG', 'REQ-DIAG-07.7'],
-];

@@ -248,6 +248,18 @@ export const ModelExplorer: React.FC<ModelExplorerProps> = ({
     effectiveFavorites,
   ]);
 
+  // Bring a newly selected row (e.g. selected on the diagram canvas) into view by focusing it;
+  // VirtualTree scrolls the focused row into the viewport.
+  const selectionKey = Array.from(selectedNodeIds).sort().join('|');
+  useEffect(() => {
+    if (!selectionKey) return;
+    if (selectedNodeIds.has(visibleRows[focusedIndex]?.node.nodeId ?? '')) return;
+    const index = visibleRows.findIndex(row => selectedNodeIds.has(row.node.nodeId));
+    if (index >= 0) setFocusedIndex(index);
+    // Only a change of selection (or of the rows that can show it) moves the focus.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectionKey, visibleRows]);
+
   // Adjust focused index if out of bounds
   useEffect(() => {
     if (focusedIndex >= visibleRows.length) {

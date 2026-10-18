@@ -54,7 +54,7 @@ import { createUnifiedProjectPayload } from '../src/utils/adiaProjectPersistence
 import { createAppSimulationSession } from '../src/utils/stateMachine/smAppAdapter';
 import type { PresentationCoordinates } from '../src/engine/sysml/presentationState';
 import * as SM from './mr_pld_a5414465340_behaviour';
-import { DERIVED, STATE_SATISFIES, SUPPLEMENTARY, TOP_SATISFIED_BY } from './mr_pld_a5414465340_requirements';
+import { DERIVED, SUPPLEMENTARY, TOP_SATISFIED_BY } from './mr_pld_a5414465340_requirements';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const SOURCE = readFileSync(resolve(ROOT, 'models/mr_pld_a5414465340/MR_PLD_A5414465340.sysml'), 'utf8');
@@ -537,41 +537,6 @@ for (const [pin, target] of [['x2.pin_18', 'starterOut'], ['x1.pin_12', 'starter
   connect(ECU, 'ibd_ecu', `c_ecu_${pin.replace('.', '_')}`, pin, `drivers.${target}`);
 }
 
-// -------------------------------------------------------------------- BDDs
-const bdd = (id: string, name: string, pkg: string, rows: string[][], colW = 380, rowGap = 110) => {
-  diagram(id, name, 'bdd', pkg);
-  const coordinates: Record<string, PresentationCoordinates> = {};
-  let y = 40;
-  for (const row of rows) {
-    const heights = row.map(def => {
-      const d = repo.definitions[def] as BlockDefinition | undefined;
-      // compartments grow with values / parts / operations, the border with the ports (MR_PLD_ECU carries 73)
-      return d?.kind === 'block' ? Math.max(120, 80 + 14 * (d.properties.length + d.operations.length + d.constraints.length), 40 + 16 * d.ports.length) : 110;
-    });
-    row.forEach((def, i) => { coordinates[def] = { x: 40 + i * colW, y, width: colW - 40, height: heights[i] }; });
-    y += Math.max(...heights) + rowGap;
-  }
-  run({ type: 'addToDiagram', diagramId: id, elementIds: Object.keys(coordinates), coordinates }, id);
-  tabs.push(id);
-};
-const B = (...names: string[]) => names.map(blockId);
-const chunk = <T,>(items: T[], size: number) => Array.from({ length: Math.ceil(items.length / size) }, (_, i) => items.slice(i * size, i * size + size));
-bdd('bdd_01_system_context', 'BDD 01 - OM 501 LA engine system context', HW, [B('OM501LA_EngineSystem', 'FR_CabECU', 'Battery24V', 'DiagnosticTester', 'StarterRelay'),
-  B('EngineSensor', 'UnitPump', 'ProportionalValve'), B('VRSensor', 'NTCSensor', 'RatiometricPressureSensor', 'ThermalOilLevelSensor'), B('MR_PLD_ECU')]);
-bdd('bdd_02_ecu_architecture', 'BDD 02 - MR_PLD_ECU architecture', HW, [B('MR_PLD_ECU'), B('ComputeCore', 'SensorAFE', 'InjectionPowerStage', 'ValveAndStarterDrivers', 'PowerSupplyAndComms')]);
-bdd('bdd_03_compute_core', 'BDD 03 - Compute core', HW, [B('ComputeCore'), B('SAK_C167CS_LM', 'TEMIC_845AW', 'AM29F400BB', 'M93C86', 'Crystal4MHz')]);
-bdd('bdd_04_sensor_afe', 'BDD 04 - Sensor analogue front-end', HW, [B('SensorAFE'), B('LM2903D', 'LM2904D', 'NtcPullUpNetwork', 'OnboardBaroSensor')]);
-bdd('bdd_05_injection_stage', 'BDD 05 - Injection power stage', HW, [B('InjectionPowerStage'), B('PLD_C1_1', 'BUZ102SL', 'SUD25N06_45L', 'DaleShunt', 'LM2901D', 'FreewheelNetwork')]);
-bdd('bdd_06_drivers_power_comms', 'BDD 06 - Drivers, power supply and communication', HW, [B('ValveAndStarterDrivers', 'PowerSupplyAndComms'), B('BUZ102SL', 'TLE4275', 'EmiChoke', 'CanTransceiver', 'L9637D')]);
-const components = generalizations.filter(([, sup]) => sup === blockId(EC)).map(([sub]) => sub);
-bdd('bdd_07_component_taxonomy', 'BDD 07 - Electronic component taxonomy', HW, [[blockId(EC)], ...chunk(components, 6)]);
-bdd('bdd_08_engine_sensors', 'BDD 08 - Engine sensor taxonomy', HW, [B('EngineSensor'), B('VRSensor', 'NTCSensor', 'RatiometricPressureSensor', 'ThermalOilLevelSensor')]);
-bdd('bdd_09_signals', 'BDD 09 - Signals (item defs) and enumerations', P.signals, [...chunk(SIGNALS.map(s => `sig_${s}`), 7), ENUMS.map(([, name]) => `enum_${name}`)], 230, 40);
-bdd('bdd_10_interfaces', 'BDD 10 - Port and interface definitions', P.ifaces, chunk(Object.values(interfaceIds), 6), 300, 60);
-bdd('bdd_11_types', 'BDD 11 - Value types and units', P.types, [VT.map(([id]) => id).concat('vt_ECU_Label'), UNITS.map(([id]) => id).concat(QK.map(([id]) => id))], 240, 50);
-bdd('bdd_12_constraints', 'BDD 12 - Constraint blocks and calculations', P.par, [B('SensorChainContext'), ...chunk(Object.keys(repo.definitions).filter(id => id.startsWith('cb_')), 6)], 300, 50);
-bdd('bdd_13_analysis_variants', 'BDD 13 - Analysis context and variants', P.ana, [B('EngineConfiguration', 'SimulationScenario'), B('OM501LA_EngineSystem')]);
-
 // --------------------------------------------------------------- parametric
 const bind = (context: string, id: string, source: { propertyId: string; parameterId?: string }, target: { propertyId: string; parameterId?: string }) => {
   const plan = buildCreateParametricBindingCommand(state.repository, { contextId: context, source, target, connectorId: id });
@@ -625,7 +590,6 @@ for (const r of DERIVED) {
   relate('deriveReqt', reqId(r.id), reqId(r.from));
   for (const blk of r.satisfiedBy) relate('satisfy', blk, reqId(r.id));
 }
-for (const [stateId, rid] of STATE_SATISFIES) relate('satisfy', stateId, reqId(rid));
 relate('refine', SCC, reqId('REQ-DIAG-07'));
 
 // one requirements diagram per block: the block, every requirement it satisfies and their source requirements
@@ -633,13 +597,6 @@ const satisfiedBy = (blk: string) => Object.values(state.repository.relationship
 const derivedFrom = (req: string) => Object.values(state.repository.relationships).filter(r => r.kind === 'deriveReqt' && r.sourceId === req).map(r => r.targetId);
 const blockIds = Object.values(state.repository.definitions).filter(d => d.kind === 'block').map(d => d.id);
 const requirementDiagrams: string[] = [];
-diagram('req_00_specification', 'REQ 00 - MR-PLD specification', 'requirements', P.reqs);
-{
-  const top = [reqId('REQ-SPEC-00'), ...TOP.map(r => reqId(r.id)), ...SUPPLEMENTARY.map(r => reqId(r.id))];
-  const coordinates = Object.fromEntries(top.map((id, i) => [id, i === 0 ? box(820, 40, 300, 150) : box(40 + ((i - 1) % 6) * 330, 300 + Math.floor((i - 1) / 6) * 230, 300, 170)]));
-  run({ type: 'addToDiagram', diagramId: 'req_00_specification', elementIds: Object.keys(coordinates), coordinates }, 'req_00_specification');
-  tabs.push('req_00_specification');
-}
 for (const blk of blockIds) {
   const reqs = satisfiedBy(blk);
   if (reqs.length === 0) throw new Error(`block ${blk} satisfies no requirement`);
@@ -953,6 +910,52 @@ diagram('req_99_verification', 'REQ 99 - Verification', 'requirements', P.reqs);
   tabs.push('req_99_verification');
 }
 
+// Diagram order matters for the model tree: it files every element under the LAST diagram that shows it.
+// So the per-block requirement diagrams come first, REQ 99 then REQ 00 (top requirements live there),
+// and the BDDs last, generic before specific (a component lands under its subsystem BDD).
+diagram('req_00_specification', 'REQ 00 - MR-PLD specification', 'requirements', P.reqs);
+{
+  const top = [reqId('REQ-SPEC-00'), ...TOP.map(r => reqId(r.id)), ...SUPPLEMENTARY.map(r => reqId(r.id))];
+  const coordinates = Object.fromEntries(top.map((id, i) => [id, i === 0 ? box(820, 40, 300, 150) : box(40 + ((i - 1) % 6) * 330, 300 + Math.floor((i - 1) / 6) * 230, 300, 170)]));
+  run({ type: 'addToDiagram', diagramId: 'req_00_specification', elementIds: Object.keys(coordinates), coordinates }, 'req_00_specification');
+  tabs.push('req_00_specification');
+}
+
+// -------------------------------------------------------------------- BDDs
+const bdd = (id: string, name: string, pkg: string, rows: string[][], colW = 380, rowGap = 110) => {
+  diagram(id, name, 'bdd', pkg);
+  const coordinates: Record<string, PresentationCoordinates> = {};
+  let y = 40;
+  for (const row of rows) {
+    const heights = row.map(def => {
+      const d = repo.definitions[def] as BlockDefinition | undefined;
+      // compartments grow with values / parts / operations, the border with the ports (MR_PLD_ECU carries 73)
+      return d?.kind === 'block' ? Math.max(120, 80 + 14 * (d.properties.length + d.operations.length + d.constraints.length), 40 + 16 * d.ports.length) : 110;
+    });
+    row.forEach((def, i) => { coordinates[def] = { x: 40 + i * colW, y, width: colW - 40, height: heights[i] }; });
+    y += Math.max(...heights) + rowGap;
+  }
+  run({ type: 'addToDiagram', diagramId: id, elementIds: Object.keys(coordinates), coordinates }, id);
+  tabs.push(id);
+};
+const B = (...names: string[]) => names.map(blockId);
+const chunk = <T,>(items: T[], size: number) => Array.from({ length: Math.ceil(items.length / size) }, (_, i) => items.slice(i * size, i * size + size));
+const components = generalizations.filter(([, sup]) => sup === blockId(EC)).map(([sub]) => sub);
+bdd('bdd_07_component_taxonomy', 'BDD 07 - Electronic component taxonomy', HW, [[blockId(EC)], ...chunk(components, 6)]);
+bdd('bdd_08_engine_sensors', 'BDD 08 - Engine sensor taxonomy', HW, [B('EngineSensor'), B('VRSensor', 'NTCSensor', 'RatiometricPressureSensor', 'ThermalOilLevelSensor')]);
+bdd('bdd_13_analysis_variants', 'BDD 13 - Analysis context and variants', P.ana, [B('EngineConfiguration', 'SimulationScenario'), B('OM501LA_EngineSystem')]);
+bdd('bdd_01_system_context', 'BDD 01 - OM 501 LA engine system context', HW, [B('OM501LA_EngineSystem', 'FR_CabECU', 'Battery24V', 'DiagnosticTester', 'StarterRelay'),
+  B('EngineSensor', 'UnitPump', 'ProportionalValve'), B('VRSensor', 'NTCSensor', 'RatiometricPressureSensor', 'ThermalOilLevelSensor'), B('MR_PLD_ECU')]);
+bdd('bdd_02_ecu_architecture', 'BDD 02 - MR_PLD_ECU architecture', HW, [B('MR_PLD_ECU'), B('ComputeCore', 'SensorAFE', 'InjectionPowerStage', 'ValveAndStarterDrivers', 'PowerSupplyAndComms')]);
+bdd('bdd_03_compute_core', 'BDD 03 - Compute core', HW, [B('ComputeCore'), B('SAK_C167CS_LM', 'TEMIC_845AW', 'AM29F400BB', 'M93C86', 'Crystal4MHz')]);
+bdd('bdd_04_sensor_afe', 'BDD 04 - Sensor analogue front-end', HW, [B('SensorAFE'), B('LM2903D', 'LM2904D', 'NtcPullUpNetwork', 'OnboardBaroSensor')]);
+bdd('bdd_05_injection_stage', 'BDD 05 - Injection power stage', HW, [B('InjectionPowerStage'), B('PLD_C1_1', 'BUZ102SL', 'SUD25N06_45L', 'DaleShunt', 'LM2901D', 'FreewheelNetwork')]);
+bdd('bdd_06_drivers_power_comms', 'BDD 06 - Drivers, power supply and communication', HW, [B('ValveAndStarterDrivers', 'PowerSupplyAndComms'), B('BUZ102SL', 'TLE4275', 'EmiChoke', 'CanTransceiver', 'L9637D')]);
+bdd('bdd_09_signals', 'BDD 09 - Signals (item defs) and enumerations', P.signals, [...chunk(SIGNALS.map(s => `sig_${s}`), 7), ENUMS.map(([, name]) => `enum_${name}`)], 230, 40);
+bdd('bdd_10_interfaces', 'BDD 10 - Port and interface definitions', P.ifaces, chunk(Object.values(interfaceIds), 6), 300, 60);
+bdd('bdd_11_types', 'BDD 11 - Value types and units', P.types, [VT.map(([id]) => id).concat('vt_ECU_Label'), UNITS.map(([id]) => id).concat(QK.map(([id]) => id))], 240, 50);
+bdd('bdd_12_constraints', 'BDD 12 - Constraint blocks and calculations', P.par, [B('SensorChainContext'), ...chunk(Object.keys(repo.definitions).filter(id => id.startsWith('cb_')), 6)], 300, 50);
+
 // ------------------------------------------------------- views / package diagram
 diagram('pkg_01_model', 'PKG 01 - Model organisation', 'package', P.root);
 run({ type: 'addToDiagram', diagramId: 'pkg_01_model', elementIds: PACKAGE_NAMES.map(([id]) => id),
@@ -978,7 +981,10 @@ for (const diagramId of Object.keys(state.repository.diagrams)) {
 
 // -------------------------------------------------------------------- save
 const saved = serializeSysmlProjectState(state.repository, state.diagramPresentations ?? {}, state.coordinates);
-const workspaceTabs = [...tabs, ...requirementDiagrams].map(diagramId => ({ kind: 'sysmlDiagram', diagramId }));
+const TAB_ORDER = ['pkg_', 'uc_', 'bdd_', 'ibd_', 'req_00', 'ad_', 'sd_', 'req_99', 'req_blk_'];
+const rank = (id: string) => TAB_ORDER.findIndex(prefix => id.startsWith(prefix));
+const ordered = [...tabs, ...requirementDiagrams].map((id, i) => ({ id, i })).sort((a, b) => rank(a.id) - rank(b.id) || (a.id.startsWith('bdd_') && b.id.startsWith('bdd_') ? a.id.localeCompare(b.id) : a.i - b.i));
+const workspaceTabs = ordered.map(({ id: diagramId }) => ({ kind: 'sysmlDiagram', diagramId }));
 const payload = createUnifiedProjectPayload({
   ...behaviour,
   openTabs: ['statemachine', 'bdd', 'ibd', 'requirements', 'hmi'],

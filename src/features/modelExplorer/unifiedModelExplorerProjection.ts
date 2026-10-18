@@ -574,14 +574,22 @@ function buildLazyStoreProjection(
   registerExternalModels(nodes, input);
 
   // 4. Diagram presentations & visual parents (if any)
-  if (input.diagramPresentations && Object.keys(input.diagramPresentations).length > 0) {
-    const visualParentBySemanticId = buildDiagramVisualParentIndex({
+  const visualParentBySemanticId = input.diagramPresentations && Object.keys(input.diagramPresentations).length > 0
+    ? buildDiagramVisualParentIndex({
       sysml: input.sysml,
       stateMachine: input.stateMachine,
       diagramPresentations: input.diagramPresentations,
-    });
-    applyDiagramVisualParents(nodes, visualParentBySemanticId);
+    })
+    : new Map<string, string>();
+  // Relationships drawn on a diagram are listed under that diagram once it is expanded, as in the
+  // eager tree, so a line selected on the canvas has a row. Only expanded diagrams are visited.
+  for (const [semanticId, diagramNodeId] of visualParentBySemanticId) {
+    if (!expanded.has(diagramNodeId) || !nodes[diagramNodeId]) continue;
+    const relationship = input.sysml.relationships?.[semanticId];
+    if (!relationship || nodes[sysmlNodeId(semanticId)]) continue;
+    register(nodes, { ...projectRelationship(relationship as any, input.sysml), parentNodeId: diagramNodeId });
   }
+  if (visualParentBySemanticId.size > 0) applyDiagramVisualParents(nodes, visualParentBySemanticId);
 
   // 5. Rebuild children without wiping hasChildren on collapsed nodes
   for (const nodeId in nodes) {

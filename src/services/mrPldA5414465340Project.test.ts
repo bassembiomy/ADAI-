@@ -86,6 +86,46 @@ describe('MR_PLD_A5414465340.adia', () => {
     expect(loaded.quarantinedRelationshipIds).toEqual([]);
   });
 
+  it('loads and validates cleanly without the state machine too (the path the Report takes)', () => {
+    const plain = loadCanonicalSysmlProject(project);
+    expect(plain.diagnostics.filter(d => d.severity !== 'info')).toEqual([]);
+    expect(validateSysmlRepository(plain.repository).diagnostics.filter(d => d.code !== 'ABSTRACT_INSTANTIATION')).toEqual([]);
+    // every relationship joins two elements of the SysML repository
+    const known = (id: string) => [repo.definitions, repo.requirements, repo.verificationCases, repo.useCases, repo.actors, repo.subjects, repo.packages, repo.diagrams]
+      .some(collection => Boolean(collection[id])) || Object.values(repo.definitions).some(d => (d.kind === 'block' && [...d.properties, ...d.ports].some(f => f.id === id))
+      || (d.kind === 'interaction' && false) || (d.kind === 'activity' && (d.nodes.some(n => n.id === id))));
+    for (const relationship of Object.values(repo.relationships)) {
+      expect(known(relationship.sourceId), `${relationship.id} source`).toBe(true);
+      expect(known(relationship.targetId), `${relationship.id} target`).toBe(true);
+    }
+  });
+
+  it('shows only real model elements on every diagram: IBD parts are block properties, ports and connectors of the context', () => {
+    const { store } = loadCanonicalSysmlProject(project, context);
+    const presentations = Object.fromEntries(store.diagramPresentations.entries());
+    const properties = new Map(blocks.flatMap(b => [...b.properties, ...b.ports].map(f => [f.id, b.id] as const)));
+    const activityNodes = new Set(Object.values(repo.definitions).flatMap(d => (d.kind === 'activity' ? d.nodes.map(n => n.id) : [])));
+    const isElement = (id: string) => Boolean(repo.definitions[id] || repo.requirements[id] || repo.verificationCases[id] || repo.useCases[id]
+      || repo.actors[id] || repo.subjects[id] || repo.packages[id] || repo.connectors[id] || repo.relationships[id]) || activityNodes.has(id);
+    for (const [diagramId, presentation] of Object.entries(presentations)) {
+      const diagram = repo.diagrams[diagramId];
+      expect(diagram, diagramId).toBeDefined();
+      for (const id of presentation.elementIds ?? []) {
+        if (diagram.diagramKind === 'ibd') {
+          // a part of the context, a nested part path under it, or one of its connectors
+          const lastProperty = id.split('/').pop()!;
+          const ok = repo.connectors[id]?.ownerId === diagram.contextElementId
+            || (properties.has(lastProperty) && id.split('/')[0].startsWith(`${diagram.contextElementId}.`));
+          expect(ok, `${diagramId}: ${id}`).toBe(true);
+        } else if (diagram.diagramKind === 'parametric') {
+          expect(properties.get(id), `${diagramId}: ${id}`).toBe(diagram.contextElementId);
+        } else {
+          expect(isElement(id), `${diagramId}: ${id}`).toBe(true);
+        }
+      }
+    }
+  });
+
   it('passes every model rule of the app; the only notes are the guidance on the two abstract part defs', () => {
     const findings = [
       ...validateSysmlRepository(repo, context).diagnostics,
