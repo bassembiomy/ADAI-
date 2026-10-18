@@ -5778,6 +5778,7 @@ const ADIA = () => {
   ]);
 
   // Switch active file function
+  const hmiOpenedByTabRef = useRef(false);
   const switchActiveFile = useCallback((newFileId: string, fallbackFile?: WorkspaceFile) => {
     const targetExists = workspaceFiles.some(file => file.id === newFileId);
     if (!targetExists && fallbackFile?.id !== newFileId) return;
@@ -5802,6 +5803,11 @@ const ADIA = () => {
     loadStateForFile(targetFile);
     setDiagramModeState(targetFile.type as DiagramMode);
     setActiveFileId(newFileId);
+    // The HMI file has no canvas of its own: its view is the HMI Dashboard window.
+    if (targetFile.type === 'hmi' && !managedWindows.hmi.isOpen) {
+      hmiOpenedByTabRef.current = true;
+      updateManagedWindow('hmi', { isOpen: true, isMinimized: false });
+    }
     // This workspace file is the rendered view now, so no diagram tab may stay
     // highlighted beside it.
     setDiagramWorkspace(previous => (
@@ -5821,9 +5827,22 @@ const ADIA = () => {
     diagramWorkspace.activeTab,
     layers,
     loadStateForFile,
+    managedWindows.hmi.isOpen,
     saveCurrentFileState,
+    updateManagedWindow,
     workspaceFiles,
   ]);
+  // A dashboard opened by selecting the HMI tab belongs to that tab and closes when another view is selected;
+  // one opened from the HMI Panel button stays open.
+  useEffect(() => {
+    if (!hmiOpenedByTabRef.current) return;
+    if (!managedWindows.hmi.isOpen) { hmiOpenedByTabRef.current = false; return; }
+    const hmiTabShowing = !activeWorkspaceTab.diagramView && diagramWorkspace.activeTab === null
+      && workspaceFiles.find(file => file.id === activeFileId)?.type === 'hmi';
+    if (hmiTabShowing) return;
+    hmiOpenedByTabRef.current = false;
+    updateManagedWindow('hmi', { isOpen: false });
+  }, [activeFileId, activeWorkspaceTab.diagramView, diagramWorkspace.activeTab, managedWindows.hmi.isOpen, updateManagedWindow, workspaceFiles]);
 
   const activateWorkspaceTarget = useCallback((target: WorkspaceTarget, options?: { workspaceAlreadyUpdated?: boolean; fallbackFile?: WorkspaceFile }) => {
     if (target.kind === 'file') {

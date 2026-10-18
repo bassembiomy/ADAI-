@@ -78,7 +78,7 @@ describe('native BDD property rules', () => {
 
   it('formats complete SysML property notation', () => {
     expect(formatLegacyProperty({ ...property('p', 'speed', 'flow', 'Velocity', '0..*'), ordered: true, unique: false, isDerived: true, unit: 'm/s', subsetsId: 'base-speed' }))
-      .toBe('/speed: Velocity [0..*] {ordered, nonunique} «flow» {unit=m/s} subsets base-speed');
+      .toBe('/speed: Velocity [0..*] {ordered, nonunique} «flow» {unit=m/s} {subsets base-speed}');
   });
 
   it('provides readable diagnostic messages for incompatible and missing property types', () => {

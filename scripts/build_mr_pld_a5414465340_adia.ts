@@ -46,6 +46,7 @@ import {
 } from '../src/engine/sysml/model';
 import { serializeSysmlProjectState } from '../src/engine/sysml/persistence';
 import { getCachedLegacyView } from '../src/engine/sysml/normalizedStore';
+import { computeBlockDisplayBounds } from '../src/components/sysml/blockLayout';
 import { validateSysmlRepository } from '../src/engine/sysml/validation';
 import { deriveIbdView } from '../src/engine/sysml/ibd';
 import { deriveBddView } from '../src/engine/sysml/bdd';
@@ -238,6 +239,15 @@ interface BlockSpec {
   ports?: Array<[string, string, string?]>; operations?: string[]; receptions?: string[]; constraints?: string[];
 }
 const blockId = (name: string) => `blk_${name}`;
+/** A block description as compartment lines of at most `width` characters (the canvas does not wrap). */
+const wrap = (text: string, width: number): string[] => {
+  const lines: string[] = [];
+  let line = '';
+  for (const word of text.split(/\s+/)) {
+    if (line && line.length + word.length + 1 > width) { lines.push(line); line = word; } else line = line ? `${line} ${word}` : word;
+  }
+  return line ? [...lines, line] : lines;
+};
 const compositions: Array<[owner: string, type: string, role: string, multiplicity: string]> = [];
 const generalizations: Array<[string, string]> = [];
 const value = (owner: string, [name, type, defaultValue, multiplicity]: Value): PropertyDefinition => ({
@@ -266,7 +276,7 @@ const block = (spec: BlockSpec) => {
   const def: BlockDefinition = {
     id, kind: 'block', name: spec.name, namespace: ns(spec.pkg), ownerId: spec.pkg, isAbstract: spec.abstract ?? false, isLeaf: false,
     properties, ports: (spec.ports ?? []).map(([name, type, m]) => port(id, name, type, m)), operations: spec.operations ?? [],
-    constraints: [...(spec.doc ? [spec.doc] : []), ...(spec.constraints ?? [])],
+    constraints: [...(spec.doc ? wrap(spec.doc, 60) : []), ...(spec.constraints ?? [])],
     ...(spec.receptions ? { receptions: spec.receptions.map(sig) } : {}),
   };
   repo.definitions[id] = def;
@@ -494,8 +504,15 @@ const connect = (context: string, diagramId: string, id: string, from: string, t
 };
 const ibd = (diagramId: string, context: string, layout: Record<string, PresentationCoordinates>) => {
   diagram(diagramId, `IBD - ${repo.definitions[context].name}`, 'ibd', context, context);
-  const coordinates = Object.fromEntries(Object.entries(layout).map(([name, bounds]) => [`${context}.${name}`, bounds]));
-  run({ type: 'addToDiagram', diagramId, elementIds: Object.keys(coordinates), coordinates }, diagramId);
+  // a key with '/' is a nested part path (e.g. the ECU subsystems drawn inside the ecu part)
+  const coordinates = Object.fromEntries(Object.entries(layout).map(([name, bounds]) => [name.includes('/') ? name : `${context}.${name}`, bounds]));
+  // The frame (the context block's own presentation) encloses every part, with room for the boundary-port
+  // labels drawn inside its left and right edges.
+  const right = Math.max(...Object.values(layout).map(b => b.x + (b.width ?? 0)));
+  const bottom = Math.max(...Object.values(layout).map(b => b.y + (b.height ?? 0)));
+  const ports = (repo.definitions[context] as BlockDefinition).ports.length;
+  const frame = box(40, 30, Math.max(900, right + (ports > 0 ? 320 : 80)), Math.max(600, bottom + 80, 60 + ports * 22));
+  run({ type: 'addToDiagram', diagramId, elementIds: [context, ...Object.keys(coordinates)], coordinates: { [context]: frame, ...coordinates } }, diagramId);
   tabs.push(diagramId);
 };
 const grid = (names: string[], columns: number, x0 = 220, y0 = 100, dx = 300, dy = 200, w = 240, h = 140) =>
@@ -503,7 +520,14 @@ const grid = (names: string[], columns: number, x0 = 220, y0 = 100, dx = 300, dy
 
 // IBD of OM501LA_EngineSystem (package InternalStructure, part engineSystem)
 const sysParts = (repo.definitions[SYS] as BlockDefinition).properties.filter(p => p.kind === 'part').map(p => p.name).filter(n => n !== 'ecu');
-ibd('ibd_engine_system', SYS, { ...grid(sysParts.slice(0, 9), 1, 120, 60, 0, 150, 260, 120), ...grid(sysParts.slice(9), 1, 1500, 60, 0, 150, 260, 120), ecu: box(560, 60, 700, 1400) });
+// ECU in the middle: its X1 / X2 pin labels run down its left edge, its five subsystems sit to the right of them
+const ecuSub = (name: string) => `${SYS}.ecu/${ECU}.${name}`;
+ibd('ibd_engine_system', SYS, {
+  ...grid(sysParts.slice(0, 9), 1, 120, 60, 0, 160, 260, 120), ...grid(sysParts.slice(9), 1, 1900, 60, 0, 160, 260, 120),
+  ecu: box(560, 60, 1180, 1500),
+  [ecuSub('pwrCom')]: box(900, 140, 380, 300), [ecuSub('core')]: box(1320, 140, 380, 340),
+  [ecuSub('afe')]: box(900, 520, 380, 300), [ecuSub('injStage')]: box(1320, 540, 380, 360), [ecuSub('drivers')]: box(900, 900, 380, 260),
+});
 const engineBody = between(SOURCE, 'part engineSystem : OM501LA_EngineSystem {', '\n        }\n');
 const canLink = /interface : CanBusLink connect nodeA ::> (\S+) to nodeB ::> (\S+);/.exec(engineBody)!;
 const canFlows = [...engineBody.matchAll(/flow of (\w+) from \S+ to \S+;/g)].map(m => m[1]);
@@ -518,7 +542,7 @@ for (const [, from, to, comment] of engineBody.matchAll(/^\s*connect (\S+) to (\
 // with nested ends; the subsystem IBDs show the parts each subsystem is made of.
 const ecuBody = between(SOURCE, 'part mrPld : MR_PLD_ECU {', '\n        }\n');
 const SUBSYSTEM: Record<string, string> = { core: 'ComputeCore', afe: 'SensorAFE', injStage: 'InjectionPowerStage', drivers: 'ValveAndStarterDrivers', pwrCom: 'PowerSupplyAndComms' };
-ibd('ibd_ecu', ECU, { pwrCom: box(160, 80, 320, 260), core: box(640, 80, 360, 300), afe: box(160, 460, 320, 260), injStage: box(640, 460, 360, 300), drivers: box(1120, 460, 280, 200) });
+ibd('ibd_ecu', ECU, { pwrCom: box(420, 80, 380, 300), core: box(900, 80, 400, 340), afe: box(420, 500, 380, 300), injStage: box(900, 520, 400, 360), drivers: box(1400, 520, 320, 240) });
 ibd('ibd_compute_core', blockId('ComputeCore'), grid(['mcu', 'flash', 'eeprom', 'coProcessor', 'crystals'], 3));
 ibd('ibd_sensor_afe', blockId('SensorAFE'), grid(['vrComparators', 'buffers', 'ntcNetworks', 'baro'], 2));
 ibd('ibd_injection_stage', blockId('InjectionPowerStage'), grid(['gateCpld', 'hsBank1', 'hsBank2', 'lowSide', 'shuntBank1', 'shuntBank2', 'currentComparators', 'freewheel'], 4));
@@ -658,18 +682,25 @@ ucRel('include', 'uc06', 'uc07');
 ucRel('include', 'uc06', 'uc05');
 ucRel('include', 'uc13', 'uc15');
 ucRel('useCaseGeneralization', 'uc04', 'uc03');
-ucRel('extend', 'uc10', 'uc06', { newExtensionPointName: 'sensor, CAN or thermal fault', extensionPointId: undefined, condition: '[CKP or CMP lost, bank short, CAN timeout, coolant >= 103 C]' });
-ucRel('extend', 'uc11', 'uc10', { newExtensionPointName: 'total sync loss', condition: '[CKP and CMP lost]' });
-ucRel('extend', 'uc12', 'uc06', { newExtensionPointName: 'coil fault', condition: '[i > 24 A or i_peak < 4 A]' });
-ucRel('extend', 'uc08', 'uc06', { newExtensionPointName: 'engine-brake request', condition: '[pedal 0 % and request from FR]' });
-ucRel('extend', 'uc09', 'uc06', { newExtensionPointName: 'coolant hot', condition: '[coolant >= 92 C]' });
+ucRel('extend', 'uc10', 'uc06', { newExtensionPointName: 'sensor, CAN or thermal fault', extensionPointId: undefined, condition: 'sync, bank, CAN or coolant >= 103 C fault' });
+ucRel('extend', 'uc11', 'uc10', { newExtensionPointName: 'total sync loss', condition: 'CKP and CMP lost' });
+ucRel('extend', 'uc12', 'uc06', { newExtensionPointName: 'coil fault', condition: 'i > 24 A or i_peak < 4 A' });
+ucRel('extend', 'uc08', 'uc06', { newExtensionPointName: 'engine-brake request', condition: 'pedal 0 % and request from FR' });
+ucRel('extend', 'uc09', 'uc06', { newExtensionPointName: 'coolant hot', condition: 'coolant >= 92 C' });
 diagram('uc_01_mr_pld', 'UC 01 - MR-PLD ECU use cases', 'useCase', UC);
 {
   const coordinates: Record<string, PresentationCoordinates> = {
     [actors.driver]: box(40, 120, 120, 160), [actors.battery]: box(40, 520, 120, 160),
-    [actors.fr]: box(1500, 120, 120, 160), [actors.tester]: box(1500, 620, 120, 160), [SUBJECT]: box(220, 40, 1220, 1060),
+    [actors.fr]: box(1700, 120, 120, 160), [actors.tester]: box(1700, 700, 120, 160), [SUBJECT]: box(220, 40, 1420, 1080),
   };
-  USE_CASES.forEach(([id], i) => { coordinates[id] = box(260 + (i % 4) * 290, 100 + Math.floor(i / 4) * 240, 250, 110); });
+  // [column, row]: every use case extending 'Inject fuel' comes from its own direction so no two «extend» labels meet
+  const GRID: Record<string, [number, number]> = {
+    uc01: [0, 0], uc02: [1, 0], uc03: [2, 0], uc04: [3, 0], uc08: [4, 0],
+    uc05: [1, 1], uc06: [2, 1], uc07: [3, 1],
+    uc09: [0, 2], uc10: [2, 2], uc12: [4, 2],
+    uc13: [0, 3], uc15: [1, 3], uc11: [2, 3], uc14: [3, 3], uc16: [4, 3],
+  };
+  USE_CASES.forEach(([id]) => { const [c, r] = GRID[id]; coordinates[id] = box(260 + c * 270, 100 + r * 280, 240, 110); });
   run({ type: 'addToDiagram', diagramId: 'uc_01_mr_pld', elementIds: Object.keys(coordinates), coordinates }, 'uc_01_mr_pld');
   tabs.unshift('uc_01_mr_pld');
 }
@@ -902,10 +933,16 @@ diagram('req_99_verification', 'REQ 99 - Verification', 'requirements', P.reqs);
 {
   const vcs = Object.keys(state.repository.verificationCases);
   const top = TOP.map(r => reqId(r.id)).concat(reqId('REQ-BRK-13'), reqId('REQ-AFT-18'));
-  const coordinates = Object.fromEntries([
-    ...top.map((id, i) => [id, box(40 + (i % 7) * 300, 40, 270, 170)]),
-    ...vcs.map((id, i) => [id, box(40 + (i % 7) * 300, 320 + Math.floor(i / 7) * 160, 270, 120)]),
-  ]);
+  // one column per requirement; each verification case stacked under the first requirement it verifies
+  const column = (vc: string) => Math.max(0, top.findIndex(r => state.repository.verificationCases[vc].verifiesRequirementIds.includes(r)));
+  const depth = new Map<number, number>();
+  const coordinates: Record<string, PresentationCoordinates> = Object.fromEntries(top.map((id, i) => [id, box(40 + i * 320, 40, 290, 190)]));
+  for (const vc of vcs) {
+    const c = column(vc);
+    const row = depth.get(c) ?? 0;
+    depth.set(c, row + 1);
+    coordinates[vc] = box(40 + c * 320, 340 + row * 150, 290, 110);
+  }
   run({ type: 'addToDiagram', diagramId: 'req_99_verification', elementIds: Object.keys(coordinates), coordinates }, 'req_99_verification');
   tabs.push('req_99_verification');
 }
@@ -922,39 +959,56 @@ diagram('req_00_specification', 'REQ 00 - MR-PLD specification', 'requirements',
 }
 
 // -------------------------------------------------------------------- BDDs
-const bdd = (id: string, name: string, pkg: string, rows: string[][], colW = 380, rowGap = 110) => {
+/**
+ * A BDD laid out with the sizes the canvas will draw (computeBlockDisplayBounds: longest compartment line,
+ * port count), so no two symbols overlap. `leftColumn`: the first element alone on the left, the rest in
+ * rows beside it (for MR_PLD_ECU, whose 73 border ports make it very tall).
+ */
+const bdd = (id: string, name: string, pkg: string, rows: string[][], options: { leftColumn?: boolean; gapX?: number; gapY?: number } = {}) => {
+  const gapX = options.gapX ?? 90;
+  const gapY = options.gapY ?? 120;
   diagram(id, name, 'bdd', pkg);
+  const ids = rows.flat();
+  run({ type: 'addToDiagram', diagramId: id, elementIds: ids, coordinates: Object.fromEntries(ids.map((e, i) => [e, box(40 + i * 10, 40, 200, 100)])) }, id);
+  const drawn = new Map(getCachedLegacyView(state.store!, id).blocks.map(b => [b.id, computeBlockDisplayBounds({ ...b, width: 150, height: 80 })]));
+  const size = (e: string) => drawn.get(e) ?? { width: 220, height: 110 };
   const coordinates: Record<string, PresentationCoordinates> = {};
-  let y = 40;
-  for (const row of rows) {
-    const heights = row.map(def => {
-      const d = repo.definitions[def] as BlockDefinition | undefined;
-      // compartments grow with values / parts / operations, the border with the ports (MR_PLD_ECU carries 73)
-      return d?.kind === 'block' ? Math.max(120, 80 + 14 * (d.properties.length + d.operations.length + d.constraints.length), 40 + 16 * d.ports.length) : 110;
-    });
-    row.forEach((def, i) => { coordinates[def] = { x: 40 + i * colW, y, width: colW - 40, height: heights[i] }; });
-    y += Math.max(...heights) + rowGap;
+  let x0 = 40;
+  let layoutRows = rows;
+  if (options.leftColumn) {
+    const [first, ...rest] = rows.flat();
+    coordinates[first] = { x: 40, y: 40, ...size(first) };
+    x0 = 40 + size(first).width + gapX * 2;
+    layoutRows = rows.slice(1);
+    if (rows[0].length > 1) layoutRows = [rows[0].slice(1), ...layoutRows];
+    void rest;
   }
-  run({ type: 'addToDiagram', diagramId: id, elementIds: Object.keys(coordinates), coordinates }, id);
+  let y = 40;
+  for (const row of layoutRows) {
+    let x = x0;
+    for (const e of row) { coordinates[e] = { x, y, ...size(e) }; x += size(e).width + gapX; }
+    y += Math.max(...row.map(e => size(e).height)) + gapY;
+  }
+  for (const [elementId, presentation] of Object.entries(coordinates)) run({ type: 'updatePresentation', diagramId: id, elementId, presentation }, id);
   tabs.push(id);
 };
 const B = (...names: string[]) => names.map(blockId);
 const chunk = <T,>(items: T[], size: number) => Array.from({ length: Math.ceil(items.length / size) }, (_, i) => items.slice(i * size, i * size + size));
 const components = generalizations.filter(([, sup]) => sup === blockId(EC)).map(([sub]) => sub);
-bdd('bdd_07_component_taxonomy', 'BDD 07 - Electronic component taxonomy', HW, [[blockId(EC)], ...chunk(components, 6)]);
+bdd('bdd_07_component_taxonomy', 'BDD 07 - Electronic component taxonomy', HW, [[blockId(EC)], ...chunk(components, 4)]);
 bdd('bdd_08_engine_sensors', 'BDD 08 - Engine sensor taxonomy', HW, [B('EngineSensor'), B('VRSensor', 'NTCSensor', 'RatiometricPressureSensor', 'ThermalOilLevelSensor')]);
 bdd('bdd_13_analysis_variants', 'BDD 13 - Analysis context and variants', P.ana, [B('EngineConfiguration', 'SimulationScenario'), B('OM501LA_EngineSystem')]);
 bdd('bdd_01_system_context', 'BDD 01 - OM 501 LA engine system context', HW, [B('OM501LA_EngineSystem', 'FR_CabECU', 'Battery24V', 'DiagnosticTester', 'StarterRelay'),
-  B('EngineSensor', 'UnitPump', 'ProportionalValve'), B('VRSensor', 'NTCSensor', 'RatiometricPressureSensor', 'ThermalOilLevelSensor'), B('MR_PLD_ECU')]);
-bdd('bdd_02_ecu_architecture', 'BDD 02 - MR_PLD_ECU architecture', HW, [B('MR_PLD_ECU'), B('ComputeCore', 'SensorAFE', 'InjectionPowerStage', 'ValveAndStarterDrivers', 'PowerSupplyAndComms')]);
-bdd('bdd_03_compute_core', 'BDD 03 - Compute core', HW, [B('ComputeCore'), B('SAK_C167CS_LM', 'TEMIC_845AW', 'AM29F400BB', 'M93C86', 'Crystal4MHz')]);
-bdd('bdd_04_sensor_afe', 'BDD 04 - Sensor analogue front-end', HW, [B('SensorAFE'), B('LM2903D', 'LM2904D', 'NtcPullUpNetwork', 'OnboardBaroSensor')]);
-bdd('bdd_05_injection_stage', 'BDD 05 - Injection power stage', HW, [B('InjectionPowerStage'), B('PLD_C1_1', 'BUZ102SL', 'SUD25N06_45L', 'DaleShunt', 'LM2901D', 'FreewheelNetwork')]);
-bdd('bdd_06_drivers_power_comms', 'BDD 06 - Drivers, power supply and communication', HW, [B('ValveAndStarterDrivers', 'PowerSupplyAndComms'), B('BUZ102SL', 'TLE4275', 'EmiChoke', 'CanTransceiver', 'L9637D')]);
-bdd('bdd_09_signals', 'BDD 09 - Signals (item defs) and enumerations', P.signals, [...chunk(SIGNALS.map(s => `sig_${s}`), 7), ENUMS.map(([, name]) => `enum_${name}`)], 230, 40);
-bdd('bdd_10_interfaces', 'BDD 10 - Port and interface definitions', P.ifaces, chunk(Object.values(interfaceIds), 6), 300, 60);
-bdd('bdd_11_types', 'BDD 11 - Value types and units', P.types, [VT.map(([id]) => id).concat('vt_ECU_Label'), UNITS.map(([id]) => id).concat(QK.map(([id]) => id))], 240, 50);
-bdd('bdd_12_constraints', 'BDD 12 - Constraint blocks and calculations', P.par, [B('SensorChainContext'), ...chunk(Object.keys(repo.definitions).filter(id => id.startsWith('cb_')), 6)], 300, 50);
+  B('EngineSensor', 'UnitPump', 'ProportionalValve'), B('VRSensor', 'NTCSensor'), B('RatiometricPressureSensor', 'ThermalOilLevelSensor'), B('MR_PLD_ECU')]);
+bdd('bdd_02_ecu_architecture', 'BDD 02 - MR_PLD_ECU architecture', HW, [B('MR_PLD_ECU'), B('ComputeCore', 'SensorAFE'), B('InjectionPowerStage', 'ValveAndStarterDrivers'), B('PowerSupplyAndComms')], { leftColumn: true });
+bdd('bdd_03_compute_core', 'BDD 03 - Compute core', HW, [B('ComputeCore'), B('SAK_C167CS_LM', 'TEMIC_845AW', 'AM29F400BB'), B('M93C86', 'Crystal4MHz')]);
+bdd('bdd_04_sensor_afe', 'BDD 04 - Sensor analogue front-end', HW, [B('SensorAFE'), B('LM2903D', 'LM2904D'), B('NtcPullUpNetwork', 'OnboardBaroSensor')]);
+bdd('bdd_05_injection_stage', 'BDD 05 - Injection power stage', HW, [B('InjectionPowerStage'), B('PLD_C1_1', 'BUZ102SL', 'SUD25N06_45L'), B('DaleShunt', 'LM2901D', 'FreewheelNetwork')]);
+bdd('bdd_06_drivers_power_comms', 'BDD 06 - Drivers, power supply and communication', HW, [B('ValveAndStarterDrivers', 'PowerSupplyAndComms'), B('BUZ102SL', 'TLE4275', 'EmiChoke'), B('CanTransceiver', 'L9637D')]);
+bdd('bdd_09_signals', 'BDD 09 - Signals (item defs) and enumerations', P.signals, [...chunk(SIGNALS.map(s => `sig_${s}`), 7), ENUMS.map(([, name]) => `enum_${name}`)], { gapX: 40, gapY: 50 });
+bdd('bdd_10_interfaces', 'BDD 10 - Port and interface definitions', P.ifaces, chunk(Object.values(interfaceIds), 6), { gapX: 50, gapY: 60 });
+bdd('bdd_11_types', 'BDD 11 - Value types and units', P.types, [VT.map(([id]) => id).concat('vt_ECU_Label'), UNITS.map(([id]) => id).concat(QK.map(([id]) => id))], { gapX: 40, gapY: 50 });
+bdd('bdd_12_constraints', 'BDD 12 - Constraint blocks and calculations', P.par, [B('SensorChainContext'), ...chunk(Object.keys(repo.definitions).filter(id => id.startsWith('cb_')), 6)], { gapX: 50, gapY: 60 });
 
 // ------------------------------------------------------- views / package diagram
 diagram('pkg_01_model', 'PKG 01 - Model organisation', 'package', P.root);

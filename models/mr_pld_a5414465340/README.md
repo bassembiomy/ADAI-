@@ -63,21 +63,38 @@ expands the tree to its row and highlights it.
 
 ## State machine — one region per behaviour owner
 
+All five regions are orthogonal (parallel) regions of the root, start with the machine and are named
+`<owner block>_<behaviour>` so the generated C identifiers stay valid.
+
 | Region | Owner block | Source |
 | --- | --- | --- |
-| `MR_PLD_OperatingStates` | `MR_PLD_ECU` (exhibit) | `state def`, 11 states, all 25 transitions |
-| `InjectionMicroCycle` | `PLD_C1_1` | `state def`, 6 states, 8 transitions |
-| `SyncSupervisor` | `SAK_C167CS_LM` | `enum SyncMode`; raises `CkpLost` / `CmpLost` / `CkpRestored` / `SyncLost` from `ckpValid` / `cmpValid` |
-| `ThermalFanControl` | `ValveAndStarterDrivers` | REQ-THM-08 (PV3 from 92 C, 100 % at 100 C, 103 C warning); raises `OvertempDetected` / `OvertempCleared` |
-| `SensorDiagnostics` | `SensorAFE` | `enum SensorFaultMode`, REQ-DIAG-07 window 0.18..4.82 V on the B65 ECT pin |
+| `MR_PLD_ECU_OperatingStates` | `MR_PLD_ECU` (exhibit) | `state def`, 11 states, all 25 transitions |
+| `PLD_C1_1_InjectionMicroCycle` | `PLD_C1_1` | `state def`, 6 states, 8 transitions |
+| `SAK_C167CS_LM_SyncSupervisor` | `SAK_C167CS_LM` | `enum SyncMode`; raises `CkpLost` / `CmpLost` / `CkpRestored` / `SyncLost` from `ckpValid` / `cmpValid` |
+| `ValveAndStarterDrivers_ThermalFanControl` | `ValveAndStarterDrivers` | REQ-THM-08 (PV3 from 92 C, 100 % at 100 C, 103 C warning); raises `OvertempDetected` / `OvertempCleared` |
+| `SensorAFE_SensorDiagnostics` | `SensorAFE` | `enum SensorFaultMode`, REQ-DIAG-07 window 0.18..4.82 V on the B65 ECT pin |
 
-`accept Signal` is a Boolean event variable named after the Signal, consumed by the transition that accepts it;
-`if guard` stays a guard on the state def attributes; `accept after t` is an `after` transition (1 ms ticks; the
-0.3 ms spill rounds up to one tick). The HMI has a pulse button per Signal, toggles / sliders for the attributes, and
-lamps / gauges for the outputs.
+The only safe state is `ST_FAULT_SHUTDOWN`. **Validate** reports no finding and **Generate C/H** produces the code.
+
+`accept Signal` is a Boolean event variable named after the Signal, consumed by the transition that accepts it
+(a Signal no state accepts is lost); `if guard` stays a guard on the state def attributes; `accept after t` is an
+`after` transition (1 ms ticks; the 0.3 ms spill rounds up to one tick). Levels (`immoValid`, `ckpValid`,
+`cmpValid`, `sensorDrift`, `peakCurrentSense`, `powerLatch`, `injEnable`, `driversTristated`) are 0/1 `uint8`.
+
+`peakCurrentSense` is the output of the PLD peak-current comparator. At 1 (default, healthy coil) a `SoiTrigger`
+runs PEAK → BIP_WAIT → HOLD by itself, so the micro-cycle can be followed by hand from the HMI; `EoiTrigger` ends
+it. At 0 the peak is never reached and the 2 ms open-coil corner cuts the cylinder off.
+
+### Running it from the HMI
+
+Open the **Main HMI** tab (the HMI Dashboard window; it closes again when another tab is selected), press
+**Run controls**, then **Start**. Example: `KL15_On` → set `immoValid` → `SelfTestPassed` → `KL50_CrankRequest`
+→ `EngineRunning` (RUN_NORMAL) → `SoiTrigger` / `EoiTrigger`, clear `ckpValid` (LIMP_DERATE), `KL15_Off`
+(AFTERRUN) → `AfterrunComplete` (STANDBY). The window has a pulse button per Signal, toggles and sliders for the
+attributes, lamps / gauges / LCDs for the outputs, an indicator per state and a trace.
 
 Corners the source leaves open, added as transitions: key off in `ST_INIT_IMMO` (→ standby) or `ST_CRANK_SYNC`
-(→ after-run), engine stall in run / limp (`EngineStopped` → ready), `CanRestored` → run, stop button in limp, open
+(→ after-run), key on again during after-run (→ `ST_INIT_IMMO`), engine stall in run / limp (`EngineStopped` → ready), `CanRestored` → run, stop button in limp, open
 coil (peak not reached in 2 ms → cylinder cut-off), cut-off cleared at power-down, and no injection unless the
 operating mode enables it.
 
