@@ -222,6 +222,35 @@ export function buildRemoveActivityNodeCommand(
   }, [], [], presentingDiagrams.map(diagramId => ({ type: 'removeFromDiagram' as const, diagramId, elementIds: [node.id] })));
 }
 
+/**
+ * Removes several nodes as ONE command (one undo step). Each removal is planned against the
+ * result of the previous one, so the whole-array patches never restore an earlier deletion.
+ */
+export function buildRemoveActivityNodesCommand(
+  repo: SysmlRepository,
+  input: { activityId: string; nodeIds: readonly string[]; diagramPresentations?: Record<string, DiagramPresentation> },
+): ActivityCommandPlan {
+  let working = repo;
+  const commands: SysmlMutationCommand[] = [];
+  for (const nodeId of input.nodeIds) {
+    const current = activityOf(working, input.activityId);
+    if (!current) return fail('NODE_NOT_FOUND', 'The node does not exist.');
+    if (!current.nodes.some(candidate => candidate.id === nodeId)) continue;
+    const plan = buildRemoveActivityNodeCommand(working, { activityId: input.activityId, nodeId, diagramPresentations: input.diagramPresentations });
+    if (!plan.ok) return plan;
+    const planned = plan.command;
+    const steps = planned.type === 'batch' ? planned.commands : [planned as SysmlMutationCommand];
+    commands.push(...steps);
+    for (const step of steps) {
+      if (step.type === 'updateElement' && step.elementId === current.id) {
+        working = withActivity(working, { ...current, ...(step.patch as Partial<ActivityDefinition>) });
+      }
+    }
+  }
+  if (commands.length === 0) return fail('NODE_NOT_FOUND', 'The node does not exist.');
+  return { ok: true, command: commands.length === 1 ? commands[0] : { type: 'batch', commands }, createdIds: [] };
+}
+
 export interface UpdateActivityNodeInput {
   activityId: string;
   nodeId: string;

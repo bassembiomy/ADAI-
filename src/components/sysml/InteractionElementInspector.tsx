@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import type { CombinedFragmentOperator, InteractionMessageSort, SysmlRepository } from '../../engine/sysml/model';
-import { FRAGMENT_OPERATORS, MESSAGE_SORTS, MESSAGE_SORT_LABELS, findInteractionElement, orderedMessages } from '../../engine/sysml/interaction';
+import { FRAGMENT_OPERATORS, MESSAGE_SORTS, MESSAGE_SORT_LABELS, blockOperations, findInteractionElement, lifelineBlock, operationName, orderedMessages } from '../../engine/sysml/interaction';
 import type { SysmlCommandResult, SysmlEditorCommand } from '../../services/sysmlCommandGateway';
 import {
   LIFELINE_CANDIDATE_GROUP_LABELS,
@@ -119,6 +119,10 @@ export function InteractionElementInspector({ repository, elementId, onExecute }
     const signals = stored.sort === 'asynchSignal' ? listSignalCandidates(repository, interactionId, stored.targetLifelineId) : [];
     const connectors = listMessageConnectors(repository, interactionId, stored.sourceLifelineId, stored.targetLifelineId);
     const position = sequence.findIndex(entry => entry.id === elementId);
+    // The operations the receiving lifeline's Block offers (inherited ones included), as in the Sequence workspace footer.
+    const targetLifeline = interaction.lifelines.find(lifeline => lifeline.id === stored.targetLifelineId);
+    const targetBlock = targetLifeline ? lifelineBlock(repository, targetLifeline) : undefined;
+    const targetOperations = targetBlock ? blockOperations(repository, targetBlock) : undefined;
     body = (
       <>
         <p className="text-xs text-[#aaa]">{messageSentence(repository, interactionId, elementId)}</p>
@@ -143,6 +147,21 @@ export function InteractionElementInspector({ repository, elementId, onExecute }
               {signals.map(option => <option key={option.id} value={option.id}>{option.received ? option.label : `${option.label} (not received)`}</option>)}
             </select>
           </div>
+        )}
+        {(stored.sort === 'synchCall' || stored.sort === 'asynchCall') && (
+          targetOperations ? (
+            <div>
+              <label className={labelClass}>Operation</label>
+              <select aria-label="Operation" className={fieldClass} value={stored.signatureId ?? ''}
+                onChange={event => run(buildUpdateInteractionMessageCommand(repository, { interactionId, messageId: elementId, signatureId: event.target.value || null }), 'The operation was rejected.')}
+              >
+                <option value="">(none)</option>
+                {targetOperations.map(operation => <option key={operation} value={operation}>{operationName(operation)}</option>)}
+              </select>
+            </div>
+          ) : (
+            <p className="text-xs text-[#888]">Operations appear once the receiving lifeline represents a Block.</p>
+          )
         )}
         {text('arguments', stored.arguments ?? '', value => run(buildUpdateInteractionMessageCommand(repository, { interactionId, messageId: elementId, arguments: value }), 'The arguments could not be changed.'), 'Arguments')}
         {connectors.length > 0 && (

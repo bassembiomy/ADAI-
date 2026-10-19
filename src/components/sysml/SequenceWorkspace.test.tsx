@@ -245,6 +245,15 @@ describe('SequenceWorkspace', () => {
     expect(interactionOf(latest).messages).toEqual([]);
   });
 
+  it('deletes several selected messages in one go, none of them coming back', () => {
+    render(<Harness />);
+    click(messageNode('1: start'));
+    click(messageNode('3: Ignite'), { shiftKey: true });
+    expect(screen.getByText('2 items selected')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Delete message' }));
+    expect(interactionOf(latest).messages).toEqual([]);
+  });
+
   it('mounts with a clear notice when the diagram has no interaction', () => {
     const repo = createEmptyRepository();
     render(<SequenceWorkspace repository={repo} diagramId="nope" onExecute={command => executeSysmlCommand(createSysmlGatewayState(repo), command)} />);

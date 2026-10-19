@@ -5,7 +5,7 @@ import type {
 import {
   MESSAGE_SORTS, CALL_SORTS, FRAGMENT_OPERATORS, actorAssociatedWith, blockOperations, blockReceptions, checkInteractionMessage,
   connectorsBetweenLifelines, findInInteraction, interactionContextBlock, isLostFoundEndpoint, interactionNestedIds, lifelineBlock, lifelineTargetExists,
-  operationName, orderedMessages, pairReplies, validateInteraction, withInteraction, wouldCreateUseCycle,
+  messageSetHasGap, operationName, orderedMessages, pairReplies, validateInteraction, withInteraction, wouldCreateUseCycle,
 } from '../engine/sysml/interaction';
 import { connectorEndAsPath, resolveConnectorEnd } from '../engine/sysml/connectorEnds';
 import { effectiveSupertypeIds } from '../engine/sysml/services/supertypes';
@@ -409,8 +409,24 @@ export function buildAddInteractionMessageCommand(repo: SysmlRepository, input: 
     if (verdict) return fail(verdict.code, verdict.message);
   }
   const stored = interaction.messages ?? [];
+  // A message inserted between two messages of one operand joins that operand (an operand is a contiguous run).
+  const before = sequence[index - 1]?.id;
+  const after = sequence[index]?.id;
+  const fragments = interaction.fragments ?? [];
+  const joined = before !== undefined && after !== undefined && fragments.some(fragment =>
+    fragment.operands.some(operand => operand.messageIds.includes(before) && operand.messageIds.includes(after)));
   return commit(repo, interaction, {
     messages: [...withOrders(stored, nextSequence), ...created.map(c => finalOf(c.id))],
+    ...(joined ? {
+      fragments: fragments.map(fragment => fragment.operands.some(operand => operand.messageIds.includes(before!) && operand.messageIds.includes(after!))
+        ? {
+          ...fragment,
+          operands: fragment.operands.map(operand => operand.messageIds.includes(before!) && operand.messageIds.includes(after!)
+            ? { ...operand, messageIds: [...operand.messageIds, ...created.map(c => c.id)] } : operand),
+          coveredLifelineIds: [...new Set([...fragment.coveredLifelineIds, ...created.flatMap(c => [c.sourceLifelineId, c.targetLifelineId]).filter(id => !isLostFoundEndpoint(id))])],
+        }
+        : fragment),
+    } : {}),
   }, created.map(c => c.id));
 }
 
@@ -604,6 +620,31 @@ export function buildRemoveInteractionMessageCommand(
     ...(invariants ? { stateInvariants: invariants } : {}),
     ...(constraints ? { constraints } : {}),
   }, []);
+}
+
+/**
+ * Removes several messages as ONE command (one undo step). Each removal is planned against the
+ * result of the previous one, so the whole-array patches never restore an earlier deletion.
+ * A message that an earlier removal already took along (a call's reply) is skipped.
+ */
+export function buildRemoveInteractionMessagesCommand(
+  repo: SysmlRepository,
+  input: { interactionId: string; messageIds: readonly string[] },
+): InteractionCommandPlan {
+  let working = repo;
+  const commands: SysmlMutationCommand[] = [];
+  for (const messageId of input.messageIds) {
+    const current = interactionOf(working, input.interactionId);
+    if (!current) return fail('MESSAGE_NOT_FOUND', 'The message does not exist.');
+    if (!current.messages.some(candidate => candidate.id === messageId)) continue;
+    const plan = buildRemoveInteractionMessageCommand(working, { interactionId: input.interactionId, messageId });
+    if (!plan.ok) return plan;
+    const command = plan.command as Extract<SysmlMutationCommand, { type: 'updateElement' }>;
+    commands.push(command);
+    working = withInteraction(working, { ...current, ...(command.patch as Partial<InteractionDefinition>) });
+  }
+  if (commands.length === 0) return fail('MESSAGE_NOT_FOUND', 'The message does not exist.');
+  return { ok: true, command: commands.length === 1 ? commands[0] : { type: 'batch', commands }, createdIds: [] };
 }
 
 /** Moves a message to a 0-based position among the messages (drag to reorder). */
@@ -859,6 +900,7 @@ export function buildAddFragmentCommand(
   if (!interaction) return fail('INTERACTION_NOT_FOUND', 'The interaction does not exist.');
   if (!FRAGMENT_OPERATORS.includes(input.operator)) return fail('INVALID_FRAGMENT_OPERATOR', 'That fragment operator is not supported.');
   if (input.messageIds.length === 0) return fail('FRAGMENT_NEEDS_MESSAGES', 'Select at least one message to enclose in the fragment.');
+  if (messageSetHasGap(interaction, input.messageIds)) return fail('FRAGMENT_NOT_CONTIGUOUS', 'A combined fragment encloses a contiguous run of messages. Select the messages without gaps (a message between the first and last must be selected too).');
   const guard = input.guard?.trim();
   const operands = [{ ...(guard ? { guard } : {}), messageIds: [...input.messageIds] }];
   if (input.operator === 'alt') operands.push({ guard: 'else', messageIds: [] });

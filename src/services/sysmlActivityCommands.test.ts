@@ -31,6 +31,7 @@ import {
   buildMoveActivityNodesCommand,
   buildMovePartitionCommand,
   buildRemoveActivityNodeCommand,
+  buildRemoveActivityNodesCommand,
   buildRemoveActivityPinCommand,
   buildRemovePartitionCommand,
   buildRenameActivityElementCommand,
@@ -474,5 +475,22 @@ describe('persistence', () => {
     expect(after.nodes.find(node => node.id === 'a1')?.bounds).toMatchObject({ x: 200, y: 120 });
     // The allocation to a nested node was not quarantined by the load.
     expect(Object.values(loaded.repository.relationships).filter(rel => rel.kind === 'allocation')).toHaveLength(1);
+  });
+});
+
+describe('deleting several nodes', () => {
+  it('removes every selected node in one undoable command', () => {
+    const ctx = setup();
+    addNode(ctx, 'initial', 'i1', 0, 0);
+    addNode(ctx, 'action', 'a1', 0, 100);
+    addNode(ctx, 'action', 'a2', 0, 200);
+    apply(ctx, buildAddActivityEdgeCommand(ctx.state.repository, { activityId: ACTIVITY, sourceId: 'i1', targetId: 'a1', id: 'e1' }));
+    apply(ctx, buildRemoveActivityNodesCommand(ctx.state.repository, { activityId: ACTIVITY, nodeIds: ['a1', 'a2'], diagramPresentations: ctx.state.diagramPresentations }));
+    expect(activity(ctx).nodes.map(node => node.id)).toEqual(['i1']);
+    expect(activity(ctx).edges).toEqual([]);
+    expect(ctx.state.diagramPresentations![DIAGRAM].elementIds).toEqual(['i1']);
+    const undone = executeSysmlCommand(ctx.state, { type: 'undo' });
+    expect((undone.repository.definitions[ACTIVITY] as ActivityDefinition).nodes.map(node => node.id)).toEqual(['i1', 'a1', 'a2']);
+    expect(undone.diagramPresentations![DIAGRAM].elementIds).toEqual(['i1', 'a1', 'a2']);
   });
 });
