@@ -77,8 +77,8 @@ describe('ADIA unified project persistence', () => {
     const saved = serializeSysmlProjectState(state.repository, state.diagramPresentations, state.coordinates);
     const file = createUnifiedProjectPayload({ version: '1.0', projectName: 'P', ...saved });
     const reopened = loadCanonicalSysmlProject({ ...file, sysmlRepository: file.sysmlRepository });
-    expect(state.diagramPresentations.bdd.elementIds).toContain('pkg-a');
-    expect(reopened.diagramPresentations.bdd.elementIds).toEqual(state.diagramPresentations.bdd.elementIds);
+    expect(state.diagramPresentations!.bdd.elementIds).toContain('pkg-a');
+    expect(reopened.diagramPresentations.bdd.elementIds).toEqual(state.diagramPresentations!.bdd.elementIds);
   });
 
   it('builds the unified module file with the main Save payload builder, not the raw repository', () => {
