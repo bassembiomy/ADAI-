@@ -19,3 +19,8 @@ legibility (< 8px effective font), and in each svg: `text-overlap`, `text-crosse
 `build.ts` reproduces `handleGenerateReport` of `src/App.tsx`; the HMI sections come from
 `src/features/reporting/hmiReportSections.ts`, as in the app. Set `REPORT_AUDIT_OUT=<dir>` to write elsewhere.
 Uses the Chromium in `$PLAYWRIGHT_BROWSERS_PATH` (default /opt/pw-browsers); never installs anything.
+
+Landscape figures: `figure.report-figure-wide` prints on a named landscape page (`@page wide`). The 680px print audit
+cannot render those at landscape width, so for them the legibility and page-height checks are analytic against the
+landscape svg box (987 x 599 px, scale = min(1, 987/vbW, 599/vbH), figure limit 669px) and reported as `[landscape]`.
+Portrait figures use the rendered scale (also clamped by the print `max-height`).

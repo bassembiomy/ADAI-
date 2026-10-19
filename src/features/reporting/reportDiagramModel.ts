@@ -31,6 +31,43 @@ export const DIAGRAM_CHAR_WIDTH = 6.5;
 export const MAX_NODES_PER_FIGURE = 20;
 export const MAX_FIGURE_WIDTH = 780;
 
+/** Page-fit rule: usable svg box (CSS px) inside a figure on a portrait / landscape A4 page, and the legibility floor. */
+export const PAGE_FIT = {
+  portrait: { width: 658, height: 909 },   // 680 x 979 content box minus figure padding/border (22px) and caption allowance (70px)
+  landscape: { width: 987, height: 599 },  // 1009 x 669 content box, same allowances
+  minLegibleFontPx: 8,
+  defaultFontPx: 9,
+} as const;
+export const MAX_WIDE_FIGURE_WIDTH = PAGE_FIT.landscape.width;
+
+export type FigureOrientation = 'portrait' | 'landscape';
+export interface FigurePageFit { orientation: FigureOrientation; scale: number; legible: boolean; portraitScale: number; landscapeScale: number }
+
+/** Smallest font-size (user units) declared in svg markup; the default when none is declared. */
+export function minFontSizeOf(svgInner: string): number {
+  let min = Infinity;
+  for (const m of svgInner.matchAll(/font-size\s*[=:]\s*"?'?\s*([0-9]*\.?[0-9]+)/g)) {
+    const v = parseFloat(m[1]);
+    if (v > 0 && v < min) min = v;
+  }
+  return Number.isFinite(min) ? min : PAGE_FIT.defaultFontPx;
+}
+
+function pageScale(box: { width: number; height: number }, vb: { width: number; height: number }): number {
+  return Math.min(1, box.width / vb.width, box.height / vb.height);
+}
+
+/** Choose portrait or landscape: landscape only when portrait would print the text below 8px and landscape does better. */
+export function figurePageFit(viewBox: { width: number; height: number }, minFont: number): FigurePageFit {
+  const portraitScale = pageScale(PAGE_FIT.portrait, viewBox);
+  const landscapeScale = pageScale(PAGE_FIT.landscape, viewBox);
+  const portraitLegible = minFont * portraitScale >= PAGE_FIT.minLegibleFontPx;
+  if (!portraitLegible && landscapeScale > portraitScale) {
+    return { orientation: 'landscape', scale: landscapeScale, legible: minFont * landscapeScale >= PAGE_FIT.minLegibleFontPx, portraitScale, landscapeScale };
+  }
+  return { orientation: 'portrait', scale: portraitScale, legible: portraitLegible, portraitScale, landscapeScale };
+}
+
 export function escapeHtml(value: string): string {
   return value
     .replace(/&/g, '&amp;')
@@ -147,11 +184,14 @@ export function fitViewBox(svgInner: string, viewBox: DiagramRect): DiagramRect 
 
 export function wrapFigure(svgInner: string, caption: string, requestedViewBox: DiagramRect, accounting?: FigureAccounting): string {
   const viewBox = fitViewBox(svgInner, requestedViewBox);
-  const displayWidth = Math.min(MAX_FIGURE_WIDTH, Math.ceil(viewBox.width));
+  const minFont = minFontSizeOf(svgInner);
+  const fit = figurePageFit(viewBox, minFont);
+  const wide = fit.orientation === 'landscape';
+  const displayWidth = Math.min(wide ? MAX_WIDE_FIGURE_WIDTH : MAX_FIGURE_WIDTH, Math.ceil(viewBox.width));
   const displayHeight = Math.ceil(displayWidth * viewBox.height / viewBox.width);
-  const attrs = accounting ? ` data-drawn-edges="${accounting.drawnEdges}" data-omitted-edges="${accounting.omitted.length}"` : '';
+  const attrs = ` data-min-font="${minFont}" data-page-fit="${fit.orientation}"` + (accounting ? ` data-drawn-edges="${accounting.drawnEdges}" data-omitted-edges="${accounting.omitted.length}"` : '');
   const note = accounting && accounting.omitted.length > 0 ? omittedNote(accounting) : '';
-  return `<figure class="report-figure"${attrs}><svg xmlns="http://www.w3.org/2000/svg" viewBox="${viewBox.x} ${viewBox.y} ${Math.ceil(viewBox.width)} ${Math.ceil(viewBox.height)}" width="${displayWidth}" height="${displayHeight}" style="max-width:100%;height:auto" role="img" aria-label="${escapeHtml(caption)}">${SVG_MARKER_DEFS}${svgInner}</svg><figcaption class="report-figure-caption">${escapeHtml(caption)}</figcaption>${note}</figure>`;
+  return `<figure class="report-figure${wide ? ' report-figure-wide' : ''}"${attrs}><svg xmlns="http://www.w3.org/2000/svg" viewBox="${viewBox.x} ${viewBox.y} ${Math.ceil(viewBox.width)} ${Math.ceil(viewBox.height)}" width="${displayWidth}" height="${displayHeight}" style="max-width:100%;height:auto" role="img" aria-label="${escapeHtml(caption)}">${SVG_MARKER_DEFS}${svgInner}</svg><figcaption class="report-figure-caption">${escapeHtml(caption)}</figcaption>${note}</figure>`;
 }
 export function renderEmptyFigure(message: string): string {
   return `<figure class="report-figure report-figure-empty"><p>${escapeHtml(message)}</p></figure>`;

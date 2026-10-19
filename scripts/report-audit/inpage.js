@@ -59,15 +59,25 @@
       out.overflow.push({ path: pathOf(el, report), section: headingOf(el, hs), overflowPx: r2(over), width: r2(b.width), left: r2(b.left), right: r2(b.right), offendingDescendants: kids, text: (el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 50) });
     }
     for (const fig of report.querySelectorAll('figure.report-figure')) {
-      const h = fig.getBoundingClientRect().height;
-      if (h > opts.maxFigureH) out.figuresTooTall.push({ caption: (fig.querySelector('.report-figure-caption') || fig).textContent.trim().replace(/\s+/g, ' ').slice(0, 110), id: fig.id, heightPx: r2(h), limitPx: opts.maxFigureH, section: headingOf(fig, hs) });
+      let h = fig.getBoundingClientRect().height;
+      let limit = opts.maxFigureH;
+      if (fig.classList.contains('report-figure-wide')) { // printed on a landscape page: judge against the landscape box
+        const svg = fig.querySelector('svg'); const vb = svg && svg.viewBox && svg.viewBox.baseVal;
+        if (vb && vb.width) h = vb.height * Math.min(1, opts.wide.width / vb.width, opts.wide.height / vb.height) + 70;
+        limit = opts.wide.height + 70;
+      }
+      if (h > limit) out.figuresTooTall.push({ caption: (fig.querySelector('.report-figure-caption') || fig).textContent.trim().replace(/\s+/g, ' ').slice(0, 110), id: fig.id, heightPx: r2(h), limitPx: limit, orientation: fig.classList.contains('report-figure-wide') ? 'landscape' : 'portrait', section: headingOf(fig, hs) });
     }
     for (const svg of report.querySelectorAll('svg')) {
       if (svg.closest('svg') !== svg) continue;
       const vb = svg.viewBox && svg.viewBox.baseVal;
       const w = svg.getBoundingClientRect().width;
       if (!vb || !vb.width || !w) continue;
-      const scale = w / vb.width;
+      let scale = w / vb.width;
+      const fig = svg.closest('figure.report-figure');
+      const isWide = !!(fig && fig.classList.contains('report-figure-wide'));
+      if (isWide) scale = Math.min(1, opts.wide.width / vb.width, opts.wide.height / vb.height); // landscape page, analytic
+      else if (opts.print) { const hh = svg.getBoundingClientRect().height; if (hh) scale = Math.min(scale, hh / vb.height); }
       let min = Infinity, minText = '';
       for (const t of svg.querySelectorAll('text')) {
         if (!t.textContent.trim() || t.closest('defs')) continue;
@@ -75,7 +85,7 @@
         if (fs < min) { min = fs; minText = t.textContent.trim().slice(0, 30); }
       }
       if (min === Infinity) continue;
-      if (min * scale < opts.minFontPx) out.legibility.push({ caption: captionOf(svg), scale: r2(scale * 100) / 100, minFontUser: min, effectiveFontPx: r2(min * scale), text: minText, section: headingOf(svg, hs) });
+      if (min * scale < opts.minFontPx) out.legibility.push({ orientation: isWide ? 'landscape' : 'portrait', caption: captionOf(svg), scale: r2(scale * 100) / 100, minFontUser: min, effectiveFontPx: r2(min * scale), text: minText, section: headingOf(svg, hs) });
     }
     return out;
   }

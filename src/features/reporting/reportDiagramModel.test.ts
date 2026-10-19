@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   MAX_NODES_PER_FIGURE, boundsOf, chunkItems, escapeHtml, measureNode,
-  rectsOverlap, renderEmptyFigure, wrapFigure,
+  rectsOverlap, renderEmptyFigure, wrapFigure, figurePageFit, minFontSizeOf,
 } from './reportDiagramModel';
 
 describe('escapeHtml', () => {
@@ -45,7 +45,7 @@ describe('chunkItems', () => {
 describe('figure wrappers', () => {
   it('wrapFigure emits an SVG figure with escaped caption', () => {
     const html = wrapFigure('<rect/>', 'BDD <Root>', { x: 0, y: 0, width: 200, height: 100 });
-    expect(html).toContain('<figure class="report-figure">');
+    expect(html).toContain('<figure class="report-figure"');
     expect(html).toContain('viewBox="0 0 200 100"');
     expect(html).toContain('BDD &lt;Root&gt;');
     expect(html).toContain('report-figure-caption');
@@ -54,5 +54,38 @@ describe('figure wrappers', () => {
   it('renderEmptyFigure renders a formal no-data statement', () => {
     expect(renderEmptyFigure('No data available for this diagram'))
       .toContain('No data available for this diagram');
+  });
+});
+
+describe('figurePageFit / page-fit rule', () => {
+  it('keeps compact figures portrait and legible', () => {
+    const fit = figurePageFit({ width: 600, height: 400 }, 10);
+    expect(fit).toMatchObject({ orientation: 'portrait', scale: 1, legible: true });
+  });
+  it('moves a wide small-font figure to landscape when that is more legible', () => {
+    const fit = figurePageFit({ width: 1400, height: 500 }, 11);
+    expect(fit.portraitScale * 11).toBeLessThan(8);
+    expect(fit.orientation).toBe('landscape');
+    expect(fit.scale).toBeCloseTo(987 / 1400, 5);
+    expect(fit.legible).toBe(false); // 11 * 0.705 = 7.8
+    expect(figurePageFit({ width: 1100, height: 500 }, 11)).toMatchObject({ orientation: 'landscape', legible: true });
+  });
+  it('stays portrait when landscape gives no better scale', () => {
+    expect(figurePageFit({ width: 5000, height: 20 }, 9).orientation).toBe('landscape');
+    expect(figurePageFit({ width: 600, height: 400 }, 4).orientation).toBe('portrait');
+  });
+  it('reads the minimum declared font-size, default 9', () => {
+    expect(minFontSizeOf('<text font-size="11">a</text><text font-size="7.5">b</text>')).toBe(7.5);
+    expect(minFontSizeOf('<rect/>')).toBe(9);
+  });
+  it('wrapFigure marks wide small-font figures and not compact ones', () => {
+    const wide = wrapFigure('<text font-size="11" x="0" y="10">a</text><rect x="0" y="0" width="1500" height="400"/>', 'Wide', { x: 0, y: 0, width: 1500, height: 400 });
+    expect(wide).toContain('report-figure report-figure-wide');
+    expect(wide).toContain('data-page-fit="landscape"');
+    expect(wide).toContain('data-min-font="11"');
+    expect(wide).toContain('width="987"');
+    const small = wrapFigure('<text font-size="11" x="0" y="10">a</text>', 'Small', { x: 0, y: 0, width: 500, height: 300 });
+    expect(small).not.toContain('report-figure-wide');
+    expect(small).toContain('data-page-fit="portrait"');
   });
 });

@@ -12,7 +12,8 @@ const { chromium } = require('playwright-core');
 const inpage = readFileSync(resolve(here, 'inpage.js'), 'utf8');
 
 const PRINT_W = 680;                 // 180 mm = A4 210 mm - 2 x 15 mm margins, in CSS px (680.3)
-const PRINT_FIGURE_MAX_H = 979;      // 259 mm printable height
+const PRINT_FIGURE_MAX_H = 979;      // 259 mm printable page height (portrait figure incl. caption)
+const WIDE_BOX = { width: 987, height: 599 }; // landscape usable svg box for report-figure-wide figures
 const SCREEN_W = 900;
 
 function findChrome() {
@@ -39,7 +40,7 @@ export async function auditFile(browser, file, name, { pdf = true, shots = true 
   const result = { case: name, modes: {} };
   for (const [mode, width] of [['screen', SCREEN_W], ['print', PRINT_W]]) {
     const { ctx, page } = await open(browser, file, mode === 'print' ? 'print' : 'screen', width);
-    const opts = { maxFigureH: PRINT_FIGURE_MAX_H, minFontPx: 8 };
+    const opts = { maxFigureH: PRINT_FIGURE_MAX_H, minFontPx: 8, wide: WIDE_BOX, print: mode === 'print' };
     const layout = await page.evaluate(o => window.__audit.layout(o), opts);
     result.modes[mode] = layout;
     if (mode === 'print') result.svg = await page.evaluate(() => window.__audit.svgs());
@@ -63,10 +64,10 @@ export function summarize(r, per = 3) {
     if (m.clipped.length) { lines.push(`  clipped/scrolling containers: ${m.clipped.length}`); for (const c of m.clipped.slice(0, 5)) lines.push(`    ${c.path} scrollWidth ${c.scrollWidth} > ${c.clientWidth} [section: ${c.section}]`); }
     if (mode === 'print') {
       lines.push(`  figures taller than a page (${PRINT_FIGURE_MAX_H}px): ${m.figuresTooTall.length}`);
-      for (const f of m.figuresTooTall) lines.push(`    ${f.heightPx}px  ${f.caption}  [section: ${f.section}]`);
+      for (const f of m.figuresTooTall) lines.push(`    ${f.heightPx}px [${f.orientation}, limit ${f.limitPx}]  ${f.caption}  [section: ${f.section}]`);
     }
     lines.push(`  illegible figures (<8px effective font): ${m.legibility.length}`);
-    for (const f of m.legibility) lines.push(`    ${f.effectiveFontPx}px (min font ${f.minFontUser} x scale ${f.scale})  ${f.caption}  e.g. "${f.text}"`);
+    for (const f of m.legibility) lines.push(`    ${f.effectiveFontPx}px [${f.orientation}] (min font ${f.minFontUser} x scale ${f.scale})  ${f.caption}  e.g. "${f.text}"`);
   }
   lines.push(`[svg geometry] total defects: ${r.svg.length}`);
   const byCap = group(r.svg, d => d.caption);
