@@ -301,9 +301,7 @@ const generateLegacyMISRACCode = (
   /** True when the state is designated as a terminal or end state */
   const isTerminalState = (s: StateData): boolean => {
     if (!s) return false;
-    if ((s as any).type === 'end' || (s as any).isFinal === true || s.isTerminalState === true || s.isTerminal === true) return true;
-    const lowerName = (s.name || '').trim().toLowerCase();
-    return lowerName === 'end' || lowerName === 'terminal' || lowerName.endsWith('_end') || lowerName.endsWith('_terminal');
+    return (s as any).type === 'end' || (s as any).isFinal === true || s.isTerminalState === true || s.isTerminal === true;
   };
 
 
@@ -1512,7 +1510,7 @@ ${terminalStateIds.length > 0 ? terminalStateIds.map(e => `        case ${e}:\n`
 }
 
 ` + smEnterStateFunc;
-  smEnterStateFunc += `    SM_Enter_State_Shallow(instance, state);\n    if (SM_Is_Terminal_State(state)) {\n        /* Terminal / End State: auto-reset state machine back to root autostart state */\n        SM_Reset(instance);\n        return;\n    }\n    switch (state) {\n`;
+  smEnterStateFunc += `    SM_Enter_State_Shallow(instance, state);\n    if (SM_Is_Terminal_State(state)) {\n        /* Terminal / End State: stay here, no child layer is entered */\n        return;\n    }\n    switch (state) {\n`;
 
   sortedStates.forEach(s => {
     const sEnum = stateEnum(s);
@@ -1739,7 +1737,10 @@ static void SM_Enter_Layer_${lIdx}(ADIA_Instance_t* instance, bool use_history) 
 
         let body = '';
         if (targetState) {
-          const isInternalTr = tr.isInternal === true || tr.type === 'internal';
+          // Same classification as the semantic builder: self = internal action; a descendant target is local (the
+          // exit/entry sequences below already leave the source alone); anything else is external.
+          const flaggedInternal = tr.isInternal === true || tr.type === 'internal';
+          const isInternalTr = flaggedInternal && stateId === targetState.id;
           let exitSeq: string[];
           let entrySeq: string[];
 

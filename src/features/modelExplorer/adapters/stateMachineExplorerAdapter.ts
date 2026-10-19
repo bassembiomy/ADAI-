@@ -314,11 +314,13 @@ export function createStateMachineExplorerAdapter(harness: StateMachineAdapterHa
 
         const allowedChildren = STATE_MACHINE_CHILDREN[kind] ?? [];
         for (const childKind of allowedChildren) {
+          const hasRegion = childKind === 'region' && kind === 'state' && snapshot.layers.some(l => l.parentStateId === id);
           caps.push({
             id: `create:${childKind}`,
             kind: 'createElement',
             label: getElementKindLabel(childKind),
-            enabled: true,
+            enabled: !hasRegion,
+            ...(hasRegion ? { reason: 'The state already has a region.' } : {}),
             elementKind: childKind,
           });
         }
@@ -457,6 +459,14 @@ export function createStateMachineExplorerAdapter(harness: StateMachineAdapterHa
             });
             return { committed: false, revision, diagnostics };
           }
+          if (command.elementKind === 'region' && snapshot.layers.some(l => l.parentStateId === command.ownerId)) {
+            diagnostics.push({
+              code: 'STATE_REGION_EXISTS',
+              severity: 'error',
+              message: 'The state already has a region.',
+            });
+            return { committed: false, revision, diagnostics };
+          }
           return { committed: false, revision, diagnostics: [] };
         }
 
@@ -520,6 +530,8 @@ export function createStateMachineExplorerAdapter(harness: StateMachineAdapterHa
           if (command.elementKind === 'state') {
             const name = command.name ?? generateUniqueName('State', existingNames);
             const stateId = generateId('state');
+            // As the canvas creates it: priority steps by 10 within the region, the first state starts the region.
+            const regionStates = snapshot.states.filter(s => s.parentId === ownerId);
             const newState: StateData = {
               id: stateId,
               name,
@@ -534,10 +546,10 @@ export function createStateMachineExplorerAdapter(harness: StateMachineAdapterHa
               color: '#ffffff',
               parentId: ownerId,
               children: [],
-              priority: 0,
+              priority: regionStates.length > 0 ? Math.max(...regionStates.map(s => s.priority)) + 10 : 10,
               isParallel: false,
               regionId: null, // as the canvas creates it: a region label is set only on parallel states
-              autostart: false,
+              autostart: regionStates.length === 0,
             };
 
             const nextLayers = snapshot.layers.map(l => {
@@ -578,7 +590,7 @@ export function createStateMachineExplorerAdapter(harness: StateMachineAdapterHa
               color: '#4caf50',
               parentId: ownerId,
               children: [],
-              priority: 0,
+              priority: 10,
               isParallel: false,
               regionId: null,
               autostart: false,
@@ -614,6 +626,17 @@ export function createStateMachineExplorerAdapter(harness: StateMachineAdapterHa
           }
 
           if (command.elementKind === 'region') {
+            if (snapshot.layers.some(l => l.parentStateId === ownerId)) {
+              return {
+                committed: false,
+                revision: this.getRevision(),
+                diagnostics: [{
+                  code: 'STATE_REGION_EXISTS',
+                  severity: 'error',
+                  message: 'The state already has a region; the canvas opens that region when entering the state.',
+                }],
+              };
+            }
             const name = command.name ?? generateUniqueName('Region', existingNames);
             const layerId = generateId('region');
             const newLayer: Layer = {
@@ -649,15 +672,18 @@ export function createStateMachineExplorerAdapter(harness: StateMachineAdapterHa
           // Pseudostates
           const pseudoKind = command.elementKind as PseudostateKind;
           const jId = generateId(pseudoKind);
-          const name = command.name ?? generateUniqueName(getElementKindLabel(pseudoKind), existingNames);
+          // As the canvas creates it: J<n> / H / H*, the junction colour, no parent state, not an autostart.
+          const canvasName = pseudoKind === 'history' ? 'H' : pseudoKind === 'deep-history' ? 'H*' : pseudoKind === 'junction' ? `J${snapshot.junctions.length + 1}` : undefined;
+          const name = command.name ?? canvasName ?? generateUniqueName(getElementKindLabel(pseudoKind), existingNames);
           const newJunction: JunctionData = {
             id: jId,
             name,
             x: 50,
             y: 50,
-            color: '#000000',
-            parentId: ownerId,
+            color: '#ff9900',
+            parentId: null,
             type: pseudoKind,
+            autostart: false,
           };
 
           const nextLayers = snapshot.layers.map(l => {
@@ -743,6 +769,7 @@ export function createStateMachineExplorerAdapter(harness: StateMachineAdapterHa
 
         case 'createRelationship': {
           const tId = generateId('trans');
+          const outgoingOrders = snapshot.transitions.filter(t => t.sourceId === command.sourceId).map(t => t.order);
           const newTransition: TransitionData = {
             id: tId,
             sourceId: command.sourceId,
@@ -752,7 +779,8 @@ export function createStateMachineExplorerAdapter(harness: StateMachineAdapterHa
             afterTicks: null,
             type: 'condition',
             hasControlPoint: false,
-            order: snapshot.transitions.length,
+            // As the canvas creates it: after the source's last outgoing transition.
+            order: outgoingOrders.length > 0 ? Math.max(...outgoingOrders) + 1 : 0,
           };
 
           // Find containing layer
