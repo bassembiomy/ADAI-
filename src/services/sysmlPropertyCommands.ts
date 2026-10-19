@@ -1,6 +1,7 @@
 import { parseMultiplicity, type BlockDefinition, type PartUsage, type PortDefinition, type PropertyDefinition, type SysmlRelationship, type SysmlRepository } from '../engine/sysml/model';
 import { PORT_STEREOTYPES } from './sysmlOwnedFeatureCommands';
 import { findPortOwner, findPropertyOwner, isPartProperty, PATH_SEPARATOR, resolveOccurrenceKey, resolvePartLike } from '../engine/sysml/partOccurrences';
+import { toRequirementPatch } from './requirementUpdateRules';
 import type { SysmlEditorCommand, SysmlMutationCommand } from './sysmlCommandGateway';
 
 type SysmlMutationPlan = SysmlMutationCommand | { type: 'batch'; commands: SysmlMutationCommand[]; coalesceKey?: string };
@@ -99,6 +100,13 @@ export function buildBlockPropertyUpdateCommand(
   elementId: string,
   patch: Record<string, unknown>,
 ): SysmlMutationPlan {
+  // A requirement stores requirementId/text/owner; the panels edit it by its BlockData names.
+  if (repository.requirements[elementId]) return { type: 'updateElement', elementId, patch: toRequirementPatch(patch) };
+  // A verification case stores its method as `method`.
+  if (repository.verificationCases[elementId] && 'verificationMethod' in patch) {
+    const { verificationMethod, ...rest } = patch;
+    return { type: 'updateElement', elementId, patch: { ...rest, method: verificationMethod } };
+  }
   const definition = repository.definitions[elementId];
   const hasSatisfactionPatch = Array.isArray(patch.satisfiedReqIds);
   if (!definition || definition.kind !== 'block' || (!Array.isArray(patch.properties) && !Array.isArray(patch.ports) && !hasSatisfactionPatch)) {

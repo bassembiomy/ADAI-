@@ -137,10 +137,38 @@ describe('getRequirementsDiagramScope', () => {
 
     const scope = getRequirementsDiagramScope(blocks, [], 'root', ['block-root', 'test-root']);
 
-    expect(scope.visibleBlockIds).toEqual(new Set(['req-root', 'block-root', 'test-root']));
+    // a requirement outside the presented set is not on this diagram
+    expect(scope.visibleBlockIds).toEqual(new Set(['block-root', 'test-root']));
+  });
+
+  it('shows on each requirements diagram only its own presented set', () => {
+    const blocks = [block('req-a', 'requirement'), block('req-b', 'requirement'), block('req-c', 'requirement')];
+    const relationships = [relationship('trace-ab', 'req-a', 'req-b', 'trace')];
+
+    const first = getRequirementsDiagramScope(blocks, relationships, 'root', ['req-a', 'req-b']);
+    const second = getRequirementsDiagramScope(blocks, relationships, 'root', new Set(['req-c']));
+
+    expect(first.visibleBlockIds).toEqual(new Set(['req-a', 'req-b']));
+    expect(first.visibleRelationshipIds).toEqual(new Set(['trace-ab']));
+    expect(second.visibleBlockIds).toEqual(new Set(['req-c']));
+    expect(second.visibleRelationshipIds).toEqual(new Set());
+  });
+
+  it('shows the layer\'s requirements when the diagram has no presented set', () => {
+    const blocks = [block('req-a', 'requirement'), block('req-b', 'requirement')];
+    expect(getRequirementsDiagramScope(blocks, [], 'root', []).visibleBlockIds).toEqual(new Set(['req-a', 'req-b']));
+    expect(getRequirementsDiagramScope(blocks, [], 'root').visibleBlockIds).toEqual(new Set(['req-a', 'req-b']));
   });
 
   describe('Requirement Diagram block interactions', () => {
+    it('double clicking a Requirement does not enter a layer, so the diagram keeps its requirements', () => {
+      const blocks = [block('req-a', 'requirement'), block('req-b', 'requirement')];
+      const decision = resolveBlockDoubleClickAction('requirements', { id: 'req-a', stereotype: 'requirement' });
+      expect(decision.action).toBe('none');
+      expect(decision.targetId).toBeUndefined();
+      expect(getRequirementsDiagramScope(blocks, [], 'root', ['req-a', 'req-b']).visibleBlockIds).toEqual(new Set(['req-a', 'req-b']));
+    });
+
     it('double clicking a Block on a Requirement diagram performs no action', () => {
       const decision = resolveBlockDoubleClickAction('requirements', { id: 'blk-1', stereotype: 'block' });
       expect(decision.action).toBe('none');

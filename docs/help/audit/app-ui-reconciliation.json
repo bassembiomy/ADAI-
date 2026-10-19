@@ -3,9 +3,9 @@
   "sourceSnapshot": "docs/help/audit/2026-10-06-ui-candidates.json",
   "scope": "Original App UI candidates; line numbers identify historical audit rows only.",
   "summary": {
-    "documented": 376,
+    "documented": 372,
     "excluded": 22,
-    "obsolete": 14,
+    "obsolete": 18,
     "unresolved": 0
   },
   "records": [
@@ -6222,17 +6222,8 @@
       "handlers": {
         "onClick": "{() => {\r\n                                          try {\r\n                                            const base64Parts = file.content.split(',');\r\n                                            const mime = base64Parts[0].match(/:(.*?);/)?.[1] || 'application/pdf';\r\n                                            const byteString = atob(base64Parts[1]);\r\n                                            const ab = new ArrayBuffer(byteString.length);\r\n                                            const ia = new Uint8Array(ab);\r\n                                            for (let i = 0; i < byteString.length; i++) {\r\n                                              ia[i] = byteString.charCodeAt(i);\r\n                                            }\r\n                                            const blob = new Blob([ab], { type: mime });\r\n                                            const url = URL.createObjectURL(blob);\r\n                                            window.open(url, '_blank');\r\n                                          } catch (err) {\r\n                                            console.error('Error opening PDF:', err);\r\n                                            addError('error', 'Failed to open PDF.');\r\n                                          }\r\n                                        }}"
       },
-      "status": "documented",
-      "featureIds": [
-        "app-requirement-pdf-view"
-      ],
-      "topicId": "app-requirement-pdf-view",
-      "sectionId": "use",
-      "reason": "Reviewed semantic handler/property and authored purpose/result/limit guidance.",
-      "currentSource": {
-        "matched": true,
-        "line": 19458
-      }
+      "status": "obsolete",
+      "reason": "Requirement PDF attachment control removed: the requirement model stores no attachments."
     },
     {
       "candidateId": "src/App.tsx:20079",
@@ -6243,17 +6234,8 @@
       "handlers": {
         "onClick": "{() => {\r\n                                          try {\r\n                                            const base64Parts = file.content.split(',');\r\n                                            const mime = base64Parts[0].match(/:(.*?);/)?.[1] || 'application/pdf';\r\n                                            const byteString = atob(base64Parts[1]);\r\n                                            const ab = new ArrayBuffer(byteString.length);\r\n                                            const ia = new Uint8Array(ab);\r\n                                            for (let i = 0; i < byteString.length; i++) {\r\n                                              ia[i] = byteString.charCodeAt(i);\r\n                                            }\r\n                                            const blob = new Blob([ab], { type: mime });\r\n                                            const url = URL.createObjectURL(blob);\r\n                                            const link = document.createElement('a');\r\n                                            link.href = url;\r\n                                            link.download = file.name;\r\n                                            link.click();\r\n                                            URL.revokeObjectURL(url);\r\n                                          } catch (err) {\r\n                                            console.error('Error downloading PDF:', err);\r\n                                            addError('error', 'Failed to download PDF.');\r\n                                          }\r\n                                        }}"
       },
-      "status": "documented",
-      "featureIds": [
-        "app-requirement-pdf-download"
-      ],
-      "topicId": "app-requirement-pdf-download",
-      "sectionId": "use",
-      "reason": "Reviewed semantic handler/property and authored purpose/result/limit guidance.",
-      "currentSource": {
-        "matched": true,
-        "line": 19482
-      }
+      "status": "obsolete",
+      "reason": "Requirement PDF attachment control removed: the requirement model stores no attachments."
     },
     {
       "candidateId": "src/App.tsx:20107",
@@ -6264,17 +6246,8 @@
       "handlers": {
         "onClick": "{() => {\r\n                                          const currentFiles = selectedBlock.attachedFiles || [];\r\n                                          const updatedFiles = currentFiles.filter((_, i) => i !== idx);\r\n                                          updateBlock(selectedBlock.id, { attachedFiles: updatedFiles });\r\n                                          addError('info', `Removed PDF: ${file.name}`);\r\n                                        }}"
       },
-      "status": "documented",
-      "featureIds": [
-        "app-requirement-pdf-remove"
-      ],
-      "topicId": "app-requirement-pdf-remove",
-      "sectionId": "use",
-      "reason": "Reviewed semantic handler/property and authored purpose/result/limit guidance.",
-      "currentSource": {
-        "matched": true,
-        "line": 19510
-      }
+      "status": "obsolete",
+      "reason": "Requirement PDF attachment control removed: the requirement model stores no attachments."
     },
     {
       "candidateId": "src/App.tsx:20126",
@@ -6297,17 +6270,8 @@
       "handlers": {
         "onClick": "{() => document.getElementById('req-pdf-upload')?.click()}"
       },
-      "status": "documented",
-      "featureIds": [
-        "app-requirement-pdf-attach"
-      ],
-      "topicId": "app-requirement-pdf-attach",
-      "sectionId": "use",
-      "reason": "Reviewed semantic handler/property and authored purpose/result/limit guidance.",
-      "currentSource": {
-        "matched": true,
-        "line": 19553
-      }
+      "status": "obsolete",
+      "reason": "Requirement PDF attachment control removed: the requirement model stores no attachments."
     },
     {
       "candidateId": "src/App.tsx:20167",

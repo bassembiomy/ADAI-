@@ -49,6 +49,7 @@ import {
   type MutationHistory,
 } from '../engine/sysml/mutations';
 import { validateSysmlRepository, type SysmlDiagnostic } from '../engine/sysml/validation';
+import { gateRequirementStatusUpdate } from './requirementUpdateRules';
 import { createModelBaseline, cloneProtectedBaselineAsWorkingCopy, clearSuspectLink, synchronizeRequirementCopy } from '../engine/sysml/requirements';
 import { validateScopedSysmlRepository } from '../engine/sysml/validation/dependencyScope';
 import { activityNestedIds, findInActivity } from '../engine/sysml/activity';
@@ -1054,6 +1055,8 @@ function gateUpdateElement(
       }];
     }
   }
+  const statusRejection = gateRequirementStatusUpdate(repo, elementId, patch);
+  if (statusRejection) return statusRejection;
   const definition = repo.definitions[elementId];
   if (definition && definition.kind === 'block') {
     const verdict = validateCanonicalBlockUpdate(repo, elementId, patch);

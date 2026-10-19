@@ -68,6 +68,15 @@ describe('inspectorSchema', () => {
     }
   });
 
+  it('offers the full requirement status list and no status field on a TestCase', () => {
+    const repository = createEmptyRepositoryV4();
+    repository.elements['req-1'] = { id: 'req-1', name: 'req1', metaclass: 'Requirement', namespace: [], ownerId: 'pkg-root', requirementId: 'REQ-1', text: 'T', status: 'draft', version: '1' } as any;
+    repository.elements['tc-1'] = { id: 'tc-1', name: 'tc1', metaclass: 'TestCase', namespace: [], ownerId: 'pkg-root', verifiesRequirementIds: ['req-1'], status: 'ready' } as any;
+    const requirementStatus = getInspectorSchema({ repository, elementId: 'req-1' })!.fields.find(field => field.key === 'status')!;
+    expect(requirementStatus.options!.map(option => option.value)).toEqual(['draft', 'approved', 'implemented', 'verified', 'failed', 'stale', 'retired']);
+    expect(getInspectorSchema({ repository, elementId: 'tc-1' })!.fields.map(field => field.key)).not.toContain('status');
+  });
+
   it('uses names and metaclasses in titles without exposing identity fields', () => {
     const repository = createEmptyRepositoryV4();
     repository.elements['block-1'] = { id: 'block-1', name: 'Block1', metaclass: 'Block', namespace: [], ownerId: 'pkg-root' };

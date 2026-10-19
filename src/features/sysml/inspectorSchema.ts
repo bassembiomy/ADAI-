@@ -407,7 +407,8 @@ function buildElementSchema(element: SemanticElement, repository: SysmlRepositor
     });
   }
 
-  if (el.status !== undefined) {
+  // Only a Requirement has a lifecycle status; a TestCase's migrated 'ready' is never read back.
+  if (el.metaclass === 'Requirement' && el.status !== undefined) {
     fields.push({
       key: 'status',
       label: 'Status',
@@ -419,6 +420,9 @@ function buildElementSchema(element: SemanticElement, repository: SysmlRepositor
         { label: 'Approved', value: 'approved' },
         { label: 'Implemented', value: 'implemented' },
         { label: 'Verified', value: 'verified' },
+        { label: 'Failed', value: 'failed' },
+        { label: 'Stale', value: 'stale' },
+        { label: 'Retired', value: 'retired' },
       ],
       toCommand: (val) => ({
         type: 'UpdateElement',

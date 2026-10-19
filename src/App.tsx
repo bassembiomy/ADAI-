@@ -200,7 +200,7 @@ import type {
 import { computeViewportBounds, cullElements } from './components/sysml/VirtualizedDiagram';
 import { handleHorizontalToolbarWheel } from './utils/toolbarScroll';
 import { LargeModelDiagnostics, loadStoredPerformanceLimits, saveStoredPerformanceLimits } from './components/sysml/LargeModelDiagnostics';
-import { validateLegacyConnectorCandidate, validateLegacyRequirementStatusTransition } from './services/sysmlCreationRules';
+import { validateLegacyConnectorCandidate } from './services/sysmlCreationRules';
 import { getCanvasRelationshipKinds, getDirectBddPropertyRelationshipKind, rejectBlockConnectionChange, rejectUiRelationship, resolveUiConnectionEndpoint } from './services/sysmlConnectionUi';
 import { formatLegacyProperty, inheritedProperties, introducesNewValidationCodes, removePartProperty, validateLegacyBlockEdit, validateLegacyBlockProperties } from './services/sysmlPropertyRules';
 import { projectDiagramScopedCanvasView } from './services/sysmlProjectionState';
@@ -8685,17 +8685,6 @@ const ADIA = () => {
     addError('info', `Entered layer: ${state.name}`);
   }, [states, layers, currentLayerId, addError]);
 
-  const enterRequirement = useCallback((blockId: string) => {
-    const block = blocks.find(b => b.id === blockId);
-    if (!block) return;
-
-    setLayerStack(prev => [...prev, currentLayerId]);
-    setLayerPath(prev => [...prev, block.name]);
-    setCurrentLayerId(blockId);
-    setSelectedIds([]);
-    addError('info', `Entered requirement: ${block.name}`);
-  }, [blocks, currentLayerId, addError]);
-
   const enterBlock = useCallback((blockId: string) => {
     console.log('[DEBUG_ENTER_BLOCK] called with blockId:', blockId);
     const block = blocks.find(b => b.id === blockId) ?? (canonicalSysmlRepository.definitions[blockId]?.kind === 'block' ? { id: blockId, name: canonicalSysmlRepository.definitions[blockId].name } : null);
@@ -11446,11 +11435,8 @@ const ADIA = () => {
 
     if (openCanvasSymbolDiagram(stateId)) return;
 
-    if (diagramMode === 'requirements') {
-      enterRequirement(stateId);
-    } else {
-      enterLayer(stateId);
-    }
+    // A requirements diagram has no layers to enter: nested requirements are shown on the same diagram.
+    if (diagramMode !== 'requirements') enterLayer(stateId);
   }, [enterLayer, diagramMode, states, openCanvasSymbolDiagram]);
 
   const handleTransitionClick = useCallback((e: MouseEvent<SVGPathElement>, transitionId: string) => {
@@ -13548,9 +13534,7 @@ const ADIA = () => {
             e.stopPropagation();
             if (openCanvasSymbolDiagram(block.id)) return;
             const decision = resolveBlockDoubleClickAction(diagramMode, block);
-            if (decision.action === 'enterRequirement') {
-              enterRequirement(decision.targetId!);
-            } else if (decision.action === 'enterBlock' && diagramMode === 'ibd') {
+            if (decision.action === 'enterBlock' && diagramMode === 'ibd') {
               enterBlock(decision.targetId!);
             }
           }}
@@ -13775,7 +13759,7 @@ const ADIA = () => {
         </g>
       );
     });
-  }, [blocks, culledDiagram, sysmlCanvasView, view.scale, parts, selectedIds, pendingBddBlockId, isCreatingTransition, handleBlockMouseDown, diagramMode, currentLayerId, activeSysmlDiagramId, sysmlDiagramPresentations, connectorSource, handlePortClick, handlePortMouseDown, enterBlock, enterRequirement, handleResizeMouseDown, interfaceRealizations, transitionSourceId, requirementsDiagramScope, bddFeatureDrag, dropBddFeatureOnBlock, startBddFeatureDrag, openCanvasSymbolDiagram]);
+  }, [blocks, culledDiagram, sysmlCanvasView, view.scale, parts, selectedIds, pendingBddBlockId, isCreatingTransition, handleBlockMouseDown, diagramMode, currentLayerId, activeSysmlDiagramId, sysmlDiagramPresentations, connectorSource, handlePortClick, handlePortMouseDown, enterBlock, handleResizeMouseDown, interfaceRealizations, transitionSourceId, requirementsDiagramScope, bddFeatureDrag, dropBddFeatureOnBlock, startBddFeatureDrag, openCanvasSymbolDiagram]);
 
   const renderRelationships = useCallback((): React.ReactNode => {
     const targetRelationships = diagramMode !== 'package' && culledDiagram ? culledDiagram.visibleRelationships : sysmlCanvasView.relationships;
@@ -17115,177 +17099,40 @@ const ADIA = () => {
                         <>
                           <div><Label>Req ID</Label><Input data-help-feature="app-block-reqId" data-help-source="src/App.tsx" value={selectedBlock.reqId || ''} onChange={(e) => updateBlock(selectedBlock.id, { reqId: e.target.value })} className="mt-1" /></div>
                           <div><Label>Status</Label>
-                            <select data-help-feature="app-requirement-status" data-help-source="src/App.tsx" value={selectedBlock.status || ''} onChange={(e) => {
-                              const validation = validateLegacyRequirementStatusTransition(blocks, relationships, selectedBlock.id, e.target.value);
-                              if (!validation.valid) addError('error', `Invalid requirement status: ${validation.reason}`);
-                              else updateBlock(selectedBlock.id, { status: e.target.value });
-                            }} className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1">
-                              <option value="Draft">Draft</option>
-                              <option value="Approved">Approved</option>
-                              <option value="Verified">Verified</option>
-                              <option value="Implemented">Implemented</option>
-                              <option value="Failed">Failed</option>
-                              <option value="Stale">Stale</option>
-                              <option value="Retired">Retired</option>
+                            <select data-help-feature="app-requirement-status" data-help-source="src/App.tsx" value={selectedBlock.status || 'draft'} onChange={(e) => updateBlock(selectedBlock.id, { status: e.target.value })} className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1">
+                              <option value="draft">Draft</option>
+                              <option value="approved">Approved</option>
+                              <option value="implemented">Implemented</option>
+                              <option value="verified">Verified</option>
+                              <option value="failed">Failed</option>
+                              <option value="stale">Stale</option>
+                              <option value="retired">Retired</option>
                             </select>
                           </div>
                           <div><Label>Priority</Label>
                             <select data-help-feature="app-block-priority" data-help-source="src/App.tsx" value={selectedBlock.priority || ''} onChange={(e) => updateBlock(selectedBlock.id, { priority: e.target.value })} className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1">
-                              <option value="High">High</option>
-                              <option value="Medium">Medium</option>
-                              <option value="Low">Low</option>
-                              <option value="Critical">Critical</option>
+                              <option value="" disabled>Not set</option>
+                              <option value="high">High</option>
+                              <option value="medium">Medium</option>
+                              <option value="low">Low</option>
+                              <option value="critical">Critical</option>
                             </select>
                           </div>
                           <div><Label>Description</Label><textarea data-help-feature="app-block-description" data-help-source="src/App.tsx" value={selectedBlock.description || ''} onChange={(e) => updateBlock(selectedBlock.id, { description: e.target.value })} className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#f97316]" /></div>
                           <div>
                             <Label>Risk</Label>
-                            <select data-help-feature="app-block-risk" data-help-source="src/App.tsx" value={selectedBlock.risk || 'Medium'} onChange={(e) => updateBlock(selectedBlock.id, { risk: e.target.value })} className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1">
-                              <option value="High">High</option>
-                              <option value="Medium">Medium</option>
-                              <option value="Low">Low</option>
-                              <option value="Critical">Critical</option>
-                            </select>
-                          </div>
-                          <div>
-                            <Label>Verification Method</Label>
-                            <select data-help-feature="app-block-verificationMethod" data-help-source="src/App.tsx" value={selectedBlock.verificationMethod || 'Test'} onChange={(e) => updateBlock(selectedBlock.id, { verificationMethod: e.target.value })} className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1">
-                              <option value="Test">Test</option>
-                              <option value="Analysis">Analysis</option>
-                              <option value="Inspection">Inspection</option>
-                              <option value="Demonstration">Demonstration</option>
+                            <select data-help-feature="app-block-risk" data-help-source="src/App.tsx" value={selectedBlock.risk || ''} onChange={(e) => updateBlock(selectedBlock.id, { risk: e.target.value })} className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1">
+                              <option value="" disabled>Not set</option>
+                              <option value="high">High</option>
+                              <option value="medium">Medium</option>
+                              <option value="low">Low</option>
+                              <option value="critical">Critical</option>
                             </select>
                           </div>
                           <div><Label>Source</Label><Input data-help-feature="app-block-source" data-help-source="src/App.tsx" value={selectedBlock.source || ''} onChange={(e) => updateBlock(selectedBlock.id, { source: e.target.value })} className="mt-1" /></div>
                           <div><Label>Version</Label><Input data-help-feature="app-block-version" data-help-source="src/App.tsx" value={selectedBlock.version || '1.0'} onChange={(e) => updateBlock(selectedBlock.id, { version: e.target.value })} className="mt-1" /></div>
                           <div><Label>Rationale</Label><textarea data-help-feature="app-block-rationale" data-help-source="src/App.tsx" value={selectedBlock.rationale || ''} onChange={(e) => updateBlock(selectedBlock.id, { rationale: e.target.value })} className="w-full h-16 bg-[#1a1a1a] border border-[#333] rounded text-sm text-[#e0e0e0] p-2 mt-1" /></div>
                           <div><Label>Baseline ID</Label><Input data-help-feature="app-block-baselineId" data-help-source="src/App.tsx" value={selectedBlock.baselineId || ''} onChange={(e) => updateBlock(selectedBlock.id, { baselineId: e.target.value || undefined })} className="mt-1" /></div>
-
-                          <div className="mt-4 pt-3 border-t border-[#333]">
-                            <Label className="flex items-center justify-between text-xs font-semibold text-[#aaa] mb-2">
-                              <span>Attached PDFs</span>
-                              <span className="text-[10px] text-[#666]">({(selectedBlock.attachedFiles || []).length})</span>
-                            </Label>
-
-                            <div className="space-y-2 mb-2 max-h-40 overflow-y-auto">
-                              {(!selectedBlock.attachedFiles || selectedBlock.attachedFiles.length === 0) ? (
-                                <div className="text-xs text-[#666] italic py-1">No PDF files attached.</div>
-                              ) : (
-                                selectedBlock.attachedFiles.map((file, idx) => (
-                                  <div key={idx} className="flex items-center justify-between bg-[#0a0a0a] p-2 rounded border border-[#333] gap-2">
-                                    <div className="flex items-center gap-2 overflow-hidden flex-1">
-                                      <FileText size={14} className="text-[#f97316] shrink-0" />
-                                      <span className="text-xs text-[#e0e0e0] truncate" title={file.name}>
-                                        {file.name}
-                                      </span>
-                                    </div>
-                                    <div className="flex items-center gap-1 shrink-0">
-                                      <button data-help-feature="app-requirement-pdf-view" data-help-source="src/App.tsx"
-                                        onClick={() => {
-                                          try {
-                                            const base64Parts = file.content.split(',');
-                                            const mime = base64Parts[0].match(/:(.*?);/)?.[1] || 'application/pdf';
-                                            const byteString = atob(base64Parts[1]);
-                                            const ab = new ArrayBuffer(byteString.length);
-                                            const ia = new Uint8Array(ab);
-                                            for (let i = 0; i < byteString.length; i++) {
-                                              ia[i] = byteString.charCodeAt(i);
-                                            }
-                                            const blob = new Blob([ab], { type: mime });
-                                            const url = URL.createObjectURL(blob);
-                                            window.open(url, '_blank');
-                                          } catch (err) {
-                                            console.error('Error opening PDF:', err);
-                                            addError('error', 'Failed to open PDF.');
-                                          }
-                                        }}
-                                        title="View PDF"
-                                        className="p-1 hover:bg-[#222] rounded text-[#aaa] hover:text-[#f97316] transition-colors"
-                                      >
-                                        <Eye size={12} />
-                                      </button>
-                                      <button data-help-feature="app-requirement-pdf-download" data-help-source="src/App.tsx"
-                                        onClick={() => {
-                                          try {
-                                            const base64Parts = file.content.split(',');
-                                            const mime = base64Parts[0].match(/:(.*?);/)?.[1] || 'application/pdf';
-                                            const byteString = atob(base64Parts[1]);
-                                            const ab = new ArrayBuffer(byteString.length);
-                                            const ia = new Uint8Array(ab);
-                                            for (let i = 0; i < byteString.length; i++) {
-                                              ia[i] = byteString.charCodeAt(i);
-                                            }
-                                            const blob = new Blob([ab], { type: mime });
-                                            const url = URL.createObjectURL(blob);
-                                            const link = document.createElement('a');
-                                            link.href = url;
-                                            link.download = file.name;
-                                            link.click();
-                                            URL.revokeObjectURL(url);
-                                          } catch (err) {
-                                            console.error('Error downloading PDF:', err);
-                                            addError('error', 'Failed to download PDF.');
-                                          }
-                                        }}
-                                        title="Download PDF"
-                                        className="p-1 hover:bg-[#222] rounded text-[#aaa] hover:text-[#f97316] transition-colors"
-                                      >
-                                        <Download size={12} />
-                                      </button>
-                                      <button data-help-feature="app-requirement-pdf-remove" data-help-source="src/App.tsx"
-                                        onClick={() => {
-                                          const currentFiles = selectedBlock.attachedFiles || [];
-                                          const updatedFiles = currentFiles.filter((_, i) => i !== idx);
-                                          updateBlock(selectedBlock.id, { attachedFiles: updatedFiles });
-                                          addError('info', `Removed PDF: ${file.name}`);
-                                        }}
-                                        title="Remove PDF"
-                                        className="p-1 hover:bg-[#222] rounded text-[#aaa] hover:text-red-400 transition-colors"
-                                      >
-                                        <Trash2 size={12} />
-                                      </button>
-                                    </div>
-                                  </div>
-                                ))
-                              )}
-                            </div>
-
-                            <div>
-                              <input data-help-feature="app-requirement-pdf-remove" data-help-source="src/App.tsx"
-                                type="file"
-                                id="req-pdf-upload"
-                                accept=".pdf"
-                                className="hidden"
-                                onChange={(e) => {
-                                  const file = e.target.files?.[0];
-                                  if (!file) return;
-                                  if (file.type !== 'application/pdf' && !file.name.endsWith('.pdf')) {
-                                    addError('error', 'Only PDF files are supported.');
-                                    return;
-                                  }
-                                  const reader = new FileReader();
-                                  reader.onload = (event) => {
-                                    const base64Content = event.target?.result as string;
-                                    const currentFiles = selectedBlock.attachedFiles || [];
-                                    const updatedFiles = [...currentFiles, { name: file.name, content: base64Content }];
-                                    updateBlock(selectedBlock.id, { attachedFiles: updatedFiles });
-                                    addError('info', `Attached PDF: ${file.name}`);
-                                  };
-                                  reader.readAsDataURL(file);
-                                  e.target.value = '';
-                                }}
-                              />
-                              <Button data-help-feature="app-requirement-pdf-attach" data-help-source="src/App.tsx"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => document.getElementById('req-pdf-upload')?.click()}
-                                className="w-full flex items-center justify-center gap-2 border-[#333] hover:border-[#f97316] hover:bg-[#f97316]/10 text-xs mt-1"
-                              >
-                                <Upload size={12} />
-                                Attach PDF File
-                              </Button>
-                            </div>
-                          </div>
                         </>
                       )}
                       {activePropTab === 'assign' && (
