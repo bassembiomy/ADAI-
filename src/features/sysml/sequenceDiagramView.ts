@@ -85,6 +85,8 @@ export interface MessageView {
   head: SequenceHeadStyle;
   isSelf: boolean;
   labelAt: Point;
+  /** Set when the label was wrapped (report layout): the lines top to bottom; `labelAt` is the baseline of the last. */
+  labelLines?: string[];
   /** Id of the fragment operand that encloses it, innermost first (for selection feedback). */
   fragmentIds: string[];
   /** Names of what the message is allocated to («allocate»). */
@@ -235,7 +237,21 @@ function representsLabelOf(repo: SysmlRepository, representsId: string): string 
 export interface SequenceViewOptions {
   /** Also draw an execution bar for each asynchronous call, until the receiver's next message. Off by default. */
   asyncExecutionBars?: boolean;
+  /**
+   * Report-only compaction (the editor leaves all of these unset): lifeline pitch, head width and slot pitch in user units,
+   * and a wrapper that splits a message label into lines for a given width. A wrapped message gets one extra
+   * LABEL_LINE_HEIGHT of slot height per additional line, and `MessageView.labelLines` lists the lines (the last one sits at `labelAt`).
+   */
+  lifelineSpacing?: number;
+  headWidth?: number;
+  messageSpacing?: number;
+  wrapLabel?: (text: string, maxWidth: number) => string[];
+  /** Report only: constraint brackets start this far right of the last lifeline's centre (default: head half width + 36) and are this far apart (default 70). */
+  constraintOffset?: number;
+  constraintLaneWidth?: number;
 }
+/** Height of one wrapped message-label line. */
+export const LABEL_LINE_HEIGHT = 12;
 
 export function buildSequenceDiagramView(repo: SysmlRepository, diagramId: string, endpoints?: SemanticEndpointContext, options: SequenceViewOptions = {}): SequenceDiagramView {
   const interaction = interactionOfDiagram(repo, diagramId);
@@ -260,15 +276,38 @@ export function buildSequenceDiagramView(repo: SysmlRepository, diagramId: strin
     slots.push({ kind: 'message', id: message.id });
     slots.push(...(extrasAfter.get(message.id) ?? []));
   }
+  const spacing = options.lifelineSpacing ?? LIFELINE_SPACING;
+  const headW = options.headWidth ?? HEAD_WIDTH;
+  const pitch = options.messageSpacing ?? MESSAGE_SPACING;
+  // Label width available to a message: the gap between its lifelines (activation bars and arrow heads take a little).
+  const lifelineIndex = new Map((interaction.lifelines ?? []).map((l, i) => [l.id, i]));
+  const labelLinesOf = (message: InteractionMessage, index: number): string[] | undefined => {
+    if (!options.wrapLabel) return undefined;
+    const text = `${index + 1}: ${messageText(repo, message)}`.replace(/: $/, '');
+    const a = lifelineIndex.get(message.sourceLifelineId);
+    const b = lifelineIndex.get(message.targetLifelineId);
+    const maxWidth = a === undefined || b === undefined ? LOST_FOUND_REACH + 40
+      : a === b ? spacing - SELF_LOOP_WIDTH - 24
+        : Math.abs(a - b) * spacing - 2 * ACTIVATION_WIDTH - 10;
+    return options.wrapLabel(text, Math.max(40, maxWidth));
+  };
+  const linesOfMessage = new Map<string, string[]>();
+  sequence.forEach((message, index) => { const lines = labelLinesOf(message, index); if (lines) linesOfMessage.set(message.id, lines); });
   const yOf = new Map<string, number>();
   const useSlotY = new Map<string, number>();
   const invariantSlotY = new Map<string, number>();
-  slots.forEach((slot, index) => {
-    if (slot.kind === 'message') yOf.set(slot.id, messageY(index));
-    else if (slot.kind === 'use') useSlotY.set(slot.use.id, messageY(index));
-    else invariantSlotY.set(slot.invariant.id, messageY(index));
+  let cursorY = FIRST_MESSAGE_Y - pitch;
+  const slotYs = slots.map(slot => {
+    const extra = slot.kind === 'message' ? ((linesOfMessage.get(slot.id)?.length ?? 1) - 1) * LABEL_LINE_HEIGHT : 0;
+    cursorY += pitch + extra;
+    return cursorY;
   });
-  const lastY = slots.length > 0 ? messageY(slots.length - 1) : FIRST_MESSAGE_Y;
+  slots.forEach((slot, index) => {
+    if (slot.kind === 'message') yOf.set(slot.id, slotYs[index]);
+    else if (slot.kind === 'use') useSlotY.set(slot.use.id, slotYs[index]);
+    else invariantSlotY.set(slot.invariant.id, slotYs[index]);
+  });
+  const lastY = slots.length > 0 ? slotYs[slots.length - 1] : FIRST_MESSAGE_Y;
   const pairing = pairReplies(interaction);
 
   // Lifelines
@@ -280,7 +319,7 @@ export function buildSequenceDiagramView(repo: SysmlRepository, diagramId: strin
     if (message.sort === 'deleteMessage' && !destroyedAt.has(message.targetLifelineId)) destroyedAt.set(message.targetLifelineId, y);
   }
   const lifelines: LifelineView[] = (interaction.lifelines ?? []).map((lifeline, index) => {
-    const centerX = MARGIN_X + HEAD_WIDTH / 2 + index * LIFELINE_SPACING;
+    const centerX = MARGIN_X + headW / 2 + index * spacing;
     const created = createdAt.get(lifeline.id);
     const headY = created !== undefined ? created - HEAD_HEIGHT / 2 : HEAD_Y;
     const representsLabel = lifeline.representsId ? representsLabelOf(repo, lifeline.representsId) : undefined;
@@ -297,7 +336,7 @@ export function buildSequenceDiagramView(repo: SysmlRepository, diagramId: strin
       ...(lifeline.representsId && repo.actors?.[lifeline.representsId] ? { isActor: true } : {}),
       index,
       centerX,
-      head: { x: centerX - HEAD_WIDTH / 2, y: headY, width: HEAD_WIDTH, height: HEAD_HEIGHT },
+      head: { x: centerX - headW / 2, y: headY, width: headW, height: HEAD_HEIGHT },
       lineTop: headY + HEAD_HEIGHT,
       lineBottom: destroyed ?? lastY + 70,
       ...(destroyed !== undefined ? { destroyedAtY: destroyed } : {}),
@@ -320,7 +359,7 @@ export function buildSequenceDiagramView(repo: SysmlRepository, diagramId: strin
     const nextFromReceiver = asynchronous
       ? sequence.slice(sequenceIndex + 1).find(later => later.sourceLifelineId === target.id)
       : undefined;
-    const endY = replyId ? yOf.get(replyId)! : nextFromReceiver ? yOf.get(nextFromReceiver.id)! : startY + MESSAGE_SPACING * 0.6;
+    const endY = replyId ? yOf.get(replyId)! : nextFromReceiver ? yOf.get(nextFromReceiver.id)! : startY + pitch * 0.6;
     const depth = activations.filter(bar => bar.lifelineId === target.id && bar.bounds.y <= startY && bar.bounds.y + bar.bounds.height >= startY).length;
     activations.push({
       callId: message.id,
@@ -363,6 +402,7 @@ export function buildSequenceDiagramView(repo: SysmlRepository, diagramId: strin
         sourceLifelineId: message.sourceLifelineId, targetLifelineId: message.targetLifelineId,
         y, points, dashed: false, head: 'open', isSelf: false,
         labelAt: { x: (edge + circleX) / 2, y: y - 6 },
+        ...(linesOfMessage.has(message.id) ? { labelLines: linesOfMessage.get(message.id) } : {}),
         fragmentIds: [], allocatedTo: allocation.get(message.id)?.allocatedTo ?? [],
         lostFound: kind, circleAt: { x: circleX, y },
       });
@@ -399,6 +439,7 @@ export function buildSequenceDiagramView(repo: SysmlRepository, diagramId: strin
       head: FILLED_HEADS.has(message.sort) ? 'filled' : 'open',
       isSelf,
       labelAt,
+      ...(linesOfMessage.has(message.id) ? { labelLines: linesOfMessage.get(message.id) } : {}),
       fragmentIds: [],
       allocatedTo: allocation.get(message.id)?.allocatedTo ?? [],
     });
@@ -415,8 +456,8 @@ export function buildSequenceDiagramView(repo: SysmlRepository, diagramId: strin
       && own.size > 0 && [...own].every(id => fragmentMessageIds[otherIndex].has(id)) && fragmentMessageIds[otherIndex].size > own.size).length;
     const covered = fragment.coveredLifelineIds.map(id => lifelineById.get(id)).filter((lifeline): lifeline is LifelineView => Boolean(lifeline));
     const xs = covered.length > 0 ? covered.map(lifeline => lifeline.centerX) : lifelines.map(lifeline => lifeline.centerX);
-    const left = (xs.length > 0 ? Math.min(...xs) : MARGIN_X + HEAD_WIDTH / 2) - 90 + depth * 12;
-    const right = (xs.length > 0 ? Math.max(...xs) : MARGIN_X + HEAD_WIDTH / 2) + 90 - depth * 12;
+    const left = (xs.length > 0 ? Math.min(...xs) : MARGIN_X + headW / 2) - 90 + depth * 12;
+    const right = (xs.length > 0 ? Math.max(...xs) : MARGIN_X + headW / 2) + 90 - depth * 12;
     const rows = fragment.operands.map(operand => operand.messageIds.filter(id => messageViewById.has(id)).map(id => messageViewById.get(id)!.y));
     const allYs = rows.flat();
     const hasMessages = allYs.length > 0;
@@ -453,8 +494,8 @@ export function buildSequenceDiagramView(repo: SysmlRepository, diagramId: strin
     const spanning = covered.length > 0 ? covered : lifelines;
     const xs = spanning.map(lifeline => lifeline.centerX);
     const slotY = useSlotY.get(use.id) ?? FIRST_MESSAGE_Y;
-    const left = (xs.length > 0 ? Math.min(...xs) : MARGIN_X + HEAD_WIDTH / 2) - HEAD_WIDTH / 2 - 10;
-    const right = (xs.length > 0 ? Math.max(...xs) : MARGIN_X + HEAD_WIDTH / 2) + HEAD_WIDTH / 2 + 10;
+    const left = (xs.length > 0 ? Math.min(...xs) : MARGIN_X + headW / 2) - headW / 2 - 10;
+    const right = (xs.length > 0 ? Math.max(...xs) : MARGIN_X + headW / 2) + headW / 2 + 10;
     const refersToLabel = sysmlObjectLabel(repo.definitions[use.refersToId], 'Interaction');
     const args = use.arguments?.trim();
     return {
@@ -488,7 +529,7 @@ export function buildSequenceDiagramView(repo: SysmlRepository, diagramId: strin
   });
 
   // Time and duration constraints: brackets beside the last lifeline, side by side when they overlap.
-  const rightMost = lifelines.reduce((max, lifeline) => Math.max(max, lifeline.centerX + HEAD_WIDTH / 2), MARGIN_X);
+  const rightMost = lifelines.reduce((max, lifeline) => Math.max(max, lifeline.centerX + headW / 2), MARGIN_X);
   const laneEnds: number[] = [];
   const constraints: ConstraintView[] = [...(interaction.constraints ?? [])].flatMap(constraint => {
     const yFrom = yOf.get(constraint.fromMessageId);
@@ -503,7 +544,7 @@ export function buildSequenceDiagramView(repo: SysmlRepository, diagramId: strin
       id: constraint.id,
       kind: constraint.kind,
       text: expression ? `{${expression}}` : '{…}',
-      x: rightMost + 36 + lane * 70,
+      x: (options.constraintOffset !== undefined ? lifelines.reduce((max, lifeline) => Math.max(max, lifeline.centerX), MARGIN_X) + options.constraintOffset : rightMost + 36) + lane * (options.constraintLaneWidth ?? 70),
       yFrom: top,
       yTo: bottom,
     };
@@ -514,7 +555,7 @@ export function buildSequenceDiagramView(repo: SysmlRepository, diagramId: strin
     for (const id of fragment.messageIds) messageViewById.get(id)?.fragmentIds.push(fragment.id);
   });
 
-  const maxX = Math.max(800, MARGIN_X * 2 + lifelines.length * LIFELINE_SPACING, ...fragments.map(fragment => fragment.bounds.x + fragment.bounds.width + 40), ...uses.map(use => use.bounds.x + use.bounds.width + 40), ...constraints.map(constraint => constraint.x + 120));
+  const maxX = Math.max(800, MARGIN_X * 2 + lifelines.length * spacing, ...fragments.map(fragment => fragment.bounds.x + fragment.bounds.width + 40), ...uses.map(use => use.bounds.x + use.bounds.width + 40), ...constraints.map(constraint => constraint.x + 120));
   const maxY = Math.max(480, lastY + 140, ...fragments.map(fragment => fragment.bounds.y + fragment.bounds.height + 40));
   return {
     interactionId: interaction.id,

@@ -4,7 +4,7 @@ import type {
 } from '../../engine/sysml/model';
 import { ACTIVITY_NODE_SIZES, LANE_HEADER_HEIGHT, PIN_SIZE, actionMinWidth } from '../sysml/activityDiagramView';
 import { USE_CASE_EDGE_NOTATION, clipToNode } from '../sysml/useCaseDiagramView';
-import { buildSequenceDiagramView, type SequenceDiagramView } from '../sysml/sequenceDiagramView';
+import { LABEL_LINE_HEIGHT, buildSequenceDiagramView, type SequenceDiagramView, type SequenceViewOptions } from '../sysml/sequenceDiagramView';
 import { edgeBadgeLabel } from '../sysml/edgeNotation';
 import { packageRelationshipKeyword } from '../sysml/packageRelationshipNotation';
 import { friendlySysmlKind, sysmlObjectLabel } from '../sysml/sysmlDisplayLabel';
@@ -652,6 +652,81 @@ function renderActivity(repo: SysmlRepository, activity: ActivityDefinition): st
 
 const REPORT_DIAGRAM_ID = '__report_sequence__';
 
+/**
+ * Page budget of one sequence figure (user units, font 10/9): a portrait page prints it at >= 8px when the viewBox is at most
+ * ~740 wide and ~1020 tall. Tall diagrams cannot go landscape, so they are compacted and split instead.
+ */
+const SEQ_MAX_WIDTH = 700;
+const SEQ_MAX_HEIGHT = 1000;
+const SEQ_HEAD_WIDTH = 128;
+const SEQ_MIN_SPACING = 140;
+/** Constraint brackets sit right of the last lifeline: their offset, wrapped text width and the extra width they need beyond the last head. */
+const SEQ_CONSTRAINT_OFFSET = 56;
+const SEQ_CONSTRAINT_TEXT = 130;
+const SEQ_CONSTRAINT_GUTTER = SEQ_CONSTRAINT_OFFSET + SEQ_CONSTRAINT_TEXT + 8 - SEQ_HEAD_WIDTH / 2;
+const SEQ_MAX_SPACING = 200;
+const SEQ_MESSAGE_PITCH = 46;
+/** Slot height spent besides messages: heads, first gap, lifeline tail, figure margins. */
+const SEQ_OVERHEAD = 72 + 56 + 24 + 32;
+
+/** Word-wraps a message label to `maxWidth` user units at font 10. Long identifiers break after "(" or "," and at camelCase humps; only a hump-less run wider than the line is split by characters. Nothing is cut. */
+export function wrapSequenceLabel(text: string, maxWidth: number): string[] {
+  const maxChars = Math.max(8, Math.floor(maxWidth / (10 * 0.58)));
+  const pieces: { text: string; glue: boolean }[] = [];
+  for (const word of text.split(/\s+/).filter(Boolean)) {
+    word.split(/(?<=[(,])|(?<=[a-z0-9])(?=[A-Z])/).forEach((part, i) => pieces.push({ text: part, glue: i > 0 }));
+  }
+  const lines: string[] = [];
+  let line = '';
+  for (const piece of pieces) {
+    let rest = piece.text;
+    while (rest.length > maxChars) {
+      if (line) { lines.push(line); line = ''; }
+      lines.push(rest.slice(0, maxChars));
+      rest = rest.slice(maxChars);
+    }
+    const sep = piece.glue ? '' : ' ';
+    if (!line) line = rest;
+    else if (line.length + sep.length + rest.length <= maxChars) line += sep + rest;
+    else { lines.push(line); line = rest; }
+  }
+  if (line) lines.push(line);
+  return lines.length > 0 ? lines : [text];
+}
+
+function sequenceOptions(lifelineCount: number, hasConstraints = false): SequenceViewOptions {
+  const room = SEQ_MAX_WIDTH - SEQ_HEAD_WIDTH - (hasConstraints ? SEQ_CONSTRAINT_GUTTER : 0);
+  const spacing = lifelineCount > 1
+    ? Math.max(SEQ_MIN_SPACING, Math.min(SEQ_MAX_SPACING, Math.floor(room / (lifelineCount - 1))))
+    : SEQ_MAX_SPACING;
+  return {
+    lifelineSpacing: spacing, headWidth: SEQ_HEAD_WIDTH, messageSpacing: SEQ_MESSAGE_PITCH, wrapLabel: wrapSequenceLabel,
+    ...(hasConstraints ? { constraintOffset: SEQ_CONSTRAINT_OFFSET, constraintLaneWidth: SEQ_CONSTRAINT_TEXT + 12 } : {}),
+  };
+}
+
+/** Estimated slot height of a message (pitch plus wrapped label lines), used to size the chunks before layout. */
+function estimateRow(m: InteractionMessage, index: number, lifelineCount: number, hasConstraints: boolean): number {
+  const opts = sequenceOptions(lifelineCount, hasConstraints);
+  const lines = wrapSequenceLabel(`${index + 1}: ${messageLabel(m)}`, (opts.lifelineSpacing ?? SEQ_MAX_SPACING) - 34).length;
+  return SEQ_MESSAGE_PITCH + (lines - 1) * LABEL_LINE_HEIGHT;
+}
+
+/** Splits the messages into consecutive chunks whose estimated height fits `budget`. */
+function chunkByHeight(messages: InteractionMessage[], lifelineCount: number, hasConstraints: boolean, budget: number): InteractionMessage[][] {
+  const chunks: InteractionMessage[][] = [];
+  let current: InteractionMessage[] = [];
+  let height = 0;
+  messages.forEach((m, i) => {
+    const row = estimateRow(m, i, lifelineCount, hasConstraints);
+    if (current.length > 0 && (height + row > budget || current.length >= MAX_NODES_PER_FIGURE)) { chunks.push(current); current = []; height = 0; }
+    current.push(m);
+    height += row;
+  });
+  if (current.length > 0) chunks.push(current);
+  return chunks;
+}
+
 function sliceInteraction(interaction: InteractionDefinition, chunk: InteractionMessage[], all: Set<string>, chunkIndex: number, ownerOf: Map<string, number>): InteractionDefinition {
   const inChunk = new Set(chunk.map(m => m.id));
   const belongs = (afterMessageId: string | undefined) => (afterMessageId && all.has(afterMessageId) ? ownerOf.get(afterMessageId) === chunkIndex : chunkIndex === 0);
@@ -683,13 +758,19 @@ function sequenceContentRects(view: SequenceDiagramView): DiagramRect[] {
   }
   for (const m of view.messages) {
     for (const p of m.points) rects.push({ x: p.x, y: p.y, width: 0, height: 0 });
-    rects.push(textBox(m.labelAt.x, m.labelAt.y, m.text, 10, m.isSelf ? 'start' : 'middle'));
+    const lines = m.labelLines ?? [m.text];
+    lines.forEach((line, i) => rects.push(textBox(m.labelAt.x, m.labelAt.y - (lines.length - 1 - i) * LABEL_LINE_HEIGHT, line, 10, m.isSelf ? 'start' : 'middle')));
   }
   for (const f of view.fragments) rects.push(f.bounds);
   for (const u of view.uses) rects.push(u.bounds);
   for (const s of view.stateInvariants) rects.push(s.bounds);
   for (const a of view.activations) rects.push(a.bounds);
-  for (const c of view.constraints) rects.push({ x: c.x - 8, y: Math.min(c.yFrom, c.yTo), width: 14 + textWidth(c.text, 10), height: Math.abs(c.yTo - c.yFrom) });
+  for (const c of view.constraints) {
+    const lines = wrapSequenceLabel(c.text, SEQ_CONSTRAINT_TEXT);
+    const mid = (c.yFrom + c.yTo) / 2;
+    rects.push({ x: c.x - 8, y: Math.min(c.yFrom, c.yTo), width: 14 + Math.max(...lines.map(l => textWidth(l, 10))), height: Math.abs(c.yTo - c.yFrom) });
+    lines.forEach((line, i) => rects.push(textBox(c.x + 6, mid + 3 + (i - (lines.length - 1) / 2) * LABEL_LINE_HEIGHT, line, 10, 'start')));
+  }
   return rects;
 }
 
@@ -726,7 +807,8 @@ function drawSequence(view: SequenceDiagramView, key: string, lifelineBottom: nu
     const markerEnd = m.head === 'filled' ? 'rf-arrow-filled' : 'rf-arrow-open';
     els.push(edgePath(`edge-seq${key}-${m.position}`, polyline(m.points), { dashed, markerEnd }));
     if (m.circleAt) els.push(`<circle cx="${m.circleAt.x}" cy="${m.circleAt.y}" r="5" fill="${TEXT}"/>`);
-    els.push(haloTxt(m.labelAt.x, m.labelAt.y, m.text, { size: 10, fill: TEXT, anchor: m.isSelf ? 'start' : 'middle' }));
+    const lines = m.labelLines ?? [m.text];
+    lines.forEach((line, li) => els.push(haloTxt(m.labelAt.x, m.labelAt.y - (lines.length - 1 - li) * LABEL_LINE_HEIGHT, line, { size: 10, fill: TEXT, anchor: m.isSelf ? 'start' : 'middle' })));
     if (m.sort === 'deleteMessage') {
       const end = m.points[m.points.length - 1];
       els.push(`<path d="M ${end.x - 6} ${end.y - 6} L ${end.x + 6} ${end.y + 6} M ${end.x + 6} ${end.y - 6} L ${end.x - 6} ${end.y + 6}" stroke="${TEXT}" stroke-width="1.6"/>`);
@@ -743,7 +825,8 @@ function drawSequence(view: SequenceDiagramView, key: string, lifelineBottom: nu
       + txt(s.bounds.x + s.bounds.width / 2, s.bounds.y + 18, `{${s.text}}`, { size: 10 }));
   }
   for (const c of view.constraints) {
-    els.push(`<path d="M ${c.x - 8} ${c.yFrom} h 8 V ${c.yTo} h -8" fill="none" stroke="${EDGE}" stroke-width="1.1"/>` + txt(c.x + 6, (c.yFrom + c.yTo) / 2 + 3, c.text, { size: 10, anchor: 'start' }));
+    els.push(`<path d="M ${c.x - 8} ${c.yFrom} h 8 V ${c.yTo} h -8" fill="none" stroke="${EDGE}" stroke-width="1.1"/>` + wrapSequenceLabel(c.text, SEQ_CONSTRAINT_TEXT).map((line, i, all) =>
+      txt(c.x + 6, (c.yFrom + c.yTo) / 2 + 3 + (i - (all.length - 1) / 2) * LABEL_LINE_HEIGHT, line, { size: 10, anchor: 'start' })).join(''));
   }
   return { svg: els.join(''), tagged: view.lifelines.length };
 }
@@ -756,26 +839,41 @@ export function renderSequenceDiagrams(repo: SysmlRepository): string[] {
       return [renderEmptyFigure(`${label}: no lifelines or messages modelled.`)];
     }
     const messages = orderedMessages(interaction);
-    const chunks = messages.length > MAX_NODES_PER_FIGURE ? chunkItems(messages, MAX_NODES_PER_FIGURE) : [messages];
     const all = new Set(messages.map(m => m.id));
-    const ownerOf = new Map<string, number>();
-    chunks.forEach((c, i) => c.forEach(m => ownerOf.set(m.id, i)));
-    return chunks.map((chunk, i) => {
-      const slice = chunks.length > 1 ? sliceInteraction(interaction, chunk, all, i, ownerOf) : interaction;
+    const lifelineCount = (interaction.lifelines ?? []).length;
+    const hasConstraints = (interaction.constraints ?? []).length > 0;
+    const viewOptions = sequenceOptions(lifelineCount, hasConstraints);
+    const layout = (chunks: InteractionMessage[][], i: number) => {
+      const ownerOf = new Map<string, number>();
+      chunks.forEach((c, ci) => c.forEach(m => ownerOf.set(m.id, ci)));
+      const slice = chunks.length > 1 ? sliceInteraction(interaction, chunks[i], all, i, ownerOf) : interaction;
       const synthetic = {
         ...repo,
         diagrams: { ...repo.diagrams, [REPORT_DIAGRAM_ID]: { id: REPORT_DIAGRAM_ID, kind: 'diagram' as const, name: label, namespace: [], diagramKind: 'sequence' as const, contextElementId: interaction.id } },
         definitions: { ...repo.definitions, [interaction.id]: slice },
       } as SysmlRepository;
-      const view = buildSequenceDiagramView(synthetic, REPORT_DIAGRAM_ID);
+      const view = buildSequenceDiagramView(synthetic, REPORT_DIAGRAM_ID, undefined, viewOptions);
+      const content = sequenceContentRects(view);
+      const contentBottom = content.length ? Math.max(...content.map(r => r.y + r.height)) : 0;
+      return { view, content, lifelineBottom: contentBottom + SEQUENCE_TAIL };
+    };
+    // Split by the page budget; refs, invariants and fragments add height the estimate cannot see, so re-split tighter until every view fits.
+    let budget = SEQ_MAX_HEIGHT - SEQ_OVERHEAD;
+    let chunks = chunkByHeight(messages, lifelineCount, hasConstraints, budget);
+    for (let attempt = 0; attempt < 8 && chunks.some(c => c.length > 1); attempt++) {
+      const tooTall = chunks.some((_, i) => layout(chunks, i).lifelineBottom + 16 > SEQ_MAX_HEIGHT);
+      if (!tooTall) break;
+      budget = Math.floor(budget * 0.85);
+      chunks = chunkByHeight(messages, lifelineCount, hasConstraints, budget);
+    }
+    if (chunks.length === 0) chunks = [messages];
+    return chunks.map((chunk, i) => {
+      const { view, content, lifelineBottom } = layout(chunks, i);
       const drawn = new Set(view.messages.map(m => m.id));
       const omitted = chunk.filter(m => !drawn.has(m.id)).map(m => {
         const lifelineName = (id: string) => (interaction.lifelines ?? []).find(l => l.id === id)?.name?.trim() || 'unknown lifeline';
         return { id: m.id, reason: `${messageLabel(m)} (${lifelineName(m.sourceLifelineId)} → ${lifelineName(m.targetLifelineId)}; a lifeline is not in the interaction)` };
       });
-      const content = sequenceContentRects(view);
-      const contentBottom = content.length ? Math.max(...content.map(r => r.y + r.height)) : 0;
-      const lifelineBottom = contentBottom + SEQUENCE_TAIL;
       const { svg } = drawSequence(view, String(i), lifelineBottom);
       const lifelineLines = view.lifelines.map(l => ({ x: l.centerX, y: l.lineTop, width: 0, height: Math.max(0, Math.min(l.lineBottom, lifelineBottom) - l.lineTop) }));
       const viewNote = chunks.length > 1 ? ` · view ${i + 1} of ${chunks.length}` : '';

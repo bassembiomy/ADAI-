@@ -414,8 +414,8 @@ describe('renderSequenceDiagrams', () => {
     const pages = renderSequenceDiagrams(big);
     expect(pages).toHaveLength(2);
     expect(pages[0]).toContain('view 1 of 2');
-    expect(accounting(pages[0])).toEqual({ drawn: 20, omitted: 0 });
-    expect(accounting(pages[1])).toEqual({ drawn: 5, omitted: 0 });
+    expect(accounting(pages[0])).toEqual({ drawn: 17, omitted: 0 }); // split by the page height budget, not a fixed count
+    expect(accounting(pages[1])).toEqual({ drawn: 8, omitted: 0 });
   });
 });
 
