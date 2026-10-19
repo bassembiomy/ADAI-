@@ -1,5 +1,6 @@
 import type { SysmlRepository } from '../../../engine/sysml/model';
 import { diagramFrameLabel } from '../../sysml/diagramFrame';
+import { actorGeneralizationIds } from '../../../engine/sysml/useCases';
 import type { CoverageMetrics, TraceabilityMatrix } from '../../../engine/sysml/rtm';
 import type { ReportModelDiagnostics } from '../../../services/reportModelConsistency';
 import type { BlockData, ConnectorData, PartData } from '../../../types/sysml_types';
@@ -378,11 +379,14 @@ export function buildSystemReport(input: SystemReportInput): string {
         body.push(num.table({
           caption: 'Actors',
           head: ['Actor', 'Kind', 'Specialises'],
-          rows: actors.map(a => [
-            `<strong>${esc(sysmlObjectLabel(a, 'Actor'))}</strong>`,
-            a.isExternal ? 'External system' : 'Human role',
-            a.generalizationIds.length ? esc(a.generalizationIds.map(id => resolveSysmlReferenceLabel(repo, id, 'Actor')).join(', ')) : dash,
-          ]),
+          rows: actors.map(a => {
+            const general = actorGeneralizationIds(repo, a.id);
+            return [
+              `<strong>${esc(sysmlObjectLabel(a, 'Actor'))}</strong>`,
+              a.isExternal ? 'External system' : 'Human role',
+              general.length ? esc(general.map(id => resolveSysmlReferenceLabel(repo, id, 'Actor')).join(', ')) : dash,
+            ];
+          }),
         }));
       }
     }

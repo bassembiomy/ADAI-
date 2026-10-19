@@ -3,6 +3,7 @@ import type {
   InteractionMessageSort, InteractionUse, Lifeline, SysmlRepository,
 } from './model';
 import { connectorEndAsPath } from './connectorEnds';
+import { actorGeneralizationIds } from './useCases';
 import { resolveSemanticEndpoint, type SemanticEndpointContext } from './semanticEndpointIndex';
 import type { SysmlDiagnostic } from './validation';
 import { effectiveSupertypeIds } from './services/supertypes';
@@ -177,6 +178,32 @@ export function messageLabel(message: Pick<InteractionMessage, 'name' | 'sort' |
   return MESSAGE_SORT_LABELS[message.sort] ?? 'Message';
 }
 
+/**
+ * UML 2.5 §17.6: an operand encloses a contiguous run of messages. True when a message lies between the first and last
+ * of `memberIds` without being one of them; the messages of another fragment lying wholly inside the span are allowed
+ * (a nested fragment). `ownFragmentId` is the fragment being checked, never counted as nested.
+ */
+export function messageSetHasGap(interaction: Pick<InteractionDefinition, 'messages' | 'fragments'>, memberIds: readonly string[], ownFragmentId?: string): boolean {
+  const sequence = orderedMessages(interaction);
+  const positionOf = new Map(sequence.map((message, position) => [message.id, position] as const));
+  const positions = memberIds.map(id => positionOf.get(id)).filter((position): position is number => position !== undefined);
+  if (positions.length < 2) return false;
+  const first = Math.min(...positions);
+  const last = Math.max(...positions);
+  const members = new Set(memberIds);
+  const nested = new Set<string>();
+  for (const other of interaction.fragments ?? []) {
+    if (other.id === ownFragmentId) continue;
+    const ids = other.operands.flatMap(operand => operand.messageIds ?? []).filter(id => positionOf.has(id));
+    if (ids.every(id => positionOf.get(id)! >= first && positionOf.get(id)! <= last)) ids.forEach(id => nested.add(id));
+  }
+  for (let position = first + 1; position < last; position += 1) {
+    const id = sequence[position].id;
+    if (!members.has(id) && !nested.has(id)) return true;
+  }
+  return false;
+}
+
 /** Messages in diagram order (ascending `order`, ties keep array order). */
 export function orderedMessages(interaction: Pick<InteractionDefinition, 'messages'>): InteractionMessage[] {
   return [...(interaction.messages ?? [])]
@@ -327,7 +354,7 @@ export function actorAssociatedWith(repo: SysmlRepository, actorId: string, useC
     const associated = Object.values(repo.relationships).some(relationship => relationship.kind === 'useCaseAssociation'
       && ((relationship.sourceId === current && relationship.targetId === useCaseId) || (relationship.targetId === current && relationship.sourceId === useCaseId)));
     if (associated) return true;
-    queue.push(...(repo.actors?.[current]?.generalizationIds ?? []));
+    queue.push(...actorGeneralizationIds(repo, current));
   }
   return false;
 }
@@ -554,7 +581,9 @@ export function validateInteraction(repo: SysmlRepository, interaction: Interact
   lifelines.forEach((lifeline, index) => {
     const label = lifeline.name?.trim();
     const actor = lifeline.representsId ? repo.actors?.[lifeline.representsId] : undefined;
-    if (lifeline.representsId && !lifelineTargetExists(repo, lifeline.representsId)) {
+    if (!lifeline.representsId) {
+      diagnostics.push(warning('LIFELINE_UNTYPED', lifeline.id, `lifelines.${index}.representsId`, `Lifeline ${label || 'Lifeline'} in ${name} represents no Block, part or Actor`));
+    } else if (!lifelineTargetExists(repo, lifeline.representsId)) {
       diagnostics.push(error('MISSING_LIFELINE_REPRESENTS', lifeline.id, `lifelines.${index}.representsId`, `Lifeline ${label || 'Lifeline'} in ${name} represents an element that does not exist (expected a Block, part or Actor)`));
     } else if (actor && scenarioUseCaseId && !actorAssociatedWith(repo, actor.id, scenarioUseCaseId)) {
       diagnostics.push(warning('SCENARIO_ACTOR_NOT_ASSOCIATED', lifeline.id, `lifelines.${index}.representsId`, `Actor ${actor.name} in ${name} is not associated with the use case this scenario belongs to`));
@@ -683,6 +712,9 @@ export function validateInteraction(repo: SysmlRepository, interaction: Interact
         }
       }
     });
+    if (operands.some(operand => messageSetHasGap(interaction, operand.messageIds ?? [], fragment.id)) || messageSetHasGap(interaction, operands.flatMap(operand => operand.messageIds ?? []), fragment.id)) {
+      diagnostics.push(error('FRAGMENT_NOT_CONTIGUOUS', fragment.id, `${path}.operands`, `A ${fragment.operator} fragment in ${name} does not enclose a contiguous run of messages; a message between its first and last is not part of it`));
+    }
   });
   (interaction.uses ?? []).forEach((use, index) => {
     const path = `uses.${index}`;

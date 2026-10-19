@@ -126,7 +126,11 @@ function resolveNode(
   const actor = repo.actors?.[id];
   if (actor) return { kind: 'actor', label: sysmlObjectLabel(actor, 'Actor'), extensionPoints: [], isExternal: actor.isExternal };
   const subject = repo.subjects?.[id];
-  if (subject) return { kind: 'subject', label: sysmlObjectLabel(subject, 'Subject'), extensionPoints: [] };
+  if (subject) {
+    // The boundary is titled with the Block it stands for once one is chosen.
+    const block = subject.realizedByBlockId ? repo.definitions?.[subject.realizedByBlockId] : undefined;
+    return { kind: 'subject', label: block?.kind === 'block' ? sysmlObjectLabel(block, 'Block') : sysmlObjectLabel(subject, 'Subject'), extensionPoints: [] };
+  }
   const useCase = repo.useCases?.[id];
   if (useCase) {
     const extensionPoints = (useCase.extensionPointIds ?? [])

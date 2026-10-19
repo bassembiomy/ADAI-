@@ -31,6 +31,7 @@ import {
   buildRemoveFragmentCommand,
   buildRemoveFragmentOperandCommand,
   buildRemoveInteractionMessageCommand,
+  buildRemoveInteractionMessagesCommand,
   buildRemoveLifelineCommand,
   buildRenameInteractionElementCommand,
   buildSetFragmentOperatorCommand,
@@ -367,17 +368,17 @@ describe('combined fragments', () => {
   it('edits the operator, operands, guards and messages of a fragment', () => {
     const ctx = drawn();
     apply(ctx, buildAddFragmentCommand(ctx.state.repository, { interactionId: INTERACTION, operator: 'par', messageIds: ['m1'], id: 'f' }));
-    apply(ctx, buildAddFragmentOperandCommand(ctx.state.repository, { interactionId: INTERACTION, fragmentId: 'f', messageIds: ['m3'], guard: 'branch' }));
-    expect(interaction(ctx).fragments[0].operands).toEqual([{ messageIds: ['m1'] }, { guard: 'branch', messageIds: ['m3'] }]);
-    expect(interaction(ctx).fragments[0].coveredLifelineIds.sort()).toEqual(['a', 'b', 'c']);
+    apply(ctx, buildAddFragmentOperandCommand(ctx.state.repository, { interactionId: INTERACTION, fragmentId: 'f', messageIds: ['m2'], guard: 'branch' }));
+    expect(interaction(ctx).fragments[0].operands).toEqual([{ messageIds: ['m1'] }, { guard: 'branch', messageIds: ['m2'] }]);
+    expect(interaction(ctx).fragments[0].coveredLifelineIds.sort()).toEqual(['a', 'b']);
 
     apply(ctx, buildSetOperandGuardCommand(ctx.state.repository, { interactionId: INTERACTION, fragmentId: 'f', operandIndex: 0, guard: ' first ' }));
     apply(ctx, buildSetOperandGuardCommand(ctx.state.repository, { interactionId: INTERACTION, fragmentId: 'f', operandIndex: 1, guard: '' }));
-    expect(interaction(ctx).fragments[0].operands).toEqual([{ guard: 'first', messageIds: ['m1'] }, { messageIds: ['m3'] }]);
+    expect(interaction(ctx).fragments[0].operands).toEqual([{ guard: 'first', messageIds: ['m1'] }, { messageIds: ['m2'] }]);
 
     // Moving a message into another operand removes it from the first.
-    apply(ctx, buildSetOperandMessagesCommand(ctx.state.repository, { interactionId: INTERACTION, fragmentId: 'f', operandIndex: 1, messageIds: ['m3', 'm1'] }));
-    expect(interaction(ctx).fragments[0].operands.map(o => o.messageIds)).toEqual([[], ['m3', 'm1']]);
+    apply(ctx, buildSetOperandMessagesCommand(ctx.state.repository, { interactionId: INTERACTION, fragmentId: 'f', operandIndex: 1, messageIds: ['m2', 'm1'] }));
+    expect(interaction(ctx).fragments[0].operands.map(o => o.messageIds)).toEqual([[], ['m2', 'm1']]);
 
     apply(ctx, buildSetFragmentOperatorCommand(ctx.state.repository, { interactionId: INTERACTION, fragmentId: 'f', operator: 'seq' }));
     expect(interaction(ctx).fragments[0].operator).toBe('seq');
@@ -458,5 +459,44 @@ describe('deletion and persistence', () => {
     addMessage(ctx, { sort: 'asynchCall', sourceLifelineId: 'a', targetLifelineId: 'b', id: 'm1' });
     const undone = executeSysmlCommand(ctx.state, { type: 'undo' });
     expect(JSON.stringify(undone.repository.definitions[INTERACTION])).toBe(snapshot);
+  });
+});
+
+describe('deleting several messages', () => {
+  it('removes every selected message in one undoable command', () => {
+    const ctx = setup();
+    withLifelines(ctx);
+    addMessage(ctx, { sort: 'asynchCall', sourceLifelineId: 'a', targetLifelineId: 'b', id: 'm1' });
+    addMessage(ctx, { sort: 'asynchCall', sourceLifelineId: 'b', targetLifelineId: 'a', id: 'm2' });
+    addMessage(ctx, { sort: 'asynchCall', sourceLifelineId: 'a', targetLifelineId: 'c', id: 'm3' });
+    apply(ctx, buildRemoveInteractionMessagesCommand(ctx.state.repository, { interactionId: INTERACTION, messageIds: ['m1', 'm2'] }));
+    expect(orderOf(ctx)).toEqual(['m3']);
+    expect(orderedMessages(interaction(ctx)).map(m => m.order)).toEqual([1]);
+    const undone = executeSysmlCommand(ctx.state, { type: 'undo' });
+    expect(orderedMessages(undone.repository.definitions[INTERACTION] as InteractionDefinition).map(m => m.id)).toEqual(['m1', 'm2', 'm3']);
+  });
+
+  it('a call selected together with its reply removes both once', () => {
+    const ctx = setup();
+    withLifelines(ctx);
+    addMessage(ctx, { sort: 'synchCall', sourceLifelineId: 'a', targetLifelineId: 'b', id: 'call', withReply: true, replyId: 'rep' });
+    addMessage(ctx, { sort: 'asynchCall', sourceLifelineId: 'a', targetLifelineId: 'c', id: 'm9' });
+    apply(ctx, buildRemoveInteractionMessagesCommand(ctx.state.repository, { interactionId: INTERACTION, messageIds: ['call', 'rep'] }));
+    expect(orderOf(ctx)).toEqual(['m9']);
+  });
+});
+
+describe('combined fragments over non-contiguous messages', () => {
+  it('refuses a message set with a gap, accepts it once the message between belongs to a fragment inside', () => {
+    const ctx = setup();
+    withLifelines(ctx);
+    addMessage(ctx, { sort: 'asynchCall', sourceLifelineId: 'a', targetLifelineId: 'b', id: 'm1' });
+    addMessage(ctx, { sort: 'asynchCall', sourceLifelineId: 'b', targetLifelineId: 'a', id: 'm2' });
+    addMessage(ctx, { sort: 'asynchCall', sourceLifelineId: 'a', targetLifelineId: 'b', id: 'm3' });
+    expect(refusal(buildAddFragmentCommand(ctx.state.repository, { interactionId: INTERACTION, operator: 'opt', messageIds: ['m1', 'm3'] }))).toBe('FRAGMENT_NOT_CONTIGUOUS');
+    expect(interaction(ctx).fragments ?? []).toEqual([]);
+    apply(ctx, buildAddFragmentCommand(ctx.state.repository, { interactionId: INTERACTION, operator: 'opt', messageIds: ['m2'], id: 'inner' }));
+    apply(ctx, buildAddFragmentCommand(ctx.state.repository, { interactionId: INTERACTION, operator: 'loop', messageIds: ['m1', 'm3'], id: 'outer' }));
+    expect(interaction(ctx).fragments.map(f => f.id)).toEqual(['inner', 'outer']);
   });
 });

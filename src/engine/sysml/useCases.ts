@@ -49,6 +49,19 @@ export interface UseCaseView {
 }
 
 /**
+ * The Actors `actorId` specializes. The diagram's generalization tool stores a `useCaseGeneralization`
+ * relationship (source = specific, target = general); the legacy `generalizationIds` is still read for
+ * imported models.
+ */
+export function actorGeneralizationIds(repo: SysmlRepository, actorId: string): string[] {
+  const ids = new Set<string>(repo.actors?.[actorId]?.generalizationIds ?? []);
+  for (const relationship of Object.values(repo.relationships ?? {})) {
+    if (relationship.kind === 'useCaseGeneralization' && relationship.sourceId === actorId && repo.actors?.[relationship.targetId]) ids.add(relationship.targetId);
+  }
+  return [...ids];
+}
+
+/**
  * Detects cycles in a directed graph.
  * Returns the cycle path [A, B, ..., A] if a cycle exists, or null otherwise.
  */
@@ -122,7 +135,7 @@ export function validateUseCaseElement(
 
     // Check for actor generalization cycle
     const actorEdges = Object.values(repo.actors || {}).flatMap(a =>
-      (a.generalizationIds || []).map(target => ({ from: a.id, to: target }))
+      actorGeneralizationIds(repo, a.id).map(target => ({ from: a.id, to: target }))
     );
     const cycle = detectUseCaseCycles(actorEdges);
     if (cycle && cycle.includes(elementId)) {

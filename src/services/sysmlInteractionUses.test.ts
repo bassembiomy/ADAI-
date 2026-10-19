@@ -35,7 +35,7 @@ function model(): SysmlRepository {
 
 const mainOf = (repo: SysmlRepository) => repo.definitions.main as InteractionDefinition;
 const withUses = (repo: SysmlRepository, uses: InteractionDefinition['uses']): InteractionDefinition => ({ ...mainOf(repo), uses });
-const codes = (repo: SysmlRepository, next: InteractionDefinition) => validateInteraction({ ...repo, definitions: { ...repo.definitions, [next.id]: next } }, next).map(d => `${d.severity}:${d.code}`);
+const codes = (repo: SysmlRepository, next: InteractionDefinition) => validateInteraction({ ...repo, definitions: { ...repo.definitions, [next.id]: next } }, next).filter(d => d.code !== 'LIFELINE_UNTYPED').map(d => `${d.severity}:${d.code}`);
 
 interface Ctx { state: SysmlGatewayState }
 function run(ctx: Ctx, command: SysmlEditorCommand): SysmlCommandResult {

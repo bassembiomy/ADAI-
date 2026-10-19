@@ -138,6 +138,13 @@ describe('SysML Use-Case Metamodel and Validation', () => {
       expect(diags.some(d => d.code === 'ACTOR_GENERALIZATION_CYCLE')).toBe(true);
     });
 
+    it('detects an actor generalization cycle made of useCaseGeneralization relationships', () => {
+      const repo = createPopulatedRepo();
+      repo.relationships.g1 = { id: 'g1', kind: 'useCaseGeneralization', sourceId: 'act1', targetId: 'act2' } as any;
+      repo.relationships.g2 = { id: 'g2', kind: 'useCaseGeneralization', sourceId: 'act2', targetId: 'act1' } as any;
+      expect(validateUseCaseElement(repo, 'act1').some(d => d.code === 'ACTOR_GENERALIZATION_CYCLE')).toBe(true);
+    });
+
     it('validates a well-formed subject', () => {
       const repo = createPopulatedRepo();
       const diags = validateUseCaseElement(repo, 'sub1');

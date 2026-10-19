@@ -34,7 +34,7 @@ function repoWith(interaction: Partial<InteractionDefinition>, setup?: (repo: Sy
 }
 
 const codes = (repo: SysmlRepository, interaction: InteractionDefinition, severity?: 'error' | 'warning') =>
-  validateInteraction(repo, interaction).filter(d => !severity || d.severity === severity).map(d => d.code).sort();
+  validateInteraction(repo, interaction).filter(d => d.code !== 'LIFELINE_UNTYPED' && (!severity || d.severity === severity)).map(d => d.code).sort();
 
 describe('interaction helpers', () => {
   it('lists nested ids, finds nested elements and orders messages by position', () => {
@@ -215,6 +215,14 @@ describe('interaction rules: messages', () => {
   });
 });
 
+describe('interaction rules: lifelines', () => {
+  it('warns about a lifeline that represents nothing', () => {
+    const { repo, interaction } = repoWith({});
+    const diagnostics = validateInteraction(repo, interaction).filter(d => d.code === 'LIFELINE_UNTYPED');
+    expect(diagnostics.map(d => [d.severity, d.elementId])).toEqual([['warning', 'c']]);
+  });
+});
+
 describe('interaction rules: combined fragments', () => {
   const messages = [msg('m1', 1, 'asynchCall', 'a', 'b'), msg('m2', 2, 'asynchCall', 'b', 'a'), msg('m3', 3, 'asynchCall', 'a', 'c')];
 
@@ -230,6 +238,24 @@ describe('interaction rules: combined fragments', () => {
 
     const ghostLifeline = repoWith({ messages, fragments: [{ id: 'f', operator: 'opt', operands: [{ messageIds: [] }], coveredLifelineIds: ['ghost'] }] });
     expect(codes(ghostLifeline.repo, ghostLifeline.interaction, 'error')).toEqual(['FRAGMENT_LIFELINE_MISSING']);
+  });
+
+  it('a fragment must enclose a contiguous run of messages; the messages of a nested fragment may sit within it', () => {
+    const four = [...messages, msg('m4', 4, 'asynchCall', 'b', 'a')];
+    const gap = repoWith({ messages: four, fragments: [{ id: 'f', operator: 'opt', operands: [{ messageIds: ['m1', 'm3'] }], coveredLifelineIds: ['a', 'b', 'c'] }] });
+    expect(codes(gap.repo, gap.interaction, 'error')).toEqual(['FRAGMENT_NOT_CONTIGUOUS']);
+
+    const contiguous = repoWith({ messages: four, fragments: [{ id: 'f', operator: 'opt', operands: [{ messageIds: ['m1', 'm2'] }], coveredLifelineIds: ['a', 'b'] }] });
+    expect(codes(contiguous.repo, contiguous.interaction, 'error')).toEqual([]);
+
+    const nestedInside = repoWith({
+      messages: four,
+      fragments: [
+        { id: 'outer', operator: 'loop', operands: [{ messageIds: ['m1', 'm3'] }], coveredLifelineIds: ['a', 'b', 'c'] },
+        { id: 'inner', operator: 'opt', operands: [{ messageIds: ['m2'] }], coveredLifelineIds: ['a', 'b'] },
+      ],
+    });
+    expect(codes(nestedInside.repo, nestedInside.interaction, 'error')).toEqual([]);
   });
 
   it('a message is in at most one operand of the same fragment, but may be in nested fragments', () => {
