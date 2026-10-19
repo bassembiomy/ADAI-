@@ -3,6 +3,7 @@ import {
   parseAction,
   parseActions,
   parseCondition,
+  findInternalTransitionSyntaxErrors,
   parseInternalTransition,
 } from './smExpressions';
 
@@ -123,5 +124,13 @@ describe('semantic expressions', () => {
     expect(() => parseInternalTransition(
       'after(0) / ratio = 1;',
     )).toThrow(/positive integer/);
+  });
+});
+
+describe('internal-transition syntax check', () => {
+  it('checks every non-empty line, not only the ones starting with a bracket', () => {
+    expect(findInternalTransitionSyntaxErrors('[a > 1] / x = 1;\n\n  after(5) / y = 2;\n')).toEqual([]);
+    const errors = findInternalTransitionSyntaxErrors('[a > 1] / x = 1;\nafter(5 / y = 2;\n/ x = = 1;\ngarbage text');
+    expect(errors.map((e) => e.line)).toEqual(['after(5 / y = 2;', '/ x = = 1;', 'garbage text']);
   });
 });

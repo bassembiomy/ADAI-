@@ -517,3 +517,18 @@ export const parseInternalTransitions = (
     .map((line) => line.trim())
     .filter(Boolean)
     .map((line) => parseInternalTransition(line, declaredSymbols));
+
+/** Syntax errors of the internal-transition text, checked line by line with the parser the simulator and the C generator use. */
+export const findInternalTransitionSyntaxErrors = (
+  source: string,
+): { line: string; message: string }[] => {
+  const errors: { line: string; message: string }[] = [];
+  for (const line of source.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)) {
+    try {
+      parseInternalTransition(line);
+    } catch (error) {
+      errors.push({ line, message: error instanceof Error ? error.message : String(error) });
+    }
+  }
+  return errors;
+};

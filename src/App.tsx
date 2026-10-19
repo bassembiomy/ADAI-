@@ -64,7 +64,9 @@ import {
 import { createStateMachineClipboard, pasteStateMachineClipboard, StateMachineClipboardData } from './utils/stateMachineClipboard';
 import { pruneStateHierarchy, pruneMultipleStatesHierarchy, countDescendants } from './utils/stateMachine/smStatePruner';
 import { generateMISRACCode, getCTimeType, validateInitialValue } from './utils/stateMachineCodeGenerator';
-import { applyAutostartEdit, findUnreachableStates } from './utils/stateMachine/smOrthogonalRegions';
+import { applyAutostartEdit, canTransitionBeInternal, findPartiallyParallelRegions, findUnreachableStates, partiallyParallelRegionMessage } from './utils/stateMachine/smOrthogonalRegions';
+import { applyStateHistoryChange, getStateHistoryType, type StateHistoryType } from './utils/stateMachine/smHistoryRegion';
+import { findInternalTransitionSyntaxErrors } from './utils/stateMachine/smExpressions';
 import { coerceTypedValue } from './utils/stateMachine/smTypedValue';
 import { isInputFocused } from './utils/domUtils';
 import { validateImportedJson, ValidationResult } from './utils/jsonImportValidator';
@@ -8025,7 +8027,29 @@ const ADIA = () => {
           const match = line.match(/^\[(.*?)\]\s*\/?\s*(.*)$/);
           if (match) checkConditionSyntax(match[1], `State '${s.name}' Internal Transition`, s.id);
         });
+        // Every non-empty line goes through the parser the simulator and the C generator use.
+        findInternalTransitionSyntaxErrors(s.internalTransitions).forEach(err => {
+          newErrors.push({
+            id: uuidv4(),
+            type: 'error',
+            message: `State '${s.name}' internal transition '${err.line}' is invalid: ${err.message}`,
+            timestamp: new Date(),
+            source: 'Validation',
+            elementId: s.id
+          });
+        });
       }
+    });
+
+    findPartiallyParallelRegions(states).forEach(region => {
+      newErrors.push({
+        id: uuidv4(),
+        type: 'error',
+        message: partiallyParallelRegionMessage(region),
+        timestamp: new Date(),
+        source: 'Validation',
+        elementId: region.parallel[0].id
+      });
     });
 
     transitions.forEach(t => {
@@ -9195,15 +9219,27 @@ const ADIA = () => {
     const junction = junctions.find(j => j.id === id);
     if (!junction) return;
 
+    addToHistory();
+    const removedTransitionIds = new Set(
+      transitions.filter(t => t.sourceId === id || t.targetId === id).map(t => t.id)
+    );
+    // Deleting a state's history junction also clears the History setting stored on the state.
+    const historyOwnerStateId = (junction.type === 'history' || junction.type === 'deep-history')
+      ? layers.find(l => l.junctionIds.includes(id))?.parentStateId ?? null
+      : null;
     setTransitions(prev => prev.filter(t => t.sourceId !== id && t.targetId !== id));
     setLayers(prev => prev.map(l => ({
       ...l,
-      junctionIds: l.junctionIds.filter(jid => jid !== id)
+      junctionIds: l.junctionIds.filter(jid => jid !== id),
+      transitionIds: l.transitionIds.filter(tid => !removedTransitionIds.has(tid))
     })));
     setJunctions(prev => prev.filter(j => j.id !== id));
+    if (historyOwnerStateId) {
+      setStates(prev => prev.map(s => s.id === historyOwnerStateId ? { ...s, historyType: 'none' } : s));
+    }
     setSelectedIds(prev => prev.filter(sid => sid !== id));
     addError('info', `Deleted junction: ${junction.name}`);
-  }, [junctions, addError]);
+  }, [junctions, transitions, layers, addError, addToHistory]);
 
   const createTransition = useCallback((sourceId: string, targetId: string) => {
     addToHistory();
@@ -9239,6 +9275,7 @@ const ADIA = () => {
   }, []);
 
   const deleteTransition = useCallback((id: string) => {
+    addToHistory();
     setTransitions(prev => prev.filter(t => t.id !== id));
     setLayers(prev => prev.map(l => ({
       ...l,
@@ -9246,7 +9283,27 @@ const ADIA = () => {
     })));
     setSelectedIds(prev => prev.filter(sid => sid !== id));
     addError('info', 'Deleted transition');
-  }, [addError]);
+  }, [addError, addToHistory]);
+
+  // History setting of a composite state: the history junction lives in the state's own region layer.
+  const setStateHistory = useCallback((stateId: string, newType: StateHistoryType) => {
+    const state = states.find(s => s.id === stateId);
+    if (!state) return;
+    addToHistory();
+    const next = applyStateHistoryChange(
+      { layers, junctions, transitions },
+      { id: state.id, name: state.name },
+      newType,
+      { newLayerId: uuidv4(), newJunctionId: uuidv4() },
+      { x: 60, y: 60 },
+      JUNCTION_COLOR,
+    );
+    setLayers(next.layers);
+    setJunctions(next.junctions);
+    setTransitions(next.transitions);
+    setStates(prev => prev.map(s => s.id === stateId ? { ...s, historyType: newType } : s));
+    addError('info', `History of ${state.name}: ${newType}`);
+  }, [states, layers, junctions, transitions, addError, addToHistory]);
 
   // BDD / SysML CREATION OPERATIONS
   const createSysmlElementOnActiveDiagram = useCallback((
@@ -16653,11 +16710,11 @@ const ADIA = () => {
 
                   <div className="flex items-center gap-2">
                     <Checkbox data-help-feature="app-state-isTerminalState" data-help-source="src/App.tsx"
-                      checked={selectedState.isTerminalState || false}
-                      onCheckedChange={(checked) => updateState(selectedState.id, { isTerminalState: checked as boolean })}
+                      checked={selectedState.isTerminalState === true || selectedState.isTerminal === true}
+                      onCheckedChange={(checked) => updateState(selectedState.id, checked ? { isTerminalState: true } : { isTerminalState: false, isTerminal: undefined })}
                       id="isTerminalState"
                     />
-                    <Label htmlFor="isTerminalState" className="text-blue-400">Is Terminal/Safe State</Label>
+                    <Label htmlFor="isTerminalState" className="text-blue-400">Is Terminal State</Label>
                   </div>
 
                   <div className="flex items-center gap-2">
@@ -16793,20 +16850,8 @@ const ADIA = () => {
                   <div>
                     <Label>History</Label>
                     <select data-help-feature="app-state-historyType" data-help-source="src/App.tsx"
-                      value={selectedState.historyType || 'none'}
-                      onChange={(e) => {
-                        const newType = e.target.value as 'none' | 'shallow' | 'deep';
-                        updateState(selectedState.id, { historyType: newType });
-
-                        const existing = junctions.find(j => j.parentId === selectedState.id && (j.type === 'history' || j.type === 'deep-history'));
-                        if (existing) {
-                          deleteJunction(existing.id);
-                        }
-
-                        if (newType !== 'none') {
-                          createJunction(selectedState.x + 30, selectedState.y + 30, newType === 'shallow' ? 'history' : 'deep-history', selectedState.id);
-                        }
-                      }}
+                      value={getStateHistoryType(layers, junctions, selectedState.id)}
+                      onChange={(e) => setStateHistory(selectedState.id, e.target.value as StateHistoryType)}
                       className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1"
                     >
                       <option value="none">None</option>
@@ -17816,12 +17861,22 @@ const ADIA = () => {
                   </div>
 
                   <div className="flex items-center gap-2 mt-3 mb-2">
-                    <Checkbox data-help-feature="app-transition-isInternal" data-help-source="src/App.tsx"
-                      checked={!!selectedTransition.isInternal}
-                      onCheckedChange={(checked) => updateTransition(selectedTransition.id, { isInternal: checked as boolean })}
-                      id="isInternal"
-                    />
-                    <Label htmlFor="isInternal" className="text-[#f97316]">Internal / Local Transition</Label>
+                    {(() => {
+                      // Internal (self) and local (descendant target) are the only kinds the flag can mean.
+                      const canBeInternal = canTransitionBeInternal(selectedTransition, states, layers);
+                      return (
+                        <span className="flex items-center gap-2"
+                          title={canBeInternal ? undefined : 'Only a transition to its own state (internal) or to one of its sub-states (local) can be internal or local.'}>
+                          <Checkbox data-help-feature="app-transition-isInternal" data-help-source="src/App.tsx"
+                            checked={!!selectedTransition.isInternal}
+                            disabled={!canBeInternal && !selectedTransition.isInternal}
+                            onCheckedChange={(checked) => updateTransition(selectedTransition.id, { isInternal: checked as boolean })}
+                            id="isInternal"
+                          />
+                          <Label htmlFor="isInternal" className="text-[#f97316]">Internal / Local Transition</Label>
+                        </span>
+                      );
+                    })()}
                   </div>
 
                   <div className="space-y-3 p-3 bg-[#1a1a1a] rounded-lg border border-[#222]">
