@@ -17313,7 +17313,7 @@ const ADIA = () => {
                   )}
                   {selectedBlock.stereotype === 'block' && (
                     <div className="space-y-2 border-t border-[#333] pt-3">
-                      <div><Label>Namespace</Label><Input data-help-feature="app-block-namespace" data-help-source="src/App.tsx" value={(selectedBlock.namespace || []).join('::')} onChange={(e) => updateBlock(selectedBlock.id, { namespace: e.target.value.split('::').map(value => value.trim()).filter(Boolean) })} className="mt-1" /></div>
+                      <div><Label>Namespace</Label><Input data-help-feature="app-block-namespace" data-help-source="src/App.tsx" value={(selectedBlock.namespace || []).join('::')} readOnly title="Derived from the owning packages" className="mt-1" /></div>
                       <label className="flex items-center gap-2 text-xs text-[#aaa]"><input data-help-feature="app-block-isAbstract" data-help-source="src/App.tsx" type="checkbox" checked={Boolean(selectedBlock.isAbstract)} onChange={(e) => updateBlock(selectedBlock.id, { isAbstract: e.target.checked })} /> Abstract</label>
                       <label className="flex items-center gap-2 text-xs text-[#aaa]"><input data-help-feature="app-block-isLeaf" data-help-source="src/App.tsx" type="checkbox" checked={Boolean(selectedBlock.isLeaf)} onChange={(e) => updateBlock(selectedBlock.id, { isLeaf: e.target.checked })} /> Leaf</label>
                     </div>

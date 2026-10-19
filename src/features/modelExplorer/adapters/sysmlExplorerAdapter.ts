@@ -864,7 +864,10 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
         );
 
         for (const cap of backendCaps) {
-          const executable = isExplorerKindExecutable(cap.metaclass);
+          // Owned features (ports, properties) are stored on a Block; an Interface Block has no
+          // such storage in the repository, so its feature entries are listed but not creatable.
+          const featureOwnerWritable = cap.category !== 'feature' || repo.definitions[id]?.kind === 'block';
+          const executable = isExplorerKindExecutable(cap.metaclass) && featureOwnerWritable;
           if (cap.allowed && executable) {
             caps.push({
               id: `create:${cap.metaclass}`,
@@ -884,7 +887,9 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
               enabled: false,
               elementKind: cap.metaclass,
               diagnosticCode: executable ? (cap.diagnosticCode ?? 'ILLEGAL_OWNERSHIP') : 'UNSUPPORTED_ELEMENT_KIND',
-              reason: executable ? cap.reason : `${cap.label} is not yet writable through this repository adapter.`,
+              reason: executable ? cap.reason : featureOwnerWritable
+                ? `${cap.label} is not yet writable through this repository adapter.`
+                : `${cap.label} cannot be created on this element: the repository stores owned features on Blocks only.`,
               capabilityGroup: 'allTypes',
               authority: cap.authority,
               catalogVisibility: 'allTypes',
@@ -895,7 +900,7 @@ export function createSysmlExplorerAdapter(harness: SysmlExplorerAdapterHarness)
         // 2. Convenience explorer children mappings
         const allowedChildren = SYSML_CHILDREN[kind] ?? [];
         for (const childKind of allowedChildren) {
-          if (isExplorerKindExecutable(childKind) && !caps.some((c) => c.elementKind === childKind)) {
+          if (isExplorerKindExecutable(childKind) && !caps.some((c) => c.elementKind === childKind || canonicalKindToExplorerKind(c.elementKind ?? '') === childKind)) {
             caps.push({
               id: `create:${childKind}`,
               kind: 'createElement',

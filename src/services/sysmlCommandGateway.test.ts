@@ -2476,12 +2476,12 @@ describe('sysmlCommandGateway review follow-up: atomic element commands (Finding
     repository.packages['pkg-target'] = {
       id: 'pkg-target', kind: 'package', name: 'Target', namespace: ['model'], ownerId: 'model',
     };
-    // Pre-existing repo-level validity error the move gate does not cover:
-    // two blocks share one qualified name. The move gate only checks target
-    // existence plus ownership policy, so the intent is admitted and only
-    // full staged validation (DUPLICATE_QUALIFIED_NAME) rejects it.
+    // The target already owns a block named Motor. The move gate only checks
+    // target existence plus ownership policy, so the intent is admitted and
+    // only full staged validation (DUPLICATE_QUALIFIED_NAME, Target::Motor
+    // after the namespace recompute) rejects it.
     repository.definitions['blk-motor'] = block('blk-motor', 'Motor');
-    repository.definitions['blk-motor-copy'] = block('blk-motor-copy', 'Motor');
+    repository.definitions['blk-motor-existing'] = { ...block('blk-motor-existing', 'Motor'), ownerId: 'pkg-target', namespace: ['Target'] };
     const state = createSysmlGatewayState(repository);
     const before = snapshot(state);
 
