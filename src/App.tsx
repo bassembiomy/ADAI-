@@ -6741,6 +6741,7 @@ const ADIA = () => {
     addError('info', 'Professional report generated and downloaded.');
   }, [results, data, headers, addError]);
 
+  const buildUnifiedProjectPayloadRef = useRef<((options?: { deferSysmlPreparation?: boolean }) => Record<string, unknown>) | null>(null);
   const executeExportProject = useCallback(async (selectedKeys: string[]) => {
     const totalEntities = blocks.length + parts.length + connectors.length + relationships.length;
     const limits = loadStoredPerformanceLimits();
@@ -6787,27 +6788,16 @@ const ADIA = () => {
       projectFiles['entropy.adia'] = { entropyNodes, entropyEdges, opmSimulationConfig };
     }
     if (selectedKeys.includes('unified')) {
+      // Same payload as the main Save: format 5 repository, presentations, coordinates and PlantUML.
+      // A raw canonicalSysmlRepository here reopens with every diagram empty.
+      const buildPayload = buildUnifiedProjectPayloadRef.current;
+      if (!buildPayload) {
+        addError('error', 'Unified project export is not ready yet.');
+        return;
+      }
       projectFiles['adia_project_unified.adia'] = {
-        version: VERSION,
-        timestamp: new Date().toISOString(),
-        projectName: currentProjectName,
-        openTabs,
-        diagramWorkspace,
-        activeSysmlDiagramId,
-        diagramNavigationStack,
-        ...persistedStateMachine, view,
-        blocks, relationships, parts, connectors, interfaceRealizations, customStereotypes,
-        hmiComponents, vlabNodes, vlabEdges, globalXBridgesNodes, globalXBridgesEdges,
-        hilConfig,
-        doe: { schemaVersion: 1, headers, data, activeModel, taguchiConfig, results },
-        managedWindows,
-        entropyNodes,
-        entropyEdges,
-        opmSimulationConfig,
-        canonicalSysmlRepository,
+        ...buildPayload(),
         workspaceFiles: saveCurrentFileState(workspaceFiles, activeFileId),
-        openTabIds,
-        activeFileId
       };
     }
 
@@ -7302,6 +7292,8 @@ const ADIA = () => {
     activeFileId,
     plantUmlDiagram,
   ]);
+
+  buildUnifiedProjectPayloadRef.current = buildUnifiedProjectPayload;
 
   const saveUnifiedProject = useCallback(async (saveAs: boolean = false) => {
     if (pendingHydrationSequenceRef.current !== committedHydrationSequenceRef.current) {
