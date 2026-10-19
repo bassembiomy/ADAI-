@@ -22,7 +22,7 @@ describe('renderHmiDesignSection', () => {
   const html = renderHmiDesignSection(components, variables, []);
 
   it('wraps the picture in a report figure that never exceeds the page width', () => {
-    expect(html).toContain('<figure class="report-figure"');
+    expect(html).toContain('<figure class="report-figure');
     expect(html).toContain('<figcaption class="report-figure-caption">HMI layout');
     expect(html).toMatch(/<svg[^>]*style="max-width:100%;height:auto"/);
     expect(html).toContain('overflow-wrap:anywhere');
@@ -40,17 +40,48 @@ describe('renderHmiDesignSection', () => {
     expect(vb.width).toBeGreaterThanOrEqual(1400 + 160 + 60);
   });
 
-  it('pads the bounds for labels wider than their widget', () => {
-    const wide = [comp('a', 0, 0, 40, 40, 'A very long component name that overflows')];
-    const b = computeHmiDesignBounds(wide);
-    expect(b.x).toBeLessThan(-20);
-    expect(b.x + b.width).toBeGreaterThan(40 + 20);
+  it('keeps the bounds at the widget boxes because widget labels are truncated to their box', () => {
+    const b = computeHmiDesignBounds([comp('a', 0, 0, 40, 40, 'A very long component name that overflows')]);
+    expect(b.x).toBe(-20);
+    expect(b.x + b.width).toBe(40 + 20);
   });
 
-  it('lists components with their bindings and escapes names', () => {
-    const out = renderHmiDesignSection([comp('a', 0, 0, 140, 90, '<b>x</b>')], variables, []);
-    expect(out).toContain('&lt;b&gt;x&lt;/b&gt;');
-    expect(out).toContain('Bound to: <strong>Temperature</strong>');
+  it('lists every component in a compact table with full name, type, variable name and state binding', () => {
+    const long = 'A very long component name that the widget itself has to truncate';
+    const out = renderHmiDesignSection([
+      comp('a', 0, 0, 140, 90, '<b>x</b>'),
+      { ...comp('b', 200, 0, 60, 60, long), variableId: null, stateId: 's1', type: 'active-state-indicator' } as HmiComponent,
+      { ...comp('c', 400, 0), variableId: 'missing-id', type: 'lamp' } as HmiComponent,
+      { ...comp('d', 600, 0), variableId: null, type: 'label' } as HmiComponent,
+    ], variables, [], [{ id: 's1', name: 'Heating' }]);
+    const table = /<table class="data[^"]*">[\s\S]*<\/table>/.exec(out)?.[0] ?? '';
+    expect(table).toContain('<th>Bound variable</th>');
+    expect(table.match(/<tr>/g)?.length).toBe(1 + 4);
+    expect(table).toContain('&lt;b&gt;x&lt;/b&gt;');
+    expect(table).toContain('<td>gauge</td><td>Temperature</td>');
+    expect(table).toContain(long);
+    expect(table).toContain('<td>active-state-indicator</td><td>Unbound</td><td>Heating</td>');
+    expect(table).toContain('<td>missing-id</td>');
+    expect(table).toContain('<td>label</td><td>Unbound</td><td>&mdash;</td>');
+    expect(out).not.toContain('class="item"');
+  });
+
+  it('draws variable names, not ids, in the picture and no text wider than its widget', () => {
+    const uuid = '6178d014-831f-4339-8dac-f275360b1222';
+    const named = [{ ...comp('a', 0, 0, 100, 80, 'Coil'), variableId: uuid }];
+    const out = renderHmiDesignSection(named, [{ ...variables[0], id: uuid, name: 'Coil current' }], []);
+    expect(out).toContain('&#8594; Coil current');
+    expect(out.match(/<svg[\s\S]*<\/svg>/)?.[0]).not.toContain(uuid);
+    const longNamed = [{ ...comp('a', 0, 0, 100, 80, 'x'.repeat(80)), variableId: uuid }];
+    const svg = renderHmiDesignSection(longNamed, [{ ...variables[0], id: uuid, name: 'y'.repeat(80) }], []);
+    for (const m of svg.matchAll(/<text x="([-\d.]+)"[^>]*font-size="([\d.]+)"[^>]*>([^<]*)<\/text>/g)) {
+      expect(m[3].replace(/&#?\w+;/g, 'x').length * 0.6 * Number(m[2])).toBeLessThanOrEqual(100);
+    }
+  });
+
+  it('marks a wide HMI picture for a landscape page and keeps a narrow one portrait', () => {
+    expect(html).toContain('report-figure report-figure-wide');
+    expect(renderHmiDesignSection([comp('a', 0, 0), comp('b', 160, 0)], variables, [])).not.toContain('report-figure-wide');
   });
 
   it('returns nothing without components', () => {
@@ -77,6 +108,20 @@ describe('renderHmiPrototypeSection', () => {
     expect(html).toContain('ResizeObserver');
     expect(html).toContain('@media print');
     expect(html).not.toMatch(/zoom\s*:/);
+  });
+
+  it('puts a canvas wider than the portrait content box on a landscape page and scales to the landscape width in print', () => {
+    expect(html).toContain('<div class="report-wide-page">');
+    expect(html).toContain('data-wide="1"');
+    expect(html).toContain('mmToPx(fit.getAttribute("data-wide") === "1" ? 267 : 180) - 26');
+    const narrow = renderHmiPrototypeSection({ hmiComponents: [comp('a', 0, 0), comp('b', 160, 0)], variables, states: [], junctions: [], transitions: [], layers: [], tickMs: 100, safetyMode: false });
+    expect(narrow).not.toContain('report-wide-page');
+    expect(narrow).toContain('data-wide="0"');
+  });
+
+  it('hands variable and state names to the portable widget runtime', () => {
+    expect(html).toContain('variableNames: hmiVariableNames');
+    expect(html).toContain('stateNames: hmiStateNames');
   });
 
   it('makes header, dashboard and event log wrap', () => {

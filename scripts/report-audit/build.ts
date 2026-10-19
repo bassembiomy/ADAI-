@@ -29,7 +29,7 @@ function hmiSections(project: any): Section[] {
   if (!comps.length) return [];
   const variables = project.variables ?? [];
   return [
-    { id: 'hmi-design', title: 'HMI Design', html: renderHmiDesignSection(comps, variables, []) },
+    { id: 'hmi-design', title: 'HMI Design', html: renderHmiDesignSection(comps, variables, [], project.states ?? []) },
     {
       id: 'interactive-prototype', title: 'Interactive System Prototype',
       html: renderHmiPrototypeSection({
@@ -70,7 +70,7 @@ async function fromProject(file: string, name: string) {
   }
   extraSections.push(...hmiSections(project));
   const comps = project.hmiComponents ?? [];
-  if (comps.length) extraSections.push({ id: 'hmi-layout-figure', title: 'HMI Layout (renderHmiDiagram)', html: renderHmiDiagram({ components: comps } as any) });
+  if (comps.length) extraSections.push({ id: 'hmi-layout-figure', title: 'HMI Layout (renderHmiDiagram)', html: renderHmiDiagram({ components: comps, variables: project.variables ?? [], states: project.states ?? [] } as any) });
   const input: SystemReportInput = {
     projectName: project.projectName ?? name, author: 'Audit', engineVersion: 'v2.4 ENGINE', generatedAt: new Date('2026-10-19T09:00:00Z'),
     repository: repo, hierarchy, diagnostics: snapshot.diagnostics,

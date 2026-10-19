@@ -10,11 +10,11 @@ import { escapeHtml, wrapFigure } from './reportDiagramModel';
 import type { DiagramRect } from './reportDiagramModel';
 
 const HMI_FIGURE_PADDING = 20;
-/** Widgets draw centred labels that can be wider than the widget box; reserve room for them. */
-const HMI_LABEL_CHAR_WIDTH = 6.4;
 const HMI_PROTOTYPE_PADDING = 20;
+/** Portrait print content box width in CSS px (180mm). */
+const HMI_PORTRAIT_CONTENT_WIDTH = 680;
 
-/** Bounds of every widget (box plus centred name / binding labels) in report coordinates. */
+/** Bounds of every widget in report coordinates; widgets truncate their texts to their own box, so nothing sticks out. */
 export function computeHmiDesignBounds(components: readonly HmiComponent[]): DiagramRect {
   const positioned = resolveHmiReportComponents([...components]);
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -22,11 +22,9 @@ export function computeHmiDesignBounds(components: readonly HmiComponent[]): Dia
     // Mirror the size renderHmiWidgetSvg uses for the widget frame.
     const w = Math.max(40, Number(c.width) || 140);
     const h = Math.max(40, Number(c.height) || 90);
-    const labelWidth = Math.max(String(c.name ?? '').length * HMI_LABEL_CHAR_WIDTH, String(c.variableId ?? c.stateId ?? '').length * 4.8 + 12);
-    const extra = Math.max(0, (labelWidth - w) / 2);
-    minX = Math.min(minX, c.x - extra);
+    minX = Math.min(minX, c.x);
     minY = Math.min(minY, c.y);
-    maxX = Math.max(maxX, c.x + w + extra);
+    maxX = Math.max(maxX, c.x + w);
     maxY = Math.max(maxY, c.y + h);
   });
   if (!Number.isFinite(minX)) return { x: 0, y: 0, width: 100, height: 100 };
@@ -39,20 +37,28 @@ export function computeHmiDesignBounds(components: readonly HmiComponent[]): Dia
 }
 
 /** Static picture of the configured HMI components plus a list of what each one is bound to. */
-export function renderHmiDesignSection(components: HmiComponent[], variables: VariableDef[], activeStateIds: string[]): string {
+export function renderHmiDesignSection(components: HmiComponent[], variables: VariableDef[], activeStateIds: string[], states: readonly { id: string; name: string }[] = []): string {
   if (components.length === 0) return '';
   const positioned = resolveHmiReportComponents(components);
   const values = Object.fromEntries(variables.map(v => [v.id, v.currentValue]));
+  const variableNames = Object.fromEntries(variables.filter(v => v.name).map(v => [v.id, v.name]));
+  const stateNames = Object.fromEntries(states.filter(st => st.name).map(st => [st.id, st.name]));
   const widgets = positioned
-    .map(c => `<g transform="translate(${c.x}, ${c.y})">${renderHmiWidgetSvg(c, values, { activeStateIds })}</g>`)
+    .map(c => `<g transform="translate(${c.x}, ${c.y})">${renderHmiWidgetSvg(c, values, { activeStateIds, variableNames, stateNames })}</g>`)
     .join('');
   const svgInner = `<g style="color:var(--text-primary,#182231);font-family:sans-serif">${widgets}</g>`;
   let html = `<div class="hmi-design" style="max-width:100%;overflow-wrap:anywhere">`;
   html += wrapFigure(svgInner, `HMI layout (${components.length} component${components.length === 1 ? '' : 's'})`, computeHmiDesignBounds(components));
-  components.forEach(c => {
-    const boundVariableName = variables.find(v => v.id === c.variableId)?.name || 'Unbound';
-    html += `<div class="item" style="overflow-wrap:anywhere"><div class="item-header">${escapeHtml(c.name)} <span class="tag">${escapeHtml(c.type)}</span></div><div class="props">Bound to: <strong>${escapeHtml(boundVariableName)}</strong></div></div>`;
-  });
+  const variableName = (id: string | null | undefined): string => (id ? variableNames[id] || id : '');
+  const boundNames = (c: HmiComponent): string => {
+    const ids = [c.variableId, ...(c.variableIds ?? []), c.pressVariableId, c.cursorVariableId].filter((id, i, all): id is string => !!id && all.indexOf(id) === i);
+    return ids.length ? ids.map(variableName).join(', ') : 'Unbound';
+  };
+  const rows = components.map(c => {
+    const stateName = c.stateId ? stateNames[c.stateId] || c.stateId : '';
+    return `<tr><td>${escapeHtml(c.name)}</td><td>${escapeHtml(String(c.type))}</td><td>${escapeHtml(boundNames(c))}</td><td>${stateName ? escapeHtml(stateName) : '&mdash;'}</td></tr>`;
+  }).join('');
+  html += `<table class="data hmi-components"><thead><tr><th>Component</th><th>Type</th><th>Bound variable</th><th>State binding</th></tr></thead><tbody>${rows}</tbody></table>`;
   html += `</div>`;
   return html;
 }
@@ -86,6 +92,8 @@ export function renderHmiPrototypeSection(input: HmiPrototypeInput): string {
   // The canvas wrapper has a 1px border outside its content box.
   const naturalWidth = width + 2;
   const naturalHeight = height + 2;
+  // Wider than the 680px portrait content box: print the simulator on a landscape page (see .report-wide-page).
+  const wide = naturalWidth > HMI_PORTRAIT_CONTENT_WIDTH;
 
   const standaloneMigration = migrateStateMachineModel({
     tickMs,
@@ -391,7 +399,7 @@ export function renderHmiPrototypeSection(input: HmiPrototypeInput): string {
             </div>
           </div>
 
-          <div id="portable-hmi-fit" class="hmi-canvas-fit" data-natural-width="${naturalWidth}" data-natural-height="${naturalHeight}" style="max-width: ${naturalWidth}px; height: ${naturalHeight}px;">
+          <div id="portable-hmi-fit" class="hmi-canvas-fit" data-natural-width="${naturalWidth}" data-natural-height="${naturalHeight}" data-wide="${wide ? 1 : 0}" style="max-width: ${naturalWidth}px; height: ${naturalHeight}px;">
             <div id="portable-hmi-canvas" class="hmi-canvas-wrapper" style="width: ${width}px; height: ${height}px;">
               ${componentsHtml}
             </div>
@@ -431,8 +439,9 @@ export function renderHmiPrototypeSection(input: HmiPrototypeInput): string {
             function applyScale() {
               var available;
               if (printing) {
-                // A4 content width (210mm - 2 x 15mm page margin) minus the container padding (2 x 12px) and border (2px).
-                available = mmToPx(180) - 26;
+                // Portrait A4 content width (210mm - 2 x 15mm margin) or, for wide canvases, the landscape one (297mm - 2 x 15mm),
+                // minus the container padding (2 x 12px) and border (2px).
+                available = mmToPx(fit.getAttribute("data-wide") === "1" ? 267 : 180) - 26;
               } else {
                 available = fit.clientWidth || naturalWidth;
               }
@@ -487,6 +496,8 @@ export function renderHmiPrototypeSection(input: HmiPrototypeInput): string {
             const hmiInputQueue = createHmiInputQueue();
             let committedSamples = [];
             let hmiResetVersion = 0;
+            const hmiVariableNames = Object.fromEntries(PROJECT_DATA.variables.filter(v => v.name).map(v => [v.id, v.name]));
+            const hmiStateNames = Object.fromEntries(PROJECT_DATA.states.filter(s => s.name).map(s => [s.id, s.name]));
             function queueHmiInput(command) {
               const v = PROJECT_DATA.variables.find(v => v.id === command.variableId);
               if (!v) return { accepted: false, error: "Missing variable binding." };
@@ -732,7 +743,8 @@ export function renderHmiPrototypeSection(input: HmiPrototypeInput): string {
 
             function updateUi() {
               portableHmi.update(Object.fromEntries(PROJECT_DATA.variables.map(v => [v.id, getVarValById(v.id)])), {
-                activeStateIds: Object.values(activeStates), time: simTime, samples: committedSamples, resetVersion: hmiResetVersion
+                activeStateIds: Object.values(activeStates), time: simTime, samples: committedSamples, resetVersion: hmiResetVersion,
+                variableNames: hmiVariableNames, stateNames: hmiStateNames
               });
               updateDashboard();
             }
@@ -933,5 +945,5 @@ export function renderHmiPrototypeSection(input: HmiPrototypeInput): string {
         </script>
       `;
 
-  return prototypeHtml;
+  return wide ? `<div class="report-wide-page">${prototypeHtml}</div>` : prototypeHtml;
 }

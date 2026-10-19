@@ -11708,7 +11708,7 @@ const ADIA = () => {
       extraSections.push({
         id: 'hmi-design',
         title: 'HMI Design',
-        html: renderHmiDesignSection(hmiComponents, variables, Object.values(activeStates)),
+        html: renderHmiDesignSection(hmiComponents, variables, Object.values(activeStates), states),
       });
       extraSections.push({
         id: 'interactive-prototype',

@@ -23,3 +23,34 @@ import { createHmiComponent } from './hmiCatalog';
 import { resolveHmiReportComponents } from './hmiReport';
 it('keeps catalog commands enabled and renders nested positions and complete OLED bindings',()=>{document.body.innerHTML='<main></main>';window.eval(getPortableHmiScript());const command=createHmiComponent('simulation-command','cmd');const comps=[command,{...component('tabs'),id:'tabs',x:100,y:50,tabs:[{id:'a',label:'A'},{id:'b',label:'B'}]},{...component('panel'),id:'panel',parentId:'tabs',tabId:'b',x:10,y:20},{...component('lamp'),id:'nested',parentId:'panel',x:5,y:8}];expect(resolveHmiReportComponents(comps).find(c=>c.id==='nested')).toEqual(expect.objectContaining({x:115,y:78}));const commands:string[]=[];const api=(window as any).ADIA_HMI.mount(document.querySelector('main'),comps,{onCommand:(c:string)=>commands.push(c)});const button=document.querySelector('[data-hmi-id="cmd"] button') as HTMLButtonElement;expect(button.disabled).toBe(false);button.click();expect(commands).toEqual(['start']);const nested=document.querySelector('[data-hmi-id="nested"]') as HTMLElement;expect(nested.style.left).toBe('115px');expect(nested.hidden).toBe(true);(document.querySelectorAll('[role="tab"]')[1] as HTMLButtonElement).click();expect(nested.hidden).toBe(false);api.destroy();const oled={...component('oled'),oledModeVarId:'mode',oledModeNames:'Idle,Run',oledTempVarId:'temp',oledTimeVarId:'time',oledStateVarId:'state',oledSteamVarId:'steam',oledHeatVarId:'heat',oledFanVarId:'fan',oledLightVarId:'light',oledDuoVarId:'duo',oledProgressVarId:'progress'};const svg=renderHmiWidgetSvg(oled,{mode:1,temp:45,time:8,state:2,steam:true,heat:false,fan:true,light:false,duo:true,progress:75});for(const label of ['Run','Temperature: 45','Time: 8','State: 2','Steam: true','Heat: false','Fan: true','Light: false','Duo: true'])expect(svg).toContain(label);});
 it('uses twelve legacy modes and continuous encoder bounds when presets are absent',()=>{document.body.innerHTML='<main></main>';window.eval(getPortableHmiScript());const inputs:any[]=[];const api=(window as any).ADIA_HMI.mount(document.querySelector('main'),[component('mode-selector'),{...component('encoder'),min:-5,max:25,step:2}],{onInput:(c:any)=>{inputs.push(c);return {accepted:true};}});expect(document.querySelectorAll('[data-hmi-id="mode-selector"] option')).toHaveLength(12);const encoder=document.querySelector('[data-hmi-id="encoder"] input') as HTMLInputElement;expect(encoder.min).toBe('-5');expect(encoder.max).toBe('25');encoder.value='15';encoder.dispatchEvent(new Event('input',{bubbles:true}));expect(inputs.at(-1)).toEqual(expect.objectContaining({value:15}));api.destroy();});
+describe('widget text stays inside the widget box',()=>{
+ const UUID='6178d014-831f-4339-8dac-f275360b1222';
+ const longName='MR-PLD ECU (A 541 446 53 40) - OM 501 LA operating modes and more';
+ /** Estimated width (0.6 em per char) of every drawn text against the room left of its centre line in the widget. */
+ const overflowing=(svg:string,w:number)=>[...svg.matchAll(/<text x="([-\d.]+)"[^>]*font-size="([\d.]+)"[^>]*>([^<]*)<\/text>/g)].filter(m=>{const x=Number(m[1]),size=Number(m[2]),chars=m[3].replace(/&#?\w+;/g,'x').length;return chars*0.6*size>2*Math.min(x,w-x)+0.001;}).map(m=>m[3]);
+ for(const width of [60,100,140,180]) it.each(HMI_CATALOG.map(c=>[c.type]))(`renders %s at ${width}px without overlong texts`,(type)=>{
+  const c={...component(type),width,height:110,name:longName,variableId:UUID,variableIds:[UUID,UUID],stateId:UUID,text:longName,options:[{label:longName,value:0}],oledTitle:longName,oledModeVarId:UUID,oledModeNames:longName,oledTempVarId:UUID,oledIndicatorVarIds:[UUID],oledIndicatorLabels:[longName]} as HmiComponent;
+  expect(overflowing(renderHmiWidgetSvg(c,{[UUID]:12345.678},{samples:[]}),Math.max(40,width))).toEqual([]);
+ });
+ it('truncates with an ellipsis and keeps the full text as tooltip',()=>{
+  const svg=renderHmiWidgetSvg({...component('gauge'),name:longName},{});
+  expect(svg).toContain('&#8230;</text>');expect(svg).toContain(`<title>${longName}</title>`);
+  expect(svg).not.toMatch(new RegExp(`<text[^>]*>${longName}`));
+ });
+ it('leaves short texts untouched and untitled',()=>{expect(renderHmiWidgetSvg({...component('gauge'),name:'Pump'},{})).not.toContain('<title>');});
+ it('shows the variable name instead of its id when a lookup is supplied',()=>{
+  const svg=renderHmiWidgetSvg({...component('gauge'),variableId:UUID},{},{variableNames:{[UUID]:'Coil current'}});
+  expect(svg).toContain('&#8594; Coil current');expect(svg).not.toContain(UUID);
+  expect(renderHmiWidgetSvg({...component('gauge'),variableId:UUID},{})).toContain(UUID.slice(0,8));
+ });
+ it('uses state names for state bindings and names in the markup and portable runtime',()=>{
+  expect(renderHmiWidgetSvg({...component('label'),variableId:null,stateId:'s1'},{},{stateNames:{s1:'Heating'}})).toContain('Heating');
+  const html=renderPortableHmiMarkup([{...component('gauge'),variableId:UUID}],[{id:UUID,name:'Coil current'}]);
+  expect(html).toContain('Coil current');expect(html).not.toContain('6178d014');
+  document.body.innerHTML='<main></main>';window.eval(getPortableHmiScript());
+  const container=document.querySelector('main') as HTMLElement;
+  const api=(window as any).ADIA_HMI.mount(container,[{...component('gauge'),variableId:UUID}]);
+  api.update({[UUID]:3},{variableNames:{[UUID]:'Coil current'}});
+  expect(container.innerHTML).toContain('Coil current');api.destroy();
+ });
+});
