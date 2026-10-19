@@ -80,6 +80,19 @@ function groupCapabilities(caps: ExplorerCapability[]): CapabilityGroup[] {
   return groups;
 }
 
+/** Items in the order the menu shows them (grouped), which is the order the arrow keys walk. */
+function displayOrder(caps: ExplorerCapability[]): ExplorerCapability[] {
+  return groupCapabilities(caps).flatMap(group => group.items);
+}
+
+/** Index of the first enabled item at or after `from` going `step` ways, or -1 when none. */
+function nextEnabledIndex(items: ExplorerCapability[], from: number, step: 1 | -1): number {
+  for (let i = from; i >= 0 && i < items.length; i += step) {
+    if (items[i].enabled) return i;
+  }
+  return -1;
+}
+
 function getCapabilityIcon(kind: CapabilityKind): React.ReactElement {
   const iconProps = { size: 13, className: 'shrink-0' };
   switch (kind) {
@@ -140,11 +153,12 @@ export const ModelExplorerMenu: React.FC<ModelExplorerMenuProps> = ({
   const menuRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [filterQuery, setFilterQuery] = useState('');
-  const [focusedIndex, setFocusedIndex] = useState(0);
-
   const filteredCapabilities = filterMenuCapabilities(capabilities, filterQuery);
 
   const groupedCapabilities = groupCapabilities(filteredCapabilities);
+  // arrow keys walk the items in display order and skip disabled ones
+  const orderedCapabilities = groupedCapabilities.flatMap(group => group.items);
+  const [focusedIndex, setFocusedIndex] = useState(() => Math.max(0, nextEnabledIndex(orderedCapabilities, 0, 1)));
 
   // Close on outside click or escape
   useEffect(() => {
@@ -158,13 +172,19 @@ export const ModelExplorerMenu: React.FC<ModelExplorerMenuProps> = ({
         onClose();
       } else if (e.key === 'ArrowDown') {
         e.preventDefault();
-        setFocusedIndex(prev => Math.min(prev + 1, filteredCapabilities.length - 1));
+        setFocusedIndex(prev => {
+          const next = nextEnabledIndex(orderedCapabilities, prev + 1, 1);
+          return next === -1 ? prev : next;
+        });
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
-        setFocusedIndex(prev => Math.max(prev - 1, 0));
+        setFocusedIndex(prev => {
+          const next = nextEnabledIndex(orderedCapabilities, prev - 1, -1);
+          return next === -1 ? prev : next;
+        });
       } else if (e.key === 'Enter') {
         e.preventDefault();
-        const cap = filteredCapabilities[focusedIndex];
+        const cap = orderedCapabilities[focusedIndex];
         if (cap && cap.enabled) {
           onSelectCapability(cap);
           onClose();
@@ -178,7 +198,7 @@ export const ModelExplorerMenu: React.FC<ModelExplorerMenuProps> = ({
       window.removeEventListener('mousedown', handlePointerDown);
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [onClose, filteredCapabilities, focusedIndex, onSelectCapability]);
+  }, [onClose, orderedCapabilities, focusedIndex, onSelectCapability]);
 
   // Viewport clamping
   const [positionStyle, setPositionStyle] = useState<React.CSSProperties>({
@@ -236,7 +256,7 @@ export const ModelExplorerMenu: React.FC<ModelExplorerMenuProps> = ({
             value={filterQuery}
             onChange={e => {
               setFilterQuery(e.target.value);
-              setFocusedIndex(0);
+              setFocusedIndex(Math.max(0, nextEnabledIndex(displayOrder(filterMenuCapabilities(capabilities, e.target.value)), 0, 1)));
             }}
             placeholder="Search action..."
             className="w-full bg-transparent text-[var(--text-primary)] placeholder:text-[var(--text-muted)] text-[11px] outline-none"
@@ -258,7 +278,7 @@ export const ModelExplorerMenu: React.FC<ModelExplorerMenuProps> = ({
                 {group.title}
               </div>
               {group.items.map(cap => {
-                const globalIndex = filteredCapabilities.indexOf(cap);
+                const globalIndex = orderedCapabilities.indexOf(cap);
                 const isFocused = globalIndex === focusedIndex;
                 const shortcut = getCapabilityShortcut(cap.kind);
 
@@ -275,7 +295,7 @@ export const ModelExplorerMenu: React.FC<ModelExplorerMenuProps> = ({
                         onClose();
                       }
                     }}
-                    onMouseEnter={() => setFocusedIndex(globalIndex)}
+                    onMouseEnter={() => { if (cap.enabled) setFocusedIndex(globalIndex); }}
                     title={cap.reason || cap.label}
                     className={`w-full flex items-center justify-between px-2.5 py-1 text-left transition-colors ${
                       !cap.enabled

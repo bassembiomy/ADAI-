@@ -177,7 +177,7 @@ import { evaluateSysmlOperationGate } from './engine/sysml/evidence';
 import { buildTraceabilityMatrix, computeCoverageMetrics } from './engine/sysml/rtm';
 import { buildCanonicalTraceabilitySnapshot } from './engine/sysml/reportSnapshotAdapter';
 import { applyLegacySysmlDeletion, impactSeverity, requiresDeletionConfirmation } from './services/sysmlTransactionAdapter';
-import { loadCanonicalSysmlProject, fromRepository, projectLegacyDiagram, selectSuspectLinks, selectEvidenceForRequirement, getDefaultSysmlWorkerClient, executeSysmlCommand, createSysmlGatewayState, computeImpactHash, type SysmlEditorCommand, createTypedUsageCommand, resolveType, type CreateNewTypeAction, type PresentationCoordinates } from './services/sysmlCommandGateway';
+import { loadCanonicalSysmlProject, fromRepository, projectLegacyDiagram, selectSuspectLinks, selectEvidenceForRequirement, getDefaultSysmlWorkerClient, executeSysmlCommand, createSysmlGatewayState, computeImpactHash, previewDeletionImpact, type SysmlEditorCommand, createTypedUsageCommand, resolveType, type CreateNewTypeAction, type PresentationCoordinates } from './services/sysmlCommandGateway';
 import { loadProjectInWorker, serializeProjectInWorker } from './engine/sysml/workers/projectIoClient';
 import { createInterface, createBlock as createBlockDefinition, createValueType as createValueTypeDefinition, createPortDefinition } from './features/modelExplorer/adapters/modelExplorerFactories';
 import { getElementKindLabel } from './features/modelExplorer/modelExplorerCapabilities';
@@ -598,6 +598,9 @@ const HierarchyTree: React.FC<any> = (props) => (
     diagramPresentations={props.diagramPresentations}
     selectedIds={props.selectedIds}
     onSelect={props.onSelect}
+    onSelectMultiple={props.onSelectMultiple}
+    onOpenSpecification={props.onOpenSpecification}
+    projectId={props.projectId}
     onDoubleClick={props.onDoubleClick}
     onCommitStateMachineSnapshot={props.onCommitStateMachineSnapshot}
 
@@ -6743,6 +6746,7 @@ const ADIA = () => {
     addError('info', 'Professional report generated and downloaded.');
   }, [results, data, headers, addError]);
 
+  const buildUnifiedProjectPayloadRef = useRef<((options?: { deferSysmlPreparation?: boolean }) => Record<string, unknown>) | null>(null);
   const executeExportProject = useCallback(async (selectedKeys: string[]) => {
     const totalEntities = blocks.length + parts.length + connectors.length + relationships.length;
     const limits = loadStoredPerformanceLimits();
@@ -6789,27 +6793,16 @@ const ADIA = () => {
       projectFiles['entropy.adia'] = { entropyNodes, entropyEdges, opmSimulationConfig };
     }
     if (selectedKeys.includes('unified')) {
+      // Same payload as the main Save: format 5 repository, presentations, coordinates and PlantUML.
+      // A raw canonicalSysmlRepository here reopens with every diagram empty.
+      const buildPayload = buildUnifiedProjectPayloadRef.current;
+      if (!buildPayload) {
+        addError('error', 'Unified project export is not ready yet.');
+        return;
+      }
       projectFiles['adia_project_unified.adia'] = {
-        version: VERSION,
-        timestamp: new Date().toISOString(),
-        projectName: currentProjectName,
-        openTabs,
-        diagramWorkspace,
-        activeSysmlDiagramId,
-        diagramNavigationStack,
-        ...persistedStateMachine, view,
-        blocks, relationships, parts, connectors, interfaceRealizations, customStereotypes,
-        hmiComponents, vlabNodes, vlabEdges, globalXBridgesNodes, globalXBridgesEdges,
-        hilConfig,
-        doe: { schemaVersion: 1, headers, data, activeModel, taguchiConfig, results },
-        managedWindows,
-        entropyNodes,
-        entropyEdges,
-        opmSimulationConfig,
-        canonicalSysmlRepository,
+        ...buildPayload(),
         workspaceFiles: saveCurrentFileState(workspaceFiles, activeFileId),
-        openTabIds,
-        activeFileId
       };
     }
 
@@ -6948,43 +6941,46 @@ const ADIA = () => {
         const offsetX = typeof v.offsetX === 'number' && Number.isFinite(v.offsetX) ? v.offsetX : (typeof v.x === 'number' && Number.isFinite(v.x) ? v.x : 0);
         const offsetY = typeof v.offsetY === 'number' && Number.isFinite(v.offsetY) ? v.offsetY : (typeof v.y === 'number' && Number.isFinite(v.y) ? v.y : 0);
         setView({ scale, offsetX, offsetY });
+      } else {
+        setView({ scale: 1, offsetX: 0, offsetY: 0 });
       }
-      if (importedData.tickMs) setTickMs(importedData.tickMs);
+      // Fields applied only when present would keep the previous project's values: absent means the default.
+      setTickMs(importedData.tickMs ? importedData.tickMs : 500);
+      setSafetyMode(importedData.safetyMode === true);
 
       // SysML projections were refreshed atomically from the canonical load above.
-      if (importedData.interfaceRealizations) setInterfaceRealizations(importedData.interfaceRealizations);
-      if (importedData.customStereotypes) setCustomStereotypes(importedData.customStereotypes);
+      setInterfaceRealizations(importedData.interfaceRealizations ?? []);
+      setCustomStereotypes(importedData.customStereotypes ?? []);
 
       // HMI Dashboard
-      if (importedData.hmiComponents) setHmiComponents(normalizeHmiComponents(importedData.hmiComponents));
+      setHmiComponents(importedData.hmiComponents ? normalizeHmiComponents(importedData.hmiComponents) : []);
 
       // V-Lab Physical Modeling
-      if (importedData.vlabNodes) setVlabNodes(importedData.vlabNodes);
-      if (importedData.vlabEdges) setVlabEdges(importedData.vlabEdges);
+      setVlabNodes(importedData.vlabNodes ?? []);
+      setVlabEdges(importedData.vlabEdges ?? []);
 
       // X-Bridges Architecture
-      if (importedData.globalXBridgesNodes) setGlobalXBridgesNodes(importedData.globalXBridgesNodes);
-      if (importedData.globalXBridgesEdges) setGlobalXBridgesEdges(importedData.globalXBridgesEdges);
+      setGlobalXBridgesNodes(importedData.globalXBridgesNodes ?? []);
+      setGlobalXBridgesEdges(importedData.globalXBridgesEdges ?? []);
 
       // ENTROPY OPM
-      if (importedData.entropyNodes) setEntropyNodes(importedData.entropyNodes);
-      if (importedData.entropyEdges) setEntropyEdges(importedData.entropyEdges);
-      if (importedData.opmSimulationConfig) setOpmSimulationConfig(importedData.opmSimulationConfig);
+      setEntropyNodes(importedData.entropyNodes ?? []);
+      setEntropyEdges(importedData.entropyEdges ?? []);
+      setOpmSimulationConfig(importedData.opmSimulationConfig ?? DEFAULT_OPM_SIMULATION_CONFIG);
 
       // HIL Configuration
-      if (importedData.hilConfig) setHilConfig(importedData.hilConfig);
+      setHilConfig(importedData.hilConfig ?? { enabled: false, target: 'Generic', clockSpeed: 16, channels: [], mappings: [], commPort: '', baudRate: 115200 });
 
       const savedPlantUmlDiagrams = readPlantUmlDiagrams(importedData);
       if (savedPlantUmlDiagrams[0]) setPlantUmlDiagram(savedPlantUmlDiagrams[0]);
 
       // DOE Modeling Suite
-      if (importedData.doe) {
-        if (importedData.doe.headers) setHeaders(importedData.doe.headers);
-        if (importedData.doe.data) setData(importedData.doe.data);
-        if (importedData.doe.activeModel) setActiveModel(importedData.doe.activeModel);
-        if (importedData.doe.taguchiConfig) setTaguchiConfig(importedData.doe.taguchiConfig);
-        if (importedData.doe.results) setResults(importedData.doe.results);
-      }
+      const importedDoe = importedData.doe ?? {};
+      setHeaders(importedDoe.headers ?? []);
+      setData(importedDoe.data ?? []);
+      setActiveModel(importedDoe.activeModel ?? 'RSM');
+      setTaguchiConfig(importedDoe.taguchiConfig ?? { objective: 'larger', targetValue: 10 });
+      setResults(importedDoe.results ?? null);
 
       // UI State
       if (importedData.managedWindows) setManagedWindows(importedData.managedWindows);
@@ -7304,6 +7300,8 @@ const ADIA = () => {
     activeFileId,
     plantUmlDiagram,
   ]);
+
+  buildUnifiedProjectPayloadRef.current = buildUnifiedProjectPayload;
 
   const saveUnifiedProject = useCallback(async (saveAs: boolean = false) => {
     if (pendingHydrationSequenceRef.current !== committedHydrationSequenceRef.current) {
@@ -8933,10 +8931,15 @@ const ADIA = () => {
     const idSet = new Set(ids);
     if (idSet.size === 0) return;
 
-    const transaction = applyLegacySysmlDeletion({ blocks, relationships, parts, connectors }, ids);
+    const legacyTransaction = applyLegacySysmlDeletion({ blocks, relationships, parts, connectors }, ids);
+    // Elements only the canonical repository holds (requirements, use cases, ...) are invisible to the legacy
+    // projection, so the gateway's impact is reviewed too, as the explorer's Delete does.
+    const gatewayImpact = previewDeletionImpact(canonicalSysmlRepository, ids, authorizedBaselineIds, sysmlDiagramPresentations);
+    const gatewayNeedsReview = Boolean(gatewayImpact)
+      && (impactSeverity(gatewayImpact!, authorizedBaselineIds) === 'blocked' || requiresDeletionConfirmation(gatewayImpact!));
+    const transaction = gatewayNeedsReview ? { ...legacyTransaction, impact: gatewayImpact! } : legacyTransaction;
     const severity = impactSeverity(transaction.impact, authorizedBaselineIds);
     if (severity === 'blocked') {
-      const blocked = transaction.impact.blockedBaselineIds ?? transaction.impact.affectedBaselineIds;
       setSysmlDeleteConfirm({
         impact: transaction.impact,
         transaction,
@@ -8961,7 +8964,7 @@ const ADIA = () => {
       return;
     }
     applyNonStateTransaction(transaction, ids);
-  }, [blocks, relationships, parts, connectors, authorizedBaselineIds, applyNonStateTransaction]);
+  }, [blocks, relationships, parts, connectors, canonicalSysmlRepository, sysmlDiagramPresentations, authorizedBaselineIds, applyNonStateTransaction]);
 
   const deleteStates = useCallback((targetIds: string | string[], otherDeletedIds: string[] = []) => {
     const rawIds = Array.isArray(targetIds) ? targetIds : [targetIds];
@@ -15266,6 +15269,14 @@ const ADIA = () => {
                         openTreeElementInWorkspace(id, contextDiagramId);
                       }
                     }}
+                    onSelectMultiple={(ids: string[]) => setSelectedIds(ids)}
+                    onOpenSpecification={(id: string) => {
+                      // select the element and bring its properties (specification) panel into view
+                      openTreeElementInWorkspace(id);
+                      setIsPropertiesCollapsed(false);
+                      if (isMobile) setMobileTab('properties');
+                    }}
+                    projectId={currentProjectName || 'ADIA_Project'}
                     onDoubleClick={(id: string, kind?: string, contextDiagramId?: string) => activateHierarchyNode(id, kind, contextDiagramId)}
                     selectedIds={selectedIds}
                     onCommitStateMachineSnapshot={handleCommitStateMachineSnapshot}

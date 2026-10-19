@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createEmptyRepository, type InteractionDefinition } from '../../engine/sysml/model';
+import { fromRepository } from '../../engine/sysml/normalizedStore';
 import { buildUnifiedModelProjection } from './unifiedModelExplorerProjection';
 
 describe('buildUnifiedModelProjection interaction content', () => {
@@ -40,5 +41,23 @@ describe('buildUnifiedModelProjection interaction content', () => {
     expect(nodes['sysml:element:f1'].kind).toBe('fragment');
     expect(nodes['sysml:element:u1'].kind).toBe('interactionUse');
     expect(nodes['sysml:element:i1'].kind).toBe('stateInvariant');
+  });
+  it('lazy: an expanded Interaction lists its lifelines, messages and fragments', () => {
+    const repository = createEmptyRepository();
+    repository.definitions.main = {
+      id: 'main', name: 'Main', kind: 'interaction', namespace: [], ownerId: 'model',
+      lifelines: [{ id: 'a', name: 'driver' }],
+      messages: [],
+      fragments: [{ id: 'f1', operator: 'alt', operands: [{ guard: 'ready', messageIds: [] }], coveredLifelineIds: ['a'] }],
+    } as InteractionDefinition;
+    const { nodes } = buildUnifiedModelProjection({
+      sysml: repository, sysmlStore: fromRepository(repository, {}, {}),
+      stateMachine: { states: [], layers: [], transitions: [], junctions: [], diagrams: [], revision: 1 },
+      externalModels: [], revision: 1,
+      expandedNodeIds: new Set(['project:model', 'project:pillar:behavior', 'project:pillar:structural', 'project:pillar:requirements', 'project:pillar:parametric', 'sysml:element:main']),
+    });
+    expect(nodes['sysml:element:main'].hasChildren).toBe(true);
+    expect(nodes['sysml:element:a']).toMatchObject({ kind: 'lifeline', readOnly: true });
+    expect(nodes['sysml:element:f1']).toMatchObject({ kind: 'fragment' });
   });
 });

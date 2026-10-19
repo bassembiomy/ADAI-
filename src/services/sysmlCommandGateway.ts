@@ -422,6 +422,20 @@ function introducedErrors(
   return errors.filter(d => !known!.has(diagnosticKey(d)));
 }
 
+/**
+ * Impact of deleting `elementIds` against the repository as it stands, without applying anything: the same
+ * gateway analysis the explorer's Delete reviews before it asks for confirmation.
+ */
+export function previewDeletionImpact(
+  repository: SysmlRepository,
+  elementIds: string[],
+  authorizedBaselineIds: string[] = [],
+  diagramPresentations?: Record<string, DiagramPresentationInput>,
+): MutationImpact | undefined {
+  const state = createSysmlGatewayState(repository, undefined, diagramPresentations);
+  return executeSysmlCommand(state, { type: 'deleteElements', elementIds, authorizedBaselineIds }).impact;
+}
+
 export function computeImpactHash(impact: MutationImpact): string {
   const key = JSON.stringify({
     req: [...impact.requestedElementIds].sort(),

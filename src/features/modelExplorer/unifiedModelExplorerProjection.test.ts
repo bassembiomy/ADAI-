@@ -763,4 +763,20 @@ describe('buildUnifiedModelProjection', () => {
       expect(nextProjection.nodes[pkgNodeId].childNodeIds.length).toBeGreaterThan(0);
     }
   });
+  it('lazy: a test case with only an outgoing verify relationship expands to it, and a sourceless allocation stays reachable', () => {
+    const repository = createEmptyRepository();
+    repository.packages.pkg = { id: 'pkg', name: 'Pkg', kind: 'package', namespace: [], ownerId: 'model' };
+    repository.requirements.r1 = {
+      id: 'r1', name: 'R1', namespace: [], ownerId: 'pkg', kind: 'requirement', requirementId: 'REQ-1', text: 't', status: 'draft', version: '1',
+    };
+    repository.verificationCases.tc1 = { id: 'tc1', name: 'TC1', kind: 'verificationCase', method: 'test', verifiesRequirementIds: [], namespace: [], ownerId: 'pkg' } as any;
+    repository.relationships.ver = { id: 'ver', kind: 'verify', sourceId: 'tc1', targetId: 'r1' } as any;
+    repository.relationships.alloc = { id: 'alloc', kind: 'allocate', sourceId: 'activity-node-x', targetId: 'r1' } as any;
+    const base = { sysml: repository, sysmlStore: fromRepository(repository, {}, {}), stateMachine: emptyStateMachine(), externalModels: [], revision: 1 };
+    const collapsed = buildUnifiedModelProjection({ ...base, expandedNodeIds: new Set(['project:model', 'project:pillar:requirements', 'project:pillar:structural', 'sysml:element:pkg']) });
+    expect(collapsed.nodes['sysml:element:tc1']?.hasChildren).toBe(true);
+    expect(collapsed.nodes['sysml:element:alloc']?.parentNodeId).toBe('project:pillar:structural');
+    const open = buildUnifiedModelProjection({ ...base, expandedNodeIds: new Set(['project:model', 'project:pillar:requirements', 'project:pillar:structural', 'sysml:element:pkg', 'sysml:element:tc1']) });
+    expect(open.nodes['sysml:element:ver']?.parentNodeId).toBe('sysml:element:tc1');
+  });
 });

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import React from 'react';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createEmptyRepository, type BlockDefinition, type SysmlRepository } from '../../engine/sysml/model';
 import {
@@ -779,3 +780,27 @@ describe('Model Explorer diagram membership lifecycle', () => {
   });
 });
 
+
+it('ctrl-click on a second row reports both ids through onSelectMultiple', () => {
+  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
+  const repo = createEmptyRepository();
+  for (const id of ['block-a', 'block-b']) {
+    repo.definitions[id] = { id, name: id, kind: 'block', ownerId: 'model', namespace: [], isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [] } as BlockDefinition;
+  }
+  const onSelectMultiple = vi.fn();
+  const { container } = render(<AppModelExplorer diagramMode="bdd" states={[]} layers={[]} transitions={[]} junctions={[]} blocks={[]} parts={[]} selectedIds={['block-a']} canonicalSysmlRepository={repo} onSelect={vi.fn()} onSelectMultiple={onSelectMultiple} onDoubleClick={vi.fn()} />);
+  fireEvent.click(container.querySelector('.model-tree-row[data-node-id="sysml:element:block-b"]')!, { ctrlKey: true });
+  expect(onSelectMultiple).toHaveBeenCalledTimes(1);
+  expect(onSelectMultiple.mock.calls[0][0]).toEqual(expect.arrayContaining(['block-a', 'block-b']));
+  expect(onSelectMultiple.mock.calls[0][0]).toHaveLength(2);
+});
+
+it('App hands the explorer its multi-select, specification and project id callbacks', () => {
+  const source = readFileSync('src/App.tsx', 'utf8');
+  const wrapper = source.slice(source.indexOf('const HierarchyTree'), source.indexOf('const findPeaks'));
+  for (const prop of ['onSelectMultiple', 'onOpenSpecification', 'projectId']) expect(wrapper).toContain(`${prop}={props.${prop}}`);
+  const use = source.slice(source.indexOf('<HierarchyTree'), source.indexOf('<HierarchyTree') + 3000);
+  expect(use).toContain('onSelectMultiple={(ids: string[]) => setSelectedIds(ids)}');
+  expect(use).toContain('onOpenSpecification=');
+  expect(use).toContain('projectId=');
+});

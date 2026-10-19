@@ -313,6 +313,89 @@ function registerExternalModels(nodes: Record<string, ModelTreeNode>, input: Uni
 
 }
 
+/** Interaction content (lifelines, messages, fragments, ...) nests under its Interaction, read-only in the tree. */
+const isUnownedRelationship = (rel: any): boolean => Boolean(rel) && (!rel.ownerId || rel.ownerId === 'model');
+
+function registerInteractionContent(
+  nodes: Record<string, ModelTreeNode>,
+  input: UnifiedExplorerInput,
+  def: any,
+  defNodeId: string,
+): void {
+  const sysmlNodeId = (id: string) => `sysml:element:${id}`;
+  const group = (key: string, label: string) => {
+    const nodeId = `sysml:group:${def.id}:${key}`;
+    register(nodes, { nodeId, semanticId: def.id, domain: 'sysml', kind: 'group', label, parentNodeId: defNodeId, childNodeIds: [], hasChildren: true });
+    return nodeId;
+  };
+  const leaf = (parent: string, id: string, kind: string, label: string, secondaryLabel?: string) => {
+    if (nodes[sysmlNodeId(id)]) return;
+    register(nodes, {
+      nodeId: sysmlNodeId(id), semanticId: id, domain: 'sysml', kind, label, secondaryLabel,
+      parentNodeId: parent, childNodeIds: [], hasChildren: false, readOnly: true, ownerSemanticId: def.id,
+    });
+  };
+  const lifelines = def.lifelines ?? [];
+  if (lifelines.length > 0) {
+    const parent = group('lifelines', 'Lifelines');
+    for (const lifeline of lifelines) {
+      const block = lifelineBlock(input.sysml, lifeline);
+      leaf(parent, lifeline.id, 'lifeline', lifeline.name?.trim() || (block ? sysmlObjectLabel(block, 'Block') : 'Lifeline'),
+        block && lifeline.name?.trim() ? `: ${sysmlObjectLabel(block, 'Block')}` : undefined);
+    }
+  }
+  const messages = orderedMessages(def);
+  if (messages.length > 0) {
+    const parent = group('messages', 'Messages');
+    messages.forEach((message, index) => leaf(parent, message.id, 'message', `${index + 1}: ${messageLabel(message)}`));
+  }
+  const fragments = def.fragments ?? [];
+  if (fragments.length > 0) {
+    const parent = group('fragments', 'Fragments');
+    for (const fragment of fragments) {
+      const guard = fragment.operands[0]?.guard?.trim();
+      leaf(parent, fragment.id, 'fragment', guard ? `${fragment.operator} [${guard}]` : fragment.operator);
+    }
+  }
+  const uses = def.uses ?? [];
+  if (uses.length > 0) {
+    const parent = group('uses', 'Ref frames');
+    for (const use of uses) leaf(parent, use.id, 'interactionUse', `ref ${sysmlObjectLabel(input.sysml.definitions[use.refersToId], 'Interaction')}`);
+  }
+  const constraints = def.constraints ?? [];
+  if (constraints.length > 0) {
+    const parent = group('constraints', 'Constraints');
+    for (const constraint of constraints) {
+      leaf(parent, constraint.id, 'interactionConstraint', constraint.kind === 'duration' ? 'Duration constraint' : 'Time constraint', constraint.expression.trim() ? `{${constraint.expression.trim()}}` : undefined);
+    }
+  }
+  const invariants = def.stateInvariants ?? [];
+  if (invariants.length > 0) {
+    const parent = group('invariants', 'State invariants');
+    for (const invariant of invariants) {
+      const lifeline = lifelines.find((candidate: any) => candidate.id === invariant.lifelineId);
+      leaf(parent, invariant.id, 'stateInvariant', 'State invariant', lifeline ? `on ${lifeline.name?.trim() || 'lifeline'}` : undefined);
+    }
+  }
+}
+
+/** Unowned relationships whose source has no store entity; cached per store revision so a large model is scanned once. */
+const sourcelessRelationshipCache = new WeakMap<object, { revision: number; relationships: any[] }>();
+function sourcelessUnownedRelationships(input: UnifiedExplorerInput, store: NormalizedSysmlStore): any[] {
+  const cached = sourcelessRelationshipCache.get(store);
+  if (cached && cached.revision === store.revision) return cached.relationships;
+  const relationships: any[] = [];
+  for (const [sourceId, relIds] of store.indexes.sourceId) {
+    if (store.entities.has(sourceId)) continue;
+    for (const relId of relIds) {
+      const rel = input.sysml.relationships[relId];
+      if (isUnownedRelationship(rel)) relationships.push(rel);
+    }
+  }
+  sourcelessRelationshipCache.set(store, { revision: store.revision, relationships });
+  return relationships;
+}
+
 function buildLazyStoreProjection(
   input: UnifiedExplorerInput,
   store: NormalizedSysmlStore,
@@ -354,6 +437,10 @@ function buildLazyStoreProjection(
 
   const hasChildrenCheck = (id: string, entity?: any): boolean => {
     if ((store.indexes.ownerId.get(id)?.size ?? 0) > 0) return true;
+    // relationships no element owns are listed under their source (client) element
+    for (const relId of store.indexes.sourceId.get(id) ?? []) {
+      if (isUnownedRelationship(input.sysml.relationships[relId])) return true;
+    }
     if (entity) {
       if (entity.kind === 'block') {
         if ((entity.properties?.length ?? 0) > 0 || (entity.ports?.length ?? 0) > 0 || (entity.operations?.length ?? 0) > 0) {
@@ -364,7 +451,9 @@ function buildLazyStoreProjection(
         return true;
       }
       if (entity.kind === 'interaction') {
-        if ((entity.lifelines?.length ?? 0) > 0 || (entity.messages?.length ?? 0) > 0) return true;
+        if ((entity.lifelines?.length ?? 0) > 0 || (entity.messages?.length ?? 0) > 0
+          || (entity.fragments?.length ?? 0) > 0 || (entity.uses?.length ?? 0) > 0
+          || (entity.constraints?.length ?? 0) > 0 || (entity.stateInvariants?.length ?? 0) > 0) return true;
       }
     }
     return false;
@@ -467,6 +556,14 @@ function buildLazyStoreProjection(
     }
   }
 
+  // Unowned relationships whose source has no tree node of its own (an allocation from an activity node, ...)
+  // would be unreachable; they are listed under the Structural pillar as the full projection does.
+  if (expanded.has('project:pillar:structural')) {
+    for (const rel of sourcelessUnownedRelationships(input, store)) {
+      if (!nodes[sysmlNodeId(rel.id)]) register(nodes, projectRelationship(rel as any, input.sysml));
+    }
+  }
+
   // 2. Iterate expandedNodeIds
   for (const expandedNodeId of expanded) {
     if (expandedNodeId.startsWith('sysml:element:')) {
@@ -537,10 +634,15 @@ function buildLazyStoreProjection(
         }
       }
 
+      const interaction = input.sysml.definitions[semanticId];
+      if (interaction?.kind === 'interaction' && nodes[expandedNodeId]) {
+        registerInteractionContent(nodes, input, interaction, expandedNodeId);
+      }
+
       // Relationships no element owns are listed under their source (client) element
       for (const relId of store.indexes.sourceId.get(semanticId) ?? []) {
         const rel = input.sysml.relationships[relId];
-        if (rel && (!(rel as any).ownerId || (rel as any).ownerId === 'model') && !nodes[sysmlNodeId(relId)]) {
+        if (isUnownedRelationship(rel) && !nodes[sysmlNodeId(relId)]) {
           register(nodes, { ...projectRelationship(rel as any, input.sysml), parentNodeId: expandedNodeId });
         }
       }
@@ -868,60 +970,7 @@ export function buildUnifiedModelProjection(input: UnifiedExplorerInput): ModelT
     if (def.kind !== 'interaction') continue;
     const defNodeId = sysmlNodeId(def.id);
     if (!nodes[defNodeId]) continue;
-    const group = (key: string, label: string) => {
-      const nodeId = `sysml:group:${def.id}:${key}`;
-      register(nodes, { nodeId, semanticId: def.id, domain: 'sysml', kind: 'group', label, parentNodeId: defNodeId, childNodeIds: [], hasChildren: true });
-      return nodeId;
-    };
-    const leaf = (parent: string, id: string, kind: string, label: string, secondaryLabel?: string) => {
-      if (nodes[sysmlNodeId(id)]) return;
-      register(nodes, {
-        nodeId: sysmlNodeId(id), semanticId: id, domain: 'sysml', kind, label, secondaryLabel,
-        parentNodeId: parent, childNodeIds: [], hasChildren: false, readOnly: true, ownerSemanticId: def.id,
-      });
-    };
-    const lifelines = def.lifelines ?? [];
-    if (lifelines.length > 0) {
-      const parent = group('lifelines', 'Lifelines');
-      for (const lifeline of lifelines) {
-        const block = lifelineBlock(input.sysml, lifeline);
-        leaf(parent, lifeline.id, 'lifeline', lifeline.name?.trim() || (block ? sysmlObjectLabel(block, 'Block') : 'Lifeline'),
-          block && lifeline.name?.trim() ? `: ${sysmlObjectLabel(block, 'Block')}` : undefined);
-      }
-    }
-    const messages = orderedMessages(def);
-    if (messages.length > 0) {
-      const parent = group('messages', 'Messages');
-      messages.forEach((message, index) => leaf(parent, message.id, 'message', `${index + 1}: ${messageLabel(message)}`));
-    }
-    const fragments = def.fragments ?? [];
-    if (fragments.length > 0) {
-      const parent = group('fragments', 'Fragments');
-      for (const fragment of fragments) {
-        const guard = fragment.operands[0]?.guard?.trim();
-        leaf(parent, fragment.id, 'fragment', guard ? `${fragment.operator} [${guard}]` : fragment.operator);
-      }
-    }
-    const uses = def.uses ?? [];
-    if (uses.length > 0) {
-      const parent = group('uses', 'Ref frames');
-      for (const use of uses) leaf(parent, use.id, 'interactionUse', `ref ${sysmlObjectLabel(input.sysml.definitions[use.refersToId], 'Interaction')}`);
-    }
-    const constraints = def.constraints ?? [];
-    if (constraints.length > 0) {
-      const parent = group('constraints', 'Constraints');
-      for (const constraint of constraints) {
-        leaf(parent, constraint.id, 'interactionConstraint', constraint.kind === 'duration' ? 'Duration constraint' : 'Time constraint', constraint.expression.trim() ? `{${constraint.expression.trim()}}` : undefined);
-      }
-    }
-    const invariants = def.stateInvariants ?? [];
-    if (invariants.length > 0) {
-      const parent = group('invariants', 'State invariants');
-      for (const invariant of invariants) {
-        const lifeline = lifelines.find(candidate => candidate.id === invariant.lifelineId);
-        leaf(parent, invariant.id, 'stateInvariant', 'State invariant', lifeline ? `on ${lifeline.name?.trim() || 'lifeline'}` : undefined);
-      }
-    }
+    registerInteractionContent(nodes, input, def, defNodeId);
   }
 
   // Canonical elements collection (V4 or unified inputs)
