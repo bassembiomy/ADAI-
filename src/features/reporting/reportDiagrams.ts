@@ -4,11 +4,12 @@ import type { JunctionData, Layer, StateData, TransitionData } from '../../types
 import { formatLegacyProperty } from '../../services/sysmlPropertyRules';
 import {
   DiagramEdgeInput, DiagramRect, MAX_NODES_PER_FIGURE, SizedNode,
-  boundsOf, chunkItems, connectionPages, escapeHtml, measureNode, rectsOverlap, renderEmptyFigure, wrapFigure,
+  boundsOf, chunkItems, connectionPages, escapeHtml, figurePageFit, measureNode, rectsOverlap, renderEmptyFigure, wrapFigure,
 } from './reportDiagramModel';
 import type { EdgeLabelPoint } from './reportDiagramLayout';
 import { PositionedNode, edgeLabelCandidates, labelPointForPoints, layoutGrid, layoutLayered, nodeById, parallelEdgeOffsets, pickLabelPoint, routeEdgeLabelPoint, routeEdgePath, routeEdgePoints } from './reportDiagramLayout';
 import { Box, Pt, boxesIntersect, longestHorizontal, parsePath, pointsToPath, polylineCrossesBox, polylineLength, segmentCrossesBox, simplify, textBox, textWidth } from './reportSvgGeometry';
+import { OrthogonalRouter, removeCollinear } from './reportStateRouting';
 import { getRequirementsDiagramScope } from '../../engine/sysml/requirementsDiagramScope';
 
 export interface ReportRequirementSource {
@@ -524,50 +525,178 @@ type IbdSide = 'left' | 'right';
 interface IbdEnd { x: number; y: number; dir: 1 | -1; name: string }
 
 interface UsedVertical { x: number; y1: number; y2: number }
+interface UsedHorizontal { y: number; x1: number; x2: number }
+
+/** Optional routing aids: extra horizontal channels / vertical lanes, port labels to keep clear, and horizontal runs already taken. */
+export interface IbdRouteAids {
+  /** Extra horizontal channel y positions (e.g. the gaps between rows of parts). */
+  ys?: readonly number[];
+  /** Extra vertical lane x positions (e.g. the free middle of a gap between two columns). */
+  xs?: readonly number[];
+  /** Port label boxes a route should not run through. */
+  labels?: readonly Box[];
+  usedHorizontal?: UsedHorizontal[];
+}
 
 /**
  * Orthogonal route between two horizontal-facing ends. Candidates are Z routes through free vertical lanes and
- * routes through a channel above / below the parts; one that crosses no part wins, preferring short, straight
- * routes whose vertical runs do not sit on another connector's.
+ * routes through a channel above / below / between the parts; one that crosses no part wins, preferring short, straight
+ * routes whose runs do not sit on another connector's or on a port label.
  */
 export function routeIbdConnector(
   from: IbdEnd, to: IbdEnd, parts: readonly DiagramRect[], channels: { top: number; bottom: number }, used: UsedVertical[],
+  aids: IbdRouteAids = {},
 ): Pt[] {
-  const p1 = { x: from.x + from.dir * IBD_STUB, y: from.y };
-  const q1 = { x: to.x + to.dir * IBD_STUB, y: to.y };
   const start = { x: from.x, y: from.y };
   const end = { x: to.x, y: to.y };
-  const candidates: Pt[][] = [];
-  const lanes = new Set<number>([Math.round((p1.x + q1.x) / 2)]);
-  for (const o of parts) { lanes.add(o.x - 12); lanes.add(o.x + o.width + 12); }
-  for (const mx of lanes) {
-    const okFrom = from.dir > 0 ? mx >= p1.x : mx <= p1.x;
-    const okTo = to.dir > 0 ? mx >= q1.x : mx <= q1.x;
-    if (okFrom && okTo) candidates.push(simplify([start, { x: mx, y: from.y }, { x: mx, y: to.y }, end]));
+  const p1 = { x: from.x + from.dir * IBD_STUB, y: from.y };
+  const q1 = { x: to.x + to.dir * IBD_STUB, y: to.y };
+  const labelBoxes = aids.labels ?? [];
+  const usedH = aids.usedHorizontal ?? (aids.usedHorizontal = []);
+
+  // A search over the grid of useful lines: lanes beside every part, the free middle of gaps, channels between rows.
+  const xSet = new Set<number>([p1.x, q1.x, Math.round((p1.x + q1.x) / 2), ...(aids.xs ?? []).map(Math.round)]);
+  const ySet = new Set<number>([p1.y, q1.y, channels.top, channels.bottom, ...(aids.ys ?? [])]);
+  for (const o of parts) {
+    for (const d of [12, 19]) { xSet.add(o.x - d); xSet.add(o.x + o.width + d); }
+    ySet.add(o.y - 10); ySet.add(o.y + o.height + 10);
   }
-  for (const chanY of [channels.top, channels.bottom]) {
-    candidates.push(simplify([start, p1, { x: p1.x, y: chanY }, { x: q1.x, y: chanY }, q1, end]));
-  }
-  let best: Pt[] | undefined;
-  let bestCost = Infinity;
-  for (const pts of candidates) {
-    if (pts.some((_, i) => i > 0 && parts.some(o => segmentCrossesBox(pts[i - 1], pts[i], o, 1)))) continue;
-    let cost = polylineLength(pts) + 18 * pts.length;
-    for (let i = 1; i < pts.length; i++) {
-      const a = pts[i - 1];
-      const b = pts[i];
-      if (a.x !== b.x) continue;
+  const X = [...xSet].sort((m, n) => m - n);
+  const Y = [...ySet].sort((m, n) => m - n);
+  const nx = X.length;
+  const ny = Y.length;
+  const segCost = (a: Pt, b: Pt): number => {
+    if (parts.some(o => segmentCrossesBox(a, b, o, 1))) return Infinity;
+    let cost = Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+    if (labelBoxes.some(o => segmentCrossesBox(a, b, o, 0))) cost += 150;
+    if (a.x === b.x) {
       const lo = Math.min(a.y, b.y);
       const hi = Math.max(a.y, b.y);
-      if (used.some(u => Math.abs(u.x - a.x) < 6 && lo < u.y2 && u.y1 < hi)) cost += 300;
+      if (used.some(u => Math.abs(u.x - a.x) < 5 && lo < u.y2 && u.y1 < hi)) cost += 150;
+      if (usedH.some(u => u.y > lo && u.y < hi && a.x > u.x1 && a.x < u.x2)) cost += 10;
+    } else {
+      const lo = Math.min(a.x, b.x);
+      const hi = Math.max(a.x, b.x);
+      if (usedH.some(u => Math.abs(u.y - a.y) < 5 && lo < u.x2 && u.x1 < hi)) cost += 150;
+      if (used.some(u => u.x > lo && u.x < hi && a.y > u.y1 && a.y < u.y2)) cost += 10;
     }
-    if (cost < bestCost) { best = pts; bestCost = cost; }
+    return cost;
+  };
+  const idx = (i: number, j: number, d: number) => (i * ny + j) * 2 + d;
+  const dist = new Float64Array(nx * ny * 2).fill(Infinity);
+  const prev = new Int32Array(nx * ny * 2).fill(-1);
+  const heap: [number, number][] = [];
+  const push = (cost: number, node: number) => {
+    heap.push([cost, node]);
+    let k = heap.length - 1;
+    while (k > 0) { const par = (k - 1) >> 1; if (heap[par][0] <= heap[k][0]) break; [heap[par], heap[k]] = [heap[k], heap[par]]; k = par; }
+  };
+  const pop = (): [number, number] => {
+    const top = heap[0];
+    const last = heap.pop()!;
+    if (heap.length > 0) {
+      heap[0] = last;
+      let k = 0;
+      for (;;) {
+        const l = 2 * k + 1; const r = l + 1; let m = k;
+        if (l < heap.length && heap[l][0] < heap[m][0]) m = l;
+        if (r < heap.length && heap[r][0] < heap[m][0]) m = r;
+        if (m === k) break;
+        [heap[m], heap[k]] = [heap[k], heap[m]]; k = m;
+      }
+    }
+    return top;
+  };
+  const si = X.indexOf(p1.x);
+  const sj = Y.indexOf(p1.y);
+  const ti = X.indexOf(q1.x);
+  const tj = Y.indexOf(q1.y);
+  const TURN = 24;
+  dist[idx(si, sj, 0)] = 0;
+  push(0, idx(si, sj, 0));
+  let goal = -1;
+  while (heap.length > 0) {
+    const [cost, node] = pop();
+    if (cost > dist[node]) continue;
+    const d = node & 1;
+    const cell = node >> 1;
+    const i = Math.floor(cell / ny);
+    const j = cell % ny;
+    if (i === ti && j === tj) { goal = node; break; }
+    const moves: [number, number][] = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    for (const [di, dj] of moves) {
+      const ni = i + di;
+      const nj = j + dj;
+      if (ni < 0 || nj < 0 || ni >= nx || nj >= ny) continue;
+      const nd = di !== 0 ? 0 : 1;
+      if (i === si && j === sj && di === -from.dir && dj === 0 && cost === 0) continue;
+      const a = { x: X[i], y: Y[j] };
+      const b = { x: X[ni], y: Y[nj] };
+      let c = segCost(a, b);
+      if (!Number.isFinite(c)) continue;
+      if (nd !== d) c += TURN;
+      if (ni === ti && nj === tj && nd === 1) c += TURN;
+      const total = cost + c;
+      const to2 = idx(ni, nj, nd);
+      if (total < dist[to2]) { dist[to2] = total; prev[to2] = node; push(total, to2); }
+    }
   }
-  const chosen = best ?? candidates[candidates.length - 1];
+  let chosen: Pt[];
+  if (goal >= 0) {
+    const path: Pt[] = [];
+    for (let node = goal; node >= 0; node = prev[node]) {
+      const cell = node >> 1;
+      path.push({ x: X[Math.floor(cell / ny)], y: Y[cell % ny] });
+    }
+    path.reverse();
+    chosen = dropCollinear([start, p1, ...path, q1, end]);
+  } else {
+    chosen = dropCollinear([start, p1, { x: p1.x, y: channels.bottom }, { x: q1.x, y: channels.bottom }, q1, end]);
+  }
   for (let i = 1; i < chosen.length; i++) {
     if (chosen[i].x === chosen[i - 1].x) used.push({ x: chosen[i].x, y1: Math.min(chosen[i].y, chosen[i - 1].y), y2: Math.max(chosen[i].y, chosen[i - 1].y) });
+    else if (chosen[i].y === chosen[i - 1].y) usedH.push({ y: chosen[i].y, x1: Math.min(chosen[i].x, chosen[i - 1].x), x2: Math.max(chosen[i].x, chosen[i - 1].x) });
   }
   return chosen;
+}
+
+/** Removes duplicate and collinear interior points so a straight route is one run. */
+function dropCollinear(points: Pt[]): Pt[] {
+  const pts = simplify(points);
+  return pts.filter((p, i) => {
+    if (i === 0 || i === pts.length - 1) return true;
+    const a = pts[i - 1];
+    const b = pts[i + 1];
+    return !((a.x === p.x && p.x === b.x) || (a.y === p.y && p.y === b.y));
+  });
+}
+
+/** Longest a part-box text line gets before it wraps onto the next line (keeps parts narrow). */
+const IBD_NAME_WRAP = 24;
+/** Target width of the whole figure so it prints legibly on a portrait page. */
+const IBD_FIGURE_WIDTH = 630;
+const IBD_BAND_GAP = 36;
+const IBD_MAX_COLUMN_HEIGHT = 420;
+
+/** Wraps a part / type name at spaces, separators and camelCase humps; hard-cuts only when nothing else fits. */
+function wrapIbdText(text: string, max = IBD_NAME_WRAP): string[] {
+  const out: string[] = [];
+  let rest = text.trim();
+  while (rest.length > max) {
+    const win = rest.slice(0, max + 1);
+    let cut = win.lastIndexOf(' ');
+    if (cut < 8) {
+      cut = -1;
+      for (let i = max; i > 8; i--) {
+        if ('_:-.'.includes(win[i - 1]) || (/[a-z0-9]/.test(win[i - 1]) && /[A-Z]/.test(win[i]))) { cut = i; break; }
+      }
+    }
+    if (cut < 0) cut = max;
+    out.push(rest.slice(0, cut).trimEnd());
+    rest = rest.slice(cut).trimStart();
+  }
+  out.push(rest);
+  return out;
 }
 
 export function renderIbdDiagram(source: ReportIbdSource): string {
@@ -596,45 +725,51 @@ export function renderIbdDiagram(source: ReportIbdSource): string {
   const connectorLabel = (conn: ConnectorData) => conn.itemFlow ?? conn.label ?? '';
 
   // Ports a part shows are the ones its type declares; sizes reserve a slot per port so none overlap.
+  // Names wrap onto extra lines instead of widening the box.
   const portsOf = (part: PartData) => (part.typeId ? blockById.get(part.typeId)?.ports ?? [] : []);
   const sized = new Map(source.parts.map(part => {
     const typeName = part.typeId ? blockById.get(part.typeId)?.name : undefined;
     const node = measureNode(part.id,
-      [`${part.name}${typeName ? `: ${typeName}` : ''}`, part.multiplicity ? `[${part.multiplicity}]` : ''], 'ibd', 110);
+      [...wrapIbdText(`${part.name}${typeName ? `: ${typeName}` : ''}`), part.multiplicity ? `[${part.multiplicity}]` : ''], 'ibd', 110);
     const slots = Math.max(0, portsOf(part).length);
     return [part.id, { ...node, height: Math.max(node.height, 16 + slots * IBD_PORT_PITCH) }];
   }));
-  // The gap between two parts holds both facing port labels and a connector label, so none of them can collide.
-  const longestPortLabel = Math.max(0, ...source.parts.flatMap(p => portsOf(p).map(port => textWidth(port.name, IBD_LABEL_SIZE))));
-  const longestConnectorLabel = Math.max(0, ...validConnectors.map(c => textWidth(connectorLabel(c), IBD_LABEL_SIZE)));
-  const portGutter = Math.min(360, Math.max(64, 2 * longestPortLabel + longestConnectorLabel + 52));
+  const connectorLabelWidth = (c: ConnectorData) => textWidth(connectorLabel(c), IBD_LABEL_SIZE);
 
+  // Boundary (context) ports sit on the frame; their labels need a gutter on that side.
+  const envPorts = source.contextBlock.ports ?? [];
+  const envSide = (port: (typeof envPorts)[number]): IbdSide => port.side === 'right' ? 'right' : port.side === 'left' ? 'left' : port.direction === 'out' ? 'right' : 'left';
+  const labelWidthOn = (side: IbdSide) => Math.max(0, ...envPorts.filter(p => envSide(p) === side).map(p => textWidth(p.name, IBD_LABEL_SIZE)));
+  const leftGutter = labelWidthOn('left') > 0 ? labelWidthOn('left') + IBD_BOUNDARY_GUTTER_EXTRA : 0;
+  const rightGutter = labelWidthOn('right') > 0 ? labelWidthOn('right') + IBD_BOUNDARY_GUTTER_EXTRA : 0;
+
+  // Columns: ranks of the connected parts (left to right); unconnected parts are one column each and wrap into rows.
   const partEdges = validConnectors
     .filter(c => contextPartIds.has(c.sourcePartId) && contextPartIds.has(c.targetPartId) && c.sourcePartId !== c.targetPartId)
     .map(c => ({ sourceId: c.sourcePartId, targetId: c.targetPartId }));
-  const placed = partEdges.length > 0
-    ? layoutLayered([...sized.values()], partEdges, { direction: 'LR', hGap: portGutter, vGap: 36 })
-    : layoutGrid([...sized.values()], undefined, portGutter, 32);
-  const placedById = new Map(placed.map(p => [p.id, p]));
-
-  // Side of each port: in -> left, out -> right, inout (or undeclared) faces the peer it is connected to.
-  const peerCentre = (partId: string, portId: string): number | undefined => {
-    for (const c of validConnectors) {
-      const otherPart = c.sourcePartId === partId && c.sourcePortId === portId ? c.targetPartId
-        : c.targetPartId === partId && c.targetPortId === portId ? c.sourcePartId : undefined;
-      const rect = otherPart ? placedById.get(otherPart) : undefined;
-      if (rect) return rect.x + rect.width / 2;
-    }
-    return undefined;
-  };
-  const portEnds = new Map<string, IbdEnd>();
-  const portEls: string[] = [];
-  const reserved: Box[] = placed.map(p => ({ x: p.x, y: p.y, width: p.width, height: p.height }));
-  const areaRects: Box[] = [...reserved];
+  let columns: string[][];
+  if (partEdges.length > 0) {
+    const ranked = layoutLayered([...sized.values()], partEdges, { direction: 'LR', hGap: 40, vGap: 36 });
+    const xs = [...new Set(ranked.map(r => r.x))].sort((p, q) => p - q);
+    columns = xs.map(x => ranked.filter(r => r.x === x).sort((p, q) => p.y - q.y).map(r => r.id));
+  } else {
+    columns = source.parts.map(p => [p.id]);
+  }
+  // A column taller than a page share is split into side-by-side columns so the figure stays compact.
+  columns = columns.flatMap(col => {
+    const total = col.reduce((sum, id) => sum + sized.get(id)!.height + 32, -32);
+    const pieces = Math.ceil(total / IBD_MAX_COLUMN_HEIGHT);
+    if (pieces <= 1) return [col];
+    const per = Math.ceil(col.length / pieces);
+    return Array.from({ length: Math.ceil(col.length / per) }, (_, k) => col.slice(k * per, (k + 1) * per));
+  });
+  const colOf = new Map<string, number>();
+  columns.forEach((col, ci) => col.forEach(id => colOf.set(id, ci)));
+  const colWidth = columns.map(col => Math.max(...col.map(id => sized.get(id)!.width)));
+  // Side of each port: in -> left, out -> right, inout (or undeclared) faces the column of the peer it is connected to,
+  // an unconnected one goes left. Decided from the columns so the gaps can be sized to the labels that face each other.
+  const portSides = new Map<string, Map<string, IbdSide>>();
   for (const part of source.parts) {
-    const rect = placedById.get(part.id);
-    if (!rect) continue;
-    portEnds.set(`${part.id}:__center`, { x: rect.x + rect.width, y: rect.y + rect.height / 2, dir: 1, name: '' });
     const ports = portsOf(part);
     const sides = new Map<string, IbdSide>();
     const counts = { left: 0, right: 0 };
@@ -645,12 +780,84 @@ export function renderIbdDiagram(source: ReportIbdSource): string {
     for (const side of sides.values()) counts[side]++;
     for (const port of ports) {
       if (sides.has(port.id)) continue;
-      const peer = peerCentre(part.id, port.id);
-      const own = rect.x + rect.width / 2;
-      const side: IbdSide = peer !== undefined && peer !== own ? (peer < own ? 'left' : 'right') : (counts.left <= counts.right ? 'left' : 'right');
+      const peerPart = validConnectors.map(c => c.sourcePartId === part.id && c.sourcePortId === port.id ? c.targetPartId
+        : c.targetPartId === part.id && c.targetPortId === port.id ? c.sourcePartId : undefined).find(id => id !== undefined && colOf.has(id));
+      const peer = peerPart !== undefined ? colOf.get(peerPart) : undefined;
+      const own = colOf.get(part.id)!;
+      const side: IbdSide = peer !== undefined && peer !== own ? (peer < own ? 'left' : 'right')
+        : peer !== undefined ? (counts.left <= counts.right ? 'left' : 'right') : 'left';
       sides.set(port.id, side);
       counts[side]++;
     }
+    portSides.set(part.id, sides);
+  }
+  const partsById = new Map(source.parts.map(p => [p.id, p]));
+  const sideLabelWidth = (ids: readonly string[], side: IbdSide) => Math.max(0, ...ids.flatMap(id => portsOf(partsById.get(id)!)
+    .filter(port => portSides.get(id)!.get(port.id) === side).map(port => textWidth(port.name, IBD_LABEL_SIZE))));
+  // The gap after a column holds the port labels facing each other plus the widest connector label crossing it.
+  const facingAfter: number[] = [];
+  const gapAfter = columns.map((col, ci) => {
+    if (ci === columns.length - 1) { facingAfter.push(0); return 0; }
+    const flows = validConnectors.filter(c => {
+      const a = colOf.get(c.sourcePartId);
+      const b = colOf.get(c.targetPartId);
+      return a !== undefined && b !== undefined && Math.min(a, b) === ci && Math.max(a, b) === ci + 1;
+    });
+    const flow = Math.min(90, Math.max(0, ...flows.map(connectorLabelWidth)));
+    const labels = sideLabelWidth(col, 'right') + sideLabelWidth(columns[ci + 1], 'left');
+    facingAfter.push(labels);
+    return Math.min(300, Math.max(56, labels + 32 + flow));
+  });
+  // Bands: consecutive columns share a row of parts until the figure width budget is used, then the next row starts.
+  const budget = Math.max(260, IBD_FIGURE_WIDTH - 2 * IBD_FRAME_PADDING - leftGutter - rightGutter - sideLabelWidth(source.parts.map(p => p.id), 'left') + sideLabelWidth(source.parts.map(p => p.id), 'right') + 28);
+  const bands: number[][] = [];
+  let bandWidth = 0;
+  columns.forEach((_, ci) => {
+    const w = colWidth[ci];
+    const last = bands[bands.length - 1];
+    if (last && bandWidth + gapAfter[last[last.length - 1]] + w <= budget) { bandWidth += gapAfter[last[last.length - 1]] + w; last.push(ci); }
+    else { bands.push([ci]); bandWidth = w; }
+  });
+  const partConnectorCount = validConnectors.filter(c => contextPartIds.has(c.sourcePartId) && contextPartIds.has(c.targetPartId)).length;
+  const bandGap = Math.min(96, IBD_BAND_GAP + 6 * partConnectorCount);
+  const placed: PositionedNode[] = [];
+  const bandRows: { y: number; height: number }[] = [];
+  const laneXs: number[] = [];
+  let bandY = 0;
+  for (const band of bands) {
+    const heights = band.map(ci => columns[ci].reduce((sum, id) => sum + sized.get(id)!.height, 0) + 32 * (columns[ci].length - 1));
+    const tallest = Math.max(...heights);
+    let x = 0;
+    band.forEach((ci, k) => {
+      let y = bandY + (tallest - heights[k]) / 2;
+      for (const id of columns[ci]) {
+        const n = sized.get(id)!;
+        placed.push({ id, x, y, width: n.width, height: n.height });
+        y += n.height + 32;
+      }
+      const gap = k < band.length - 1 ? gapAfter[ci] : 0;
+      if (gap > 0) {
+        const free = Math.max(0, gap - facingAfter[ci] - 8);
+        const mid = x + colWidth[ci] + gap / 2;
+        for (let d = 0; d <= free / 2 - 2; d += 7) { laneXs.push(mid + d); if (d > 0) laneXs.push(mid - d); }
+      }
+      x += colWidth[ci] + gap;
+    });
+    bandRows.push({ y: bandY, height: tallest });
+    bandY += tallest + bandGap;
+  }
+  const placedById = new Map(placed.map(p => [p.id, p]));
+
+  const portEnds = new Map<string, IbdEnd>();
+  const portEls: string[] = [];
+  const reserved: Box[] = placed.map(p => ({ x: p.x, y: p.y, width: p.width, height: p.height }));
+  const areaRects: Box[] = [...reserved];
+  for (const part of source.parts) {
+    const rect = placedById.get(part.id);
+    if (!rect) continue;
+    portEnds.set(`${part.id}:__center`, { x: rect.x + rect.width, y: rect.y + rect.height / 2, dir: 1, name: '' });
+    const ports = portsOf(part);
+    const sides = portSides.get(part.id)!;
     const slotOf = { left: 0, right: 0 };
     for (const port of ports) {
       const side = sides.get(port.id)!;
@@ -673,11 +880,6 @@ export function renderIbdDiagram(source: ReportIbdSource): string {
 
   // Boundary (context) ports sit on the frame; the frame is widened by a gutter holding their labels, so labels never meet parts.
   const area = boundsOf(areaRects, 0);
-  const envPorts = source.contextBlock.ports ?? [];
-  const envSide = (port: (typeof envPorts)[number]): IbdSide => port.side === 'right' ? 'right' : port.side === 'left' ? 'left' : port.direction === 'out' ? 'right' : 'left';
-  const labelWidthOn = (side: IbdSide) => Math.max(0, ...envPorts.filter(p => envSide(p) === side).map(p => textWidth(p.name, IBD_LABEL_SIZE)));
-  const leftGutter = labelWidthOn('left') > 0 ? labelWidthOn('left') + IBD_BOUNDARY_GUTTER_EXTRA : 0;
-  const rightGutter = labelWidthOn('right') > 0 ? labelWidthOn('right') + IBD_BOUNDARY_GUTTER_EXTRA : 0;
   const envNeeded = Math.max(envPorts.filter(p => envSide(p) === 'left').length, envPorts.filter(p => envSide(p) === 'right').length);
   const frameX = area.x - IBD_FRAME_PADDING - leftGutter;
   const frameY = area.y - IBD_FRAME_PADDING - IBD_TITLE_HEIGHT;
@@ -735,7 +937,17 @@ export function renderIbdDiagram(source: ReportIbdSource): string {
   const channels = { top: area.y - 14, bottom: area.y + area.height + 14 };
   const used: UsedVertical[] = [];
   const labelBoxes: Box[] = [];
-  const routes = drawn.map(({ conn, from, to }) => ({ conn, points: routeIbdConnector(from, to, partRects, channels, used) }));
+  // Channels: the gaps between rows of parts, several lanes each, plus extra lanes above and below everything.
+  const channelYs: number[] = [];
+  const laneCount = Math.max(1, Math.floor((bandGap - 14) / 14));
+  bandRows.slice(0, -1).forEach(row => {
+    const mid = row.y + row.height + bandGap / 2;
+    for (let k = 0; k < laneCount; k++) channelYs.push(mid + (k % 2 === 0 ? 1 : -1) * Math.ceil(k / 2) * 7);
+  });
+  for (let k = 1; k <= 3; k++) channelYs.push(channels.top - 7 * k, channels.bottom + 7 * k);
+  const outerXs = [area.x - 7, area.x - 14, area.x + area.width + 7, area.x + area.width + 14];
+  const aids: IbdRouteAids = { ys: channelYs, xs: [...laneXs, ...outerXs], labels: reserved.slice(placed.length), usedHorizontal: [] };
+  const routes = drawn.map(({ conn, from, to }) => ({ conn, points: routeIbdConnector(from, to, partRects, channels, used, aids) }));
   const frameBox: Box = { x: frameX, y: frameY, width: frameW, height: frameH };
   const connectorEls = routes.map(({ conn, points }) => {
     const label = connectorLabel(conn);
@@ -748,7 +960,14 @@ export function renderIbdDiagram(source: ReportIbdSource): string {
         if (Math.abs(points[i].y - points[i - 1].y) < 0.5) runs.push({ a: points[i - 1], b: points[i], length: Math.abs(points[i].x - points[i - 1].x) });
       }
       runs.sort((p, q) => q.length - p.length);
-      for (const run of runs) if (run.length >= lw + 6) candidates.push({ x: (run.a.x + run.b.x) / 2, y: run.a.y - 4 }, { x: (run.a.x + run.b.x) / 2, y: run.a.y + 12 });
+      for (const run of runs) {
+        if (run.length < lw + 6) continue;
+        const mid = (run.a.x + run.b.x) / 2;
+        const room = (run.length - lw - 6) / 2;
+        for (let d = 0; d <= room; d += 8) {
+          for (const dx of d === 0 ? [0] : [d, -d]) candidates.push({ x: mid + dx, y: run.a.y - 4 }, { x: mid + dx, y: run.a.y + 12 });
+        }
+      }
       for (let i = 1; i < points.length; i++) {
         if (Math.abs(points[i].x - points[i - 1].x) < 0.5 && Math.abs(points[i].y - points[i - 1].y) >= 12) {
           candidates.push({ x: points[i].x, y: (points[i].y + points[i - 1].y) / 2 + 3 });
@@ -918,7 +1137,7 @@ function shortTransitionLabel(t: TransitionData): string {
   return text.length > SM_LABEL_MAX_CHARS ? `${text.slice(0, SM_LABEL_MAX_CHARS - 1)}…` : text;
 }
 
-type SmEdgeClass = 'self' | 'forward' | 'sameColumn' | 'around' | 'parent';
+type SmEdgeClass = 'self' | 'forward' | 'sameColumn' | 'around' | 'parent' | 'routed';
 interface SmPlanned { t: TransitionData; src: DiagramRect; tgt: DiagramRect; cls: SmEdgeClass; label: string }
 
 /** First free interval row of a channel list: rows are bands stacked away from the diagram, each holding disjoint x intervals. */
@@ -929,7 +1148,33 @@ function allocChannel(levels: [number, number][][], x1: number, x2: number): num
   }
 }
 
+/** Folded (top-down) layout: a rank wider than this wraps onto a further row. */
+const SM_FOLD_ROW_WIDTH = 520;
+
+/** How well a rendered figure fits its page: 2 legible on a portrait page, 1 legible on a landscape page, 0 illegible. */
+function smFigureFit(figure: string): { rank: number; scale: number } | undefined {
+  const vb = /viewBox="(-?[\d.]+) (-?[\d.]+) ([\d.]+) ([\d.]+)"/.exec(figure);
+  const font = /data-min-font="([\d.]+)"/.exec(figure);
+  if (!vb || !font) return undefined;
+  const fit = figurePageFit({ width: Number(vb[3]), height: Number(vb[4]) }, Number(font[1]));
+  return { rank: fit.legible ? (fit.orientation === 'portrait' ? 2 : 1) : 0, scale: fit.scale };
+}
+
+/**
+ * Left-to-right layout first (the compact, familiar picture). When that cannot be printed legibly on a portrait page
+ * the layer is laid out top-down instead, wrapping wide ranks, and the better fitting of the two is used.
+ */
 function renderStateMachineLayer(layer: Layer, source: ReportStateMachineSource, view?: StateMachineView, extraOmitted: { id: string; reason: string }[] = []): string {
+  const natural = renderStateMachineLayerCore(layer, source, view, extraOmitted, false);
+  const naturalFit = smFigureFit(natural);
+  if (!naturalFit || naturalFit.rank === 2) return natural;
+  const folded = renderStateMachineLayerCore(layer, source, view, extraOmitted, true);
+  const foldedFit = smFigureFit(folded);
+  if (!foldedFit) return natural;
+  return foldedFit.rank > naturalFit.rank || (foldedFit.rank === naturalFit.rank && foldedFit.scale > naturalFit.scale) ? folded : natural;
+}
+
+function renderStateMachineLayerCore(layer: Layer, source: ReportStateMachineSource, view: StateMachineView | undefined, extraOmitted: { id: string; reason: string }[], folded: boolean): string {
   const layerStates = source.states.filter(s => layer.stateIds.includes(s.id));
   if (layerStates.length === 0) return renderEmptyFigure(`No states in layer ${layer.name}.`);
   const layerJunctions = source.junctions.filter(j => layer.junctionIds.includes(j.id));
@@ -950,7 +1195,9 @@ function renderStateMachineLayer(layer: Layer, source: ReportStateMachineSource,
   const layoutEdges = layerTransitions.filter(t => localIds.has(t.sourceId) && localIds.has(t.targetId)).map(t => ({
     sourceId: t.sourceId, targetId: t.targetId, labelWidth: textWidth(shortTransitionLabel(t), SM_LABEL_SIZE),
   }));
-  const leafPlaced = layoutLayered([...sized.values()], layoutEdges, { rootIds: roots, vGap: 52 });
+  const leafPlaced = folded
+    ? layoutLayered([...sized.values()], layoutEdges, { rootIds: roots, direction: 'TB', hGap: 56, vGap: 72, maxRowWidth: SM_FOLD_ROW_WIDTH })
+    : layoutLayered([...sized.values()], layoutEdges, { rootIds: roots, vGap: 52 });
   const placedById = new Map(leafPlaced.map(p => [p.id, p]));
 
   const depthOf = (s: StateData): number => (s.parentId && stateById.has(s.parentId)) ? 1 + depthOf(stateById.get(s.parentId)!) : 0;
@@ -1019,6 +1266,7 @@ function renderStateMachineLayer(layer: Layer, source: ReportStateMachineSource,
       const tci = colOf(tgt);
       const cls: SmEdgeClass = t.sourceId === t.targetId ? 'self'
         : isParentTarget ? 'parent'
+        : folded ? 'routed'
         : tci === sci + 1 && tgt.x >= src.x + src.width ? 'forward'
         : tci === sci ? 'sameColumn'
         : 'around';
@@ -1062,6 +1310,114 @@ function renderStateMachineLayer(layer: Layer, source: ReportStateMachineSource,
     return wanted;
   };
 
+  // --- folded layout: ports on the state sides and orthogonal routes around every state --------------------
+  type SmSide = 'top' | 'bottom' | 'left' | 'right';
+  const SIDE_DIR: Record<SmSide, number> = { right: 0, bottom: 1, left: 2, top: 3 };
+  const routedPts = new Map<string, Pt[]>();
+  const foldedStubs: { stub: (typeof stubs)[number]; rect: DiagramRect; label: string; pts: Pt[] }[] = [];
+  const deferredEdges: { into: string[]; index: number; edge: DiagramEdgeInput; pts: Pt[]; text: string }[] = [];
+  const allRoutes: Pt[][] = [];
+  let foldedPsCy: number | undefined;
+  if (folded) {
+    const loopNodes = new Map<string, number>();
+    for (const p of planned) if (p.cls === 'self') loopNodes.set(p.t.sourceId, (loopNodes.get(p.t.sourceId) ?? 0) + 1);
+    const ports = new Map<string, { key: string; order: number }[]>();
+    const addPort = (id: string, side: SmSide, key: string, order: number) => {
+      const k = `${id}|${side}`;
+      ports.set(k, [...(ports.get(k) ?? []), { key, order }]);
+    };
+    const isVertical = (side: SmSide) => side === 'top' || side === 'bottom';
+    const sidesFor = (src: DiagramRect, tgt: DiagramRect): [SmSide, SmSide] => {
+      if (tgt.y >= src.y + src.height + 8) return ['bottom', 'top'];
+      if (tgt.y + tgt.height <= src.y - 8) return ['top', 'bottom'];
+      return tgt.x + tgt.width / 2 >= src.x + src.width / 2 ? ['right', 'left'] : ['left', 'right'];
+    };
+    const mid = (r: DiagramRect, side: SmSide) => (isVertical(side) ? r.x + r.width / 2 : r.y + r.height / 2);
+    const routed = planned.filter(p => p.cls === 'routed');
+    const sideMap = new Map<string, [SmSide, SmSide]>();
+    for (const p of routed) {
+      const [a, b] = sidesFor(p.src, p.tgt);
+      sideMap.set(p.t.id, [a, b]);
+      addPort(p.t.sourceId, a, `${p.t.id}:s`, mid(p.tgt, a));
+      addPort(p.t.targetId, b, `${p.t.id}:t`, mid(p.src, b));
+    }
+    // off-view connectors: a labelled stub in a gutter left or right of the whole diagram
+    const nodesBox = boundsOf(allPlaced, 0);
+    const leftLimit = Math.min(nodesBox.x, asRect ? asRect.x - 50 : Infinity);
+    for (const outgoing of [true, false]) {
+      let lastBottom = -Infinity;
+      for (const stub of stubs.filter(q => q.outgoing === outgoing).sort((a, b) => a.local.y - b.local.y)) {
+        const label = `${outgoing ? '→ ' : '← '}${stub.text}`;
+        const width = Math.max(90, Math.ceil(label.length * 6 + 16));
+        const y = Math.max(stub.local.y + stub.local.height / 2 - STUB_HEIGHT / 2, lastBottom + STUB_GAP);
+        lastBottom = y + STUB_HEIGHT;
+        const rect: DiagramRect = { x: outgoing ? nodesBox.x + nodesBox.width + 48 : leftLimit - 48 - width, y, width, height: STUB_HEIGHT };
+        foldedStubs.push({ stub, rect, label, pts: [] });
+        addPort(outgoing ? stub.t.sourceId : stub.t.targetId, outgoing ? 'right' : 'left', `${stub.t.id}:stub`, y + STUB_HEIGHT / 2);
+        allPlaced.push(rect);
+        labelBoxes.push(rect);
+      }
+    }
+    const phantomOn = (id: string, side: SmSide) => (side === 'left' && autostartState?.id === id && asRect ? 1 : 0);
+    const portAt = (id: string, rect: DiagramRect, side: SmSide, key: string): Pt => {
+      const list = [...(ports.get(`${id}|${side}`) ?? [])].sort((a, b) => a.order - b.order);
+      const index = list.findIndex(e => e.key === key);
+      const phantom = phantomOn(id, side);
+      let frac = (index + phantom + 1) / (list.length + phantom + 1);
+      if (side === 'top' && loopNodes.has(id)) frac = index % 2 === 0 ? 0.1 + 0.06 * (index / 2) : 0.9 - 0.06 * ((index - 1) / 2);
+      return isVertical(side)
+        ? { x: rect.x + rect.width * frac, y: side === 'top' ? rect.y : rect.y + rect.height }
+        : { x: side === 'left' ? rect.x : rect.x + rect.width, y: rect.y + rect.height * frac };
+    };
+    const away = (pt: Pt, side: SmSide, by = 12): Pt => ({ x: pt.x + [by, 0, -by, 0][SIDE_DIR[side]], y: pt.y + [0, by, 0, -by][SIDE_DIR[side]] });
+    if (autostartState && asRect) foldedPsCy = slotY(asRect, 0, (ports.get(`${autostartState.id}|left`)?.length ?? 0) + 1);
+
+    const router = new OrthogonalRouter(leafRects.map(r => ({ x: r.x, y: r.y, width: r.width, height: r.height })));
+    for (const [id, count] of loopNodes) {
+      const r = rectOf(id)!;
+      const w = Math.max(28, r.width * 0.5);
+      const lift = 30 + (count - 1) * 16;
+      router.addObstacle({ x: r.x + r.width / 2 - w / 2, y: r.y - lift - 4, width: w, height: lift + 4, inflate: 3 });
+    }
+    if (asRect && foldedPsCy !== undefined) {
+      router.addObstacle({ x: asRect.x - 50, y: foldedPsCy - 1, width: 50, height: 2, inflate: 3 });
+      router.addObstacle({ x: asRect.x - 50, y: foldedPsCy - 7, width: 14, height: 14, inflate: 3 });
+    }
+    for (const fs of foldedStubs) router.addObstacle(fs.rect);
+    const span = (p: SmPlanned) => Math.abs(centreY(p.src) - centreY(p.tgt)) + Math.abs(p.src.x - p.tgt.x);
+    for (const p of [...routed].sort((a, b) => span(a) - span(b))) {
+      const [a, b] = sideMap.get(p.t.id)!;
+      const from = portAt(p.t.sourceId, p.src, a, `${p.t.id}:s`);
+      const to = portAt(p.t.targetId, p.tgt, b, `${p.t.id}:t`);
+      routedPts.set(p.t.id, removeCollinear([from, ...router.route(away(from, a), away(to, b), SIDE_DIR[a]), to]));
+    }
+    for (const fs of foldedStubs) {
+      const outgoing = fs.stub.outgoing;
+      const side: SmSide = outgoing ? 'right' : 'left';
+      const localId = outgoing ? fs.stub.t.sourceId : fs.stub.t.targetId;
+      const from = portAt(localId, fs.stub.local, side, `${fs.stub.t.id}:stub`);
+      const cy = fs.rect.y + fs.rect.height / 2;
+      const end: Pt = { x: outgoing ? fs.rect.x : fs.rect.x + fs.rect.width, y: cy };
+      const route = removeCollinear([from, ...router.route(away(from, side), away(end, outgoing ? 'left' : 'right'), SIDE_DIR[side]), end]);
+      fs.pts = outgoing ? route : [...route].reverse();
+    }
+    allRoutes.push(...routedPts.values(), ...foldedStubs.map(f => f.pts));
+  }
+
+  // A label for a folded route: beside or above one of its runs, clear of states, other labels and every route.
+  const placeRoutedLabel = (pts: Pt[], text: string): EdgeLabelPoint => {
+    const candidates = edgeLabelCandidates(pts);
+    for (const c of candidates) {
+      const box = textBox(c.x, c.y, text, SM_LABEL_SIZE, c.anchor ?? 'middle');
+      const padded = { x: box.x - 1.5, y: box.y - 1.5, width: box.width + 3, height: box.height + 3 };
+      if (labelBoxes.some(b => boxesIntersect(b, padded)) || leafRects.some(r => boxesIntersect(r, padded))
+        || allRoutes.some(r => polylineCrossesBox(r, padded, 0))) continue;
+      labelBoxes.push(box);
+      return c;
+    }
+    return placeLabel(candidates[0], text);
+  };
+
   // --- plan every in-view transition -----------------------------------------------------------------------
   const maxBottom = Math.max(...allPlaced.map(r => r.y + r.height));
   const bottomLevels: [number, number][][] = [];
@@ -1080,6 +1436,11 @@ function renderStateMachineLayer(layer: Layer, source: ReportStateMachineSource,
     const sR = src.x + src.width;
     let path: string;
     let at: EdgeLabelPoint;
+    if (p.cls === 'routed') {
+      deferredEdges.push({ into: edgeEls, index: edgeEls.push('') - 1, edge, pts: routedPts.get(t.id)!, text: label });
+      drawnEdges++;
+      continue;
+    }
     if (p.cls === 'self') {
       const index = loopsOn.get(t.sourceId) ?? 0;
       loopsOn.set(t.sourceId, index + 1);
@@ -1138,7 +1499,7 @@ function renderStateMachineLayer(layer: Layer, source: ReportStateMachineSource,
   if (autostartState && asRect) {
     const psSize = 14;
     const psX = asRect.x - 50;
-    const psCy = slotY(asRect, 0, (ins.get(autostartState.id)?.length ?? 0) + 1);
+    const psCy = foldedPsCy ?? slotY(asRect, 0, (ins.get(autostartState.id)?.length ?? 0) + 1);
     initialPseudostateEls = `<circle class="initial-pseudostate" cx="${psX + psSize / 2}" cy="${psCy}" r="${psSize / 2}" fill="#182231" stroke="#182231" stroke-width="1.2"/>`
       + `<path id="edge-initial-${escapeHtml(autostartState.id)}" d="M ${psX + psSize} ${psCy} L ${asRect.x} ${psCy}" fill="none" stroke="${EDGE_STROKE}" stroke-width="1.1" marker-end="url(#rf-arrow)"/>`;
     allPlaced.push({ x: psX, y: psCy - psSize / 2, width: psSize, height: psSize });
@@ -1147,7 +1508,17 @@ function renderStateMachineLayer(layer: Layer, source: ReportStateMachineSource,
   // Off-view connectors: a labelled stub in a gutter right of (outgoing) or left of (incoming) the diagram.
   // The route runs along the gutters and a channel above the diagram when the straight way would cross a state.
   const stubEls: string[] = [];
-  if (stubs.length > 0) {
+  if (folded) {
+    for (const fs of foldedStubs) {
+      const { rect } = fs;
+      const text = shortTransitionLabel(fs.stub.t);
+      deferredEdges.push({ into: stubEls, index: stubEls.push('') - 1, edge: { id: fs.stub.t.id, sourceId: fs.stub.t.sourceId, targetId: fs.stub.t.targetId, label: text, kind: 'transition' }, pts: fs.pts, text });
+      stubEls.push(`<g class="sm-stub" data-x="${rect.x}" data-y="${rect.y}" data-w="${rect.width}" data-h="${rect.height}"><rect x="${rect.x}" y="${rect.y}" width="${rect.width}" height="${rect.height}" rx="11" fill="#f4f6f8" stroke="${NODE_STROKE}" stroke-width="1" stroke-dasharray="3 2"/>`
+        + `<text x="${rect.x + rect.width / 2}" y="${rect.y + 15}" text-anchor="middle" font-size="10" fill="${TEXT_COLOR}">${escapeHtml(fs.label)}</text></g>`);
+      drawnEdges++;
+    }
+    for (const d of deferredEdges) d.into[d.index] = drawStyledEdge(d.edge, pointsToPath(d.pts), d.text ? placeRoutedLabel(d.pts, d.text) : undefined);
+  } else if (stubs.length > 0) {
     const content = boundsOf(allPlaced, 0);
     const rightEdge = Math.max(content.x + content.width, gutterRight);
     const leftEdge = Math.min(content.x, gutterLeft);

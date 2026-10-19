@@ -68,3 +68,12 @@ A figure is legible when (min font in user units) x (rendered scale) >= 8px.
 - WP7: F5 in `src/features/hmi/hmiReport.ts` and `hmiReportSections.ts`.
 ## Phase B
 - WP5: F4 for state machines and sequence diagrams. WP6: F4 for IBDs.
+
+## Final status (2026-10-19)
+All WPs done (WP1-WP8, WP5a/WP5b/WP6). Final audit, all four cases (fixture, MR_PLD_ECU, inductance_heater, stress):
+0 svg geometry defects (overlaps, edges through nodes, text over borders, outside viewBox), 0 paper overflow on screen
+and in print, 0 figures taller than a page, 0 fixed elements over content. Every diagram prints at >= 8px.
+Accepted exception: the HMI picture and simulator of very wide HMIs (MR-PLD 1302px) print below 8px even on a
+landscape page; every HMI detail is listed at full size in the component table, and on screen the simulator has a
+Fit / 100% toggle. Reporting + HMI tests: 477 passing.
+Open (outside scope): F7, inductance_heater.adia fails to load (`migrateV3ToV4.sortRecord`).

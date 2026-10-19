@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { BlockData, ConnectorData, PartData } from '../../types/sysml_types';
 import { renderIbdDiagram } from './reportDiagrams';
+import { figurePageFit } from './reportDiagramModel';
+import { edgeNodeCollisions, figuresOf, labelCollisions, outsideViewBox, parseFigure } from './figureGeometry.testutil';
 import { createReportSnapshot, toHierarchySource } from './reportSnapshot';
 
 const blocks: BlockData[] = [
@@ -137,3 +139,59 @@ describe('renderIbdDiagram', () => {
 });
 
 
+
+describe('renderIbdDiagram page fit', () => {
+  const mkBlock = (id: string, name: string, ports: { id: string; name: string; direction: 'in' | 'out' | 'inout' }[]) =>
+    ({ id, name, stereotype: 'block', x: 0, y: 0, width: 160, height: 80, properties: [], operations: [], constraints: [], classes: [], ports: ports.map(p => ({ ...p, type: 'Real' })) }) as unknown as BlockData;
+  const ctx = (ports: { id: string; name: string; direction: 'in' | 'out'; side?: 'left' | 'right' }[] = []) =>
+    ({ ...contextBlock, ports: ports.map(p => ({ ...p, type: 'Real' })) }) as unknown as BlockData;
+  const figureOf = (html: string) => {
+    const figure = figuresOf(html)[0];
+    const g = parseFigure(figure);
+    return { figure, g, fit: figurePageFit(g.viewBox, Number(/data-min-font="([0-9.]+)"/.exec(figure)![1])) };
+  };
+
+  it('fits a 10-part / 20-connector IBD with ports legibly, without overlaps', () => {
+    const blocks10 = Array.from({ length: 10 }, (_, i) => mkBlock(`b${i}`, `Module${i}Controller`, [
+      { id: `b${i}-in1`, name: `supply${i}`, direction: 'in' }, { id: `b${i}-in2`, name: 'canBus', direction: 'in' },
+      { id: `b${i}-out1`, name: 'status', direction: 'out' }, { id: `b${i}-out2`, name: `drive${i}`, direction: 'out' },
+    ]));
+    const parts10 = blocks10.map((b, i) => ({ id: `q${i}`, name: `module${i}`, blockId: 'sys', typeId: b.id, multiplicity: '1', x: 0, y: 0, width: 140, height: 70 }) as PartData);
+    const conns: ConnectorData[] = [];
+    for (let i = 0; i < 10; i++) {
+      conns.push({ id: `k${i}a`, sourcePartId: `q${i}`, sourcePortId: `b${i}-out1`, targetPartId: `q${(i + 1) % 10}`, targetPortId: `b${(i + 1) % 10}-in1`, itemFlow: `flow${i}` } as ConnectorData);
+      conns.push({ id: `k${i}b`, sourcePartId: `q${i}`, sourcePortId: `b${i}-out2`, targetPartId: `q${(i + 3) % 10}`, targetPortId: `b${(i + 3) % 10}-in2` } as ConnectorData);
+    }
+    const envPorts = [{ id: 'e1', name: 'KL30', direction: 'in' as const }, { id: 'e2', name: 'canH', direction: 'in' as const }, { id: 'e3', name: 'fan', direction: 'out' as const }];
+    const html = renderIbdDiagram({ contextBlock: ctx(envPorts), parts: parts10, connectors: conns, blocks: blocks10 });
+    const { g, fit } = figureOf(html);
+    expect(html).toContain('10 parts, 20 connectors');
+    expect(fit.legible).toBe(true);
+    expect(fit.orientation).toBe('portrait');
+    expect(edgeNodeCollisions(g)).toEqual([]);
+    expect(labelCollisions(g)).toEqual([]);
+    expect(outsideViewBox(g)).toEqual([]);
+  });
+
+  it('wraps a 7-part IBD with long names and no connectors into rows that print legibly in portrait', () => {
+    const longBlocks = Array.from({ length: 7 }, (_, i) => mkBlock(`t${i}`, `ExtraordinarilyDescriptiveSubsystemType${i} with trailing words`, [
+      { id: `t${i}-p`, name: 'interfaceSignal', direction: 'inout' },
+    ]));
+    const longParts = longBlocks.map((b, i) => ({ id: `lp${i}`, name: `component_with_a_long_instance_name_${i}`, blockId: 'sys', typeId: b.id, x: 0, y: 0, width: 140, height: 70 }) as PartData);
+    const html = renderIbdDiagram({ contextBlock, parts: longParts, connectors: [], blocks: longBlocks });
+    const { g, fit } = figureOf(html);
+    expect(html).toContain('7 parts, 0 connectors');
+    expect(fit.orientation).toBe('portrait');
+    expect(fit.legible).toBe(true);
+    expect(g.nodes).toHaveLength(7);
+    g.nodes.forEach(n => expect(n.width).toBeLessThan(260));
+    expect(labelCollisions(g)).toEqual([]);
+    expect(outsideViewBox(g)).toEqual([]);
+  });
+
+  it('still accounts for connectors that are not drawn after wrapping into rows', () => {
+    const outside = [{ id: 'x1', sourcePartId: 'part1', sourcePortId: 'p-in', targetPartId: 'ghost', targetPortId: 'nope' } as ConnectorData];
+    const html = renderIbdDiagram({ contextBlock, parts, connectors: [...connectors, ...outside], blocks });
+    expect(html).toContain('data-drawn-edges="1" data-omitted-edges="1"');
+  });
+});
