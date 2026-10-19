@@ -821,7 +821,6 @@ export function projectNormalizedDiagram(
         })),
         operations: b.operations ?? [],
         constraints: b.constraints ?? [],
-        classes: [],
         ports: legacyPorts,
         satisfiedReqIds: satisfiedReqIdsBySource.get(b.id) ?? [],
       };
@@ -837,7 +836,6 @@ export function projectNormalizedDiagram(
         properties: [],
         operations: [],
         constraints: [],
-        classes: [],
         ports: [],
       };
     }
@@ -874,7 +872,6 @@ export function projectNormalizedDiagram(
       properties: [],
       operations: [],
       constraints: [],
-      classes: [],
       ports: [],
     };
     entityCache.blocks.set(req.id, { entity: req, coords, result });
@@ -902,7 +899,6 @@ export function projectNormalizedDiagram(
       properties: [],
       operations: [],
       constraints: [],
-      classes: [],
       ports: [],
     };
     entityCache.blocks.set(vc.id, { entity: vc, coords, result });

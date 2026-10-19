@@ -57,6 +57,11 @@ export function blockCompartmentHeight(block: CompartmentSource): number {
   return lines === 0 ? 0 : 8 + lines * 12;
 }
 
+/** Vertical space of an operations / constraints compartment with `lineCount` rows (0 when empty); every row is drawn. */
+export function featureCompartmentHeight(lineCount: number): number {
+  return lineCount <= 0 ? 0 : 13 + lineCount * 12;
+}
+
 /**
  * Computes a safe minimum SVG frame for a legacy SysML block. The renderer
  * uses fixed-size text rows, so the frame must grow with the longest visible
@@ -66,14 +71,12 @@ export function computeBlockDisplayBounds(block: BlockData): BlockDisplayBounds 
   const propertyLines = block.properties.map(property =>
     `${formatLegacyProperty(property)}${property.defaultValue ? ` = ${property.defaultValue}` : ''}`,
   );
-  const classLines = block.classes ?? [];
-  const operationLines = block.operations.slice(0, 2);
-  const constraintLines = (block.constraints ?? []).slice(0, 2).map(constraint => `{${constraint}}`);
+  const operationLines = block.operations;
+  const constraintLines = (block.constraints ?? []).map(constraint => `{${constraint}}`);
   const visibleLines = [
     block.isAbstract ? `${block.name} {abstract}` : block.name,
     `«${block.stereotype}»`,
     ...propertyLines,
-    ...classLines,
     ...operationLines,
     ...constraintLines,
     ...blockCompartmentLines(block),
@@ -81,9 +84,9 @@ export function computeBlockDisplayBounds(block: BlockData): BlockDisplayBounds 
   const longestLine = visibleLines.reduce((max, line) => Math.max(max, line.length), 0);
   const width = Math.max(block.width || 150, Math.ceil(longestLine * 6.2 + 20));
 
-  const ownedFeatureRows = Math.max(1, propertyLines.length + classLines.length);
-  const heightFromContent = 45 + ownedFeatureRows * 12 + 10 + (classLines.length > 0 ? 7 : 0) +
-    (operationLines.length > 0 ? 25 : 0) + (constraintLines.length > 0 ? 25 : 0) + blockCompartmentHeight(block);
+  const ownedFeatureRows = Math.max(1, propertyLines.length);
+  const heightFromContent = 45 + ownedFeatureRows * 12 + 10 +
+    featureCompartmentHeight(operationLines.length) + featureCompartmentHeight(constraintLines.length) + blockCompartmentHeight(block);
   const heightFromPorts = 35 + block.ports.length * 15;
   return { width, height: Math.max(block.height || 100, heightFromContent, heightFromPorts) };
 }

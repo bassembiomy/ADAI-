@@ -155,9 +155,10 @@ import { createEmptyRepositoryV4 } from './engine/sysml/domain';
 import { BlockFeatureEditor } from './components/sysml/BlockFeatureEditor';
 import { RelationshipEndEditor } from './components/sysml/RelationshipEndEditor';
 import { restoreConnectionErrorFocus, SysmlConnectionErrorDetails } from './components/sysml/SysmlConnectionErrorDetails';
-import { computeBlockDisplayBounds, blockCompartmentLines, blockCompartmentHeight } from './components/sysml/blockLayout';
+import { computeBlockDisplayBounds, blockCompartmentLines, blockCompartmentHeight, featureCompartmentHeight } from './components/sysml/blockLayout';
 import { AllocationMatrix as CanonicalAllocationMatrix } from './components/sysml/AllocationMatrix';
 import { IbdConnectorEditor } from './components/sysml/IbdConnectorEditor';
+import { buildConnectorUpdateCommand, connectorEditorValue } from './services/sysmlConnectorUpdateCommands';
 import { RequirementGovernancePanel } from './components/sysml/RequirementGovernancePanel';
 import { resolveSysmlReferenceLabel, sysmlObjectLabel } from './features/sysml/sysmlDisplayLabel';
 import { RequirementAssignmentsPanel } from './components/trmSim/RequirementAssignmentsPanel';
@@ -226,7 +227,8 @@ import { pathFromKey } from './engine/sysml/partOccurrences';
 import { DEFAULT_NESTED_PART_DEPTH, MAX_NESTED_PART_DEPTH, isDrawnInIbd, layoutIbdNestedParts } from './features/sysml/ibdNestedParts';
 import { IbdConnectorEndpoint } from './components/sysml/IbdConnectorEndpoint';
 import { resolvePackageDiagramActivation } from './services/sysmlDiagramActivation';
-import { diagramFrameLabel, diagramKindAbbreviation } from './features/sysml/diagramFrame';
+import { presentationFromBlockGeometry } from './services/blockGeometryPresentation';
+import { diagramFrameLabel, diagramFrameRect, diagramKindAbbreviation } from './features/sysml/diagramFrame';
 import { requirementStatusColor } from './features/sysml/requirementStatus';
 import { edgeBadgeLabel } from './features/sysml/edgeNotation';
 import { getDiagramKindLabel } from './features/modelExplorer/modelExplorerCapabilities';
@@ -7597,6 +7599,8 @@ const ADIA = () => {
   const selectedPart = useMemo(() => selectedIds.length === 1 ? parts.find(p => p.id === selectedIds[0]) : null, [selectedIds, parts]);
 
   const selectedConnector = useMemo(() => selectedIds.length === 1 ? connectors.find(c => c.id === selectedIds[0]) : null, [selectedIds, connectors]);
+  /** The connector inspector edits the stored ConnectorUsage, so editing one field keeps the others. */
+  const editedConnector = useMemo(() => selectedConnector ? connectorEditorValue(canonicalSysmlRepository, selectedConnector.id) : undefined, [selectedConnector, canonicalSysmlRepository]);
   const selectedInterfaceRealization = useMemo(() => selectedIds.length === 1 ? interfaceRealizations.find(ir => ir.id === selectedIds[0]) : null, [selectedIds, interfaceRealizations]);
   const emptyInspectorRepoV4 = useMemo(() => createEmptyRepositoryV4(), []);
   const shouldDeriveInspectorV4 = !isPropertiesCollapsed && selectedIds.length > 0;
@@ -8697,9 +8701,7 @@ const ADIA = () => {
   }, [blocks, currentLayerId, addError]);
 
   const enterBlock = useCallback((blockId: string) => {
-    console.log('[DEBUG_ENTER_BLOCK] called with blockId:', blockId);
     const block = blocks.find(b => b.id === blockId) ?? (canonicalSysmlRepository.definitions[blockId]?.kind === 'block' ? { id: blockId, name: canonicalSysmlRepository.definitions[blockId].name } : null);
-    console.log('[DEBUG_ENTER_BLOCK] resolved block:', block);
     if (!block) return;
 
     const nav = enterBlockContext(
@@ -9361,11 +9363,7 @@ const ADIA = () => {
 
     if (hasGeometric && !hasSemantic) {
       const activeDiagramId = activeSysmlDiagramId;
-      const presentation: PresentationCoordinates = {};
-      if (updates.x !== undefined || updates.ibdX !== undefined) presentation.x = updates.x ?? updates.ibdX;
-      if (updates.y !== undefined || updates.ibdY !== undefined) presentation.y = updates.y ?? updates.ibdY;
-      if (updates.width !== undefined || updates.ibdWidth !== undefined) presentation.width = updates.width ?? updates.ibdWidth;
-      if (updates.height !== undefined || updates.ibdHeight !== undefined) presentation.height = updates.height ?? updates.ibdHeight;
+      const presentation: PresentationCoordinates = presentationFromBlockGeometry(updates);
       if (isDraggingRef.current || isResizingRef.current) {
         updatePresentationDraft(id, presentation);
         const existing = pendingPresentationUpdatesRef.current.get(id) ?? {};
@@ -9384,11 +9382,7 @@ const ADIA = () => {
 
     if (hasGeometric && hasSemantic) {
       const activeDiagramId = activeSysmlDiagramId;
-      const presentation: PresentationCoordinates = {};
-      if (updates.x !== undefined) presentation.x = updates.x;
-      if (updates.y !== undefined) presentation.y = updates.y;
-      if (updates.width !== undefined) presentation.width = updates.width;
-      if (updates.height !== undefined) presentation.height = updates.height;
+      const presentation: PresentationCoordinates = presentationFromBlockGeometry(updates);
       const semanticPatch = { ...updates };
       geometricKeys.forEach(k => delete (semanticPatch as any)[k]);
       const semanticCommand = buildBlockPropertyUpdateCommand(canonicalSysmlRepository, id, semanticPatch as Record<string, unknown>);
@@ -10336,17 +10330,6 @@ const ADIA = () => {
     }
     applySysmlDeletion(transaction, 'Deleted connector');
   }, [blocks, relationships, parts, connectors, addError, addToHistory, authorizedBaselineIds, applySysmlDeletion]);
-
-  const updateConnector = useCallback((id: string, updates: Partial<ConnectorData>) => {
-    const result = handleExecuteSysmlCommand({
-      type: 'updateElement',
-      elementId: id,
-      patch: updates,
-    });
-    if (!result.committed) {
-      result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
-    }
-  }, [handleExecuteSysmlCommand, addError]);
 
   const deleteInterfaceRealization = useCallback((id: string) => {
     addToHistory();
@@ -13391,27 +13374,45 @@ const ADIA = () => {
     );
   }), [diagramShortcuts, selectedIds, packageRelationshipTool, addError, handleBlockMouseDown, openExactDiagramById]);
 
-  /** SysML diagram frame with its `pkg [...] ... [...]` header, sized around the content. */
+  /** SysML diagram frame with its `<kind> [...] ... [...]` header, sized around the content (derived, never stored). */
   const renderPackageDiagramFrame = useCallback((): React.ReactNode => {
-    if (diagramMode !== 'package') return null;
+    if (diagramMode !== 'package' && diagramMode !== 'bdd' && diagramMode !== 'requirements') return null;
     const label = diagramFrameLabel(canonicalSysmlRepository, activeSysmlDiagramId);
     if (!label) return null;
-    const rects = [...packageNestingNodes, ...diagramShortcuts];
-    const padding = 40;
-    const minX = rects.length ? Math.min(...rects.map(r => r.x)) - padding : 40;
-    const minY = rects.length ? Math.min(...rects.map(r => r.y)) - padding - 24 : 40;
-    const maxX = rects.length ? Math.max(...rects.map(r => r.x + r.width)) + padding : 640;
-    const maxY = rects.length ? Math.max(...rects.map(r => r.y + r.height)) + padding : 440;
+    const shownBlocks = sysmlCanvasView.blocks.filter(block => {
+      if (diagramMode === 'bdd') return block.stereotype !== 'requirement';
+      if (diagramMode === 'requirements') {
+        return ['requirement', 'block', 'part', 'testCase', 'activity', 'useCase', 'stateMachine'].includes(block.stereotype)
+          && requirementsDiagramScope.visibleBlockIds.has(block.id)
+          && (block.layerId ?? 'root') === currentLayerId;
+      }
+      return true;
+    });
+    const rects = [
+      ...sysmlCanvasView.packages.map(pkg => ({ x: pkg.x, y: pkg.y, width: pkg.width, height: pkg.height })),
+      ...shownBlocks.map(block => {
+        const bounds = computeBlockDisplayBounds(block);
+        return { x: block.x, y: block.y, width: bounds.width, height: bounds.height };
+      }),
+      ...diagramShortcuts,
+    ];
+    const canvasEl = canvasRef.current;
+    const frame = diagramFrameRect(rects, {
+      width: canvasEl?.clientWidth || 900, height: canvasEl?.clientHeight || 600,
+      scale: view.scale, offsetX: view.offsetX, offsetY: view.offsetY,
+    });
+    const minX = frame.x;
+    const minY = frame.y;
     const tabWidth = label.length * 6.4 + 20;
     return (
       <g data-presentation-kind="diagramFrame" pointerEvents="none">
-        <rect x={minX} y={minY} width={maxX - minX} height={maxY - minY} fill="none" stroke="var(--sysml-block-stroke)" strokeWidth={1.2} />
+        <rect x={minX} y={minY} width={frame.width} height={frame.height} fill="none" stroke="var(--sysml-block-stroke)" strokeWidth={1.2} />
         <path d={`M ${minX} ${minY + 20} L ${minX + tabWidth - 8} ${minY + 20} L ${minX + tabWidth} ${minY + 12} L ${minX + tabWidth} ${minY}`}
           fill="none" stroke="var(--sysml-block-stroke)" strokeWidth={1.2} />
         <text x={minX + 8} y={minY + 14} fill="var(--sysml-block-text)" fontSize={11} fontFamily="monospace">{label}</text>
       </g>
     );
-  }, [diagramMode, canonicalSysmlRepository, activeSysmlDiagramId, packageNestingNodes, diagramShortcuts]);
+  }, [diagramMode, canonicalSysmlRepository, activeSysmlDiagramId, sysmlCanvasView.blocks, sysmlCanvasView.packages, diagramShortcuts, requirementsDiagramScope, currentLayerId, view.scale, view.offsetX, view.offsetY]);
 
   const renderBlocks = useCallback((ibdContextLayer: 'all' | 'frame' | 'ports' = 'all'): React.ReactNode => {
     // In BDD mode, always treat as root level (ignore currentLayerId from IBD navigation)
@@ -13432,7 +13433,7 @@ const ADIA = () => {
                 onClick={(e) => { e.stopPropagation(); setSelectedIds([block.id]); }}
                 style={{ cursor: 'move', pointerEvents: 'all' }}
               />
-              <text x={frame.x + 5} y={frame.y + 15} fill="#666" fontSize={12} fontWeight="bold">ibd [Block] {block.name}</text>
+              <text x={frame.x + 5} y={frame.y + 15} fill="#666" fontSize={12} fontWeight="bold">{diagramFrameLabel(canonicalSysmlRepository, activeSysmlDiagramId) ?? `ibd [Block] ${block.name}`}</text>
 
               {isSelected && ['nw', 'ne', 'sw', 'se'].map(h => {
                 const hx = h.includes('e') ? frame.x + frame.w : frame.x;
@@ -13577,10 +13578,10 @@ const ADIA = () => {
               {/* Requirement Specifics */}
               {block.stereotype === 'requirement' ? (
                 <g transform="translate(5, 45)">
-                  <text y={0} fill="#f97316" fontSize={10} fontWeight="bold">Id: {block.reqId}</text>
+                  <text y={0} fill="#f97316" fontSize={10} fontWeight="bold">{`id = "${block.reqId ?? ''}"`}</text>
                   <foreignObject x={0} y={5} width={Math.max(10, displayWidth - 10)} height={Math.max(10, displayHeight - 55)}>
                     <div className="text-[9px] text-[#aaa] overflow-hidden h-full">
-                      {block.description}
+                      {`text = "${block.description ?? ''}"`}
                     </div>
                   </foreignObject>
                   {/* Status Indicator */}
@@ -13660,25 +13661,15 @@ const ADIA = () => {
                       {formatLegacyProperty(prop)}{prop.defaultValue ? ` = ${prop.defaultValue}` : ''}
                     </text>
                   ))}
-                  {block.classes && block.classes.length > 0 && (
-                    <g transform={`translate(0, ${block.properties.length * 12 + 5})`}>
-                      <line x1={-5} y1={-2} x2={displayWidth - 5} y2={-2} stroke="#444" strokeWidth={1} />
-                      {block.classes.map((cls, i) => (
-                        <text key={i} y={i * 12 + 8} fill="#aaa" fontSize={10} fontFamily="monospace">
-                          {cls}
-                        </text>
-                      ))}
-                    </g>
-                  )}
                 </g>
               )}
 
-              {/* Operations Separator if needed */}
+              {/* Operations Separator if needed; every operation is drawn */}
               {block.operations.length > 0 && (
                 <>
-                  <line x1={0} y1={bodyBottom - 25} x2={displayWidth} y2={bodyBottom - 25} stroke="#444" strokeWidth={1} />
-                  <g transform={`translate(5, ${bodyBottom - 15})`}>
-                    {block.operations.slice(0, 2).map((op, i) => (
+                  <line x1={0} y1={bodyBottom - featureCompartmentHeight(block.operations.length)} x2={displayWidth} y2={bodyBottom - featureCompartmentHeight(block.operations.length)} stroke="#444" strokeWidth={1} />
+                  <g transform={`translate(5, ${bodyBottom - featureCompartmentHeight(block.operations.length) + 10})`}>
+                    {block.operations.map((op, i) => (
                       <text data-help-feature="live:App:9dbeffc76288"
                         key={`${op}-${i}`}
                         y={i * 12}
@@ -13693,12 +13684,12 @@ const ADIA = () => {
                 </>
               )}
 
-              {/* Constraints */}
+              {/* Constraints; every constraint is drawn above the operations compartment */}
               {block.constraints && block.constraints.length > 0 && (
                 <>
-                  <line x1={0} y1={bodyBottom - (block.operations.length > 0 ? 40 : 25)} x2={displayWidth} y2={bodyBottom - (block.operations.length > 0 ? 40 : 25)} stroke="#444" strokeWidth={1} />
-                  <g transform={`translate(5, ${bodyBottom - (block.operations.length > 0 ? 30 : 15)})`}>
-                    {block.constraints.slice(0, 2).map((c, i) => (
+                  <line x1={0} y1={bodyBottom - featureCompartmentHeight(block.operations.length) - featureCompartmentHeight(block.constraints.length)} x2={displayWidth} y2={bodyBottom - featureCompartmentHeight(block.operations.length) - featureCompartmentHeight(block.constraints.length)} stroke="#444" strokeWidth={1} />
+                  <g transform={`translate(5, ${bodyBottom - featureCompartmentHeight(block.operations.length) - featureCompartmentHeight(block.constraints.length) + 10})`}>
+                    {block.constraints.map((c, i) => (
                       <text key={i} y={i * 12} fill="#aaa" fontSize={10} fontFamily="monospace">{`{${c}}`}</text>
                     ))}
                   </g>
@@ -13775,7 +13766,7 @@ const ADIA = () => {
         </g>
       );
     });
-  }, [blocks, culledDiagram, sysmlCanvasView, view.scale, parts, selectedIds, pendingBddBlockId, isCreatingTransition, handleBlockMouseDown, diagramMode, currentLayerId, activeSysmlDiagramId, sysmlDiagramPresentations, connectorSource, handlePortClick, handlePortMouseDown, enterBlock, enterRequirement, handleResizeMouseDown, interfaceRealizations, transitionSourceId, requirementsDiagramScope, bddFeatureDrag, dropBddFeatureOnBlock, startBddFeatureDrag, openCanvasSymbolDiagram]);
+  }, [blocks, culledDiagram, sysmlCanvasView, view.scale, parts, selectedIds, pendingBddBlockId, isCreatingTransition, handleBlockMouseDown, diagramMode, currentLayerId, activeSysmlDiagramId, canonicalSysmlRepository, sysmlDiagramPresentations, connectorSource, handlePortClick, handlePortMouseDown, enterBlock, enterRequirement, handleResizeMouseDown, interfaceRealizations, transitionSourceId, requirementsDiagramScope, bddFeatureDrag, dropBddFeatureOnBlock, startBddFeatureDrag, openCanvasSymbolDiagram]);
 
   const renderRelationships = useCallback((): React.ReactNode => {
     const targetRelationships = diagramMode !== 'package' && culledDiagram ? culledDiagram.visibleRelationships : sysmlCanvasView.relationships;
@@ -17553,15 +17544,6 @@ const ADIA = () => {
                     />
                   </div>
                   <div>
-                    <Label>Nested Classes / Parts</Label>
-                    <textarea data-help-feature="app-block-classes" data-help-source="src/App.tsx"
-                      value={(selectedBlock.classes || []).join('\n')}
-                      onChange={(e) => updateBlock(selectedBlock.id, { classes: e.target.value.split('\n').filter(s => s) })}
-                      className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#f97316]"
-                      placeholder="ClassName : Type"
-                    />
-                  </div>
-                  <div>
                     <Label>Properties</Label>
                     <BlockPropertiesEditor
                       properties={selectedBlock.properties}
@@ -17860,19 +17842,8 @@ const ADIA = () => {
                 </>
               ) : selectedConnector ? (
                 <>
-                  <IbdConnectorEditor
-                    connector={{
-                      id: selectedConnector.id,
-                      kind: selectedConnector.kind || 'assembly',
-                      ownerId: currentLayerId,
-                      sourcePortId: `${selectedConnector.sourcePartId}::${selectedConnector.sourcePortId}`,
-                      targetPortId: `${selectedConnector.targetPartId}::${selectedConnector.targetPortId}`,
-                      itemFlowId: selectedConnector.itemFlow,
-                      sourceParameterId: (selectedConnector as any).sourceParameterId,
-                      targetParameterId: (selectedConnector as any).targetParameterId,
-                      itemProperty: (selectedConnector as any).itemProperty,
-                      itemUnit: (selectedConnector as any).itemUnit,
-                    }}
+                  {editedConnector && <IbdConnectorEditor
+                    connector={editedConnector}
                     availablePorts={[
                       ...((blocksById.get(currentLayerId)?.ports ?? []).map(port => ({
                         id: `${currentLayerId}::${port.id}`,
@@ -17891,26 +17862,16 @@ const ADIA = () => {
                     definitions={canonicalSysmlRepository.definitions}
                     diagnostics={canonicalSysmlRepository.connectors[selectedConnector.id] ? validateConnector(canonicalSysmlRepository, selectedConnector.id) : []}
                     onChange={(updatedConn) => {
-                      const [srcPart, srcPort] = updatedConn.sourcePortId.split('::');
-                      const [tgtPart, tgtPort] = updatedConn.targetPortId.split('::');
-                      updateConnector(selectedConnector.id, {
-                        kind: updatedConn.kind,
-                        sourcePartId: srcPart || selectedConnector.sourcePartId,
-                        sourcePortId: srcPort || selectedConnector.sourcePortId,
-                        targetPartId: tgtPart || selectedConnector.targetPartId,
-                        targetPortId: tgtPort || selectedConnector.targetPortId,
-                        itemFlow: updatedConn.itemFlowId,
-                        sourceParameterId: updatedConn.sourceParameterId,
-                        targetParameterId: updatedConn.targetParameterId,
-                        itemProperty: updatedConn.itemProperty,
-                        itemUnit: updatedConn.itemUnit,
-                      } as any);
+                      const plan = buildConnectorUpdateCommand(canonicalSysmlRepository, selectedConnector.id, updatedConn);
+                      if (!plan.ok) {
+                        plan.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
+                        return;
+                      }
+                      if (!plan.command) return;
+                      const result = handleExecuteSysmlCommand(plan.command);
+                      if (!result.committed) result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
                     }}
-                  />
-                  <div className="mt-2">
-                    <Label>Label (Text)</Label>
-                    <Input data-help-feature="app-connector-label" data-help-source="src/App.tsx" value={selectedConnector.label || ''} onChange={(e) => updateConnector(selectedConnector.id, { label: e.target.value })} className="mt-1" placeholder="e.g., Control Link" />
-                  </div>
+                  />}
                   <Button data-help-feature="app-connector-delete" data-help-source="src/App.tsx" variant="outline" size="sm" onClick={() => deleteConnector(selectedConnector.id)} className="w-full border-red-800 text-red-400 hover:bg-red-950/30">Delete Connector</Button>
                 </>
               ) : selectedInterfaceRealization ? (

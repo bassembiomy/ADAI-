@@ -5485,11 +5485,9 @@
       "snapshotLine": 20429,
       "tag": "textarea",
       "label": "\"ClassName : Type\"",
-      "status": "documented",
-      "featureIds": [
-        "app-block-classes"
-      ],
-      "reason": "Reviewed semantic handler/property and authored purpose/result/limit guidance.",
+      "status": "obsolete",
+      "featureIds": [],
+      "reason": "Control removed: it wrote no stored field; the connector editor and block panel edit real repository fields only.",
       "sourceEvidence": [
         "src/App.tsx"
       ]
@@ -5869,11 +5867,9 @@
       "snapshotLine": 20784,
       "tag": "Input",
       "label": "\"e.g., Control Link\"",
-      "status": "documented",
-      "featureIds": [
-        "app-connector-label"
-      ],
-      "reason": "Reviewed semantic handler/property and authored purpose/result/limit guidance.",
+      "status": "obsolete",
+      "featureIds": [],
+      "reason": "Control removed: it wrote no stored field; the connector editor and block panel edit real repository fields only.",
       "sourceEvidence": [
         "src/App.tsx"
       ]

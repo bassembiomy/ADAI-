@@ -41,6 +41,11 @@ describe('renderIbdDiagram', () => {
     expect(html).toContain('report-figure-caption');
   });
 
+  it('uses the full Annex A frame header when the caller supplies it', () => {
+    const html = renderIbdDiagram({ contextBlock, parts, connectors, blocks, frameLabel: 'ibd [Block] ThermalSystem [Thermal Internals]' });
+    expect(html).toContain('ibd [Block] ThermalSystem [Thermal Internals]');
+  });
+
   it('offsets parallel connectors so they do not coincide', () => {
     const parallel: ConnectorData[] = [
       ...connectors,
