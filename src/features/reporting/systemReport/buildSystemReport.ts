@@ -1,4 +1,5 @@
 import type { SysmlRepository } from '../../../engine/sysml/model';
+import { diagramFrameLabel } from '../../sysml/diagramFrame';
 import type { CoverageMetrics, TraceabilityMatrix } from '../../../engine/sysml/rtm';
 import type { ReportModelDiagnostics } from '../../../services/reportModelConsistency';
 import type { BlockData, ConnectorData, PartData } from '../../../types/sysml_types';
@@ -147,6 +148,12 @@ function formatDate(date: Date): string {
 }
 
 /** Replaces any model id found in a diagnostic message by the element's name. */
+/** Annex A frame header of the Internal Block Diagram owned by the block, when the repository has one. */
+function ibdFrameLabel(repo: SysmlRepository, blockId: string): string | undefined {
+  const diagram = Object.values(repo.diagrams).find(d => d.diagramKind === 'ibd' && (d.contextElementId ?? d.ownerId) === blockId);
+  return diagram ? diagramFrameLabel(repo, diagram.id) : undefined;
+}
+
 function makeHumanizer(repo: SysmlRepository, h: HierarchySourceModel): (message: string) => string {
   const labels = new Map<string, string>();
   for (const b of h.blocks) labels.set(b.id, b.name?.trim() || friendlySysmlKind(b.stereotype, 'Block'));
@@ -430,6 +437,7 @@ export function buildSystemReport(input: SystemReportInput): string {
     html += `<p class="path-line">Context path: ${[...crumbs, `<strong>${esc(block.name)}</strong>`].join(SEP)}${node.parent ? '' : ' (top-level context)'}</p>`;
     html += num.numberFigures(renderIbdDiagram({
       contextBlock: block, parts: blockParts, connectors: touching, blocks: h.blocks, allParts: h.parts, linkFor,
+      frameLabel: ibdFrameLabel(repo, block.id),
     }));
 
     html += num.table({

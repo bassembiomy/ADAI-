@@ -53,13 +53,13 @@ function failure(code: string, elementId: string, message: string): PathSpecOutc
   return { ok: false, diagnostics: [{ code, severity: 'error', elementId, message }] };
 }
 
-function pathEndOf(spec: IbdEndpointSpec & { path: string[] }): ConnectorEnd {
+export function pathEndOf(spec: IbdEndpointSpec & { path: string[] }): ConnectorEnd {
   const portId = spec.portId ?? spec.portDefinitionId;
   return { path: [...spec.path], ...(portId ? { portId } : {}) };
 }
 
 /** Turns the part the IBD shows (property id or path string) into the property path of a connector end. */
-function toPathSpec(repo: SysmlRepository, contextId: string, spec: IbdEndpointSpec): PathSpecOutcome {
+export function toPathSpec(repo: SysmlRepository, contextId: string, spec: IbdEndpointSpec): PathSpecOutcome {
   const portId = spec.portId ?? spec.portDefinitionId;
   if (spec.path) return { ok: true, spec: { ...spec, path: [...spec.path] } };
   const occurrenceId = spec.occurrenceId;

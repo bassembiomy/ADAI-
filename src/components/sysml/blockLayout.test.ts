@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { BlockData } from '../../types/sysml_types';
-import { computeBlockDisplayBounds } from './blockLayout';
+import { computeBlockDisplayBounds, featureCompartmentHeight } from './blockLayout';
 
 const block = (overrides: Partial<BlockData> = {}): BlockData => ({
   id: 'b', name: 'NewBlock', stereotype: 'block', x: 0, y: 0, width: 150, height: 100,
-  properties: [], operations: [], constraints: [], classes: [], ports: [], ...overrides,
+  properties: [], operations: [], constraints: [], ports: [], ...overrides,
 });
 
 describe('computeBlockDisplayBounds', () => {
@@ -32,5 +32,22 @@ describe('computeBlockDisplayBounds', () => {
       properties: Array.from({ length: 8 }, (_, index) => ({ id: `p-${index}`, name: `part${index}`, type: 'Motor', kind: 'part' as const })),
     }));
     expect(bounds.height).toBeGreaterThanOrEqual(145);
+  });
+
+  it('shows every operation and constraint instead of truncating to two rows', () => {
+    const two = computeBlockDisplayBounds(block({ height: 20, operations: ['a()', 'b()'], constraints: ['x > 0', 'y > 0'] }));
+    const five = computeBlockDisplayBounds(block({
+      height: 20,
+      operations: ['a()', 'b()', 'c()', 'd()', 'e()'],
+      constraints: ['x > 0', 'y > 0', 'z > 0', 'w > 0', 'v > 0'],
+    }));
+    expect(five.height - two.height).toBe(2 * 3 * 12);
+    expect(featureCompartmentHeight(0)).toBe(0);
+    expect(featureCompartmentHeight(5)).toBe(13 + 5 * 12);
+  });
+
+  it('widens the frame for the longest operation beyond the second row', () => {
+    const bounds = computeBlockDisplayBounds(block({ operations: ['a()', 'b()', 'aVeryLongOperationNameThatNeedsRoom(parameter: Real): Real'] }));
+    expect(bounds.width).toBeGreaterThan(150);
   });
 });

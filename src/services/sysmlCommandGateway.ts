@@ -563,7 +563,6 @@ export function projectLegacyDiagram(
         })),
         operations: b.operations ?? [],
         constraints: b.constraints ?? [],
-        classes: [],
         ports: legacyPorts,
         satisfiedReqIds: satisfiedReqIdsBySource.get(b.id) ?? [],
         ...(allocationNames.get(b.id)?.allocatedFrom.length ? { allocatedFrom: allocationNames.get(b.id)!.allocatedFrom } : {}),
@@ -591,7 +590,6 @@ export function projectLegacyDiagram(
         properties: [],
         operations: [],
         constraints: [],
-        classes: [],
         ports: [],
       });
     } else {
@@ -606,7 +604,6 @@ export function projectLegacyDiagram(
         properties: [],
         operations: [],
         constraints: [],
-        classes: [],
         ports: [],
       });
     }
@@ -637,7 +634,6 @@ export function projectLegacyDiagram(
       properties: [],
       operations: [],
       constraints: [],
-      classes: [],
       ports: [],
     });
   }
@@ -659,7 +655,6 @@ export function projectLegacyDiagram(
       properties: [],
       operations: [],
       constraints: [],
-      classes: [],
       ports: [],
     });
   }

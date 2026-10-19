@@ -268,4 +268,57 @@ describe('BlockFeatureEditor', () => {
     const added = next.ports[next.ports.length - 1];
     expect(added).toMatchObject({ kind: 'full', typeId: '' });
   });
+
+  describe('port edits', () => {
+    const blockWithPorts: BlockDefinition = {
+      ...currentBlock,
+      ports: [
+        { id: 'pstd', name: 'std', kind: 'standard', typeId: '', direction: 'inout', isConjugated: false, multiplicity: { lower: 1, upper: 1, ordered: false, unique: true } },
+        { id: 'pblk', name: 'blk', kind: 'standard', typeId: 'EngineBlock', direction: 'inout', isConjugated: false, multiplicity: { lower: 1, upper: 1, ordered: false, unique: true } },
+      ],
+    };
+
+    it('a kind change updates portKind and appliedStereotypeIds with it', () => {
+      const onChange = vi.fn();
+      render(<BlockFeatureEditor block={blockWithPorts} definitions={definitions} onChange={onChange} />);
+      fireEvent.change(screen.getByLabelText('Port 1 kind'), { target: { value: 'proxy' } });
+      expect(onChange.mock.calls[0][0].ports[0]).toMatchObject({ kind: 'proxy', portKind: 'proxyPort', appliedStereotypeIds: ['ProxyPort'] });
+      fireEvent.change(screen.getByLabelText('Port 1 kind'), { target: { value: 'full' } });
+      expect(onChange.mock.calls[1][0].ports[0]).toMatchObject({ kind: 'full', portKind: 'fullPort', appliedStereotypeIds: ['FullPort'] });
+    });
+
+    it('rejects a proxy kind on a Block-typed port and a Block type on a proxy port, changing nothing', () => {
+      const onChange = vi.fn();
+      render(<BlockFeatureEditor block={blockWithPorts} definitions={definitions} onChange={onChange} />);
+      fireEvent.change(screen.getByLabelText('Port 2 kind'), { target: { value: 'proxy' } });
+      expect(onChange).not.toHaveBeenCalled();
+      expect(screen.getAllByRole('alert').map(a => a.textContent).join()).toContain('INVALID_PROXY_PORT_TYPE');
+    });
+
+    it('rejects an interface type on a full port and a non-interface type on a proxy port', () => {
+      const onChange = vi.fn();
+      const typed: BlockDefinition = { ...currentBlock, ports: [
+        { ...blockWithPorts.ports[0], id: 'pfull', kind: 'full', portKind: 'fullPort' },
+        { ...blockWithPorts.ports[0], id: 'pprox', kind: 'proxy', portKind: 'proxyPort' },
+      ] };
+      render(<BlockFeatureEditor block={typed} definitions={definitions} onChange={onChange} />);
+      fireEvent.change(screen.getByLabelText('Port 1 type'), { target: { value: 'PowerIF' } });
+      fireEvent.change(screen.getByLabelText('Port 2 type'), { target: { value: 'EngineBlock' } });
+      expect(onChange).not.toHaveBeenCalled();
+      const alerts = screen.getAllByRole('alert').map(a => a.textContent);
+      expect(alerts.some(a => a?.includes('INVALID_FULL_PORT_TYPE'))).toBe(true);
+      expect(alerts.some(a => a?.includes('INVALID_PROXY_PORT_TYPE'))).toBe(true);
+      fireEvent.change(screen.getByLabelText('Port 1 type'), { target: { value: 'EngineBlock' } });
+      expect(onChange.mock.calls[0][0].ports[0].typeId).toBe('EngineBlock');
+    });
+
+    it('edits the port multiplicity like a property', () => {
+      const onChange = vi.fn();
+      render(<BlockFeatureEditor block={blockWithPorts} definitions={definitions} onChange={onChange} />);
+      const input = screen.getByLabelText('Port 1 multiplicity') as HTMLInputElement;
+      expect(input.value).toBe('1..1');
+      fireEvent.change(input, { target: { value: '0..*' } });
+      expect(onChange.mock.calls[0][0].ports[0].multiplicity).toEqual({ lower: 0, upper: '*', ordered: false, unique: true });
+    });
+  });
 });

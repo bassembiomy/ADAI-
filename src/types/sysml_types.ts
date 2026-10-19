@@ -41,7 +41,8 @@ export interface BlockData {
   properties: ValuePropertyData[];
   operations: string[];
   constraints: string[];
-  classes: string[]; // Nested classes/parts definitions
+  /** @deprecated No repository field backs this; never read or written. Kept optional so legacy literals compile. */
+  classes?: string[];
   ports: PortData[];
   /** Names of elements allocated to / from this one («allocate», SysML 1.6 Clause 15); compartments draw only when non-empty. */
   allocatedFrom?: string[];

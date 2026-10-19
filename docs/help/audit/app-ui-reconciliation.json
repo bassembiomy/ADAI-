@@ -3,9 +3,9 @@
   "sourceSnapshot": "docs/help/audit/2026-10-06-ui-candidates.json",
   "scope": "Original App UI candidates; line numbers identify historical audit rows only.",
   "summary": {
-    "documented": 372,
+    "documented": 370,
     "excluded": 22,
-    "obsolete": 18,
+    "obsolete": 20,
     "unresolved": 0
   },
   "records": [
@@ -6744,17 +6744,8 @@
       "handlers": {
         "onChange": "{(e) => updateBlock(selectedBlock.id, { classes: e.target.value.split('\\n').filter(s => s) })}"
       },
-      "status": "documented",
-      "featureIds": [
-        "app-block-classes"
-      ],
-      "topicId": "app-block-classes",
-      "sectionId": "use",
-      "reason": "Reviewed semantic handler/property and authored purpose/result/limit guidance.",
-      "currentSource": {
-        "matched": true,
-        "line": 19832
-      }
+      "status": "obsolete",
+      "reason": "Control removed: it wrote no stored field; the connector editor and block panel edit real repository fields only."
     },
     {
       "candidateId": "src/App.tsx:20438",
@@ -7264,17 +7255,8 @@
       "handlers": {
         "onChange": "{(e) => updateConnector(selectedConnector.id, { label: e.target.value })}"
       },
-      "status": "documented",
-      "featureIds": [
-        "app-connector-label"
-      ],
-      "topicId": "app-connector-label",
-      "sectionId": "use",
-      "reason": "Reviewed semantic handler/property and authored purpose/result/limit guidance.",
-      "currentSource": {
-        "matched": true,
-        "line": 20187
-      }
+      "status": "obsolete",
+      "reason": "Control removed: it wrote no stored field; the connector editor and block panel edit real repository fields only."
     },
     {
       "candidateId": "src/App.tsx:20786",
