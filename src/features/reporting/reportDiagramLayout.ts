@@ -1,5 +1,5 @@
 import { DiagramRect, MAX_FIGURE_WIDTH, SizedNode } from './reportDiagramModel';
-import { Pt, boxContainsPoint, longestHorizontal, polylineCrossesBox, polylineLength, simplify } from './reportSvgGeometry';
+import { Box, Pt, boxContainsPoint, boxesIntersect, textBox, longestHorizontal, polylineCrossesBox, polylineLength, simplify } from './reportSvgGeometry';
 
 export interface PositionedNode extends DiagramRect {
   id: string;
@@ -247,6 +247,10 @@ export interface RouteOptions {
   direction?: LayoutDirection;
   /** TB only: horizontal anchor shift in px so parallel edges between the same pair stay distinct. */
   offset?: number;
+  /** TB only: overrides `offset` for where the route leaves the source (x shift from its centre). */
+  sourceOffset?: number;
+  /** TB only: overrides `offset` for where the route enters the target (x shift from its centre). */
+  targetOffset?: number;
   /** TB only: every placed node of the figure. Routes that would pass through one of them (other than the two ends) detour around it. */
   obstacles?: readonly DiagramRect[];
 }
@@ -282,10 +286,10 @@ function roundedPolyline(points: { x: number; y: number }[], radius = 8): string
   return `${d} L ${last.x} ${last.y}`;
 }
 
-function baseTopBottomPoints(source: DiagramRect, target: DiagramRect, offset: number): Pt[] {
+function baseTopBottomPoints(source: DiagramRect, target: DiagramRect, offset: number, sourceOffset = offset, targetOffset = offset): Pt[] {
   const clampX = (r: DiagramRect, x: number) => Math.min(r.x + r.width - 6, Math.max(r.x + 6, x));
-  const sx = clampX(source, source.x + source.width / 2 + offset);
-  const tx = clampX(target, target.x + target.width / 2 + offset);
+  const sx = clampX(source, source.x + source.width / 2 + sourceOffset);
+  const tx = clampX(target, target.x + target.width / 2 + targetOffset);
   const sourceBottom = source.y + source.height;
   const targetBottom = target.y + target.height;
   if (target.y >= sourceBottom) {
@@ -330,10 +334,10 @@ function hitsAny(points: readonly Pt[], blockers: readonly DiagramRect[]): boole
  * channel just below (or above) its row, run sideways to a free vertical lane beside the intermediate nodes, and
  * enter the target from its own channel. The cheapest collision-free candidate wins.
  */
-function detourTopBottom(source: DiagramRect, target: DiagramRect, offset: number, all: readonly DiagramRect[], blockers: readonly DiagramRect[]): Pt[] | undefined {
+function detourTopBottom(source: DiagramRect, target: DiagramRect, sourceOffset: number, targetOffset: number, all: readonly DiagramRect[], blockers: readonly DiagramRect[]): Pt[] | undefined {
   const clampX = (r: DiagramRect, x: number) => Math.min(r.x + r.width - 6, Math.max(r.x + 6, x));
-  const sx = clampX(source, source.x + source.width / 2 + offset);
-  const tx = clampX(target, target.x + target.width / 2 + offset);
+  const sx = clampX(source, source.x + source.width / 2 + sourceOffset);
+  const tx = clampX(target, target.x + target.width / 2 + targetOffset);
   const sourceBottom = source.y + source.height;
   const targetBottom = target.y + target.height;
   const rowBottom = (ref: DiagramRect) => Math.max(ref.y + ref.height, ...all.filter(o => Math.abs(o.y - ref.y) < 1).map(o => o.y + o.height));
@@ -379,12 +383,63 @@ function detourTopBottom(source: DiagramRect, target: DiagramRect, offset: numbe
   return best;
 }
 
-function topBottomPoints(source: DiagramRect, target: DiagramRect, offset: number, obstacles: readonly DiagramRect[] = []): Pt[] {
-  const base = baseTopBottomPoints(source, target, offset);
+function topBottomPoints(source: DiagramRect, target: DiagramRect, offset: number, obstacles: readonly DiagramRect[] = [], sourceOffset = offset, targetOffset = offset): Pt[] {
+  const base = baseTopBottomPoints(source, target, offset, sourceOffset, targetOffset);
   if (obstacles.length === 0) return base;
   const blockers = blockersFor(source, target, obstacles);
   if (!hitsAny(base, blockers)) return base;
-  return detourTopBottom(source, target, offset, obstacles, blockers) ?? base;
+  return detourTopBottom(source, target, sourceOffset, targetOffset, obstacles, blockers) ?? base;
+}
+
+/** The polyline a TB-routed edge follows (not for self edges). Same route `routeEdgePath` draws. */
+export function routeEdgePoints(source: DiagramRect, target: DiagramRect, opts: RouteOptions = {}): Pt[] {
+  const offset = opts.offset ?? 0;
+  return topBottomPoints(source, target, offset, opts.obstacles, opts.sourceOffset ?? offset, opts.targetOffset ?? offset);
+}
+
+const INFLATE = 1.5;
+const clearOf = (box: Box, others: readonly Box[]) => others.every(o => !boxesIntersect(
+  { x: box.x - INFLATE, y: box.y - INFLATE, width: box.width + 2 * INFLATE, height: box.height + 2 * INFLATE }, o));
+
+/**
+ * First candidate label position whose text box touches neither an obstacle (any node) nor an already placed label;
+ * falls back to the first candidate when every one collides. Callers add the chosen box to `taken`.
+ */
+export function pickLabelPoint(candidates: readonly EdgeLabelPoint[], text: string, avoid: readonly Box[], taken: readonly Box[], size = 9): EdgeLabelPoint {
+  const fits = (c: EdgeLabelPoint) => {
+    const box = textBox(c.x, c.y, text, size, c.anchor ?? 'middle');
+    return clearOf(box, avoid) && clearOf(box, taken);
+  };
+  return candidates.find(fits) ?? candidates[0];
+}
+
+/** Label positions along a route in order of preference: the default anchor, then free spots on every run. */
+export function edgeLabelCandidates(points: readonly Pt[]): EdgeLabelPoint[] {
+  const out: EdgeLabelPoint[] = [labelPointForPoints(points)];
+  if (points.length === 4) {
+    const a = points[1];
+    const b = points[2];
+    if (Math.abs(a.x - b.x) < 12) out.unshift({ x: a.x + 6, y: (a.y + b.y) / 2 + 3, anchor: 'start' });
+    else out.unshift({ x: (a.x + b.x) / 2, y: a.y - 4 });
+  }
+  const segs: { a: Pt; b: Pt; length: number; horizontal: boolean }[] = [];
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1];
+    const b = points[i];
+    const horizontal = Math.abs(a.y - b.y) < 0.5;
+    const length = horizontal ? Math.abs(a.x - b.x) : Math.abs(a.y - b.y);
+    if (length >= 12 && (horizontal || Math.abs(a.x - b.x) < 0.5)) segs.push({ a, b, length, horizontal });
+  }
+  segs.sort((p, q) => q.length - p.length);
+  for (const s of segs) {
+    for (const f of [0.5, 0.3, 0.7, 0.15, 0.85]) {
+      const x = s.a.x + (s.b.x - s.a.x) * f;
+      const y = s.a.y + (s.b.y - s.a.y) * f;
+      if (s.horizontal) out.push({ x, y: y - 4 }, { x, y: y + 11 });
+      else out.push({ x: x + 6, y: y + 3, anchor: 'start' }, { x: x - 6, y: y + 3, anchor: 'end' });
+    }
+  }
+  return out;
 }
 
 export interface EdgeLabelPoint { x: number; y: number; anchor?: 'start' | 'middle' | 'end' }
@@ -406,11 +461,11 @@ export function labelPointForPoints(points: readonly Pt[], minRun = 12): EdgeLab
 }
 
 /** Horizontal-text anchor for a TB-routed edge's label: on its horizontal run, or beside a straight vertical run. */
-export function routeEdgeLabelPoint(source: DiagramRect, target: DiagramRect, offsetOrOpts: number | { offset?: number; obstacles?: readonly DiagramRect[] } = 0): EdgeLabelPoint {
+export function routeEdgeLabelPoint(source: DiagramRect, target: DiagramRect, offsetOrOpts: number | { offset?: number; sourceOffset?: number; targetOffset?: number; obstacles?: readonly DiagramRect[] } = 0): EdgeLabelPoint {
   const opts = typeof offsetOrOpts === 'number' ? { offset: offsetOrOpts } : offsetOrOpts;
   const isSelf = sameRect(source, target);
   if (isSelf) return { x: source.x + source.width / 2, y: source.y - 24 };
-  const pts = topBottomPoints(source, target, opts.offset ?? 0, opts.obstacles);
+  const pts = topBottomPoints(source, target, opts.offset ?? 0, opts.obstacles, opts.sourceOffset, opts.targetOffset);
   if (pts.length === 4) {
     const a = pts[1];
     const b = pts[2];
@@ -420,8 +475,8 @@ export function routeEdgeLabelPoint(source: DiagramRect, target: DiagramRect, of
   return labelPointForPoints(pts);
 }
 
-function routeTopBottom(source: DiagramRect, target: DiagramRect, offset: number, obstacles?: readonly DiagramRect[]): string {
-  return roundedPolyline(topBottomPoints(source, target, offset, obstacles));
+function routeTopBottom(source: DiagramRect, target: DiagramRect, offset: number, obstacles?: readonly DiagramRect[], sourceOffset?: number, targetOffset?: number): string {
+  return roundedPolyline(topBottomPoints(source, target, offset, obstacles, sourceOffset, targetOffset));
 }
 export function routeEdgePath(source: DiagramRect, target: DiagramRect, opts: RouteOptions = {}): string {
   const isSelf = source.x === target.x && source.y === target.y
@@ -432,7 +487,7 @@ export function routeEdgePath(source: DiagramRect, target: DiagramRect, opts: Ro
     const w = Math.max(28, source.width * 0.5);
     return `M ${cx - w / 2} ${y} C ${cx - w / 2} ${y - 30}, ${cx + w / 2} ${y - 30}, ${cx + w / 2} ${y}`;
   }
-  if (opts.direction === 'TB') return routeTopBottom(source, target, opts.offset ?? 0, opts.obstacles);
+  if (opts.direction === 'TB') return routeTopBottom(source, target, opts.offset ?? 0, opts.obstacles, opts.sourceOffset, opts.targetOffset);
   const sx = source.x + source.width;
   const sy = source.y + source.height / 2;
   const tx = target.x;

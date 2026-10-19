@@ -42,6 +42,23 @@ describe('renderHmiDiagram', () => {
     expect(html).toContain('HMI layout');
   });
 
+  it('prints variable names and truncates texts to the widget width', () => {
+    const uuid = '6178d014-831f-4339-8dac-f275360b1222';
+    const html = renderHmiDiagram({
+      components: [
+        component({ id: 'g1', name: 'MR-PLD ECU - OM 501 LA operating modes', x: 0, y: 0, width: 120, variableId: uuid }),
+        component({ id: 'g2', name: 'MR-PLD ECU (A 541 446 53 40) - OM 501 LA', x: 200, y: 0, width: 120, variableId: uuid }),
+      ],
+      variables: [{ id: uuid, name: 'Coil current' }],
+    });
+    expect(html).not.toContain(uuid);
+    expect(html).toContain('&#8594; Coil current');
+    expect(html).toContain('<title>MR-PLD ECU - OM 501 LA operating modes</title>');
+    for (const m of html.matchAll(/<text x="([-\d.]+)"[^>]*font-size="([\d.]+)"[^>]*>([^<]*)<\/text>/g)) {
+      expect(m[3].replace(/&#?\w+;/g, 'x').length * 0.6 * Number(m[2])).toBeLessThanOrEqual(120);
+    }
+  });
+
   it('falls back to a grid when persisted positions overlap', () => {
     const components = [
       component({ id: 'a', x: 0, y: 0 }),

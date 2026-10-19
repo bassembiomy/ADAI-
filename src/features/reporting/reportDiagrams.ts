@@ -7,7 +7,7 @@ import {
   boundsOf, chunkItems, connectionPages, escapeHtml, measureNode, rectsOverlap, renderEmptyFigure, wrapFigure,
 } from './reportDiagramModel';
 import type { EdgeLabelPoint } from './reportDiagramLayout';
-import { PositionedNode, labelPointForPoints, layoutGrid, layoutLayered, nodeById, parallelEdgeOffsets, routeEdgeLabelPoint, routeEdgePath } from './reportDiagramLayout';
+import { PositionedNode, edgeLabelCandidates, labelPointForPoints, layoutGrid, layoutLayered, nodeById, parallelEdgeOffsets, pickLabelPoint, routeEdgeLabelPoint, routeEdgePath, routeEdgePoints } from './reportDiagramLayout';
 import { Box, Pt, boxesIntersect, longestHorizontal, parsePath, pointsToPath, polylineCrossesBox, polylineLength, segmentCrossesBox, simplify, textBox, textWidth } from './reportSvgGeometry';
 import { getRequirementsDiagramScope } from '../../engine/sysml/requirementsDiagramScope';
 
@@ -108,8 +108,10 @@ export function drawStyledEdge(edge: DiagramEdgeInput, path: string, labelPoint?
   return `<path id="edge-${edge.id}" d="${path}" fill="none" stroke="${EDGE_STROKE}" stroke-width="1.1"${dashed}${marker}/>${label}`;
 }
 
-function multiplicityLabel(text: string, x: number, y: number): string {
-  return text ? `<text x="${x}" y="${y}" font-size="9" fill="#65717e">${escapeHtml(text)}</text>` : '';
+function multiplicityLabel(text: string, at: EdgeLabelPoint): string {
+  if (!text) return '';
+  const anchor = at.anchor && at.anchor !== 'start' ? ` text-anchor="${at.anchor}"` : '';
+  return `<text class="rf-multiplicity" x="${at.x}" y="${at.y}" font-size="9" fill="#65717e"${anchor}>${escapeHtml(text)}</text>`;
 }
 
 interface PageRender {
@@ -142,12 +144,13 @@ function layoutPage(
   edges: DiagramEdgeInput[],
   rootIds?: string[],
   hierarchical = false,
+  maxRowWidth?: number,
 ): PageRender {
   const pageIds = new Set(pageNodes.map(n => n.id));
   const pageSized = pageNodes.map(n => sized.get(n.id)!);
   const pageEdges = edges.filter(e => pageIds.has(e.sourceId) && pageIds.has(e.targetId));
   const placed = hierarchical
-    ? layoutLayered(pageSized, pageEdges.map(hierarchyRankEdge), { rootIds, direction: 'TB' })
+    ? layoutLayered(pageSized, pageEdges.map(hierarchyRankEdge), { rootIds, direction: 'TB', maxRowWidth })
     : layoutLayered(pageSized, pageEdges, { rootIds });
   return { sized: pageSized, edges: pageEdges, placed };
 }
@@ -183,12 +186,52 @@ function parallelOffsetFor(offsets: Map<string, number>, id: string): number {
   return offsets.get(id) ?? 0;
 }
 
-function multiplicityAnchors(src: DiagramRect, tgt: DiagramRect, offset: number): { source: { x: number; y: number }; target: { x: number; y: number } } {
-  const sx = src.x + src.width / 2 + offset + 5;
-  const tx = tgt.x + tgt.width / 2 + offset + 5;
-  if (tgt.y >= src.y + src.height) return { source: { x: sx, y: src.y + src.height + 12 }, target: { x: tx, y: tgt.y - 6 } };
-  if (tgt.y + tgt.height <= src.y) return { source: { x: sx, y: src.y - 6 }, target: { x: tx, y: tgt.y + tgt.height + 12 } };
-  return { source: { x: src.x + src.width - 4, y: src.y - 6 }, target: { x: tgt.x + 4, y: tgt.y - 6 } };
+/**
+ * Portrait page budget. Width in SVG user units: the print box is 680px, so up to 720 units keeps the scale >= 0.9
+ * (min font 9 -> >= 8px, with headroom). Height is the whole printed figure (scaled svg + caption + the "not drawn in
+ * this view" note) against the 979px print box, less a safety margin.
+ */
+export const PORTRAIT_VIEW_MAX_WIDTH = 720;
+export const PORTRAIT_FIGURE_MAX_HEIGHT = 950;
+const PRINT_BOX_WIDTH = 680;
+/** A wrapped TB rank must leave room for the 24 unit viewBox padding on both sides. */
+const PORTRAIT_ROW_WIDTH = PORTRAIT_VIEW_MAX_WIDTH - 2 * 24 - 4;
+
+/** Rendered size of a wrapped figure: viewBox width and the estimated printed height (svg, caption, omitted note). */
+function printedSizeOf(figure: string): { width: number; height: number } {
+  const m = /viewBox="[-\d.]+ [-\d.]+ ([\d.]+) ([\d.]+)"/.exec(figure);
+  if (!m) return { width: 0, height: 0 };
+  const width = Number(m[1]);
+  const scale = Math.min(1, PRINT_BOX_WIDTH / width);
+  const note = /report-figure-omitted">([^<]*)</.exec(figure)?.[1];
+  const overhead = 32 + (note ? 22 + 15 * Math.ceil(note.length / 95) : 0);
+  return { width, height: Number(m[2]) * scale + overhead };
+}
+
+/**
+ * Splits pages whose rendered figure would not fit one portrait page at a legible scale. A page is re-split
+ * (boundary nodes repeat, every connection stays on some view) until each view fits or has two nodes.
+ */
+function splitToPageBudget<T extends { id: string }>(
+  pages: T[][],
+  edges: readonly { sourceId: string; targetId: string }[],
+  renderPage: (page: T[]) => string,
+): T[][] {
+  const fits = (page: T[]) => {
+    const { width, height } = printedSizeOf(renderPage(page));
+    return width <= PORTRAIT_VIEW_MAX_WIDTH && height <= PORTRAIT_FIGURE_MAX_HEIGHT;
+  };
+  const split = (page: T[]): T[][] => {
+    if (page.length <= 2 || fits(page)) return [page];
+    const ids = new Set(page.map(n => n.id));
+    const pageEdges = edges.filter(e => ids.has(e.sourceId) && ids.has(e.targetId));
+    for (let size = Math.ceil(page.length * 0.6); size >= 2; size = size > 2 ? Math.max(2, Math.ceil(size * 0.8)) : 1) {
+      const parts = connectionPages(page, pageEdges, size);
+      if (parts.length > 1) return parts.flatMap(split);
+    }
+    return [page];
+  };
+  return pages.flatMap(split);
 }
 
 export function renderRequirementsDiagram(source: ReportRequirementSource): string {
@@ -203,32 +246,39 @@ export function renderRequirementsDiagram(source: ReportRequirementSource): stri
     .filter(r => nodeIds.has(r.sourceId) && nodeIds.has(r.targetId))
     .map(r => ({ id: r.id, sourceId: r.sourceId, targetId: r.targetId, label: r.type === 'requirementContainment' ? '«contains»' : (r.label || `«${r.type}»`), kind: r.type }));
   const nameOf = blockName(new Map(source.blocks.map(b => [b.id, b])));
-  const pages = connectionPages(allNodes, edges);
-  return pages.map((page, pageIndex) => {
+  const allNodesMap = new Map(allNodes.map(n => [n.id, n]));
+  const renderPage = (page: BlockData[], viewNote: string): string => {
     const sized = new Map(page.map(r => [r.id, measureNode(r.id,
       r.stereotype === 'requirement'
         ? [r.reqId ?? 'REQ', r.name ?? '', r.status ? `status: ${r.status}` : '']
         : [`«${r.stereotype ?? 'block'}»`, r.name ?? ''],
       r.stereotype === 'requirement' ? 'req' : 'bdd')]));
-    const { edges: pageEdges, placed } = layoutPage(page, sized, edges, undefined, true);
+    const { edges: pageEdges, placed } = layoutPage(page, sized, edges, undefined, true, PORTRAIT_ROW_WIDTH);
     const offsets = parallelEdgeOffsets(pageEdges);
+    // Every label avoids every node (not only its own ends) and the labels already placed.
+    const taken: Box[] = [];
+    const edgeEls = pageEdges.map(e => {
+      const src = nodeById(placed, e.sourceId)!;
+      const tgt = nodeById(placed, e.targetId)!;
+      const offset = parallelOffsetFor(offsets, e.id);
+      const path = routeEdgePath(src, tgt, { direction: 'TB', offset, obstacles: placed });
+      let at: EdgeLabelPoint | undefined;
+      if (e.label) {
+        at = src === tgt
+          ? routeEdgeLabelPoint(src, tgt, { offset, obstacles: placed })
+          : pickLabelPoint(edgeLabelCandidates(routeEdgePoints(src, tgt, { offset, obstacles: placed })), e.label, placed, taken);
+        taken.push(textBox(at.x, at.y, e.label, 9, at.anchor ?? 'middle'));
+      }
+      return drawStyledEdge(e, path, at);
+    });
     const inner = [
-      ...pageEdges.map(e => {
-        const src = nodeById(placed, e.sourceId)!;
-        const tgt = nodeById(placed, e.targetId)!;
-        const offset = parallelOffsetFor(offsets, e.id);
-        return drawStyledEdge(e, routeEdgePath(src, tgt, { direction: 'TB', offset, obstacles: placed }), routeEdgeLabelPoint(src, tgt, { offset, obstacles: placed }));
+      ...edgeEls,
+      ...placed.map(pos => {
+        const node = allNodesMap.get(pos.id);
+        const isReq = node?.stereotype === 'requirement';
+        return drawLabeledNode(sized.get(pos.id)!, pos, isReq ? REQ_STROKE : NODE_STROKE);
       }),
-      ...(() => {
-        const allNodesMap = new Map(allNodes.map(n => [n.id, n]));
-        return placed.map(pos => {
-          const node = allNodesMap.get(pos.id);
-          const isReq = node?.stereotype === 'requirement';
-          return drawLabeledNode(sized.get(pos.id)!, pos, isReq ? REQ_STROKE : NODE_STROKE);
-        });
-      })(),
     ].join('');
-    const viewNote = pages.length > 1 ? ` · view ${pageIndex + 1} of ${pages.length}` : '';
     const requirementCount = page.filter(n => n.stereotype === 'requirement').length;
     const supportingCount = page.length - requirementCount;
     const countNote = supportingCount > 0
@@ -237,7 +287,96 @@ export function renderRequirementsDiagram(source: ReportRequirementSource): stri
     const omitted = omittedForPage(scopeConnections, new Set(page.map(n => n.id)), nodeIds, nameOf);
     return wrapFigure(inner, `Requirements diagram${viewNote} (${countNote}, ${pageEdges.length} relationships)`, boundsOf(placed, 24),
       { drawnNodes: page.length, drawnEdges: pageEdges.length, omitted });
-  }).join('\n');
+  };
+  const pages = splitToPageBudget(connectionPages(allNodes, edges), edges, page => renderPage(page, ''));
+  return pages.map((page, pageIndex) => renderPage(page, pages.length > 1 ? ` · view ${pageIndex + 1} of ${pages.length}` : '')).join('\n');
+}
+
+/** Gap kept between neighbouring edge stems on a node side, beyond the widest multiplicity label there. */
+const PORT_GAP = 10;
+const PORT_MIN_STEP = 14;
+const MAX_FAN_NODE_WIDTH = 520;
+
+interface PortEntry { edgeId: string; end: 'source' | 'target'; otherX: number; labelWidth: number }
+type EdgeEndOffsets = Map<string, { sourceOffset?: number; targetOffset?: number }>;
+
+/** Which node side an edge uses at each end in a top-down layout (same-row edges use the facing sides: no fan). */
+function endSides(src: DiagramRect, tgt: DiagramRect): { source: 'top' | 'bottom'; target: 'top' | 'bottom' } | undefined {
+  if (tgt.y >= src.y + src.height) return { source: 'bottom', target: 'top' };
+  if (tgt.y + tgt.height <= src.y) return { source: 'top', target: 'bottom' };
+  return undefined;
+}
+
+function collectPorts(
+  placed: PositionedNode[],
+  edges: readonly DiagramEdgeInput[],
+  texts: ReadonlyMap<string, { source: string; target: string }>,
+): Map<string, PortEntry[]> {
+  const groups = new Map<string, PortEntry[]>();
+  for (const e of edges) {
+    const src = nodeById(placed, e.sourceId);
+    const tgt = nodeById(placed, e.targetId);
+    if (!src || !tgt || src === tgt) continue;
+    const sides = endSides(src, tgt);
+    if (!sides) continue;
+    const t = texts.get(e.id) ?? { source: '', target: '' };
+    const add = (nodeId: string, side: string, entry: PortEntry) => {
+      const key = `${nodeId}|${side}`;
+      groups.set(key, [...(groups.get(key) ?? []), entry]);
+    };
+    add(src.id, sides.source, { edgeId: e.id, end: 'source', otherX: tgt.x + tgt.width / 2, labelWidth: textWidth(t.source) });
+    add(tgt.id, sides.target, { edgeId: e.id, end: 'target', otherX: src.x + src.width / 2, labelWidth: textWidth(t.target) });
+  }
+  return groups;
+}
+
+const portNodeId = (key: string) => key.slice(0, key.lastIndexOf('|'));
+const portStep = (entries: readonly PortEntry[]) => Math.max(PORT_MIN_STEP, Math.max(...entries.map(p => p.labelWidth)) + PORT_GAP);
+
+/** Node width needed so every stem on each side gets its own slot wide enough for its multiplicity label. */
+function fanWidths(groups: Map<string, PortEntry[]>): Map<string, number> {
+  const widths = new Map<string, number>();
+  for (const [key, entries] of groups) {
+    if (entries.length < 2) continue;
+    const needed = Math.min(MAX_FAN_NODE_WIDTH, Math.ceil((entries.length - 1) * portStep(entries) + 12 + PORT_GAP));
+    widths.set(portNodeId(key), Math.max(widths.get(portNodeId(key)) ?? 0, needed));
+  }
+  return widths;
+}
+
+/** Spreads the stems of a node side evenly (ordered by where they go, so they do not cross) across its width. */
+function assignPortOffsets(groups: Map<string, PortEntry[]>, placed: PositionedNode[]): EdgeEndOffsets {
+  const out: EdgeEndOffsets = new Map();
+  for (const [key, entries] of groups) {
+    const node = nodeById(placed, portNodeId(key))!;
+    const sorted = [...entries].sort((a, b) => a.otherX - b.otherX);
+    const n = sorted.length;
+    const step = n > 1 ? Math.min(portStep(sorted), (node.width - 12) / (n - 1)) : 0;
+    sorted.forEach((p, i) => {
+      const offset = (i - (n - 1) / 2) * step;
+      const cur = out.get(p.edgeId) ?? {};
+      out.set(p.edgeId, p.end === 'source' ? { ...cur, sourceOffset: offset } : { ...cur, targetOffset: offset });
+    });
+  }
+  return out;
+}
+
+/** Candidate spots for a multiplicity label at one end of a route: beside the stem (right, then left), then further along it. */
+function endLabelCandidates(points: readonly Pt[], atStart: boolean): EdgeLabelPoint[] {
+  const pts = simplify(points);
+  const p = atStart ? pts[0] : pts[pts.length - 1];
+  const q = atStart ? pts[1] : pts[pts.length - 2];
+  if (!q) return [{ x: p.x + 6, y: p.y - 4, anchor: 'start' }];
+  if (Math.abs(p.x - q.x) < 0.5) {
+    const dir = Math.sign(q.y - p.y) || 1;
+    const out: EdgeLabelPoint[] = [];
+    for (const d of dir > 0 ? [11, 21] : [-4, -14]) {
+      out.push({ x: p.x + 6, y: p.y + d, anchor: 'start' }, { x: p.x - 6, y: p.y + d, anchor: 'end' });
+    }
+    return out;
+  }
+  const dir = Math.sign(q.x - p.x);
+  return [-4, 11].map(dy => ({ x: p.x + dir * 4, y: p.y + dy, anchor: dir > 0 ? 'start' as const : 'end' as const }));
 }
 
 export function renderBddDiagram(source: ReportBlockSource): string {
@@ -258,40 +397,83 @@ export function renderBddDiagram(source: ReportBlockSource): string {
       label: DASHED_REL_TYPES.has(r.type) ? (r.label?.startsWith('«') ? r.label : `«${r.type}»`) : (r.label ?? ''), kind: r.type,
     }));
   const nameOf = blockName(new Map(source.blocks.map(b => [b.id, b])));
-  const pages = connectionPages(allNodes, edges);
-  return pages.map((page, pageIndex) => {
-    const sized = new Map(page.map(b => {
-      const isReq = b.stereotype === 'requirement';
-      const hasIbd = !isReq && (source.parts ?? []).some(p => p.blockId === b.id);
-      const stereotypePrefix = `«${b.stereotype ?? 'block'}»`;
-      const stereotypeLabel = isReq
-        ? '«requirement»'
-        : hasIbd
-          ? `${stereotypePrefix} ⤓ [IBD]`
-          : stereotypePrefix;
-      const nameLabel = `${b.name ?? ''}${b.isAbstract ? ' {abstract}' : ''}${b.isLeaf ? ' {leaf}' : ''}`;
-      return [b.id, measureNode(b.id, [
-        stereotypeLabel,
-        nameLabel,
-        ...(b.properties ?? []).slice(0, 3).map(p => `${formatLegacyProperty(p)}${p.defaultValue ? ` = ${p.defaultValue}` : ''}`),
-      ], isReq ? 'req' : 'bdd', 96)];
-    }));
-    const { edges: pageEdges, placed } = layoutPage(page, sized, edges, undefined, true);
+  const relMap = new Map(source.relationships.map(r => [r.id, r]));
+  const multiplicityTexts = new Map(edges.map(e => {
+    const rel = relMap.get(e.id);
+    const sourceRole = (rel as any)?.sourceRole ? `+${(rel as any).sourceRole} ` : '';
+    const targetRole = (rel as any)?.targetRole ? `+${(rel as any).targetRole} ` : '';
+    return [e.id, {
+      source: `${sourceRole}${rel?.sourceMultiplicity ?? ''}`.trim(),
+      target: `${targetRole}${rel?.targetMultiplicity ?? ''}`.trim(),
+    }];
+  }));
+  const sizeNodes = (page: BlockData[], minWidths: ReadonlyMap<string, number>) => new Map(page.map(b => {
+    const isReq = b.stereotype === 'requirement';
+    const hasIbd = !isReq && (source.parts ?? []).some(p => p.blockId === b.id);
+    const stereotypePrefix = `«${b.stereotype ?? 'block'}»`;
+    const stereotypeLabel = isReq
+      ? '«requirement»'
+      : hasIbd
+        ? `${stereotypePrefix} ⤓ [IBD]`
+        : stereotypePrefix;
+    const nameLabel = `${b.name ?? ''}${b.isAbstract ? ' {abstract}' : ''}${b.isLeaf ? ' {leaf}' : ''}`;
+    return [b.id, measureNode(b.id, [
+      stereotypeLabel,
+      nameLabel,
+      ...(b.properties ?? []).slice(0, 3).map(p => `${formatLegacyProperty(p)}${p.defaultValue ? ` = ${p.defaultValue}` : ''}`),
+    ], isReq ? 'req' : 'bdd', Math.max(96, minWidths.get(b.id) ?? 0))];
+  }));
+  const renderPage = (page: BlockData[], viewNote: string): string => {
+    // Layout twice: the first pass tells which nodes fan out many edges, the second gives those nodes room for one
+    // stem (and one multiplicity label) per edge.
+    let sized = sizeNodes(page, new Map());
+    let laid = layoutPage(page, sized, edges, undefined, true, PORTRAIT_ROW_WIDTH);
+    const wider = fanWidths(collectPorts(laid.placed, laid.edges, multiplicityTexts));
+    if (wider.size > 0) {
+      sized = sizeNodes(page, wider);
+      laid = layoutPage(page, sized, edges, undefined, true, PORTRAIT_ROW_WIDTH);
+    }
+    const { edges: pageEdges, placed } = laid;
+    const portOffsets = assignPortOffsets(collectPorts(placed, pageEdges, multiplicityTexts), placed);
     const offsets = parallelEdgeOffsets(pageEdges);
-    const relMap = new Map(source.relationships.map(r => [r.id, r]));
-    const edgeEls = pageEdges.map(e => {
+    const routes = pageEdges.map(e => {
       const src = nodeById(placed, e.sourceId)!;
       const tgt = nodeById(placed, e.targetId)!;
-      const rel = relMap.get(e.id);
-      const sourceRole = (rel as any)?.sourceRole ? `+${(rel as any).sourceRole} ` : '';
-      const targetRole = (rel as any)?.targetRole ? `+${(rel as any).targetRole} ` : '';
-      const sourceText = `${sourceRole}${rel?.sourceMultiplicity ?? ''}`.trim();
-      const targetText = `${targetRole}${rel?.targetMultiplicity ?? ''}`.trim();
-      const offset = parallelOffsetFor(offsets, e.id);
-      const anchors = multiplicityAnchors(src, tgt, offset);
-      return drawStyledEdge(e, routeEdgePath(src, tgt, { direction: 'TB', offset, obstacles: placed }), routeEdgeLabelPoint(src, tgt, { offset, obstacles: placed }))
-        + multiplicityLabel(sourceText, anchors.source.x, anchors.source.y)
-        + multiplicityLabel(targetText, anchors.target.x, anchors.target.y);
+      const route = { direction: 'TB' as const, offset: parallelOffsetFor(offsets, e.id), obstacles: placed, ...(portOffsets.get(e.id) ?? {}) };
+      return { e, src, tgt, route, points: src === tgt ? [] : routeEdgePoints(src, tgt, route) };
+    });
+    // Multiplicity labels first (they sit at the node sides), each at its own free spot beside its edge end;
+    // edge labels then avoid nodes and every label placed so far.
+    const taken: Box[] = [];
+    const mults = new Map<string, { source?: EdgeLabelPoint; target?: EdgeLabelPoint }>();
+    const placeMultiplicity = (text: string, candidates: EdgeLabelPoint[]) => {
+      if (!text) return undefined;
+      const at = pickLabelPoint(candidates, text, placed, taken);
+      taken.push(textBox(at.x, at.y, text, 9, at.anchor ?? 'start'));
+      return at;
+    };
+    for (const { e, src, tgt, points } of routes) {
+      const t = multiplicityTexts.get(e.id)!;
+      mults.set(e.id, src === tgt
+        ? {
+          source: placeMultiplicity(t.source, [{ x: src.x + src.width - 4, y: src.y - 6, anchor: 'start' }]),
+          target: placeMultiplicity(t.target, [{ x: tgt.x + 4, y: tgt.y - 6, anchor: 'start' }]),
+        }
+        : { source: placeMultiplicity(t.source, endLabelCandidates(points, true)), target: placeMultiplicity(t.target, endLabelCandidates(points, false)) });
+    }
+    const edgeEls = routes.map(({ e, src, tgt, route, points }) => {
+      let at: EdgeLabelPoint | undefined;
+      if (e.label) {
+        at = src === tgt
+          ? routeEdgeLabelPoint(src, tgt, route)
+          : pickLabelPoint(edgeLabelCandidates(points), e.label, placed, taken);
+        taken.push(textBox(at.x, at.y, e.label, 9, at.anchor ?? 'middle'));
+      }
+      const m = mults.get(e.id) ?? {};
+      const t = multiplicityTexts.get(e.id)!;
+      return drawStyledEdge(e, routeEdgePath(src, tgt, route), at)
+        + (m.source ? multiplicityLabel(t.source, m.source) : '')
+        + (m.target ? multiplicityLabel(t.target, m.target) : '');
     });
     const inner = [...edgeEls, ...placed.map(pos => {
       const node = allNodes.find(n => n.id === pos.id);
@@ -308,11 +490,12 @@ export function renderBddDiagram(source: ReportBlockSource): string {
       };
       return drawLabeledNode(sized.get(pos.id)!, pos, nodeOpts);
     })].join('');
-    const viewNote = pages.length > 1 ? ` · view ${pageIndex + 1} of ${pages.length}` : '';
     const omitted = omittedForPage(scopeConnections, new Set(page.map(n => n.id)), nodeIds, nameOf);
     return wrapFigure(inner, `Block definition diagram${viewNote} (${page.length} blocks, ${pageEdges.length} relationships)`, boundsOf(placed, 24),
       { drawnNodes: page.length, drawnEdges: pageEdges.length, omitted });
-  }).join('\n');
+  };
+  const pages = splitToPageBudget(connectionPages(allNodes, edges), edges, page => renderPage(page, ''));
+  return pages.map((page, pageIndex) => renderPage(page, pages.length > 1 ? ` · view ${pageIndex + 1} of ${pages.length}` : '')).join('\n');
 }
 
 export interface ReportIbdSource {
@@ -1117,6 +1300,9 @@ export function renderXbridgesDiagram(source: ReportXBridgesSource): string {
 
 export interface ReportHmiSource {
   components: readonly HmiComponent[];
+  /** Used to print variable / state names instead of raw ids in the widget binding lines. */
+  variables?: readonly { id: string; name?: string }[];
+  states?: readonly { id: string; name?: string }[];
 }
 
 const HMI_FALLBACK_WIDTH = 140;
@@ -1147,9 +1333,12 @@ export function renderHmiDiagram(source: ReportHmiSource): string {
   if (source.components.length === 0) return renderEmptyFigure('No HMI components configured.');
   const placed = computeHmiLayout(source.components);
   const byId = new Map(source.components.map(c => [c.id, c]));
+  const named = (list: readonly { id: string; name?: string }[] | undefined) =>
+    Object.fromEntries((list ?? []).filter(item => item.name).map(item => [item.id, item.name as string]));
+  const runtime = { variableNames: named(source.variables), stateNames: named(source.states) };
   const els = placed.map(pos => {
     const c = byId.get(pos.id)!;
-    return `<g transform="translate(${pos.x},${pos.y})">${renderHmiWidgetSvg({ ...c, width: pos.width, height: pos.height })}</g>`;
+    return `<g transform="translate(${pos.x},${pos.y})">${renderHmiWidgetSvg({ ...c, width: pos.width, height: pos.height }, {}, runtime)}</g>`;
   });
   return wrapFigure(els.join(''),
     `HMI layout (${source.components.length} components)`, boundsOf(placed, 24));

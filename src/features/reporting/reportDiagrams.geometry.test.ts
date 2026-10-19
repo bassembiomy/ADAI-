@@ -8,6 +8,7 @@ import { SM_LABEL_MAX_CHARS, renderBddDiagram, renderIbdDiagram, renderRequireme
 import { renderActivityDiagrams, renderSequenceDiagrams, renderUseCaseDiagrams } from './reportDiagrams.sysml';
 import { textWidth } from './reportSvgGeometry';
 import { buildSequenceDiagramView } from '../sysml/sequenceDiagramView';
+import { PAGE_FIT, figurePageFit, minFontSizeOf } from './reportDiagramModel';
 import { edgeNodeCollisions, figuresOf, labelCollisions, outsideViewBox, parseFigure } from './figureGeometry.testutil';
 
 function expectSound(figure: string, name: string): void {
@@ -161,6 +162,63 @@ describe('sequence figures', () => {
     expect(lines.length).toBeGreaterThan(1);
     for (const y2 of lines) expect(y2).toBeLessThanOrEqual(lastMessageY + 24 + 12);
     expectSound(fig, 'sequence');
+  });
+
+  it('keeps long message labels on the portrait page budget by wrapping, never widening (F4)', () => {
+    const repo = createEmptyRepository();
+    const names = ['Driver', 'Engine control unit', 'Fuel injection system', 'Starter motor'];
+    const long = [
+      'requestEngineStartWithPreconditionCheck(ignitionState, immobiliserStatus)',
+      'Verify that the battery voltage is above the cranking threshold before engaging',
+      'Engage the starter pinion with the flywheel ring gear and report engagement',
+      'Command first injection pulse for every cylinder in firing order',
+      'Confirm that crankshaft speed has exceeded the self-sustaining threshold',
+    ];
+    (repo.definitions as any).start = {
+      id: 'start', kind: 'interaction', name: 'Engine start', namespace: [],
+      lifelines: names.map((name, i) => ({ id: `l${i}`, name })),
+      messages: Array.from({ length: 12 }, (_, i) => ({
+        id: `m${i}`, order: i + 1, sort: i % 3 === 2 ? 'reply' : 'synchCall', name: `${long[i % long.length]} (${i})`,
+        sourceLifelineId: `l${i % 3 === 2 ? (i + 1) % 4 : i % 4}`, targetLifelineId: `l${i % 3 === 2 ? i % 4 : (i + 1) % 4}`,
+      })),
+      fragments: [],
+    };
+    const figures = renderSequenceDiagrams(repo);
+    expect(figures.length).toBeGreaterThanOrEqual(1);
+    for (const f of figures) {
+      const g = parseFigure(f);
+      const fit = figurePageFit(g.viewBox, minFontSizeOf(f));
+      expect(fit.orientation, 'stays portrait').toBe('portrait');
+      expect(fit.legible, `legible at ${minFontSizeOf(f)} x ${fit.scale.toFixed(2)}`).toBe(true);
+      expect(g.viewBox.width).toBeLessThanOrEqual(740);
+      expect(g.viewBox.height).toBeLessThanOrEqual(PAGE_FIT.portrait.height / fit.scale);
+      expect(labelCollisions(g)).toEqual([]);
+      expectSound(f, 'long-label sequence');
+    }
+    // the full text stays readable: every word of every label is drawn somewhere
+    const drawn = figures.join(' ').replace(/<[^>]+>/g, '').replace(/\s+/g, '');
+    for (const label of long) expect(drawn).toContain(label.replace(/\s+/g, ''));
+  });
+
+  it('splits a tall sequence into consecutive figures that each fit the page height', () => {
+    const repo = createEmptyRepository();
+    (repo.definitions as any).tall = {
+      id: 'tall', kind: 'interaction', name: 'Tall', namespace: [],
+      lifelines: ['a', 'b', 'c', 'd'].map(id => ({ id, name: id.toUpperCase() })),
+      messages: Array.from({ length: 30 }, (_, i) => ({
+        id: `t${i}`, order: i + 1, sort: 'asynchCall', name: `a fairly long message label number ${i} that needs wrapping`,
+        sourceLifelineId: 'abcd'[i % 4], targetLifelineId: 'abcd'[(i + 1) % 4],
+      })),
+      fragments: [],
+    };
+    const figures = renderSequenceDiagrams(repo);
+    expect(figures.length).toBeGreaterThan(1);
+    for (const f of figures) {
+      const g = parseFigure(f);
+      expect(figurePageFit(g.viewBox, minFontSizeOf(f)).legible).toBe(true);
+      expect(g.viewBox.height).toBeLessThanOrEqual(1020);
+      expectSound(f, 'tall sequence');
+    }
   });
 });
 
