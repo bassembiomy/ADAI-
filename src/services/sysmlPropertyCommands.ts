@@ -1,6 +1,6 @@
 import { parseMultiplicity, type BlockDefinition, type PartUsage, type PortDefinition, type PropertyDefinition, type SysmlRelationship, type SysmlRepository } from '../engine/sysml/model';
 import { PORT_STEREOTYPES } from './sysmlOwnedFeatureCommands';
-import { findPortOwner, findPropertyOwner, isPartProperty, PATH_SEPARATOR, resolveOccurrenceKey, resolvePartLike } from '../engine/sysml/partOccurrences';
+import { findPortOwner, findPropertyOwner, isPartProperty, isStructuralProperty, PATH_SEPARATOR, resolveOccurrenceKey, resolvePartLike } from '../engine/sysml/partOccurrences';
 import type { SysmlEditorCommand, SysmlMutationCommand } from './sysmlCommandGateway';
 
 type SysmlMutationPlan = SysmlMutationCommand | { type: 'batch'; commands: SysmlMutationCommand[]; coalesceKey?: string };
@@ -164,7 +164,8 @@ export function buildBlockPropertyUpdateCommand(
 /**
  * Format 5: a part has no usage record, so an update addressed to a part (its
  * property id or its property path) or to a Block port is an update of the Block
- * that declares it. Returns undefined when the id is neither.
+ * that declares it; a swimlane rename is an update of its Activity. Returns
+ * undefined when the id is none of these.
  */
 export function buildFeatureUpdateCommand(
   repository: SysmlRepository,
@@ -179,14 +180,18 @@ export function buildFeatureUpdateCommand(
   const owner = occurrence
     ? repository.definitions[occurrence.declaringBlockId]
     : propertyOwner?.block;
-  if (owner?.kind === 'block' && owner.properties.some(property => property.id === propertyId && isPartProperty(repository, property))) {
+  // Every Block property kind (value, part, reference, flow, constraint) is edited through its Block.
+  if (owner?.kind === 'block' && owner.properties.some(property => property.id === propertyId)) {
     const properties = owner.properties.map(property => {
       if (property.id !== propertyId) return property;
       const next: PropertyDefinition = { ...property };
       if (typeof patch.name === 'string') next.name = patch.name;
       if (typeof patch.typeId === 'string') next.typeId = patch.typeId;
-      if (typeof patch.aggregation === 'string') next.kind = patch.aggregation === 'reference' ? 'reference' : 'part';
-      if (patch.kind === 'part' || patch.kind === 'reference') next.kind = patch.kind;
+      // Only a part/reference property switches between the two aggregations.
+      if (isStructuralProperty(property)) {
+        if (typeof patch.aggregation === 'string') next.kind = patch.aggregation === 'reference' ? 'reference' : 'part';
+        if (patch.kind === 'part' || patch.kind === 'reference') next.kind = patch.kind;
+      }
       if (typeof patch.multiplicity === 'string') next.multiplicity = parseMultiplicity(patch.multiplicity || '1');
       else if (patch.multiplicity && typeof patch.multiplicity === 'object') next.multiplicity = patch.multiplicity as PropertyDefinition['multiplicity'];
       return next;
@@ -205,6 +210,19 @@ export function buildFeatureUpdateCommand(
       return next;
     });
     return { type: 'updateElement', elementId: portOwner.block.id, patch: { ports } };
+  }
+  // An Activity Partition (swimlane) lives in its Activity: renaming it edits that Activity.
+  if (typeof patch.name === 'string') {
+    const activity = Object.values(repository.definitions).find(definition =>
+      definition.kind === 'activity' && (definition.partitions ?? []).some(partition => partition.id === elementId));
+    if (activity?.kind === 'activity') {
+      const name = patch.name;
+      return {
+        type: 'updateElement',
+        elementId: activity.id,
+        patch: { partitions: activity.partitions.map(partition => partition.id === elementId ? { ...partition, name } : partition) },
+      };
+    }
   }
   return undefined;
 }

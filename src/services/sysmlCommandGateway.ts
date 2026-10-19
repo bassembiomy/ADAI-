@@ -35,6 +35,8 @@ import type {
   InteractionDefinition,
 } from '../engine/sysml/model';
 import { createEmptyRepository, isDefinitionKind } from '../engine/sysml/model';
+import type { MetaclassKind } from '../engine/sysml/domain/base';
+import { evaluateOwnership, resolveSemanticElement } from '../engine/sysml/capabilities/ownershipPolicy';
 import { resolvedPropertyUnitSymbol } from '../engine/sysml/units';
 import { allocationNamesByElement } from '../engine/sysml/allocation';
 import { stakeholdersOf, viewpointConcernTexts } from '../engine/sysml/views';
@@ -1138,74 +1140,124 @@ export function validateOwnershipMove(
     curr = nextParent;
   }
 
-  // Metatype compatibility check
-  const targetPkg = targetOwnerId === 'model' ? repo.packages.model : repo.packages?.[targetOwnerId];
-  const targetDef = repo.definitions?.[targetOwnerId];
-  const targetReq = repo.requirements?.[targetOwnerId];
-
-  // Determine source element kind
-  const sourceDef = repo.definitions?.[elementId];
-  const sourcePkg = repo.packages?.[elementId];
-  const sourceDiag = repo.diagrams?.[elementId];
-  const sourceReq = repo.requirements?.[elementId];
-  const sourceUsage = repo.usages?.[elementId];
-  const sourceVC = repo.verificationCases?.[elementId];
-
-  const sourceKind =
-    sourcePkg ? 'package' :
-    sourceDiag ? 'diagram' :
-    sourceDef ? sourceDef.kind :
-    sourceReq ? 'requirement' :
-    sourceUsage ? sourceUsage.kind :
-    sourceVC ? 'verificationCase' :
-    'unknown';
-
-  if (targetOwnerId === 'model' || Boolean(targetPkg)) {
-    // Model or package target
-    const allowed = ['package', 'diagram', 'block', 'valueType', 'interface', 'requirement', 'verificationCase', 'stateMachine', 'view', 'viewpoint', 'stakeholder', 'activity', 'interaction'];
-    if (!allowed.includes(sourceKind)) {
-      return {
-        code: 'DISALLOWED_OWNERSHIP',
-        severity: 'error',
-        elementId,
-        message: `Target package '${targetOwnerId}' cannot contain element '${elementId}' of kind '${sourceKind}'`,
-      };
-    }
-    return null;
+  // Metatype compatibility check: the same ownership policy that gates creation.
+  const targetOwner = targetOwnerId === 'model' ? null : resolveSemanticElement(repo, targetOwnerId) ?? null;
+  const sourceMetaclass = moveSourceMetaclass(repo, elementId);
+  const decision = sourceMetaclass
+    ? evaluateOwnership(targetOwner, sourceMetaclass)
+    : { allowed: false, message: `'${elementId}' is not a movable element` };
+  if (!decision.allowed || (targetOwnerId !== 'model' && !targetOwner)) {
+    return {
+      code: 'DISALLOWED_OWNERSHIP',
+      severity: 'error',
+      elementId,
+      message: decision.message
+        ? `Target '${targetOwnerId}' cannot contain element '${elementId}': ${decision.message}`
+        : `Target '${targetOwnerId}' cannot contain element '${elementId}'`,
+    };
   }
-
-  if (targetDef && targetDef.kind === 'block') {
-    // Block target: can contain parts, ports, properties, constraints
-    const allowed = ['part', 'reference', 'shared', 'port', 'property', 'constraint', 'activity', 'interaction'];
-    if (!allowed.includes(sourceKind)) {
-      return {
-        code: 'DISALLOWED_OWNERSHIP',
-        severity: 'error',
-        elementId,
-        message: `Target block '${targetOwnerId}' cannot contain element '${elementId}' of kind '${sourceKind}'`,
-      };
-    }
-    return null;
+  const movedDiagram = repo.diagrams?.[elementId];
+  if (movedDiagram) {
+    const ownerDiag = validateDiagramOwner(repo, movedDiagram.diagramKind, targetOwnerId);
+    if (ownerDiag) return { ...ownerDiag, elementId };
   }
+  return null;
+}
 
-  if (targetReq) {
-    if (sourceKind !== 'requirement') {
-      return {
-        code: 'DISALLOWED_OWNERSHIP',
-        severity: 'error',
-        elementId,
-        message: `Target requirement '${targetOwnerId}' cannot contain element '${elementId}' of kind '${sourceKind}'`,
-      };
-    }
-    return null;
-  }
+/**
+ * The metaclass the ownership policy judges a moved element by. The policy has
+ * no Actor or Subject metaclass: they are use-case-diagram participants owned
+ * like Use Cases, so they deliberately follow the UseCase rule.
+ */
+function moveSourceMetaclass(repo: SysmlRepository, elementId: string): MetaclassKind | undefined {
+  if (repo.diagrams?.[elementId]) return 'Diagram';
+  if (repo.requirements?.[elementId]) return 'Requirement';
+  if (repo.verificationCases?.[elementId]) return 'VerificationCase';
+  if (repo.actors?.[elementId] || repo.subjects?.[elementId]) return 'UseCase';
+  const usage = repo.usages?.[elementId];
+  if (usage) return usage.kind === 'part' ? 'PartProperty' : 'Port';
+  return resolveSemanticElement(repo, elementId)?.metaclass;
+}
 
+/**
+ * Which owners a diagram of each kind may have (SysML 1.6 / Cameo): a BDD in a
+ * Package or Block, an IBD in a Block, requirement diagrams in a Package or
+ * Requirement. Returns a diagnostic, or null when the owner is legal.
+ */
+function validateDiagramOwner(repo: SysmlRepository, diagramKind: string, ownerId: string): SysmlDiagnostic | null {
+  const ownerMeta: string = ownerId === 'model' ? 'Model' : resolveSemanticElement(repo, ownerId)?.metaclass ?? 'Unknown';
+  const legal: Record<string, readonly string[]> = {
+    bdd: ['Model', 'Package', 'Block', 'ConstraintBlock'],
+    ibd: ['Block', 'ConstraintBlock'],
+    requirements: ['Model', 'Package', 'Requirement'],
+    rtm: ['Model', 'Package', 'Requirement'],
+  };
+  const owners = legal[diagramKind];
+  if (!owners || owners.includes(ownerMeta)) return null;
   return {
     code: 'DISALLOWED_OWNERSHIP',
     severity: 'error',
-    elementId,
-    message: `Target '${targetOwnerId}' cannot contain element '${elementId}'`,
+    message: `A ${diagramKind} diagram cannot be owned by ${ownerMeta} '${ownerId}' (legal owners: ${owners.join(', ')}).`,
   };
+}
+
+/** Qualified-name path (root Model excluded) of an owner chain, outermost first. */
+function ownerNamespace(repo: SysmlRepository, ownerId: string | undefined): string[] {
+  const names: string[] = [];
+  const seen = new Set<string>();
+  let current = ownerId;
+  while (current && current !== 'model' && !seen.has(current)) {
+    seen.add(current);
+    const owner = repo.packages?.[current] ?? repo.definitions?.[current] ?? repo.requirements?.[current] ?? repo.useCases?.[current];
+    if (!owner) break;
+    names.unshift(owner.name);
+    current = owner.ownerId;
+  }
+  return names;
+}
+
+const NAMESPACED_COLLECTIONS = ['definitions', 'packages', 'diagrams', 'requirements', 'verificationCases', 'useCases', 'actors', 'subjects'] as const;
+
+/** The given ids plus everything they own, transitively (any ownerId-bearing collection). */
+function ownedDescendantIds(repo: SysmlRepository, rootIds: readonly string[]): Set<string> {
+  const owned = new Set<string>(rootIds);
+  const records = NAMESPACED_COLLECTIONS
+    .flatMap(collection => Object.values(repo[collection] ?? {}) as Array<{ id: string; ownerId?: string }>);
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const record of records) {
+      if (!owned.has(record.id) && record.ownerId && owned.has(record.ownerId)) { owned.add(record.id); grew = true; }
+    }
+  }
+  return owned;
+}
+
+/**
+ * `namespace` is the qualified-name path of the owner chain. Recomputes it, on the
+ * staged repository, for the given roots and everything they own, appending the
+ * patch operations; returns the ids whose record changed.
+ */
+function recomputeNamespaces(
+  nextRepo: SysmlRepository,
+  rootIds: readonly string[],
+  forwardOps: import('../engine/sysml/patches').PatchOperation[],
+  inverseOps: import('../engine/sysml/patches').PatchOperation[],
+): string[] {
+  const changed: string[] = [];
+  for (const id of ownedDescendantIds(nextRepo, rootIds)) {
+    for (const collection of NAMESPACED_COLLECTIONS) {
+      const current = (nextRepo[collection] as Record<string, { ownerId?: string; namespace?: string[] }>)[id];
+      if (!current) continue;
+      const namespace = ownerNamespace(nextRepo, current.ownerId);
+      if (JSON.stringify(current.namespace ?? []) === JSON.stringify(namespace)) continue;
+      const updated = { ...current, namespace };
+      (nextRepo[collection] as Record<string, unknown>)[id] = updated;
+      forwardOps.push({ op: 'replace', collection, id, oldValue: current, value: updated } as never);
+      inverseOps.unshift({ op: 'replace', collection, id, oldValue: updated, value: current } as never);
+      changed.push(id);
+    }
+  }
+  return changed;
 }
 
 const PACKAGE_SYMBOL_SIZE = { width: 220, height: 140 };
@@ -2589,6 +2641,15 @@ function executeSysmlCommandCore(
       rewrittenInteractions.push({ before, after });
     }
 
+    // `namespace` stores owner names, so renaming a Package re-derives it for everything it owns.
+    const renameOps: import('../engine/sysml/patches').PatchOperation[] = [];
+    const renameInverseOps: import('../engine/sysml/patches').PatchOperation[] = [];
+    let renamedIds: string[] = [];
+    if (collection === 'packages' && typeof (command.patch as { name?: unknown }).name === 'string') {
+      for (const namespaced of NAMESPACED_COLLECTIONS) (nextRepo as unknown as Record<string, unknown>)[namespaced] = { ...(nextRepo[namespaced] ?? {}) };
+      renamedIds = recomputeNamespaces(nextRepo, [command.elementId], renameOps, renameInverseOps);
+    }
+
     const scopedVal = validateScopedSysmlRepository(nextRepo, {
       commandType: 'updateElement',
       affectedIds: [command.elementId],
@@ -2620,14 +2681,22 @@ function executeSysmlCommandCore(
     seedBaselineErrors(nextRepo, stagedValidation.diagnostics, endpointContext);
     upsertEntity(store, collection, nextElement);
     for (const { after } of rewrittenInteractions) upsertEntity(store, 'definitions', after);
+    for (const id of renamedIds) {
+      for (const namespaced of NAMESPACED_COLLECTIONS) {
+        const record = (nextRepo[namespaced] as Record<string, unknown>)[id];
+        if (record) upsertEntity(store, namespaced, record as never);
+      }
+    }
     const patch = createSysmlPatch({
       revision: nextRepo.revision,
       coalesceKey: command.coalesceKey,
       forward: [
         { op: 'replace', collection, id: command.elementId, oldValue: existing, value: nextElement },
         ...rewrittenInteractions.map(({ before, after }) => ({ op: 'replace' as const, collection: 'definitions' as const, id: before.id, oldValue: before, value: after })),
+        ...renameOps,
       ],
       inverse: [
+        ...renameInverseOps,
         ...rewrittenInteractions.slice().reverse().map(({ before, after }) => ({ op: 'replace' as const, collection: 'definitions' as const, id: before.id, oldValue: after, value: before })),
         { op: 'replace', collection, id: command.elementId, oldValue: nextElement, value: existing },
       ],
@@ -2821,6 +2890,9 @@ function executeSysmlCommandCore(
     for (const op of mutationResult.forwardPatch?.forward ?? []) {
       if (op.op === 'replace' && op.collection === 'definitions' && nextRepo.definitions[op.id]) {
         upsertEntity(store, 'definitions', nextRepo.definitions[op.id]);
+      }
+      if (op.op === 'replace' && op.collection === 'usages' && nextRepo.usages[op.id]) {
+        upsertEntity(store, 'usages', nextRepo.usages[op.id]);
       }
     }
     const nextDiagramPresentations: Record<string, DiagramPresentation> = {};
@@ -3020,6 +3092,9 @@ function executeSysmlCommandCore(
       requirements: { ...(state.repository.requirements || {}) },
       verificationCases: { ...(state.repository.verificationCases || {}) },
       usages: { ...(state.repository.usages || {}) },
+      actors: { ...(state.repository.actors || {}) },
+      subjects: { ...(state.repository.subjects || {}) },
+      useCases: { ...(state.repository.useCases || {}) },
       auditTrail: [...(state.repository.auditTrail || [])],
     };
 
@@ -3065,8 +3140,21 @@ function executeSysmlCommandCore(
         nextRepo.usages[elemId] = updatedUsage;
         forwardOps.push({ op: 'replace', collection: 'usages', id: elemId, oldValue: prevUsage, value: updatedUsage });
         inverseOps.unshift({ op: 'replace', collection: 'usages', id: elemId, oldValue: updatedUsage, value: prevUsage });
+      } else {
+        for (const collection of ['useCases', 'actors', 'subjects'] as const) {
+          const prev = nextRepo[collection][elemId];
+          if (!prev) continue;
+          const updated = { ...prev, ownerId: targetOwnerId };
+          (nextRepo[collection] as Record<string, unknown>)[elemId] = updated;
+          forwardOps.push({ op: 'replace', collection, id: elemId, oldValue: prev, value: updated });
+          inverseOps.unshift({ op: 'replace', collection, id: elemId, oldValue: updated, value: prev });
+          break;
+        }
       }
     }
+
+    // Recompute `namespace` for every moved element and everything it owns, in the same transaction.
+    const touchedIds = new Set<string>([...command.elementIds, ...recomputeNamespaces(nextRepo, command.elementIds, forwardOps, inverseOps)]);
 
     nextRepo.auditTrail.push({
       id: `change-${nextRepo.revision}-move`,
@@ -3102,13 +3190,16 @@ function executeSysmlCommandCore(
     // Single atomic transaction: store projection, persistence records, and
     // exactly one history entry.
     seedBaselineErrors(nextRepo, stagedValidation.diagnostics, endpointContext);
-    for (const elemId of command.elementIds) {
+    for (const elemId of touchedIds) {
       if (nextRepo.definitions[elemId]) upsertEntity(store, 'definitions', nextRepo.definitions[elemId]);
       else if (nextRepo.packages[elemId]) upsertEntity(store, 'packages', nextRepo.packages[elemId]);
       else if (nextRepo.diagrams[elemId]) upsertEntity(store, 'diagrams', nextRepo.diagrams[elemId]);
       else if (nextRepo.requirements[elemId]) upsertEntity(store, 'requirements', nextRepo.requirements[elemId]);
       else if (nextRepo.verificationCases[elemId]) upsertEntity(store, 'verificationCases', nextRepo.verificationCases[elemId]);
       else if (nextRepo.usages[elemId]) upsertEntity(store, 'usages', nextRepo.usages[elemId]);
+      else if (nextRepo.useCases[elemId]) upsertEntity(store, 'useCases', nextRepo.useCases[elemId]);
+      else if (nextRepo.actors[elemId]) upsertEntity(store, 'actors', nextRepo.actors[elemId]);
+      else if (nextRepo.subjects[elemId]) upsertEntity(store, 'subjects', nextRepo.subjects[elemId]);
     }
 
     const patch = createSysmlPatch({
@@ -3168,6 +3259,8 @@ function executeSysmlCommandCore(
     if (diagram.diagramKind === 'sequence' && state.repository.definitions[ownerId]?.kind !== 'interaction') {
       return reject('INVALID_DIAGRAM_OWNER', 'A Sequence Diagram must be owned by an Interaction.', ownerId);
     }
+    const ownerVerdict = validateDiagramOwner(state.repository, diagram.diagramKind, ownerId);
+    if (ownerVerdict) return reject('INVALID_DIAGRAM_OWNER', ownerVerdict.message, ownerId);
     // Stage-first atomicity (Finding 1 review fix): stage the diagram and its
     // presentation as pure values. Store and patch history stay untouched
     // until staged validation below passes.

@@ -59,12 +59,12 @@ describe('model explorer creates and shows Enumeration, Signal and ConstraintBlo
   it('offers Unit and QuantityKind as things a Package can own', () => {
     const adapter = createSysmlExplorerAdapter(harness());
     const labels = adapter.capabilities(['model']).filter((c: { kind: string }) => c.kind === 'createElement').map((c: { elementKind?: string }) => c.elementKind);
-    expect(labels).toEqual(expect.arrayContaining(['unit', 'quantityKind']));
+    expect(labels).toEqual(expect.arrayContaining(['Unit', 'QuantityKind']));
   });
 
   it('offers them as things a Package can own', () => {
     const adapter = createSysmlExplorerAdapter(harness());
     const labels = adapter.capabilities(['model']).filter((c: { kind: string }) => c.kind === 'createElement').map((c: { elementKind?: string }) => c.elementKind);
-    expect(labels).toEqual(expect.arrayContaining(['enumeration', 'signal', 'constraintBlock']));
+    expect(labels).toEqual(expect.arrayContaining(['Enumeration', 'Signal', 'ConstraintBlock']));
   });
 });

@@ -386,11 +386,10 @@ export function classifyRelationship(repo: SysmlRepository, relationshipId: stri
   return { allowed: diagnostics.length === 0, diagram: 'rtm', diagnostics };
 }
 
-/** A part property id, a property path of a part, or a Block port id. */
+/** A Block property id (any kind), a property path of a part, or a Block port id. */
 export function isFeatureReference(repo: SysmlRepository, id: string): boolean {
   if (id.includes(PATH_SEPARATOR)) return Boolean(resolveOccurrenceKey(repo, id));
-  const property = findPropertyOwner(repo, id);
-  if (property) return isPartProperty(repo, property.feature);
+  if (findPropertyOwner(repo, id)) return true;
   return Boolean(findPortOwner(repo, id));
 }
 

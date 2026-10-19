@@ -25,11 +25,31 @@ function elementExistsInRepository(repository: SysmlRepository, id: string): boo
 }
 
 /**
+ * A diagram may be owned by a Block (a block-owned BDD), but a Package or Block
+ * created from it cannot be owned by that Block: elements created on the canvas
+ * belong to the nearest owning Package. Other owners are kept as they are.
+ */
+const isBlockLike = (kind?: string): boolean => kind === 'block' || kind === 'constraintBlock' || kind === 'interface' || kind === 'associationBlock';
+
+function nearestOwningPackage(repository: SysmlRepository, ownerId: string): string {
+  let current = ownerId;
+  const seen = new Set<string>();
+  while (isBlockLike(repository.definitions?.[current]?.kind) && !seen.has(current)) {
+    seen.add(current);
+    const next = repository.definitions[current].ownerId;
+    if (!next) return 'model';
+    current = next;
+  }
+  return current;
+}
+
+/**
  * Pure resolution of the semantic owner for SysML diagram element creation.
  * Owner policy:
  * - IBD requires a real Block contextElementId.
  * - Package Diagram uses its owning Package or 'model'.
- * - BDD, Requirements, and other diagrams use the explicitly owned diagram's owner or 'model'.
+ * - BDD, Requirements, and other diagrams use the explicitly owned diagram's owner or 'model';
+ *   a Block-owned diagram resolves to the Block's nearest owning Package.
  */
 export function resolveSysmlCreationOwner(
   repository: SysmlRepository,
@@ -61,7 +81,7 @@ export function resolveSysmlCreationOwner(
   const diagram = repository.diagrams?.[context.diagramId];
   if (diagram?.ownerId) {
     if (elementExistsInRepository(repository, diagram.ownerId)) {
-      return { ok: true, ownerId: diagram.ownerId };
+      return { ok: true, ownerId: nearestOwningPackage(repository, diagram.ownerId) };
     }
     return {
       ok: false,
