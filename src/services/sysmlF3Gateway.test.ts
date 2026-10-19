@@ -122,7 +122,7 @@ describe('F3.3 deleting a Block leaves no ghosts', () => {
     expect(result.committed, JSON.stringify(result.diagnostics)).toBe(true);
     expect(after.repository.diagrams.ibd).toBeUndefined();
     expect(after.repository.diagrams.ctx).toBeUndefined();
-    expect(after.diagramPresentations.ibd).toBeUndefined();
+    expect(after.diagramPresentations?.ibd).toBeUndefined();
     const veh = after.repository.definitions.veh as BlockDefinition;
     expect(veh.properties.map(p => p.typeId)).toEqual(['', '']);
     expect((after.store?.definitions.get('veh') as BlockDefinition).properties[0].typeId).toBe('');
