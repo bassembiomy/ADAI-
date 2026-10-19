@@ -199,12 +199,19 @@ export function resolveTreeOpenTarget(
     return context ? { kind: 'region', context, selectId: semanticId } : null;
   }
 
-  // a block feature (property / port) opens through its block
+  // a block feature (property / port / operation) or a use case's extension point opens through its owner,
+  // but the feature itself is what gets selected so its inspector shows
   let target = semanticId;
   for (const definition of Object.values(repository.definitions)) {
     if (definition.kind !== 'block') continue;
-    if (definition.properties.some(p => p.id === semanticId) || definition.ports.some(p => p.id === semanticId)) target = definition.id;
+    if (
+      definition.properties.some(p => p.id === semanticId)
+      || definition.ports.some(p => p.id === semanticId)
+      || (definition.operations ?? []).some(op => (typeof op === 'string' ? op : (op as { id?: string }).id) === semanticId)
+    ) target = definition.id;
   }
+  const extensionPoint = repository.extensionPoints?.[semanticId];
+  if (extensionPoint?.useCaseId) target = extensionPoint.useCaseId;
   const relationship = repository.relationships[target];
   const presents = (diagramId: string) => {
     const ids = diagramPresentations?.[diagramId]?.elementIds ?? [];
@@ -214,5 +221,5 @@ export function resolveTreeOpenTarget(
   const chosen = [options.preferredDiagramId, options.activeDiagramId].find(id => id && candidates.includes(id))
     ?? candidates[candidates.length - 1]
     ?? Object.values(repository.diagrams).find(d => d.ownerId === target)?.id;
-  return chosen ? { kind: 'diagram', diagramId: chosen, selectId: target } : null;
+  return chosen ? { kind: 'diagram', diagramId: chosen, selectId: semanticId } : null;
 }

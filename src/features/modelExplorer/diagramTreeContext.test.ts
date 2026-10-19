@@ -208,9 +208,23 @@ describe('resolveTreeOpenTarget', () => {
     expect(resolveTreeOpenTarget('r1', repo(), presentations, sm)).toMatchObject({ diagramId: 'reqB' });
   });
 
-  it('opens a feature through its block and a relationship where both ends are shown', () => {
-    expect(resolveTreeOpenTarget('b1.p', repo(), presentations, sm, { activeDiagramId: 'bdd' })).toEqual({ kind: 'diagram', diagramId: 'bdd', selectId: 'b1' });
+  it('opens a feature on the diagram of its block but selects the feature itself, and a relationship where both ends are shown', () => {
+    expect(resolveTreeOpenTarget('b1.p', repo(), presentations, sm, { activeDiagramId: 'bdd' })).toEqual({ kind: 'diagram', diagramId: 'bdd', selectId: 'b1.p' });
     expect(resolveTreeOpenTarget('sat', repo(), presentations, sm)).toEqual({ kind: 'diagram', diagramId: 'reqA', selectId: 'sat' });
+  });
+
+  it('selects a port, operation or extension point itself while opening its owner diagram', () => {
+    const r = repo();
+    const block = r.definitions.b1 as any;
+    block.ports = [{ id: 'b1.port', name: 'po', kind: 'standard', typeId: '' }];
+    block.operations = [{ id: 'b1.op', name: 'op' }];
+    r.useCases = { uc1: { id: 'uc1', name: 'UC', kind: 'useCase', namespace: [], ownerId: 'model' } as any };
+    r.extensionPoints = { ep1: { id: 'ep1', name: 'EP', kind: 'extensionPoint', namespace: [], ownerId: 'uc1', useCaseId: 'uc1' } as any };
+    const pres = { ...presentations, bdd: { elementIds: ['b1', 'uc1'] } };
+    expect(resolveTreeOpenTarget('b1.port', r, pres, sm, { activeDiagramId: 'bdd' })).toEqual({ kind: 'diagram', diagramId: 'bdd', selectId: 'b1.port' });
+    expect(resolveTreeOpenTarget('b1.op', r, pres, sm, { activeDiagramId: 'bdd' })).toEqual({ kind: 'diagram', diagramId: 'bdd', selectId: 'b1.op' });
+    expect(resolveTreeOpenTarget('ep1', r, pres, sm)).toEqual({ kind: 'diagram', diagramId: 'bdd', selectId: 'ep1' });
+    expect(resolveTreeOpenTarget('nothing-here', r, pres, sm)).toBeNull();
   });
 
   it('opens a state in the region that holds it', () => {
