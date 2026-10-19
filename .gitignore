@@ -42,3 +42,4 @@ playwright-report/
 npm-audit-*.json
 Z-CODE/
 data/
+scripts/report-audit/out/

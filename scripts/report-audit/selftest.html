@@ -1,0 +1,34 @@
+<!doctype html><html><head><meta charset="utf-8"><title>selftest</title>
+<style>body{margin:0;font-family:sans-serif}.report{max-width:210mm;margin:0 auto;padding:0}
+figure.report-figure{margin:10px 0;padding:10px;border:1px solid #ccc}figure.report-figure svg{max-width:100%;height:auto}</style></head><body>
+<div class="report"><h2>Self test</h2>
+<!-- CLEAN: nothing may be reported. Includes a container node with a child and an edge that stays in free space. -->
+<figure class="report-figure" id="clean"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 200" width="400" height="200">
+ <g class="rf-node" data-x="10" data-y="10" data-w="180" data-h="150"><rect x="10" y="10" width="180" height="150" fill="#fff" stroke="#000"/><text x="100" y="28" font-size="12" text-anchor="middle">Frame</text>
+  <g class="rf-node" data-x="30" data-y="50" data-w="100" data-h="40"><rect x="30" y="50" width="100" height="40" fill="#fff" stroke="#000"/><text x="80" y="75" font-size="12" text-anchor="middle">Inner</text></g></g>
+ <g class="rf-node" data-x="260" data-y="20" data-w="110" data-h="40"><rect x="260" y="20" width="110" height="40" fill="#fff" stroke="#000"/><text x="315" y="45" font-size="12" text-anchor="middle">Right</text></g>
+ <g class="rf-node" data-x="260" data-y="120" data-w="110" data-h="40"><rect x="260" y="120" width="110" height="40" fill="#fff" stroke="#000"/><text x="315" y="145" font-size="12" text-anchor="middle">Below</text></g>
+ <path id="edge-ok" d="M315 60 L315 120" stroke="#000" fill="none"/><text x="322" y="95" font-size="10">label</text>
+</svg><figcaption class="report-figure-caption">CLEAN case</figcaption></figure>
+<!-- DEFECTS: exactly one of each class. -->
+<figure class="report-figure" id="defects"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 260" width="500" height="260">
+ <!-- text-overlap: two free texts on top of each other -->
+ <text x="250" y="20" font-size="14">OVERLAPPING</text><text x="255" y="22" font-size="14">TEXTOVER</text>
+ <!-- text-crosses-node-border: text wider than its node -->
+ <g class="rf-node" data-x="80" data-y="40" data-w="60" data-h="30"><rect x="80" y="40" width="60" height="30" fill="#fff" stroke="#000"/><text x="110" y="60" font-size="14" text-anchor="middle">Far too wide for it</text></g>
+ <!-- edge-through-node: A -> C passes through B -->
+ <g class="rf-node" data-x="10" data-y="120" data-w="60" data-h="30"><rect x="10" y="120" width="60" height="30" fill="#fff" stroke="#000"/><text x="40" y="140" font-size="12" text-anchor="middle">A</text></g>
+ <g class="rf-node" data-x="140" data-y="110" data-w="60" data-h="50"><rect x="140" y="110" width="60" height="50" fill="#fff" stroke="#000"/><text x="170" y="140" font-size="12" text-anchor="middle">B</text></g>
+ <g class="rf-node" data-x="300" data-y="120" data-w="60" data-h="30"><rect x="300" y="120" width="60" height="30" fill="#fff" stroke="#000"/><text x="330" y="140" font-size="12" text-anchor="middle">C</text></g>
+ <path id="edge-through" d="M70 135 L300 135" stroke="#000" fill="none"/>
+ <!-- node-overlap: partially overlapping siblings -->
+ <g class="rf-node" data-x="380" data-y="40" data-w="60" data-h="40"><rect x="380" y="40" width="60" height="40" fill="#fff" stroke="#000"/><text x="410" y="65" font-size="12" text-anchor="middle">P</text></g>
+ <g class="rf-node" data-x="420" data-y="60" data-w="60" data-h="40"><rect x="420" y="60" width="60" height="40" fill="#fff" stroke="#000"/><text x="450" y="85" font-size="12" text-anchor="middle">Q</text></g>
+ <!-- outside-viewbox -->
+ <rect x="470" y="220" width="60" height="30" fill="#fcc" stroke="#000"/>
+</svg><figcaption class="report-figure-caption">DEFECTS case</figcaption></figure>
+<!-- paper overflow: a 900px wide div -->
+<div style="width:900px;height:20px;background:#eee">wide</div>
+<!-- legibility: 4000-unit wide viewBox shrunk to the page -->
+<figure class="report-figure" id="tiny"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 4000 100" width="4000" height="100"><text x="10" y="50" font-size="12">tiny</text></svg><figcaption class="report-figure-caption">TINY case</figcaption></figure>
+</div></body></html>
