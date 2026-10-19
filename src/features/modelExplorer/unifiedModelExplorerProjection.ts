@@ -1,4 +1,5 @@
-import type { ModelDiagramDefinition, SysmlRepository } from '../../engine/sysml/model';
+import type { ActivityDefinition, ModelDiagramDefinition, SysmlRepository } from '../../engine/sysml/model';
+import { activityNestedIds } from '../../engine/sysml/activity';
 import type { NormalizedSysmlStore } from '../../engine/sysml/normalizedStore';
 import type { SemanticElement } from '../../engine/sysml/domain/base';
 import type {
@@ -379,17 +380,37 @@ function registerInteractionContent(
   }
 }
 
-/** Unowned relationships whose source has no store entity; cached per store revision so a large model is scanned once. */
-const sourcelessRelationshipCache = new WeakMap<object, { revision: number; relationships: any[] }>();
-function sourcelessUnownedRelationships(input: UnifiedExplorerInput, store: NormalizedSysmlStore): any[] {
+/** Activity that owns each nested activity element (node, pin, edge, partition, parameter), per repository. */
+const activityOwnerCache = new WeakMap<object, Map<string, string>>();
+function activityOwnerOf(repository: SysmlRepository, nestedId: string): string | undefined {
+  let owners = activityOwnerCache.get(repository.definitions);
+  if (!owners) {
+    owners = new Map();
+    for (const definition of Object.values(repository.definitions ?? {})) {
+      if ((definition as any).kind !== 'activity') continue;
+      for (const id of activityNestedIds(definition as ActivityDefinition)) owners.set(id, definition.id);
+    }
+    activityOwnerCache.set(repository.definitions, owners);
+  }
+  return owners.get(nestedId);
+}
+
+/**
+ * Unowned relationships whose source has no store entity, each with the element it is listed under: the
+ * Activity owning the source when the source is an activity node / pin / edge (Cameo lists it there), else
+ * none (the Structural pillar). Cached per store revision so a large model is scanned once.
+ */
+const sourcelessRelationshipCache = new WeakMap<object, { revision: number; relationships: Array<{ rel: any; parentId?: string }> }>();
+function sourcelessUnownedRelationships(input: UnifiedExplorerInput, store: NormalizedSysmlStore): Array<{ rel: any; parentId?: string }> {
   const cached = sourcelessRelationshipCache.get(store);
   if (cached && cached.revision === store.revision) return cached.relationships;
-  const relationships: any[] = [];
+  const relationships: Array<{ rel: any; parentId?: string }> = [];
   for (const [sourceId, relIds] of store.indexes.sourceId) {
     if (store.entities.has(sourceId)) continue;
+    const parentId = activityOwnerOf(input.sysml, sourceId);
     for (const relId of relIds) {
       const rel = input.sysml.relationships[relId];
-      if (isUnownedRelationship(rel)) relationships.push(rel);
+      if (isUnownedRelationship(rel)) relationships.push({ rel, parentId: parentId && store.entities.has(parentId) ? parentId : undefined });
     }
   }
   sourcelessRelationshipCache.set(store, { revision: store.revision, relationships });
@@ -441,6 +462,7 @@ function buildLazyStoreProjection(
     for (const relId of store.indexes.sourceId.get(id) ?? []) {
       if (isUnownedRelationship(input.sysml.relationships[relId])) return true;
     }
+    if (entity?.kind === 'activity' && sourcelessUnownedRelationships(input, store).some(entry => entry.parentId === id)) return true;
     if (entity) {
       if (entity.kind === 'block') {
         if ((entity.properties?.length ?? 0) > 0 || (entity.ports?.length ?? 0) > 0 || (entity.operations?.length ?? 0) > 0) {
@@ -556,11 +578,12 @@ function buildLazyStoreProjection(
     }
   }
 
-  // Unowned relationships whose source has no tree node of its own (an allocation from an activity node, ...)
-  // would be unreachable; they are listed under the Structural pillar as the full projection does.
-  if (expanded.has('project:pillar:structural')) {
-    for (const rel of sourcelessUnownedRelationships(input, store)) {
-      if (!nodes[sysmlNodeId(rel.id)]) register(nodes, projectRelationship(rel as any, input.sysml));
+  // Unowned relationships whose source has no tree node of its own: under the Activity owning the source
+  // (an allocation from an activity node), otherwise under the Structural pillar as the full projection does.
+  for (const { rel, parentId } of sourcelessUnownedRelationships(input, store)) {
+    const parentNodeId = parentId ? sysmlNodeId(parentId) : 'project:pillar:structural';
+    if (expanded.has(parentNodeId) && !nodes[sysmlNodeId(rel.id)]) {
+      register(nodes, { ...projectRelationship(rel as any, input.sysml), parentNodeId });
     }
   }
 
@@ -1015,6 +1038,13 @@ export function buildUnifiedModelProjection(input: UnifiedExplorerInput): ModelT
     if (!(rel as any).ownerId && nodes[sysmlNodeId(rel.sourceId)]) {
       relNode.parentNodeId = sysmlNodeId(rel.sourceId);
       ownersWithChildren.add(rel.sourceId);
+    } else if (!(rel as any).ownerId) {
+      // a source with no tree node of its own (an activity node) lists it under its Activity
+      const activityId = activityOwnerOf(input.sysml, rel.sourceId);
+      if (activityId && nodes[sysmlNodeId(activityId)]) {
+        relNode.parentNodeId = sysmlNodeId(activityId);
+        ownersWithChildren.add(activityId);
+      }
     }
     if (!nodes[relNode.nodeId]) {
       register(nodes, relNode);

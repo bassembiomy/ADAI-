@@ -779,4 +779,21 @@ describe('buildUnifiedModelProjection', () => {
     const open = buildUnifiedModelProjection({ ...base, expandedNodeIds: new Set(['project:model', 'project:pillar:requirements', 'project:pillar:structural', 'sysml:element:pkg', 'sysml:element:tc1']) });
     expect(open.nodes['sysml:element:ver']?.parentNodeId).toBe('sysml:element:tc1');
   });
+  it('lists an allocation from an activity node under the Activity owning the node (lazy and full)', () => {
+    const repository = createEmptyRepository();
+    repository.packages.pkg = { id: 'pkg', name: 'Pkg', kind: 'package', namespace: [], ownerId: 'model' };
+    repository.definitions.blk = { id: 'blk', name: 'Blk', kind: 'block', namespace: [], ownerId: 'pkg', properties: [], ports: [], operations: [] } as any;
+    repository.definitions.act = {
+      id: 'act', name: 'Act', kind: 'activity', namespace: [], ownerId: 'blk', nodes: [{ id: 'act_node', kind: 'action', name: 'Do' }], edges: [], partitions: [], parameters: [],
+    } as any;
+    repository.relationships.alloc = { id: 'alloc', kind: 'allocate', sourceId: 'act_node', targetId: 'blk' } as any;
+    const base = { sysml: repository, sysmlStore: fromRepository(repository, {}, {}), stateMachine: emptyStateMachine(), externalModels: [], revision: 1 };
+    const pillarOnly = buildUnifiedModelProjection({ ...base, expandedNodeIds: new Set(['project:model', 'project:pillar:structural', 'project:pillar:behavior', 'sysml:element:pkg', 'sysml:element:blk']) });
+    expect(pillarOnly.nodes['sysml:element:alloc']).toBeUndefined();
+    expect(pillarOnly.nodes['sysml:element:act']?.hasChildren).toBe(true);
+    const lazy = buildUnifiedModelProjection({ ...base, expandedNodeIds: new Set(['project:model', 'project:pillar:structural', 'project:pillar:behavior', 'sysml:element:pkg', 'sysml:element:blk', 'sysml:element:act']) });
+    expect(lazy.nodes['sysml:element:alloc']?.parentNodeId).toBe('sysml:element:act');
+    const full = buildUnifiedModelProjection({ sysml: repository, stateMachine: emptyStateMachine(), externalModels: [], revision: 1 });
+    expect(full.nodes['sysml:element:alloc']?.parentNodeId).toBe('sysml:element:act');
+  });
 });
