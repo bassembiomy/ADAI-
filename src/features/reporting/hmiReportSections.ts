@@ -206,6 +206,7 @@ export function renderHmiPrototypeSection(input: HmiPrototypeInput): string {
               margin: 0 auto 20px;
               overflow: visible;
             }
+            .hmi-canvas-fit.is-actual { overflow-x: auto; overflow-y: hidden; }
             #sim-dashboard > div { min-width: 0; }
             #sim-dashboard > div > div {
               white-space: normal !important;
@@ -218,6 +219,7 @@ export function renderHmiPrototypeSection(input: HmiPrototypeInput): string {
             @media print {
               .hmi-sim-container { max-width: 100%; padding: 12px; box-shadow: none; break-inside: avoid; page-break-inside: avoid; }
               .hmi-canvas-fit { break-inside: avoid; page-break-inside: avoid; }
+              .sim-btn-zoom { display: none !important; }
             }
             .hmi-comp-container {
               position: absolute;
@@ -396,6 +398,7 @@ export function renderHmiPrototypeSection(input: HmiPrototypeInput): string {
               <button id="sim-btn-power" onclick="window.ADIA_SIM.toggleSimRunning()" class="sim-btn">PAUSE</button>
               <button id="sim-btn-step" onclick="window.ADIA_SIM.step()" class="sim-btn">STEP TICK</button>
               <button id="sim-btn-reset" onclick="window.ADIA_SIM.reset()" class="sim-btn">RESET</button>
+              <button id="sim-btn-zoom" type="button" class="sim-btn sim-btn-zoom" aria-pressed="false" title="Toggle between fitting the simulator to the page width and its natural 100% size (scrollable)">Fit</button>
             </div>
           </div>
 
@@ -428,6 +431,8 @@ export function renderHmiPrototypeSection(input: HmiPrototypeInput): string {
             var naturalWidth = Number(fit.getAttribute("data-natural-width")) || 1;
             var naturalHeight = Number(fit.getAttribute("data-natural-height")) || 1;
             var printing = false;
+            var actual = false; // user's "100%" choice; ignored while printing
+            var zoomBtn = document.getElementById("sim-btn-zoom");
             function mmToPx(mm) {
               var probe = document.createElement("div");
               probe.style.cssText = "position:absolute;visibility:hidden;width:" + mm + "mm;height:0";
@@ -445,11 +450,30 @@ export function renderHmiPrototypeSection(input: HmiPrototypeInput): string {
               } else {
                 available = fit.clientWidth || naturalWidth;
               }
-              var scale = Math.max(0.05, Math.min(1, available / naturalWidth));
-              canvas.style.transform = scale < 1 ? "scale(" + scale + ")" : "none";
-              fit.style.height = Math.ceil(naturalHeight * scale) + "px";
-              fit.style.maxWidth = (printing ? Math.floor(naturalWidth * scale) : naturalWidth) + "px";
+              var showActual = actual && !printing;
+              if (showActual) {
+                // 100%: natural size inside a horizontally scrollable viewport (never wider than the page column).
+                canvas.style.transform = "none";
+                fit.classList.add("is-actual");
+                fit.style.height = (naturalHeight + 18) + "px";
+                fit.style.maxWidth = naturalWidth + "px";
+              } else {
+                var scale = Math.max(0.05, Math.min(1, available / naturalWidth));
+                canvas.style.transform = scale < 1 ? "scale(" + scale + ")" : "none";
+                fit.classList.remove("is-actual");
+                fit.scrollLeft = 0;
+                fit.style.height = Math.ceil(naturalHeight * scale) + "px";
+                fit.style.maxWidth = (printing ? Math.floor(naturalWidth * scale) : naturalWidth) + "px";
+              }
+              if (zoomBtn && !printing) {
+                zoomBtn.textContent = actual ? "100%" : "Fit";
+                zoomBtn.setAttribute("aria-pressed", actual ? "true" : "false");
+                zoomBtn.classList.toggle("active", actual);
+                // Nothing to toggle when the canvas already fits at full size.
+                zoomBtn.hidden = !actual && (fit.clientWidth || naturalWidth) >= naturalWidth;
+              }
             }
+            if (zoomBtn) zoomBtn.addEventListener("click", function() { actual = !actual; applyScale(); });
             function setPrinting(value) { printing = value; applyScale(); }
             applyScale();
             window.addEventListener("resize", applyScale);

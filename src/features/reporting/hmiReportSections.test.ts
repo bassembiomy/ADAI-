@@ -110,6 +110,16 @@ describe('renderHmiPrototypeSection', () => {
     expect(html).not.toMatch(/zoom\s*:/);
   });
 
+  it('offers a screen-only Fit / 100% toggle that print always overrides with Fit', () => {
+    expect(html).toContain('id="sim-btn-zoom"');
+    expect(html).toMatch(/id="sim-btn-zoom"[^>]*class="sim-btn sim-btn-zoom"/);
+    expect(html).toContain('.sim-btn-zoom { display: none !important; }');
+    expect(html).toContain('.hmi-canvas-fit.is-actual { overflow-x: auto;');
+    expect(html).toContain('var showActual = actual && !printing;');
+    expect(html).toContain('fit.classList.add("is-actual")');
+    expect(html).toContain('actual = !actual; applyScale();');
+  });
+
   it('puts a canvas wider than the portrait content box on a landscape page and scales to the landscape width in print', () => {
     expect(html).toContain('<div class="report-wide-page">');
     expect(html).toContain('data-wide="1"');

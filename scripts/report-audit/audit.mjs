@@ -63,6 +63,8 @@ export function summarize(r, per = 3) {
     for (const o of m.overflow.slice(0, 8)) lines.push(`    +${o.overflowPx}px  ${o.path}  [section: ${o.section}]${o.text ? `  "${o.text}"` : ''}  (${o.offendingDescendants} offending descendants)`);
     if (m.clipped.length) { lines.push(`  clipped/scrolling containers: ${m.clipped.length}`); for (const c of m.clipped.slice(0, 5)) lines.push(`    ${c.path} scrollWidth ${c.scrollWidth} > ${c.clientWidth} [section: ${c.section}]`); }
     if (mode === 'print') {
+      lines.push(`  visible fixed/sticky elements (overlap content on every printed page): ${(m.fixedElements || []).length}`);
+      for (const f of m.fixedElements || []) lines.push(`    ${f.position}  ${f.path}  "${f.text}"`);
       lines.push(`  figures taller than a page (${PRINT_FIGURE_MAX_H}px): ${m.figuresTooTall.length}`);
       for (const f of m.figuresTooTall) lines.push(`    ${f.heightPx}px [${f.orientation}, limit ${f.limitPx}]  ${f.caption}  [section: ${f.section}]`);
     }

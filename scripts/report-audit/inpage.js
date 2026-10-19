@@ -36,6 +36,16 @@
     const hs = headings();
     const out = { content: { left: r2(left), right: r2(right), width: r2(right - left) }, overflow: [], clipped: [], figuresTooTall: [], legibility: [], docScrollWidth: document.documentElement.scrollWidth, docClientWidth: document.documentElement.clientWidth };
     out.docOverflow = out.docScrollWidth > out.docClientWidth;
+    // position:fixed/sticky elements print at the top-left of every page in Chromium and overlap content
+    out.fixedElements = [];
+    if (opts.print) {
+      for (const el of document.body.querySelectorAll('*')) {
+        const st = getComputedStyle(el);
+        if ((st.position === 'fixed' || st.position === 'sticky') && st.display !== 'none' && st.visibility !== 'hidden' && el.getClientRects().length) {
+          out.fixedElements.push({ path: pathOf(el, null), position: st.position, text: (el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 60) });
+        }
+      }
+    }
     const offending = new Set();
     const rows = [];
     for (const el of report.querySelectorAll('*')) {

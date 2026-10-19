@@ -116,16 +116,12 @@ table.rtm-grid th:first-child { text-align:left; }
 .item-header { font-weight:700; }
 .props { color:var(--muted); margin-left:10px; font-size:9.5pt; }
 
-/* running footer (fallback for engines without @page margin boxes) */
-.print-footer { display:none; }
-
 @page { size:A4; margin:18mm 15mm 20mm; @bottom-right { content:"Page " counter(page) " of " counter(pages); font-size:8pt; color:#64748b; } }
 @page wide { size:A4 landscape; margin:15mm 15mm 18mm; @bottom-right { content:"Page " counter(page) " of " counter(pages); font-size:8pt; color:#64748b; } }
 figure.report-figure.report-figure-wide, .report-wide-page { page:wide; }
 @media print {
   body { background:#fff; font-size:10pt; }
   .report { max-width:none; margin:0; padding:0; box-shadow:none; }
-  .print-footer { display:block; position:fixed; bottom:-12mm; left:0; font-size:8pt; color:#64748b; }
   a { color:inherit; text-decoration:none; }
   figure.report-figure { border-color:#cbd5e1; }
   figure.report-figure svg { height:auto; max-width:100%; max-height:230mm; }
@@ -134,3 +130,18 @@ figure.report-figure.report-figure-wide, .report-wide-page { page:wide; }
 }
 @media screen and (max-width: 800px) { .report { margin:0; padding:14px; } .cover { padding-left:10px; } }
 `;
+
+/** Escape arbitrary text for use inside a double-quoted CSS string (backslashes, quotes, newlines, control chars). */
+export function cssString(text: string): string {
+  const body = text
+    .replace(/[\u0000-\u001f\u007f\u2028\u2029]/g, ' ')
+    .replace(/[\\"]/g, (c) => '\\' + c)
+    .replace(/</g, '\\3c ');
+  return `"${body}"`;
+}
+
+/** Running footer (document id / project) in the @bottom-left margin box of both page types; the page counter sits at @bottom-right. */
+export function printFooterCss(text: string): string {
+  const box = `@bottom-left { content:${cssString(text)}; font-size:8pt; color:#64748b; }`;
+  return `@page { ${box} }\n@page wide { ${box} }`;
+}

@@ -14,7 +14,7 @@ import {
 import type { HierarchySourceModel } from '../reportHierarchyEngine';
 import { buildScenarioEntries } from '../scenariosSection';
 import { ReportNumbering, notModelled, sectionId } from './numbering';
-import { SYSTEM_REPORT_CSS } from './reportStyles';
+import { SYSTEM_REPORT_CSS, printFooterCss } from './reportStyles';
 import { renderRtmSection } from './rtmSection';
 
 export interface SystemReportInput {
@@ -679,10 +679,11 @@ ${num.listOfTables()}
 </section>`;
 
   return `<!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><title>${esc(input.projectName)} - System Architecture &amp; Design Report</title><style>${SYSTEM_REPORT_CSS}</style></head>
+<html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><title>${esc(input.projectName)} - System Architecture &amp; Design Report</title><style>${SYSTEM_REPORT_CSS}
+${printFooterCss(`${docId} \u00b7 ${input.projectName}`)}</style></head>
 <body><div class="report">
 ${cover}
 ${front}
 ${body.join('\n')}
-</div><div class="print-footer">${esc(docId)} &middot; ${esc(input.projectName)}</div></body></html>`;
+</div></body></html>`;
 }
