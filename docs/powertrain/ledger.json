@@ -263,8 +263,10 @@
       "deps": [
         "WP-08"
       ],
-      "status": "todo",
-      "findings": []
+      "status": "done",
+      "findings": [],
+      "review": "reviewed",
+      "note": "Rotational Inertia, Torsional Compliance, Disc Clutch (stateless lock + ZC), Torque Converter, Planetary Gear; Info bus element names unconfirmed vs MATLAB"
     },
     {
       "id": "WP-14",
@@ -656,9 +658,17 @@
       "deps": [
         "EC-06"
       ],
-      "status": "todo",
+      "status": "done",
       "tests": "",
-      "findings": []
+      "findings": [],
+      "review": "reviewed",
+      "note": "grid sweeps, calibrationExport, DoE panel; reviewer fix: SI engine AFR 14.7 for f_air"
+    },
+    {
+      "id": "WP-15a",
+      "status": "done",
+      "review": "reviewed",
+      "note": "Ideal Fixed Gear Transmission"
     }
   ],
   "blocks": {},
@@ -674,6 +684,11 @@
       "test": "src/help/helpCoverage.test.ts > requires fresh live UI evidence and detects a new unmapped inline control",
       "since": "49f07cf (baseline)",
       "cause": "docs/help live-UI report has an 'unmapped' item; unrelated to powertrain"
+    },
+    {
+      "test": "stateMachineCodeGenerator(.behavior), smCTestRuntimeRenderer, smGeneratedVerification.e2e C-compile gates",
+      "since": "environment",
+      "cause": "avr-gcc / host C toolchain gates not available in the cloud container; unrelated to powertrain"
     }
   ],
   "engine_calibration": {
