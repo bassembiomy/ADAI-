@@ -167,7 +167,7 @@
       "deps": [
         "WP-09"
       ],
-      "status": "todo",
+      "status": "in_progress",
       "findings": []
     },
     {
@@ -432,7 +432,7 @@
     },
     {
       "id": "WP-31",
-      "title": "Reference apps: conventional, EV",
+      "title": "EV reference model (Conventional vehicle in WP-31b)",
       "exec": "S",
       "deps": [
         "WP-09",
@@ -440,8 +440,9 @@
         "WP-22",
         "WP-23"
       ],
-      "status": "todo",
-      "findings": []
+      "status": "in_progress",
+      "findings": [],
+      "tests": "src/engine/xbridges/powertrain/wp31_evReference.test.ts"
     },
     {
       "id": "WP-32",
