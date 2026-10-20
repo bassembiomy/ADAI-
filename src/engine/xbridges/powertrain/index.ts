@@ -3,6 +3,7 @@
 import type { XBlock } from '../types';
 import type { PtBlockSpec } from './ptSpec';
 import { PT_CATEGORY_ORDER } from './ptSpec';
+import { FUELING_ACTUATION_BLOCKS } from './blocks/fuelingActuation';
 import { ENGINE_CYLINDER_BLOCKS } from './blocks/engineCylinders';
 import { TEST_CELL_CONTROL_BLOCKS } from './blocks/testCellControl';
 import { DOE_SWEEPER_BLOCKS } from './blocks/doeSweeper';
@@ -16,7 +17,7 @@ import { VEHICLE_BODY_BLOCKS } from './blocks/vehicleBody';
 import { BATTERY_BLOCKS } from './blocks/batteries';
 import { ELECTRIC_MOTOR_BLOCKS } from './blocks/electricMotors';
 
-export const PT_BLOCKS: { spec: PtBlockSpec; factory: (id: string, params?: Record<string, any>) => XBlock }[] = [...SCENARIO_BLOCKS, ...VEHICLE_BODY_BLOCKS, ...BATTERY_BLOCKS, ...ELECTRIC_MOTOR_BLOCKS, ...WHEEL_BLOCKS, ...COMBUSTION_ENGINE_BLOCKS, ...FINAL_DRIVE_BLOCKS, ...AIR_PATH_BLOCKS, ...TURBOCHARGER_BLOCKS, ...DOE_SWEEPER_BLOCKS, ...TEST_CELL_CONTROL_BLOCKS, ...ENGINE_CYLINDER_BLOCKS];
+export const PT_BLOCKS: { spec: PtBlockSpec; factory: (id: string, params?: Record<string, any>) => XBlock }[] = [...SCENARIO_BLOCKS, ...VEHICLE_BODY_BLOCKS, ...BATTERY_BLOCKS, ...ELECTRIC_MOTOR_BLOCKS, ...WHEEL_BLOCKS, ...COMBUSTION_ENGINE_BLOCKS, ...FINAL_DRIVE_BLOCKS, ...AIR_PATH_BLOCKS, ...TURBOCHARGER_BLOCKS, ...DOE_SWEEPER_BLOCKS, ...TEST_CELL_CONTROL_BLOCKS, ...ENGINE_CYLINDER_BLOCKS, ...FUELING_ACTUATION_BLOCKS];
 
 export const POWERTRAIN_SPECS: PtBlockSpec[] = PT_BLOCKS.map(b => b.spec);
 export const POWERTRAIN_FACTORIES: Record<string, (id: string, params?: Record<string, any>) => XBlock> =
