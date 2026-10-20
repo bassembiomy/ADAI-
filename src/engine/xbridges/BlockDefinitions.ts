@@ -1,6 +1,7 @@
 // src/engine/xbridges/BlockDefinitions.ts
 import { XBlock, XPort } from './types';
 import { VectorUtils } from './VectorUtils';
+import { LOOKUP_FACTORIES, LOOKUP_CATEGORY } from './lookup/lookupBlocks';
 import * as math from 'mathjs';
 import {
   evaluateDOEModel,
@@ -11504,7 +11505,8 @@ return block;
                                                                                                                                                                                       icon: 'file-text',
                                                                                                                                                                                       description: 'A text block to write custom notes directly next to the models. Has no simulation ports or reactions.',
                                                                                                                                                                                       execute: () => ({ outputs: [] })
-                                                                                                                                                                                    })
+                                                                                                                                                                                    }),
+  ...LOOKUP_FACTORIES
 };
 
 
@@ -11629,6 +11631,7 @@ export const XBRIDGES_CATEGORIES = [
       { type: 'Counter', label: 'Counter', icon: 'trending-up' }
     ]
   },
+  LOOKUP_CATEGORY,
   {
     name: 'Trigonometric & Hyperbolic',
     blocks: [

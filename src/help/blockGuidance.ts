@@ -323,3 +323,65 @@ VLAB_RUNTIME_RELATIONS.ma_moisture_sensor='output=moistAirState(p,T,phi).massFra
 VLAB_RUNTIME_RELATIONS.ma_thermo_sensor='output=moistAirState(p,T,phi).rho';
 VLAB_RUNTIME_RELATIONS.ma_flow_source='mass_flow=rate*ctrl (unwired ctrl=1)';
 BLOCK_GUIDANCE['xbridges:MPC_CONTROLLER'].equation='J = Σ ((predicted_y − reference)ᵀ Q (predicted_y − reference) + uᵀ R u), with u_min ≤ u ≤ u_max';
+
+// Lookup tables (WP-03): Simulink parameter names.
+const LUT_COMMON = {
+  InterpMethod: "Interpolation inside the table: 'Linear point-slope' or 'Linear Lagrange' (same linear result), 'Flat' (value at the lower breakpoint), 'Nearest' (nearest breakpoint, ties go up). Cubic spline and Akima spline are not supported yet and give a block error.",
+  ExtrapMethod: "Behaviour outside the breakpoints: 'Clip' holds the edge value, 'Linear' extends the edge cell. Flat and Nearest require 'Clip'."
+};
+BLOCK_GUIDANCE['xbridges:LOOKUP_1D'] = {
+  description: 'Approximates a one-dimensional function y = f(u1) from a table sampled at strictly increasing breakpoints.',
+  behavior: 'Finds the interval of u1 in the breakpoints and interpolates the table. Invalid breakpoints, a table of the wrong size or a non-finite input give a block error and output 0.',
+  example: 'Breakpoints [0 1 2 4], table [0 10 15 40], input 3 -> 27.5 (linear); input 5 -> 52.5 with Linear extrapolation, 40 with Clip.',
+  parameters: {
+    Table: 'Output values, one per breakpoint (vector, or MATLAB text such as [0 10 15 40]).',
+    BreakpointsForDimension1: 'Strictly increasing, finite breakpoints of the input u1 (at least two).',
+    ...LUT_COMMON
+  }
+};
+BLOCK_GUIDANCE['xbridges:LOOKUP_2D'] = {
+  description: 'Approximates y = f(u1, u2) by bilinear interpolation of a table; u1 selects rows and u2 selects columns.',
+  behavior: 'Table rows follow BreakpointsForDimension1 and columns follow BreakpointsForDimension2. A size mismatch or invalid breakpoints give a block error.',
+  example: 'Default table [4 5 6; 16 19 20; 10 18 23] on rows [1 2 3], columns [4 5 6]: u1 = 1.5, u2 = 5.5 -> (5+6+19+20)/4 = 12.5.',
+  parameters: {
+    Table: 'Matrix of output values (rows x columns), or MATLAB text such as [4 5 6;16 19 20;10 18 23].',
+    BreakpointsForDimension1: 'Strictly increasing breakpoints of u1 (one per table row).',
+    BreakpointsForDimension2: 'Strictly increasing breakpoints of u2 (one per table column).',
+    ...LUT_COMMON
+  }
+};
+BLOCK_GUIDANCE['xbridges:LOOKUP_ND'] = {
+  description: 'Approximates y = f(u1..un) for n = 1 to 4 table dimensions by multilinear interpolation.',
+  behavior: 'One input port per dimension. The table is nested arrays whose sizes equal the breakpoint lengths; n outside 1..4 gives a block error.',
+  example: 'n = 3, table f(x,y,z) = x + 10y + 100z on breakpoints [0 1], [0 1 2], [0 5]: input (0.5, 1.5, 2) -> 0.5 + 15 + 200 = 215.5.',
+  parameters: {
+    NumberOfTableDimensions: 'Number of table dimensions, an integer from 1 to 4; sets the number of inputs u1..un.',
+    Table: 'n-dimensional table as nested arrays (first index = dimension 1).',
+    BreakpointsForDimension1: 'Strictly increasing breakpoints of u1.',
+    BreakpointsForDimension2: 'Strictly increasing breakpoints of u2 (n >= 2).',
+    BreakpointsForDimension3: 'Strictly increasing breakpoints of u3 (n >= 3).',
+    BreakpointsForDimension4: 'Strictly increasing breakpoints of u4 (n = 4).',
+    ...LUT_COMMON
+  }
+};
+BLOCK_GUIDANCE['xbridges:PRELOOKUP'] = {
+  description: 'Finds the zero-based breakpoint index k and the interval fraction f of the input, to be shared by several Interpolation Using Prelookup blocks.',
+  behavior: 'k satisfies bp[k] <= u < bp[k+1] and f = (u - bp[k]) / (bp[k+1] - bp[k]). Clip limits f to [0, 1]; Linear lets f leave [0, 1] outside the breakpoints. The bus output option is not supported until bus signals exist.',
+  example: 'Breakpoints [10 20 30 40], input 25 -> k = 1, f = 0.5; input 40 -> k = 2, f = 1 (k = 3, f = 0 with UseLastBreakpoint on).',
+  parameters: {
+    BreakpointsData: 'Strictly increasing, finite breakpoints (at least two).',
+    ExtrapMethod: "'Clip' limits the fraction to [0, 1]; 'Linear' extrapolates it beyond the end breakpoints.",
+    UseLastBreakpoint: "'on' returns index N-1 with fraction 0 at the last breakpoint; 'off' returns index N-2 with fraction 1.",
+    OutputSelection: "'Index and fraction' gives k and f; 'Index only' gives k; 'Index and fraction as bus' is not supported yet."
+  }
+};
+BLOCK_GUIDANCE['xbridges:INTERP_PRELOOKUP'] = {
+  description: 'Interpolates an n-D table at the zero-based indices and fractions produced by Prelookup blocks.',
+  behavior: 'Inputs are ordered k1, f1, k2, f2, ... Each k must be an integer inside the table dimension; interpolation and extrapolation follow InterpMethod and ExtrapMethod.',
+  example: 'Table [1 2; 3 4], k1 = 0, f1 = 0.5, k2 = 0, f2 = 0.5 -> 2.5.',
+  parameters: {
+    NumberOfTableDimensions: 'Number of table dimensions, an integer from 1 to 4; sets the (k, f) input pairs.',
+    Table: 'n-dimensional table as nested arrays (first index = dimension 1).',
+    ...LUT_COMMON
+  }
+};

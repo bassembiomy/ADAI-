@@ -1,5 +1,7 @@
 // src/utils/xbridges/XbridgesLibrary.ts
 
+import { LOOKUP_CATEGORY } from '../../engine/xbridges/lookup/lookupBlocks';
+
 export const XBRIDGES_CATEGORIES = [
   {
     name: 'DEM & Particle Simulation',
@@ -397,5 +399,6 @@ export const XBRIDGES_CATEGORIES = [
       { type: 'FUZZY_PID_CONTROLLER', label: 'Fuzzy PID Controller', icon: 'cpu' },
       { type: 'FUZZY_SURFACE_VIEWER', label: 'Control Surface Viewer', icon: 'bar-chart' }
     ]
-  }
+  },
+  LOOKUP_CATEGORY
 ];
