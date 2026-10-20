@@ -65,9 +65,11 @@
       "deps": [
         "WP-00"
       ],
-      "status": "in_progress",
+      "status": "done",
       "findings": [],
-      "tests": "src/engine/xbridges/lookup/lookupTables.test.ts"
+      "tests": "src/engine/xbridges/lookup/lookupTables.test.ts",
+      "commit": "feat(powertrain): WP-03",
+      "review": "Opus 2026-10-20: 10 files / 275 tests pass; one rework (capability registry entry, point-slope vs Lagrange formula). G3 pending (no MATLAB)."
     },
     {
       "id": "WP-04",
@@ -76,7 +78,7 @@
       "deps": [
         "WP-03"
       ],
-      "status": "todo",
+      "status": "in_progress",
       "findings": []
     },
     {
@@ -106,7 +108,7 @@
       "deps": [
         "WP-03"
       ],
-      "status": "todo",
+      "status": "in_progress",
       "findings": []
     },
     {
@@ -116,8 +118,13 @@
       "deps": [
         "WP-06"
       ],
-      "status": "todo",
-      "findings": []
+      "status": "done",
+      "findings": [
+        {
+          "severity": "low",
+          "summary": "Folded into each block WP: the symbol is delivered with its block (contract test checks it)."
+        }
+      ]
     },
     {
       "id": "WP-08",
@@ -126,8 +133,13 @@
       "deps": [
         "WP-06"
       ],
-      "status": "todo",
-      "findings": []
+      "status": "done",
+      "findings": [
+        {
+          "severity": "low",
+          "summary": "Folded into each block WP: Opus writes the expected ports/params in the block-group tests, Sonnet writes the spec to match."
+        }
+      ]
     },
     {
       "id": "WP-10",
@@ -416,5 +428,6 @@
   "blocks": {},
   "user_decisions": [
     "2026-10-20: skip Antigravity and the MATLAB inventory; proceed with the block data in plan \u00a72 (docs-based). G3 Simulink goldens stay pending until MATLAB runs are available."
-  ]
+  ],
+  "tsc_note": "tsc errors in this cloud env: 2 pre-existing 'xlsx' module errors (package not installable here) + errors in acceptance tests whose WP is not implemented yet. Executors report only errors in files they touch."
 }
