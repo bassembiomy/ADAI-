@@ -107,7 +107,7 @@ describe('powertrain registry contract (every spec)', () => {
       if (s.source === 'user-spec') {
         // user-specified engine calibration blocks (no Simulink counterpart): must cite the spec section
         expect(s.specRef, s.type).toMatch(/^docs\/powertrain\/engine-calibration-spec\.md#/);
-        expect(s.category, s.type).toMatch(/^Powertrain \/ Engine Calibration\//);
+        expect(s.category, s.type).toMatch(/^Powertrain \/ Engine Calibration \/ /);
       } else {
         expect(s.simulinkPath, s.type).toMatch(/^Powertrain Blockset\//);
       }
