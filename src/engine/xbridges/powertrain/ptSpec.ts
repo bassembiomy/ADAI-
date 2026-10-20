@@ -47,6 +47,11 @@ export const PT_CATEGORY_ORDER = [
   'Powertrain / Propulsion / Combustion Engine Controllers',
   'Powertrain / Propulsion / Combustion Engine Components / Fundamental Flow',
   'Powertrain / Propulsion / Combustion Engine Components / Boost',
+  'Powertrain / Engine Calibration / Engine Plant',
+  'Powertrain / Engine Calibration / Air Path',
+  'Powertrain / Engine Calibration / Fueling and Actuation',
+  'Powertrain / Engine Calibration / Control and Calibration',
+  'Powertrain / Engine Calibration / Test Cell and DoE',
 ] as const;
 
 export type PtCategory = typeof PT_CATEGORY_ORDER[number];
@@ -57,6 +62,8 @@ export const PT_SYMBOL_IDS = [
   'ecm-battery', 'dcdc', 'starter', 'alternator', 'motor-mapped', 'pmsm', 'induction-motor', 'inverter',
   'motor-controller', 'engine-si', 'engine-ci', 'engine-core', 'engine-controller', 'control-volume',
   'flow-boundary', 'flow-restriction', 'heat-exchanger', 'throttle', 'compressor', 'turbine', 'boost-shaft', 'two-way',
+  'cylinder-ci', 'cylinder-si', 'intake-manifold', 'turbocharger', 'fuel-injector', 'valvetrain', 'calibration-ecu',
+  'calibration-map', 'dyno', 'ambient', 'doe-sweeper',
 ] as const;
 
 export type PtSymbolId = typeof PT_SYMBOL_IDS[number];
@@ -65,8 +72,9 @@ export interface PtBlockSpec {
   type: string; // PT_...
   label: string;
   category: PtCategory;
-  simulinkPath: string;
-  source: 'simulink-docs' | 'inventory';
+  simulinkPath: string; // '' for user-spec blocks (kept required so existing blocks compile unchanged)
+  source: 'simulink-docs' | 'inventory' | 'user-spec';
+  specRef?: string; // doc anchor for user-spec blocks
   symbol: PtSymbolId;
   inputs: PtPortSpec[];
   outputs: PtPortSpec[];

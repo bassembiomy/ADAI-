@@ -535,6 +535,107 @@
       ],
       "status": "todo",
       "findings": []
+    },
+    {
+      "id": "EC-00",
+      "title": "Engine calibration scaffolding (categories, user-spec source, symbols)",
+      "exec": "S",
+      "deps": [],
+      "status": "done",
+      "tests": "src/engine/xbridges/powertrain/ec00_scaffold.test.ts",
+      "findings": []
+    },
+    {
+      "id": "EC-01",
+      "title": "Crank-angle cylinder model (engineCycle.ts) + CI / SI Cylinder (Wiebe) blocks",
+      "exec": "S",
+      "deps": [
+        "EC-00"
+      ],
+      "status": "in_progress",
+      "tests": "src/engine/xbridges/powertrain/ec01_cylinder.test.ts",
+      "findings": []
+    },
+    {
+      "id": "EC-02",
+      "title": "Ambient Conditions, Throttle Body, Intake Manifold",
+      "exec": "S",
+      "deps": [
+        "EC-00"
+      ],
+      "status": "in_progress",
+      "tests": "src/engine/xbridges/powertrain/ec02_airPath.test.ts",
+      "findings": []
+    },
+    {
+      "id": "EC-03",
+      "title": "Turbocharger (parametric)",
+      "exec": "S",
+      "deps": [
+        "EC-00"
+      ],
+      "status": "in_progress",
+      "tests": "src/engine/xbridges/powertrain/ec03_turbocharger.test.ts",
+      "findings": []
+    },
+    {
+      "id": "EC-04",
+      "title": "Fuel Injector, VVT / Valvetrain",
+      "exec": "S",
+      "deps": [
+        "EC-01"
+      ],
+      "status": "todo",
+      "tests": "src/engine/xbridges/powertrain/ec04_fuelingActuation.test.ts",
+      "findings": []
+    },
+    {
+      "id": "EC-05",
+      "title": "Engine Dynamometer, Calibration ECU, Calibration Map 2D",
+      "exec": "S",
+      "deps": [
+        "EC-00"
+      ],
+      "status": "todo",
+      "tests": "",
+      "findings": []
+    },
+    {
+      "id": "EC-06",
+      "title": "DoE designs + DoE Sweeper & Constraint Evaluator, exports",
+      "exec": "S",
+      "deps": [
+        "EC-00"
+      ],
+      "status": "todo",
+      "tests": "",
+      "findings": []
+    },
+    {
+      "id": "EC-07",
+      "title": "CI engine test cell example + DoE sweep system test",
+      "exec": "S",
+      "deps": [
+        "EC-01",
+        "EC-02",
+        "EC-04",
+        "EC-05",
+        "EC-06"
+      ],
+      "status": "todo",
+      "tests": "",
+      "findings": []
+    },
+    {
+      "id": "EC-08",
+      "title": "UI: export DoE results to the DOE module / ECU / Mapped Engine from the properties panel",
+      "exec": "S",
+      "deps": [
+        "EC-06"
+      ],
+      "status": "todo",
+      "tests": "",
+      "findings": []
     }
   ],
   "blocks": {},
@@ -551,5 +652,13 @@
       "since": "49f07cf (baseline)",
       "cause": "docs/help live-UI report has an 'unmapped' item; unrelated to powertrain"
     }
-  ]
+  ],
+  "engine_calibration": {
+    "spec": "docs/powertrain/engine-calibration-spec.md",
+    "user_decisions": [
+      "2026-10-20: core engines both (user crank-angle blocks now, Simulink mean-value WP-27 later)",
+      "2026-10-20: all blocks at once",
+      "2026-10-20: missing models from published sources, marked as assumptions"
+    ]
+  }
 }
