@@ -25,7 +25,7 @@ export interface PtParamSpec {
   max?: number;
   minExclusive?: boolean;
   maxExclusive?: boolean;
-  kind: 'scalar' | 'vector' | 'table' | 'enum';
+  kind: 'scalar' | 'vector' | 'table' | 'enum' | 'string';
   options?: string[];
   description: string;
 }

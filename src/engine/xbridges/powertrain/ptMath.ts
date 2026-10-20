@@ -23,6 +23,10 @@ const flat = (v: unknown): unknown[] => (Array.isArray(v) ? v.flatMap(flat) : [v
 export function validateParams(specs: PtParamSpec[], params: Record<string, any>): string | null {
   for (const s of specs) {
     const v = params[s.name];
+    if (s.kind === 'string') {
+      if (typeof v !== 'string') return `Parameter ${s.name} must be text`;
+      continue;
+    }
     if (s.kind === 'enum') {
       if (!s.options || !s.options.includes(String(v))) return `Parameter ${s.name} must be one of ${(s.options ?? []).join(', ')}`;
       continue;
