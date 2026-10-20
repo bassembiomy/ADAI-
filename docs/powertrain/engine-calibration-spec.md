@@ -45,11 +45,13 @@ evaluation from the current inputs (quasi-steady: the X-Bridges time step is muc
   (0 when P_brake <= 0). Documented as an uncalibrated indicator for trends and constraints, not an emissions prediction.
   **Correction (planner review of EC-01, 2026-10-20):** the literal initial-rate model above gave ~210 g/kWh for a diesel point
   (real engine-out NOx is ~2-10 g/kWh). Two physical limits and a calibration factor are added:
-  (1) dissociation: T_f,k = min(T_f,k, T_f_max), parameter T_f_max default 2650 K;
+  (1) dissociation (soft knee, rework 2 — a hard cap removed the timing sensitivity near TDC): T_f,eff = T_f if T_f <= T_knee,
+      else T_knee + s_diss * (T_f - T_knee); parameters T_knee default 2400 K, s_diss default 0.35;
   (2) equilibrium limit per element (Heywood 1988 eq. 11.8 simplified, R1/(R2+R3) << 1):
       d[NO]/dt = rate * (1 - ([NO]/[NO]_e)^2), [NO]_e = sqrt(K_p [O2][N2]), K_p = 20.3 * exp(-21650/T_b) (Heywood 1988 table 11.1 / eq. 11.5),
       element [NO] in mol/cm^3 tracked on the element volume as it expands;
   (3) NOx = k_NOx * (model result), parameter k_NOx default 1, to be calibrated against measurements.
+  Result at the diesel test point (2000 rpm, 30 mg, 1.8 bar): ~17 g/kWh; SOI 0/5/10/15/20/30 deg -> 16.1/17.1/20.6/27.3/37.2/70.7 g/kWh.
 - Knock (SI) **[filled, assumption: Livengood-Wu integral with Douaud-Eyzat 1978]**: tau [s] = 17.68e-3 * (ON/100)^3.402 * (p/101325)^-1.7 * exp(3800/T_u),
   T_u = T_IVC * (p/P_IVC)^((gamma - 1)/gamma); I = integral dt/tau from IVC to end of combustion (dt = dtheta/(6N));
   KnockIndex = I (>= 1 means knock), KnockMargin = clamp(1 - I, 0, 1). Parameter ON (octane number, default 95).
