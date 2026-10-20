@@ -190,9 +190,10 @@
       "deps": [
         "WP-08"
       ],
-      "status": "in_progress",
+      "status": "done",
       "findings": [],
-      "tests": "src/engine/xbridges/powertrain/wp12_wheel.test.ts"
+      "tests": "src/engine/xbridges/powertrain/wp12_wheel.test.ts",
+      "review": "Opus 2026-10-20: one rework (example 2.94 kN, BrkPrs clamped at 0, Info.Fz clamped). Powertrain suites 11 files / 100 tests in isolated worktree. G3 pending."
     },
     {
       "id": "WP-13",
@@ -211,9 +212,10 @@
       "deps": [
         "WP-13"
       ],
-      "status": "in_progress",
+      "status": "done",
       "findings": [],
-      "tests": "src/engine/xbridges/powertrain/wp14_openDifferential.test.ts"
+      "tests": "src/engine/xbridges/powertrain/wp14_openDifferential.test.ts",
+      "review": "Opus 2026-10-20: example hand-checked; efficiency direction for a left crown wheel follows physical power flow (confirm with goldens). Powertrain suites 11 files / 100 tests in isolated worktree. G3 pending."
     },
     {
       "id": "WP-15",
@@ -269,9 +271,10 @@
       "deps": [
         "WP-08"
       ],
-      "status": "in_progress",
+      "status": "done",
       "findings": [],
-      "tests": "src/engine/xbridges/powertrain/wp19_mappedMotor.test.ts"
+      "tests": "src/engine/xbridges/powertrain/wp19_mappedMotor.test.ts",
+      "review": "Opus 2026-10-20: one rework (example arithmetic 2100 W / 177.4 A). Powertrain suites 11 files / 100 tests in isolated worktree. G3 pending."
     },
     {
       "id": "WP-20",
@@ -311,9 +314,10 @@
       "deps": [
         "WP-08"
       ],
-      "status": "in_progress",
+      "status": "done",
       "findings": [],
-      "tests": "src/engine/xbridges/powertrain/wp23_mappedEngines.test.ts"
+      "tests": "src/engine/xbridges/powertrain/wp23_mappedEngines.test.ts",
+      "review": "Opus 2026-10-20: examples verified by running the block (3.389 g/s, 277 g/kWh; 3.197 g/s, 218 g/kWh); default BSFC 254-315 (SI) / 218-270 (CI) g/kWh. Powertrain suites 11 files / 100 tests in isolated worktree. G3 pending."
     },
     {
       "id": "WP-24",
@@ -463,5 +467,8 @@
   "user_decisions": [
     "2026-10-20: skip Antigravity and the MATLAB inventory; proceed with the block data in plan \u00a72 (docs-based). G3 Simulink goldens stay pending until MATLAB runs are available."
   ],
-  "tsc_note": "tsc errors in this cloud env: 2 pre-existing 'xlsx' module errors (package not installable here) + errors in acceptance tests whose WP is not implemented yet. Executors report only errors in files they touch."
+  "tsc_note": "tsc errors in this cloud env: 2 pre-existing 'xlsx' module errors (package not installable here) + errors in acceptance tests whose WP is not implemented yet. Executors report only errors in files they touch.",
+  "lessons": [
+    "Executors' hand-computed help examples were wrong twice (WP-12, WP-19): briefs now require every number in an example to be produced by running the block."
+  ]
 }
