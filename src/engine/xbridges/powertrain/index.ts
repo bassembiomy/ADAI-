@@ -3,6 +3,7 @@
 import type { XBlock } from '../types';
 import type { PtBlockSpec } from './ptSpec';
 import { PT_CATEGORY_ORDER } from './ptSpec';
+import { FINAL_DRIVE_BLOCKS } from './blocks/finalDrive';
 import { COMBUSTION_ENGINE_BLOCKS } from './blocks/combustionEngines';
 import { WHEEL_BLOCKS } from './blocks/wheels';
 import { SCENARIO_BLOCKS } from './blocks/scenarios';
@@ -10,7 +11,7 @@ import { VEHICLE_BODY_BLOCKS } from './blocks/vehicleBody';
 import { BATTERY_BLOCKS } from './blocks/batteries';
 import { ELECTRIC_MOTOR_BLOCKS } from './blocks/electricMotors';
 
-export const PT_BLOCKS: { spec: PtBlockSpec; factory: (id: string, params?: Record<string, any>) => XBlock }[] = [...SCENARIO_BLOCKS, ...VEHICLE_BODY_BLOCKS, ...BATTERY_BLOCKS, ...ELECTRIC_MOTOR_BLOCKS, ...WHEEL_BLOCKS, ...COMBUSTION_ENGINE_BLOCKS];
+export const PT_BLOCKS: { spec: PtBlockSpec; factory: (id: string, params?: Record<string, any>) => XBlock }[] = [...SCENARIO_BLOCKS, ...VEHICLE_BODY_BLOCKS, ...BATTERY_BLOCKS, ...ELECTRIC_MOTOR_BLOCKS, ...WHEEL_BLOCKS, ...COMBUSTION_ENGINE_BLOCKS, ...FINAL_DRIVE_BLOCKS];
 
 export const POWERTRAIN_SPECS: PtBlockSpec[] = PT_BLOCKS.map(b => b.spec);
 export const POWERTRAIN_FACTORIES: Record<string, (id: string, params?: Record<string, any>) => XBlock> =
