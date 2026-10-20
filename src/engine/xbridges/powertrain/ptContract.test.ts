@@ -104,7 +104,13 @@ describe('powertrain registry contract (every spec)', () => {
     for (const s of POWERTRAIN_SPECS) {
       expect(s.equations.length, s.type).toBeGreaterThan(0);
       expect(s.references.length, s.type).toBeGreaterThan(0);
-      expect(s.simulinkPath, s.type).toMatch(/^Powertrain Blockset\//);
+      if (s.source === 'user-spec') {
+        // user-specified engine calibration blocks (no Simulink counterpart): must cite the spec section
+        expect(s.specRef, s.type).toMatch(/^docs\/powertrain\/engine-calibration-spec\.md#/);
+        expect(s.category, s.type).toMatch(/^Powertrain \/ Engine Calibration\//);
+      } else {
+        expect(s.simulinkPath, s.type).toMatch(/^Powertrain Blockset\//);
+      }
       expect(PT_SYMBOL_IDS, s.type).toContain(s.symbol);
       const b = POWERTRAIN_FACTORIES[s.type]('probe', {});
       expect(b.equation, s.type).toBeTruthy();
