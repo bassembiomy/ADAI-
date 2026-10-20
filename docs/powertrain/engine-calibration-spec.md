@@ -43,6 +43,13 @@ evaluation from the current inputs (quasi-steady: the X-Bridges time step is muc
   phi = global equivalence ratio (CI: AFR_stoich * m_f / m_air; SI: 1/lambda). Element volume V_b,k = dm_k (1+AFR_stoich) R T_b/p.
   Integrate from formation to EVO with dt = dtheta/(6N); m_NO = 30 g/mol * sum(moles); NOx = 3.6e9 * m_NO_per_cycle_total_rate / P_brake [g/kWh]
   (0 when P_brake <= 0). Documented as an uncalibrated indicator for trends and constraints, not an emissions prediction.
+  **Correction (planner review of EC-01, 2026-10-20):** the literal initial-rate model above gave ~210 g/kWh for a diesel point
+  (real engine-out NOx is ~2-10 g/kWh). Two physical limits and a calibration factor are added:
+  (1) dissociation: T_f,k = min(T_f,k, T_f_max), parameter T_f_max default 2650 K;
+  (2) equilibrium limit per element (Heywood 1988 eq. 11.8 simplified, R1/(R2+R3) << 1):
+      d[NO]/dt = rate * (1 - ([NO]/[NO]_e)^2), [NO]_e = sqrt(K_p [O2][N2]), K_p = 20.3 * exp(-21650/T_b) (Heywood 1988 table 11.1 / eq. 11.5),
+      element [NO] in mol/cm^3 tracked on the element volume as it expands;
+  (3) NOx = k_NOx * (model result), parameter k_NOx default 1, to be calibrated against measurements.
 - Knock (SI) **[filled, assumption: Livengood-Wu integral with Douaud-Eyzat 1978]**: tau [s] = 17.68e-3 * (ON/100)^3.402 * (p/101325)^-1.7 * exp(3800/T_u),
   T_u = T_IVC * (p/P_IVC)^((gamma - 1)/gamma); I = integral dt/tau from IVC to end of combustion (dt = dtheta/(6N));
   KnockIndex = I (>= 1 means knock), KnockMargin = clamp(1 - I, 0, 1). Parameter ON (octane number, default 95).
