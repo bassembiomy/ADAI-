@@ -2,6 +2,8 @@
 //   XBlock.updateDiscrete(inputs, params, state, t) -> new state. The engine calls it once per major time step, in
 //   updateDiscreteStates (the same phase as the discrete blocks), for blocks with evaluateDerivatives; never inside solver
 //   stages. Continuous integration then starts from the updated state.
+//   XBlock.discreteStateKeys lists the top-level state keys that are discrete; no solver integrates them (implicit solvers
+//   leave them out of the Newton/Jacobian state vector).
 import { describe, it, expect } from 'vitest';
 import { XbridgesEngine } from './XbridgesEngine';
 import { Solvers } from './Solvers';
@@ -11,6 +13,7 @@ function hybrid(log: { xs: number[]; kSeen: number[] }) {
     id: 'h', type: 'TestHybrid', params: {}, isStateful: true,
     inputs: [], outputs: [{ id: 'k', name: 'k', type: 'auto', direction: 'output', value: 0 }, { id: 'x', name: 'x', type: 'auto', direction: 'output', value: 0 }],
     state: { x: 0, k: 0 },
+    discreteStateKeys: ['k'],
     execute: (_i: any[], _p: any, s: any) => ({ outputs: [s.k, s.x] }),
     evaluateDerivatives: (_i: any[], _p: any, s: any) => { log.kSeen.push(s.k); return { x: 1, k: 0 }; },
     updateDiscrete: (_i: any[], _p: any, s: any) => { log.xs.push(s.x); return { ...s, k: s.k + 1 }; },

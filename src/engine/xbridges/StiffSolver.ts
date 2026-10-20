@@ -59,7 +59,12 @@ export class StiffSolver {
   static buildLayout(engine: XbridgesEngine): Layout {
     const leaves: Leaf[] = [];
     for (const block of engine.executionOrder) {
-      if (block.evaluateDerivatives && block.state !== undefined) collectLeaves(block.id, block.state, [], leaves);
+      if (!block.evaluateDerivatives || block.state === undefined) continue;
+      const discrete = block.discreteStateKeys;
+      if (discrete && discrete.length > 0 && block.state !== null && typeof block.state === 'object' && !Array.isArray(block.state)) {
+        // Hybrid block: declared discrete states are updated by updateDiscrete, never integrated.
+        for (const k of Object.keys(block.state)) if (!discrete.includes(k)) collectLeaves(block.id, block.state[k], [k], leaves);
+      } else collectLeaves(block.id, block.state, [], leaves);
     }
     return { leaves, n: leaves.length };
   }

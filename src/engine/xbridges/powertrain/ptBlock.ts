@@ -10,6 +10,10 @@ type Params = Record<string, any>;
 export interface PtBlockImpl {
   init?(p: Params): any;
   execute(ins: XValue[], p: Params, state: any, t: number): { outputs: XValue[]; nextState?: any; error?: string };
+  /** Discrete update of a hybrid block at a major step; returns the new state (pure). */
+  update?(ins: XValue[], p: Params, state: any, t: number): any;
+  /** Top-level state keys updated only by update (discrete states of a hybrid block). */
+  discreteStateKeys?: string[];
   derivatives?(ins: XValue[], p: Params, state: any, t: number): any;
   zeroCrossings?(ins: XValue[], p: Params, state: any, t: number): number[];
   portsFor?(p: Params): PtPorts;
@@ -136,6 +140,14 @@ export function definePtBlock(spec: PtBlockSpec, impl: PtBlockImpl): (id: string
         const { rp, bad } = check(p);
         if (bad) return zeroLike(state);
         return impl.derivatives!(ins, rp, state, t);
+      };
+    }
+    if (impl.discreteStateKeys) block.discreteStateKeys = [...impl.discreteStateKeys];
+    if (impl.update) {
+      block.updateDiscrete = (ins, p, state, t) => {
+        const { rp, bad } = check(p);
+        if (bad) return state;
+        return impl.update!(ins, rp, state, t);
       };
     }
     if (impl.zeroCrossings) {

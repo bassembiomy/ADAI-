@@ -80,7 +80,7 @@ export class AdaptiveSolver {
         // If a discrete state actually changes, we must invalidate FSAL and recompute k1.
         const prevDiscreteStates = new Map<string, string>();
         engine.executionOrder.forEach(b => {
-          if (!b.evaluateDerivatives && b.params.sampleTime > 0) {
+          if (b.updateDiscrete || (!b.evaluateDerivatives && b.params.sampleTime > 0)) {
             prevDiscreteStates.set(b.id, JSON.stringify(b.state));
           }
         });
@@ -89,7 +89,7 @@ export class AdaptiveSolver {
 
         let discreteStateChanged = false;
         engine.executionOrder.forEach(b => {
-          if (!b.evaluateDerivatives && b.params.sampleTime > 0) {
+          if (b.updateDiscrete || (!b.evaluateDerivatives && b.params.sampleTime > 0)) {
             if (prevDiscreteStates.get(b.id) !== JSON.stringify(b.state)) {
               discreteStateChanged = true;
             }
@@ -276,7 +276,7 @@ export class AdaptiveSolver {
         // If a discrete state actually changes, we must invalidate FSAL and recompute k1.
         const prevDiscreteStates = new Map<string, string>();
         engine.executionOrder.forEach(b => {
-          if (!b.evaluateDerivatives && b.params.sampleTime > 0) {
+          if (b.updateDiscrete || (!b.evaluateDerivatives && b.params.sampleTime > 0)) {
             prevDiscreteStates.set(b.id, JSON.stringify(b.state));
           }
         });
@@ -285,7 +285,7 @@ export class AdaptiveSolver {
 
         let discreteStateChanged = false;
         engine.executionOrder.forEach(b => {
-          if (!b.evaluateDerivatives && b.params.sampleTime > 0) {
+          if (b.updateDiscrete || (!b.evaluateDerivatives && b.params.sampleTime > 0)) {
             if (prevDiscreteStates.get(b.id) !== JSON.stringify(b.state)) {
               discreteStateChanged = true;
             }

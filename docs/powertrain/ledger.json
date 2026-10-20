@@ -669,6 +669,30 @@
       "status": "done",
       "review": "reviewed",
       "note": "Ideal Fixed Gear Transmission"
+    },
+    {
+      "id": "WP-14b",
+      "status": "done",
+      "review": "reviewed",
+      "note": "Limited Slip Differential (2-DOF, tanh clutch coupling), Transfer Case"
+    },
+    {
+      "id": "WP-15b",
+      "status": "done",
+      "review": "reviewed",
+      "note": "AMT (clutch-open shift), DCT (torque handover), CVT (first-order ratio); hybrid state via updateDiscrete + discreteStateKeys"
+    },
+    {
+      "id": "WP-16",
+      "status": "done",
+      "review": "reviewed",
+      "note": "AMT/DCT/CVT controllers; shift schedule with hysteresis and tHold"
+    },
+    {
+      "id": "WP-09e",
+      "status": "done",
+      "review": "reviewed",
+      "note": "engine: XBlock.updateDiscrete (Simulink mdlUpdate for hybrid blocks, once per accepted major step, idempotent on retried steps) and discreteStateKeys (excluded from stiff Newton state). Reviewer replaced a derivative==0 freezing heuristic in StiffSolver by the declared keys."
     }
   ],
   "blocks": {},
@@ -677,7 +701,8 @@
   ],
   "tsc_note": "tsc errors in this cloud env: 2 pre-existing 'xlsx' module errors (package not installable here) + errors in acceptance tests whose WP is not implemented yet. Executors report only errors in files they touch.",
   "lessons": [
-    "Executors' hand-computed help examples were wrong twice (WP-12, WP-19): briefs now require every number in an example to be produced by running the block."
+    "Executors' hand-computed help examples were wrong twice (WP-12, WP-19): briefs now require every number in an example to be produced by running the block.",
+    "Hybrid blocks (continuous + discrete state) must use updateDiscrete/discreteStateKeys; never commit state by object identity or in-place mutation."
   ],
   "preexisting_failures": [
     {

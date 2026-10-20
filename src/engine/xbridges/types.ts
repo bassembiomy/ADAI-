@@ -55,6 +55,10 @@ export interface XBlock {
   // Optional: For continuous-time blocks (like Integrators), this returns the state derivative (dx/dt)
   // This is required for solvers like ODE1 and ODE4.
   evaluateDerivatives?: (inputs: XValue[], params: Record<string, any>, state: any, time: number) => any;
+  /** Hybrid blocks (with evaluateDerivatives): pure discrete update (Simulink mdlUpdate) returning the new state. Called once per major step. */
+  updateDiscrete?: (inputs: XValue[], params: Record<string, any>, state: any, time: number) => any;
+  /** Hybrid blocks: top-level keys of the state object that are discrete states (never integrated by a solver). */
+  discreteStateKeys?: string[];
 
   // Optional: Returns zero-crossing values for discontinuities bracketing
   ZeroCrossingFn?: (inputs: XValue[], params: Record<string, any>, state: any, time: number) => number[];

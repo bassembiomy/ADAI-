@@ -601,8 +601,22 @@ export class XbridgesEngine {
     return derivatives;
   }
 
+  private hybridUpdates = new Map<string, { time: number; state: any }>();
+
   public updateDiscreteStates(time: number) {
     for (const block of this.executionOrder) {
+      if (block.evaluateDerivatives && block.updateDiscrete) {
+        // Hybrid block: once per major step. A retried step at the same time with the same committed state is skipped;
+        // after a rollback the state object differs, so the update is applied again.
+        const last = this.hybridUpdates.get(block.id);
+        if (last && last.time === time && last.state === block.state) continue;
+        try {
+          const next = block.updateDiscrete(this.gatherInputs(block), block.params, block.state, time);
+          if (next !== undefined) block.state = next;
+        } catch (err: any) {}
+        this.hybridUpdates.set(block.id, { time, state: block.state });
+        continue;
+      }
       if (!block.evaluateDerivatives) {
         const ts = Number(block.params.sampleTime);
         if (ts > 0) {
