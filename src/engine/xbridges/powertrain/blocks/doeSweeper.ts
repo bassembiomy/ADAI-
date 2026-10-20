@@ -17,6 +17,8 @@ export interface DoeRow {
   responses: Record<string, number>;
   feasible: boolean;
   violations: string[];
+  /** Operating point of the row (grid mode only). */
+  op?: { N: number; Load: number };
 }
 
 const inp = (id: string, unit: string, simulinkIndex: number, description: string, feedthrough?: boolean): PtPortSpec =>
@@ -27,6 +29,19 @@ const par = (name: string, label: string, unit: string, def: number, description
   o: { min?: number; max?: number; minExclusive?: boolean; maxExclusive?: boolean } = {}): PtParamSpec =>
   ({ name, label, unit, default: def, kind: 'scalar', description, ...o });
 
+const baseOutputs: PtPortSpec[] = [
+  out('Info', 'bus', 1, 'Bus with Points (design size, times the operating points in grid mode), Completed (finished points), BestIndex (index of the best feasible point, -1 if none) and BestObjective (its objective response).', 'Bus: DoeSweeperInfoBus'),
+  out('NextPoint', '1', 2, 'Factor values of the active design point, in the order of the factors parameter (units of the factors). The last point is held after the sweep.'),
+  out('PointIndex', '1', 3, 'Zero-based index of the active point (grid mode: operating point index * design size + design index).'),
+  out('Done', '1', 4, '1 once every design point has had its dwell time, otherwise 0.'),
+];
+const gridOutputs: PtPortSpec[] = [
+  ...baseOutputs,
+  out('N_set', 'rpm', 5, 'Engine speed of the active operating point (grid mode).'),
+  out('Load', '%', 6, 'Load of the active operating point (grid mode).'),
+];
+const responsesIn = [inp('Responses', 'bus', 1, 'Response bus of the engine under test (T_brake, BSFC, P_max, T_exh, NOx and any other numeric element). Averaged over the last averageWindow seconds of each dwell. It does not act on any output instantaneously.', false)];
+
 const spec: PtBlockSpec = {
   type: 'PT_DOE_SWEEPER',
   label: 'DoE Sweeper & Constraint Evaluator',
@@ -35,13 +50,9 @@ const spec: PtBlockSpec = {
   source: 'user-spec',
   specRef: SPEC_REF,
   symbol: 'doe-sweeper',
-  inputs: [inp('Responses', 'bus', 1, 'Response bus of the engine under test (T_brake, BSFC, P_max, T_exh, NOx and any other numeric element). Averaged over the last averageWindow seconds of each dwell. It does not act on any output instantaneously.', false)],
-  outputs: [
-    out('Info', 'bus', 1, 'Bus with Points (design size), Completed (finished points), BestIndex (index of the best feasible point, -1 if none) and BestObjective (its objective response).', 'Bus: DoeSweeperInfoBus'),
-    out('NextPoint', '1', 2, 'Factor values of the active design point, in the order of the factors parameter (units of the factors). The last point is held after the sweep.'),
-    out('PointIndex', '1', 3, 'Zero-based index of the active design point.'),
-    out('Done', '1', 4, '1 once every design point has had its dwell time, otherwise 0.'),
-  ],
+  inputs: responsesIn,
+  outputs: baseOutputs,
+  variants: { param: 'operatingPoints', ports: { Single: { inputs: responsesIn, outputs: baseOutputs }, Grid: { inputs: responsesIn, outputs: gridOutputs } } },
   params: [
     { name: 'designType', label: 'Design type', unit: '', default: 'Full Factorial', kind: 'enum', options: ['Full Factorial', 'Latin Hypercube', 'Central Composite'],
       description: 'Experimental design: Full Factorial (all level combinations), Latin Hypercube (seeded space filling, one point per stratum of every factor) or Central Composite (corners, axial and centre points).' },
@@ -59,6 +70,12 @@ const spec: PtBlockSpec = {
     par('averageWindow', 'Averaging window', 's', 0.5, 'Length of the window at the end of each dwell over which the responses are averaged (must not exceed the dwell time).', { min: 0, minExclusive: true }),
     par('Pmax_limit', 'Peak pressure limit', 'Pa', 180e5, 'Hard limit on the averaged P_max response; a point above it is infeasible.', { min: 0, minExclusive: true }),
     par('Texh_limit', 'Exhaust temperature limit', 'K', 1050, 'Hard limit on the averaged T_exh response; a point above it is infeasible.', { min: 0, minExclusive: true }),
+    { name: 'operatingPoints', label: 'Operating points', unit: '', default: 'Single', kind: 'enum', options: ['Single', 'Grid'],
+      description: 'Single runs the design once. Grid runs the design at every operating point opSpeeds x opLoads (speed slowest) and adds the N_set and Load outputs.' },
+    { name: 'opSpeeds', label: 'Operating point speeds', unit: 'rpm', default: [1000, 2000, 3000], kind: 'vector',
+      description: 'Engine speeds of the grid, strictly increasing (grid mode only).' },
+    { name: 'opLoads', label: 'Operating point loads', unit: '%', default: [25, 50, 75, 100], kind: 'vector',
+      description: 'Loads of the grid in percent, strictly increasing (grid mode only).' },
     { name: 'objective', label: 'Objective', unit: '', default: 'BSFC', kind: 'enum', options: ['BSFC', 'NOx', 'T_exh', '-T_brake'],
       description: 'Response minimised over the feasible points. -T_brake maximises brake torque.' },
   ],
@@ -68,6 +85,7 @@ const spec: PtBlockSpec = {
     'Latin Hypercube: x_ij = (pi_j(i) + u_ij)/n, pi_j a seeded random permutation of 0..n-1, u_ij ~ U[0,1); scaled to lo_j + x*(hi_j - lo_j)',
     'Central Composite: 2^k corners (+-1), 2k axial points (+-alpha), centre points; alpha = 1 (face) or (2^k)^(1/4) (rotatable)',
     'Point index i = floor(t/dwell); responses averaged for t in [(i+1)*dwell - averageWindow, (i+1)*dwell)',
+    'Grid mode: global point index g = op*nDesign + i, op = iS*nLoads + iL (speed slowest), i = design index; N_set = opSpeeds[iS], Load = opLoads[iL]',
     'Feasible iff P_max <= Pmax_limit and T_exh <= Texh_limit; best = argmin of the objective over feasible points',
   ],
   references: [
@@ -124,13 +142,27 @@ function buildDesign(p: Record<string, any>): number[][] {
 }
 
 // The runtime params object handed to execute is stable per block, so the design is cached on it.
-const designCache = new WeakMap<object, number[][]>();
-function designFor(p: Record<string, any>): number[][] {
+interface Plan { design: number[][]; ops: { N: number; Load: number }[] | null }
+const designCache = new WeakMap<object, Plan>();
+function strictlyIncreasing(name: string, v: unknown): number[] {
+  const a = Array.isArray(v) ? (v as unknown[]).flat() as number[] : [];
+  if (a.length === 0 || !a.every(x => typeof x === 'number' && Number.isFinite(x))) throw new Error(`Parameter ${name} must be a finite numeric vector`);
+  for (let k = 1; k < a.length; k++) if (!(a[k] > a[k - 1])) throw new Error(`Parameter ${name} must be strictly increasing`);
+  return a;
+}
+function designFor(p: Record<string, any>): Plan {
   const hit = designCache.get(p);
   if (hit) return hit;
-  const d = buildDesign(p);
-  designCache.set(p, d);
-  return d;
+  const design = buildDesign(p);
+  let ops: Plan['ops'] = null;
+  if (p.operatingPoints === 'Grid') {
+    const sp = strictlyIncreasing('opSpeeds', p.opSpeeds), ld = strictlyIncreasing('opLoads', p.opLoads);
+    if (sp.length * ld.length * design.length > MAX_POINTS) throw new Error(`Grid sweep exceeds ${MAX_POINTS} points`);
+    ops = sp.flatMap(N => ld.map(Load => ({ N, Load })));
+  }
+  const plan = { design, ops };
+  designCache.set(p, plan);
+  return plan;
 }
 
 const objectiveValue = (row: DoeRow, objective: string): number | undefined => {
@@ -171,21 +203,22 @@ export function toDoeInputTable(rows: DoeRow[], factorNames: string[], responseN
   };
 }
 
-function finaliseRow(index: number, point: number[], st: SweeperState, p: Record<string, any>): DoeRow {
+function finaliseRow(index: number, point: number[], st: SweeperState, p: Record<string, any>, op?: { N: number; Load: number }): DoeRow {
   const responses: Record<string, number> = {};
   if (st.count > 0) for (const [k, s] of Object.entries(st.sums)) responses[k] = s / st.count;
   const violations: string[] = [];
   if (st.count === 0) violations.push('no samples');
   if (responses.P_max !== undefined && responses.P_max > p.Pmax_limit) violations.push('P_max');
   if (responses.T_exh !== undefined && responses.T_exh > p.Texh_limit) violations.push('T_exh');
-  return { index, point: [...point], responses, feasible: violations.length === 0, violations };
+  return { index, point: [...point], responses, feasible: violations.length === 0, violations, ...(op ? { op: { ...op } } : {}) };
 }
 
 const doeFactory = definePtBlock(spec, {
   init: () => initState(),
   execute: (ins, p, state, t) => {
-    const design = designFor(p);
-    const n = design.length;
+    const { design, ops } = designFor(p);
+    const nd = design.length;
+    const n = nd * (ops ? ops.length : 1);
     const st: SweeperState = state && Array.isArray(state.rows) ? state : initState();
     const i = Math.max(0, Math.floor(t / p.dwell + TIME_EPS));
     const idx = Math.min(i, n - 1);
@@ -193,7 +226,7 @@ const doeFactory = definePtBlock(spec, {
     // state update: finalise finished points, accumulate the averaging window of the active point
     let cur = st.cur, count = st.count, sums = st.sums, rows = st.rows;
     while (cur < Math.min(i, n)) {
-      rows = [...rows, finaliseRow(cur, design[cur], { cur, count, sums, rows }, p)];
+      rows = [...rows, finaliseRow(cur, design[cur % nd], { cur, count, sums, rows }, p, ops ? ops[Math.floor(cur / nd)] : undefined)];
       cur++; count = 0; sums = {};
     }
     if (i < n && t >= (i + 1) * p.dwell - p.averageWindow - TIME_EPS) {
@@ -211,8 +244,10 @@ const doeFactory = definePtBlock(spec, {
     const best = bestRow(st.rows, p.objective);
     const info = makeBus(['Points', 'Completed', 'BestIndex', 'BestObjective'],
       [n, st.rows.length, best ? best.index : -1, best ? (best.responses[p.objective.startsWith('-') ? p.objective.slice(1) : p.objective] ?? 0) : 0]);
+    const outs: XValue[] = [info, [...design[idx % nd]], idx, i >= n ? 1 : 0];
+    if (ops) { const o = ops[Math.floor(idx / nd)]; outs.push(o.N, o.Load); }
     return {
-      outputs: [info, [...design[idx]], idx, i >= n ? 1 : 0],
+      outputs: outs,
       nextState: { cur, count, sums, rows },
     };
   },

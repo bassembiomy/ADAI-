@@ -1293,6 +1293,7 @@ export const XbridgesWorkspace: React.FC<{
   onSave?: (nodes: any[], edges: any[], mappings: readonly XBMappingV1[]) => void;
   onSaveAll?: () => void;
   onLaunchDoe?: () => void;
+  onExportDoeData?: (headers: string[], data: number[][]) => void;
   initialSelectedNodeId?: string | null;
   sharedClipboard?: { nodes: any[]; edges: any[]; sourceFileId: string } | null;
   onClipboardChange?: (clipboard: { nodes: any[]; edges: any[]; sourceFileId: string } | null) => void;
@@ -1312,6 +1313,7 @@ export const XbridgesWorkspace: React.FC<{
   onSave,
   onSaveAll,
   onLaunchDoe,
+  onExportDoeData,
   initialSelectedNodeId,
   sharedClipboard,
   onClipboardChange,
@@ -1438,6 +1440,11 @@ export const XbridgesWorkspace: React.FC<{
       .filter(n => n.data && n.data.type === 'FUZZY_INFERENCE_SYSTEM')
       .map(n => ({ id: n.id, label: n.data.label || n.id, params: n.data.params }));
   }, [nodes]);
+
+  const panelBlocks = React.useMemo(
+    () => nodes.map(n => ({ id: n.id, type: n.data.type, label: n.data.label, params: n.data.params })),
+    [nodes],
+  );
 
   // Tutorial / Learning Lab State
   const [activeLabId, setActiveLabId] = useState<string | null>(null);
@@ -3653,6 +3660,8 @@ export const XbridgesWorkspace: React.FC<{
               availableFisBlocks={availableFisBlocks}
               onUpdate={updateBlock}
               onLaunchDoe={onLaunchDoe}
+              availableBlocks={panelBlocks}
+              onExportDoeData={onExportDoeData}
               onClose={() => setSelectedNodeId(null)}
               isCollapsed={isPropsCollapsed}
               onCollapseToggle={setIsPropsCollapsed}

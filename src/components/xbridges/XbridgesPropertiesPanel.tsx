@@ -4,6 +4,7 @@ import { XBlock, XPort } from '../../engine/xbridges/types';
 import { X, Plus, Trash2, Settings2, Hash, Layers, Activity } from 'lucide-react';
 import { polyToString, zpgToString } from '../../engine/xbridges/BlockDefinitions';
 import { VectorUtils } from '../../engine/xbridges/VectorUtils';
+import { DoeSweeperPanel } from './powertrain/DoeSweeperPanel';
 
 interface Props {
   block: XBlock | null;
@@ -15,6 +16,8 @@ interface Props {
   isCollapsed?: boolean;
   onCollapseToggle?: (collapsed: boolean) => void;
   requirementAssignments?: React.ReactNode;
+  availableBlocks?: { id: string; type: string; label?: string; params: Record<string, any> }[];
+  onExportDoeData?: (headers: string[], data: number[][]) => void;
 }
 
 const normalizeNumerals = (val: string) => {
@@ -38,7 +41,9 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
   onClose,
   isCollapsed: isCollapsedExternal,
   onCollapseToggle,
-  requirementAssignments
+  requirementAssignments,
+  availableBlocks,
+  onExportDoeData
 }) => {
   if (!block) return null;
 
@@ -1338,6 +1343,9 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
                  </div>
               </div>
             </section>
+        )}
+        {block.type === 'PT_DOE_SWEEPER' && (
+          <DoeSweeperPanel block={block} availableBlocks={availableBlocks} onUpdate={onUpdate} onExportDoeData={onExportDoeData} />
         )}
         {requirementAssignments}
       </div>

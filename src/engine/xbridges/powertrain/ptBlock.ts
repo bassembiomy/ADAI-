@@ -79,14 +79,22 @@ export function definePtBlock(spec: PtBlockSpec, impl: PtBlockImpl): (id: string
   return (id, given) => {
     const params = resolvePtParams(spec, given);
     const ports = portSpecsFor(spec, impl, params);
-    const cache = new WeakMap<object, { rp: Params; bad: string | null }>();
+    // Cache per params object; a shallow snapshot notices in-place edits (Object.assign on block.params).
+    const cache = new WeakMap<object, { rp: Params; bad: string | null; snap: Params }>();
+    const sameSnapshot = (snap: Params, cur: Params): boolean => {
+      const ks = Object.keys(cur);
+      if (ks.length !== Object.keys(snap).length) return false;
+      for (const k of ks) if (!(k in snap) || snap[k] !== cur[k]) return false;
+      return true;
+    };
     const check = (runtime: Params): { rp: Params; bad: string | null } => {
       const key = runtime as object | null | undefined;
-      const hit = key !== null && typeof key === 'object' ? cache.get(key) : undefined;
-      if (hit) return hit;
+      const isObj = key !== null && typeof key === 'object';
+      const hit = isObj ? cache.get(key) : undefined;
+      if (hit && sameSnapshot(hit.snap, runtime)) return hit;
       const rp = resolvePtParams(spec, runtime);
-      const entry = { rp, bad: validateParams(spec.params, rp) };
-      if (key !== null && typeof key === 'object') cache.set(key, entry);
+      const entry = { rp, bad: validateParams(spec.params, rp), snap: isObj ? { ...runtime } : {} };
+      if (isObj) cache.set(key, entry);
       return entry;
     };
     let initState: any;

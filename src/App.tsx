@@ -15524,6 +15524,11 @@ const ADIA = () => {
                   availableVariables={variables}
                   tickMs={tickMs}
                   onLaunchDoe={() => toggleWindow('doe')}
+                  onExportDoeData={(doeHeaders, doeData) => {
+                    setHeaders(doeHeaders);
+                    setData(doeData);
+                    setManagedWindows(prev => (prev.doe.isOpen ? { ...prev, doe: { ...prev.doe, isMinimized: false } } : { ...prev, doe: { ...prev.doe, isOpen: true } }));
+                  }}
                   onBack={() => {
                     if (xBridgesStateId) setXBridgesStateId(null);
                     else setDiagramMode('statemachine');
