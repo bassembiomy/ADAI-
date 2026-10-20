@@ -150,9 +150,10 @@
       "deps": [
         "WP-08"
       ],
-      "status": "in_progress",
+      "status": "done",
       "findings": [],
-      "tests": "src/engine/xbridges/powertrain/wp10_scenarios.test.ts"
+      "tests": "src/engine/xbridges/powertrain/wp10_scenarios.test.ts",
+      "review": "Opus 2026-10-20: 65 tests in isolated worktree; drive-cycle file moved from powertrain/data (ignored by .gitignore 'data/') to powertrain/cycles. G3 pending (no MATLAB)."
     },
     {
       "id": "WP-11",
@@ -161,9 +162,10 @@
       "deps": [
         "WP-08"
       ],
-      "status": "in_progress",
+      "status": "done",
       "findings": [],
-      "tests": "src/engine/xbridges/powertrain/wp11_vehicleBody.test.ts"
+      "tests": "src/engine/xbridges/powertrain/wp11_vehicleBody.test.ts",
+      "review": "Opus 2026-10-20: 160 tests in isolated worktree; equations match spec; example hand-checked. G3 pending (no MATLAB)."
     },
     {
       "id": "WP-12",
@@ -172,8 +174,9 @@
       "deps": [
         "WP-08"
       ],
-      "status": "todo",
-      "findings": []
+      "status": "in_progress",
+      "findings": [],
+      "tests": "src/engine/xbridges/powertrain/wp12_wheel.test.ts"
     },
     {
       "id": "WP-13",
@@ -187,13 +190,14 @@
     },
     {
       "id": "WP-14",
-      "title": "Final drive",
+      "title": "Open Differential (LSD, transfer case, active diff in WP-14b)",
       "exec": "S",
       "deps": [
         "WP-13"
       ],
-      "status": "todo",
-      "findings": []
+      "status": "in_progress",
+      "findings": [],
+      "tests": "src/engine/xbridges/powertrain/wp14_openDifferential.test.ts"
     },
     {
       "id": "WP-15",
@@ -222,9 +226,15 @@
       "deps": [
         "WP-08"
       ],
-      "status": "in_progress",
-      "findings": [],
-      "tests": "src/engine/xbridges/powertrain/wp17_batteries.test.ts"
+      "status": "done",
+      "findings": [
+        {
+          "severity": "low",
+          "summary": "Equivalent Circuit Battery tables depend on SOC only (BattTemp only reported); temperature-dependent tables are a documented gap for WP-17b."
+        }
+      ],
+      "tests": "src/engine/xbridges/powertrain/wp17_batteries.test.ts",
+      "review": "Opus 2026-10-20: regression 41 files / 637 tests; examples hand-checked (360.96 V, 36.9 V). G3 pending (no MATLAB)."
     },
     {
       "id": "WP-18",
@@ -238,13 +248,14 @@
     },
     {
       "id": "WP-19",
-      "title": "Mapped motor, SPMSM, IPMSM",
+      "title": "Mapped Motor (SPMSM/IPMSM in WP-19b)",
       "exec": "S",
       "deps": [
         "WP-08"
       ],
-      "status": "todo",
-      "findings": []
+      "status": "in_progress",
+      "findings": [],
+      "tests": "src/engine/xbridges/powertrain/wp19_mappedMotor.test.ts"
     },
     {
       "id": "WP-20",
@@ -279,13 +290,14 @@
     },
     {
       "id": "WP-23",
-      "title": "Mapped SI/CI/core engine",
+      "title": "Mapped SI and CI Engine (Mapped Core Engine in WP-23b)",
       "exec": "S",
       "deps": [
         "WP-08"
       ],
-      "status": "todo",
-      "findings": []
+      "status": "in_progress",
+      "findings": [],
+      "tests": "src/engine/xbridges/powertrain/wp23_mappedEngines.test.ts"
     },
     {
       "id": "WP-24",
