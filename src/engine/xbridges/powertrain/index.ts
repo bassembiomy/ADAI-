@@ -3,8 +3,9 @@
 import type { XBlock } from '../types';
 import type { PtBlockSpec } from './ptSpec';
 import { PT_CATEGORY_ORDER } from './ptSpec';
+import { VEHICLE_BODY_BLOCKS } from './blocks/vehicleBody';
 
-export const PT_BLOCKS: { spec: PtBlockSpec; factory: (id: string, params?: Record<string, any>) => XBlock }[] = [];
+export const PT_BLOCKS: { spec: PtBlockSpec; factory: (id: string, params?: Record<string, any>) => XBlock }[] = [...VEHICLE_BODY_BLOCKS];
 
 export const POWERTRAIN_SPECS: PtBlockSpec[] = PT_BLOCKS.map(b => b.spec);
 export const POWERTRAIN_FACTORIES: Record<string, (id: string, params?: Record<string, any>) => XBlock> =
