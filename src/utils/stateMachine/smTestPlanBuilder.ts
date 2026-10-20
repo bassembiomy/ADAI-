@@ -56,6 +56,22 @@ export const buildSMTestManifest = (ir: SemanticModel): SMTestManifest => {
 
   const cases: SMTestCase[] = [];
 
+  const linkedRequirements = new Map<string, readonly string[]>();
+  for (const el of ir.traceableElements ?? []) {
+    if (el.requirementIds.length > 0) linkedRequirements.set(el.id, el.requirementIds);
+  }
+  const resolveRequirementIds = (
+    stateIds: readonly string[],
+    transitionIds: readonly string[],
+    placeholder: readonly string[],
+  ): readonly string[] => {
+    const linked = new Set<string>();
+    for (const id of [...stateIds, ...transitionIds]) {
+      for (const req of linkedRequirements.get(id) ?? []) linked.add(req);
+    }
+    return linked.size > 0 ? [...linked].sort() : placeholder;
+  };
+
   const makeTraceability = (
     testCaseId: string,
     stateIds: readonly string[],
@@ -66,7 +82,7 @@ export const buildSMTestManifest = (ir: SemanticModel): SMTestManifest => {
     modelId,
     stateIds: Object.freeze([...stateIds]),
     transitionIds: Object.freeze([...transitionIds]),
-    requirementIds: Object.freeze([...requirementIds]),
+    requirementIds: Object.freeze([...resolveRequirementIds(stateIds, transitionIds, requirementIds)]),
     generatedFunctions: Object.freeze([...generatedFunctions]),
     testCaseId,
   });

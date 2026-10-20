@@ -42,7 +42,7 @@ const withMessages = (repo: SysmlRepository, messages: Array<Record<string, unkn
   ...interaction(repo),
   messages: messages.map((message, index) => ({ id: `m${index + 1}`, name: '', order: index + 1, ...message })),
 }) as InteractionDefinition;
-const codes = (repo: SysmlRepository, next: InteractionDefinition) => validateInteraction(repo, next).map(d => `${d.severity}:${d.code}`);
+const codes = (repo: SysmlRepository, next: InteractionDefinition) => validateInteraction(repo, next).filter(d => d.code !== 'LIFELINE_UNTYPED').map(d => `${d.severity}:${d.code}`);
 const signalTo = (target: string, signatureId: string) => ({ sort: 'asynchSignal', sourceLifelineId: 'c', targetLifelineId: target, signatureId });
 
 describe('receptions', () => {

@@ -217,7 +217,7 @@ function elementExists(repo: SysmlRepository, id: string, context?: SemanticEndp
   return resolveSemanticEndpoint(repo, id, context) !== undefined;
 }
 
-function requirementDirectionValid(repo: SysmlRepository, relationship: SysmlRelationship): { valid: boolean; code: string } {
+function requirementDirectionValid(repo: SysmlRepository, relationship: SysmlRelationship, context?: SemanticEndpointContext): { valid: boolean; code: string } {
   const sourceReq = Boolean(repo.requirements[relationship.sourceId]);
   const targetReq = Boolean(repo.requirements[relationship.targetId]);
   switch (relationship.kind) {
@@ -236,7 +236,7 @@ function requirementDirectionValid(repo: SysmlRepository, relationship: SysmlRel
         ? { valid: true, code: '' }
         : { valid: false, code: 'INVALID_REQUIREMENT_RELATION_DIRECTION' };
     case 'verify':
-      return (Boolean(repo.verificationCases[relationship.sourceId]) || resolveRepositoryEndpoint(repo, relationship.sourceId)?.family === 'interaction') && targetReq
+      return (Boolean(repo.verificationCases[relationship.sourceId]) || resolveRepositoryEndpoint(repo, relationship.sourceId)?.family === 'interaction' || ['simulationTarget', 'state'].includes(context?.externalEndpoints?.get(relationship.sourceId)?.family ?? '')) && targetReq
         ? { valid: true, code: '' }
         : { valid: false, code: 'INVALID_REQUIREMENT_RELATION_DIRECTION' };
     case 'trace':
@@ -363,7 +363,7 @@ export function classifyRelationship(repo: SysmlRepository, relationshipId: stri
       diagram: relationshipDiagram(relationship.kind),
     });
     diagnostics.push(...decision.diagnostics.map(diagnostic => `${diagnostic.code}: ${diagnostic.message}`));
-    const check = requirementDirectionValid(repo, relationship);
+    const check = requirementDirectionValid(repo, relationship, context);
     if (!check.valid) diagnostics.push(`${check.code}: Requirement containment ${relationshipId} must connect requirement to requirement`);
     diagnostics.sort();
     return { allowed: diagnostics.length === 0, diagram: 'requirements', diagnostics };
@@ -379,18 +379,17 @@ export function classifyRelationship(repo: SysmlRepository, relationshipId: stri
   // Trace endpoint legality is fully owned by the shared connection policy;
   // do not append the obsolete generic requirement-direction diagnostic.
   if (relationship.kind !== 'trace') {
-    const check = requirementDirectionValid(repo, relationship);
+    const check = requirementDirectionValid(repo, relationship, context);
     if (!check.valid) diagnostics.push(`${check.code}: ${relationship.kind} ${relationshipId} has invalid SysML endpoint direction`);
   }
   diagnostics.sort();
   return { allowed: diagnostics.length === 0, diagram: 'rtm', diagnostics };
 }
 
-/** A part property id, a property path of a part, or a Block port id. */
+/** A Block property id (any kind), a property path of a part, or a Block port id. */
 export function isFeatureReference(repo: SysmlRepository, id: string): boolean {
   if (id.includes(PATH_SEPARATOR)) return Boolean(resolveOccurrenceKey(repo, id));
-  const property = findPropertyOwner(repo, id);
-  if (property) return isPartProperty(repo, property.feature);
+  if (findPropertyOwner(repo, id)) return true;
   return Boolean(findPortOwner(repo, id));
 }
 

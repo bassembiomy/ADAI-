@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createEmptyRepository, type SysmlRepository } from '../../engine/sysml/model';
 import type { ModelTreeNode } from './modelExplorerTypes';
 import type { StateMachineExplorerSnapshot } from './adapters/stateMachineExplorerAdapter';
-import { buildDiagramVisualParentIndex, resolveCanvasSymbolDiagramTarget, resolveCanvasSymbolDiagramTargets, resolveDiagramSemanticOwner, resolveExactDiagramCanvasContext } from './diagramTreeContext';
+import { resolveCanvasSymbolDiagramTarget, resolveCanvasSymbolDiagramTargets, resolveDiagramSemanticOwner, resolveExactDiagramCanvasContext, resolveTreeOpenTarget } from './diagramTreeContext';
 
 function diagramNode(id: string, domain: 'sysml' | 'stateMachine'): ModelTreeNode {
   return {
@@ -78,128 +78,6 @@ describe('resolveDiagramSemanticOwner', () => {
     };
     expect(resolveDiagramSemanticOwner(diagramNode('ghost', 'sysml'), repository, stateMachine)).toBe('model');
     expect(resolveDiagramSemanticOwner(diagramNode('ghost-sm', 'stateMachine'), repository, stateMachine)).toBe('root');
-  });
-});
-
-describe('buildDiagramVisualParentIndex', () => {
-  it('maps presented SysML elements to their diagram node', () => {
-    const index = buildDiagramVisualParentIndex({
-      sysml: repositoryWithDiagrams(),
-      stateMachine: stateMachineWithNestedDiagram(),
-      diagramPresentations: {
-        'bdd-1': { elementIds: ['block-1'] },
-        'req-diagram-1': { elementIds: ['req-1'] },
-        'parametric-1': { elementIds: ['constraint-1'] },
-      },
-    });
-
-    expect(index.get('block-1')).toBe('sysml:element:bdd-1');
-    expect(index.get('req-1')).toBe('sysml:element:req-diagram-1');
-    expect(index.get('constraint-1')).toBe('sysml:element:parametric-1');
-  });
-
-  it('maps states and junctions of a state-machine diagram to that diagram node', () => {
-    const index = buildDiagramVisualParentIndex({
-      sysml: createEmptyRepository(),
-      stateMachine: stateMachineWithNestedDiagram(),
-      diagramPresentations: {},
-    });
-
-    expect(index.get('s2')).toBe('sm:diagram:nested-sm-1');
-    expect(index.get('j1')).toBe('sm:diagram:nested-sm-1');
-  });
-
-  it('ignores presentations whose diagram or element no longer resolves', () => {
-    const index = buildDiagramVisualParentIndex({
-      sysml: repositoryWithDiagrams(),
-      stateMachine: stateMachineWithNestedDiagram(),
-      diagramPresentations: {
-        'deleted-diagram': { elementIds: ['block-1'] },
-        'bdd-1': { elementIds: ['ghost-1', ''] },
-      },
-    });
-
-    expect(index.get('ghost-1')).toBeUndefined();
-    expect(index.has('')).toBe(false);
-    // A stale diagram ID must not capture a semantic element that still exists.
-    expect(index.has('block-1')).toBe(false);
-  });
-
-  it('lets the later diagram entry win deterministically', () => {
-    const index = buildDiagramVisualParentIndex({
-      sysml: repositoryWithDiagrams(),
-      stateMachine: stateMachineWithNestedDiagram(),
-      diagramPresentations: {
-        'bdd-1': { elementIds: ['block-1'] },
-        'req-diagram-1': { elementIds: ['block-1'] },
-      },
-    });
-
-    expect(index.get('block-1')).toBe('sysml:element:req-diagram-1');
-  });
-
-  it('correctly maps relationships when explicitly presented, inferred from endpoints, or hidden', () => {
-    const repo = repositoryWithDiagrams();
-    repo.definitions['block-2'] = {
-      id: 'block-2', name: 'Gearbox', namespace: ['model'], ownerId: 'model', kind: 'block',
-      isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
-    };
-    repo.relationships['rel-explicit'] = {
-      id: 'rel-explicit', kind: 'association', sourceId: 'block-1', targetId: 'block-2',
-    } as any;
-    repo.relationships['rel-inferred'] = {
-      id: 'rel-inferred', kind: 'dependency', sourceId: 'block-1', targetId: 'block-2',
-    } as any;
-    repo.relationships['rel-hidden'] = {
-      id: 'rel-hidden', kind: 'generalization', sourceId: 'block-1', targetId: 'block-2',
-    } as any;
-    repo.relationships['rel-stale-endpoint'] = {
-      id: 'rel-stale-endpoint', kind: 'association', sourceId: 'block-1', targetId: 'missing-block',
-    } as any;
-
-    const index = buildDiagramVisualParentIndex({
-      sysml: repo,
-      stateMachine: stateMachineWithNestedDiagram(),
-      diagramPresentations: {
-        'bdd-1': {
-          elementIds: ['block-1', 'block-2', 'rel-explicit'],
-          hiddenElementIds: ['rel-hidden'],
-        },
-      },
-    });
-
-    // rel-explicit is explicitly presented
-    expect(index.get('rel-explicit')).toBe('sysml:element:bdd-1');
-    // rel-inferred has both endpoints presented and is not hidden
-    expect(index.get('rel-inferred')).toBe('sysml:element:bdd-1');
-    // rel-hidden is hidden despite both endpoints presented
-    expect(index.get('rel-hidden')).toBeUndefined();
-    // rel-stale-endpoint does not have both endpoints presented
-    expect(index.get('rel-stale-endpoint')).toBeUndefined();
-  });
-
-  it('handles multiple diagrams with later precedence for relationships and ignores missing diagrams', () => {
-    const repo = repositoryWithDiagrams();
-    repo.definitions['block-2'] = {
-      id: 'block-2', name: 'Gearbox', namespace: ['model'], ownerId: 'model', kind: 'block',
-      isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [],
-    };
-    repo.relationships['rel-shared'] = {
-      id: 'rel-shared', kind: 'association', sourceId: 'block-1', targetId: 'block-2',
-    } as any;
-
-    const index = buildDiagramVisualParentIndex({
-      sysml: repo,
-      stateMachine: stateMachineWithNestedDiagram(),
-      diagramPresentations: {
-        'bdd-1': { elementIds: ['block-1', 'block-2'] },
-        'missing-diagram': { elementIds: ['block-1', 'block-2', 'rel-shared'] },
-        'req-diagram-1': { elementIds: ['block-1', 'block-2'] },
-      },
-    });
-
-    // req-diagram-1 comes after bdd-1; missing-diagram is ignored because it does not exist in repo.diagrams
-    expect(index.get('rel-shared')).toBe('sysml:element:req-diagram-1');
   });
 });
 
@@ -287,5 +165,74 @@ describe('resolveExactDiagramCanvasContext', () => {
     expect(resolveExactDiagramCanvasContext('missing', createEmptyRepository(), snapshot)).toBeNull();
     snapshot.diagrams!.push({ id: 'stale-sm', name: 'Stale SM', ownerId: 'absent', contextRegionId: 'absent' });
     expect(resolveExactDiagramCanvasContext('stale-sm', createEmptyRepository(), snapshot)).toBeNull();
+  });
+});
+
+describe('resolveTreeOpenTarget', () => {
+  const repo = () => {
+    const r = createEmptyRepository();
+    r.packages.reqs = { id: 'reqs', name: 'Reqs', kind: 'package', namespace: [], ownerId: 'model' };
+    r.definitions.b1 = {
+      id: 'b1', name: 'B1', namespace: [], ownerId: 'model', kind: 'block', isAbstract: false, isLeaf: false,
+      properties: [{ id: 'b1.p', name: 'p', kind: 'value', typeId: '', multiplicity: { lower: 1, upper: 1, ordered: false, unique: true } }],
+      ports: [], operations: [], constraints: [],
+    };
+    r.requirements.r1 = { id: 'r1', name: 'R1', namespace: [], ownerId: 'reqs', kind: 'requirement', requirementId: 'R-1', text: 't', status: 'draft', version: '1' };
+    r.relationships.sat = { id: 'sat', kind: 'satisfy', sourceId: 'b1', targetId: 'r1' };
+    r.diagrams.bdd = { id: 'bdd', name: 'BDD', namespace: [], ownerId: 'model', kind: 'diagram', diagramKind: 'bdd' };
+    r.diagrams.reqA = { id: 'reqA', name: 'REQ A', namespace: [], ownerId: 'reqs', kind: 'diagram', diagramKind: 'requirements' };
+    r.diagrams.reqB = { id: 'reqB', name: 'REQ B', namespace: [], ownerId: 'reqs', kind: 'diagram', diagramKind: 'requirements' };
+    return r;
+  };
+  const presentations = { bdd: { elementIds: ['b1'] }, reqA: { elementIds: ['b1', 'r1'] }, reqB: { elementIds: ['r1'] } };
+  const sm: StateMachineExplorerSnapshot = {
+    states: [
+      { id: 'outer', name: 'Outer', parentId: 'root' } as never,
+      { id: 'inner', name: 'Inner', parentId: 'outerRegion' } as never,
+    ],
+    layers: [
+      { id: 'root', name: 'Root', parentStateId: null, stateIds: ['outer'], transitionIds: [], junctionIds: [] },
+      { id: 'outerRegion', name: 'Outer', parentStateId: 'outer', stateIds: ['inner'], transitionIds: [], junctionIds: [] },
+    ],
+    transitions: [], junctions: [], revision: 1,
+    diagrams: [{ id: 'smRoot', name: 'Main', ownerId: 'root', contextRegionId: 'root' }],
+  };
+
+  it('opens a diagram row as itself', () => {
+    expect(resolveTreeOpenTarget('reqA', repo(), presentations, sm)).toEqual({ kind: 'diagram', diagramId: 'reqA', selectId: 'reqA' });
+  });
+
+  it('opens an element on the diagram of the clicked reference row, else on the shown diagram, else on the last that presents it', () => {
+    expect(resolveTreeOpenTarget('r1', repo(), presentations, sm, { preferredDiagramId: 'reqA' })).toMatchObject({ diagramId: 'reqA', selectId: 'r1' });
+    expect(resolveTreeOpenTarget('r1', repo(), presentations, sm, { activeDiagramId: 'reqA' })).toMatchObject({ diagramId: 'reqA' });
+    expect(resolveTreeOpenTarget('r1', repo(), presentations, sm)).toMatchObject({ diagramId: 'reqB' });
+  });
+
+  it('opens a feature on the diagram of its block but selects the feature itself, and a relationship where both ends are shown', () => {
+    expect(resolveTreeOpenTarget('b1.p', repo(), presentations, sm, { activeDiagramId: 'bdd' })).toEqual({ kind: 'diagram', diagramId: 'bdd', selectId: 'b1.p' });
+    expect(resolveTreeOpenTarget('sat', repo(), presentations, sm)).toEqual({ kind: 'diagram', diagramId: 'reqA', selectId: 'sat' });
+  });
+
+  it('selects a port, operation or extension point itself while opening its owner diagram', () => {
+    const r = repo();
+    const block = r.definitions.b1 as any;
+    block.ports = [{ id: 'b1.port', name: 'po', kind: 'standard', typeId: '' }];
+    block.operations = [{ id: 'b1.op', name: 'op' }];
+    r.useCases = { uc1: { id: 'uc1', name: 'UC', kind: 'useCase', namespace: [], ownerId: 'model' } as any };
+    r.extensionPoints = { ep1: { id: 'ep1', name: 'EP', kind: 'extensionPoint', namespace: [], ownerId: 'uc1', useCaseId: 'uc1' } as any };
+    const pres = { ...presentations, bdd: { elementIds: ['b1', 'uc1'] } };
+    expect(resolveTreeOpenTarget('b1.port', r, pres, sm, { activeDiagramId: 'bdd' })).toEqual({ kind: 'diagram', diagramId: 'bdd', selectId: 'b1.port' });
+    expect(resolveTreeOpenTarget('b1.op', r, pres, sm, { activeDiagramId: 'bdd' })).toEqual({ kind: 'diagram', diagramId: 'bdd', selectId: 'b1.op' });
+    expect(resolveTreeOpenTarget('ep1', r, pres, sm)).toEqual({ kind: 'diagram', diagramId: 'bdd', selectId: 'ep1' });
+    expect(resolveTreeOpenTarget('nothing-here', r, pres, sm)).toBeNull();
+  });
+
+  it('opens a state in the region that holds it', () => {
+    expect(resolveTreeOpenTarget('outer', repo(), presentations, sm)).toEqual({
+      kind: 'region', selectId: 'outer', context: { layerId: 'root', layerStack: [], layerPath: ['Root'] },
+    });
+    expect(resolveTreeOpenTarget('inner', repo(), presentations, sm)).toEqual({
+      kind: 'region', selectId: 'inner', context: { layerId: 'outerRegion', layerStack: ['root'], layerPath: ['Root', 'Outer'] },
+    });
   });
 });

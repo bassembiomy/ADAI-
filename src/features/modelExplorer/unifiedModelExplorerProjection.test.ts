@@ -114,6 +114,62 @@ describe('buildUnifiedModelProjection', () => {
     expect(projection.nodes['vlab:model:vl'].diagramId).toBe('vl-diagram');
   });
 
+  it('places a top-level package under the pillar of its content and keeps diagram content under its owner', () => {
+    const repository = createEmptyRepository();
+    const pkg = (id: string, name: string) => ({ id, name, kind: 'package' as const, namespace: [], ownerId: 'model' });
+    repository.packages.reqs = pkg('reqs', 'Requirements');
+    repository.packages.hw = pkg('hw', 'Hardware');
+    repository.requirements.r1 = {
+      id: 'r1', name: 'R1', namespace: [], ownerId: 'reqs', kind: 'requirement', requirementId: 'REQ-1', text: 't', status: 'draft', version: '1',
+    };
+    repository.definitions.b1 = {
+      id: 'b1', name: 'B1', namespace: [], ownerId: 'hw', kind: 'block', isAbstract: false, isLeaf: false,
+      properties: [], ports: [], operations: [], constraints: [],
+    };
+    repository.diagrams.rd = { id: 'rd', name: 'REQ - B1', namespace: [], ownerId: 'reqs', kind: 'diagram', diagramKind: 'requirements' };
+    repository.diagrams.pd = { id: 'pd', name: 'PKG', namespace: [], ownerId: 'hw', kind: 'diagram', diagramKind: 'package' };
+    repository.relationships.sat = { id: 'sat', kind: 'satisfy', sourceId: 'b1', targetId: 'r1' };
+    const diagramPresentations = { rd: { elementIds: ['b1', 'r1'] }, pd: { elementIds: ['reqs', 'hw'] } };
+    const base = { sysml: repository, stateMachine: emptyStateMachine(), externalModels: [], revision: 1, diagramPresentations };
+
+    const full = buildUnifiedModelProjection(base);
+    expect(full.nodes['sysml:element:reqs'].parentNodeId).toBe('project:pillar:requirements');
+    expect(full.nodes['sysml:element:hw'].parentNodeId).toBe('project:pillar:structural');
+    expect(full.nodes['sysml:element:reqs'].childNodeIds).toEqual(expect.arrayContaining(['sysml:element:r1', 'sysml:element:rd']));
+    expect(full.nodes['sysml:element:rd'].childNodeIds).toEqual([]);
+    expect(full.nodes['sysml:element:sat'].parentNodeId).toBe('sysml:element:b1');
+
+    const lazy = buildUnifiedModelProjection({
+      ...base,
+      sysmlStore: fromRepository(repository, {}, {}),
+      expandedNodeIds: new Set(['project:model', 'project:pillar:requirements', 'project:pillar:structural',
+        'sysml:element:reqs', 'sysml:element:hw', 'sysml:element:b1']),
+    });
+    expect(lazy.nodes['sysml:element:reqs'].parentNodeId).toBe('project:pillar:requirements');
+    expect(lazy.nodes['sysml:element:reqs'].childNodeIds).toEqual(expect.arrayContaining(['sysml:element:r1', 'sysml:element:rd']));
+    expect(lazy.nodes['sysml:element:hw'].childNodeIds).toEqual(expect.arrayContaining(['sysml:element:b1', 'sysml:element:pd']));
+    expect(lazy.nodes['sysml:element:b1'].parentNodeId).toBe('sysml:element:hw');
+    expect(lazy.nodes['sysml:element:sat'].parentNodeId).toBe('sysml:element:b1');
+  });
+
+  it('lists what an expanded diagram presents as reference rows, without taking ownership', () => {
+    const repository = createEmptyRepository();
+    repository.packages.reqs = { id: 'reqs', name: 'Requirements', kind: 'package', namespace: [], ownerId: 'model' };
+    repository.requirements.r1 = {
+      id: 'r1', name: 'R1', namespace: [], ownerId: 'reqs', kind: 'requirement', requirementId: 'REQ-1', text: 't', status: 'draft', version: '1',
+    };
+    repository.diagrams.rd = { id: 'rd', name: 'REQ', namespace: [], ownerId: 'reqs', kind: 'diagram', diagramKind: 'requirements' };
+    const tree = buildUnifiedModelProjection({
+      sysml: repository, sysmlStore: fromRepository(repository, {}, {}), stateMachine: emptyStateMachine(), externalModels: [], revision: 1,
+      diagramPresentations: { rd: { elementIds: ['r1', 'gone'] } },
+      expandedNodeIds: new Set(['project:model', 'project:pillar:requirements', 'sysml:element:reqs', 'sysml:element:rd']),
+    });
+    expect(tree.nodes['sysml:element:rd'].childNodeIds).toEqual(['sysml:ref:rd:r1']);
+    expect(tree.nodes['sysml:ref:rd:r1']).toMatchObject({ semanticId: 'r1', presentedOnDiagramId: 'rd', ownerSemanticId: 'reqs', readOnly: true });
+    // the requirement keeps its own row under its owner
+    expect(tree.nodes['sysml:element:r1'].parentNodeId).toBe('sysml:element:reqs');
+  });
+
   it('nests requirements according to requirement containment relationships', () => {
     const repository = createEmptyRepository();
     repository.requirements.parent = {
@@ -221,7 +277,7 @@ describe('buildUnifiedModelProjection', () => {
     expect(projection.nodes['sm:diagram:adia-default-state-machine'].parentNodeId).toBe('project:pillar:behavior');
   });
 
-  it('groups BDD-presented elements under the diagram while preserving their semantic owner', () => {
+  it('keeps a BDD-presented element under its owner: a diagram owns nothing (Cameo containment)', () => {
     const repository = createEmptyRepository();
     repository.definitions['block-1'] = {
       id: 'block-1', name: 'Engine', namespace: ['model'], ownerId: 'model', kind: 'block',
@@ -239,15 +295,15 @@ describe('buildUnifiedModelProjection', () => {
     });
 
     expect(projection.nodes['sysml:element:block-1']).toMatchObject({
-      parentNodeId: 'sysml:element:bdd-1',
+      parentNodeId: 'project:pillar:structural',
       ownerSemanticId: 'model',
     });
-    expect(projection.nodes['sysml:element:bdd-1'].childNodeIds).toContain('sysml:element:block-1');
-    // One primary containment location: the semantic pillar no longer lists it.
-    expect(projection.nodes['project:pillar:structural'].childNodeIds).not.toContain('sysml:element:block-1');
+    expect(projection.nodes['sysml:element:bdd-1'].childNodeIds).toEqual([]);
+    expect(projection.nodes['project:pillar:structural'].childNodeIds)
+      .toEqual(expect.arrayContaining(['sysml:element:block-1', 'sysml:element:bdd-1']));
   });
 
-  it('groups requirements-diagram content under that diagram', () => {
+  it('keeps requirements-diagram content under its owner', () => {
     const repository = createEmptyRepository();
     repository.requirements['req-1'] = {
       id: 'req-1', name: 'Safety', namespace: ['model'], ownerId: 'model', kind: 'requirement',
@@ -266,14 +322,14 @@ describe('buildUnifiedModelProjection', () => {
     });
 
     expect(projection.nodes['sysml:element:req-1']).toMatchObject({
-      parentNodeId: 'sysml:element:req-diagram-1',
+      parentNodeId: 'project:pillar:requirements',
       ownerSemanticId: 'model',
     });
     expect(projection.nodes['project:pillar:requirements'].childNodeIds)
-      .not.toContain('sysml:element:req-1');
+      .toEqual(expect.arrayContaining(['sysml:element:req-1', 'sysml:element:req-diagram-1']));
   });
 
-  it('groups parametric-diagram content and classifies parametric diagrams under the Parametric pillar', () => {
+  it('keeps parametric-diagram content under its owner and classifies parametric diagrams under the Parametric pillar', () => {
     const repository = createEmptyRepository();
     repository.definitions['block-1'] = {
       id: 'block-1', name: 'Engine', namespace: ['model'], ownerId: 'model', kind: 'block',
@@ -302,16 +358,17 @@ describe('buildUnifiedModelProjection', () => {
     });
 
     expect(projection.nodes['sysml:element:constraint-1']).toMatchObject({
-      parentNodeId: 'sysml:element:parametric-1',
+      parentNodeId: 'sysml:element:block-1',
       ownerSemanticId: 'block-1',
     });
+    expect(projection.nodes['sysml:element:parametric-1'].parentNodeId).toBe('sysml:element:block-1');
     expect(projection.nodes['project:pillar:parametric'].childNodeIds)
       .toContain('sysml:element:parametric-orphan');
     expect(projection.nodes['project:pillar:structural'].childNodeIds)
       .not.toContain('sysml:element:parametric-orphan');
   });
 
-  it('groups state-machine states and junctions under the diagram that presents them', () => {
+  it('keeps state-machine states and junctions under their region, not under the diagram', () => {
     const input = defaultWorkspaceInput();
     input.stateMachine = ensureRootStateMachineDiagram({
       states: [
@@ -337,19 +394,11 @@ describe('buildUnifiedModelProjection', () => {
     });
     const projection = buildUnifiedModelProjection(input);
 
-    expect(projection.nodes['sm:state:s1']).toMatchObject({
-      parentNodeId: 'sm:diagram:adia-default-state-machine',
-      ownerSemanticId: 'root',
-    });
-    expect(projection.nodes['sm:state:s2']).toMatchObject({
-      parentNodeId: 'sm:diagram:nested-sm-1',
-      ownerSemanticId: 'region-1',
-    });
-    expect(projection.nodes['sm:junction:j1']).toMatchObject({
-      parentNodeId: 'sm:diagram:nested-sm-1',
-      ownerSemanticId: 'region-1',
-    });
-    // A diagram keeps its semantic parent: grouping is presentation, not ownership.
+    expect(projection.nodes['sm:state:s1']).toMatchObject({ parentNodeId: 'sm:region:root', ownerSemanticId: 'root' });
+    expect(projection.nodes['sm:state:s2']).toMatchObject({ parentNodeId: 'sm:region:region-1', ownerSemanticId: 'region-1' });
+    expect(projection.nodes['sm:junction:j1']).toMatchObject({ parentNodeId: 'sm:region:region-1', ownerSemanticId: 'region-1' });
+    expect(projection.nodes['sm:diagram:nested-sm-1'].childNodeIds).toEqual([]);
+    // The diagram is a leaf under the region it renders.
     expect(projection.nodes['sm:diagram:nested-sm-1'].parentNodeId).toBe('sm:region:region-1');
     expect(projection.nodes['sm:region:region-1'].parentNodeId).toBe('sm:state:s1');
   });
@@ -713,5 +762,38 @@ describe('buildUnifiedModelProjection', () => {
       expect(expandDuration).toBeLessThan(10);
       expect(nextProjection.nodes[pkgNodeId].childNodeIds.length).toBeGreaterThan(0);
     }
+  });
+  it('lazy: a test case with only an outgoing verify relationship expands to it, and a sourceless allocation stays reachable', () => {
+    const repository = createEmptyRepository();
+    repository.packages.pkg = { id: 'pkg', name: 'Pkg', kind: 'package', namespace: [], ownerId: 'model' };
+    repository.requirements.r1 = {
+      id: 'r1', name: 'R1', namespace: [], ownerId: 'pkg', kind: 'requirement', requirementId: 'REQ-1', text: 't', status: 'draft', version: '1',
+    };
+    repository.verificationCases.tc1 = { id: 'tc1', name: 'TC1', kind: 'verificationCase', method: 'test', verifiesRequirementIds: [], namespace: [], ownerId: 'pkg' } as any;
+    repository.relationships.ver = { id: 'ver', kind: 'verify', sourceId: 'tc1', targetId: 'r1' } as any;
+    repository.relationships.alloc = { id: 'alloc', kind: 'allocate', sourceId: 'activity-node-x', targetId: 'r1' } as any;
+    const base = { sysml: repository, sysmlStore: fromRepository(repository, {}, {}), stateMachine: emptyStateMachine(), externalModels: [], revision: 1 };
+    const collapsed = buildUnifiedModelProjection({ ...base, expandedNodeIds: new Set(['project:model', 'project:pillar:requirements', 'project:pillar:structural', 'sysml:element:pkg']) });
+    expect(collapsed.nodes['sysml:element:tc1']?.hasChildren).toBe(true);
+    expect(collapsed.nodes['sysml:element:alloc']?.parentNodeId).toBe('project:pillar:structural');
+    const open = buildUnifiedModelProjection({ ...base, expandedNodeIds: new Set(['project:model', 'project:pillar:requirements', 'project:pillar:structural', 'sysml:element:pkg', 'sysml:element:tc1']) });
+    expect(open.nodes['sysml:element:ver']?.parentNodeId).toBe('sysml:element:tc1');
+  });
+  it('lists an allocation from an activity node under the Activity owning the node (lazy and full)', () => {
+    const repository = createEmptyRepository();
+    repository.packages.pkg = { id: 'pkg', name: 'Pkg', kind: 'package', namespace: [], ownerId: 'model' };
+    repository.definitions.blk = { id: 'blk', name: 'Blk', kind: 'block', namespace: [], ownerId: 'pkg', properties: [], ports: [], operations: [] } as any;
+    repository.definitions.act = {
+      id: 'act', name: 'Act', kind: 'activity', namespace: [], ownerId: 'blk', nodes: [{ id: 'act_node', kind: 'action', name: 'Do' }], edges: [], partitions: [], parameters: [],
+    } as any;
+    repository.relationships.alloc = { id: 'alloc', kind: 'allocate', sourceId: 'act_node', targetId: 'blk' } as any;
+    const base = { sysml: repository, sysmlStore: fromRepository(repository, {}, {}), stateMachine: emptyStateMachine(), externalModels: [], revision: 1 };
+    const pillarOnly = buildUnifiedModelProjection({ ...base, expandedNodeIds: new Set(['project:model', 'project:pillar:structural', 'project:pillar:behavior', 'sysml:element:pkg', 'sysml:element:blk']) });
+    expect(pillarOnly.nodes['sysml:element:alloc']).toBeUndefined();
+    expect(pillarOnly.nodes['sysml:element:act']?.hasChildren).toBe(true);
+    const lazy = buildUnifiedModelProjection({ ...base, expandedNodeIds: new Set(['project:model', 'project:pillar:structural', 'project:pillar:behavior', 'sysml:element:pkg', 'sysml:element:blk', 'sysml:element:act']) });
+    expect(lazy.nodes['sysml:element:alloc']?.parentNodeId).toBe('sysml:element:act');
+    const full = buildUnifiedModelProjection({ sysml: repository, stateMachine: emptyStateMachine(), externalModels: [], revision: 1 });
+    expect(full.nodes['sysml:element:alloc']?.parentNodeId).toBe('sysml:element:act');
   });
 });

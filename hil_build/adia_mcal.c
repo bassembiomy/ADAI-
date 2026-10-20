@@ -28,7 +28,7 @@ adia_mcal_status_t adia_mcal_gpio_write(adia_mcal_gpio_channel_t ch, int32_t val
 {
     (void)ch;
     switch (ch) {
-    case ADIA_MCAL_GPIO_34D93ED7_4309_4EA8_B6E3_2CECEA48F7A9:
+    case ADIA_MCAL_GPIO_67797E0B_1464_429D_9FED_B7F8ADD5BF54:
         HAL_GPIO_Write(PIN_CH_1, "ch_1", (value != 0));
         return ADIA_MCAL_OK;
     default: return ADIA_MCAL_INVALID_CHANNEL;

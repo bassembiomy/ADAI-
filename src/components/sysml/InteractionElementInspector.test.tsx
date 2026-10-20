@@ -13,7 +13,7 @@ const block = (id: string, name: string) => ({
 
 function seed() {
   const repo = createEmptyRepository();
-  repo.definitions.Vehicle = block('Vehicle', 'Vehicle');
+  repo.definitions.Vehicle = { ...block('Vehicle', 'Vehicle'), operations: ['start()'] };
   repo.definitions.main = {
     id: 'main', kind: 'interaction', name: 'Start', namespace: [], ownerId: 'model',
     lifelines: [{ id: 'a', name: 'driver' }, { id: 'b', name: 'car', representsId: 'Vehicle' }],
@@ -82,6 +82,16 @@ describe('InteractionElementInspector', () => {
     fireEvent.blur(args);
     expect(main().messages[0]).toMatchObject({ name: 'begin', sort: 'asynchSignal', arguments: 'fast' });
     expect(screen.getByText('Position 1 of 2')).toBeTruthy();
+  });
+
+  it('picks the operation of a call message from the receiving Block, as the sequence footer does', () => {
+    render(<Harness elementId="m1" />);
+    const select = screen.getByLabelText('Operation') as HTMLSelectElement;
+    expect([...select.options].map(option => option.value)).toEqual(['', 'start()']);
+    fireEvent.change(select, { target: { value: 'start()' } });
+    expect(main().messages[0].signatureId).toBe('start()');
+    fireEvent.change(select, { target: { value: '' } });
+    expect(main().messages[0].signatureId).toBeUndefined();
   });
 
   it('edits a fragment operator and guard, and deletes it', () => {

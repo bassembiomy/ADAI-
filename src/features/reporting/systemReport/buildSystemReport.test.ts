@@ -226,6 +226,14 @@ describe('buildSystemReport: content', () => {
     expect(count('Evidence records')).toBe(2);
   });
 
+  it('shows an actor generalization drawn as a relationship in the Actors table', () => {
+    const input = richReportInput();
+    input.repository.actors.actor_admin = { id: 'actor_admin', kind: 'actor', name: 'Administrator', namespace: [], ownerId: 'model', isExternal: false, generalizationIds: [] };
+    input.repository.relationships.rel_gen = { id: 'rel_gen', kind: 'useCaseGeneralization', sourceId: 'actor_admin', targetId: 'actor_driver' } as any;
+    const html = buildSystemReport(input);
+    expect(/<tr>(?:(?!<\/tr>)[\s\S])*Administrator(?:(?!<\/tr>)[\s\S])*Driver(?:(?!<\/tr>)[\s\S])*<\/tr>/.test(html)).toBe(true);
+  });
+
   it('draws every diagram kind and the scenario tables', () => {
     for (const caption of ['Package diagram', 'Requirements diagram', 'Use case diagram', 'Block definition diagram', 'Internal block diagram',
       'Parametric diagram', 'Activity diagram', 'Sequence diagram', 'State machine']) {

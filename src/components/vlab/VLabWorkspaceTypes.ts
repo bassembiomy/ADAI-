@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { Node, Edge } from '@xyflow/react';
 
 export type VLabNode = Node<Record<string, any>>;
@@ -14,4 +15,5 @@ export interface VLabWorkspaceProps {
   onSaveAll?: () => void;
   onNavigateToXbridges?: (targetBlockId?: string) => void;
   initialSelectedNodeId?: string | null;
+  renderRequirementAssignments?: (blockId: string) => ReactNode;
 }

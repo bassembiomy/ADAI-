@@ -26,6 +26,8 @@ export const SEQUENCE_DIAGNOSTIC_GUIDANCE: Record<string, string> = {
   ALT_OPERAND_MISSING_GUARD: 'Warning: a nonfinal alt operand has no guard. Enter its condition; the final operand may serve as else.',
   FRAGMENT_MESSAGE_MISSING: 'An operand lists a missing message. Repair the membership.',
   MESSAGE_IN_MULTIPLE_OPERANDS: 'The same message belongs to multiple operands of one fragment. Assign it to one operand.',
+  FRAGMENT_NOT_CONTIGUOUS: 'A fragment operand must enclose a contiguous run of messages. Reselect the messages without gaps, or move the stray message out of the span.',
+  LIFELINE_UNTYPED: 'Warning: the lifeline represents no Block, part or Actor. Select what it represents in the inspector.',
   FRAGMENT_MESSAGE_NOT_COVERED: 'A member message touches a lifeline outside fragment coverage. Expand coverage or remove that membership.',
   USE_TARGET_MISSING: 'The ref target is missing or not an Interaction. Select an existing Interaction.',
   USE_CYCLE: 'A ref dependency leads back to this Interaction. Break the cycle.',

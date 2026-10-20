@@ -13,8 +13,6 @@
  * - Fails closed when the report delegate is unavailable or artifact verification fails.
  */
 
-import { generateReportDocxBuffer } from '../../features/reporting/exportReportToDocx';
-import { exportReportToPdf } from '../../features/reporting/exportReportToPdf';
 import { createStateMachineVerificationReport } from '../../features/reporting/generators/createStateMachineVerificationReport';
 import { createMotorDriveTestReport } from '../../features/reporting/generators/createMotorDriveTestReport';
 import {
@@ -288,8 +286,10 @@ export function createReportDelegate(opts: ReportDelegateOptions = {}): ReportAp
   const {
     getProjectData,
     outputDir = './reports',
-    docxExporter = generateReportDocxBuffer,
+    docxExporter = async (doc: ReportDocument) =>
+      (await import('../../features/reporting/exportReportToDocx')).generateReportDocxBuffer(doc),
     pdfExporter = async (doc: ReportDocument) => {
+      const { exportReportToPdf } = await import('../../features/reporting/exportReportToPdf');
       const pdf = exportReportToPdf(doc);
       return pdf.output('arraybuffer');
     },

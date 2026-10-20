@@ -6,6 +6,8 @@ import { TypeSelectionPrompt } from './TypeSelectionPrompt';
 import type { CreateNewTypeAction, TypeCandidate } from './typeSelectionTypes';
 import {
   PORT_KIND_MAP,
+  portKindFields,
+  portTypingDiagnostic,
   planOwnedPortCreation,
   planOwnedPropertyCreation,
   suggestedMetaclassForPortKind,
@@ -53,6 +55,14 @@ const INHERITANCE_PANEL_CODES = new Set([
 const DEFAULT_MAX_VISIBLE_INHERITED = 50;
 
 const PROPERTY_KINDS: NonNullable<PropertyDefinition['kind']>[] = ['value', 'part', 'reference', 'flow'];
+/** Parses `lower..upper` (or a single bound) the way the property editor does. */
+function parseMultiplicityText(text: string): { lower: number; upper: number | '*' } {
+  const parts = text.trim().split('..');
+  const lower = parseInt(parts[0], 10) || 0;
+  const upper = parts[1] === '*' ? '*' : parseInt(parts[1] || parts[0], 10) || 1;
+  return { lower, upper };
+}
+
 const PORT_KINDS: NonNullable<PortDefinition['kind']>[] = ['standard', 'proxy', 'full', 'flow'];
 const PORT_DIRECTIONS: NonNullable<PortDefinition['direction']>[] = ['in', 'out', 'inout'];
 
@@ -226,9 +236,26 @@ export function BlockFeatureEditor({
     onCreateNewType(propertyPrompt.action);
   };
 
+  // A port edit that changes its kind or type runs the same proxy/full typing gate as port creation;
+  // a rejected edit changes nothing and says why. A kind change updates `portKind` and the stereotypes too.
+  const [portErrors, setPortErrors] = useState<Record<string, string>>({});
   const updatePort = (index: number, patch: Partial<PortDefinition>) => {
-    const ports = block.ports.map((p, i) => (i === index ? { ...p, ...patch } : p));
-    update({ ports });
+    const current = block.ports[index];
+    if (!current) return;
+    const next: PortDefinition = { ...current, ...patch, ...(patch.kind ? portKindFields(patch.kind) : {}) };
+    if (patch.kind !== undefined || patch.typeId !== undefined) {
+      const rejection = portTypingDiagnostic(definitions, next.kind, next.typeId);
+      if (rejection) {
+        setPortErrors(prev => ({ ...prev, [current.id]: `[${rejection.code}] ${rejection.message}` }));
+        return;
+      }
+    }
+    setPortErrors(prev => {
+      if (!(current.id in prev)) return prev;
+      const { [current.id]: _cleared, ...rest } = prev;
+      return rest;
+    });
+    update({ ports: block.ports.map((p, i) => (i === index ? next : p)) });
   };
 
   const removePort = (index: number) => {
@@ -474,13 +501,7 @@ export function BlockFeatureEditor({
                 <input data-help-feature="ui:sysml/BlockFeatureEditor:96f86cd35d6c" data-help-source="src/components/sysml/BlockFeatureEditor.tsx"
                   aria-label={`Property ${index + 1} multiplicity`}
                   value={`${prop.multiplicity.lower}..${prop.multiplicity.upper}`}
-                  onChange={e => {
-                    const text = e.target.value.trim();
-                    const parts = text.split('..');
-                    const lower = parseInt(parts[0], 10) || 0;
-                    const upper = parts[1] === '*' ? '*' : parseInt(parts[1] || parts[0], 10) || 1;
-                    updateProperty(index, { multiplicity: { ...prop.multiplicity, lower, upper } });
-                  }}
+                  onChange={e => updateProperty(index, { multiplicity: { ...prop.multiplicity, ...parseMultiplicityText(e.target.value) } })}
                   className="w-full rounded border border-gray-700 bg-transparent px-2 py-1"
                 />
               </label>
@@ -633,6 +654,15 @@ export function BlockFeatureEditor({
                   ))}
                 </select>
               </label>
+              <label>
+                Multiplicity
+                <input data-help-feature="ui:sysml/BlockFeatureEditor:96f86cd35d6c" data-help-source="src/components/sysml/BlockFeatureEditor.tsx"
+                  aria-label={`Port ${index + 1} multiplicity`}
+                  value={`${port.multiplicity.lower}..${port.multiplicity.upper}`}
+                  onChange={e => updatePort(index, { multiplicity: { ...port.multiplicity, ...parseMultiplicityText(e.target.value) } })}
+                  className="w-full rounded border border-gray-700 bg-transparent px-2 py-1"
+                />
+              </label>
               <div className="flex items-center pt-4">
                 <label className="flex items-center gap-1">
                   <input data-help-feature="ui:sysml/BlockFeatureEditor:087cb3f107f7" data-help-source="src/components/sysml/BlockFeatureEditor.tsx"
@@ -652,6 +682,9 @@ export function BlockFeatureEditor({
             >
               Remove port
             </button>
+            {portErrors[port.id] && (
+              <div role="alert" className="rounded border border-red-700 bg-red-950/40 p-1.5 text-red-300">{portErrors[port.id]}</div>
+            )}
             {diagnosticsFor(port.id).length > 0 && (
               <div role="alert" className="space-y-1 rounded border border-red-700 bg-red-950/40 p-1.5 text-red-300">
                 {diagnosticsFor(port.id).map((d, i) => (

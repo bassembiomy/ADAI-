@@ -1,0 +1,66 @@
+
+=== S1  Data-consistency checks ===
+  [PASS] NTC calibration table (13 rows) vs divider + ADC  - 13/13 rows consistent
+  [PASS] Boost table (7 rows) vs canonical transfer function
+  [PASS] Oil-pressure table (7 rows) vs transfer function
+  [PASS] Shunt sense: 16 A / 8 A on 0.033 Ohm  - 528 mV / 264 mV
+  [PASS] Battery divider 24 V -> ADC 749
+  [PASS] CKP frequency f = 0.6 x rpm (36 slots)
+  [PASS] CMP frequency f = 0.1 x rpm (12 teeth, cam = crank/2)
+  [PASS] Device codes decimal -> hex
+  [PASS] Pin-out completeness X1 16 / X2 55
+  [PASS] Fault codes unique per function  - no collisions
+  [PASS] SysML model constants == simulation data  - 5/5 equal
+  [PASS] SysML connector ports modelled  - 71 pins
+
+=== S2  State-machine scenario verification (read from model) ===
+  model: 11 states, 25 transitions, initial=ST_STANDBY
+  [PASS] scn01_KeyOff           expected ST_STANDBY          - got ST_STANDBY; rpm=0 q=0.0 mg
+  [PASS] scn02_IgnitionOn       expected ST_READY            - got ST_READY; rpm=0 q=0.0 mg
+  [PASS] scn03_ColdCrank        expected ST_CRANK_SYNC       - got ST_CRANK_SYNC; rpm=220 q=64.0 mg
+  [PASS] scn04_NormalRun        expected ST_RUN_NORMAL       - got ST_RUN_NORMAL; rpm=1185.0 q=94.0 mg
+  [PASS] scn05_FullLoad         expected ST_RUN_NORMAL       - got ST_RUN_NORMAL; rpm=1900.0 q=182.0 mg
+  [PASS] scn06_EngineBrake      expected ST_ENGINE_BRAKE     - got ST_ENGINE_BRAKE; rpm=1400 q=0.0 mg
+  [PASS] scn07_ImmoMismatch     expected ST_IMMO_LOCKED      - got ST_IMMO_LOCKED; rpm=0 q=0.0 mg
+  [PASS] scn08_CkpLossLimp      expected ST_LIMP_DERATE      - got ST_LIMP_DERATE; rpm=1640.0 q=84.0 mg
+  [PASS] scn09_CmpLossRun       expected ST_LIMP_DERATE      - got ST_LIMP_DERATE; rpm=1185.0 q=65.8 mg
+  [PASS] scn10_TotalSyncLoss    expected ST_FAULT_SHUTDOWN   - got ST_FAULT_SHUTDOWN; rpm=0 q=0.0 mg
+  [PASS] scn11_Overheat         expected ST_LIMP_DERATE      - got ST_LIMP_DERATE; rpm=1640.0 q=102.2 mg
+  [PASS] scn12_Bank1Short       expected ST_LIMP_DERATE      - got ST_LIMP_DERATE; rpm=1250.0 q=66.3 mg
+  [PASS] scn13_CanTimeout       expected ST_LIMP_DERATE      - got ST_LIMP_DERATE; rpm=1250.0 q=66.3 mg
+  [PASS] scn14_LowBoostSmoke    expected ST_RUN_NORMAL       - got ST_RUN_NORMAL; rpm=1900.0 q=68.0 mg
+
+=== S3  Peak & Hold solenoid current (RL + BIP) ===
+  [PASS] Time to 16 A peak < 0.3 ms  - 0.273 ms
+  [PASS] Hold current within 7.5 .. 8.5 A  - 7.50 .. 8.50 A
+  [PASS] Peak shunt voltage = 0.528 V  - max V_shunt 0.528 V
+  [PASS] Spill: current decays to 0 within 0.3 ms  - 58 us
+  [PASS] Shorted coil reaches 24 A trip (hardware cut-off)  - trip after 5.49 us
+
+=== S4  720° engine cycle: sync signals & injection timing ===
+  [PASS] Firing order 1-4-2-5-3-6 at 120° spacing  - TDC angles {1: 0, 4: 120, 2: 240, 5: 360, 3: 480, 6: 600}
+  [PASS] Injection windows do not overlap within a bank  - 1.661 ms per event
+
+=== S5  Sensor fault-injection matrix ===
+  [PASS] OPEN / SCG / SCB detected electrically on all 6 analog sensors; DRIFT not (needs plausibility)
+
+=== S6  60 s drive-cycle co-simulation ===
+   t= 1.00s  KL15_On              -> ST_INIT_IMMO
+   t= 1.50s  SelfTestPassed       -> ST_READY
+   t= 3.00s  KL50_CrankRequest    -> ST_CRANK_SYNC
+   t= 3.65s  EngineRunning        -> ST_RUN_NORMAL
+   t=22.00s  OvertempDetected     -> ST_LIMP_DERATE
+   t=26.80s  OvertempCleared      -> ST_RUN_NORMAL
+   t=30.00s  EngineBrakeRequest   -> ST_ENGINE_BRAKE
+   t=34.00s  EngineBrakeRelease   -> ST_RUN_NORMAL
+   t=40.00s  CkpLost              -> ST_LIMP_DERATE
+   t=46.00s  CkpRestored          -> ST_RUN_NORMAL
+   t=52.00s  KL15_Off             -> ST_AFTERRUN
+   t=54.00s  AfterrunComplete     -> ST_STANDBY
+  [PASS] Fuel never exceeds smoke limit / 185 mg during drive cycle  - max q 166.0 mg
+  [PASS] CKP loss window: rpm <= 1800  - max 1188 rpm
+  [PASS] Overtemp >= 103 C triggers derate in drive cycle  - at t=22.0 s
+  [PASS] Drive cycle visits all major modes  - ST_STANDBY > ST_INIT_IMMO > ST_READY > ST_CRANK_SYNC > ST_RUN_NORMAL > ST_LIMP_DERATE > ST_RUN_NORMAL > ST_ENGINE_BRAKE > ST_RUN_NORMAL > ST_LIMP_DERATE > ST_RUN_NORMAL > ST_AFTERRUN > ST_STANDBY
+  [PASS] Ratiometric NTC chain immune to Vref ±2 %  - max error 0.0000 °C
+
+=== SUMMARY: 39/39 checks passed; requirements: REQ-ADC-12=OK, REQ-COM-11=OK, REQ-DIAG-07=OK, REQ-FIRE-10=OK, REQ-INJ-03=OK, REQ-INJ-04=OK, REQ-LIMP-09=OK, REQ-PWR-01=OK, REQ-SAF-05=OK, REQ-SEC-06=OK, REQ-SYNC-02=OK, REQ-THM-08=OK

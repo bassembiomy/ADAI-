@@ -2,10 +2,10 @@
   "sourceSnapshot": "docs/help/audit/2026-10-06-ui-candidates.json",
   "scope": "Snapshot reconciliation. Snapshot line numbers locate evidence, never stable feature identity. Unresolved sites remain visible.",
   "statusCounts": {
-    "documented": 376,
+    "documented": 372,
     "excluded": 44,
     "mapped": 843,
-    "obsolete": 14
+    "obsolete": 18
   },
   "modules": [
     {
@@ -5082,11 +5082,9 @@
       "snapshotLine": 20055,
       "tag": "button",
       "label": "\"View PDF\"",
-      "status": "documented",
-      "featureIds": [
-        "app-requirement-pdf-view"
-      ],
-      "reason": "Reviewed semantic handler/property and authored purpose/result/limit guidance.",
+      "status": "obsolete",
+      "featureIds": [],
+      "reason": "Requirement PDF attachment control removed: the requirement model stores no attachments.",
       "sourceEvidence": [
         "src/App.tsx"
       ]
@@ -5097,11 +5095,9 @@
       "snapshotLine": 20079,
       "tag": "button",
       "label": "\"Download PDF\"",
-      "status": "documented",
-      "featureIds": [
-        "app-requirement-pdf-download"
-      ],
-      "reason": "Reviewed semantic handler/property and authored purpose/result/limit guidance.",
+      "status": "obsolete",
+      "featureIds": [],
+      "reason": "Requirement PDF attachment control removed: the requirement model stores no attachments.",
       "sourceEvidence": [
         "src/App.tsx"
       ]
@@ -5112,11 +5108,9 @@
       "snapshotLine": 20107,
       "tag": "button",
       "label": "\"Remove PDF\"",
-      "status": "documented",
-      "featureIds": [
-        "app-requirement-pdf-remove"
-      ],
-      "reason": "Reviewed semantic handler/property and authored purpose/result/limit guidance.",
+      "status": "obsolete",
+      "featureIds": [],
+      "reason": "Requirement PDF attachment control removed: the requirement model stores no attachments.",
       "sourceEvidence": [
         "src/App.tsx"
       ]
@@ -5140,11 +5134,9 @@
       "snapshotLine": 20150,
       "tag": "Button",
       "label": "Attach PDF File",
-      "status": "documented",
-      "featureIds": [
-        "app-requirement-pdf-attach"
-      ],
-      "reason": "Reviewed semantic handler/property and authored purpose/result/limit guidance.",
+      "status": "obsolete",
+      "featureIds": [],
+      "reason": "Requirement PDF attachment control removed: the requirement model stores no attachments.",
       "sourceEvidence": [
         "src/App.tsx"
       ]
@@ -5485,11 +5477,9 @@
       "snapshotLine": 20429,
       "tag": "textarea",
       "label": "\"ClassName : Type\"",
-      "status": "documented",
-      "featureIds": [
-        "app-block-classes"
-      ],
-      "reason": "Reviewed semantic handler/property and authored purpose/result/limit guidance.",
+      "status": "obsolete",
+      "featureIds": [],
+      "reason": "Control removed: it wrote no stored field; the connector editor and block panel edit real repository fields only.",
       "sourceEvidence": [
         "src/App.tsx"
       ]
@@ -5869,11 +5859,9 @@
       "snapshotLine": 20784,
       "tag": "Input",
       "label": "\"e.g., Control Link\"",
-      "status": "documented",
-      "featureIds": [
-        "app-connector-label"
-      ],
-      "reason": "Reviewed semantic handler/property and authored purpose/result/limit guidance.",
+      "status": "obsolete",
+      "featureIds": [],
+      "reason": "Control removed: it wrote no stored field; the connector editor and block panel edit real repository fields only.",
       "sourceEvidence": [
         "src/App.tsx"
       ]

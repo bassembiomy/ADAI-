@@ -194,7 +194,7 @@ describe('sysmlExplorerAdapter', () => {
 
     const adapter = createSysmlExplorerAdapter(harness);
     const labels = adapter.capabilities(['block-1'], 'bdd-1').filter(x => x.enabled).map(x => x.label);
-    expect(labels).toContain('Part');
+    expect(labels).toContain('Part Property');
     expect(labels).toContain('Proxy Port');
     expect(labels).not.toContain('Region');
 
@@ -231,6 +231,27 @@ describe('sysmlExplorerAdapter', () => {
         enabled: false,
         diagnosticCode: 'ILLEGAL_OWNERSHIP',
       })
+    );
+  });
+
+  it('lists each creatable type once in a Package New menu', () => {
+    const harness = createTestHarness();
+    harness.executeCommand({ type: 'createElement', element: { id: 'pkg-1', name: 'P', kind: 'package', namespace: [], ownerId: 'model' } });
+    const adapter = createSysmlExplorerAdapter(harness);
+    const labels = adapter.capabilities(['pkg-1'], undefined)
+      .filter(c => c.kind === 'createElement' && c.enabled)
+      .map(c => c.label.toLowerCase());
+    expect(labels.length).toBeGreaterThan(0);
+    expect(new Set(labels).size).toBe(labels.length);
+  });
+
+  it('does not offer an enabled Port on an Interface Block (no repository storage for it)', () => {
+    const harness = createTestHarness();
+    harness.executeCommand({ type: 'createElement', element: { id: 'if-1', name: 'I', kind: 'interface', namespace: [], ownerId: 'model', features: [] } });
+    const adapter = createSysmlExplorerAdapter(harness);
+    expect(adapter.capabilities(['if-1'], undefined).some(c => c.elementKind === 'Port' && c.enabled)).toBe(false);
+    expect(adapter.capabilities(['if-1'], undefined, { includeAllTypes: true })).toContainEqual(
+      expect.objectContaining({ elementKind: 'Port', enabled: false, diagnosticCode: 'UNSUPPORTED_ELEMENT_KIND', reason: expect.any(String) }),
     );
   });
 

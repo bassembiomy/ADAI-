@@ -210,7 +210,7 @@ export function validateSysmlRepository(repo: SysmlRepository, context?: Semanti
     if (relationship.kind === 'requirementContainment') {
       diagnostics.push(...validateRequirementContainment(repo, relationship.id));
     } else {
-      const direction = checkRelationshipDirection(repo, relationship);
+      const direction = checkRelationshipDirection(repo, relationship, context);
       if (!direction.valid) {
         const sourceFamily = describeEndpointFamily(repo, relationship.sourceId, context);
         const targetFamily = describeEndpointFamily(repo, relationship.targetId, context);
@@ -312,7 +312,7 @@ function directionCorrectiveAction(kind: string): string {
 }
 
 function checkRelationshipDirection(
-  repo: SysmlRepository, relationship: SysmlRelationship,
+  repo: SysmlRepository, relationship: SysmlRelationship, context?: SemanticEndpointContext,
 ): { valid: boolean; reason: string } {
   const sourceRequirement = Boolean(repo.requirements[relationship.sourceId]);
   const targetRequirement = Boolean(repo.requirements[relationship.targetId]);
@@ -327,9 +327,9 @@ function checkRelationshipDirection(
     case 'satisfy': return !sourceRequirement && targetRequirement
       ? { valid: true, reason: '' }
       : { valid: false, reason: 'Satisfy requires a non-Requirement source and a Requirement target.' };
-    case 'verify': return (Boolean(repo.verificationCases[relationship.sourceId]) || resolveRepositoryEndpoint(repo, relationship.sourceId)?.family === 'interaction') && targetRequirement
+    case 'verify': return (Boolean(repo.verificationCases[relationship.sourceId]) || resolveRepositoryEndpoint(repo, relationship.sourceId)?.family === 'interaction' || ['simulationTarget', 'state'].includes(context?.externalEndpoints?.get(relationship.sourceId)?.family ?? '')) && targetRequirement
       ? { valid: true, reason: '' }
-      : { valid: false, reason: 'Verify requires a Verification Case or Interaction source and a Requirement target.' };
+      : { valid: false, reason: 'Verify requires a Verification Case, Interaction or simulation target source and a Requirement target.' };
     case 'refine': return !sourceRequirement && targetRequirement
       ? { valid: true, reason: '' }
       : { valid: false, reason: 'Refine requires a non-Requirement source and a Requirement target.' };

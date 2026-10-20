@@ -24,6 +24,7 @@ function seedRepository() {
   repo.diagrams[DIAGRAM_ID] = { id: DIAGRAM_ID, kind: 'diagram', name: 'Flight use cases', diagramKind: 'useCase', namespace: [], ownerId: 'model' };
   repo.actors.pilot = { id: 'pilot', kind: 'actor', name: 'Pilot', namespace: [], ownerId: 'model', isExternal: true, generalizationIds: [] };
   repo.actors.captain = { id: 'captain', kind: 'actor', name: 'Captain', namespace: [], ownerId: 'model', isExternal: true, generalizationIds: [] };
+  repo.definitions.Airframe = { id: 'Airframe', kind: 'block', name: 'Airframe', namespace: [], ownerId: 'model', isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [] };
   repo.subjects.plane = { id: 'plane', kind: 'subject', name: 'Aircraft', namespace: [], ownerId: 'model' };
   repo.useCases.fly = { id: 'fly', kind: 'useCase', name: 'Fly', namespace: [], ownerId: 'model', extensionPointIds: [], behaviorArtifactIds: [] };
   repo.useCases.divert = { id: 'divert', kind: 'useCase', name: 'Divert', namespace: [], ownerId: 'model', extensionPointIds: [], behaviorArtifactIds: [] };
@@ -166,6 +167,30 @@ describe('UseCaseWorkspace', () => {
     fireEvent.blur(input);
     expect(latest.repository.useCases.fly.name).toBe('Cruise');
     expect(node('useCase', 'Cruise')).toBeTruthy();
+  });
+
+  it('chooses the subject Block through updateElement; the boundary is then titled with the Block', () => {
+    render(<Harness />);
+    fireEvent.pointerDown(node('subject', 'Aircraft'), { button: 0 });
+    fireEvent.pointerUp(container(), { button: 0 });
+    const select = screen.getByLabelText('Subject (Block)') as HTMLSelectElement;
+    expect([...select.options].map(option => option.textContent)).toEqual(['(none)', 'Airframe']);
+    fireEvent.change(select, { target: { value: 'Airframe' } });
+    expect(latest.repository.subjects.plane.realizedByBlockId).toBe('Airframe');
+    expect(node('subject', 'Airframe')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Subject (Block)'), { target: { value: '' } });
+    expect(latest.repository.subjects.plane.realizedByBlockId).toBeUndefined();
+    expect(node('subject', 'Aircraft')).toBeTruthy();
+  });
+
+  it('edits the description of the selected use case through updateElement', () => {
+    render(<Harness />);
+    fireEvent.pointerDown(node('useCase', 'Fly'), { button: 0 });
+    fireEvent.pointerUp(container(), { button: 0 });
+    const area = screen.getByLabelText('Use case description') as HTMLTextAreaElement;
+    fireEvent.change(area, { target: { value: 'The pilot flies the aircraft.' } });
+    fireEvent.blur(area);
+    expect(latest.repository.useCases.fly.description).toBe('The pilot flies the aircraft.');
   });
 
   it('adds an extension point to the selected use case', () => {

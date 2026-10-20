@@ -2034,5 +2034,65 @@
     "featureIds": [
       "ui:sysml/UseCaseWorkspace:snapToggle"
     ]
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "AppModelExplorer|onCommandResult:{props.onCommandResult}|onCommitStateMachineSnapshot:{props.onCommitStateMachineSnapshot}|onDoubleClick:{props.onDoubleClick}|onExecuteSysmlCommand:{props.onExecuteSysmlCommand}|onOpenSpecification:{props.onOpenSpecification}|onSelect:{props.onSelect}|onSelectMultiple:{props.onSelectMultiple}",
+    "id": "ui:modelExplorer/ModelTreeRow:d6ca5f847c12",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation (2026-10-19 release review).",
+    "featureIds": [
+      "ui:modelExplorer/ModelTreeRow:d6ca5f847c12"
+    ]
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "HierarchyTree|onCommandResult:{handleExplorerCommand}|onCommitStateMachineSnapshot:{handleCommitStateMachineSnapshot}|onDoubleClick:{(id:string,kind?:string,contextDiagramId?:string)=>activateHierarchyNode(id,kind,contextDiagramId)}|onExecuteSysmlCommand:{handleExecuteSysmlCommand}|onOpenSpecification:{(id:string)=>{//selecttheelementandbringitsproperties(specification)panelintoviewopenTreeElementInWorkspace(id);setIsPropertiesCollapsed(false);if(isMobile)setMobileTab('properties');}}|onSelect:{(id:string,multiSelect?:boolean,contextDiagramId?:string)=>{if(multiSelect){setSelectedIds([id]);}elseif(isDiagramHierarchyNode(id)){activateHierarchyNode(id,'diagram');setSelectedIds([id]);}else{openTreeElementInWorkspace(id,contextDiagramId);}}}|onSelectMultiple:{(ids:string[])=>setSelectedIds(ids)}",
+    "id": "ui:modelExplorer/ModelTreeRow:d6ca5f847c12",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation (2026-10-19 release review).",
+    "featureIds": [
+      "ui:modelExplorer/ModelTreeRow:d6ca5f847c12"
+    ]
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "IbdConnectorEditor|onChange:{(updatedConn)=>{constplan=buildConnectorUpdateCommand(canonicalSysmlRepository,selectedConnector.id,updatedConn);if(!plan.ok){plan.diagnostics.forEach(d=>addError(d.severity,d.message,'SysML',d.elementId));return;}if(!plan.command)return;constresult=handleExecuteSysmlCommand(plan.command);if(!result.committed)result.diagnostics.forEach(d=>addError(d.severity,d.message,'SysML',d.elementId));}}",
+    "id": "sysml:relationship:Connector",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation (2026-10-19 release review).",
+    "featureIds": [
+      "sysml:relationship:Connector"
+    ]
+  },
+  {
+    "source": "src/components/sysml/InteractionElementInspector.tsx",
+    "signature": "select|onChange:{event=>run(buildUpdateInteractionMessageCommand(repository,{interactionId,messageId:elementId,signatureId:event.target.value||null}),'Theoperationwasrejected.')}",
+    "id": "behavior:element:sequence:message",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation (2026-10-19 release review).",
+    "featureIds": [
+      "behavior:element:sequence:message"
+    ]
+  },
+  {
+    "source": "src/components/sysml/UseCaseWorkspace.tsx",
+    "signature": "textarea|onBlur:{commitDescription}|onChange:{event=>setDescriptionDraft({id:selectedUseCase.id,value:event.target.value})}",
+    "id": "sysml:element:UseCase",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation (2026-10-19 release review).",
+    "featureIds": [
+      "sysml:element:UseCase"
+    ]
+  },
+  {
+    "source": "src/components/sysml/UseCaseWorkspace.tsx",
+    "signature": "select|onChange:{event=>execute({type:'updateElement',elementId:selectedSubject.id,patch:{realizedByBlockId:event.target.value||undefined}},'ThesubjectBlockwasrejected.')}",
+    "id": "behavior:element:usecase:subject",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation (2026-10-19 release review).",
+    "featureIds": [
+      "behavior:element:usecase:subject"
+    ]
   }
 ]

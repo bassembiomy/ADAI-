@@ -23,12 +23,14 @@ export function getRequirementsDiagramScope(
   presentedElementIds?: ReadonlySet<string> | readonly string[],
 ): RequirementsDiagramScope {
   const selectedLayerId = currentLayerId ?? 'root';
-  const presentedSet = presentedElementIds ? new Set(presentedElementIds) : null;
+  // A diagram with a presented set shows exactly that set; without one it falls back to the layer's requirements.
+  const presented = new Set(presentedElementIds ?? []);
+  const presentedSet = presented.size > 0 ? presented : null;
   const blocksById = new Map(blocks.map(block => [block.id, block]));
   const visibleBlockIds = new Set(
     blocks
       .filter(block => {
-        if (presentedSet && presentedSet.has(block.id)) return true;
+        if (presentedSet) return presentedSet.has(block.id);
         return block.stereotype === 'requirement' && layerIdOf(block) === selectedLayerId;
       })
       .map(block => block.id),
@@ -79,25 +81,21 @@ function layerIdOf(block: BlockData): string {
 }
 
 export interface DiagramBlockDoubleClickAction {
-  action: 'none' | 'enterRequirement' | 'enterBlock';
+  action: 'none' | 'enterBlock';
   targetId?: string;
 }
 
 /**
  * Resolves the double-click action for a Block or element on the canvas.
- * On Requirement diagrams, double-clicking a Block or TestCase does NOT drill down or mutate.
+ * On Requirement diagrams, double-clicking a Requirement, Block or TestCase does NOT drill down or mutate:
+ * nested requirements are drawn on the same diagram with containment lines, so there is no layer to enter.
  * Explicit actions (e.g. Open in BDD, Open IBD) must be used instead, matching Cameo behavior.
  */
 export function resolveBlockDoubleClickAction(
   diagramMode: string,
   block: { id: string; stereotype: string },
 ): DiagramBlockDoubleClickAction {
-  if (diagramMode === 'requirements') {
-    if (block.stereotype === 'requirement') {
-      return { action: 'enterRequirement', targetId: block.id };
-    }
-    return { action: 'none' };
-  }
+  if (diagramMode === 'requirements') return { action: 'none' };
   return { action: 'enterBlock', targetId: block.id };
 }
 

@@ -29,7 +29,7 @@ function model(): SysmlRepository {
 const mainOf = (repo: SysmlRepository) => repo.definitions.main as InteractionDefinition;
 const states = (...ids: string[]): SemanticEndpointContext => ({ externalEndpoints: new Map(ids.map(id => [id, { id, name: id.toUpperCase(), family: 'state' as const }])) });
 const codes = (repo: SysmlRepository, next: InteractionDefinition, endpoints?: SemanticEndpointContext) =>
-  validateInteraction({ ...repo, definitions: { ...repo.definitions, main: next } }, next, endpoints).map(d => `${d.severity}:${d.code}`);
+  validateInteraction({ ...repo, definitions: { ...repo.definitions, main: next } }, next, endpoints).filter(d => d.code !== 'LIFELINE_UNTYPED').map(d => `${d.severity}:${d.code}`);
 const withInv = (repo: SysmlRepository, stateInvariants: InteractionDefinition['stateInvariants']): InteractionDefinition => ({ ...mainOf(repo), stateInvariants });
 
 interface Ctx { state: SysmlGatewayState }

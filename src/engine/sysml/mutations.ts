@@ -1,7 +1,7 @@
 import type { ConnectorUsage, SysmlRepository } from './model';
 import { classifyDeletionTarget } from './policy';
 import { connectorEndOf } from './connectorEnds';
-import { findPortOwner, findPropertyOwner, isPartProperty, PATH_SEPARATOR, resolveOccurrenceKey } from './partOccurrences';
+import { findPortOwner, findPropertyOwner, PATH_SEPARATOR, resolveOccurrenceKey } from './partOccurrences';
 import { activityNestedIds, clearCalledBehaviorReferences } from './activity';
 import { clearInteractionReferences, interactionNestedIds, interactionReferencesTo } from './interaction';
 import { getNestedRequirementIds } from './requirements';
@@ -143,7 +143,7 @@ export function impactSeverity(
   return needsReview ? 'review' : 'safe';
 }
 
-/** Block features (part properties, ports) among the ids, as `{blockId, propertyId|portId}`, in format 5 where no entity stands for them. */
+/** Block features (properties of any kind, ports) among the ids, as `{blockId, propertyId|portId}`, in format 5 where no entity stands for them. */
 function featureTargets(repo: SysmlRepository, ids: Iterable<string>): Array<{ id: string; blockId: string; propertyId?: string; portId?: string }> {
   const targets: Array<{ id: string; blockId: string; propertyId?: string; portId?: string }> = [];
   for (const id of ids) {
@@ -155,7 +155,7 @@ function featureTargets(repo: SysmlRepository, ids: Iterable<string>): Array<{ i
       continue;
     }
     const property = findPropertyOwner(repo, id);
-    if (property && isPartProperty(repo, property.feature)) { targets.push({ id, blockId: property.block.id, propertyId: id }); continue; }
+    if (property) { targets.push({ id, blockId: property.block.id, propertyId: id }); continue; }
     const port = findPortOwner(repo, id);
     if (port) targets.push({ id, blockId: port.block.id, portId: id });
   }
@@ -248,6 +248,13 @@ export function analyzeMutation(repo: SysmlRepository, command: SysmlCommand): M
         cascadeQueue.push(cascadeId);
       }
     }
+  }
+
+  // A diagram owned by (or in the context of) a deleted element goes with it, so no
+  // diagram or presentation is left pointing at a missing id.
+  for (const diagramId in repo.diagrams) {
+    const diagram = repo.diagrams[diagramId];
+    if ((diagram.ownerId && deleted.has(diagram.ownerId)) || (diagram.contextElementId && deleted.has(diagram.contextElementId))) deleted.add(diagramId);
   }
 
   // Properties and ports of a deleted Block go with it; path connectors that run through them are removed too.
@@ -578,6 +585,27 @@ export function applyCommand(
       next.definitions[definition.id] = { ...definition, receptions: after };
       forwardOps.push({ op: 'replace', collection: 'definitions', id: definition.id, path: ['receptions'], oldValue: before, value: after });
       inverseOps.push({ op: 'replace', collection: 'definitions', id: definition.id, path: ['receptions'], oldValue: after, value: before });
+    }
+  }
+  // A property or part typed by a deleted Block or ValueType must not keep a dangling typeId:
+  // clear it (untyped) in the same atomic deletion; the inverse patch restores the exact value.
+  const removedDefinitionIds = new Set(impact.deletedElementIds.filter(id => repo.definitions[id]));
+  if (removedDefinitionIds.size > 0) {
+    for (const id in repo.definitions) {
+      const definition = repo.definitions[id];
+      if (!definition || definition.kind !== 'block' || removed.has(definition.id) || !definition.properties?.some(property => removedDefinitionIds.has(property.typeId))) continue;
+      const before = definition.properties;
+      const after = before.map(property => removedDefinitionIds.has(property.typeId) ? { ...property, typeId: '' } : property);
+      next.definitions[definition.id] = { ...definition, properties: after };
+      forwardOps.push({ op: 'replace', collection: 'definitions', id: definition.id, path: ['properties'], oldValue: before, value: after });
+      inverseOps.push({ op: 'replace', collection: 'definitions', id: definition.id, path: ['properties'], oldValue: after, value: before });
+    }
+    for (const id in repo.usages) {
+      const usage = repo.usages[id];
+      if (!usage || removed.has(usage.id) || usage.kind !== 'part' || !removedDefinitionIds.has(usage.typeId)) continue;
+      next.usages[usage.id] = { ...usage, typeId: '' };
+      forwardOps.push({ op: 'replace', collection: 'usages', id: usage.id, path: ['typeId'], oldValue: usage.typeId, value: '' });
+      inverseOps.push({ op: 'replace', collection: 'usages', id: usage.id, path: ['typeId'], oldValue: '', value: usage.typeId });
     }
   }
   // Format 5: a deleted part or port is removed from the Block that declares it.

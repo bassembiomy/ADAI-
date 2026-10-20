@@ -23,7 +23,7 @@ import {
   buildMoveLifelineCommand,
   buildRemoveFragmentCommand,
   buildRemoveFragmentOperandCommand,
-  buildRemoveInteractionMessageCommand,
+  buildRemoveInteractionMessagesCommand,
   buildRemoveInteractionUseCommand,
   buildRemoveLifelineCommand,
   buildRenameInteractionElementCommand,
@@ -437,13 +437,9 @@ export function SequenceWorkspace({ repository, diagramId, onExecute, onNavigate
       if (result?.committed) setSelected([]);
       return;
     }
-    // Several messages: one command each, so a refusal names the message that blocks it.
-    for (const entry of selectedMessages) {
-      const stillThere = interaction?.messages.some(candidate => candidate.id === entry.id);
-      if (!stillThere) continue;
-      const result = executePlan(buildRemoveInteractionMessageCommand(repository, { interactionId, messageId: entry.id }), 'The message could not be deleted.');
-      if (!result?.committed) return;
-    }
+    // Several messages: one command (one undo step), planned message by message on an evolving snapshot.
+    const result = executePlan(buildRemoveInteractionMessagesCommand(repository, { interactionId, messageIds: selectedMessages.map(entry => entry.id) }), 'The message could not be deleted.');
+    if (!result?.committed) return;
     setSelected([]);
   };
 

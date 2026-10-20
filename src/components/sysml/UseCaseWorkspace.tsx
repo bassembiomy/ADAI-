@@ -577,6 +577,22 @@ export function UseCaseWorkspace({
     execute({ type: 'updateElement', elementId: singleId, patch: { name: value } }, 'The name could not be changed.');
   };
 
+  const blockChoices = useMemo(
+    () => Object.values(repository.definitions).filter(definition => definition.kind === 'block')
+      .sort((a, b) => sysmlObjectLabel(a, 'Block').localeCompare(sysmlObjectLabel(b, 'Block'))),
+    [repository.definitions],
+  );
+  const selectedUseCase = singleNode?.kind === 'useCase' ? repository.useCases[singleNode.id] : undefined;
+  const selectedSubject = singleNode?.kind === 'subject' ? repository.subjects[singleNode.id] : undefined;
+  const [descriptionDraft, setDescriptionDraft] = useState<{ id: string; value: string } | null>(null);
+  const commitDescription = () => {
+    if (!selectedUseCase || !descriptionDraft || descriptionDraft.id !== selectedUseCase.id) return;
+    const value = descriptionDraft.value;
+    setDescriptionDraft(null);
+    if (value === (selectedUseCase.description ?? '')) return;
+    execute({ type: 'updateElement', elementId: selectedUseCase.id, patch: { description: value } }, 'The description could not be changed.');
+  };
+
   const addExtensionPoint = () => {
     if (!singleNode || singleNode.kind !== 'useCase') return;
     const command = buildCreateExtensionPointCommand(repository, singleNode.id, extensionPointDraft);
@@ -817,6 +833,27 @@ export function UseCaseWorkspace({
                   <button data-help-feature="ui:sysml/UseCaseWorkspace:40def99da961" data-help-source="src/components/sysml/UseCaseWorkspace.tsx" type="button" className="rounded border border-neutral-600 px-2 py-0.5" onClick={addExtensionPoint}>Add extension point</button>
                   {singleNode.subjectId && <span className="text-neutral-400">Subject: {nameOf(singleNode.subjectId)}</span>}
                 </>
+              )}
+              {selectedUseCase && (
+                <label>Description{' '}
+                  <textarea aria-label="Use case description" rows={2}
+                    value={descriptionDraft?.id === selectedUseCase.id ? descriptionDraft.value : (selectedUseCase.description ?? '')}
+                    onChange={event => setDescriptionDraft({ id: selectedUseCase.id, value: event.target.value })}
+                    onBlur={commitDescription}
+                    className="rounded border border-neutral-700 bg-neutral-950 px-1 py-0.5 align-top"
+                  />
+                </label>
+              )}
+              {selectedSubject && (
+                <label>Subject (Block){' '}
+                  <select aria-label="Subject (Block)" value={selectedSubject.realizedByBlockId ?? ''}
+                    onChange={event => execute({ type: 'updateElement', elementId: selectedSubject.id, patch: { realizedByBlockId: event.target.value || undefined } }, 'The subject Block was rejected.')}
+                    className="rounded border border-neutral-700 bg-neutral-950 px-1 py-0.5"
+                  >
+                    <option value="">(none)</option>
+                    {blockChoices.map(block => <option key={block.id} value={block.id}>{sysmlObjectLabel(block, 'Block')}</option>)}
+                  </select>
+                </label>
               )}
               <button data-help-feature="ui:sysml/UseCaseWorkspace:48235b4d6daa" data-help-source="src/components/sysml/UseCaseWorkspace.tsx" type="button" className="rounded border border-neutral-600 px-2 py-0.5" onClick={() => onNavigate?.(singleNode.id)}>Open</button>
             </>

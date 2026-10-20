@@ -84,6 +84,41 @@ export const PORT_STEREOTYPES: Record<CanonicalPortKind, string[]> = {
   flowPort: ['FlowPort'],
 };
 
+/** The canonical port kind a stored `PortDefinition['kind']` stands for. */
+export const CANONICAL_PORT_KIND: Record<PortDefinition['kind'], CanonicalPortKind> = {
+  standard: 'umlPort',
+  proxy: 'proxyPort',
+  full: 'fullPort',
+  flow: 'flowPort',
+};
+
+/** The fields that change together when a port's kind changes, stored as `createOwnedFeature` stores them. */
+export function portKindFields(kind: PortDefinition['kind']): Pick<PortDefinition, 'kind' | 'portKind' | 'appliedStereotypeIds'> {
+  const portKind = CANONICAL_PORT_KIND[kind];
+  return { kind, portKind, appliedStereotypeIds: [...PORT_STEREOTYPES[portKind]] };
+}
+
+/**
+ * The proxy/full typing gate of `createOwnedFeature`, for a port whose kind or type is edited: a
+ * ProxyPort is typed by an InterfaceBlock, a FullPort by a Block or ValueType. An untyped port passes.
+ */
+export function portTypingDiagnostic(
+  definitions: Record<string, SysmlDefinition>,
+  kind: PortDefinition['kind'],
+  typeId: string | undefined,
+): { code: string; message: string } | undefined {
+  if (!typeId) return undefined;
+  const typeDef = definitions[typeId];
+  if (!typeDef) return { code: 'TYPE_NOT_FOUND', message: `Type "${typeId}" not found in repository.` };
+  if (kind === 'proxy' && !isCompatiblePortType(typeDef, 'proxyPort')) {
+    return { code: 'INVALID_PROXY_PORT_TYPE', message: `ProxyPort must be typed by an InterfaceBlock, but "${typeDef.name}" is a ${typeDef.kind}.` };
+  }
+  if (kind === 'full' && !isCompatiblePortType(typeDef, 'fullPort')) {
+    return { code: 'INVALID_FULL_PORT_TYPE', message: 'FullPort must be typed by a Block or ValueType.' };
+  }
+  return undefined;
+}
+
 export function createPortDefinitionFromIntent(
   owner: BlockDefinition,
   intent: Extract<OwnedFeatureIntent, { featureKind: 'port' }>,

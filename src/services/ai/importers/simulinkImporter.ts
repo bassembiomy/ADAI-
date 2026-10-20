@@ -1,4 +1,4 @@
-import JSZip from 'jszip';
+import type { default as JSZipType } from 'jszip';
 import { ExternalModel, ExternalComponent, ExternalLink, ExternalPort } from './externalModel';
 
 const MAX_ENTRY_SIZE = 10 * 1024 * 1024; // 10 MB
@@ -152,8 +152,9 @@ export async function parseSimulink(
   buffer: Buffer | Uint8Array,
   options?: SimulinkParserOptions
 ): Promise<ExternalModel> {
+  const JSZip = (await import('jszip')).default;
   const zip = new JSZip();
-  let zipFile: JSZip;
+  let zipFile: JSZipType;
   try {
     zipFile = await zip.loadAsync(buffer);
   } catch (err: any) {

@@ -15,9 +15,9 @@ import {
   STREAMED_REPOSITORY_COLLECTIONS,
   streamEntriesInChunks,
   stripCanonicalPayloadForHydration,
-  projectStateEndpoints,
   projectStateEndpointSignature,
 } from './projectIoPayload';
+import { projectExternalEndpoints, projectExternalEndpointSignature } from '../../trmSim/simEndpoints';
 
 export type ProgressPhase = 'read' | 'parse' | 'migrate' | 'normalize' | 'validate' | 'serialize';
 
@@ -133,8 +133,8 @@ if (typeof self !== 'undefined' && typeof (self as any).postMessage === 'functio
 
         if (cancelledIds.has(data.id)) return;
         self.postMessage({ id: data.id, type: 'progress', phase: 'normalize' });
-        const loaded = loadCanonicalSysmlProject(parsed, { externalEndpoints: projectStateEndpoints(parsed.states) });
-        const stateEndpointSignature = projectStateEndpointSignature(parsed.states);
+        const loaded = loadCanonicalSysmlProject(parsed, { externalEndpoints: projectExternalEndpoints(parsed) });
+        const stateEndpointSignature = projectExternalEndpointSignature(parsed);
 
         if (cancelledIds.has(data.id)) return;
         self.postMessage({ id: data.id, type: 'progress', phase: 'validate' });
@@ -177,7 +177,7 @@ if (typeof self !== 'undefined' && typeof (self as any).postMessage === 'functio
             diagnostics: loaded.diagnostics,
             upgradeReport: loaded.upgradeReport,
             interchangeReport: loaded.interchangeReport,
-            rawPayload: stripCanonicalPayloadForHydration(parsed, loaded.valid, stateEndpointSignature),
+            rawPayload: stripCanonicalPayloadForHydration(parsed, loaded.valid, projectStateEndpointSignature(parsed.states)),
           },
         });
       } catch (err: any) {

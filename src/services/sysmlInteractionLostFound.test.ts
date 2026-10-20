@@ -21,7 +21,7 @@ function model(messages: unknown[] = []): SysmlRepository {
   return repo;
 }
 const mainOf = (repo: SysmlRepository) => repo.definitions.main as InteractionDefinition;
-const codes = (repo: SysmlRepository) => validateInteraction(repo, mainOf(repo)).map(d => `${d.severity}:${d.code}`);
+const codes = (repo: SysmlRepository) => validateInteraction(repo, mainOf(repo)).filter(d => d.code !== 'LIFELINE_UNTYPED').map(d => `${d.severity}:${d.code}`);
 
 interface Ctx { state: SysmlGatewayState }
 function run(ctx: Ctx, command: SysmlEditorCommand): SysmlCommandResult {

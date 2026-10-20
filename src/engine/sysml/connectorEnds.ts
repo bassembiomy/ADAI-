@@ -224,7 +224,7 @@ export function resolveConnectorPortEnd(
 
 /**
  * Port typing for connector ends (OMG SysML 1.6): proxy ports must be typed by
- * an interface definition, full ports by a block, interface, or valueType.
+ * an interface definition, full ports by a block or valueType (as the createOwnedFeature gate).
  * Unresolvable types are reported explicitly as UNRESOLVED_IMPORT.
  */
 export function validatePortDefinitionTyping(
@@ -249,8 +249,8 @@ export function validatePortDefinitionTyping(
   const typeKind: string = type.kind;
   if (definition.kind === 'proxy' && typeKind !== 'interface') {
     diagnostics.push(diag('MISSING_PORT_TYPE', connectorId, propertyPath, `Proxy port ${label} must be typed by an InterfaceDefinition, found ${typeKind} ${type.id}`));
-  } else if (definition.kind === 'full' && typeKind !== 'block' && typeKind !== 'interface' && typeKind !== 'valueType') {
-    diagnostics.push(diag('MISSING_PORT_TYPE', connectorId, propertyPath, `Full port ${label} must resolve to a block, interface, or valueType, found ${typeKind} ${type.id}`));
+  } else if (definition.kind === 'full' && typeKind !== 'block' && typeKind !== 'valueType') {
+    diagnostics.push(diag('MISSING_PORT_TYPE', connectorId, propertyPath, `Full port ${label} must be typed by a block or valueType, found ${typeKind} ${type.id}`));
   }
   return diagnostics;
 }

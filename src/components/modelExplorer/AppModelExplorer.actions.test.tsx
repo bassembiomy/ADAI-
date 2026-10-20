@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import React from 'react';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createEmptyRepository, type BlockDefinition, type SysmlRepository } from '../../engine/sysml/model';
 import {
@@ -597,7 +598,8 @@ describe('AppModelExplorer diagram-context creation', () => {
     expect(onCommit).toHaveBeenCalledTimes(1);
     const committed = onCommit.mock.calls[0][0];
     const created = committed.states.find((state: { id: string }) => state.id !== 's1');
-    expect(created).toMatchObject({ parentId: 'region-1', regionId: 'region-1' });
+    // in the region (parentId), without a region label, as the canvas creates a state
+    expect(created).toMatchObject({ parentId: 'region-1', regionId: null });
     expect(committed.layers.find((layer: { id: string }) => layer.id === 'region-1').stateIds).toContain(created.id);
     // State-machine diagram membership is derived from the region, so no
     // SysML presentation command may be issued.
@@ -655,7 +657,7 @@ describe('AppModelExplorer diagram-context creation', () => {
   });
 });
 
-describe('Model Explorer diagram grouping lifecycle', () => {
+describe('Model Explorer diagram membership lifecycle', () => {
   it('keeps diagram membership undoable, redoable, and persistent across a project round trip', () => {
     const repository = repositoryWithDiagrams();
     const created: BlockDefinition = {
@@ -686,8 +688,8 @@ describe('Model Explorer diagram grouping lifecycle', () => {
     const afterRedo = executeSysmlCommand(afterUndo, { type: 'redo' });
     expect(afterRedo.diagramPresentations['bdd-1'].elementIds).toContain(created.id);
 
-    // The presentation survives the project persistence path and still drives
-    // the containment grouping after a reload.
+    // The presentation survives the project persistence path; the containment
+    // tree keeps listing the element under its owner (a diagram owns nothing).
     const payload = JSON.parse(JSON.stringify(
       buildCanonicalSysmlProjectPayload(afterRedo, { version: '1.0', projectName: 'Grouping' }),
     ));
@@ -701,8 +703,9 @@ describe('Model Explorer diagram grouping lifecycle', () => {
       diagramPresentations: loaded.diagramPresentations,
     });
 
+    expect(loaded.diagramPresentations['bdd-1'].elementIds).toContain(created.id);
     expect(projection.nodes[`sysml:element:${created.id}`]).toMatchObject({
-      parentNodeId: 'sysml:element:bdd-1',
+      parentNodeId: 'project:pillar:structural',
       ownerSemanticId: 'model',
     });
   });
@@ -777,3 +780,27 @@ describe('Model Explorer diagram grouping lifecycle', () => {
   });
 });
 
+
+it('ctrl-click on a second row reports both ids through onSelectMultiple', () => {
+  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
+  const repo = createEmptyRepository();
+  for (const id of ['block-a', 'block-b']) {
+    repo.definitions[id] = { id, name: id, kind: 'block', ownerId: 'model', namespace: [], isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [] } as BlockDefinition;
+  }
+  const onSelectMultiple = vi.fn();
+  const { container } = render(<AppModelExplorer diagramMode="bdd" states={[]} layers={[]} transitions={[]} junctions={[]} blocks={[]} parts={[]} selectedIds={['block-a']} canonicalSysmlRepository={repo} onSelect={vi.fn()} onSelectMultiple={onSelectMultiple} onDoubleClick={vi.fn()} />);
+  fireEvent.click(container.querySelector('.model-tree-row[data-node-id="sysml:element:block-b"]')!, { ctrlKey: true });
+  expect(onSelectMultiple).toHaveBeenCalledTimes(1);
+  expect(onSelectMultiple.mock.calls[0][0]).toEqual(expect.arrayContaining(['block-a', 'block-b']));
+  expect(onSelectMultiple.mock.calls[0][0]).toHaveLength(2);
+});
+
+it('App hands the explorer its multi-select, specification and project id callbacks', () => {
+  const source = readFileSync('src/App.tsx', 'utf8');
+  const wrapper = source.slice(source.indexOf('const HierarchyTree'), source.indexOf('const findPeaks'));
+  for (const prop of ['onSelectMultiple', 'onOpenSpecification', 'projectId']) expect(wrapper).toContain(`${prop}={props.${prop}}`);
+  const use = source.slice(source.indexOf('<HierarchyTree'), source.indexOf('<HierarchyTree') + 3000);
+  expect(use).toContain('onSelectMultiple={(ids: string[]) => setSelectedIds(ids)}');
+  expect(use).toContain('onOpenSpecification=');
+  expect(use).toContain('projectId=');
+});

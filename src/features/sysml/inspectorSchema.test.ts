@@ -56,6 +56,20 @@ export const supportedInspectorFixtures: Array<{ metaclass: string; selection: I
 })();
 
 describe('inspectorSchema', () => {
+  it('Connector Source and Target are read-only; no editable field commits a sourceId/targetId patch', () => {
+    const fixture = supportedInspectorFixtures.find(f => f.metaclass === 'Connector')!;
+    const schema = getInspectorSchema(fixture.selection)!;
+    for (const key of ['sourceId', 'targetId']) {
+      const field = schema.fields.find(f => f.key === key)!;
+      expect(field.mode).toBe('readOnly');
+      expect(field.toCommand).toBeUndefined();
+      expect(field.readOnlyReason).toBeTruthy();
+    }
+    expect(schema.fields.find(f => f.key === 'name')?.mode).toBe('editable');
+    const allocate = getInspectorSchema(supportedInspectorFixtures.find(f => f.metaclass === 'Allocate')!.selection)!;
+    expect(allocate.fields.find(f => f.key === 'sourceId')?.mode).toBe('editable');
+  });
+
   it.each(supportedInspectorFixtures)('$metaclass exposes no fake editable controls', ({ selection }) => {
     const schema = getInspectorSchema(selection);
     expect(schema).toBeDefined();
@@ -66,6 +80,15 @@ describe('inspectorSchema', () => {
     for (const action of schema!.actions.filter(action => action.enabled)) {
       expect(action.toCommand).toBeTypeOf('function');
     }
+  });
+
+  it('offers the full requirement status list and no status field on a TestCase', () => {
+    const repository = createEmptyRepositoryV4();
+    repository.elements['req-1'] = { id: 'req-1', name: 'req1', metaclass: 'Requirement', namespace: [], ownerId: 'pkg-root', requirementId: 'REQ-1', text: 'T', status: 'draft', version: '1' } as any;
+    repository.elements['tc-1'] = { id: 'tc-1', name: 'tc1', metaclass: 'TestCase', namespace: [], ownerId: 'pkg-root', verifiesRequirementIds: ['req-1'], status: 'ready' } as any;
+    const requirementStatus = getInspectorSchema({ repository, elementId: 'req-1' })!.fields.find(field => field.key === 'status')!;
+    expect(requirementStatus.options!.map(option => option.value)).toEqual(['draft', 'approved', 'implemented', 'verified', 'failed', 'stale', 'retired']);
+    expect(getInspectorSchema({ repository, elementId: 'tc-1' })!.fields.map(field => field.key)).not.toContain('status');
   });
 
   it('uses names and metaclasses in titles without exposing identity fields', () => {
@@ -133,9 +156,7 @@ describe('inspectorSchema', () => {
       expect(field).toMatchObject({ label, valueType: 'select' });
       expect(field.options).toContainEqual({ label: 'Block1', value: 'block-1' });
     }
-    expect(connector.fields.find(field => field.key === 'sourceId')?.toCommand?.('block-2')).toMatchObject({
-      type: 'UpdateRelationship', relationshipId: 'connector-1', patch: { sourceId: 'block-2' },
-    });
+    expect(connector.fields.find(field => field.key === 'sourceId')?.toCommand).toBeUndefined();
 
     const flow = getInspectorSchema({ repository, itemFlowId: 'flow-1' })!;
     for (const key of ['sourceId', 'targetId', 'realizingRelationshipId', 'conveyedClassifierIds']) {

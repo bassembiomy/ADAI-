@@ -1,0 +1,191 @@
+{
+  "plan": "docs/superpowers/plans/2026-10-20-powertrain-blockset-xbridges.md",
+  "baseline": "49f07cf",
+  "wps": [
+    {
+      "id": "WP-00",
+      "title": "Loop setup and baseline",
+      "deps": [],
+      "status": "in_progress",
+      "findings": [
+        {
+          "severity": "med",
+          "summary": "Baseline suites (plan \u00a75) not run in the cloud session: npm ci fails, cdn.sheetjs.com (xlsx-0.20.3 tarball) is denied by the network policy. Run the baseline on the user's machine at the start of the first loop iteration, then mark WP-00 done."
+        }
+      ]
+    },
+    {
+      "id": "WP-01",
+      "title": "Inventory from MATLAB (user machine)",
+      "deps": [
+        "WP-00"
+      ],
+      "status": "todo",
+      "findings": []
+    },
+    {
+      "id": "WP-02",
+      "title": "Lookup tables LOOKUP_1D / LOOKUP_2D",
+      "deps": [
+        "WP-00"
+      ],
+      "status": "todo",
+      "findings": []
+    },
+    {
+      "id": "WP-03",
+      "title": "Scaffold, registration, symbols, contract test",
+      "deps": [
+        "WP-01",
+        "WP-02"
+      ],
+      "status": "todo",
+      "findings": []
+    },
+    {
+      "id": "WP-10",
+      "title": "Drivers & sources",
+      "deps": [
+        "WP-03"
+      ],
+      "status": "todo",
+      "findings": []
+    },
+    {
+      "id": "WP-11",
+      "title": "Vehicle body and wheel",
+      "deps": [
+        "WP-03"
+      ],
+      "status": "todo",
+      "findings": []
+    },
+    {
+      "id": "WP-12",
+      "title": "Couplings",
+      "deps": [
+        "WP-03"
+      ],
+      "status": "todo",
+      "findings": []
+    },
+    {
+      "id": "WP-13",
+      "title": "Gears & differentials",
+      "deps": [
+        "WP-03"
+      ],
+      "status": "todo",
+      "findings": []
+    },
+    {
+      "id": "WP-14",
+      "title": "Energy storage",
+      "deps": [
+        "WP-03"
+      ],
+      "status": "todo",
+      "findings": []
+    },
+    {
+      "id": "WP-15",
+      "title": "Electric machines",
+      "deps": [
+        "WP-03"
+      ],
+      "status": "todo",
+      "findings": []
+    },
+    {
+      "id": "WP-16",
+      "title": "Combustion engines (mapped)",
+      "deps": [
+        "WP-03"
+      ],
+      "status": "todo",
+      "findings": []
+    },
+    {
+      "id": "WP-17",
+      "title": "Transmissions",
+      "deps": [
+        "WP-12",
+        "WP-13"
+      ],
+      "status": "todo",
+      "findings": []
+    },
+    {
+      "id": "WP-18",
+      "title": "Motor controllers & inverter",
+      "deps": [
+        "WP-15"
+      ],
+      "status": "todo",
+      "findings": []
+    },
+    {
+      "id": "WP-19",
+      "title": "Engine controllers",
+      "deps": [
+        "WP-16"
+      ],
+      "status": "todo",
+      "findings": []
+    },
+    {
+      "id": "WP-20",
+      "title": "Embedded C for powertrain blocks",
+      "deps": [
+        "WP-10",
+        "WP-11",
+        "WP-12",
+        "WP-13",
+        "WP-14",
+        "WP-15",
+        "WP-16"
+      ],
+      "status": "todo",
+      "findings": []
+    },
+    {
+      "id": "WP-21",
+      "title": "Reference applications EV / Conventional",
+      "deps": [
+        "WP-17",
+        "WP-18"
+      ],
+      "status": "todo",
+      "findings": []
+    },
+    {
+      "id": "WP-22",
+      "title": "Help, AI catalog, DOE, TRM, table editor",
+      "deps": [
+        "WP-20",
+        "WP-21"
+      ],
+      "status": "todo",
+      "findings": []
+    },
+    {
+      "id": "WP-23",
+      "title": "P3 blocks from inventory",
+      "deps": [
+        "WP-22"
+      ],
+      "status": "todo",
+      "findings": []
+    },
+    {
+      "id": "WP-24",
+      "title": "Close-out and PR",
+      "deps": [
+        "WP-22"
+      ],
+      "status": "todo",
+      "findings": []
+    }
+  ],
+  "goldens": "none yet (plan \u00a73.4 item 4)"
+}

@@ -12,7 +12,7 @@ import {
   buildMoveActivityNodesCommand,
   buildMovePartitionCommand,
   buildRemoveActivityEdgeCommand,
-  buildRemoveActivityNodeCommand,
+  buildRemoveActivityNodesCommand,
   buildRemoveActivityPinCommand,
   buildRemovePartitionCommand,
   buildRenameActivityElementCommand,
@@ -524,11 +524,9 @@ export function ActivityWorkspace({
       if (result?.committed) setSelected([]);
       return;
     }
-    // Several nodes: one command each so a refusal names the node that blocks it.
-    for (const node of selectedNodes) {
-      const result = executePlan(buildRemoveActivityNodeCommand(repository, { activityId, nodeId: node.id, diagramPresentations }), 'The node could not be deleted.');
-      if (!result?.committed) return;
-    }
+    // Several nodes: one command (one undo step), planned node by node on an evolving snapshot.
+    const result = executePlan(buildRemoveActivityNodesCommand(repository, { activityId, nodeIds: selectedNodes.map(node => node.id), diagramPresentations }), 'The node could not be deleted.');
+    if (!result?.committed) return;
     setSelected([]);
   };
 

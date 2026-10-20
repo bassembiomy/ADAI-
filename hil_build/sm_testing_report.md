@@ -13,7 +13,7 @@
 - Layers: 1 (1 OR, 0 AND)
 - Active configuration slots: 1
 - Static AST reachability: 100.0%
-- Reachable state IDs: c00e5706-9069-434b-abe0-239fb4101411, c10ea879-22fb-4440-9bc7-5c73603d14f8
+- Reachable state IDs: fc452778-f368-4f41-81bd-b1a3d3e2fac9, 71cb93e8-e357-4659-b62f-a3145823df82
 - Unreachable state IDs: None
 - Terminal state IDs: None
 
@@ -55,8 +55,8 @@ Evidence labels describe only the checks actually recorded for this generated pa
 
 | State name | Model ID | C enum | Layer | X-Bridges |
 |---|---|---|---|---|
-| State_1 | c00e5706-9069-434b-abe0-239fb4101411 | SM_ST_C00E5706_9069_434B_ABE0_239FB4101411 | root | no |
-| State_1_copy | c10ea879-22fb-4440-9bc7-5c73603d14f8 | SM_ST_C10EA879_22FB_4440_9BC7_5C73603D14F8 | root | no |
+| State_1 | fc452778-f368-4f41-81bd-b1a3d3e2fac9 | SM_ST_FC452778_F368_4F41_81BD_B1A3D3E2FAC9 | root | no |
+| State_2 | 71cb93e8-e357-4659-b62f-a3145823df82 | SM_ST__71CB93E8_E357_4659_B62F_A3145823DF82 | root | no |
 
 ## 8. HIL Driver Mapping Report
 

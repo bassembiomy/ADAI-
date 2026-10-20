@@ -1298,6 +1298,7 @@ export const XbridgesWorkspace: React.FC<{
   coSimEngine?: any;
   isSmSimulating?: boolean;
   simulationTime?: number;
+  renderRequirementAssignments?: (blockId: string) => React.ReactNode;
 }> = ({
   initialNodes = [],
   initialEdges = [],
@@ -1315,7 +1316,8 @@ export const XbridgesWorkspace: React.FC<{
   workspaceFiles,
   coSimEngine,
   isSmSimulating = false,
-  simulationTime = 0
+  simulationTime = 0,
+  renderRequirementAssignments
 }) => {
   const initialNodesWithMappings = useMemo(
     () => syncXBBoundaryNodeMetadata(initialNodes, initialMappings),
@@ -3645,6 +3647,7 @@ export const XbridgesWorkspace: React.FC<{
               onClose={() => setSelectedNodeId(null)}
               isCollapsed={isPropsCollapsed}
               onCollapseToggle={setIsPropsCollapsed}
+              requirementAssignments={renderRequirementAssignments?.(selectedNode.id)}
             />
           )}
 

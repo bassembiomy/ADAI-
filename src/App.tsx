@@ -1,6 +1,11 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo, MouseEvent, KeyboardEvent, ChangeEvent, Profiler, startTransition } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo, MouseEvent, KeyboardEvent, ChangeEvent, Profiler, startTransition, lazy, Suspense } from 'react';
 import { recordRenderCommit, resetProjectLoadTelemetry } from './features/sysml/performance/renderTelemetry';
-import { projectStateEndpoints, hasMatchingProjectStateContext } from './engine/sysml/workers/projectIoPayload';
+import { projectExternalEndpoints, projectExternalEndpointSignature, projectSimSources, buildSimEndpoints } from './engine/trmSim/simEndpoints';
+import { repositoryChangeCommands, runAllSimulationCases, simEvidenceStatusFor } from './engine/trmSim/simVerification';
+import { SimVerificationPanel } from './components/trmSim/SimVerificationPanel';
+import { useXBridgesWorkspaceInputs } from './components/xbridges/xbridgesWorkspaceInputs';
+import { buildSimExternalElements } from './engine/trmSim/simExternalElements';
+import { buildTraceabilityIndex } from './engine/sysml/traceabilityIndex';
 import { parseProjectJsonBuffer } from './utils/projectJsonBuffer';
 import * as math from 'mathjs';
 import Plot from './components/doe/PlotlyRenderer';
@@ -9,17 +14,6 @@ import { createVLabDOEBlock, createXBridgesDOEBlock } from './engine/doe/integra
 import { fitRSM, fitGMDH, fitTaguchi } from './engine/doe/statistics';
 import DOMPurify from 'dompurify';
 import { v4 as uuidv4 } from 'uuid';
-import * as XLSX from 'xlsx';
-import { jsPDF } from 'jspdf';
-import html2canvas from 'html2canvas';
-import { XbridgesWorkspace } from './components/xbridges/XbridgesWorkspace';
-import { VLabWorkspace } from './components/vlab/VLabWorkspace';
-import { HILWorkspace } from './components/hil/HILWorkspace';
-import { EntropyWorkspace } from './components/entropy/EntropyWorkspace';
-import { PlantUmlWorkspace } from './components/plantuml/PlantUmlWorkspace';
-import { UseCaseWorkspace } from './components/sysml/UseCaseWorkspace';
-import { ActivityWorkspace } from './components/sysml/ActivityWorkspace';
-import { SequenceWorkspace } from './components/sysml/SequenceWorkspace';
 import { buildCreateInteractionFromContextCommand } from './services/sysmlInteractionCommands';
 import { buildSetVerificationBehaviorCommand, listTestProcedures } from './services/sysmlVerificationCommands';
 import { InteractionElementInspector } from './components/sysml/InteractionElementInspector';
@@ -70,6 +64,9 @@ import {
 import { createStateMachineClipboard, pasteStateMachineClipboard, StateMachineClipboardData } from './utils/stateMachineClipboard';
 import { pruneStateHierarchy, pruneMultipleStatesHierarchy, countDescendants } from './utils/stateMachine/smStatePruner';
 import { generateMISRACCode, getCTimeType, validateInitialValue } from './utils/stateMachineCodeGenerator';
+import { applyAutostartEdit, canTransitionBeInternal, findPartiallyParallelRegions, findUnreachableStates, partiallyParallelRegionMessage } from './utils/stateMachine/smOrthogonalRegions';
+import { applyStateHistoryChange, getStateHistoryType, type StateHistoryType } from './utils/stateMachine/smHistoryRegion';
+import { findInternalTransitionSyntaxErrors } from './utils/stateMachine/smExpressions';
 import { coerceTypedValue } from './utils/stateMachine/smTypedValue';
 import { isInputFocused } from './utils/domUtils';
 import { validateImportedJson, ValidationResult } from './utils/jsonImportValidator';
@@ -108,7 +105,6 @@ import type { SemanticTraceFrame } from './utils/stateMachine/smTrace';
 import { STATE_MACHINE_RUNTIME_BUNDLE } from './generated/stateMachineRuntimeBundle';
 import { analyzeStateMachine } from './utils/smAnalysisEngine';
 import { HelpModal } from './components/help/HelpModal';
-import { HmiWorkspace } from './components/hmi/HmiWorkspace';
 import { normalizeHmiComponents, parseHmiVariableValue, validateHmiInput, type HmiInputCommand, type HmiInputResult } from './features/hmi/hmiModel';
 import { createHmiInputQueue, getPortableHmiInputQueueScript } from './features/hmi/hmiInputQueue';
 import { renderHmiWidgetSvg, renderPortableHmiMarkup, getPortableHmiScript, resolveHmiReportComponents } from './features/hmi/hmiReport';
@@ -119,13 +115,39 @@ import { parseModelExplorerDragData } from './features/modelExplorer/modelExplor
 import type { ActiveDiagramContext, ExplorerCommandResult } from './features/modelExplorer/modelExplorerTypes';
 import { VLAB_LIBRARY } from './utils/vlabLibrary';
 import { BLOCK_LIBRARY as XBRIDGES_LIBRARY } from './engine/xbridges/BlockDefinitions';
-import JSZip from 'jszip';
-import {
-  createReportSnapshot,
-  toHierarchySource,
-  buildSystemReport,
-  renderStateMachineAnalysisHtml,
-} from './features/reporting';
+// Workspaces load on first use (prefetched when idle) to keep them out of the startup bundle.
+const loadXbridgesWorkspace = () => import('./components/xbridges/XbridgesWorkspace');
+const XbridgesWorkspace = lazy(() => loadXbridgesWorkspace().then(m => ({ default: m.XbridgesWorkspace })));
+const loadVLabWorkspace = () => import('./components/vlab/VLabWorkspace');
+const VLabWorkspace = lazy(() => loadVLabWorkspace().then(m => ({ default: m.VLabWorkspace })));
+const loadHILWorkspace = () => import('./components/hil/HILWorkspace');
+const HILWorkspace = lazy(() => loadHILWorkspace().then(m => ({ default: m.HILWorkspace })));
+const loadEntropyWorkspace = () => import('./components/entropy/EntropyWorkspace');
+const EntropyWorkspace = lazy(() => loadEntropyWorkspace().then(m => ({ default: m.EntropyWorkspace })));
+const loadPlantUmlWorkspace = () => import('./components/plantuml/PlantUmlWorkspace');
+const PlantUmlWorkspace = lazy(() => loadPlantUmlWorkspace().then(m => ({ default: m.PlantUmlWorkspace })));
+const loadUseCaseWorkspace = () => import('./components/sysml/UseCaseWorkspace');
+const UseCaseWorkspace = lazy(() => loadUseCaseWorkspace().then(m => ({ default: m.UseCaseWorkspace })));
+const loadActivityWorkspace = () => import('./components/sysml/ActivityWorkspace');
+const ActivityWorkspace = lazy(() => loadActivityWorkspace().then(m => ({ default: m.ActivityWorkspace })));
+const loadSequenceWorkspace = () => import('./components/sysml/SequenceWorkspace');
+const SequenceWorkspace = lazy(() => loadSequenceWorkspace().then(m => ({ default: m.SequenceWorkspace })));
+const loadHmiWorkspace = () => import('./components/hmi/HmiWorkspace');
+const HmiWorkspace = lazy(() => loadHmiWorkspace().then(m => ({ default: m.HmiWorkspace })));
+const WorkspaceLoading = () => (
+  <div className="absolute inset-0 flex items-center justify-center text-sm text-gray-500">Loading workspace…</div>
+);
+const WORKSPACE_PREFETCH_LOADERS = [loadXbridgesWorkspace, loadVLabWorkspace, loadHILWorkspace, loadEntropyWorkspace, loadPlantUmlWorkspace, loadUseCaseWorkspace, loadActivityWorkspace, loadSequenceWorkspace, loadHmiWorkspace];
+// Heavy export libraries are loaded on demand to keep them out of the startup bundle.
+const loadXlsx = () => import('xlsx');
+const loadJsPdf = () => import('jspdf').then(m => m.jsPDF);
+const loadHtml2Canvas = () => import('html2canvas').then(m => m.default);
+const loadJsZip = () => import('jszip').then(m => m.default);
+// Import report helpers from their modules, not the './features/reporting' barrel:
+// the barrel re-exports the PDF/DOCX exporters, which would pull jspdf and docx into the startup bundle.
+import { createReportSnapshot, toHierarchySource } from './features/reporting/reportSnapshot';
+import { buildSystemReport } from './features/reporting/systemReport/buildSystemReport';
+import { renderStateMachineAnalysisHtml } from './features/reporting/systemReport/stateMachineAnalysisSection';
 import { TraceabilityMatrix as CanonicalTraceabilityMatrix } from './components/sysml/TraceabilityMatrix';
 import { BlockPropertiesEditor } from './components/sysml/BlockPropertiesEditor';
 import { SysmlPropertyPanel } from './components/sysml/SysmlPropertyPanel';
@@ -135,12 +157,14 @@ import { createEmptyRepositoryV4 } from './engine/sysml/domain';
 import { BlockFeatureEditor } from './components/sysml/BlockFeatureEditor';
 import { RelationshipEndEditor } from './components/sysml/RelationshipEndEditor';
 import { restoreConnectionErrorFocus, SysmlConnectionErrorDetails } from './components/sysml/SysmlConnectionErrorDetails';
-import { computeBlockDisplayBounds, blockCompartmentLines, blockCompartmentHeight } from './components/sysml/blockLayout';
+import { computeBlockDisplayBounds, blockCompartmentLines, blockCompartmentHeight, featureCompartmentHeight } from './components/sysml/blockLayout';
 import { AllocationMatrix as CanonicalAllocationMatrix } from './components/sysml/AllocationMatrix';
 import { IbdConnectorEditor } from './components/sysml/IbdConnectorEditor';
+import { buildConnectorUpdateCommand, connectorEditorValue } from './services/sysmlConnectorUpdateCommands';
 import { RequirementGovernancePanel } from './components/sysml/RequirementGovernancePanel';
 import { resolveSysmlReferenceLabel, sysmlObjectLabel } from './features/sysml/sysmlDisplayLabel';
-import { StateRequirementTraceability } from './components/statemachine/StateRequirementTraceability';
+import { RequirementAssignmentsPanel } from './components/trmSim/RequirementAssignmentsPanel';
+import { elementSimTargets } from './engine/trmSim/elementSimTargets';
 import { StateMachineCanvasContextMenu } from './components/statemachine/StateMachineCanvasContextMenu';
 import { validateAssociationEnds } from './engine/sysml/bdd';
 import { validateRequirementContainment } from './engine/sysml/validation';
@@ -150,12 +174,12 @@ import { resolveBlockDoubleClickAction, resolveExplicitBlockNavigation } from '.
 import { analyzeMutation } from './engine/sysml/mutations';
 import { loadRepository, serializeRepository, serializeSysmlProjectState, type V5UpgradeReport } from './engine/sysml/persistence';
 import { SysmlUpgradeReportDialog } from './components/sysml/SysmlUpgradeReportDialog';
-import { createEmptyRepository, parseMultiplicity, type SysmlRelationship, type ConnectorUsage, type ModelDiagramDefinition } from './engine/sysml/model';
+import { createEmptyRepository, parseMultiplicity, type SysmlRelationship, type SysmlRepository, type ConnectorUsage, type ModelDiagramDefinition } from './engine/sysml/model';
 import { evaluateSysmlOperationGate } from './engine/sysml/evidence';
 import { buildTraceabilityMatrix, computeCoverageMetrics } from './engine/sysml/rtm';
 import { buildCanonicalTraceabilitySnapshot } from './engine/sysml/reportSnapshotAdapter';
 import { applyLegacySysmlDeletion, impactSeverity, requiresDeletionConfirmation } from './services/sysmlTransactionAdapter';
-import { loadCanonicalSysmlProject, fromRepository, projectLegacyDiagram, selectSuspectLinks, selectEvidenceForRequirement, getDefaultSysmlWorkerClient, executeSysmlCommand, createSysmlGatewayState, computeImpactHash, type SysmlEditorCommand, createTypedUsageCommand, resolveType, type CreateNewTypeAction, type PresentationCoordinates } from './services/sysmlCommandGateway';
+import { loadCanonicalSysmlProject, fromRepository, projectLegacyDiagram, selectSuspectLinks, selectEvidenceForRequirement, getDefaultSysmlWorkerClient, executeSysmlCommand, createSysmlGatewayState, computeImpactHash, previewDeletionImpact, type SysmlEditorCommand, createTypedUsageCommand, resolveType, type CreateNewTypeAction, type PresentationCoordinates } from './services/sysmlCommandGateway';
 import { loadProjectInWorker, serializeProjectInWorker } from './engine/sysml/workers/projectIoClient';
 import { createInterface, createBlock as createBlockDefinition, createValueType as createValueTypeDefinition, createPortDefinition } from './features/modelExplorer/adapters/modelExplorerFactories';
 import { getElementKindLabel } from './features/modelExplorer/modelExplorerCapabilities';
@@ -179,7 +203,7 @@ import type {
 import { computeViewportBounds, cullElements } from './components/sysml/VirtualizedDiagram';
 import { handleHorizontalToolbarWheel } from './utils/toolbarScroll';
 import { LargeModelDiagnostics, loadStoredPerformanceLimits, saveStoredPerformanceLimits } from './components/sysml/LargeModelDiagnostics';
-import { validateLegacyConnectorCandidate, validateLegacyRequirementStatusTransition } from './services/sysmlCreationRules';
+import { validateLegacyConnectorCandidate } from './services/sysmlCreationRules';
 import { getCanvasRelationshipKinds, getDirectBddPropertyRelationshipKind, rejectBlockConnectionChange, rejectUiRelationship, resolveUiConnectionEndpoint } from './services/sysmlConnectionUi';
 import { formatLegacyProperty, inheritedProperties, introducesNewValidationCodes, removePartProperty, validateLegacyBlockEdit, validateLegacyBlockProperties } from './services/sysmlPropertyRules';
 import { projectDiagramScopedCanvasView } from './services/sysmlProjectionState';
@@ -205,7 +229,8 @@ import { pathFromKey } from './engine/sysml/partOccurrences';
 import { DEFAULT_NESTED_PART_DEPTH, MAX_NESTED_PART_DEPTH, isDrawnInIbd, layoutIbdNestedParts } from './features/sysml/ibdNestedParts';
 import { IbdConnectorEndpoint } from './components/sysml/IbdConnectorEndpoint';
 import { resolvePackageDiagramActivation } from './services/sysmlDiagramActivation';
-import { diagramFrameLabel, diagramKindAbbreviation } from './features/sysml/diagramFrame';
+import { presentationFromBlockGeometry } from './services/blockGeometryPresentation';
+import { diagramFrameLabel, diagramFrameRect, diagramKindAbbreviation } from './features/sysml/diagramFrame';
 import { requirementStatusColor } from './features/sysml/requirementStatus';
 import { edgeBadgeLabel } from './features/sysml/edgeNotation';
 import { getDiagramKindLabel } from './features/modelExplorer/modelExplorerCapabilities';
@@ -243,7 +268,7 @@ import {
   type DiagramWorkspaceTab,
 } from './services/sysmlDiagramWorkspace';
 import { ensureRootStateMachineDiagram } from './features/modelExplorer/adapters/stateMachineExplorerAdapter';
-import { resolveCanvasSymbolDiagramTargets, resolveExactDiagramCanvasContext } from './features/modelExplorer/diagramTreeContext';
+import { resolveCanvasSymbolDiagramTargets, resolveExactDiagramCanvasContext, resolveTreeOpenTarget } from './features/modelExplorer/diagramTreeContext';
 import type { StateMachineDiagramData } from './types/sm_types';
 import { resolveActiveSysmlDiagramTarget } from './services/sysmlDiagramTarget';
 import { planContextualCreation } from './features/sysml/contextualCreation';
@@ -575,6 +600,9 @@ const HierarchyTree: React.FC<any> = (props) => (
     diagramPresentations={props.diagramPresentations}
     selectedIds={props.selectedIds}
     onSelect={props.onSelect}
+    onSelectMultiple={props.onSelectMultiple}
+    onOpenSpecification={props.onOpenSpecification}
+    projectId={props.projectId}
     onDoubleClick={props.onDoubleClick}
     onCommitStateMachineSnapshot={props.onCommitStateMachineSnapshot}
 
@@ -883,7 +911,7 @@ const LegacyTraceabilityMatrix = ({
     roots.forEach(r => traverse(r, 0));
   }
 
-  const exportExcel = () => {
+  const exportExcel = async () => {
     const referenceLabel = (id: string, fallbackKind = 'Element') => {
       const block = blocks.find(b => b.id === id);
       if (block) return sysmlObjectLabel(block, block.stereotype || 'Block');
@@ -973,6 +1001,7 @@ const LegacyTraceabilityMatrix = ({
         Links: outgoing,
       };
     });
+    const XLSX = await loadXlsx();
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "RTM");
@@ -1231,6 +1260,7 @@ const CodeGenerationDialog = ({
           <Button data-help-feature="app-code-download" data-help-source="src/App.tsx"
             onClick={async () => {
               try {
+                const JSZip = await loadJsZip();
                 const zip = new JSZip();
                 files.forEach(f => {
                   zip.file(f.name, f.content);
@@ -1394,6 +1424,7 @@ const PidWorkspaceDialog = ({
     // Download PID files together as a ZIP
     (async () => {
       try {
+        const JSZip = await loadJsZip();
         const zip = new JSZip();
         zip.file('pid_controller.h', h_content);
         zip.file('pid_controller.c', c_content);
@@ -2520,9 +2551,10 @@ const DoeWorkspace = ({
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (evt) => {
+    reader.onload = async (evt) => {
       try {
         const bstr = evt.target?.result;
+        const XLSX = await loadXlsx();
         const wb = XLSX.read(bstr, { type: 'binary' });
         const ws = wb.Sheets[wb.SheetNames[0]];
         const jsonData = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
@@ -4138,6 +4170,7 @@ const ReportPreviewModal = ({
       try {
         const plot = originalPlots[i] as any;
         if (plot.data && plot.layout) {
+             const html2canvas = await loadHtml2Canvas();
              const canvas = await html2canvas(plot);
              const imgData = canvas.toDataURL('image/png');
              const img = document.createElement('img');
@@ -4166,6 +4199,8 @@ const ReportPreviewModal = ({
   const exportToPDF = async () => {
     if (!previewRef.current) return;
     try {
+      const html2canvas = await loadHtml2Canvas();
+      const jsPDF = await loadJsPdf();
       const canvas = await html2canvas(previewRef.current, { scale: 2, backgroundColor: '#1a1a1a' });
       const imgData = canvas.toDataURL('image/jpeg', 0.95);
       const pdf = new jsPDF('p', 'mm', 'a4');
@@ -4482,6 +4517,27 @@ type WorkspaceTarget =
   | { kind: 'file'; fileId: string };
 
 const ADIA = () => {
+  // Warm the workspace chunks one per idle slot, so module evaluation never competes with input.
+  useEffect(() => {
+    const w = window as any;
+    const hasIdle = typeof w.requestIdleCallback === 'function';
+    let cancelled = false;
+    let handle: any = null;
+    let index = 0;
+    const schedule = () => {
+      if (cancelled || index >= WORKSPACE_PREFETCH_LOADERS.length) return;
+      const run = () => {
+        const load = WORKSPACE_PREFETCH_LOADERS[index++];
+        load().catch(() => { /* prefetch is best effort */ }).finally(schedule);
+      };
+      handle = hasIdle ? w.requestIdleCallback(run, { timeout: 1000 }) : setTimeout(run, index === 0 ? 2000 : 250);
+    };
+    schedule();
+    return () => {
+      cancelled = true;
+      if (hasIdle) w.cancelIdleCallback?.(handle); else clearTimeout(handle);
+    };
+  }, []);
   const [currentTheme, setCurrentTheme] = useState<AppTheme>(getStoredTheme);
 
   useEffect(() => {
@@ -5209,13 +5265,24 @@ const ADIA = () => {
     });
   }, [canonicalSysmlRepository, sysmlStore]);
 
+  const [globalXBridgesNodes, setGlobalXBridgesNodes] = useState<any[]>([]);
+  const [vlabNodes, setVlabNodes] = useState<any[]>([]);
   const externalEndpointContext = useMemo<SemanticEndpointContext>(() => {
     const map = new Map<string, ExternalSemanticEndpoint>();
     for (const s of states) {
       map.set(s.id, { id: s.id, name: s.name, family: 'state' });
     }
+    for (const [id, endpoint] of buildSimEndpoints(projectSimSources({ states, junctions, transitions, variables, globalXBridgesNodes, vlabNodes }))) {
+      map.set(id, endpoint);
+    }
     return { externalEndpoints: map };
-  }, [states]);
+  }, [states, junctions, transitions, variables, globalXBridgesNodes, vlabNodes]);
+
+  const traceabilityExternalElements = useMemo(() => [
+    ...states.map(state => ({ id: state.id, name: state.name, kind: 'state' })),
+    ...junctions.map(junction => ({ id: junction.id, name: junction.name, kind: junction.type ?? 'pseudostate' })),
+    ...buildSimExternalElements(projectSimSources({ states, junctions, transitions, variables, globalXBridgesNodes, vlabNodes })).filter(e => e.id.startsWith('sim:')),
+  ], [states, junctions, transitions, variables, globalXBridgesNodes, vlabNodes]);
 
   const handleExecuteSysmlCommand = useCallback((cmd: SysmlEditorCommand) => {
     const currentRepo = sysmlGatewayStateRef.current?.repository ?? canonicalSysmlRepository;
@@ -5233,10 +5300,8 @@ const ADIA = () => {
     const result = executeSysmlCommand(currentState, cmd, activeSysmlDiagramId, externalEndpointContext);
     if (result.committed) {
       sysmlGatewayStateRef.current = { ...currentState, ...result, context: externalEndpointContext };
-      startTransition(() => {
-        setCanonicalSysmlRepository(result.repository);
-        setSysmlStore(result.store ? { ...result.store } : fromRepository(result.repository, result.coordinates, result.diagramPresentations));
-      });
+      setCanonicalSysmlRepository(result.repository);
+      setSysmlStore(result.store ? { ...result.store } : fromRepository(result.repository, result.coordinates, result.diagramPresentations));
     }
     return result;
   }, [canonicalSysmlRepository, sysmlStore, externalEndpointContext, activeSysmlDiagramId]);
@@ -5421,7 +5486,6 @@ const ADIA = () => {
   const [draggedPort, setDraggedPort] = useState<{ elementId: string, portId: string } | null>(null);
 
   // Global X-Bridges persistence
-  const [globalXBridgesNodes, setGlobalXBridgesNodes] = useState<any[]>([]);
   const [globalXBridgesEdges, setGlobalXBridgesEdges] = useState<any[]>([]);
   const globalXBridgesNodesRef = useRef<any[]>(globalXBridgesNodes);
   const globalXBridgesEdgesRef = useRef<any[]>(globalXBridgesEdges);
@@ -5435,7 +5499,6 @@ const ADIA = () => {
   }, [globalXBridgesEdges]);
 
   // V-Lab STATE
-  const [vlabNodes, setVlabNodes] = useState<any[]>([]);
   const [vlabEdges, setVlabEdges] = useState<any[]>([]);
   const [vlabSelectedNodeId, setVlabSelectedNodeId] = useState<string | null>(null);
   const [xBridgesSelectedNodeId, setXBridgesSelectedNodeId] = useState<string | null>(null);
@@ -6303,6 +6366,34 @@ const ADIA = () => {
     }
   }, [setIsRunning, setErrors, setCurrentError, setShowErrorDialog]);
 
+  // TRM simulation verification: the panel edits a repository copy; changes reach the model only as gateway commands.
+  const [simVerificationRequirementId, setSimVerificationRequirementId] = useState<string | null>(null);
+  const simVerificationProject = useMemo(() => ({
+    states, junctions, transitions, variables, layers, tickMs, hilConfig, safetyMode,
+    globalXBridgesNodes, globalXBridgesEdges, vlabNodes, vlabEdges,
+  }), [states, junctions, transitions, variables, layers, tickMs, hilConfig, safetyMode, globalXBridgesNodes, globalXBridgesEdges, vlabNodes, vlabEdges]);
+  // Stable XbridgesWorkspace inputs: a fresh array per render re-imports the stored model over unsaved edits.
+  const xBridgesWorkspaceInputs = useXBridgesWorkspaceInputs(states, xBridgesStateId, globalXBridgesNodes, globalXBridgesEdges);
+  const simEvidenceCurrency = useCallback((evidence: { id: string; simulation?: unknown }): 'current' | 'stale' =>
+    evidence.simulation && simEvidenceStatusFor(canonicalSysmlRepository, evidence.id, simVerificationProject) === 'stale' ? 'stale' : 'current',
+  [canonicalSysmlRepository, simVerificationProject]);
+  const handleSimVerificationRepositoryChange = useCallback((next: SysmlRepository) => {
+    const previous = sysmlGatewayStateRef.current?.repository ?? canonicalSysmlRepository;
+    for (const command of repositoryChangeCommands(previous, next)) {
+      const result = command.type === 'deleteElements' ? executeConfirmedDeletion(command.elementIds) : handleExecuteSysmlCommand(command as SysmlEditorCommand);
+      if (!result.committed) {
+        addError('error', result.diagnostics.map(d => d.message).join('; ') || 'The simulation verification change was rejected.', 'Simulation verification');
+        break;
+      }
+    }
+  }, [canonicalSysmlRepository, executeConfirmedDeletion, handleExecuteSysmlCommand, addError]);
+  const handleRunAllSimulations = useCallback(() => {
+    const out = runAllSimulationCases(sysmlGatewayStateRef.current?.repository ?? canonicalSysmlRepository, simVerificationProject, { newId: () => uuidv4(), executedAt: new Date().toISOString() });
+    handleSimVerificationRepositoryChange(out.repository);
+    const count = (o: string) => out.results.filter(r => r.outcome === o).length;
+    addError('info', `Simulation tests: ${count('passed')} passed, ${count('failed')} failed, ${count('inconclusive')} inconclusive, ${count('error')} errors, ${count('skipped')} skipped`, 'Simulation verification');
+  }, [canonicalSysmlRepository, simVerificationProject, handleSimVerificationRepositoryChange, addError]);
+
   const handleExplorerCommandResult = useCallback((result: ExplorerCommandResult) => {
     for (const diagnostic of result.diagnostics) {
       addError(diagnostic.severity, `${diagnostic.code}: ${diagnostic.message}`, 'Model Explorer', diagnostic.semanticId);
@@ -6464,12 +6555,13 @@ const ADIA = () => {
   // === Professional Report Generation ===
   const [showReportPreview, setShowReportPreview] = useState(false);
 
-  const generateReport = useCallback(() => {
+  const generateReport = useCallback(async () => {
     if (!results) {
       addError('warning', 'No model results to export. Run a model first.');
       return;
     }
 
+    const jsPDF = await loadJsPdf();
     const pdf = new jsPDF('p', 'mm', 'a4');
     const pageW = pdf.internal.pageSize.getWidth();
     const margin = 20;
@@ -6656,6 +6748,7 @@ const ADIA = () => {
     addError('info', 'Professional report generated and downloaded.');
   }, [results, data, headers, addError]);
 
+  const buildUnifiedProjectPayloadRef = useRef<((options?: { deferSysmlPreparation?: boolean }) => Record<string, unknown>) | null>(null);
   const executeExportProject = useCallback(async (selectedKeys: string[]) => {
     const totalEntities = blocks.length + parts.length + connectors.length + relationships.length;
     const limits = loadStoredPerformanceLimits();
@@ -6702,27 +6795,16 @@ const ADIA = () => {
       projectFiles['entropy.adia'] = { entropyNodes, entropyEdges, opmSimulationConfig };
     }
     if (selectedKeys.includes('unified')) {
+      // Same payload as the main Save: format 5 repository, presentations, coordinates and PlantUML.
+      // A raw canonicalSysmlRepository here reopens with every diagram empty.
+      const buildPayload = buildUnifiedProjectPayloadRef.current;
+      if (!buildPayload) {
+        addError('error', 'Unified project export is not ready yet.');
+        return;
+      }
       projectFiles['adia_project_unified.adia'] = {
-        version: VERSION,
-        timestamp: new Date().toISOString(),
-        projectName: currentProjectName,
-        openTabs,
-        diagramWorkspace,
-        activeSysmlDiagramId,
-        diagramNavigationStack,
-        ...persistedStateMachine, view,
-        blocks, relationships, parts, connectors, interfaceRealizations, customStereotypes,
-        hmiComponents, vlabNodes, vlabEdges, globalXBridgesNodes, globalXBridgesEdges,
-        hilConfig,
-        doe: { schemaVersion: 1, headers, data, activeModel, taguchiConfig, results },
-        managedWindows,
-        entropyNodes,
-        entropyEdges,
-        opmSimulationConfig,
-        canonicalSysmlRepository,
+        ...buildPayload(),
         workspaceFiles: saveCurrentFileState(workspaceFiles, activeFileId),
-        openTabIds,
-        activeFileId
       };
     }
 
@@ -6814,9 +6896,9 @@ const ADIA = () => {
       // remains valid after hydration instead of being quarantined as an
       // unresolved endpoint. No stale State copies are persisted: only live
       // endpoint identities from the incoming model are supplied.
-      const hydrationEndpoints = projectStateEndpoints(importedData.states);
+      const hydrationEndpoints = projectExternalEndpoints(importedData);
       const hydratedRepository = applyCanonicalProjectLoad(
-        preloadedResult && preloadedResult.valid && hasMatchingProjectStateContext(preloadedResult.stateEndpointSignature, importedData.states)
+        preloadedResult && preloadedResult.valid && preloadedResult.stateEndpointSignature === projectExternalEndpointSignature(importedData)
           ? preloadedResult
           : loadCanonicalSysmlProject({
               ...importedData,
@@ -6861,43 +6943,46 @@ const ADIA = () => {
         const offsetX = typeof v.offsetX === 'number' && Number.isFinite(v.offsetX) ? v.offsetX : (typeof v.x === 'number' && Number.isFinite(v.x) ? v.x : 0);
         const offsetY = typeof v.offsetY === 'number' && Number.isFinite(v.offsetY) ? v.offsetY : (typeof v.y === 'number' && Number.isFinite(v.y) ? v.y : 0);
         setView({ scale, offsetX, offsetY });
+      } else {
+        setView({ scale: 1, offsetX: 0, offsetY: 0 });
       }
-      if (importedData.tickMs) setTickMs(importedData.tickMs);
+      // Fields applied only when present would keep the previous project's values: absent means the default.
+      setTickMs(importedData.tickMs ? importedData.tickMs : 500);
+      setSafetyMode(importedData.safetyMode === true);
 
       // SysML projections were refreshed atomically from the canonical load above.
-      if (importedData.interfaceRealizations) setInterfaceRealizations(importedData.interfaceRealizations);
-      if (importedData.customStereotypes) setCustomStereotypes(importedData.customStereotypes);
+      setInterfaceRealizations(importedData.interfaceRealizations ?? []);
+      setCustomStereotypes(importedData.customStereotypes ?? []);
 
       // HMI Dashboard
-      if (importedData.hmiComponents) setHmiComponents(normalizeHmiComponents(importedData.hmiComponents));
+      setHmiComponents(importedData.hmiComponents ? normalizeHmiComponents(importedData.hmiComponents) : []);
 
       // V-Lab Physical Modeling
-      if (importedData.vlabNodes) setVlabNodes(importedData.vlabNodes);
-      if (importedData.vlabEdges) setVlabEdges(importedData.vlabEdges);
+      setVlabNodes(importedData.vlabNodes ?? []);
+      setVlabEdges(importedData.vlabEdges ?? []);
 
       // X-Bridges Architecture
-      if (importedData.globalXBridgesNodes) setGlobalXBridgesNodes(importedData.globalXBridgesNodes);
-      if (importedData.globalXBridgesEdges) setGlobalXBridgesEdges(importedData.globalXBridgesEdges);
+      setGlobalXBridgesNodes(importedData.globalXBridgesNodes ?? []);
+      setGlobalXBridgesEdges(importedData.globalXBridgesEdges ?? []);
 
       // ENTROPY OPM
-      if (importedData.entropyNodes) setEntropyNodes(importedData.entropyNodes);
-      if (importedData.entropyEdges) setEntropyEdges(importedData.entropyEdges);
-      if (importedData.opmSimulationConfig) setOpmSimulationConfig(importedData.opmSimulationConfig);
+      setEntropyNodes(importedData.entropyNodes ?? []);
+      setEntropyEdges(importedData.entropyEdges ?? []);
+      setOpmSimulationConfig(importedData.opmSimulationConfig ?? DEFAULT_OPM_SIMULATION_CONFIG);
 
       // HIL Configuration
-      if (importedData.hilConfig) setHilConfig(importedData.hilConfig);
+      setHilConfig(importedData.hilConfig ?? { enabled: false, target: 'Generic', clockSpeed: 16, channels: [], mappings: [], commPort: '', baudRate: 115200 });
 
       const savedPlantUmlDiagrams = readPlantUmlDiagrams(importedData);
       if (savedPlantUmlDiagrams[0]) setPlantUmlDiagram(savedPlantUmlDiagrams[0]);
 
       // DOE Modeling Suite
-      if (importedData.doe) {
-        if (importedData.doe.headers) setHeaders(importedData.doe.headers);
-        if (importedData.doe.data) setData(importedData.doe.data);
-        if (importedData.doe.activeModel) setActiveModel(importedData.doe.activeModel);
-        if (importedData.doe.taguchiConfig) setTaguchiConfig(importedData.doe.taguchiConfig);
-        if (importedData.doe.results) setResults(importedData.doe.results);
-      }
+      const importedDoe = importedData.doe ?? {};
+      setHeaders(importedDoe.headers ?? []);
+      setData(importedDoe.data ?? []);
+      setActiveModel(importedDoe.activeModel ?? 'RSM');
+      setTaguchiConfig(importedDoe.taguchiConfig ?? { objective: 'larger', targetValue: 10 });
+      setResults(importedDoe.results ?? null);
 
       // UI State
       if (importedData.managedWindows) setManagedWindows(importedData.managedWindows);
@@ -7218,6 +7303,8 @@ const ADIA = () => {
     plantUmlDiagram,
   ]);
 
+  buildUnifiedProjectPayloadRef.current = buildUnifiedProjectPayload;
+
   const saveUnifiedProject = useCallback(async (saveAs: boolean = false) => {
     if (pendingHydrationSequenceRef.current !== committedHydrationSequenceRef.current) {
       addError('info', 'Project is still loading. Save when loading completes.');
@@ -7512,6 +7599,8 @@ const ADIA = () => {
   const selectedPart = useMemo(() => selectedIds.length === 1 ? parts.find(p => p.id === selectedIds[0]) : null, [selectedIds, parts]);
 
   const selectedConnector = useMemo(() => selectedIds.length === 1 ? connectors.find(c => c.id === selectedIds[0]) : null, [selectedIds, connectors]);
+  /** The connector inspector edits the stored ConnectorUsage, so editing one field keeps the others. */
+  const editedConnector = useMemo(() => selectedConnector ? connectorEditorValue(canonicalSysmlRepository, selectedConnector.id) : undefined, [selectedConnector, canonicalSysmlRepository]);
   const selectedInterfaceRealization = useMemo(() => selectedIds.length === 1 ? interfaceRealizations.find(ir => ir.id === selectedIds[0]) : null, [selectedIds, interfaceRealizations]);
   const emptyInspectorRepoV4 = useMemo(() => createEmptyRepositoryV4(), []);
   const shouldDeriveInspectorV4 = !isPropertiesCollapsed && selectedIds.length > 0;
@@ -7938,7 +8027,29 @@ const ADIA = () => {
           const match = line.match(/^\[(.*?)\]\s*\/?\s*(.*)$/);
           if (match) checkConditionSyntax(match[1], `State '${s.name}' Internal Transition`, s.id);
         });
+        // Every non-empty line goes through the parser the simulator and the C generator use.
+        findInternalTransitionSyntaxErrors(s.internalTransitions).forEach(err => {
+          newErrors.push({
+            id: uuidv4(),
+            type: 'error',
+            message: `State '${s.name}' internal transition '${err.line}' is invalid: ${err.message}`,
+            timestamp: new Date(),
+            source: 'Validation',
+            elementId: s.id
+          });
+        });
       }
+    });
+
+    findPartiallyParallelRegions(states).forEach(region => {
+      newErrors.push({
+        id: uuidv4(),
+        type: 'error',
+        message: partiallyParallelRegionMessage(region),
+        timestamp: new Date(),
+        source: 'Validation',
+        elementId: region.parallel[0].id
+      });
     });
 
     transitions.forEach(t => {
@@ -8096,38 +8207,15 @@ const ADIA = () => {
       priorities.forEach((group, order) => { if (group.length > 1) group.forEach(t => newErrors.push({ id: uuidv4(), type: 'warning', message: `Multiple transitions from '${sourceName}' have the same priority (${order}). Execution order may be non-deterministic.`, timestamp: new Date(), source: 'Validation', elementId: t.id })); });
     });
 
-    const reachable = new Set<string>();
-    const queue = states.filter(s => s.autostart).map(s => s.id);
-
-    if (queue.length === 0 && states.length > 0) {
-      queue.push(states[0].id);
-    }
-
-    queue.forEach(id => reachable.add(id));
-
-    let head = 0;
-    while (head < queue.length) {
-      const currentId = queue[head++];
-      const outgoing = transitions.filter(t => t.sourceId === currentId);
-      outgoing.forEach(t => {
-        if (!reachable.has(t.targetId)) {
-          reachable.add(t.targetId);
-          queue.push(t.targetId);
-        }
+    findUnreachableStates(states, transitions).forEach(s => {
+      newErrors.push({
+        id: uuidv4(),
+        type: 'warning',
+        message: `State '${s.name}' appears to be unreachable. Tip: Ensure there is a transition path from an initial state to this state, or mark it as 'Auto-start'.`,
+        timestamp: new Date(),
+        source: 'Validation',
+        elementId: s.id
       });
-    }
-
-    states.forEach(s => {
-      if (!reachable.has(s.id)) {
-        newErrors.push({
-          id: uuidv4(),
-          type: 'warning',
-          message: `State '${s.name}' appears to be unreachable. Tip: Ensure there is a transition path from an initial state to this state, or mark it as 'Auto-start'.`,
-          timestamp: new Date(),
-          source: 'Validation',
-          elementId: s.id
-        });
-      }
     });
 
     states.forEach(s => {
@@ -8623,21 +8711,8 @@ const ADIA = () => {
     addError('info', `Entered layer: ${state.name}`);
   }, [states, layers, currentLayerId, addError]);
 
-  const enterRequirement = useCallback((blockId: string) => {
-    const block = blocks.find(b => b.id === blockId);
-    if (!block) return;
-
-    setLayerStack(prev => [...prev, currentLayerId]);
-    setLayerPath(prev => [...prev, block.name]);
-    setCurrentLayerId(blockId);
-    setSelectedIds([]);
-    addError('info', `Entered requirement: ${block.name}`);
-  }, [blocks, currentLayerId, addError]);
-
   const enterBlock = useCallback((blockId: string) => {
-    console.log('[DEBUG_ENTER_BLOCK] called with blockId:', blockId);
     const block = blocks.find(b => b.id === blockId) ?? (canonicalSysmlRepository.definitions[blockId]?.kind === 'block' ? { id: blockId, name: canonicalSysmlRepository.definitions[blockId].name } : null);
-    console.log('[DEBUG_ENTER_BLOCK] resolved block:', block);
     if (!block) return;
 
     const nav = enterBlockContext(
@@ -8843,14 +8918,8 @@ const ADIA = () => {
   const updateState = useCallback((id: string, updates: Partial<StateData>) => {
     setStates(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s));
     if (updates.autostart) {
-      setStates(prev => {
-        const target = prev.find(s => s.id === id);
-        if (!target) return prev;
-        return prev.map(s => {
-          if (s.id !== id && s.parentId === target.parentId && s.autostart) return { ...s, autostart: false };
-          return s;
-        });
-      });
+      // one AutoStart state per region, except among parallel states (orthogonal regions are all entered)
+      setStates(prev => applyAutostartEdit(prev, id, true));
       setJunctions(prev => {
         const targetState = states.find(s => s.id === id);
         if (!targetState) return prev;
@@ -8886,10 +8955,15 @@ const ADIA = () => {
     const idSet = new Set(ids);
     if (idSet.size === 0) return;
 
-    const transaction = applyLegacySysmlDeletion({ blocks, relationships, parts, connectors }, ids);
+    const legacyTransaction = applyLegacySysmlDeletion({ blocks, relationships, parts, connectors }, ids);
+    // Elements only the canonical repository holds (requirements, use cases, ...) are invisible to the legacy
+    // projection, so the gateway's impact is reviewed too, as the explorer's Delete does.
+    const gatewayImpact = previewDeletionImpact(canonicalSysmlRepository, ids, authorizedBaselineIds, sysmlDiagramPresentations);
+    const gatewayNeedsReview = Boolean(gatewayImpact)
+      && (impactSeverity(gatewayImpact!, authorizedBaselineIds) === 'blocked' || requiresDeletionConfirmation(gatewayImpact!));
+    const transaction = gatewayNeedsReview ? { ...legacyTransaction, impact: gatewayImpact! } : legacyTransaction;
     const severity = impactSeverity(transaction.impact, authorizedBaselineIds);
     if (severity === 'blocked') {
-      const blocked = transaction.impact.blockedBaselineIds ?? transaction.impact.affectedBaselineIds;
       setSysmlDeleteConfirm({
         impact: transaction.impact,
         transaction,
@@ -8914,7 +8988,7 @@ const ADIA = () => {
       return;
     }
     applyNonStateTransaction(transaction, ids);
-  }, [blocks, relationships, parts, connectors, authorizedBaselineIds, applyNonStateTransaction]);
+  }, [blocks, relationships, parts, connectors, canonicalSysmlRepository, sysmlDiagramPresentations, authorizedBaselineIds, applyNonStateTransaction]);
 
   const deleteStates = useCallback((targetIds: string | string[], otherDeletedIds: string[] = []) => {
     const rawIds = Array.isArray(targetIds) ? targetIds : [targetIds];
@@ -9145,15 +9219,27 @@ const ADIA = () => {
     const junction = junctions.find(j => j.id === id);
     if (!junction) return;
 
+    addToHistory();
+    const removedTransitionIds = new Set(
+      transitions.filter(t => t.sourceId === id || t.targetId === id).map(t => t.id)
+    );
+    // Deleting a state's history junction also clears the History setting stored on the state.
+    const historyOwnerStateId = (junction.type === 'history' || junction.type === 'deep-history')
+      ? layers.find(l => l.junctionIds.includes(id))?.parentStateId ?? null
+      : null;
     setTransitions(prev => prev.filter(t => t.sourceId !== id && t.targetId !== id));
     setLayers(prev => prev.map(l => ({
       ...l,
-      junctionIds: l.junctionIds.filter(jid => jid !== id)
+      junctionIds: l.junctionIds.filter(jid => jid !== id),
+      transitionIds: l.transitionIds.filter(tid => !removedTransitionIds.has(tid))
     })));
     setJunctions(prev => prev.filter(j => j.id !== id));
+    if (historyOwnerStateId) {
+      setStates(prev => prev.map(s => s.id === historyOwnerStateId ? { ...s, historyType: 'none' } : s));
+    }
     setSelectedIds(prev => prev.filter(sid => sid !== id));
     addError('info', `Deleted junction: ${junction.name}`);
-  }, [junctions, addError]);
+  }, [junctions, transitions, layers, addError, addToHistory]);
 
   const createTransition = useCallback((sourceId: string, targetId: string) => {
     addToHistory();
@@ -9189,6 +9275,7 @@ const ADIA = () => {
   }, []);
 
   const deleteTransition = useCallback((id: string) => {
+    addToHistory();
     setTransitions(prev => prev.filter(t => t.id !== id));
     setLayers(prev => prev.map(l => ({
       ...l,
@@ -9196,7 +9283,27 @@ const ADIA = () => {
     })));
     setSelectedIds(prev => prev.filter(sid => sid !== id));
     addError('info', 'Deleted transition');
-  }, [addError]);
+  }, [addError, addToHistory]);
+
+  // History setting of a composite state: the history junction lives in the state's own region layer.
+  const setStateHistory = useCallback((stateId: string, newType: StateHistoryType) => {
+    const state = states.find(s => s.id === stateId);
+    if (!state) return;
+    addToHistory();
+    const next = applyStateHistoryChange(
+      { layers, junctions, transitions },
+      { id: state.id, name: state.name },
+      newType,
+      { newLayerId: uuidv4(), newJunctionId: uuidv4() },
+      { x: 60, y: 60 },
+      JUNCTION_COLOR,
+    );
+    setLayers(next.layers);
+    setJunctions(next.junctions);
+    setTransitions(next.transitions);
+    setStates(prev => prev.map(s => s.id === stateId ? { ...s, historyType: newType } : s));
+    addError('info', `History of ${state.name}: ${newType}`);
+  }, [states, layers, junctions, transitions, addError, addToHistory]);
 
   // BDD / SysML CREATION OPERATIONS
   const createSysmlElementOnActiveDiagram = useCallback((
@@ -9305,11 +9412,7 @@ const ADIA = () => {
 
     if (hasGeometric && !hasSemantic) {
       const activeDiagramId = activeSysmlDiagramId;
-      const presentation: PresentationCoordinates = {};
-      if (updates.x !== undefined || updates.ibdX !== undefined) presentation.x = updates.x ?? updates.ibdX;
-      if (updates.y !== undefined || updates.ibdY !== undefined) presentation.y = updates.y ?? updates.ibdY;
-      if (updates.width !== undefined || updates.ibdWidth !== undefined) presentation.width = updates.width ?? updates.ibdWidth;
-      if (updates.height !== undefined || updates.ibdHeight !== undefined) presentation.height = updates.height ?? updates.ibdHeight;
+      const presentation: PresentationCoordinates = presentationFromBlockGeometry(updates);
       if (isDraggingRef.current || isResizingRef.current) {
         updatePresentationDraft(id, presentation);
         const existing = pendingPresentationUpdatesRef.current.get(id) ?? {};
@@ -9328,11 +9431,7 @@ const ADIA = () => {
 
     if (hasGeometric && hasSemantic) {
       const activeDiagramId = activeSysmlDiagramId;
-      const presentation: PresentationCoordinates = {};
-      if (updates.x !== undefined) presentation.x = updates.x;
-      if (updates.y !== undefined) presentation.y = updates.y;
-      if (updates.width !== undefined) presentation.width = updates.width;
-      if (updates.height !== undefined) presentation.height = updates.height;
+      const presentation: PresentationCoordinates = presentationFromBlockGeometry(updates);
       const semanticPatch = { ...updates };
       geometricKeys.forEach(k => delete (semanticPatch as any)[k]);
       const semanticCommand = buildBlockPropertyUpdateCommand(canonicalSysmlRepository, id, semanticPatch as Record<string, unknown>);
@@ -10280,17 +10379,6 @@ const ADIA = () => {
     }
     applySysmlDeletion(transaction, 'Deleted connector');
   }, [blocks, relationships, parts, connectors, addError, addToHistory, authorizedBaselineIds, applySysmlDeletion]);
-
-  const updateConnector = useCallback((id: string, updates: Partial<ConnectorData>) => {
-    const result = handleExecuteSysmlCommand({
-      type: 'updateElement',
-      elementId: id,
-      patch: updates,
-    });
-    if (!result.committed) {
-      result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
-    }
-  }, [handleExecuteSysmlCommand, addError]);
 
   const deleteInterfaceRealization = useCallback((id: string) => {
     addToHistory();
@@ -11390,11 +11478,8 @@ const ADIA = () => {
 
     if (openCanvasSymbolDiagram(stateId)) return;
 
-    if (diagramMode === 'requirements') {
-      enterRequirement(stateId);
-    } else {
-      enterLayer(stateId);
-    }
+    // A requirements diagram has no layers to enter: nested requirements are shown on the same diagram.
+    if (diagramMode !== 'requirements') enterLayer(stateId);
   }, [enterLayer, diagramMode, states, openCanvasSymbolDiagram]);
 
   const handleTransitionClick = useCallback((e: MouseEvent<SVGPathElement>, transitionId: string) => {
@@ -11600,7 +11685,9 @@ const ADIA = () => {
     const traceabilityMatrix = buildTraceabilityMatrix(
       canonicalSysmlRepository,
       {},
-      traceabilitySnapshot.index,
+      buildTraceabilityIndex(canonicalSysmlRepository, traceabilityExternalElements),
+      traceabilityExternalElements,
+      { evidenceCurrency: simEvidenceCurrency },
     );
     const traceabilityMetrics = computeCoverageMetrics(traceabilityMatrix);
 
@@ -12457,7 +12544,7 @@ const ADIA = () => {
     setShowGlobalReportPreview(true);
     setShowReportDialog(false);
     addError('info', 'Report preview ready');
-  }, [blocks, parts, connectors, relationships, states, transitions, junctions, hmiComponents, variables, activeStates, addError, setShowReportDialog, layers, tickMs, safetyMode, canonicalSysmlRepository]);
+  }, [blocks, parts, connectors, relationships, states, transitions, junctions, hmiComponents, variables, activeStates, addError, setShowReportDialog, layers, tickMs, safetyMode, canonicalSysmlRepository, traceabilityExternalElements, simEvidenceCurrency]);
 
   // KEYBOARD SHORTCUTS
   useEffect(() => {
@@ -13333,27 +13420,45 @@ const ADIA = () => {
     );
   }), [diagramShortcuts, selectedIds, packageRelationshipTool, addError, handleBlockMouseDown, openExactDiagramById]);
 
-  /** SysML diagram frame with its `pkg [...] ... [...]` header, sized around the content. */
+  /** SysML diagram frame with its `<kind> [...] ... [...]` header, sized around the content (derived, never stored). */
   const renderPackageDiagramFrame = useCallback((): React.ReactNode => {
-    if (diagramMode !== 'package') return null;
+    if (diagramMode !== 'package' && diagramMode !== 'bdd' && diagramMode !== 'requirements') return null;
     const label = diagramFrameLabel(canonicalSysmlRepository, activeSysmlDiagramId);
     if (!label) return null;
-    const rects = [...packageNestingNodes, ...diagramShortcuts];
-    const padding = 40;
-    const minX = rects.length ? Math.min(...rects.map(r => r.x)) - padding : 40;
-    const minY = rects.length ? Math.min(...rects.map(r => r.y)) - padding - 24 : 40;
-    const maxX = rects.length ? Math.max(...rects.map(r => r.x + r.width)) + padding : 640;
-    const maxY = rects.length ? Math.max(...rects.map(r => r.y + r.height)) + padding : 440;
+    const shownBlocks = sysmlCanvasView.blocks.filter(block => {
+      if (diagramMode === 'bdd') return block.stereotype !== 'requirement';
+      if (diagramMode === 'requirements') {
+        return ['requirement', 'block', 'part', 'testCase', 'activity', 'useCase', 'stateMachine'].includes(block.stereotype)
+          && requirementsDiagramScope.visibleBlockIds.has(block.id)
+          && (block.layerId ?? 'root') === currentLayerId;
+      }
+      return true;
+    });
+    const rects = [
+      ...sysmlCanvasView.packages.map(pkg => ({ x: pkg.x, y: pkg.y, width: pkg.width, height: pkg.height })),
+      ...shownBlocks.map(block => {
+        const bounds = computeBlockDisplayBounds(block);
+        return { x: block.x, y: block.y, width: bounds.width, height: bounds.height };
+      }),
+      ...diagramShortcuts,
+    ];
+    const canvasEl = canvasRef.current;
+    const frame = diagramFrameRect(rects, {
+      width: canvasEl?.clientWidth || 900, height: canvasEl?.clientHeight || 600,
+      scale: view.scale, offsetX: view.offsetX, offsetY: view.offsetY,
+    });
+    const minX = frame.x;
+    const minY = frame.y;
     const tabWidth = label.length * 6.4 + 20;
     return (
       <g data-presentation-kind="diagramFrame" pointerEvents="none">
-        <rect x={minX} y={minY} width={maxX - minX} height={maxY - minY} fill="none" stroke="var(--sysml-block-stroke)" strokeWidth={1.2} />
+        <rect x={minX} y={minY} width={frame.width} height={frame.height} fill="none" stroke="var(--sysml-block-stroke)" strokeWidth={1.2} />
         <path d={`M ${minX} ${minY + 20} L ${minX + tabWidth - 8} ${minY + 20} L ${minX + tabWidth} ${minY + 12} L ${minX + tabWidth} ${minY}`}
           fill="none" stroke="var(--sysml-block-stroke)" strokeWidth={1.2} />
         <text x={minX + 8} y={minY + 14} fill="var(--sysml-block-text)" fontSize={11} fontFamily="monospace">{label}</text>
       </g>
     );
-  }, [diagramMode, canonicalSysmlRepository, activeSysmlDiagramId, packageNestingNodes, diagramShortcuts]);
+  }, [diagramMode, canonicalSysmlRepository, activeSysmlDiagramId, sysmlCanvasView.blocks, sysmlCanvasView.packages, diagramShortcuts, requirementsDiagramScope, currentLayerId, view.scale, view.offsetX, view.offsetY]);
 
   const renderBlocks = useCallback((ibdContextLayer: 'all' | 'frame' | 'ports' = 'all'): React.ReactNode => {
     // In BDD mode, always treat as root level (ignore currentLayerId from IBD navigation)
@@ -13374,7 +13479,7 @@ const ADIA = () => {
                 onClick={(e) => { e.stopPropagation(); setSelectedIds([block.id]); }}
                 style={{ cursor: 'move', pointerEvents: 'all' }}
               />
-              <text x={frame.x + 5} y={frame.y + 15} fill="#666" fontSize={12} fontWeight="bold">ibd [Block] {block.name}</text>
+              <text x={frame.x + 5} y={frame.y + 15} fill="#666" fontSize={12} fontWeight="bold">{diagramFrameLabel(canonicalSysmlRepository, activeSysmlDiagramId) ?? `ibd [Block] ${block.name}`}</text>
 
               {isSelected && ['nw', 'ne', 'sw', 'se'].map(h => {
                 const hx = h.includes('e') ? frame.x + frame.w : frame.x;
@@ -13490,9 +13595,7 @@ const ADIA = () => {
             e.stopPropagation();
             if (openCanvasSymbolDiagram(block.id)) return;
             const decision = resolveBlockDoubleClickAction(diagramMode, block);
-            if (decision.action === 'enterRequirement') {
-              enterRequirement(decision.targetId!);
-            } else if (decision.action === 'enterBlock' && diagramMode === 'ibd') {
+            if (decision.action === 'enterBlock' && diagramMode === 'ibd') {
               enterBlock(decision.targetId!);
             }
           }}
@@ -13519,10 +13622,10 @@ const ADIA = () => {
               {/* Requirement Specifics */}
               {block.stereotype === 'requirement' ? (
                 <g transform="translate(5, 45)">
-                  <text y={0} fill="#f97316" fontSize={10} fontWeight="bold">Id: {block.reqId}</text>
+                  <text y={0} fill="#f97316" fontSize={10} fontWeight="bold">{`id = "${block.reqId ?? ''}"`}</text>
                   <foreignObject x={0} y={5} width={Math.max(10, displayWidth - 10)} height={Math.max(10, displayHeight - 55)}>
                     <div className="text-[9px] text-[#aaa] overflow-hidden h-full">
-                      {block.description}
+                      {`text = "${block.description ?? ''}"`}
                     </div>
                   </foreignObject>
                   {/* Status Indicator */}
@@ -13602,25 +13705,15 @@ const ADIA = () => {
                       {formatLegacyProperty(prop)}{prop.defaultValue ? ` = ${prop.defaultValue}` : ''}
                     </text>
                   ))}
-                  {block.classes && block.classes.length > 0 && (
-                    <g transform={`translate(0, ${block.properties.length * 12 + 5})`}>
-                      <line x1={-5} y1={-2} x2={displayWidth - 5} y2={-2} stroke="#444" strokeWidth={1} />
-                      {block.classes.map((cls, i) => (
-                        <text key={i} y={i * 12 + 8} fill="#aaa" fontSize={10} fontFamily="monospace">
-                          {cls}
-                        </text>
-                      ))}
-                    </g>
-                  )}
                 </g>
               )}
 
-              {/* Operations Separator if needed */}
+              {/* Operations Separator if needed; every operation is drawn */}
               {block.operations.length > 0 && (
                 <>
-                  <line x1={0} y1={bodyBottom - 25} x2={displayWidth} y2={bodyBottom - 25} stroke="#444" strokeWidth={1} />
-                  <g transform={`translate(5, ${bodyBottom - 15})`}>
-                    {block.operations.slice(0, 2).map((op, i) => (
+                  <line x1={0} y1={bodyBottom - featureCompartmentHeight(block.operations.length)} x2={displayWidth} y2={bodyBottom - featureCompartmentHeight(block.operations.length)} stroke="#444" strokeWidth={1} />
+                  <g transform={`translate(5, ${bodyBottom - featureCompartmentHeight(block.operations.length) + 10})`}>
+                    {block.operations.map((op, i) => (
                       <text data-help-feature="live:App:9dbeffc76288"
                         key={`${op}-${i}`}
                         y={i * 12}
@@ -13635,12 +13728,12 @@ const ADIA = () => {
                 </>
               )}
 
-              {/* Constraints */}
+              {/* Constraints; every constraint is drawn above the operations compartment */}
               {block.constraints && block.constraints.length > 0 && (
                 <>
-                  <line x1={0} y1={bodyBottom - (block.operations.length > 0 ? 40 : 25)} x2={displayWidth} y2={bodyBottom - (block.operations.length > 0 ? 40 : 25)} stroke="#444" strokeWidth={1} />
-                  <g transform={`translate(5, ${bodyBottom - (block.operations.length > 0 ? 30 : 15)})`}>
-                    {block.constraints.slice(0, 2).map((c, i) => (
+                  <line x1={0} y1={bodyBottom - featureCompartmentHeight(block.operations.length) - featureCompartmentHeight(block.constraints.length)} x2={displayWidth} y2={bodyBottom - featureCompartmentHeight(block.operations.length) - featureCompartmentHeight(block.constraints.length)} stroke="#444" strokeWidth={1} />
+                  <g transform={`translate(5, ${bodyBottom - featureCompartmentHeight(block.operations.length) - featureCompartmentHeight(block.constraints.length) + 10})`}>
+                    {block.constraints.map((c, i) => (
                       <text key={i} y={i * 12} fill="#aaa" fontSize={10} fontFamily="monospace">{`{${c}}`}</text>
                     ))}
                   </g>
@@ -13717,7 +13810,7 @@ const ADIA = () => {
         </g>
       );
     });
-  }, [blocks, culledDiagram, sysmlCanvasView, view.scale, parts, selectedIds, pendingBddBlockId, isCreatingTransition, handleBlockMouseDown, diagramMode, currentLayerId, activeSysmlDiagramId, sysmlDiagramPresentations, connectorSource, handlePortClick, handlePortMouseDown, enterBlock, enterRequirement, handleResizeMouseDown, interfaceRealizations, transitionSourceId, requirementsDiagramScope, bddFeatureDrag, dropBddFeatureOnBlock, startBddFeatureDrag, openCanvasSymbolDiagram]);
+  }, [blocks, culledDiagram, sysmlCanvasView, view.scale, parts, selectedIds, pendingBddBlockId, isCreatingTransition, handleBlockMouseDown, diagramMode, currentLayerId, activeSysmlDiagramId, canonicalSysmlRepository, sysmlDiagramPresentations, connectorSource, handlePortClick, handlePortMouseDown, enterBlock, handleResizeMouseDown, interfaceRealizations, transitionSourceId, requirementsDiagramScope, bddFeatureDrag, dropBddFeatureOnBlock, startBddFeatureDrag, openCanvasSymbolDiagram]);
 
   const renderRelationships = useCallback((): React.ReactNode => {
     const targetRelationships = diagramMode !== 'package' && culledDiagram ? culledDiagram.visibleRelationships : sysmlCanvasView.relationships;
@@ -14507,7 +14600,53 @@ const ADIA = () => {
    * exact-ID diagrams open their exact canvas, blocks enter their IBD context,
    * and states enter their nested layer.
    */
-  const activateHierarchyNode = (id: string, kind?: string) => {
+  /** A tree row opens in the workspace: the diagram that shows the element, with the element selected. */
+  const openTreeElementInWorkspace = (id: string, contextDiagramId?: string) => {
+    const stateMachine = { states, layers, transitions, junctions, diagrams: seededStateMachineDiagrams };
+    const activeTab = diagramWorkspace.activeTab;
+    const shownDiagramId = activeTab && (activeTab.kind === 'sysmlDiagram' || activeTab.kind === 'stateMachineDiagram') ? activeTab.diagramId : undefined;
+    const target = resolveTreeOpenTarget(id, canonicalSysmlRepository, sysmlDiagramPresentations, stateMachine,
+      { preferredDiagramId: contextDiagramId, activeDiagramId: shownDiagramId });
+    if (!target) {
+      setSelectedIds([id]);
+      return;
+    }
+    if (target.kind === 'diagram') {
+      if (target.diagramId !== shownDiagramId) openExactDiagramByIdImmediate(target.diagramId, { preserveReturnStack: true });
+    } else {
+      // the canvas always moves to the region that holds the element, even when the machine is already open
+      // the state machine is on screen only in its own tab: the project's State Machine file (no diagram tab
+      // in front of it) or a State Machine diagram tab; a use case, sequence or other diagram tab is not it
+      const activeFile = workspaceFiles.find(file => file.id === activeFileId);
+      const stateMachineShown = activeTab ? activeTab.kind === 'stateMachineDiagram' : activeFile?.type === 'statemachine';
+      if (!stateMachineShown) {
+        // the project's State Machine tab, else the machine's root diagram
+        const stateMachineFile = workspaceFiles.find(file => file.type === 'statemachine');
+        const rootDiagram = seededStateMachineDiagrams.find(diagram => diagram.contextRegionId === 'root');
+        if (stateMachineFile) switchActiveFile(stateMachineFile.id);
+        else if (rootDiagram) openExactDiagramByIdImmediate(rootDiagram.id);
+      }
+      setCurrentLayerId(target.context.layerId);
+      setLayerStack(target.context.layerStack);
+      setLayerPath(target.context.layerPath);
+      // centre the canvas on the state / junction, as the error list's "go to element" does
+      const shownState = states.find(state => state.id === target.selectId);
+      const shownJunction = junctions.find(junction => junction.id === target.selectId);
+      const centre = shownState
+        ? { x: shownState.x + shownState.width / 2, y: shownState.y + shownState.height / 2 }
+        : shownJunction ? { x: shownJunction.x, y: shownJunction.y } : null;
+      if (centre) {
+        // after the State Machine tab has rendered, so the canvas measured is the one shown
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          const rect = canvasRef.current?.getBoundingClientRect();
+          if (rect) setView({ scale: 1, offsetX: rect.width / (2 * uiZoom) - centre.x, offsetY: rect.height / (2 * uiZoom) - centre.y });
+        }));
+      }
+    }
+    setSelectedIds([target.selectId]);
+  };
+
+  const activateHierarchyNode = (id: string, kind?: string, contextDiagramId?: string) => {
     const externalModelFile = workspaceFiles.find(file => file.id === id && (file.type === 'xbridges' || file.type === 'vlab'));
     if (externalModelFile) {
       openFileInTab(externalModelFile.id);
@@ -14525,8 +14664,10 @@ const ADIA = () => {
       }
     } else if (kind === 'block' || canonicalSysmlRepository.definitions[id]?.kind === 'block') {
       enterBlock(id);
-    } else if (diagramMode === "statemachine") {
-      enterLayer(id);
+    } else {
+      // a state with inner states opens its region, as a double-click on the canvas does
+      const innerRegion = layers.find(layer => layer.parentStateId === id);
+      openTreeElementInWorkspace(innerRegion?.id ?? id, contextDiagramId);
     }
   };
 
@@ -15175,13 +15316,25 @@ const ADIA = () => {
                     externalModels={hierarchyExternalModels}
                     canonicalSysmlRepository={canonicalSysmlRepository}
                     sysmlStore={sysmlStore}
-                    onSelect={(id: string, multiSelect?: boolean) => {
-                      if (!multiSelect && isDiagramHierarchyNode(id)) {
+                    onSelect={(id: string, multiSelect?: boolean, contextDiagramId?: string) => {
+                      if (multiSelect) {
+                        setSelectedIds([id]);
+                      } else if (isDiagramHierarchyNode(id)) {
                         activateHierarchyNode(id, 'diagram');
+                        setSelectedIds([id]);
+                      } else {
+                        openTreeElementInWorkspace(id, contextDiagramId);
                       }
-                      setSelectedIds([id]);
                     }}
-                    onDoubleClick={(id: string, kind?: string) => activateHierarchyNode(id, kind)}
+                    onSelectMultiple={(ids: string[]) => setSelectedIds(ids)}
+                    onOpenSpecification={(id: string) => {
+                      // select the element and bring its properties (specification) panel into view
+                      openTreeElementInWorkspace(id);
+                      setIsPropertiesCollapsed(false);
+                      if (isMobile) setMobileTab('properties');
+                    }}
+                    projectId={currentProjectName || 'ADIA_Project'}
+                    onDoubleClick={(id: string, kind?: string, contextDiagramId?: string) => activateHierarchyNode(id, kind, contextDiagramId)}
                     selectedIds={selectedIds}
                     onCommitStateMachineSnapshot={handleCommitStateMachineSnapshot}
 
@@ -15362,14 +15515,12 @@ const ADIA = () => {
           <div style={{ display: isMobile && mobileTab !== 'canvas' ? 'none' : 'flex' }} className="flex-1 flex flex-col min-w-0">
             <main className="flex-1 relative overflow-hidden bg-[#0a0a0a]">
             {(xBridgesStateId || diagramMode === 'xbridges') && (
+                <Suspense fallback={<WorkspaceLoading />}>
                 <XbridgesWorkspace
                   key={xBridgesStateId || activeFileId}
-                  initialNodes={syncXBBoundaryNodeMetadata(
-                    xBridgesStateId ? Array.from(states.find(s => s.id === xBridgesStateId)?.xBridgesModel?.nodes || []) : globalXBridgesNodes,
-                    xBridgesStateId ? Array.from(states.find(s => s.id === xBridgesStateId)?.xBridgesModel?.mappings || []) : [],
-                  )}
-                  initialEdges={xBridgesStateId ? Array.from(states.find(s => s.id === xBridgesStateId)?.xBridgesModel?.edges || []) : globalXBridgesEdges}
-                  initialMappings={xBridgesStateId ? Array.from(states.find(s => s.id === xBridgesStateId)?.xBridgesModel?.mappings || []) : []}
+                  initialNodes={xBridgesWorkspaceInputs.initialNodes}
+                  initialEdges={xBridgesWorkspaceInputs.initialEdges}
+                  initialMappings={xBridgesWorkspaceInputs.initialMappings}
                   availableVariables={variables}
                   tickMs={tickMs}
                   onLaunchDoe={() => toggleWindow('doe')}
@@ -15386,19 +15537,32 @@ const ADIA = () => {
                   workspaceFiles={workspaceFiles}
                   isSmSimulating={isRunning}
                   simulationTime={simulationTime}
+                  renderRequirementAssignments={xBridgesStateId ? undefined : (blockId: string) => (
+                    <RequirementAssignmentsPanel
+                      repository={canonicalSysmlRepository}
+                      elementName={String(globalXBridgesNodes.find((n: any) => n.id === blockId)?.data?.label || blockId)}
+                      targets={elementSimTargets(simVerificationProject, { engine: 'xb', blockId })}
+                      onRepositoryChange={handleSimVerificationRepositoryChange}
+                      newId={uuidv4}
+                    />
+                  )}
                 />
+                </Suspense>
               )}
 
               {diagramMode === 'plantuml' && (
+                <Suspense fallback={<WorkspaceLoading />}>
                 <PlantUmlWorkspace
                   diagram={plantUmlDiagram}
                   onChange={setPlantUmlDiagram}
                   onSave={() => addError('info', 'PlantUML diagram saved in the current project session.')}
                   onExport={exportPlantUmlSource}
                 />
+                </Suspense>
               )}
 
               {diagramMode === 'useCase' && (
+                <Suspense fallback={<WorkspaceLoading />}>
                 <UseCaseWorkspace
                   key={activeSysmlDiagramId}
                   repository={canonicalSysmlRepository}
@@ -15409,9 +15573,11 @@ const ADIA = () => {
                   onSelect={setSelectedIds}
                   authorizedBaselineIds={authorizedBaselineIds}
                 />
+                </Suspense>
               )}
 
               {diagramMode === 'activity' && (
+                <Suspense fallback={<WorkspaceLoading />}>
                 <ActivityWorkspace
                   key={activeSysmlDiagramId}
                   repository={canonicalSysmlRepository}
@@ -15422,9 +15588,11 @@ const ADIA = () => {
                   onSelect={setSelectedIds}
                   authorizedBaselineIds={authorizedBaselineIds}
                 />
+                </Suspense>
               )}
 
               {diagramMode === 'sequence' && (
+                <Suspense fallback={<WorkspaceLoading />}>
                 <SequenceWorkspace
                   key={activeSysmlDiagramId}
                   repository={canonicalSysmlRepository}
@@ -15437,9 +15605,11 @@ const ADIA = () => {
                   endpoints={externalEndpointContext}
                   transitions={transitions}
                 />
+                </Suspense>
               )}
 
               {diagramMode === 'vlab' && (
+                <Suspense fallback={<WorkspaceLoading />}>
                 <VLabWorkspace
                   nodes={vlabNodes}
                   edges={vlabEdges}
@@ -15451,6 +15621,15 @@ const ADIA = () => {
                   }}
                   onBack={() => setDiagramMode('statemachine')}
                   initialSelectedNodeId={vlabSelectedNodeId}
+                  renderRequirementAssignments={(blockId: string) => (
+                    <RequirementAssignmentsPanel
+                      repository={canonicalSysmlRepository}
+                      elementName={String(vlabNodes.find((n: any) => n.id === blockId)?.data?.label || blockId)}
+                      targets={elementSimTargets(simVerificationProject, { engine: 'vlab', blockId })}
+                      onRepositoryChange={handleSimVerificationRepositoryChange}
+                      newId={uuidv4}
+                    />
+                  )}
                   onNavigateToXbridges={(nodeId?: string) => {
                     const findMatchingNode = (targetNodes: any[], sourceNodeId?: string): any => {
                       if (!sourceNodeId) return null;
@@ -15494,9 +15673,11 @@ const ADIA = () => {
                     setTimeout(() => setXBridgesSelectedNodeId(null), 1000);
                   }}
                 />
+                </Suspense>
               )}
 
               {diagramMode === 'hil' && (
+                <Suspense fallback={<WorkspaceLoading />}>
                 <HILWorkspace
                   config={hilConfig}
                   onChangeConfig={setHilConfig}
@@ -15511,9 +15692,11 @@ const ADIA = () => {
                   tickMs={tickMs}
                   onBack={() => setDiagramMode('statemachine')}
                 />
+                </Suspense>
               )}
 
               {diagramMode === 'entropy' && (
+                <Suspense fallback={<WorkspaceLoading />}>
                 <EntropyWorkspace
                   initialNodes={entropyNodes}
                   initialEdges={entropyEdges}
@@ -15540,6 +15723,7 @@ const ADIA = () => {
                     ports: blocks.flatMap(b => b.ports || []),
                   }}
                 />
+                </Suspense>
               )}
 
               {!xBridgesStateId && !['xbridges', 'vlab', 'hil', 'entropy', 'useCase', 'activity', 'sequence'].includes(diagramMode) && (
@@ -16526,11 +16710,11 @@ const ADIA = () => {
 
                   <div className="flex items-center gap-2">
                     <Checkbox data-help-feature="app-state-isTerminalState" data-help-source="src/App.tsx"
-                      checked={selectedState.isTerminalState || false}
-                      onCheckedChange={(checked) => updateState(selectedState.id, { isTerminalState: checked as boolean })}
+                      checked={selectedState.isTerminalState === true || selectedState.isTerminal === true}
+                      onCheckedChange={(checked) => updateState(selectedState.id, checked ? { isTerminalState: true } : { isTerminalState: false, isTerminal: undefined })}
                       id="isTerminalState"
                     />
-                    <Label htmlFor="isTerminalState" className="text-blue-400">Is Terminal/Safe State</Label>
+                    <Label htmlFor="isTerminalState" className="text-blue-400">Is Terminal State</Label>
                   </div>
 
                   <div className="flex items-center gap-2">
@@ -16666,20 +16850,8 @@ const ADIA = () => {
                   <div>
                     <Label>History</Label>
                     <select data-help-feature="app-state-historyType" data-help-source="src/App.tsx"
-                      value={selectedState.historyType || 'none'}
-                      onChange={(e) => {
-                        const newType = e.target.value as 'none' | 'shallow' | 'deep';
-                        updateState(selectedState.id, { historyType: newType });
-
-                        const existing = junctions.find(j => j.parentId === selectedState.id && (j.type === 'history' || j.type === 'deep-history'));
-                        if (existing) {
-                          deleteJunction(existing.id);
-                        }
-
-                        if (newType !== 'none') {
-                          createJunction(selectedState.x + 30, selectedState.y + 30, newType === 'shallow' ? 'history' : 'deep-history', selectedState.id);
-                        }
-                      }}
+                      value={getStateHistoryType(layers, junctions, selectedState.id)}
+                      onChange={(e) => setStateHistory(selectedState.id, e.target.value as StateHistoryType)}
                       className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1"
                     >
                       <option value="none">None</option>
@@ -16808,16 +16980,12 @@ const ADIA = () => {
                     />
                   </div>
 
-                  <StateRequirementTraceability
-                    stateId={selectedState.id}
-                    stateName={selectedState.name}
-                    canonicalRepository={canonicalSysmlRepository}
-                    onLinkRequirement={(requirementId, kind) => {
-                      createRelationship(selectedState.id, requirementId, kind);
-                    }}
-                    onUnlinkRelationship={(relationshipId) => {
-                      deleteRelationship(relationshipId);
-                    }}
+                  <RequirementAssignmentsPanel
+                    repository={canonicalSysmlRepository}
+                    elementName={selectedState.name}
+                    targets={elementSimTargets(simVerificationProject, { engine: 'sm', stateId: selectedState.id })}
+                    onRepositoryChange={handleSimVerificationRepositoryChange}
+                    newId={uuidv4}
                   />
 
                   <Button data-help-feature="app-state-layer" data-help-source="src/App.tsx"
@@ -16978,177 +17146,40 @@ const ADIA = () => {
                         <>
                           <div><Label>Req ID</Label><Input data-help-feature="app-block-reqId" data-help-source="src/App.tsx" value={selectedBlock.reqId || ''} onChange={(e) => updateBlock(selectedBlock.id, { reqId: e.target.value })} className="mt-1" /></div>
                           <div><Label>Status</Label>
-                            <select data-help-feature="app-requirement-status" data-help-source="src/App.tsx" value={selectedBlock.status || ''} onChange={(e) => {
-                              const validation = validateLegacyRequirementStatusTransition(blocks, relationships, selectedBlock.id, e.target.value);
-                              if (!validation.valid) addError('error', `Invalid requirement status: ${validation.reason}`);
-                              else updateBlock(selectedBlock.id, { status: e.target.value });
-                            }} className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1">
-                              <option value="Draft">Draft</option>
-                              <option value="Approved">Approved</option>
-                              <option value="Verified">Verified</option>
-                              <option value="Implemented">Implemented</option>
-                              <option value="Failed">Failed</option>
-                              <option value="Stale">Stale</option>
-                              <option value="Retired">Retired</option>
+                            <select data-help-feature="app-requirement-status" data-help-source="src/App.tsx" value={selectedBlock.status || 'draft'} onChange={(e) => updateBlock(selectedBlock.id, { status: e.target.value })} className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1">
+                              <option value="draft">Draft</option>
+                              <option value="approved">Approved</option>
+                              <option value="implemented">Implemented</option>
+                              <option value="verified">Verified</option>
+                              <option value="failed">Failed</option>
+                              <option value="stale">Stale</option>
+                              <option value="retired">Retired</option>
                             </select>
                           </div>
                           <div><Label>Priority</Label>
                             <select data-help-feature="app-block-priority" data-help-source="src/App.tsx" value={selectedBlock.priority || ''} onChange={(e) => updateBlock(selectedBlock.id, { priority: e.target.value })} className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1">
-                              <option value="High">High</option>
-                              <option value="Medium">Medium</option>
-                              <option value="Low">Low</option>
-                              <option value="Critical">Critical</option>
+                              <option value="" disabled>Not set</option>
+                              <option value="high">High</option>
+                              <option value="medium">Medium</option>
+                              <option value="low">Low</option>
+                              <option value="critical">Critical</option>
                             </select>
                           </div>
                           <div><Label>Description</Label><textarea data-help-feature="app-block-description" data-help-source="src/App.tsx" value={selectedBlock.description || ''} onChange={(e) => updateBlock(selectedBlock.id, { description: e.target.value })} className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#f97316]" /></div>
                           <div>
                             <Label>Risk</Label>
-                            <select data-help-feature="app-block-risk" data-help-source="src/App.tsx" value={selectedBlock.risk || 'Medium'} onChange={(e) => updateBlock(selectedBlock.id, { risk: e.target.value })} className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1">
-                              <option value="High">High</option>
-                              <option value="Medium">Medium</option>
-                              <option value="Low">Low</option>
-                              <option value="Critical">Critical</option>
-                            </select>
-                          </div>
-                          <div>
-                            <Label>Verification Method</Label>
-                            <select data-help-feature="app-block-verificationMethod" data-help-source="src/App.tsx" value={selectedBlock.verificationMethod || 'Test'} onChange={(e) => updateBlock(selectedBlock.id, { verificationMethod: e.target.value })} className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1">
-                              <option value="Test">Test</option>
-                              <option value="Analysis">Analysis</option>
-                              <option value="Inspection">Inspection</option>
-                              <option value="Demonstration">Demonstration</option>
+                            <select data-help-feature="app-block-risk" data-help-source="src/App.tsx" value={selectedBlock.risk || ''} onChange={(e) => updateBlock(selectedBlock.id, { risk: e.target.value })} className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1">
+                              <option value="" disabled>Not set</option>
+                              <option value="high">High</option>
+                              <option value="medium">Medium</option>
+                              <option value="low">Low</option>
+                              <option value="critical">Critical</option>
                             </select>
                           </div>
                           <div><Label>Source</Label><Input data-help-feature="app-block-source" data-help-source="src/App.tsx" value={selectedBlock.source || ''} onChange={(e) => updateBlock(selectedBlock.id, { source: e.target.value })} className="mt-1" /></div>
                           <div><Label>Version</Label><Input data-help-feature="app-block-version" data-help-source="src/App.tsx" value={selectedBlock.version || '1.0'} onChange={(e) => updateBlock(selectedBlock.id, { version: e.target.value })} className="mt-1" /></div>
                           <div><Label>Rationale</Label><textarea data-help-feature="app-block-rationale" data-help-source="src/App.tsx" value={selectedBlock.rationale || ''} onChange={(e) => updateBlock(selectedBlock.id, { rationale: e.target.value })} className="w-full h-16 bg-[#1a1a1a] border border-[#333] rounded text-sm text-[#e0e0e0] p-2 mt-1" /></div>
                           <div><Label>Baseline ID</Label><Input data-help-feature="app-block-baselineId" data-help-source="src/App.tsx" value={selectedBlock.baselineId || ''} onChange={(e) => updateBlock(selectedBlock.id, { baselineId: e.target.value || undefined })} className="mt-1" /></div>
-
-                          <div className="mt-4 pt-3 border-t border-[#333]">
-                            <Label className="flex items-center justify-between text-xs font-semibold text-[#aaa] mb-2">
-                              <span>Attached PDFs</span>
-                              <span className="text-[10px] text-[#666]">({(selectedBlock.attachedFiles || []).length})</span>
-                            </Label>
-
-                            <div className="space-y-2 mb-2 max-h-40 overflow-y-auto">
-                              {(!selectedBlock.attachedFiles || selectedBlock.attachedFiles.length === 0) ? (
-                                <div className="text-xs text-[#666] italic py-1">No PDF files attached.</div>
-                              ) : (
-                                selectedBlock.attachedFiles.map((file, idx) => (
-                                  <div key={idx} className="flex items-center justify-between bg-[#0a0a0a] p-2 rounded border border-[#333] gap-2">
-                                    <div className="flex items-center gap-2 overflow-hidden flex-1">
-                                      <FileText size={14} className="text-[#f97316] shrink-0" />
-                                      <span className="text-xs text-[#e0e0e0] truncate" title={file.name}>
-                                        {file.name}
-                                      </span>
-                                    </div>
-                                    <div className="flex items-center gap-1 shrink-0">
-                                      <button data-help-feature="app-requirement-pdf-view" data-help-source="src/App.tsx"
-                                        onClick={() => {
-                                          try {
-                                            const base64Parts = file.content.split(',');
-                                            const mime = base64Parts[0].match(/:(.*?);/)?.[1] || 'application/pdf';
-                                            const byteString = atob(base64Parts[1]);
-                                            const ab = new ArrayBuffer(byteString.length);
-                                            const ia = new Uint8Array(ab);
-                                            for (let i = 0; i < byteString.length; i++) {
-                                              ia[i] = byteString.charCodeAt(i);
-                                            }
-                                            const blob = new Blob([ab], { type: mime });
-                                            const url = URL.createObjectURL(blob);
-                                            window.open(url, '_blank');
-                                          } catch (err) {
-                                            console.error('Error opening PDF:', err);
-                                            addError('error', 'Failed to open PDF.');
-                                          }
-                                        }}
-                                        title="View PDF"
-                                        className="p-1 hover:bg-[#222] rounded text-[#aaa] hover:text-[#f97316] transition-colors"
-                                      >
-                                        <Eye size={12} />
-                                      </button>
-                                      <button data-help-feature="app-requirement-pdf-download" data-help-source="src/App.tsx"
-                                        onClick={() => {
-                                          try {
-                                            const base64Parts = file.content.split(',');
-                                            const mime = base64Parts[0].match(/:(.*?);/)?.[1] || 'application/pdf';
-                                            const byteString = atob(base64Parts[1]);
-                                            const ab = new ArrayBuffer(byteString.length);
-                                            const ia = new Uint8Array(ab);
-                                            for (let i = 0; i < byteString.length; i++) {
-                                              ia[i] = byteString.charCodeAt(i);
-                                            }
-                                            const blob = new Blob([ab], { type: mime });
-                                            const url = URL.createObjectURL(blob);
-                                            const link = document.createElement('a');
-                                            link.href = url;
-                                            link.download = file.name;
-                                            link.click();
-                                            URL.revokeObjectURL(url);
-                                          } catch (err) {
-                                            console.error('Error downloading PDF:', err);
-                                            addError('error', 'Failed to download PDF.');
-                                          }
-                                        }}
-                                        title="Download PDF"
-                                        className="p-1 hover:bg-[#222] rounded text-[#aaa] hover:text-[#f97316] transition-colors"
-                                      >
-                                        <Download size={12} />
-                                      </button>
-                                      <button data-help-feature="app-requirement-pdf-remove" data-help-source="src/App.tsx"
-                                        onClick={() => {
-                                          const currentFiles = selectedBlock.attachedFiles || [];
-                                          const updatedFiles = currentFiles.filter((_, i) => i !== idx);
-                                          updateBlock(selectedBlock.id, { attachedFiles: updatedFiles });
-                                          addError('info', `Removed PDF: ${file.name}`);
-                                        }}
-                                        title="Remove PDF"
-                                        className="p-1 hover:bg-[#222] rounded text-[#aaa] hover:text-red-400 transition-colors"
-                                      >
-                                        <Trash2 size={12} />
-                                      </button>
-                                    </div>
-                                  </div>
-                                ))
-                              )}
-                            </div>
-
-                            <div>
-                              <input data-help-feature="app-requirement-pdf-remove" data-help-source="src/App.tsx"
-                                type="file"
-                                id="req-pdf-upload"
-                                accept=".pdf"
-                                className="hidden"
-                                onChange={(e) => {
-                                  const file = e.target.files?.[0];
-                                  if (!file) return;
-                                  if (file.type !== 'application/pdf' && !file.name.endsWith('.pdf')) {
-                                    addError('error', 'Only PDF files are supported.');
-                                    return;
-                                  }
-                                  const reader = new FileReader();
-                                  reader.onload = (event) => {
-                                    const base64Content = event.target?.result as string;
-                                    const currentFiles = selectedBlock.attachedFiles || [];
-                                    const updatedFiles = [...currentFiles, { name: file.name, content: base64Content }];
-                                    updateBlock(selectedBlock.id, { attachedFiles: updatedFiles });
-                                    addError('info', `Attached PDF: ${file.name}`);
-                                  };
-                                  reader.readAsDataURL(file);
-                                  e.target.value = '';
-                                }}
-                              />
-                              <Button data-help-feature="app-requirement-pdf-attach" data-help-source="src/App.tsx"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => document.getElementById('req-pdf-upload')?.click()}
-                                className="w-full flex items-center justify-center gap-2 border-[#333] hover:border-[#f97316] hover:bg-[#f97316]/10 text-xs mt-1"
-                              >
-                                <Upload size={12} />
-                                Attach PDF File
-                              </Button>
-                            </div>
-                          </div>
                         </>
                       )}
                       {activePropTab === 'assign' && (
@@ -17282,7 +17313,7 @@ const ADIA = () => {
                   )}
                   {selectedBlock.stereotype === 'block' && (
                     <div className="space-y-2 border-t border-[#333] pt-3">
-                      <div><Label>Namespace</Label><Input data-help-feature="app-block-namespace" data-help-source="src/App.tsx" value={(selectedBlock.namespace || []).join('::')} onChange={(e) => updateBlock(selectedBlock.id, { namespace: e.target.value.split('::').map(value => value.trim()).filter(Boolean) })} className="mt-1" /></div>
+                      <div><Label>Namespace</Label><Input data-help-feature="app-block-namespace" data-help-source="src/App.tsx" value={(selectedBlock.namespace || []).join('::')} readOnly title="Derived from the owning packages" className="mt-1" /></div>
                       <label className="flex items-center gap-2 text-xs text-[#aaa]"><input data-help-feature="app-block-isAbstract" data-help-source="src/App.tsx" type="checkbox" checked={Boolean(selectedBlock.isAbstract)} onChange={(e) => updateBlock(selectedBlock.id, { isAbstract: e.target.checked })} /> Abstract</label>
                       <label className="flex items-center gap-2 text-xs text-[#aaa]"><input data-help-feature="app-block-isLeaf" data-help-source="src/App.tsx" type="checkbox" checked={Boolean(selectedBlock.isLeaf)} onChange={(e) => updateBlock(selectedBlock.id, { isLeaf: e.target.checked })} /> Leaf</label>
                     </div>
@@ -17413,15 +17444,6 @@ const ADIA = () => {
                       onChange={(e) => updateBlock(selectedBlock.id, { constraints: e.target.value.split('\n').filter(s => s) })}
                       className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#f97316]"
                       placeholder="x > 0"
-                    />
-                  </div>
-                  <div>
-                    <Label>Nested Classes / Parts</Label>
-                    <textarea data-help-feature="app-block-classes" data-help-source="src/App.tsx"
-                      value={(selectedBlock.classes || []).join('\n')}
-                      onChange={(e) => updateBlock(selectedBlock.id, { classes: e.target.value.split('\n').filter(s => s) })}
-                      className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#f97316]"
-                      placeholder="ClassName : Type"
                     />
                   </div>
                   <div>
@@ -17723,19 +17745,8 @@ const ADIA = () => {
                 </>
               ) : selectedConnector ? (
                 <>
-                  <IbdConnectorEditor
-                    connector={{
-                      id: selectedConnector.id,
-                      kind: selectedConnector.kind || 'assembly',
-                      ownerId: currentLayerId,
-                      sourcePortId: `${selectedConnector.sourcePartId}::${selectedConnector.sourcePortId}`,
-                      targetPortId: `${selectedConnector.targetPartId}::${selectedConnector.targetPortId}`,
-                      itemFlowId: selectedConnector.itemFlow,
-                      sourceParameterId: (selectedConnector as any).sourceParameterId,
-                      targetParameterId: (selectedConnector as any).targetParameterId,
-                      itemProperty: (selectedConnector as any).itemProperty,
-                      itemUnit: (selectedConnector as any).itemUnit,
-                    }}
+                  {editedConnector && <IbdConnectorEditor
+                    connector={editedConnector}
                     availablePorts={[
                       ...((blocksById.get(currentLayerId)?.ports ?? []).map(port => ({
                         id: `${currentLayerId}::${port.id}`,
@@ -17754,26 +17765,16 @@ const ADIA = () => {
                     definitions={canonicalSysmlRepository.definitions}
                     diagnostics={canonicalSysmlRepository.connectors[selectedConnector.id] ? validateConnector(canonicalSysmlRepository, selectedConnector.id) : []}
                     onChange={(updatedConn) => {
-                      const [srcPart, srcPort] = updatedConn.sourcePortId.split('::');
-                      const [tgtPart, tgtPort] = updatedConn.targetPortId.split('::');
-                      updateConnector(selectedConnector.id, {
-                        kind: updatedConn.kind,
-                        sourcePartId: srcPart || selectedConnector.sourcePartId,
-                        sourcePortId: srcPort || selectedConnector.sourcePortId,
-                        targetPartId: tgtPart || selectedConnector.targetPartId,
-                        targetPortId: tgtPort || selectedConnector.targetPortId,
-                        itemFlow: updatedConn.itemFlowId,
-                        sourceParameterId: updatedConn.sourceParameterId,
-                        targetParameterId: updatedConn.targetParameterId,
-                        itemProperty: updatedConn.itemProperty,
-                        itemUnit: updatedConn.itemUnit,
-                      } as any);
+                      const plan = buildConnectorUpdateCommand(canonicalSysmlRepository, selectedConnector.id, updatedConn);
+                      if (!plan.ok) {
+                        plan.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
+                        return;
+                      }
+                      if (!plan.command) return;
+                      const result = handleExecuteSysmlCommand(plan.command);
+                      if (!result.committed) result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));
                     }}
-                  />
-                  <div className="mt-2">
-                    <Label>Label (Text)</Label>
-                    <Input data-help-feature="app-connector-label" data-help-source="src/App.tsx" value={selectedConnector.label || ''} onChange={(e) => updateConnector(selectedConnector.id, { label: e.target.value })} className="mt-1" placeholder="e.g., Control Link" />
-                  </div>
+                  />}
                   <Button data-help-feature="app-connector-delete" data-help-source="src/App.tsx" variant="outline" size="sm" onClick={() => deleteConnector(selectedConnector.id)} className="w-full border-red-800 text-red-400 hover:bg-red-950/30">Delete Connector</Button>
                 </>
               ) : selectedInterfaceRealization ? (
@@ -17860,12 +17861,22 @@ const ADIA = () => {
                   </div>
 
                   <div className="flex items-center gap-2 mt-3 mb-2">
-                    <Checkbox data-help-feature="app-transition-isInternal" data-help-source="src/App.tsx"
-                      checked={!!selectedTransition.isInternal}
-                      onCheckedChange={(checked) => updateTransition(selectedTransition.id, { isInternal: checked as boolean })}
-                      id="isInternal"
-                    />
-                    <Label htmlFor="isInternal" className="text-[#f97316]">Internal / Local Transition</Label>
+                    {(() => {
+                      // Internal (self) and local (descendant target) are the only kinds the flag can mean.
+                      const canBeInternal = canTransitionBeInternal(selectedTransition, states, layers);
+                      return (
+                        <span className="flex items-center gap-2"
+                          title={canBeInternal ? undefined : 'Only a transition to its own state (internal) or to one of its sub-states (local) can be internal or local.'}>
+                          <Checkbox data-help-feature="app-transition-isInternal" data-help-source="src/App.tsx"
+                            checked={!!selectedTransition.isInternal}
+                            disabled={!canBeInternal && !selectedTransition.isInternal}
+                            onCheckedChange={(checked) => updateTransition(selectedTransition.id, { isInternal: checked as boolean })}
+                            id="isInternal"
+                          />
+                          <Label htmlFor="isInternal" className="text-[#f97316]">Internal / Local Transition</Label>
+                        </span>
+                      );
+                    })()}
                   </div>
 
                   <div className="space-y-3 p-3 bg-[#1a1a1a] rounded-lg border border-[#222]">
@@ -18771,12 +18782,14 @@ const ADIA = () => {
             onClose={() => toggleWindow('rtm')}
             onUpdate={updateManagedWindow}
           >
+            <div className="flex h-full min-h-0 flex-col">
+            <div className="min-h-0 flex-1">
             <CanonicalTraceabilityMatrix
               repository={canonicalSysmlRepository}
-              externalElements={[
-                ...states.map(state => ({ id: state.id, name: state.name, kind: 'state' })),
-                ...junctions.map(junction => ({ id: junction.id, name: junction.name, kind: junction.type ?? 'pseudostate' })),
-              ]}
+              externalElements={traceabilityExternalElements}
+              evidenceCurrency={simEvidenceCurrency}
+              onSimulate={setSimVerificationRequirementId}
+              onRunAllSimulations={handleRunAllSimulations}
               onNavigate={(elementId) => {
                 setSelectedIds([elementId]);
                 if (blocks.some(block => block.id === elementId && block.stereotype === 'requirement')) setDiagramMode('requirements');
@@ -18784,6 +18797,20 @@ const ADIA = () => {
                 else if (parts.some(part => part.id === elementId) || connectors.some(connector => connector.id === elementId)) setDiagramMode('ibd');
               }}
             />
+            </div>
+            {simVerificationRequirementId && canonicalSysmlRepository.requirements[simVerificationRequirementId] && (
+              <div className="max-h-[50%] overflow-auto border-t border-[var(--border-default)]">
+                <button type="button" aria-label="Close simulation verification" onClick={() => setSimVerificationRequirementId(null)} className="float-right m-2 rounded border border-neutral-700 px-2 py-0.5 text-xs text-neutral-300">Close</button>
+                <SimVerificationPanel
+                  repository={canonicalSysmlRepository}
+                  requirementId={simVerificationRequirementId}
+                  project={simVerificationProject}
+                  onRepositoryChange={handleSimVerificationRepositoryChange}
+                  newId={uuidv4}
+                />
+              </div>
+            )}
+            </div>
           </FloatingWindow>
         )}
 
@@ -18810,6 +18837,7 @@ const ADIA = () => {
             onClose={() => toggleWindow('hmi')}
             onUpdate={updateManagedWindow}
           >
+            <Suspense fallback={<WorkspaceLoading />}>
             <HmiWorkspace data-help-topic="hmi_dashboard"
               variables={variables}
               components={hmiComponents}
@@ -18830,6 +18858,7 @@ const ADIA = () => {
               }}
               onClose={() => toggleWindow('hmi')}
             />
+            </Suspense>
           </FloatingWindow>
         )}
 

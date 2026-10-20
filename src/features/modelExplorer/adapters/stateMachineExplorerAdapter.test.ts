@@ -285,7 +285,58 @@ describe('stateMachineExplorerAdapter', () => {
     expect(harness.snapshot!.states[0]).toMatchObject({
       isXBridges: true,
       parentId: 'root',
-      regionId: 'root',
+      regionId: null,
     });
+  });
+
+  it('creates a state like the canvas does: in its region, without a region label', () => {
+    const harness = createSmHarness();
+    const adapter = createStateMachineExplorerAdapter(harness);
+    expect(adapter.execute({ type: 'createElement', ownerId: 'root', elementKind: 'state', name: 'Idle' }).committed).toBe(true);
+    expect(harness.snapshot!.states[0]).toMatchObject({ name: 'Idle', parentId: 'root', regionId: null });
+  });
+
+  it('sets autostart and priority like the canvas: first state starts the region, priority steps by 10', () => {
+    const harness = createSmHarness();
+    const adapter = createStateMachineExplorerAdapter(harness);
+    for (const name of ['A', 'B', 'C']) adapter.execute({ type: 'createElement', ownerId: 'root', elementKind: 'state', name });
+    const [a, b, c] = harness.snapshot!.states;
+    expect([a.autostart, b.autostart, c.autostart]).toEqual([true, false, false]);
+    expect([a.priority, b.priority, c.priority]).toEqual([10, 20, 30]);
+  });
+
+  it('numbers a new transition after the source\'s outgoing transitions, like the canvas', () => {
+    const harness = createSmHarness();
+    const adapter = createStateMachineExplorerAdapter(harness);
+    for (const name of ['A', 'B']) adapter.execute({ type: 'createElement', ownerId: 'root', elementKind: 'state', name });
+    const [a, b] = harness.snapshot!.states;
+    const make = (from: string, to: string) => adapter.execute({ type: 'createRelationship', relationshipKind: 'transition', sourceId: from, targetId: to } as any);
+    make(a.id, b.id);
+    make(b.id, a.id);
+    make(a.id, b.id);
+    make(a.id, a.id);
+    expect(harness.snapshot!.transitions.map(t => [t.sourceId === a.id ? 'A' : 'B', t.order])).toEqual([['A', 0], ['B', 0], ['A', 1], ['A', 2]]);
+  });
+
+  it('creates a junction with the canvas defaults', () => {
+    const harness = createSmHarness();
+    const adapter = createStateMachineExplorerAdapter(harness);
+    adapter.execute({ type: 'createElement', ownerId: 'root', elementKind: 'junction' });
+    expect(harness.snapshot!.junctions[0]).toMatchObject({ name: 'J1', color: '#ff9900', parentId: null, type: 'junction', autostart: false });
+  });
+
+  it('offers no New Region on a state that already has one', () => {
+    const harness = createSmHarness();
+    const adapter = createStateMachineExplorerAdapter(harness);
+    adapter.execute({ type: 'createElement', ownerId: 'root', elementKind: 'state', name: 'P' });
+    const p = harness.snapshot!.states[0];
+    const region = () => adapter.capabilities([p.id]).find(c => c.id === 'create:region')!;
+    expect(region().enabled).toBe(true);
+    expect(adapter.execute({ type: 'createElement', ownerId: p.id, elementKind: 'region' }).committed).toBe(true);
+    expect(region().enabled).toBe(false);
+    const again = adapter.execute({ type: 'createElement', ownerId: p.id, elementKind: 'region' });
+    expect(again.committed).toBe(false);
+    expect(again.diagnostics[0].code).toBe('STATE_REGION_EXISTS');
+    expect(harness.snapshot!.layers.filter(l => l.parentStateId === p.id)).toHaveLength(1);
   });
 });

@@ -13,6 +13,11 @@ import { calculateSeparatedRelationshipPath } from '../../utils/sysmlConnectionR
 import { resolveSysmlReferenceLabel, sysmlObjectLabel } from '../../features/sysml/sysmlDisplayLabel';
 import { edgeBadgeLabel } from '../../features/sysml/edgeNotation';
 import { computeBlockDisplayBounds } from './blockLayout';
+import { buildTraceabilityMatrix, computeCoverageMetrics } from '../../engine/sysml/rtm';
+import { renderRtmSection } from '../../features/reporting/systemReport/rtmSection';
+import { ReportNumbering } from '../../features/reporting/systemReport/numbering';
+import { buildSystemReport } from '../../features/reporting/systemReport/buildSystemReport';
+import { richReportInput } from '../../features/reporting/systemReport/systemReport.fixture';
 
 // Exercise the actual legacy render callback without booting unrelated editors,
 // workers and persistence in the monolithic App. All geometry/label code is real.
@@ -108,27 +113,20 @@ describe('legacy App SysML labels', () => {
       { stateObj: undefined, resolvedIds: [uuid(4)], sysmlObjectLabel });
     expect(value).toBe('Deleted state: State');
   });
+  // The report export moved from App.tsx to features/reporting/systemReport (co-work 4fa01c4);
+  // these guarantees are now checked on the builder that renders the rows.
   it('keeps internal references out of the exported traceability report row', () => {
-    const row = {
-      requirement: { id: uuid(0), requirementId: 'REQ-1', name: ' ' },
-      status: 'unresolved', changeKind: 'unchanged', coveringBlocks: [],
-      blocks: [uuid(1)], parts: [], verificationCases: [], evidence: [], unresolvedEndpointIds: [uuid(2)],
-    };
-    const repository = createEmptyRepository();
-    const links = evaluateNode(node => ts.isVariableDeclaration(node)
-      && node.name.getText(sourceFile) === 'links'
-      && node.initializer?.getText(sourceFile).includes('row.coveringBlocks') === true,
-    { row, canonicalSysmlRepository: repository, resolveSysmlReferenceLabel, sysmlObjectLabel });
-    const unresolved = evaluateNode(node => ts.isVariableDeclaration(node)
-      && node.name.getText(sourceFile) === 'unresolved'
-      && node.initializer?.getText(sourceFile).includes('row.unresolvedEndpointIds') === true,
-    { row });
-    const html = evaluateNode(node => ts.isTemplateExpression(node)
-      && node.getText(sourceFile).includes('escapeHtml(unresolved)'),
-    { row, links, unresolved, escapeHtml: String, sysmlObjectLabel });
-    expect(html).toContain('REQ-1 · Requirement');
-    expect(html).toContain('Block');
-    expect(html).toContain('Referenced element is unavailable');
+    const repo = createEmptyRepository();
+    repo.requirements[uuid(0)] = { id: uuid(0), name: ' ', namespace: [], kind: 'requirement', requirementId: 'REQ-1', text: 't', status: 'draft', version: '1' } as any;
+    repo.definitions[uuid(1)] = { id: uuid(1), name: ' ', namespace: [], kind: 'block', isAbstract: false, isLeaf: false, properties: [], ports: [], operations: [], constraints: [] } as any;
+    repo.relationships.s = { id: 's', kind: 'satisfy', sourceId: uuid(1), targetId: uuid(0) };
+    repo.relationships.t = { id: 't', kind: 'trace', sourceId: uuid(0), targetId: uuid(2) };
+    const matrix = buildTraceabilityMatrix(repo);
+    expect(matrix.rows[0].unresolvedEndpointIds).toEqual([uuid(2)]);
+    const html = renderRtmSection({ repository: repo, matrix, metrics: computeCoverageMetrics(matrix), modelHash: 'h', repositoryRevision: repo.revision }, new ReportNumbering());
+    const text = html.replace(/<[^>]+>/g, ' ');
+    expect(text).toMatch(/REQ-1\s+Requirement/);
+    expect(text).toContain('Block');
     for (const n of [0, 1, 2]) expect(html).not.toContain(uuid(n));
   });
   it('uses State for unnamed and unresolved states in the exported dashboard script', () => {
@@ -147,11 +145,16 @@ describe('legacy App SysML labels', () => {
     { layer: { id: uuid(4), name: ' ' }, sysmlObjectLabel });
     expect(label).toBe('Region');
   });
-  it.each(['sPortName', 'tPortName'])('labels unnamed exported connector ports (%s)', name => {
-    const value = evaluateNode(node => ts.isVariableDeclaration(node) && node.name.getText(sourceFile) === name, {
-      sBlock: { ports: [] }, tBlock: { ports: [] }, c: { sourcePortId: uuid(0), targetPortId: uuid(1) }, sysmlObjectLabel,
-    });
-    expect(value).toBe('Port');
+  it.each(['source', 'target'] as const)('labels unnamed exported connector ports (%s)', end => {
+    const input = richReportInput();
+    const portId = end === 'source' ? 'port_engout' : 'port_gbin';
+    const port = input.hierarchy.blocks.flatMap(b => b.ports ?? []).find(p => p.id === portId)!;
+    port.name = ' ';
+    const conn = input.hierarchy.connectors.find(c => (end === 'source' ? c.sourcePortId : c.targetPortId) === portId);
+    expect(conn).toBeDefined();
+    const html = buildSystemReport(input);
+    expect(html).toMatch(/<td>[^<]*\.Port<\/td>/);
+    expect(html.replace(/<style[\s\S]*?<\/style>|<script[\s\S]*?<\/script>|<[^>]+>/g, ' ')).not.toContain(portId);
   });
   it('resolves baseline and suspect-link notifications without internal IDs', () => {
     const repo = createEmptyRepository();

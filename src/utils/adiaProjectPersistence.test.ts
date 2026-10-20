@@ -1,4 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { serializeSysmlProjectState } from '../engine/sysml/persistence';
+import { createEmptyRepository, type PackageDefinition } from '../engine/sysml/model';
+import { createSysmlGatewayState, executeSysmlCommand, loadCanonicalSysmlProject } from '../services/sysmlCommandGateway';
 import {
   createProjectSnapshot,
   createUnifiedProjectPayload,
@@ -64,5 +68,24 @@ describe('ADIA unified project persistence', () => {
       },
     };
     expect(hasUnsavedProjectChanges(modified, clean)).toBe(true);
+  });
+
+  it('keeps diagram presentations through a unified-module export and reopen', () => {
+    const pkg: PackageDefinition = { id: 'pkg-a', kind: 'package', name: 'A', namespace: ['model'], ownerId: 'model' };
+    let state = createSysmlGatewayState(createEmptyRepository());
+    state = { ...state, ...executeSysmlCommand(state, { type: 'createAndPresent', element: pkg, diagramId: 'bdd', presentation: { x: 20, y: 30, width: 220, height: 140 } }) };
+    const saved = serializeSysmlProjectState(state.repository, state.diagramPresentations, state.coordinates);
+    const file = createUnifiedProjectPayload({ version: '1.0', projectName: 'P', ...saved });
+    const reopened = loadCanonicalSysmlProject({ ...file, sysmlRepository: file.sysmlRepository });
+    expect(state.diagramPresentations!.bdd.elementIds).toContain('pkg-a');
+    expect(reopened.diagramPresentations.bdd.elementIds).toEqual(state.diagramPresentations!.bdd.elementIds);
+  });
+
+  it('builds the unified module file with the main Save payload builder, not the raw repository', () => {
+    const source = readFileSync('src/App.tsx', 'utf8');
+    const start = source.indexOf("projectFiles['adia_project_unified.adia']");
+    const block = source.slice(start, start + 600);
+    expect(block).toContain('buildPayload()');
+    expect(block).not.toContain('canonicalSysmlRepository');
   });
 });

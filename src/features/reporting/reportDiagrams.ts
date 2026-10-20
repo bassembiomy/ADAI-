@@ -317,6 +317,8 @@ export function renderBddDiagram(source: ReportBlockSource): string {
 
 export interface ReportIbdSource {
   contextBlock: BlockData;
+  /** SysML frame header (`ibd [Block] Name [Diagram]`); defaults to `ibd [Block] <context block name>`. */
+  frameLabel?: string;
   parts: readonly PartData[];
   connectors: readonly ConnectorData[];
   blocks: readonly BlockData[];
@@ -607,7 +609,7 @@ export function renderIbdDiagram(source: ReportIbdSource): string {
   const fx1 = Math.max(frameX + frameW, routes.length ? routeBounds.x + routeBounds.width + 8 : 0);
   const fy1 = Math.max(frameY + frameH, routes.length ? routeBounds.y + routeBounds.height + 8 : 0);
   const frame = `<rect x="${fx0}" y="${fy0}" width="${fx1 - fx0}" height="${fy1 - fy0}" fill="none" stroke="${NODE_STROKE}" stroke-width="1.2" stroke-dasharray="6 4"/>`
-    + `<text x="${fx0 + 8}" y="${fy0 + 16}" font-size="11" font-weight="600" fill="${TEXT_COLOR}">ibd [Block] ${escapeHtml(source.contextBlock.name)}</text>`;
+    + `<text x="${fx0 + 8}" y="${fy0 + 16}" font-size="11" font-weight="600" fill="${TEXT_COLOR}">${escapeHtml(source.frameLabel ?? `ibd [Block] ${source.contextBlock.name}`)}</text>`;
   const inner = frame + connectorEls.join('') + partEls.join('') + portEls.join('');
   const caption = `Internal block diagram · ${source.contextBlock.name} (${source.parts.length} parts, ${drawn.length} connectors)`;
   return wrapFigure(inner, caption, { x: fx0, y: fy0, width: fx1 - fx0, height: fy1 - fy0 },

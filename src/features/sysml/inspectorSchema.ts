@@ -407,7 +407,8 @@ function buildElementSchema(element: SemanticElement, repository: SysmlRepositor
     });
   }
 
-  if (el.status !== undefined) {
+  // Only a Requirement has a lifecycle status; a TestCase's migrated 'ready' is never read back.
+  if (el.metaclass === 'Requirement' && el.status !== undefined) {
     fields.push({
       key: 'status',
       label: 'Status',
@@ -419,6 +420,9 @@ function buildElementSchema(element: SemanticElement, repository: SysmlRepositor
         { label: 'Approved', value: 'approved' },
         { label: 'Implemented', value: 'implemented' },
         { label: 'Verified', value: 'verified' },
+        { label: 'Failed', value: 'failed' },
+        { label: 'Stale', value: 'stale' },
+        { label: 'Retired', value: 'retired' },
       ],
       toCommand: (val) => ({
         type: 'UpdateElement',
@@ -448,9 +452,12 @@ function buildElementSchema(element: SemanticElement, repository: SysmlRepositor
   };
 }
 
+const CONNECTOR_END_READ_ONLY_REASON = 'A connector end is a property path; change it in the IBD connector inspector.';
+
 function buildRelationshipSchema(relationship: SemanticRelationship, repository: SysmlRepositoryV4): InspectorSchema {
   const fields: InspectorField[] = [];
   const actions: InspectorAction[] = [];
+  const isConnector = relationship.metaclass === 'Connector';
 
   // Metaclass (Read-only)
   fields.push({
@@ -482,13 +489,17 @@ function buildRelationshipSchema(relationship: SemanticRelationship, repository:
     label: 'Source',
     value: relationship.sourceId,
     valueType: 'select',
-    mode: 'editable',
+    ...(isConnector
+      ? { mode: 'readOnly' as const, readOnlyReason: CONNECTOR_END_READ_ONLY_REASON }
+      : {
+        mode: 'editable' as const,
+        toCommand: (val: unknown) => ({
+          type: 'UpdateRelationship' as const,
+          relationshipId: relationship.id,
+          patch: { sourceId: String(val) },
+        }),
+      }),
     ...referenceFieldMetadata(repository, [relationship.sourceId], 'Element', false, 'endpoint'),
-    toCommand: (val) => ({
-      type: 'UpdateRelationship',
-      relationshipId: relationship.id,
-      patch: { sourceId: String(val) },
-    }),
   });
 
   // Target (Editable)
@@ -497,13 +508,17 @@ function buildRelationshipSchema(relationship: SemanticRelationship, repository:
     label: 'Target',
     value: relationship.targetId,
     valueType: 'select',
-    mode: 'editable',
+    ...(isConnector
+      ? { mode: 'readOnly' as const, readOnlyReason: CONNECTOR_END_READ_ONLY_REASON }
+      : {
+        mode: 'editable' as const,
+        toCommand: (val: unknown) => ({
+          type: 'UpdateRelationship' as const,
+          relationshipId: relationship.id,
+          patch: { targetId: String(val) },
+        }),
+      }),
     ...referenceFieldMetadata(repository, [relationship.targetId], 'Element', false, 'endpoint'),
-    toCommand: (val) => ({
-      type: 'UpdateRelationship',
-      relationshipId: relationship.id,
-      patch: { targetId: String(val) },
-    }),
   });
 
   // Behavioral: Transition guard and trigger

@@ -2,7 +2,8 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { spawn, execFileSync } = require('node:child_process');
+const { spawn, execFileSync, execFile } = require('node:child_process');
+const execFileAsync = require('node:util').promisify(execFile);
 const { randomUUID } = require('node:crypto');
 const { verifyToolchainHash } = require('./toolchainVerifier.cjs');
 
@@ -264,6 +265,24 @@ function resolveToolExecutable(name, toolchainsDir = defaultToolchainsDir()) {
   }
 }
 
+async function resolveToolExecutableAsync(name, toolchainsDir = defaultToolchainsDir()) {
+  const dir = toolchainsDir || defaultToolchainsDir();
+  for (const [key, spec] of [...Object.entries(TOOLCHAINS), ...Object.entries(FLASH_TOOLS)]) {
+    if (name !== spec.cmd && name !== spec.checkFile && name !== key) continue;
+    const resolved = resolveInstalledToolchain(key, { toolchainsDir: dir });
+    if (resolved?.executable) return resolved.executable;
+  }
+
+  try {
+    const tool = process.platform === 'win32' ? 'where.exe' : 'which';
+    const { stdout } = await execFileAsync(tool, [name], { encoding: 'utf8', windowsHide: true, timeout: 5000 });
+    const first = String(stdout).split(/\r?\n/).find(Boolean);
+    return first || null;
+  } catch {
+    return null;
+  }
+}
+
 function downloadFile(url, destPath, progressCallback) {
   return new Promise((resolve, reject) => {
     const fetchUrl = (targetUrl) => {
@@ -456,7 +475,7 @@ module.exports = {
   defaultToolchainsDir,
   candidateToolchainDirs, resolveInstalledToolchain,
   isToolchainLocallyInstalled, isFlashToolLocallyInstalled,
-  configureToolchainPaths, resolveToolExecutable,
+  configureToolchainPaths, resolveToolExecutable, resolveToolExecutableAsync,
   downloadFile, extractZip, provisionToolchain, provisionAllRequiredToolchains,
   downloadAndExtractToolchain, ensureToolchain,
 };

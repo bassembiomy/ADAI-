@@ -23,14 +23,32 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { app } = require('electron');
+let electronApp = null;
+try { electronApp = require('electron').app || null; } catch { /* not running under Electron */ }
+
+// Electron patches fs for .asar paths; original-fs reads the archive as a raw file.
+let rawFs;
+try { rawFs = require('original-fs'); } catch { rawFs = require('fs'); }
+
+function hashFileStream(filePath, fsImpl) {
+  return new Promise((resolve, reject) => {
+    const hash = crypto.createHash('sha256');
+    const stream = fsImpl.createReadStream(filePath);
+    stream.on('error', reject);
+    stream.on('data', chunk => hash.update(chunk));
+    stream.on('end', () => resolve(hash.digest('hex')));
+  });
+}
 
 /**
  * Verifies the ASAR integrity in production builds.
  * No-ops in development mode.
- * @returns {{ ok: boolean, error?: string }}
+ * @param {{ app?: object, fs?: object }} [options] - injectable dependencies (tests)
+ * @returns {Promise<{ ok: boolean, error?: string }>}
  */
-function verifyAsarIntegrity() {
+async function verifyAsarIntegrity(options = {}) {
+  const app = options.app || electronApp;
+  const asarFs = options.fs || rawFs;
   // Only enforce in production (packaged) builds
   if (!app.isPackaged) {
     return { ok: true };
@@ -55,8 +73,7 @@ function verifyAsarIntegrity() {
     }
 
     // Compute actual ASAR hash
-    const asarBuffer = fs.readFileSync(asarPath);
-    const actualHash = crypto.createHash('sha256').update(asarBuffer).digest('hex');
+    const actualHash = await hashFileStream(asarPath, asarFs);
 
     if (actualHash !== expectedHash) {
       const error = `ASAR integrity check failed.\nExpected: ${expectedHash}\nActual:   ${actualHash}\n\nThe application package may have been tampered with.`;

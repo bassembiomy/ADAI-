@@ -6,7 +6,7 @@ export type SysmlEndpointFamily =
   | 'block' | 'interfaceBlock' | 'interface' | 'valueType' | 'enumeration'
   | 'requirement' | 'verificationCase' | 'part' | 'port' | 'valueParameter'
   | 'actor' | 'useCase' | 'subject' | 'state' | 'property'
-  | 'activity' | 'interaction' | 'operation' | 'signal' | 'constraintBlock' | 'package' | 'unit' | 'quantityKind' | 'view' | 'viewpoint' | 'stakeholder' | 'unknown';
+  | 'activity' | 'interaction' | 'operation' | 'signal' | 'constraintBlock' | 'package' | 'unit' | 'quantityKind' | 'view' | 'viewpoint' | 'stakeholder' | 'simulationTarget' | 'unknown';
 
 export interface ConnectionEndpoint {
   id: string;
@@ -43,9 +43,9 @@ const ASSOCIATION_FAMILY = new Set<SysmlEndpointFamily>(['block', 'interfaceBloc
  * SysML 1.6 §16.3.2.7: the client of «satisfy» is any named design element, not
  * only Blocks. Requirements, unresolved endpoints and Packages are excluded.
  */
-const SATISFY_SOURCE_FAMILY = new Set<SysmlEndpointFamily>(['block', 'interfaceBlock', 'interface', 'part', 'port', 'property', 'state', 'useCase', 'activity', 'interaction', 'operation']);
+const SATISFY_SOURCE_FAMILY = new Set<SysmlEndpointFamily>(['block', 'interfaceBlock', 'interface', 'part', 'port', 'property', 'state', 'useCase', 'activity', 'interaction', 'operation', 'simulationTarget']);
 /** «verify» clients are test cases or the behaviours/operations that realise them. */
-const VERIFY_SOURCE_FAMILY = new Set<SysmlEndpointFamily>(['verificationCase', 'state', 'activity', 'interaction', 'operation']);
+const VERIFY_SOURCE_FAMILY = new Set<SysmlEndpointFamily>(['verificationCase', 'state', 'activity', 'interaction', 'operation', 'simulationTarget']);
 const SAME_FAMILY_GENERALIZATION = new Set<SysmlEndpointFamily>(['interface', 'valueType', 'enumeration', 'signal', 'constraintBlock']);
 const REQUIREMENT_KINDS = new Set(['requirementContainment', 'deriveReqt', 'copy', 'satisfy', 'verify', 'refine', 'trace']);
 const USE_CASE_KINDS = new Set(['useCaseAssociation', 'include', 'extend', 'useCaseGeneralization', 'useCaseSatisfy', 'useCaseRefine', 'useCaseTrace']);
@@ -89,6 +89,10 @@ export function evaluateSysmlConnection(input: ConnectionPolicyInput): Connectio
   if (!validDiagram(kind, input.diagram)) return reject(normalized, 'INVALID_RELATIONSHIP_DIAGRAM', `This relationship is not valid on the ${input.diagram} diagram.`, 'Choose a relationship supported by the current diagram.');
   if (!source.id || !target.id) return reject(normalized, 'MISSING_RELATIONSHIP_ENDPOINT', 'Both relationship endpoints must be resolved model elements.', 'Choose existing endpoints before creating the relationship.');
   if (source.id === target.id && kind !== 'transition') return reject(normalized, 'SELF_RELATIONSHIP', 'An endpoint cannot connect to itself.', 'Choose two distinct endpoints.');
+
+  if (source.family === 'simulationTarget' || target.family === 'simulationTarget') {
+    if (!['satisfy', 'verify', 'refine', 'trace'].includes(kind)) return reject(normalized, 'SIMULATION_TARGET_RELATIONSHIP', 'A simulation target can only be linked to a Requirement by satisfy, verify, refine or trace.', 'Link the simulation target to a Requirement, or choose a model element for this relationship.');
+  }
 
   if (kind === 'association') {
     if (source.family === 'unknown' || target.family === 'unknown') return reject(normalized, 'UNKNOWN_STEREOTYPE_FAMILY', 'Association requires declared classifier endpoint families.', 'Declare a supported stereotype family before using an association.');

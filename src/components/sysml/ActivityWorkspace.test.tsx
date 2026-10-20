@@ -203,6 +203,17 @@ describe('ActivityWorkspace', () => {
     expect(latest.diagramPresentations![DIAGRAM_ID].elementIds).not.toContain('n-start');
   });
 
+  it('Delete from model removes every selected node, none of them coming back', () => {
+    render(<Harness />);
+    fireEvent.pointerDown(node('action', 'Start engine'), { button: 0 });
+    fireEvent.pointerUp(window);
+    fireEvent.pointerDown(node('action', 'Drive off'), { button: 0, shiftKey: true });
+    fireEvent.pointerUp(window);
+    fireEvent.click(screen.getByRole('button', { name: 'Delete from model' }));
+    expect(activityOf(latest).nodes.map(n => n.id)).toEqual(['n-init', 'n-dec', 'n-fin']);
+    expect(latest.diagramPresentations![DIAGRAM_ID].elementIds).toEqual(['n-init', 'n-dec', 'n-fin']);
+  });
+
   it('dragging a node into another swimlane proposes membership; Apply commits it, Keep leaves it', () => {
     render(<Harness kind="lanes" />);
     expect(screen.getAllByTestId('activity-lane').map(l => l.getAttribute('data-label'))).toEqual(['Pilot', 'System']);

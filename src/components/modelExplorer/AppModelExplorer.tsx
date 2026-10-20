@@ -331,9 +331,10 @@ export interface AppModelExplorerProps {
   sysmlStore?: import('../../engine/sysml/normalizedStore').NormalizedSysmlStore;
   diagramPresentations?: Record<string, import('../../engine/sysml/presentationState').DiagramPresentationInput>;
   selectedIds: string[];
-  onSelect: (id: string, multiSelect?: boolean) => void;
+  /** `contextDiagramId`: the diagram whose reference row was clicked. */
+  onSelect: (id: string, multiSelect?: boolean, contextDiagramId?: string) => void;
   onSelectMultiple?: (ids: string[]) => void;
-  onDoubleClick: (id: string, kind?: string) => void;
+  onDoubleClick: (id: string, kind?: string, contextDiagramId?: string) => void;
   onCommitStateMachineSnapshot?: (snapshot: StateMachineExplorerSnapshot, description: string) => void;
   onUpdateStates?: (states: StateData[]) => void;
   onUpdateLayers?: (layers: Layer[]) => void;
@@ -604,7 +605,8 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
         setLastSelectedSemanticId(node.semanticId);
       } else {
         setLastSelectedSemanticId(node.semanticId);
-        onSelect(node.semanticId, multiSelect);
+        if (node.presentedOnDiagramId) onSelect(node.semanticId, multiSelect, node.presentedOnDiagramId);
+        else onSelect(node.semanticId, multiSelect);
       }
     },
     [lastSelectedSemanticId, onSelectMultiple, onSelect, projection.nodes, projection.roots, selectedIds]
@@ -620,7 +622,8 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
           return;
         }
       }
-      onDoubleClick(node.semanticId, node.kind);
+      if (node.presentedOnDiagramId) onDoubleClick(node.semanticId, node.kind, node.presentedOnDiagramId);
+      else onDoubleClick(node.semanticId, node.kind);
     },
     [onDoubleClick, onSelect]
   );

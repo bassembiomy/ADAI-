@@ -12,24 +12,8 @@
 #include <stdbool.h>
 #include "hal_config.h"
 
-#ifdef TARGET_MCU_STM32F4
-#include "stm32f4xx_hal.h"
-extern UART_HandleTypeDef huart1;
-extern UART_HandleTypeDef huart2;
-extern UART_HandleTypeDef huart3;
-extern SPI_HandleTypeDef hspi1;
-extern ADC_HandleTypeDef hadc1;
-extern DAC_HandleTypeDef hdac;
-extern TIM_HandleTypeDef htim1;
-extern I2C_HandleTypeDef hi2c1;
-#elif defined(TARGET_MCU_STM32F1)
-#include "stm32f1xx_hal.h"
-extern UART_HandleTypeDef huart1;
-extern UART_HandleTypeDef huart2;
-extern SPI_HandleTypeDef hspi1;
-extern ADC_HandleTypeDef hadc1;
-extern TIM_HandleTypeDef htim1;
-extern I2C_HandleTypeDef hi2c1;
+#ifdef __cplusplus
+extern "C" {
 #endif
 
 void HAL_Drivers_Init(void);
@@ -47,4 +31,7 @@ void HAL_I2C_Write(const char* pin, const char* name, uint32_t value);
 void HIL_SendString(const char* str);
 void HIL_Receive_Poll(void);
 
+#ifdef __cplusplus
+}
+#endif
 #endif /* HAL_DRIVERS_H */

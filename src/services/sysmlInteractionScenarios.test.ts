@@ -179,6 +179,14 @@ describe('actors as lifelines', () => {
     expect(codes(repo, asLifelines(repo, 'scenario', 'customer', 'premium'))).toEqual([]);
   });
 
+  it('follows a diagram generalization relationship (not only the legacy generalizationIds)', () => {
+    const repo = model();
+    repo.actors.vip = { id: 'vip', kind: 'actor', name: 'Vip', namespace: ['model'], ownerId: 'model', isExternal: true, generalizationIds: [] } as any;
+    repo.relationships.gen = { id: 'gen', kind: 'useCaseGeneralization', sourceId: 'vip', targetId: 'customer' } as any;
+    repo.definitions.scenario = { id: 'scenario', kind: 'interaction', name: 'S', namespace: [], ownerId: 'withdraw', lifelines: [], messages: [], fragments: [] } as InteractionDefinition;
+    expect(codes(repo, asLifelines(repo, 'scenario', 'vip'))).toEqual([]);
+  });
+
   it('warns, never errors, about an actor the use case does not involve', () => {
     const repo = model();
     repo.definitions.scenario = { id: 'scenario', kind: 'interaction', name: 'S', namespace: [], ownerId: 'withdraw', lifelines: [], messages: [], fragments: [] } as InteractionDefinition;
