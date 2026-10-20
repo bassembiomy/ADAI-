@@ -49,7 +49,7 @@ const spec: PtBlockSpec = {
       description: 'One row [low, high] per factor, in the units of that factor. The row count sets the number of factors; every row needs low < high.' },
     { name: 'factors', label: 'Factor names', unit: '', default: DEFAULT_FACTORS, kind: 'string',
       description: 'Comma-separated factor names, one per row of the bounds table, in the order of the NextPoint vector (for example SOI,P_rail). They name the columns of the exported DOE table.' },
-    par('levels', 'Levels per factor', '1', 3, 'Number of equally spaced levels per factor for the Full Factorial design (integer, 2 or more).', { min: 2 }),
+    par('levels', 'Levels per factor', '1', 3, 'Number of equally spaced levels per factor for the Full Factorial design (integer, 1 or more; 1 gives the midpoint of each bound).', { min: 1 }),
     par('samples', 'Samples', '1', 10, 'Number of design points for the Latin Hypercube design (integer, 1 or more).', { min: 1 }),
     par('seed', 'Random seed', '1', 1, 'Seed of the Latin Hypercube generator; the same seed always gives the same design.'),
     { name: 'ccdAlpha', label: 'CCD axial distance', unit: '', default: 'face', kind: 'enum', options: ['face', 'rotatable'],
@@ -64,7 +64,7 @@ const spec: PtBlockSpec = {
   ],
   states: ['accumulated response sums', 'finished design points'],
   equations: [
-    'Full Factorial: levels_j = lo_j + (hi_j - lo_j)*m/(L - 1), m = 0..L-1; all combinations, first factor slowest',
+    'Full Factorial: levels_j = lo_j + (hi_j - lo_j)*m/(L - 1), m = 0..L-1 (L = 1: (lo_j + hi_j)/2); all combinations, first factor slowest',
     'Latin Hypercube: x_ij = (pi_j(i) + u_ij)/n, pi_j a seeded random permutation of 0..n-1, u_ij ~ U[0,1); scaled to lo_j + x*(hi_j - lo_j)',
     'Central Composite: 2^k corners (+-1), 2k axial points (+-alpha), centre points; alpha = 1 (face) or (2^k)^(1/4) (rotatable)',
     'Point index i = floor(t/dwell); responses averaged for t in [(i+1)*dwell - averageWindow, (i+1)*dwell)',
@@ -106,9 +106,9 @@ function buildDesign(p: Record<string, any>): number[][] {
   if (names.length !== 0 && names.length !== k) throw new Error(`Parameter factors lists ${names.length} names but bounds has ${k} rows`);
   if (p.averageWindow > p.dwell) throw new Error('Parameter averageWindow must be <= dwell');
   if (p.designType === 'Full Factorial') {
-    if (!isInt(p.levels) || p.levels < 2) throw new Error('Parameter levels must be an integer >= 2');
+    if (!isInt(p.levels) || p.levels < 1) throw new Error('Parameter levels must be an integer >= 1');
     if (Math.pow(p.levels, k) > MAX_POINTS) throw new Error(`Full factorial design exceeds ${MAX_POINTS} points`);
-    const lv = bounds.map(([lo, hi]) => Array.from({ length: p.levels }, (_, m) => lo + ((hi - lo) * m) / (p.levels - 1)));
+    const lv = bounds.map(([lo, hi]) => p.levels === 1 ? [(lo + hi) / 2] : Array.from({ length: p.levels }, (_, m) => lo + ((hi - lo) * m) / (p.levels - 1)));
     return fullFactorial(lv);
   }
   if (p.designType === 'Latin Hypercube') {

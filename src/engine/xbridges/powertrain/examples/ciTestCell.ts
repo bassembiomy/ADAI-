@@ -74,11 +74,14 @@ type Conn = { sourceBlock: string; sourcePort: string; targetBlock: string; targ
 
 export function buildCiTestCell(opts: {
   design?: Partial<Defaults['design']>; limits?: Partial<Defaults['limits']>; overrides?: Partial<Defaults>;
+  /** true (default): one-step MEMORY blocks break the loops; false: the same signals are wired directly. */
+  delays?: boolean;
 } = {}): { blocks: XBlock[]; connections: Conn[] } {
   const d: Defaults = { ...CI_TEST_CELL_DEFAULTS, ...(opts.overrides ?? {}) };
   const design = { ...d.design, ...(opts.design ?? {}) };
   const limits = { ...d.limits, ...(opts.limits ?? {}) };
   const ID = CI_TEST_CELL_IDS;
+  const delays = opts.delays ?? true;
   const L = BLOCK_LIBRARY as Record<string, (id: string, params?: any) => XBlock>;
 
   const blocks: XBlock[] = [
@@ -91,11 +94,6 @@ export function buildCiTestCell(opts: {
     L.Constant('egrFlow', { value: d.mdot_egr }),
     L.Constant('egrTemp', { value: d.T_egr }),
     L.Sum('exhFlow', { signs: '++' }),
-    L.MEMORY('texhMem', { initialCondition: d.T_exh0 }),
-    L.MEMORY('pmapMem', { initialCondition: d.P_o }),
-    L.MEMORY('boostMem', { initialCondition: d.P_boost0 }),
-    L.MEMORY('tcompMem', { initialCondition: d.T_comp0 }),
-    L.MEMORY('tbrakeMem', { initialCondition: d.T_brake0 }),
     L.PT_CALIBRATION_ECU(ID.ecu, {
       mode: 'DoE override', factorOrder: design.factors, default_PW: d.default_PW, default_VgtPos: d.default_VgtPos,
     }),
@@ -114,6 +112,15 @@ export function buildCiTestCell(opts: {
       dwell: design.dwell, averageWindow: design.averageWindow, Pmax_limit: limits.Pmax_limit, Texh_limit: limits.Texh_limit,
     }),
   ];
+  if (delays) {
+    const at = blocks.findIndex(b => b.id === ID.ecu);
+    blocks.splice(at, 0,
+      L.MEMORY('texhMem', { initialCondition: d.T_exh0 }),
+      L.MEMORY('pmapMem', { initialCondition: d.P_o }),
+      L.MEMORY('boostMem', { initialCondition: d.P_boost0 }),
+      L.MEMORY('tcompMem', { initialCondition: d.T_comp0 }),
+      L.MEMORY('tbrakeMem', { initialCondition: d.T_brake0 }));
+  }
 
   const c = (sourceBlock: string, sourcePort: string, targetBlock: string, targetPort: string): Conn =>
     ({ sourceBlock, sourcePort, targetBlock, targetPort });
@@ -172,5 +179,20 @@ export function buildCiTestCell(opts: {
     c(ID.cylinder, 'NOx', ID.responses, 'in5'),
     c(ID.responses, 'bus', ID.sweeper, 'Responses'),
   ];
+  if (!delays) {
+    // Direct wiring: route every X -> mem.u -> mem.y -> T chain as X -> T.
+    const mems = new Set(['texhMem', 'pmapMem', 'boostMem', 'tcompMem', 'tbrakeMem']);
+    const src = new Map<string, Conn>();
+    for (const k of connections) if (mems.has(k.targetBlock)) src.set(k.targetBlock, k);
+    const direct: Conn[] = [];
+    for (const k of connections) {
+      if (mems.has(k.targetBlock)) continue;
+      if (mems.has(k.sourceBlock)) {
+        const s0 = src.get(k.sourceBlock)!;
+        direct.push(c(s0.sourceBlock, s0.sourcePort, k.targetBlock, k.targetPort));
+      } else direct.push(k);
+    }
+    return { blocks, connections: direct };
+  }
   return { blocks, connections };
 }

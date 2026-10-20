@@ -79,6 +79,8 @@ export interface SolverOptions {
   relTol?: number;
   absTol?: number;
   algTol?: number;   // Tolerance for Newton-Raphson algebraic loop solver
+  /** Max Gauss-Seidel passes over an algebraic loop before Newton-Raphson is tried (default 50). */
+  algMaxPasses?: number;
   maxIter?: number;  // Max iterations for Newton-Raphson algebraic loop solver
   zeroTol?: number;  // Zero-crossing detection time tolerance
   stiffDetect?: boolean; // Enable/disable stiffness detection

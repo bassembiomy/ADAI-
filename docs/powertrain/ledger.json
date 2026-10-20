@@ -211,13 +211,14 @@
       "deps": [
         "WP-09c"
       ],
-      "status": "todo",
+      "status": "done",
       "findings": [
         {
           "severity": "high",
           "summary": "Found in EC-07: block-level feedthrough makes stateful PT blocks (manifold, turbo, dyno) form false algebraic loops; Gauss-Seidel did not settle in 5 passes and Newton returned wrong values silently (charge pipe 0.7 kg/s). Workaround in examples/ciTestCell.ts: one-step Memory blocks."
         }
-      ]
+      ],
+      "review": "Opus 2026-10-20: Gauss-Seidel up to 50 passes (test cell needs 2-9), Newton restarts from pre-sweep values and rejects singular steps, final residual check -> ALGEBRAIC_LOOP_NOT_CONVERGED error. Test cell runs without delay blocks within 3 % of the delayed build."
     },
     {
       "id": "WP-10",

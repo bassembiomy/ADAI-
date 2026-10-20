@@ -448,7 +448,9 @@ export class XbridgesEngine {
       return a === b;
     };
     let prev = snapshot();
-    for (let pass = 0; pass < 5; pass++) {
+    const start = prev;
+    const maxPasses = this.options?.algMaxPasses ?? 50;
+    for (let pass = 0; pass < maxPasses; pass++) {
       this.cycleBlocks.forEach(b => this.executeBlockOrCache(b, time, tempStates));
       const cur = snapshot();
       const settled = cur.every((v, i) => settledValue(v, prev[i]));
@@ -456,12 +458,25 @@ export class XbridgesEngine {
       if (settled) return;
     }
 
+    // Gauss-Seidel did not settle (it may be diverging): restart Newton from the pre-sweep values.
+    loopKeys.forEach((lk, i) => this.signalValues.set(`${lk.blockId}.${lk.portId}`, start[i]));
+
     // Newton operates on plain numeric outputs only; others are left untouched.
     const numericKeys = loopKeys.filter(lk => typeof this.signalValues.get(`${lk.blockId}.${lk.portId}`) === 'number');
     loopKeys.length = 0;
     loopKeys.push(...numericKeys);
     const n = loopKeys.length;
     if (n === 0) return;
+
+    const reportNotConverged = () => {
+      if (this.diagnostics.some(d => d.code === 'ALGEBRAIC_LOOP_NOT_CONVERGED')) return;
+      this.diagnostics.push({
+        severity: 'error',
+        code: 'ALGEBRAIC_LOOP_NOT_CONVERGED',
+        message: `Algebraic loop through ${this.cycleBlocks.map(b => b.label || b.type).join(', ')} did not converge (tolerance ${algTol}).`,
+        blockIds: this.cycleBlocks.map(b => b.id)
+      });
+    };
 
     const getZ = (): number[] => {
       return loopKeys.map(lk => {
@@ -527,12 +542,23 @@ export class XbridgesEngine {
         const negG = g.map(val => -val);
         const deltaZ = math.lusolve(J, negG) as number[];
         const dZ = math.flatten(deltaZ) as number[];
+        // A (near-)singular Jacobian gives an absurdly long step; take the damped step instead.
+        const zScale = 1 + Math.max(...z.map(Math.abs));
+        if (dZ.some(v => !Number.isFinite(v) || Math.abs(v) > 1e6 * zScale)) throw new Error('singular loop Jacobian');
         z = z.map((zi, i) => zi + (dZ[i] || 0));
       } catch (err) {
         z = z.map((zi, i) => zi - 0.1 * g[i]);
       }
+      if (z.some(v => !Number.isFinite(v))) {
+        reportNotConverged();
+        return;
+      }
     }
 
+    // Final residual check: |F(z) - z| relative to 1 + |z|.
+    const fFinal = evaluateF(z);
+    const residual = Math.max(...z.map((zi, i) => Math.abs(fFinal[i] - zi) / (1 + Math.abs(zi))));
+    if (!(residual <= algTol)) reportNotConverged();
     setZ(z);
   }
 
