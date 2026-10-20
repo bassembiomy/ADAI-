@@ -129,6 +129,18 @@
       ]
     },
     {
+      "id": "WP-07b",
+      "title": "Descriptive powertrain icons in palette and canvas, with usage tooltip",
+      "exec": "S",
+      "deps": [
+        "WP-06"
+      ],
+      "status": "done",
+      "tests": "src/components/xbridges/powertrain/PtSymbol.test.tsx",
+      "review": "Opus 2026-10-20: one rework (SI/CI engines distinct, ECM battery circuit readable, wider palette slot); palette verified in the running app.",
+      "findings": []
+    },
+    {
       "id": "WP-08",
       "title": "Spec transcription for all blocks",
       "exec": "S",

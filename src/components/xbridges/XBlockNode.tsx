@@ -1879,7 +1879,7 @@ export const XBlockNode = React.memo(({ data, selected, id }: any) => {
 
   const getIcon = (type: string) => {
     const ptSpec = getPowertrainSpec(type);
-    if (ptSpec) return <PtSymbol id={ptSpec.symbol} size={14} />;
+    if (ptSpec) return <PtSymbol id={ptSpec.symbol} size={18} />;
     const iconName = blockTypeToIconName[type] || data?.icon;
     if (iconName && LucideIconMap[iconName]) {
       const IconComponent = LucideIconMap[iconName];

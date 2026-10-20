@@ -1,6 +1,7 @@
 // Original engineering pictograms for powertrain blocks (48x32 viewBox, currentColor only).
 import React from 'react';
 import type { PtSymbolId } from '../../../engine/xbridges/powertrain/ptSpec';
+import { getPowertrainSpec } from '../../../engine/xbridges/powertrain/index';
 
 const gearPath = (cx: number, cy: number, r: number, teeth: number): string => {
   const pts: string[] = [];
@@ -51,34 +52,59 @@ const Turbine = ({ cx = 24, cy = 16, r = 11, blades = 6 }: { cx?: number; cy?: n
   </g>
 );
 
+
+const polar = (cx: number, cy: number, r: number, deg: number): string =>
+  `${(cx + r * Math.cos((deg * Math.PI) / 180)).toFixed(2)} ${(cy - r * Math.sin((deg * Math.PI) / 180)).toFixed(2)}`;
+
+// Cylinder with piston and connecting rod; the head part (spark plug or injector) is passed in.
+const Cylinder = ({ head }: { head: React.ReactNode }) => (
+  <g>
+    <rect x="11" y="9" width="26" height="21" rx="1" />
+    <rect x="17" y="20" width="14" height="4" rx="1" />
+    <path d="M24 24 L21 28" />
+    <circle cx="21" cy="28" r="1.4" />
+    {head}
+  </g>
+);
+const Tyre = () => (
+  <g>
+    <circle cx="24" cy="16" r="12" />
+    <circle cx="24" cy="16" r="8.5" />
+    <circle cx="24" cy="16" r="2.5" />
+    <path d={Array.from({ length: 8 }, (_, k) => `M${polar(24, 16, 9.6, 37.5 + 45 * k)} L${polar(24, 16, 11.2, 37.5 + 45 * k)}`).join(' ')} />
+    <path d="M2 28.5 H46" />
+    <rect x="-2.3" y="-4" width="4.6" height="8" rx="1.5" transform={`translate(${polar(24, 16, 10.2, 60)}) rotate(30)`} />
+  </g>
+);
+
 export const PT_SYMBOL_RENDERERS: Record<PtSymbolId, () => React.ReactElement> = {
-  'drive-cycle': () => <g><path d="M4 26 V6 M4 26 H44" /><path d="M6 22 L12 12 L18 18 L24 8 L30 20 L36 10 L42 16" /></g>,
-  'driver': () => <g><circle cx="24" cy="16" r="11" /><path d="M13 16 H35 M24 16 V27" /><circle cx="24" cy="16" r="2" /></g>,
-  'vehicle': () => <g><path d="M4 22 V16 L10 14 L15 8 H31 L37 14 L44 16 V22 Z" /><circle cx="14" cy="23" r="4" /><circle cx="34" cy="23" r="4" /></g>,
-  'wheel': () => <g><Wheel /><path d="M24 5 V27 M13 16 H35" /></g>,
+  'drive-cycle': () => <g><path d="M5 3 V27 H45 M2.5 6 L5 3 L7.5 6 M42 24.5 L45 27 L42 29.5" /><path d="M6 25 L13 11 H19 L25 25 H29 L36 8 H43" /></g>,
+  'driver': () => <g><circle cx="24" cy="13" r="10" /><circle cx="24" cy="13" r="2.5" /><path d="M14 13 H21.5 M26.5 13 H34 M24 15.5 V23" /><rect x="19.5" y="26" width="9" height="4" rx="1" /></g>,
+  'vehicle': () => <g><path d="M16 4.5 H33 M30 2 L33 4.5 L30 7" /><path d="M5 23 V18 L11 16 L16 10 H30 L36 16 L43 18 V23" /><path d="M2 27.5 H46" /><circle cx="14" cy="23.5" r="4" /><circle cx="34" cy="23.5" r="4" /></g>,
+  'wheel': () => <Tyre />,
   'clutch': () => <g><Shaft x1={2} x2={16} /><Shaft x1={32} x2={46} /><rect x="16" y="6" width="4" height="20" /><rect x="28" y="6" width="4" height="20" /><path d="M22 10 V22 M26 10 V22" /></g>,
   'torque-converter': () => <g><circle cx="24" cy="16" r="12" /><path d="M14 10 Q24 16 14 22 M34 10 Q24 16 34 22" /><Shaft x1={2} x2={12} /><Shaft x1={36} x2={46} /></g>,
   'compliance': () => <g><Shaft x1={2} x2={12} /><path d="M12 16 L15 8 L21 24 L27 8 L33 24 L36 16" /><Shaft x1={36} x2={46} /></g>,
   'inertia': () => <g><Shaft /><rect x="17" y="5" width="14" height="22" rx="2" /><path d="M17 11 H31 M17 21 H31" /></g>,
   'gear': () => <g><Gear cx={15} cy={16} r={11} n={8} /><Gear cx={34} cy={16} r={8} n={6} /></g>,
   'planetary': () => <g><circle cx="24" cy="16" r="14" /><circle cx="24" cy="16" r="4" /><circle cx="24" cy="7" r="3" /><circle cx="16" cy="21" r="3" /><circle cx="32" cy="21" r="3" /></g>,
-  'differential': () => <g><circle cx="24" cy="16" r="12" /><path d="M2 16 H12 M36 16 H46 M24 4 V10" /><path d="M18 16 L24 10 L30 16 L24 22 Z" /></g>,
+  'differential': () => <g><path d={gearPath(24, 14, 8, 12)} /><circle cx="24" cy="14" r="2" /><rect x="21.5" y="22" width="5" height="9" /><path d="M16 14 H8 M32 14 H40" /><rect x="3" y="7" width="5" height="14" rx="1" /><rect x="40" y="7" width="5" height="14" rx="1" /></g>,
   'transfer-case': () => <g><Gear cx={14} cy={16} r={9} n={7} /><Gear cx={34} cy={16} r={9} n={7} /><path d="M14 7 H34 M14 25 H34" /></g>,
   'transmission': () => <g><Box x={4} y={4} w={40} h={24} /><Gear cx={16} cy={16} r={7} n={6} /><Gear cx={31} cy={16} r={5} n={5} /></g>,
   'cvt': () => <g><path d="M8 6 L18 13 V19 L8 26 M40 6 L30 13 V19 L40 26" /><path d="M13 7 Q24 16 35 9 M13 25 Q24 16 35 23" /></g>,
   'transmission-controller': () => <g><Box x={5} y={9} w={24} h={14} /><path d="M29 16 H42 M38 12 L42 16 L38 20" /><path d="M10 14 H24 M10 18 H20" /></g>,
-  'battery': () => <g><Box x={4} y={8} w={36} h={16} /><rect x="40" y="13" width="4" height="6" /><path d="M10 12 V20 M16 12 V20 M22 12 V20" /></g>,
-  'ecm-battery': () => <g><path d="M4 16 H12 M36 16 H44" /><path d="M12 16 H16 L18 11 L21 21 L24 11 L27 21 L29 16 H36" /><path d="M14 6 V26" /></g>,
+  'battery': () => <g><rect x="9" y="7" width="29" height="18" rx="2" /><rect x="38" y="12" width="3" height="8" /><rect x="12" y="10" width="13" height="12" fill="currentColor" stroke="none" /><path d="M2 16 H6 M43 16 H47 M45 14 V18" /></g>,
+  'ecm-battery': () => <g><path d="M2 16 H5 M5 9 V23 M8 12 V20 M8 16 H12 L13 16 L14.5 13 L17 19 L19.5 13 L21 16 H26" /><path d="M26 8 V24 M43 8 V24 M43 16 H46" /><path d="M26 8 H29 L30.5 5.5 L33 10.5 L35.5 5.5 L37 8 H43" /><path d="M26 24 H32 M32 20.5 V27.5 M35 20.5 V27.5 M35 24 H43" /></g>,
   'dcdc': () => <g><Box x={4} y={4} w={40} h={24} /><path d="M4 28 L44 4" /><path d="M9 11 H17 M9 15 H17" /><path d="M31 21 Q35 17 39 21" /></g>,
   'starter': () => <g><circle cx="16" cy="16" r="11" /><text x="16" y="20" fontSize="11" textAnchor="middle" fill="currentColor" stroke="none">M</text><Shaft x1={27} x2={46} /><Gear cx={38} cy={16} r={6} n={6} /></g>,
   'alternator': () => <g><circle cx="24" cy="16" r="12" /><Sine /><Shaft x1={2} x2={12} /></g>,
-  'motor-mapped': () => <g><circle cx="20" cy="16" r="12" /><text x="20" y="20" fontSize="11" textAnchor="middle" fill="currentColor" stroke="none">M</text><Shaft x1={32} x2={46} /><path d="M10 28 L16 24 L22 26 L30 22" /></g>,
+  'motor-mapped': () => <g><circle cx="13" cy="16" r="11" /><text x="13" y="20.5" fontSize="12" textAnchor="middle" fill="currentColor" stroke="none">M</text><path d="M29 5 V27 H46" /><path d="M30 10 H36 Q42 10 45 23" /></g>,
   'pmsm': () => <g><circle cx="24" cy="16" r="13" /><circle cx="24" cy="16" r="6" /><path d="M21 13 H27 V19 H21 Z" /><path d="M24 3 V10 M24 22 V29" /></g>,
   'induction-motor': () => <g><circle cx="24" cy="16" r="13" /><circle cx="24" cy="16" r="6" /><path d="M18 12 L30 20 M18 20 L30 12" /></g>,
   'inverter': () => <g><Box x={4} y={4} w={40} h={24} /><path d="M8 12 H18 M8 17 H18" /><path d="M26 20 Q30 10 34 16 T42 12" /></g>,
   'motor-controller': () => <g><Box x={4} y={6} w={22} h={20} /><path d="M26 16 H34" /><circle cx="40" cy="16" r="6" /><path d="M9 12 H21 M9 16 H17 M9 20 H21" /></g>,
-  'engine-si': () => <g><Cylinders n={3} /><path d="M20 3 L24 7 M24 3 L20 7" /><path d="M42 20 H46" /></g>,
-  'engine-ci': () => <g><Cylinders n={3} /><path d="M12 3 V7 M20 3 V7 M28 3 V7" /><path d="M42 20 H46" /></g>,
+  'engine-si': () => <Cylinder head={<g><rect x="22" y="3" width="4" height="6" /><path d="M24 9 V12" /><path d="M26 10 L31 12.5 L27 15 L32 18" strokeWidth={2} /></g>} />,
+  'engine-ci': () => <Cylinder head={<g><rect x="22.5" y="3" width="3" height="5" /><path d="M22.5 8 L24 10.5 L25.5 8" /><path d="M24 12 L16 19 M24 12 L21 19.5 M24 12 L27 19.5 M24 12 L32 19" strokeDasharray="1.5 2" /></g>} />,
   'engine-core': () => <g><rect x="12" y="4" width="14" height="14" /><circle cx="19" cy="22" r="5" /><path d="M19 18 V22 M26 11 H36" /><path d="M2 22 H14 M24 22 H46" /></g>,
   'engine-controller': () => <g><Box x={4} y={6} w={20} h={20} /><path d="M24 16 H30" /><Cylinders n={2} /></g>,
   'control-volume': () => <g><ellipse cx="24" cy="16" rx="14" ry="10" /><path d="M2 16 H10 M38 16 H46" /></g>,
@@ -92,13 +118,65 @@ export const PT_SYMBOL_RENDERERS: Record<PtSymbolId, () => React.ReactElement> =
   'two-way': () => <g><Box x={10} y={6} w={28} h={20} /><path d="M14 12 H34 M30 9 L34 12 L30 15 M34 20 H14 M18 17 L14 20 L18 23" /></g>,
 };
 
+export const PT_SYMBOL_TITLES: Record<PtSymbolId, string> = {
+  'drive-cycle': 'Speed versus time drive cycle',
+  'driver': 'Steering wheel with pedal',
+  'vehicle': 'Car moving forward on road',
+  'wheel': 'Tyre on road with disc brake',
+  'clutch': 'Two friction plates clutch',
+  'torque-converter': 'Torque converter with turbine blades',
+  'compliance': 'Torsional spring between shafts',
+  'inertia': 'Rotating inertia on shaft',
+  'gear': 'Two meshing gears',
+  'planetary': 'Planetary gear set',
+  'differential': 'Differential with ring gear and axles',
+  'transfer-case': 'Transfer case with two gears',
+  'transmission': 'Gearbox housing with gears',
+  'cvt': 'Continuously variable transmission pulleys',
+  'transmission-controller': 'Transmission controller with command output',
+  'battery': 'Battery cell with charge level',
+  'ecm-battery': 'Battery equivalent circuit with resistors and capacitor',
+  'dcdc': 'DC to DC converter',
+  'starter': 'Starter motor with pinion gear',
+  'alternator': 'Alternator with alternating output',
+  'motor-mapped': 'Motor with torque speed envelope',
+  'pmsm': 'Permanent magnet synchronous motor',
+  'induction-motor': 'Induction motor with rotor bars',
+  'inverter': 'DC to AC inverter',
+  'motor-controller': 'Motor controller driving a motor',
+  'engine-si': 'Spark ignition engine cylinder with spark plug',
+  'engine-ci': 'Diesel engine cylinder with fuel injector',
+  'engine-core': 'Engine core with intake and exhaust',
+  'engine-controller': 'Engine controller for cylinders',
+  'control-volume': 'Gas control volume',
+  'flow-boundary': 'Flow boundary source',
+  'flow-restriction': 'Flow restriction in a pipe',
+  'heat-exchanger': 'Heat exchanger with fins',
+  'throttle': 'Throttle valve in a pipe',
+  'compressor': 'Compressor with impeller',
+  'turbine': 'Turbine with blades',
+  'boost-shaft': 'Shaft connecting compressor and turbine',
+  'two-way': 'Two way bidirectional connection',
+};
+
 export function PtSymbol({ id, size = 24 }: { id: PtSymbolId; size?: number }): React.ReactElement {
   const Render = PT_SYMBOL_RENDERERS[id];
   return (
-    <svg width={size * 1.5} height={size} viewBox="0 0 48 32" fill="none" stroke="currentColor" strokeWidth={1.5}
-      strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" data-pt-symbol={id}>
+    <svg width={size * 1.5} height={size} viewBox="0 0 48 32" fill="none" stroke="currentColor" strokeWidth={1.7}
+      strokeLinecap="round" strokeLinejoin="round" role="img" data-pt-symbol={id}>
+      <title>{PT_SYMBOL_TITLES[id]}</title>
       {Render ? <Render /> : null}
     </svg>
+  );
+}
+
+export function PtLibraryIcon({ type, size }: { type: string; size?: number }): React.ReactElement | null {
+  const spec = getPowertrainSpec(type);
+  if (!spec) return null;
+  return (
+    <span title={spec.description.split(/(?<=\.)\s/)[0]} className="inline-flex items-center justify-center">
+      <PtSymbol id={spec.symbol} size={size ?? 22} />
+    </span>
   );
 }
 

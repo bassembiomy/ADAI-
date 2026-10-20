@@ -81,6 +81,8 @@ const renderLibraryIcon = (iconName: string, size = 14, className?: string) => {
   return <IconComp size={size} className={className} />;
 };
 
+import { PtLibraryIcon } from './powertrain/PtSymbol';
+import { getPowertrainSpec } from '../../engine/xbridges/powertrain/index';
 import { XbridgesEngine } from '../../engine/xbridges/XbridgesEngine';
 import { Solvers } from '../../engine/xbridges/Solvers';
 import { AdaptiveSolver } from '../../engine/xbridges/AdaptiveSolver';
@@ -2947,8 +2949,8 @@ export const XbridgesWorkspace: React.FC<{
                 onClick={() => addBlockAtPos(b.type, searchMenuPos.x, searchMenuPos.y)}
               >
                 <div className="flex items-center gap-3">
-                  <div className="text-slate-500 group-hover:text-[#c9a86c] transition-colors flex items-center justify-center w-5 h-5">
-                    {renderLibraryIcon(b.icon)}
+                  <div className={`text-slate-500 group-hover:text-[#c9a86c] transition-colors flex items-center justify-center ${getPowertrainSpec(b.type) ? 'w-9' : 'w-5'} h-5`}>
+                    {getPowertrainSpec(b.type) ? <PtLibraryIcon type={b.type} /> : renderLibraryIcon(b.icon)}
                   </div>
                   <div className="flex flex-col">
                     <span className="text-xs font-bold text-[#e0e0e0] group-hover:text-[#c9a86c]">{b.label}</span>
@@ -3057,8 +3059,8 @@ export const XbridgesWorkspace: React.FC<{
                           onDragStart={(e) => onDragStart(e, b.type)}
                           className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-[#222] border border-transparent hover:border-[#333] cursor-grab active:cursor-grabbing transition-all group"
                         >
-                          <div className="text-slate-500 group-hover:text-[#c9a86c] transition-colors flex items-center justify-center w-5 h-5">
-                            {renderLibraryIcon(b.icon)}
+                          <div className={`text-slate-500 group-hover:text-[#c9a86c] transition-colors flex items-center justify-center ${getPowertrainSpec(b.type) ? 'w-9' : 'w-5'} h-5`}>
+                            {getPowertrainSpec(b.type) ? <PtLibraryIcon type={b.type} /> : renderLibraryIcon(b.icon)}
                           </div>
                           <span className="text-xs font-bold text-slate-400 group-hover:text-[#e0e0e0] transition-colors">
                             {b.label}
