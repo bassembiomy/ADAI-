@@ -2,7 +2,7 @@
   "plan": "docs/superpowers/plans/2026-10-20-powertrain-blockset-xbridges.md",
   "revision": 2,
   "baseline": "49f07cf",
-  "statuses": "todo | in_progress | waiting_agy | done | blocked",
+  "statuses": "todo | in_progress | waiting_agy | deferred | done | blocked",
   "exec_legend": "O = Opus, S = Sonnet pt-executor, AG = Antigravity (agy / pasted brief)",
   "gates_legend": "per block: G1 ports, G2 params, G3 Simulink goldens, G4 physics, G5 C parity: pending | pass | n/a",
   "wps": [
@@ -11,13 +11,20 @@
       "title": "Loop setup and baseline",
       "exec": "O",
       "deps": [],
-      "status": "in_progress",
+      "status": "done",
       "findings": [
         {
           "severity": "med",
           "summary": "Baseline suites (plan \u00a75) not run in the cloud session: npm ci fails, cdn.sheetjs.com (xlsx-0.20.3 tarball) is denied by the network policy. Run the baseline on the user's machine at the start of the first loop iteration, then mark WP-00 done."
         }
-      ]
+      ],
+      "baseline": {
+        "date": "2026-10-20",
+        "commit": "49f07cf",
+        "command": "npx vitest run src/engine/xbridges/BlockDefinitions.test.ts src/help/blockReference.test.ts src/services/ai/catalog/xbridgesCapabilityIndex.test.ts src/utils/stateMachine/xbCapabilities.test.ts src/utils/stateMachine/xbCGenerator.test.ts src/utils/stateMachine/xbInterpreter.test.ts src/components/xbridges --reporter=dot",
+        "result": "9 files / 257 tests passed",
+        "env": "cloud: node_modules from package-lock.json minus the xlsx tarball (cdn.sheetjs.com denied), installed in the scratchpad and symlinked; package.json untouched"
+      }
     },
     {
       "id": "WP-01",
@@ -26,8 +33,13 @@
       "deps": [
         "WP-00"
       ],
-      "status": "waiting_agy",
-      "findings": [],
+      "status": "deferred",
+      "findings": [
+        {
+          "severity": "med",
+          "summary": "Deferred by user decision 2026-10-20 (no Antigravity / MATLAB). Port and parameter data come from plan \u00a72 and the Simulink documentation; G1/G2 are checked against the specs Opus writes per block WP. Run the brief later to confirm."
+        }
+      ],
       "brief": "docs/powertrain/antigravity/WP-01-inventory.md"
     },
     {
@@ -35,21 +47,27 @@
       "title": "Golden generator + parity harness",
       "exec": "AG+O",
       "deps": [
-        "WP-01"
+        "WP-00"
       ],
-      "status": "waiting_agy",
-      "findings": [],
+      "status": "deferred",
+      "findings": [
+        {
+          "severity": "med",
+          "summary": "Deferred by user decision 2026-10-20 (no Antigravity / MATLAB). Port and parameter data come from plan \u00a72 and the Simulink documentation; G1/G2 are checked against the specs Opus writes per block WP. Run the brief later to confirm."
+        }
+      ],
       "brief": "docs/powertrain/antigravity/WP-02-goldens.md"
     },
     {
       "id": "WP-03",
-      "title": "Lookup tables",
+      "title": "Lookup tables (engine, palette, help); embedded C moves to WP-30",
       "exec": "S",
       "deps": [
         "WP-00"
       ],
-      "status": "todo",
-      "findings": []
+      "status": "in_progress",
+      "findings": [],
+      "tests": "src/engine/xbridges/lookup/lookupTables.test.ts"
     },
     {
       "id": "WP-04",
@@ -64,7 +82,7 @@
     {
       "id": "WP-05",
       "title": "Simulink core gaps",
-      "exec": "S+AG",
+      "exec": "S",
       "deps": [
         "WP-03"
       ],
@@ -84,9 +102,8 @@
     {
       "id": "WP-06",
       "title": "Scaffold and registration",
-      "exec": "AG",
+      "exec": "S",
       "deps": [
-        "WP-01",
         "WP-03"
       ],
       "status": "todo",
@@ -95,7 +112,7 @@
     {
       "id": "WP-07",
       "title": "Symbols",
-      "exec": "AG",
+      "exec": "S",
       "deps": [
         "WP-06"
       ],
@@ -105,7 +122,7 @@
     {
       "id": "WP-08",
       "title": "Spec transcription for all blocks",
-      "exec": "AG",
+      "exec": "S",
       "deps": [
         "WP-06"
       ],
@@ -335,7 +352,7 @@
     {
       "id": "WP-31",
       "title": "Reference apps: conventional, EV",
-      "exec": "AG+O",
+      "exec": "S",
       "deps": [
         "WP-16",
         "WP-22",
@@ -347,7 +364,7 @@
     {
       "id": "WP-32",
       "title": "Reference apps: HEV family",
-      "exec": "AG+S",
+      "exec": "S",
       "deps": [
         "WP-31"
       ],
@@ -357,7 +374,7 @@
     {
       "id": "WP-33",
       "title": "Reference apps: engine dynamometer",
-      "exec": "AG",
+      "exec": "S",
       "deps": [
         "WP-24",
         "WP-27"
@@ -368,7 +385,7 @@
     {
       "id": "WP-34",
       "title": "Help, AI catalog, DOE, TRM, table editor",
-      "exec": "S+AG",
+      "exec": "S",
       "deps": [
         "WP-30"
       ],
@@ -378,7 +395,7 @@
     {
       "id": "WP-35",
       "title": "Simulink exchange map",
-      "exec": "AG",
+      "exec": "S",
       "deps": [
         "WP-34"
       ],
@@ -396,5 +413,8 @@
       "findings": []
     }
   ],
-  "blocks": {}
+  "blocks": {},
+  "user_decisions": [
+    "2026-10-20: skip Antigravity and the MATLAB inventory; proceed with the block data in plan \u00a72 (docs-based). G3 Simulink goldens stay pending until MATLAB runs are available."
+  ]
 }
