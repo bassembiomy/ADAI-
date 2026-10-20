@@ -13,8 +13,19 @@ import { buildEvReference, EV_REFERENCE_IDS as ID } from './examples/evReference
 
 function instrumented(stop: number) {
   const { blocks, connections } = buildEvReference({ cycle: 'UDDS' });
-  // test-side probes: one Scope and a charge integrator on the motor current
-  blocks.push(BLOCK_LIBRARY.Scope('probe', { numSignals: 4, bufferSize: 1e7, limitDataPoints: false }));
+  // Test-side probes: a lightweight recorder (one sample per macro step, O(1) per call; the Scope block
+  // copies its whole history on each call, which is quadratic over long runs) and a charge integrator.
+  const byT = new Map<number, { t: number; y1: number; y2: number; y3: number; y4: number }>();
+  const probe: any = {
+    id: 'probe', type: 'TestProbe', params: {}, outputs: [],
+    inputs: [1, 2, 3, 4].map(i => ({ id: `in${i}`, name: `in${i}`, type: 'auto', direction: 'input', value: 0 })),
+    execute: (ins: any[], _p: any, _s: any, t: number) => {
+      // the last evaluation at a given step time wins: the post-step output pass comes after the solver stages
+      byT.set(Math.round(t * 100), { t, y1: ins[0], y2: ins[1], y3: ins[2], y4: ins[3] });
+      return { outputs: [] };
+    },
+  };
+  blocks.push(probe);
   blocks.push(BLOCK_LIBRARY.Integrator('ampSec', { initialCondition: 0 }));
   const c = (s: string, sp: string, t: string, tp: string) => ({ sourceBlock: s, sourcePort: sp, targetBlock: t, targetPort: tp });
   connections.push(
@@ -24,10 +35,6 @@ function instrumented(stop: number) {
   );
   const e = new XbridgesEngine({ blocks, connections } as any);
   Solvers.runFixedStep(e, { solver: 'ode14x', startTime: 0, stopTime: stop, fixedStep: 0.01 } as any);
-  const hist = ((e.getBlock('probe')!.state as any).history as any[]);
-  // keep one sample per macro step (the scope also records solver-stage evaluations)
-  const byT = new Map<number, any>();
-  for (const s of hist) byT.set(Math.round(s.t * 100), s);
   const samples = [...byT.entries()].sort((a, b) => a[0] - b[0]).map(([, s]) => s);
   return { e, samples };
 }

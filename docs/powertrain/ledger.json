@@ -441,9 +441,37 @@
         "WP-22",
         "WP-23"
       ],
-      "status": "in_progress",
+      "status": "done",
       "findings": [],
-      "tests": "src/engine/xbridges/powertrain/wp31_evReference.test.ts"
+      "tests": "src/engine/xbridges/powertrain/wp31_evReference.test.ts",
+      "review": "Opus 2026-10-20: UDDS 0-120 s with ode14x h=0.01 in 72 s: RMS speed error 0.27 m/s, max 0.88 m/s, 146 Wh/km, regen to -27 A, charge conservation 2e-12. Test probe changed by Opus from Scope to an O(1) recorder (Scope was quadratic). Full-cycle and Conventional vehicle in WP-31b."
+    },
+    {
+      "id": "WP-31b",
+      "title": "Conventional vehicle reference (mapped SI engine + clutch + transmission) and full-cycle EV run (needs WP-13/15)",
+      "exec": "S",
+      "deps": [
+        "WP-13",
+        "WP-15",
+        "WP-31"
+      ],
+      "status": "todo",
+      "findings": []
+    },
+    {
+      "id": "WP-34a",
+      "title": "Scope block performance: execute copies the whole history on every call (O(n^2) over long runs); append in place / ring buffer",
+      "exec": "S",
+      "deps": [
+        "WP-09c"
+      ],
+      "status": "todo",
+      "findings": [
+        {
+          "severity": "high",
+          "summary": "Found in WP-31: 120 s EV run took ~730 s with a Scope probe vs ~72 s without (BlockDefinitions.ts Scope execute: let history = [...state.history])."
+        }
+      ]
     },
     {
       "id": "WP-32",
