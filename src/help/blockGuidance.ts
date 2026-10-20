@@ -1,3 +1,4 @@
+import { POWERTRAIN_GUIDANCE } from '../engine/xbridges/powertrain/index';
 /** Reviewed instruction supplements. Registry values remain authoritative. */
 export interface BlockGuidance { description: string; behavior?: string; example?: string; equation?: string; parameters?: Record<string, string> }
 export const BLOCK_GUIDANCE: Record<string, BlockGuidance> = {};
@@ -405,3 +406,5 @@ BLOCK_GUIDANCE['xbridges:BUS_SELECTOR'] = {
     OutputAsBus: "'off' gives one output port per selected path; 'on' gives one bus output whose elements are named by the last path segment."
   }
 };
+
+Object.assign(BLOCK_GUIDANCE, POWERTRAIN_GUIDANCE);

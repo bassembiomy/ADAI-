@@ -13,6 +13,8 @@ import { LineChart, Line, AreaChart, Area, ResponsiveContainer, YAxis } from 're
 import { XPort } from '../../engine/xbridges/types';
 import { XBRIDGES_CATEGORIES, raycastTwin, ROOM_WALLS, ROOM_CIRCLES, ROOM_BOXES, MATLAB_WALLS, MATLAB_OBSTACLES, polyToString, zpgToString, findRoots } from '../../engine/xbridges/BlockDefinitions';
 import { WorkspaceContext } from './context';
+import { getPowertrainSpec } from '../../engine/xbridges/powertrain/index';
+import { PtSymbol } from './powertrain/PtSymbol';
 
 // Map icon string names to Lucide icon components
 const LucideIconMap: Record<string, React.ComponentType<any>> = {
@@ -1876,6 +1878,8 @@ export const XBlockNode = React.memo(({ data, selected, id }: any) => {
   };
 
   const getIcon = (type: string) => {
+    const ptSpec = getPowertrainSpec(type);
+    if (ptSpec) return <PtSymbol id={ptSpec.symbol} size={14} />;
     const iconName = blockTypeToIconName[type] || data?.icon;
     if (iconName && LucideIconMap[iconName]) {
       const IconComponent = LucideIconMap[iconName];

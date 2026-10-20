@@ -2,6 +2,7 @@
 
 import { LOOKUP_CATEGORY } from '../../engine/xbridges/lookup/lookupBlocks';
 import { BUS_CATEGORY } from '../../engine/xbridges/bus/busBlocks';
+import { POWERTRAIN_CATEGORIES } from '../../engine/xbridges/powertrain/index';
 
 export const XBRIDGES_CATEGORIES = [
   {
@@ -402,5 +403,6 @@ export const XBRIDGES_CATEGORIES = [
     ]
   },
   LOOKUP_CATEGORY,
-  BUS_CATEGORY
+  BUS_CATEGORY,
+  ...POWERTRAIN_CATEGORIES
 ];

@@ -4,6 +4,7 @@ import { VectorUtils } from './VectorUtils';
 import { LOOKUP_FACTORIES, LOOKUP_CATEGORY } from './lookup/lookupBlocks';
 import { BUS_FACTORIES, BUS_CATEGORY } from './bus/busBlocks';
 import { isBus, flattenBus } from './bus/busCore';
+import { POWERTRAIN_FACTORIES, POWERTRAIN_CATEGORIES } from './powertrain/index';
 import * as math from 'mathjs';
 import {
   evaluateDOEModel,
@@ -11517,7 +11518,8 @@ return block;
                                                                                                                                                                                       execute: () => ({ outputs: [] })
                                                                                                                                                                                     }),
   ...LOOKUP_FACTORIES,
-  ...BUS_FACTORIES
+  ...BUS_FACTORIES,
+  ...POWERTRAIN_FACTORIES
 };
 
 
@@ -11834,5 +11836,6 @@ export const XBRIDGES_CATEGORIES = [
     blocks: [
       { type: 'Note', label: 'Note Text Block', icon: 'file-text' }
     ]
-  }
+  },
+  ...POWERTRAIN_CATEGORIES
 ];
