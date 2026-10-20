@@ -78,8 +78,9 @@
       "deps": [
         "WP-03"
       ],
-      "status": "in_progress",
-      "findings": []
+      "status": "done",
+      "findings": [],
+      "review": "Opus 2026-10-20: 37 files / 595 tests pass (incl. trmSim, DOE); no new tsc errors; no rework."
     },
     {
       "id": "WP-05",

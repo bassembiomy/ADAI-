@@ -2,6 +2,8 @@
 import { XBlock, XPort } from './types';
 import { VectorUtils } from './VectorUtils';
 import { LOOKUP_FACTORIES, LOOKUP_CATEGORY } from './lookup/lookupBlocks';
+import { BUS_FACTORIES, BUS_CATEGORY } from './bus/busBlocks';
+import { isBus, flattenBus } from './bus/busCore';
 import * as math from 'mathjs';
 import {
   evaluateDOEModel,
@@ -2503,7 +2505,15 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
           const sample: any = { t: time };
           for (let i = 0; i < pNumSignals; i++) {
             const val = ins[i];
-            if (Array.isArray(val)) {
+            if (isBus(val)) {
+              const leaves = flattenBus(val);
+              let first: any = Object.values(leaves)[0];
+              while (Array.isArray(first)) first = first.length === 0 ? 0 : first[0];
+              const firstNum = Number(first ?? 0);
+              sample[`y${i + 1}`] = Number.isFinite(firstNum) ? firstNum : 0;
+              sample[`y${i + 1}_raw`] = val;
+              for (const [path, leaf] of Object.entries(leaves)) sample[`y${i + 1}.${path}`] = leaf;
+            } else if (Array.isArray(val)) {
               let firstScalar: any = val;
               while (Array.isArray(firstScalar)) {
                 if (firstScalar.length === 0) {
@@ -11506,7 +11516,8 @@ return block;
                                                                                                                                                                                       description: 'A text block to write custom notes directly next to the models. Has no simulation ports or reactions.',
                                                                                                                                                                                       execute: () => ({ outputs: [] })
                                                                                                                                                                                     }),
-  ...LOOKUP_FACTORIES
+  ...LOOKUP_FACTORIES,
+  ...BUS_FACTORIES
 };
 
 
@@ -11632,6 +11643,7 @@ export const XBRIDGES_CATEGORIES = [
     ]
   },
   LOOKUP_CATEGORY,
+  BUS_CATEGORY,
   {
     name: 'Trigonometric & Hyperbolic',
     blocks: [

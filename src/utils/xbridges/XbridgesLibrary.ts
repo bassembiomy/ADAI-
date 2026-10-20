@@ -1,6 +1,7 @@
 // src/utils/xbridges/XbridgesLibrary.ts
 
 import { LOOKUP_CATEGORY } from '../../engine/xbridges/lookup/lookupBlocks';
+import { BUS_CATEGORY } from '../../engine/xbridges/bus/busBlocks';
 
 export const XBRIDGES_CATEGORIES = [
   {
@@ -400,5 +401,6 @@ export const XBRIDGES_CATEGORIES = [
       { type: 'FUZZY_SURFACE_VIEWER', label: 'Control Surface Viewer', icon: 'bar-chart' }
     ]
   },
-  LOOKUP_CATEGORY
+  LOOKUP_CATEGORY,
+  BUS_CATEGORY
 ];

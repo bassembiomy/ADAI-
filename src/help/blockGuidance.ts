@@ -385,3 +385,23 @@ BLOCK_GUIDANCE['xbridges:INTERP_PRELOOKUP'] = {
     ...LUT_COMMON
   }
 };
+
+// Bus signals (WP-04): Simulink parameter names.
+BLOCK_GUIDANCE['xbridges:BUS_CREATOR'] = {
+  description: 'Combines its inputs into one bus signal with named elements; an input that is itself a bus becomes a nested sub-bus.',
+  behavior: 'Input k becomes element k, in port order. The number of names must equal Inputs and names must be unique, otherwise the block reports an error and outputs an empty bus.',
+  example: 'Inputs 3, SignalNames "Trq, Spd, Pwr" with inputs 10, 20, 30 -> bus {Trq: 10, Spd: 20, Pwr: 30}.',
+  parameters: {
+    Inputs: 'Number of input ports (integer, at least 1); default 2.',
+    SignalNames: 'Comma-separated element names, one per input (whitespace is trimmed). Empty means signal1, signal2, ... signalN.'
+  }
+};
+BLOCK_GUIDANCE['xbridges:BUS_SELECTOR'] = {
+  description: 'Selects elements of an incoming bus by name; dot paths reach into nested buses.',
+  behavior: 'One output per path in OutputSignals, or a single bus output when OutputAsBus is on. A missing path or a non-bus input gives a block error naming the cause and outputs 0.',
+  example: 'Bus {Trq: 10, Fuel: {Mass: 0.5, Vol: 0.1}} with OutputSignals "Fuel.Vol,Trq" -> out1 = 0.1, out2 = 10; with OutputAsBus on -> bus {Vol: 0.1, Trq: 10}.',
+  parameters: {
+    OutputSignals: 'Comma-separated element paths to select, such as Trq,Fuel.Vol; default signal1,signal2.',
+    OutputAsBus: "'off' gives one output port per selected path; 'on' gives one bus output whose elements are named by the last path segment."
+  }
+};

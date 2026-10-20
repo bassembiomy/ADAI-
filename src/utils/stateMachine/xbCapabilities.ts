@@ -258,6 +258,7 @@ const hostOnlySet = (
 );
 
 const LOOKUP_HOST_ONLY = hostOnlySet(['LOOKUP_1D', 'LOOKUP_2D', 'LOOKUP_ND', 'PRELOOKUP', 'INTERP_PRELOOKUP'], 'Lookup-table embedded C is scheduled in Powertrain plan WP-30; tables run in the host engine only for now.');
+const BUS_HOST_ONLY = hostOnlySet(['BUS_CREATOR', 'BUS_SELECTOR'], 'Bus signals become C structs in Powertrain plan WP-30; host engine only for now.');
 
 const UNCLASSIFIED_HOST_ONLY = hostOnlySet([
   'DC_VOLTAGE_SOURCE', 'THREE_PHASE_LOAD',
@@ -506,6 +507,7 @@ export const XB_CAPABILITIES: Readonly<Record<string, XBBlockCapability>> = {
   // overrides family-level entries that still lack paired executable evidence.
   ...UNCLASSIFIED_HOST_ONLY,
   ...LOOKUP_HOST_ONLY,
+  ...BUS_HOST_ONLY,
   ...UNPAIRED_EMBEDDED_OPERATIONS,
 };
 

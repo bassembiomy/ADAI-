@@ -4,7 +4,10 @@
 export type XScalar = number | boolean;
 export type XVector = number[] | boolean[];
 export type XMatrix = number[][] | boolean[][];
-export type XValue = XScalar | XVector | XMatrix;
+export type XBusElement = number | boolean | number[] | boolean[] | number[][] | XBus;
+/** Bus signal: plain ordered object of named elements (nested buses allowed). */
+export interface XBus { [element: string]: XBusElement }
+export type XValue = XScalar | XVector | XMatrix | XBus;
 
 // --- Signal Types ---
 export type XSignalType = 'continuous' | 'discrete' | 'logical' | 'vector' | 'matrix' | 'bit_array' | 'power' | 'measurement' | 'transform' | 'auto';
