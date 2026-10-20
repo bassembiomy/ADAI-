@@ -205,6 +205,21 @@
       "review": "Opus 2026-10-20: convergence ratios after fix ode2 4.08, ode3 8.33, ode4 16.68, ode5 39.1; no legacy test changed or broken by the new order. src/help/helpCoverage.test.ts 'requires fresh live UI evidence...' fails identically on baseline 49f07cf (pre-existing, unrelated: stale live-UI report)."
     },
     {
+      "id": "WP-09d",
+      "title": "Per-output feedthrough: outputs that depend only on state break loops (Simulink port-level direct feedthrough); non-converged algebraic loops must raise an error instead of returning wrong values",
+      "exec": "S",
+      "deps": [
+        "WP-09c"
+      ],
+      "status": "todo",
+      "findings": [
+        {
+          "severity": "high",
+          "summary": "Found in EC-07: block-level feedthrough makes stateful PT blocks (manifold, turbo, dyno) form false algebraic loops; Gauss-Seidel did not settle in 5 passes and Newton returned wrong values silently (charge pipe 0.7 kg/s). Workaround in examples/ciTestCell.ts: one-step Memory blocks."
+        }
+      ]
+    },
+    {
       "id": "WP-10",
       "title": "Drive cycle source, longitudinal driver",
       "exec": "S",
@@ -628,9 +643,10 @@
         "EC-05",
         "EC-06"
       ],
-      "status": "in_progress",
+      "status": "done",
       "tests": "src/engine/xbridges/powertrain/ec07_ciTestCell.test.ts",
-      "findings": []
+      "findings": [],
+      "review": "Opus 2026-10-20: 3x3 SOI x P_rail sweep at 2000 rpm in ~64 s; T_brake 145-223 N*m, BSFC 190-216 g/kWh, Pmax 52-88 bar, Texh 803-939 K, NOx 18-27 g/kWh; best feasible SOI 14 / 180 MPa (190.4 g/kWh). Loops broken with one-step Memory blocks (10 ms) because of block-level feedthrough; see WP-09d."
     },
     {
       "id": "EC-08",
