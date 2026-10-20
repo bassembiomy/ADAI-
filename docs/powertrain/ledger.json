@@ -177,7 +177,7 @@
       "deps": [
         "WP-09"
       ],
-      "status": "in_progress",
+      "status": "done",
       "findings": [
         {
           "severity": "high",
@@ -188,7 +188,8 @@
           "summary": "Measured before fix: every fixed-step solver converges with order 1 on x'=-x (error ratio ~2 for ode2/3/4/5); ode45 misses 1e-6 by 75x; ordering depends on block insertion order."
         }
       ],
-      "tests": "src/engine/xbridges/executionOrder.test.ts"
+      "tests": "src/engine/xbridges/executionOrder.test.ts",
+      "review": "Opus 2026-10-20: convergence ratios after fix ode2 4.08, ode3 8.33, ode4 16.68, ode5 39.1; no legacy test changed or broken by the new order. src/help/helpCoverage.test.ts 'requires fresh live UI evidence...' fails identically on baseline 49f07cf (pre-existing, unrelated: stale live-UI report)."
     },
     {
       "id": "WP-10",
@@ -501,5 +502,12 @@
   "tsc_note": "tsc errors in this cloud env: 2 pre-existing 'xlsx' module errors (package not installable here) + errors in acceptance tests whose WP is not implemented yet. Executors report only errors in files they touch.",
   "lessons": [
     "Executors' hand-computed help examples were wrong twice (WP-12, WP-19): briefs now require every number in an example to be produced by running the block."
+  ],
+  "preexisting_failures": [
+    {
+      "test": "src/help/helpCoverage.test.ts > requires fresh live UI evidence and detects a new unmapped inline control",
+      "since": "49f07cf (baseline)",
+      "cause": "docs/help live-UI report has an 'unmapped' item; unrelated to powertrain"
+    }
   ]
 }

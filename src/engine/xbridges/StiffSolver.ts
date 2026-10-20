@@ -94,10 +94,7 @@ export class StiffSolver {
   /** f(t, x): outputs at the trial state, then derivatives, flattened in layout order. */
   static f(engine: XbridgesEngine, layout: Layout, t: number, x: ArrayLike<number>): Float64Array {
     const temp = StiffSolver.unflatten(engine, layout, x);
-    // Two passes: the engine's topological order evaluates a stateful block (e.g. an integrator) after its
-    // consumers, so the first pass only refreshes state-driven outputs; the second propagates them downstream.
-    // Without this f(t, x) would see the outputs of the previous call (a lagged, non-deterministic function).
-    engine.computeOutputs(t, temp);
+    // Single pass: the engine's sorted order now evaluates stateful blocks before their feedthrough consumers.
     engine.computeOutputs(t, temp);
     const d = StiffSolver.flattenDerivatives(engine.computeDerivatives(t, temp), layout);
     for (let i = 0; i < d.length; i++) {

@@ -12,6 +12,8 @@ export interface PtPortSpec {
   /** e.g. 'Bus: <Name>' for bus ports. */
   dataType?: string;
   description: string;
+  /** Inputs only: false when the input does not affect any output instantaneously. Default true. */
+  feedthrough?: boolean;
 }
 
 export interface PtParamSpec {

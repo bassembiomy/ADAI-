@@ -223,7 +223,9 @@ export class XbridgesEngine {
       }
     });
     
-    // 1. Build adjacency list for Topological Sort
+    // 1. Build adjacency list for Topological Sort.
+    // An edge s->t is a sorting dependency iff t has direct feedthrough.
+    const isFeedthrough = (b: XBlock): boolean => b.directFeedthrough ?? !b.isStateful;
     const adjList = new Map<string, string[]>();
     const inDegree = new Map<string, number>();
 
@@ -238,7 +240,7 @@ export class XbridgesEngine {
       
       if (sourceBlock && targetBlock && adjList.has(conn.sourceBlock) && adjList.has(conn.targetBlock)) {
         adjList.get(conn.sourceBlock)!.push(conn.targetBlock);
-        if (!sourceBlock.isStateful) {
+        if (isFeedthrough(targetBlock)) {
           inDegree.set(conn.targetBlock, inDegree.get(conn.targetBlock)! + 1);
         }
       }
@@ -257,7 +259,7 @@ export class XbridgesEngine {
       sortedBlocks.push(block);
 
       adjList.get(u)!.forEach(v => {
-        if (!block.isStateful) {
+        if (isFeedthrough(this.blockMap.get(v)!)) {
           inDegree.set(v, inDegree.get(v)! - 1);
           if (inDegree.get(v) === 0) queue.push(v);
         }
@@ -281,7 +283,8 @@ export class XbridgesEngine {
           
           const outputs = this.flatConnections.filter(c => c.sourceBlock === curr);
           outputs.forEach(c => {
-            q.push(c.targetBlock);
+            const tb = this.blockMap.get(c.targetBlock);
+            if (tb && isFeedthrough(tb)) q.push(c.targetBlock);
           });
         }
         return false;
@@ -425,6 +428,38 @@ export class XbridgesEngine {
       });
     });
 
+    if (loopKeys.length === 0) return;
+
+    // Gauss-Seidel passes (cycle blocks in order) before falling back to Newton.
+    const snapshot = () => loopKeys.map(lk => this.signalValues.get(`${lk.blockId}.${lk.portId}`));
+    const settledValue = (a: any, b: any): boolean => {
+      if (typeof a === 'number' && typeof b === 'number') {
+        if (a === b) return true;
+        return Math.abs(a - b) <= algTol * (1 + Math.abs(b));
+      }
+      if (Array.isArray(a) && Array.isArray(b)) {
+        return a.length === b.length && a.every((v, i) => settledValue(v, b[i]));
+      }
+      if (a && b && typeof a === 'object' && typeof b === 'object' && !Array.isArray(a) && !Array.isArray(b)) {
+        const ka = Object.keys(a);
+        const kb = Object.keys(b);
+        return ka.length === kb.length && ka.every(k => k in b && settledValue(a[k], b[k]));
+      }
+      return a === b;
+    };
+    let prev = snapshot();
+    for (let pass = 0; pass < 5; pass++) {
+      this.cycleBlocks.forEach(b => this.executeBlockOrCache(b, time, tempStates));
+      const cur = snapshot();
+      const settled = cur.every((v, i) => settledValue(v, prev[i]));
+      prev = cur;
+      if (settled) return;
+    }
+
+    // Newton operates on plain numeric outputs only; others are left untouched.
+    const numericKeys = loopKeys.filter(lk => typeof this.signalValues.get(`${lk.blockId}.${lk.portId}`) === 'number');
+    loopKeys.length = 0;
+    loopKeys.push(...numericKeys);
     const n = loopKeys.length;
     if (n === 0) return;
 

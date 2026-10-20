@@ -100,6 +100,7 @@ export function definePtBlock(spec: PtBlockSpec, impl: PtBlockImpl): (id: string
       outputs: byIndex(ports.outputs).map(buildPort),
       state: initState,
       isStateful: spec.states.length > 0,
+      directFeedthrough: ports.inputs.some(p => p.feedthrough ?? true),
       equation: spec.equations.join('; '),
       description: spec.description,
       icon: 'box',

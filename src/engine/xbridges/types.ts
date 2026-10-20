@@ -36,6 +36,8 @@ export interface XBlock {
   inputs: XPort[];
   outputs: XPort[];
   state?: any; // For blocks with memory (integrators, unit delays, flip-flops)
+  /** True when some output depends on the current value of an input. Default: !isStateful (backward compatible). */
+  directFeedthrough?: boolean;
   isStateful?: boolean; // NEW: Indicates if the block breaks algebraic loops
   allowDynamicInputs?: boolean; // Can the user add more inputs? (e.g. Sum, Mul, Concat)
   allowDynamicOutputs?: boolean; // Can the user add more outputs? (e.g. Demux)
