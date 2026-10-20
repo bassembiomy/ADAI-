@@ -84,6 +84,7 @@ const renderLibraryIcon = (iconName: string, size = 14, className?: string) => {
 import { XbridgesEngine } from '../../engine/xbridges/XbridgesEngine';
 import { Solvers } from '../../engine/xbridges/Solvers';
 import { AdaptiveSolver } from '../../engine/xbridges/AdaptiveSolver';
+import { StiffSolver } from '../../engine/xbridges/StiffSolver';
 import { ModelDiagnostic } from '../../engine/xbridges/types';
 import { XBlockNode, getColor } from './XBlockNode';
 import { XbridgesPropertiesPanel } from './XbridgesPropertiesPanel';
@@ -1543,7 +1544,7 @@ export const XbridgesWorkspace: React.FC<{
   const [viewPath, setViewPath] = useState<string[]>(['root']);
   const currentParentId = viewPath[viewPath.length - 1];
 
-  const [solverType, setSolverType] = useState<'euler' | 'ode2' | 'ode3' | 'rk4' | 'ode5' | 'ode23' | 'ode45'>('rk4');
+  const [solverType, setSolverType] = useState<'euler' | 'ode2' | 'ode3' | 'rk4' | 'ode5' | 'ode23' | 'ode45' | 'ode14x' | 'ode23tb'>('rk4');
   const [edgeType, setEdgeType] = useState<'default' | 'straight' | 'smoothstep'>('smoothstep');
   const [snapEnabled, setSnapEnabled] = useState(false);
   const initialStep = tickMs ? tickMs / 1000 : 0.02;
@@ -1914,6 +1915,8 @@ export const XbridgesWorkspace: React.FC<{
             else if (solverType === 'ode5') Solvers.stepODE5(engineRef.current, timeRef.current, fixedStep);
             else if (solverType === 'ode23') AdaptiveSolver.stepODE23(engineRef.current, timeRef.current, fixedStep);
             else if (solverType === 'ode45') AdaptiveSolver.stepODE45(engineRef.current, timeRef.current, fixedStep);
+            else if (solverType === 'ode14x') StiffSolver.stepODE14x(engineRef.current, timeRef.current, fixedStep);
+            else if (solverType === 'ode23tb') StiffSolver.stepODE23TB(engineRef.current, timeRef.current, fixedStep, 1e-3, 1e-6);
             else Solvers.stepEuler(engineRef.current, timeRef.current, fixedStep);
 
             timeRef.current += fixedStep;
@@ -2722,6 +2725,8 @@ export const XbridgesWorkspace: React.FC<{
     else if (solverType === 'ode5') Solvers.stepODE5(engineRef.current, timeRef.current, fixedStep);
     else if (solverType === 'ode23') AdaptiveSolver.stepODE23(engineRef.current, timeRef.current, fixedStep);
     else if (solverType === 'ode45') AdaptiveSolver.stepODE45(engineRef.current, timeRef.current, fixedStep);
+    else if (solverType === 'ode14x') StiffSolver.stepODE14x(engineRef.current, timeRef.current, fixedStep);
+    else if (solverType === 'ode23tb') StiffSolver.stepODE23TB(engineRef.current, timeRef.current, fixedStep, 1e-3, 1e-6);
     else Solvers.stepEuler(engineRef.current, timeRef.current, fixedStep);
 
     timeRef.current += fixedStep;

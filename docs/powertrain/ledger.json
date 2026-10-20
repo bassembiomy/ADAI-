@@ -167,8 +167,9 @@
       "deps": [
         "WP-09"
       ],
-      "status": "in_progress",
-      "findings": []
+      "status": "done",
+      "findings": [],
+      "review": "Opus 2026-10-20: both in-file step chains and the solverType union handle ode14x/ode23tb; 22 tests, lint:theme and tsc clean."
     },
     {
       "id": "WP-09c",
