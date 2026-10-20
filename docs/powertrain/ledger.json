@@ -552,9 +552,10 @@
       "deps": [
         "EC-00"
       ],
-      "status": "in_progress",
+      "status": "done",
       "tests": "src/engine/xbridges/powertrain/ec01_cylinder.test.ts",
-      "findings": []
+      "findings": [],
+      "review": "Opus 2026-10-20: two NOx reworks (equilibrium limit, soft dissociation knee): diesel point BMEP 10.4 bar, BSFC 209, Pmax 76.5 bar, Texh 749 K, NOx ~17 g/kWh rising with advance"
     },
     {
       "id": "EC-02",
@@ -563,9 +564,10 @@
       "deps": [
         "EC-00"
       ],
-      "status": "in_progress",
+      "status": "done",
       "tests": "src/engine/xbridges/powertrain/ec02_airPath.test.ts",
-      "findings": []
+      "findings": [],
+      "review": "Opus 2026-10-20: contract-test category pattern fixed by planner; throttle example hand-checked"
     },
     {
       "id": "EC-03",
@@ -574,9 +576,10 @@
       "deps": [
         "EC-00"
       ],
-      "status": "in_progress",
+      "status": "done",
       "tests": "src/engine/xbridges/powertrain/ec03_turbocharger.test.ts",
-      "findings": []
+      "findings": [],
+      "review": "Opus 2026-10-20: power balance at settled speed checked (0.95*5870.7 = 5577.2 W)"
     },
     {
       "id": "EC-04",
@@ -585,9 +588,10 @@
       "deps": [
         "EC-01"
       ],
-      "status": "todo",
+      "status": "done",
       "tests": "src/engine/xbridges/powertrain/ec04_fuelingActuation.test.ts",
-      "findings": []
+      "findings": [],
+      "review": "Opus 2026-10-20: one rework (k_ov default 6e8; RGF 9.3 % at 20 deg overlap); wide overlaps unphysical until calibrated"
     },
     {
       "id": "EC-05",
@@ -596,9 +600,10 @@
       "deps": [
         "EC-00"
       ],
-      "status": "in_progress",
+      "status": "done",
       "tests": "src/engine/xbridges/powertrain/ec05_testCellControl.test.ts",
-      "findings": []
+      "findings": [],
+      "review": "Opus 2026-10-20: unconnected DoE input reads as scalar 0 in DoE override mode (documented)"
     },
     {
       "id": "EC-06",
@@ -607,9 +612,10 @@
       "deps": [
         "EC-00"
       ],
-      "status": "in_progress",
+      "status": "done",
       "tests": "src/engine/xbridges/powertrain/ec06_doe.test.ts",
-      "findings": []
+      "findings": [],
+      "review": "Opus 2026-10-20: one rework ('string' parameter kind instead of a factory wrapper; inscribed CCD documented)"
     },
     {
       "id": "EC-07",
@@ -622,8 +628,8 @@
         "EC-05",
         "EC-06"
       ],
-      "status": "todo",
-      "tests": "",
+      "status": "in_progress",
+      "tests": "src/engine/xbridges/powertrain/ec07_ciTestCell.test.ts",
       "findings": []
     },
     {
@@ -660,5 +666,8 @@
       "2026-10-20: all blocks at once",
       "2026-10-20: missing models from published sources, marked as assumptions"
     ]
-  }
+  },
+  "follow_ups": [
+    "Share the compressible-orifice Psi function between Throttle Body and Turbocharger (now duplicated) in ptMath."
+  ]
 }
