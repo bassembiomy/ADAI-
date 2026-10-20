@@ -118,7 +118,8 @@ plan if the installed release does not have it; any block WP-01 finds that is mi
 - `blocks/<group>.ts` per WP group: `PT_SPECS`, `PT_FACTORIES`. `index.ts`: `POWERTRAIN_SPECS`,
   `POWERTRAIN_FACTORIES` (only verified blocks), `POWERTRAIN_CATEGORIES`.
 - Registration: `BLOCK_LIBRARY` spreads `POWERTRAIN_FACTORIES`; **both** palettes append `POWERTRAIN_CATEGORIES`.
-  Palette groups mirror the Simulink library tree: "Powertrain / Drivetrain / Couplings", etc.
+  Palette: one group "Powertrain Blockset" holding every block, ordered by Simulink sub-library (user decision 2026-10-20);
+  each spec keeps its Simulink sub-library in `category` ("Powertrain / Drivetrain / Couplings", ...) for help and ordering.
 - A factory builds ports only from its spec; never a port the Simulink block does not have.
 
 ### 3.2 Block semantics
