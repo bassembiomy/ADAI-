@@ -8,7 +8,7 @@ import { BLOCK_LIBRARY, XBRIDGES_CATEGORIES as CANVAS_CATEGORIES } from '../Bloc
 import { XBRIDGES_CATEGORIES as HELP_CATEGORIES } from '../../../utils/xbridges/XbridgesLibrary';
 import { getBlockHelpReferences } from '../../../help/blockReference';
 import { POWERTRAIN_SPECS, POWERTRAIN_FACTORIES, POWERTRAIN_CATEGORIES, getPowertrainSpec } from './index';
-import { PT_SYMBOL_IDS } from './ptSpec';
+import { PT_SYMBOL_IDS, PT_CATEGORY_ORDER } from './ptSpec';
 import { rpm2radps, radps2rpm, smoothSign, powerFlowEfficiency, validateParams } from './ptMath';
 import type { PtBlockSpec, PtPortSpec } from './ptSpec';
 
@@ -112,13 +112,16 @@ describe('powertrain registry contract (every spec)', () => {
     }
   });
 
-  it('every block is in a "Powertrain / ..." category in both palettes, and nothing else is', () => {
+  it('all blocks are in one "Powertrain Blockset" palette group in both palettes (user decision 2026-10-20), ordered by Simulink sub-library', () => {
+    expect(POWERTRAIN_CATEGORIES.map(c => c.name)).toEqual(POWERTRAIN_SPECS.length ? ['Powertrain Blockset'] : []);
+    const order = (s: PtBlockSpec) => PT_CATEGORY_ORDER.indexOf(s.category as any);
+    const expected = [...POWERTRAIN_SPECS].sort((a, b) => order(a) - order(b)).map(s => s.type);
     for (const cats of [CANVAS_CATEGORIES, HELP_CATEGORIES]) {
-      const pt = cats.filter(c => c.name.startsWith('Powertrain /'));
-      const listed = pt.flatMap(c => c.blocks.map(b => b.type)).sort();
-      expect(listed).toEqual(POWERTRAIN_SPECS.map(s => s.type).sort());
-      for (const c of pt) expect(POWERTRAIN_CATEGORIES.map(x => x.name)).toContain(c.name);
+      expect(cats.filter(c => c.name.startsWith('Powertrain')).map(c => c.name)).toEqual(POWERTRAIN_SPECS.length ? ['Powertrain Blockset'] : []);
+      const group = cats.find(c => c.name === 'Powertrain Blockset');
+      if (POWERTRAIN_SPECS.length) expect(group!.blocks.map(b => b.type)).toEqual(expected);
     }
+    for (const s of POWERTRAIN_SPECS) expect(PT_CATEGORY_ORDER, s.type).toContain(s.category);
   });
 
   it('every block has complete help (no documentation gaps)', () => {
