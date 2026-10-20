@@ -3183,6 +3183,8 @@ export const XbridgesWorkspace: React.FC<{
                     <option value="ode5">Dormand-Prince (ODE5)</option>
                     <option value="ode23">Adaptive ODE23 (BS)</option>
                     <option value="ode45">Adaptive ODE45 (DP)</option>
+                    <option value="ode14x">Implicit Extrapolation (ODE14x, stiff)</option>
+                    <option value="ode23tb">Adaptive TR-BDF2 (ODE23tb, stiff)</option>
                   </select>
                 </div>
               </div>

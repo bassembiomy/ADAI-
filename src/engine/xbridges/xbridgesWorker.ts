@@ -1,6 +1,7 @@
 import { XbridgesEngine } from './XbridgesEngine';
 import { Solvers } from './Solvers';
 import { AdaptiveSolver } from './AdaptiveSolver';
+import { StiffSolver } from './StiffSolver';
 import type {
   XbridgesWorkerRequest,
   XbridgesWorkerResponse,
@@ -140,6 +141,8 @@ export function handleXbridgesWorkerMessage(request: XbridgesWorkerRequest): Xbr
       else if (solver === 'ode5') Solvers.stepODE5(workerEngine, currentTime, dt);
       else if (solver === 'ode23') AdaptiveSolver.stepODE23(workerEngine, currentTime, dt);
       else if (solver === 'ode45') AdaptiveSolver.stepODE45(workerEngine, currentTime, dt);
+      else if (solver === 'ode14x') StiffSolver.stepODE14x(workerEngine, currentTime, dt);
+      else if (solver === 'ode23tb') StiffSolver.stepODE23TB(workerEngine, currentTime, dt, 1e-3, 1e-6);
       else Solvers.stepEuler(workerEngine, currentTime, dt);
 
       currentTime += dt;

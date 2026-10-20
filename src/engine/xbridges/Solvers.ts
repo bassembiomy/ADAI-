@@ -2,6 +2,7 @@ import { XbridgesEngine } from './XbridgesEngine';
 import { SolverOptions } from './types';
 import { VectorUtils } from './VectorUtils';
 import { AdaptiveSolver } from './AdaptiveSolver';
+import { StiffSolver } from './StiffSolver';
 
 // Dormand-Prince coefficients for ODE5 fixed step
 const C_DP = [0, 1/5, 3/10, 4/5, 8/9, 1, 1];
@@ -503,8 +504,22 @@ export class Solvers {
           this.runODE2(engine, options);
       } else if (solver === 'ode5') {
           this.runODE5(engine, options);
-      } else {
+      } else if (solver === 'ode14x') {
+          StiffSolver.runODE14x(engine, options);
+      } else if (solver === 'ode23tb') {
+          StiffSolver.runODE23TB(engine, options);
+      } else if (solver === 'euler' || solver === 'ode1' || solver === 'fixedStep') {
           this.runEuler(engine, options);
+      } else {
+          engine.diagnostics.push({
+            severity: 'error',
+            code: 'UNSUPPORTED_SOLVER',
+            message: `Solver '${solver}' is not supported. Use ode14x or ode23tb for stiff models.`,
+          });
       }
   }
+
+  // ODE14x: implicit extrapolation (stiff), single step for the live canvas worker
+  static stepODE14x = (engine: XbridgesEngine, t: number, h: number, opts?: { extrapolationOrder?: number; newtonIterations?: number }) =>
+    StiffSolver.stepODE14x(engine, t, h, opts);
 }

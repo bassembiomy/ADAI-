@@ -65,8 +65,10 @@ export interface XModel {
 }
 
 export interface SolverOptions {
-  solver: 'euler' | 'ode1' | 'ode2' | 'ode3' | 'ode4' | 'rk4' | 'ode5' | 'ode23' | 'ode45' | 'fixedStep' | 'ode113' | 'ode23s' | 'ode15s';
+  solver: 'euler' | 'ode1' | 'ode2' | 'ode3' | 'ode4' | 'rk4' | 'ode5' | 'ode23' | 'ode45' | 'ode14x' | 'ode23tb' | 'fixedStep' | 'ode113' | 'ode23s' | 'ode15s';
   fixedStep?: number; // e.g. 0.01 for RK4/Euler
+  extrapolationOrder?: number; // ode14x, default 4
+  newtonIterations?: number; // ode14x, default 1
   startTime: number;
   stopTime: number;
   maxStep?: number;

@@ -150,12 +150,38 @@
       "deps": [
         "WP-00"
       ],
-      "status": "in_progress",
+      "status": "done",
       "tests": "src/engine/xbridges/stiffSolvers.test.ts",
       "findings": [
         {
           "severity": "high",
           "summary": "SolverOptions lists ode15s/ode23s/ode113 but Solvers.runFixedStep falls back to explicit Euler for any unknown name, silently."
+        }
+      ],
+      "review": "Opus 2026-10-20: 41 files / 512 tests; ode14x 3e-11 at h=0.01 on the stiff test; ode23tb 8e-6 (safety factor 0.8). Canvas step chains in XbridgesWorkspace.tsx still lack ode14x/ode23tb (WP-09b)."
+    },
+    {
+      "id": "WP-09b",
+      "title": "Canvas: XbridgesWorkspace solverType union and its two in-file step chains run ode14x/ode23tb (today they fall through to Euler)",
+      "exec": "S",
+      "deps": [
+        "WP-09"
+      ],
+      "status": "todo",
+      "findings": []
+    },
+    {
+      "id": "WP-09c",
+      "title": "Engine execution order (Simulink sorted order): non-direct-feedthrough blocks are sources; edges out of them are kept, edges into them ignored; per-block directFeedthrough flag",
+      "exec": "S",
+      "deps": [
+        "WP-09"
+      ],
+      "status": "todo",
+      "findings": [
+        {
+          "severity": "high",
+          "summary": "Pre-existing engine bug confirmed by Opus: XbridgesEngine.compile ignores edges OUT of stateful blocks and counts edges INTO them, so consumers of an Integrator run before it and read the previous stage's output. RK4 on x'=-x, h=0.1: one step gives 0.9025 instead of the RK4 value 0.9048375 (2.6 % error after 10 steps: first-order behaviour). Affects every X-Bridges simulation and solver."
         }
       ]
     },
