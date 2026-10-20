@@ -177,13 +177,18 @@
       "deps": [
         "WP-09"
       ],
-      "status": "todo",
+      "status": "in_progress",
       "findings": [
         {
           "severity": "high",
           "summary": "Pre-existing engine bug confirmed by Opus: XbridgesEngine.compile ignores edges OUT of stateful blocks and counts edges INTO them, so consumers of an Integrator run before it and read the previous stage's output. RK4 on x'=-x, h=0.1: one step gives 0.9025 instead of the RK4 value 0.9048375 (2.6 % error after 10 steps: first-order behaviour). Affects every X-Bridges simulation and solver."
+        },
+        {
+          "severity": "high",
+          "summary": "Measured before fix: every fixed-step solver converges with order 1 on x'=-x (error ratio ~2 for ode2/3/4/5); ode45 misses 1e-6 by 75x; ordering depends on block insertion order."
         }
-      ]
+      ],
+      "tests": "src/engine/xbridges/executionOrder.test.ts"
     },
     {
       "id": "WP-10",
