@@ -1,10 +1,15 @@
 {
   "plan": "docs/superpowers/plans/2026-10-20-powertrain-blockset-xbridges.md",
+  "revision": 2,
   "baseline": "49f07cf",
+  "statuses": "todo | in_progress | waiting_agy | done | blocked",
+  "exec_legend": "O = Opus, S = Sonnet pt-executor, AG = Antigravity (agy / pasted brief)",
+  "gates_legend": "per block: G1 ports, G2 params, G3 Simulink goldens, G4 physics, G5 C parity: pending | pass | n/a",
   "wps": [
     {
       "id": "WP-00",
       "title": "Loop setup and baseline",
+      "exec": "O",
       "deps": [],
       "status": "in_progress",
       "findings": [
@@ -16,16 +21,30 @@
     },
     {
       "id": "WP-01",
-      "title": "Inventory from MATLAB (user machine)",
+      "title": "Inventory from MATLAB",
+      "exec": "AG",
       "deps": [
         "WP-00"
       ],
-      "status": "todo",
-      "findings": []
+      "status": "waiting_agy",
+      "findings": [],
+      "brief": "docs/powertrain/antigravity/WP-01-inventory.md"
     },
     {
       "id": "WP-02",
-      "title": "Lookup tables LOOKUP_1D / LOOKUP_2D",
+      "title": "Golden generator + parity harness",
+      "exec": "AG+O",
+      "deps": [
+        "WP-01"
+      ],
+      "status": "waiting_agy",
+      "findings": [],
+      "brief": "docs/powertrain/antigravity/WP-02-goldens.md"
+    },
+    {
+      "id": "WP-03",
+      "title": "Lookup tables",
+      "exec": "S",
       "deps": [
         "WP-00"
       ],
@@ -33,91 +52,130 @@
       "findings": []
     },
     {
-      "id": "WP-03",
-      "title": "Scaffold, registration, symbols, contract test",
+      "id": "WP-04",
+      "title": "Bus signals (Info buses)",
+      "exec": "S",
+      "deps": [
+        "WP-03"
+      ],
+      "status": "todo",
+      "findings": []
+    },
+    {
+      "id": "WP-05",
+      "title": "Simulink core gaps",
+      "exec": "S+AG",
+      "deps": [
+        "WP-03"
+      ],
+      "status": "todo",
+      "findings": []
+    },
+    {
+      "id": "WP-05b",
+      "title": "Enabled/Triggered/Variant subsystem, Goto/From",
+      "exec": "S",
+      "deps": [
+        "WP-05"
+      ],
+      "status": "todo",
+      "findings": []
+    },
+    {
+      "id": "WP-06",
+      "title": "Scaffold and registration",
+      "exec": "AG",
       "deps": [
         "WP-01",
-        "WP-02"
+        "WP-03"
+      ],
+      "status": "todo",
+      "findings": []
+    },
+    {
+      "id": "WP-07",
+      "title": "Symbols",
+      "exec": "AG",
+      "deps": [
+        "WP-06"
+      ],
+      "status": "todo",
+      "findings": []
+    },
+    {
+      "id": "WP-08",
+      "title": "Spec transcription for all blocks",
+      "exec": "AG",
+      "deps": [
+        "WP-06"
       ],
       "status": "todo",
       "findings": []
     },
     {
       "id": "WP-10",
-      "title": "Drivers & sources",
+      "title": "Drive cycle source, longitudinal driver",
+      "exec": "S",
       "deps": [
-        "WP-03"
+        "WP-08"
       ],
       "status": "todo",
       "findings": []
     },
     {
       "id": "WP-11",
-      "title": "Vehicle body and wheel",
+      "title": "Vehicle body 1DOF/3DOF",
+      "exec": "S",
       "deps": [
-        "WP-03"
+        "WP-08"
       ],
       "status": "todo",
       "findings": []
     },
     {
       "id": "WP-12",
-      "title": "Couplings",
+      "title": "Longitudinal wheel",
+      "exec": "S",
       "deps": [
-        "WP-03"
+        "WP-08"
       ],
       "status": "todo",
       "findings": []
     },
     {
       "id": "WP-13",
-      "title": "Gears & differentials",
+      "title": "Couplings",
+      "exec": "S",
       "deps": [
-        "WP-03"
+        "WP-08"
       ],
       "status": "todo",
       "findings": []
     },
     {
       "id": "WP-14",
-      "title": "Energy storage",
+      "title": "Final drive",
+      "exec": "S",
       "deps": [
-        "WP-03"
-      ],
-      "status": "todo",
-      "findings": []
-    },
-    {
-      "id": "WP-15",
-      "title": "Electric machines",
-      "deps": [
-        "WP-03"
-      ],
-      "status": "todo",
-      "findings": []
-    },
-    {
-      "id": "WP-16",
-      "title": "Combustion engines (mapped)",
-      "deps": [
-        "WP-03"
-      ],
-      "status": "todo",
-      "findings": []
-    },
-    {
-      "id": "WP-17",
-      "title": "Transmissions",
-      "deps": [
-        "WP-12",
         "WP-13"
       ],
       "status": "todo",
       "findings": []
     },
     {
-      "id": "WP-18",
-      "title": "Motor controllers & inverter",
+      "id": "WP-15",
+      "title": "Transmissions",
+      "exec": "S",
+      "deps": [
+        "WP-13"
+      ],
+      "status": "todo",
+      "findings": []
+    },
+    {
+      "id": "WP-16",
+      "title": "Transmission controllers",
+      "exec": "S",
       "deps": [
         "WP-15"
       ],
@@ -125,42 +183,59 @@
       "findings": []
     },
     {
-      "id": "WP-19",
-      "title": "Engine controllers",
+      "id": "WP-17",
+      "title": "Batteries",
+      "exec": "S",
       "deps": [
-        "WP-16"
+        "WP-08"
+      ],
+      "status": "todo",
+      "findings": []
+    },
+    {
+      "id": "WP-18",
+      "title": "Starter, alternator, DC-DC",
+      "exec": "S",
+      "deps": [
+        "WP-17"
+      ],
+      "status": "todo",
+      "findings": []
+    },
+    {
+      "id": "WP-19",
+      "title": "Mapped motor, SPMSM, IPMSM",
+      "exec": "S",
+      "deps": [
+        "WP-08"
       ],
       "status": "todo",
       "findings": []
     },
     {
       "id": "WP-20",
-      "title": "Embedded C for powertrain blocks",
+      "title": "Induction motor, flux-based PMSM",
+      "exec": "S",
       "deps": [
-        "WP-10",
-        "WP-11",
-        "WP-12",
-        "WP-13",
-        "WP-14",
-        "WP-15",
-        "WP-16"
+        "WP-19"
       ],
       "status": "todo",
       "findings": []
     },
     {
       "id": "WP-21",
-      "title": "Reference applications EV / Conventional",
+      "title": "Inverter",
+      "exec": "S",
       "deps": [
-        "WP-17",
-        "WP-18"
+        "WP-19"
       ],
       "status": "todo",
       "findings": []
     },
     {
       "id": "WP-22",
-      "title": "Help, AI catalog, DOE, TRM, table editor",
+      "title": "Motor controllers",
+      "exec": "S",
       "deps": [
         "WP-20",
         "WP-21"
@@ -170,22 +245,156 @@
     },
     {
       "id": "WP-23",
-      "title": "P3 blocks from inventory",
+      "title": "Mapped SI/CI/core engine",
+      "exec": "S",
       "deps": [
-        "WP-22"
+        "WP-08"
       ],
       "status": "todo",
       "findings": []
     },
     {
       "id": "WP-24",
-      "title": "Close-out and PR",
+      "title": "SI/CI controller",
+      "exec": "S",
       "deps": [
-        "WP-22"
+        "WP-23"
+      ],
+      "status": "todo",
+      "findings": []
+    },
+    {
+      "id": "WP-25",
+      "title": "Engine fundamental flow",
+      "exec": "S",
+      "deps": [
+        "WP-08"
+      ],
+      "status": "todo",
+      "findings": []
+    },
+    {
+      "id": "WP-26",
+      "title": "Boost",
+      "exec": "S",
+      "deps": [
+        "WP-25"
+      ],
+      "status": "todo",
+      "findings": []
+    },
+    {
+      "id": "WP-27",
+      "title": "SI/CI core engine",
+      "exec": "S",
+      "deps": [
+        "WP-25",
+        "WP-26"
+      ],
+      "status": "todo",
+      "findings": []
+    },
+    {
+      "id": "WP-28",
+      "title": "Remaining inventory-only blocks",
+      "exec": "S",
+      "deps": [
+        "WP-08"
+      ],
+      "status": "todo",
+      "findings": []
+    },
+    {
+      "id": "WP-30",
+      "title": "Embedded C",
+      "exec": "S",
+      "deps": [
+        "WP-10",
+        "WP-11",
+        "WP-12",
+        "WP-13",
+        "WP-14",
+        "WP-15",
+        "WP-16",
+        "WP-17",
+        "WP-18",
+        "WP-19",
+        "WP-20",
+        "WP-21",
+        "WP-22",
+        "WP-23",
+        "WP-24",
+        "WP-25",
+        "WP-26",
+        "WP-27",
+        "WP-28"
+      ],
+      "status": "todo",
+      "findings": []
+    },
+    {
+      "id": "WP-31",
+      "title": "Reference apps: conventional, EV",
+      "exec": "AG+O",
+      "deps": [
+        "WP-16",
+        "WP-22",
+        "WP-23"
+      ],
+      "status": "todo",
+      "findings": []
+    },
+    {
+      "id": "WP-32",
+      "title": "Reference apps: HEV family",
+      "exec": "AG+S",
+      "deps": [
+        "WP-31"
+      ],
+      "status": "todo",
+      "findings": []
+    },
+    {
+      "id": "WP-33",
+      "title": "Reference apps: engine dynamometer",
+      "exec": "AG",
+      "deps": [
+        "WP-24",
+        "WP-27"
+      ],
+      "status": "todo",
+      "findings": []
+    },
+    {
+      "id": "WP-34",
+      "title": "Help, AI catalog, DOE, TRM, table editor",
+      "exec": "S+AG",
+      "deps": [
+        "WP-30"
+      ],
+      "status": "todo",
+      "findings": []
+    },
+    {
+      "id": "WP-35",
+      "title": "Simulink exchange map",
+      "exec": "AG",
+      "deps": [
+        "WP-34"
+      ],
+      "status": "todo",
+      "findings": []
+    },
+    {
+      "id": "WP-36",
+      "title": "Close-out and PR",
+      "exec": "O",
+      "deps": [
+        "WP-35"
       ],
       "status": "todo",
       "findings": []
     }
   ],
-  "goldens": "none yet (plan \u00a73.4 item 4)"
+  "blocks": {}
 }

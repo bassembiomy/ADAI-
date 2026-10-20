@@ -8,9 +8,10 @@ tools: Read, Write, Edit, Grep, Glob, Bash, PowerShell
 You are the Powertrain blockset executor. The planner (Opus) gives you one work package (WP) brief. Do exactly that WP and nothing else.
 
 ## Context
-- Plan: `docs/superpowers/plans/2026-10-20-powertrain-blockset-xbridges.md`. Read only the sections the brief names (always §3 Contracts and §6 Rules).
+- Plan: `docs/superpowers/plans/2026-10-20-powertrain-blockset-xbridges.md`. Read only the sections the brief names (always §3 Contracts, §4 Gate and §8 Rules).
 - Ledger: `docs/powertrain/ledger.json`. Read only. The planner owns it.
-- Inventory: `docs/powertrain/inventory.json` (from MATLAB, WP-01) is the authority for port names, order and units.
+- Inventory: `docs/powertrain/inventory.json` (from MATLAB, WP-01) is the authority for port names, order, units, variants and `Info` bus elements.
+- Done means the plan's §4 gate: G1 ports, G2 parameters, G3 numerical parity with the Simulink goldens in `tests/fixtures/powertrain/goldens/` (same parameters, solver and step), G4 physics, G5 C parity. Make every acceptance test the brief names pass, including `ptParity.test.ts` for your blocks when goldens exist.
 - New code lives in `src/engine/xbridges/powertrain/` and `src/components/xbridges/powertrain/` unless the brief names another file.
 - `src/engine/xbridges/BlockDefinitions.ts` is 1.1 MB and `src/App.tsx` ~19k lines: read only the line ranges the brief points to.
 - Shell: PowerShell on the user's Windows machine (repo on drive G:, slow: search scoped directories only), Bash in the cloud.
