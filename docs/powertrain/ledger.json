@@ -109,8 +109,9 @@
       "deps": [
         "WP-03"
       ],
-      "status": "in_progress",
-      "findings": []
+      "status": "done",
+      "findings": [],
+      "review": "Opus 2026-10-20: 10 files / 187 tests; lint:theme OK; one rework (invalid params never reach derivatives; params resolved once per params object via WeakMap - assumes params objects are replaced, not mutated, as XbridgesEngine.patchBlockParams does)."
     },
     {
       "id": "WP-07",
@@ -149,18 +150,20 @@
       "deps": [
         "WP-08"
       ],
-      "status": "todo",
-      "findings": []
+      "status": "in_progress",
+      "findings": [],
+      "tests": "src/engine/xbridges/powertrain/wp10_scenarios.test.ts"
     },
     {
       "id": "WP-11",
-      "title": "Vehicle body 1DOF/3DOF",
+      "title": "Vehicle Body 1DOF Longitudinal (3DOF in a follow-up WP-11b)",
       "exec": "S",
       "deps": [
         "WP-08"
       ],
-      "status": "todo",
-      "findings": []
+      "status": "in_progress",
+      "findings": [],
+      "tests": "src/engine/xbridges/powertrain/wp11_vehicleBody.test.ts"
     },
     {
       "id": "WP-12",
@@ -214,13 +217,14 @@
     },
     {
       "id": "WP-17",
-      "title": "Batteries",
+      "title": "Datasheet + Equivalent Circuit Battery (Estimation ECM in WP-17b)",
       "exec": "S",
       "deps": [
         "WP-08"
       ],
-      "status": "todo",
-      "findings": []
+      "status": "in_progress",
+      "findings": [],
+      "tests": "src/engine/xbridges/powertrain/wp17_batteries.test.ts"
     },
     {
       "id": "WP-18",
