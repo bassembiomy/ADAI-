@@ -596,8 +596,8 @@
       "deps": [
         "EC-00"
       ],
-      "status": "todo",
-      "tests": "",
+      "status": "in_progress",
+      "tests": "src/engine/xbridges/powertrain/ec05_testCellControl.test.ts",
       "findings": []
     },
     {
@@ -607,8 +607,8 @@
       "deps": [
         "EC-00"
       ],
-      "status": "todo",
-      "tests": "",
+      "status": "in_progress",
+      "tests": "src/engine/xbridges/powertrain/ec06_doe.test.ts",
       "findings": []
     },
     {
