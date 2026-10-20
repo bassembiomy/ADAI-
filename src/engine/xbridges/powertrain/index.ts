@@ -20,12 +20,12 @@ export const POWERTRAIN_FACTORIES: Record<string, (id: string, params?: Record<s
 export const getPowertrainSpec = (type: string): PtBlockSpec | undefined => POWERTRAIN_SPECS.find(s => s.type === type);
 
 export const POWERTRAIN_CATEGORIES: { name: string; blocks: { type: string; label: string; icon: string }[] }[] =
-  PT_CATEGORY_ORDER
-    .map(name => ({
-      name: name as string,
-      blocks: POWERTRAIN_SPECS.filter(s => s.category === name).map(s => ({ type: s.type, label: s.label, icon: 'box' })),
-    }))
-    .filter(c => c.blocks.length > 0);
+  (() => {
+    const blocks = PT_CATEGORY_ORDER
+      .flatMap(name => POWERTRAIN_SPECS.filter(s => s.category === name))
+      .map(s => ({ type: s.type, label: s.label, icon: 'box' }));
+    return blocks.length > 0 ? [{ name: 'Powertrain Blockset', blocks }] : [];
+  })();
 
 export const POWERTRAIN_GUIDANCE: Record<string, {
   description: string; behavior: string; example: string; equation: string; parameters: Record<string, string>;
