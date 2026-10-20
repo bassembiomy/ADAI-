@@ -144,6 +144,22 @@
       ]
     },
     {
+      "id": "WP-09",
+      "title": "Stiff solvers ode14x and ode23tb; no silent Euler fallback",
+      "exec": "S",
+      "deps": [
+        "WP-00"
+      ],
+      "status": "in_progress",
+      "tests": "src/engine/xbridges/stiffSolvers.test.ts",
+      "findings": [
+        {
+          "severity": "high",
+          "summary": "SolverOptions lists ode15s/ode23s/ode113 but Solvers.runFixedStep falls back to explicit Euler for any unknown name, silently."
+        }
+      ]
+    },
+    {
       "id": "WP-10",
       "title": "Drive cycle source, longitudinal driver",
       "exec": "S",
@@ -383,6 +399,7 @@
       "title": "Reference apps: conventional, EV",
       "exec": "S",
       "deps": [
+        "WP-09",
         "WP-16",
         "WP-22",
         "WP-23"

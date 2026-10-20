@@ -186,6 +186,7 @@ Exec: AG = Antigravity, S = Sonnet, O = Opus. Every block WP = S implements → 
 | 04 | Bus signals: ADR (O), `bus` value type, Bus Creator/Selector, Scope and TRM read bus elements, C as struct | S | 03 |
 | 05 | Core gaps (§2.R row 3) + palette entries for `MEMORY`, `UNIT_DELAY` | S (+AG help) | 03 |
 | 05b | Enabled/Triggered/Variant Subsystem, Goto/From | S | 05 |
+| 09 | Stiff solvers (found while planning WP-31: wheel slip dynamics have sub-ms time constants, only explicit solvers existed, and `ode15s`/`ode23s` in `SolverOptions` silently ran Euler): `ode14x` (Simulink fixed-step implicit extrapolation, order 4, 1 Newton iteration, finite-difference Jacobian), `ode23tb` (variable-step TR-BDF2), per-step entry points for the canvas worker, solver menu entries; unknown names -> `UNSUPPORTED_SOLVER` error | S | 00 |
 | 06 | Scaffold: `ptSpec.ts`, `ptMath.ts`, `index.ts`, registration in both palettes; O writes `ptContract.test.ts` (G1/G2 for every spec, help entry, palette entry in both palettes) | AG | 01, 03 |
 | 07 | Symbols: `PtSymbol.tsx` with every `PtSymbolId`, `XBlockNode` hook, theme lint | AG | 06 |
 | 08 | Spec transcription for **all** §2 blocks from `inventory.json` (ports, params, variants; no equations, not registered) | AG | 06 |
