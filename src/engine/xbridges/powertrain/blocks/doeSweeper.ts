@@ -184,6 +184,14 @@ function bestRow(rows: DoeRow[], objective: string): DoeRow | undefined {
   return best;
 }
 
+/** Total number of sweep points (design size, times the operating points in Grid mode); 0 for invalid parameters. */
+export function doeSweeperPointCount(params: Record<string, any>): number {
+  try {
+    const { design, ops } = designFor(params);
+    return design.length * (ops ? ops.length : 1);
+  } catch { return 0; }
+}
+
 export function doeSweeperResults(state: any): DoeRow[] {
   const rows = state?.rows;
   return Array.isArray(rows) ? rows.map((r: DoeRow) => ({ ...r, point: [...r.point], responses: { ...r.responses }, violations: [...r.violations] })) : [];

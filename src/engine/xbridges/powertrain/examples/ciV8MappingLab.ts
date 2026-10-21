@@ -132,7 +132,7 @@ export const CI_V8_MAPPING_LAB_STEPS: CiV8LabStep[] = [
   {
     title: '3. Optimise',
     targetNodeId: 'doe',
-    instructions: 'Select the DoE Sweeper and read the results table. A row marked x is infeasible: its peak cylinder pressure exceeded 135 bar or its exhaust temperature exceeded 950 K. A row marked * is the best feasible row (lowest BSFC) of its speed/load point. Note how the limits push the optimum away from the lowest-BSFC corner of the factor grid.\n\nThen click "Write optimum to ECU" with the Calibration ECU as target. The ECU switches to Map mode and receives the SOI and rail pressure maps.',
+    instructions: 'Select the DoE Sweeper and read the results table. A row marked x is infeasible: its peak cylinder pressure exceeded 135 bar or its exhaust temperature exceeded 950 K. A row marked * is the best feasible row (lowest BSFC) of its speed/load point. Note how the limits push the optimum away from the lowest-BSFC corner of the factor grid.\n\nWait until all 81 points are collected (the write buttons stay disabled until then). Then choose the Calibration ECU in the "Target ECU" list and click "Write optimum to ECU". The ECU switches to Map mode and receives the SOI and rail pressure maps.',
     objectives: [
       { id: 'select_doe', label: 'Select the DoE Sweeper', check: safe(w => w?.selectedNodeId === 'doe') },
       { id: 'write_ecu', label: 'Write the optimum to the ECU (ECU mode becomes Map)', check: safe(w => ecuMap(w)) },
@@ -158,7 +158,7 @@ export const CI_V8_MAPPING_LAB_STEPS: CiV8LabStep[] = [
   {
     title: '6. Explore',
     targetNodeId: 'doe',
-    instructions: 'Change the sweeper objective from BSFC to NOx and rerun the sweep. Compare the optimum rows: lower NOx needs retarded injection, which costs fuel. This is the BSFC/NOx trade-off the calibrator has to balance.',
+    instructions: 'Choose NOx in the Objective dropdown of the sweeper (instead of BSFC) and rerun the sweep. Compare the optimum rows: lower NOx needs retarded injection, which costs fuel. This is the BSFC/NOx trade-off the calibrator has to balance.',
     objectives: [
       { id: 'objective_nox', label: 'Set the sweeper objective to NOx', check: safe(w => find(w, 'doe')?.data?.params?.objective === 'NOx') },
     ],

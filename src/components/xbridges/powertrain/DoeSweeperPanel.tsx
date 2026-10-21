@@ -1,7 +1,7 @@
 // Results table and calibration export of the DoE Sweeper block (X-Bridges properties panel).
 import React, { useMemo, useState } from 'react';
 import type { XBlock } from '../../../engine/xbridges/types';
-import { doeSweeperResults } from '../../../engine/xbridges/powertrain/blocks/doeSweeper';
+import { doeSweeperPointCount, doeSweeperResults } from '../../../engine/xbridges/powertrain/blocks/doeSweeper';
 import {
   bestRowIndices, calibrationMapsFromResults, doeModuleTable, mappedEngineTablesFromResults,
 } from '../../../engine/xbridges/powertrain/calibrationExport';
@@ -28,6 +28,8 @@ export const DoeSweeperPanel: React.FC<Props> = ({ block, availableBlocks = [], 
     [block.params.factors],
   );
   const objective: string = typeof block.params.objective === 'string' ? block.params.objective : 'BSFC';
+  const total = useMemo(() => doeSweeperPointCount(block.params), [block.params]);
+  const complete = rows.length > 0 && rows.length >= total;
   const grid = rows.some(r => r.op !== undefined);
   const best = useMemo(() => bestRowIndices(rows, objective), [rows, objective]);
   const maxTorque = rows.reduce((m, r) => (r.responses.T_brake !== undefined && r.responses.T_brake > m ? r.responses.T_brake : m), 0);
@@ -104,6 +106,9 @@ export const DoeSweeperPanel: React.FC<Props> = ({ block, availableBlocks = [], 
         </div>
       )}
 
+      <p className="text-xs text-slate-400">{`${rows.length} of ${total} points`}</p>
+      {rows.length > 0 && !complete && <p className="text-xs text-[#c9a86c]">Finish the sweep to write calibration maps</p>}
+
       <button type="button" className={buttonCls} disabled={rows.length === 0 || !onExportDoeData}
         onClick={() => { const d = doeModuleTable(rows, factors, RESPONSES); onExportDoeData?.(d.headers, d.data); }}>
         Send to DOE module
@@ -121,7 +126,7 @@ export const DoeSweeperPanel: React.FC<Props> = ({ block, availableBlocks = [], 
             No feasible point at {maps.missing.map(m => `${m.N} rpm / ${m.Load} %`).join(', ')}; filled from the nearest operating point.
           </p>
         )}
-        <button type="button" className={buttonCls} disabled={rows.length === 0 || ecuId === ''} onClick={writeEcu}>Write optimum to ECU</button>
+        <button type="button" className={buttonCls} disabled={!complete || ecuId === ''} onClick={writeEcu}>Write optimum to ECU</button>
       </div>
 
       <div className="space-y-2 pt-2 border-t border-[#333]">
@@ -135,7 +140,7 @@ export const DoeSweeperPanel: React.FC<Props> = ({ block, availableBlocks = [], 
           <input type="number" aria-label="Reference torque (N*m)" className={selectCls} value={tRef ?? String(maxTorque)}
             onChange={e => setTRef(e.target.value)} />
         </label>
-        <button type="button" className={buttonCls} disabled={rows.length === 0 || engId === ''} onClick={writeEngine}>Write maps to Mapped Engine</button>
+        <button type="button" className={buttonCls} disabled={!complete || engId === ''} onClick={writeEngine}>Write maps to Mapped Engine</button>
       </div>
       {message !== '' && <p role="alert" className="text-xs text-[#c9a86c]">{message}</p>}
     </section>

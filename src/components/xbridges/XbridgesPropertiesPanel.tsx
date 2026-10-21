@@ -4,6 +4,7 @@ import { XBlock, XPort } from '../../engine/xbridges/types';
 import { X, Plus, Trash2, Settings2, Hash, Layers, Activity } from 'lucide-react';
 import { polyToString, zpgToString } from '../../engine/xbridges/BlockDefinitions';
 import { VectorUtils } from '../../engine/xbridges/VectorUtils';
+import { getPowertrainSpec } from '../../engine/xbridges/powertrain';
 import { DoeSweeperPanel } from './powertrain/DoeSweeperPanel';
 
 interface Props {
@@ -852,8 +853,20 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
                   <label className="block text-xs font-medium text-slate-400 mb-1 capitalize">
                     {key.replace(/([A-Z])/g, ' $1').trim()}
                   </label>
-                  
-                   {['representation', 'mode', 'method', 'criteria', 'operation', 'angle_unit', 'output_type', 'rounding', 'overflow', 'type', 'numCases', 'numSignals', 'bufferSize', 'andMethod', 'orMethod', 'defuzzMethod', 'operator', 'implication', 'limitDataPoints', 'showGrid', 'showLegend', 'timeRange', 'diagMode', 'axis', 'carrierType', 'simulationType'].includes(key) && 
+
+                  {(() => {
+                    const ptParam = getPowertrainSpec(block.type)?.params.find(p => p.name === key && p.kind === 'enum' && p.options);
+                    return ptParam;
+                  })() ? (
+                    <select data-help-feature="ui:xbridges/XbridgesPropertiesPanel:efa3cb1669d5" data-help-source="src/components/xbridges/XbridgesPropertiesPanel.tsx"
+                      aria-label={getPowertrainSpec(block.type)!.params.find(p => p.name === key)!.label}
+                      value={String(displayValue)}
+                      onChange={(e) => onUpdate(block.id, { params: { ...block.params, [key]: e.target.value } })}
+                      className="w-full text-sm px-2.5 py-1.5 border border-[#333] bg-[#0a0a0a] text-emerald-400 font-bold rounded focus:border-[#c9a86c] focus:ring-1 focus:ring-[#c9a86c]/50 outline-none transition-all cursor-pointer"
+                    >
+                      {(getPowertrainSpec(block.type)!.params.find(p => p.name === key)!.options ?? []).map(o => <option key={o} value={o}>{o}</option>)}
+                    </select>
+                  ) : ['representation', 'mode', 'method', 'criteria', 'operation', 'angle_unit', 'output_type', 'rounding', 'overflow', 'type', 'numCases', 'numSignals', 'bufferSize', 'andMethod', 'orMethod', 'defuzzMethod', 'operator', 'implication', 'limitDataPoints', 'showGrid', 'showLegend', 'timeRange', 'diagMode', 'axis', 'carrierType', 'simulationType'].includes(key) && 
                   (key !== 'type' || block.type === 'WaveformGen' || block.type === 'FUZZY_INFERENCE_SYSTEM') ? (
                     <select data-help-feature="ui:xbridges/XbridgesPropertiesPanel:efa3cb1669d5" data-help-source="src/components/xbridges/XbridgesPropertiesPanel.tsx"
                       value={String(displayValue)}
