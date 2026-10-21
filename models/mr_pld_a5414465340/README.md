@@ -73,42 +73,78 @@ The state machine, its variables and the HMI are built with the editor's own ope
 commands, their properties only through the fields of the State and Transition panels, variables through the
 Variables panel's Add, HMI widgets from the HMI Dashboard palette with the fields of its Properties panel.
 
-All five regions are orthogonal (parallel) regions of the root, start with the machine and are named
-`<owner block>_<behaviour>` so the generated C identifiers stay valid.
+All twelve regions are orthogonal (parallel) regions of the root, start with the machine and are named
+`<owner block>_<behaviour>` after a block of the source, so the generated C identifiers stay valid. They run in
+this order in every tick: the operating modes first, then the monitors that raise the Signals the modes accept
+one tick later.
 
 | Region | Owner block | Source |
 | --- | --- | --- |
 | `MR_PLD_ECU_OperatingStates` | `MR_PLD_ECU` (exhibit) | `state def`, 11 states, all 25 transitions |
 | `PLD_C1_1_InjectionMicroCycle` | `PLD_C1_1` | `state def`, 6 states, 8 transitions |
-| `SAK_C167CS_LM_SyncSupervisor` | `SAK_C167CS_LM` | `enum SyncMode`; raises `CkpLost` / `CmpLost` / `CkpRestored` / `SyncLost` from `ckpValid` / `cmpValid` |
+| `SAK_C167CS_LM_SyncSupervisor` | `SAK_C167CS_LM` | `enum SyncMode`; raises `CkpLost` / `CmpLost` / `CkpRestored` / `SyncLost` / `SyncLocked` from `ckpValid` / `cmpValid` |
 | `ValveAndStarterDrivers_ThermalFanControl` | `ValveAndStarterDrivers` | REQ-THM-08 (PV3 from 92 C, 100 % at 100 C, 103 C warning); raises `OvertempDetected` / `OvertempCleared` |
 | `SensorAFE_SensorDiagnostics` | `SensorAFE` | `enum SensorFaultMode`, REQ-DIAG-07 window 0.18..4.82 V on the B65 ECT pin |
+| `FR_CabECU_DriverRequests` | `FR_CabECU` | sd m01 / m06 / m07: the key switch (`KeyState`) raises `KL15_On` / `KL15_Off` / `KL50_CrankRequest`, the BRAKE position `EngineBrakeRequest` / `EngineBrakeRelease` |
+| `SAK_C167CS_LM_SelfTestAndEeprom` | `SAK_C167CS_LM` | `do action runSelfTests` with the immobiliser release frame over IES-CAN (sd m03..m05) → `SelfTestPassed` / `ImmoRejected`; `do action writeEeprom` → `AfterrunComplete` |
+| `SAK_C167CS_LM_CanTimeout` | `SAK_C167CS_LM` | IES-CAN frames of `FR_CabECU` missing → `CanTimeout`, back → `CanRestored` |
+| `SAK_C167CS_LM_SpeedMonitor` | `SAK_C167CS_LM` | `EngineRunning` above 500 rpm, `EngineStopped` below 300 rpm |
+| `SAK_C167CS_LM_InjectionTiming` | `SAK_C167CS_LM` | CAPCOM `SoiTrigger` / `EoiTrigger` while the engine turns and injection is enabled (sd m12) |
+| `InjectionPowerStage_CurrentSense` | `InjectionPowerStage` | shunt + LM2901D feedback (sd m14 / m16): `PeakCurrentReached`, `BipDetected`; a shorted bank: `OvercurrentTrip` + `BankShortDetected` |
+| `OM501LA_EngineSystem_EngineDynamics` | `OM501LA_EngineSystem` | the engine the ECU drives, with the speeds of `mrpld_sim.py`: 220 rpm cranking, fires once fuelled and synchronised, then 600 + 13 × pedal rpm (× torque limit); stops on fuel cut |
+
+`FR_CabECU_DriverRequests` and `OM501LA_EngineSystem_EngineDynamics` are the vehicle side the HMI drives (the cab
+ECU and the engine), not MR-PLD firmware: leave them out of the generated C when the code is meant for the ECU.
 
 The only safe state is `ST_FAULT_SHUTDOWN`. **Validate** reports no finding and **Generate C/H** produces the code.
-The five regions are parallel states of the root, all AutoStart: entering the machine enters every orthogonal
-region (SysML 1.6 / UML 2.5 §14.2.3.4.3).
+The regions are parallel states of the root, all AutoStart: entering the machine enters every orthogonal region
+(SysML 1.6 / UML 2.5 §14.2.3.4.3).
 
-`accept Signal` is a Boolean event variable named after the Signal, consumed by the transition that accepts it
-(a Signal no state accepts is lost); `if guard` stays a guard on the state def attributes; `accept after t` is an
-`after` transition (1 ms ticks; the 0.3 ms spill rounds up to one tick). Levels (`immoValid`, `ckpValid`,
-`cmpValid`, `sensorDrift`, `powerLatch`, `injEnable`, `driversTristated`) are 0/1 `uint8`.
+`accept Signal` is a Boolean event variable named after the Signal, consumed by the transition that accepts it.
+The monitor that raises a Signal drops it one tick later if no transition took it (UML: an event nobody accepts is
+lost), except the fault Signals (`CkpLost`, `CmpLost`, `SyncLost`, `OvertempDetected`, `CanTimeout`,
+`BankShortDetected`, `KL50_CrankRequest` while the key is held in CRANK), which stay pending until the mode that
+reacts to them is reached. Entering `ST_LIMP_DERATE` drops the recovery Signals of an earlier episode, so only a
+recovery seen in limp ends it; power-down (`ST_STANDBY`) drops a pending bank-short report. `if guard` stays a
+guard on the state def attributes; `accept after t` is an `after` transition (1 ms ticks; the 0.3 ms spill rounds
+up to one tick). Levels (`immoValid`, `ckpValid`, `cmpValid`, `canValid`, `bank1Short`, `sensorDrift`, `powerLatch`,
+`starter`, `injEnable`, gates, ...) are 0/1 `uint8`.
+
+The monitor durations (self-test 15 ticks, crank to fire 20, CAN time-out 15, EEPROM write 30, one injection every
+15 ticks) are scaled for the operator: the app runs about 15 to 60 ticks of 1 ms per second in a browser, so each
+step takes one to three seconds on screen. The source's own times (2 ms BIP / open-coil time-outs, 0.3 ms spill) are
+kept as they are.
 
 ### Running it from the HMI
 
-Open **HMI Panel**, press **Run controls**, then **Start**. Example: `KL15_On` → set `immoValid` → `SelfTestPassed` → `KL50_CrankRequest`
-→ `EngineRunning` (RUN_NORMAL), clear `ckpValid` (LIMP_DERATE), `KL15_Off`
-(AFTERRUN) → `AfterrunComplete` (STANDBY). The window has a pulse button per Signal, toggles and sliders for the
-attributes, lamps / gauges / LCDs for the outputs, an indicator per state and a trace. The injection micro-cycle
-runs on the 1 ms tick (peak within 2 ms), faster than buttons can be pressed: it is exercised by the tests and by
-Step.
+The HMI inputs are the attributes of block `SimulationScenario` (the source's workstation simulator): key switch,
+accelerator pedal, coolant and the fault levels, plus the two engine-block buttons and the B65 ECT pin.
+
+1. Open **HMI Panel** and maximise the window (□). It opens in **Edit layout**: press **Run controls**, then **Start**.
+2. **Key switch → IGN**. The ECU wakes up (`Self-test, immobiliser`) and is **Ready to crank** after about a second.
+3. **Key switch → CRANK** and keep it there: starter on, the engine cranks at 220 rpm, synchronises and fires; the
+   mode goes to **Running**. Then put the key to **RUN** (as you release a real key).
+4. **Accelerator pedal**: engine speed follows (600 rpm idle, about 1900 rpm at 100 %). The injection cycle runs by
+   itself (tab **Injection**).
+5. **BRAKE** (pedal at 0 %): engine brake valves on, injection off. Back to **RUN** releases it.
+6. Tab **Sensors & faults**: switch a sensor off and back on, or move the coolant above 103 °C and back below
+   100 °C: **Limp home** and back to **Running**. CKP and CMP both off: **Fault shutdown**. Bank 1 short: limp
+   and cylinder cut-off until the key is cycled. IES-CAN off at key-on: the ECU waits for the immobiliser release.
+   Immobiliser key invalid before IGN: **Start locked (wrong key)**, the starter stays off.
+7. **Key switch → OFF**: **After-run** writes the EEPROM, then **Off**. The engine-block **Stop engine** button does
+   the same with the key left on; the ECU then wakes again and **Start engine** restarts it.
+
+**Reset** in the HMI header returns everything to the start. The **Trace** tab plots speed, pedal, coolant, torque
+limit and fan duty.
+
+The tests drive the machine the same way (key switch, pedal, fault levels only): all 14 scenarios end in their
+expected state, and the 60 s drive cycle of `sim_out/results.json` passes event by event.
 
 Corners the source leaves open, added as transitions: key off in `ST_INIT_IMMO` (→ standby) or `ST_CRANK_SYNC`
-(→ after-run), key on again during after-run (→ `ST_INIT_IMMO`), engine stall in run / limp (`EngineStopped` → ready), `CanRestored` → run, stop button in limp, open
-coil (peak not reached in 2 ms → cylinder cut-off), cut-off cleared at power-down, and no injection unless the
-operating mode enables it.
-
-The test replays the source simulation on this state machine: all 14 scenarios end in their expected state, and the
-60 s drive cycle of `sim_out/results.json` passes event by event.
+(→ after-run), key on again during after-run (→ `ST_INIT_IMMO`), engine stall in run / limp (`EngineStopped` →
+ready), `CanRestored` → run, `SyncLocked` → run (a CMP loss raises no `CkpRestored`, so the source never left limp
+after it), stop button in limp, open coil (peak not reached in 2 ms → cylinder cut-off), cut-off cleared at
+power-down, and no injection unless the operating mode enables it.
 
 Values marked **TBV** are reverse-engineering hypotheses to be confirmed on the bench or with Star Diagnosis.
 

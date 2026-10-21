@@ -59,32 +59,36 @@ const fire = (session: AppSimulationSession, signal: string) => {
   return step(session);
 };
 const leaf = (frame: { activeStateIds: string[] }) => frame.activeStateIds.filter(id => id.startsWith('ST_') && id !== 'ST_RUN');
+/** Steps until the operating mode is reached; fails after `max` ticks. */
+const until = (session: AppSimulationSession, mode: string, max = 200) => {
+  let frame = step(session);
+  for (let tick = 1; tick < max && leaf(frame)[0] !== mode; tick++) frame = step(session);
+  expect(leaf(frame), `${mode} within ${max} ticks`).toEqual([mode]);
+  return frame;
+};
+const KEY = { OFF: 0, IGN: 1, CRANK: 2, RUN: 3, BRAKE: 4 } as const;
 
-/** mrpld_sim.py run_scenario(): the same stimulus sequence, on the ADIA state machine. */
+/**
+ * mrpld_sim.py run_scenario(), worked from the HMI the way the operator does it: the attributes of
+ * SimulationScenario (key switch, pedal, coolant, fault levels); the ECU and the engine do the rest.
+ */
 function runScenario(s: Record<string, string>) {
   const session = createAppSimulationSession(project);
-  set(session, { coolantC: Number(s.coolantC) });
-  let frame = step(session);
+  set(session, { coolantC: Number(s.coolantC), immoValid: s.immoValid === 'true' ? 1 : 0 });
+  let frame = step(session, 5);
   if (s.keyState === 'OFF') return { session, frame };
-  frame = fire(session, 'KL15_On');
-  set(session, { immoValid: s.immoValid === 'true' ? 1 : 0 });
-  frame = fire(session, s.immoValid === 'true' ? 'SelfTestPassed' : 'ImmoRejected');
+  set(session, { keyState: KEY.IGN });
+  frame = until(session, s.immoValid === 'true' ? 'ST_READY' : 'ST_IMMO_LOCKED');
   if (s.keyState === 'IGN') return { session, frame };
-  frame = fire(session, 'KL50_CrankRequest');
-  set(session, { rpm: 220 });
-  if (s.keyState === 'CRANK') return { session, frame: step(session) };
-  set(session, { rpm: 650 });
-  frame = fire(session, 'EngineRunning');
-  set(session, { rpm: 600 + Number(s.pedalPct) * 13 });
-  if (s.keyState === 'BRAKE') frame = fire(session, 'EngineBrakeRequest');
-  // the SyncSupervisor region raises CkpLost / CmpLost / SyncLost from the sensor validity
-  set(session, { ckpValid: s.ckpValid === 'true' ? 1 : 0, cmpValid: s.cmpValid === 'true' ? 1 : 0 });
-  frame = step(session, 5);
-  // the ThermalFanControl region raises OvertempDetected from the coolant temperature
-  frame = step(session, 5);
-  if (s.bank1Short === 'true') frame = fire(session, 'BankShortDetected');
-  if (s.canValid === 'false') frame = fire(session, 'CanTimeout');
-  return { session, frame };
+  set(session, { keyState: KEY.CRANK });
+  if (s.immoValid !== 'true') return { session, frame: step(session, 50) };
+  frame = until(session, 'ST_CRANK_SYNC');
+  if (s.keyState === 'CRANK') return { session, frame: step(session, 5) };
+  frame = until(session, 'ST_RUN_NORMAL');
+  set(session, { keyState: s.keyState === 'BRAKE' ? KEY.BRAKE : KEY.RUN, pedalPct: Number(s.pedalPct) });
+  // the faults of the scenario, as levels: the monitors raise the Signals
+  set(session, { ckpValid: s.ckpValid === 'true' ? 1 : 0, cmpValid: s.cmpValid === 'true' ? 1 : 0, canValid: s.canValid === 'false' ? 0 : 1, bank1Short: s.bank1Short === 'true' ? 1 : 0 });
+  return { session, frame: step(session, 60) };
 }
 const SCENARIOS = [...source.matchAll(/part (scn\d+_\w+) : SimulationScenario \{ (.*?) \}/g)].map(m => ({
   name: m[1], ...Object.fromEntries([...m[2].matchAll(/:>> (\w+) = ([^;]+);/g)].map(f => [f[1], f[2].replace(/"/g, '').replace('KeyState::', '')])),
@@ -341,8 +345,8 @@ describe('MR_PLD_A5414465340.adia', () => {
 
   it("passes the app's Validate button with no error or warning, and generates MISRA C code", () => {
     expect(appValidationFindings(project)).toEqual([]);
-    // all five orthogonal regions are AutoStart, as entering the machine enters each of them
-    expect(project.states.filter((st: { parentId: string; autostart: boolean }) => st.parentId === 'root' && st.autostart)).toHaveLength(5);
+    // all twelve orthogonal regions are AutoStart, as entering the machine enters each of them
+    expect(project.states.filter((st: { parentId: string; autostart: boolean }) => st.parentId === 'root' && st.autostart)).toHaveLength(12);
     for (const state of project.states) expect(state.name, state.id).toMatch(/^[A-Za-z_]\w*$/);
     expect(project.states.filter((st: { isSafeState?: boolean }) => st.isSafeState).map((st: { name: string }) => st.name)).toEqual(['ST_FAULT_SHUTDOWN']);
   });
@@ -365,66 +369,101 @@ describe('MR_PLD_A5414465340.adia', () => {
     expect(diagnostics).toEqual([]);
   });
 
+  it('owns every region by a block of the source and binds every HMI widget to the model', () => {
+    for (const region of project.states.filter((st: { parentId: string }) => st.parentId === 'root')) {
+      expect(blocks.some(b => region.name.startsWith(`${b.name}_`)), region.name).toBe(true);
+    }
+    const variableIds = new Set(project.variables.map((v: { id: string }) => v.id));
+    const stateIds = new Set(project.states.map((st: { id: string }) => st.id));
+    for (const c of project.hmiComponents) {
+      if (c.type === 'tabs') continue;
+      const bound = (c.variableId && variableIds.has(c.variableId)) || (c.stateId && stateIds.has(c.stateId))
+        || (c.variableIds?.length && c.variableIds.every((id: string) => variableIds.has(id)));
+      expect(Boolean(bound), c.name).toBe(true);
+    }
+    // the operator inputs are the attributes of block SimulationScenario
+    const scenario = blocks.find(b => b.name === 'SimulationScenario')!;
+    const attributes = new Set(scenario.properties.map(p => p.name));
+    const inputs = project.hmiComponents.filter((c: { writable?: boolean; variableId: string | null }) => c.writable && c.variableId)
+      .map((c: { variableId: string }) => variableNameOfId.get(c.variableId)!);
+    const fromScenario = inputs.filter((name: string) => attributes.has(name));
+    expect(fromScenario.sort()).toEqual(['bank1Short', 'canValid', 'ckpValid', 'cmpValid', 'coolantC', 'immoValid', 'keyState', 'pedalPct']);
+    // the others are the engine-block buttons and the B65 channel of SensorAFE
+    expect(inputs.filter((name: string) => !attributes.has(name)).sort()).toEqual(['BlockStartButton', 'BlockStopButton', 'sensorDrift', 'vEctPin']);
+  });
+
   it.each(SCENARIOS.map(s => [s.name, s] as const))('reproduces simulation scenario %s', (_name, s) => {
     const { frame } = runScenario(s);
     expect(leaf(frame)).toEqual([s.expectedState]);
     const expected = simResults.scenarios.find((r: { name: string }) => r.name === s.name);
     expect(expected.finalState).toBe(s.expectedState);
-    if (s.expectedState === 'ST_IMMO_LOCKED') expect(frame.data.v_starter).toBe(false);
+    if (s.expectedState === 'ST_IMMO_LOCKED') expect(frame.data.v_starter).toBe(0);
     if (s.expectedState === 'ST_LIMP_DERATE') expect(frame.data.v_torqueLimitPct).toBeLessThanOrEqual(65);
     if (s.expectedState === 'ST_FAULT_SHUTDOWN') expect(frame.data.v_injEnable).toBe(0);
+    if (s.expectedState === 'ST_RUN_NORMAL') expect(frame.data.v_rpm).toBeCloseTo(600 + Number(s.pedalPct) * 13, 5);
   });
 
-  it('replays the 60 s drive cycle of the source simulation event by event', () => {
+  it('replays the 60 s drive cycle of the source simulation from the operator inputs', () => {
     const session = createAppSimulationSession(project);
-    set(session, { coolantC: 84, immoValid: 1 });
-    const LEVELS: Record<string, Record<string, number | boolean>> = {
-      KL50_CrankRequest: { rpm: 220 }, EngineRunning: { rpm: 650 }, OvertempDetected: { coolantC: 104 }, OvertempCleared: { coolantC: 95 },
-      CkpLost: { ckpValid: 0 }, CkpRestored: { ckpValid: 1 }, KL15_Off: { rpm: 0 },
+    set(session, { coolantC: 84 });
+    const OPERATOR: Record<string, Record<string, number>> = {
+      KL15_On: { keyState: KEY.IGN }, SelfTestPassed: {}, KL50_CrankRequest: { keyState: KEY.CRANK }, EngineRunning: {},
+      OvertempDetected: { keyState: KEY.RUN, pedalPct: 60, coolantC: 104 }, OvertempCleared: { coolantC: 95 },
+      EngineBrakeRequest: { pedalPct: 0, keyState: KEY.BRAKE }, EngineBrakeRelease: { keyState: KEY.RUN },
+      CkpLost: { ckpValid: 0 }, CkpRestored: { ckpValid: 1 }, KL15_Off: { keyState: KEY.OFF }, AfterrunComplete: {},
     };
-    const RAISED_BY_REGIONS = new Set(['OvertempDetected', 'OvertempCleared', 'CkpLost', 'CkpRestored']);
     for (const [, event, expectedState] of simResults.driveCycleEvents as Array<[number, string, string]>) {
-      if (LEVELS[event]) set(session, LEVELS[event]);
-      const frame = RAISED_BY_REGIONS.has(event) ? step(session, 5) : fire(session, event);
-      expect(leaf(frame), event).toEqual([expectedState]);
+      set(session, OPERATOR[event]);
+      until(session, expectedState);
     }
   });
 
-  it('runs one peak & hold injection and cuts a cylinder on overcurrent', () => {
+  it('runs peak & hold injections on its own while the engine turns, and cuts the cylinder of a shorted bank', () => {
     const { session } = runScenario(SCENARIOS.find(s => s.name === 'scn04_NormalRun')!);
-    let frame = fire(session, 'SoiTrigger');
+    const seen = new Set<string>();
+    let gatesOn = false;
+    for (let tick = 0; tick < 60; tick++) {
+      const frame = step(session);
+      frame.activeStateIds.forEach(id => seen.add(id));
+      gatesOn ||= frame.data.v_hsGate === 1 && frame.data.v_lsGate === 1;
+    }
+    expect(['INJ_PEAK', 'INJ_BIP_WAIT', 'INJ_HOLD', 'INJ_SPILL'].filter(id => !seen.has(id))).toEqual([]);
+    expect(seen.has('INJ_CYL_CUTOFF')).toBe(false);
+    expect(gatesOn).toBe(true);
+    set(session, { bank1Short: 1 });
+    const frame = until(session, 'ST_LIMP_DERATE');
+    expect(step(session).activeStateIds).toContain('INJ_CYL_CUTOFF');
+    expect(frame.data.v_torqueLimitPct).toBe(65);
+  });
+
+  it('keeps the micro-cycle of the source: event driven, open coil and BIP time-outs after 2 ms', () => {
+    const { session } = runScenario(SCENARIOS.find(s => s.name === 'scn02_IgnitionOn')!);
+    // ready, not injecting: drive the PLD by hand, the current sense answers
+    set(session, { injEnable: 1, SoiTrigger: true });
+    let frame = step(session);
     expect(frame.activeStateIds).toContain('INJ_PEAK');
-    expect([frame.data.v_hsGate, frame.data.v_lsGate]).toEqual([true, true]);
-    frame = fire(session, 'PeakCurrentReached');
-    expect(frame.activeStateIds).toContain('INJ_BIP_WAIT');
-    frame = fire(session, 'BipDetected');
+    expect([frame.data.v_hsGate, frame.data.v_lsGate, frame.data.v_PeakCurrentReached]).toEqual([1, 1, true]);
+    expect(step(session).activeStateIds).toContain('INJ_BIP_WAIT');
+    frame = step(session);
     expect(frame.activeStateIds).toContain('INJ_HOLD');
-    expect(frame.data.v_holdChop).toBe(true);
-    frame = fire(session, 'EoiTrigger');
-    frame = step(session, 2);
-    expect(frame.activeStateIds).toContain('INJ_IDLE');
-    expect(frame.data.v_holdChop).toBe(false);
-    fire(session, 'SoiTrigger');
+    expect(frame.data.v_holdChop).toBe(1);
     frame = fire(session, 'OvercurrentTrip');
     expect(frame.activeStateIds).toContain('INJ_CYL_CUTOFF');
     expect(frame.data.v_cylCutoff).toBe(true);
-  });
-
-  it('declares an open coil when the peak current is never reached and holds without BIP after 2 ms', () => {
-    const { session } = runScenario(SCENARIOS.find(s => s.name === 'scn04_NormalRun')!);
-    fire(session, 'SoiTrigger');
-    expect(step(session, 3).activeStateIds).toContain('INJ_CYL_CUTOFF');
-    const second = runScenario(SCENARIOS.find(s => s.name === 'scn04_NormalRun')!).session;
-    fire(second, 'SoiTrigger');
-    fire(second, 'PeakCurrentReached');
-    expect(step(second, 3).activeStateIds).toContain('INJ_HOLD');
+    // an open coil never reaches the peak current: the same machine without the shunt feedback
+    const peak = project.transitions.find((t: { condition: string }) => t.condition === 'hsGate==1 && lsGate==1 && bank1Short==0');
+    expect(peak).toBeDefined();
+    const openCoil = createAppSimulationSession({ ...project, transitions: project.transitions.filter((t: { id: string }) => t.id !== peak.id) });
+    set(openCoil, { injEnable: 1, powerLatch: 1 });
+    fire(openCoil, 'SoiTrigger');
+    expect(step(openCoil, 3).activeStateIds).toContain('INJ_CYL_CUTOFF');
   });
 
   it('never injects outside the operating modes that allow it', () => {
     const session = createAppSimulationSession(project);
     const frame = fire(session, 'SoiTrigger');
     expect(frame.activeStateIds).toContain('INJ_IDLE');
-    expect(frame.data.v_hsGate).toBe(false);
+    expect(frame.data.v_hsGate).toBe(0);
   });
 
   it('drives the fan clutch from 92 C and classifies the ECT channel', () => {
@@ -451,25 +490,74 @@ describe('MR_PLD_A5414465340.adia', () => {
     expect(frame.data.v_dtcSensor).toBe(true);
   });
 
-  it('closes the corners the source leaves open: key off while initialising or cranking, key on during after-run, stall, CAN recovery', () => {
+  it('recovers from every recoverable fault while running, and only from the fault it is in', () => {
+    const { session } = runScenario(SCENARIOS.find(s => s.name === 'scn04_NormalRun')!);
+    for (const [fault, healthy] of [[{ ckpValid: 0 }, { ckpValid: 1 }], [{ cmpValid: 0 }, { cmpValid: 1 }], [{ canValid: 0 }, { canValid: 1 }],
+      [{ coolantC: 105 }, { coolantC: 90 }]] as const) {
+      set(session, fault);
+      until(session, 'ST_LIMP_DERATE');
+      set(session, healthy);
+      until(session, 'ST_RUN_NORMAL');
+    }
+    // a bank short is not cured by an unrelated recovery: limp holds until the key is cycled
+    set(session, { bank1Short: 1 });
+    until(session, 'ST_LIMP_DERATE');
+    set(session, { bank1Short: 0, ckpValid: 0 });
+    step(session, 5);
+    set(session, { ckpValid: 1 });
+    step(session, 5);
+    set(session, { keyState: KEY.OFF });
+    until(session, 'ST_AFTERRUN');
+    until(session, 'ST_STANDBY');
+    set(session, { keyState: KEY.IGN });
+    until(session, 'ST_READY');
+    set(session, { keyState: KEY.CRANK });
+    until(session, 'ST_RUN_NORMAL');
+    set(session, { keyState: KEY.RUN });
+    expect(leaf(step(session, 60))).toEqual(['ST_RUN_NORMAL']);
+  });
+
+  it('closes the corners the source leaves open: key off while initialising or cranking, key on during after-run, stall, stop button', () => {
     let session = createAppSimulationSession(project);
-    fire(session, 'KL15_On');
-    expect(leaf(fire(session, 'KL15_Off'))).toEqual(['ST_STANDBY']);
+    set(session, { keyState: KEY.IGN });
+    until(session, 'ST_INIT_IMMO');
+    set(session, { keyState: KEY.OFF });
+    until(session, 'ST_STANDBY', 3);
 
     session = runScenario(SCENARIOS.find(s => s.name === 'scn03_ColdCrank')!).session;
-    let frame = fire(session, 'KL15_Off');
-    expect(leaf(frame)).toEqual(['ST_AFTERRUN']);
-    expect(frame.data.v_starter).toBe(false);
+    set(session, { keyState: KEY.OFF });
+    let frame = until(session, 'ST_AFTERRUN', 3);
+    expect(frame.data.v_starter).toBe(0);
     step(session, 5);
-    frame = fire(session, 'KL15_On');
-    expect(leaf(frame)).toEqual(['ST_INIT_IMMO']);
-    expect([frame.data.v_powerLatch, frame.data.v_eepromWrite]).toEqual([1, false]);
+    set(session, { keyState: KEY.IGN });
+    frame = until(session, 'ST_INIT_IMMO', 3);
+    expect([frame.data.v_powerLatch, frame.data.v_eepromWrite]).toEqual([1, 0]);
 
     session = runScenario(SCENARIOS.find(s => s.name === 'scn04_NormalRun')!).session;
     set(session, { rpm: 0 });
     expect(leaf(fire(session, 'EngineStopped'))).toEqual(['ST_READY']);
 
-    session = runScenario(SCENARIOS.find(s => s.name === 'scn13_CanTimeout')!).session;
-    expect(leaf(fire(session, 'CanRestored'))).toEqual(['ST_RUN_NORMAL']);
+    // the engine-block stop button with the key left on: after-run, then KL15 wakes the ECU again
+    session = runScenario(SCENARIOS.find(s => s.name === 'scn04_NormalRun')!).session;
+    expect(leaf(fire(session, 'BlockStopButton'))).toEqual(['ST_AFTERRUN']);
+    until(session, 'ST_READY');
+    fire(session, 'BlockStartButton');
+    until(session, 'ST_RUN_NORMAL');
+  });
+
+  it('waits for the immobiliser release over IES-CAN and keeps the starter off while the start is locked', () => {
+    const session = createAppSimulationSession(project);
+    set(session, { canValid: 0, keyState: KEY.IGN });
+    expect(leaf(step(session, 100))).toEqual(['ST_INIT_IMMO']);
+    set(session, { canValid: 1 });
+    until(session, 'ST_READY', 30);
+    set(session, { keyState: KEY.OFF });
+    until(session, 'ST_STANDBY');
+    set(session, { immoValid: 0, keyState: KEY.IGN });
+    until(session, 'ST_IMMO_LOCKED');
+    set(session, { keyState: KEY.CRANK });
+    const frame = step(session, 50);
+    expect(leaf(frame)).toEqual(['ST_IMMO_LOCKED']);
+    expect([frame.data.v_starter, frame.data.v_rpm, frame.data.v_dtcImmo]).toEqual([0, 0, true]);
   });
 });
