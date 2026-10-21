@@ -158,8 +158,9 @@ export const CI_V8_MAPPING_LAB_STEPS: CiV8LabStep[] = [
   {
     title: '6. Explore',
     targetNodeId: 'doe',
-    instructions: 'Choose NOx in the Objective dropdown of the sweeper (instead of BSFC) and rerun the sweep. Compare the optimum rows: lower NOx needs retarded injection, which costs fuel. This is the BSFC/NOx trade-off the calibrator has to balance.',
+    instructions: 'First set the Calibration ECU Mode back to DoE override (the ECU is in Map mode after step 4 and would ignore the sweep factors). Then choose NOx in the Objective dropdown of the sweeper (instead of BSFC) and rerun the sweep. Compare the optimum rows: lower NOx needs retarded injection, which costs fuel. This is the BSFC/NOx trade-off the calibrator has to balance.',
     objectives: [
+      { id: 'ecu_doe', label: 'Set the Calibration ECU Mode back to DoE override', check: safe(w => find(w, 'ecu')?.data?.params?.mode === 'DoE override') },
       { id: 'objective_nox', label: 'Set the sweeper objective to NOx', check: safe(w => find(w, 'doe')?.data?.params?.objective === 'NOx') },
     ],
   },

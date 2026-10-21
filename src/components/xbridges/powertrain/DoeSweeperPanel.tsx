@@ -73,6 +73,11 @@ export const DoeSweeperPanel: React.FC<Props> = ({ block, availableBlocks = [], 
   return (
     <section className="space-y-3">
       <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">DoE results</h3>
+      {ecus.filter(b => b.params?.mode === 'Map').map(b => (
+        <p key={b.id} role="alert" className="text-xs text-amber-400">
+          {`${(b as any).label ?? b.id}: the Calibration ECU is in Map mode, so the sweep factors are ignored. Set its Mode to DoE override to run a new sweep.`}
+        </p>
+      ))}
       {rows.length === 0 ? (
         <p className="text-xs text-slate-500">Run the simulation to collect sweep results.</p>
       ) : (
