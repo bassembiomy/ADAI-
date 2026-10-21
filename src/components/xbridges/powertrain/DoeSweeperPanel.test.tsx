@@ -11,9 +11,9 @@ import { XbridgesEngine } from '../../../engine/xbridges/XbridgesEngine';
 import { Solvers } from '../../../engine/xbridges/Solvers';
 import { makeBus } from '../../../engine/xbridges/bus/busCore';
 import { calibrationMapsFromResults, mappedEngineTablesFromResults, doeModuleTable } from '../../../engine/xbridges/powertrain/calibrationExport';
-import { doeSweeperResults } from '../../../engine/xbridges/powertrain/blocks/doeSweeper';
+import { doeSweeperResults, doeSweeperPointCount } from '../../../engine/xbridges/powertrain/blocks/doeSweeper';
 
-function sweptBlock() {
+function sweptBlock(stopTime = 16.5) {
   const plant: any = {
     id: 'plant', type: 'TestPlant', params: {},
     inputs: ['x', 'n', 'load'].map(id => ({ id, name: id, type: 'auto', direction: 'input', value: 0 })),
@@ -28,7 +28,7 @@ function sweptBlock() {
   const c = (s: string, sp: string, t: string, tp: string) => ({ sourceBlock: s, sourcePort: sp, targetBlock: t, targetPort: tp });
   const e = new XbridgesEngine({ blocks: [sw, plant], connections: [c('sw', 'NextPoint', 'plant', 'x'), c('sw', 'N_set', 'plant', 'n'), c('sw', 'Load', 'plant', 'load'),
     c('plant', 'Responses', 'sw', 'Responses')] } as any);
-  Solvers.runFixedStep(e, { solver: 'ode4', startTime: 0, stopTime: 16.5, fixedStep: 0.05 } as any);
+  Solvers.runFixedStep(e, { solver: 'ode4', startTime: 0, stopTime, fixedStep: 0.05 } as any);
   return e.getBlock('sw')!;
 }
 
@@ -77,6 +77,26 @@ describe('DoE Sweeper panel', () => {
     const t = mappedEngineTablesFromResults(doeSweeperResults(block.state), { objective: 'BSFC', T_ref: 200 });
     expect(onUpdate).toHaveBeenCalledWith('eng1', { params: { ...eng.params, f_tbrake_n_bpt: t.f_tbrake_n_bpt, f_tbrake_t_bpt: t.f_tbrake_t_bpt,
       f_tbrake: t.f_tbrake, f_fuel: t.f_fuel, f_air: t.f_air } });
+  });
+
+  it('counts the sweep points of the design (grid x design size)', () => {
+    expect(doeSweeperPointCount(sweptBlock().params)).toBe(16);
+    expect(doeSweeperPointCount(BLOCK_LIBRARY.PT_DOE_SWEEPER('s', { designType: 'Full Factorial', factors: 'SOI,P_rail', levels: 3 }).params)).toBe(9);
+  });
+
+  it('shows the sweep progress and writes maps only after the sweep is complete', () => {
+    const partial = sweptBlock(5.5);
+    const onUpdate = vi.fn();
+    render(<XbridgesPropertiesPanel block={partial as any} onUpdate={onUpdate} onClose={vi.fn()} availableBlocks={[ecu, eng] as any} onExportDoeData={vi.fn()} />);
+    expect(screen.getByText(/5 of 16 points/)).toBeTruthy();
+    fireEvent.change(screen.getByRole('combobox', { name: 'Target ECU' }), { target: { value: 'ecu1' } });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Target engine' }), { target: { value: 'eng1' } });
+    expect((screen.getByRole('button', { name: 'Write optimum to ECU' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: 'Write maps to Mapped Engine' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: 'Send to DOE module' }) as HTMLButtonElement).disabled).toBe(false);
+    cleanup();
+    render(<XbridgesPropertiesPanel block={sweptBlock() as any} onUpdate={onUpdate} onClose={vi.fn()} availableBlocks={[ecu, eng] as any} />);
+    expect(screen.getByText(/16 of 16 points/)).toBeTruthy();
   });
 
   it('shows nothing extra for other blocks', () => {
