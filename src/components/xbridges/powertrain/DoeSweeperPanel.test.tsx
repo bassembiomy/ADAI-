@@ -99,6 +99,16 @@ describe('DoE Sweeper panel', () => {
     expect(screen.getByText(/16 of 16 points/)).toBeTruthy();
   });
 
+  it('warns that the sweep factors are ignored while a Calibration ECU is in Map mode', () => {
+    const block = sweptBlock();
+    render(<XbridgesPropertiesPanel block={block as any} onUpdate={vi.fn()} onClose={vi.fn()} availableBlocks={[ecu, eng] as any} />);
+    expect(screen.queryByText(/is in Map mode/)).toBeNull();
+    cleanup();
+    const mapEcu = { ...ecu, params: { ...ecu.params, mode: 'Map' } };
+    render(<XbridgesPropertiesPanel block={block as any} onUpdate={vi.fn()} onClose={vi.fn()} availableBlocks={[mapEcu, eng] as any} />);
+    expect(screen.getByText(/ECU is in Map mode/).textContent).toMatch(/DoE override/);
+  });
+
   it('shows nothing extra for other blocks', () => {
     render(<XbridgesPropertiesPanel block={{ id: 'g', type: 'GAIN', params: { gain: 2 }, inputs: [], outputs: [] } as any} onUpdate={vi.fn()} onClose={vi.fn()} />);
     expect(screen.queryByRole('table', { name: 'DoE results' })).toBeNull();

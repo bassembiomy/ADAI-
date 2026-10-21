@@ -131,6 +131,12 @@ describe('V8 diesel mapping lab: learning lab registration', () => {
       expect(s.objectives.length).toBeGreaterThan(0);
       for (const o of s.objectives) expect(o.check(empty)).toBe(false);
     }
+    // a new sweep (step 6) needs the ECU back in DoE override mode, otherwise the sweep factors are ignored
+    const last = STEPS[STEPS.length - 1];
+    expect(last.instructions).toMatch(/DoE override/);
+    const wNox = (mode: string) => ({ ...empty, nodes: [{ id: 'doe', data: { params: { objective: 'NOx' } } }, { id: 'ecu', data: { params: { mode } } }] });
+    expect(last.objectives.every(o => o.check(wNox('DoE override')))).toBe(true);
+    expect(last.objectives.every(o => o.check(wNox('Map')))).toBe(false);
     const ws = readFileSync(join(__dirname, '../../../components/xbridges/XbridgesWorkspace.tsx'), 'utf8');
     expect(ws).toMatch(/CI_V8_MAPPING_LAB\b/);
     expect(ws).toMatch(/CI_V8_MAPPING_LAB_STEPS/);
