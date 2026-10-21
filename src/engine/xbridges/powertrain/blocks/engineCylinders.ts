@@ -86,11 +86,11 @@ function optsOf(p: Record<string, any>, afr: number): CycleOptions {
   };
 }
 
-const INFO_KEYS = ['BMEP', 'IMEP_gross', 'PMEP', 'P_brake', 'eta_th', 'thetaPmax', 'FuelFlw'];
+const INFO_KEYS = ['BMEP', 'IMEP_gross', 'PMEP', 'P_brake', 'eta_th', 'thetaPmax', 'FuelFlw', 'T_brake', 'BSFC', 'P_max', 'T_exh', 'NOx'];
 const infoValues = (r: CycleResult): number[] =>
-  [r.bmep, r.imepGross, r.pmep, r.Pbrake, r.etaTh * 100, r.thetaPmax, r.fuelFlw];
+  [r.bmep, r.imepGross, r.pmep, r.Pbrake, r.etaTh * 100, r.thetaPmax, r.fuelFlw, r.Tbrake, r.bsfc, r.pMax, r.Texh, r.noxGPerKWh];
 
-const INFO_DESC = 'Bus with BMEP [Pa], IMEP_gross [Pa], PMEP [Pa], P_brake [W], eta_th [%], thetaPmax [deg], FuelFlw [kg/s], ';
+const INFO_DESC = 'Bus with BMEP [Pa], IMEP_gross [Pa], PMEP [Pa], P_brake [W], eta_th [%], thetaPmax [deg], FuelFlw [kg/s], T_brake [N*m], BSFC [g/(kW*h)], P_max [Pa], T_exh [K], NOx [g/(kW*h)], ';
 
 // Measured with the default parameters (see the example texts); numbers come from running the blocks.
 const ciSpec: PtBlockSpec = {

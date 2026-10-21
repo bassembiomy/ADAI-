@@ -693,6 +693,12 @@
       "status": "done",
       "review": "reviewed",
       "note": "engine: XBlock.updateDiscrete (Simulink mdlUpdate for hybrid blocks, once per accepted major step, idempotent on retried steps) and discreteStateKeys (excluded from stiff Newton state). Reviewer replaced a derivative==0 freezing heuristic in StiffSolver by the declared keys."
+    },
+    {
+      "id": "LAB-V8",
+      "status": "done",
+      "review": "reviewed",
+      "note": "X-Bridges learning lab 'V8 Diesel Engine Mapping & Calibrated Control' (examples/ciV8MappingLab.ts): Powertrain-only 6.6 L V8 test cell, 81-point grid DoE, ECU map export and closed-loop check. Reviewer fixes: Calibration Map 2D ports unit 'inherit' (engine unit check skips inherit), lab node labels passed to the canvas, layout spacing, step 5 text. Assumptions: ideal intercooler, no EGR, turbine flow = air flow (fuel mass neglected). Live canvas speed is frame-bound (one 0.02 s step per frame)."
     }
   ],
   "blocks": {},

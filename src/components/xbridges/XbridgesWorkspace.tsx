@@ -29,6 +29,7 @@ import {
   reconcileXBBoundaryMappings,
   syncXBBoundaryNodeMetadata,
 } from '../../utils/stateMachine/xbBoundaryMappings';
+import { CI_V8_MAPPING_LAB, CI_V8_MAPPING_LAB_STEPS } from '../../engine/xbridges/powertrain/examples/ciV8MappingLab';
 import { isInputFocused } from '../../utils/domUtils';
 import { handleHorizontalToolbarWheel } from '../../utils/toolbarScroll';
 import { XbridgesWorkerClient } from '../../services/xbridgesWorkerClient';
@@ -142,7 +143,7 @@ const normalizeNumerals = (val: string) => {
     .replace(/[٫،,]/g, '.');
 };
 
-const XBRIDGES_LEARNING_LABS = [
+const XBRIDGES_LEARNING_LABS: any[] = [
   {
     id: 'lms_sys_id',
     name: 'LMS System Identification Lab',
@@ -768,7 +769,8 @@ const XBRIDGES_LEARNING_LABS = [
       { id: 'cde31', source: 'cfd_sph', sourceHandle: 'drum_fluid_torque', target: 'surrogate_learner', targetHandle: 'fluid_torque' },
       { id: 'cde32', source: 'cfd_sph', sourceHandle: 'slosh_intensity', target: 'surrogate_learner', targetHandle: 'slosh_intensity' }
     ]
-  }
+  },
+  CI_V8_MAPPING_LAB
 ];
 
 const XBRIDGES_LEARNING_LAB_STEPS: Record<string, any[]> = {
@@ -1280,7 +1282,8 @@ const XBRIDGES_LEARNING_LAB_STEPS: Record<string, any[]> = {
         }
       ]
     }
-  ]
+  ],
+  [CI_V8_MAPPING_LAB.id]: CI_V8_MAPPING_LAB_STEPS as any[],
 };
 
 export const XbridgesWorkspace: React.FC<{
@@ -2883,7 +2886,7 @@ export const XbridgesWorkspace: React.FC<{
     setLabCompleted(false);
     setViewPath(['root']);
 
-    const newNodes = lab.nodes.map(n => {
+    const newNodes = lab.nodes.map((n: any) => {
       const blockDef = BLOCK_LIBRARY[n.type](n.id, n.params || {});
       return {
         id: n.id,
@@ -2891,6 +2894,7 @@ export const XbridgesWorkspace: React.FC<{
         position: n.position,
         data: {
           ...blockDef,
+          ...(n.label ? { label: n.label } : {}),
           parentId: (n as any).parentId || 'root',
           selected: false,
           onUpdate: (newData: any) => updateBlock(n.id, newData),
@@ -2899,7 +2903,7 @@ export const XbridgesWorkspace: React.FC<{
       };
     });
 
-    const newEdges = lab.edges.map(e => ({
+    const newEdges = lab.edges.map((e: any) => ({
       id: e.id,
       source: e.source,
       sourceHandle: e.sourceHandle || 'out',
@@ -2912,6 +2916,8 @@ export const XbridgesWorkspace: React.FC<{
 
     setNodes(newNodes);
     setEdges(newEdges);
+    if (lab.solverType) setSolverType(lab.solverType);
+    if (lab.fixedStep) { setFixedStep(lab.fixedStep); setStepSizeInput(String(lab.fixedStep)); }
 
     if (reactFlowInstance) {
       setTimeout(() => reactFlowInstance.fitView(), 150);

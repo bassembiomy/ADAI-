@@ -66,6 +66,15 @@ describe('V8 diesel mapping lab: model', () => {
     expect(new Set(LAB.edges.map(e => e.id)).size).toBe(LAB.edges.length);
   });
 
+  it('compiles without unit warnings: the Calibration Map 2D ports inherit the units of the connected signals', () => {
+    const map = BLOCK_LIBRARY.PT_CALIBRATION_MAP_2D('m', {});
+    expect([...map.inputs, ...map.outputs].map(p => p.unit)).toEqual(['inherit', 'inherit', 'inherit']);
+    const blocks = LAB.nodes.map(n => BLOCK_LIBRARY[n.type](n.id, n.params ?? {}));
+    const e = new XbridgesEngine({ blocks, connections: LAB.edges.map(x => ({ sourceBlock: x.source, sourcePort: x.sourceHandle, targetBlock: x.target, targetPort: x.targetHandle })) } as any);
+    Solvers.runFixedStep(e, { solver: 'euler', startTime: 0, stopTime: 0.04, fixedStep: 0.02 } as any);
+    expect(e.diagnostics.filter(d => d.code === 'UNIT_INCONSISTENCY')).toEqual([]);
+  });
+
   it('is an 8-cylinder 6.6 L engine with consistent cylinder, injector and manifold data', () => {
     const c = node('cylinder').params!;
     expect([c.B, c.S, c.L, c.CR, c.Ncyl, c.dTheta]).toEqual([0.103, 0.099, 0.165, 16.8, 8, 2]);
@@ -127,5 +136,6 @@ describe('V8 diesel mapping lab: learning lab registration', () => {
     expect(ws).toMatch(/CI_V8_MAPPING_LAB_STEPS/);
     expect(ws).toMatch(/lab\.solverType/);
     expect(ws).toMatch(/lab\.fixedStep/);
+    expect(ws).toMatch(/label: n\.label/); // the lab labels (e.g. 'Fuel Demand Map (ms)') name the blocks on the canvas
   });
 });

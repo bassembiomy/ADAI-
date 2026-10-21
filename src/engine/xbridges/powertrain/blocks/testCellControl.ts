@@ -233,10 +233,10 @@ const MAP_SPEC: PtBlockSpec = {
   specRef: SPEC_REF,
   symbol: 'calibration-map',
   inputs: [
-    inp('X_in', '1', 1, 'First lookup coordinate, matched to X_bp (the rows of Z). Clipped to the X_bp range.'),
-    inp('Y_in', '1', 2, 'Second lookup coordinate, matched to Y_bp (the columns of Z). Clipped to the Y_bp range.'),
+    inp('X_in', 'inherit', 1, 'First lookup coordinate, matched to X_bp (the rows of Z). Clipped to the X_bp range. The unit is inherited from the connected signal (e.g. rpm).'),
+    inp('Y_in', 'inherit', 2, 'Second lookup coordinate, matched to Y_bp (the columns of Z). Clipped to the Y_bp range. The unit is inherited from the connected signal (e.g. %).'),
   ],
-  outputs: [out('Z_out', '1', 1, 'Interpolated table value at (X_in, Y_in).')],
+  outputs: [out('Z_out', 'inherit', 1, 'Interpolated table value at (X_in, Y_in), in the unit of the table values, inherited by the connected input.')],
   params: [
     { name: 'X_bp', label: 'X breakpoints', unit: '1', default: [1000, 2000, 3000], kind: 'vector', description: 'Strictly increasing breakpoints for X_in; the rows of Z.' },
     { name: 'Y_bp', label: 'Y breakpoints', unit: '1', default: [0, 50, 100], kind: 'vector', description: 'Strictly increasing breakpoints for Y_in; the columns of Z.' },

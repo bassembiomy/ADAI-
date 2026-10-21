@@ -151,7 +151,8 @@ export class XbridgesEngine {
       }
 
       // Unit consistency validation
-      if (outPort.unit && inPort.unit && outPort.unit !== inPort.unit) {
+      // 'inherit' (Simulink unit inheritance) takes the unit of the connected signal and is never inconsistent.
+      if (outPort.unit && inPort.unit && outPort.unit !== 'inherit' && inPort.unit !== 'inherit' && outPort.unit !== inPort.unit) {
         this.diagnostics.push({
           severity: 'warning',
           code: 'UNIT_INCONSISTENCY',
