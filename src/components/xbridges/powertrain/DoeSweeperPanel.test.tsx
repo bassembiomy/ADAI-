@@ -12,6 +12,7 @@ import { Solvers } from '../../../engine/xbridges/Solvers';
 import { makeBus } from '../../../engine/xbridges/bus/busCore';
 import { calibrationMapsFromResults, mappedEngineTablesFromResults, doeModuleTable } from '../../../engine/xbridges/powertrain/calibrationExport';
 import { doeSweeperResults, doeSweeperPointCount } from '../../../engine/xbridges/powertrain/blocks/doeSweeper';
+import { baseSoiMap, toCalibrationMap2D } from '../../../engine/xbridges/powertrain/mrPldMaps';
 
 function sweptBlock(stopTime = 16.5) {
   const plant: any = {
@@ -107,6 +108,21 @@ describe('DoE Sweeper panel', () => {
     const mapEcu = { ...ecu, params: { ...ecu.params, mode: 'Map' } };
     render(<XbridgesPropertiesPanel block={block as any} onUpdate={vi.fn()} onClose={vi.fn()} availableBlocks={[mapEcu, eng] as any} />);
     expect(screen.getByText(/ECU is in Map mode/).textContent).toMatch(/DoE override/);
+  });
+
+  it('writes a generated MR-PLD map (base SOI, speed x fuel quantity) into a Calibration Map 2D block', () => {
+    const block = sweptBlock();
+    const map = { id: 'm1', type: 'PT_CALIBRATION_MAP_2D', label: '1. Base SOI map', params: { ...BLOCK_LIBRARY.PT_CALIBRATION_MAP_2D('m1', {}).params } };
+    const onUpdate = vi.fn();
+    render(<XbridgesPropertiesPanel block={block as any} onUpdate={onUpdate} onClose={vi.fn()} availableBlocks={[ecu, eng, map] as any} />);
+    const kind = screen.getByRole('combobox', { name: 'Calibration map' }) as HTMLSelectElement;
+    expect(Array.from(kind.options).map(o => o.value)).toEqual(['baseSoi', 'fullLoadFuel', 'fullLoadTorque', 'smoke', 'injectionDuration']);
+    fireEvent.change(kind, { target: { value: 'baseSoi' } });
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Fuel quantity at 100 % load (mg/stroke)' }), { target: { value: '185' } });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Target map' }), { target: { value: 'm1' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Write calibration map' }));
+    const m = baseSoiMap(doeSweeperResults(block.state), { qPerLoad: 1.85 });
+    expect(onUpdate).toHaveBeenCalledWith('m1', { params: { ...map.params, ...toCalibrationMap2D({ x: m.speedBp, y: m.qBp, z: m.soi }) } });
   });
 
   it('shows nothing extra for other blocks', () => {
