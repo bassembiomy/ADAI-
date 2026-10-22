@@ -11,6 +11,8 @@ export interface RtmSectionInput {
   metrics: CoverageMetrics;
   modelHash?: string;
   repositoryRevision?: number;
+  /** In-document link of a requirement's specification entry, when the report has one. */
+  requirementHref?: (requirementElementId: string) => string | undefined;
 }
 
 /** Most columns per page of the requirement x element grid. */
@@ -146,6 +148,10 @@ function buildGrid(repo: SysmlRepository, matrix: TraceabilityMatrix): { columns
  */
 export function renderRtmSection(input: RtmSectionInput, numbering: ReportNumbering, base = '8'): string {
   const { repository: repo, matrix, metrics } = input;
+  const linked = (elementId: string, html: string): string => {
+    const href = input.requirementHref?.(elementId);
+    return href ? `<a href="${escapeHtml(href)}">${html}</a>` : html;
+  };
   let html = '';
   if (matrix.rows.length === 0) {
     return notModelled();
@@ -189,8 +195,8 @@ export function renderRtmSection(input: RtmSectionInput, numbering: ReportNumber
       return {
         className: 'rtm-row',
         cells: [
-          `<code>${escapeHtml(r.requirementId)}</code>`,
-          `<strong>${escapeHtml(sysmlObjectLabel(r, 'Requirement'))}</strong>${r.text ? `<div class="req-text">${escapeHtml(r.text)}</div>` : ''}`,
+          linked(r.id, `<code>${escapeHtml(r.requirementId)}</code>`),
+          `<strong>${linked(r.id, escapeHtml(sysmlObjectLabel(r, 'Requirement')))}</strong>${r.text ? `<div class="req-text">${escapeHtml(r.text)}</div>` : ''}`,
           escapeHtml(`${r.risk ?? 'unspecified'} / ${r.priority ?? 'unspecified'}`),
           rtmStatusBadge(row.status),
           joinList(derived.map(escapeHtml)),
@@ -222,7 +228,7 @@ export function renderRtmSection(input: RtmSectionInput, numbering: ReportNumber
         rows: matrix.rows.map(row => ({
           className: 'grid-row',
           cells: [
-            `<strong>${escapeHtml(row.requirement.requirementId)}</strong> ${escapeHtml(sysmlObjectLabel(row.requirement, 'Requirement'))}`,
+            linked(row.requirement.id, `<strong>${escapeHtml(row.requirement.requirementId)}</strong> ${escapeHtml(sysmlObjectLabel(row.requirement, 'Requirement'))}`),
             ...page.map(col => {
               const set = marks.get(row.requirement.id)?.get(col.id);
               if (!set || set.size === 0) return '';

@@ -14,6 +14,8 @@ import {
   renderActivityDiagrams, renderPackageDiagrams, renderParametricDiagrams, renderSequenceDiagrams, renderUseCaseDiagrams,
 } from '../reportDiagrams.sysml';
 import type { HierarchySourceModel } from '../reportHierarchyEngine';
+import { renderRequirementDiagramViews } from '../reportRequirementDiagrams';
+import type { DiagramPresentation } from '../../../engine/sysml/presentationState';
 import { buildScenarioEntries } from '../scenariosSection';
 import { ReportNumbering, notModelled, sectionId } from './numbering';
 import { SYSTEM_REPORT_CSS } from './reportStyles';
@@ -26,9 +28,42 @@ export interface SystemReportInput {
   diagnostics?: ReportModelDiagnostics; revision?: string;
   traceability: { matrix: TraceabilityMatrix; metrics: CoverageMetrics; modelHash?: string; repositoryRevision?: number; diagnostics?: { code: string; message: string }[] };
   extraSections?: { id: string; title: string; html: string }[];   // App-supplied (SM analysis, scenarios, HMI, prototype)
+  /** Per-diagram presentations saved by the editor; requirement diagrams are drawn from them as the user drew them. */
+  diagramPresentations?: Record<string, DiagramPresentation>;
 }
 
+interface ReqRow { elementId: string; id: string; name: string; status: string; priority: string; owner: string; text: string; level: number }
+
+/** Anchor of a requirement's specification entry. */
+function reqAnchor(elementId: string): string {
+  return `req-${elementId.replace(/[^A-Za-z0-9_-]/g, ch => `_${ch.charCodeAt(0).toString(16)}`)}`;
+}
+
+function statusBadge(status: string): string {
+  const s = status.trim().toLowerCase();
+  const cls = s === 'verified' || s === 'implemented' ? 'ok' : s === 'approved' ? 'info' : s === 'failed' ? 'bad' : s === 'stale' ? 'warn' : 'muted';
+  return `<span class="badge badge-${cls}">${escapeHtml(status)}</span>`;
+}
+
+const REQUIREMENT_LEGEND = `<div class="req-legend"><strong>Reading the requirement diagrams</strong>
+<span><svg width="34" height="12" aria-hidden="true"><line x1="9" y1="6" x2="34" y2="6" stroke="#546e7a"/><circle cx="6" cy="6" r="5" fill="#fff" stroke="#546e7a"/><line x1="6" y1="1" x2="6" y2="11" stroke="#546e7a"/><line x1="1" y1="6" x2="11" y2="6" stroke="#546e7a"/></svg> containment: the requirement at the crosshair owns the other one</span>
+<span><svg width="34" height="12" aria-hidden="true"><line x1="0" y1="6" x2="32" y2="6" stroke="#546e7a" stroke-dasharray="4 3"/><path d="M 26 2 L 33 6 L 26 10" fill="none" stroke="#546e7a"/></svg> &laquo;deriveReqt&raquo;, &laquo;satisfy&raquo;, &laquo;verify&raquo;, &laquo;refine&raquo;, &laquo;trace&raquo;, &laquo;copy&raquo;: dependency, arrow points to the supplier (the requirement it depends on)</span>
+<span><span class="req-swatch"></span> requirement: Id and Text compartments; the dot is its status. Select it to open its specification.</span></div>`;
+
 const esc = escapeHtml;
+
+/**
+ * Page behaviour of the report: HMI panels (`.hmi-fit`) are scaled to the page width so they never run past the
+ * paper border, on screen and in print (in print also kept within one page); figures shrunk to fit the page get a "View at full size" toggle on screen.
+ */
+const REPORT_SCRIPT = `<script>(function(){
+function fitHmi(){document.querySelectorAll('.hmi-fit').forEach(function(box){var c=box.firstElementChild;if(!c)return;var w=parseFloat(box.getAttribute('data-w'))||c.offsetWidth,h=parseFloat(box.getAttribute('data-h'))||c.offsetHeight;box.style.width='';var avail=box.clientWidth;if(!w||!avail)return;var printing=window.matchMedia&&window.matchMedia('print').matches;var s=Math.min(1,avail/w,printing?760/h:Infinity);c.style.transform=s<1?'scale('+s+')':'';box.style.height=Math.ceil(h*s)+'px';box.style.width=Math.ceil(w*s)<avail?Math.ceil(w*s)+'px':'';});}
+function zoomers(){document.querySelectorAll('figure.report-figure > svg').forEach(function(svg){if(svg.getAttribute('data-zoom'))return;var vb=svg.viewBox&&svg.viewBox.baseVal;var shown=svg.getBoundingClientRect().width;if(!vb||!vb.width||!shown||vb.width<=shown*1.15)return;svg.setAttribute('data-zoom','1');var fit=svg.getAttribute('width');var b=document.createElement('button');b.type='button';b.className='fig-zoom';b.textContent='View at full size';b.onclick=function(){var on=svg.parentNode.classList.toggle('fig-full');svg.setAttribute('width',on?String(Math.ceil(vb.width)):fit);svg.style.width=on?Math.ceil(vb.width)+'px':'';b.textContent=on?'Fit to page':'View at full size';};svg.parentNode.insertBefore(b,svg.nextSibling);});}
+function all(){fitHmi();zoomers();}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',all);else all();
+window.addEventListener('load',all);window.addEventListener('resize',fitHmi);window.addEventListener('beforeprint',fitHmi);window.addEventListener('afterprint',fitHmi);
+if(window.matchMedia){var m=window.matchMedia('print');if(m.addEventListener)m.addEventListener('change',fitHmi);else if(m.addListener)m.addListener(fitHmi);}
+window.ADIA_REPORT_FIT=fitHmi;})();</script>`;
 const SEP = ' &#8250; ';
 const dash = '<span class="muted">&#8212;</span>';
 const NON_BLOCK_STEREOTYPES = new Set([
@@ -207,6 +242,80 @@ export function buildSystemReport(input: SystemReportInput): string {
     return hasSysmlReference(repo, raw) ? resolveSysmlReferenceLabel(repo, raw, 'Type') : raw;
   };
 
+  // ---- Cross-references used by the requirement diagrams, tables and specifications ----
+  const reqElementIds = new Set([
+    ...h.blocks.filter(b => b.stereotype === 'requirement').map(b => b.id),
+    ...Object.keys(repo.requirements),
+  ]);
+  const bddElementIds = new Set(h.blocks.filter(b => b.stereotype !== 'requirement').map(b => b.id));
+  /** In-document link of a model element: requirement specification, internal structure section or the block table. */
+  const elementHref = (id: string): string | undefined => {
+    if (reqElementIds.has(id)) return `#${reqAnchor(id)}`;
+    const node = ibdByBlock.get(id);
+    if (node) return `#${sectionId(node.number)}`;
+    return bddElementIds.has(id) ? `#${sectionId('5.1')}` : undefined;
+  };
+  const elementName = (id: string): string => {
+    const b = blocksById.get(id);
+    if (b) return b.stereotype === 'requirement' ? `${b.reqId ? `${b.reqId} ` : ''}${sysmlObjectLabel(b, 'Requirement')}` : sysmlObjectLabel(b, 'Element');
+    const r = repo.requirements[id];
+    if (r) return `${r.requirementId} ${sysmlObjectLabel(r, 'Requirement')}`.trim();
+    return hasSysmlReference(repo, id) ? resolveSysmlReferenceLabel(repo, id, 'Element') : 'Unresolved element';
+  };
+  const elementLink = (id: string): string => {
+    const href = elementHref(id);
+    return href ? `<a href="${href}">${esc(elementName(id))}</a>` : esc(elementName(id));
+  };
+  /** Requirement diagram subsections each element is shown on. */
+  const shownOn = new Map<string, { anchor: string; name: string }[]>();
+  let reqRowsRendered = false;
+
+  function renderRequirementSpec(r: ReqRow): string {
+    const id = r.elementId;
+    const rels = h.relationships;
+    const ends = (pick: (rel: typeof rels[number]) => string | undefined): string[] => [...new Set(rels.map(pick).filter((x): x is string => Boolean(x)))];
+    const isContain = (t: string) => t === 'requirementContainment' || t === 'composition';
+    const isDerive = (t: string) => t === 'derive' || t === 'deriveReqt';
+    const owner = repo.requirements[id]?.ownerId;
+    const parents = new Set(ends(rel => isContain(rel.type) && rel.targetId === id && reqElementIds.has(rel.sourceId) ? rel.sourceId : undefined));
+    if (owner && reqElementIds.has(owner)) parents.add(owner);
+    const children = new Set(ends(rel => isContain(rel.type) && rel.sourceId === id && reqElementIds.has(rel.targetId) ? rel.targetId : undefined));
+    for (const other of reqElementIds) if (repo.requirements[other]?.ownerId === id) children.add(other);
+    const verifiers = new Set(ends(rel => rel.type === 'verify' && rel.targetId === id ? rel.sourceId : undefined));
+    for (const vc of Object.values(repo.verificationCases)) if (vc.verifiesRequirementIds?.includes(id)) verifiers.add(vc.id);
+    const rows: [string, string[]][] = [
+      ['Contained in', [...parents]],
+      ['Contains', [...children]],
+      ['Derived from', ends(rel => isDerive(rel.type) && rel.sourceId === id ? rel.targetId : undefined)],
+      ['Derived requirements', ends(rel => isDerive(rel.type) && rel.targetId === id ? rel.sourceId : undefined)],
+      ['Satisfied by', ends(rel => rel.type === 'satisfy' && rel.targetId === id ? rel.sourceId : undefined)],
+      ['Verified by', [...verifiers]],
+      ['Refined by', ends(rel => rel.type === 'refine' && rel.targetId === id ? rel.sourceId : undefined)],
+      ['Traced from', ends(rel => rel.type === 'trace' && rel.targetId === id ? rel.sourceId : undefined)],
+      ['Traces to', ends(rel => rel.type === 'trace' && rel.sourceId === id ? rel.targetId : undefined)],
+      ['Copied from', ends(rel => rel.type === 'copy' && rel.sourceId === id ? rel.targetId : undefined)],
+    ];
+    const ownerPkg = owner && repo.packages[owner] ? sysmlObjectLabel(repo.packages[owner], 'Package') : undefined;
+    const req = repo.requirements[id];
+    const facts: [string, string][] = [
+      ['Status', statusBadge(r.status)], ['Priority', esc(r.priority)], ['Assigned to', esc(r.owner)],
+      ...(req?.risk ? [['Risk', esc(req.risk)] as [string, string]] : []),
+      ...(ownerPkg ? [['Package', esc(ownerPkg)] as [string, string]] : []),
+      ...(req?.version ? [['Version', esc(req.version)] as [string, string]] : []),
+    ];
+    const relRows = rows.filter(([, ids]) => ids.length > 0)
+      .map(([label, ids]) => `<tr><th>${label}</th><td>${ids.map(elementLink).join(', ')}</td></tr>`).join('');
+    const diagrams = shownOn.get(id) ?? [];
+    return `<div class="req-spec" id="${reqAnchor(id)}">
+<div class="req-spec-head"><code>${esc(r.id)}</code> <strong>${esc(r.name)}</strong></div>
+<div class="req-spec-text">${r.text ? esc(r.text) : '<span class="muted">No requirement text.</span>'}</div>
+<div class="req-spec-facts">${facts.map(([k, v]) => `<span><em>${k}:</em> ${v}</span>`).join('')}</div>
+${req?.rationale ? `<div class="req-spec-rationale"><em>Rationale:</em> ${esc(req.rationale)}</div>` : ''}
+<table class="req-spec-rel">${relRows || '<tr><td class="muted">No relationships.</td></tr>'}</table>
+<div class="req-spec-nav">${diagrams.length ? `Shown on: ${diagrams.map(d => `<a href="#${d.anchor}">${esc(d.name)}</a>`).join(', ')} &middot; ` : ''}<a href="#${sectionId('3.2')}">Requirement table</a> &middot; <a href="#${sectionId('8')}">Traceability matrix</a></div>
+</div>`;
+  }
+
   const body: string[] = [];
 
   // Document-control tables come first in the document, so they are numbered first.
@@ -311,25 +420,30 @@ export function buildSystemReport(input: SystemReportInput): string {
   {
     body.push(num.heading(2, '3', 'Requirements'));
     const reqBlocks = h.blocks.filter(b => b.stereotype === 'requirement') as BlockData[];
-    interface ReqRow { id: string; name: string; status: string; priority: string; owner: string; text: string; level: number }
     let reqRows: ReqRow[] = [];
     if (reqBlocks.length > 0) {
-      body.push(num.numberFigures(renderRequirementsDiagram({ blocks: h.blocks, relationships: h.relationships })));
       const reqById = new Map(reqBlocks.map(r => [r.id, r]));
       const childrenMap = new Map<string, string[]>();
       const parentSet = new Set<string>();
+      const addChild = (parentId: string, childId: string) => {
+        if (parentId === childId || (childrenMap.get(parentId) ?? []).includes(childId)) return;
+        childrenMap.set(parentId, [...(childrenMap.get(parentId) ?? []), childId]);
+        parentSet.add(childId);
+      };
       for (const rel of h.relationships) {
         if (!reqById.has(rel.sourceId) || !reqById.has(rel.targetId)) continue;
-        if (rel.type === 'composition' || rel.type === 'derive' || rel.type === 'deriveReqt' || rel.type === 'requirementContainment') {
-          childrenMap.set(rel.sourceId, [...(childrenMap.get(rel.sourceId) ?? []), rel.targetId]);
-          parentSet.add(rel.targetId);
-        }
+        if (rel.type === 'composition' || rel.type === 'derive' || rel.type === 'deriveReqt' || rel.type === 'requirementContainment') addChild(rel.sourceId, rel.targetId);
+      }
+      // Containment is ownership (SysML 1.6 §16.3.2.4): a requirement owned by another one is nested under it.
+      for (const r of reqBlocks) {
+        const ownerId = repo.requirements[r.id]?.ownerId;
+        if (ownerId && reqById.has(ownerId)) addChild(ownerId, r.id);
       }
       const seen = new Set<string>();
       const walk = (r: BlockData, level: number): void => {
         if (seen.has(r.id)) return;
         seen.add(r.id);
-        reqRows.push({ id: r.reqId || '', name: sysmlObjectLabel(r, 'Requirement'), status: r.status || 'Draft', priority: r.priority || 'Medium', owner: r.assignedTo || 'Unassigned', text: r.description || '', level });
+        reqRows.push({ elementId: r.id, id: r.reqId || '', name: sysmlObjectLabel(r, 'Requirement'), status: r.status || 'Draft', priority: r.priority || 'Medium', owner: r.assignedTo || 'Unassigned', text: r.description || '', level });
         for (const childId of childrenMap.get(r.id) ?? []) { const c = reqById.get(childId); if (c) walk(c, level + 1); }
       };
       const roots = reqBlocks.filter(r => !parentSet.has(r.id));
@@ -338,19 +452,49 @@ export function buildSystemReport(input: SystemReportInput): string {
     } else {
       reqRows = Object.values(repo.requirements)
         .sort((a, b) => a.requirementId.localeCompare(b.requirementId))
-        .map(r => ({ id: r.requirementId, name: sysmlObjectLabel(r, 'Requirement'), status: r.status, priority: r.priority ?? 'Medium', owner: r.owner ?? 'Unassigned', text: r.text, level: 0 }));
+        .map(r => ({ elementId: r.id, id: r.requirementId, name: sysmlObjectLabel(r, 'Requirement'), status: r.status, priority: r.priority ?? 'Medium', owner: r.owner ?? 'Unassigned', text: r.text, level: 0 }));
     }
+
     if (reqRows.length === 0) body.push(notModelled());
     else {
+      reqRowsRendered = true;
+      body.push('<p>Requirements are presented as in the model: first the requirement diagrams as drawn, then the requirement table (nested by containment and derivation), then one specification per requirement with every relationship it takes part in. Select a requirement in a diagram or a table to open its specification; the specification links back to the diagrams that show it and to the elements that satisfy, verify, refine or trace it.</p>');
+
+      // 3.1 Diagrams: one figure per Requirement diagram of the model, as drawn in the editor.
+      body.push(num.heading(3, '3.1', 'Requirement diagrams'));
+      const views = renderRequirementDiagramViews({
+        repository: repo, blocks: h.blocks, relationships: h.relationships, presentations: input.diagramPresentations, hrefFor: elementHref,
+      });
+      body.push(REQUIREMENT_LEGEND);
+      if (views.length > 0) {
+        views.forEach((view, i) => {
+          const number = `3.1.${i + 1}`;
+          body.push(num.heading(4, number, view.name));
+          body.push(`<p class="path-line">Diagram frame: <strong>${esc(view.frameLabel)}</strong></p>`);
+          body.push(num.numberFigures(view.html));
+          for (const id of view.elementIds) shownOn.set(id, [...(shownOn.get(id) ?? []), { anchor: sectionId(number), name: view.name }]);
+        });
+      } else if (reqBlocks.length > 0) {
+        body.push(num.numberFigures(renderRequirementsDiagram({ blocks: h.blocks, relationships: h.relationships })));
+      } else body.push('<p class="muted">The model has no requirement diagram.</p>');
+
+      // 3.2 Table, Cameo "Requirement Table" layout.
+      body.push(num.heading(3, '3.2', 'Requirement table'));
       body.push(num.table({
-        caption: 'Requirements (indented by derivation / containment)',
-        head: ['ID', 'Name', 'Status', 'Priority', 'Assigned to', 'Description'],
-        rows: reqRows.map(r => [
-          `<code>${esc(r.id)}</code>`,
-          `<div style="margin-left:${r.level * 14}px">${r.level > 0 ? '&#8627; ' : ''}<strong>${esc(r.name)}</strong></div>`,
-          esc(r.status), esc(r.priority), esc(r.owner), esc(r.text),
+        caption: 'Requirements (indented by containment / derivation)',
+        className: 'req-table',
+        head: ['#', 'Id', 'Name', 'Text', 'Status', 'Priority', 'Assigned to'],
+        rows: reqRows.map((r, i) => [
+          String(i + 1),
+          `<a href="#${reqAnchor(r.elementId)}"><code>${esc(r.id)}</code></a>`,
+          `<div style="padding-left:${r.level * 14}px">${r.level > 0 ? '&#8627; ' : ''}<a href="#${reqAnchor(r.elementId)}"><strong>${esc(r.name)}</strong></a></div>`,
+          r.text ? esc(r.text) : dash, statusBadge(r.status), esc(r.priority), esc(r.owner),
         ]),
       }));
+
+      // 3.3 Specifications: everything one requirement takes part in, linked both ways.
+      body.push(num.heading(3, '3.3', 'Requirement specifications'));
+      body.push(reqRows.map(r => renderRequirementSpec(r)).join('\n'));
     }
   }
 
@@ -579,6 +723,7 @@ export function buildSystemReport(input: SystemReportInput): string {
       metrics: input.traceability.metrics,
       modelHash: input.traceability.modelHash,
       repositoryRevision: input.traceability.repositoryRevision,
+      requirementHref: id => (reqElementIds.has(id) && reqRowsRendered ? `#${reqAnchor(id)}` : undefined),
     }, num, '8'));
   }
 
@@ -696,5 +841,5 @@ ${num.listOfTables()}
 ${cover}
 ${front}
 ${body.join('\n')}
-</div><div class="print-footer">${esc(docId)} &middot; ${esc(input.projectName)}</div></body></html>`;
+</div><div class="print-footer">${esc(docId)} &middot; ${esc(input.projectName)}</div>${REPORT_SCRIPT}</body></html>`;
 }

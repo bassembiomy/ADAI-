@@ -109,6 +109,41 @@ table.rtm-grid th:first-child { text-align:left; }
 .doc-control .sig { height:30px; border-bottom:1px solid var(--ink); }
 .glossary-sym { text-align:center; width:34mm; }
 
+/* requirements (Cameo-style diagrams, table and specifications) */
+figure.report-figure a.req-node:hover rect { stroke:var(--accent); stroke-width:2.2; }
+.req-legend { font-size:8.5pt; color:var(--ink); border:1px solid var(--rule); background:var(--band); padding:6px 10px; margin:6px 0 10px; break-inside:avoid; }
+.req-legend span { display:block; margin-top:3px; }
+.req-legend svg { vertical-align:middle; margin-right:4px; }
+.req-swatch { display:inline-block !important; width:22px; height:11px; margin:0 4px 0 0 !important; vertical-align:middle; background:#fff7ed; border:1.2px solid #c2410c; }
+table.req-table td:nth-child(1) { width:2.4em; color:var(--muted); text-align:right; }
+table.req-table td:nth-child(2) { white-space:nowrap; }
+table.req-table a { text-decoration:none; color:inherit; }
+.req-spec { border:1px solid var(--rule); border-left:4px solid #c2410c; padding:8px 12px; margin:10px 0; background:#fff; break-inside:avoid; page-break-inside:avoid; scroll-margin-top:12px; }
+.req-spec:target { box-shadow:0 0 0 3px rgba(249,115,22,.35); }
+.req-spec-head { font-size:11pt; color:var(--navy); }
+.req-spec-head code { color:#c2410c; font-weight:700; background:#fff7ed; }
+.req-spec-text { margin:4px 0 6px; padding:5px 8px; background:var(--band); border-radius:2px; }
+.req-spec-facts { display:flex; flex-wrap:wrap; gap:4px 16px; font-size:9pt; }
+.req-spec-facts em, .req-spec-rationale em { color:var(--muted); font-style:normal; }
+.req-spec-rationale { font-size:9pt; margin-top:4px; }
+table.req-spec-rel { border-collapse:collapse; margin:6px 0 4px; font-size:9pt; width:100%; }
+table.req-spec-rel th { text-align:left; color:var(--muted); font-weight:600; width:34mm; padding:2px 8px 2px 0; vertical-align:top; }
+table.req-spec-rel td { padding:2px 0; }
+.req-spec-nav { font-size:8.5pt; color:var(--muted); border-top:1px dotted var(--rule); padding-top:3px; }
+
+/* figures wider than the page: on screen they can be opened at full size */
+.fig-zoom { display:inline-block; margin-top:4px; font-size:8.5pt; color:#0a5a8a; background:none; border:1px solid var(--rule); border-radius:3px; padding:1px 8px; cursor:pointer; }
+figure.report-figure.fig-full { overflow-x:auto; }
+figure.report-figure.fig-full svg { max-width:none !important; }
+
+/* HMI: panels always fit inside the page width */
+.hmi-design, .hmi-reference { max-width:100%; overflow:hidden; }
+.hmi-reference svg { max-width:100%; height:auto; display:block; margin:0 auto; }
+.hmi-sim-container { max-width:100%; overflow:hidden; }
+.hmi-sim-header { flex-wrap:wrap; gap:8px; }
+.hmi-fit { width:100%; overflow:hidden; margin:0 auto 20px; }
+.hmi-fit > .hmi-canvas-wrapper { transform-origin:0 0; margin:0 !important; }
+
 /* HMI design list (supplied by the app) */
 .item { margin:0 0 8px; }
 .item-header { font-weight:700; }
@@ -124,7 +159,10 @@ table.rtm-grid th:first-child { text-align:left; }
   .print-footer { display:block; position:fixed; bottom:-12mm; left:0; font-size:8pt; color:#64748b; }
   a { color:inherit; text-decoration:none; }
   figure.report-figure { border-color:#cbd5e1; }
-  .hmi-sim-container { break-inside:auto; }
+  .hmi-sim-container { break-inside:auto; box-shadow:none; }
+  .hmi-fit, .hmi-reference { break-inside:avoid; page-break-inside:avoid; }
+  .fig-zoom { display:none; }
+  figure.report-figure.fig-full svg { max-width:100% !important; }
 }
 @media screen and (max-width: 800px) { .report { margin:0; padding:14px; } .cover { padding-left:10px; } }
 `;

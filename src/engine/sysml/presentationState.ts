@@ -53,3 +53,25 @@ export function normalizeDiagramPresentations(
     return [diagramId, { ...value, elementIds, presentations }];
   }));
 }
+
+/** The presentation the canvas shows for a diagram, merged with the legacy mode-keyed record of the default diagrams. */
+export function resolveDiagramPresentation(
+  diagramId: string,
+  presentations: Record<string, DiagramPresentation>,
+): DiagramPresentation | undefined {
+  const primary = presentations[diagramId];
+  const legacyFallbackKey = diagramId === 'adia-default-bdd' ? 'bdd'
+    : diagramId === 'adia-default-requirements' ? 'requirements'
+    : diagramId === 'bdd' ? 'adia-default-bdd'
+    : diagramId === 'requirements' ? 'adia-default-requirements'
+    : undefined;
+  const legacyFallback = legacyFallbackKey ? presentations[legacyFallbackKey] : undefined;
+  return primary && legacyFallback
+    ? {
+        ...legacyFallback,
+        ...primary,
+        elementIds: Array.from(new Set([...(legacyFallback.elementIds ?? []), ...(primary.elementIds ?? [])])),
+        presentations: { ...(legacyFallback.presentations ?? {}), ...(primary.presentations ?? {}) },
+      }
+    : (primary ?? legacyFallback);
+}
