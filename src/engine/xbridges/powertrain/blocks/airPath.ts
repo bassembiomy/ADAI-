@@ -2,6 +2,7 @@
 import type { XValue } from '../../types';
 import { makeBus } from '../../bus/busCore';
 import { definePtBlock } from '../ptBlock';
+import { orificePsi, orificeCriticalRatio } from '../ptMath';
 import type { PtBlockSpec, PtParamSpec, PtPortSpec } from '../ptSpec';
 
 const SPEC_REF = 'docs/powertrain/engine-calibration-spec.md#2-blocks';
@@ -108,11 +109,8 @@ const throttleSpec: PtBlockSpec = {
   example: 'With the defaults, alpha = 30 deg and T_amb = 298.15 K the area is 3.4995e-4 m^2. At P_amb = 101325 Pa and P_map = 30000 Pa the flow is choked (pressure ratio 0.296) and mdot_th = 0.0664 kg/s; at P_map = 91192.5 Pa (ratio 0.9) it is 0.0410 kg/s.',
 };
 
-const psiFn = (pr: number, g: number): { psi: number; choked: boolean } => {
-  const prc = Math.pow(2 / (g + 1), g / (g - 1));
-  if (pr <= prc) return { psi: Math.sqrt(g * Math.pow(2 / (g + 1), (g + 1) / (g - 1))), choked: true };
-  return { psi: Math.sqrt(((2 * g) / (g - 1)) * (Math.pow(pr, 2 / g) - Math.pow(pr, (g + 1) / g))), choked: false };
-};
+const psiFn = (pr: number, g: number): { psi: number; choked: boolean } =>
+  ({ psi: orificePsi(pr, g), choked: pr <= orificeCriticalRatio(g) });
 
 const throttleFactory = definePtBlock(throttleSpec, {
   execute: (ins, p) => {

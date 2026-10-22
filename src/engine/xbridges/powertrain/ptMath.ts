@@ -17,6 +17,18 @@ export function powerFlowEfficiency(torqueIn: number, speedIn: number, eta: numb
   return 1;
 }
 
+/** Critical (choking) pressure ratio of a compressible orifice, (2/(g+1))^(g/(g-1)). */
+export const orificeCriticalRatio = (g: number): number => Math.pow(2 / (g + 1), g / (g - 1));
+
+/**
+ * Compressible orifice flow function Psi(pr), pr = p_down/p_up (Heywood 1988 eq. 2.24; Guzzella & Onder 2010 eq. 2.39):
+ * sqrt(2g/(g-1)*(pr^(2/g) - pr^((g+1)/g))) above the critical ratio, the choked value sqrt(g*(2/(g+1))^((g+1)/(g-1))) at or below it.
+ */
+export function orificePsi(pr: number, g: number): number {
+  if (pr <= orificeCriticalRatio(g)) return Math.sqrt(g * Math.pow(2 / (g + 1), (g + 1) / (g - 1)));
+  return Math.sqrt(Math.max(0, (2 * g) / (g - 1) * (Math.pow(pr, 2 / g) - Math.pow(pr, (g + 1) / g))));
+}
+
 const flat = (v: unknown): unknown[] => (Array.isArray(v) ? v.flatMap(flat) : [v]);
 
 /** Returns a message naming the first offending parameter, or null when all are valid. */

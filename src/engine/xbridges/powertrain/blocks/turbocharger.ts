@@ -3,7 +3,7 @@ import type { XValue } from '../../types';
 import { makeBus } from '../../bus/busCore';
 import { definePtBlock } from '../ptBlock';
 import type { PtBlockSpec, PtParamSpec, PtPortSpec } from '../ptSpec';
-import { rpm2radps, radps2rpm } from '../ptMath';
+import { rpm2radps, radps2rpm, orificePsi } from '../ptMath';
 
 const inp = (id: string, unit: string, simulinkIndex: number, description: string): PtPortSpec =>
   ({ id, name: id, direction: 'input', unit, simulinkIndex, description });
@@ -78,11 +78,7 @@ const spec: PtBlockSpec = {
 
 const num = (v: XValue | undefined): number => (typeof v === 'number' ? v : Array.isArray(v) ? Number(v[0]) : NaN);
 
-const psi = (pr: number, g: number): number => {
-  const prc = Math.pow(2 / (g + 1), g / (g - 1));
-  return pr <= prc ? Math.sqrt(g * Math.pow(2 / (g + 1), (g + 1) / (g - 1)))
-    : Math.sqrt(Math.max(0, 2 * g / (g - 1) * (Math.pow(pr, 2 / g) - Math.pow(pr, (g + 1) / g))));
-};
+const psi = orificePsi;
 
 interface Res { PR: number; Pboost: number; Tcomp: number; Pc: number; Pt: number; Aeff: number; mt: number; Pback: number }
 
