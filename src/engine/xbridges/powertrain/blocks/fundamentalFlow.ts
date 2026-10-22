@@ -12,11 +12,11 @@ import type { PtBlockSpec, PtParamSpec, PtPortSpec } from '../ptSpec';
 const CATEGORY = 'Powertrain / Propulsion / Combustion Engine Components / Fundamental Flow' as const;
 const PATH = 'Powertrain Blockset/Propulsion/Combustion Engine Components/Fundamental Flow/';
 
-const inp = (id: string, unit: string, simulinkIndex: number, description: string, dataType?: string, feedthrough?: boolean): PtPortSpec =>
+export const inp = (id: string, unit: string, simulinkIndex: number, description: string, dataType?: string, feedthrough?: boolean): PtPortSpec =>
   ({ id, name: id, direction: 'input', unit, simulinkIndex, description, ...(dataType ? { dataType } : {}), ...(feedthrough !== undefined ? { feedthrough } : {}) });
-const out = (id: string, unit: string, simulinkIndex: number, description: string, dataType?: string): PtPortSpec =>
+export const out = (id: string, unit: string, simulinkIndex: number, description: string, dataType?: string): PtPortSpec =>
   ({ id, name: id, direction: 'output', unit, simulinkIndex, description, ...(dataType ? { dataType } : {}) });
-const par = (name: string, label: string, unit: string, def: number, description: string,
+export const par = (name: string, label: string, unit: string, def: number, description: string,
   min?: number, minExclusive?: boolean, max?: number): PtParamSpec =>
   ({ name, label, unit, default: def, kind: 'scalar', description, ...(min !== undefined ? { min } : {}), ...(minExclusive ? { minExclusive } : {}), ...(max !== undefined ? { max } : {}) });
 
@@ -26,16 +26,16 @@ const REF_GUZZELLA = 'Guzzella and Onder, Introduction to Modeling and Control o
 const pR = par('R', 'Gas constant', 'J/(kg*K)', 287, 'Specific gas constant of the gas.', 0, true);
 const pCp = par('cp', 'Specific heat at constant pressure', 'J/(kg*K)', 1005, 'Specific heat at constant pressure; must exceed R so that cv = cp - R is positive.', 0, true);
 
-const num = (v: XValue | undefined): number => (typeof v === 'number' ? v : Array.isArray(v) ? Number(v[0]) : NaN);
-const field = (v: XValue | undefined, k: string): number => (isBus(v) && typeof (v as any)[k] === 'number' ? (v as any)[k] : NaN);
+export const num = (v: XValue | undefined): number => (typeof v === 'number' ? v : Array.isArray(v) ? Number(v[0]) : NaN);
+export const field = (v: XValue | undefined, k: string): number => (isBus(v) && typeof (v as any)[k] === 'number' ? (v as any)[k] : NaN);
 
 const STATE_BUS = 'Bus: FlowStateBus';
 const FLOW_BUS = 'Bus: FlowBus';
-const stateBus = (P: number, T: number) => makeBus(['Prs', 'Temp'], [P, T]);
-const flowBus = (m: number, h: number) => makeBus(['MassFlw', 'HeatFlw'], [m, h]);
+export const stateBus = (P: number, T: number) => makeBus(['Prs', 'Temp'], [P, T]);
+export const flowBus = (m: number, h: number) => makeBus(['MassFlw', 'HeatFlw'], [m, h]);
 
 /** Reads a state bus; returns a message when it is missing, non-finite or non-physical. */
-function readState(v: XValue | undefined, side: string): { P: number; T: number } | string {
+export function readState(v: XValue | undefined, side: string): { P: number; T: number } | string {
   const P = field(v, 'Prs'), T = field(v, 'Temp');
   if (!Number.isFinite(P) || !Number.isFinite(T)) return `Flow ${side} must be a state bus with Prs and Temp`;
   if (P <= 0) return `Flow ${side} Prs must be > 0 Pa`;

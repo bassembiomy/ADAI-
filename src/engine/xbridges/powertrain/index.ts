@@ -18,11 +18,13 @@ import { BATTERY_BLOCKS } from './blocks/batteries';
 import { ELECTRIC_MOTOR_BLOCKS } from './blocks/electricMotors';
 import { COUPLING_BLOCKS } from './blocks/couplings';
 import { FUNDAMENTAL_FLOW_BLOCKS } from './blocks/fundamentalFlow';
+import { CORE_ENGINE_BLOCKS } from './blocks/coreEngines';
 import { TRANSMISSION_BLOCKS } from './blocks/transmissions';
 import { TRANSMISSION_CONTROLLER_BLOCKS } from './blocks/transmissionControllers';
 import { ENGINE_CONTROLLER_BLOCKS } from './blocks/engineControllers';
+import { BOOST_DRIVE_BLOCKS } from './blocks/boostDrive';
 
-export const PT_BLOCKS: { spec: PtBlockSpec; factory: (id: string, params?: Record<string, any>) => XBlock }[] = [...SCENARIO_BLOCKS, ...VEHICLE_BODY_BLOCKS, ...BATTERY_BLOCKS, ...ELECTRIC_MOTOR_BLOCKS, ...WHEEL_BLOCKS, ...COUPLING_BLOCKS, ...FUNDAMENTAL_FLOW_BLOCKS, ...TRANSMISSION_BLOCKS, ...TRANSMISSION_CONTROLLER_BLOCKS, ...ENGINE_CONTROLLER_BLOCKS, ...COMBUSTION_ENGINE_BLOCKS, ...FINAL_DRIVE_BLOCKS, ...AIR_PATH_BLOCKS, ...TURBOCHARGER_BLOCKS, ...DOE_SWEEPER_BLOCKS, ...TEST_CELL_CONTROL_BLOCKS, ...ENGINE_CYLINDER_BLOCKS, ...FUELING_ACTUATION_BLOCKS];
+export const PT_BLOCKS: { spec: PtBlockSpec; factory: (id: string, params?: Record<string, any>) => XBlock }[] = [...SCENARIO_BLOCKS, ...VEHICLE_BODY_BLOCKS, ...BATTERY_BLOCKS, ...ELECTRIC_MOTOR_BLOCKS, ...WHEEL_BLOCKS, ...COUPLING_BLOCKS, ...FUNDAMENTAL_FLOW_BLOCKS, ...BOOST_DRIVE_BLOCKS, ...CORE_ENGINE_BLOCKS, ...TRANSMISSION_BLOCKS, ...TRANSMISSION_CONTROLLER_BLOCKS, ...ENGINE_CONTROLLER_BLOCKS, ...COMBUSTION_ENGINE_BLOCKS, ...FINAL_DRIVE_BLOCKS, ...AIR_PATH_BLOCKS, ...TURBOCHARGER_BLOCKS, ...DOE_SWEEPER_BLOCKS, ...TEST_CELL_CONTROL_BLOCKS, ...ENGINE_CYLINDER_BLOCKS, ...FUELING_ACTUATION_BLOCKS];
 
 export const POWERTRAIN_SPECS: PtBlockSpec[] = PT_BLOCKS.map(b => b.spec);
 export const POWERTRAIN_FACTORIES: Record<string, (id: string, params?: Record<string, any>) => XBlock> =
