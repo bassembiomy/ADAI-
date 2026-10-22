@@ -18,7 +18,7 @@ import { characterizeCiCoreEngine } from './characterization/ciCoreEngineFit';
 
 const cylinder = { B: 0.13, S: 0.15, L: 0.26, Ncyl: 6, CR: 17.25, dTheta: 2, dTheta_comb: 60, dTheta_id: 6 };
 const intake = (N: number, F: number) => ({ P: 1e5 + 1.4e5 * F / 185, T: 320 });
-const opts = { cylinder, SpdBp: [800, 1400, 2000], FuelBp: [0, 60, 120, 180], SoiBp: [0, 4, 8, 12, 16, 20, 24], SoiDevBp: [-12, -6, 0, 6], intake };
+const opts = { cylinder, SpdBp: [800, 1400, 2000], FuelBp: [0, 60, 120, 180], SoiBp: [0, 4, 8, 12, 16, 20, 24, 28, 32, 36], SoiDevBp: [-18, -12, -6, 0, 6], intake };
 const st = (Prs: number, Temp: number) => makeBus(['Prs', 'Temp'], [Prs, Temp]);
 
 describe('CI Core Engine characterisation from the crank-angle cylinder', () => {
@@ -33,7 +33,7 @@ describe('CI Core Engine characterisation from the crank-angle cylinder', () => 
   };
 
   it('returns a complete, valid parameter set with the geometry passed through', () => {
-    expect([params.Ncyl, params.SpdBp, params.FuelBp, params.SoiDevBp]).toEqual([6, [800, 1400, 2000], [0, 60, 120, 180], [-12, -6, 0, 6]]);
+    expect([params.Ncyl, params.SpdBp, params.FuelBp, params.SoiDevBp]).toEqual([6, [800, 1400, 2000], [0, 60, 120, 180], [-18, -12, -6, 0, 6]]);
     expect(Math.abs(params.Vd - 6 * Math.PI / 4 * 0.13 ** 2 * 0.15) / params.Vd).toBeLessThan(1e-12);
     expect(params.f_tqinr.map((r: number[]) => r[0])).toEqual([0, 0, 0]);
     for (const r of params.f_tqinr) for (let j = 1; j < r.length; j++) expect(r[j]).toBeGreaterThan(r[j - 1]);
@@ -50,8 +50,10 @@ describe('CI Core Engine characterisation from the crank-angle cylinder', () => 
     }
   });
 
-  it('follows the cylinder off the grid and off the optimal SOI (torque 6 %, NOx trend)', () => {
-    const a = compare(1100, 90, 6), b = compare(1100, 90, 18);
+  it('the optimum SOI lies inside the swept range, and the model follows the cylinder off the grid and off the optimal SOI (torque 6 %, NOx trend)', () => {
+    for (const r of params.f_soi_opt) for (const v of r.slice(1)) { expect(v).toBeGreaterThan(0); expect(v).toBeLessThan(36); }
+    const opt = params.f_soi_opt[1][2]; // near 1100 rpm / 90 mg the optimum is close to the 1400 rpm / 120 mg grid value
+    const a = compare(1100, 90, opt - 12), b = compare(1100, 90, opt + 4);
     for (const r of [a, b]) expect(Math.abs(r.core.T - r.cyl.T) / r.cyl.T).toBeLessThan(0.06);
     expect(Math.sign(b.core.NOx - a.core.NOx)).toBe(Math.sign(b.cyl.NOx - a.cyl.NOx));
   });
