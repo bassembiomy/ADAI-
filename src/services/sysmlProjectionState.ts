@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import type { DiagramPresentation } from '../engine/sysml/presentationState';
+import { resolveDiagramPresentation, type DiagramPresentation } from '../engine/sysml/presentationState';
 import type { LegacySysmlView, SysmlCommandResult } from './sysmlCommandGateway';
 import type { BlockData, PackageData, PartData } from '../types/sysml_types';
 
@@ -53,21 +53,7 @@ export function projectDiagramScopedCanvasView(
   contextElementIds: readonly string[] = [],
   presentationDrafts: Readonly<Record<string, import('./sysmlCommandGateway').PresentationCoordinates>> = {},
 ): LegacySysmlView {
-  const primary = presentations[diagramId];
-  const legacyFallbackKey = diagramId === 'adia-default-bdd' ? 'bdd'
-    : diagramId === 'adia-default-requirements' ? 'requirements'
-    : diagramId === 'bdd' ? 'adia-default-bdd'
-    : diagramId === 'requirements' ? 'adia-default-requirements'
-    : undefined;
-  const legacyFallback = legacyFallbackKey ? presentations[legacyFallbackKey] : undefined;
-  const diagram = primary && legacyFallback
-    ? {
-        ...legacyFallback,
-        ...primary,
-        elementIds: Array.from(new Set([...(legacyFallback.elementIds ?? []), ...(primary.elementIds ?? [])])),
-        presentations: { ...(legacyFallback.presentations ?? {}), ...(primary.presentations ?? {}) },
-      }
-    : (primary ?? legacyFallback);
+  const diagram = resolveDiagramPresentation(diagramId, presentations);
   const visibleIds = new Set([...(diagram?.elementIds ?? []), ...contextElementIds]);
   const isPresented = (elementId: string) => visibleIds.has(elementId);
   return {

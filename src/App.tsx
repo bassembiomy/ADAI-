@@ -12029,8 +12029,10 @@ const ADIA = () => {
             </div>
           </div>
 
-          <div id="portable-hmi-canvas" class="hmi-canvas-wrapper" style="width: ${width}px; height: ${height}px;">
-            ${componentsHtml}
+          <div class="hmi-fit" data-w="${width}" data-h="${height}">
+            <div id="portable-hmi-canvas" class="hmi-canvas-wrapper" style="width: ${width}px; height: ${height}px;">
+              ${componentsHtml}
+            </div>
           </div>
 
           <div style="background: #111115; border: 1px solid #2a2a36; border-radius: 8px; padding: 16px; margin-bottom: 20px;">
@@ -12539,12 +12541,13 @@ const ADIA = () => {
         diagnostics: traceabilitySnapshot.diagnostics.map(item => ({ code: item.code, message: item.message })),
       },
       extraSections,
+      diagramPresentations: sysmlDiagramPresentations,
     });
     setGlobalReportData({ html, projectName });
     setShowGlobalReportPreview(true);
     setShowReportDialog(false);
     addError('info', 'Report preview ready');
-  }, [blocks, parts, connectors, relationships, states, transitions, junctions, hmiComponents, variables, activeStates, addError, setShowReportDialog, layers, tickMs, safetyMode, canonicalSysmlRepository, traceabilityExternalElements, simEvidenceCurrency]);
+  }, [blocks, parts, connectors, relationships, states, transitions, junctions, hmiComponents, variables, activeStates, addError, setShowReportDialog, layers, tickMs, safetyMode, canonicalSysmlRepository, traceabilityExternalElements, simEvidenceCurrency, sysmlDiagramPresentations]);
 
   // KEYBOARD SHORTCUTS
   useEffect(() => {
