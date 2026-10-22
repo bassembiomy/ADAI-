@@ -55,6 +55,10 @@ table.data tbody tr:nth-child(even) td { background:var(--band); }
 table.data thead { display:table-header-group; }
 table.data tr { break-inside:avoid; page-break-inside:avoid; }
 table.data td.num { text-align:right; font-variant-numeric:tabular-nums; }
+/* every table stays inside the page: long identifiers and code wrap instead of widening the table */
+.report table { max-width:100%; }
+.report td, .report th { overflow-wrap:anywhere; }
+.report td code, .report th code { white-space:normal; overflow-wrap:anywhere; }
 .req-text { color:var(--muted); font-size:9pt; margin-top:2px; }
 .tag { display:inline-block; background:var(--band); border:1px solid var(--rule); border-radius:3px; padding:0 5px; font-size:8.5pt; }
 .tag-accent { background:var(--accent); border-color:var(--accent); color:#fff; }
@@ -116,7 +120,6 @@ figure.report-figure a.req-node:hover rect { stroke:var(--accent); stroke-width:
 .req-legend svg { vertical-align:middle; margin-right:4px; }
 .req-swatch { display:inline-block !important; width:22px; height:11px; margin:0 4px 0 0 !important; vertical-align:middle; background:#fff7ed; border:1.2px solid #c2410c; }
 table.req-table td:nth-child(1) { width:2.4em; color:var(--muted); text-align:right; }
-table.req-table td:nth-child(2) { white-space:nowrap; }
 table.req-table a { text-decoration:none; color:inherit; }
 .req-spec { border:1px solid var(--rule); border-left:4px solid #c2410c; padding:8px 12px; margin:10px 0; background:#fff; break-inside:avoid; page-break-inside:avoid; scroll-margin-top:12px; }
 .req-spec:target { box-shadow:0 0 0 3px rgba(249,115,22,.35); }

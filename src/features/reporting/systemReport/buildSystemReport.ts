@@ -3,7 +3,7 @@ import { diagramFrameLabel } from '../../sysml/diagramFrame';
 import { actorGeneralizationIds } from '../../../engine/sysml/useCases';
 import type { CoverageMetrics, TraceabilityMatrix } from '../../../engine/sysml/rtm';
 import type { ReportModelDiagnostics } from '../../../services/reportModelConsistency';
-import type { BlockData, ConnectorData, PartData } from '../../../types/sysml_types';
+import type { BlockData, ConnectorData, PartData, RelationshipData } from '../../../types/sysml_types';
 import type { Layer, StateData } from '../../../types/sm_types';
 import { hasSysmlReference, resolveSysmlReferenceLabel, sysmlObjectLabel, friendlySysmlKind } from '../../sysml/sysmlDisplayLabel';
 import { escapeHtml } from '../reportDiagramModel';
@@ -270,19 +270,34 @@ export function buildSystemReport(input: SystemReportInput): string {
   const shownOn = new Map<string, { anchor: string; name: string }[]>();
   let reqRowsRendered = false;
 
+  // Relationships and owned requirements indexed once, so the specifications stay linear in the model size.
+  const relsByEnd = new Map<string, RelationshipData[]>();
+  for (const rel of h.relationships) {
+    for (const end of new Set([rel.sourceId, rel.targetId])) relsByEnd.set(end, [...(relsByEnd.get(end) ?? []), rel]);
+  }
+  const ownedRequirements = new Map<string, string[]>();
+  for (const other of reqElementIds) {
+    const ownerId = repo.requirements[other]?.ownerId;
+    if (ownerId) ownedRequirements.set(ownerId, [...(ownedRequirements.get(ownerId) ?? []), other]);
+  }
+  const verifiersByRequirement = new Map<string, string[]>();
+  for (const vc of Object.values(repo.verificationCases)) {
+    for (const reqId of vc.verifiesRequirementIds ?? []) verifiersByRequirement.set(reqId, [...(verifiersByRequirement.get(reqId) ?? []), vc.id]);
+  }
+
   function renderRequirementSpec(r: ReqRow): string {
     const id = r.elementId;
-    const rels = h.relationships;
-    const ends = (pick: (rel: typeof rels[number]) => string | undefined): string[] => [...new Set(rels.map(pick).filter((x): x is string => Boolean(x)))];
+    const rels = relsByEnd.get(id) ?? [];
+    const ends = (pick: (rel: RelationshipData) => string | undefined): string[] => [...new Set(rels.map(pick).filter((x): x is string => Boolean(x)))];
     const isContain = (t: string) => t === 'requirementContainment' || t === 'composition';
     const isDerive = (t: string) => t === 'derive' || t === 'deriveReqt';
     const owner = repo.requirements[id]?.ownerId;
     const parents = new Set(ends(rel => isContain(rel.type) && rel.targetId === id && reqElementIds.has(rel.sourceId) ? rel.sourceId : undefined));
     if (owner && reqElementIds.has(owner)) parents.add(owner);
     const children = new Set(ends(rel => isContain(rel.type) && rel.sourceId === id && reqElementIds.has(rel.targetId) ? rel.targetId : undefined));
-    for (const other of reqElementIds) if (repo.requirements[other]?.ownerId === id) children.add(other);
+    for (const other of ownedRequirements.get(id) ?? []) children.add(other);
     const verifiers = new Set(ends(rel => rel.type === 'verify' && rel.targetId === id ? rel.sourceId : undefined));
-    for (const vc of Object.values(repo.verificationCases)) if (vc.verifiesRequirementIds?.includes(id)) verifiers.add(vc.id);
+    for (const vc of verifiersByRequirement.get(id) ?? []) verifiers.add(vc);
     const rows: [string, string[]][] = [
       ['Contained in', [...parents]],
       ['Contains', [...children]],

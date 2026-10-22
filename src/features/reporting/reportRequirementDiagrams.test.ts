@@ -126,5 +126,7 @@ describe('buildSystemReport: page fit', () => {
     expect(html).toContain("addEventListener('beforeprint',fitHmi)");
     expect(html).toMatch(/\.hmi-reference svg \{ max-width:100%; height:auto;/);
     expect(html).toMatch(/\.hmi-sim-container \{ max-width:100%; overflow:hidden; \}/);
+    // Long identifiers and code wrap inside table cells instead of pushing tables past the page border.
+    expect(html).toContain('.report td, .report th { overflow-wrap:anywhere; }');
   });
 });
