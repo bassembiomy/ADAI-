@@ -2,6 +2,8 @@
 // application style), referenceApps/ciEngineDyno.ts.
 //   buildCiEngineDynoApp(spec) -> lab { id, name, category, difficulty, description, solverType, fixedStep, stepsPerFrame,
 //     nodes (Subsystem containers + blocks with parentId), edges }. Reusable: any CiEngineSpec; OM501_LA_SPEC is the first.
+//   Simulink wiring: lines never cross a subsystem border; Inport / Outport blocks in each subsystem and lines between the
+//   subsystem ports at the top level (the engine flattens them).
 //   Subsystems: sub_engine 'Engine System' and sub_controller 'Engine Controller' contain genuine Powertrain Blockset blocks
 //   only (spec source 'simulink-docs'); sub_dyno 'Dynamometer' and sub_test 'Test Sequence' use standard X-Bridges blocks
 //   (Constant, GAIN, Sum, Integrator, SWITCH, DEMUX, BUS_CREATOR, BUS_SELECTOR), the genuine Rotational Inertia and the
@@ -28,6 +30,7 @@ import { buildCiEngineDynoApp, calibrateCiController, OM501_LA_SPEC, OM501_REFER
 
 const SUBS = { sub_engine: 'Engine System', sub_controller: 'Engine Controller', sub_dyno: 'Dynamometer', sub_test: 'Test Sequence' } as const;
 const SPEC_ONLY = ['PT_CI_CYLINDER', 'PT_SI_CYLINDER', 'PT_CALIBRATION_ECU', 'PT_ENGINE_DYNO', 'PT_CALIBRATION_MAP_2D', 'PT_THROTTLE_BODY', 'PT_INTAKE_MANIFOLD', 'PT_TURBOCHARGER', 'PT_FUEL_INJECTOR', 'PT_VVT_VALVETRAIN', 'PT_AMBIENT'];
+const PORTS = ['Inport', 'Outport'];
 const STANDARD = ['Constant', 'GAIN', 'Sum', 'Integrator', 'SWITCH', 'DEMUX', 'BUS_CREATOR', 'BUS_SELECTOR', 'PT_ROTATIONAL_INERTIA', 'PT_DOE_SWEEPER'];
 
 function checkStructure(app: typeof APP) {
@@ -36,13 +39,30 @@ function checkStructure(app: typeof APP) {
   for (const n of app.nodes.filter(n => n.type !== 'Subsystem')) {
     expect(Object.keys(SUBS), n.id).toContain(n.parentId);
     expect(SPEC_ONLY, n.id).not.toContain(n.type);
+    if (PORTS.includes(n.type)) continue;
     if (n.parentId === 'sub_engine' || n.parentId === 'sub_controller') expect(getPowertrainSpec(n.type)?.source, `${n.id} genuine`).toBe('simulink-docs');
     else expect(STANDARD.includes(n.type) || getPowertrainSpec(n.type)?.source === 'simulink-docs', `${n.id} standard`).toBe(true);
   }
   const blocks = new Map(app.nodes.filter(n => n.type !== 'Subsystem').map(n => [n.id, BLOCK_LIBRARY[n.type](n.id, n.params ?? {})]));
+  const parent = (id: string) => app.nodes.find(n => n.id === id)?.parentId ?? 'root';
+  const isSub = (id: string) => app.nodes.find(n => n.id === id)?.type === 'Subsystem';
+  // Simulink wiring: every line stays inside one level; signals cross subsystem borders only through Inport / Outport
   for (const e of app.edges) {
-    expect(blocks.get(e.source)?.outputs.some(p => p.id === e.sourceHandle), `${e.id} source`).toBe(true);
-    expect(blocks.get(e.target)?.inputs.some(p => p.id === e.targetHandle), `${e.id} target`).toBe(true);
+    expect(parent(e.source), `${e.id} same level`).toBe(parent(e.target));
+    if (isSub(e.source)) {
+      const port = app.nodes.find(n => n.id === e.sourceHandle);
+      expect([port?.type, port?.parentId], `${e.id} subsystem output`).toEqual(['Outport', e.source]);
+    } else expect(blocks.get(e.source)?.outputs.some(p => p.id === e.sourceHandle), `${e.id} source`).toBe(true);
+    if (isSub(e.target)) {
+      const port = app.nodes.find(n => n.id === e.targetHandle);
+      expect([port?.type, port?.parentId], `${e.id} subsystem input`).toEqual(['Inport', e.target]);
+    } else expect(blocks.get(e.target)?.inputs.some(p => p.id === e.targetHandle), `${e.id} target`).toBe(true);
+  }
+  // every subsystem port is used on both sides
+  for (const n of app.nodes.filter(x => PORTS.includes(x.type))) {
+    const outer = n.type === 'Inport' ? app.edges.some(e => e.target === n.parentId && e.targetHandle === n.id) : app.edges.some(e => e.source === n.parentId && e.sourceHandle === n.id);
+    const inner = n.type === 'Inport' ? app.edges.some(e => e.source === n.id) : app.edges.some(e => e.target === n.id);
+    expect([outer, inner], `${n.id} wired`).toEqual([true, true]);
   }
   const open = new Set(['engineMap.TrqCmd', 'engineMap.EngSpd', 'ambient.Flw']);
   for (const [id, b] of blocks) for (const p of b.inputs) {
@@ -56,8 +76,7 @@ function checkStructure(app: typeof APP) {
 }
 
 function run(app: typeof APP, overrides: Record<string, Record<string, any>> = {}) {
-  const nodes = app.nodes.filter(n => n.type !== 'Subsystem');
-  const blocks = nodes.map(n => BLOCK_LIBRARY[n.type](n.id, { ...(n.params ?? {}), ...(overrides[n.id] ?? {}) }));
+  const blocks = app.nodes.map(n => ({ ...BLOCK_LIBRARY[n.type](n.id, { ...(n.params ?? {}), ...(overrides[n.id] ?? {}) }), ...(n.parentId ? { parentId: n.parentId } : {}) }));
   const e = new XbridgesEngine({ blocks, connections: app.edges.map(x => ({ sourceBlock: x.source, sourcePort: x.sourceHandle, targetBlock: x.target, targetPort: x.targetHandle })) } as any);
   const doe = blocks.find(b => b.id === 'doe')!;
   const n = doeSweeperPointCount(doe.params);
