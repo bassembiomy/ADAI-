@@ -9,7 +9,7 @@
 //   Generated maps are written into PT_CALIBRATION_MAP_2D target blocks map1Soi, map3Duration, map6Smoke, map7FuelLimit,
 //   map7Torque and the Mapped CI Engine engineMap.
 //   Additions: CI Cylinder Info Lambda (trapped air / (AFR_st * m_f)) and P_map; Fuel Injector Info m_f [mg] and ET [ms];
-//   DoE Sweeper param Lambda_min (0 = off): a row with Lambda < Lambda_min is infeasible with violation 'Lambda'.
+//   DoE Sweeper params Lambda_min and NOx_max (0 = off): Lambda < Lambda_min -> violation 'Lambda'; NOx > NOx_max -> 'NOx'.
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -56,6 +56,16 @@ describe('block additions for the MR-PLD maps', () => {
     };
     expect(sweep()).toEqual([[], [], []]);
     expect(sweep(1.6)).toEqual([['Lambda'], ['Lambda'], []]);
+    // NOx_max (0 = off): the response NOx above NOx_max is a violation 'NOx' (here NOx = 20 * L)
+    const sweepNox = (NOx_max: number) => {
+      const p2 = { ...plant, execute: (ins: any[]) => ({ outputs: [makeBus(['BSFC', 'NOx'], [200, 20 * (Array.isArray(ins[0]) ? ins[0][0] : 0)])] }) };
+      const sw = BLOCK_LIBRARY.PT_DOE_SWEEPER('sw', { factors: 'L', bounds: [[1, 2]], levels: 3, dwell: 1, averageWindow: 0.5, NOx_max });
+      const e = new XbridgesEngine({ blocks: [sw, p2], connections: [{ sourceBlock: 'sw', sourcePort: 'NextPoint', targetBlock: 'p', targetPort: 'x' }, { sourceBlock: 'p', sourcePort: 'R', targetBlock: 'sw', targetPort: 'Responses' }] } as any);
+      Solvers.runFixedStep(e, { solver: 'euler', startTime: 0, stopTime: 3.05, fixedStep: 0.05 } as any);
+      return doeSweeperResults(e.getBlock('sw')!.state).map(r => r.violations);
+    };
+    expect(sweepNox(0)).toEqual([[], [], []]);
+    expect(sweepNox(25)).toEqual([[], ['NOx'], ['NOx']]);
   });
 });
 
@@ -83,8 +93,8 @@ describe('OM 501 LA lab: model', () => {
     expect(Math.abs(node('manifold').params!.Vd_tot - 6 * Math.PI / 4 * 0.13 ** 2 * 0.15) / 11.95e-3).toBeLessThan(0.01);
     expect(node('turbo').params!.mode).toBe('Wastegate');
     const d = node('doe').params!;
-    expect([d.opSpeeds, d.opLoads, d.factors, d.bounds, d.levels, d.Pmax_limit, d.Texh_limit, d.Lambda_min])
-      .toEqual([[800, 1200, 1800], [25, 50, 75, 100], 'SOI,VgtPos', [[4, 22], [0, 60]], 3, 190e5, 1000, 1.3]);
+    expect([d.opSpeeds, d.opLoads, d.factors, d.bounds, d.levels, d.Pmax_limit, d.Texh_limit, d.Lambda_min, d.NOx_max])
+      .toEqual([[800, 1200, 1800], [25, 50, 75, 100], 'SOI,VgtPos', [[4, 22], [0, 60]], 3, 190e5, 1000, 1.3, 30]);
     const b = node('benchDoe').params!;
     expect([b.opSpeeds, b.factors, b.bounds, b.levels]).toEqual([[800, 1200, 1800], 'PW', [[0.2, 4]], 9]);
     expect([LAB.solverType, LAB.fixedStep]).toEqual(['euler', 0.02]);
@@ -110,6 +120,10 @@ describe('OM 501 LA lab: map generation', () => {
     const s = baseSoiMap(rows, { qPerLoad: q });
     expect(s.qBp).toEqual([46.25, 92.5, 138.75, 185]);
     for (const r of s.soi) for (const v of r) { expect(v).toBeGreaterThanOrEqual(4); expect(v).toBeLessThanOrEqual(22); }
+    // the NOx limit retards the injection where advanced timing makes too much NOx (low speed), so the map is not flat
+    expect(s.soi[0].every(v => v < 22)).toBe(true);
+    expect(s.soi[2].some(v => v === 22)).toBe(true);
+    expect(rows.some(r => r.violations.includes('NOx'))).toBe(true);
 
     const f = fullLoadFuelLimit(rows, { qPerLoad: q });
     f.qMax.forEach(v => { expect(v).toBeGreaterThan(0); expect(v).toBeLessThanOrEqual(185); });

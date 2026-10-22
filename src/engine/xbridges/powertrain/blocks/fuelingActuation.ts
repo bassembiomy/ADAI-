@@ -35,7 +35,7 @@ const injectorSpec: PtBlockSpec = {
     inp('N', 'rpm', 4, 'Engine speed; sets the injection duration in crank degrees and the mean fuel flow.'),
   ],
   outputs: [
-    out('Info', 'bus', 1, 'Bus with DeltaP (Pa, rail minus cylinder), Area (m^2, total hole area) and InjDuration_deg (crank degrees).', 'Bus: FuelInjectorInfo'),
+    out('Info', 'bus', 1, 'Bus with DeltaP (Pa, rail minus cylinder), Area (m^2, total hole area), InjDuration_deg (crank degrees), m_f (mg, the m_f output) and ET (ms, the ET input).', 'Bus: FuelInjectorInfo'),
     out('m_f', 'mg', 2, 'Fuel mass injected per event and cylinder.'),
     out('mdot_f', 'kg/s', 3, 'Instantaneous fuel mass flow while the injector is open.'),
     out('mdot_f_mean', 'kg/s', 4, 'Mean fuel mass flow of the whole engine, N_cyl events per two crank revolutions.'),
@@ -77,7 +77,7 @@ const injectorFactory = definePtBlock(injectorSpec, {
     const mKg = mdot * ET * 1e-3;
     return {
       outputs: [
-        makeBus(['DeltaP', 'Area', 'InjDuration_deg'], [dP, A, ET * 1e-3 * 6 * N]),
+        makeBus(['DeltaP', 'Area', 'InjDuration_deg', 'm_f', 'ET'], [dP, A, ET * 1e-3 * 6 * N, mKg * 1e6, ET]),
         mKg * 1e6, mdot, (mKg * p.N_cyl * N) / 120,
       ],
     };

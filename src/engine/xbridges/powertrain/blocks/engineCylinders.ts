@@ -89,8 +89,10 @@ function optsOf(p: Record<string, any>, afr: number): CycleOptions {
 const INFO_KEYS = ['BMEP', 'IMEP_gross', 'PMEP', 'P_brake', 'eta_th', 'thetaPmax', 'FuelFlw', 'T_brake', 'BSFC', 'P_max', 'T_exh', 'NOx'];
 const infoValues = (r: CycleResult): number[] =>
   [r.bmep, r.imepGross, r.pmep, r.Pbrake, r.etaTh * 100, r.thetaPmax, r.fuelFlw, r.Tbrake, r.bsfc, r.pMax, r.Texh, r.noxGPerKWh];
+const CI_EXTRA_KEYS = ['Lambda', 'P_map'];
 
 const INFO_DESC = 'Bus with BMEP [Pa], IMEP_gross [Pa], PMEP [Pa], P_brake [W], eta_th [%], thetaPmax [deg], FuelFlw [kg/s], T_brake [N*m], BSFC [g/(kW*h)], P_max [Pa], T_exh [K], NOx [g/(kW*h)], ';
+const CI_INFO_DESC = INFO_DESC + 'Lambda [1] (trapped air / (AFR_st * m_f), 0 without fuel), P_map [Pa] (the P_map input), ';
 
 // Measured with the default parameters (see the example texts); numbers come from running the blocks.
 const ciSpec: PtBlockSpec = {
@@ -112,7 +114,7 @@ const ciSpec: PtBlockSpec = {
     inp('P_exh', 'Pa', 8, 'Exhaust pressure; sets the pumping loss and the blowdown end state.'),
   ],
   outputs: [
-    out('Info', 'bus', 1, INFO_DESC + 'and Stalled.', 'Bus: CICylinderInfo'),
+    out('Info', 'bus', 1, CI_INFO_DESC + 'and Stalled.', 'Bus: CICylinderInfo'),
     out('T_brake', 'N*m', 2, 'Brake torque of the whole engine.'),
     out('IMEP', 'Pa', 3, 'Net indicated mean effective pressure including pumping.'),
     out('FMEP', 'Pa', 4, 'Chen-Flynn friction mean effective pressure.'),
@@ -188,7 +190,7 @@ function finiteIns(ins: XValue[]): number[] | null {
 
 const ciFactory = definePtBlock(ciSpec, {
   execute: (ins, p) => {
-    const keys = [...INFO_KEYS, 'Stalled'];
+    const keys = [...INFO_KEYS, ...CI_EXTRA_KEYS, 'Stalled'];
     const v = finiteIns(ins);
     if (!v) return { outputs: stalled(8, keys), error: 'CI Cylinder inputs must be finite' };
     const [N, mfMg, SOI, dComb, dId, Pmap, Tmap, Pexh] = v;
@@ -196,7 +198,7 @@ const ciFactory = definePtBlock(ciSpec, {
     if (mfMg < 0) return { outputs: stalled(8, keys), error: 'm_f must be >= 0' };
     const r = runEngineCycle(geomOf(p),
       { N, mf: mfMg * 1e-6, theta0: -SOI + dId, dThetaComb: dComb, Pivc: Pmap, Tivc: Tmap, Pexh }, optsOf(p, p.afrStoich));
-    const info = makeBus([...INFO_KEYS, 'Stalled'], [...infoValues(r), 0]);
+    const info = makeBus(keys, [...infoValues(r), r.lambda, Pmap, 0]);
     return { outputs: [info, r.Tbrake, r.imep, r.fmep, r.bsfc, r.Texh, r.pMax, r.noxGPerKWh] };
   },
 });

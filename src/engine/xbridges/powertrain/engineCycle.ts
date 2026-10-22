@@ -27,7 +27,9 @@ export interface TraceSample { theta: number; p: number; T: number; V: number; x
 export interface CycleResult {
   pMax: number; thetaPmax: number; imepGross: number; pmep: number; imep: number; fmep: number; bmep: number;
   Tbrake: number; Pbrake: number; bsfc: number; etaTh: number; Texh: number; pEVO: number; TEVO: number;
-  noxGPerKWh: number; knockIndex: number; fuelFlw: number; trace?: TraceSample[];
+  noxGPerKWh: number; knockIndex: number; fuelFlw: number;
+  /** Trapped air mass per cylinder and cycle [kg] and lambda = mTrapped / (afrStoich * mf) (0 when mf = 0). */
+  mTrapped: number; lambda: number; trace?: TraceSample[];
 }
 
 const DEG = Math.PI / 180;
@@ -231,7 +233,7 @@ export function runEngineCycle(
 
   const res: CycleResult = {
     pMax, thetaPmax: thPmax, imepGross, pmep, imep, fmep, bmep, Tbrake, Pbrake, bsfc, etaTh, Texh, pEVO, TEVO,
-    noxGPerKWh, knockIndex, fuelFlw,
+    noxGPerKWh, knockIndex, fuelFlw, mTrapped: m, lambda: mf > 0 ? m / (afrStoich * mf) : 0,
   };
   if (flags.trace) {
     res.trace = Array.from(ths, (th, i) => {

@@ -5,6 +5,7 @@ import { doeSweeperPointCount, doeSweeperResults } from '../../../engine/xbridge
 import {
   bestRowIndices, calibrationMapsFromResults, doeModuleTable, mappedEngineTablesFromResults,
 } from '../../../engine/xbridges/powertrain/calibrationExport';
+import { baseSoiMap, fullLoadFuelLimit, injectionDurationMap, smokeLimiterMap, toCalibrationMap2D } from '../../../engine/xbridges/powertrain/mrPldMaps';
 
 export interface DoeAvailableBlock { id: string; type: string; label?: string; params: Record<string, any> }
 
@@ -17,6 +18,12 @@ interface Props {
 
 const RESPONSES = ['T_brake', 'BSFC', 'P_max', 'T_exh', 'NOx'];
 const ENGINE_TYPES = ['PT_MAPPED_SI_ENGINE', 'PT_MAPPED_CI_ENGINE'];
+const MAP_KINDS: [string, string][] = [
+  ['baseSoi', '1. Base SOI (speed x fuel)'], ['fullLoadFuel', '7. Full-load fuel limit (speed)'], ['fullLoadTorque', '7. Full-load torque (speed)'],
+  ['smoke', '6. Smoke limiter (speed x boost)'], ['injectionDuration', '3. Injection duration (speed x fuel)'],
+];
+const SMOKE_BOOST_BP = [1, 1.5, 2, 2.5, 3];
+const INJ_Q_FRACTIONS = [0.25, 0.5, 0.75, 1];
 const fmt = (v: number | undefined): string => (v === undefined ? '' : Number.isInteger(v) ? String(v) : Number(v.toPrecision(5)).toString());
 const selectCls = 'w-full text-xs px-2 py-1.5 border border-[#333] bg-[#0a0a0a] text-[#e0e0e0] rounded outline-none focus:border-[#c9a86c]';
 const buttonCls = 'w-full p-2 bg-[#c9a86c] text-white rounded font-bold text-xs hover:bg-[#b8975a] transition-all disabled:opacity-40';
@@ -38,6 +45,10 @@ export const DoeSweeperPanel: React.FC<Props> = ({ block, availableBlocks = [], 
   const [engId, setEngId] = useState('');
   const [tRef, setTRef] = useState<string | null>(null);
   const [message, setMessage] = useState('');
+  const [mapKind, setMapKind] = useState('baseSoi');
+  const [qFull, setQFull] = useState('185');
+  const [lamLimit, setLamLimit] = useState<string | null>(null);
+  const [mapId, setMapId] = useState('');
 
   const ecus = availableBlocks.filter(b => b.type === 'PT_CALIBRATION_ECU');
   const engines = availableBlocks.filter(b => ENGINE_TYPES.includes(b.type));
@@ -53,6 +64,33 @@ export const DoeSweeperPanel: React.FC<Props> = ({ block, availableBlocks = [], 
       const params: Record<string, any> = { ...ecu.params, mode: 'Map', speedBp: m.speedBp, loadBp: m.loadBp };
       for (const f of factors) params[`map_${f}`] = m.maps[f];
       onUpdate(ecu.id, { params });
+      setMessage('');
+    } catch (e) { setMessage(e instanceof Error ? e.message : String(e)); }
+  };
+
+  const calMaps = availableBlocks.filter(b => b.type === 'PT_CALIBRATION_MAP_2D');
+  const lambdaDefault = Number(block.params.Lambda_min) > 0 ? Number(block.params.Lambda_min) : 1.3;
+
+  const writeMap = () => {
+    const target = calMaps.find(b => b.id === mapId);
+    if (!target) return;
+    try {
+      const q100 = Number(qFull), lambdaMin = Number(lamLimit ?? lambdaDefault);
+      if (!Number.isFinite(q100) || q100 <= 0) throw new Error('Fuel quantity at 100 % load must be a positive number');
+      const qPerLoad = q100 / 100;
+      let p: ReturnType<typeof toCalibrationMap2D>;
+      if (mapKind === 'baseSoi') { const m = baseSoiMap(rows, { qPerLoad, objective }); p = toCalibrationMap2D({ x: m.speedBp, y: m.qBp, z: m.soi }); }
+      else if (mapKind === 'fullLoadFuel') { const m = fullLoadFuelLimit(rows, { qPerLoad, objective }); p = toCalibrationMap2D({ x: m.speedBp, z: m.qMax }); }
+      else if (mapKind === 'fullLoadTorque') { const m = fullLoadFuelLimit(rows, { qPerLoad, objective }); p = toCalibrationMap2D({ x: m.speedBp, z: m.torque }); }
+      else if (mapKind === 'smoke') {
+        const m = smokeLimiterMap(rows, { qPerLoad, lambdaMin, boostBp: SMOKE_BOOST_BP });
+        p = toCalibrationMap2D({ x: m.speedBp, y: m.boostBp, z: m.qSmoke });
+      } else {
+        const m = injectionDurationMap(rows, { qTargets: INJ_Q_FRACTIONS.map(f => f * q100) });
+        p = toCalibrationMap2D({ x: m.speedBp, y: m.qBp, z: m.et });
+        if (m.clipped.length > 0) { onUpdate(target.id, { params: { ...target.params, ...p } }); setMessage(`Targets outside the measured range were clamped: ${m.clipped.map(c => `${c.q} mg at ${c.N} rpm`).join(', ')}`); return; }
+      }
+      onUpdate(target.id, { params: { ...target.params, ...p } });
       setMessage('');
     } catch (e) { setMessage(e instanceof Error ? e.message : String(e)); }
   };
@@ -146,6 +184,28 @@ export const DoeSweeperPanel: React.FC<Props> = ({ block, availableBlocks = [], 
             onChange={e => setTRef(e.target.value)} />
         </label>
         <button type="button" className={buttonCls} disabled={!complete || engId === ''} onClick={writeEngine}>Write maps to Mapped Engine</button>
+      </div>
+
+      <div className="space-y-2 pt-2 border-t border-[#333]">
+        <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Calibration map</h3>
+        <label className="block text-xs font-medium text-slate-400">Calibration map
+          <select aria-label="Calibration map" className={selectCls} value={mapKind} onChange={e => setMapKind(e.target.value)}>
+            {MAP_KINDS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          </select>
+        </label>
+        <label className="block text-xs font-medium text-slate-400">Fuel quantity at 100 % load (mg/stroke)
+          <input type="number" aria-label="Fuel quantity at 100 % load (mg/stroke)" className={selectCls} value={qFull} onChange={e => setQFull(e.target.value)} />
+        </label>
+        <label className="block text-xs font-medium text-slate-400">Smoke lambda limit
+          <input type="number" aria-label="Smoke lambda limit" className={selectCls} value={lamLimit ?? String(lambdaDefault)} onChange={e => setLamLimit(e.target.value)} />
+        </label>
+        <label className="block text-xs font-medium text-slate-400">Target map
+          <select aria-label="Target map" className={selectCls} value={mapId} onChange={e => setMapId(e.target.value)}>
+            <option value="" />
+            {calMaps.map(b => <option key={b.id} value={b.id}>{b.label ?? b.id}</option>)}
+          </select>
+        </label>
+        <button type="button" className={buttonCls} disabled={!complete || mapId === ''} onClick={writeMap}>Write calibration map</button>
       </div>
       {message !== '' && <p role="alert" className="text-xs text-[#c9a86c]">{message}</p>}
     </section>

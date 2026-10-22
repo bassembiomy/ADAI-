@@ -30,6 +30,7 @@ import {
   syncXBBoundaryNodeMetadata,
 } from '../../utils/stateMachine/xbBoundaryMappings';
 import { CI_V8_MAPPING_LAB, CI_V8_MAPPING_LAB_STEPS } from '../../engine/xbridges/powertrain/examples/ciV8MappingLab';
+import { OM501_MRPLD_LAB, OM501_MRPLD_LAB_STEPS } from '../../engine/xbridges/powertrain/examples/om501MrPldLab';
 import { isInputFocused } from '../../utils/domUtils';
 import { handleHorizontalToolbarWheel } from '../../utils/toolbarScroll';
 import { XbridgesWorkerClient } from '../../services/xbridgesWorkerClient';
@@ -770,7 +771,8 @@ const XBRIDGES_LEARNING_LABS: any[] = [
       { id: 'cde32', source: 'cfd_sph', sourceHandle: 'slosh_intensity', target: 'surrogate_learner', targetHandle: 'slosh_intensity' }
     ]
   },
-  CI_V8_MAPPING_LAB
+  CI_V8_MAPPING_LAB,
+  OM501_MRPLD_LAB
 ];
 
 const XBRIDGES_LEARNING_LAB_STEPS: Record<string, any[]> = {
@@ -1284,6 +1286,7 @@ const XBRIDGES_LEARNING_LAB_STEPS: Record<string, any[]> = {
     }
   ],
   [CI_V8_MAPPING_LAB.id]: CI_V8_MAPPING_LAB_STEPS as any[],
+  [OM501_MRPLD_LAB.id]: OM501_MRPLD_LAB_STEPS as any[],
 };
 
 export const XbridgesWorkspace: React.FC<{
