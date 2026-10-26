@@ -40,6 +40,7 @@ import { Settings2, Play, Pause, Square, Send, ChevronLeft, ChevronDown, Chevron
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { isInputFocused } from '../../utils/domUtils';
 import { handleHorizontalToolbarWheel } from '../../utils/toolbarScroll';
+import { useReactFlowCadNavigation } from '../../utils/useCadNavigation';
 import { getVLabSignalInfo, exportScopeToCSV, VLAB_SIGNAL_COLORS } from '../../utils/scopeUtils';
 import { VLabSimulinkScope } from './VLabSimulinkScope';
 import { computeAbsoluteReferencePressure, convertPressureFromSI, type PressureUnit, type ElevationUnit } from '../../utils/hydraulicUnits';
@@ -1292,6 +1293,10 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
   const [quickSearchPos, setQuickSearchPos] = useState({ x: 0, y: 0 });
   const [quickSearchQuery, setQuickSearchQuery] = useState('');
   const [reactFlowInstance, setReactFlowInstance] = useState<any>(null);
+  const flowContainerRef = useRef<HTMLDivElement>(null);
+  const reactFlowInstanceRef = useRef<any>(null);
+  reactFlowInstanceRef.current = reactFlowInstance;
+  useReactFlowCadNavigation(flowContainerRef, () => reactFlowInstanceRef.current);
 
   // Right-click drag-to-copy state
   const [rightClickDrag, setRightClickDrag] = useState<{
@@ -3129,7 +3134,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
         </div>
 
         {/* Center: Flow Canvas */}
-        <div data-help-feature="ui:vlab/VLabWorkspace:f4ba75cf7913" data-help-source="src/components/vlab/VLabWorkspace.tsx" className={`flex-1 relative bg-[#0a0a0a] ${isConnecting ? 'react-flow--connection-active' : ''}`} onDrop={onDrop} onDragOver={onDragOver} onContextMenu={(e) => e.preventDefault()}>
+        <div data-help-feature="ui:vlab/VLabWorkspace:f4ba75cf7913" data-help-source="src/components/vlab/VLabWorkspace.tsx" ref={flowContainerRef} className={`flex-1 relative bg-[#0a0a0a] ${isConnecting ? 'react-flow--connection-active' : ''}`} onDrop={onDrop} onDragOver={onDragOver} onContextMenu={(e) => e.preventDefault()}>
           <ReactFlow data-help-feature="live:components/vlab/VLabWorkspace:99dea21cf220"
             deleteKeyCode={null}
             proOptions={{ hideAttribution: true }}

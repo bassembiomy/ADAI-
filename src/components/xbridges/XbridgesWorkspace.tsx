@@ -1,5 +1,5 @@
 // src/components/xbridges/XbridgesWorkspace.tsx
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { beginRightDragCopy, moveRightDragCopy } from '../../services/rightDragCopyGesture';
 import {
   ReactFlow,
@@ -33,6 +33,7 @@ import { CI_V8_MAPPING_LAB, CI_V8_MAPPING_LAB_STEPS } from '../../engine/xbridge
 import { OM501_MRPLD_LAB, OM501_MRPLD_LAB_STEPS } from '../../engine/xbridges/powertrain/examples/om501MrPldLab';
 import { isInputFocused } from '../../utils/domUtils';
 import { handleHorizontalToolbarWheel } from '../../utils/toolbarScroll';
+import { useReactFlowCadNavigation } from '../../utils/useCadNavigation';
 import { XbridgesWorkerClient } from '../../services/xbridgesWorkerClient';
 
 // Map icon string names to Lucide icon components
@@ -1607,6 +1608,10 @@ export const XbridgesWorkspace: React.FC<{
   }, [coSimEngine, isSmSimulating, setNodes]);
 
   const [reactFlowInstance, setReactFlowInstance] = useState<any>(null);
+  const flowContainerRef = useRef<HTMLDivElement>(null);
+  const reactFlowInstanceRef = useRef<any>(null);
+  reactFlowInstanceRef.current = reactFlowInstance;
+  useReactFlowCadNavigation(flowContainerRef, () => reactFlowInstanceRef.current, 0.2, 2.0);
 
   // Right-click drag-to-copy state
   const [rightClickDrag, setRightClickDrag] = useState<{
@@ -3432,7 +3437,7 @@ export const XbridgesWorkspace: React.FC<{
         </div>
 
         <div className="flex-1 relative flex min-h-0">
-          <div className="flex-1 relative" onContextMenu={(e) => e.preventDefault()} style={{ cursor: rightClickDrag ? 'copy' : undefined }}>
+          <div ref={flowContainerRef} className="flex-1 relative" onContextMenu={(e) => e.preventDefault()} style={{ cursor: rightClickDrag ? 'copy' : undefined }}>
             {/* Copy-mode indicator badge */}
             {rightClickDrag && (
               <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[9999] pointer-events-none flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#c9a86c]/90 backdrop-blur-md shadow-lg text-black text-[10px] font-black uppercase tracking-widest select-none animate-pulse">

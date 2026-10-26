@@ -30,6 +30,7 @@ import { createActor, createSubject, createUseCase } from '../../features/modelE
 import { diagramFrameLabel } from '../../features/sysml/diagramFrame';
 import { resolveSysmlReferenceLabel, sysmlObjectLabel } from '../../features/sysml/sysmlDisplayLabel';
 import { handleHorizontalToolbarWheel } from '../../utils/toolbarScroll';
+import { useCadNavigation } from '../../utils/useCadNavigation';
 
 export interface UseCaseWorkspaceProps {
   repository: SysmlRepository;
@@ -249,24 +250,27 @@ export function UseCaseWorkspace({
     [proposals, repository],
   );
 
-  // Wheel zoom around the cursor needs a non-passive listener to prevent page scroll.
-  useEffect(() => {
-    const element = canvasRef.current;
-    if (!element) return undefined;
-    const onWheel = (event: WheelEvent) => {
-      event.preventDefault();
-      const rect = element.getBoundingClientRect();
-      const px = event.clientX - rect.left;
-      const py = event.clientY - rect.top;
-      setViewport(current => {
-        const k = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, current.k * (event.deltaY < 0 ? 1.1 : 1 / 1.1)));
-        const ratio = k / current.k;
-        return { k, x: px - (px - current.x) * ratio, y: py - (py - current.y) * ratio };
-      });
-    };
-    element.addEventListener('wheel', onWheel, { passive: false });
-    return () => element.removeEventListener('wheel', onWheel);
-  }, []);
+  // SolidWorks-style navigation: wheel zoom about the cursor, middle drag pan (over symbols too),
+  // Shift+middle drag zoom, double middle click fit, Space+left drag pan.
+  const viewportRef = useRef(viewport);
+  viewportRef.current = viewport;
+  const fitRef = useRef<() => void>(() => undefined);
+  const [navigating, setNavigating] = useState(false);
+  useCadNavigation({
+    targetRef: canvasRef,
+    getView: () => ({ scale: viewportRef.current.k, offsetX: viewportRef.current.x, offsetY: viewportRef.current.y }),
+    setView: next => {
+      const vp = { k: next.scale, x: next.offsetX, y: next.offsetY };
+      viewportRef.current = vp;
+      setViewport(vp);
+    },
+    minScale: MIN_ZOOM,
+    maxScale: MAX_ZOOM,
+    onFit: () => fitRef.current(),
+    wheel: true,
+    spacePan: true,
+    onActiveChange: setNavigating,
+  });
 
   const toWorld = useCallback((clientX: number, clientY: number, vp: Viewport = viewport): Point => {
     const rect = svgRef.current?.getBoundingClientRect();
@@ -555,6 +559,7 @@ export function UseCaseWorkspace({
     setViewport({ k, x: 40 - minX * k + (rect.width - 80 - (maxX - minX) * k) / 2, y: 40 - minY * k + (rect.height - 80 - (maxY - minY) * k) / 2 });
   };
 
+  fitRef.current = fitToContent;
   const zoomBy = (factor: number) => setViewport(current => ({ ...current, k: Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, current.k * factor)) }));
 
   // -------------------------------------------------------------------------
@@ -617,7 +622,7 @@ export function UseCaseWorkspace({
   );
 
   const blocked = pendingDeletion ? impactSeverity(pendingDeletion.impact, authorizedBaselineIds) === 'blocked' : false;
-  const cursor = isCreationTool(tool) || isRelationshipTool(tool) ? 'crosshair' : drag?.mode === 'pan' ? 'grabbing' : 'grab';
+  const cursor = navigating ? 'grabbing' : isCreationTool(tool) || isRelationshipTool(tool) ? 'crosshair' : drag?.mode === 'pan' ? 'grabbing' : 'grab';
 
   return (
     <section className="flex h-full min-h-0 w-full flex-col bg-[var(--surface-canvas)] text-[var(--text-primary)]" aria-label="Use Case Diagram workspace" data-testid="usecase-workspace">

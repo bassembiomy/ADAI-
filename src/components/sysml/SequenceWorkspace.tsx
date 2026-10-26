@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CombinedFragmentOperator, InteractionMessageSort, SysmlRepository } from '../../engine/sysml/model';
 import type { DiagramPresentation } from '../../engine/sysml/presentationState';
 import type { SemanticEndpointContext } from '../../engine/sysml/semanticEndpointIndex';
@@ -59,6 +59,7 @@ import { interactionToPlantUml } from '../../features/plantuml/adapters/sysmlInt
 import { diagramFrameLabel } from '../../features/sysml/diagramFrame';
 import { resolveSysmlReferenceLabel, sysmlObjectLabel } from '../../features/sysml/sysmlDisplayLabel';
 import { handleHorizontalToolbarWheel } from '../../utils/toolbarScroll';
+import { useCadNavigation } from '../../utils/useCadNavigation';
 
 export interface SequenceWorkspaceProps {
   repository: SysmlRepository;
@@ -258,6 +259,56 @@ export function SequenceWorkspace({ repository, diagramId, onExecute, onNavigate
     }
     return execute(plan.command, failure);
   }, [execute]);
+
+  // SolidWorks-style navigation on the scrolling canvas: the view offset is the
+  // negated scroll position, so pan scrolls and zoom keeps the point under the cursor.
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const zoomRef = useRef(zoom);
+  zoomRef.current = zoom;
+  const pendingScrollRef = useRef<{ left: number; top: number } | null>(null);
+  const [navigating, setNavigating] = useState(false);
+  useCadNavigation({
+    targetRef: scrollRef,
+    getView: () => {
+      const pending = pendingScrollRef.current;
+      const el = scrollRef.current;
+      return { scale: zoomRef.current, offsetX: -(pending?.left ?? el?.scrollLeft ?? 0), offsetY: -(pending?.top ?? el?.scrollTop ?? 0) };
+    },
+    setView: next => {
+      const el = scrollRef.current;
+      if (!el) return;
+      const scroll = { left: -next.offsetX, top: -next.offsetY };
+      if (next.scale === zoomRef.current) {
+        el.scrollLeft = scroll.left;
+        el.scrollTop = scroll.top;
+        return;
+      }
+      pendingScrollRef.current = scroll;
+      zoomRef.current = next.scale;
+      setZoom(next.scale);
+    },
+    minScale: MIN_ZOOM,
+    maxScale: MAX_ZOOM,
+    onFit: () => {
+      const el = scrollRef.current;
+      if (!el) return;
+      const k = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Math.min(el.clientWidth / view.canvasSize.width, el.clientHeight / view.canvasSize.height)));
+      pendingScrollRef.current = { left: 0, top: 0 };
+      setZoom(k);
+    },
+    wheel: true,
+    spacePan: true,
+    onActiveChange: setNavigating,
+  });
+  // The scroll that keeps the zoom anchored can only be applied once the canvas has its new size.
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    const pending = pendingScrollRef.current;
+    if (!el || !pending) return;
+    pendingScrollRef.current = null;
+    el.scrollLeft = pending.left;
+    el.scrollTop = pending.top;
+  }, [zoom]);
 
   const toWorldY = useCallback((clientY: number): number => {
     const rect = svgRef.current?.getBoundingClientRect();
@@ -528,7 +579,7 @@ export function SequenceWorkspace({ repository, diagramId, onExecute, onNavigate
     >{label}</button>
   );
 
-  const cursor = tool === 'select' ? (drag?.moved ? 'grabbing' : 'default') : 'crosshair';
+  const cursor = navigating ? 'grabbing' : tool === 'select' ? (drag?.moved ? 'grabbing' : 'default') : 'crosshair';
   const selectClass = 'max-w-[200px] rounded border border-neutral-700 bg-neutral-950 px-1 py-0.5 text-xs';
   const inputClass = 'rounded border border-neutral-700 bg-neutral-950 px-1 py-0.5';
   const buttonClass = 'rounded border border-neutral-600 px-2 py-0.5';
@@ -617,7 +668,7 @@ export function SequenceWorkspace({ repository, diagramId, onExecute, onNavigate
       </header>
 
       <div data-help-feature="live:components/sysml/SequenceWorkspace:5038e2c00767"
-        tabIndex={0} onKeyDown={onKeyDown}
+        ref={scrollRef} tabIndex={0} onKeyDown={onKeyDown}
         className="relative min-h-0 flex-1 overflow-auto outline-none"
         aria-label="Sequence canvas" role="application" data-testid="sequence-canvas"
       >

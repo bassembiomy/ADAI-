@@ -54,6 +54,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { OPM_EXAMPLES } from './EntropyExamples';
 import { OpmFloatingWindow } from './OpmFloatingWindow';
 import { OpmRightPanelContent } from './OpmRightPanelContent';
+import { useReactFlowCadNavigation } from '../../utils/useCadNavigation';
 
 const nodeTypes = {
   opmObject: OPMObjectNode,
@@ -211,6 +212,8 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
   const [activeTool, setActiveTool] = useState<'select' | 'object' | 'process' | 'state' | 'requirement'>('select');
   const [activeLinkType, setActiveLinkType] = useState<OPMLinkType>('consumption');
   const reactFlowInstanceRef = useRef<any>(null);
+  const flowContainerRef = useRef<HTMLDivElement>(null);
+  useReactFlowCadNavigation(flowContainerRef, () => reactFlowInstanceRef.current, 0.01, 15);
   const opmClipboardRef = useRef<{ nodes: AppNode[]; edges: AppEdge[] } | null>(null);
   const isSpacePressed = useRef<boolean>(false);
   const spaceComboUsed = useRef<boolean>(false);
@@ -2549,7 +2552,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
           <div className="relative min-h-0 flex-1">
 
           {/* React Flow Canvas */}
-          <div className="absolute inset-0">
+          <div ref={flowContainerRef} className="absolute inset-0">
             <ReactFlow data-help-feature="live:components/entropy/EntropyWorkspace:7f1236c98c39"
               proOptions={{ hideAttribution: true }}
               nodes={filteredNodes}

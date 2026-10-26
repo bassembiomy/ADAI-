@@ -272,6 +272,7 @@ import { resolveCanvasSymbolDiagramTargets, resolveExactDiagramCanvasContext, re
 import type { StateMachineDiagramData } from './types/sm_types';
 import { resolveActiveSysmlDiagramTarget } from './services/sysmlDiagramTarget';
 import { planContextualCreation } from './features/sysml/contextualCreation';
+import { beginNavGesture, createFrameBatcher, createMiddleClickTracker, fitViewToBounds, navigationModeForPress, stepNavGesture, switchNavGestureToZoom, wheelZoomFactor, zoomViewAt, type NavGesture } from './utils/canvasNavigation';
 
 // Security Helper: Escapes HTML special characters to prevent XSS / HTML injection attacks
 const escapeHtml = (str: unknown): string => {
@@ -4878,9 +4879,11 @@ const ADIA = () => {
   const canvasRef = useRef<HTMLDivElement>(null);
   const isSpacePressed = useRef(false);
   const spaceComboUsed = useRef(false);
-  const lastMousePos = useRef<Point>({ x: 0, y: 0 });
-  const midDown = useRef(false);
-  const rightDown = useRef(false);
+  const navGestureRef = useRef<NavGesture | null>(null);
+  const suppressContextMenuRef = useRef(false);
+  const middleClickTrackerRef = useRef(createMiddleClickTracker());
+  const zoomIndicatorTimerRef = useRef<number | null>(null);
+  const worldGroupRef = useRef<SVGGElement>(null);
   const rightDragCopyRef = useRef<RightDragCopyState | null>(null);
   const [smCanvasContextMenu, setSmCanvasContextMenu] = useState<{
     x: number;
@@ -10471,31 +10474,10 @@ const ADIA = () => {
     }
   }, [sysmlCanvasView, states, view, addToHistory, uiZoom, diagramMode, currentLayerId]);
 
-  // CANVAS NAVIGATION (CATIA-style)
+  // Canvas navigation (pan / zoom / fit) is handled in the capture phase by
+  // handleNavigationMouseDownCapture, so it works over symbols too.
   const handleMouseDown = useCallback((e: MouseEvent<HTMLDivElement>) => {
-    if (e.button === 1) {
-      midDown.current = true;
-      if (rightDown.current) {
-        setIsPanning(true);
-        lastMousePos.current = { x: e.clientX, y: e.clientY };
-      }
-      e.preventDefault();
-      return;
-    }
-
-    if (e.button === 2) {
-      rightDown.current = true;
-      if (midDown.current) {
-        setIsPanning(true);
-        lastMousePos.current = { x: e.clientX, y: e.clientY };
-      }
-      e.preventDefault();
-      return;
-    }
-
-    if (e.button === 0 && isSpacePressed.current) {
-      setIsPanning(true);
-      lastMousePos.current = { x: e.clientX, y: e.clientY };
+    if (e.button === 1 || e.button === 2) {
       e.preventDefault();
       return;
     }
@@ -10511,7 +10493,7 @@ const ADIA = () => {
       }
       setSelectedIds([]);
     }
-  }, [isCreatingTransition, isCreatingConnector, setIsCreatingTransition, setTransitionSourceId, setIsCreatingConnector, setConnectorSource, setSelectedIds, canvasRef, isSpacePressed, setIsPanning, rightDown, midDown, lastMousePos]);
+  }, [isCreatingTransition, isCreatingConnector, setIsCreatingTransition, setTransitionSourceId, setIsCreatingConnector, setConnectorSource, setSelectedIds, canvasRef]);
 
   const performDragMove = useCallback((worldX: number, worldY: number) => {
     const gesture = pendingBddBlockGestureRef.current;
@@ -10784,15 +10766,7 @@ const ADIA = () => {
       return;
     }
 
-    if (isPanning) {
-      const dx = e.clientX - lastMousePos.current.x;
-      const dy = e.clientY - lastMousePos.current.y;
-      setView(prev => ({
-        ...prev,
-        offsetX: prev.offsetX + dx,
-        offsetY: prev.offsetY + dy
-      }));
-      lastMousePos.current = { x: e.clientX, y: e.clientY };
+    if (navGestureRef.current) {
       e.preventDefault();
       return;
     }
@@ -10936,7 +10910,7 @@ const ADIA = () => {
       }
       return;
     }
-  }, [isPanning, isDragging, draggedPort, selectedIds, states, junctions, blocks, parts, sysmlCanvasView, view, snapEnabled, updateState, updateJunction, updateBlock, updatePart, diagramMode, currentLayerId, activeSysmlDiagramId, sysmlDiagramPresentations, isResizing, resizeStart, resizeHandle, layers, handleExecuteSysmlCommand, addError, setDiagramDragOffset, addToHistory, packageNestingNodes, diagramShortcuts]);
+  }, [isDragging, draggedPort, selectedIds, states, junctions, blocks, parts, sysmlCanvasView, view, snapEnabled, updateState, updateJunction, updateBlock, updatePart, diagramMode, currentLayerId, activeSysmlDiagramId, sysmlDiagramPresentations, isResizing, resizeStart, resizeHandle, layers, handleExecuteSysmlCommand, addError, setDiagramDragOffset, addToHistory, packageNestingNodes, diagramShortcuts]);
 
   const handleMouseUp = useCallback((e: MouseEvent<HTMLDivElement>) => {
     if (e.button === 2 && rightDragCopyRef.current) {
@@ -11027,12 +11001,6 @@ const ADIA = () => {
           : [pendingBlockGesture.blockId]);
       }
     }
-    if (e.button === 1) {
-      midDown.current = false;
-    }
-    if (e.button === 2) {
-      rightDown.current = false;
-    }
     if (isResizing) {
       setIsResizing(false);
       setResizeHandle(null);
@@ -11116,10 +11084,7 @@ const ADIA = () => {
       setPresentationDrafts({});
       dragRawPositionsRef.current = {};
     }
-    if (isPanning) {
-      setIsPanning(false);
-    }
-  }, [bddFeatureDrag, dropBddFeatureOnBlock, sysmlCanvasView, uiZoom, view, isDragging, isPanning, draggedPort, isResizing, selectedIds, diagramMode, currentLayerId, activeSysmlDiagramId, handleExecuteSysmlCommand, sysmlDiagramPresentations, canonicalSysmlRepository, packageNestingNodes, requestPackageOwnershipMove, addError]);
+  }, [bddFeatureDrag, dropBddFeatureOnBlock, sysmlCanvasView, uiZoom, view, isDragging, draggedPort, isResizing, selectedIds, diagramMode, currentLayerId, activeSysmlDiagramId, handleExecuteSysmlCommand, sysmlDiagramPresentations, canonicalSysmlRepository, packageNestingNodes, requestPackageOwnershipMove, addError]);
 
   const diagramMouseHandlersRef = useRef({ move: handleMouseMove, up: handleMouseUp });
   diagramMouseHandlersRef.current = { move: handleMouseMove, up: handleMouseUp };
@@ -11168,31 +11133,147 @@ const ADIA = () => {
     };
   }, []);
 
-  const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    const rect = canvasRef.current?.getBoundingClientRect();
-    if (!rect) return;
+  // ---- Canvas navigation (SolidWorks mouse scheme, CATIA chord kept) ----
+  // The view is mirrored in a ref and updates are batched to one per frame, so
+  // pan and zoom never lag behind the pointer and never drop motion.
+  const viewRef = useRef(view);
+  viewRef.current = view;
+  const uiZoomRef = useRef(uiZoom);
+  uiZoomRef.current = uiZoom;
+  const viewBatcherRef = useRef<ReturnType<typeof createFrameBatcher<typeof view>> | null>(null);
+  if (!viewBatcherRef.current) {
+    viewBatcherRef.current = createFrameBatcher(() => viewRef.current, next => { viewRef.current = next; setView(next); });
+  }
+  useEffect(() => () => {
+    viewBatcherRef.current?.cancel();
+    if (zoomIndicatorTimerRef.current !== null) window.clearTimeout(zoomIndicatorTimerRef.current);
+  }, []);
 
-    const mouseX = (e.clientX - rect.left) / uiZoom;
-    const mouseY = (e.clientY - rect.top) / uiZoom;
-
-    const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
-    const newScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, view.scale * zoomFactor));
-
-    const zoomPointX = (mouseX - view.offsetX) / view.scale;
-    const zoomPointY = (mouseY - view.offsetY) / view.scale;
-    const newOffsetX = mouseX - zoomPointX * newScale;
-    const newOffsetY = mouseY - zoomPointY * newScale;
-
-    setView({
-      scale: newScale,
-      offsetX: newOffsetX,
-      offsetY: newOffsetY
-    });
-
+  const flashZoomIndicator = useCallback(() => {
     setShowZoomIndicator(true);
-    setTimeout(() => setShowZoomIndicator(false), 500);
-  }, [view, uiZoom]);
+    if (zoomIndicatorTimerRef.current !== null) window.clearTimeout(zoomIndicatorTimerRef.current);
+    zoomIndicatorTimerRef.current = window.setTimeout(() => {
+      zoomIndicatorTimerRef.current = null;
+      setShowZoomIndicator(false);
+    }, 600);
+  }, []);
+
+  const canvasLocalPoint = useCallback((clientX: number, clientY: number) => {
+    const rect = canvasRef.current?.getBoundingClientRect();
+    const ratio = uiZoomRef.current || 1;
+    return { x: (clientX - (rect?.left ?? 0)) / ratio, y: (clientY - (rect?.top ?? 0)) / ratio };
+  }, []);
+
+  /** Zoom to fit everything drawn on the diagram (double middle click / F). */
+  const fitDiagramToView = useCallback(() => {
+    const canvas = canvasRef.current;
+    const world = worldGroupRef.current;
+    if (!canvas || !world) return;
+    const rect = canvas.getBoundingClientRect();
+    const ratio = uiZoomRef.current || 1;
+    const current = viewRef.current;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    // Child 0 is the origin marker, which is not diagram content.
+    Array.from(world.children).slice(1).forEach(child => {
+      const box = child.getBoundingClientRect();
+      if (box.width === 0 && box.height === 0) return;
+      minX = Math.min(minX, box.left); minY = Math.min(minY, box.top);
+      maxX = Math.max(maxX, box.right); maxY = Math.max(maxY, box.bottom);
+    });
+    if (!Number.isFinite(minX)) return;
+    const toWorldX = (cx: number) => ((cx - rect.left) / ratio - current.offsetX) / current.scale;
+    const toWorldY = (cy: number) => ((cy - rect.top) / ratio - current.offsetY) / current.scale;
+    const bounds = { x: toWorldX(minX), y: toWorldY(minY), width: toWorldX(maxX) - toWorldX(minX), height: toWorldY(maxY) - toWorldY(minY) };
+    viewBatcherRef.current?.cancel();
+    const next = fitViewToBounds(bounds, rect.width / ratio, rect.height / ratio, MIN_SCALE, MAX_SCALE);
+    viewRef.current = next;
+    setView(next);
+    flashZoomIndicator();
+  }, [flashZoomIndicator]);
+  const fitDiagramToViewRef = useRef(fitDiagramToView);
+  fitDiagramToViewRef.current = fitDiagramToView;
+
+  const endCanvasNavigation = useCallback(() => {
+    if (!navGestureRef.current) return;
+    navGestureRef.current = null;
+    viewBatcherRef.current?.flush();
+    setIsPanning(false);
+  }, []);
+
+  useEffect(() => {
+    const onMove = (event: globalThis.MouseEvent) => {
+      const gesture = navGestureRef.current;
+      if (!gesture) return;
+      event.preventDefault();
+      middleClickTrackerRef.current.move(event.clientX, event.clientY);
+      viewBatcherRef.current?.push(current => {
+        const live = navGestureRef.current;
+        if (!live) return current;
+        const stepped = stepNavGesture(live, current, event.clientX, event.clientY, MIN_SCALE, MAX_SCALE, uiZoomRef.current || 1);
+        navGestureRef.current = stepped.gesture;
+        return stepped.view;
+      });
+      if (gesture.mode === 'zoom') flashZoomIndicator();
+    };
+    const onUp = (event: globalThis.MouseEvent) => {
+      const gesture = navGestureRef.current;
+      if (!gesture) return;
+      // A chord ends when the button that started it (middle / space+left) is released.
+      if (event.button === gesture.button) endCanvasNavigation();
+    };
+    // Capture phase: panels the pointer crosses must not be able to swallow the drag.
+    window.addEventListener('mousemove', onMove, { passive: false, capture: true });
+    window.addEventListener('mouseup', onUp, true);
+    window.addEventListener('blur', endCanvasNavigation);
+    return () => {
+      window.removeEventListener('mousemove', onMove, true);
+      window.removeEventListener('mouseup', onUp, true);
+      window.removeEventListener('blur', endCanvasNavigation);
+    };
+  }, [endCanvasNavigation, flashZoomIndicator]);
+
+  const handleNavigationMouseDownCapture = useCallback((e: MouseEvent<HTMLDivElement>) => {
+    const running = navGestureRef.current;
+    if (running) {
+      // CATIA chord: with the middle button held, a left or right click turns the drag into a zoom.
+      if (running.button === 1 && (e.button === 0 || e.button === 2)) {
+        const local = canvasLocalPoint(e.clientX, e.clientY);
+        viewBatcherRef.current?.flush();
+        navGestureRef.current = switchNavGestureToZoom(running, e.clientX, e.clientY, local.x, local.y, viewRef.current);
+        if (e.button === 2) suppressContextMenuRef.current = true;
+      }
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+    const mode = navigationModeForPress(e, isSpacePressed.current);
+    if (!mode) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.button === 1 && middleClickTrackerRef.current.press(e.clientX, e.clientY)) {
+      fitDiagramToView();
+      return;
+    }
+    const local = canvasLocalPoint(e.clientX, e.clientY);
+    viewBatcherRef.current?.flush();
+    navGestureRef.current = beginNavGesture(mode, e.button, e.clientX, e.clientY, local.x, local.y, viewRef.current);
+    setIsPanning(true);
+  }, [canvasLocalPoint, fitDiagramToView]);
+
+  // Wheel zoom needs a non-passive native listener (React's onWheel is passive).
+  useEffect(() => {
+    const element = canvasRef.current;
+    if (!element) return undefined;
+    const onWheel = (event: globalThis.WheelEvent) => {
+      event.preventDefault();
+      const local = canvasLocalPoint(event.clientX, event.clientY);
+      const factor = wheelZoomFactor(event);
+      viewBatcherRef.current?.push(current => zoomViewAt(current, local.x, local.y, factor, MIN_SCALE, MAX_SCALE));
+      flashZoomIndicator();
+    };
+    element.addEventListener('wheel', onWheel, { passive: false });
+    return () => element.removeEventListener('wheel', onWheel);
+  }, [canvasLocalPoint, flashZoomIndicator]);
 
   const beginElementDrag = useCallback((e: MouseEvent<SVGElement>, elementId: string, worldX: number, worldY: number) => {
     const dragIds = selectedIds.includes(elementId) ? [...selectedIds]
@@ -12778,6 +12859,10 @@ const ADIA = () => {
             deleteNonStateElements(otherSelectedIds);
           }
         }
+      }
+
+      if ((e.key === 'f' || e.key === 'F') && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && !isSpacePressed.current) {
+        fitDiagramToViewRef.current();
       }
 
       if (e.key === 'Escape') {
@@ -16183,10 +16268,15 @@ const ADIA = () => {
                   if (pendingBddBlockGestureRef.current || isDraggingRef.current) return;
                   handleMouseUp(e);
                 }}
+                onMouseDownCapture={handleNavigationMouseDownCapture}
                 onDoubleClick={handleDoubleClick}
-                onWheel={handleWheel}
                 onContextMenu={(e) => {
                   e.preventDefault();
+                  if (suppressContextMenuRef.current) {
+                    suppressContextMenuRef.current = false;
+                    e.stopPropagation();
+                    return;
+                  }
                   if (diagramMode === 'statemachine') {
                     const rect = canvasRef.current?.getBoundingClientRect();
                     if (!rect) return;
@@ -16234,13 +16324,16 @@ const ADIA = () => {
               >
                 <svg className="sysml-diagram-canvas" width="100%" height="100%" style={{ pointerEvents: 'none' }}>
                   <defs>
+                    {/* The grid is anchored to the world, so it pans and zooms with the diagram. */}
                     <pattern
                       id="grid"
-                      width={GRID_SIZE}
-                      height={GRID_SIZE}
+                      x={view.offsetX}
+                      y={view.offsetY}
+                      width={GRID_SIZE * view.scale * (GRID_SIZE * view.scale < 8 ? 5 : 1)}
+                      height={GRID_SIZE * view.scale * (GRID_SIZE * view.scale < 8 ? 5 : 1)}
                       patternUnits="userSpaceOnUse"
                     >
-                      <path d={`M ${GRID_SIZE} 0 L 0 0 0 ${GRID_SIZE}`} fill="none" stroke="var(--canvas-grid-dot)" strokeWidth="1" />
+                      {(() => { const g = GRID_SIZE * view.scale * (GRID_SIZE * view.scale < 8 ? 5 : 1); return <path d={`M ${g} 0 L 0 0 0 ${g}`} fill="none" stroke="var(--canvas-grid-dot)" strokeWidth="1" />; })()}
                     </pattern>
                   </defs>
 
@@ -16255,7 +16348,7 @@ const ADIA = () => {
                   )}
 
                   {/* World content */}
-                  <g transform={`translate(${view.offsetX}, ${view.offsetY}) scale(${view.scale})`}>
+                  <g ref={worldGroupRef} transform={`translate(${view.offsetX}, ${view.offsetY}) scale(${view.scale})`}>
                     {/* Origin marker */}
                     <g>
                       <line x1={-10} y1={0} x2={10} y2={0} stroke="#f97316" strokeWidth={0.5} opacity={0.5} />
