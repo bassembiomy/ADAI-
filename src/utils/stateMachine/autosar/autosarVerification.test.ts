@@ -4,9 +4,9 @@
  * determinism. Plan: docs/superpowers/plans/2026-10-27-autosar-codegen.md, "Phase 3" (V1-V8).
  */
 import { createHash } from 'node:crypto';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { readFileSync as readSource } from 'node:fs';
@@ -155,7 +155,7 @@ describe('V3 differential correctness against the ADIA interpreter', () => {
   });
 
   it('detects a one-value semantic bug that the unit test does not need to know about', async () => {
-    const files = replaceIn(generated(automotiveFixture()), 'autosar/core/sm_user_logic.c', /\b200\b/, '201');
+    const files = replaceIn(generated(automotiveFixture()), 'autosar/core/sm_user_logic.c', /\b200U\b/, '201U');
     const evidence = await verifyAutosarPackage(automotiveFixture(), files, { gates: ['differential'], executedAt: null });
     const item = gate(evidence, 'differential');
     expect(item.status).toBe('fail');
@@ -355,5 +355,99 @@ describe('V7 CLI', () => {
   it('is registered as an npm script', () => {
     const pkg = JSON.parse(readSource(join(__dirname, '../../../../package.json'), 'utf8')) as { scripts: Record<string, string> };
     expect(pkg.scripts['verify:autosar']).toContain('scripts/verify_autosar.ts');
+  });
+});
+
+/** Integer and float division / remainder whose divisors are required input ports. */
+const divisionFixture = (): StateMachineModelV5 => {
+  const model = flatOrFixture();
+  model.variables.push(
+    variable('num', 'int32'), variable('den', 'int32'), variable('quot', 'int32'), variable('rem', 'int32'),
+    variable('fnum', 'double'), variable('fden', 'double'), variable('fquot', 'double'),
+    variable('small_num', 'int8'), variable('small_den', 'int8'), variable('small_quot', 'int8'),
+  );
+  model.states[0].during = 'quot = num / den; rem = num % den; fquot = fnum / fden; small_quot = small_num / small_den;';
+  return model;
+};
+
+const divisionProbe = (swc: string): string => `
+#include <stdio.h>
+#include "${swc}.h"
+#include "Rte_${swc}_Stub.h"
+#define CHECK(c) do { if (!(c)) { (void)printf("FAIL %s:%d %s\\n", __FILE__, __LINE__, #c); return 1; } } while (0)
+
+static int fault_after(sint32 num, sint32 den, float64 fnum, float64 fden, sint8 snum, sint8 sden)
+{
+    Rte_Stub_Reset();
+    ${swc}_Init();
+    Rte_Stub_RP_num_num_Value = num;
+    Rte_Stub_RP_den_den_Value = den;
+    Rte_Stub_RP_fnum_fnum_Value = fnum;
+    Rte_Stub_RP_fden_fden_Value = fden;
+    Rte_Stub_RP_small_num_small_num_Value = snum;
+    Rte_Stub_RP_small_den_small_den_Value = sden;
+    ${swc}_MainFunction();
+    return (Rte_Stub_RP_SmFaultEvent_LastStatus == 0x01U) && (Rte_Stub_PP_SmStatus_ErrorStatus_Value != 0U);
+}
+
+int main(void)
+{
+    /* Well-defined division: no fault, C99 truncation agrees with the model. */
+    CHECK(!fault_after(7, 2, 1.0, 4.0, (sint8)-7, (sint8)2));
+    CHECK(Rte_Stub_PP_quot_quot_Value == 3);
+    CHECK(Rte_Stub_PP_rem_rem_Value == 1);
+    CHECK(Rte_Stub_PP_fquot_fquot_Value == 0.25);
+    CHECK(Rte_Stub_PP_small_quot_small_quot_Value == (sint8)-3);
+    /* Zero divisors fault like the model, never trap and never publish NaN/Inf. */
+    CHECK(fault_after(7, 0, 1.0, 4.0, 1, 1));
+    CHECK(fault_after(7, 2, 1.0, 0.0, 1, 1));
+    CHECK(fault_after(7, 2, 1.0, 4.0, 1, 0));
+    CHECK(Rte_Stub_PP_fquot_fquot_Value == Rte_Stub_PP_fquot_fquot_Value);
+    /* INT_MIN / -1 and -128 / -1 must not be undefined behaviour (UBSan aborts if they are). */
+    (void)fault_after((sint32)(-2147483647 - 1), -1, 1.0, 1.0, (sint8)-128, (sint8)-1);
+    (void)printf("DIVISION PROBE PASSED\\n");
+    return 0;
+}
+`;
+
+describe('V9 division semantics match the model (no undefined behaviour, no redraws)', () => {
+  it('guards integer and float division/remainder and faults like the interpreter (gcc + UBSan)', () => {
+    const files = generated(divisionFixture());
+    const directory = mkdtempSync(join(tmpdir(), 'adia-autosar-div-'));
+    try {
+      for (const item of files) {
+        const target = join(directory, item.name.slice('autosar/'.length));
+        mkdirSync(dirname(target), { recursive: true });
+        writeFileSync(target, item.content);
+      }
+      writeFileSync(join(directory, 'probe.c'), divisionProbe('AdiaSwc'));
+      const sources = files.map((item) => item.name.slice('autosar/'.length))
+        .filter((name) => name.endsWith('.c') && /^(swc|core|stubs)\//.test(name));
+      const build = spawnSync('gcc', ['-std=c99', '-pedantic-errors', '-Wall', '-Wextra', '-Werror', '-DADIA_TESTING', '-g',
+        '-fsanitize=address,undefined', '-fno-sanitize-recover=all', '-I', 'swc', '-I', 'core', '-I', 'stubs',
+        ...sources, 'probe.c', '-lm', '-o', 'probe'], { cwd: directory, encoding: 'utf8' });
+      expect(build.status, build.stderr).toBe(0);
+      const runResult = spawnSync(join(directory, 'probe'), [], { cwd: directory, encoding: 'utf8' });
+      expect(runResult.status, `${runResult.stdout}\n${runResult.stderr}`).toBe(0);
+      expect(runResult.stdout).toContain('DIVISION PROBE PASSED');
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('the differential gate draws zero divisors and boundary quotients and still matches, without rejecting vectors', async () => {
+    const evidence = await runAutosarVerification(divisionFixture(), {
+      gates: ['differential', 'sanitizers'], cycles: 2000, seed: 3, executedAt: null,
+    });
+    const item = gate(evidence, 'differential');
+    expect(item.status, item.summary).toBe('pass');
+    expect(item.metrics.mismatches).toBe(0);
+    expect(item.metrics.rejectedDivisionByZero ?? 0).toBe(0);
+    expect(item.metrics.faultCycles, 'vectors must exercise the divide-by-zero fault path').toBeGreaterThan(0);
+    expect(gate(evidence, 'sanitizers').status).toBe('pass');
+  }, 300_000);
+
+  it('the original automotive differential no longer needs any rejected vectors', () => {
+    expect(gate(differential, 'differential').metrics.rejectedDivisionByZero ?? 0).toBe(0);
   });
 });
