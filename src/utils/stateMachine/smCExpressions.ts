@@ -1,6 +1,7 @@
 import type { VariableType } from '../../types/sm_types';
 import type { ActionNode, ExpressionNode } from './smExpressions';
 import type { SemanticVariable } from './smSemanticModel';
+import { getTypeBounds } from './smTypedValue';
 
 const UNSIGNED_TYPES = new Set<VariableType>([
   'uint',
@@ -29,6 +30,36 @@ const variableType = (
   }
   if (node.kind === 'call') return variableType(node.argument, variables);
   return undefined;
+};
+
+/**
+ * AUTOSAR platform mode: `/` and `%` are rendered through guarded helpers (SM_Div, SM_Rem) and assignments through
+ * coercing stores, so a zero divisor faults like the semantic interpreter and no value is undefined behaviour.
+ * The default (Generate C/H) output is unaffected. Set only for the duration of one synchronous generation.
+ */
+let guardedDivision = false;
+
+export const isDivisionGuarded = (): boolean => guardedDivision;
+
+export const withGuardedDivision = <T>(enabled: boolean, body: () => T): T => {
+  const previous = guardedDivision;
+  guardedDivision = enabled;
+  try {
+    return body();
+  } finally {
+    guardedDivision = previous;
+  }
+};
+
+export const expressionHasDivision = (node: ExpressionNode): boolean => {
+  switch (node.kind) {
+    case 'binary':
+      return node.operator === '/' || node.operator === '%'
+        || expressionHasDivision(node.left) || expressionHasDivision(node.right);
+    case 'unary': return expressionHasDivision(node.operand);
+    case 'call': return expressionHasDivision(node.argument);
+    default: return false;
+  }
 };
 
 const renderLiteral = (
@@ -66,7 +97,12 @@ const renderNode = (
       const operandType = variableType(node.left, variables)
         ?? variableType(node.right, variables)
         ?? expectedType;
-      return `(${renderNode(node.left, variables, operandType, resolveVariable)} ${node.operator} ${renderNode(node.right, variables, operandType, resolveVariable)})`;
+      const left = renderNode(node.left, variables, operandType, resolveVariable);
+      const right = renderNode(node.right, variables, operandType, resolveVariable);
+      if (guardedDivision && (node.operator === '/' || node.operator === '%')) {
+        return `${node.operator === '/' ? 'SM_Div' : 'SM_Rem'}(instance, (double)(${left}), (double)(${right}))`;
+      }
+      return `(${left} ${node.operator} ${right})`;
     }
     case 'unary':
       return `(${node.operator}${renderNode(
@@ -121,11 +157,34 @@ export const renderCAction = (
   if (target === undefined) {
     throw new Error(`action target '${action.target}' is absent from semantic IR`);
   }
-  return `instance->data.${target.cName} = (${cType(target.type)})(${renderCExpression(
-    action.value,
-    variables,
-    target.type,
-  )});`;
+  const value = renderCExpression(action.value, variables, target.type);
+  if (!guardedDivision) {
+    return `instance->data.${target.cName} = (${cType(target.type)})(${value});`;
+  }
+  // Once an arithmetic fault is latched the step is aborted in the model: no further assignment happens.
+  const store = `instance->data.${target.cName}`;
+  if (!expressionHasDivision(action.value)) {
+    return [
+      'if (instance->error_status == SM_ERR_NONE) {',
+      `    ${store} = (${cType(target.type)})(${value});`,
+      '}',
+    ].join('\n');
+  }
+  const faultOnOverflow = target.overflowPolicy === 'error' ? 'true' : 'false';
+  const bounds = getTypeBounds(target.type);
+  const coerced = bounds !== null
+    ? `SM_Coerce_Integer(instance, (double)(${value}), ${bounds.min}.0, ${bounds.max}.0, ${faultOnOverflow})`
+    : `SM_Coerce_Real(instance, (double)(${value}), ${target.type === 'float' || target.type === 'single' ? 'true' : 'false'}, ${faultOnOverflow})`;
+  return [
+    '{',
+    `    double sm_value = ${coerced};`,
+    '    if (instance->error_status == SM_ERR_NONE) {',
+    target.type === 'bool'
+      ? `        ${store} = (sm_value != 0.0);`
+      : `        ${store} = (${cType(target.type)})(sm_value);`,
+    '    }',
+    '}',
+  ].join('\n');
 };
 
 export const renderCType = cType;

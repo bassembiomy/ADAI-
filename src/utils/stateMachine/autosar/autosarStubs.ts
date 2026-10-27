@@ -445,7 +445,36 @@ export const renderUnitTest = (ctx: SwcRenderContext): string => {
   });
 
   const firstProvided = ports.provided[0];
-  return lines(
+  const division = ctx.hasDivision === true;
+  const primedValue = (port: AutosarPort): string => probeValues(port)[0][0];
+  const primedData = (port: AutosarPort): string => probeValues(port)[0][1];
+  const divisionSupport = division
+    ? [
+      '/* The model divides: a zero divisor is a model fault, so the tests run with valid (non-zero) inputs. */',
+      'static void reset_stub(void)',
+      '{',
+      '    Rte_Stub_Reset();',
+      ...ports.required.map((port) => `    Rte_Stub_RP_${port.cName}_${port.dataElementName}_Value = ${primedValue(port)};`),
+      '}',
+      '',
+      'static void init_component(void)',
+      '{',
+      `    ${swc}_Init();`,
+      '#ifdef ADIA_TESTING',
+      '    if (g_inst != NULL) {',
+      ...ports.required.map((port) => `        g_inst->data.${port.cName} = ${primedData(port)};`),
+      '    }',
+      '#endif',
+      '}',
+      '',
+    ]
+    : [];
+  const guarded = (rows: string[]): string[] => (division
+    ? rows.map((row) => row
+      .replace(/^(\s*)Rte_Stub_Reset\(\);$/, '$1reset_stub();')
+      .replace(new RegExp(`^(\\s*)${swc}_Init\\(\\);`), '$1init_component();'))
+    : rows).flatMap((row) => (row === '@@DIVISION_SUPPORT@@' ? divisionSupport : [row]));
+  return lines(...guarded([
     '/* Generated host unit test of the software component (runs with the RTE stub). */',
     ...traceComment(ctx.fingerprint),
     '#include <stdio.h>',
@@ -477,6 +506,7 @@ export const renderUnitTest = (ctx: SwcRenderContext): string => {
     `    ${swc}_MainFunction();`,
     '}',
     '',
+    '@@DIVISION_SUPPORT@@',
     '#ifdef ADIA_TESTING',
     ...portTests.flat(),
     'static void test_forced_fault(void)',
@@ -552,6 +582,7 @@ export const renderUnitTest = (ctx: SwcRenderContext): string => {
       : [
         '    Rte_Stub_Reset();',
         `    ${swc}_Init();`,
+        ...(division ? ['    run_cycle(); /* valid data first: a divisor must not still hold its initial value */'] : []),
         `    Rte_Stub_RP_${ports.required[0].cName}_${ports.required[0].dataElementName}_Status = RTE_E_NO_DATA;`,
         '    run_cycle();',
         '    CHECK(Rte_Stub_PP_SmStatus_ErrorStatus_Value == 0U);',
@@ -589,7 +620,7 @@ export const renderUnitTest = (ctx: SwcRenderContext): string => {
     '    (void)printf("ALL TESTS PASSED\\n");',
     '    return 0;',
     '}',
-  );
+  ]));
 };
 
 export const renderMakefile = (): string => [

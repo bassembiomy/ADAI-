@@ -4,11 +4,14 @@ import { analyzeSemanticModel } from '../smAnalysisEngine';
 
 import { toCIdentifier } from './smExpressions';
 import {
+  expressionHasDivision,
+  isDivisionGuarded,
   renderCAction,
   renderCExpression,
   renderCInitialValue,
   renderCType,
   unwrapTopLevelCondition,
+  withGuardedDivision,
 } from './smCExpressions';
 import type {
   SemanticLayer,
@@ -172,7 +175,8 @@ const renderActions = (
   indent = '    ',
 ): string => lines(
   actions.map((action) =>
-    `${indent}${renderCAction(action, ir.variables)}`).join('\n'),
+    renderCAction(action, ir.variables).split('\n')
+      .map((row) => `${indent}${row}`).join('\n')).join('\n'),
   actions.length === 0
     ? null
     : `${indent}SM_TraceAction(instance, ${renderCStringLiteral(traceLabel)});`,
@@ -922,7 +926,8 @@ export const renderConfigHeader = (ir: SemanticModel): string => {
     '    SM_ERR_CONFIGURATION,',
     '    SM_ERR_SAFETY_VIOLATION,',
     '    SM_ERR_XBRIDGES_NUMERIC,',
-    '    SM_ERR_INVALID_ARGUMENT',
+    isDivisionGuarded() ? '    SM_ERR_INVALID_ARGUMENT,' : '    SM_ERR_INVALID_ARGUMENT',
+    ...(isDivisionGuarded() ? ['    SM_ERR_ARITHMETIC'] : []),
     '} SM_Error_t;',
     '',
     'typedef uint32_t SM_Group_t;',
@@ -978,6 +983,15 @@ export const renderCoreHeader = (): string => lines(
   '/* Deprecated: use SM_GetActiveSlot(). The argument is an active-slot ID. */',
   'SM_Node_t SM_GetActive(const ADIA_Instance_t *instance, SM_Group_t slot);',
   'SM_Error_t SM_GetError(const ADIA_Instance_t *instance);',
+  ...(isDivisionGuarded()
+    ? [
+      '/* Guarded arithmetic (AUTOSAR platform): a zero divisor or a non-finite result latches SM_ERR_ARITHMETIC. */',
+      'double SM_Div(ADIA_Instance_t *instance, double dividend, double divisor);',
+      'double SM_Rem(ADIA_Instance_t *instance, double dividend, double divisor);',
+      'double SM_Coerce_Integer(ADIA_Instance_t *instance, double value, double minimum, double maximum, bool fault_on_overflow);',
+      'double SM_Coerce_Real(ADIA_Instance_t *instance, double value, bool single_precision, bool fault_on_overflow);',
+    ]
+    : []),
   '#ifdef SM_TRACE_ENABLED',
   'void SM_SetTraceSink(ADIA_Instance_t *instance, SM_TraceSink_t sink);',
   'void SM_TraceAction(ADIA_Instance_t *instance, const char *action);',
@@ -1406,6 +1420,86 @@ export const renderMcalTestStubs = (): string => lines(
   '}',
 );
 
+const renderGuardedArithmetic = (): string[] => [
+  'static void SM_Latch_Arithmetic(ADIA_Instance_t *instance)',
+  '{',
+  '    if (instance->error_status == SM_ERR_NONE) {',
+  '        instance->error_status = SM_ERR_ARITHMETIC;',
+  '    }',
+  '}',
+  '',
+  'double SM_Div(ADIA_Instance_t *instance, double dividend, double divisor)',
+  '{',
+  '    double result = 0.0;',
+  '    if (divisor == 0.0) {',
+  '        SM_Latch_Arithmetic(instance);',
+  '    } else {',
+  '        result = dividend / divisor;',
+  '    }',
+  '    return result;',
+  '}',
+  '',
+  'double SM_Rem(ADIA_Instance_t *instance, double dividend, double divisor)',
+  '{',
+  '    double result = 0.0;',
+  '    if (divisor == 0.0) {',
+  '        SM_Latch_Arithmetic(instance);',
+  '    } else {',
+  '        result = fmod(dividend, divisor);',
+  '    }',
+  '    return result;',
+  '}',
+  '',
+  '/* Model semantics: truncate toward zero, then saturate (or fault) outside the type range; non-finite values fault. */',
+  'double SM_Coerce_Integer(ADIA_Instance_t *instance, double value, double minimum, double maximum, bool fault_on_overflow)',
+  '{',
+  '    double result = 0.0;',
+  '    if (isfinite(value) == 0) {',
+  '        SM_Latch_Arithmetic(instance);',
+  '    } else if ((value < minimum) || (value > maximum)) {',
+  '        if (fault_on_overflow) {',
+  '            SM_Latch_Arithmetic(instance);',
+  '        } else if (value < minimum) {',
+  '            result = minimum;',
+  '        } else {',
+  '            result = maximum;',
+  '        }',
+  '    } else {',
+  '        result = trunc(value);',
+  '    }',
+  '    return result;',
+  '}',
+  '',
+  'double SM_Coerce_Real(ADIA_Instance_t *instance, double value, bool single_precision, bool fault_on_overflow)',
+  '{',
+  '    double result = 0.0;',
+  '    if (isfinite(value) == 0) {',
+  '        SM_Latch_Arithmetic(instance);',
+  '    } else if (single_precision && (fabs(value) > (double)FLT_MAX)) {',
+  '        if (fault_on_overflow) {',
+  '            SM_Latch_Arithmetic(instance);',
+  '        } else if (value < 0.0) {',
+  '            result = -(double)FLT_MAX;',
+  '        } else {',
+  '            result = (double)FLT_MAX;',
+  '        }',
+  '    } else {',
+  '        result = value;',
+  '    }',
+  '    return result;',
+  '}',
+  '',
+];
+
+export const modelHasDivision = (ir: SemanticModel): boolean => {
+  const actions = [
+    ...Object.values(ir.states).flatMap((state) => [...state.entryActions, ...state.duringActions, ...state.exitActions]),
+    ...Object.values(ir.transitions).flatMap((transition) => transition.actions),
+  ];
+  return actions.some((action) => expressionHasDivision(action.value))
+    || Object.values(ir.transitions).some((transition) => expressionHasDivision(transition.guard));
+};
+
 export const renderCoreSource = (
   ir: SemanticModel,
   options: CGeneratorOptions = {},
@@ -1494,9 +1588,17 @@ export const renderCoreSource = (
     'static void SM_Enter_Fault(ADIA_Instance_t *instance)',
     '{',
     '    if (!instance->fault_latched) {',
+    ...(isDivisionGuarded()
+      ? [
+        '        /* Fault handling is not part of the aborted step: exit and safe-state actions assign normally. */',
+        '        SM_Error_t latched_error = instance->error_status;',
+        '        instance->error_status = SM_ERR_NONE;',
+      ]
+      : []),
     '        SM_Exit_All(instance);',
     '        SM_Enter_Safe_State(instance);',
     '        SM_ApplySafeOutputs(instance);',
+    ...(isDivisionGuarded() ? ['        instance->error_status = latched_error;'] : []),
     '        instance->fault_latched = true;',
     '    }',
     '}',
@@ -1513,6 +1615,7 @@ export const renderCoreSource = (
     '#include "sm_user_logic.h"',
     options.platform === 'autosar' ? null : '#include "mcal_dio.h"',
     '',
+    ...(isDivisionGuarded() ? renderGuardedArithmetic() : []),
     '#ifdef SM_TRACE_ENABLED',
     'void SM_SetTraceSink(ADIA_Instance_t *instance, SM_TraceSink_t sink)',
     '{',
@@ -1828,6 +1931,14 @@ export const renderTestingReport = (
   renderSemanticTestingReport(analyzeSemanticModel(ir), evidence, ir);
 
 export const generateCArtifacts = (
+  ir: SemanticModel,
+  options: CGeneratorOptions = {},
+): CGeneratorResult =>
+  // Only the AUTOSAR platform guards division; Generate C/H output stays byte-identical.
+  withGuardedDivision(options.platform === 'autosar' && modelHasDivision(ir), () =>
+    generateCArtifactsUnguarded(ir, options));
+
+const generateCArtifactsUnguarded = (
   ir: SemanticModel,
   options: CGeneratorOptions = {},
 ): CGeneratorResult => {

@@ -9,6 +9,8 @@ export interface SwcRenderContext {
   /** 16 hex digits, identical in every deliverable. */
   fingerprint: string;
   safetyMode: boolean;
+  /** The model divides: the core guards `/` and `%` and a zero divisor is a model fault. */
+  hasDivision?: boolean;
 }
 
 /** Memory sections used by the component and the core (in this order). */

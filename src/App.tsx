@@ -65,6 +65,7 @@ import { createStateMachineClipboard, pasteStateMachineClipboard, StateMachineCl
 import { pruneStateHierarchy, pruneMultipleStatesHierarchy, countDescendants } from './utils/stateMachine/smStatePruner';
 import { generateMISRACCode, getCTimeType, validateInitialValue } from './utils/stateMachineCodeGenerator';
 import { generateAutosarSwc, toAutosarSwcName } from './utils/stateMachine/autosar/autosarSwcGenerator';
+import { buildAutosarReportSection } from './utils/stateMachine/autosar/autosarReport';
 import { applyAutostartEdit, canTransitionBeInternal, findPartiallyParallelRegions, findUnreachableStates, partiallyParallelRegionMessage } from './utils/stateMachine/smOrthogonalRegions';
 import { applyStateHistoryChange, getStateHistoryType, type StateHistoryType } from './utils/stateMachine/smHistoryRegion';
 import { findInternalTransitionSyntaxErrors } from './utils/stateMachine/smExpressions';
@@ -11789,6 +11790,22 @@ const ADIA = () => {
       extraSections.push({ id: 'state-machine-analysis', title: 'State Machine Analysis', html: renderStateMachineAnalysisHtml(analysis) });
     }
 
+    // AUTOSAR SWC evidence: static report (toolchain gates stay NOT RUN until the verifier ran them).
+    if (hierarchySource.states.length > 0) {
+      try {
+        const projectFile = activeProjectPath ? (activeProjectPath.split(/[/\\]/).pop() ?? '') : '';
+        const swcName = toAutosarSwcName(projectFile || currentProjectName);
+        const autosarChart = { tickMs, states, junctions, transitions, variables, layers, safetyMode };
+        extraSections.push(buildAutosarReportSection(autosarChart, swcName));
+      } catch (error) {
+        extraSections.push({
+          id: 'autosar-swc',
+          title: 'AUTOSAR Software Component',
+          html: `<p>The AUTOSAR section could not be built: ${escapeHtml(error instanceof Error ? error.message : 'unknown error')}</p>`,
+        });
+      }
+    }
+
     // Helper to generate SVG for HMI
     const renderHmiSVG = (components: HmiComponent[]) => {
       if (components.length === 0) return '';
@@ -12629,7 +12646,7 @@ const ADIA = () => {
     setShowGlobalReportPreview(true);
     setShowReportDialog(false);
     addError('info', 'Report preview ready');
-  }, [blocks, parts, connectors, relationships, states, transitions, junctions, hmiComponents, variables, activeStates, addError, setShowReportDialog, layers, tickMs, safetyMode, canonicalSysmlRepository, traceabilityExternalElements, simEvidenceCurrency, sysmlDiagramPresentations]);
+  }, [blocks, parts, connectors, relationships, states, transitions, junctions, hmiComponents, variables, activeStates, addError, setShowReportDialog, layers, tickMs, safetyMode, canonicalSysmlRepository, traceabilityExternalElements, simEvidenceCurrency, sysmlDiagramPresentations, activeProjectPath, currentProjectName]);
 
   // KEYBOARD SHORTCUTS
   useEffect(() => {
