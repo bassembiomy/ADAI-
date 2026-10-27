@@ -491,9 +491,14 @@ describe('W9 MISRA Rule 5.1 and additional rules', () => {
     expect(longSwc.files).toEqual([]);
     expect(longSwc.errors.some((error) => error.id === 'AUTOSAR_MISRA_VIOLATION' && error.message.includes('Rule 5.1'))).toBe(true);
 
+    // C identifiers derive from the state id (SM_ST_<ID>_Entry/During/Exit), not the display name.
     const model = automotiveFixture();
-    model.states[0].name = 'DoorLockingSequenceWaitingForUnlockA';
-    model.states[1].name = 'DoorLockingSequenceWaitingForUnlockB';
+    const [idA, idB] = ['door_locking_sequence_waiting_a', 'door_locking_sequence_waiting_b'];
+    model.states[0].id = idA;
+    model.states[1].id = idB;
+    model.transitions[0].sourceId = idA;
+    model.transitions[0].targetId = idB;
+    model.layers[0].stateIds = [idA, idB];
     const longStates = generateAutosarSwc(model);
     expect(longStates.errors.some((error) => error.id === 'AUTOSAR_MISRA_VIOLATION' && error.message.includes('Rule 5.1'))).toBe(true);
   });

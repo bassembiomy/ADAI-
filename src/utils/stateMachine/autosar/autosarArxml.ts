@@ -1,5 +1,6 @@
 import type { AutosarPort } from './autosarPorts';
-import type { SwcRenderContext } from './autosarSwc';
+import { SWC_MEMORY_SECTIONS, type SwcRenderContext } from './autosarSwc';
+import { AUTOSAR_GENERATOR_VERSION, traceLines } from './autosarTrace';
 
 const TYPE_PATH = '/AUTOSAR_Platform/ImplementationDataTypes';
 
@@ -49,6 +50,7 @@ export const renderArxml = (ctx: SwcRenderContext): string => {
   const { swc, ports, tickMs } = ctx;
   const root = `/${swc}`;
   const interfacesPath = `${root}/Interfaces`;
+  const addrMethodsPath = `${root}/SwAddrMethods`;
   const componentPath = `${root}/ComponentTypes/${swc}`;
   const behaviorName = `${swc}_InternalBehavior`;
   const behaviorPath = `${componentPath}/${behaviorName}`;
@@ -188,6 +190,8 @@ export const renderArxml = (ctx: SwcRenderContext): string => {
           ]),
         ]),
         el('RUNNABLES', [initRunnableNode, mainRunnableNode]),
+        // Static component instance in the C code: it cannot be instantiated more than once.
+        el('SUPPORTS-MULTIPLE-INSTANTIATION', 'false'),
       ]),
     ]),
   ]);
@@ -206,14 +210,25 @@ export const renderArxml = (ctx: SwcRenderContext): string => {
       ]),
     ]),
     el('PROGRAMMING-LANGUAGE', 'C'),
+    el('RESOURCE-CONSUMPTION', [
+      name(`${swc}_ResourceConsumption`),
+      el('MEMORY-SECTIONS', SWC_MEMORY_SECTIONS.map((section) => el('MEMORY-SECTION', [
+        name(section),
+        ref('SW-ADDRMETHOD-REF', 'SW-ADDR-METHOD', `${addrMethodsPath}/${section}`),
+      ]))),
+    ]),
     el('SW-VERSION', '1.0.0'),
-    el('USED-CODE-GENERATOR', 'ADIA AUTOSAR generator'),
+    el('USED-CODE-GENERATOR', `ADIA AUTOSAR generator ${AUTOSAR_GENERATOR_VERSION}`),
     ref('BEHAVIOR-REF', 'SWC-INTERNAL-BEHAVIOR', behaviorPath),
   ]);
 
   const document: Node = el('AR-PACKAGES', [
       el('AR-PACKAGE', [
         name(swc),
+        el('ADMIN-DATA', [el('SDGS', [el('SDG', traceLines(ctx.fingerprint).map((line) => {
+          const [key, ...rest] = line.split(': ');
+          return el('SD', rest.join(': '), `GID="${key}"`);
+        }), 'GID="ADIA-TRACEABILITY"')])]),
         el('AR-PACKAGES', [
           el('AR-PACKAGE', [
             name('Interfaces'),
@@ -225,12 +240,18 @@ export const renderArxml = (ctx: SwcRenderContext): string => {
           ]),
           el('AR-PACKAGE', [name('ComponentTypes'), el('ELEMENTS', [component])]),
           el('AR-PACKAGE', [name('Implementations'), el('ELEMENTS', [implementation])]),
+          el('AR-PACKAGE', [name('SwAddrMethods'), el('ELEMENTS', SWC_MEMORY_SECTIONS.map((section) => el('SW-ADDR-METHOD', [
+            name(section),
+            ...(section.startsWith('VAR') ? [el('SECTION-INITIALIZATION-POLICY', 'CLEARED')] : []),
+            el('SECTION-TYPE', section.startsWith('VAR') ? 'VAR' : 'CODE'),
+          ])))]),
         ]),
       ]),
     ]);
 
   const header = [
     '<?xml version="1.0" encoding="UTF-8"?>',
+    ...traceLines(ctx.fingerprint).map((line) => `<!-- ${line} -->`),
     '<AUTOSAR xmlns="http://autosar.org/schema/r4.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://autosar.org/schema/r4.0 AUTOSAR_00049.xsd">',
   ];
   return `${[...header, ...document.map((line) => `  ${line}`), '</AUTOSAR>'].join('\n')}\n`;

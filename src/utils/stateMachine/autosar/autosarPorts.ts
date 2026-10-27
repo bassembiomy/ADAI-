@@ -1,4 +1,5 @@
 import type { VariableType } from '../../../types/sm_types';
+import type { ExpressionNode } from '../smExpressions';
 import type { SemanticModel } from '../smSemanticModel';
 
 export interface AutosarPort {
@@ -18,6 +19,8 @@ export interface AutosarPort {
 export interface AutosarPortModel {
   provided: AutosarPort[];
   required: AutosarPort[];
+  /** Model names of variables neither read nor written: no port is derived for them. */
+  unused: string[];
 }
 
 export const toAutosarPlatformType = (type: VariableType): string => {
@@ -65,13 +68,62 @@ const assignedVariableIds = (ir: SemanticModel): Set<string> => {
   return assigned;
 };
 
+const collectReads = (node: ExpressionNode, reads: Set<string>): void => {
+  switch (node.kind) {
+    case 'variable':
+      reads.add(node.cName);
+      reads.add(node.name);
+      break;
+    case 'binary':
+      collectReads(node.left, reads);
+      collectReads(node.right, reads);
+      break;
+    case 'unary':
+      collectReads(node.operand, reads);
+      break;
+    case 'call':
+      collectReads(node.argument, reads);
+      break;
+    default:
+      break;
+  }
+};
+
+/** Names (model and C) of variables read by a guard, an action right-hand side or an X-Bridges input. */
+const readVariableNames = (ir: SemanticModel): { names: Set<string>; ids: Set<string> } => {
+  const names = new Set<string>();
+  const ids = new Set<string>();
+  for (const state of Object.values(ir.states)) {
+    for (const action of [...state.entryActions, ...state.duringActions, ...state.exitActions]) {
+      collectReads(action.value, names);
+    }
+    for (const mapping of state.xBridges?.mappings ?? []) {
+      if (mapping.direction === 'in') ids.add(mapping.variableId);
+    }
+  }
+  for (const transition of Object.values(ir.transitions)) {
+    collectReads(transition.guard, names);
+    for (const action of transition.actions) collectReads(action.value, names);
+  }
+  return { names, ids };
+};
+
 export const deriveAutosarPorts = (ir: SemanticModel): AutosarPortModel => {
   const assigned = assignedVariableIds(ir);
+  const reads = readVariableNames(ir);
   const provided: AutosarPort[] = [];
   const required: AutosarPort[] = [];
+  const unused: string[] = [];
   for (const variable of Object.values(ir.variables)) {
-    const platformType = toAutosarPlatformType(variable.type);
     const isProvided = assigned.has(variable.id);
+    const isRead = reads.names.has(variable.cName)
+      || reads.names.has(variable.name)
+      || reads.ids.has(variable.id);
+    if (!isProvided && !isRead) {
+      unused.push(variable.name);
+      continue;
+    }
+    const platformType = toAutosarPlatformType(variable.type);
     const port: AutosarPort = {
       variableId: variable.id,
       portName: `${isProvided ? 'PP' : 'RP'}_${variable.cName}`,
@@ -83,7 +135,7 @@ export const deriveAutosarPorts = (ir: SemanticModel): AutosarPortModel => {
     };
     (isProvided ? provided : required).push(port);
   }
-  return { provided, required };
+  return { provided, required, unused };
 };
 
 /** C literal of an initial value for a platform type. */
@@ -115,6 +167,8 @@ export const coreCType = (platformType: string): string => {
     case 'uint16': return 'uint16_t';
     case 'sint32': return 'int32_t';
     case 'uint32': return 'uint32_t';
+    case 'sint64': return 'int64_t';
+    case 'uint64': return 'uint64_t';
     case 'float32': return 'float';
     default: return 'double';
   }

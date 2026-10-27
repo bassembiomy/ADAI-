@@ -1,8 +1,7 @@
 import type { ErrorItem } from '../../../types/sm_types';
 import { generateCArtifacts } from '../smCGenerator';
-import type { LegacyStateMachineModel, ModelDiagnostic } from '../smModel';
-import { migrateStateMachineModel } from '../smModelMigration';
-import { buildSemanticModel } from '../smSemanticBuilder';
+import type { LegacyStateMachineModel } from '../smModel';
+import { runSmFrontEnd } from '../smFrontEnd';
 import { renderArxml } from './autosarArxml';
 import { renderIntegrationGuide, renderMisraCompliance } from './autosarDocs';
 import { checkMisraSubset } from './autosarMisraChecker';
@@ -20,8 +19,9 @@ import {
   renderUnitTest,
 } from './autosarStubs';
 import { renderSwcHeader, renderSwcSource, type SwcRenderContext } from './autosarSwc';
+import { AUTOSAR_GENERATOR_VERSION, modelFingerprint } from './autosarTrace';
 
-export { deriveAutosarPorts, toAutosarPlatformType };
+export { deriveAutosarPorts, toAutosarPlatformType, AUTOSAR_GENERATOR_VERSION };
 export type { AutosarPort, AutosarPortModel } from './autosarPorts';
 
 export interface AutosarGeneratorOptions {
@@ -37,6 +37,7 @@ export interface AutosarGeneratorResult {
 const DEFAULT_SWC_NAME = 'AdiaSwc';
 const SWC_NAME_PATTERN = /^[A-Za-z][A-Za-z0-9_]{0,127}$/;
 const SHORT_NAME_PATTERN = /^[A-Za-z][A-Za-z0-9_]*$/;
+const MAX_PERIOD_MS = 4294967295;
 const RESERVED_PORT_ELEMENTS = new Set(['SmStatus', 'SmFaultEvent']);
 
 const makeError = (id: string, message: string, source = 'autosar-generator'): ErrorItem => ({
@@ -49,15 +50,6 @@ const makeError = (id: string, message: string, source = 'autosar-generator'): E
 
 const failure = (errors: ErrorItem[], warnings: string[] = []): AutosarGeneratorResult =>
   ({ files: [], errors, warnings });
-
-const diagnosticToError = (diagnostic: ModelDiagnostic): ErrorItem => ({
-  id: diagnostic.code,
-  type: diagnostic.severity,
-  message: diagnostic.message,
-  timestamp: new Date(),
-  source: 'state-machine-semantic-model',
-  elementId: diagnostic.elementId,
-});
 
 /** Wraps a core .c body (after its leading includes) in the CODE memory section. */
 const wrapCoreSource = (swc: string, content: string): string => {
@@ -82,15 +74,19 @@ const wrapCoreSource = (swc: string, content: string): string => {
   ].join('\n');
 };
 
-/** Converts a project/file name into a valid AUTOSAR short name (fallback 'AdiaSwc'). */
+/** Longest name the UI derives: keeps `<SWC>_<suffix>` external identifiers distinct within 31 characters (Rule 5.1). */
+const MAX_DERIVED_SWC_NAME = 18;
+
+/** Converts a project/file name into a valid, MISRA 5.1-safe AUTOSAR short name (fallback 'AdiaSwc'). */
 export const toAutosarSwcName = (rawName: string | null | undefined): string => {
   const cleaned = (rawName ?? '')
     .replace(/\.[A-Za-z0-9]+$/, '')
     .replace(/[^A-Za-z0-9_]+/g, '_')
+    .replace(/_+/g, '_')
     .replace(/^[^A-Za-z]+/, '')
-    .replace(/_+$/, '')
-    .slice(0, 128);
-  return SWC_NAME_PATTERN.test(cleaned) ? cleaned : DEFAULT_SWC_NAME;
+    .slice(0, MAX_DERIVED_SWC_NAME)
+    .replace(/_+$/, '');
+  return /^[A-Za-z][A-Za-z0-9_]{0,17}$/.test(cleaned) ? cleaned : DEFAULT_SWC_NAME;
 };
 
 export const generateAutosarSwc = (
@@ -104,29 +100,19 @@ export const generateAutosarSwc = (
       `'${swc}' is not a valid AUTOSAR short name (letter first, then letters, digits or underscore, at most 128 characters).`,
     )]);
   }
-  if (
-    chart.safetyMode === true
-    && !chart.states.some((state) => state.isSafeState === true)
-  ) {
-    return failure([makeError(
-      'SAFE_STATE_REQUIRED',
-      'No Safe State defined while safety mode is enabled.',
-      'state-machine-semantic-model',
-    )]);
-  }
-
   // I/O of an AUTOSAR application component goes through RTE ports, never MCAL.
-  const { hilConfig: _ignoredHil, ...withoutHil } = chart as typeof chart & { hilConfig?: unknown };
-  void _ignoredHil;
-  const migrated = migrateStateMachineModel(withoutHil as LegacyStateMachineModel);
-  const built = buildSemanticModel(migrated.model);
-  const diagnostics = [...migrated.diagnostics, ...built.diagnostics];
-  const errors = diagnostics.filter((item) => item.severity === 'error').map(diagnosticToError);
-  const warnings = diagnostics
-    .filter((item) => item.severity === 'warning')
-    .map((item) => `[${item.code}] ${item.message}`);
-  if (built.ir === undefined || errors.length > 0) return failure(errors, warnings);
-  const ir = built.ir;
+  const frontEnd = runSmFrontEnd(chart, { stripHil: true });
+  const errors = [...frontEnd.errors];
+  const warnings = [...frontEnd.warnings];
+  const tick = frontEnd.ir?.tickMs ?? chart.tickMs;
+  if (typeof tick === 'number' && (!Number.isInteger(tick) || tick <= 0 || tick > MAX_PERIOD_MS)) {
+    errors.push(makeError(
+      'AUTOSAR_INVALID_PERIOD',
+      `The tick period ${tick} ms is not a positive integer number of milliseconds (1..${MAX_PERIOD_MS}); the TimingEvent period and <SWC>_PERIOD_MS must be integral.`,
+    ));
+  }
+  if (frontEnd.ir === undefined || errors.length > 0) return failure(errors, warnings);
+  const ir = frontEnd.ir;
 
   const ports = deriveAutosarPorts(ir);
   const seen = new Set<string>();
@@ -142,6 +128,15 @@ export const generateAutosarSwc = (
   }
   if (nameErrors.length > 0) return failure(nameErrors, warnings);
 
+  for (const name of ports.unused) {
+    warnings.push(`[AUTOSAR_UNUSED_VARIABLE] Variable '${name}' is neither read nor written by the model; no port, ARXML entry or code is generated for it.`);
+  }
+  for (const variable of Object.values(ir.variables)) {
+    if (variable.type !== 'int64' && variable.type !== 'uint64') continue;
+    if (![...ports.provided, ...ports.required].some((port) => port.variableId === variable.id)) continue;
+    warnings.push(`[AUTOSAR_64BIT_PRECISION] Variable '${variable.name}' is ${variable.type}: the core evaluates arithmetic on it in double precision (53 bit mantissa), so results beyond 2^53 lose precision; plain copies through the ports are exact.`);
+  }
+
   const rendered = generateCArtifacts(ir, {
     platform: 'autosar',
     includeVerificationPackage: false,
@@ -155,6 +150,8 @@ export const generateAutosarSwc = (
     swcUpper: swc.toUpperCase(),
     tickMs: ir.tickMs,
     ports,
+    fingerprint: modelFingerprint(ir),
+    safetyMode: ir.safetyMode,
   };
 
   const coreFiles = rendered.files
@@ -182,7 +179,7 @@ export const generateAutosarSwc = (
     ...ctx,
     findings,
     checkedFiles: checked.map((file) => file.name.replace(/^autosar\//, '')),
-    safetyMode: ir.safetyMode,
+    warnings,
     hasXBridges: Object.values(ir.states).some((state) => state.xBridges !== null),
   };
 

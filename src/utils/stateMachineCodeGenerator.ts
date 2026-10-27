@@ -5,15 +5,13 @@ import {
 import { analyzeStateMachine } from './smAnalysisEngine';
 import { generateHALCode } from '../engine/hil/hilCodeGenerator';
 import { generateCArtifacts } from './stateMachine/smCGenerator';
-import { migrateStateMachineModel } from './stateMachine/smModelMigration';
-import { buildSemanticModel } from './stateMachine/smSemanticBuilder';
+import { runSmFrontEnd } from './stateMachine/smFrontEnd';
 import {
   renderTestingReport as renderSemanticTestingReport,
   type VerificationEvidence,
 } from './stateMachine/smReports';
 import type {
   LegacyStateMachineModel,
-  ModelDiagnostic,
 } from './stateMachine/smModel';
 
 const VERSION = 'v3.0 ENGINE';
@@ -2883,17 +2881,6 @@ static inline uint32_t HAL_GetTick(void) { return 0; }
   };
 };
 
-const diagnosticToLegacyError = (
-  diagnostic: ModelDiagnostic,
-): ErrorItem => ({
-  id: diagnostic.code,
-  type: diagnostic.severity,
-  message: diagnostic.message,
-  timestamp: new Date(),
-  source: 'state-machine-semantic-model',
-  elementId: diagnostic.elementId,
-});
-
 const HIL_TEST_SHIM_NAMES = new Set([
   'Arduino.h',
   'Arduino.cpp',
@@ -2922,49 +2909,9 @@ export const generateMISRACCode = (
     requirementLinks?: ReadonlyMap<string, readonly string[]>;
   } = {},
 ): { files: { name: string; content: string }[]; errors: ErrorItem[]; warnings: string[] } => {
-  if (
-    chart.safetyMode === true
-    && !chart.states.some((state) => state.isSafeState === true)
-  ) {
-    return {
-      files: [],
-      errors: [{
-        id: 'SAFE_STATE_REQUIRED',
-        type: 'error',
-        message: 'No Safe State defined while safety mode is enabled.',
-        timestamp: new Date(),
-        source: 'state-machine-semantic-model',
-      }],
-      warnings: [],
-    };
-  }
-
-  const migrated = migrateStateMachineModel(chart as LegacyStateMachineModel);
-  // Legacy HIL callers predate the mandatory invalid-input policy field. Keep
-  // those callers compatible while preserving strict validation for authored
-  // semantic models that explicitly omit a policy.
-  if (migrated.model.hilConfig?.mappings) {
-    const policies = { ...(migrated.model.verification?.invalidInputPolicies ?? {}) };
-    for (const mapping of migrated.model.hilConfig.mappings) {
-      if (mapping.direction === 'read') {
-        policies[mapping.id] ??= 'default';
-        policies[mapping.channelId] ??= 'default';
-        policies[mapping.adiaVarId] ??= 'default';
-      }
-    }
-    migrated.model.verification = {
-      ...(migrated.model.verification ?? {}),
-      invalidInputPolicies: policies,
-    } as typeof migrated.model.verification;
-  }
-  const built = buildSemanticModel(migrated.model, { requirementLinks: options.requirementLinks });
-  const diagnostics = [...migrated.diagnostics, ...built.diagnostics];
-  const errors = diagnostics
-    .filter((item) => item.severity === 'error')
-    .map(diagnosticToLegacyError);
-  const warnings = diagnostics
-    .filter((item) => item.severity === 'warning')
-    .map((item) => `[${item.code}] ${item.message}`);
+  const frontEnd = runSmFrontEnd(chart, { requirementLinks: options.requirementLinks });
+  const { errors, warnings } = frontEnd;
+  const built = { ir: frontEnd.ir };
 
   if (built.ir === undefined || errors.length > 0) {
     return { files: [], errors, warnings };

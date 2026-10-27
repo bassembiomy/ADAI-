@@ -1154,6 +1154,7 @@ export const renderMappingSource = (ir: SemanticModel): string => {
 
 export const renderSafetyHeader = (
   options: CGeneratorOptions = {},
+  safetyMode = true,
 ): string => lines(
   '#ifndef SM_SAFETY_H',
   '#define SM_SAFETY_H',
@@ -1162,10 +1163,10 @@ export const renderSafetyHeader = (
   '',
   'SM_Error_t SM_Validate_State_Consistency(const ADIA_Instance_t *instance);',
   'void SM_ApplySafeOutputs(ADIA_Instance_t *instance);',
-  options.platform === 'autosar'
-    ? '/* Platform hook, defined by the AUTOSAR software component. */'
+  (options.platform === 'autosar' && safetyMode)
+    ? '/* Platform hook, defined by the AUTOSAR software component (safety mode only). */'
     : null,
-  options.platform === 'autosar'
+  (options.platform === 'autosar' && safetyMode)
     ? 'void SM_Platform_ApplySafeOutputs(ADIA_Instance_t *instance);'
     : null,
   '',
@@ -1836,7 +1837,7 @@ export const generateCArtifacts = (
     { name: 'sm_mapping.c', content: renderMappingSource(ir) },
     { name: 'sm_core.h', content: renderCoreHeader() },
     { name: 'sm_core.c', content: renderCoreSource(ir, options) },
-    { name: 'sm_safety.h', content: renderSafetyHeader(options) },
+    { name: 'sm_safety.h', content: renderSafetyHeader(options, ir.safetyMode) },
     { name: 'sm_safety.c', content: renderSafetySource(ir, options) },
     { name: 'sm_user_logic.h', content: renderUserLogicHeader(ir) },
     { name: 'sm_user_logic.c', content: renderUserLogicSource(ir) },

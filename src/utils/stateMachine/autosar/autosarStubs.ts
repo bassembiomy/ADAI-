@@ -1,5 +1,6 @@
-import { platformInitLiteral } from './autosarPorts';
-import type { SwcRenderContext } from './autosarSwc';
+import { coreCType, platformInitLiteral, type AutosarPort } from './autosarPorts';
+import { isFloatPlatformType, SWC_MEMORY_SECTIONS, type SwcRenderContext } from './autosarSwc';
+import { traceComment } from './autosarTrace';
 
 const lines = (...parts: Array<string | null | undefined>): string =>
   `${parts.filter((part): part is string => typeof part === 'string').join('\n')}\n`;
@@ -134,7 +135,7 @@ export const renderCompilerCfg = (ctx: SwcRenderContext): string => lines(
 
 export const renderMemMap = (ctx: SwcRenderContext): string => {
   const { swc } = ctx;
-  const sections = ['CODE', 'VAR_CLEARED_UNSPECIFIED'];
+  const sections = SWC_MEMORY_SECTIONS;
   const branches = sections.flatMap((name) => [
     ['START', name],
     ['STOP', name],
@@ -325,18 +326,137 @@ export const renderRteStubSource = (ctx: SwcRenderContext): string => {
   );
 };
 
+/** Three distinct probe values of a port type, as [C expression of the port type, C expression of the core type]. */
+const probeValues = (port: AutosarPort): Array<[string, string]> => {
+  if (port.platformType === 'boolean') {
+    return [['TRUE', 'true'], ['FALSE', 'false'], ['TRUE', 'true']];
+  }
+  const literals = isFloatPlatformType(port.platformType) ? ['1.5', '2.5', '3.5'] : ['1', '2', '3'];
+  const core = coreCType(port.platformType);
+  return literals.map((literal) => [`((${port.platformType})${literal})`, `((${core})${literal})`]);
+};
+
 export const renderUnitTest = (ctx: SwcRenderContext): string => {
   const { swc, ports, swcUpper } = ctx;
-  const providedChecks = ports.provided.map((port) =>
-    `    CHECK(Rte_Stub_PP_${port.cName}_${port.dataElementName}_WriteCount == 1U);`);
-  const cycleChecks = ports.provided.map((port) =>
-    `        CHECK(Rte_Stub_PP_${port.cName}_${port.dataElementName}_WriteCount == (1U + cycle));`);
-  const failing = ports.required[0];
+  const limit = `${swcUpper}_RTE_ERROR_LIMIT`;
+  const dem = 'Rte_Stub_RP_SmFaultEvent_LastStatus';
+  const hasFloat = ports.required.some((port) => isFloatPlatformType(port.platformType));
+  const writeCount = (port: AutosarPort): string => `Rte_Stub_PP_${port.cName}_${port.dataElementName}_WriteCount`;
+  const providedValueMatchesData = (port: AutosarPort): string => port.platformType === 'boolean'
+    ? `Rte_Stub_PP_${port.cName}_${port.dataElementName}_Value == (g_inst->data.${port.cName} ? TRUE : FALSE)`
+    : `Rte_Stub_PP_${port.cName}_${port.dataElementName}_Value == (${port.platformType})g_inst->data.${port.cName}`;
+
+  const portTests = ports.required.flatMap((port, index) => {
+    const value = `Rte_Stub_RP_${port.cName}_${port.dataElementName}_Value`;
+    const status = `Rte_Stub_RP_${port.cName}_${port.dataElementName}_Status`;
+    const data = `g_inst->data.${port.cName}`;
+    const [one, two, three] = probeValues(port);
+    const isFloat = isFloatPlatformType(port.platformType);
+    const nonFinite = isFloat
+      ? [
+        ['NAN', '(NaN)'], ['INFINITY', '(+Inf)'], ['-INFINITY', '(-Inf)'],
+      ].flatMap(([literal, label]) => [
+        `    ${value} = (${port.platformType})${literal};`,
+        '    run_cycle();',
+        `    CHECK(${data} == ${two[1]}); /* non-finite ${label} rejected, last valid value kept */`,
+      ])
+      : [];
+    return [
+      `/* Required port ${port.portName} (${port.platformType}). */`,
+      `static void test_port_${index}(void)`,
+      '{',
+      '    uint32 cycle;',
+      '',
+      '    Rte_Stub_Reset();',
+      `    ${swc}_Init();`,
+      '    /* accept: RTE_E_OK and the overlaid RTE_E_LOST_DATA */',
+      `    ${value} = ${one[0]};`,
+      `    ${status} = RTE_E_OK;`,
+      '    run_cycle();',
+      `    CHECK(${data} == ${one[1]});`,
+      `    ${value} = ${two[0]};`,
+      `    ${status} = RTE_E_LOST_DATA;`,
+      '    run_cycle();',
+      `    CHECK(${data} == ${two[1]});`,
+      '    /* reject: any other status keeps the last valid value */',
+      `    ${value} = ${three[0]};`,
+      `    ${status} = RTE_E_NO_DATA;`,
+      '    run_cycle();',
+      `    CHECK(${data} == ${two[1]});`,
+      `    ${status} = RTE_E_NEVER_RECEIVED;`,
+      '    run_cycle();',
+      `    CHECK(${data} == ${two[1]});`,
+      `    ${status} = RTE_E_INVALID;`,
+      '    run_cycle();',
+      `    CHECK(${data} == ${two[1]});`,
+      `    ${status} = RTE_E_OK;`,
+      ...nonFinite,
+      `    ${value} = ${one[0]};`,
+      '    run_cycle();',
+      `    CHECK(${data} == ${one[1]});`,
+      '',
+      '    /* RTE error limit: reached after exactly the limit of consecutive failures, saturating, cleared by one good read */',
+      '    Rte_Stub_Reset();',
+      `    ${swc}_Init();`,
+      `    ${status} = RTE_E_NO_DATA;`,
+      `    for (cycle = 1U; cycle < ${limit}; cycle++) {`,
+      '        run_cycle();',
+      `        CHECK(${dem} == DEM_EVENT_STATUS_PASSED);`,
+      '    }',
+      '    run_cycle();',
+      `    CHECK(${dem} == DEM_EVENT_STATUS_FAILED);`,
+      '    CHECK(Rte_Stub_PP_SmStatus_ErrorStatus_Value == 0U); /* not a core error */',
+      `    for (cycle = 0U; cycle < (${limit} + 2U); cycle++) {`,
+      '        run_cycle();',
+      '    }',
+      `    CHECK(${dem} == DEM_EVENT_STATUS_FAILED);`,
+      `    ${status} = RTE_E_OK;`,
+      '    run_cycle();',
+      `    CHECK(${dem} == DEM_EVENT_STATUS_PASSED);`,
+      `    if (${limit} > 1U) {`,
+      `        ${status} = RTE_E_NO_DATA;`,
+      `        for (cycle = 0U; cycle < ${limit}; cycle++) {`,
+      '            run_cycle();',
+      '        }',
+      `        CHECK(${dem} == DEM_EVENT_STATUS_FAILED);`,
+      `        ${swc}_Init(); /* clears every failure counter */`,
+      '        run_cycle();',
+      `        CHECK(${dem} == DEM_EVENT_STATUS_PASSED);`,
+      '    }',
+      ...(isFloat
+        ? [
+          '',
+          '    /* a stream of non-finite values counts as failed reads */',
+          '    Rte_Stub_Reset();',
+          `    ${swc}_Init();`,
+          `    ${value} = (${port.platformType})NAN;`,
+          `    for (cycle = 0U; cycle < ${limit}; cycle++) {`,
+          '        run_cycle();',
+          '    }',
+          `    CHECK(${dem} == DEM_EVENT_STATUS_FAILED);`,
+          `    ${value} = ${one[0]};`,
+          '    run_cycle();',
+          `    CHECK(${dem} == DEM_EVENT_STATUS_PASSED);`,
+        ]
+        : []),
+      '}',
+      '',
+    ];
+  });
+
+  const firstProvided = ports.provided[0];
   return lines(
     '/* Generated host unit test of the software component (runs with the RTE stub). */',
+    ...traceComment(ctx.fingerprint),
     '#include <stdio.h>',
+    ...(hasFloat ? ['#include <math.h>'] : []),
     `#include "${swc}.h"`,
     `#include "Rte_${swc}_Stub.h"`,
+    '',
+    '#ifdef ADIA_TESTING',
+    '#include "sm_core.h"',
+    'static ADIA_Instance_t *g_inst = NULL;',
+    '#endif',
     '',
     '#define CYCLES 20U',
     '',
@@ -352,42 +472,117 @@ export const renderUnitTest = (ctx: SwcRenderContext): string => {
     '',
     '#define CHECK(c) check((c) ? 1 : 0, #c, __LINE__)',
     '',
-    'int main(void)',
+    'static void run_cycle(void)',
+    '{',
+    `    ${swc}_MainFunction();`,
+    '}',
+    '',
+    '#ifdef ADIA_TESTING',
+    ...portTests.flat(),
+    'static void test_forced_fault(void)',
+    '{',
+    '    /* A corrupted core (active state cleared) is detected: error status, Dem FAILED, latched. */',
+    '    Rte_Stub_Reset();',
+    `    ${swc}_Init();`,
+    '    CHECK(SM_Test_SetStateActive(g_inst, SM_GetActiveSlot(g_inst, 0U), false) == SM_ERR_NONE);',
+    ...(ctx.safetyMode && firstProvided !== undefined
+      ? [`    CHECK(${writeCount(firstProvided)} == 1U);`]
+      : []),
+    '    run_cycle();',
+    `    CHECK(${dem} == DEM_EVENT_STATUS_FAILED);`,
+    '    CHECK(Rte_Stub_PP_SmStatus_ErrorStatus_Value != 0U);',
+    ...(ctx.safetyMode
+      ? [
+        '    /* Safety mode: the safe state was entered and its outputs published by the platform hook. */',
+        '    CHECK(SM_GetError(g_inst) != SM_ERR_NONE);',
+        ...ports.provided.map((port) => `    CHECK(${providedValueMatchesData(port)});`),
+        ...(firstProvided !== undefined ? [`    CHECK(${writeCount(firstProvided)} == 3U); /* hook + runnable */`] : []),
+      ]
+      : []),
+    '    run_cycle();',
+    `    CHECK(${dem} == DEM_EVENT_STATUS_FAILED);`,
+    '',
+    '    /* Re-initialisation recovers. */',
+    '    Rte_Stub_Reset();',
+    `    ${swc}_Init();`,
+    '    run_cycle();',
+    `    CHECK(${dem} == DEM_EVENT_STATUS_PASSED);`,
+    '    CHECK(Rte_Stub_PP_SmStatus_ErrorStatus_Value == 0U);',
+    '}',
+    '#endif /* ADIA_TESTING */',
+    '',
+    'static void test_init_and_cyclic(void)',
     '{',
     '    uint32 cycle;',
     '',
     '    /* Init writes every provided port and both status ports once. */',
     '    Rte_Stub_Reset();',
     `    ${swc}_Init();`,
-    ...providedChecks,
+    ...ports.provided.map((port) => `    CHECK(${writeCount(port)} == 1U);`),
     '    CHECK(Rte_Stub_PP_SmStatus_ActiveState_WriteCount == 1U);',
     '    CHECK(Rte_Stub_PP_SmStatus_ErrorStatus_WriteCount == 1U);',
     '    CHECK(Rte_Stub_PP_SmStatus_ErrorStatus_Value == 0U);',
+    '#ifdef ADIA_TESTING',
+    ...ports.provided.map((port) => `    CHECK(${providedValueMatchesData(port)});`),
+    '    CHECK(Rte_Stub_PP_SmStatus_ActiveState_Value == (uint16)SM_GetActiveSlot(g_inst, 0U));',
+    '#endif',
+    `    CHECK(${dem} == 0U);`,
+    '    CHECK(Rte_Stub_RP_SmFaultEvent_CallCount == 0U);',
     '',
     '    /* Cyclic execution: no error, ports and the Dem event written every cycle. */',
     '    for (cycle = 1U; cycle <= CYCLES; ++cycle) {',
-    `        ${swc}_MainFunction();`,
+    '        run_cycle();',
     '        CHECK(Rte_Stub_PP_SmStatus_ErrorStatus_Value == 0U);',
-    '        CHECK(Rte_Stub_RP_SmFaultEvent_LastStatus == DEM_EVENT_STATUS_PASSED);',
+    `        CHECK(${dem} == DEM_EVENT_STATUS_PASSED);`,
     '        CHECK(Rte_Stub_RP_SmFaultEvent_CallCount == cycle);',
     '        CHECK(Rte_Stub_PP_SmStatus_ActiveState_WriteCount == (1U + cycle));',
-    ...cycleChecks,
+    ...ports.provided.map((port) => `        CHECK(${writeCount(port)} == (1U + cycle));`),
+    '#ifdef ADIA_TESTING',
+    '        CHECK(Rte_Stub_PP_SmStatus_ActiveState_Value == (uint16)SM_GetActiveSlot(g_inst, 0U));',
+    ...ports.provided.map((port) => `        CHECK(${providedValueMatchesData(port)});`),
+    '#endif',
     '    }',
+    '}',
     '',
-    '    /* A failed read (RTE_E_NO_DATA) must not disturb the cyclic behaviour. */',
-    ...(failing === undefined
+    '/* Black-box check available in every build: a failed read does not disturb the cyclic behaviour. */',
+    'static void test_failed_read(void)',
+    '{',
+    ...(ports.required[0] === undefined
       ? ['    /* The model has no required port. */']
       : [
-        `    Rte_Stub_RP_${failing.cName}_${failing.dataElementName}_Status = RTE_E_NO_DATA;`,
-        `    ${swc}_MainFunction();`,
+        '    Rte_Stub_Reset();',
+        `    ${swc}_Init();`,
+        `    Rte_Stub_RP_${ports.required[0].cName}_${ports.required[0].dataElementName}_Status = RTE_E_NO_DATA;`,
+        '    run_cycle();',
         '    CHECK(Rte_Stub_PP_SmStatus_ErrorStatus_Value == 0U);',
-        '    CHECK(Rte_Stub_RP_SmFaultEvent_LastStatus == DEM_EVENT_STATUS_PASSED);',
-        `    Rte_Stub_RP_${failing.cName}_${failing.dataElementName}_Status = RTE_E_LOST_DATA;`,
-        `    ${swc}_MainFunction();`,
+        `    CHECK(${dem} == DEM_EVENT_STATUS_PASSED);`,
+        `    Rte_Stub_RP_${ports.required[0].cName}_${ports.required[0].dataElementName}_Status = RTE_E_LOST_DATA;`,
+        '    run_cycle();',
         '    CHECK(Rte_Stub_PP_SmStatus_ErrorStatus_Value == 0U);',
       ]),
+    '}',
     '',
+    'int main(void)',
+    '{',
     `    CHECK(${swcUpper}_PERIOD_MS > 0U);`,
+    `    CHECK(${limit} > 0U);`,
+    '    Rte_Stub_Reset();',
+    `    ${swc}_Init();`,
+    '#ifdef ADIA_TESTING',
+    `    g_inst = ${swc}_Test_GetInstance();`,
+    '    if (g_inst == NULL) {',
+    '        (void)printf("FAIL: no test instance\\n");',
+    '        return 1;',
+    '    }',
+    '#endif',
+    '    test_init_and_cyclic();',
+    '    test_failed_read();',
+    '#ifdef ADIA_TESTING',
+    ...ports.required.map((_port, index) => `    test_port_${index}();`),
+    '    test_forced_fault();',
+    '#else',
+    '    (void)printf("NOTE: white-box tests skipped, build with -DADIA_TESTING (make test does)\\n");',
+    '#endif',
     '    if (failures != 0) {',
     '        return 1;',
     '    }',
@@ -402,6 +597,8 @@ export const renderMakefile = (): string => [
   '# Usage: make test    (from this directory, or: make -C <dir> test)',
   'CC ?= gcc',
   'CFLAGS ?= -std=c99 -pedantic-errors -Wall -Wextra -Werror',
+  '# The host test needs the test hooks (instance access, fault injection); production builds do not define this.',
+  'TEST_DEFS = -DADIA_TESTING',
   'INCLUDES = -Iswc -Icore -Istubs',
   'SOURCES = $(wildcard swc/*.c) $(wildcard core/*.c) $(wildcard stubs/*.c) $(wildcard test/*.c)',
   'TARGET = build/swc_host_test',
@@ -412,7 +609,7 @@ export const renderMakefile = (): string => [
   '',
   '$(TARGET): $(SOURCES) $(wildcard swc/*.h) $(wildcard core/*.h) $(wildcard stubs/*.h)',
   '\t@mkdir -p build',
-  '\t$(CC) $(CFLAGS) $(INCLUDES) $(SOURCES) -o $(TARGET) -lm',
+  '\t$(CC) $(CFLAGS) $(TEST_DEFS) $(INCLUDES) $(SOURCES) -o $(TARGET) -lm',
   '',
   'test: $(TARGET)',
   '\t./$(TARGET)',
