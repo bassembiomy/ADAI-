@@ -87,3 +87,28 @@ subset checks, determinism, and error paths. Plus `npx tsc --noEmit` and the exi
 - No qualified MISRA tool (e.g. Polyspace, PC-lint, Helix QAC) is available here; `checkMisraSubset`
   covers textually decidable rules only, and the report states this.
 - AUTOSAR Adaptive (C++14, ara::com) is not generated.
+
+---
+
+# Phase 2 — production hardening (weak points found in review of phase 1)
+
+Acceptance: `npx vitest run src/utils/stateMachine/autosar` (adds `autosarProduction.test.ts`, planner-owned)
+plus every phase-1 command.
+
+| # | Weak point in phase 1 | Requirement |
+|---|---|---|
+| W1 | Generated unit test covered 91 % lines / 50 % branches of the SWC; fault path (Dem FAILED, safe-output hook) never ran; read-failure retention could not be observed. | `<SWC>.c` exposes `ADIA_Instance_t *<SWC>_Test_GetInstance(void)` **only under `#ifdef ADIA_TESTING`** (declared in `<SWC>.h` under the same guard). The Makefile `test` target builds with `-DADIA_TESTING`. The generated test drives every branch of the SWC: per-port read accept/reject (incl. `RTE_E_LOST_DATA`, non-finite floats), RTE error limit, forced core fault (`SM_Test_SetStateActive`) → Dem FAILED + safe state. Gate: **100 % line coverage, ≥ 90 % branches taken** (gcov) on `swc/<SWC>.c`. A production build (no `ADIA_TESTING`) contains no `_Test_` symbol. |
+| W2 | Generated test had no proven fault-detection power. | Mutation gate: removing user port writes, swapping Dem PASSED/FAILED, or rejecting `RTE_E_LOST_DATA` each make `make test` fail. Stub defines `RTE_E_INVALID` (1). |
+| W3 | Only gcc `-Wall -Wextra` on gcc. | Also clean under `gcc -fanalyzer -Werror` (swc + core), `clang -std=c99 -Wall -Wextra -pedantic -Werror` (build + run), and ASan + UBSan (`-fno-sanitize-recover=all`) on the behaviour test and a 70 000-cycle soak. |
+| W4 | A float input of NaN/Inf from the bus was accepted. | Non-finite float reads are rejected (last valid value kept) and count as a read failure. |
+| W5 | A permanently lost signal was silently held forever. | Per required port, consecutive failed reads are counted (saturating, never wraps). When any port reaches `<SWCU>_RTE_ERROR_LIMIT` (default `10U`, overridable with `#ifndef`), MainFunction reports Dem FAILED; one good read of that port clears it. Documented in the Integration Guide. |
+| W6 | Fractional `tickMs` emitted `2.5U` (invalid C). | `tickMs` must be a positive integer → else error `AUTOSAR_INVALID_PERIOD`. |
+| W7 | 64-bit variables silently lose precision (core stores them as double). | Warning `[AUTOSAR_64BIT_PRECISION]` naming the variable. |
+| W8 | Variables neither read nor written became dead R-ports. | Excluded from ports/ARXML, warning `[AUTOSAR_UNUSED_VARIABLE]` naming the variable. Read = used in a guard, an action right-hand side, or an X-Bridges input boundary. |
+| W9 | MISRA Rule 5.1 (external identifiers distinct in 31 chars) unchecked: long SWC/state names collide. | Checker gains Rule 5.1 (cross-file, external names only), 16.4 (switch has default), 21.4 (setjmp.h), 21.5 (signal.h), 21.10 (time.h). Violations block generation (`AUTOSAR_MISRA_VIOLATION`, message names the rule). `toAutosarSwcName` caps names at 18 chars so the UI never produces a 5.1 clash. |
+| W10 | ARXML lacked integration-relevant facts. | `SUPPORTS-MULTIPLE-INSTANTIATION` = false (static instance); every runnable `CAN-BE-INVOKED-CONCURRENTLY` = false; com-spec INIT-VALUEs equal model initial values; `SWC-IMPLEMENTATION/RESOURCE-CONSUMPTION/MEMORY-SECTIONS` lists exactly the memory sections used in the C code, each with a resolving `SW-ADDRMETHOD-REF`. |
+| W11 | No traceability between model, generator and artefacts. | Exported `AUTOSAR_GENERATOR_VERSION` (semver). SWC `.c`/`.h`, ARXML and both docs carry `ADIA-AUTOSAR-GENERATOR: <version>` and the same `ADIA-FINGERPRINT: <16 hex>` (deterministic hash of the model); it changes when the model changes. |
+| W12 | AUTOSAR pipeline duplicated `generateMISRACCode`'s front end (drift risk). | Share the migrate → validate → build front end with `generateMISRACCode` (one helper used by both). Parity: every error id `generateMISRACCode` reports for an invalid model is reported by `generateAutosarSwc`. |
+| W13 | Type round trip only proven for boolean/float64/uint8. | Every ADIA type (bool, int8, uint8, int16, uint16, int32, uint32, int, uint, float, double, int64) round-trips extreme values input port → core → output port. |
+| W14 | Scale untested. | 40 inputs, 40 outputs, 15-state chain: generates < 5 s, MISRA clean, builds and its generated test passes. |
+| W15 | Docs not auditable. | MISRA doc lists deviations with ids `DEV-<n>`, each with a rule reference and rationale; Integration Guide lists every port, the period, `<SWCU>_RTE_ERROR_LIMIT` and the fingerprint. |
