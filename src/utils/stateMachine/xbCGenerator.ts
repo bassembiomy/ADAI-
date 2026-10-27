@@ -4498,7 +4498,22 @@ export const validateGeneratedCAST = (cCode: string): void => {
   }
 };
 
-export const renderXBSource = (ir: SemanticModel): string => {
+/**
+ * AUTOSAR/MISRA variant of the numeric helpers: Rule 15.6 requires compound
+ * statements, so single-line `if (...) return ...;` bodies get braces. The
+ * default (generic) output is unchanged.
+ */
+const toCompoundBodies = (source: string): string =>
+  source.replace(
+    /^(\s*)(if \([^\n]*\)) (return [^\n;]*;)$/gm,
+    (_match, indent: string, condition: string, statement: string) =>
+      `${indent}${condition} {\n${indent}    ${statement}\n${indent}}`,
+  );
+
+export const renderXBSource = (
+  ir: SemanticModel,
+  options: { platform?: 'generic' | 'autosar' } = {},
+): string => {
   for (const state of orderedXBStates(ir)) {
     for (const operationId of state.xBridges!.executionOrder) {
       const operation = state.xBridges!.operations[operationId];
@@ -4519,7 +4534,7 @@ export const renderXBSource = (ir: SemanticModel): string => {
     '#include <float.h>',
     '#include <math.h>',
     '',
-    NUMERIC_HELPERS,
+    options.platform === 'autosar' ? toCompoundBodies(NUMERIC_HELPERS) : NUMERIC_HELPERS,
     wrappers.length > 0 ? '' : false,
     ...wrappers,
   );

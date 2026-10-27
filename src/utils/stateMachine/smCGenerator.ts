@@ -40,6 +40,13 @@ export interface CGeneratorOptions {
   vectorCount?: number;
   reportSourceFiles?: readonly GeneratedCFile[];
   verificationEvidence?: VerificationEvidence;
+  /**
+   * Target platform of the rendered core. 'generic' (default) keeps the MCAL
+   * based output. 'autosar' omits every MCAL include/call: I/O belongs to the
+   * RTE and the safe-output hook SM_Platform_ApplySafeOutputs() is provided by
+   * the AUTOSAR software component.
+   */
+  platform?: 'generic' | 'autosar';
 }
 
 
@@ -1145,7 +1152,9 @@ export const renderMappingSource = (ir: SemanticModel): string => {
   );
 };
 
-export const renderSafetyHeader = (): string => lines(
+export const renderSafetyHeader = (
+  options: CGeneratorOptions = {},
+): string => lines(
   '#ifndef SM_SAFETY_H',
   '#define SM_SAFETY_H',
   '',
@@ -1153,11 +1162,21 @@ export const renderSafetyHeader = (): string => lines(
   '',
   'SM_Error_t SM_Validate_State_Consistency(const ADIA_Instance_t *instance);',
   'void SM_ApplySafeOutputs(ADIA_Instance_t *instance);',
+  options.platform === 'autosar'
+    ? '/* Platform hook, defined by the AUTOSAR software component. */'
+    : null,
+  options.platform === 'autosar'
+    ? 'void SM_Platform_ApplySafeOutputs(ADIA_Instance_t *instance);'
+    : null,
   '',
   '#endif /* SM_SAFETY_H */',
 );
 
-export const renderSafetySource = (ir: SemanticModel): string => {
+export const renderSafetySource = (
+  ir: SemanticModel,
+  options: CGeneratorOptions = {},
+): string => {
+  const autosar = options.platform === 'autosar';
   const states = orderedStates(ir);
   const layers = orderedLayers(ir);
   const mappedOutputs = ir.ioMappings.filter(
@@ -1183,7 +1202,7 @@ export const renderSafetySource = (ir: SemanticModel): string => {
     '#include <stddef.h>',
     '#include "sm_safety.h"',
     '#include "sm_mapping.h"',
-    (ir.safetyMode || mappedOutputs.length > 0)
+    (!autosar && (ir.safetyMode || mappedOutputs.length > 0))
       ? '#include "mcal_dio.h"'
       : null,
     '',
@@ -1304,15 +1323,18 @@ export const renderSafetySource = (ir: SemanticModel): string => {
     '',
     'void SM_ApplySafeOutputs(ADIA_Instance_t *instance)',
     '{',
-    '    (void)instance;',
+    (autosar && ir.safetyMode) ? null : '    (void)instance;',
     mappedOutputs.length === 0
       ? null
       : mappedOutputs.map((mapping) =>
         mapping.channelDataType === 'bool'
           ? `    MCAL_Dio_WriteChannel(${channelMacro(mapping.channelId)}, ${mapping.safeValue === true ? 'true' : 'false'});`
           : `    MCAL_WriteChannelValue(${channelMacro(mapping.channelId)}, ${mapping.safeValue === null ? '0.0' : Number(mapping.safeValue).toString()});`).join('\n'),
-    (ir.safetyMode || mappedOutputs.length > 0)
+    (!autosar && (ir.safetyMode || mappedOutputs.length > 0))
       ? '    MCAL_ApplySafeOutputs();'
+      : null,
+    (autosar && ir.safetyMode)
+      ? '    SM_Platform_ApplySafeOutputs(instance);'
       : null,
     '}',
   );
@@ -1383,7 +1405,10 @@ export const renderMcalTestStubs = (): string => lines(
   '}',
 );
 
-export const renderCoreSource = (ir: SemanticModel): string => {
+export const renderCoreSource = (
+  ir: SemanticModel,
+  options: CGeneratorOptions = {},
+): string => {
   const index = buildIndex(ir);
   const states = orderedStates(ir);
   const rootLayer = ir.layers[ir.rootLayerId];
@@ -1485,7 +1510,7 @@ export const renderCoreSource = (ir: SemanticModel): string => {
     '#include "sm_mapping.h"',
     '#include "sm_safety.h"',
     '#include "sm_user_logic.h"',
-    '#include "mcal_dio.h"',
+    options.platform === 'autosar' ? null : '#include "mcal_dio.h"',
     '',
     '#ifdef SM_TRACE_ENABLED',
     'void SM_SetTraceSink(ADIA_Instance_t *instance, SM_TraceSink_t sink)',
@@ -1810,19 +1835,21 @@ export const generateCArtifacts = (
     { name: 'sm_mapping.h', content: renderMappingHeader() },
     { name: 'sm_mapping.c', content: renderMappingSource(ir) },
     { name: 'sm_core.h', content: renderCoreHeader() },
-    { name: 'sm_core.c', content: renderCoreSource(ir) },
-    { name: 'sm_safety.h', content: renderSafetyHeader() },
-    { name: 'sm_safety.c', content: renderSafetySource(ir) },
+    { name: 'sm_core.c', content: renderCoreSource(ir, options) },
+    { name: 'sm_safety.h', content: renderSafetyHeader(options) },
+    { name: 'sm_safety.c', content: renderSafetySource(ir, options) },
     { name: 'sm_user_logic.h', content: renderUserLogicHeader(ir) },
     { name: 'sm_user_logic.c', content: renderUserLogicSource(ir) },
-    { name: 'mcal_dio.h', content: renderMcalHeader(ir, options) },
+    ...(options.platform === 'autosar'
+      ? []
+      : [{ name: 'mcal_dio.h', content: renderMcalHeader(ir, options) }]),
     ...(orderedStates(ir).some((state) => state.xBridges !== null)
       ? [
           { name: 'sm_xbridges.h', content: renderXBHeader(ir) },
-          { name: 'sm_xbridges.c', content: renderXBSource(ir) },
+          { name: 'sm_xbridges.c', content: renderXBSource(ir, options) },
         ]
       : []),
-    ...(options.includeTestShims
+    ...(options.includeTestShims && options.platform !== 'autosar'
       ? [{ name: 'mcal_dio_test_stubs.c', content: renderMcalTestStubs() }]
       : []),
     ...(options.includeHostHarness

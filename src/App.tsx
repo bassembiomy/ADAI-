@@ -64,6 +64,7 @@ import {
 import { createStateMachineClipboard, pasteStateMachineClipboard, StateMachineClipboardData } from './utils/stateMachineClipboard';
 import { pruneStateHierarchy, pruneMultipleStatesHierarchy, countDescendants } from './utils/stateMachine/smStatePruner';
 import { generateMISRACCode, getCTimeType, validateInitialValue } from './utils/stateMachineCodeGenerator';
+import { generateAutosarSwc, toAutosarSwcName } from './utils/stateMachine/autosar/autosarSwcGenerator';
 import { applyAutostartEdit, canTransitionBeInternal, findPartiallyParallelRegions, findUnreachableStates, partiallyParallelRegionMessage } from './utils/stateMachine/smOrthogonalRegions';
 import { applyStateHistoryChange, getStateHistoryType, type StateHistoryType } from './utils/stateMachine/smHistoryRegion';
 import { findInternalTransitionSyntaxErrors } from './utils/stateMachine/smExpressions';
@@ -12996,6 +12997,45 @@ const ADIA = () => {
     }
   }, [tickMs, states, junctions, transitions, variables, layers, safetyMode, hilConfig, addError, validateModel, calculateChecksum, validateWithAI]);
 
+  // AUTOSAR CLASSIC SWC GENERATION (MISRA C, ARXML, RTE stubs, host test)
+  const generateAutosarCode = useCallback(async () => {
+    if (!validateModel()) {
+      return;
+    }
+
+    setIsGenerating(true);
+    try {
+      const projectFile = activeProjectPath ? (activeProjectPath.split(/[/\\]/).pop() ?? '') : '';
+      const swcName = toAutosarSwcName(projectFile || currentProjectName);
+      const chart = { tickMs, states, junctions, transitions, variables, layers, safetyMode };
+      const { files, errors: validationErrors, warnings } = generateAutosarSwc(chart, { swcName });
+
+      if (validationErrors.length > 0) {
+        setCodegenErrors(validationErrors);
+        setCodegenWarnings([]);
+        validationErrors.forEach(err => addError(err.type, err.message, err.source, err.elementId));
+        addError('error', `AUTOSAR generation blocked: ${validationErrors.length} errors found. Fix errors before generating.`);
+        setShowCodegenDialog(true);
+        return;
+      }
+
+      const checksums = files.map(f => `${f.name}:${calculateChecksum(f.content)}`).join(', ');
+      const logEntry = `[${new Date().toLocaleTimeString()}] Generated AUTOSAR SWC ${swcName}: ${checksums}`;
+      setGenerationLog(prev => [logEntry, ...prev]);
+
+      setGeneratedFiles(files);
+      setCodegenErrors([]);
+      setCodegenWarnings(warnings);
+      setShowCodegenDialog(true);
+      addError('info', `AUTOSAR Classic SWC '${swcName}' generated successfully.`);
+    } catch (error) {
+      console.error('AUTOSAR generation failed:', error);
+      addError('error', `AUTOSAR generation failed: ${error instanceof Error ? error.message : 'Unknown error'}. This might be an internal issue.`);
+    } finally {
+      setIsGenerating(false);
+    }
+  }, [tickMs, states, junctions, transitions, variables, layers, safetyMode, activeProjectPath, currentProjectName, addError, validateModel, calculateChecksum]);
+
   const renderStates = useCallback((): React.ReactNode => {
     return currentStates.map(state => {
       const isSelected = selectedIds.includes(state.id);
@@ -15065,6 +15105,21 @@ const ADIA = () => {
                 <polyline points="8 6 2 12 8 18" />
               </svg>
               {isGenerating ? 'Generating...' : 'Generate C/H'}
+            </Button>
+
+            <Button data-help-feature="app-generate-autosar" data-help-source="src/App.tsx"
+              variant="outline"
+              size="sm"
+              onClick={generateAutosarCode}
+              disabled={isGenerating}
+              className="h-7 px-2.5 text-xs font-semibold whitespace-nowrap bg-orange-500/10 border-orange-500/30 text-orange-500 hover:bg-orange-500/20 hover:text-orange-600 disabled:opacity-50 disabled:cursor-wait"
+              title="Generate AUTOSAR Classic SWC (MISRA C, ARXML, RTE)"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1">
+                <rect x="3" y="3" width="18" height="18" rx="2" />
+                <path d="M3 9h18M9 21V9" />
+              </svg>
+              Generate AUTOSAR
             </Button>
 
             <Separator orientation="vertical" className="h-4" />
