@@ -5,6 +5,8 @@ import { analyzeSemanticModel } from '../smAnalysisEngine';
 import { toCIdentifier } from './smExpressions';
 import {
   expressionHasDivision,
+  actionStoreIsTrivial,
+  expressionNeedsModelArithmetic,
   isDivisionGuarded,
   renderCAction,
   renderCExpression,
@@ -965,7 +967,7 @@ export const renderConfigHeader = (ir: SemanticModel): string => {
   );
 };
 
-export const renderCoreHeader = (): string => lines(
+export const renderCoreHeader = (options: CGeneratorOptions = {}): string => lines(
   '#ifndef SM_CORE_H',
   '#define SM_CORE_H',
   '',
@@ -983,6 +985,13 @@ export const renderCoreHeader = (): string => lines(
   '/* Deprecated: use SM_GetActiveSlot(). The argument is an active-slot ID. */',
   'SM_Node_t SM_GetActive(const ADIA_Instance_t *instance, SM_Group_t slot);',
   'SM_Error_t SM_GetError(const ADIA_Instance_t *instance);',
+  ...(options.platform === 'autosar'
+    ? [
+      '/* AUTOSAR platform: latches an externally detected fault (e.g. persistent loss of a required input) as SM_ERR_SAFETY_VIOLATION, */',
+      '/* exactly like a fault the core detects itself: every state is exited and, in safety mode, the safe state is entered. */',
+      'SM_Error_t SM_Report_External_Fault(ADIA_Instance_t *instance);',
+    ]
+    : []),
   ...(isDivisionGuarded()
     ? [
       '/* Guarded arithmetic (AUTOSAR platform): a zero divisor or a non-finite result latches SM_ERR_ARITHMETIC. */',
@@ -1491,6 +1500,21 @@ const renderGuardedArithmetic = (): string[] => [
   '',
 ];
 
+/**
+ * AUTOSAR platform: the model needs the model-exact arithmetic (division, arithmetic that can leave the range of its
+ * target, non-trivial narrowing stores). Without it the plain C casts are exact, so the default output stays lean.
+ */
+export const modelNeedsGuardedArithmetic = (ir: SemanticModel): boolean => {
+  const actions = [
+    ...Object.values(ir.states).flatMap((state) => [...state.entryActions, ...state.duringActions, ...state.exitActions]),
+    ...Object.values(ir.transitions).flatMap((transition) => transition.actions),
+  ];
+  return modelHasDivision(ir)
+    || actions.some((action) => !actionStoreIsTrivial(action, ir.variables)
+      || expressionNeedsModelArithmetic(action.value, ir.variables))
+    || Object.values(ir.transitions).some((transition) => expressionNeedsModelArithmetic(transition.guard, ir.variables));
+};
+
 export const modelHasDivision = (ir: SemanticModel): boolean => {
   const actions = [
     ...Object.values(ir.states).flatMap((state) => [...state.entryActions, ...state.duringActions, ...state.exitActions]),
@@ -1860,6 +1884,22 @@ export const renderCoreSource = (
     '    return instance == NULL ? SM_ERR_NULL_INSTANCE : instance->error_status;',
     '}',
     '',
+    ...(options.platform === 'autosar'
+      ? [
+        'SM_Error_t SM_Report_External_Fault(ADIA_Instance_t *instance)',
+        '{',
+        '    if (instance == NULL) {',
+        '        return SM_ERR_NULL_INSTANCE;',
+        '    }',
+        '    if (instance->error_status == SM_ERR_NONE) {',
+        '        instance->error_status = SM_ERR_SAFETY_VIOLATION;',
+        '    }',
+        '    SM_Enter_Fault(instance);',
+        '    return instance->error_status;',
+        '}',
+        '',
+      ]
+      : []),
     '#ifdef ADIA_TESTING',
     'SM_Error_t SM_Test_SetActiveState(ADIA_Instance_t *instance, uint32_t slot, SM_Node_t state)',
     '{',
@@ -1935,7 +1975,7 @@ export const generateCArtifacts = (
   options: CGeneratorOptions = {},
 ): CGeneratorResult =>
   // Only the AUTOSAR platform guards division; Generate C/H output stays byte-identical.
-  withGuardedDivision(options.platform === 'autosar' && modelHasDivision(ir), () =>
+  withGuardedDivision(options.platform === 'autosar' && modelNeedsGuardedArithmetic(ir), () =>
     generateCArtifactsUnguarded(ir, options));
 
 const generateCArtifactsUnguarded = (
@@ -1946,7 +1986,7 @@ const generateCArtifactsUnguarded = (
     { name: 'sm_config.h', content: renderConfigHeader(ir) },
     { name: 'sm_mapping.h', content: renderMappingHeader() },
     { name: 'sm_mapping.c', content: renderMappingSource(ir) },
-    { name: 'sm_core.h', content: renderCoreHeader() },
+    { name: 'sm_core.h', content: renderCoreHeader(options) },
     { name: 'sm_core.c', content: renderCoreSource(ir, options) },
     { name: 'sm_safety.h', content: renderSafetyHeader(options, ir.safetyMode) },
     { name: 'sm_safety.c', content: renderSafetySource(ir, options) },

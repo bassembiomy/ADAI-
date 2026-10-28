@@ -96,7 +96,7 @@ export const renderIntegrationGuide = (ctx: DocsContext): string => {
     '| `core/` | Verified state-machine core (no MCAL access). |',
     '| `arxml/` | Software-component description to import into the authoring tool. |',
     '| `stubs/` | Host-only stand-ins for the AUTOSAR stack (replace on integration). |',
-    '| `test/`, `Makefile` | Host unit test (`make test`). |',
+    '| `test/`, `Makefile` | Host unit test and back-to-back test against the ADIA semantic interpreter (`make test`). |',
     '| `doc/` | This guide and the MISRA compliance document. |',
     '',
     '## Ports',
@@ -109,19 +109,76 @@ export const renderIntegrationGuide = (ctx: DocsContext): string => {
     '| PP_SmStatus | provided | SRI_SmStatus | ErrorStatus | uint8 | 0 | Rte_Write_PP_SmStatus_ErrorStatus |',
     '| RP_SmFaultEvent | required | CSI_DemEvent | SetEventStatus(IN uint8 EventStatus) | uint8 | - | Rte_Call_RP_SmFaultEvent_SetEventStatus |',
     '',
-    'A variable assigned by any action of the model (state entry/during/exit, transition actions, X-Bridges outputs)',
-    'is a provided port; every other variable is a required port. Required ports are read with `Rte_Read_*`;',
-    'the value is accepted only when the status is `RTE_E_OK` or `RTE_E_LOST_DATA` (an overlaid flag: the data is',
-    'valid). On any other status, or when a float value is NaN/Inf, the last valid value is kept and the read counts',
-    'as a failure.',
+    ...(ports.mapped
+      ? [
+        'The ports follow the I/O mapping of the model: a `read` mapping is a required port, a `write` mapping a provided',
+        'port; every other variable is internal to the component (no port, RTE call or ARXML entry). Required ports are read',
+        'with `Rte_Read_*`; a read is valid when the status is `RTE_E_OK` or `RTE_E_LOST_DATA` (an overlaid flag: the data',
+        'is valid) and, for floats, the value is finite. Anything else is a failed read and the input policy of the port applies.',
+      ]
+      : [
+        'The model has no I/O mapping, so the directions were inferred: a variable assigned by any action of the model (state',
+        'entry/during/exit, transition actions, X-Bridges outputs) is a provided port; every other used variable is a required port.',
+        'Declare the inputs and outputs in the I/O mapping of the model to control the interface (see `[AUTOSAR_PORTS_INFERRED]`).',
+        'Required ports are read with `Rte_Read_*`; the value is accepted only when the status is `RTE_E_OK` or `RTE_E_LOST_DATA`',
+        '(an overlaid flag: the data is valid). On any other status, or when a float value is NaN/Inf, the last valid value is kept',
+        'and the read counts as a failure.',
+      ]),
     '',
+    ...(ports.mapped
+      ? [
+        '## Input policies and safe values',
+        '',
+        'Invalid-input policy of each required port (from the model verification settings):',
+        '',
+        '| Port | Variable | Policy | On a failed or invalid read |',
+        '|---|---|---|---|',
+        ...ports.required.map((port) => {
+          const policy = port.invalidInputPolicy ?? 'reject';
+          const range = port.clampMin === undefined && port.clampMax === undefined
+            ? ''
+            : ` (range ${port.clampMin ?? '-'} .. ${port.clampMax ?? '-'})`;
+          const behaviour: Record<string, string> = {
+            reject: 'the last valid value is held',
+            default: `the model initial value (${port.initValue}) is substituted immediately (fail-safe default)`,
+            clamp: `valid reads are clamped to the mapped channel range${range}; a failed read holds the last valid value`,
+            'diagnostic-fault': `the last valid value is held; when the consecutive failures reach \`${swcUpper}_RTE_ERROR_LIMIT\` the core fault is latched (safe state, safe values, Dem FAILED)`,
+          };
+          return `| ${port.portName} | ${port.cName} | ${policy} | ${behaviour[policy]} |`;
+        }),
+        '',
+        'Safe value of each provided port: while the core fault is latched (from the cycle in which it latches) the port',
+        'publishes its safe value instead of the model value.',
+        '',
+        '| Port | Variable | Safe value |',
+        '|---|---|---|',
+        ...ports.provided.map((port) =>
+          `| ${port.portName} | ${port.cName} | ${port.safeValue === undefined ? 'none (publishes the model value)' : String(port.safeValue)} |`),
+        '',
+        ...(ports.calibration.length > 0
+          ? [
+            '### Calibration candidates',
+            '',
+            'These variables are read by the model, never written and not mapped. They are compiled into the core as constants',
+            '(their initial value); turning them into AUTOSAR calibration parameters is a later step:',
+            '',
+            ...ports.calibration.map((name) => `- \`${name}\``),
+            '',
+          ]
+          : []),
+        ...(ports.internal.length > 0
+          ? [`Internal variables (written by the model, no port): ${ports.internal.map((name) => `\`${name}\``).join(', ')}.`, '']
+          : []),
+      ]
+      : []),
     ...(excluded.length > 0 ? ['Generator notes for this model:', '', ...excluded.map((item) => `- ${item}`), ''] : []),
     '## RTE error limit',
     '',
     `Per required port the generated code counts consecutive failed reads (saturating, never wraps). When any port`,
     `reaches \`${swcUpper}_RTE_ERROR_LIMIT\` (default \`10U\`, defined in \`swc/${swc}.h\` with \`#ifndef\`, override with`,
     `\`-D${swcUpper}_RTE_ERROR_LIMIT=<n>U\`) \`MainFunction\` reports \`DEM_EVENT_STATUS_FAILED\`. One good read of that port`,
-    'clears its counter and the event is reported as passed again (if the core reports no error).',
+    'clears its counter and the event is reported as passed again (if the core reports no error). A port with the policy',
+    '`diagnostic-fault` additionally latches the core fault (`SM_Report_External_Fault`), which is not cleared by a good read.',
     '',
     '## Runnables and events',
     '',
@@ -149,7 +206,7 @@ export const renderIntegrationGuide = (ctx: DocsContext): string => {
     'port to a configured Dem event in the system description.',
     '',
     ctx.safetyMode
-      ? 'Safety mode: on a fault the core enters the safe state and calls `SM_Platform_ApplySafeOutputs()` (in `swc/' + swc + '.c`). The safe values reach the provided ports because the runnable writes every provided port from the instance data after each step.'
+      ? 'Safety mode: on a fault the core enters the safe state and calls `SM_Platform_ApplySafeOutputs()` (in `swc/' + swc + '.c`), which publishes the provided ports; the runnable writes every provided port after each step (a port with a safe value publishes it while the fault is latched).'
       : null,
     '',
     '## Replacing the stubs',
@@ -169,7 +226,13 @@ export const renderIntegrationGuide = (ctx: DocsContext): string => {
     '## Host test',
     '',
     '`make test` compiles with `-std=c99 -pedantic-errors -Wall -Wextra -Werror -DADIA_TESTING` and runs `test/test_' + swc + '.c`.',
-    'The test drives every path of `swc/' + swc + '.c` (read accept/reject per port, non-finite floats, RTE error limit, forced core fault).',
+    'The test drives every path of `swc/' + swc + '.c` (read accept/reject per port, every input policy, non-finite floats, RTE error limit, forced core fault, safe values).',
+    '',
+    'It then runs the back-to-back test `test/test_' + swc + '_b2b.c` (prints `B2B PASSED`): seeded input vectors for every required port',
+    '(including failed reads, non-finite floats and bursts of failures) with the expected ActiveState, ErrorStatus flag and every provided',
+    'port per cycle, computed at generation time by the ADIA semantic interpreter (with the input conditioning and safe values applied).',
+    'The comparison needs no ADIA: integers and booleans exact, floats bit-exact or within 1e-12 relative. It assumes the default',
+    `\`${swcUpper}_RTE_ERROR_LIMIT\`.`,
     '',
     '## Traceability',
     '',

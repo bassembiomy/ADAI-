@@ -1,7 +1,7 @@
 import type { SemanticModel } from '../smSemanticModel';
 
 /** Version of the AUTOSAR generator; bump on every change of the generated output. */
-export const AUTOSAR_GENERATOR_VERSION = '2.0.0';
+export const AUTOSAR_GENERATOR_VERSION = '2.1.0';
 
 const canonicalize = (value: unknown): unknown => {
   if (Array.isArray(value)) return value.map(canonicalize);

@@ -62,6 +62,63 @@ export const expressionHasDivision = (node: ExpressionNode): boolean => {
   }
 };
 
+/** Operand of guarded arithmetic or comparison: a numeric literal is a plain double, exactly as the interpreter sees it. */
+const doubleLiteralText = (value: number): string => (Number.isInteger(value) ? `${value}.0` : String(value));
+
+const COMPARISONS = new Set(['<', '<=', '>', '>=', '==', '!=']);
+
+/**
+ * AUTOSAR platform: does this expression need the model's arithmetic (double evaluation)? Arithmetic, function calls,
+ * comparisons of operands of different type (C converts signed to unsigned) and negative literals in comparisons would
+ * otherwise wrap, be undefined behaviour (signed overflow, abs(INT_MIN)) or compare differently from the interpreter.
+ */
+export const expressionNeedsModelArithmetic = (
+  node: ExpressionNode,
+  variables: Readonly<Record<string, SemanticVariable>>,
+): boolean => {
+  switch (node.kind) {
+    case 'binary': {
+      if (node.operator === '+' || node.operator === '-' || node.operator === '*'
+        || node.operator === '/' || node.operator === '%') return true;
+      if (COMPARISONS.has(node.operator)) {
+        const left = variableType(node.left, variables);
+        const right = variableType(node.right, variables);
+        const negative = (side: ExpressionNode): boolean =>
+          side.kind === 'literal' && typeof side.value === 'number' && side.value < 0;
+        if ((left !== undefined && right !== undefined && left !== right) || negative(node.left) || negative(node.right)) {
+          return true;
+        }
+      }
+      return expressionNeedsModelArithmetic(node.left, variables) || expressionNeedsModelArithmetic(node.right, variables);
+    }
+    case 'unary': return node.operator === '-' || expressionNeedsModelArithmetic(node.operand, variables);
+    case 'call': return true;
+    default: return false;
+  }
+};
+
+/** A store that cannot overflow or change value: a bool target, an in-range literal or a same-typed variable. */
+export const actionStoreIsTrivial = (
+  action: ActionNode,
+  variables: Readonly<Record<string, SemanticVariable>>,
+): boolean => {
+  const target = variables[action.target];
+  const value = action.value;
+  if (target === undefined) return false;
+  if (target.type === 'bool') return !expressionNeedsModelArithmetic(value, variables);
+  if (value.kind === 'literal' && typeof value.value === 'number') {
+    const bounds = getTypeBounds(target.type);
+    return bounds === null
+      ? Number.isFinite(value.value) && target.type !== 'float' && target.type !== 'single'
+      : Number.isInteger(value.value) && value.value >= bounds.min && value.value <= bounds.max;
+  }
+  if (value.kind === 'variable') {
+    const source = variableType(value, variables);
+    return source !== undefined && (source === target.type || (target.type === 'double' && source !== 'int64' && source !== 'uint64'));
+  }
+  return false;
+};
+
 const renderLiteral = (
   value: number | boolean,
   expectedType?: VariableType,
@@ -79,6 +136,9 @@ const renderLiteral = (
   }
   return String(value);
 };
+
+const doubleOperand = (node: ExpressionNode, rendered: string): string =>
+  (node.kind === 'literal' && typeof node.value === 'number' ? doubleLiteralText(node.value) : rendered);
 
 const renderNode = (
   node: ExpressionNode,
@@ -100,11 +160,18 @@ const renderNode = (
       const left = renderNode(node.left, variables, operandType, resolveVariable);
       const right = renderNode(node.right, variables, operandType, resolveVariable);
       if (guardedDivision && (node.operator === '/' || node.operator === '%')) {
-        return `${node.operator === '/' ? 'SM_Div' : 'SM_Rem'}(instance, (double)(${left}), (double)(${right}))`;
+        return `${node.operator === '/' ? 'SM_Div' : 'SM_Rem'}(instance, (double)(${doubleOperand(node.left, left)}), (double)(${doubleOperand(node.right, right)}))`;
+      }
+      if (guardedDivision && (COMPARISONS.has(node.operator) || node.operator === '+' || node.operator === '-' || node.operator === '*')) {
+        // Model semantics: JavaScript numbers, i.e. doubles (exact for every integer type up to 2^53).
+        return `((double)(${doubleOperand(node.left, left)}) ${node.operator} (double)(${doubleOperand(node.right, right)}))`;
       }
       return `(${left} ${node.operator} ${right})`;
     }
     case 'unary':
+      if (guardedDivision && node.operator === '-') {
+        return `(-(double)(${doubleOperand(node.operand, renderNode(node.operand, variables, variableType(node.operand, variables) ?? expectedType, resolveVariable))}))`;
+      }
       return `(${node.operator}${renderNode(
         node.operand,
         variables,
@@ -112,6 +179,10 @@ const renderNode = (
         resolveVariable,
       )})`;
     case 'call':
+      if (guardedDivision) {
+        const argument = renderNode(node.argument, variables, variableType(node.argument, variables) ?? expectedType, resolveVariable);
+        return `${node.functionName === 'abs' ? 'fabs' : node.functionName}((double)(${doubleOperand(node.argument, argument)}))`;
+      }
       return `${node.functionName}(${renderNode(
         node.argument,
         variables,
@@ -163,7 +234,7 @@ export const renderCAction = (
   }
   // Once an arithmetic fault is latched the step is aborted in the model: no further assignment happens.
   const store = `instance->data.${target.cName}`;
-  if (!expressionHasDivision(action.value)) {
+  if (!expressionHasDivision(action.value) && actionStoreIsTrivial(action, variables)) {
     return [
       'if (instance->error_status == SM_ERR_NONE) {',
       `    ${store} = (${cType(target.type)})(${value});`,

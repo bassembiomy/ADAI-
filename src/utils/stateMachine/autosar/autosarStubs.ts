@@ -1,4 +1,4 @@
-import { coreCType, platformInitLiteral, type AutosarPort } from './autosarPorts';
+import { coreCType, INTEGER_RANGES, platformInitLiteral, portLiteral, type AutosarPort } from './autosarPorts';
 import { isFloatPlatformType, SWC_MEMORY_SECTIONS, type SwcRenderContext } from './autosarSwc';
 import { traceComment } from './autosarTrace';
 
@@ -328,12 +328,23 @@ export const renderRteStubSource = (ctx: SwcRenderContext): string => {
 
 /** Three distinct probe values of a port type, as [C expression of the port type, C expression of the core type]. */
 const probeValues = (port: AutosarPort): Array<[string, string]> => {
-  if (port.platformType === 'boolean') {
-    return [['TRUE', 'true'], ['FALSE', 'false'], ['TRUE', 'true']];
-  }
-  const literals = isFloatPlatformType(port.platformType) ? ['1.5', '2.5', '3.5'] : ['1', '2', '3'];
   const core = coreCType(port.platformType);
-  return literals.map((literal) => [`((${port.platformType})${literal})`, `((${core})${literal})`]);
+  if (port.platformType === 'boolean') {
+    // With an invalid-input policy the value after a failed read must be distinguishable from the initial value.
+    const second = port.invalidInputPolicy !== undefined && port.initValue === '0';
+    return second
+      ? [['FALSE', 'false'], ['TRUE', 'true'], ['FALSE', 'false']]
+      : [['TRUE', 'true'], ['FALSE', 'false'], ['TRUE', 'true']];
+  }
+  const float = isFloatPlatformType(port.platformType);
+  let numbers: number[] = float ? [1.5, 2.5, 3.5] : [1, 2, 3];
+  if (port.clampMin !== undefined || port.clampMax !== undefined) {
+    const range = INTEGER_RANGES[port.platformType];
+    const low = Math.max(port.clampMin ?? (range === undefined ? -1000 : range[0]), -1000);
+    const high = Math.min(port.clampMax ?? (range === undefined ? 1000 : range[1]), 1000);
+    if (numbers.some((value) => value < low || value > high)) numbers = [low, high, low];
+  }
+  return numbers.map((value) => [`((${port.platformType})${value})`, `((${core})${value})`]);
 };
 
 export const renderUnitTest = (ctx: SwcRenderContext): string => {
@@ -345,24 +356,119 @@ export const renderUnitTest = (ctx: SwcRenderContext): string => {
   const providedValueMatchesData = (port: AutosarPort): string => port.platformType === 'boolean'
     ? `Rte_Stub_PP_${port.cName}_${port.dataElementName}_Value == (g_inst->data.${port.cName} ? TRUE : FALSE)`
     : `Rte_Stub_PP_${port.cName}_${port.dataElementName}_Value == (${port.platformType})g_inst->data.${port.cName}`;
+  /** While the core fault is latched a provided port with a safe value publishes it instead of the data value. */
+  const providedValueAfterFault = (port: AutosarPort): string => port.safeValue === undefined
+    ? providedValueMatchesData(port)
+    : `Rte_Stub_PP_${port.cName}_${port.dataElementName}_Value == ${portLiteral(port.platformType, port.safeValue)}`;
 
+  const safeChecks = (): string[] => ports.provided
+    .filter((port) => port.safeValue !== undefined)
+    .map((port) => `    CHECK(Rte_Stub_PP_${port.cName}_${port.dataElementName}_Value == ${portLiteral(port.platformType, port.safeValue as number | boolean)}); /* safe value */`);
   const portTests = ports.required.flatMap((port, index) => {
     const value = `Rte_Stub_RP_${port.cName}_${port.dataElementName}_Value`;
     const status = `Rte_Stub_RP_${port.cName}_${port.dataElementName}_Status`;
     const data = `g_inst->data.${port.cName}`;
     const [one, two, three] = probeValues(port);
     const isFloat = isFloatPlatformType(port.platformType);
+    const policy = port.invalidInputPolicy;
+    const diagnostic = policy === 'diagnostic-fault';
+    const initCore = port.platformType === 'boolean'
+      ? (port.initValue === '1' ? 'true' : 'false')
+      : `((${coreCType(port.platformType)})${platformInitLiteral(port)})`;
+    /** What the core holds after a failed read: the last valid value, or the initial value for policy "default". */
+    const held = policy === 'default' ? initCore : two[1];
+    const heldText = policy === 'default' ? 'initial value substituted (policy default)' : 'last valid value kept';
     const nonFinite = isFloat
       ? [
         ['NAN', '(NaN)'], ['INFINITY', '(+Inf)'], ['-INFINITY', '(-Inf)'],
       ].flatMap(([literal, label]) => [
         `    ${value} = (${port.platformType})${literal};`,
         '    run_cycle();',
-        `    CHECK(${data} == ${two[1]}); /* non-finite ${label} rejected, last valid value kept */`,
+        `    CHECK(${data} == ${held}); /* non-finite ${label} rejected, ${heldText} */`,
       ])
       : [];
+    const clampTests: string[] = policy !== 'clamp' ? [] : [
+      '    /* policy clamp: valid reads are clamped to the mapped channel range; a failed read keeps the last value */',
+      ...(port.clampMax === undefined ? [] : [
+        `    ${value} = (${port.platformType})(${portLiteral(port.platformType, port.clampMax)} + ${isFloat ? '1.0' : '1'});`,
+        '    run_cycle();',
+        `    CHECK(${data} == ((${coreCType(port.platformType)})${portLiteral(port.platformType, port.clampMax)}));`,
+        `    ${value} = (${port.platformType})${portLiteral(port.platformType, port.clampMax)};`,
+        '    run_cycle();',
+        `    CHECK(${data} == ((${coreCType(port.platformType)})${portLiteral(port.platformType, port.clampMax)})); /* the bound itself is valid */`,
+      ]),
+      ...(port.clampMin === undefined ? [] : [
+        `    ${value} = (${port.platformType})(${portLiteral(port.platformType, port.clampMin)} - ${isFloat ? '1.0' : '1'});`,
+        '    run_cycle();',
+        `    CHECK(${data} == ((${coreCType(port.platformType)})${portLiteral(port.platformType, port.clampMin)}));`,
+        `    ${value} = (${port.platformType})${portLiteral(port.platformType, port.clampMin)};`,
+        '    run_cycle();',
+        `    CHECK(${data} == ((${coreCType(port.platformType)})${portLiteral(port.platformType, port.clampMin)})); /* the bound itself is valid */`,
+      ]),
+      `    ${status} = RTE_E_NO_DATA;`,
+      `    ${value} = ${three[0]};`,
+      '    run_cycle();',
+      `    CHECK(${data} == ((${coreCType(port.platformType)})${portLiteral(port.platformType, (port.clampMin ?? port.clampMax) as number)})); /* failed read: last value kept */`,
+      `    ${status} = RTE_E_OK;`,
+    ];
+    const limitTests = diagnostic
+      ? [
+        '    /* policy diagnostic-fault: the core fault is latched when the consecutive failures reach the error limit */',
+        '    Rte_Stub_Reset();',
+        `    ${swc}_Init();`,
+        `    ${status} = RTE_E_NO_DATA;`,
+        `    for (cycle = 1U; cycle < ${limit}; cycle++) {`,
+        '        run_cycle();',
+        `        CHECK(${dem} == DEM_EVENT_STATUS_PASSED);`,
+        '        CHECK(Rte_Stub_PP_SmStatus_ErrorStatus_Value == 0U);',
+        '    }',
+        '    run_cycle();',
+        `    CHECK(${dem} == DEM_EVENT_STATUS_FAILED);`,
+        '    CHECK(Rte_Stub_PP_SmStatus_ErrorStatus_Value != 0U); /* the core fault is latched */',
+        '    CHECK(SM_GetError(g_inst) != SM_ERR_NONE);',
+        ...safeChecks(),
+        `    ${status} = RTE_E_OK;`,
+        '    run_cycle();',
+        `    CHECK(${dem} == DEM_EVENT_STATUS_FAILED); /* a good read does not clear a latched core fault */`,
+        '    CHECK(Rte_Stub_PP_SmStatus_ErrorStatus_Value != 0U);',
+        ...safeChecks(),
+        `    ${swc}_Init(); /* re-initialisation recovers */`,
+        '    run_cycle();',
+        `    CHECK(${dem} == DEM_EVENT_STATUS_PASSED);`,
+        '    CHECK(Rte_Stub_PP_SmStatus_ErrorStatus_Value == 0U);',
+      ]
+      : [
+        '    /* RTE error limit: reached after exactly the limit of consecutive failures, saturating, cleared by one good read */',
+        '    Rte_Stub_Reset();',
+        `    ${swc}_Init();`,
+        `    ${status} = RTE_E_NO_DATA;`,
+        `    for (cycle = 1U; cycle < ${limit}; cycle++) {`,
+        '        run_cycle();',
+        `        CHECK(${dem} == DEM_EVENT_STATUS_PASSED);`,
+        '    }',
+        '    run_cycle();',
+        `    CHECK(${dem} == DEM_EVENT_STATUS_FAILED);`,
+        '    CHECK(Rte_Stub_PP_SmStatus_ErrorStatus_Value == 0U); /* not a core error */',
+        `    for (cycle = 0U; cycle < (${limit} + 2U); cycle++) {`,
+        '        run_cycle();',
+        '    }',
+        `    CHECK(${dem} == DEM_EVENT_STATUS_FAILED);`,
+        `    ${status} = RTE_E_OK;`,
+        '    run_cycle();',
+        `    CHECK(${dem} == DEM_EVENT_STATUS_PASSED);`,
+        `    if (${limit} > 1U) {`,
+        `        ${status} = RTE_E_NO_DATA;`,
+        `        for (cycle = 0U; cycle < ${limit}; cycle++) {`,
+        '            run_cycle();',
+        '        }',
+        `        CHECK(${dem} == DEM_EVENT_STATUS_FAILED);`,
+        `        ${swc}_Init(); /* clears every failure counter */`,
+        '        run_cycle();',
+        `        CHECK(${dem} == DEM_EVENT_STATUS_PASSED);`,
+        '    }',
+      ];
     return [
-      `/* Required port ${port.portName} (${port.platformType}). */`,
+      `/* Required port ${port.portName} (${port.platformType}${policy === undefined ? '' : `, invalid-input policy ${policy}`}). */`,
       `static void test_port_${index}(void)`,
       '{',
       '    uint32 cycle;',
@@ -378,51 +484,25 @@ export const renderUnitTest = (ctx: SwcRenderContext): string => {
       `    ${status} = RTE_E_LOST_DATA;`,
       '    run_cycle();',
       `    CHECK(${data} == ${two[1]});`,
-      '    /* reject: any other status keeps the last valid value */',
+      `    /* reject: any other status is a failed read (${heldText}) */`,
       `    ${value} = ${three[0]};`,
       `    ${status} = RTE_E_NO_DATA;`,
       '    run_cycle();',
-      `    CHECK(${data} == ${two[1]});`,
+      `    CHECK(${data} == ${held});`,
       `    ${status} = RTE_E_NEVER_RECEIVED;`,
       '    run_cycle();',
-      `    CHECK(${data} == ${two[1]});`,
+      `    CHECK(${data} == ${held});`,
       `    ${status} = RTE_E_INVALID;`,
       '    run_cycle();',
-      `    CHECK(${data} == ${two[1]});`,
+      `    CHECK(${data} == ${held});`,
       `    ${status} = RTE_E_OK;`,
       ...nonFinite,
       `    ${value} = ${one[0]};`,
       '    run_cycle();',
       `    CHECK(${data} == ${one[1]});`,
+      ...clampTests,
       '',
-      '    /* RTE error limit: reached after exactly the limit of consecutive failures, saturating, cleared by one good read */',
-      '    Rte_Stub_Reset();',
-      `    ${swc}_Init();`,
-      `    ${status} = RTE_E_NO_DATA;`,
-      `    for (cycle = 1U; cycle < ${limit}; cycle++) {`,
-      '        run_cycle();',
-      `        CHECK(${dem} == DEM_EVENT_STATUS_PASSED);`,
-      '    }',
-      '    run_cycle();',
-      `    CHECK(${dem} == DEM_EVENT_STATUS_FAILED);`,
-      '    CHECK(Rte_Stub_PP_SmStatus_ErrorStatus_Value == 0U); /* not a core error */',
-      `    for (cycle = 0U; cycle < (${limit} + 2U); cycle++) {`,
-      '        run_cycle();',
-      '    }',
-      `    CHECK(${dem} == DEM_EVENT_STATUS_FAILED);`,
-      `    ${status} = RTE_E_OK;`,
-      '    run_cycle();',
-      `    CHECK(${dem} == DEM_EVENT_STATUS_PASSED);`,
-      `    if (${limit} > 1U) {`,
-      `        ${status} = RTE_E_NO_DATA;`,
-      `        for (cycle = 0U; cycle < ${limit}; cycle++) {`,
-      '            run_cycle();',
-      '        }',
-      `        CHECK(${dem} == DEM_EVENT_STATUS_FAILED);`,
-      `        ${swc}_Init(); /* clears every failure counter */`,
-      '        run_cycle();',
-      `        CHECK(${dem} == DEM_EVENT_STATUS_PASSED);`,
-      '    }',
+      ...limitTests,
       ...(isFloat
         ? [
           '',
@@ -436,7 +516,7 @@ export const renderUnitTest = (ctx: SwcRenderContext): string => {
           `    CHECK(${dem} == DEM_EVENT_STATUS_FAILED);`,
           `    ${value} = ${one[0]};`,
           '    run_cycle();',
-          `    CHECK(${dem} == DEM_EVENT_STATUS_PASSED);`,
+          `    CHECK(${dem} == DEM_EVENT_STATUS_${diagnostic ? 'FAILED' : 'PASSED'});`,
         ]
         : []),
       '}',
@@ -525,7 +605,7 @@ export const renderUnitTest = (ctx: SwcRenderContext): string => {
       ? [
         '    /* Safety mode: the safe state was entered and its outputs published by the platform hook. */',
         '    CHECK(SM_GetError(g_inst) != SM_ERR_NONE);',
-        ...ports.provided.map((port) => `    CHECK(${providedValueMatchesData(port)});`),
+        ...ports.provided.map((port) => `    CHECK(${providedValueAfterFault(port)});`),
         ...(firstProvided !== undefined ? [`    CHECK(${writeCount(firstProvided)} == 3U); /* hook + runnable */`] : []),
       ]
       : []),
@@ -624,26 +704,36 @@ export const renderUnitTest = (ctx: SwcRenderContext): string => {
 };
 
 export const renderMakefile = (): string => [
-  '# Host build of the AUTOSAR SWC package: builds and runs the unit test.',
+  '# Host build of the AUTOSAR SWC package: builds and runs the unit test and the back-to-back test.',
   '# Usage: make test    (from this directory, or: make -C <dir> test)',
   'CC ?= gcc',
   'CFLAGS ?= -std=c99 -pedantic-errors -Wall -Wextra -Werror',
   '# The host test needs the test hooks (instance access, fault injection); production builds do not define this.',
   'TEST_DEFS = -DADIA_TESTING',
   'INCLUDES = -Iswc -Icore -Istubs',
-  'SOURCES = $(wildcard swc/*.c) $(wildcard core/*.c) $(wildcard stubs/*.c) $(wildcard test/*.c)',
+  'COMMON_SOURCES = $(wildcard swc/*.c) $(wildcard core/*.c) $(wildcard stubs/*.c)',
+  '# test/test_<SWC>.c is the unit test, test/test_<SWC>_b2b.c compares the component with the ADIA semantic interpreter.',
+  'B2B_SOURCES = $(wildcard test/*_b2b.c)',
+  'UNIT_SOURCES = $(filter-out $(B2B_SOURCES),$(wildcard test/*.c))',
   'TARGET = build/swc_host_test',
+  'B2B_TARGET = build/swc_b2b_test',
+  'HEADERS = $(wildcard swc/*.h) $(wildcard core/*.h) $(wildcard stubs/*.h)',
   '',
   '.PHONY: all test clean',
   '',
-  'all: $(TARGET)',
+  'all: $(TARGET) $(B2B_TARGET)',
   '',
-  '$(TARGET): $(SOURCES) $(wildcard swc/*.h) $(wildcard core/*.h) $(wildcard stubs/*.h)',
+  '$(TARGET): $(COMMON_SOURCES) $(UNIT_SOURCES) $(HEADERS)',
   '\t@mkdir -p build',
-  '\t$(CC) $(CFLAGS) $(TEST_DEFS) $(INCLUDES) $(SOURCES) -o $(TARGET) -lm',
+  '\t$(CC) $(CFLAGS) $(TEST_DEFS) $(INCLUDES) $(COMMON_SOURCES) $(UNIT_SOURCES) -o $(TARGET) -lm',
   '',
-  'test: $(TARGET)',
+  '$(B2B_TARGET): $(COMMON_SOURCES) $(B2B_SOURCES) $(HEADERS)',
+  '\t@mkdir -p build',
+  '\t$(CC) $(CFLAGS) $(TEST_DEFS) -DADIA_B2B_MAIN $(INCLUDES) $(COMMON_SOURCES) $(B2B_SOURCES) -o $(B2B_TARGET) -lm',
+  '',
+  'test: $(TARGET) $(B2B_TARGET)',
   '\t./$(TARGET)',
+  '\t./$(B2B_TARGET)',
   '',
   'clean:',
   '\trm -rf build',

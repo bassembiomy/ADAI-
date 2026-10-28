@@ -2,6 +2,9 @@ import type { VariableType } from '../../../types/sm_types';
 import type { ExpressionNode } from '../smExpressions';
 import type { SemanticModel } from '../smSemanticModel';
 
+/** Invalid-input policy of a required port (`SMInvalidInputPolicy` of the model's verification configuration). */
+export type AutosarInputPolicy = 'reject' | 'default' | 'clamp' | 'diagnostic-fault';
+
 export interface AutosarPort {
   variableId: string;
   /** Port prototype short name: PP_<cName> (provided) or RP_<cName> (required). */
@@ -14,6 +17,13 @@ export interface AutosarPort {
   initValue: string;
   /** C identifier of the variable inside SM_Data_t. */
   cName: string;
+  /** Required ports of a model with I/O mappings: the model's policy for failed or invalid reads. */
+  invalidInputPolicy?: AutosarInputPolicy;
+  /** Provided ports: value published while the core fault is latched (write mapping `safeValue`). */
+  safeValue?: number | boolean;
+  /** Required ports with policy `clamp`: effective bounds (a bound that cannot restrict the type is absent). */
+  clampMin?: number;
+  clampMax?: number;
 }
 
 export interface AutosarPortModel {
@@ -21,7 +31,36 @@ export interface AutosarPortModel {
   required: AutosarPort[];
   /** Model names of variables neither read nor written: no port is derived for them. */
   unused: string[];
+  /** true: the model's I/O mappings define the interface; false: directions are inferred from usage. */
+  mapped: boolean;
+  /** Mapped: names of read-mapped variables assigned by an action (an error). */
+  inputsWrittenByModel: string[];
+  /** Inferred: names of variables both read and written (direction is a guess). */
+  ambiguous: string[];
+  /** Mapped: unmapped, never-written, read variables (compiled-in constants, calibration candidates). */
+  calibration: string[];
+  /** Mapped: unmapped variables the model both writes and reads (internal state, no port). */
+  internal: string[];
+  /** Mapped: names of write-mapped variables. */
+  writeMapped: string[];
+  /** Mapped: names of write-mapped variables without a safe value. */
+  missingSafeValue: string[];
 }
+
+/** Value range of each platform integer type (64 bit: the exact double range, as the core evaluates in double). */
+export const INTEGER_RANGES: Record<string, [number, number]> = {
+  sint8: [-128, 127],
+  uint8: [0, 255],
+  sint16: [-32768, 32767],
+  uint16: [0, 65535],
+  sint32: [-2147483648, 2147483647],
+  uint32: [0, 4294967295],
+  sint64: [-(2 ** 53 - 1), 2 ** 53 - 1],
+  uint64: [0, 2 ** 53 - 1],
+};
+
+export const isFloatPortType = (platformType: string): boolean =>
+  platformType === 'float32' || platformType === 'float64';
 
 export const toAutosarPlatformType = (type: VariableType): string => {
   switch (type) {
@@ -108,34 +147,118 @@ const readVariableNames = (ir: SemanticModel): { names: Set<string>; ids: Set<st
   return { names, ids };
 };
 
+const normalizeSafeValue = (value: number | boolean, platformType: string): number | boolean => {
+  if (platformType === 'boolean') return typeof value === 'boolean' ? value : value !== 0;
+  const numeric = typeof value === 'boolean' ? (value ? 1 : 0) : value;
+  const range = INTEGER_RANGES[platformType];
+  if (range === undefined) return platformType === 'float32' ? Math.fround(numeric) : numeric;
+  return Math.min(range[1], Math.max(range[0], Math.trunc(numeric)));
+};
+
+/** Effective clamp bounds of a port: a bound that cannot restrict the type is omitted. */
+const clampBounds = (
+  platformType: string,
+  rangeMin: number | undefined,
+  rangeMax: number | undefined,
+): { clampMin?: number; clampMax?: number } => {
+  if (platformType === 'boolean') return {};
+  const integer = INTEGER_RANGES[platformType];
+  const low = rangeMin === undefined ? undefined : integer === undefined ? rangeMin : Math.ceil(rangeMin);
+  const high = rangeMax === undefined ? undefined : integer === undefined ? rangeMax : Math.floor(rangeMax);
+  if (low !== undefined && high !== undefined && low > high) return {};
+  const bounds: { clampMin?: number; clampMax?: number } = {};
+  if (low !== undefined && (integer === undefined || low > integer[0])) {
+    bounds.clampMin = platformType === 'float32' ? Math.fround(low) : low;
+  }
+  if (high !== undefined && (integer === undefined || high < integer[1])) {
+    bounds.clampMax = platformType === 'float32' ? Math.fround(high) : high;
+  }
+  return bounds;
+};
+
+const makePort = (
+  variable: SemanticModel['variables'][string],
+  direction: 'PP' | 'RP',
+): AutosarPort => {
+  const platformType = toAutosarPlatformType(variable.type);
+  return {
+    variableId: variable.id,
+    portName: `${direction}_${variable.cName}`,
+    interfaceName: `SRI_${variable.cName}`,
+    dataElementName: variable.cName,
+    platformType,
+    initValue: numericText(variable.initialValue, platformType),
+    cName: variable.cName,
+  };
+};
+
+/**
+ * Derives the AUTOSAR ports. With I/O mappings (the model's explicit declaration, edited in the I/O mapping UI)
+ * the mappings are authoritative: `read` is a required port, `write` a provided port, every other variable is
+ * internal. Without mappings the direction is inferred from usage (an assigned variable is an output).
+ */
 export const deriveAutosarPorts = (ir: SemanticModel): AutosarPortModel => {
   const assigned = assignedVariableIds(ir);
   const reads = readVariableNames(ir);
   const provided: AutosarPort[] = [];
   const required: AutosarPort[] = [];
   const unused: string[] = [];
+  const ambiguous: string[] = [];
+  const calibration: string[] = [];
+  const internal: string[] = [];
+  const inputsWrittenByModel: string[] = [];
+  const writeMapped: string[] = [];
+  const missingSafeValue: string[] = [];
+  const mapped = ir.ioMappings.length > 0;
+  const isReadByModel = (variable: SemanticModel['variables'][string]): boolean =>
+    reads.names.has(variable.cName) || reads.names.has(variable.name) || reads.ids.has(variable.id);
+  const readMappings = new Map<string, SemanticModel['ioMappings'][number]>();
+  const writeMappings = new Map<string, SemanticModel['ioMappings'][number]>();
+  for (const mapping of ir.ioMappings) {
+    const target = mapping.direction === 'read' ? readMappings : writeMappings;
+    if (!target.has(mapping.variableId)) target.set(mapping.variableId, mapping);
+  }
+
   for (const variable of Object.values(ir.variables)) {
-    const isProvided = assigned.has(variable.id);
-    const isRead = reads.names.has(variable.cName)
-      || reads.names.has(variable.name)
-      || reads.ids.has(variable.id);
-    if (!isProvided && !isRead) {
+    const isAssigned = assigned.has(variable.id);
+    const isRead = isReadByModel(variable);
+    if (mapped) {
+      const readMapping = readMappings.get(variable.id);
+      const writeMapping = writeMappings.get(variable.id);
+      if (readMapping !== undefined) {
+        if (isAssigned) inputsWrittenByModel.push(variable.name);
+        const port = makePort(variable, 'RP');
+        const policies = ir.verification.invalidInputPolicies;
+        port.invalidInputPolicy = policies[readMapping.id] ?? policies[readMapping.channelId] ?? policies[variable.id] ?? 'reject';
+        if (port.invalidInputPolicy === 'clamp') {
+          Object.assign(port, clampBounds(port.platformType, readMapping.channelRangeMin, readMapping.channelRangeMax));
+        }
+        required.push(port);
+      } else if (writeMapping !== undefined) {
+        const port = makePort(variable, 'PP');
+        writeMapped.push(variable.name);
+        if (writeMapping.safeValue === null) missingSafeValue.push(variable.name);
+        else port.safeValue = normalizeSafeValue(writeMapping.safeValue, port.platformType);
+        provided.push(port);
+      } else if (!isAssigned && !isRead) {
+        unused.push(variable.name);
+      } else if (!isAssigned) {
+        calibration.push(variable.name);
+      } else {
+        internal.push(variable.name);
+      }
+      continue;
+    }
+    if (!isAssigned && !isRead) {
       unused.push(variable.name);
       continue;
     }
-    const platformType = toAutosarPlatformType(variable.type);
-    const port: AutosarPort = {
-      variableId: variable.id,
-      portName: `${isProvided ? 'PP' : 'RP'}_${variable.cName}`,
-      interfaceName: `SRI_${variable.cName}`,
-      dataElementName: variable.cName,
-      platformType,
-      initValue: numericText(variable.initialValue, platformType),
-      cName: variable.cName,
-    };
-    (isProvided ? provided : required).push(port);
+    if (isAssigned && isRead) ambiguous.push(variable.name);
+    (isAssigned ? provided : required).push(makePort(variable, isAssigned ? 'PP' : 'RP'));
   }
-  return { provided, required, unused };
+  return {
+    provided, required, unused, mapped, inputsWrittenByModel, ambiguous, calibration, internal, writeMapped, missingSafeValue,
+  };
 };
 
 /** C literal of an initial value for a platform type. */
@@ -156,6 +279,10 @@ export const platformInitLiteral = (port: Pick<AutosarPort, 'platformType' | 'in
   }
   return `${digits}${platformType === 'sint64' ? 'LL' : ''}`;
 };
+
+/** C literal of an arbitrary value for a platform type (same spelling rules as the init value). */
+export const portLiteral = (platformType: string, value: number | boolean): string =>
+  platformInitLiteral({ platformType, initValue: numericText(value, platformType) });
 
 /** Core (stdint/bool/double) C type for a variable type. */
 export const coreCType = (platformType: string): string => {

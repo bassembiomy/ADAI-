@@ -120,6 +120,9 @@ export interface SemanticIOMapping {
   direction: 'read' | 'write';
   conversionExpression: ExpressionNode | null;
   safeValue: number | boolean | null;
+  /** Range of the mapped channel (finite values only); the AUTOSAR `clamp` input policy clamps to it. */
+  channelRangeMin?: number;
+  channelRangeMax?: number;
 }
 
 export interface SemanticJunction {

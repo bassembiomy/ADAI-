@@ -5,6 +5,7 @@ import type { SemanticModel } from '../smSemanticModel';
 import { runSmFrontEnd } from '../smFrontEnd';
 import { renderArxml } from './autosarArxml';
 import { renderIntegrationGuide, renderMisraCompliance } from './autosarDocs';
+import { renderB2bTest } from './autosarB2b';
 import { checkMisraSubset, type MisraFinding } from './autosarMisraChecker';
 import { deriveAutosarPorts, toAutosarPlatformType } from './autosarPorts';
 import {
@@ -21,6 +22,7 @@ import {
 } from './autosarStubs';
 import { renderSwcHeader, renderSwcSource, type SwcRenderContext } from './autosarSwc';
 import { AUTOSAR_GENERATOR_VERSION, modelFingerprint } from './autosarTrace';
+import { runAutosarOracle, type OracleRun } from './autosarVectors';
 
 export { deriveAutosarPorts, toAutosarPlatformType, AUTOSAR_GENERATOR_VERSION };
 export type { AutosarPort, AutosarPortModel } from './autosarPorts';
@@ -45,6 +47,9 @@ export interface AutosarPackageCore extends AutosarGeneratorResult {
 }
 
 const DEFAULT_SWC_NAME = 'AdiaSwc';
+/** Cycles and seed of the back-to-back vectors shipped in the package. */
+const B2B_CYCLES = 200;
+const B2B_SEED = 1;
 const SWC_NAME_PATTERN = /^[A-Za-z][A-Za-z0-9_]{0,127}$/;
 const SHORT_NAME_PATTERN = /^[A-Za-z][A-Za-z0-9_]*$/;
 const MAX_PERIOD_MS = 4294967295;
@@ -115,8 +120,10 @@ export const generateAutosarCore = (
       `'${swc}' is not a valid AUTOSAR short name (letter first, then letters, digits or underscore, at most 128 characters).`,
     )]);
   }
-  // I/O of an AUTOSAR application component goes through RTE ports, never MCAL.
-  const frontEnd = runSmFrontEnd(chart, { stripHil: true });
+  // The model's I/O mappings define the ports (read => required, write => provided); the mappings are kept in the
+  // semantic model for that classification only. I/O of an AUTOSAR component goes through RTE ports, never MCAL:
+  // the core is rendered without them (see `coreModel`).
+  const frontEnd = runSmFrontEnd(chart);
   const errors = [...frontEnd.errors];
   const warnings = [...frontEnd.warnings];
   const tick = frontEnd.ir?.tickMs ?? chart.tickMs;
@@ -130,6 +137,34 @@ export const generateAutosarCore = (
   const ir = frontEnd.ir;
 
   const ports = deriveAutosarPorts(ir);
+  if (ports.inputsWrittenByModel.length > 0) {
+    return failure(swc, ports.inputsWrittenByModel.map((name) => makeError(
+      'AUTOSAR_INPUT_WRITTEN_BY_MODEL',
+      `Variable '${name}' is mapped as an input (read) but the model assigns it. An AUTOSAR required port delivers the raw input `
+      + 'every cycle (the RTE re-delivers the same value, e.g. a held button stays true), so a value the model clears is overwritten '
+      + 'on the next cycle and a "consume by clearing" pattern re-triggers. Do not assign inputs: keep the raw input and detect '
+      + 'edges with an internal variable (for example `pressed = key && !key_prev; key_prev = key;`).',
+    )), warnings);
+  }
+  if (!ports.mapped) {
+    warnings.push('[AUTOSAR_PORTS_INFERRED] The model has no I/O mappings: the port directions are inferred from usage (a variable assigned by any action is a provided port, every other used variable a required port). Declare the inputs and outputs in the I/O mapping to control the interface.');
+    for (const name of ports.ambiguous) {
+      warnings.push(`[AUTOSAR_AMBIGUOUS_DIRECTION] ${name}: the variable is both read and written, so it was made a provided port; an input that the model also assigns must be mapped as a read in the I/O mapping.`);
+    }
+  } else {
+    if (ports.writeMapped.length > 0 && !ir.safetyMode) {
+      warnings.push('[AUTOSAR_SAFETY_MODE_OFF] The model has write mappings (outputs) but safety mode is off: no safe state is defined, so on a fault the core only stops; the safe values of the outputs are still published while the fault is latched.');
+    }
+    for (const name of ports.missingSafeValue) {
+      warnings.push(`[AUTOSAR_SAFE_VALUE_MISSING] ${name}: the write mapping has no safe value, so the output keeps publishing the model value while the fault is latched.`);
+    }
+    for (const name of ports.calibration) {
+      warnings.push(`[AUTOSAR_CALIBRATION_CANDIDATE] ${name}: the variable is read, never written and not mapped; it is compiled into the core as a constant (initial value). Make it a calibration parameter in the integration (later step) or map it as an input.`);
+    }
+    if (ir.ioMappings.some((mapping) => mapping.conversionExpression !== null)) {
+      warnings.push('[AUTOSAR_CONVERSION_IGNORED] I/O mapping conversion expressions apply to raw MCAL channel values; RTE ports carry the variable value itself, so they are not generated.');
+    }
+  }
   const seen = new Set<string>();
   const nameErrors: ErrorItem[] = [];
   for (const port of [...ports.provided, ...ports.required]) {
@@ -152,7 +187,9 @@ export const generateAutosarCore = (
     warnings.push(`[AUTOSAR_64BIT_PRECISION] Variable '${variable.name}' is ${variable.type}: the core evaluates arithmetic on it in double precision (53 bit mantissa), so results beyond 2^53 lose precision; plain copies through the ports are exact.`);
   }
 
-  const rendered = generateCArtifacts(ir, {
+  // No MCAL: the core sees a model without I/O mappings (ports and policies are handled by the component).
+  const coreModel: SemanticModel = { ...ir, ioMappings: [] };
+  const rendered = generateCArtifacts(coreModel, {
     platform: 'autosar',
     includeVerificationPackage: false,
     includeTestShims: false,
@@ -199,6 +236,16 @@ export const generateAutosarCore = (
     hasXBridges: Object.values(ir.states).some((state) => state.xBridges !== null),
   };
 
+  let oracle: OracleRun;
+  try {
+    oracle = runAutosarOracle(ir, ports, { cycles: B2B_CYCLES, seed: B2B_SEED });
+  } catch (error) {
+    return failure(swc, [makeError(
+      'AUTOSAR_ORACLE_FAILED',
+      `The ADIA semantic interpreter could not compute the back-to-back expectations: ${error instanceof Error ? error.message : String(error)}`,
+    )], warnings);
+  }
+
   const files = [
     ...swcFiles,
     ...coreFiles,
@@ -212,6 +259,7 @@ export const generateAutosarCore = (
     { name: `autosar/stubs/Rte_${swc}_Stub.h`, content: renderRteStubHeader(ctx) },
     { name: `autosar/stubs/Rte_${swc}_Stub.c`, content: renderRteStubSource(ctx) },
     { name: `autosar/test/test_${swc}.c`, content: renderUnitTest(ctx) },
+    { name: `autosar/test/test_${swc}_b2b.c`, content: renderB2bTest(ctx, oracle) },
     { name: 'autosar/Makefile', content: renderMakefile() },
     { name: 'autosar/doc/MISRA_Compliance.md', content: renderMisraCompliance(docsContext) },
     { name: 'autosar/doc/Integration_Guide.md', content: renderIntegrationGuide(docsContext) },

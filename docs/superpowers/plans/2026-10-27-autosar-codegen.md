@@ -153,3 +153,10 @@ An integrator review of a package generated from a production model found:
 The Integration Guide lists per input its policy and per output its safe value. Acceptance: planner-owned
 `autosarIoMapping.test.ts` plus all earlier suites.
 | I9 (found while implementing phase 4) | Integer arithmetic overflowing its target (`INT32_MAX + 1`) saturates in the model but wraps / is signed-overflow UB in the generated C; the b2b vectors had been narrowed to ±1000 to avoid it. | In `platform: 'autosar'` every assignment follows the interpreter: evaluate arithmetic exactly as the model does (double), then truncate and saturate to the target type, or latch the core fault when the variable's `overflowPolicy` is `error`. No UB under UBSan. B2B and differential vectors use the full type range (no narrowing). Bump `AUTOSAR_GENERATOR_VERSION` to 2.1.0. |
+
+### Open items after phase 4 (known, not yet covered by tests)
+
+- After a *runtime evaluation fault* (division by zero, `error` overflow policy, non-finite value) the interpreter does not run exit / safe-state actions, while the C core does. Outputs with a mapping `safeValue` are unaffected (the SWC publishes the safe value while faulted); an output assigned only in an exit or safe-state action can differ after such a fault. Needs a semantic decision (which behaviour is the model's intent) before alignment.
+- float32 overflow saturates to ±`Number.MAX_VALUE` in the interpreter but ±`FLT_MAX` in the generated C.
+- X-Bridges output assignments do not use the guarded store path yet.
+- Mapping `conversionExpr` is not applied to RTE ports (`[AUTOSAR_CONVERSION_IGNORED]` warning).

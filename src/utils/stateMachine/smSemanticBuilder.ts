@@ -780,6 +780,10 @@ export const buildSemanticModel = (
         ? parseCondition(mapping.conversionExpr, new Set(['x']))
         : null,
       safeValue: mapping.safeValue ?? null,
+      ...(Number.isFinite(channelById.get(mapping.channelId)?.rangeMin)
+        ? { channelRangeMin: channelById.get(mapping.channelId)!.rangeMin } : {}),
+      ...(Number.isFinite(channelById.get(mapping.channelId)?.rangeMax)
+        ? { channelRangeMax: channelById.get(mapping.channelId)!.rangeMax } : {}),
     }))
     .sort((left, right) => left.id.localeCompare(right.id));
 

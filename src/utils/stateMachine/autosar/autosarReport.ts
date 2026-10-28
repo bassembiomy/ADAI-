@@ -314,10 +314,24 @@ const buildBlocks = (
         ['RP_SmFaultEvent', 'required', 'CSI_DemEvent', 'SetEventStatus', 'uint8', '-', 'Rte_Call_RP_SmFaultEvent_SetEventStatus'],
       ],
     },
+    ...(ctx.ports.mapped
+      ? [
+        {
+          kind: 'table',
+          head: ['Port', 'Variable', 'Invalid-input policy / safe value'],
+          rows: [
+            ...ctx.ports.required.map((port) => [port.portName, port.cName, `input policy: ${port.invalidInputPolicy ?? 'reject'}`]),
+            ...ctx.ports.provided.map((port) => [port.portName, port.cName, port.safeValue === undefined ? 'no safe value' : `safe value: ${String(port.safeValue)}`]),
+          ],
+        } as Block,
+        { kind: 'paragraph', text: 'The ports follow the I/O mapping of the model; variables without a mapping are internal.' } as Block,
+      ]
+      : []),
     {
       kind: 'list',
       items: [
         `Memory sections: ${memorySections(core).join(', ')}.`,
+        'Back-to-back test: test/test_' + swc + '_b2b.c compares the component with the ADIA semantic interpreter on seeded input vectors (make test prints B2B PASSED).',
         'Dem: every activation reports DEM_EVENT_STATUS_FAILED (0x01) while the core reports an error or a required port reached the RTE error limit, otherwise DEM_EVENT_STATUS_PASSED (0x00).',
         `The component keeps one static instance: it cannot be instantiated more than once; the runnables are not invoked concurrently.`,
       ],

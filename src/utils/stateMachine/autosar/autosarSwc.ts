@@ -1,4 +1,4 @@
-import { coreCType, platformInitLiteral, type AutosarPortModel } from './autosarPorts';
+import { coreCType, platformInitLiteral, portLiteral, type AutosarPort, type AutosarPortModel } from './autosarPorts';
 import { traceComment } from './autosarTrace';
 
 export interface SwcRenderContext {
@@ -50,7 +50,9 @@ export const renderSwcHeader = (ctx: SwcRenderContext): string => {
     '/*',
     ' * Consecutive failed reads of one required port (error status, or a non-finite',
     ' * float) after which MainFunction reports Dem FAILED. A good read of that port',
-    ' * clears its counter. Override at build time with -D.',
+    ' * clears its counter. A required port whose invalid-input policy is',
+    ' * "diagnostic-fault" also latches the core fault when it reaches the limit.',
+    ' * Override at build time with -D.',
     ' */',
     `#ifndef ${swcUpper}_RTE_ERROR_LIMIT`,
     `#define ${swcUpper}_RTE_ERROR_LIMIT 10U`,
@@ -86,6 +88,22 @@ export const renderSwcSource = (ctx: SwcRenderContext): string => {
   const hasFloat = ports.required.some((port) => isFloatPlatformType(port.platformType));
   const errors = `${swc}_RteErrors`;
 
+  const policyOf = (port: AutosarPort): string => port.invalidInputPolicy ?? 'reject';
+  const assignCore = (port: AutosarPort, source: string): string => port.platformType === 'boolean'
+    ? `${inst}.data.${port.cName} = (${source} != FALSE);`
+    : `${inst}.data.${port.cName} = (${coreCType(port.platformType)})${source};`;
+  const clampLines = (port: AutosarPort): string[] => [
+    ...(port.clampMax === undefined ? [] : [
+      `            if (value > ${portLiteral(port.platformType, port.clampMax)}) {`,
+      `                value = ${portLiteral(port.platformType, port.clampMax)};`,
+      '            }',
+    ]),
+    ...(port.clampMin === undefined ? [] : [
+      `            if (value < ${portLiteral(port.platformType, port.clampMin)}) {`,
+      `                value = ${portLiteral(port.platformType, port.clampMin)};`,
+      '            }',
+    ]),
+  ];
   const readBlocks = ports.required.flatMap((port, index) => [
     '    {',
     `        ${port.platformType} value = ${platformInitLiteral(port)};`,
@@ -98,18 +116,55 @@ export const renderSwcSource = (ctx: SwcRenderContext): string => {
       ]
       : []),
     '        if (accepted != FALSE) {',
-    port.platformType === 'boolean'
-      ? `            ${inst}.data.${port.cName} = (value != FALSE);`
-      : `            ${inst}.data.${port.cName} = (${coreCType(port.platformType)})value;`,
+    ...(policyOf(port) === 'clamp' ? clampLines(port) : []),
+    `            ${assignCore(port, 'value')}`,
+    ...(policyOf(port) === 'default'
+      ? [
+        '        } else {',
+        '            /* invalid-input policy "default": fail-safe substitution with the model initial value */',
+        `            ${port.platformType === 'boolean'
+          ? `${inst}.data.${port.cName} = ${port.initValue === '1' ? 'true' : 'false'};`
+          : assignCore(port, platformInitLiteral(port))}`,
+      ]
+      : []),
     '        }',
     `        ${swc}_TrackRead(${index}U, accepted);`,
     '    }',
   ]);
-  const writeProvided = ports.provided.map((port) => port.platformType === 'boolean'
-    ? `    (void)Rte_Write_PP_${port.cName}_${port.dataElementName}(instance->data.${port.cName} ? TRUE : FALSE);`
-    : `    (void)Rte_Write_PP_${port.cName}_${port.dataElementName}((${port.platformType})instance->data.${port.cName});`);
+  const diagnosticIndexes = ports.required
+    .map((port, index) => (policyOf(port) === 'diagnostic-fault' ? index : -1))
+    .filter((index) => index >= 0);
+  const safePorts = ports.provided.filter((port) => port.safeValue !== undefined);
+  const hasSafeValues = safePorts.length > 0;
+  const writeProvided = ports.provided.flatMap((port) => {
+    const normal = port.platformType === 'boolean'
+      ? `(void)Rte_Write_PP_${port.cName}_${port.dataElementName}(instance->data.${port.cName} ? TRUE : FALSE);`
+      : `(void)Rte_Write_PP_${port.cName}_${port.dataElementName}((${port.platformType})instance->data.${port.cName});`;
+    if (port.safeValue === undefined) return [`    ${normal}`];
+    return [
+      '    if (faulted != FALSE) {',
+      `        (void)Rte_Write_PP_${port.cName}_${port.dataElementName}(${portLiteral(port.platformType, port.safeValue)}); /* safe value */`,
+      '    } else {',
+      `        ${normal}`,
+      '    }',
+    ];
+  });
 
   const helpers = [
+    ...(hasSafeValues
+      ? [
+        '/* The core fault is latched (or an error is pending): provided ports with a safe value publish it. */',
+        `static FUNC(boolean, ${swc}_CODE) ${swc}_IsFaulted(const ADIA_Instance_t *instance)`,
+        '{',
+        '    boolean faulted = FALSE;',
+        '    if ((instance->fault_latched) || (instance->error_status != SM_ERR_NONE)) {',
+        '        faulted = TRUE;',
+        '    }',
+        '    return faulted;',
+        '}',
+        '',
+      ]
+      : []),
     ...(hasFloat
       ? [
         `static FUNC(boolean, ${swc}_CODE) ${swc}_IsFinite(float64 value)`,
@@ -147,6 +202,20 @@ export const renderSwcSource = (ctx: SwcRenderContext): string => {
         '    }',
         '}',
         '',
+        ...(diagnosticIndexes.length > 0
+          ? [
+            '/* Invalid-input policy "diagnostic-fault": persistent loss of such a port is a core fault. */',
+            `static FUNC(boolean, ${swc}_CODE) ${swc}_DiagnosticFaultReached(void)`,
+            '{',
+            '    boolean reached = FALSE;',
+            `    if (${diagnosticIndexes.map((index) => `${diagnosticIndexes.length > 1 ? '(' : ''}${errors}[${index}U] >= ${swcUpper}_RTE_ERROR_LIMIT${diagnosticIndexes.length > 1 ? ')' : ''}`).join(' || ')}) {`,
+            '        reached = TRUE;',
+            '    }',
+            '    return reached;',
+            '}',
+            '',
+          ]
+          : []),
         `static FUNC(boolean, ${swc}_CODE) ${swc}_RteLimitReached(void)`,
         '{',
         '    boolean reached = FALSE;',
@@ -165,8 +234,18 @@ export const renderSwcSource = (ctx: SwcRenderContext): string => {
 
   const code = [
     ...helpers,
-    `static FUNC(void, ${swc}_CODE) ${swc}_WriteProvidedPorts(const ADIA_Instance_t *instance)`,
+    hasSafeValues
+      ? `static FUNC(void, ${swc}_CODE) ${swc}_WriteProvidedPorts(const ADIA_Instance_t *instance, boolean forceSafe)`
+      : `static FUNC(void, ${swc}_CODE) ${swc}_WriteProvidedPorts(const ADIA_Instance_t *instance)`,
     '{',
+    ...(hasSafeValues
+      ? [
+        '    boolean faulted = forceSafe;',
+        '    if (faulted == FALSE) {',
+        `        faulted = ${swc}_IsFaulted(instance);`,
+        '    }',
+      ]
+      : []),
     ...(writeProvided.length > 0 ? writeProvided : ['    (void)instance;', '    /* The model assigns no variable: no data port is provided. */']),
     '}',
     '',
@@ -175,12 +254,13 @@ export const renderSwcSource = (ctx: SwcRenderContext): string => {
         '/*',
         ' * Platform hook of the state-machine core (see sm_safety.h), called when the',
         ' * safe state is entered. In AUTOSAR the safe outputs are not driven through',
-        ' * MCAL: the safe values are published on the provided ports immediately.',
+        ' * MCAL: the safe state is published on the provided ports immediately',
+        ' * (provided ports with a safe value publish that value).',
         ' * Integrators may add further reactions (e.g. a mode-switch request) here.',
         ' */',
         'void SM_Platform_ApplySafeOutputs(ADIA_Instance_t *instance)',
         '{',
-        `    ${swc}_WriteProvidedPorts(instance);`,
+        `    ${swc}_WriteProvidedPorts(instance${hasSafeValues ? ', TRUE' : ''});`,
         '}',
         '',
       ]
@@ -196,7 +276,7 @@ export const renderSwcSource = (ctx: SwcRenderContext): string => {
     ...ports.required.map((_port, index) => `    ${errors}[${index}] = 0U;`),
     '    /* A failing initialisation is latched in the instance and published below. */',
     `    (void)SM_Init(&${inst});`,
-    `    ${swc}_WriteProvidedPorts(&${inst});`,
+    `    ${swc}_WriteProvidedPorts(&${inst}${hasSafeValues ? ', FALSE' : ''});`,
     `    ${swc}_WriteStatusPorts();`,
     '}',
     '',
@@ -205,8 +285,15 @@ export const renderSwcSource = (ctx: SwcRenderContext): string => {
     '    uint8 demStatus = DEM_EVENT_STATUS_PASSED;',
     '    SM_Error_t stepResult;',
     ...readBlocks,
+    ...(diagnosticIndexes.length > 0
+      ? [
+        `    if (${swc}_DiagnosticFaultReached() != FALSE) {`,
+        `        (void)SM_Report_External_Fault(&${inst});`,
+        '    }',
+      ]
+      : []),
     `    stepResult = SM_Step(&${inst}, ${swcUpper}_PERIOD_MS);`,
-    `    ${swc}_WriteProvidedPorts(&${inst});`,
+    `    ${swc}_WriteProvidedPorts(&${inst}${hasSafeValues ? ', FALSE' : ''});`,
     `    ${swc}_WriteStatusPorts();`,
     '    if (stepResult != SM_ERR_NONE) {',
     '        demStatus = DEM_EVENT_STATUS_FAILED;',

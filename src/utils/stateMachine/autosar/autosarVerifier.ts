@@ -12,7 +12,6 @@ import { basename, dirname, join } from 'node:path';
 import type { ErrorItem } from '../../../types/sm_types';
 import type { LegacyStateMachineModel } from '../smModel';
 import { runSmFrontEnd } from '../smFrontEnd';
-import { createRuntime, initializeRuntime, stepRuntime, type SemanticRuntime } from '../smInterpreter';
 import type { SemanticModel } from '../smSemanticModel';
 import { checkArxmlStructure } from './autosarArxmlCheck';
 import {
@@ -22,9 +21,10 @@ import {
   type AutosarVerificationEvidence,
 } from './autosarEvidence';
 import { checkMisraSubset } from './autosarMisraChecker';
-import { deriveAutosarPorts, type AutosarPort } from './autosarPorts';
+import { deriveAutosarPorts, isFloatPortType, type AutosarPort } from './autosarPorts';
 import { generateAutosarSwc } from './autosarSwcGenerator';
 import { AUTOSAR_GENERATOR_VERSION } from './autosarTrace';
+import { AUTOSAR_EPISODE_CYCLES, READ_FAILED, READ_LOST_DATA, runAutosarOracle, withinTolerance, type OracleRun } from './autosarVectors';
 
 export type { AutosarGateEvidence, AutosarGateId, AutosarVerificationEvidence } from './autosarEvidence';
 export { AUTOSAR_GATE_IDS } from './autosarEvidence';
@@ -46,8 +46,7 @@ export interface AutosarVerifierOptions {
 }
 
 const DEFAULT_CYCLES = 500;
-/** The component is re-initialised every this many cycles, so a latched fault does not hide the rest of the run. */
-const EPISODE_CYCLES = 25;
+const EPISODE_CYCLES = AUTOSAR_EPISODE_CYCLES;
 const STRICT = ['-std=c99', '-pedantic-errors', '-Wall', '-Wextra', '-Werror'];
 const INCLUDES = ['-Iswc', '-Icore', '-Istubs'];
 const COMMAND_TIMEOUT_MS = 300_000;
@@ -99,10 +98,14 @@ interface Context {
   seed: number;
 }
 
+/** Sources of the given folders; the back-to-back test has its own main(), so it is built separately (`b2bSource`). */
 const sourcesIn = (files: readonly PackageFile[], dirs: readonly string[]): string[] =>
   files.map((file) => file.name.replace(/^autosar\//, ''))
-    .filter((name) => name.endsWith('.c') && dirs.some((dir) => name.startsWith(`${dir}/`)))
+    .filter((name) => name.endsWith('.c') && !name.endsWith('_b2b.c') && dirs.some((dir) => name.startsWith(`${dir}/`)))
     .sort();
+
+const b2bSource = (files: readonly PackageFile[]): string | undefined =>
+  files.map((file) => file.name.replace(/^autosar\//, '')).find((name) => /^test\/[^/]+_b2b\.c$/.test(name));
 
 const notRun = (id: string, summary: string, tool: string | null = null): AutosarGateEvidence =>
   ({ id, status: 'not-run', summary, tool, toolVersion: null, command: null, metrics: {} });
@@ -132,6 +135,19 @@ const unavailable = (id: string, tool: string): AutosarGateEvidence =>
 
 const cc = (flags: readonly string[], sources: readonly string[], out: string, libs: readonly string[] = ['-lm']): string[] =>
   [...flags, ...INCLUDES, ...sources, ...libs, '-o', out];
+
+/** Builds and runs the shipped back-to-back test with the given flags; null when it passed (or the package has none). */
+const runB2b = (ctx: Context, flags: readonly string[], tool: string, out: string): string | null => {
+  const source = b2bSource(ctx.files);
+  if (source === undefined) return null;
+  const sources = [...sourcesIn(ctx.files, ['swc', 'core', 'stubs']), source];
+  const built = run(tool, cc([...flags, '-DADIA_B2B_MAIN'], sources, out), ctx.pkg);
+  if (built.status !== 0) return `back-to-back build failed: ${firstLines(built.output, ctx.tmp)}`;
+  const executed = run(join(ctx.pkg, out), [], ctx.pkg);
+  return executed.status === 0 && executed.output.includes('B2B PASSED')
+    ? null
+    : `back-to-back test failed (exit ${executed.status}): ${firstLines(executed.output, ctx.tmp)}`;
+};
 
 const commandLine = (tool: string, args: readonly string[]): string => [toolName(tool), ...args].join(' ');
 
@@ -184,7 +200,15 @@ const gateHostBuild = (ctx: Context): AutosarGateEvidence => {
   const args = cc([...STRICT, '-DADIA_TESTING', '-O0'], sources, 'build/host_test');
   mkdirSync(join(ctx.pkg, 'build'), { recursive: true });
   const built = run(ctx.tools.gcc, args, ctx.pkg);
-  const ok = built.status === 0;
+  const b2b = b2bSource(ctx.files);
+  const b2bBuilt = built.status === 0 && b2b !== undefined
+    ? run(ctx.tools.gcc, cc([...STRICT, '-DADIA_TESTING', '-DADIA_B2B_MAIN', '-O0'], [...sourcesIn(ctx.files, ['swc', 'core', 'stubs']), b2b], 'build/b2b_test'), ctx.pkg)
+    : built;
+  const ok = built.status === 0 && b2bBuilt.status === 0;
+  if (built.status === 0 && !ok) {
+    return result('host-build', false, `Back-to-back test build failed: ${firstLines(b2bBuilt.output, ctx.tmp)}`,
+      { tool: toolName(ctx.tools.gcc), toolVersion: version, command: commandLine(ctx.tools.gcc, args), metrics: { sources: sources.length } });
+  }
   return result('host-build', ok,
     ok ? `Strict build (${STRICT.join(' ')}) of ${sources.length} sources succeeded.` : `Build failed: ${firstLines(built.output, ctx.tmp)}`,
     { tool: toolName(ctx.tools.gcc), toolVersion: version, command: commandLine(ctx.tools.gcc, args), metrics: { sources: sources.length } });
@@ -265,10 +289,12 @@ const gateSanitizers = (ctx: Context): AutosarGateEvidence => {
   const built = run(ctx.tools.gcc, args, ctx.pkg);
   if (built.status !== 0) return result('sanitizers', false, `Sanitizer build failed: ${firstLines(built.output, ctx.tmp)}`, base);
   const executed = run(join(ctx.pkg, 'build', 'san_test'), [], ctx.pkg);
-  const ok = executed.status === 0 && executed.output.includes('ALL TESTS PASSED');
+  const unitOk = executed.status === 0 && executed.output.includes('ALL TESTS PASSED');
+  const b2bFailure = unitOk ? runB2b(ctx, flags, ctx.tools.gcc, 'build/san_b2b') : null;
+  const ok = unitOk && b2bFailure === null;
   return result('sanitizers', ok,
-    ok ? 'The generated test passed under AddressSanitizer and UndefinedBehaviorSanitizer (-fno-sanitize-recover=all).'
-      : `Sanitizer run failed (exit ${executed.status}): ${firstLines(executed.output, ctx.tmp)}`, base);
+    ok ? 'The generated test and the back-to-back test passed under AddressSanitizer and UndefinedBehaviorSanitizer (-fno-sanitize-recover=all).'
+      : `Sanitizer run failed (exit ${executed.status}): ${b2bFailure ?? firstLines(executed.output, ctx.tmp)}`, base);
 };
 
 const gateSecondCompiler = (ctx: Context): AutosarGateEvidence => {
@@ -282,10 +308,12 @@ const gateSecondCompiler = (ctx: Context): AutosarGateEvidence => {
   const built = run(ctx.tools.clang, args, ctx.pkg);
   if (built.status !== 0) return result('second-compiler', false, `clang build failed: ${firstLines(built.output, ctx.tmp)}`, base);
   const executed = run(join(ctx.pkg, 'build', 'clang_test'), [], ctx.pkg);
-  const ok = executed.status === 0 && executed.output.includes('ALL TESTS PASSED');
+  const unitOk = executed.status === 0 && executed.output.includes('ALL TESTS PASSED');
+  const b2bFailure = unitOk ? runB2b(ctx, flags, ctx.tools.clang, 'build/clang_b2b') : null;
+  const ok = unitOk && b2bFailure === null;
   return result('second-compiler', ok,
-    ok ? `clang builds the package without warnings (${flags.join(' ')}) and the generated test passed.`
-      : `clang-built test failed (exit ${executed.status}): ${firstLines(executed.output, ctx.tmp)}`, base);
+    ok ? `clang builds the package without warnings (${flags.join(' ')}) and the generated test and the back-to-back test passed.`
+      : `clang-built test failed (exit ${executed.status}): ${b2bFailure ?? firstLines(executed.output, ctx.tmp)}`, base);
 };
 
 const gateReproducible = (ctx: Context): AutosarGateEvidence => {
@@ -318,64 +346,15 @@ const gateReproducible = (ctx: Context): AutosarGateEvidence => {
 
 // ------------------------------------------------------------------ differential gate
 
-/** mulberry32: small, fast, fully specified 32-bit PRNG (the vectors are generated in TS and handed to C as a table). */
-const mulberry32 = (seed: number): (() => number) => {
-  let state = seed >>> 0;
-  return () => {
-    state = (state + 0x6d2b79f5) >>> 0;
-    let value = state;
-    value = Math.imul(value ^ (value >>> 15), value | 1);
-    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
-    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
-  };
-};
-
-const INTEGER_RANGES: Record<string, [number, number]> = {
-  sint8: [-128, 127],
-  uint8: [0, 255],
-  sint16: [-32768, 32767],
-  uint16: [0, 65535],
-  sint32: [-2147483648, 2147483647],
-  uint32: [0, 4294967295],
-  // 64-bit variables are evaluated in double precision by the core: stay inside the exact range.
-  sint64: [-(2 ** 53 - 1), 2 ** 53 - 1],
-  uint64: [0, 2 ** 53 - 1],
-};
-
-const FLOAT_BOUNDARIES = [0, 1, -1, 0.5, -0.5, 100, -100, 1000000, -1000000, 0.0009765625, -0.0009765625];
-
-/** Deterministic type-correct value: boundaries (20 %), small magnitudes near typical thresholds (30 %), uniform (50 %). */
-const drawValue = (platformType: string, random: () => number): number => {
-  const selector = random();
-  const pick = random();
-  if (platformType === 'boolean') return pick < 0.5 ? 0 : 1;
-  // 5 %: exactly zero, so divisors of zero are drawn on purpose (the model faults, the core must too).
-  if (selector < 0.05 && platformType !== 'boolean') return 0;
-  if (platformType === 'float32' || platformType === 'float64') {
-    if (selector < 0.2) return FLOAT_BOUNDARIES[Math.floor(pick * FLOAT_BOUNDARIES.length)];
-    if (selector < 0.5) return (Math.floor(pick * 801) - 400) / 4;
-    // k / 1024 with |k| <= 2^20 is exactly representable in float32 and float64.
-    return (Math.floor(pick * 2097153) - 1048576) / 1024;
-  }
-  const [min, max] = INTEGER_RANGES[platformType] ?? INTEGER_RANGES.sint32;
-  if (selector < 0.2) {
-    const boundaries = [min, min + 1, max - 1, max, 0, 1, -1].filter((value) => value >= min && value <= max);
-    return boundaries[Math.floor(pick * boundaries.length)];
-  }
-  if (selector < 0.5) {
-    const low = Math.max(min, -200);
-    const high = Math.min(max, 200);
-    return low + Math.floor(pick * (high - low + 1));
-  }
-  return min + Math.floor(pick * (max - min + 1));
-};
-
 const cNumber = (value: number): string => {
+  if (Number.isNaN(value)) return 'NAN';
+  if (value === Number.POSITIVE_INFINITY) return 'INFINITY';
+  if (value === Number.NEGATIVE_INFINITY) return '(-INFINITY)';
   const text = Object.is(value, -0) ? '0' : String(value);
   return /[.eE]/.test(text) ? text : `${text}.0`;
 };
 
-const isFloatType = (platformType: string): boolean => platformType === 'float32' || platformType === 'float64';
+const isFloatType = isFloatPortType;
 
 const printSpec = (port: AutosarPort): { format: string; cast: string } => {
   if (isFloatType(port.platformType)) return { format: '%.17g', cast: 'double' };
@@ -394,7 +373,7 @@ const renderDriver = (
   swc: string,
   required: readonly AutosarPort[],
   provided: readonly AutosarPort[],
-  vectors: readonly number[][],
+  oracle: OracleRun,
   cycles: number,
 ): string => {
   const row = (index: string): string[] => {
@@ -406,11 +385,14 @@ const renderDriver = (
   return [
     '/* Generated by the ADIA AUTOSAR verifier: drives the SWC through the RTE stub with seeded input vectors. Not part of the package. */',
     '#include <stdio.h>',
+    '#include <math.h>',
     `#include "${swc}.h"`,
     `#include "Rte_${swc}_Stub.h"`,
     '',
-    ...required.map((port, position) =>
-      `static const double vector_${position}[${Math.max(cycles, 1)}] = {${vectors[position].map(cNumber).join(', ')}};`),
+    ...required.flatMap((port, position) => [
+      `static const double vector_${position}[${Math.max(cycles, 1)}] = {${oracle.values[position].map(cNumber).join(', ')}};`,
+      `static const unsigned char status_${position}[${Math.max(cycles, 1)}] = {${oracle.status[position].join(', ')}};`,
+    ]),
     '',
     'int main(void)',
     '{',
@@ -424,9 +406,12 @@ const renderDriver = (
     `            ${swc}_Init();`,
     ...row('cycle').map((line) => `        ${line}`),
     '        }',
-    ...required.map((port, position) => port.platformType === 'boolean'
-      ? `        Rte_Stub_RP_${port.cName}_${port.dataElementName}_Value = (vector_${position}[cycle] != 0.0) ? TRUE : FALSE;`
-      : `        Rte_Stub_RP_${port.cName}_${port.dataElementName}_Value = (${port.platformType})vector_${position}[cycle];`),
+    ...required.flatMap((port, position) => [
+      port.platformType === 'boolean'
+        ? `        Rte_Stub_RP_${port.cName}_${port.dataElementName}_Value = (vector_${position}[cycle] != 0.0) ? TRUE : FALSE;`
+        : `        Rte_Stub_RP_${port.cName}_${port.dataElementName}_Value = (${port.platformType})vector_${position}[cycle];`,
+      `        Rte_Stub_RP_${port.cName}_${port.dataElementName}_Status = (status_${position}[cycle] == ${READ_FAILED}U) ? RTE_E_NO_DATA : ((status_${position}[cycle] == ${READ_LOST_DATA}U) ? RTE_E_LOST_DATA : RTE_E_OK);`,
+    ]),
     `        ${swc}_MainFunction();`,
     ...row('cycle + 1U').map((line) => `    ${line}`),
     '    }',
@@ -436,63 +421,24 @@ const renderDriver = (
   ].join('\n');
 };
 
-const withinTolerance = (expected: number, actual: number, float: boolean): boolean => {
-  if (expected === actual) return true;
-  if (!float || !Number.isFinite(expected) || !Number.isFinite(actual)) return false;
-  return Math.abs(expected - actual) <= 1e-12 * Math.max(Math.abs(expected), Math.abs(actual));
-};
-
 const gateDifferential = (ctx: Context): AutosarGateEvidence => {
   const version = versionOf(ctx.tools.gcc, ctx.pkg);
   if (version === null) return unavailable('differential', ctx.tools.gcc);
-  const frontEnd = runSmFrontEnd(ctx.chart, { stripHil: true });
+  const frontEnd = runSmFrontEnd(ctx.chart);
   const ir: SemanticModel | undefined = frontEnd.ir;
   if (ir === undefined || frontEnd.errors.length > 0) {
     return result('differential', false, 'The model has errors, so the ADIA interpreter oracle cannot be built.');
   }
   const ports = deriveAutosarPorts(ir);
-  const random = mulberry32(ctx.seed);
-  const vectors: number[][] = ports.required.map(() => []);
-
-  // Oracle: ADIA's semantic interpreter, stepped exactly like the SWC cycle (inputs, step(period), outputs).
-  const stateNumber = new Map(Object.values(ir.states)
-    .sort((left, right) => left.activityIndex - right.activityIndex)
-    .map((state, index) => [state.id, index + 1]));
-  const runtime = createRuntime(ir);
-  // A latched model error is a fault: the core exits every state and enters the safe state (safety mode), which is
-  // the configuration the interpreter itself defines in enterFaultConfiguration. The interpreter applies it for
-  // timing and X-Bridges errors but not for a RUNTIME_EVALUATION_ERROR (it freezes the configuration); the oracle
-  // maps that case to the fault configuration. Reported as a known divergence of the interpreter.
-  const faultState = ir.safetyMode && ir.safeStateId !== null ? (stateNumber.get(ir.safeStateId) ?? -1) : 0;
-  const observe = (target: SemanticRuntime): number[] => [
-    target.error !== null
-      ? faultState
-      : target.activeSlots[0] === null || target.activeSlots[0] === undefined ? 0 : (stateNumber.get(target.activeSlots[0]) ?? -1),
-    target.error === null ? 0 : 1,
-    ...ports.provided.map((port) => Number(target.data[port.variableId])),
-  ];
-  initializeRuntime(runtime);
-  const expected: number[][] = [observe(runtime)];
-  let faultCycles = 0;
-  for (let cycle = 0; cycle < ctx.cycles; cycle += 1) {
-    if (cycle > 0 && cycle % EPISODE_CYCLES === 0) {
-      initializeRuntime(runtime);
-      expected.push(observe(runtime));
-    }
-    const drawn = ports.required.map((port) => drawValue(port.platformType, random));
-    ports.required.forEach((port, position) => {
-      vectors[position].push(drawn[position]);
-      runtime.data[port.variableId] = port.platformType === 'boolean' ? drawn[position] !== 0 : drawn[position];
-    });
-    stepRuntime(runtime, ir.tickMs);
-    if (runtime.error !== null) faultCycles += 1;
-    expected.push(observe(runtime));
-  }
+  // Oracle: ADIA's semantic interpreter, stepped exactly like the SWC cycle (conditioned inputs, step(period), outputs).
+  const oracle = runAutosarOracle(ir, ports, { cycles: ctx.cycles, seed: ctx.seed });
+  const expected = oracle.rows;
+  const faultCycles = oracle.faultCycles;
 
   // Device under test: the generated C through the RTE stub.
   const driverPath = 'build/adia_diff_driver.c';
   mkdirSync(join(ctx.pkg, 'build'), { recursive: true });
-  writeFileSync(join(ctx.pkg, driverPath), renderDriver(ctx.swc, ports.required, ports.provided, vectors, ctx.cycles));
+  writeFileSync(join(ctx.pkg, driverPath), renderDriver(ctx.swc, ports.required, ports.provided, oracle, ctx.cycles));
   const sources = [...sourcesIn(ctx.files, ['swc', 'core', 'stubs']), driverPath];
   const args = cc([...STRICT, '-DADIA_TESTING', '-O0'], sources, 'build/diff_driver');
   const base = {
@@ -531,7 +477,7 @@ const gateDifferential = (ctx: Context): AutosarGateEvidence => {
   const faults = ` ${faultCycles} cycle(s) ran in the latched-fault state (ErrorStatus and fault configuration compared).`;
   return result('differential', mismatches === 0,
     mismatches === 0
-      ? `${ctx.cycles} seeded cycles (seed ${ctx.seed}): generated C and the ADIA interpreter agree on ${columns.length} signals (integers exact, floats bit-exact or within 1e-12 relative; re-initialised every ${EPISODE_CYCLES} cycles).${faults}`
+      ? `${ctx.cycles} seeded cycles (seed ${ctx.seed}): generated C and the ADIA interpreter agree on ${columns.length} signals (integers exact, floats bit-exact or within 1e-12 relative; re-initialised every ${EPISODE_CYCLES} cycles; failed reads, input policies and safe values applied).${faults}`
       : `${mismatches} mismatch(es) in ${ctx.cycles} cycles (seed ${ctx.seed}); ${first}.${faults}`,
     { ...base, metrics });
 };
