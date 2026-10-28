@@ -326,3 +326,97 @@ describe('I1-I8 full verifier on the mapped model', () => {
     expect(names).toContain('autosar/doc/Verification_Report.md');
   });
 });
+
+// ---------------------------------------------------------------- I9 integer overflow (found during phase 4)
+
+/** Integer arithmetic that overflows its target type: the model truncates and saturates (default policy). */
+const overflowFixture = (strict = false): StateMachineModelV5 => {
+  const model = flatOrFixture();
+  const only = {
+    ...model.states[0],
+    during: strict
+      ? 'strict = in_s32 + 1;'
+      : 's32 = in_s32 + 1; u8 = in_u8 + 10; s8 = in_s8 * 2; s16 = in_s16 - 1; u32 = in_u32 + 1; mixed = in_s32 * in_s8;',
+  };
+  model.states = [only];
+  model.transitions = [];
+  model.layers = [{ ...model.layers[0], stateIds: [only.id], transitionIds: [] }];
+  model.variables = strict
+    ? [variable('in_s32', 'int32'), { ...variable('strict', 'int32'), overflowPolicy: 'error' }]
+    : [
+      variable('in_s32', 'int32'), variable('in_u8', 'uint8'), variable('in_s8', 'int8'), variable('in_s16', 'int16'), variable('in_u32', 'uint32'),
+      variable('s32', 'int32'), variable('u8', 'uint8'), variable('s8', 'int8'), variable('s16', 'int16'), variable('u32', 'uint32'), variable('mixed', 'int32'),
+    ];
+  return model;
+};
+
+const overflowProbe = (strict: boolean): string => `
+#include <stdio.h>
+#include "AdiaSwc.h"
+#include "Rte_AdiaSwc_Stub.h"
+#define CHECK(c) do { if (!(c)) { (void)printf("FAIL %s:%d %s\\n", __FILE__, __LINE__, #c); return 1; } } while (0)
+
+int main(void)
+{
+    Rte_Stub_Reset();
+    AdiaSwc_Init();
+${strict ? `    Rte_Stub_RP_in_s32_in_s32_Value = (sint32)2147483647;
+    AdiaSwc_MainFunction();
+    CHECK(Rte_Stub_RP_SmFaultEvent_LastStatus == 0x01U);
+    CHECK(Rte_Stub_PP_SmStatus_ErrorStatus_Value != 0U);` : `    Rte_Stub_RP_in_s32_in_s32_Value = (sint32)2147483647;
+    Rte_Stub_RP_in_u8_in_u8_Value = 250U;
+    Rte_Stub_RP_in_s8_in_s8_Value = (sint8)-100;
+    Rte_Stub_RP_in_s16_in_s16_Value = (sint16)-32768;
+    Rte_Stub_RP_in_u32_in_u32_Value = 4294967295UL;
+    AdiaSwc_MainFunction();
+    CHECK(Rte_Stub_PP_s32_s32_Value == (sint32)2147483647);
+    CHECK(Rte_Stub_PP_u8_u8_Value == 255U);
+    CHECK(Rte_Stub_PP_s8_s8_Value == (sint8)-128);
+    CHECK(Rte_Stub_PP_s16_s16_Value == (sint16)(-32767 - 1));
+    CHECK(Rte_Stub_PP_u32_u32_Value == 4294967295UL);
+    CHECK(Rte_Stub_PP_mixed_mixed_Value == (sint32)(-2147483647 - 1));
+    CHECK(Rte_Stub_RP_SmFaultEvent_LastStatus == 0x00U);`}
+    (void)printf("OVERFLOW PROBE PASSED\\n");
+    return 0;
+}
+`;
+
+describe('I9 integer overflow follows the model (truncate + saturate, or fault under the error policy) without UB', () => {
+  it.each([[false], [true]])('strict overflow policy = %s (gcc + UBSan)', (strict) => {
+    const { files } = generateOk(overflowFixture(strict));
+    withPackage(files, (root) => {
+      writeFileSync(join(root, 'overflow_test.c'), overflowProbe(strict));
+      const sources = files.map((item) => item.name.slice('autosar/'.length))
+        .filter((name) => name.endsWith('.c') && /^(swc|core|stubs)\//.test(name));
+      const build = spawnSync('gcc', ['-std=c99', '-pedantic-errors', '-Wall', '-Wextra', '-Werror', '-DADIA_TESTING', '-g',
+        '-fsanitize=address,undefined', '-fno-sanitize-recover=all', '-I', 'swc', '-I', 'core', '-I', 'stubs',
+        ...sources, 'overflow_test.c', '-lm', '-o', 'overflow_test'], { cwd: root, encoding: 'utf8' });
+      expect(build.status, build.stderr).toBe(0);
+      const run = spawnSync(join(root, 'overflow_test'), [], { cwd: root, encoding: 'utf8' });
+      expect(run.status, `${run.stdout}\n${run.stderr}`).toBe(0);
+      expect(run.stdout).toContain('OVERFLOW PROBE PASSED');
+    });
+  });
+
+  it('back-to-back vectors use the full integer range (no narrowing) and the shipped test passes', () => {
+    const { files } = generateOk(overflowFixture());
+    const b2b = file(files, 'autosar/test/test_AdiaSwc_b2b.c');
+    expect(b2b).toMatch(/\b2147483647\b/);
+    expect(b2b).not.toMatch(/±\s*1000|integerSpan|within \+?-?1000/i);
+    withPackage(files, (root) => {
+      const run = spawnSync('make', ['-C', root, 'test'], { encoding: 'utf8' });
+      expect(run.status, `${run.stdout}\n${run.stderr}`).toBe(0);
+      expect(run.stdout).toContain('B2B PASSED');
+    });
+  });
+
+  it('the differential gate matches the interpreter over the full range', async () => {
+    const evidence = await runAutosarVerification(overflowFixture(), {
+      gates: ['differential', 'sanitizers', 'unit-test'], cycles: 2000, seed: 11, executedAt: null,
+    });
+    for (const gate of evidence.gates.filter((item) => item.status !== 'not-run')) {
+      expect(gate.status, `${gate.id}: ${gate.summary}`).toBe('pass');
+    }
+    expect(evidence.gates.find((item) => item.id === 'differential')!.metrics.mismatches).toBe(0);
+  }, 300_000);
+});

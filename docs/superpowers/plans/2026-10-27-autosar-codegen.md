@@ -152,3 +152,4 @@ An integrator review of a package generated from a production model found:
 
 The Integration Guide lists per input its policy and per output its safe value. Acceptance: planner-owned
 `autosarIoMapping.test.ts` plus all earlier suites.
+| I9 (found while implementing phase 4) | Integer arithmetic overflowing its target (`INT32_MAX + 1`) saturates in the model but wraps / is signed-overflow UB in the generated C; the b2b vectors had been narrowed to ±1000 to avoid it. | In `platform: 'autosar'` every assignment follows the interpreter: evaluate arithmetic exactly as the model does (double), then truncate and saturate to the target type, or latch the core fault when the variable's `overflowPolicy` is `error`. No UB under UBSan. B2B and differential vectors use the full type range (no narrowing). Bump `AUTOSAR_GENERATOR_VERSION` to 2.1.0. |
