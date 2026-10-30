@@ -4,7 +4,7 @@ import { HMI_HELP_TOPICS } from './hmiTopics';
 
 describe('HMI Help coverage', () => {
   it('documents every catalog widget with bindings, configuration, example and state semantics', () => {
-    expect(Object.keys(HMI_HELP_TOPICS).filter(id => id.startsWith('hmi-component-'))).toHaveLength(42);
+    expect(Object.keys(HMI_HELP_TOPICS).filter(id => id.startsWith('hmi-component-'))).toHaveLength(49);
     for (const entry of HMI_CATALOG) {
       const topic = HMI_HELP_TOPICS[`hmi-component-${entry.type}`];
       expect(topic.title).toBe(`HMI: ${entry.label}`);
