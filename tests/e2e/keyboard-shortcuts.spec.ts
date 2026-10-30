@@ -123,8 +123,10 @@ test('Model Explorer: F2 renames, Delete asks to delete from the model, Ctrl+D d
   const row = page.locator('.model-explorer-container [role="treeitem"]', { hasText: 'TreeBlock' }).first();
   await row.click();
   await page.keyboard.press('F2');
-  await expect(page.locator('.model-explorer-container [role="treeitem"] input')).toHaveCount(1);
+  const renameInput = page.locator('.model-explorer-container [role="treeitem"] input');
+  await expect(renameInput).toBeFocused();
   await page.keyboard.press('Escape');
+  await expect(renameInput).toHaveCount(0);
 
   await row.click();
   await page.keyboard.press('Delete');
