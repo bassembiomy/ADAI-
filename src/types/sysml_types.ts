@@ -1,4 +1,5 @@
 import type { Point } from './sm_types';
+import type { HmiIconId, HmiLcdTheme } from '../features/hmi/hmiGlyphs';
 
 export interface PortData {
   id: string;
@@ -197,6 +198,7 @@ export interface ValidationResult {
 export type HmiComponentType = 'toggle' | 'button' | 'slider' | 'input' | 'lamp' | 'led' | 'lcd' | 'gauge' | 'rotary' | 'hybrid-rotary' | 'buzzer' | 'oled' | 'encoder' | 'mode-selector' | 'mode-icon'
   | 'checkbox' | 'combo-box' | 'radio-group' | 'rocker-switch' | 'slide-switch' | 'knob' | 'vertical-slider' | 'latching-button' | 'pulse-button' | 'simulation-command'
   | 'half-gauge' | 'quarter-gauge' | 'linear-gauge' | 'vertical-gauge' | 'dashboard-scope' | 'xy-plot' | 'multi-state-image' | 'active-state-indicator' | 'alarm-list' | 'progress-bar' | 'thermometer' | 'tank-level' | 'seven-segment'
+  | 'fourteen-segment' | 'sixteen-segment' | 'dot-matrix' | 'character-lcd' | 'segment-lcd' | 'icon-indicator' | 'led-bar'
   | 'label' | 'image' | 'panel' | 'tabs';
 
 export interface HmiComponent {
@@ -213,7 +215,7 @@ export interface HmiComponent {
   variableIds?: string[];
   hybridValues?: string[];
   soundType?: 'sine' | 'square' | 'sawtooth' | 'triangle';
-  icon?: 'none' | 'power' | 'play' | 'light';
+  icon?: HmiIconId | 'none';
   color?: 'orange' | 'green' | 'red' | 'blue' | 'yellow' | 'grey';
   cursorVariableId?: string | null;
   pressVariableId?: string | null;
@@ -250,4 +252,13 @@ export interface HmiComponent {
   tabs?: { id: string; label: string }[];
   activeValue?: number | boolean;
   inactiveValue?: number | boolean;
+  lcdTheme?: HmiLcdTheme;
+  digitCount?: number;
+  segmentSkew?: boolean;
+  lcdRows?: number;
+  lcdColumns?: number;
+  lcdLines?: string[];
+  annunciators?: HmiAnnunciator[];
+  barSegments?: number;
 }
+export interface HmiAnnunciator { icon: HmiIconId; variableId: string | null; label?: string }

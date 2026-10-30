@@ -57,8 +57,8 @@ describe('HMI binding model', () => {
     expect(validateHmiInput({ ...command, releaseValue: false }, [variable], [])).toMatchObject({ accepted: true, value: true });
   });
   it('contains every legacy and approved new component exactly once', () => {
-    expect(HMI_CATALOG).toHaveLength(42);
-    expect(new Set(HMI_CATALOG.map(entry => entry.type)).size).toBe(42);
+    expect(HMI_CATALOG).toHaveLength(49);
+    expect(new Set(HMI_CATALOG.map(entry => entry.type)).size).toBe(49);
     const approved = 'checkbox combo-box radio-group rocker-switch slide-switch knob vertical-slider latching-button pulse-button simulation-command half-gauge quarter-gauge linear-gauge vertical-gauge dashboard-scope xy-plot multi-state-image active-state-indicator alarm-list progress-bar thermometer tank-level seven-segment label image panel tabs'.split(' ');
     expect(approved.every(type => HMI_CATALOG.some(entry => entry.type === type))).toBe(true);
     expect(HMI_CATALOG.find(entry => entry.type === 'mode-icon')?.role).toBe('input');

@@ -107,7 +107,7 @@ describe('HMI controls',()=>{
   it('renders every catalog component without unsupported fallback',()=>{
     const components=HMI_CATALOG.map((c,i)=>({...createHmiComponent(c.type,`c${i}`),variableId:'v',stateId:'s',variableIds:['v','v']}));
     const view=render(<HmiWorkspace variables={variables} components={components} setComponents={vi.fn()} onInput={()=>({accepted:true})} onClose={vi.fn()} runtime={runtime} externalOwnedVariableIds={[]} onSimulationCommand={vi.fn()}/>);
-    expect(view.container.querySelectorAll('.hmi-component').length).toBe(42);expect(view.container.textContent).not.toContain('Unsupported component');
+    expect(view.container.querySelectorAll('.hmi-component').length).toBe(49);expect(view.container.textContent).not.toContain('Unsupported component');
   });
   it('state indicators use committed active IDs and plots use committed samples',()=>{
     const view=render(<HmiWidget comp={{...createHmiComponent('active-state-indicator','c'),stateId:'s'}} variables={variables} runtime={runtime} editMode={false} owned={new Set()} onInput={vi.fn()} onSimulationCommand={vi.fn()}/>);

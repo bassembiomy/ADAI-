@@ -2,6 +2,7 @@ import type { VariableDef } from '../../types/sm_types';
 import type { HmiComponent } from '../../types/sysml_types';
 import { coerceTypedValue } from '../../utils/stateMachine/smTypedValue';
 import { createHmiComponent, getHmiDefinition } from './hmiCatalog';
+import { HMI_GLYPHS, HMI_ICON_IDS, isHmiIconId } from './hmiGlyphs';
 
 export interface HmiInputCommand {
   sourceId: string;
@@ -64,10 +65,31 @@ export function normalizeHmiComponents(raw: unknown, diagnostics: string[] = [])
     const component = { ...defaults, ...source, id, type: entry.type } as HmiComponent;
     component.name = typeof source.name === 'string' ? source.name : defaults.name;
     component.variableId = typeof source.variableId === 'string' ? source.variableId : null;
-    for (const [key, allowed] of [['soundType', ['sine', 'square', 'sawtooth', 'triangle']], ['icon', ['none', 'power', 'play', 'light']], ['color', ['orange', 'green', 'red', 'blue', 'yellow', 'grey']]] as const) {
+    for (const [key, allowed] of [['soundType', ['sine', 'square', 'sawtooth', 'triangle']], ['icon', ['none', ...HMI_ICON_IDS]], ['color', ['orange', 'green', 'red', 'blue', 'yellow', 'grey']]] as const) {
       if (source[key] !== undefined && !allowed.some(value => value === source[key])) {
         delete component[key]; diagnostics.push(`HMI ${id}: removed invalid ${key}.`);
       }
+    }
+    if (source.lcdTheme !== undefined && !Object.prototype.hasOwnProperty.call(HMI_GLYPHS.lcdThemes, String(source.lcdTheme))) {
+      component.lcdTheme = defaults.lcdTheme; diagnostics.push(`HMI ${id}: removed invalid lcdTheme.`);
+      if (component.lcdTheme === undefined) delete component.lcdTheme;
+    }
+    if (source.icon !== undefined && component.icon === undefined && defaults.icon !== undefined) component.icon = defaults.icon;
+    for (const [key, low, high] of [['digitCount', 1, 16], ['lcdRows', 1, 4], ['lcdColumns', 8, 40], ['barSegments', 4, 40]] as const) {
+      const value = source[key];
+      if (value !== undefined && !(typeof value === 'number' && Number.isInteger(value) && value >= low && value <= high)) {
+        if (defaults[key] === undefined) delete component[key]; else component[key] = defaults[key];
+      }
+    }
+    if (source.segmentSkew !== undefined && typeof source.segmentSkew !== 'boolean') delete component.segmentSkew;
+    if (source.lcdLines !== undefined) component.lcdLines = Array.isArray(source.lcdLines) ? source.lcdLines.filter((line): line is string => typeof line === 'string').slice(0, 4) : defaults.lcdLines;
+    if (source.annunciators !== undefined) {
+      component.annunciators = Array.isArray(source.annunciators) ? source.annunciators.flatMap(item => {
+        const entry = item as { icon?: unknown; variableId?: unknown; label?: unknown } | null;
+        if (!entry || typeof entry !== 'object' || !isHmiIconId(entry.icon) || !(entry.variableId === null || typeof entry.variableId === 'string')) return [];
+        return [{ icon: entry.icon, variableId: entry.variableId, ...(typeof entry.label === 'string' ? { label: entry.label } : {}) }];
+      }).slice(0, 12) : defaults.annunciators;
+      if (component.annunciators === undefined) delete component.annunciators;
     }
     for (const key of ['cursorVariableId', 'pressVariableId', 'oledModeVarId', 'oledTempVarId', 'oledTimeVarId', 'oledStateVarId', 'oledSteamVarId', 'oledHeatVarId', 'oledFanVarId', 'oledLightVarId', 'oledDuoVarId', 'oledProgressVarId'] as const) {
       if (source[key] !== undefined && source[key] !== null && typeof source[key] !== 'string') {
