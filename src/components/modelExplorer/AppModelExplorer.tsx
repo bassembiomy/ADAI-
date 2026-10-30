@@ -959,6 +959,7 @@ export const AppModelExplorer: React.FC<AppModelExplorerProps> = ({
           isOpen={true}
           impact={pendingImpact.impact}
           impactHash={pendingImpact.impactHash}
+          operation={pendingImpact.command.type === 'delete' ? 'delete' : 'move'}
           onConfirm={handleConfirmImpact}
           onCancel={() => setPendingImpact(null)}
         />

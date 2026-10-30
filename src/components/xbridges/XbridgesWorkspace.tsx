@@ -2469,6 +2469,8 @@ export const XbridgesWorkspace: React.FC<{
       if (isInputFocused(e.target)) {
         return;
       }
+      // An open dialog owns the keyboard.
+      if ((e.target as HTMLElement | null)?.closest?.('[role="dialog"], [aria-modal="true"]')) return;
 
       // Track Space press
       if (e.code === 'Space' && !e.ctrlKey) {
@@ -2558,7 +2560,7 @@ export const XbridgesWorkspace: React.FC<{
       }
 
       // Undo (Ctrl+Z or Cmd+Z)
-      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyZ') {
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyZ' && !e.shiftKey) {
         e.preventDefault();
         if (history.length > 0) {
           const previousState = history[history.length - 1];
@@ -2570,7 +2572,7 @@ export const XbridgesWorkspace: React.FC<{
       }
 
       // Copy (Ctrl+C or Cmd+C)
-      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyC') {
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyC' && !e.shiftKey) {
         const activeSelectedNodes = nodes.filter(n => n.selected);
         const copyList = activeSelectedNodes.length > 0
           ? activeSelectedNodes
@@ -2597,7 +2599,7 @@ export const XbridgesWorkspace: React.FC<{
       }
 
       // Paste (Ctrl+V or Cmd+V)
-      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyV') {
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyV' && !e.shiftKey) {
         const clipboardToUse = sharedClipboard !== undefined ? sharedClipboard : localClipboard;
         if (clipboardToUse && clipboardToUse.nodes.length > 0) {
           saveHistory();

@@ -9,6 +9,8 @@ export interface MoveImpactDialogProps {
   onConfirm: (hash: string) => void;
   onCancel: () => void;
   operationTitle?: string;
+  /** What the confirmed command does; a deletion is worded as a deletion, not a move. */
+  operation?: 'move' | 'delete';
   className?: string;
 }
 
@@ -18,7 +20,8 @@ export const MoveImpactDialog: React.FC<MoveImpactDialogProps> = ({
   impactHash,
   onConfirm,
   onCancel,
-  operationTitle = 'Confirm Structural Move',
+  operation = 'move',
+  operationTitle = operation === 'delete' ? 'Confirm Delete from Model' : 'Confirm Structural Move',
   className = '',
 }) => {
   if (isOpen === false) return null;
@@ -58,11 +61,12 @@ export const MoveImpactDialog: React.FC<MoveImpactDialogProps> = ({
             <ShieldAlert size={16} className="text-[var(--status-warning)] shrink-0 mt-0.5" />
             <div className="flex flex-col gap-1 text-[11px] leading-relaxed">
               <span className="font-semibold">
-                Structural relocation requires confirmation
+                {operation === 'delete' ? 'Deletion requires confirmation' : 'Structural relocation requires confirmation'}
               </span>
               <span>
-                Moving these model elements alters containment hierarchy and may invalidate
-                associated transitions, relationships, or diagram presentations.
+                {operation === 'delete'
+                  ? 'Deleting these model elements removes them, their owned elements and their symbols from every diagram, and may invalidate associated transitions or relationships.'
+                  : 'Moving these model elements alters containment hierarchy and may invalidate associated transitions, relationships, or diagram presentations.'}
               </span>
             </div>
           </div>

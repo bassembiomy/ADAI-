@@ -358,32 +358,40 @@ export const ModelExplorer: React.FC<ModelExplorerProps> = ({
     onRenameCancel?.();
   }, [onRenameCancel]);
 
-  useEffect(() => {
-    const handleGlobalKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'F2') {
-        const focusedRow = visibleRows[focusedIndex];
-        if (focusedRow && !focusedRow.node.readOnly) {
-          e.preventDefault();
-          setLocalRenamingNodeId(focusedRow.node.nodeId);
-        }
+  // The shortcuts the context menu shows (F2, Del, Ctrl+C, Ctrl+V, Ctrl+D) act on the focused
+  // row while the tree has focus. They are scoped to the tree so F2 or Delete pressed on a
+  // diagram never renames or deletes whatever row the tree last focused.
+  const handleTreeShortcut = useCallback((e: React.KeyboardEvent) => {
+    const target = e.target as HTMLElement;
+    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
+    const focusedRow = visibleRows[focusedIndex];
+    if (!focusedRow) return;
+    if (e.key === 'F2') {
+      if (!focusedRow.node.readOnly) {
+        e.preventDefault();
+        setLocalRenamingNodeId(focusedRow.node.nodeId);
       }
-    };
-    window.addEventListener('keydown', handleGlobalKeyDown);
-    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, [visibleRows, focusedIndex]);
+      return;
+    }
+    const ctrl = (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey;
+    const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+    const kind = (e.key === 'Delete' || e.key === 'Backspace') && !e.ctrlKey && !e.metaKey ? 'delete'
+      : ctrl && key === 'c' ? 'copy'
+      : ctrl && key === 'v' ? 'paste'
+      : ctrl && key === 'd' ? 'duplicate'
+      : null;
+    if (!kind) return;
+    // Handled here, so the diagram's own Delete / copy shortcuts do not act as well.
+    e.preventDefault();
+    e.stopPropagation();
+    const capability = (getCapabilities ? getCapabilities(focusedRow.node) : []).find(cap => cap.kind === kind);
+    if (capability?.enabled) onExecuteCapability?.(capability, focusedRow.node);
+  }, [visibleRows, focusedIndex, getCapabilities, onExecuteCapability]);
 
   return (
     <div data-help-feature="live:components/modelExplorer/ModelExplorer:d0ef54c166ea"
       className={`model-explorer-container flex flex-col h-full w-full bg-[var(--surface-panel)] border-r border-[var(--border-default)] ${className}`}
-      onKeyDown={(e) => {
-        if (e.key === 'F2') {
-          const focusedRow = visibleRows[focusedIndex];
-          if (focusedRow && !focusedRow.node.readOnly) {
-            e.preventDefault();
-            setLocalRenamingNodeId(focusedRow.node.nodeId);
-          }
-        }
-      }}
+      onKeyDown={handleTreeShortcut}
     >
       <ModelExplorerToolbar
         viewMode={viewMode}

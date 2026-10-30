@@ -69,13 +69,15 @@ export const IntroStandbyOverlay: React.FC<IntroStandbyOverlayProps> = ({ mode, 
   useEffect(() => {
     if (mode !== 'intro') return;
     
-    const handleKeyDown = () => {
+    // The key that skips the intro only skips it; it must not also reach the app's shortcuts.
+    const handleKeyDown = (e: KeyboardEvent) => {
+      e.stopPropagation();
       handleExit();
     };
 
-    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keydown', handleKeyDown, true);
     return () => {
-      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keydown', handleKeyDown, true);
     };
   }, [mode]);
 
@@ -89,13 +91,19 @@ export const IntroStandbyOverlay: React.FC<IntroStandbyOverlayProps> = ({ mode, 
       if (Date.now() - mountedTime < 300) return;
       handleExit();
     };
+    // The key that wakes the screen only wakes it (e.g. Delete must not delete the selection).
+    const handleWakeKey = (e: KeyboardEvent) => {
+      e.stopPropagation();
+      e.preventDefault();
+      handleWake();
+    };
 
-    window.addEventListener('keydown', handleWake);
+    window.addEventListener('keydown', handleWakeKey, true);
     window.addEventListener('mousedown', handleWake);
     window.addEventListener('touchstart', handleWake);
 
     return () => {
-      window.removeEventListener('keydown', handleWake);
+      window.removeEventListener('keydown', handleWakeKey, true);
       window.removeEventListener('mousedown', handleWake);
       window.removeEventListener('touchstart', handleWake);
     };

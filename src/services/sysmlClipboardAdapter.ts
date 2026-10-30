@@ -1,4 +1,4 @@
-import type { SysmlRepository, SysmlEntity } from '../engine/sysml/model';
+import { qualifiedName, type SysmlRepository, type SysmlEntity } from '../engine/sysml/model';
 import type { DiagramPresentation, PresentationCoordinates } from '../engine/sysml/presentationState';
 import type { SysmlEditorCommand, SysmlElement } from './sysmlCommandGateway';
 
@@ -51,6 +51,8 @@ export function buildSysmlPastePlan(
   diagramId: string,
   createId: () => string,
   offset = 24,
+  /** Repository the copies are pasted into (the clipboard may hold an earlier snapshot). */
+  targetRepository: SysmlRepository = repository,
 ): SysmlPastePlan | null {
   const byId = new Map(entities(repository).map(entity => [entity.id, entity]));
   const originals = [...new Set(selectedIds)].map(id => byId.get(id)).filter((item): item is SysmlEntity => item !== undefined);
@@ -66,11 +68,27 @@ export function buildSysmlPastePlan(
     }
   }
 
+  // Definitions and requirements need a unique qualified name: a copy pasted next to its
+  // original is numbered (Motor -> Motor2), a cut element pasted back keeps its name.
+  const takenNames = new Set([...Object.values(targetRepository.definitions), ...Object.values(targetRepository.requirements)]
+    .map(element => qualifiedName(element.namespace, element.name)));
+  const uniqueName = (namespace: readonly string[], base: string) => {
+    let name = base;
+    for (let index = 2; takenNames.has(qualifiedName(namespace, name)); index += 1) name = `${base}${index}`;
+    takenNames.add(qualifiedName(namespace, name));
+    return name;
+  };
+  const isNamedScope = (entity: SysmlEntity) =>
+    Boolean(targetRepository.definitions[entity.id] ?? repository.definitions[entity.id] ?? targetRepository.requirements[entity.id] ?? repository.requirements[entity.id]);
+
   const diagram = diagramPresentations[diagramId];
   const coordinates: Record<string, PresentationCoordinates> = {};
   const commands: Extract<SysmlEditorCommand, { type: 'batch' }>['commands'] = [];
   for (const entity of originals) {
-    const clone = remapEntity(entity, idMap);
+    const clone = remapEntity(entity, idMap) as SysmlEntity & { name?: string; namespace?: string[] };
+    if (isNamedScope(entity) && typeof clone.name === 'string' && Array.isArray(clone.namespace)) {
+      clone.name = uniqueName(clone.namespace, clone.name);
+    }
     commands.push({ type: 'createElement', element: clone as SysmlElement });
     const oldBounds = diagram?.presentations[entity.id]?.bounds ?? {};
     coordinates[idMap.get(entity.id)!] = {

@@ -1918,6 +1918,10 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (isInputFocused(e.target)) return;
+      // An open dialog owns the keyboard.
+      if ((e.target as HTMLElement | null)?.closest?.('[role="dialog"], [aria-modal="true"]')) return;
+      const isCtrlOrCmd = e.ctrlKey || e.metaKey;
+      const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
 
       // Track Space press
       if (e.code === 'Space' && !e.ctrlKey) {
@@ -1983,7 +1987,8 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
       }
 
       // Undo (Ctrl + Z)
-      if (e.ctrlKey && e.key === 'z') {
+      if (isCtrlOrCmd && key === 'z' && !e.shiftKey) {
+        e.preventDefault();
         if (history.length > 0) {
           const prevState = history[history.length - 1];
           setNodes(prevState.nodes);
@@ -1993,20 +1998,25 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
       }
 
       // Save (Ctrl + S)
-      if (e.ctrlKey && e.key === 's') {
+      if (isCtrlOrCmd && key === 's') {
         e.preventDefault();
         if (onSaveAll) onSaveAll();
         else console.log('V-Lab State Saved Locally');
       }
 
-      // Delete
+      // Delete: selected blocks with their wires, and selected wires (undoable)
       if (e.key === 'Delete' || e.key === 'Backspace') {
-        setNodes(nds => nds.filter(node => !node.selected));
-        setEdges(eds => eds.filter(edge => !edge.selected));
+        const removedIds = new Set(nodes.filter(node => node.selected).map(node => node.id));
+        if (removedIds.size > 0 || edges.some(edge => edge.selected)) {
+          e.preventDefault();
+          setHistory(h => [...h, { nodes, edges }].slice(-20));
+          setNodes(nds => nds.filter(node => !removedIds.has(node.id)));
+          setEdges(eds => eds.filter(edge => !edge.selected && !removedIds.has(edge.source) && !removedIds.has(edge.target)));
+        }
       }
 
       // Ctrl + C (Copy or Collapse panels)
-      if (e.ctrlKey && e.key === 'c') {
+      if (isCtrlOrCmd && key === 'c' && !e.shiftKey) {
         const selectedNodes = nodes.filter(n => n.selected);
         if (selectedNodes.length > 0) {
           setClipboard(selectedNodes);
@@ -2023,8 +2033,9 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
       }
 
       // Ctrl + V (Paste)
-      if (e.ctrlKey && e.key === 'v') {
+      if (isCtrlOrCmd && key === 'v' && !e.shiftKey) {
         if (clipboard.length > 0) {
+          setHistory(h => [...h, { nodes, edges }].slice(-20));
           const pastedNodes = clipboard.map(n => ({
             ...n,
             id: `${n.data.type}_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
@@ -2036,14 +2047,14 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
       }
 
       // Ctrl + A (Select All)
-      if (e.ctrlKey && e.key === 'a') {
+      if (isCtrlOrCmd && key === 'a') {
         e.preventDefault();
         setNodes(nds => nds.map(n => ({ ...n, selected: true })));
         setEdges(eds => eds.map(e => ({ ...e, selected: true })));
       }
 
       // Simulink Fit View (F key or Space key)
-      if ((e.code === 'KeyF' || e.code === 'Space') && !e.ctrlKey && !e.metaKey && !e.altKey && !isInputFocused(e.target)) {
+      if ((e.code === 'KeyF' || e.code === 'Space') && !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey && !isInputFocused(e.target)) {
         if (e.code === 'Space' && isSpacePressedRef.current && spaceComboUsedRef.current) return;
         if (reactFlowInstance) {
           reactFlowInstance.fitView({ padding: 0.2, duration: 400 });
@@ -2091,7 +2102,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [nodes, edges, clipboard, setNodes, setEdges, isLibCollapsed, isPropsCollapsed, setIsSimulating, reactFlowInstance]);
+  }, [nodes, edges, history, clipboard, setNodes, setEdges, isLibCollapsed, isPropsCollapsed, setIsSimulating, reactFlowInstance, onSaveAll]);
 
   const filteredLibrary = useMemo(() => {
     if (!searchQuery.trim()) return VLAB_LIBRARY;

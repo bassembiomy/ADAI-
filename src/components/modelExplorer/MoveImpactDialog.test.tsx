@@ -33,6 +33,15 @@ describe('MoveImpactDialog', () => {
     expect(html).toContain('Cancel');
   });
 
+  it('words a deletion as a deletion, not a move', () => {
+    const html = renderToStaticMarkup(
+      <MoveImpactDialog impact={sampleImpact} impactHash="h" operation="delete" onConfirm={vi.fn()} onCancel={vi.fn()} />
+    );
+    expect(html).toContain('Confirm Delete from Model');
+    expect(html).toContain('Deleting these model elements');
+    expect(html).not.toContain('Structural Move');
+  });
+
   it('renders nothing when isOpen is false', () => {
     const html = renderToStaticMarkup(
       <MoveImpactDialog

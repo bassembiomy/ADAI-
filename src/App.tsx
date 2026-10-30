@@ -2575,16 +2575,8 @@ const DoeWorkspace = ({
     reader.readAsBinaryString(file);
   };
 
-  useEffect(() => {
-    const handleKeyDown = (e: globalThis.KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-        e.preventDefault();
-        handleExportProject();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleExportProject]);
+  // Ctrl+S is the application-wide "Save project" shortcut (handled by the main window);
+  // a second listener here opened the module picker on top of every save.
 
   const handleBuilderNumFactorsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = parseInt(e.target.value);
@@ -6334,7 +6326,7 @@ const ADIA = () => {
 
   // Clipboard state
   const [clipboard, setClipboard] = useState<StateMachineClipboardData | null>(null);
-  const sysmlClipboardRef = useRef<string[]>([]);
+  const sysmlClipboardRef = useRef<{ ids: string[]; repository: Parameters<typeof buildSysmlPastePlan>[0]; presentations: Parameters<typeof buildSysmlPastePlan>[1] } | null>(null);
 
   // Resizing state
   const [isResizing, setIsResizing] = useState(false);
@@ -7366,6 +7358,12 @@ const ADIA = () => {
       addError('error', `Failed to save project: ${err?.message || String(err)}`);
     }
   }, [buildUnifiedProjectPayload, currentProjectName, addError]);
+  const saveUnifiedProjectRef = useRef(saveUnifiedProject);
+  saveUnifiedProjectRef.current = saveUnifiedProject;
+  // Ctrl+S inside a workspace that flushes its own state first: save once that state is committed.
+  const saveProjectAfterWorkspaceFlush = useCallback(() => {
+    window.setTimeout(() => { void saveUnifiedProjectRef.current(false); }, 0);
+  }, []);
 
   // X-BRIDGES Application Delegate connected to live React Flow state
   const liveXbridgesState = useMemo(() => createLiveXbridgesStateAccessors(
@@ -12633,26 +12631,35 @@ const ADIA = () => {
   // KEYBOARD SHORTCUTS
   useEffect(() => {
     const handleKeyDown = (e: globalThis.KeyboardEvent) => {
-      if (diagramMode === 'entropy') {
-        // Let EntropyWorkspace handle all shortcuts in OPM mode
+      // OPM, V-Lab and X-Bridges register their own complete shortcut sets
+      // (save included); handling the keys here as well would act twice and
+      // reach a SysML selection the user cannot see.
+      if (diagramMode === 'entropy' || diagramMode === 'vlab' || diagramMode === 'xbridges' || xBridgesStateId) {
         return;
       }
 
-      // Prevent shortcuts when typing in inputs
-
       const target = e.target as HTMLElement;
-      const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
+      const isCtrlOrCmd = e.ctrlKey || e.metaKey;
+      const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
 
-      if (isInput) {
-        if (e.ctrlKey && (e.key === 's' || e.key === 'S')) {
+      // Prevent shortcuts when typing in inputs
+      if (isInputFocused(target)) {
+        if (isCtrlOrCmd && key === 's') {
           e.preventDefault();
           saveUnifiedProject(e.shiftKey);
         }
         return;
       }
+      // An open dialog owns the keyboard: Delete or Ctrl+A must not act on the canvas behind it.
+      if (target.closest?.('[role="dialog"], [aria-modal="true"]')) return;
+
+      // Diagrams drawn on the main canvas. Activity, use case, sequence, PlantUML and HIL
+      // workspaces handle their own canvas keys; only the app-wide shortcuts apply there.
+      const isMainCanvas = diagramMode === 'statemachine' || diagramMode === 'bdd' || diagramMode === 'ibd'
+        || diagramMode === 'requirements' || diagramMode === 'package';
 
       // Space + C combo: Collapse/Expand properties, tree, variables, and scope together
-      if ((e.key === 'c' || e.key === 'C') && isSpacePressed.current) {
+      if (key === 'c' && isSpacePressed.current && !isCtrlOrCmd) {
         e.preventDefault();
         spaceComboUsed.current = true;
         const allCollapsed = isHierarchyCollapsed && isVariablesCollapsed && isPropertiesCollapsed && isScopeCollapsed;
@@ -12669,8 +12676,8 @@ const ADIA = () => {
         }
       }
 
-      // Shift + C: Toggle Connect Mode
-      if (e.shiftKey && (e.key === 'c' || e.key === 'C') && !e.ctrlKey && !e.metaKey && !e.altKey && !isSpacePressed.current) {
+      // Shift + C: Toggle Connect Mode (IBD connectors, state machine transitions)
+      if ((diagramMode === 'ibd' || diagramMode === 'statemachine') && e.shiftKey && key === 'c' && !e.ctrlKey && !e.metaKey && !e.altKey && !isSpacePressed.current) {
         e.preventDefault();
         if (diagramMode === 'ibd') {
           setIsCreatingConnector(prev => {
@@ -12689,8 +12696,8 @@ const ADIA = () => {
         }
       }
 
-      // Shift + X: Create X-Bridges block at viewport center
-      if (e.shiftKey && (e.key === 'x' || e.key === 'X') && !e.ctrlKey && !e.metaKey && !e.altKey && !isSpacePressed.current) {
+      // Shift + X: Create X-Bridges state at viewport center
+      if (diagramMode === 'statemachine' && e.shiftKey && key === 'x' && !e.ctrlKey && !e.metaKey && !e.altKey && !isSpacePressed.current) {
         e.preventDefault();
         const canvasW = canvasRef.current?.clientWidth || 800;
         const canvasH = canvasRef.current?.clientHeight || 600;
@@ -12722,29 +12729,54 @@ const ADIA = () => {
         document.body.style.cursor = 'grab';
       }
 
-      if (e.key === 'ArrowLeft') setView(prev => ({ ...prev, offsetX: prev.offsetX + 20 / prev.scale }));
-      if (e.key === 'ArrowRight') setView(prev => ({ ...prev, offsetX: prev.offsetX - 20 / prev.scale }));
-      if (e.key === 'ArrowUp') setView(prev => ({ ...prev, offsetY: prev.offsetY + 20 / prev.scale }));
-      if (e.key === 'ArrowDown') setView(prev => ({ ...prev, offsetY: prev.offsetY - 20 / prev.scale }));
+      // Arrow keys pan the diagram (unless a focused control, e.g. a toolbar, uses them).
+      const focusIsFree = target === document.body || !!canvasRef.current?.contains(target);
+      if (isMainCanvas && focusIsFree && !isCtrlOrCmd && !e.altKey) {
+        const step = 20;
+        if (e.key === 'ArrowLeft') { e.preventDefault(); setView(prev => ({ ...prev, offsetX: prev.offsetX + step })); }
+        if (e.key === 'ArrowRight') { e.preventDefault(); setView(prev => ({ ...prev, offsetX: prev.offsetX - step })); }
+        if (e.key === 'ArrowUp') { e.preventDefault(); setView(prev => ({ ...prev, offsetY: prev.offsetY + step })); }
+        if (e.key === 'ArrowDown') { e.preventDefault(); setView(prev => ({ ...prev, offsetY: prev.offsetY - step })); }
+      }
 
-      if (e.ctrlKey) {
+      // UI zoom (whole application)
+      if (isCtrlOrCmd && !e.altKey) {
         if (e.key === '=' || e.key === '+') {
           e.preventDefault();
           setUiZoom(prev => Math.min(3.0, prev + 0.1));
         }
-        if (e.key === '-') {
+        if (e.key === '-' || e.key === '_') {
           e.preventDefault();
           setUiZoom(prev => Math.max(0.4, prev - 0.1));
         }
-        if (e.key === '0') {
+        if (e.key === '0' || e.code === 'Digit0') {
           e.preventDefault();
           setUiZoom(1.0);
         }
       }
 
-      // Copy / Paste / Cut / Select All / Undo / Redo / Save
-      if (e.ctrlKey) {
-        if (e.key === 'c' || e.key === 'C') {
+      // Undo / Redo / Save apply in every workspace that does not own its shortcuts.
+      if (isCtrlOrCmd && !e.altKey) {
+        if (key === 'z' && !e.shiftKey) {
+          e.preventDefault();
+          undo();
+        }
+        if (key === 'y' || (key === 'z' && e.shiftKey)) {
+          e.preventDefault();
+          redo();
+        }
+        if (key === 's') {
+          e.preventDefault();
+          saveUnifiedProject(e.shiftKey);
+        }
+      }
+
+      if (!isMainCanvas) return;
+
+      // Copy / Paste / Cut / Select All on the main canvas
+      if (isCtrlOrCmd && !e.altKey && !e.shiftKey) {
+        // Copying with nothing selected leaves the clipboard alone (and native text copy works).
+        if (key === 'c' && selectedIds.length > 0) {
           // Copy
           if (diagramMode === 'statemachine') {
             setClipboard(createStateMachineClipboard(
@@ -12752,12 +12784,12 @@ const ADIA = () => {
               blocks, relationships, parts, connectors, interfaceRealizations,
             ));
           } else {
-            sysmlClipboardRef.current = [...selectedIds];
+            sysmlClipboardRef.current = { ids: [...selectedIds], repository: canonicalSysmlRepository, presentations: sysmlDiagramPresentations };
             setClipboard(null);
           }
           addError('info', `Copied ${selectedIds.length} items`);
         }
-        if (e.key === 'v' || e.key === 'V') {
+        if (key === 'v') {
           // Paste
           if (diagramMode === 'statemachine' && clipboard) {
             addToHistory();
@@ -12783,14 +12815,18 @@ const ADIA = () => {
 
             setSelectedIds(result.pastedTopLevelIds);
             addError('info', 'Pasted items');
-          } else if (diagramMode !== 'statemachine' && sysmlClipboardRef.current.length > 0) {
+          } else if (diagramMode !== 'statemachine' && sysmlClipboardRef.current && sysmlClipboardRef.current.ids.length > 0) {
             const diagramId = activeSysmlDiagramId;
+            // Paste from the snapshot taken at copy / cut time, so cut elements can be pasted back.
+            const copied = sysmlClipboardRef.current;
             const plan = buildSysmlPastePlan(
-              canonicalSysmlRepository,
-              sysmlDiagramPresentations,
-              sysmlClipboardRef.current,
+              copied.repository,
+              copied.presentations,
+              copied.ids,
               diagramId,
               () => uuidv4(),
+              24,
+              canonicalSysmlRepository,
             );
             if (!plan) {
               addError('warning', 'The copied SysML selection is no longer present in the repository.');
@@ -12805,7 +12841,7 @@ const ADIA = () => {
             }
           }
         }
-        if (e.key === 'x' || e.key === 'X') {
+        if (key === 'x' && selectedIds.length > 0) {
           // Cut
           const selectedStateIds = selectedIds.filter(id => states.some(s => s.id === id));
           const otherSelectedIds = selectedIds.filter(id => !states.some(s => s.id === id));
@@ -12816,33 +12852,28 @@ const ADIA = () => {
               blocks, relationships, parts, connectors, interfaceRealizations,
             ));
           } else {
-            sysmlClipboardRef.current = [...otherSelectedIds];
+            sysmlClipboardRef.current = { ids: [...otherSelectedIds], repository: canonicalSysmlRepository, presentations: sysmlDiagramPresentations };
             setClipboard(null);
           }
-          // Delete logic
-          executeDeleteState(selectedStateIds, otherSelectedIds);
+          // Delete logic: SysML elements go through the same impact review as Delete from model
+          // (the gateway refuses an unconfirmed delete of presented elements).
+          if (diagramMode === 'statemachine') executeDeleteState(selectedStateIds, otherSelectedIds);
+          else deleteNonStateElements(otherSelectedIds);
           addError('info', 'Cut items');
         }
-        if (e.key === 'a' || e.key === 'A') {
+        if (key === 'a') {
           e.preventDefault();
+          // Select what this diagram shows, never elements that only exist on other diagrams.
           const allIds = diagramMode === 'statemachine'
             ? [...currentStates.map(s => s.id), ...currentJunctions.map(j => j.id), ...currentTransitions.map(t => t.id)]
-            : (diagramMode === 'bdd' || diagramMode === 'requirements')
-              ? [...blocks.map(b => b.id), ...relationships.map(r => r.id)]
-              : [...parts.map(p => p.id), ...connectors.map(c => c.id)];
+            : [
+              ...sysmlCanvasView.packages.map(pkg => pkg.id),
+              ...sysmlCanvasView.blocks.filter(b => !(diagramMode === 'ibd' && b.id === currentLayerId)).map(b => b.id),
+              ...sysmlCanvasView.relationships.map(r => r.id),
+              ...sysmlCanvasView.parts.map(p => p.id),
+              ...sysmlCanvasView.connectors.map(c => c.id),
+            ];
           setSelectedIds(allIds);
-        }
-        if (e.key === 'z' || e.key === 'Z') {
-          e.preventDefault();
-          undo();
-        }
-        if (e.key === 'y' || e.key === 'Y') {
-          e.preventDefault();
-          redo();
-        }
-        if (e.key === 's' || e.key === 'S') {
-          e.preventDefault();
-          saveUnifiedProject(e.shiftKey);
         }
       }
 
@@ -12889,7 +12920,7 @@ const ADIA = () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [selectedIds, view, deleteState, deleteStates, deleteNonStateElements, executeDeleteState, deleteJunction, deleteTransition, deleteBlock, removeFromDiagram, deleteRelationship, deletePart, deleteConnector, deleteInterfaceRealization, states, junctions, transitions, blocks, relationships, parts, connectors, interfaceRealizations, clipboard, currentLayerId, currentStates, currentJunctions, currentTransitions, canonicalSysmlRepository, sysmlDiagramPresentations, handleExecuteSysmlCommand, addToHistory, undo, redo, addError, handleExportProject, diagramMode, activeSysmlDiagramId, startSimulation, pauseSimulation, resetSimulation, isHierarchyCollapsed, isVariablesCollapsed, isPropertiesCollapsed, isScopeCollapsed]);
+  }, [selectedIds, view, uiZoom, xBridgesStateId, sysmlCanvasView, saveUnifiedProject, createXBridgesState, deleteState, deleteStates, deleteNonStateElements, executeDeleteState, deleteJunction, deleteTransition, deleteBlock, removeFromDiagram, deleteRelationship, deletePart, deleteConnector, deleteInterfaceRealization, states, junctions, transitions, blocks, relationships, parts, connectors, interfaceRealizations, clipboard, currentLayerId, currentStates, currentJunctions, currentTransitions, canonicalSysmlRepository, sysmlDiagramPresentations, handleExecuteSysmlCommand, addToHistory, undo, redo, addError, handleExportProject, diagramMode, activeSysmlDiagramId, startSimulation, pauseSimulation, resetSimulation, isHierarchyCollapsed, isVariablesCollapsed, isPropertiesCollapsed, isScopeCollapsed]);
 
   // CODE GENERATION (FULLY FUNCTIONAL WITH USER FEEDBACK)
   const generateCode = useCallback(async () => {
@@ -15622,7 +15653,7 @@ const ADIA = () => {
                     else setDiagramMode('statemachine');
                   }}
                   onSave={handleXBridgesSave}
-                  onSaveAll={handleExportProject}
+                  onSaveAll={saveProjectAfterWorkspaceFlush}
                   initialSelectedNodeId={xBridgesSelectedNodeId}
                   sharedClipboard={sharedClipboard}
                   onClipboardChange={setSharedClipboard}
@@ -15704,6 +15735,7 @@ const ADIA = () => {
               {diagramMode === 'vlab' && (
                 <Suspense fallback={<WorkspaceLoading />}>
                 <VLabWorkspace
+                  onSaveAll={saveProjectAfterWorkspaceFlush}
                   nodes={vlabNodes}
                   edges={vlabEdges}
                   onNodesChange={(nodes) => setVlabNodes(nodes)}
@@ -16475,7 +16507,7 @@ const ADIA = () => {
                 <span className="text-[#888]">
                   {isPanning ? 'PANNING' : isSpacePressed.current ? 'PAN MODE (SPACE)' : 'READY'}
                   {' | '}
-                  Space+Drag: Pan | Ctrl+Wheel: Zoom
+                  Middle or Space+Drag: Pan | Wheel: Zoom | F: Fit
                 </span>
               </div>
 

@@ -1739,7 +1739,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
       }
 
       // 14. Zoom Out: Ctrl+-
-      if (isCtrlOrCmd && e.key === '-') {
+      if (isCtrlOrCmd && (e.key === '-' || e.key === '_')) {
         e.preventDefault();
         e.stopPropagation();
         reactFlowInstanceRef.current?.zoomOut({ duration: 200 });
@@ -1817,11 +1817,18 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
       }
     };
 
+    // Space + drag pans the canvas: releasing Space after a pan must not toggle the simulation.
+    const handlePointerDown = () => {
+      if (isSpacePressed.current) spaceComboUsed.current = true;
+    };
+
     window.addEventListener('keydown', handleKeyDown, { capture: true });
     window.addEventListener('keyup', handleKeyUp, { capture: true });
+    window.addEventListener('pointerdown', handlePointerDown, { capture: true });
     return () => {
       window.removeEventListener('keydown', handleKeyDown, { capture: true });
       window.removeEventListener('keyup', handleKeyUp, { capture: true });
+      window.removeEventListener('pointerdown', handlePointerDown, { capture: true });
     };
   }, [
     selectedNode,
