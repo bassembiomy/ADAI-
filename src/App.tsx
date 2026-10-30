@@ -107,6 +107,8 @@ import { analyzeStateMachine } from './utils/smAnalysisEngine';
 import { HelpModal } from './components/help/HelpModal';
 import { normalizeHmiComponents, parseHmiVariableValue, validateHmiInput, type HmiInputCommand, type HmiInputResult } from './features/hmi/hmiModel';
 import { createHmiInputQueue, getPortableHmiInputQueueScript } from './features/hmi/hmiInputQueue';
+import { createHmiRunRecorder } from './features/hmi/hmiRunRecorder';
+import { renderHmiRunReportHtml } from './features/hmi/hmiRunReport';
 import { renderHmiWidgetSvg, renderPortableHmiMarkup, getPortableHmiScript, resolveHmiReportComponents } from './features/hmi/hmiReport';
 import { resolveModuleHelp } from './help/helpNavigation';
 import { useContextualHelp } from './help/helpContext';
@@ -4900,6 +4902,11 @@ const ADIA = () => {
   const simulationSessionRef = useRef<AppSimulationSession | null>(null);
   const simulationLifecycleRef = useRef(createAppSimulationLifecycle());
   const hmiInputQueueRef = useRef(createHmiInputQueue());
+  const hmiRunRecorderRef = useRef(createHmiRunRecorder());
+  const hmiOperatorInputIdsRef = useRef<string[]>([]);
+  useEffect(() => {
+    hmiRunRecorderRef.current.setTransitionTargets(Object.fromEntries(transitions.map(t => [t.id, t.targetId])));
+  }, [transitions]);
   const [hmiResetVersion, setHmiResetVersion] = useState(0);
   const [simulationStartVersion, setSimulationStartVersion] = useState(0);
   const [hmiSamples, setHmiSamples] = useState<Array<{ time: number; values: Record<string, number | boolean> }>>([]);
@@ -8329,6 +8336,7 @@ const ADIA = () => {
     hmiInputQueueRef.current.clear();
     setHmiResetVersion(version => version + 1);
     setHmiSamples([]);
+    hmiRunRecorderRef.current.reset();
     setIsRunning(false);
     setActiveStates({});
     setStateTimers({});
@@ -8417,6 +8425,15 @@ const ADIA = () => {
   ) => {
     const update = traceFrameToAppUpdate(frame, session.ir);
     const activeIds = new Set(Object.values(update.activeStates));
+    const recorderTick = {
+      time: timeSeconds,
+      values: update.variableValues,
+      activeStateIds: Object.values(update.activeStates),
+      firedTransitionIds: update.traceEvents.map(e => e.transitionId),
+      operatorInputIds: hmiOperatorInputIdsRef.current,
+    };
+    if (sampleScope) hmiRunRecorderRef.current.record(recorderTick);
+    else hmiRunRecorderRef.current.start(recorderTick);
     if (sampleScope) setHmiSamples(prev => [...prev, {
       time: timeSeconds, values: { ...update.variableValues },
     }].slice(-600));
@@ -8503,16 +8520,21 @@ const ADIA = () => {
         readInputs: readFactoryInputs,
         isCurrent: () => lifecycle.isCurrent(operation),
         beforeStep: () => {
+          hmiOperatorInputIdsRef.current = [];
           for (const [id, value] of Object.entries(hmiInputQueueRef.current.drain())) {
             const variable = variables.find(v => v.id === id);
             if (!variable || session.ioMappings.some(m => m.variableId === id && m.direction === 'read')) continue;
             const parsed = parseHmiVariableValue(variable, value);
-            if (parsed.accepted) setSessionVariableValue(session, id, parsed.value);
+            if (parsed.accepted) {
+              setSessionVariableValue(session, id, parsed.value);
+              hmiOperatorInputIdsRef.current.push(id);
+            }
           }
         },
         applyFrame: nextFrame => {
           setSimulationTime(newTime);
           applySimulationFrameToReact(session, nextFrame, newTime, true);
+          hmiOperatorInputIdsRef.current = [];
         },
         commitOutputs: writeFactoryOutputs,
       });
@@ -8561,6 +8583,7 @@ const ADIA = () => {
       setSimulationTime(0);
       setScopeData([]);
       setHmiSamples([]);
+      hmiRunRecorderRef.current.reset();
       setTraceHistory([]);
       setFiredTransitions({});
       applySimulationFrameToReact(session, session.initialFrame, 0, false);
@@ -8591,6 +8614,7 @@ const ADIA = () => {
     hmiInputQueueRef.current.clear();
     setHmiResetVersion(version => version + 1);
     setHmiSamples([]);
+    hmiRunRecorderRef.current.reset();
     const lifecycle = simulationLifecycleRef.current;
     lifecycle.invalidate();
     const generation = lifecycle.currentGeneration();
@@ -11817,6 +11841,17 @@ const ADIA = () => {
       });
       hmiHtml += `</div>`;
       extraSections.push({ id: 'hmi-design', title: 'HMI Design', html: hmiHtml });
+      extraSections.push({
+        id: 'hmi-signal-feedback',
+        title: 'HMI Signal Feedback',
+        html: renderHmiRunReportHtml({
+          components: hmiComponents,
+          variables,
+          states: states.map(s => ({ id: s.id, name: s.name, entry: s.entry, during: s.during, exit: s.exit })),
+          transitions,
+          log: hmiRunRecorderRef.current.snapshot(),
+        }),
+      });
     }
 
     // 6. Interactive System Prototype

@@ -152,6 +152,15 @@ figure.report-figure.fig-full svg { max-width:none !important; }
 .item-header { font-weight:700; }
 .props { color:var(--muted); margin-left:10px; font-size:9.5pt; }
 
+/* HMI signal feedback (run evidence for the industrial-design team) */
+.hmi-feedback table.data { font-size:8.5pt; }
+.hmi-feedback table.data th, .hmi-feedback table.data td { padding:3px 5px; overflow-wrap:anywhere; word-break:break-word; }
+.hmi-feedback table.data td { white-space:normal; }
+.hmi-feedback ul { margin:4px 0 8px; padding-left:18px; }
+[data-state-scenario] { margin:10px 0; padding:8px 10px; border:1px solid var(--rule); border-left:3px solid var(--accent); background:#fff; break-inside:avoid; page-break-inside:avoid; font-size:9.5pt; }
+[data-state-scenario] h4 { margin:0 0 4px; }
+[data-state-scenario] p { margin:3px 0; }
+
 /* running footer (fallback for engines without @page margin boxes) */
 .print-footer { display:none; }
 
