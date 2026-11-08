@@ -15,7 +15,7 @@ for (const [id, text, example] of [
   ['BitwiseNOT', 'Complements every bit after converting the input to a signed 32-bit integer.', 'For a zero input, the signed output is -1.'],
   ['ShiftLeft', 'Shifts signed 32-bit input bits left by the second input; JavaScript masks the shift count to five bits.', 'Inputs 3 and 2 produce 12.'],
   ['ShiftRight', 'Shifts signed 32-bit input bits right with sign extension.', 'Inputs -8 and 2 produce -2.'],
-  ['Constant', 'Emits the configured value, parsing MATLAB-style scalar, vector and matrix text.', 'Set value to [1 2 3] to emit the vector [1,2,3].'],
+  ['Constant', 'Emits the configured value, parsing MATLAB-style scalar, vector and matrix text.', 'Set value to [1 2 3] to emit the vector [1,2,3]. Set output_type (auto, float64, float32, int8..uint32, boolean) to choose the output data type; integers round to nearest and saturate.'],
   ['VectorAdd', 'Adds inputs element by element with scalar broadcasting through VectorUtils.', 'Inputs [1,2] and [3,4] produce [4,6].'],
   ['VectorSub', 'Subtracts the second input from the first element by element.', 'Inputs [3,5] and [1,2] produce [2,3].'],
   ['VectorMul', 'Multiplies all inputs element by element with scalar broadcasting.', 'Inputs [2,3] and 2 produce [4,6].'],

@@ -1,3 +1,4 @@
+import { VectorUtils } from '../../engine/xbridges/VectorUtils';
 import { validateStateSpaceNode } from './stateSpaceValidation';
 import { getXBBlockCapability, isMatrixSolveBlockType } from './xbCapabilities';
 import { getXBConformanceStatus } from './xbConformanceStatus';
@@ -403,6 +404,26 @@ const hasAlgebraicCycle = (
   return [...directNodeIds].some(visit);
 };
 
+const CONSTANT_INTEGER_RANGES: Readonly<Record<string, readonly [number, number]>> = {
+  int8: [-128, 127],
+  uint8: [0, 255],
+  int16: [-32768, 32767],
+  uint16: [0, 65535],
+  int32: [-2147483648, 2147483647],
+  uint32: [0, 4294967295],
+};
+const CONSTANT_NON_INTEGER_TYPES: ReadonlySet<string> = new Set(['float64', 'float32', 'boolean']);
+
+const constantElements = (value: unknown): number[] => {
+  if (Array.isArray(value)) return value.flatMap((item) => constantElements(item));
+  if (typeof value === 'string') {
+    const parsed = VectorUtils.parseMatlabArray(value);
+    if (typeof parsed === 'string') return [];
+    return constantElements(parsed);
+  }
+  return typeof value === 'number' || typeof value === 'boolean' ? [Number(value)] : [];
+};
+
 export const validateXBModel = (
   rawModel: XBPersistedModelV1,
   variables: Readonly<Record<string, SemanticVariable>>,
@@ -611,6 +632,33 @@ export const validateXBModel = (
     }
     if (node.type === 'Constant') {
       const val = parameters.value ?? parameters.Value ?? parameters.constant;
+      const outType = parameters.output_type;
+      if (typeof outType === 'string' && outType !== 'auto') {
+        const range = CONSTANT_INTEGER_RANGES[outType];
+        if (range === undefined && !CONSTANT_NON_INTEGER_TYPES.has(outType)) {
+          diagnostics.push(diagnostic(
+            'XB_CONSTANT_TYPE_INVALID',
+            `Constant block '${node.id}' has unknown output_type '${outType}'.`,
+            node.id,
+          ));
+        } else if (range !== undefined) {
+          for (const element of constantElements(val)) {
+            if (!Number.isInteger(element)) {
+              diagnostics.push(diagnostic(
+                'XB_CONSTANT_VALUE_NOT_REPRESENTABLE',
+                `Constant block '${node.id}' value ${element} is not an integer and cannot be represented as ${outType}.`,
+                node.id,
+              ));
+            } else if (element < range[0] || element > range[1]) {
+              diagnostics.push(diagnostic(
+                'XB_CONSTANT_VALUE_OUT_OF_RANGE',
+                `Constant block '${node.id}' value ${element} is outside the ${outType} range [${range[0]}, ${range[1]}].`,
+                node.id,
+              ));
+            }
+          }
+        }
+      }
       let valLength = 0;
       if (Array.isArray(val)) {
         valLength = val.length;

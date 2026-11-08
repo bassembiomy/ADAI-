@@ -2111,16 +2111,41 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     }
   }),
 
-  'Constant': (id, params) => ({
-    id, type: 'Constant', params: { value: params.value ?? 1 },
-    inputs: [],
-    outputs: [createPort('out', 'Out', 'output', params.value ?? 1)],
-    execute: (_, p) => {
-      // Support parsing arrays/vectors if user typed "[1 2 3]" or "[1, 2, 3]"
-      const v = VectorUtils.parseMatlabArray(p.value);
-      return { outputs: [v] };
-    }
-  }),
+  'Constant': (id, params) => {
+    const output_type = params.output_type !== undefined ? String(params.output_type) : 'auto';
+    const castConstant = (x: any, type: string): any => {
+      if (Array.isArray(x)) return x.map((item) => castConstant(item, type));
+      const n = Number(x);
+      if (typeof x === 'string' && x.trim() === '') return x;
+      if (Number.isNaN(n)) return x;
+      switch (type) {
+        case 'float32': return Math.fround(n);
+        case 'boolean': return n !== 0 ? 1 : 0;
+        case 'int8': case 'uint8': case 'int16': case 'uint16': case 'int32': case 'uint32': {
+          const unsigned = type[0] === 'u';
+          const bits = Number(type.replace(/\D/g, ''));
+          const min = unsigned ? 0 : -Math.pow(2, bits - 1);
+          const max = unsigned ? Math.pow(2, bits) - 1 : Math.pow(2, bits - 1) - 1;
+          const r = Math.sign(n) * Math.round(Math.abs(n));
+          return Math.min(max, Math.max(min, r)) + 0;
+        }
+        default: return x;
+      }
+    };
+    return {
+      id, type: 'Constant', params: { value: params.value ?? 1, output_type },
+      inputs: [],
+      outputs: [createPort('out', 'Out', 'output', params.value ?? 1, undefined, undefined,
+        output_type === 'auto' ? undefined : output_type)],
+      description: 'Constant output. output_type selects the output data type (auto = inherit); integers round to nearest and saturate.',
+      execute: (_, p) => {
+        // Support parsing arrays/vectors if user typed "[1 2 3]" or "[1, 2, 3]"
+        const v = VectorUtils.parseMatlabArray(p.value);
+        const type = p.output_type !== undefined ? String(p.output_type) : 'auto';
+        return { outputs: [type === 'auto' || type === 'float64' ? v : castConstant(v, type)] };
+      }
+    };
+  },
 
   'Step': (id, params) => ({
     id, type: 'Step', params: {

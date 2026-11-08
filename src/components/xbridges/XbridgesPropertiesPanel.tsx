@@ -790,7 +790,9 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
             </div>
           )}
 
-          {Object.entries(block.params)
+          {Object.entries(block.type === 'Constant' && block.params?.output_type === undefined
+            ? { ...block.params, output_type: 'auto' } /* models saved before output_type existed */
+            : block.params)
             .filter(([key]) => {
               if (['TRANSFER_FUNCTION', 'DISCRETE_TRANSFER_FUNCTION', 'ZERO_POLE_GAIN', 'ROOT_LOCUS', 'LAPLACE_TRANSFORM'].includes(block.type)) {
                 return !['A', 'B', 'C', 'D', 'numerator', 'denominator', 'zeros', 'poles', 'gain', 'maxGain', 'representation', 'equation', 'lastFactor', 'lastMaxDegree', 'lastMappingType'].includes(key);
@@ -910,7 +912,21 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
                           <option value="boolean">Boolean</option>
                         </>
                       )}
-                      {key === 'output_type' && block.type !== 'NUMERIC_REPRESENTATION' && (
+                      {key === 'output_type' && block.type === 'Constant' && (
+                        <>
+                          <option value="auto">Inherit (auto)</option>
+                          <option value="float64">Double (float64)</option>
+                          <option value="float32">Single (float32)</option>
+                          <option value="int8">Int8</option>
+                          <option value="uint8">UInt8</option>
+                          <option value="int16">Int16</option>
+                          <option value="uint16">UInt16</option>
+                          <option value="int32">Int32</option>
+                          <option value="uint32">UInt32</option>
+                          <option value="boolean">Boolean</option>
+                        </>
+                      )}
+                      {key === 'output_type' && block.type !== 'NUMERIC_REPRESENTATION' && block.type !== 'Constant' && (
                         <>
                           <option value="float64">Double (float64)</option>
                           <option value="float32">Single (float32)</option>
