@@ -1,7 +1,7 @@
 {
   "scope": "Registered semantic features; UI source candidates reported separately.",
-  "total": 2195,
-  "documented": 2195,
+  "total": 2200,
+  "documented": 2200,
   "missing": 0,
   "coverage": 100,
   "duplicateFeatureIds": [],
@@ -14448,6 +14448,51 @@
       "topicId": "live:components/xbridges/powertrain/DoeSweeperPanel:41575c58e7e8",
       "sectionId": "use",
       "sourcePath": "src/components/xbridges/powertrain/DoeSweeperPanel.tsx",
+      "kind": "action",
+      "module": "system"
+    },
+    {
+      "id": "live:components/xbridges/diagnostics/XbridgesDiagnosticPopup:1bdc27f5f835",
+      "label": "View all run diagnostics",
+      "topicId": "live:components/xbridges/diagnostics/XbridgesDiagnosticPopup:1bdc27f5f835",
+      "sectionId": "use",
+      "sourcePath": "src/components/xbridges/diagnostics/XbridgesDiagnosticPopup.tsx",
+      "kind": "action",
+      "module": "system"
+    },
+    {
+      "id": "live:components/xbridges/diagnostics/XbridgesDiagnosticPopup:e6bed41841c3",
+      "label": "Dismiss the run diagnostics pop-up",
+      "topicId": "live:components/xbridges/diagnostics/XbridgesDiagnosticPopup:e6bed41841c3",
+      "sectionId": "use",
+      "sourcePath": "src/components/xbridges/diagnostics/XbridgesDiagnosticPopup.tsx",
+      "kind": "action",
+      "module": "system"
+    },
+    {
+      "id": "live:components/xbridges/diagnostics/XbridgesStatusBar:8551c4632149",
+      "label": "Show the block of a problem",
+      "topicId": "live:components/xbridges/diagnostics/XbridgesStatusBar:8551c4632149",
+      "sectionId": "use",
+      "sourcePath": "src/components/xbridges/diagnostics/XbridgesStatusBar.tsx",
+      "kind": "action",
+      "module": "system"
+    },
+    {
+      "id": "live:components/xbridges/diagnostics/XbridgesStatusBar:c6828325f596",
+      "label": "Open help for a problem",
+      "topicId": "live:components/xbridges/diagnostics/XbridgesStatusBar:c6828325f596",
+      "sectionId": "use",
+      "sourcePath": "src/components/xbridges/diagnostics/XbridgesStatusBar.tsx",
+      "kind": "action",
+      "module": "system"
+    },
+    {
+      "id": "live:components/xbridges/diagnostics/XbridgesStatusBar:a1cc4a27dd3f",
+      "label": "Show or hide the Problems list",
+      "topicId": "live:components/xbridges/diagnostics/XbridgesStatusBar:a1cc4a27dd3f",
+      "sectionId": "use",
+      "sourcePath": "src/components/xbridges/diagnostics/XbridgesStatusBar.tsx",
       "kind": "action",
       "module": "system"
     },

@@ -1521,6 +1521,51 @@ export const LIVE_UI_FEATURES: HelpFeature[] = [
     "sourcePath": "src/components/xbridges/powertrain/DoeSweeperPanel.tsx",
     "kind": "action",
     "module": "system"
+  },
+  {
+    "id": "live:components/xbridges/diagnostics/XbridgesDiagnosticPopup:1bdc27f5f835",
+    "label": "View all run diagnostics",
+    "topicId": "live:components/xbridges/diagnostics/XbridgesDiagnosticPopup:1bdc27f5f835",
+    "sectionId": "use",
+    "sourcePath": "src/components/xbridges/diagnostics/XbridgesDiagnosticPopup.tsx",
+    "kind": "action",
+    "module": "system"
+  },
+  {
+    "id": "live:components/xbridges/diagnostics/XbridgesDiagnosticPopup:e6bed41841c3",
+    "label": "Dismiss the run diagnostics pop-up",
+    "topicId": "live:components/xbridges/diagnostics/XbridgesDiagnosticPopup:e6bed41841c3",
+    "sectionId": "use",
+    "sourcePath": "src/components/xbridges/diagnostics/XbridgesDiagnosticPopup.tsx",
+    "kind": "action",
+    "module": "system"
+  },
+  {
+    "id": "live:components/xbridges/diagnostics/XbridgesStatusBar:8551c4632149",
+    "label": "Show the block of a problem",
+    "topicId": "live:components/xbridges/diagnostics/XbridgesStatusBar:8551c4632149",
+    "sectionId": "use",
+    "sourcePath": "src/components/xbridges/diagnostics/XbridgesStatusBar.tsx",
+    "kind": "action",
+    "module": "system"
+  },
+  {
+    "id": "live:components/xbridges/diagnostics/XbridgesStatusBar:c6828325f596",
+    "label": "Open help for a problem",
+    "topicId": "live:components/xbridges/diagnostics/XbridgesStatusBar:c6828325f596",
+    "sectionId": "use",
+    "sourcePath": "src/components/xbridges/diagnostics/XbridgesStatusBar.tsx",
+    "kind": "action",
+    "module": "system"
+  },
+  {
+    "id": "live:components/xbridges/diagnostics/XbridgesStatusBar:a1cc4a27dd3f",
+    "label": "Show or hide the Problems list",
+    "topicId": "live:components/xbridges/diagnostics/XbridgesStatusBar:a1cc4a27dd3f",
+    "sectionId": "use",
+    "sourcePath": "src/components/xbridges/diagnostics/XbridgesStatusBar.tsx",
+    "kind": "action",
+    "module": "system"
   }
 ];
 export const LIVE_UI_TOPICS: Record<string,HelpTopic> = {
@@ -4733,6 +4778,101 @@ export const LIVE_UI_TOPICS: Record<string,HelpTopic> = {
     ],
     "sources": [
       "src/components/xbridges/powertrain/DoeSweeperPanel.tsx"
+    ]
+  },
+  "live:components/xbridges/diagnostics/XbridgesDiagnosticPopup:1bdc27f5f835": {
+    "title": "View all run diagnostics",
+    "category": "Workspace Controls",
+    "description": "Open the Problems list of the X-Bridges status bar, which holds every diagnostic of the current run, errors first, and close the pop-up. The pop-up itself shows only the three most serious items that were not announced before. Opening the list does not change the model or the run.",
+    "content": "Open the Problems list of the X-Bridges status bar, which holds every diagnostic of the current run, errors first, and close the pop-up. The pop-up itself shows only the three most serious items that were not announced before. Opening the list does not change the model or the run.",
+    "sections": [
+      {
+        "id": "use",
+        "title": "View all run diagnostics",
+        "body": "Open the Problems list of the X-Bridges status bar, which holds every diagnostic of the current run, errors first, and close the pop-up. The pop-up itself shows only the three most serious items that were not announced before. Opening the list does not change the model or the run.",
+        "sources": [
+          "src/components/xbridges/diagnostics/XbridgesDiagnosticPopup.tsx"
+        ]
+      }
+    ],
+    "sources": [
+      "src/components/xbridges/diagnostics/XbridgesDiagnosticPopup.tsx"
+    ]
+  },
+  "live:components/xbridges/diagnostics/XbridgesDiagnosticPopup:e6bed41841c3": {
+    "title": "Dismiss the run diagnostics pop-up",
+    "category": "Workspace Controls",
+    "description": "Hide the pop-up at the top right of the canvas. The diagnostics stay in the status bar Problems list until the next run starts, and the problem is not repaired by hiding it. Warnings and information also hide themselves after 8 seconds; an error pop-up stays until you dismiss it.",
+    "content": "Hide the pop-up at the top right of the canvas. The diagnostics stay in the status bar Problems list until the next run starts, and the problem is not repaired by hiding it. Warnings and information also hide themselves after 8 seconds; an error pop-up stays until you dismiss it.",
+    "sections": [
+      {
+        "id": "use",
+        "title": "Dismiss the run diagnostics pop-up",
+        "body": "Hide the pop-up at the top right of the canvas. The diagnostics stay in the status bar Problems list until the next run starts, and the problem is not repaired by hiding it. Warnings and information also hide themselves after 8 seconds; an error pop-up stays until you dismiss it.",
+        "sources": [
+          "src/components/xbridges/diagnostics/XbridgesDiagnosticPopup.tsx"
+        ]
+      }
+    ],
+    "sources": [
+      "src/components/xbridges/diagnostics/XbridgesDiagnosticPopup.tsx"
+    ]
+  },
+  "live:components/xbridges/diagnostics/XbridgesStatusBar:8551c4632149": {
+    "title": "Show the block of a problem",
+    "category": "Workspace Controls",
+    "description": "Select the block that the diagnostic names and bring it into view on the canvas, opening its Subsystem level when it sits inside one. The button appears only when the diagnostic names at least one block; when it names several, the first one that exists is shown. Selecting a block changes neither the model nor the run.",
+    "content": "Select the block that the diagnostic names and bring it into view on the canvas, opening its Subsystem level when it sits inside one. The button appears only when the diagnostic names at least one block; when it names several, the first one that exists is shown. Selecting a block changes neither the model nor the run.",
+    "sections": [
+      {
+        "id": "use",
+        "title": "Show the block of a problem",
+        "body": "Select the block that the diagnostic names and bring it into view on the canvas, opening its Subsystem level when it sits inside one. The button appears only when the diagnostic names at least one block; when it names several, the first one that exists is shown. Selecting a block changes neither the model nor the run.",
+        "sources": [
+          "src/components/xbridges/diagnostics/XbridgesStatusBar.tsx"
+        ]
+      }
+    ],
+    "sources": [
+      "src/components/xbridges/diagnostics/XbridgesStatusBar.tsx"
+    ]
+  },
+  "live:components/xbridges/diagnostics/XbridgesStatusBar:c6828325f596": {
+    "title": "Open help for a problem",
+    "category": "Workspace Controls",
+    "description": "Open the help chapter that explains the diagnostic code at its diagnostics section: X-Bridges Simulation for simulation codes, and X-Bridges Embedded Code Generation for the XB_ codes. A code without a help entry opens the Simulation chapter. Opening help does not change the model or the run.",
+    "content": "Open the help chapter that explains the diagnostic code at its diagnostics section: X-Bridges Simulation for simulation codes, and X-Bridges Embedded Code Generation for the XB_ codes. A code without a help entry opens the Simulation chapter. Opening help does not change the model or the run.",
+    "sections": [
+      {
+        "id": "use",
+        "title": "Open help for a problem",
+        "body": "Open the help chapter that explains the diagnostic code at its diagnostics section: X-Bridges Simulation for simulation codes, and X-Bridges Embedded Code Generation for the XB_ codes. A code without a help entry opens the Simulation chapter. Opening help does not change the model or the run.",
+        "sources": [
+          "src/components/xbridges/diagnostics/XbridgesStatusBar.tsx"
+        ]
+      }
+    ],
+    "sources": [
+      "src/components/xbridges/diagnostics/XbridgesStatusBar.tsx"
+    ]
+  },
+  "live:components/xbridges/diagnostics/XbridgesStatusBar:a1cc4a27dd3f": {
+    "title": "Show or hide the Problems list",
+    "category": "Workspace Controls",
+    "description": "Expand or collapse the Problems list above the status bar. The button shows the number of errors and warnings of the current run, or No problems. The list is read-only: it shows severity, code, message and the meaning from the help reference of each diagnostic, errors first, and keeps the diagnostics of a stopped run until the next run starts.",
+    "content": "Expand or collapse the Problems list above the status bar. The button shows the number of errors and warnings of the current run, or No problems. The list is read-only: it shows severity, code, message and the meaning from the help reference of each diagnostic, errors first, and keeps the diagnostics of a stopped run until the next run starts.",
+    "sections": [
+      {
+        "id": "use",
+        "title": "Show or hide the Problems list",
+        "body": "Expand or collapse the Problems list above the status bar. The button shows the number of errors and warnings of the current run, or No problems. The list is read-only: it shows severity, code, message and the meaning from the help reference of each diagnostic, errors first, and keeps the diagnostics of a stopped run until the next run starts.",
+        "sources": [
+          "src/components/xbridges/diagnostics/XbridgesStatusBar.tsx"
+        ]
+      }
+    ],
+    "sources": [
+      "src/components/xbridges/diagnostics/XbridgesStatusBar.tsx"
     ]
   }
 };

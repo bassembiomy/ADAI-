@@ -100,6 +100,9 @@ import { Solvers } from '../../engine/xbridges/Solvers';
 import { AdaptiveSolver } from '../../engine/xbridges/AdaptiveSolver';
 import { StiffSolver } from '../../engine/xbridges/StiffSolver';
 import { ModelDiagnostic } from '../../engine/xbridges/types';
+import { XbridgesStatusBar, type XbRunStatus } from './diagnostics/XbridgesStatusBar';
+import { XbridgesDiagnosticPopup } from './diagnostics/XbridgesDiagnosticPopup';
+import { mergeDiagnostics, newDiagnostics } from './diagnostics/xbDiagnosticsModel';
 import { XBlockNode, getColor } from './XBlockNode';
 import { XbridgesPropertiesPanel } from './XbridgesPropertiesPanel';
 import { XbridgesScopeWindow } from './XbridgesScopeWindow';
@@ -1336,6 +1339,20 @@ const XBRIDGES_LEARNING_LAB_STEPS: Record<string, any[]> = {
   [OM501_MRPLD_LAB.id]: OM501_MRPLD_LAB_STEPS as any[],
 };
 
+/** Solver names as the Solver Method list shows them (the status bar repeats them). */
+const SOLVER_LABELS: Record<string, string> = {
+  rk4: 'Fixed-Step RK4 (ODE4)',
+  euler: 'Explicit Euler (ODE1)',
+  ode2: 'Heun Method (ODE2)',
+  ode3: 'Bogacki-Shampine (ODE3)',
+  ode5: 'Dormand-Prince (ODE5)',
+  ode23: 'Adaptive ODE23 (BS)',
+  ode45: 'Adaptive ODE45 (DP)',
+  ode14x: 'Implicit Extrapolation (ODE14x, stiff)',
+  ode23tb: 'Adaptive TR-BDF2 (ODE23tb, stiff)',
+  discrete: 'Discrete (fixed-step, no continuous states)',
+};
+
 export const XbridgesWorkspace: React.FC<{
   initialNodes?: any[];
   initialEdges?: any[];
@@ -1358,6 +1375,8 @@ export const XbridgesWorkspace: React.FC<{
   isSmSimulating?: boolean;
   simulationTime?: number;
   renderRequirementAssignments?: (blockId: string) => React.ReactNode;
+  /** Opens a help chapter at a section (used by the status bar's Help button). */
+  onOpenHelp?: (topicId: string, sectionId?: string) => void;
 }> = ({
   initialNodes = [],
   initialEdges = [],
@@ -1378,7 +1397,8 @@ export const XbridgesWorkspace: React.FC<{
   coSimEngine,
   isSmSimulating = false,
   simulationTime = 0,
-  renderRequirementAssignments
+  renderRequirementAssignments,
+  onOpenHelp
 }) => {
   const initialNodesWithMappings = useMemo(
     () => syncXBBoundaryNodeMetadata(initialNodes, initialMappings),
@@ -1510,6 +1530,30 @@ export const XbridgesWorkspace: React.FC<{
   const [history, setHistory] = useState<{ nodes: Node[], edges: Edge[] }[]>([]);
   const [activeSidebarTab, setActiveSidebarTab] = useState<'library' | 'labs'>('library');
   const [diagnostics, setDiagnostics] = useState<ModelDiagnostic[]>([]);
+  // Run diagnostics: everything raised in the current run is merged (never dropped); the pop-up shows what has not been announced yet.
+  const announcedDiagnosticsRef = useRef<ModelDiagnostic[]>([]);
+  const [popupDiagnostics, setPopupDiagnostics] = useState<ModelDiagnostic[]>([]);
+  const [hasRun, setHasRun] = useState(false);
+  const [runFailed, setRunFailed] = useState(false);
+  const [statusTime, setStatusTime] = useState(0);
+  const addDiagnostics = useCallback((incoming: readonly ModelDiagnostic[] | undefined) => {
+    if (!incoming || incoming.length === 0) return;
+    setDiagnostics(prev => {
+      const next = mergeDiagnostics(prev, incoming);
+      return next.length === prev.length ? prev : next;
+    });
+  }, []);
+  useEffect(() => {
+    const fresh = newDiagnostics(announcedDiagnosticsRef.current, diagnostics);
+    if (fresh.length === 0) return;
+    announcedDiagnosticsRef.current = [...announcedDiagnosticsRef.current, ...fresh];
+    setPopupDiagnostics(prev => mergeDiagnostics(prev, fresh));
+  }, [diagnostics]);
+  const dismissPopup = useCallback(() => setPopupDiagnostics([]), []);
+  const showAllDiagnostics = useCallback(() => {
+    setShowDiagnostics(true);
+    setPopupDiagnostics([]);
+  }, []);
   const [showConfirmClear, setShowConfirmClear] = useState(false);
 
   const availableFisBlocks = React.useMemo(() => {
@@ -1647,6 +1691,9 @@ export const XbridgesWorkspace: React.FC<{
   const timeRef = React.useRef(0);
   const activeSimulating = isSimulating || (!!coSimEngine && isSmSimulating);
   const activeTime = coSimEngine && isSmSimulating ? simulationTime : timeRef.current;
+  const runStatus: XbRunStatus = activeSimulating
+    ? (isPaused ? 'paused' : 'running')
+    : runFailed ? 'failed' : hasRun ? 'stopped' : 'idle';
 
   // Sync with background co-simulation engine when running via State Machine
   useEffect(() => {
@@ -1846,6 +1893,7 @@ export const XbridgesWorkspace: React.FC<{
   useEffect(() => {
     let animationFrameId: number;
     let updateThrottle = 0;
+    let mainThreadEngine: XbridgesEngine | null = null;
 
     if (isSimulating) {
       // Rebuild engine model on start - use BLOCK_LIBRARY to get live execute() functions
@@ -1879,6 +1927,10 @@ export const XbridgesWorkspace: React.FC<{
       };
 
       setDiagnostics([]);
+      announcedDiagnosticsRef.current = [];
+      setPopupDiagnostics([]);
+      setHasRun(true);
+      setRunFailed(false);
       // Solver pane: start time, stop time and fixed step ('auto' resolved against the model), as in Simulink.
       const startParsed = parseTimeInput(startTimeInput);
       const stopParsed = parseTimeInput(stopTimeInput);
@@ -1890,14 +1942,17 @@ export const XbridgesWorkspace: React.FC<{
         fixedStep: stepParsed ?? Number.NaN,
       }, model.blocks as any);
       if (resolvedConfig.diagnostics.some(d => d.severity === 'error')) {
-        setDiagnostics(resolvedConfig.diagnostics);
+        addDiagnostics(resolvedConfig.diagnostics);
+        setRunFailed(true);
         setIsSimulating(false);
-        setShowDiagnostics(true);
         return;
       }
       const liveStep = resolvedConfig.fixedStep;
       liveStepRef.current = liveStep;
       timeRef.current = resolvedConfig.startTime;
+      setStatusTime(resolvedConfig.startTime);
+      // Configuration warnings (no error) are part of the run's diagnostics too.
+      addDiagnostics(resolvedConfig.diagnostics);
       simLimitRef.current = Number.isFinite(resolvedConfig.stopTime) ? resolvedConfig.stopTime : null;
       const solverOptions: SolverOptions = {
         solver: solverType,
@@ -1914,30 +1969,31 @@ export const XbridgesWorkspace: React.FC<{
 
       if (!useWorker) {
         engineRef.current = new XbridgesEngine(model);
+        mainThreadEngine = engineRef.current;
         engineRef.current.options = solverOptions;
         const compileDiagnostics = engineRef.current.compile(resolvedConfig.startTime);
-        setDiagnostics(compileDiagnostics);
+        addDiagnostics(compileDiagnostics);
 
         const hasErrors = compileDiagnostics.some(d => d.severity === 'error');
         if (hasErrors) {
+          setRunFailed(true);
           setIsSimulating(false);
-          setShowDiagnostics(true);
           return;
         }
       } else {
         xbridgesWorkerRef.current.compile(model, timeRef.current, solverOptions)
           .then(res => {
-            if (res.diagnostics) setDiagnostics(res.diagnostics);
+            addDiagnostics(res.diagnostics);
             if (!res.ok) {
+              setRunFailed(true);
               setIsSimulating(false);
-              setShowDiagnostics(true);
             }
           })
           .catch(err => {
             console.error('Failed to compile model in Xbridges worker:', err);
-            if (Array.isArray(err?.diagnostics)) setDiagnostics(err.diagnostics);
+            if (Array.isArray(err?.diagnostics)) addDiagnostics(err.diagnostics);
+            setRunFailed(true);
             setIsSimulating(false);
-            setShowDiagnostics(true);
           });
       }
 
@@ -1979,18 +2035,16 @@ export const XbridgesWorkspace: React.FC<{
                 inportOverrides,
               }).then(res => {
                 if (!res.ok) {
-                  if (res.diagnostics) setDiagnostics(res.diagnostics);
+                  addDiagnostics(res.diagnostics);
+                  setRunFailed(true);
                   setIsSimulating(false);
-                  setShowDiagnostics(true);
                   return;
                 }
                 timeRef.current = res.simulationTime;
                 if (res.engineSnapshot?.blockStates) {
                   lastWorkerStatesRef.current = res.engineSnapshot.blockStates;
                 }
-                if (res.diagnostics && res.diagnostics.length > 0) {
-                  setDiagnostics(res.diagnostics);
-                }
+                addDiagnostics(res.diagnostics);
 
                 if (simLimitRef.current !== null && timeRef.current >= simLimitRef.current - 1e-12) {
                   timeRef.current = simLimitRef.current;
@@ -2005,6 +2059,7 @@ export const XbridgesWorkspace: React.FC<{
                 }
               }).catch(err => {
                 console.error('Xbridges worker step error:', err);
+                setRunFailed(true);
                 setIsSimulating(false);
               });
             }
@@ -2012,6 +2067,7 @@ export const XbridgesWorkspace: React.FC<{
             // Throttle UI updates to ~15fps (every 4th frame at 60fps)
             updateThrottle++;
             if (updateThrottle % 4 === 0) {
+              setStatusTime(timeRef.current);
               setNodes(nds => nds.map(n => {
                 const state = lastWorkerStatesRef.current[n.id];
                 if (state !== undefined && n.type === 'xblock') {
@@ -2054,6 +2110,9 @@ export const XbridgesWorkspace: React.FC<{
 
             updateThrottle++;
             if (updateThrottle % 4 === 0) {
+              // Runtime diagnostics (DIVIDE_BY_ZERO, ...) live on the engine; merge them on the throttled update.
+              addDiagnostics(engineRef.current.diagnostics);
+              setStatusTime(timeRef.current);
               setNodes(nds => nds.map(n => {
                 const engineBlock = engineRef.current!['blockMap'].get(n.id);
                 if (engineBlock && n.type === 'xblock') {
@@ -2079,10 +2138,33 @@ export const XbridgesWorkspace: React.FC<{
 
     return () => {
       cancelAnimationFrame(animationFrameId);
+      if (isSimulating) {
+        // End of a run (stop, stop time, failure): keep the last time and the engine's runtime diagnostics.
+        setStatusTime(timeRef.current);
+        if (mainThreadEngine) addDiagnostics(mainThreadEngine.diagnostics);
+      }
       xbridgesWorkerRef.current?.dispose();
       xbridgesWorkerRef.current = null;
     };
   }, [isSimulating]); // Deliberately omitted nodes/edges to prevent restarting loop while dragging
+
+  // Status bar "Show block": select the block, open its subsystem level and bring it into view.
+  const showDiagnosticBlocks = useCallback((blockIds: string[]) => {
+    const target = nodesRef.current.find(n => blockIds.includes(n.id));
+    if (!target) return;
+    const path: string[] = [];
+    let parent: string | undefined = target.data?.parentId;
+    while (parent && parent !== 'root' && !path.includes(parent)) {
+      path.unshift(parent);
+      parent = nodesRef.current.find(n => n.id === parent)?.data?.parentId;
+    }
+    setViewPath(['root', ...path]);
+    setSelectedNodeId(target.id);
+    setNodes(nds => nds.map(n => (n.selected === (n.id === target.id) ? n : { ...n, selected: n.id === target.id })));
+    window.setTimeout(() => {
+      reactFlowInstanceRef.current?.fitView({ nodes: [{ id: target.id }], duration: 400, maxZoom: 1.2, padding: 0.5 });
+    }, 80);
+  }, [setNodes]);
 
   const saveHistory = useCallback(() => {
     setHistory(prev => [...prev.slice(-19), { nodes, edges }]);
@@ -3418,7 +3500,7 @@ export const XbridgesWorkspace: React.FC<{
                           ? 'bg-red-900/20 border-red-700/30 text-red-400 hover:bg-red-900/30'
                           : 'bg-amber-900/20 border-amber-700/30 text-amber-400 hover:bg-amber-900/30'
                       }`}
-                      title="Model Diagnostics"
+                      title="Show or hide the Problems list in the status bar"
                     >
                       <span className="font-mono">
                         {diagnostics.filter(d => d.severity === 'error').length > 0 && (
@@ -3431,44 +3513,6 @@ export const XbridgesWorkspace: React.FC<{
                       </span>
                       <span>DIAG</span>
                     </button>
-
-                    {/* Floating Diagnostics Panel */}
-                    {showDiagnostics && (
-                      <div className="absolute top-full right-0 mt-2 w-[400px] bg-[#1a1a1a] border border-[#333] rounded-xl shadow-2xl z-[9999] overflow-hidden text-[#e0e0e0] animate-in fade-in slide-in-from-top-2 duration-200">
-                        <div className="flex items-center justify-between px-4 py-3 border-b border-[#333] bg-[#111]/50">
-                          <span className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Model Diagnostics</span>
-                          <button data-help-feature="ui:xbridges/XbridgesWorkspace:8df1bd58765f" data-help-source="src/components/xbridges/XbridgesWorkspace.tsx" onClick={() => setShowDiagnostics(false)} className="text-slate-500 hover:text-slate-300 transition-colors">
-                            <X size={14} />
-                          </button>
-                        </div>
-                        <div className="max-h-[300px] overflow-y-auto custom-scrollbar p-2 space-y-1">
-                          {diagnostics.map((d, i) => (
-                            <div
-                              key={i}
-                              className={`flex gap-3 p-2.5 rounded-lg text-[11px] ${
-                                d.severity === 'error'
-                                  ? 'bg-red-900/15 border border-red-700/25'
-                                  : d.severity === 'warning'
-                                  ? 'bg-amber-900/15 border border-amber-700/25'
-                                  : 'bg-blue-900/15 border border-blue-700/25'
-                              }`}
-                            >
-                              <span className={`font-black text-[9px] uppercase mt-0.5 shrink-0 ${
-                                d.severity === 'error' ? 'text-red-500' : d.severity === 'warning' ? 'text-amber-500' : 'text-blue-500'
-                              }`}>
-                                {d.severity === 'error' ? '✖' : d.severity === 'warning' ? '⚠' : 'ℹ'}
-                              </span>
-                              <div className="flex flex-col gap-0.5 min-w-0">
-                                <span className={`font-black text-[9px] tracking-wider uppercase ${
-                                  d.severity === 'error' ? 'text-red-500' : d.severity === 'warning' ? 'text-amber-500' : 'text-blue-500'
-                                }`}>[{d.code}]</span>
-                                <span className="text-slate-300 leading-relaxed break-words">{d.message}</span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
                   </div>
                 )}
 
@@ -3550,7 +3594,8 @@ export const XbridgesWorkspace: React.FC<{
         </div>
 
         <div className="flex-1 relative flex min-h-0">
-          <div ref={flowContainerRef} className="flex-1 relative" onContextMenu={(e) => e.preventDefault()} style={{ cursor: rightClickDrag ? 'copy' : undefined }}>
+          <div className="flex-1 relative flex flex-col min-w-0 min-h-0">
+          <div ref={flowContainerRef} className="flex-1 relative min-h-0" onContextMenu={(e) => e.preventDefault()} style={{ cursor: rightClickDrag ? 'copy' : undefined }}>
             {/* Copy-mode indicator badge */}
             {rightClickDrag && (
               <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[9999] pointer-events-none flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#c9a86c]/90 backdrop-blur-md shadow-lg text-black text-[10px] font-black uppercase tracking-widest select-none animate-pulse">
@@ -3778,6 +3823,29 @@ export const XbridgesWorkspace: React.FC<{
               <Trash2 size={12} />
               Clear Canvas
             </button>
+
+            {popupDiagnostics.length > 0 && (
+              <div className="absolute top-14 right-4 z-[60]">
+                <XbridgesDiagnosticPopup
+                  diagnostics={popupDiagnostics}
+                  onDismiss={dismissPopup}
+                  onShowAll={showAllDiagnostics}
+                />
+              </div>
+            )}
+          </div>
+          <XbridgesStatusBar
+            status={runStatus}
+            time={activeSimulating && coSimEngine && isSmSimulating ? simulationTime : statusTime}
+            solver={SOLVER_LABELS[solverType] ?? String(solverType)}
+            stopTime={stopTimeInput}
+            fixedStep={stepSizeInput}
+            diagnostics={diagnostics}
+            expanded={showDiagnostics}
+            onExpandedChange={setShowDiagnostics}
+            onSelectBlocks={showDiagnosticBlocks}
+            onOpenHelp={(topicId, sectionId) => onOpenHelp?.(topicId, sectionId)}
+          />
           </div>
 
           {selectedNode && (

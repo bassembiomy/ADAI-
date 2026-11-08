@@ -2880,5 +2880,79 @@
     "featureIds": [
       "live:components/xbridges/powertrain/DoeSweeperPanel:41575c58e7e8"
     ]
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "XbridgesWorkspace|onBack:{()=>{if(xBridgesStateId)setXBridgesStateId(null);elsesetDiagramMode('statemachine');}}|onClipboardChange:{setSharedClipboard}|onExportDoeData:{(doeHeaders,doeData)=>{setHeaders(doeHeaders);setData(doeData);setManagedWindows(prev=>(prev.doe.isOpen?{...prev,doe:{...prev.doe,isMinimized:false}}:{...prev,doe:{...prev.doe,isOpen:true}}));}}|onLaunchDoe:{()=>toggleWindow('doe')}|onOpenHelp:{handleOpenHelp}|onSave:{handleXBridgesSave}|onSaveAll:{handleExportProject}",
+    "id": "live:App:64beed4cb5ee",
+    "status": "excluded",
+    "reason": "XbridgesWorkspace callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/xbridges/XbridgesWorkspace.tsx",
+    "signature": "XbridgesDiagnosticPopup|onDismiss:{dismissPopup}|onShowAll:{showAllDiagnostics}",
+    "id": "live:components/xbridges/XbridgesWorkspace:d873232ac90a",
+    "status": "excluded",
+    "reason": "XbridgesDiagnosticPopup callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/xbridges/XbridgesWorkspace.tsx",
+    "signature": "XbridgesStatusBar|onExpandedChange:{setShowDiagnostics}|onOpenHelp:{(topicId,sectionId)=>onOpenHelp?.(topicId,sectionId)}|onSelectBlocks:{showDiagnosticBlocks}",
+    "id": "live:components/xbridges/XbridgesWorkspace:0a1a141c656c",
+    "status": "excluded",
+    "reason": "XbridgesStatusBar callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/xbridges/diagnostics/XbridgesDiagnosticPopup.tsx",
+    "signature": "button|onClick:{onShowAll}",
+    "id": "live:components/xbridges/diagnostics/XbridgesDiagnosticPopup:1bdc27f5f835",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/xbridges/diagnostics/XbridgesDiagnosticPopup:1bdc27f5f835"
+    ]
+  },
+  {
+    "source": "src/components/xbridges/diagnostics/XbridgesDiagnosticPopup.tsx",
+    "signature": "button|onClick:{onDismiss}",
+    "id": "live:components/xbridges/diagnostics/XbridgesDiagnosticPopup:e6bed41841c3",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/xbridges/diagnostics/XbridgesDiagnosticPopup:e6bed41841c3"
+    ]
+  },
+  {
+    "source": "src/components/xbridges/diagnostics/XbridgesStatusBar.tsx",
+    "signature": "button|onClick:{()=>onSelectBlocks(d.blockIds)}",
+    "id": "live:components/xbridges/diagnostics/XbridgesStatusBar:8551c4632149",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/xbridges/diagnostics/XbridgesStatusBar:8551c4632149"
+    ]
+  },
+  {
+    "source": "src/components/xbridges/diagnostics/XbridgesStatusBar.tsx",
+    "signature": "button|onClick:{()=>onOpenHelp(d.helpTopicId,d.helpSectionId)}",
+    "id": "live:components/xbridges/diagnostics/XbridgesStatusBar:c6828325f596",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/xbridges/diagnostics/XbridgesStatusBar:c6828325f596"
+    ]
+  },
+  {
+    "source": "src/components/xbridges/diagnostics/XbridgesStatusBar.tsx",
+    "signature": "button|onClick:{()=>setOpen(!open)}",
+    "id": "live:components/xbridges/diagnostics/XbridgesStatusBar:a1cc4a27dd3f",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/xbridges/diagnostics/XbridgesStatusBar:a1cc4a27dd3f"
+    ]
   }
 ]

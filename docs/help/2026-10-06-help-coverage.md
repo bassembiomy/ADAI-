@@ -2,7 +2,7 @@
 
 Generated from live registries and schema factories. This is feature mapping coverage, not proof that every reachable UI control has complete instructions.
 
-2195/2195 registered features have resolvable instructional destinations (100.00%). 0 missing. Duplicate IDs: 0.
+2200/2200 registered features have resolvable instructional destinations (100.00%). 0 missing. Duplicate IDs: 0.
 
 ## Source UI reconciliation
 
@@ -92,7 +92,7 @@ None in the registered feature inventory.
 
 ## Current source scan
 
-1554 handler sites across 105 production TSX files were scanned from the current source, including callback wiring and gestures omitted from the earlier snapshot. Status: {"documented":1393,"excluded":161}. The live report retains source signatures and a fingerprint; tests reject stale evidence and demonstrate failure for a new unmapped inline control. Callback wiring, profiler hooks and propagation wrappers are explicitly excluded rather than counted as user features.
+1560 handler sites across 107 production TSX files were scanned from the current source, including callback wiring and gestures omitted from the earlier snapshot. Status: {"documented":1397,"excluded":163}. The live report retains source signatures and a fingerprint; tests reject stale evidence and demonstrate failure for a new unmapped inline control. Callback wiring, profiler hooks and propagation wrappers are explicitly excluded rather than counted as user features.
 
 ## Implementation limits
 

@@ -15735,6 +15735,7 @@ const ADIA = () => {
                   workspaceFiles={workspaceFiles}
                   isSmSimulating={isRunning}
                   simulationTime={simulationTime}
+                  onOpenHelp={handleOpenHelp}
                   renderRequirementAssignments={xBridgesStateId ? undefined : (blockId: string) => (
                     <RequirementAssignmentsPanel
                       repository={canonicalSysmlRepository}
