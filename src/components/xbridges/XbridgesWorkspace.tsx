@@ -1560,7 +1560,7 @@ export const XbridgesWorkspace: React.FC<{
   const [viewPath, setViewPath] = useState<string[]>(['root']);
   const currentParentId = viewPath[viewPath.length - 1];
 
-  const [solverType, setSolverType] = useState<'euler' | 'ode2' | 'ode3' | 'rk4' | 'ode5' | 'ode23' | 'ode45' | 'ode14x' | 'ode23tb'>('rk4');
+  const [solverType, setSolverType] = useState<'euler' | 'ode2' | 'ode3' | 'rk4' | 'ode5' | 'ode23' | 'ode45' | 'ode14x' | 'ode23tb' | 'discrete'>('rk4');
   const [edgeType, setEdgeType] = useState<'default' | 'straight' | 'smoothstep'>('smoothstep');
   const [snapEnabled, setSnapEnabled] = useState(false);
   const initialStep = tickMs ? tickMs / 1000 : 0.02;
@@ -3213,6 +3213,7 @@ export const XbridgesWorkspace: React.FC<{
                     <option value="ode45">Adaptive ODE45 (DP)</option>
                     <option value="ode14x">Implicit Extrapolation (ODE14x, stiff)</option>
                     <option value="ode23tb">Adaptive TR-BDF2 (ODE23tb, stiff)</option>
+                    <option value="discrete">Discrete (fixed-step, no continuous states)</option>
                   </select>
                 </div>
               </div>

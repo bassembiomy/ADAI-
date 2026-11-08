@@ -216,7 +216,7 @@ export function getXBlockParameterDescription(typeId: string, name: string): str
   if (name === 'mode') return 'Select the implemented controller combination such as PI, PD or PID.';
   if (name === 'method' && ['THREE_PHASE_PWM'].includes(typeId)) return 'Select SPWM or the implemented Saddle/SVPWM common-mode injection branch.';
   if (name === 'method' && typeId === 'ROTOR_POSITION_ESTIMATOR') return 'Declared estimator method; the actual factory uses its documented back-EMF/flux estimation equations.';
-  if (name === 'method' && typeId === 'INTEGRATOR_DISCRETE') return 'Declared integration method; consult the implementation’s actual elapsed-time update.';
+  if (name === 'method' && typeId === 'INTEGRATOR_DISCRETE') return 'forward_euler Ts/(z-1), backward_euler Ts*z/(z-1) or tustin Ts/2*(z+1)/(z-1); the block updates only at its sample_time hits and holds its output between them.';
   if (name === 'method' && typeId === 'FUZZY_DEFUZZIFY') return 'Defuzzification method interpreting the supplied membership data.';
   if (name === 'method') return 'Integration/filter discretization method: forward_euler, backward_euler or the implemented trapezoidal branch.';
   return meanings[name];

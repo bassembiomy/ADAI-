@@ -253,6 +253,25 @@ const createPort = (
   frame
 });
 
+type BlockDiagnostic = { code: string; severity: 'error' | 'warning' | 'info'; message: string };
+const anyValue = (v: any, pred: (x: any) => boolean): boolean =>
+  Array.isArray(v) ? v.some((x) => anyValue(x, pred)) : pred(v);
+/** Runtime LOGIC_NAN_INPUT: NaN cannot be converted to a logical value. */
+const logicNanDiagnostic = (ins: any[]): { diagnostic?: BlockDiagnostic } =>
+  ins.some((v) => anyValue(v, (x) => typeof x === 'number' && Number.isNaN(x)))
+    ? { diagnostic: { code: 'LOGIC_NAN_INPUT', severity: 'error', message: 'a NaN input cannot be converted to a logical value.' } }
+    : {};
+/** Runtime MATH_DOMAIN_ERROR when `inDomain(u)` is false for a finite-or-infinite (non-NaN) scalar input. */
+const mathDomainDiagnostic = (u: number, inDomain: (u: number) => boolean, domain: string): { diagnostic?: BlockDiagnostic } =>
+  !Number.isNaN(u) && !inDomain(u)
+    ? { diagnostic: { code: 'MATH_DOMAIN_ERROR', severity: 'warning', message: `input ${u} is outside the function domain ${domain}.` } }
+    : {};
+const divideByZeroDiagnostic = (divisors: any[]): { diagnostic?: BlockDiagnostic } =>
+  divisors.some((v) => anyValue(v, (x) => x === 0 || x === false))
+    ? { diagnostic: { code: 'DIVIDE_BY_ZERO', severity: 'warning', message: 'division by zero (IEEE result: Inf or NaN).' } }
+    : {};
+
+
 // // Helper functions and waypoints for ROBOT_VACUUM_DIGITAL_TWIN
 export const ROOM_WALLS = [
   // Outer boundary walls
@@ -1842,7 +1861,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     outputs: [createPort('out', 'Out', 'output')],
     icon: 'activity',
     equation: 'Out = A & B & ...',
-    execute: (ins) => ({ outputs: [ins.every(val => !!val)] })
+    execute: (ins) => ({ outputs: [ins.every(val => !!val)], ...logicNanDiagnostic(ins) })
   }),
 
   'OR': (id, params) => ({
@@ -1852,7 +1871,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     outputs: [createPort('out', 'Out', 'output')],
     icon: 'activity',
     equation: 'Out = A | B | ...',
-    execute: (ins) => ({ outputs: [ins.some(val => !!val)] })
+    execute: (ins) => ({ outputs: [ins.some(val => !!val)], ...logicNanDiagnostic(ins) })
   }),
 
   'NOT': (id) => ({
@@ -1861,7 +1880,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     outputs: [createPort('out', 'Out', 'output')],
     icon: 'zap',
     equation: 'Out = !In',
-    execute: (ins) => ({ outputs: [!ins[0]] })
+    execute: (ins) => ({ outputs: [!ins[0]], ...logicNanDiagnostic(ins) })
   }),
 
   'NAND': (id, params) => ({
@@ -1872,7 +1891,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     icon: 'activity',
     equation: 'Out = !(A & B & ...)',
     description: 'A Not-AND gate. The output is LOW (0) only if all inputs are HIGH (1).',
-    execute: (ins) => ({ outputs: [!ins.every(val => !!val)] })
+    execute: (ins) => ({ outputs: [!ins.every(val => !!val)], ...logicNanDiagnostic(ins) })
   }),
 
   'NOR': (id, params) => ({
@@ -1883,7 +1902,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     icon: 'activity',
     equation: 'Out = !(A | B | ...)',
     description: 'A Not-OR gate. The output is HIGH (1) only if all inputs are LOW (0).',
-    execute: (ins) => ({ outputs: [!ins.some(val => !!val)] })
+    execute: (ins) => ({ outputs: [!ins.some(val => !!val)], ...logicNanDiagnostic(ins) })
   }),
 
   'XOR': (id, params) => ({
@@ -1893,7 +1912,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     outputs: [createPort('out', 'Out', 'output')],
     icon: 'activity',
     equation: 'Out = Σ(Inputs) % 2',
-    execute: (ins) => ({ outputs: [ins.filter(val => !!val).length % 2 !== 0] })
+    execute: (ins) => ({ outputs: [ins.filter(val => !!val).length % 2 !== 0], ...logicNanDiagnostic(ins) })
   }),
 
   // --- Bitwise Operations ---
@@ -2266,7 +2285,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     id, type: 'VectorDiv', params: {},
     inputs: [createPort('in1', 'Num', 'input'), createPort('in2', 'Den', 'input')],
     outputs: [createPort('out', 'Out', 'output')],
-    execute: (ins) => ({ outputs: [VectorUtils.applyElementWise(ins[0], ins[1], 'divide')] })
+    execute: (ins) => ({ outputs: [VectorUtils.applyElementWise(ins[0], ins[1], 'divide')], ...divideByZeroDiagnostic([ins[1]]) })
   }),
 
   'VectorPow': (id) => ({
@@ -3696,32 +3715,44 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     evaluateDerivatives: (ins) => [Number(ins[0])]
   }),
 
-  'INTEGRATOR_DISCRETE': (id, params) => ({
-    id, type: 'INTEGRATOR_DISCRETE',
-    params: { initial_condition: params.initial_condition || 0, sample_time: params.sample_time || 0.001, method: params.method || 'forward_euler' },
-    isStateful: true,
-    inputs: [createPort('u', 'u', 'input')],
-    outputs: [createPort('y', 'y', 'output')],
-    state: { y: params.initial_condition || 0, u_prev: 0, lastTime: 0 },
-    icon: 'layers',
-    equation: 'y(k) = y(k-1) + Δt * u(k-1) (Forward Euler)',
-    description: 'Performs numerical integration of a discrete-time signal using Euler or Tustin methods.',
-    execute: (ins, p, state, time) => {
-      const dt = Math.max(1e-6, time - (state.lastTime || 0));
-      const u = Number(ins[0]);
-      let nextY = state.y;
+  'INTEGRATOR_DISCRETE': (id, params) => {
+    const method = params.method || 'forward_euler';
+    return {
+      id, type: 'INTEGRATOR_DISCRETE',
+      // sample_time is the discrete-integrator parameter; the engine scheduler treats it as an alias of sampleTime,
+      // so the block updates only at its sample hits k*Ts and holds its output in between.
+      params: {
+        initial_condition: params.initial_condition || 0,
+        sample_time: params.sample_time !== undefined ? params.sample_time : 0.001,
+        method
+      },
+      isStateful: true,
+      // Backward Euler and Tustin add the current input to the output (direct feedthrough).
+      directFeedthrough: method !== 'forward_euler',
+      inputs: [createPort('u', 'u', 'input')],
+      outputs: [createPort('y', 'y', 'output')],
+      state: { y: params.initial_condition || 0, u_prev: 0 },
+      icon: 'layers',
+      equation: 'x(k+1) = x(k) + Ts * u(k); y(k) = x(k) (Forward Euler)',
+      description: 'Discrete-time integrator Ts/(z-1) (forward Euler), Ts*z/(z-1) (backward Euler) or Ts/2*(z+1)/(z-1) (Tustin). Updates only at its sample hits k*Ts and holds its output between them.',
+      execute: (ins, p, state) => {
+        const Ts = Number(p.sample_time);
+        const u = Number(ins[0]);
+        const x = state.y;
 
-      if (p.method === 'forward_euler') {
-        nextY = state.y + dt * state.u_prev;
-      } else if (p.method === 'backward_euler') {
-        nextY = state.y + dt * u;
-      } else if (p.method === 'tustin') {
-        nextY = state.y + (dt / 2) * (u + state.u_prev);
+        // Output and next state are both computed at the sample hit (the engine calls execute once for the output and once for the update).
+        if (p.method === 'backward_euler') {
+          const y = x + Ts * u;
+          return { outputs: [y], nextState: { y, u_prev: u } };
+        }
+        if (p.method === 'tustin') {
+          const y = x + (Ts / 2) * (u + state.u_prev);
+          return { outputs: [y], nextState: { y, u_prev: u } };
+        }
+        return { outputs: [x], nextState: { y: x + Ts * u, u_prev: u } };
       }
-
-      return { outputs: [nextY], nextState: { y: nextY, u_prev: u, lastTime: time } };
-    }
-  }),
+    };
+  },
 
   // --- Signal Routing ---
   'MUX': (id, params) => ({
@@ -3767,7 +3798,11 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     outputs: [createPort('y', 'y', 'output')],
     execute: (ins, p) => {
       if (p.operation === 'divide') {
-        return { outputs: [ins.reduce((acc: number, val) => acc / (Number(val) || 1), Number(ins[0]) || 1)] };
+        // y = in1 / in2 / ... with IEEE semantics (x/0 = +-Inf, 0/0 = NaN); a single input gives 1/in1.
+        const nums = ins.map(Number);
+        const divisors = nums.length === 1 ? nums : nums.slice(1);
+        const y = nums.length === 1 ? 1 / nums[0] : divisors.reduce((acc, val) => acc / val, nums[0]);
+        return { outputs: [y], ...divideByZeroDiagnostic(divisors) };
       }
       return { outputs: [ins.reduce((acc: number, val) => acc * Number(val), 1)] };
     }
@@ -4024,9 +4059,10 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     inputs: [createPort('u', 'u', 'input')],
     outputs: [createPort('y', 'y', 'output')],
     execute: (ins, p) => {
-      const val = Math.asin(Number(ins[0]));
+      const u = Number(ins[0]);
+      const val = Math.asin(u);
       const output = p.angle_unit === 'degrees' ? (val * 180) / Math.PI : val;
-      return { outputs: [output] };
+      return { outputs: [output], ...mathDomainDiagnostic(u, (x) => Math.abs(x) <= 1, '[-1, 1]') };
     }
   }),
 
@@ -4035,9 +4071,10 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     inputs: [createPort('u', 'u', 'input')],
     outputs: [createPort('y', 'y', 'output')],
     execute: (ins, p) => {
-      const val = Math.acos(Number(ins[0]));
+      const u = Number(ins[0]);
+      const val = Math.acos(u);
       const output = p.angle_unit === 'degrees' ? (val * 180) / Math.PI : val;
-      return { outputs: [output] };
+      return { outputs: [output], ...mathDomainDiagnostic(u, (x) => Math.abs(x) <= 1, '[-1, 1]') };
     }
   }),
 
@@ -4068,9 +4105,10 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     inputs: [createPort('u', 'u', 'input')],
     outputs: [createPort('y', 'y', 'output')],
     execute: (ins, p) => {
-      const val = Math.acos(1 / Number(ins[0]));
+      const u = Number(ins[0]);
+      const val = Math.acos(1 / u);
       const output = p.angle_unit === 'degrees' ? (val * 180) / Math.PI : val;
-      return { outputs: [output] };
+      return { outputs: [output], ...mathDomainDiagnostic(u, (x) => Math.abs(x) >= 1, '|u| >= 1') };
     }
   }),
 
@@ -4079,9 +4117,10 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     inputs: [createPort('u', 'u', 'input')],
     outputs: [createPort('y', 'y', 'output')],
     execute: (ins, p) => {
-      const val = Math.asin(1 / Number(ins[0]));
+      const u = Number(ins[0]);
+      const val = Math.asin(1 / u);
       const output = p.angle_unit === 'degrees' ? (val * 180) / Math.PI : val;
-      return { outputs: [output] };
+      return { outputs: [output], ...mathDomainDiagnostic(u, (x) => Math.abs(x) >= 1, '|u| >= 1') };
     }
   }),
 
@@ -4155,7 +4194,8 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     inputs: [createPort('u', 'u', 'input')],
     outputs: [createPort('y', 'y', 'output')],
     execute: (ins) => {
-      return { outputs: [Math.acosh(Number(ins[0]))] };
+      const u = Number(ins[0]);
+      return { outputs: [Math.acosh(u)], ...mathDomainDiagnostic(u, (x) => x >= 1, 'u >= 1') };
     }
   }),
 
@@ -4164,7 +4204,8 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     inputs: [createPort('u', 'u', 'input')],
     outputs: [createPort('y', 'y', 'output')],
     execute: (ins) => {
-      return { outputs: [Math.atanh(Number(ins[0]))] };
+      const u = Number(ins[0]);
+      return { outputs: [Math.atanh(u)], ...mathDomainDiagnostic(u, (x) => Math.abs(x) <= 1, '[-1, 1]') };
     }
   }),
 
@@ -4173,7 +4214,8 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     inputs: [createPort('u', 'u', 'input')],
     outputs: [createPort('y', 'y', 'output')],
     execute: (ins) => {
-      return { outputs: [Math.atanh(1 / Number(ins[0]))] };
+      const u = Number(ins[0]);
+      return { outputs: [Math.atanh(1 / u)], ...mathDomainDiagnostic(u, (x) => Math.abs(x) >= 1, '|u| >= 1') };
     }
   }),
 
@@ -4182,7 +4224,8 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     inputs: [createPort('u', 'u', 'input')],
     outputs: [createPort('y', 'y', 'output')],
     execute: (ins) => {
-      return { outputs: [Math.acosh(1 / Number(ins[0]))] };
+      const u = Number(ins[0]);
+      return { outputs: [Math.acosh(1 / u)], ...mathDomainDiagnostic(u, (x) => x > 0 && x <= 1, '0 < u <= 1') };
     }
   }),
 
@@ -4399,7 +4442,7 @@ return block;
 
   'UNIT_DELAY': (id, params) => {
     const x0 = params.initialCondition !== undefined ? params.initialCondition : 0;
-    const ts = Number(params.sampleTime) || 0.1;
+    const ts = params.sampleTime !== undefined ? Number(params.sampleTime) : 0.1;
     return {
       id, type: 'UNIT_DELAY',
       params: { initialCondition: x0, sampleTime: ts },
@@ -4689,6 +4732,8 @@ return block;
                     });
                     return {
                       ...ss,
+                      // Keep the coefficients as parameters so compile can check them (leading zero, properness, finiteness).
+                      params: { ...ss.params, numerator: num, denominator: den },
                       type: 'TRANSFER_FUNCTION',
                       icon: 'settings-2',
                       equation: 'G(s) = (b0*sⁿ + ... + bn) / (a0*sⁿ + ... + an)',
@@ -4810,6 +4855,7 @@ return block;
 
                           return {
                             ...ss,
+                            params: { ...ss.params, numerator: num, denominator: den },
                             type: 'DISCRETE_TRANSFER_FUNCTION',
                             equation: 'H(z) = (b0*zⁿ + ... + bn) / (a0*zⁿ + ... + an)',
                             description: 'Discrete-time transfer function.'

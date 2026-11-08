@@ -50,6 +50,8 @@ export interface XBlock {
     outputs: XValue[]; 
     nextState?: any; 
     error?: string; // Runtime error propagation
+    /** Typed runtime diagnostic (recorded once per block per code per run by the engine). */
+    diagnostic?: { code: string; severity: 'error' | 'warning' | 'info'; message: string };
   };
 
   // Optional: For continuous-time blocks (like Integrators), this returns the state derivative (dx/dt)
@@ -71,7 +73,7 @@ export interface XModel {
 }
 
 export interface SolverOptions {
-  solver: 'euler' | 'ode1' | 'ode2' | 'ode3' | 'ode4' | 'rk4' | 'ode5' | 'ode23' | 'ode45' | 'ode14x' | 'ode23tb' | 'fixedStep' | 'ode113' | 'ode23s' | 'ode15s';
+  solver: 'euler' | 'ode1' | 'ode2' | 'ode3' | 'ode4' | 'rk4' | 'ode5' | 'ode23' | 'ode45' | 'ode14x' | 'ode23tb' | 'fixedStep' | 'ode113' | 'ode23s' | 'ode15s' | 'discrete';
   fixedStep?: number; // e.g. 0.01 for RK4/Euler
   extrapolationOrder?: number; // ode14x, default 4
   newtonIterations?: number; // ode14x, default 1

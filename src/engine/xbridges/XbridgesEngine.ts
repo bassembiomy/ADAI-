@@ -2,6 +2,7 @@
 import { XModel, XBlock, ModelDiagnostic, SolverOptions } from './types';
 import { BLOCK_LIBRARY, getPolynomialCoefficients, trimLeadingZeros } from './BlockDefinitions';
 import { VectorUtils } from './VectorUtils';
+import { runModelChecks, getBlockSampleTime } from './modelChecks';
 import * as math from 'mathjs';
 
 export class XbridgesEngine {
@@ -310,6 +311,9 @@ export class XbridgesEngine {
       }
     }
 
+    // Simulink-equivalent compile-time checks (connectivity, sample times / solver, parameter constraints).
+    this.diagnostics.push(...runModelChecks(this.flatBlocks, this.flatConnections, this.options));
+
     this.sortedBlocks = sortedBlocks;
     this.cycleBlocks = cycleBlocks;
     this.downstreamBlocks = downstreamBlocks;
@@ -322,7 +326,7 @@ export class XbridgesEngine {
       b.outputs.forEach(out => {
         this.signalValues.set(`${b.id}.${out.id}`, out.value);
       });
-      const ts = Number(b.params.sampleTime);
+      const ts = this.sampleTimeOf(b);
       if (ts > 0) {
         b.nextTick = startTime;
         this.nextSampleTime.set(b.id, startTime);
@@ -371,11 +375,18 @@ export class XbridgesEngine {
     }
   }
 
+  /** Periodic sample time of a block (`sampleTime` or its alias `sample_time`); 0 when continuous/inherited/invalid. */
+  private sampleTimeOf(block: XBlock): number {
+    const t = getBlockSampleTime(block);
+    return t !== null && Number.isFinite(t) && t > 0 ? t : 0;
+  }
+
   private executeBlockOrCache(block: XBlock, time: number, tempStates?: Map<string, any>) {
-    const ts = Number(block.params.sampleTime);
+    const ts = this.sampleTimeOf(block);
     if (ts > 0) {
       const nextTime = block.nextTick ?? this.nextSampleTime.get(block.id) ?? 0;
-      if (time < nextTime - 1e-9) {
+      // Minor stages (tempStates) of a solver step never trigger a sample hit: discrete outputs are held (ZOH).
+      if (time < nextTime - 1e-9 || tempStates) {
         const cached = this.lastOutputs.get(block.id);
         if (cached) {
           block.outputs.forEach((outPort, i) => {
@@ -407,6 +418,16 @@ export class XbridgesEngine {
             blockIds: [block.id]
           });
         }
+      }
+
+      const typed = result.diagnostic;
+      if (typed && !this.diagnostics.some(d => d.code === typed.code && d.blockIds?.includes(block.id))) {
+        this.diagnostics.push({
+          severity: typed.severity,
+          code: typed.code,
+          message: `Block '${block.label || block.type}': ${typed.message}`,
+          blockIds: [block.id]
+        });
       }
 
       block.outputs.forEach((outPort, i) => {
@@ -619,7 +640,7 @@ export class XbridgesEngine {
         continue;
       }
       if (!block.evaluateDerivatives) {
-        const ts = Number(block.params.sampleTime);
+        const ts = this.sampleTimeOf(block);
         if (ts > 0) {
           const nextTime = block.nextTick ?? this.nextSampleTime.get(block.id) ?? 0;
           if (time >= nextTime - 1e-9) {

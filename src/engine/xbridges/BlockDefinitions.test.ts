@@ -981,7 +981,8 @@ describe('X-Bridges Learning Models Block Tests', () => {
     };
 
     const engine = new XbridgesEngine(model as any);
-    const diagnostics = engine.compile();
+    // Unconnected-port warnings (Simulink defaults) may accompany it; exactly one error is expected.
+    const diagnostics = engine.compile().filter(d => d.severity === 'error');
 
     expect(diagnostics.length).toBe(1);
     expect(diagnostics[0].code).toBe('MISSING_FIS_CONFIG');

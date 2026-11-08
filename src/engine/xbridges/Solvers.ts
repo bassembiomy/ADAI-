@@ -489,7 +489,9 @@ export class Solvers {
 
   static runFixedStep(engine: XbridgesEngine, options: SolverOptions) {
       engine.options = options;
-      engine.compile(options.startTime);
+      const compileDiagnostics = engine.compile(options.startTime);
+      // A model that fails its compile-time checks is not simulated (Simulink: update diagram fails).
+      if (compileDiagnostics.some(d => d.severity === 'error')) return;
 
       const solver = options.solver as string;
       if (solver === 'ode45') {
@@ -508,7 +510,7 @@ export class Solvers {
           StiffSolver.runODE14x(engine, options);
       } else if (solver === 'ode23tb') {
           StiffSolver.runODE23TB(engine, options);
-      } else if (solver === 'euler' || solver === 'ode1' || solver === 'fixedStep') {
+      } else if (solver === 'euler' || solver === 'ode1' || solver === 'fixedStep' || solver === 'discrete') {
           this.runEuler(engine, options);
       } else {
           engine.diagnostics.push({
