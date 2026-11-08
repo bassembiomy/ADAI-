@@ -19,7 +19,7 @@ const collect = (text: string, patterns: RegExp[]) => {
 };
 
 const simulationCodes = (() => {
-  const engine = ['XbridgesEngine', 'modelChecks', 'Solvers', 'simulationConfig', 'StiffSolver', 'AdaptiveSolver']
+  const engine = ['XbridgesEngine', 'modelChecks', 'Solvers', 'simulationConfig', 'StiffSolver', 'AdaptiveSolver', 'parameterEvaluation']
     .map((name) => read(`src/engine/xbridges/${name}.ts`)).join('\n');
   const codes = collect(engine, [
     /code:\s*'([A-Z][A-Z0-9_]+)'/g,
