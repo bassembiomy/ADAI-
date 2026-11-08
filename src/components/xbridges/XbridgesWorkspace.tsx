@@ -1,6 +1,7 @@
 // src/components/xbridges/XbridgesWorkspace.tsx
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
-import { beginRightDragCopy, moveRightDragCopy } from '../../services/rightDragCopyGesture';
+import { copyBlocks, snapshotBlocks } from './blockCopy';
+import { createDragCopyController } from './dragCopyController';
 import {
   ReactFlow,
   addEdge,
@@ -1411,6 +1412,7 @@ export const XbridgesWorkspace: React.FC<{
     edges: any[];
     sourceFileId: string;
   } | null>(null);
+  const pasteCountRef = React.useRef<{ clipboard: unknown; count: number }>({ clipboard: null, count: 0 });
   const [isSimulating, setIsSimulating] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const isPausedRef = React.useRef(isPaused);
@@ -1726,89 +1728,114 @@ export const XbridgesWorkspace: React.FC<{
   reactFlowInstanceRef.current = reactFlowInstance;
   useReactFlowCadNavigation(flowContainerRef, () => reactFlowInstanceRef.current, 0.2, 2.0);
 
-  // Right-click drag-to-copy state
-  const [rightClickDrag, setRightClickDrag] = useState<{
-    clonedNodeId: string;
-    startMouseX: number;
-    startMouseY: number;
-    startNodeX: number;
-    startNodeY: number;
-  } | null>(null);
-  const rightCopyGestureRef = React.useRef<ReturnType<typeof beginRightDragCopy> | null>(null);
-  const pendingRightCopyNodeRef = React.useRef<string | null>(null);
+  // Drag-copy (right-drag or Ctrl + left-drag): one controller, window listeners registered once.
+  const [copyDragging, setCopyDragging] = useState(false);
   const isDraggingCopyRef = React.useRef(false);
+  const ctrlPressNodeRef = React.useRef<string | null>(null);
+  const dragCopyHostRef = React.useRef<{
+    onSave?: typeof onSave;
+    persistWorkspace: typeof persistWorkspace;
+  }>({ onSave, persistWorkspace });
+  dragCopyHostRef.current = { onSave, persistWorkspace };
+  const dragCopyRef = React.useRef<ReturnType<typeof createDragCopyController> | null>(null);
+  if (!dragCopyRef.current) {
+    dragCopyRef.current = createDragCopyController({
+      getNodes: () => nodesRef.current as any,
+      getEdges: () => edgesRef.current as any,
+      setGraph: (nextNodes, nextEdges) => {
+        nodesRef.current = nextNodes as any;
+        edgesRef.current = nextEdges as any;
+        setNodes(nextNodes as any);
+        setEdges(nextEdges as any);
+      },
+      getZoom: () => reactFlowInstanceRef.current?.getZoom?.() || 1,
+      pushHistory: () => {
+        const snapshot = { nodes: nodesRef.current, edges: edgesRef.current };
+        setHistory(previous => [...previous.slice(-19), snapshot]);
+      },
+      commit: () => {
+        setSelectedNodeId(
+          (nodesRef.current.filter(n => n.selected).length === 1
+            ? nodesRef.current.find(n => n.selected)?.id
+            : null) ?? null,
+        );
+        const { onSave: save, persistWorkspace: persist } = dragCopyHostRef.current;
+        if (save) {
+          isSavingRef.current = true;
+          persist(nodesRef.current, edgesRef.current);
+          requestAnimationFrame(() => requestAnimationFrame(() => { isSavingRef.current = false; }));
+        }
+      },
+      onDraggingChange: (dragging) => {
+        isDraggingCopyRef.current = dragging;
+        setCopyDragging(dragging);
+      },
+    });
+  }
 
   useEffect(() => {
-    if (!rightClickDrag) return;
-    isDraggingCopyRef.current = true;
-
-    const handleWindowMouseMove = (e: MouseEvent) => {
-      const zoom = reactFlowInstance?.getZoom() || 1;
-      const dx = (e.clientX - rightClickDrag.startMouseX) / zoom;
-      const dy = (e.clientY - rightClickDrag.startMouseY) / zoom;
-      
-      setNodes(nds => nds.map(n => n.id === rightClickDrag.clonedNodeId ? {
-        ...n,
-        position: {
-          x: rightClickDrag.startNodeX + dx,
-          y: rightClickDrag.startNodeY + dy
-        }
-      } : n));
+    const ctl = dragCopyRef.current!;
+    const onMouseDown = (event: MouseEvent) => {
+      if (event.button !== 2 && !(event.button === 0 && event.ctrlKey)) return;
+      const target = event.target as Element | null;
+      const container = flowContainerRef.current;
+      if (!target || !container || !container.contains(target)) return;
+      const nodeEl = target.closest?.('.react-flow__node') as HTMLElement | null;
+      const nodeId = nodeEl?.getAttribute('data-id');
+      if (!nodeId) return;
+      // Ctrl + left press on a handle, an input or a no-drag control keeps its normal meaning.
+      if (event.button === 0 && target.closest('.react-flow__handle, .nodrag, input, textarea, select, button')) return;
+      if (ctl.pointerDown({ button: event.button, ctrlKey: event.ctrlKey, clientX: event.clientX, clientY: event.clientY }, nodeId)) {
+        // Capture phase on window: React Flow's own drag (d3-drag on the node wrapper) never sees this press,
+        // so the original block does not move while the copy does.
+        event.preventDefault();
+        event.stopPropagation();
+        ctrlPressNodeRef.current = event.button === 0 ? nodeId : null;
+      }
     };
-
-    const handleWindowMouseUp = (e: MouseEvent) => {
-      if (e.button === 2) {
-        e.preventDefault();
-        isDraggingCopyRef.current = false;
-        setRightClickDrag(null);
-        // Fire one save after copy-drag ends
-        if (onSave) {
-          isSavingRef.current = true;
-          persistWorkspace(nodesRef.current, edgesRef.current);
-          requestAnimationFrame(() => requestAnimationFrame(() => { isSavingRef.current = false; }));
+    const onMouseMove = (event: MouseEvent) => ctl.pointerMove({ clientX: event.clientX, clientY: event.clientY, buttons: event.buttons });
+    const onMouseUp = (event: MouseEvent) => {
+      const wasDragging = ctl.isDragging();
+      const pressedNode = ctrlPressNodeRef.current;
+      const wasActive = ctl.isActive();
+      ctl.pointerUp({ button: event.button, clientX: event.clientX, clientY: event.clientY });
+      if (wasActive && !ctl.isActive()) {
+        ctrlPressNodeRef.current = null;
+        if (event.button === 2 || wasDragging) event.preventDefault();
+        // A Ctrl + click without movement keeps React Flow's multi-select toggle.
+        if (pressedNode && !wasDragging && event.button === 0) {
+          const nextNodes = nodesRef.current.map(n => (n.id === pressedNode ? { ...n, selected: !n.selected } : n));
+          nodesRef.current = nextNodes;
+          setNodes(nextNodes);
         }
       }
     };
-
-    const handleContextMenu = (e: MouseEvent) => {
-      e.preventDefault();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (ctl.keyDown({ key: event.key })) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
     };
-
-    window.addEventListener('mousemove', handleWindowMouseMove);
-    window.addEventListener('mouseup', handleWindowMouseUp);
-    window.addEventListener('contextmenu', handleContextMenu);
-
+    const onContextMenu = (event: MouseEvent) => {
+      if (ctl.contextMenu()) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    };
+    window.addEventListener('mousedown', onMouseDown, true);
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+    window.addEventListener('keydown', onKeyDown, true);
+    window.addEventListener('contextmenu', onContextMenu, true);
     return () => {
-      window.removeEventListener('mousemove', handleWindowMouseMove);
-      window.removeEventListener('mouseup', handleWindowMouseUp);
-      window.removeEventListener('contextmenu', handleContextMenu);
+      window.removeEventListener('mousedown', onMouseDown, true);
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+      window.removeEventListener('keydown', onKeyDown, true);
+      window.removeEventListener('contextmenu', onContextMenu, true);
     };
-  }, [rightClickDrag, reactFlowInstance, setNodes, onSave, persistWorkspace]);
-
-  useEffect(() => {
-    const handleMove = (event: MouseEvent) => {
-      const gesture = rightCopyGestureRef.current;
-      const nodeId = pendingRightCopyNodeRef.current;
-      if (!gesture || !nodeId || rightClickDrag) return;
-      const moved = moveRightDragCopy(gesture, { clientX: event.clientX, clientY: event.clientY });
-      rightCopyGestureRef.current = moved;
-      if (moved.phase !== 'dragging') return;
-      const node = nodesRef.current.find(candidate => candidate.id === nodeId);
-      if (!node) return;
-      const newNodeId = `${node.data.type || 'block'}-${Date.now()}`;
-      setHistory(previous => [...previous.slice(-19), { nodes: nodesRef.current, edges: edgesRef.current }]);
-      setNodes(current => [...current.map(candidate => ({ ...candidate, selected: false })), {
-        ...node, id: newNodeId, selected: true,
-        data: { ...node.data, id: newNodeId, selected: true },
-      }]);
-      setSelectedNodeId(newNodeId);
-      setRightClickDrag({ clonedNodeId: newNodeId, startMouseX: event.clientX, startMouseY: event.clientY, startNodeX: node.position.x, startNodeY: node.position.y });
-    };
-    const handleUp = () => { rightCopyGestureRef.current = null; pendingRightCopyNodeRef.current = null; };
-    window.addEventListener('mousemove', handleMove);
-    window.addEventListener('mouseup', handleUp);
-    return () => { window.removeEventListener('mousemove', handleMove); window.removeEventListener('mouseup', handleUp); };
-  }, [rightClickDrag, setNodes, setSelectedNodeId]);
+    // Registered once: everything the handlers need lives in refs, so no state update can remove a listener.
+  }, [setNodes]);
 
   // Select and focus programmatic node from V-Lab
   useEffect(() => {
@@ -2169,17 +2196,6 @@ export const XbridgesWorkspace: React.FC<{
   const saveHistory = useCallback(() => {
     setHistory(prev => [...prev.slice(-19), { nodes, edges }]);
   }, [nodes, edges]);
-
-  const handleNodeMouseDown = useCallback((event: React.MouseEvent, nodeId: string) => {
-    if (event.button === 2) {
-      const node = nodes.find(n => n.id === nodeId);
-      if (!node) return;
-      event.preventDefault();
-      event.stopPropagation();
-      rightCopyGestureRef.current = beginRightDragCopy({ sourceIds: [nodeId], clientX: event.clientX, clientY: event.clientY });
-      pendingRightCopyNodeRef.current = nodeId;
-    }
-  }, [nodes]);
 
   // Auto-save on unmount to prevent data loss (FR-Persistence)
   React.useEffect(() => {
@@ -2749,7 +2765,7 @@ export const XbridgesWorkspace: React.FC<{
         }
       }
 
-      // Copy (Ctrl+C or Cmd+C)
+      // Copy (Ctrl+C or Cmd+C): a deep snapshot, so later edits of the originals do not change what is pasted
       if ((e.ctrlKey || e.metaKey) && e.code === 'KeyC') {
         const activeSelectedNodes = nodes.filter(n => n.selected);
         const copyList = activeSelectedNodes.length > 0
@@ -2757,76 +2773,54 @@ export const XbridgesWorkspace: React.FC<{
           : nodes.filter(n => n.id === selectedNodeId);
 
         if (copyList.length > 0) {
-          const copyNodeIds = new Set(copyList.map(n => n.id));
-          const copyEdges = edges.filter(ed => copyNodeIds.has(ed.source) && copyNodeIds.has(ed.target));
-          
+          const snapshot = snapshotBlocks(nodes as any[], edges as any[], copyList.map(n => n.id));
+          const payload = { nodes: snapshot.nodes, edges: snapshot.edges, sourceFileId: fileId || 'unknown' };
           if (onClipboardChange) {
-            onClipboardChange({
-              nodes: copyList,
-              edges: copyEdges,
-              sourceFileId: fileId || 'unknown'
-            });
+            onClipboardChange(payload);
           } else {
-            setLocalClipboard({
-              nodes: copyList,
-              edges: copyEdges,
-              sourceFileId: fileId || 'unknown'
-            });
+            setLocalClipboard(payload);
           }
         }
       }
 
-      // Paste (Ctrl+V or Cmd+V)
+      // Paste (Ctrl+V or Cmd+V): independent copies with unique names; each paste of the same clipboard lands 40 px further
       if ((e.ctrlKey || e.metaKey) && e.code === 'KeyV') {
         const clipboardToUse = sharedClipboard !== undefined ? sharedClipboard : localClipboard;
         if (clipboardToUse && clipboardToUse.nodes.length > 0) {
           saveHistory();
 
-          const idMap: Record<string, string> = {};
-          
-          const newNodes = clipboardToUse.nodes.map(oldNode => {
-            const newNodeId = `${oldNode.data.type || 'block'}-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
-            idMap[oldNode.id] = newNodeId;
-            
-            return {
-              ...oldNode,
-              id: newNodeId,
-              position: {
-                x: oldNode.position.x + 40,
-                y: oldNode.position.y + 40,
-              },
-              selected: true,
-              data: {
-                ...oldNode.data,
-                id: newNodeId,
-                selected: true
-              }
-            };
-          });
+          if (pasteCountRef.current.clipboard !== clipboardToUse) {
+            pasteCountRef.current = { clipboard: clipboardToUse, count: 0 };
+          }
+          pasteCountRef.current.count += 1;
+          const step = 40 * pasteCountRef.current.count;
 
-          const newEdges = clipboardToUse.edges.map(oldEdge => {
-            const newSource = idMap[oldEdge.source];
-            const newTarget = idMap[oldEdge.target];
-            const newEdgeId = `edge-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
-            return {
-              ...oldEdge,
-              id: newEdgeId,
-              source: newSource,
-              target: newTarget
-            };
-          });
+          const clipIds = new Set(clipboardToUse.nodes.map((n: any) => n.id));
+          const topIds = clipboardToUse.nodes
+            .filter((n: any) => !clipIds.has(n.data?.parentId))
+            .map((n: any) => n.id);
+          const pasted = copyBlocks(
+            clipboardToUse.nodes,
+            clipboardToUse.edges,
+            topIds,
+            { offset: { x: step, y: step }, reservedLabels: nodes.map(n => n.data?.label).filter(Boolean) as string[] },
+          );
+          // Top-level pasted blocks land in the diagram level that is open now.
+          const topCopies = new Set(topIds.map((id: string) => pasted.idMap[id]));
+          const newNodes = pasted.nodes.map(n => (topCopies.has(n.id) ? { ...n, data: { ...n.data, parentId: currentParentId } } : n));
+          const newEdges = pasted.edges;
 
           setNodes(nds => [
             ...nds.map(n => ({ ...n, selected: false })),
-            ...newNodes
+            ...newNodes as any[]
           ]);
           
           if (newEdges.length > 0) {
-            setEdges(eds => [...eds, ...newEdges]);
+            setEdges(eds => [...eds, ...newEdges as any[]]);
           }
 
-          if (newNodes.length === 1) {
-            setSelectedNodeId(newNodes[0].id);
+          if (topCopies.size === 1) {
+            setSelectedNodeId([...topCopies][0] as string);
           } else {
             setSelectedNodeId(null);
           }
@@ -2847,7 +2841,7 @@ export const XbridgesWorkspace: React.FC<{
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [nodes, edges, history, selectedNodeId, sharedClipboard, onClipboardChange, localClipboard, fileId, setNodes, setEdges, setIsSimulating, saveHistory, isLibCollapsed, isPropsCollapsed, onSave, onSaveAll, persistWorkspace]);
+  }, [nodes, edges, history, selectedNodeId, sharedClipboard, onClipboardChange, localClipboard, fileId, setNodes, setEdges, setIsSimulating, saveHistory, isLibCollapsed, isPropsCollapsed, onSave, onSaveAll, persistWorkspace, currentParentId]);
 
   const updateBlock = (blockId: string, data: any) => {
     setNodes(nds => nds.map(n => {
@@ -3595,18 +3589,17 @@ export const XbridgesWorkspace: React.FC<{
 
         <div className="flex-1 relative flex min-h-0">
           <div className="flex-1 relative flex flex-col min-w-0 min-h-0">
-          <div ref={flowContainerRef} className="flex-1 relative min-h-0" onContextMenu={(e) => e.preventDefault()} style={{ cursor: rightClickDrag ? 'copy' : undefined }}>
+          <div ref={flowContainerRef} className="flex-1 relative min-h-0" onContextMenu={(e) => e.preventDefault()} style={{ cursor: copyDragging ? 'copy' : undefined }}>
             {/* Copy-mode indicator badge */}
-            {rightClickDrag && (
+            {copyDragging && (
               <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[9999] pointer-events-none flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#c9a86c]/90 backdrop-blur-md shadow-lg text-black text-[10px] font-black uppercase tracking-widest select-none animate-pulse">
-                <span>⊕</span> Copying Block — Release Right Click to Place
+                <span>⊕</span> Copying — Release to Place, Esc to Cancel
               </div>
             )}
             <WorkspaceContext.Provider value={{
               saveHistory,
               updateBlock: (id, newData) => updateBlock(id, newData),
               onOpenScope: (blockId) => setOpenScopes(prev => prev.includes(blockId) ? prev : [...prev, blockId]),
-              onNodeMouseDown: (e, n) => handleNodeMouseDown(e, n),
               isTargetBlock: (blockId) => {
                 const steps = activeLabId ? XBRIDGES_LEARNING_LAB_STEPS[activeLabId] : null;
                 const currentStep = steps ? steps[currentStepIndex] : null;
