@@ -94,6 +94,8 @@ export class XbridgesEngine {
   }
 
   private flatBlocks: XBlock[] = [];
+  /** Blocks of the compiled model (subsystems flattened). */
+  public getFlatBlocks(): XBlock[] { return this.flatBlocks; }
   private flatConnections: { sourceBlock: string; sourcePort: string; targetBlock: string; targetPort: string }[] = [];
 
   private flatten() {
@@ -328,8 +330,10 @@ export class XbridgesEngine {
       });
       const ts = this.sampleTimeOf(b);
       if (ts > 0) {
-        b.nextTick = startTime;
-        this.nextSampleTime.set(b.id, startTime);
+        // Sample hits lie on the absolute grid t = n*Ts: first hit is the smallest n*Ts >= startTime (1e-9 tolerance).
+        const firstHit = Math.ceil(startTime / ts - 1e-9) * ts;
+        b.nextTick = firstHit;
+        this.nextSampleTime.set(b.id, firstHit);
         this.lastOutputs.set(b.id, b.outputs.map(out => out.value));
       }
     });

@@ -35,6 +35,15 @@ import { isInputFocused } from '../../utils/domUtils';
 import { handleHorizontalToolbarWheel } from '../../utils/toolbarScroll';
 import { useReactFlowCadNavigation } from '../../utils/useCadNavigation';
 import { XbridgesWorkerClient } from '../../services/xbridgesWorkerClient';
+import {
+  parseTimeInput,
+  parseFixedStepInput,
+  resolveSimulationConfig,
+  toSimulationSettings,
+  fromSimulationSettings,
+  type XSimulationSettings,
+} from '../../engine/xbridges/simulationConfig';
+import type { SolverOptions } from '../../engine/xbridges/types';
 
 // Map icon string names to Lucide icon components
 const LucideIconMap: Record<string, React.ComponentType<any>> = {
@@ -144,6 +153,43 @@ const normalizeNumerals = (val: string) => {
     .replace(/[۰۱۲۳۴۵۶۷۸۹]/g, (d) => "۰۱۲۳۴۵۶۷۸۹".indexOf(d).toString())
     .replace(/[٫،,]/g, '.');
 };
+
+const formatTimeInput = (v: number) => (v === Number.POSITIVE_INFINITY ? 'inf' : String(v));
+
+type WorkspaceSolverType = 'euler' | 'ode2' | 'ode3' | 'rk4' | 'ode5' | 'ode23' | 'ode45' | 'ode14x' | 'ode23tb' | 'discrete';
+
+/** One live-canvas step with the selected solver. 'discrete' evaluates outputs and discrete updates only. */
+function stepLiveSolver(engine: XbridgesEngine, solverType: string, t: number, dt: number) {
+  if (solverType === 'rk4') Solvers.stepRK4(engine, t, dt);
+  else if (solverType === 'ode2') Solvers.stepODE2(engine, t, dt);
+  else if (solverType === 'ode3') Solvers.stepODE3(engine, t, dt);
+  else if (solverType === 'ode5') Solvers.stepODE5(engine, t, dt);
+  else if (solverType === 'ode23') AdaptiveSolver.stepODE23(engine, t, dt);
+  else if (solverType === 'ode45') AdaptiveSolver.stepODE45(engine, t, dt);
+  else if (solverType === 'ode14x') StiffSolver.stepODE14x(engine, t, dt);
+  else if (solverType === 'ode23tb') StiffSolver.stepODE23TB(engine, t, dt, 1e-3, 1e-6);
+  else if (solverType === 'discrete') Solvers.stepDiscrete(engine, t, dt);
+  else Solvers.stepEuler(engine, t, dt);
+}
+
+/** Simulation settings as saved with the model: parsed from the toolbar text, 'auto' step resolved for the model's blocks. */
+function buildSimulationSettings(
+  inputs: { solver: string; start: string; stop: string; step: string },
+  nodes: any[],
+): XSimulationSettings {
+  const start = parseTimeInput(inputs.start);
+  const stop = parseTimeInput(inputs.stop);
+  const step = parseFixedStepInput(inputs.step);
+  const config = {
+    solver: inputs.solver,
+    startTime: start ?? 0,
+    stopTime: stop ?? 10,
+    fixedStep: step ?? ('auto' as const),
+  };
+  const blocks = nodes.map(n => ({ id: n.id, type: n.data?.type, params: n.data?.params ?? {} }));
+  const resolved = resolveSimulationConfig(config, blocks as any);
+  return toSimulationSettings(config, resolved.fixedStep);
+}
 
 const XBRIDGES_LEARNING_LABS: any[] = [
   {
@@ -925,11 +971,11 @@ const XBRIDGES_LEARNING_LAB_STEPS: Record<string, any[]> = {
     },
     {
       title: '5. Experiment with Simulation Step Size',
-      instructions: 'The simulation step size (dt) is crucial for discretized learning models. If dt is too large, the gradient updates oscillate.\n\nStop the engine, change the Time Step (Δt) in the top toolbar to a different value (e.g. 0.01s or 0.05s) to explore its impact, then restart the simulation.',
+      instructions: 'The simulation step size (dt) is crucial for discretized learning models. If dt is too large, the gradient updates oscillate.\n\nStop the engine, change the Fixed Step in the top toolbar to a different value (e.g. 0.01s or 0.05s) to explore its impact, then restart the simulation.',
       objectives: [
         { 
           id: 'change_dt', 
-          label: 'Change the simulation time step (Δt) away from 0.02s', 
+          label: 'Change the Fixed Step away from 0.02s', 
           check: (wState: any) => {
             return Math.abs(wState.fixedStep - 0.02) > 0.001;
           } 
@@ -1296,8 +1342,10 @@ export const XbridgesWorkspace: React.FC<{
   initialMappings?: readonly XBMappingV1[];
   availableVariables?: any[];
   tickMs?: number; // Added to sync with State Machine
+  /** Saved Solver settings (start/stop time, solver, fixed step); older models have none and open with the defaults. */
+  initialSimulation?: XSimulationSettings;
   onBack?: () => void;
-  onSave?: (nodes: any[], edges: any[], mappings: readonly XBMappingV1[]) => void;
+  onSave?: (nodes: any[], edges: any[], mappings: readonly XBMappingV1[], simulation: XSimulationSettings) => void;
   onSaveAll?: () => void;
   onLaunchDoe?: () => void;
   onExportDoeData?: (headers: string[], data: number[][]) => void;
@@ -1316,6 +1364,7 @@ export const XbridgesWorkspace: React.FC<{
   initialMappings = [],
   availableVariables = [],
   tickMs,
+  initialSimulation,
   onBack,
   onSave,
   onSaveAll,
@@ -1348,15 +1397,36 @@ export const XbridgesWorkspace: React.FC<{
   useEffect(() => {
     isPausedRef.current = isPaused;
   }, [isPaused]);
-  const [simLimitInput, setSimLimitInput] = useState('');
+  const initialSimConfig = fromSimulationSettings(initialSimulation);
+  const [startTimeInput, setStartTimeInput] = useState(formatTimeInput(initialSimConfig?.startTime ?? 0));
+  const [stopTimeInput, setStopTimeInput] = useState(formatTimeInput(initialSimConfig?.stopTime ?? 10));
+  const [solverType, setSolverType] = useState<WorkspaceSolverType>((initialSimConfig?.solver as WorkspaceSolverType | undefined) ?? 'rk4');
+  const initialStep = tickMs ? tickMs / 1000 : 0.02;
+  const [fixedStep, setFixedStep] = useState(typeof initialSimConfig?.fixedStep === 'number' ? initialSimConfig.fixedStep : initialStep);
+  const [stepSizeInput, setStepSizeInput] = useState(
+    tickMs ? String(initialStep)
+      : initialSimConfig ? (initialSimConfig.fixedStep === 'auto' ? 'auto' : String(initialSimConfig.fixedStep))
+        : 'auto',
+  );
+  const simInputsRef = React.useRef({ solver: solverType as string, start: startTimeInput, stop: stopTimeInput, step: stepSizeInput });
+  simInputsRef.current = { solver: solverType, start: startTimeInput, stop: stopTimeInput, step: stepSizeInput };
+  const startTimeParsed = parseTimeInput(startTimeInput);
+  const stopTimeParsed = parseTimeInput(stopTimeInput);
+  const fixedStepParsed = parseFixedStepInput(stepSizeInput);
+  const startTimeInvalid = startTimeParsed === null || !Number.isFinite(startTimeParsed);
+  const stopTimeInvalid = stopTimeParsed === null || (!startTimeInvalid && stopTimeParsed < (startTimeParsed as number));
+  const fixedStepInvalid = fixedStepParsed === null || (fixedStepParsed !== 'auto' && !(Number.isFinite(fixedStepParsed) && fixedStepParsed > 0));
+  const simulationKey = `${solverType}|${startTimeInput}|${stopTimeInput}|${stepSizeInput}`;
   const simLimitRef = React.useRef<number | null>(null);
+  const liveStepRef = React.useRef<number | null>(null);
   const isSpacePressedRef = React.useRef(false);
   const spaceComboUsedRef = React.useRef(false);
 
   useEffect(() => {
-    const val = parseFloat(simLimitInput);
-    simLimitRef.current = (!isNaN(val) && val > 0) ? val : null;
-  }, [simLimitInput]);
+    // Stop time: a finite number limits the run; 'inf' (or invalid text, which blocks the run) leaves it unlimited.
+    const val = parseTimeInput(stopTimeInput);
+    simLimitRef.current = val !== null && Number.isFinite(val) ? val : null;
+  }, [stopTimeInput]);
 
   // Track whether we are the ones who last changed the data (so we don't re-import our own save)
   const isSavingRef = React.useRef(false);
@@ -1378,7 +1448,7 @@ export const XbridgesWorkspace: React.FC<{
     );
     const syncedNodes = syncXBBoundaryNodeMetadata(nextNodes, mappings);
     initialMappingsRef.current = mappings;
-    onSave?.(syncedNodes, nextEdges, mappings);
+    onSave?.(syncedNodes, nextEdges, mappings, buildSimulationSettings(simInputsRef.current, syncedNodes));
   }, [onSave, validVariableIds]);
   const persistWorkspaceRef = React.useRef(persistWorkspace);
 
@@ -1407,7 +1477,7 @@ export const XbridgesWorkspace: React.FC<{
       }
     }, 300);
     return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
-  }, [nodes, edges, onSave, persistWorkspace]);
+  }, [nodes, edges, onSave, persistWorkspace, simulationKey]);
 
   // Inward sync: only apply when initialNodes/initialEdges change AND we didn't cause the change
   useEffect(() => {
@@ -1560,12 +1630,8 @@ export const XbridgesWorkspace: React.FC<{
   const [viewPath, setViewPath] = useState<string[]>(['root']);
   const currentParentId = viewPath[viewPath.length - 1];
 
-  const [solverType, setSolverType] = useState<'euler' | 'ode2' | 'ode3' | 'rk4' | 'ode5' | 'ode23' | 'ode45' | 'ode14x' | 'ode23tb' | 'discrete'>('rk4');
   const [edgeType, setEdgeType] = useState<'default' | 'straight' | 'smoothstep'>('smoothstep');
   const [snapEnabled, setSnapEnabled] = useState(false);
-  const initialStep = tickMs ? tickMs / 1000 : 0.02;
-  const [fixedStep, setFixedStep] = useState(initialStep);
-  const [stepSizeInput, setStepSizeInput] = useState(String(initialStep));
 
   // Update fixedStep if tickMs changes from parent
   useEffect(() => {
@@ -1812,6 +1878,34 @@ export const XbridgesWorkspace: React.FC<{
         }))
       };
 
+      setDiagnostics([]);
+      // Solver pane: start time, stop time and fixed step ('auto' resolved against the model), as in Simulink.
+      const startParsed = parseTimeInput(startTimeInput);
+      const stopParsed = parseTimeInput(stopTimeInput);
+      const stepParsed = parseFixedStepInput(stepSizeInput);
+      const resolvedConfig = resolveSimulationConfig({
+        solver: solverType,
+        startTime: startParsed ?? Number.NaN,
+        stopTime: stopParsed ?? Number.NaN,
+        fixedStep: stepParsed ?? Number.NaN,
+      }, model.blocks as any);
+      if (resolvedConfig.diagnostics.some(d => d.severity === 'error')) {
+        setDiagnostics(resolvedConfig.diagnostics);
+        setIsSimulating(false);
+        setShowDiagnostics(true);
+        return;
+      }
+      const liveStep = resolvedConfig.fixedStep;
+      liveStepRef.current = liveStep;
+      timeRef.current = resolvedConfig.startTime;
+      simLimitRef.current = Number.isFinite(resolvedConfig.stopTime) ? resolvedConfig.stopTime : null;
+      const solverOptions: SolverOptions = {
+        solver: solverType,
+        startTime: resolvedConfig.startTime,
+        stopTime: resolvedConfig.stopTime,
+        fixedStep: liveStep,
+      };
+
       if (!xbridgesWorkerRef.current) {
         xbridgesWorkerRef.current = new XbridgesWorkerClient();
       }
@@ -1820,7 +1914,8 @@ export const XbridgesWorkspace: React.FC<{
 
       if (!useWorker) {
         engineRef.current = new XbridgesEngine(model);
-        const compileDiagnostics = engineRef.current.compile();
+        engineRef.current.options = solverOptions;
+        const compileDiagnostics = engineRef.current.compile(resolvedConfig.startTime);
         setDiagnostics(compileDiagnostics);
 
         const hasErrors = compileDiagnostics.some(d => d.severity === 'error');
@@ -1830,7 +1925,7 @@ export const XbridgesWorkspace: React.FC<{
           return;
         }
       } else {
-        xbridgesWorkerRef.current.compile(model, timeRef.current)
+        xbridgesWorkerRef.current.compile(model, timeRef.current, solverOptions)
           .then(res => {
             if (res.diagnostics) setDiagnostics(res.diagnostics);
             if (!res.ok) {
@@ -1840,6 +1935,7 @@ export const XbridgesWorkspace: React.FC<{
           })
           .catch(err => {
             console.error('Failed to compile model in Xbridges worker:', err);
+            if (Array.isArray(err?.diagnostics)) setDiagnostics(err.diagnostics);
             setIsSimulating(false);
             setShowDiagnostics(true);
           });
@@ -1863,11 +1959,21 @@ export const XbridgesWorkspace: React.FC<{
             }
           });
 
+          // The run ends exactly at the stop time: the last step is shortened to land on it.
+          const stopAt = simLimitRef.current;
+          const remaining = stopAt === null ? Infinity : stopAt - timeRef.current;
+          if (remaining <= 1e-12) {
+            timeRef.current = stopAt ?? timeRef.current;
+            setIsSimulating(false);
+            return;
+          }
+          const stepNow = Math.min(liveStep, remaining);
+
           if (useWorker && xbridgesWorkerRef.current?.available) {
             if (!xbridgesWorkerRef.current.inFlight) {
               xbridgesWorkerRef.current.step({
                 time: timeRef.current,
-                dt: fixedStep,
+                dt: stepNow,
                 solverType,
                 paramUpdates,
                 inportOverrides,
@@ -1886,7 +1992,7 @@ export const XbridgesWorkspace: React.FC<{
                   setDiagnostics(res.diagnostics);
                 }
 
-                if (simLimitRef.current !== null && timeRef.current >= simLimitRef.current) {
+                if (simLimitRef.current !== null && timeRef.current >= simLimitRef.current - 1e-12) {
                   timeRef.current = simLimitRef.current;
                   setIsSimulating(false);
                   setNodes(nds => nds.map(n => {
@@ -1929,19 +2035,11 @@ export const XbridgesWorkspace: React.FC<{
               }
             });
 
-            if (solverType === 'rk4') Solvers.stepRK4(engineRef.current, timeRef.current, fixedStep);
-            else if (solverType === 'ode2') Solvers.stepODE2(engineRef.current, timeRef.current, fixedStep);
-            else if (solverType === 'ode3') Solvers.stepODE3(engineRef.current, timeRef.current, fixedStep);
-            else if (solverType === 'ode5') Solvers.stepODE5(engineRef.current, timeRef.current, fixedStep);
-            else if (solverType === 'ode23') AdaptiveSolver.stepODE23(engineRef.current, timeRef.current, fixedStep);
-            else if (solverType === 'ode45') AdaptiveSolver.stepODE45(engineRef.current, timeRef.current, fixedStep);
-            else if (solverType === 'ode14x') StiffSolver.stepODE14x(engineRef.current, timeRef.current, fixedStep);
-            else if (solverType === 'ode23tb') StiffSolver.stepODE23TB(engineRef.current, timeRef.current, fixedStep, 1e-3, 1e-6);
-            else Solvers.stepEuler(engineRef.current, timeRef.current, fixedStep);
+            stepLiveSolver(engineRef.current, solverType, timeRef.current, stepNow);
 
-            timeRef.current += fixedStep;
+            timeRef.current += stepNow;
 
-            if (simLimitRef.current !== null && timeRef.current >= simLimitRef.current) {
+            if (simLimitRef.current !== null && timeRef.current >= simLimitRef.current - 1e-12) {
               timeRef.current = simLimitRef.current;
               setIsSimulating(false);
               setNodes(nds => nds.map(n => {
@@ -1973,8 +2071,8 @@ export const XbridgesWorkspace: React.FC<{
     } else {
       timeRef.current = 0; // Reset time when stopped
       setIsPaused(false);
-      setDiagnostics([]);
-      setShowDiagnostics(false);
+      // Diagnostics stay visible after a stop (a failed compile stops the run, and its errors must remain readable);
+      // they are replaced by the next run's compile.
       xbridgesWorkerRef.current?.dispose();
       xbridgesWorkerRef.current = null;
     }
@@ -2739,17 +2837,10 @@ export const XbridgesWorkspace: React.FC<{
   const stepSimulation = () => {
     if (!engineRef.current) return;
 
-    if (solverType === 'rk4') Solvers.stepRK4(engineRef.current, timeRef.current, fixedStep);
-    else if (solverType === 'ode2') Solvers.stepODE2(engineRef.current, timeRef.current, fixedStep);
-    else if (solverType === 'ode3') Solvers.stepODE3(engineRef.current, timeRef.current, fixedStep);
-    else if (solverType === 'ode5') Solvers.stepODE5(engineRef.current, timeRef.current, fixedStep);
-    else if (solverType === 'ode23') AdaptiveSolver.stepODE23(engineRef.current, timeRef.current, fixedStep);
-    else if (solverType === 'ode45') AdaptiveSolver.stepODE45(engineRef.current, timeRef.current, fixedStep);
-    else if (solverType === 'ode14x') StiffSolver.stepODE14x(engineRef.current, timeRef.current, fixedStep);
-    else if (solverType === 'ode23tb') StiffSolver.stepODE23TB(engineRef.current, timeRef.current, fixedStep, 1e-3, 1e-6);
-    else Solvers.stepEuler(engineRef.current, timeRef.current, fixedStep);
+    const stepNow = liveStepRef.current ?? fixedStep;
+    stepLiveSolver(engineRef.current, solverType, timeRef.current, stepNow);
 
-    timeRef.current += fixedStep;
+    timeRef.current += stepNow;
 
     setNodes(nds => nds.map(n => {
       const engineBlock = engineRef.current!['blockMap'].get(n.id);
@@ -2827,7 +2918,7 @@ export const XbridgesWorkspace: React.FC<{
         isSimulating,
         openScopes,
         selectedNodeId,
-        fixedStep
+        fixedStep: typeof parseFixedStepInput(stepSizeInput) === 'number' ? (parseFixedStepInput(stepSizeInput) as number) : fixedStep
       };
 
       let changed = false;
@@ -2847,7 +2938,7 @@ export const XbridgesWorkspace: React.FC<{
     }, 400);
 
     return () => clearInterval(interval);
-  }, [activeLabId, currentStepIndex, nodes, edges, isSimulating, openScopes, selectedNodeId, fixedStep, completedObjectives]);
+  }, [activeLabId, currentStepIndex, nodes, edges, isSimulating, openScopes, selectedNodeId, fixedStep, stepSizeInput, completedObjectives]);
 
   const selectedNode = nodes.find(n => n.id === selectedNodeId);
 
@@ -3255,30 +3346,51 @@ export const XbridgesWorkspace: React.FC<{
               </div>
 
               <div className="flex flex-col">
-                <span className="text-[8px] text-slate-400 font-black uppercase tracking-widest mb-1">Time Step (Δt)</span>
+                <span className="text-[8px] text-slate-400 font-black uppercase tracking-widest mb-1">Start Time</span>
                 <div className="relative group">
                   <div className="absolute left-2.5 top-1/2 -translate-y-1/2 text-emerald-600 text-[8px] font-bold italic">s</div>
-                  <input data-help-feature="ui:xbridges/XbridgesWorkspace:d928378d041c" data-help-source="src/components/xbridges/XbridgesWorkspace.tsx"
+                  <input data-help-source="src/components/xbridges/XbridgesWorkspace.tsx"
                     type="text"
-                    value={stepSizeInput}
-                    onChange={e => setStepSizeInput(normalizeNumerals(e.target.value).replace(/[^0-9.]/g, ''))}
-                    disabled={!!tickMs || activeSimulating}
-                    className={`w-20 bg-[#0a0a0a] border border-[#333] rounded-xl pl-7 pr-3 py-1.5 text-[10px] font-mono font-bold focus:outline-none focus:border-emerald-500 transition-all ${tickMs ? 'text-[#c9a86c] opacity-80 cursor-not-allowed' : 'text-[#e0e0e0] hover:bg-[#222]'}`}
+                    value={startTimeInput}
+                    onChange={e => setStartTimeInput(normalizeNumerals(e.target.value).replace(/[^0-9a-zA-Z.+-]/g, ''))}
+                    disabled={activeSimulating}
+                    title={startTimeInvalid ? 'Start time must be a finite number' : 'Simulation start time in seconds (default 0)'}
+                    aria-invalid={startTimeInvalid}
+                    className={`w-20 bg-[#0a0a0a] border rounded-xl pl-7 pr-3 py-1.5 text-[10px] font-mono font-bold text-[#e0e0e0] focus:outline-none transition-all hover:bg-[#222] disabled:opacity-50 ${startTimeInvalid ? 'border-red-500 focus:border-red-500' : 'border-[#333] focus:border-emerald-500'}`}
                   />
                 </div>
               </div>
 
               <div className="flex flex-col">
-                <span className="text-[8px] text-slate-400 font-black uppercase tracking-widest mb-1">End Time</span>
+                <span className="text-[8px] text-slate-400 font-black uppercase tracking-widest mb-1">Stop Time</span>
                 <div className="relative group">
                   <div className="absolute left-2.5 top-1/2 -translate-y-1/2 text-rose-500 text-[8px] font-bold italic">s</div>
                   <input data-help-feature="ui:xbridges/XbridgesWorkspace:84388e80584d" data-help-source="src/components/xbridges/XbridgesWorkspace.tsx"
                     type="text"
-                    value={simLimitInput}
-                    onChange={e => setSimLimitInput(normalizeNumerals(e.target.value).replace(/[^0-9.]/g, ''))}
+                    value={stopTimeInput}
+                    onChange={e => setStopTimeInput(normalizeNumerals(e.target.value).replace(/[^0-9a-zA-Z.+-]/g, ''))}
                     disabled={activeSimulating}
-                    placeholder="Unlimited"
-                    className="w-20 bg-[#0a0a0a] border border-[#333] rounded-xl pl-7 pr-3 py-1.5 text-[10px] font-mono font-bold text-[#e0e0e0] focus:outline-none focus:border-rose-500 transition-all hover:bg-[#222] disabled:opacity-50"
+                    placeholder="inf"
+                    title={stopTimeInvalid ? 'Stop time must be a number not less than the start time, or inf' : 'Simulation stop time in seconds (default 10, inf runs until stopped)'}
+                    aria-invalid={stopTimeInvalid}
+                    className={`w-20 bg-[#0a0a0a] border rounded-xl pl-7 pr-3 py-1.5 text-[10px] font-mono font-bold text-[#e0e0e0] focus:outline-none transition-all hover:bg-[#222] disabled:opacity-50 ${stopTimeInvalid ? 'border-red-500 focus:border-red-500' : 'border-[#333] focus:border-rose-500'}`}
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-col">
+                <span className="text-[8px] text-slate-400 font-black uppercase tracking-widest mb-1">Fixed Step</span>
+                <div className="relative group">
+                  <div className="absolute left-2.5 top-1/2 -translate-y-1/2 text-emerald-600 text-[8px] font-bold italic">s</div>
+                  <input data-help-feature="ui:xbridges/XbridgesWorkspace:d928378d041c" data-help-source="src/components/xbridges/XbridgesWorkspace.tsx"
+                    type="text"
+                    value={stepSizeInput}
+                    onChange={e => setStepSizeInput(normalizeNumerals(e.target.value).replace(/[^0-9a-zA-Z.+-]/g, ''))}
+                    disabled={!!tickMs || activeSimulating}
+                    placeholder="auto"
+                    title={fixedStepInvalid ? 'Fixed step must be auto or a number greater than 0' : "Fixed-step size in seconds, or auto (fundamental sample time, else (stop - start) / 50)"}
+                    aria-invalid={fixedStepInvalid}
+                    className={`w-20 bg-[#0a0a0a] border rounded-xl pl-7 pr-3 py-1.5 text-[10px] font-mono font-bold focus:outline-none transition-all ${fixedStepInvalid ? 'border-red-500 focus:border-red-500' : 'border-[#333] focus:border-emerald-500'} ${tickMs ? 'text-[#c9a86c] opacity-80 cursor-not-allowed' : 'text-[#e0e0e0] hover:bg-[#222]'}`}
                   />
                 </div>
               </div>

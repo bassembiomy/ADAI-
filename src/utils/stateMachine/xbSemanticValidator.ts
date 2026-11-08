@@ -306,12 +306,12 @@ const validateSampleTimes = (
   diagnostics: ModelDiagnostic[],
 ): void => {
   const step = model.solver.stepSeconds;
-  if ((model.solver.kind !== 'euler' && model.solver.kind !== 'rk4')
+  if ((model.solver.kind !== 'euler' && model.solver.kind !== 'rk4' && model.solver.kind !== 'discrete')
     || !Number.isFinite(step)
     || step <= 0) {
     diagnostics.push(diagnostic(
       'XB_SAMPLE_TIME_INVALID',
-      'The embedded solver requires a finite positive fixed step.',
+      'The embedded solver must be Euler, RK4 or Discrete with a finite positive fixed step.',
     ));
     return;
   }
@@ -424,6 +424,25 @@ const constantElements = (value: unknown): number[] => {
   return typeof value === 'number' || typeof value === 'boolean' ? [Number(value)] : [];
 };
 
+/** True when the block carries continuous states (needs an integrating solver). */
+const hasContinuousStates = (node: XBNodeV1): boolean => {
+  const p = node.parameters as Record<string, unknown>;
+  switch (node.type) {
+    case 'INTEGRATOR_CONTINUOUS':
+    case 'Integrator':
+    case 'TRANSFER_FUNCTION':
+      return true;
+    case 'STATE_SPACE':
+      return p.representation !== 'discrete';
+    case 'PID_CONTROLLER': {
+      const ts = typeof p.sampleTime === 'string' ? Number(p.sampleTime) : p.sampleTime;
+      return !(typeof ts === 'number' && Number.isFinite(ts) && ts > 0);
+    }
+    default:
+      return false;
+  }
+};
+
 export const validateXBModel = (
   rawModel: XBPersistedModelV1,
   variables: Readonly<Record<string, SemanticVariable>>,
@@ -433,6 +452,17 @@ export const validateXBModel = (
   const diagnostics: ModelDiagnostic[] = [];
   const shapeResult = resolveGraphShapes(model);
   diagnostics.push(...shapeResult.diagnostics);
+
+  if (model.solver.kind === 'discrete') {
+    for (const node of model.nodes) {
+      if (!hasContinuousStates(node)) continue;
+      diagnostics.push(diagnostic(
+        'XB_DISCRETE_SOLVER_CONTINUOUS_STATE',
+        `Block '${node.id}' (${node.type}) has continuous states, which the Discrete solver cannot integrate; choose Euler or RK4, or use a discrete block.`,
+        node.id,
+      ));
+    }
+  }
 
   const nodesById = new Map<string, XBNodeV1>();
   const portsByNode = new Map<string, readonly PortDescriptor[]>();

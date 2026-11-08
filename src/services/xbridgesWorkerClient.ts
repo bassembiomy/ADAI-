@@ -2,7 +2,7 @@ import type {
   XbridgesWorkerRequest,
   XbridgesWorkerResponse,
 } from '../engine/xbridges/xbridgesWorkerProtocol';
-import type { XModel } from '../engine/xbridges/types';
+import type { SolverOptions, XModel } from '../engine/xbridges/types';
 
 function serializeModelForWorker(model: XModel): XModel {
   return {
@@ -68,6 +68,7 @@ export class XbridgesWorkerClient {
 
       if (!response.ok) {
         const err = new Error(response.error?.message || 'X-Bridges worker error');
+        if (response.diagnostics) (err as Error & { diagnostics?: unknown }).diagnostics = response.diagnostics;
         if (response.error?.stack) err.stack = response.error.stack;
         current.reject(err);
       } else {
@@ -115,13 +116,14 @@ export class XbridgesWorkerClient {
     }
   }
 
-  public compile(model: XModel, time = 0): Promise<XbridgesWorkerResponse> {
+  public compile(model: XModel, time = 0, solverOptions?: Partial<SolverOptions>): Promise<XbridgesWorkerResponse> {
     if (!this.worker) return Promise.reject(new Error('X-Bridges worker is unavailable'));
     const requestId = this.nextId++;
     const request: XbridgesWorkerRequest = {
       requestId,
       type: 'compile',
       model: serializeModelForWorker(model),
+      solverOptions,
       time,
       dt: 0,
     };

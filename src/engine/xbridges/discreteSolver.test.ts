@@ -81,7 +81,7 @@ describe('discrete solver in simulation', () => {
       [['k', 'out', 'd', 'u'], ['d', 'y', 't', 'u']]);
     let derivativeCalls = 0;
     const original = e.computeDerivatives.bind(e);
-    (e as any).computeDerivatives = (...args: any[]) => { derivativeCalls++; return original(...args); };
+    (e as any).computeDerivatives = (t: number, tempStates?: any) => { derivativeCalls++; return (original as any)(t, tempStates); };
     Solvers.runFixedStep(e, { solver: 'discrete', startTime: 0, stopTime: 1, fixedStep: 0.1 } as any);
     expect(e.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
     expect(derivativeCalls).toBe(0);

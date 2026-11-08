@@ -52,7 +52,7 @@ export interface XBridgesReport {
   memoryEstimateAccuracy: 'lower-bound-excludes-padding';
   solvers: Array<{
     stateId: string;
-    kind: 'euler' | 'rk4';
+    kind: 'euler' | 'rk4' | 'discrete';
     stepSeconds: number;
     substepsPerTick: number;
   }>;

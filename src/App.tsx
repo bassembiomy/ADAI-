@@ -97,6 +97,7 @@ import {
 import { serializeInlineScriptJson } from './utils/stateMachine/smInlineScriptSerialization';
 import { migrateStateMachineModel } from './utils/stateMachine/smModelMigration';
 import type { XBMappingV1 } from './utils/stateMachine/xbModel';
+import { embeddedSolverKind, type XSimulationSettings } from './engine/xbridges/simulationConfig';
 import {
   createXBBoundaryMapping,
   listXBBoundaryTargets,
@@ -5492,6 +5493,8 @@ const ADIA = () => {
 
   // Global X-Bridges persistence
   const [globalXBridgesEdges, setGlobalXBridgesEdges] = useState<any[]>([]);
+  // Solver settings of the global X-Bridges canvas (start/stop time, solver, fixed step); absent in older projects.
+  const [globalXBridgesSimulation, setGlobalXBridgesSimulation] = useState<XSimulationSettings | undefined>(undefined);
   const globalXBridgesNodesRef = useRef<any[]>(globalXBridgesNodes);
   const globalXBridgesEdgesRef = useRef<any[]>(globalXBridgesEdges);
 
@@ -5608,7 +5611,7 @@ const ADIA = () => {
       case 'ibd':
         return { parts, connectors, interfaceRealizations };
       case 'xbridges':
-        return { globalXBridgesNodes, globalXBridgesEdges };
+        return { globalXBridgesNodes, globalXBridgesEdges, globalXBridgesSimulation };
       case 'vlab':
         return { vlabNodes, vlabEdges };
       case 'hil':
@@ -5625,7 +5628,7 @@ const ADIA = () => {
   }, [
     states, junctions, transitions, layers, variables, view, tickMs, safetyMode,
     blocks, relationships, customStereotypes, parts, connectors, interfaceRealizations,
-    globalXBridgesNodes, globalXBridgesEdges, vlabNodes, vlabEdges, hilConfig,
+    globalXBridgesNodes, globalXBridgesEdges, globalXBridgesSimulation, vlabNodes, vlabEdges, hilConfig,
     entropyNodes, entropyEdges, opmSimulationConfig, hmiComponents, headers, data, activeModel, taguchiConfig, results,
     requirementsDiagramScope,
   ]);
@@ -5676,7 +5679,7 @@ const ADIA = () => {
           // empty tab must not erase shared semantic model elements.
           break;
         case 'xbridges':
-          setGlobalXBridgesNodes([]); setGlobalXBridgesEdges([]);
+          setGlobalXBridgesNodes([]); setGlobalXBridgesEdges([]); setGlobalXBridgesSimulation(undefined);
           break;
         case 'vlab':
           setVlabNodes([]); setVlabEdges([]);
@@ -5757,6 +5760,7 @@ const ADIA = () => {
       case 'xbridges':
         setGlobalXBridgesNodes(d.globalXBridgesNodes || []);
         setGlobalXBridgesEdges(d.globalXBridgesEdges || []);
+        setGlobalXBridgesSimulation(d.globalXBridgesSimulation ?? undefined);
         break;
       case 'vlab':
         setVlabNodes(d.vlabNodes || []);
@@ -5785,7 +5789,7 @@ const ADIA = () => {
     setStates, setJunctions, setTransitions, setLayers, setVariables, setView, setTickMs,
     blocks, relationships, parts, connectors, applyCanonicalProjectLoad, setCustomStereotypes, setInterfaceRealizations,
     canonicalSysmlRepository,
-    setGlobalXBridgesNodes, setGlobalXBridgesEdges, setVlabNodes, setVlabEdges, setHilConfig,
+    setGlobalXBridgesNodes, setGlobalXBridgesEdges, setGlobalXBridgesSimulation, setVlabNodes, setVlabEdges, setHilConfig,
     setEntropyNodes, setEntropyEdges, setOpmSimulationConfig, setHmiComponents, setHeaders, setData, setActiveModel, setTaguchiConfig, setResults,
     applyStateMachineSnapshot
   ]);
@@ -6379,6 +6383,18 @@ const ADIA = () => {
   }), [states, junctions, transitions, variables, layers, tickMs, hilConfig, safetyMode, globalXBridgesNodes, globalXBridgesEdges, vlabNodes, vlabEdges]);
   // Stable XbridgesWorkspace inputs: a fresh array per render re-imports the stored model over unsaved edits.
   const xBridgesWorkspaceInputs = useXBridgesWorkspaceInputs(states, xBridgesStateId, globalXBridgesNodes, globalXBridgesEdges);
+  // Saved Solver settings for the workspace. A state-embedded model saved before `simulation` existed opens with the
+  // solver it already has (kind and step), so opening it does not change code generation.
+  const xBridgesStateSimulation = useMemo<XSimulationSettings | undefined>(() => {
+    if (!xBridgesStateId) return undefined;
+    const model = states.find(s => s.id === xBridgesStateId)?.xBridgesModel as { simulation?: XSimulationSettings; solver?: { kind: string; stepSeconds: number } } | undefined;
+    if (model?.simulation) return model.simulation;
+    if (model?.solver) return { solver: model.solver.kind, startTime: 0, stopTime: 10, fixedStep: model.solver.stepSeconds };
+    return undefined;
+  // Only the state that is open matters; later saves must not feed back into the open workspace.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [xBridgesStateId]);
+  const xBridgesInitialSimulation = xBridgesStateId ? xBridgesStateSimulation : globalXBridgesSimulation;
   const simEvidenceCurrency = useCallback((evidence: { id: string; simulation?: unknown }): 'current' | 'stale' =>
     evidence.simulation && simEvidenceStatusFor(canonicalSysmlRepository, evidence.id, simVerificationProject) === 'stale' ? 'stale' : 'current',
   [canonicalSysmlRepository, simVerificationProject]);
@@ -6782,7 +6798,7 @@ const ADIA = () => {
       projectFiles['requirements.adia'] = { blocks: blocks.filter(b => b.stereotype === 'requirement'), relationships };
     }
     if (selectedKeys.includes('xbridges')) {
-      projectFiles['xbridges.adia'] = { globalXBridgesNodes, globalXBridgesEdges };
+      projectFiles['xbridges.adia'] = { globalXBridgesNodes, globalXBridgesEdges, globalXBridgesSimulation };
     }
     if (selectedKeys.includes('vlab')) {
       projectFiles['vlab.adia'] = { vlabNodes, vlabEdges };
@@ -6875,19 +6891,29 @@ const ADIA = () => {
 
 
 
-  const handleXBridgesSave = useCallback((nodes: any[], edges: any[], mappings: readonly XBMappingV1[]) => {
+  const handleXBridgesSave = useCallback((nodes: any[], edges: any[], mappings: readonly XBMappingV1[], simulation?: XSimulationSettings) => {
     const prunedMappings = pruneXBBoundaryMappings(mappings, nodes);
     if (xBridgesStateId) {
-      setStates(prev => prev.map(s =>
-        s.id === xBridgesStateId
-          ? { ...s, xBridgesModel: { ...s.xBridgesModel, nodes, edges, mappings: Array.from(prunedMappings) } }
-          : s
-      ));
+      setStates(prev => prev.map(s => {
+        if (s.id !== xBridgesStateId) return s;
+        const next = { ...s.xBridgesModel, nodes, edges, mappings: Array.from(prunedMappings) } as NonNullable<typeof s.xBridgesModel>;
+        if (simulation) {
+          // Embedded code generation follows the workspace solver: Euler / RK4 / Discrete with the resolved fixed step.
+          // Other workspace solvers are stored as chosen; the embedded adapter then reports the supported kinds.
+          const resolvedStep = simulation.resolvedStep ?? (typeof simulation.fixedStep === 'number' ? simulation.fixedStep : undefined);
+          (next as any).simulation = simulation;
+          if (resolvedStep !== undefined) {
+            (next as any).solver = { kind: embeddedSolverKind(simulation.solver), stepSeconds: resolvedStep };
+          }
+        }
+        return { ...s, xBridgesModel: next };
+      }));
     } else {
       setGlobalXBridgesNodes(nodes);
       setGlobalXBridgesEdges(edges);
+      if (simulation) setGlobalXBridgesSimulation(simulation);
     }
-  }, [xBridgesStateId, setGlobalXBridgesNodes, setGlobalXBridgesEdges, setStates]);
+  }, [xBridgesStateId, setGlobalXBridgesNodes, setGlobalXBridgesEdges, setGlobalXBridgesSimulation, setStates]);
 
 
   const hydrateProjectImmediate = useCallback((importedData: any, preloadedResult?: any) => {
@@ -6969,6 +6995,7 @@ const ADIA = () => {
       // X-Bridges Architecture
       setGlobalXBridgesNodes(importedData.globalXBridgesNodes ?? []);
       setGlobalXBridgesEdges(importedData.globalXBridgesEdges ?? []);
+      setGlobalXBridgesSimulation(importedData.globalXBridgesSimulation ?? undefined);
 
       // ENTROPY OPM
       setEntropyNodes(importedData.entropyNodes ?? []);
@@ -7058,7 +7085,8 @@ const ADIA = () => {
             type: 'xbridges',
             data: {
               globalXBridgesNodes: importedData.globalXBridgesNodes || [],
-              globalXBridgesEdges: importedData.globalXBridgesEdges || []
+              globalXBridgesEdges: importedData.globalXBridgesEdges || [],
+              globalXBridgesSimulation: importedData.globalXBridgesSimulation
             }
           },
           {
@@ -7203,7 +7231,7 @@ const ADIA = () => {
   }, [
     setStates, setJunctions, setTransitions, setLayers, setVariables, setView, setTickMs,
     applyCanonicalProjectLoad, setInterfaceRealizations, setCustomStereotypes,
-    setHmiComponents, setVlabNodes, setVlabEdges, setGlobalXBridgesNodes, setGlobalXBridgesEdges,
+    setHmiComponents, setVlabNodes, setVlabEdges, setGlobalXBridgesNodes, setGlobalXBridgesEdges, setGlobalXBridgesSimulation,
     setHilConfig,
     setHeaders, setData, setActiveModel, setTaguchiConfig, setResults, setManagedWindows,
     setIsRunning, setActiveStates, setStateTimers, setTraceHistory, setScopeData, setSimulationTime,
@@ -7250,6 +7278,7 @@ const ADIA = () => {
       vlabEdges,
       globalXBridgesNodes,
       globalXBridgesEdges,
+      globalXBridgesSimulation,
       entropyNodes,
       entropyEdges,
       opmSimulationConfig,
@@ -7293,6 +7322,7 @@ const ADIA = () => {
     vlabEdges,
     globalXBridgesNodes,
     globalXBridgesEdges,
+    globalXBridgesSimulation,
     entropyNodes,
     entropyEdges,
     opmSimulationConfig,
@@ -15683,6 +15713,7 @@ const ADIA = () => {
                   initialMappings={xBridgesWorkspaceInputs.initialMappings}
                   availableVariables={variables}
                   tickMs={tickMs}
+                  initialSimulation={xBridgesInitialSimulation}
                   onLaunchDoe={() => toggleWindow('doe')}
                   onExportDoeData={(doeHeaders, doeData) => {
                     setHeaders(doeHeaders);

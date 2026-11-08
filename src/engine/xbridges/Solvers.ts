@@ -3,6 +3,7 @@ import { SolverOptions } from './types';
 import { VectorUtils } from './VectorUtils';
 import { AdaptiveSolver } from './AdaptiveSolver';
 import { StiffSolver } from './StiffSolver';
+import { resolveSimulationConfig } from './simulationConfig';
 
 // Dormand-Prince coefficients for ODE5 fixed step
 const C_DP = [0, 1/5, 3/10, 4/5, 8/9, 1, 1];
@@ -83,6 +84,26 @@ export class Solvers {
         c = (temp - t) - y;
         t = temp;
       }
+    }
+    engine.computeOutputs(stopTime);
+  }
+
+  // Discrete (fixed-step, no continuous states): outputs and discrete updates only, no integration.
+  static stepDiscrete(engine: XbridgesEngine, t: number, _dt: number) {
+      engine.computeOutputs(t);
+      engine.updateDiscreteStates(t);
+  }
+
+  static runDiscrete(engine: XbridgesEngine, options: SolverOptions) {
+    const startTime = options.startTime;
+    const stopTime = options.stopTime;
+    const dt = options.fixedStep || 0.01;
+    engine.options = options;
+    const n = Math.max(0, Math.round((stopTime - startTime) / dt - 1e-9));
+    const steps = startTime + n * dt < stopTime - 1e-12 ? n + 1 : n;
+    for (let i = 0; i < steps; i++) {
+      const t = startTime + i * dt;
+      this.stepDiscrete(engine, t, Math.min(dt, stopTime - t));
     }
     engine.computeOutputs(stopTime);
   }
@@ -489,7 +510,30 @@ export class Solvers {
 
   static runFixedStep(engine: XbridgesEngine, options: SolverOptions) {
       engine.options = options;
+      // Resolve start/stop/fixed step ('auto') the way Simulink's Solver pane does.
+      engine.compile(options.startTime);
+      const resolved = resolveSimulationConfig(
+        { solver: options.solver as string, startTime: options.startTime, stopTime: options.stopTime, fixedStep: (options.fixedStep as number | 'auto' | undefined) ?? 'auto' },
+        engine.getFlatBlocks(),
+      );
+      const configDiagnostics = [...resolved.diagnostics];
+      if (options.stopTime === Number.POSITIVE_INFINITY) {
+        configDiagnostics.push({
+          severity: 'error', code: 'STOP_TIME_INFINITE_BATCH',
+          message: 'A batch run needs a finite stop time; infinite stop time is only for the live canvas.',
+        });
+      }
+      if (configDiagnostics.some(d => d.severity === 'error')) {
+        engine.diagnostics.push(...configDiagnostics);
+        return;
+      }
+      if (options.fixedStep !== resolved.fixedStep) {
+        options = { ...options, fixedStep: resolved.fixedStep };
+        engine.options = options;
+      }
+      // Recompile so the compile-time checks and sample-hit schedule use the resolved options.
       const compileDiagnostics = engine.compile(options.startTime);
+      engine.diagnostics.push(...configDiagnostics);
       // A model that fails its compile-time checks is not simulated (Simulink: update diagram fails).
       if (compileDiagnostics.some(d => d.severity === 'error')) return;
 
@@ -510,7 +554,9 @@ export class Solvers {
           StiffSolver.runODE14x(engine, options);
       } else if (solver === 'ode23tb') {
           StiffSolver.runODE23TB(engine, options);
-      } else if (solver === 'euler' || solver === 'ode1' || solver === 'fixedStep' || solver === 'discrete') {
+      } else if (solver === 'discrete') {
+          this.runDiscrete(engine, options);
+      } else if (solver === 'euler' || solver === 'ode1' || solver === 'fixedStep') {
           this.runEuler(engine, options);
       } else {
           engine.diagnostics.push({

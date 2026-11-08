@@ -2,6 +2,7 @@ import { XbridgesEngine } from './XbridgesEngine';
 import { Solvers } from './Solvers';
 import { AdaptiveSolver } from './AdaptiveSolver';
 import { StiffSolver } from './StiffSolver';
+import type { SolverOptions } from './types';
 import type {
   XbridgesWorkerRequest,
   XbridgesWorkerResponse,
@@ -61,6 +62,8 @@ export function handleXbridgesWorkerMessage(request: XbridgesWorkerRequest): Xbr
   try {
     if (request.model) {
       workerEngine = new XbridgesEngine(request.model);
+      // Solver options (fixed step, solver type) drive the solver-specific compile checks.
+      if (request.solverOptions) workerEngine.options = request.solverOptions as SolverOptions;
       const compileDiagnostics = workerEngine.compile(request.time || 0);
       const hasErrors = compileDiagnostics.some(d => d.severity === 'error');
       if (hasErrors) {
@@ -143,6 +146,7 @@ export function handleXbridgesWorkerMessage(request: XbridgesWorkerRequest): Xbr
       else if (solver === 'ode45') AdaptiveSolver.stepODE45(workerEngine, currentTime, dt);
       else if (solver === 'ode14x') StiffSolver.stepODE14x(workerEngine, currentTime, dt);
       else if (solver === 'ode23tb') StiffSolver.stepODE23TB(workerEngine, currentTime, dt, 1e-3, 1e-6);
+      else if (solver === 'discrete') Solvers.stepDiscrete(workerEngine, currentTime, dt);
       else Solvers.stepEuler(workerEngine, currentTime, dt);
 
       currentTime += dt;

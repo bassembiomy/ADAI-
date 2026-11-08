@@ -1,3 +1,4 @@
+import type { XSimulationSettings } from '../../engine/xbridges/simulationConfig';
 /** JSON-compatible parameter values persisted with an X-Bridges block. */
 export type XBParameterValue =
   | boolean
@@ -34,7 +35,7 @@ export interface XBMappingV1 {
 }
 
 export type XBMemoryPolicy = 'reset' | 'retain';
-export type XBSolverKind = 'euler' | 'rk4';
+export type XBSolverKind = 'euler' | 'rk4' | 'discrete';
 export type XBFaultPolicy = 'signal-only' | 'escalate';
 
 export interface XBSolverConfig {
@@ -67,6 +68,8 @@ export interface XBLegacyXBridgesModel extends Partial<
   nodes: any[];
   edges: any[];
   mappings?: XBMappingV1[];
+  /** Workspace Solver settings (start/stop time, solver, fixed step); `solver` is derived from them. */
+  simulation?: XSimulationSettings;
 }
 
 import type { XBEmbeddedLimits } from './xbEmbeddedProfile';

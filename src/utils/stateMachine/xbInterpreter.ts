@@ -2162,6 +2162,8 @@ const updateContinuousState = (
   runtime: XBRuntime,
   faults: XBNumericFault[],
 ): void => {
+  // The Discrete solver performs no continuous integration (validator rejects continuous states).
+  if (runtime.ir.solver.kind === 'discrete') return;
   const slots = continuousSlots(runtime);
   if (slots.length === 0) return;
   const snapshots = new Map<string, XBSnapshot>();

@@ -26,7 +26,7 @@ export interface XBSemanticModel {
   readonly signals: Readonly<Record<string, XBSemanticSignal>>;
   readonly mappings: readonly XBSemanticMapping[];
   readonly solver: {
-    readonly kind: 'euler' | 'rk4';
+    readonly kind: 'euler' | 'rk4' | 'discrete';
     /** Canonical fixed solver interval, validated against the base tick. */
     readonly stepSeconds: number;
     readonly substepsPerTick: number;
@@ -177,7 +177,7 @@ export interface XBSemanticModel {
   readonly signals: Readonly<Record<string, XBSemanticSignal>>;
   readonly mappings: readonly XBSemanticMapping[];
   readonly solver: {
-    readonly kind: 'euler' | 'rk4';
+    readonly kind: 'euler' | 'rk4' | 'discrete';
     /** Canonical fixed solver interval, validated against the base tick. */
     readonly stepSeconds: number;
     readonly substepsPerTick: number;

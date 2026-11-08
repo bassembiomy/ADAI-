@@ -3895,6 +3895,8 @@ const renderContinuousStateUpdates = (
   layout: XBStateLayout,
   member: string,
 ): string[] => {
+  // The Discrete solver emits no continuous integration stage.
+  if (xb.solver.kind === 'discrete') return [];
   const slots = continuousOperationSlots(xb);
   if (slots.length === 0) return [];
   const transactionalAssignments = (

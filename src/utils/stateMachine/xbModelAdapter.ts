@@ -324,9 +324,9 @@ export const adaptXBModel = (input: unknown): XBAdaptResult => {
       : null;
 
   if (solver === null
-    || (solver.kind !== 'euler' && solver.kind !== 'rk4')
+    || (solver.kind !== 'euler' && solver.kind !== 'rk4' && solver.kind !== 'discrete')
     || typeof solver.stepSeconds !== 'number') {
-    invalid(diagnostics, 'X-Bridges solver must select Euler or RK4 with an explicit step.');
+    invalid(diagnostics, 'X-Bridges solver must select Euler, RK4 or Discrete with an explicit step.');
   }
   if (policy === null
     || (policy.memory !== 'reset' && policy.memory !== 'retain')
