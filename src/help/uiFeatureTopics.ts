@@ -5448,18 +5448,27 @@ export const UI_HELP_FEATURES: HelpFeature[] = [
     "module": "xbridges"
   },
   {
-    "id": "ui:xbridges/XbridgesWorkspace:d928378d041c",
-    "label": "StepSizeInput",
-    "topicId": "ui:xbridges/XbridgesWorkspace:d928378d041c",
+    "id": "ui:xbridges/XbridgesWorkspace:a3feed12fada",
+    "label": "Fixed Step",
+    "topicId": "ui:xbridges/XbridgesWorkspace:a3feed12fada",
     "sectionId": "use",
     "sourcePath": "src/components/xbridges/XbridgesWorkspace.tsx",
     "kind": "property",
     "module": "xbridges"
   },
   {
-    "id": "ui:xbridges/XbridgesWorkspace:84388e80584d",
-    "label": "Unlimited",
-    "topicId": "ui:xbridges/XbridgesWorkspace:84388e80584d",
+    "id": "ui:xbridges/XbridgesWorkspace:0f1f63961b7b",
+    "label": "Stop Time",
+    "topicId": "ui:xbridges/XbridgesWorkspace:0f1f63961b7b",
+    "sectionId": "use",
+    "sourcePath": "src/components/xbridges/XbridgesWorkspace.tsx",
+    "kind": "property",
+    "module": "xbridges"
+  },
+  {
+    "id": "ui:xbridges/XbridgesWorkspace:cb8a7f3d200e",
+    "label": "Start Time",
+    "topicId": "ui:xbridges/XbridgesWorkspace:cb8a7f3d200e",
     "sectionId": "use",
     "sourcePath": "src/components/xbridges/XbridgesWorkspace.tsx",
     "kind": "property",
@@ -18898,13 +18907,13 @@ export const HELP_UI_FEATURE_TOPICS: Record<string, HelpTopic> = {
   "ui:xbridges/XbridgesWorkspace:264e711480bc": {
     "title": "XbridgesWorkspace: SolverType",
     "category": "Workspace Controls",
-    "description": "Choose the offered X-Bridges solver. Solver choice changes the simulation integration path; use a step size appropriate to model dynamics and inspect diagnostics.",
-    "content": "Choose the offered X-Bridges solver. Solver choice changes the simulation integration path; use a step size appropriate to model dynamics and inspect diagnostics.",
+    "description": "Choose the X-Bridges solver used by Run and Single Step: Fixed-Step RK4 (ODE4, the default), Explicit Euler (ODE1), Heun (ODE2), Bogacki-Shampine (ODE3), Dormand-Prince (ODE5), the variable-step ODE23 and ODE45, the stiff solvers ODE14x (implicit extrapolation, fixed step) and ODE23tb (TR-BDF2, variable step), or Discrete (fixed step, no continuous states). The Discrete solver only evaluates outputs and discrete updates and does not integrate: a block with continuous states is reported as CONTINUOUS_STATES_WITH_DISCRETE_SOLVER. The list is disabled while a simulation runs. The choice is saved with the model; only Euler, RK4 and Discrete reach generated embedded C. See the chapter X-Bridges Simulation Settings and Diagnostics.",
+    "content": "Choose the X-Bridges solver used by Run and Single Step: Fixed-Step RK4 (ODE4, the default), Explicit Euler (ODE1), Heun (ODE2), Bogacki-Shampine (ODE3), Dormand-Prince (ODE5), the variable-step ODE23 and ODE45, the stiff solvers ODE14x (implicit extrapolation, fixed step) and ODE23tb (TR-BDF2, variable step), or Discrete (fixed step, no continuous states). The Discrete solver only evaluates outputs and discrete updates and does not integrate: a block with continuous states is reported as CONTINUOUS_STATES_WITH_DISCRETE_SOLVER. The list is disabled while a simulation runs. The choice is saved with the model; only Euler, RK4 and Discrete reach generated embedded C. See the chapter X-Bridges Simulation Settings and Diagnostics.",
     "sections": [
       {
         "id": "use",
         "title": "SolverType",
-        "body": "Choose the offered X-Bridges solver. Solver choice changes the simulation integration path; use a step size appropriate to model dynamics and inspect diagnostics.",
+        "body": "Choose the X-Bridges solver used by Run and Single Step: Fixed-Step RK4 (ODE4, the default), Explicit Euler (ODE1), Heun (ODE2), Bogacki-Shampine (ODE3), Dormand-Prince (ODE5), the variable-step ODE23 and ODE45, the stiff solvers ODE14x (implicit extrapolation, fixed step) and ODE23tb (TR-BDF2, variable step), or Discrete (fixed step, no continuous states). The Discrete solver only evaluates outputs and discrete updates and does not integrate: a block with continuous states is reported as CONTINUOUS_STATES_WITH_DISCRETE_SOLVER. The list is disabled while a simulation runs. The choice is saved with the model; only Euler, RK4 and Discrete reach generated embedded C. See the chapter X-Bridges Simulation Settings and Diagnostics.",
         "sources": [
           "src/components/xbridges/XbridgesWorkspace.tsx"
         ]
@@ -18939,16 +18948,16 @@ export const HELP_UI_FEATURE_TOPICS: Record<string, HelpTopic> = {
       "src/components/xbridges/XbridgesWorkspace.tsx"
     ]
   },
-  "ui:xbridges/XbridgesWorkspace:d928378d041c": {
-    "title": "XbridgesWorkspace: StepSizeInput",
+  "ui:xbridges/XbridgesWorkspace:a3feed12fada": {
+    "title": "XbridgesWorkspace: Fixed Step",
     "category": "Workspace Controls",
-    "description": "Enter the simulation step size using digits and decimal point. The input normalizes numeral characters and removes unsupported characters; inspect the committed value before running.",
-    "content": "Enter the simulation step size using digits and decimal point. The input normalizes numeral characters and removes unsupported characters; inspect the committed value before running.",
+    "description": "Enter the Fixed Step in seconds, or auto (the default). A number must be greater than 0, otherwise the run is refused with FIXED_STEP_INVALID and the field is outlined in red. auto uses the greatest common divisor of the periodic sample times of the blocks; with no sample time it uses (Stop Time - Start Time) / 50, and 0.2 when the stop time is inf. With a fixed-step solver, including Discrete, every block sample time must be an integer multiple of the step (SAMPLE_TIME_NOT_MULTIPLE_OF_FIXED_STEP). ODE23 and ODE45 take it as their initial step in a batch run. When the workspace is driven by the State Machine Tick, the field is locked to the Tick. The field is disabled while a simulation runs.",
+    "content": "Enter the Fixed Step in seconds, or auto (the default). A number must be greater than 0, otherwise the run is refused with FIXED_STEP_INVALID and the field is outlined in red. auto uses the greatest common divisor of the periodic sample times of the blocks; with no sample time it uses (Stop Time - Start Time) / 50, and 0.2 when the stop time is inf. With a fixed-step solver, including Discrete, every block sample time must be an integer multiple of the step (SAMPLE_TIME_NOT_MULTIPLE_OF_FIXED_STEP). ODE23 and ODE45 take it as their initial step in a batch run. When the workspace is driven by the State Machine Tick, the field is locked to the Tick. The field is disabled while a simulation runs.",
     "sections": [
       {
         "id": "use",
-        "title": "StepSizeInput",
-        "body": "Enter the simulation step size using digits and decimal point. The input normalizes numeral characters and removes unsupported characters; inspect the committed value before running.",
+        "title": "Fixed Step",
+        "body": "Enter the Fixed Step in seconds, or auto (the default). A number must be greater than 0, otherwise the run is refused with FIXED_STEP_INVALID and the field is outlined in red. auto uses the greatest common divisor of the periodic sample times of the blocks; with no sample time it uses (Stop Time - Start Time) / 50, and 0.2 when the stop time is inf. With a fixed-step solver, including Discrete, every block sample time must be an integer multiple of the step (SAMPLE_TIME_NOT_MULTIPLE_OF_FIXED_STEP). ODE23 and ODE45 take it as their initial step in a batch run. When the workspace is driven by the State Machine Tick, the field is locked to the Tick. The field is disabled while a simulation runs.",
         "sources": [
           "src/components/xbridges/XbridgesWorkspace.tsx"
         ]
@@ -18961,16 +18970,38 @@ export const HELP_UI_FEATURE_TOPICS: Record<string, HelpTopic> = {
       "src/components/xbridges/XbridgesWorkspace.tsx"
     ]
   },
-  "ui:xbridges/XbridgesWorkspace:84388e80584d": {
-    "title": "XbridgesWorkspace: Unlimited",
+  "ui:xbridges/XbridgesWorkspace:0f1f63961b7b": {
+    "title": "XbridgesWorkspace: Stop Time",
     "category": "Workspace Controls",
-    "description": "Enter the simulation time limit or leave it unlimited where supported. The input normalizes digits and decimal point; check the run configuration before simulation.",
-    "content": "Enter the simulation time limit or leave it unlimited where supported. The input normalizes digits and decimal point; check the run configuration before simulation.",
+    "description": "Enter the simulation Stop Time in seconds. The default is 10. Enter inf (in any case, optionally +inf) for no end: the live canvas then runs until you stop it. A number must not be less than the Start Time, otherwise the run is refused with STOP_TIME_BEFORE_START and the field is outlined in red. A finite Stop Time ends the run exactly at that time; a batch run outside the live canvas needs a finite Stop Time (STOP_TIME_INFINITE_BATCH). The field is disabled while a simulation runs and is saved with the model.",
+    "content": "Enter the simulation Stop Time in seconds. The default is 10. Enter inf (in any case, optionally +inf) for no end: the live canvas then runs until you stop it. A number must not be less than the Start Time, otherwise the run is refused with STOP_TIME_BEFORE_START and the field is outlined in red. A finite Stop Time ends the run exactly at that time; a batch run outside the live canvas needs a finite Stop Time (STOP_TIME_INFINITE_BATCH). The field is disabled while a simulation runs and is saved with the model.",
     "sections": [
       {
         "id": "use",
-        "title": "Unlimited",
-        "body": "Enter the simulation time limit or leave it unlimited where supported. The input normalizes digits and decimal point; check the run configuration before simulation.",
+        "title": "Stop Time",
+        "body": "Enter the simulation Stop Time in seconds. The default is 10. Enter inf (in any case, optionally +inf) for no end: the live canvas then runs until you stop it. A number must not be less than the Start Time, otherwise the run is refused with STOP_TIME_BEFORE_START and the field is outlined in red. A finite Stop Time ends the run exactly at that time; a batch run outside the live canvas needs a finite Stop Time (STOP_TIME_INFINITE_BATCH). The field is disabled while a simulation runs and is saved with the model.",
+        "sources": [
+          "src/components/xbridges/XbridgesWorkspace.tsx"
+        ]
+      }
+    ],
+    "related": [
+      "xbridges-ref"
+    ],
+    "sources": [
+      "src/components/xbridges/XbridgesWorkspace.tsx"
+    ]
+  },
+  "ui:xbridges/XbridgesWorkspace:cb8a7f3d200e": {
+    "title": "XbridgesWorkspace: Start Time",
+    "category": "Workspace Controls",
+    "description": "Enter the simulation Start Time in seconds. The default is 0. It must be a finite number: other text is outlined in red and the run is refused with START_TIME_INVALID. The simulation clock begins at this time, and a block with a sample time first updates at the first multiple of its sample time that is not before it. The field is disabled while a simulation runs. Start Time is saved with the model together with the solver, Stop Time and Fixed Step.",
+    "content": "Enter the simulation Start Time in seconds. The default is 0. It must be a finite number: other text is outlined in red and the run is refused with START_TIME_INVALID. The simulation clock begins at this time, and a block with a sample time first updates at the first multiple of its sample time that is not before it. The field is disabled while a simulation runs. Start Time is saved with the model together with the solver, Stop Time and Fixed Step.",
+    "sections": [
+      {
+        "id": "use",
+        "title": "Start Time",
+        "body": "Enter the simulation Start Time in seconds. The default is 0. It must be a finite number: other text is outlined in red and the run is refused with START_TIME_INVALID. The simulation clock begins at this time, and a block with a sample time first updates at the first multiple of its sample time that is not before it. The field is disabled while a simulation runs. Start Time is saved with the model together with the solver, Stop Time and Fixed Step.",
         "sources": [
           "src/components/xbridges/XbridgesWorkspace.tsx"
         ]

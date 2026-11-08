@@ -152,14 +152,14 @@ export const DoeSweeperPanel: React.FC<Props> = ({ block, availableBlocks = [], 
       <p className="text-xs text-slate-400">{`${rows.length} of ${total} points`}</p>
       {rows.length > 0 && !complete && <p className="text-xs text-[#c9a86c]">Finish the sweep to write calibration maps</p>}
 
-      <button type="button" className={buttonCls} disabled={rows.length === 0 || !onExportDoeData}
+      <button data-help-feature="live:components/xbridges/powertrain/DoeSweeperPanel:3eecfecc0e75" type="button" className={buttonCls} disabled={rows.length === 0 || !onExportDoeData}
         onClick={() => { const d = doeModuleTable(rows, factors, RESPONSES); onExportDoeData?.(d.headers, d.data); }}>
         Send to DOE module
       </button>
 
       <div className="space-y-2 pt-2 border-t border-[#333]">
         <label className="block text-xs font-medium text-slate-400">Target ECU
-          <select aria-label="Target ECU" className={selectCls} value={ecuId} onChange={e => setEcuId(e.target.value)}>
+          <select data-help-feature="live:components/xbridges/powertrain/DoeSweeperPanel:d5b02ad4c42f" aria-label="Target ECU" className={selectCls} value={ecuId} onChange={e => setEcuId(e.target.value)}>
             <option value="" />
             {ecus.map(b => <option key={b.id} value={b.id}>{b.label ?? b.id}</option>)}
           </select>
@@ -169,43 +169,43 @@ export const DoeSweeperPanel: React.FC<Props> = ({ block, availableBlocks = [], 
             No feasible point at {maps.missing.map(m => `${m.N} rpm / ${m.Load} %`).join(', ')}; filled from the nearest operating point.
           </p>
         )}
-        <button type="button" className={buttonCls} disabled={!complete || ecuId === ''} onClick={writeEcu}>Write optimum to ECU</button>
+        <button data-help-feature="live:components/xbridges/powertrain/DoeSweeperPanel:a6b1b86e5689" type="button" className={buttonCls} disabled={!complete || ecuId === ''} onClick={writeEcu}>Write optimum to ECU</button>
       </div>
 
       <div className="space-y-2 pt-2 border-t border-[#333]">
         <label className="block text-xs font-medium text-slate-400">Target engine
-          <select aria-label="Target engine" className={selectCls} value={engId} onChange={e => setEngId(e.target.value)}>
+          <select data-help-feature="live:components/xbridges/powertrain/DoeSweeperPanel:86206d9ea94c" aria-label="Target engine" className={selectCls} value={engId} onChange={e => setEngId(e.target.value)}>
             <option value="" />
             {engines.map(b => <option key={b.id} value={b.id}>{b.label ?? b.id}</option>)}
           </select>
         </label>
         <label className="block text-xs font-medium text-slate-400">Reference torque (N*m)
-          <input type="number" aria-label="Reference torque (N*m)" className={selectCls} value={tRef ?? String(maxTorque)}
+          <input data-help-feature="live:components/xbridges/powertrain/DoeSweeperPanel:ab21c85eb12f" type="number" aria-label="Reference torque (N*m)" className={selectCls} value={tRef ?? String(maxTorque)}
             onChange={e => setTRef(e.target.value)} />
         </label>
-        <button type="button" className={buttonCls} disabled={!complete || engId === ''} onClick={writeEngine}>Write maps to Mapped Engine</button>
+        <button data-help-feature="live:components/xbridges/powertrain/DoeSweeperPanel:ebf97757c9da" type="button" className={buttonCls} disabled={!complete || engId === ''} onClick={writeEngine}>Write maps to Mapped Engine</button>
       </div>
 
       <div className="space-y-2 pt-2 border-t border-[#333]">
         <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Calibration map</h3>
         <label className="block text-xs font-medium text-slate-400">Calibration map
-          <select aria-label="Calibration map" className={selectCls} value={mapKind} onChange={e => setMapKind(e.target.value)}>
+          <select data-help-feature="live:components/xbridges/powertrain/DoeSweeperPanel:73aa45b7766f" aria-label="Calibration map" className={selectCls} value={mapKind} onChange={e => setMapKind(e.target.value)}>
             {MAP_KINDS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
         </label>
         <label className="block text-xs font-medium text-slate-400">Fuel quantity at 100 % load (mg/stroke)
-          <input type="number" aria-label="Fuel quantity at 100 % load (mg/stroke)" className={selectCls} value={qFull} onChange={e => setQFull(e.target.value)} />
+          <input data-help-feature="live:components/xbridges/powertrain/DoeSweeperPanel:8c9687ddf9a9" type="number" aria-label="Fuel quantity at 100 % load (mg/stroke)" className={selectCls} value={qFull} onChange={e => setQFull(e.target.value)} />
         </label>
         <label className="block text-xs font-medium text-slate-400">Smoke lambda limit
-          <input type="number" aria-label="Smoke lambda limit" className={selectCls} value={lamLimit ?? String(lambdaDefault)} onChange={e => setLamLimit(e.target.value)} />
+          <input data-help-feature="live:components/xbridges/powertrain/DoeSweeperPanel:1c1aa268ecc1" type="number" aria-label="Smoke lambda limit" className={selectCls} value={lamLimit ?? String(lambdaDefault)} onChange={e => setLamLimit(e.target.value)} />
         </label>
         <label className="block text-xs font-medium text-slate-400">Target map
-          <select aria-label="Target map" className={selectCls} value={mapId} onChange={e => setMapId(e.target.value)}>
+          <select data-help-feature="live:components/xbridges/powertrain/DoeSweeperPanel:7843f549c0b1" aria-label="Target map" className={selectCls} value={mapId} onChange={e => setMapId(e.target.value)}>
             <option value="" />
             {calMaps.map(b => <option key={b.id} value={b.id}>{b.label ?? b.id}</option>)}
           </select>
         </label>
-        <button type="button" className={buttonCls} disabled={!complete || mapId === ''} onClick={writeMap}>Write calibration map</button>
+        <button data-help-feature="live:components/xbridges/powertrain/DoeSweeperPanel:41575c58e7e8" type="button" className={buttonCls} disabled={!complete || mapId === ''} onClick={writeMap}>Write calibration map</button>
       </div>
       {message !== '' && <p role="alert" className="text-xs text-[#c9a86c]">{message}</p>}
     </section>

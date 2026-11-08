@@ -82,7 +82,7 @@ export const RequirementAssignmentsPanel: React.FC<RequirementAssignmentsPanelPr
                 <span className="font-mono text-[10px] text-[#aaa]">&laquo;{l.kind}&raquo;</span>{' '}
                 <span className="text-[#888]">{l.target}</span>
               </span>
-              <button
+              <button data-help-feature="live:components/trmSim/RequirementAssignmentsPanel:450f30c1c600"
                 type="button"
                 onClick={() => unlink(l.id)}
                 aria-label={`Unlink ${l.requirement} from ${l.target}`}
@@ -102,20 +102,20 @@ export const RequirementAssignmentsPanel: React.FC<RequirementAssignmentsPanelPr
         <p className="text-[11px] text-[#666] italic py-1 border-t border-[#222] pt-2">No requirements exist in the repository yet.</p>
       ) : (
         <div className="pt-2 border-t border-[#222] space-y-2">
-          <select aria-label="Requirement" value={requirementKey} onChange={e => setRequirementKey(e.target.value)} className={selectClass}>
+          <select data-help-feature="live:components/trmSim/RequirementAssignmentsPanel:1a8c6ee60a04" aria-label="Requirement" value={requirementKey} onChange={e => setRequirementKey(e.target.value)} className={selectClass}>
             <option value="">-- Choose Requirement --</option>
             {requirements.map(r => (
               <option key={r.id} value={r.id}>{(r as any).requirementId || r.name || r.id}{r.name && (r as any).requirementId ? ` - ${r.name}` : ''}</option>
             ))}
           </select>
-          <select aria-label="Link element" value={chosenTarget} onChange={e => setTargetKey(e.target.value)} className={selectClass}>
+          <select data-help-feature="live:components/trmSim/RequirementAssignmentsPanel:90a3b828479f" aria-label="Link element" value={chosenTarget} onChange={e => setTargetKey(e.target.value)} className={selectClass}>
             {targets.map(t => <option key={t.target} value={t.target}>{t.name}</option>)}
           </select>
           <div className="flex gap-2">
-            <select aria-label="Link kind" value={kind} onChange={e => setKind(e.target.value as LinkKind)} className={selectClass}>
+            <select data-help-feature="live:components/trmSim/RequirementAssignmentsPanel:41821f99b8e0" aria-label="Link kind" value={kind} onChange={e => setKind(e.target.value as LinkKind)} className={selectClass}>
               {LINK_KINDS.map(k => <option key={k} value={k}>{k}</option>)}
             </select>
-            <button
+            <button data-help-feature="live:components/trmSim/RequirementAssignmentsPanel:54d855b4c17e"
               type="button"
               onClick={link}
               className="px-3 py-1.5 text-xs font-medium rounded bg-orange-500 text-[#111827] hover:bg-orange-400 transition-colors whitespace-nowrap"

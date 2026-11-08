@@ -3,7 +3,7 @@
   "scope": "Source-derived inventory candidates; rows are UI sites, not unique features or proof of rendered/reachable controls. Dynamic factories require registry expansion and human semantic review.",
   "productionSourceFiles": 720,
   "jsxSourceFiles": 89,
-  "uiCandidateSites": 1277,
+  "uiCandidateSites": 1278,
   "moduleSourceCounts": {
     "src/agent": 15,
     "src/agent/collaborators": 4,
@@ -15246,11 +15246,11 @@
     {
       "candidateId": "src/components/xbridges/XbridgesWorkspace.tsx:3206",
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3206,
+      "line": 3385,
       "tag": "input",
-      "label": "",
+      "label": "\"Fixed Step\"",
       "handlers": {
-        "onChange": "{e => setStepSizeInput(normalizeNumerals(e.target.value).replace(/[^0-9.]/g, ''))}"
+        "onChange": "{e => setStepSizeInput(normalizeNumerals(e.target.value).replace(/[^0-9a-zA-Z.+-]/g, ''))}"
       },
       "helpAttributes": {},
       "status": "requires-semantic-review"
@@ -15258,11 +15258,23 @@
     {
       "candidateId": "src/components/xbridges/XbridgesWorkspace.tsx:3220",
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3220,
+      "line": 3368,
       "tag": "input",
-      "label": "\"Unlimited\"",
+      "label": "\"Stop Time\"",
       "handlers": {
-        "onChange": "{e => setSimLimitInput(normalizeNumerals(e.target.value).replace(/[^0-9.]/g, ''))}"
+        "onChange": "{e => setStopTimeInput(normalizeNumerals(e.target.value).replace(/[^0-9a-zA-Z.+-]/g, ''))}"
+      },
+      "helpAttributes": {},
+      "status": "requires-semantic-review"
+    },
+    {
+      "candidateId": "src/components/xbridges/XbridgesWorkspace.tsx:3352",
+      "source": "src/components/xbridges/XbridgesWorkspace.tsx",
+      "line": 3352,
+      "tag": "input",
+      "label": "\"Start Time\"",
+      "handlers": {
+        "onChange": "{e => setStartTimeInput(normalizeNumerals(e.target.value).replace(/[^0-9a-zA-Z.+-]/g, ''))}"
       },
       "helpAttributes": {},
       "status": "requires-semantic-review"

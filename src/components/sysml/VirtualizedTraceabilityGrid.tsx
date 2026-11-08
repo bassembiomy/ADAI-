@@ -238,7 +238,7 @@ export function VirtualizedTraceabilityGrid({
                       <span className="font-mono text-orange-400 font-semibold">{row.requirement.requirementId}</span>
                       <span className="font-medium text-neutral-200 truncate">{sysmlObjectLabel(row.requirement, 'Requirement')}</span>
                       {onSimulate && (
-                        <button
+                        <button data-help-feature="live:components/sysml/VirtualizedTraceabilityGrid:9445de5000d6"
                           type="button"
                           aria-label={`Simulate ${row.requirement.requirementId}`}
                           onClick={e => { e.stopPropagation(); onSimulate(row.requirement.id); }}

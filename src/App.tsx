@@ -15712,7 +15712,9 @@ const ADIA = () => {
                   initialEdges={xBridgesWorkspaceInputs.initialEdges}
                   initialMappings={xBridgesWorkspaceInputs.initialMappings}
                   availableVariables={variables}
-                  tickMs={tickMs}
+                  // The chart Tick fixes the step only for an X-Bridges state (code generation runs it per tick);
+                  // the standalone canvas keeps its own Fixed Step, including 'auto'.
+                  tickMs={xBridgesStateId ? tickMs : undefined}
                   initialSimulation={xBridgesInitialSimulation}
                   onLaunchDoe={() => toggleWindow('doe')}
                   onExportDoeData={(doeHeaders, doeData) => {
@@ -19004,7 +19006,7 @@ const ADIA = () => {
             </div>
             {simVerificationRequirementId && canonicalSysmlRepository.requirements[simVerificationRequirementId] && (
               <div className="max-h-[50%] overflow-auto border-t border-[var(--border-default)]">
-                <button type="button" aria-label="Close simulation verification" onClick={() => setSimVerificationRequirementId(null)} className="float-right m-2 rounded border border-neutral-700 px-2 py-0.5 text-xs text-neutral-300">Close</button>
+                <button data-help-feature="live:App:8aa7845712fd" type="button" aria-label="Close simulation verification" onClick={() => setSimVerificationRequirementId(null)} className="float-right m-2 rounded border border-neutral-700 px-2 py-0.5 text-xs text-neutral-300">Close</button>
                 <SimVerificationPanel
                   repository={canonicalSysmlRepository}
                   requirementId={simVerificationRequirementId}

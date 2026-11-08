@@ -2094,5 +2094,791 @@
     "featureIds": [
       "behavior:element:usecase:subject"
     ]
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "XbridgesWorkspace|onBack:{()=>{if(xBridgesStateId)setXBridgesStateId(null);elsesetDiagramMode('statemachine');}}|onClipboardChange:{setSharedClipboard}|onExportDoeData:{(doeHeaders,doeData)=>{setHeaders(doeHeaders);setData(doeData);setManagedWindows(prev=>(prev.doe.isOpen?{...prev,doe:{...prev.doe,isMinimized:false}}:{...prev,doe:{...prev.doe,isOpen:true}}));}}|onLaunchDoe:{()=>toggleWindow('doe')}|onSave:{handleXBridgesSave}|onSaveAll:{handleExportProject}",
+    "id": "live:App:00601285ce43",
+    "status": "excluded",
+    "reason": "XbridgesWorkspace callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "RequirementAssignmentsPanel|onRepositoryChange:{handleSimVerificationRepositoryChange}",
+    "id": "live:App:9c302c907356",
+    "status": "excluded",
+    "reason": "RequirementAssignmentsPanel callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "RequirementAssignmentsPanel|onRepositoryChange:{handleSimVerificationRepositoryChange}",
+    "id": "live:App:9c302c907356",
+    "status": "excluded",
+    "reason": "RequirementAssignmentsPanel callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "RequirementAssignmentsPanel|onRepositoryChange:{handleSimVerificationRepositoryChange}",
+    "id": "live:App:9c302c907356",
+    "status": "excluded",
+    "reason": "RequirementAssignmentsPanel callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "CanonicalTraceabilityMatrix|onNavigate:{(elementId)=>{setSelectedIds([elementId]);if(blocks.some(block=>block.id===elementId&&block.stereotype==='requirement'))setDiagramMode('requirements');elseif(blocks.some(block=>block.id===elementId))setDiagramMode('bdd');elseif(parts.some(part=>part.id===elementId)||connectors.some(connector=>connector.id===elementId))setDiagramMode('ibd');}}|onRunAllSimulations:{handleRunAllSimulations}|onSimulate:{setSimVerificationRequirementId}",
+    "id": "live:App:7238313455df",
+    "status": "excluded",
+    "reason": "CanonicalTraceabilityMatrix callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "button|onClick:{()=>setSimVerificationRequirementId(null)}",
+    "id": "live:App:8aa7845712fd",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:App:8aa7845712fd"
+    ]
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "SimVerificationPanel|onRepositoryChange:{handleSimVerificationRepositoryChange}",
+    "id": "live:App:0b7d405dadfb",
+    "status": "excluded",
+    "reason": "SimVerificationPanel callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/sysml/TraceabilityMatrix.tsx",
+    "signature": "button|onClick:{onRunAllSimulations}",
+    "id": "live:components/sysml/TraceabilityMatrix:e0511dea904b",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/sysml/TraceabilityMatrix:e0511dea904b"
+    ]
+  },
+  {
+    "source": "src/components/sysml/TraceabilityMatrix.tsx",
+    "signature": "VirtualizedTraceabilityGrid|onNavigate:{onNavigate}|onSimulate:{onSimulate}",
+    "id": "live:components/sysml/TraceabilityMatrix:71c6e671374d",
+    "status": "excluded",
+    "reason": "VirtualizedTraceabilityGrid callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/sysml/TraceabilityMatrix.tsx",
+    "signature": "button|onClick:{()=>onSimulate(row.requirement.id)}",
+    "id": "live:components/sysml/TraceabilityMatrix:bafff0f97516",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/sysml/TraceabilityMatrix:bafff0f97516"
+    ]
+  },
+  {
+    "source": "src/components/sysml/VirtualizedTraceabilityGrid.tsx",
+    "signature": "button|onClick:{e=>{e.stopPropagation();onSimulate(row.requirement.id);}}|onDoubleClick:{e=>e.stopPropagation()}|onKeyDown:{e=>e.stopPropagation()}",
+    "id": "live:components/sysml/VirtualizedTraceabilityGrid:9445de5000d6",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/sysml/VirtualizedTraceabilityGrid:9445de5000d6"
+    ]
+  },
+  {
+    "source": "src/components/trmSim/RequirementAssignmentsPanel.tsx",
+    "signature": "button|onClick:{()=>unlink(l.id)}",
+    "id": "live:components/trmSim/RequirementAssignmentsPanel:450f30c1c600",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/trmSim/RequirementAssignmentsPanel:450f30c1c600"
+    ]
+  },
+  {
+    "source": "src/components/trmSim/RequirementAssignmentsPanel.tsx",
+    "signature": "select|onChange:{e=>setRequirementKey(e.target.value)}",
+    "id": "live:components/trmSim/RequirementAssignmentsPanel:1a8c6ee60a04",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/trmSim/RequirementAssignmentsPanel:1a8c6ee60a04"
+    ]
+  },
+  {
+    "source": "src/components/trmSim/RequirementAssignmentsPanel.tsx",
+    "signature": "select|onChange:{e=>setTargetKey(e.target.value)}",
+    "id": "live:components/trmSim/RequirementAssignmentsPanel:90a3b828479f",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/trmSim/RequirementAssignmentsPanel:90a3b828479f"
+    ]
+  },
+  {
+    "source": "src/components/trmSim/RequirementAssignmentsPanel.tsx",
+    "signature": "select|onChange:{e=>setKind(e.target.valueasLinkKind)}",
+    "id": "live:components/trmSim/RequirementAssignmentsPanel:41821f99b8e0",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/trmSim/RequirementAssignmentsPanel:41821f99b8e0"
+    ]
+  },
+  {
+    "source": "src/components/trmSim/RequirementAssignmentsPanel.tsx",
+    "signature": "button|onClick:{link}",
+    "id": "live:components/trmSim/RequirementAssignmentsPanel:54d855b4c17e",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/trmSim/RequirementAssignmentsPanel:54d855b4c17e"
+    ]
+  },
+  {
+    "source": "src/components/trmSim/ScenarioEditor.tsx",
+    "signature": "input|onChange:{e=>onChange(e.target.value)}",
+    "id": "live:components/trmSim/ScenarioEditor:d640f7ce96ce",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/trmSim/ScenarioEditor:d640f7ce96ce"
+    ]
+  },
+  {
+    "source": "src/components/trmSim/ScenarioEditor.tsx",
+    "signature": "Txt|onChange:{v=>set({duration:v})}",
+    "id": "live:components/trmSim/ScenarioEditor:c9ca34acd7a6",
+    "status": "excluded",
+    "reason": "Txt callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/trmSim/ScenarioEditor.tsx",
+    "signature": "Txt|onChange:{v=>set({step:v})}",
+    "id": "live:components/trmSim/ScenarioEditor:23189c6627a3",
+    "status": "excluded",
+    "reason": "Txt callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/trmSim/ScenarioEditor.tsx",
+    "signature": "select|onChange:{ev=>set({order:draft.order.map((x,j)=>(j===i?ev.target.valueasSimEngine:x))})}",
+    "id": "live:components/trmSim/ScenarioEditor:62effc598d24",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/trmSim/ScenarioEditor:62effc598d24"
+    ]
+  },
+  {
+    "source": "src/components/trmSim/ScenarioEditor.tsx",
+    "signature": "Txt|onChange:{v=>upd('signals',i,{alias:v})}",
+    "id": "live:components/trmSim/ScenarioEditor:91b5f17eb06f",
+    "status": "excluded",
+    "reason": "Txt callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/trmSim/ScenarioEditor.tsx",
+    "signature": "select|onChange:{e=>upd('signals',i,{target:e.target.value})}",
+    "id": "live:components/trmSim/ScenarioEditor:e0619a4eb129",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/trmSim/ScenarioEditor:e0619a4eb129"
+    ]
+  },
+  {
+    "source": "src/components/trmSim/ScenarioEditor.tsx",
+    "signature": "button|onClick:{()=>del('signals',i)}",
+    "id": "live:components/trmSim/ScenarioEditor:5439474e0ea7",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/trmSim/ScenarioEditor:5439474e0ea7"
+    ]
+  },
+  {
+    "source": "src/components/trmSim/ScenarioEditor.tsx",
+    "signature": "select|onChange:{e=>upd('stimuli',i,{target:e.target.value})}",
+    "id": "live:components/trmSim/ScenarioEditor:93076449a552",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/trmSim/ScenarioEditor:93076449a552"
+    ]
+  },
+  {
+    "source": "src/components/trmSim/ScenarioEditor.tsx",
+    "signature": "select|onChange:{e=>upd('stimuli',i,{kind:e.target.valueasProfileKind})}",
+    "id": "live:components/trmSim/ScenarioEditor:937e6c0f3af9",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/trmSim/ScenarioEditor:937e6c0f3af9"
+    ]
+  },
+  {
+    "source": "src/components/trmSim/ScenarioEditor.tsx",
+    "signature": "Txt|onChange:{v=>upd('stimuli',i,{[keys[j]]:v})}",
+    "id": "live:components/trmSim/ScenarioEditor:2c3e845762b5",
+    "status": "excluded",
+    "reason": "Txt callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/trmSim/ScenarioEditor.tsx",
+    "signature": "button|onClick:{()=>del('stimuli',i)}",
+    "id": "live:components/trmSim/ScenarioEditor:c9043a812051",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/trmSim/ScenarioEditor:c9043a812051"
+    ]
+  },
+  {
+    "source": "src/components/trmSim/ScenarioEditor.tsx",
+    "signature": "select|onChange:{e=>upd('couplings',i,{from:e.target.value})}",
+    "id": "live:components/trmSim/ScenarioEditor:e9725a413525",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/trmSim/ScenarioEditor:e9725a413525"
+    ]
+  },
+  {
+    "source": "src/components/trmSim/ScenarioEditor.tsx",
+    "signature": "select|onChange:{e=>upd('couplings',i,{to:e.target.value})}",
+    "id": "live:components/trmSim/ScenarioEditor:0eba2ded97aa",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/trmSim/ScenarioEditor:0eba2ded97aa"
+    ]
+  },
+  {
+    "source": "src/components/trmSim/ScenarioEditor.tsx",
+    "signature": "button|onClick:{()=>del('couplings',i)}",
+    "id": "live:components/trmSim/ScenarioEditor:9bd5a8aabec8",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/trmSim/ScenarioEditor:9bd5a8aabec8"
+    ]
+  },
+  {
+    "source": "src/components/trmSim/ScenarioEditor.tsx",
+    "signature": "select|onChange:{e=>upd('assertions',i,{requirementId:e.target.value})}",
+    "id": "live:components/trmSim/ScenarioEditor:d73824f0277b",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/trmSim/ScenarioEditor:d73824f0277b"
+    ]
+  },
+  {
+    "source": "src/components/trmSim/ScenarioEditor.tsx",
+    "signature": "Txt|onChange:{v=>upd('assertions',i,{condition:v})}",
+    "id": "live:components/trmSim/ScenarioEditor:4a706ab93b8e",
+    "status": "excluded",
+    "reason": "Txt callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/trmSim/ScenarioEditor.tsx",
+    "signature": "select|onChange:{e=>upd('assertions',i,{mode:e.target.valueasMode})}",
+    "id": "live:components/trmSim/ScenarioEditor:a02077162eee",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/trmSim/ScenarioEditor:a02077162eee"
+    ]
+  },
+  {
+    "source": "src/components/trmSim/ScenarioEditor.tsx",
+    "signature": "Txt|onChange:{v=>upd('assertions',i,{trigger:v})}",
+    "id": "live:components/trmSim/ScenarioEditor:4e1ebbb7bb25",
+    "status": "excluded",
+    "reason": "Txt callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/trmSim/ScenarioEditor.tsx",
+    "signature": "Txt|onChange:{v=>upd('assertions',i,{within:v})}",
+    "id": "live:components/trmSim/ScenarioEditor:36918f3d2441",
+    "status": "excluded",
+    "reason": "Txt callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/trmSim/ScenarioEditor.tsx",
+    "signature": "Txt|onChange:{v=>upd('assertions',i,{w0:v})}",
+    "id": "live:components/trmSim/ScenarioEditor:eacdc905cb63",
+    "status": "excluded",
+    "reason": "Txt callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/trmSim/ScenarioEditor.tsx",
+    "signature": "Txt|onChange:{v=>upd('assertions',i,{w1:v})}",
+    "id": "live:components/trmSim/ScenarioEditor:4f3e95585827",
+    "status": "excluded",
+    "reason": "Txt callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/trmSim/ScenarioEditor.tsx",
+    "signature": "button|onClick:{()=>del('assertions',i)}",
+    "id": "live:components/trmSim/ScenarioEditor:69cbcae096a2",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/trmSim/ScenarioEditor:69cbcae096a2"
+    ]
+  },
+  {
+    "source": "src/components/trmSim/ScenarioEditor.tsx",
+    "signature": "button|onClick:{()=>setDraft(p=>({...p,signals:[...p.signals,{alias:'',target:''}]}))}",
+    "id": "live:components/trmSim/ScenarioEditor:5b09f9e68589",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/trmSim/ScenarioEditor:5b09f9e68589"
+    ]
+  },
+  {
+    "source": "src/components/trmSim/ScenarioEditor.tsx",
+    "signature": "button|onClick:{()=>setDraft(p=>({...p,stimuli:[...p.stimuli,{target:'',kind:'constant',a:'',b:'',c:''}]}))}",
+    "id": "live:components/trmSim/ScenarioEditor:e57e15218622",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/trmSim/ScenarioEditor:e57e15218622"
+    ]
+  },
+  {
+    "source": "src/components/trmSim/ScenarioEditor.tsx",
+    "signature": "button|onClick:{()=>setDraft(p=>({...p,couplings:[...p.couplings,{from:'',to:''}]}))}",
+    "id": "live:components/trmSim/ScenarioEditor:1bd228bd743b",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/trmSim/ScenarioEditor:1bd228bd743b"
+    ]
+  },
+  {
+    "source": "src/components/trmSim/ScenarioEditor.tsx",
+    "signature": "button|onClick:{()=>setDraft(p=>({...p,assertions:[...p.assertions,{id:nextAssertionId(),requirementId,condition:'',mode:'always',w0:'',w1:'',trigger:'',within:''}],}))}",
+    "id": "live:components/trmSim/ScenarioEditor:f9637d2bb203",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/trmSim/ScenarioEditor:f9637d2bb203"
+    ]
+  },
+  {
+    "source": "src/components/trmSim/ScenarioEditor.tsx",
+    "signature": "button|onClick:{()=>onSave(scenario,verifies)}",
+    "id": "live:components/trmSim/ScenarioEditor:718d8ebfd967",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/trmSim/ScenarioEditor:718d8ebfd967"
+    ]
+  },
+  {
+    "source": "src/components/trmSim/ScenarioEditor.tsx",
+    "signature": "button|onClick:{onCancel}",
+    "id": "live:components/trmSim/ScenarioEditor:044e02219145",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/trmSim/ScenarioEditor:044e02219145"
+    ]
+  },
+  {
+    "source": "src/components/trmSim/SimVerificationPanel.tsx",
+    "signature": "input|onChange:{e=>onChange(e.target.value)}",
+    "id": "live:components/trmSim/SimVerificationPanel:d640f7ce96ce",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/trmSim/SimVerificationPanel:d640f7ce96ce"
+    ]
+  },
+  {
+    "source": "src/components/trmSim/SimVerificationPanel.tsx",
+    "signature": "button|onClick:{()=>commit(r=>{deleter.relationships[l.relationshipId];})}",
+    "id": "live:components/trmSim/SimVerificationPanel:7a6a2cfa23a6",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/trmSim/SimVerificationPanel:7a6a2cfa23a6"
+    ]
+  },
+  {
+    "source": "src/components/trmSim/SimVerificationPanel.tsx",
+    "signature": "select|onChange:{e=>setLinkTarget(e.target.value)}",
+    "id": "live:components/trmSim/SimVerificationPanel:48a8221c83b4",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/trmSim/SimVerificationPanel:48a8221c83b4"
+    ]
+  },
+  {
+    "source": "src/components/trmSim/SimVerificationPanel.tsx",
+    "signature": "select|onChange:{e=>setLinkKind(e.target.valueastypeoflinkKind)}",
+    "id": "live:components/trmSim/SimVerificationPanel:ffe75a33dd6f",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/trmSim/SimVerificationPanel:ffe75a33dd6f"
+    ]
+  },
+  {
+    "source": "src/components/trmSim/SimVerificationPanel.tsx",
+    "signature": "button|onClick:{link}",
+    "id": "live:components/trmSim/SimVerificationPanel:54d855b4c17e",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/trmSim/SimVerificationPanel:54d855b4c17e"
+    ]
+  },
+  {
+    "source": "src/components/trmSim/SimVerificationPanel.tsx",
+    "signature": "button|onClick:{()=>onRepositoryChange(createSimulationCase(repository,requirementId,{id:makeId()}))}",
+    "id": "live:components/trmSim/SimVerificationPanel:7f19a2c4b022",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/trmSim/SimVerificationPanel:7f19a2c4b022"
+    ]
+  },
+  {
+    "source": "src/components/trmSim/SimVerificationPanel.tsx",
+    "signature": "button|onClick:{()=>run(vc)}",
+    "id": "live:components/trmSim/SimVerificationPanel:395ee6231e45",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/trmSim/SimVerificationPanel:395ee6231e45"
+    ]
+  },
+  {
+    "source": "src/components/trmSim/SimVerificationPanel.tsx",
+    "signature": "button|onClick:{()=>openEditor(vc,true)}",
+    "id": "live:components/trmSim/SimVerificationPanel:5a5974381b36",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/trmSim/SimVerificationPanel:5a5974381b36"
+    ]
+  },
+  {
+    "source": "src/components/trmSim/SimVerificationPanel.tsx",
+    "signature": "button|onClick:{()=>openEditor(vc,false)}",
+    "id": "live:components/trmSim/SimVerificationPanel:9392fe8371af",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/trmSim/SimVerificationPanel:9392fe8371af"
+    ]
+  },
+  {
+    "source": "src/components/trmSim/SimVerificationPanel.tsx",
+    "signature": "button|onClick:{()=>setScenarioEditing(vc.id)}",
+    "id": "live:components/trmSim/SimVerificationPanel:a0aa172b67b4",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/trmSim/SimVerificationPanel:a0aa172b67b4"
+    ]
+  },
+  {
+    "source": "src/components/trmSim/SimVerificationPanel.tsx",
+    "signature": "ScenarioEditor|onCancel:{()=>setScenarioEditing(null)}|onSave:{(sc,verifies)=>saveScenario(vc,sc,verifies)}",
+    "id": "live:components/trmSim/SimVerificationPanel:dc439576832f",
+    "status": "excluded",
+    "reason": "ScenarioEditor callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/trmSim/SimVerificationPanel.tsx",
+    "signature": "select|onChange:{e=>setD({observe:e.target.value})}",
+    "id": "live:components/trmSim/SimVerificationPanel:ca9b0fdd617c",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/trmSim/SimVerificationPanel:ca9b0fdd617c"
+    ]
+  },
+  {
+    "source": "src/components/trmSim/SimVerificationPanel.tsx",
+    "signature": "select|onChange:{e=>setD({check:e.target.valueasCheckKind})}",
+    "id": "live:components/trmSim/SimVerificationPanel:fc9bec1010d5",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/trmSim/SimVerificationPanel:fc9bec1010d5"
+    ]
+  },
+  {
+    "source": "src/components/trmSim/SimVerificationPanel.tsx",
+    "signature": "Num|onChange:{v=>setD({value:v})}",
+    "id": "live:components/trmSim/SimVerificationPanel:b4d1493db8db",
+    "status": "excluded",
+    "reason": "Num callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/trmSim/SimVerificationPanel.tsx",
+    "signature": "Num|onChange:{v=>setD({by:v})}",
+    "id": "live:components/trmSim/SimVerificationPanel:7736739e64b4",
+    "status": "excluded",
+    "reason": "Num callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/trmSim/SimVerificationPanel.tsx",
+    "signature": "Num|onChange:{v=>setD({w0:v})}",
+    "id": "live:components/trmSim/SimVerificationPanel:7cd6e3bf7d8d",
+    "status": "excluded",
+    "reason": "Num callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/trmSim/SimVerificationPanel.tsx",
+    "signature": "Num|onChange:{v=>setD({w1:v})}",
+    "id": "live:components/trmSim/SimVerificationPanel:4506c030340e",
+    "status": "excluded",
+    "reason": "Num callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/trmSim/SimVerificationPanel.tsx",
+    "signature": "Num|onChange:{v=>setD({tolerance:v})}",
+    "id": "live:components/trmSim/SimVerificationPanel:7f8ba4b8114c",
+    "status": "excluded",
+    "reason": "Num callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/trmSim/SimVerificationPanel.tsx",
+    "signature": "Num|onChange:{v=>setD({duration:v})}",
+    "id": "live:components/trmSim/SimVerificationPanel:33b95fcde638",
+    "status": "excluded",
+    "reason": "Num callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/trmSim/SimVerificationPanel.tsx",
+    "signature": "Num|onChange:{v=>setD({step:v})}",
+    "id": "live:components/trmSim/SimVerificationPanel:81b94d4f720e",
+    "status": "excluded",
+    "reason": "Num callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/trmSim/SimVerificationPanel.tsx",
+    "signature": "select|onChange:{e=>setStim(i,{target:e.target.value})}",
+    "id": "live:components/trmSim/SimVerificationPanel:dfa0623c0d1f",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/trmSim/SimVerificationPanel:dfa0623c0d1f"
+    ]
+  },
+  {
+    "source": "src/components/trmSim/SimVerificationPanel.tsx",
+    "signature": "select|onChange:{e=>setStim(i,{kind:e.target.valueasProfileKind})}",
+    "id": "live:components/trmSim/SimVerificationPanel:c2d9619cf26c",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/trmSim/SimVerificationPanel:c2d9619cf26c"
+    ]
+  },
+  {
+    "source": "src/components/trmSim/SimVerificationPanel.tsx",
+    "signature": "Num|onChange:{v=>setStim(i,{[keys[j]]:v})}",
+    "id": "live:components/trmSim/SimVerificationPanel:1800fc9b22a2",
+    "status": "excluded",
+    "reason": "Num callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/trmSim/SimVerificationPanel.tsx",
+    "signature": "button|onClick:{()=>setDraft(prev=>({...prev,stimuli:prev.stimuli.filter((_,j)=>j!==i)}))}",
+    "id": "live:components/trmSim/SimVerificationPanel:c94dd7ec1f1d",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/trmSim/SimVerificationPanel:c94dd7ec1f1d"
+    ]
+  },
+  {
+    "source": "src/components/trmSim/SimVerificationPanel.tsx",
+    "signature": "button|onClick:{()=>setDraft(prev=>({...prev,stimuli:[...prev.stimuli,{target:'',kind:'constant',a:'',b:'',c:''}]}))}",
+    "id": "live:components/trmSim/SimVerificationPanel:de6e00fd936a",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/trmSim/SimVerificationPanel:de6e00fd936a"
+    ]
+  },
+  {
+    "source": "src/components/trmSim/SimVerificationPanel.tsx",
+    "signature": "button|onClick:{()=>save(vc)}",
+    "id": "live:components/trmSim/SimVerificationPanel:f87e80e1c7b2",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/trmSim/SimVerificationPanel:f87e80e1c7b2"
+    ]
+  },
+  {
+    "source": "src/components/trmSim/SimVerificationPanel.tsx",
+    "signature": "button|onClick:{()=>{setEditing(null);setErrors([]);}}",
+    "id": "live:components/trmSim/SimVerificationPanel:a54f57ba5dfc",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/trmSim/SimVerificationPanel:a54f57ba5dfc"
+    ]
+  },
+  {
+    "source": "src/components/xbridges/XbridgesPropertiesPanel.tsx",
+    "signature": "DoeSweeperPanel|onExportDoeData:{onExportDoeData}|onUpdate:{onUpdate}",
+    "id": "live:components/xbridges/XbridgesPropertiesPanel:1f6b55ea68d8",
+    "status": "excluded",
+    "reason": "DoeSweeperPanel callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/xbridges/XbridgesWorkspace.tsx",
+    "signature": "XbridgesPropertiesPanel|onClose:{()=>setSelectedNodeId(null)}|onCollapseToggle:{setIsPropsCollapsed}|onExportDoeData:{onExportDoeData}|onLaunchDoe:{onLaunchDoe}|onUpdate:{updateBlock}",
+    "id": "live:components/xbridges/XbridgesWorkspace:7187ed46d2e6",
+    "status": "excluded",
+    "reason": "XbridgesPropertiesPanel callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/xbridges/powertrain/DoeSweeperPanel.tsx",
+    "signature": "button|onClick:{()=>{constd=doeModuleTable(rows,factors,RESPONSES);onExportDoeData?.(d.headers,d.data);}}",
+    "id": "live:components/xbridges/powertrain/DoeSweeperPanel:3eecfecc0e75",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/xbridges/powertrain/DoeSweeperPanel:3eecfecc0e75"
+    ]
+  },
+  {
+    "source": "src/components/xbridges/powertrain/DoeSweeperPanel.tsx",
+    "signature": "select|onChange:{e=>setEcuId(e.target.value)}",
+    "id": "live:components/xbridges/powertrain/DoeSweeperPanel:d5b02ad4c42f",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/xbridges/powertrain/DoeSweeperPanel:d5b02ad4c42f"
+    ]
+  },
+  {
+    "source": "src/components/xbridges/powertrain/DoeSweeperPanel.tsx",
+    "signature": "button|onClick:{writeEcu}",
+    "id": "live:components/xbridges/powertrain/DoeSweeperPanel:a6b1b86e5689",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/xbridges/powertrain/DoeSweeperPanel:a6b1b86e5689"
+    ]
+  },
+  {
+    "source": "src/components/xbridges/powertrain/DoeSweeperPanel.tsx",
+    "signature": "select|onChange:{e=>setEngId(e.target.value)}",
+    "id": "live:components/xbridges/powertrain/DoeSweeperPanel:86206d9ea94c",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/xbridges/powertrain/DoeSweeperPanel:86206d9ea94c"
+    ]
+  },
+  {
+    "source": "src/components/xbridges/powertrain/DoeSweeperPanel.tsx",
+    "signature": "input|onChange:{e=>setTRef(e.target.value)}",
+    "id": "live:components/xbridges/powertrain/DoeSweeperPanel:ab21c85eb12f",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/xbridges/powertrain/DoeSweeperPanel:ab21c85eb12f"
+    ]
+  },
+  {
+    "source": "src/components/xbridges/powertrain/DoeSweeperPanel.tsx",
+    "signature": "button|onClick:{writeEngine}",
+    "id": "live:components/xbridges/powertrain/DoeSweeperPanel:ebf97757c9da",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/xbridges/powertrain/DoeSweeperPanel:ebf97757c9da"
+    ]
+  },
+  {
+    "source": "src/components/xbridges/powertrain/DoeSweeperPanel.tsx",
+    "signature": "select|onChange:{e=>setMapKind(e.target.value)}",
+    "id": "live:components/xbridges/powertrain/DoeSweeperPanel:73aa45b7766f",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/xbridges/powertrain/DoeSweeperPanel:73aa45b7766f"
+    ]
+  },
+  {
+    "source": "src/components/xbridges/powertrain/DoeSweeperPanel.tsx",
+    "signature": "input|onChange:{e=>setQFull(e.target.value)}",
+    "id": "live:components/xbridges/powertrain/DoeSweeperPanel:8c9687ddf9a9",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/xbridges/powertrain/DoeSweeperPanel:8c9687ddf9a9"
+    ]
+  },
+  {
+    "source": "src/components/xbridges/powertrain/DoeSweeperPanel.tsx",
+    "signature": "input|onChange:{e=>setLamLimit(e.target.value)}",
+    "id": "live:components/xbridges/powertrain/DoeSweeperPanel:1c1aa268ecc1",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/xbridges/powertrain/DoeSweeperPanel:1c1aa268ecc1"
+    ]
+  },
+  {
+    "source": "src/components/xbridges/powertrain/DoeSweeperPanel.tsx",
+    "signature": "select|onChange:{e=>setMapId(e.target.value)}",
+    "id": "live:components/xbridges/powertrain/DoeSweeperPanel:7843f549c0b1",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/xbridges/powertrain/DoeSweeperPanel:7843f549c0b1"
+    ]
+  },
+  {
+    "source": "src/components/xbridges/powertrain/DoeSweeperPanel.tsx",
+    "signature": "button|onClick:{writeMap}",
+    "id": "live:components/xbridges/powertrain/DoeSweeperPanel:41575c58e7e8",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/xbridges/powertrain/DoeSweeperPanel:41575c58e7e8"
+    ]
   }
 ]

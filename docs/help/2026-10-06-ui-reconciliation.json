@@ -2,17 +2,17 @@
   "sourceSnapshot": "docs/help/audit/2026-10-06-ui-candidates.json",
   "scope": "Snapshot reconciliation. Snapshot line numbers locate evidence, never stable feature identity. Unresolved sites remain visible.",
   "statusCounts": {
-    "documented": 372,
+    "documented": 370,
     "excluded": 44,
-    "mapped": 843,
-    "obsolete": 18
+    "mapped": 844,
+    "obsolete": 20
   },
   "modules": [
     {
       "sourcePath": "src/App.tsx",
       "candidates": 412,
-      "mapped": 376,
-      "excluded": 36,
+      "mapped": 370,
+      "excluded": 42,
       "unresolved": 0
     },
     {
@@ -528,8 +528,8 @@
     },
     {
       "sourcePath": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "candidates": 36,
-      "mapped": 34,
+      "candidates": 37,
+      "mapped": 35,
       "excluded": 2,
       "unresolved": 0
     }
@@ -19876,33 +19876,49 @@
     {
       "candidateId": "src/components/xbridges/XbridgesWorkspace.tsx:3206",
       "sourcePath": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "snapshotLine": 3206,
+      "snapshotLine": 3385,
       "tag": "input",
-      "label": "",
+      "label": "\"Fixed Step\"",
       "status": "mapped",
       "featureIds": [
-        "ui:xbridges/XbridgesWorkspace:d928378d041c"
+        "ui:xbridges/XbridgesWorkspace:a3feed12fada"
       ],
       "reason": "Source-specific instructions grounded in this callback’s selected field/command/action.",
       "sourceEvidence": [
         "src/components/xbridges/XbridgesWorkspace.tsx",
-        "{e => setStepSizeInput(normalizeNumerals(e.target.value).replace(/[^0-9.]/g, ''))}"
+        "{e => setStepSizeInput(normalizeNumerals(e.target.value).replace(/[^0-9a-zA-Z.+-]/g, ''))}"
       ]
     },
     {
       "candidateId": "src/components/xbridges/XbridgesWorkspace.tsx:3220",
       "sourcePath": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "snapshotLine": 3220,
+      "snapshotLine": 3368,
       "tag": "input",
-      "label": "\"Unlimited\"",
+      "label": "\"Stop Time\"",
       "status": "mapped",
       "featureIds": [
-        "ui:xbridges/XbridgesWorkspace:84388e80584d"
+        "ui:xbridges/XbridgesWorkspace:0f1f63961b7b"
       ],
       "reason": "Source-specific instructions grounded in this callback’s selected field/command/action.",
       "sourceEvidence": [
         "src/components/xbridges/XbridgesWorkspace.tsx",
-        "{e => setSimLimitInput(normalizeNumerals(e.target.value).replace(/[^0-9.]/g, ''))}"
+        "{e => setStopTimeInput(normalizeNumerals(e.target.value).replace(/[^0-9a-zA-Z.+-]/g, ''))}"
+      ]
+    },
+    {
+      "candidateId": "src/components/xbridges/XbridgesWorkspace.tsx:3352",
+      "sourcePath": "src/components/xbridges/XbridgesWorkspace.tsx",
+      "snapshotLine": 3352,
+      "tag": "input",
+      "label": "\"Start Time\"",
+      "status": "mapped",
+      "featureIds": [
+        "ui:xbridges/XbridgesWorkspace:cb8a7f3d200e"
+      ],
+      "reason": "Source-specific instructions grounded in this callback’s selected field/command/action.",
+      "sourceEvidence": [
+        "src/components/xbridges/XbridgesWorkspace.tsx",
+        "{e => setStartTimeInput(normalizeNumerals(e.target.value).replace(/[^0-9a-zA-Z.+-]/g, ''))}"
       ]
     },
     {

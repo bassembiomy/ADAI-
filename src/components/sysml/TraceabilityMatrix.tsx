@@ -98,7 +98,7 @@ export function TraceabilityMatrix({ repository, externalElements = [], onNaviga
               {renderVirtualGrid ? 'Standard View' : 'Virtualized Grid'}
             </button>
             {onRunAllSimulations && (
-              <button type="button" onClick={onRunAllSimulations} className="rounded border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs text-neutral-300 hover:text-neutral-100">Run all simulation tests</button>
+              <button data-help-feature="live:components/sysml/TraceabilityMatrix:e0511dea904b" type="button" onClick={onRunAllSimulations} className="rounded border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs text-neutral-300 hover:text-neutral-100">Run all simulation tests</button>
             )}
             <button data-help-feature="ui:sysml/TraceabilityMatrix:72c56515f6ca" data-help-source="src/components/sysml/TraceabilityMatrix.tsx" type="button" onClick={exportCsv} className="rounded border border-orange-700 px-3 py-1 text-xs text-orange-300 hover:bg-orange-950">Export CSV</button>
           </div>
@@ -160,7 +160,7 @@ export function TraceabilityMatrix({ repository, externalElements = [], onNaviga
                     if (next !== index) { event.preventDefault(); rowRefs.current[next]?.focus(); }
                   }}
                 >
-                  <td className="p-2"><button data-help-feature="ui:sysml/TraceabilityMatrix:42bd19a061b8" data-help-source="src/components/sysml/TraceabilityMatrix.tsx" type="button" onClick={() => onNavigate?.(row.requirement.id)} className="text-left"><span className="block font-mono text-orange-300">{row.requirement.requirementId}</span><span className="font-medium">{sysmlObjectLabel(row.requirement, 'Requirement')}</span><span className="block max-w-xs truncate text-neutral-500">{row.requirement.text}</span></button>{onSimulate && <button type="button" aria-label={`Simulate ${row.requirement.requirementId}`} onClick={() => onSimulate(row.requirement.id)} className="mt-1 rounded border border-orange-700 px-2 py-0.5 text-[11px] text-orange-300 hover:bg-orange-950">Simulate</button>}</td>
+                  <td className="p-2"><button data-help-feature="ui:sysml/TraceabilityMatrix:42bd19a061b8" data-help-source="src/components/sysml/TraceabilityMatrix.tsx" type="button" onClick={() => onNavigate?.(row.requirement.id)} className="text-left"><span className="block font-mono text-orange-300">{row.requirement.requirementId}</span><span className="font-medium">{sysmlObjectLabel(row.requirement, 'Requirement')}</span><span className="block max-w-xs truncate text-neutral-500">{row.requirement.text}</span></button>{onSimulate && <button data-help-feature="live:components/sysml/TraceabilityMatrix:bafff0f97516" type="button" aria-label={`Simulate ${row.requirement.requirementId}`} onClick={() => onSimulate(row.requirement.id)} className="mt-1 rounded border border-orange-700 px-2 py-0.5 text-[11px] text-orange-300 hover:bg-orange-950">Simulate</button>}</td>
                   <td className="p-2">
                     <div className="flex flex-col gap-1 max-w-xs">
                       {/* Containment Parents (Contained By) */}

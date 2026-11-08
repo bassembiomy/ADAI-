@@ -2,15 +2,15 @@
 
 Generated from live registries and schema factories. This is feature mapping coverage, not proof that every reachable UI control has complete instructions.
 
-2091/2091 registered features have resolvable instructional destinations (100.00%). 0 missing. Duplicate IDs: 0.
+2195/2195 registered features have resolvable instructional destinations (100.00%). 0 missing. Duplicate IDs: 0.
 
 ## Source UI reconciliation
 
-1277 source candidates across 75 files. Status: {"documented":376,"excluded":44,"mapped":843,"obsolete":14}. The full JSON preserves every candidate and its reconciliation reason. Dynamic factories expand separately; duplicate sites are not unique feature counts.
+1278 source candidates across 75 files. Status: {"documented":370,"excluded":44,"mapped":844,"obsolete":20}. The full JSON preserves every candidate and its reconciliation reason. Dynamic factories expand separately; duplicate sites are not unique feature counts.
 
 | Source | Candidates | Mapped | Excluded | Unresolved |
 |---|---:|---:|---:|---:|
-| src/App.tsx | 412 | 376 | 36 | 0 |
+| src/App.tsx | 412 | 370 | 42 | 0 |
 | src/components/AiArchitectSidebar.tsx | 18 | 18 | 0 | 0 |
 | src/components/ArchitectBrainSidebar.tsx | 2 | 2 | 0 | 0 |
 | src/components/FactoryIOGateway.tsx | 9 | 9 | 0 | 0 |
@@ -84,7 +84,7 @@ Generated from live registries and schema factories. This is feature mapping cov
 | src/components/xbridges/XbridgesPropertiesPanel.tsx | 38 | 38 | 0 | 0 |
 | src/components/xbridges/XbridgesRootLocusWindow.tsx | 7 | 7 | 0 | 0 |
 | src/components/xbridges/XbridgesScopeWindow.tsx | 15 | 15 | 0 | 0 |
-| src/components/xbridges/XbridgesWorkspace.tsx | 36 | 34 | 2 | 0 |
+| src/components/xbridges/XbridgesWorkspace.tsx | 37 | 35 | 2 | 0 |
 
 ## Missing instructional destinations
 
@@ -92,7 +92,7 @@ None in the registered feature inventory.
 
 ## Current source scan
 
-1477 handler sites across 99 production TSX files were scanned from the current source, including callback wiring and gestures omitted from the earlier snapshot. Status: {"documented":1335,"excluded":142}. The live report retains source signatures and a fingerprint; tests reject stale evidence and demonstrate failure for a new unmapped inline control. Callback wiring, profiler hooks and propagation wrappers are explicitly excluded rather than counted as user features.
+1554 handler sites across 105 production TSX files were scanned from the current source, including callback wiring and gestures omitted from the earlier snapshot. Status: {"documented":1393,"excluded":161}. The live report retains source signatures and a fingerprint; tests reject stale evidence and demonstrate failure for a new unmapped inline control. Callback wiring, profiler hooks and propagation wrappers are explicitly excluded rather than counted as user features.
 
 ## Implementation limits
 

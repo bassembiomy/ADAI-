@@ -87,7 +87,7 @@ function TargetOptions({ items, placeholder }: { items: SimCandidate[]; placehol
 }
 
 function Txt({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
-  return <label className={lbl}>{label}<input aria-label={label} className={field} value={value} onChange={e => onChange(e.target.value)} /></label>;
+  return <label className={lbl}>{label}<input data-help-feature="live:components/trmSim/ScenarioEditor:d640f7ce96ce" aria-label={label} className={field} value={value} onChange={e => onChange(e.target.value)} /></label>;
 }
 
 export interface ScenarioEditorProps {
@@ -132,7 +132,7 @@ export function ScenarioEditor({ verificationCase: vc, repository, project, requ
         <Txt label="Step (s)" value={draft.step} onChange={v => set({ step: v })} />
         {draft.order.map((e, i) => (
           <label key={i} className={lbl}>{`Order ${i + 1}`}
-            <select aria-label={`Order ${i + 1}`} className={field} value={e}
+            <select data-help-feature="live:components/trmSim/ScenarioEditor:62effc598d24" aria-label={`Order ${i + 1}`} className={field} value={e}
               onChange={ev => set({ order: draft.order.map((x, j) => (j === i ? ev.target.value as SimEngine : x)) })}>
               {ENGINES.map(k => <option key={k} value={k}>{ENGINE_NAMES[k]}</option>)}
             </select>
@@ -144,11 +144,11 @@ export function ScenarioEditor({ verificationCase: vc, repository, project, requ
         <div key={i} className="flex flex-wrap items-end gap-2">
           <Txt label={`Signal ${i + 1} alias`} value={s.alias} onChange={v => upd('signals', i, { alias: v })} />
           <label className={lbl}>{`Signal ${i + 1} target`}
-            <select aria-label={`Signal ${i + 1} target`} className={field} value={s.target} onChange={e => upd('signals', i, { target: e.target.value })}>
+            <select data-help-feature="live:components/trmSim/ScenarioEditor:e0619a4eb129" aria-label={`Signal ${i + 1} target`} className={field} value={s.target} onChange={e => upd('signals', i, { target: e.target.value })}>
               <TargetOptions items={candidates.observe} placeholder="Select a signal" />
             </select>
           </label>
-          <button type="button" className={btn} aria-label={`Remove signal ${i + 1}`} onClick={() => del('signals', i)}>Remove</button>
+          <button data-help-feature="live:components/trmSim/ScenarioEditor:5439474e0ea7" type="button" className={btn} aria-label={`Remove signal ${i + 1}`} onClick={() => del('signals', i)}>Remove</button>
         </div>
       ))}
 
@@ -159,17 +159,17 @@ export function ScenarioEditor({ verificationCase: vc, repository, project, requ
         return (
           <div key={i} className="flex flex-wrap items-end gap-2">
             <label className={lbl}>{`Stimulus ${n} target`}
-              <select aria-label={`Stimulus ${n} target`} className={field} value={s.target} onChange={e => upd('stimuli', i, { target: e.target.value })}>
+              <select data-help-feature="live:components/trmSim/ScenarioEditor:93076449a552" aria-label={`Stimulus ${n} target`} className={field} value={s.target} onChange={e => upd('stimuli', i, { target: e.target.value })}>
                 <TargetOptions items={candidates.stimulus} placeholder="Select a target" />
               </select>
             </label>
             <label className={lbl}>{`Stimulus ${n} profile`}
-              <select aria-label={`Stimulus ${n} profile`} className={field} value={s.kind} onChange={e => upd('stimuli', i, { kind: e.target.value as ProfileKind })}>
+              <select data-help-feature="live:components/trmSim/ScenarioEditor:937e6c0f3af9" aria-label={`Stimulus ${n} profile`} className={field} value={s.kind} onChange={e => upd('stimuli', i, { kind: e.target.value as ProfileKind })}>
                 <option value="constant">constant</option><option value="step">step</option><option value="ramp">ramp</option>
               </select>
             </label>
             {names.map((nm, j) => <Txt key={nm} label={`Stimulus ${n} ${nm}`} value={s[keys[j]]} onChange={v => upd('stimuli', i, { [keys[j]]: v })} />)}
-            <button type="button" className={btn} aria-label={`Remove stimulus ${n}`} onClick={() => del('stimuli', i)}>Remove</button>
+            <button data-help-feature="live:components/trmSim/ScenarioEditor:c9043a812051" type="button" className={btn} aria-label={`Remove stimulus ${n}`} onClick={() => del('stimuli', i)}>Remove</button>
           </div>
         );
       })}
@@ -177,16 +177,16 @@ export function ScenarioEditor({ verificationCase: vc, repository, project, requ
       {draft.couplings.map((c, i) => (
         <div key={i} className="flex flex-wrap items-end gap-2">
           <label className={lbl}>{`Coupling ${i + 1} from`}
-            <select aria-label={`Coupling ${i + 1} from`} className={field} value={c.from} onChange={e => upd('couplings', i, { from: e.target.value })}>
+            <select data-help-feature="live:components/trmSim/ScenarioEditor:e9725a413525" aria-label={`Coupling ${i + 1} from`} className={field} value={c.from} onChange={e => upd('couplings', i, { from: e.target.value })}>
               <TargetOptions items={candidates.observe} placeholder="Select a signal" />
             </select>
           </label>
           <label className={lbl}>{`Coupling ${i + 1} to`}
-            <select aria-label={`Coupling ${i + 1} to`} className={field} value={c.to} onChange={e => upd('couplings', i, { to: e.target.value })}>
+            <select data-help-feature="live:components/trmSim/ScenarioEditor:0eba2ded97aa" aria-label={`Coupling ${i + 1} to`} className={field} value={c.to} onChange={e => upd('couplings', i, { to: e.target.value })}>
               <TargetOptions items={candidates.stimulus} placeholder="Select a target" />
             </select>
           </label>
-          <button type="button" className={btn} aria-label={`Remove coupling ${i + 1}`} onClick={() => del('couplings', i)}>Remove</button>
+          <button data-help-feature="live:components/trmSim/ScenarioEditor:9bd5a8aabec8" type="button" className={btn} aria-label={`Remove coupling ${i + 1}`} onClick={() => del('couplings', i)}>Remove</button>
         </div>
       ))}
 
@@ -195,13 +195,13 @@ export function ScenarioEditor({ verificationCase: vc, repository, project, requ
         return (
           <div key={a.id} className="flex flex-wrap items-end gap-2">
             <label className={lbl}>{`Assertion ${n} requirement`}
-              <select aria-label={`Assertion ${n} requirement`} className={field} value={a.requirementId} onChange={e => upd('assertions', i, { requirementId: e.target.value })}>
+              <select data-help-feature="live:components/trmSim/ScenarioEditor:d73824f0277b" aria-label={`Assertion ${n} requirement`} className={field} value={a.requirementId} onChange={e => upd('assertions', i, { requirementId: e.target.value })}>
                 {requirements.map(r => <option key={r.id} value={r.id}>{r.requirementId}</option>)}
               </select>
             </label>
             <Txt label={`Assertion ${n} condition`} value={a.condition} onChange={v => upd('assertions', i, { condition: v })} />
             <label className={lbl}>{`Assertion ${n} mode`}
-              <select aria-label={`Assertion ${n} mode`} className={field} value={a.mode} onChange={e => upd('assertions', i, { mode: e.target.value as Mode })}>
+              <select data-help-feature="live:components/trmSim/ScenarioEditor:a02077162eee" aria-label={`Assertion ${n} mode`} className={field} value={a.mode} onChange={e => upd('assertions', i, { mode: e.target.value as Mode })}>
                 {['always', 'never', 'eventually', 'response'].map(m => <option key={m} value={m}>{m}</option>)}
               </select>
             </label>
@@ -209,16 +209,16 @@ export function ScenarioEditor({ verificationCase: vc, repository, project, requ
             {a.mode === 'response' && <Txt label={`Assertion ${n} within (s)`} value={a.within} onChange={v => upd('assertions', i, { within: v })} />}
             <Txt label={`Assertion ${n} window start`} value={a.w0} onChange={v => upd('assertions', i, { w0: v })} />
             <Txt label={`Assertion ${n} window end`} value={a.w1} onChange={v => upd('assertions', i, { w1: v })} />
-            <button type="button" className={btn} aria-label={`Remove assertion ${n}`} onClick={() => del('assertions', i)}>Remove</button>
+            <button data-help-feature="live:components/trmSim/ScenarioEditor:69cbcae096a2" type="button" className={btn} aria-label={`Remove assertion ${n}`} onClick={() => del('assertions', i)}>Remove</button>
           </div>
         );
       })}
 
       <div className="flex flex-wrap gap-2">
-        <button type="button" className={btn} onClick={() => setDraft(p => ({ ...p, signals: [...p.signals, { alias: '', target: '' }] }))}>Add signal</button>
-        <button type="button" className={btn} onClick={() => setDraft(p => ({ ...p, stimuli: [...p.stimuli, { target: '', kind: 'constant', a: '', b: '', c: '' }] }))}>Add stimulus</button>
-        <button type="button" className={btn} onClick={() => setDraft(p => ({ ...p, couplings: [...p.couplings, { from: '', to: '' }] }))}>Add coupling</button>
-        <button type="button" className={btn} onClick={() => setDraft(p => ({
+        <button data-help-feature="live:components/trmSim/ScenarioEditor:5b09f9e68589" type="button" className={btn} onClick={() => setDraft(p => ({ ...p, signals: [...p.signals, { alias: '', target: '' }] }))}>Add signal</button>
+        <button data-help-feature="live:components/trmSim/ScenarioEditor:e57e15218622" type="button" className={btn} onClick={() => setDraft(p => ({ ...p, stimuli: [...p.stimuli, { target: '', kind: 'constant', a: '', b: '', c: '' }] }))}>Add stimulus</button>
+        <button data-help-feature="live:components/trmSim/ScenarioEditor:1bd228bd743b" type="button" className={btn} onClick={() => setDraft(p => ({ ...p, couplings: [...p.couplings, { from: '', to: '' }] }))}>Add coupling</button>
+        <button data-help-feature="live:components/trmSim/ScenarioEditor:f9637d2bb203" type="button" className={btn} onClick={() => setDraft(p => ({
           ...p, assertions: [...p.assertions, { id: nextAssertionId(), requirementId, condition: '', mode: 'always', w0: '', w1: '', trigger: '', within: '' }],
         }))}>Add assertion</button>
       </div>
@@ -235,8 +235,8 @@ export function ScenarioEditor({ verificationCase: vc, repository, project, requ
       )}
 
       <div className="flex gap-2">
-        <button type="button" className={btn} disabled={errors.length > 0} onClick={() => onSave(scenario, verifies)}>Save scenario</button>
-        <button type="button" className={btn} onClick={onCancel}>Cancel</button>
+        <button data-help-feature="live:components/trmSim/ScenarioEditor:718d8ebfd967" type="button" className={btn} disabled={errors.length > 0} onClick={() => onSave(scenario, verifies)}>Save scenario</button>
+        <button data-help-feature="live:components/trmSim/ScenarioEditor:044e02219145" type="button" className={btn} onClick={onCancel}>Cancel</button>
       </div>
     </div>
   );

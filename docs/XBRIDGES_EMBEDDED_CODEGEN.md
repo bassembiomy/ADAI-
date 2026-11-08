@@ -128,8 +128,24 @@ analysis, but that does not override the embedded target profile.
 
 ## Timing and solver rules
 
-- The model selects fixed-step `euler` or `rk4`; variable-step generation is not
-  supported.
+- The model selects the fixed-step solver kind `euler`, `rk4` or `discrete`;
+  variable-step generation is not supported. The `discrete` kind has no
+  integration stage: each step evaluates the outputs and the discrete updates
+  only, so a block with continuous states is rejected with
+  `XB_DISCRETE_SOLVER_CONTINUOUS_STATE` (use `euler` or `rk4`, or the discrete
+  block). It applies to a continuous `INTEGRATOR_CONTINUOUS`, `Integrator`,
+  `TRANSFER_FUNCTION`, a `STATE_SPACE` whose representation is not `discrete`,
+  and a `PID_CONTROLLER` without a positive sample time.
+- The kind and step come from the X-Bridges workspace Solver settings and are
+  saved with the model. Explicit Euler (ODE1) is stored as `euler`, Fixed-Step
+  RK4 (ODE4) as `rk4`, and Discrete as `discrete`; the step is the resolved
+  Fixed Step (`auto` is replaced by the greatest common divisor of the discrete
+  sample times, otherwise by `(stop - start) / 50`, or 0.2 for an infinite stop
+  time). Any other workspace solver (ode2, ode3, ode5, ode23, ode45, ode14x,
+  ode23tb) is saved as chosen for simulation but is not an embedded kind: the
+  model adapter reports `XB_MODEL_INVALID` (solver must be Euler, RK4 or
+  Discrete with an explicit step). Start Time and Stop Time are simulation
+  settings and are not part of the generated package.
 - Solver step size must be finite, positive, and divide the state-machine base
   tick exactly. Substep count is fixed at generation time.
 - A discrete sample time must be a positive integer multiple of the solver
@@ -138,6 +154,59 @@ analysis, but that does not override the embedded target profile.
   (zero-order hold).
 - The simulator must run the same solver, step, schedule, numeric policy, and
   target capability assumptions when differential parity is required.
+
+## Constant output data type
+
+The `Constant` block property **Output data type** (`output_type`) is `auto`
+(inherit), `float64`, `float32`, `boolean`, `int8`, `uint8`, `int16`, `uint16`,
+`int32` or `uint32`. The simulation rounds a value to the nearest integer and
+saturates it at the limits of an integer type. Code generation refuses what it
+would have to change, for every element of a vector value:
+
+| Diagnostic | Cause |
+|---|---|
+| `XB_CONSTANT_TYPE_INVALID` | `output_type` is not one of the listed types |
+| `XB_CONSTANT_VALUE_NOT_REPRESENTABLE` | a non-integer value for an integer type |
+| `XB_CONSTANT_VALUE_OUT_OF_RANGE` | a value outside the range of the integer type, for example 300 for `uint8` (0 to 255) |
+
+Models saved before the property existed are read as `auto`. The target profile
+still decides which numeric types can be generated (see Floating point above).
+
+## Control-port defaults
+
+The Enable and Reset inputs of `PID_BASIC` and `PID_CONTROLLER` are control
+ports with defaults: Enable is 1 and Reset is 0. A scalar control port that is
+left unconnected (and has no boundary mapping) is driven by a generated
+`Constant` of its default before validation, so the validator, the semantic
+model, the interpreter and the generated C use the same value, as the simulation
+does. Data inputs have no default: every scalar data input needs exactly one
+driver, otherwise generation stops with `XB_PORT_DANGLING`.
+
+## Discrete integrator methods
+
+`INTEGRATOR_DISCRETE` (parameters `sample_time` and `method`) follows the same
+difference equations in the simulation, the interpreter and the generated C:
+
+| Method | Equations | Direct feedthrough |
+|---|---|---|
+| `forward_euler` (default) | `y(k) = x(k)`, `x(k+1) = x(k) + Ts*u(k)` | no |
+| `backward_euler` | `y(k) = x(k) + Ts*u(k)` | yes |
+| `tustin` (Tustin, alias `trapezoidal`) | `y(k) = x(k) + Ts/2*(u(k) + u(k-1))`, `u(-1) = 0` | yes |
+
+A feedback loop made only of blocks with direct feedthrough is an algebraic
+loop. The simulation reports `ALGEBRAIC_LOOP` and solves it iteratively;
+generation stops with `XB_ALGEBRAIC_LOOP_UNSUPPORTED`. Break the loop with
+`forward_euler` or a `UNIT_DELAY`.
+
+## Diagnostics
+
+Every code-generation diagnostic is an error. The in-application Help chapter
+"X-Bridges Embedded Code Generation" lists each `XB_*` code with its meaning and
+corrective action; the codes added by the Discrete solver, the Constant output
+type, control-port defaults and the integrator methods are
+`XB_DISCRETE_SOLVER_CONTINUOUS_STATE`, `XB_CONSTANT_TYPE_INVALID`,
+`XB_CONSTANT_VALUE_NOT_REPRESENTABLE`, `XB_CONSTANT_VALUE_OUT_OF_RANGE`,
+`XB_PORT_DANGLING` and `XB_ALGEBRAIC_LOOP_UNSUPPORTED`.
 
 ## State ownership, history, and lifecycle
 

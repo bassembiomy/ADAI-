@@ -3349,7 +3349,7 @@ export const XbridgesWorkspace: React.FC<{
                 <span className="text-[8px] text-slate-400 font-black uppercase tracking-widest mb-1">Start Time</span>
                 <div className="relative group">
                   <div className="absolute left-2.5 top-1/2 -translate-y-1/2 text-emerald-600 text-[8px] font-bold italic">s</div>
-                  <input data-help-source="src/components/xbridges/XbridgesWorkspace.tsx"
+                  <input data-help-feature="ui:xbridges/XbridgesWorkspace:cb8a7f3d200e" data-help-source="src/components/xbridges/XbridgesWorkspace.tsx"
                     type="text"
                     value={startTimeInput}
                     onChange={e => setStartTimeInput(normalizeNumerals(e.target.value).replace(/[^0-9a-zA-Z.+-]/g, ''))}
@@ -3365,7 +3365,7 @@ export const XbridgesWorkspace: React.FC<{
                 <span className="text-[8px] text-slate-400 font-black uppercase tracking-widest mb-1">Stop Time</span>
                 <div className="relative group">
                   <div className="absolute left-2.5 top-1/2 -translate-y-1/2 text-rose-500 text-[8px] font-bold italic">s</div>
-                  <input data-help-feature="ui:xbridges/XbridgesWorkspace:84388e80584d" data-help-source="src/components/xbridges/XbridgesWorkspace.tsx"
+                  <input data-help-feature="ui:xbridges/XbridgesWorkspace:0f1f63961b7b" data-help-source="src/components/xbridges/XbridgesWorkspace.tsx"
                     type="text"
                     value={stopTimeInput}
                     onChange={e => setStopTimeInput(normalizeNumerals(e.target.value).replace(/[^0-9a-zA-Z.+-]/g, ''))}
@@ -3382,7 +3382,7 @@ export const XbridgesWorkspace: React.FC<{
                 <span className="text-[8px] text-slate-400 font-black uppercase tracking-widest mb-1">Fixed Step</span>
                 <div className="relative group">
                   <div className="absolute left-2.5 top-1/2 -translate-y-1/2 text-emerald-600 text-[8px] font-bold italic">s</div>
-                  <input data-help-feature="ui:xbridges/XbridgesWorkspace:d928378d041c" data-help-source="src/components/xbridges/XbridgesWorkspace.tsx"
+                  <input data-help-feature="ui:xbridges/XbridgesWorkspace:a3feed12fada" data-help-source="src/components/xbridges/XbridgesWorkspace.tsx"
                     type="text"
                     value={stepSizeInput}
                     onChange={e => setStepSizeInput(normalizeNumerals(e.target.value).replace(/[^0-9a-zA-Z.+-]/g, ''))}

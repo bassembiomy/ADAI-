@@ -79,7 +79,7 @@ const field = 'rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-x
 const btn = 'rounded border border-neutral-700 px-2 py-1 text-xs text-neutral-300 hover:bg-neutral-900';
 
 function Num({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
-  return <label className="flex flex-col gap-1 text-[11px] text-neutral-400">{label}<input className={field} value={value} onChange={e => onChange(e.target.value)} /></label>;
+  return <label className="flex flex-col gap-1 text-[11px] text-neutral-400">{label}<input data-help-feature="live:components/trmSim/SimVerificationPanel:d640f7ce96ce" className={field} value={value} onChange={e => onChange(e.target.value)} /></label>;
 }
 
 export function SimVerificationPanel({ repository, requirementId, project, onRepositoryChange, now, newId }: SimVerificationPanelProps) {
@@ -181,28 +181,28 @@ export function SimVerificationPanel({ repository, requirementId, project, onRep
             <li key={l.relationshipId} className="flex items-center gap-2">
               <span>{l.name}</span>
               <span className="text-neutral-500">{l.kind} · {l.relationship}{l.missing ? ' · missing in project' : ''}</span>
-              <button type="button" className={btn} aria-label={`Unlink ${l.name}`}
+              <button data-help-feature="live:components/trmSim/SimVerificationPanel:7a6a2cfa23a6" type="button" className={btn} aria-label={`Unlink ${l.name}`}
                 onClick={() => commit(r => { delete r.relationships[l.relationshipId]; })}>Unlink</button>
             </li>
           ))}
         </ul>
         <div className="mt-2 flex flex-wrap items-end gap-2">
           <label className="flex flex-col gap-1 text-[11px] text-neutral-400">Link target
-            <select className={field} value={linkTarget} onChange={e => setLinkTarget(e.target.value)}>
+            <select data-help-feature="live:components/trmSim/SimVerificationPanel:48a8221c83b4" className={field} value={linkTarget} onChange={e => setLinkTarget(e.target.value)}>
               {elements.map(e => <option key={e.id} value={e.id}>{e.name} ({e.kind})</option>)}
             </select>
           </label>
           <label className="flex flex-col gap-1 text-[11px] text-neutral-400">Link kind
-            <select className={field} value={linkKind} onChange={e => setLinkKind(e.target.value as typeof linkKind)}>
+            <select data-help-feature="live:components/trmSim/SimVerificationPanel:ffe75a33dd6f" className={field} value={linkKind} onChange={e => setLinkKind(e.target.value as typeof linkKind)}>
               {LINK_KINDS.map(k => <option key={k} value={k}>{k}</option>)}
             </select>
           </label>
-          <button type="button" className={btn} onClick={link}>Link</button>
+          <button data-help-feature="live:components/trmSim/SimVerificationPanel:54d855b4c17e" type="button" className={btn} onClick={link}>Link</button>
         </div>
       </div>
 
       <div>
-        <button type="button" className={btn} onClick={() => onRepositoryChange(createSimulationCase(repository, requirementId, { id: makeId() }))}>New simulation test case</button>
+        <button data-help-feature="live:components/trmSim/SimVerificationPanel:7f19a2c4b022" type="button" className={btn} onClick={() => onRepositoryChange(createSimulationCase(repository, requirementId, { id: makeId() }))}>New simulation test case</button>
       </div>
       {cases.length === 0 && <p className="text-neutral-400">No simulation verification case verifies this requirement.</p>}
       {cases.map(vc => {
@@ -222,14 +222,14 @@ export function SimVerificationPanel({ repository, requirementId, project, onRep
           <section key={vc.id} className="rounded border border-neutral-800 p-2" aria-label={vc.name}>
             <div className="flex items-center gap-2">
               <h3 className="font-semibold">{vc.name}</h3>
-              <button type="button" className={btn} aria-label={`Run ${vc.name}`} disabled={!vc.simulationCriterion && !vc.simulationScenario} onClick={() => run(vc)}>Run</button>
+              <button data-help-feature="live:components/trmSim/SimVerificationPanel:395ee6231e45" type="button" className={btn} aria-label={`Run ${vc.name}`} disabled={!vc.simulationCriterion && !vc.simulationScenario} onClick={() => run(vc)}>Run</button>
               {vc.simulationCriterion && (
-                <button type="button" className={btn} onClick={() => openEditor(vc, true)} aria-label={`Edit criterion for ${vc.name}`}>Edit criterion</button>
+                <button data-help-feature="live:components/trmSim/SimVerificationPanel:5a5974381b36" type="button" className={btn} onClick={() => openEditor(vc, true)} aria-label={`Edit criterion for ${vc.name}`}>Edit criterion</button>
               )}
-              <button type="button" className={btn} onClick={() => openEditor(vc, false)} aria-label={`Define criterion for ${vc.name}`}>
+              <button data-help-feature="live:components/trmSim/SimVerificationPanel:9392fe8371af" type="button" className={btn} onClick={() => openEditor(vc, false)} aria-label={`Define criterion for ${vc.name}`}>
                 {vc.simulationCriterion ? 'Define new criterion' : 'Define criterion'}
               </button>
-              <button type="button" className={btn} onClick={() => setScenarioEditing(vc.id)}
+              <button data-help-feature="live:components/trmSim/SimVerificationPanel:a0aa172b67b4" type="button" className={btn} onClick={() => setScenarioEditing(vc.id)}
                 aria-label={scenario ? `Edit scenario for ${vc.name}` : `Define scenario for ${vc.name}`}>
                 {scenario ? 'Edit scenario' : 'Define scenario'}
               </button>
@@ -280,14 +280,14 @@ export function SimVerificationPanel({ repository, requirementId, project, onRep
             {editing === vc.id && (
               <div className="mt-2 flex flex-col gap-2">
                 <label className="flex flex-col gap-1 text-[11px] text-neutral-400">Observe
-                  <select className={field} value={draft.observe} onChange={e => setD({ observe: e.target.value })}>
+                  <select data-help-feature="live:components/trmSim/SimVerificationPanel:ca9b0fdd617c" className={field} value={draft.observe} onChange={e => setD({ observe: e.target.value })}>
                     <option value="">Select a signal</option>
                     {candidates.observe.map(c => <option key={c.target} value={c.target}>{c.name}</option>)}
                   </select>
                 </label>
                 <div className="flex flex-wrap gap-2">
                   <label className="flex flex-col gap-1 text-[11px] text-neutral-400">Check
-                    <select className={field} value={draft.check} onChange={e => setD({ check: e.target.value as CheckKind })}>
+                    <select data-help-feature="live:components/trmSim/SimVerificationPanel:fc9bec1010d5" className={field} value={draft.check} onChange={e => setD({ check: e.target.value as CheckKind })}>
                       {['<=', '>=', 'within', 'reaches', 'settles'].map(k => <option key={k} value={k}>{k}</option>)}
                     </select>
                   </label>
@@ -306,26 +306,26 @@ export function SimVerificationPanel({ repository, requirementId, project, onRep
                   return (
                     <div key={i} className="flex flex-wrap items-end gap-2">
                       <label className="flex flex-col gap-1 text-[11px] text-neutral-400">{`Stimulus ${n} target`}
-                        <select className={field} value={s.target} onChange={e => setStim(i, { target: e.target.value })}>
+                        <select data-help-feature="live:components/trmSim/SimVerificationPanel:dfa0623c0d1f" className={field} value={s.target} onChange={e => setStim(i, { target: e.target.value })}>
                           <option value="">Select a target</option>
                           {candidates.stimulus.map(c => <option key={c.target} value={c.target}>{c.name}</option>)}
                         </select>
                       </label>
                       <label className="flex flex-col gap-1 text-[11px] text-neutral-400">{`Stimulus ${n} profile`}
-                        <select className={field} value={s.kind} onChange={e => setStim(i, { kind: e.target.value as ProfileKind })}>
+                        <select data-help-feature="live:components/trmSim/SimVerificationPanel:c2d9619cf26c" className={field} value={s.kind} onChange={e => setStim(i, { kind: e.target.value as ProfileKind })}>
                           <option value="constant">constant</option><option value="step">step</option><option value="ramp">ramp</option>
                         </select>
                       </label>
                       {names.map((nm, j) => <Num key={nm} label={`Stimulus ${n} ${nm}`} value={s[keys[j]]} onChange={v => setStim(i, { [keys[j]]: v })} />)}
-                      <button type="button" className={btn} aria-label={`Remove stimulus ${n}`}
+                      <button data-help-feature="live:components/trmSim/SimVerificationPanel:c94dd7ec1f1d" type="button" className={btn} aria-label={`Remove stimulus ${n}`}
                         onClick={() => setDraft(prev => ({ ...prev, stimuli: prev.stimuli.filter((_, j) => j !== i) }))}>Remove</button>
                     </div>
                   );
                 })}
                 <div className="flex gap-2">
-                  <button type="button" className={btn} onClick={() => setDraft(prev => ({ ...prev, stimuli: [...prev.stimuli, { target: '', kind: 'constant', a: '', b: '', c: '' }] }))}>Add stimulus</button>
-                  <button type="button" className={btn} onClick={() => save(vc)}>Save criterion</button>
-                  <button type="button" className={btn} onClick={() => { setEditing(null); setErrors([]); }}>Cancel</button>
+                  <button data-help-feature="live:components/trmSim/SimVerificationPanel:de6e00fd936a" type="button" className={btn} onClick={() => setDraft(prev => ({ ...prev, stimuli: [...prev.stimuli, { target: '', kind: 'constant', a: '', b: '', c: '' }] }))}>Add stimulus</button>
+                  <button data-help-feature="live:components/trmSim/SimVerificationPanel:f87e80e1c7b2" type="button" className={btn} onClick={() => save(vc)}>Save criterion</button>
+                  <button data-help-feature="live:components/trmSim/SimVerificationPanel:a54f57ba5dfc" type="button" className={btn} onClick={() => { setEditing(null); setErrors([]); }}>Cancel</button>
                 </div>
                 {errors.length > 0 && <div role="alert" className="text-red-400">{errors.map(m => <p key={m}>{m}</p>)}</div>}
               </div>

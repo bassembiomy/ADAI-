@@ -5,21 +5,23 @@ export const BLOCK_GUIDANCE: Record<string, BlockGuidance> = {};
 function add(id: string, description: string, example?: string, behavior?: string) {
   BLOCK_GUIDANCE[`xbridges:${id}`] = { description, example, behavior };
 }
-add('AND', 'Returns true only when every input is truthy.', 'Inputs [1, 0] produce false; [1, 1] produce true.');
-add('OR', 'Returns true when at least one input is truthy.', 'Inputs [0, 1] produce true.');
-add('NOT', 'Negates the truth value of its input.', 'Input 0 produces true; input 2 produces false.');
-add('XOR', 'Returns true for an odd number of truthy inputs.', 'Inputs [1, 1, 1] produce true; [1, 1] produce false.');
+add('AND', 'Returns true only when every input is truthy. A NaN input cannot be converted to a logical value: the block is still evaluated (NaN counts as false) and raises the error LOGIC_NAN_INPUT, once per block.', 'Inputs [1, 0] produce false; [1, 1] produce true.');
+add('OR', 'Returns true when at least one input is truthy. A NaN input cannot be converted to a logical value: the block is still evaluated (NaN counts as false) and raises the error LOGIC_NAN_INPUT, once per block.', 'Inputs [0, 1] produce true.');
+add('NOT', 'Negates the truth value of its input. A NaN input cannot be converted to a logical value: the block is still evaluated (NaN counts as false) and raises the error LOGIC_NAN_INPUT, once per block.', 'Input 0 produces true; input 2 produces false.');
+add('NAND', 'Not-AND: returns false only when every input is truthy. A NaN input cannot be converted to a logical value: the block is still evaluated (NaN counts as false) and raises the error LOGIC_NAN_INPUT, once per block.');
+add('NOR', 'Not-OR: returns true only when every input is falsy. A NaN input cannot be converted to a logical value: the block is still evaluated (NaN counts as false) and raises the error LOGIC_NAN_INPUT, once per block.');
+add('XOR', 'Returns true for an odd number of truthy inputs. A NaN input cannot be converted to a logical value: the block is still evaluated (NaN counts as false) and raises the error LOGIC_NAN_INPUT, once per block.', 'Inputs [1, 1, 1] produce true; [1, 1] produce false.');
 for (const [id, text, example] of [
   ['BitwiseOR', 'Combines the set bits of two signed 32-bit integers using JavaScript bitwise OR.', 'Inputs 5 and 3 produce 7.'],
   ['BitwiseXOR', 'Sets each bit where two signed 32-bit integer inputs differ.', 'Inputs 5 and 3 produce 6.'],
   ['BitwiseNOT', 'Complements every bit after converting the input to a signed 32-bit integer.', 'For a zero input, the signed output is -1.'],
   ['ShiftLeft', 'Shifts signed 32-bit input bits left by the second input; JavaScript masks the shift count to five bits.', 'Inputs 3 and 2 produce 12.'],
   ['ShiftRight', 'Shifts signed 32-bit input bits right with sign extension.', 'Inputs -8 and 2 produce -2.'],
-  ['Constant', 'Emits the configured value, parsing MATLAB-style scalar, vector and matrix text.', 'Set value to [1 2 3] to emit the vector [1,2,3]. Set output_type (auto, float64, float32, int8..uint32, boolean) to choose the output data type; integers round to nearest and saturate.'],
+  ['Constant', 'Emits the configured value, parsing MATLAB-style scalar, vector and matrix text. The property Output data type (output_type) is auto (inherit), float64, float32, boolean or int8..uint32. In simulation an integer type rounds to nearest and saturates; generated embedded C refuses what it would have to change: an unknown type is XB_CONSTANT_TYPE_INVALID, a non-integer value for an integer type is XB_CONSTANT_VALUE_NOT_REPRESENTABLE and a value outside the type range (for example uint8 holds 0 to 255) is XB_CONSTANT_VALUE_OUT_OF_RANGE.', 'Set value to [1 2 3] to emit the vector [1,2,3]. Set Output data type (output_type) to uint8 and value 300: the simulation saturates to 255, whereas code generation reports XB_CONSTANT_VALUE_OUT_OF_RANGE.'],
   ['VectorAdd', 'Adds inputs element by element with scalar broadcasting through VectorUtils.', 'Inputs [1,2] and [3,4] produce [4,6].'],
   ['VectorSub', 'Subtracts the second input from the first element by element.', 'Inputs [3,5] and [1,2] produce [2,3].'],
   ['VectorMul', 'Multiplies all inputs element by element with scalar broadcasting.', 'Inputs [2,3] and 2 produce [4,6].'],
-  ['VectorDiv', 'Divides the first input by the second element by element.', 'Inputs [4,6] and 2 produce [2,3].'],
+  ['VectorDiv', 'Divides the first input (Num) by the second (Den) element by element with IEEE arithmetic: x/0 gives Inf or -Inf and 0/0 gives NaN. A zero element in Den raises the warning DIVIDE_BY_ZERO, once per block, and the run continues.', 'Inputs [4,6] and 2 produce [2,3]; a Den of 0 produces Inf and the warning DIVIDE_BY_ZERO.'],
   ['VectorPow', 'Raises each base element to the corresponding exponent.', 'Inputs [2,3] and 2 produce [4,9].'],
   ['UnaryNeg', 'Changes the sign of every scalar, vector or matrix element.', 'Input [1,-2] produces [-1,2].'],
   ['Abs', 'Returns the absolute value of each scalar, vector or matrix element.', 'Input [-1,2] produces [1,2].'],
@@ -40,7 +42,7 @@ for (const [id, text, example] of [
   ['DEMUX', 'Returns vector elements as separate outputs; a scalar becomes one output.', 'Input [2,5] produces output values 2 and 5.'],
   ['IF_ELSE', 'Selects the true or false data input using JavaScript truthiness of cond.', 'cond=1, u_true=5 and u_false=2 produce 5.'],
   ['SWITCH_CASE', 'Floors a one-based selector and selects that input index, falling back to case 1 when absent.', 'selector=2, case 1=10 and case 2=20 produce 20. Selector 0 reads the selector itself.'],
-  ['PRODUCT', 'Multiplies numeric inputs, or divides an accumulator by every input in divide mode.', 'Multiply mode inputs [2,3] produce 6. Divide mode [6,2] produces 0.5 because the first input is also included in the reduction.'],
+  ['PRODUCT', 'Multiply mode outputs u1·u2·…·un. Divide mode outputs u1/u2/…/un (the first input is the numerator and every other input a divisor); with a single input it outputs 1/u1. Division follows IEEE arithmetic: x/0 gives Inf or -Inf and 0/0 gives NaN, and the run continues. A divisor equal to 0 raises the warning DIVIDE_BY_ZERO, once per block.', 'Multiply mode inputs [2,3] produce 6. Divide mode inputs [6,2] produce 3; inputs [6,0] produce Inf and the warning DIVIDE_BY_ZERO.'],
   ['DATA_TYPE_CONVERSION', 'Converts a scalar into a configured integer, floating-point, boolean or fixed-point representation.', 'Select uint8, floor and saturate; input 300 becomes 255.', 'Validates output type, rounding and overflow policy before xbConvertScalar. Invalid settings return output zero with a runtime error. Float16 and Float64 require the corresponding support flags.'],
   ['TERMINATOR', 'Consumes an input without producing a signal or updating a state.', 'Connect an unused signal to u; there are no output ports.'],
   ['DFlipFlop', 'Stores a boolean data input on a rising clock edge.', 'Drive D=1, CLK from 0 to 1 and RST=0 to obtain Q=1 and Q!=0.', 'Reset has priority and clears Q. Otherwise a rising clock edge samples D; without an edge Q is held. Q! is the complement.'],
@@ -92,23 +94,23 @@ for (const [id, formula, example] of [
   ['SEC', '1/cos(u)', 'angle_unit=degrees and u=60 produce approximately 2.'],
   ['COSEC', '1/sin(u)', 'angle_unit=degrees and u=30 produce approximately 2.'],
 ] as const) add(id, `Computes ${formula} on a numeric scalar. When angle_unit is degrees, converts input to radians first. Singularities follow JavaScript floating-point arithmetic.`, example);
-for (const [id, formula, example] of [
-  ['ASIN', 'asin(u)', 'u=0.5 with angle_unit=degrees produces approximately 30.'],
-  ['ACOS', 'acos(u)', 'u=0.5 with angle_unit=degrees produces approximately 60.'],
-  ['ATAN', 'atan(u)', 'u=1 with angle_unit=degrees produces 45.'],
-  ['ACOT', 'atan(1/u)', 'u=1 with angle_unit=degrees produces 45.'],
-  ['ASEC', 'acos(1/u)', 'u=2 with angle_unit=degrees produces approximately 60.'],
-  ['ACOSEC', 'asin(1/u)', 'u=2 with angle_unit=degrees produces approximately 30.'],
-] as const) add(id, `Computes ${formula} on a numeric scalar. The result is radians unless angle_unit is degrees. Out-of-domain values follow the underlying JavaScript Math function.`, example);
-for (const [id, formula, example] of [
+for (const [id, formula, example, domain] of [
+  ['ASIN', 'asin(u)', 'u=0.5 with angle_unit=degrees produces approximately 30.', 'The domain is [-1, 1].'],
+  ['ACOS', 'acos(u)', 'u=0.5 with angle_unit=degrees produces approximately 60.', 'The domain is [-1, 1].'],
+  ['ATAN', 'atan(u)', 'u=1 with angle_unit=degrees produces 45.', ''],
+  ['ACOT', 'atan(1/u)', 'u=1 with angle_unit=degrees produces 45.', ''],
+  ['ASEC', 'acos(1/u)', 'u=2 with angle_unit=degrees produces approximately 60.', 'The domain is |u| >= 1.'],
+  ['ACOSEC', 'asin(1/u)', 'u=2 with angle_unit=degrees produces approximately 30.', 'The domain is |u| >= 1.'],
+] as const) add(id, `Computes ${formula} on a numeric scalar. The result is radians unless angle_unit is degrees.${domain ? ` ${domain} An input outside the domain gives NaN and raises the warning MATH_DOMAIN_ERROR (once per block); the run continues. Limit the input to the domain, for example with a Saturation block.` : ' It is defined for every real input, so it raises no domain diagnostic.'}`, example);
+for (const [id, formula, example, hdomain] of [
   ['SINH', 'sinh(u)', 'u=0 produces 0.'], ['COSH', 'cosh(u)', 'u=0 produces 1.'],
   ['TANH', 'tanh(u)', 'u=0 produces 0.'], ['COTH', '1/tanh(u)', 'u=1 produces approximately 1.313.'],
   ['SECH', '1/cosh(u)', 'u=0 produces 1.'], ['COSECH', '1/sinh(u)', 'u=1 produces approximately 0.851.'],
-  ['ASINH', 'asinh(u)', 'u=0 produces 0.'], ['ACOSH', 'acosh(u)', 'u=1 produces 0.'],
-  ['ATANH', 'atanh(u)', 'u=0 produces 0.'], ['ACOTH', 'atanh(1/u)', 'u=2 produces approximately 0.5493.'],
-  ['ASECH', 'acosh(1/u)', 'u=1 produces 0.'],
-] as const) add(id, `Computes ${formula} on Number(input), using JavaScript hyperbolic functions. These blocks have no angle-unit conversion or editable parameters.`, `Numerical example: ${example}`);
-add('ACOSECH', 'Computes the inverse hyperbolic cosecant asinh(1/u) (MATLAB acsch), not the reciprocal sine 1/sin(u). It has no declared editable parameters and no angle-unit conversion.', 'Input 2 produces approximately 0.4812.');
+  ['ASINH', 'asinh(u)', 'u=0 produces 0.'], ['ACOSH', 'acosh(u)', 'u=1 produces 0.', 'The domain is u >= 1.'],
+  ['ATANH', 'atanh(u)', 'u=0 produces 0.', 'The domain is [-1, 1].'], ['ACOTH', 'atanh(1/u)', 'u=2 produces approximately 0.5493.', 'The domain is |u| >= 1.'],
+  ['ASECH', 'acosh(1/u)', 'u=1 produces 0.', 'The domain is 0 < u <= 1.'],
+] as ReadonlyArray<readonly [string, string, string, string?]>) add(id, `Computes ${formula} on Number(input), using JavaScript hyperbolic functions. These blocks have no angle-unit conversion or editable parameters.${hdomain ? ` ${hdomain} An input outside the domain gives NaN and raises the warning MATH_DOMAIN_ERROR (once per block); the run continues.` : ''}`, `Numerical example: ${example}`);
+add('ACOSECH', 'Computes the inverse hyperbolic cosecant asinh(1/u) (MATLAB acsch), not the reciprocal sine 1/sin(u). It is defined for every real nonzero input and raises no domain diagnostic; u=0 gives 1/u = Inf and an Inf output. It has no declared editable parameters and no angle-unit conversion.', 'Input 2 produces approximately 0.4812.');
 add('THREE_PHASE_PWM', 'Compares three normalized phase references with an accumulated sawtooth phase; Saddle/SVPWM methods subtract the midpoint of the largest and smallest reference before comparison.', 'At t=0, references [0,0,0] normalize to 0.5 and all three gates output 1.');
 add('SIX_STEP_COMMUTATION', 'Thresholds three Hall inputs at 0.5, decodes their three-bit code and selects six high/low gate commands; invalid codes 000 and 111 disable every gate.', 'Hall [1,0,1] produces [AH,AL,BH,BL,CH,CL]=[1,0,0,1,0,0].');
 add('SENSORLESS_SIX_STEP', 'Detects sign changes of the floating phase voltage relative to the three-phase average; advances a six-step sequence and estimates speed from twice the zero-crossing interval. Threshold and Vdc are currently unused.', 'Initial step 1 produces phase commands [1,-1,0]; a floating-phase sign change advances to step 2.');
@@ -134,9 +136,15 @@ add('SECTOR_SELECTOR', 'Converts angle radians to degrees, applies (degrees+360)
 add('SWITCHING_TIME_CALCULATOR', 'Uses Vref, sector angle, Vdc and Ts inputs to calculate T1=Ts√3Vref/Vdc sin(π/3−θs), T2=Ts√3Vref/Vdc sinθs and T0=Ts−T1−T2; each result is independently clamped to zero.', 'Vref=0 with Ts=0.0001 yields [T1,T2,T0]=[0,0,0.0001].');
 add('SVPWM_GATE_GENERATOR', 'Folds time within Ts around Ts/2 and compares it with sector-dependent thresholds made from T0/4,T1/2,T2/2 to generate three phase gates.', 'With sector=1,T1=T2=0,T0=Ts, all gates turn on when folded time exceeds Ts/4.');
 add('ZERO_SEQUENCE_INJECTION', 'Subtracts the midpoint of the largest and smallest phase reference from all three phases.', 'Input [1,0,-0.5] has midpoint 0.25 and produces [0.75,-0.25,-0.75].');
-add('SATURATION', 'Clamps a numeric input between lowerLimit and upperLimit; NaN is propagated.', 'With default limits -1 and 1, input 3 produces 1.');
-add('DEADZONE', 'Returns zero inside [lowerLimit,upperLimit]; outside, subtracts the nearest bound from the input. NaN is propagated.', 'Default bounds ±0.5 give input 2 an output of 1.5.');
-add('RATE_LIMITER', 'Clamps the change from the previous output using risingSlewRate and fallingSlewRate (units per second) times the time elapsed since the previous output. With an explicit sampleTime the block updates at its sample hits; inherited sample time uses the elapsed solver time.', 'With defaults (1 and -1 per second), a step from 0 to 10 reaches about 1 after 1 second.');
+add('SATURATION', 'Clamps a numeric input between lowerLimit and upperLimit; NaN is propagated. A lowerLimit above the upperLimit is the error LIMITS_INVALID and a NaN limit is PARAMETER_NOT_FINITE; a model with either error is not simulated.', 'With default limits -1 and 1, input 3 produces 1.');
+add('DEADZONE', 'Returns zero inside [lowerLimit,upperLimit]; outside, subtracts the nearest bound from the input. NaN is propagated. A lowerLimit above the upperLimit is the error LIMITS_INVALID and a NaN limit is PARAMETER_NOT_FINITE; a model with either error is not simulated.', 'Default bounds ±0.5 give input 2 an output of 1.5.');
+add('RATE_LIMITER', 'Clamps the change from the previous output using risingSlewRate and fallingSlewRate (units per second) times the time elapsed since the previous output. With an explicit sampleTime the block updates at its sample hits; inherited sample time uses the elapsed solver time. A risingSlewRate below the fallingSlewRate is the error LIMITS_INVALID and a NaN slew rate is PARAMETER_NOT_FINITE.', 'With defaults (1 and -1 per second), a step from 0 to 10 reaches about 1 after 1 second.');
+add('TRANSFER_FUNCTION', 'Continuous transfer function G(s) = num(s)/den(s), converted to state space for simulation. The numerator and denominator are coefficient lists in descending powers of s. It must be proper: a numerator order above the denominator order is the error TF_IMPROPER, a leading denominator coefficient of 0 is TF_DENOMINATOR_LEADING_ZERO, and an empty or non-finite coefficient is PARAMETER_NOT_FINITE. A model with such an error is not simulated.');
+add('DISCRETE_TRANSFER_FUNCTION', 'Discrete transfer function H(z) = num(z)/den(z) evaluated at its sample hits. It needs a sample time greater than 0 (a sample time of 0 is DISCRETE_BLOCK_CONTINUOUS_SAMPLE_TIME). The same coefficient rules as the continuous block apply: TF_IMPROPER, TF_DENOMINATOR_LEADING_ZERO and PARAMETER_NOT_FINITE.');
+add('ZERO_POLE_GAIN', 'System in zero-pole-gain form H(s) = K·Π(s-zi)/Π(s-pi). When zeros and poles are given as lists, more zeros than poles is the error TF_IMPROPER (the block must be causal), and a non-finite zero, pole or gain is PARAMETER_NOT_FINITE.');
+add('STATE_SPACE', 'Linear time-invariant system in state space: dx/dt = Ax + Bu, y = Cx + Du (continuous) or x(k+1) = Ax(k) + Bu(k) (representation discrete, which needs a sample time greater than 0). A must be square n by n, B must have n rows, C n columns, D as many rows as C and as many columns as B; otherwise the error STATE_SPACE_DIMENSION_MISMATCH is raised and the model is not simulated. A State Space with representation continuous and a sample time of 0 or less has continuous states and cannot run with the Discrete solver.');
+add('PID_BASIC', 'PID controller on its Error input with P, PI, PD or PID selected by mode; the mode is honoured both in continuous time (sampleTime <= 0, integrated by the solver) and in discrete time (sampleTime > 0, with the chosen method). The output is clamped to [min, max] with clamping anti-windup. Enable (default 1) and Reset (default 0) are control inputs: left unconnected they use those defaults without a warning, Enable below 0.5 outputs 0 and holds the state, and Reset above 0.5 outputs 0 and clears the state. Errors: min above max is LIMITS_INVALID, a mode with a derivative term (PD or PID) and a filter coefficient N that is not finite and greater than 0 is PID_FILTER_COEFFICIENT_INVALID, and a non-finite Kp, Ki or Kd or a NaN limit is PARAMETER_NOT_FINITE.');
+add('PID_CONTROLLER', 'PID controller with Ref and Feedback inputs, setpoint weights beta (proportional) and gamma (derivative), and the outputs Control, Error, P, I and D. The mode (P, PI, PD or PID) is honoured both in continuous time (sampleTime <= 0, integrated by the solver) and in discrete time (sampleTime > 0, with the chosen method). The output is clamped to [min, max] with clamping anti-windup. Enable (default 1) and Reset (default 0) are control inputs: left unconnected they use those defaults without a warning, Enable below 0.5 outputs 0 and holds the state, and Reset above 0.5 clears the outputs and state. Errors: min above max is LIMITS_INVALID, a mode with a derivative term (PD or PID) and a filter coefficient N that is not finite and greater than 0 is PID_FILTER_COEFFICIENT_INVALID, and a non-finite Kp, Ki or Kd or a NaN limit is PARAMETER_NOT_FINITE.');
 add('RELAY', 'Turns on for u>=switchOn, stays on while u>switchOff and turns off at or below switchOff.', 'With defaults, inputs 1,0.5,0 produce outputs 1,1,0 (onValue and offValue set the on and off output values).');
 add('WHITE_NOISE', 'Generates Gaussian samples using Box–Muller and scales by sqrt(variance), then adds mean; it uses Math.random and is not deterministically seeded.', 'Mean 2 and variance 4 produce samples centered on 2 with standard deviation 2.');
 add('BAND_LIMITED_NOISE', 'Generates Gaussian noise and applies a first-order low-pass recursion with τ=1/(2πfc), dt=max(1e-6,t-lastTime) and α=dt/(τ+dt).', 'Set fc=100 and connect y to Scope; observe a filtered random signal with state carried between steps.');

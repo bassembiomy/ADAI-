@@ -152,7 +152,7 @@ export function checkSampleTimes(blocks: XBlock[], conns: FlatConnection[], opti
     seen.add(key);
     out.push({
       severity: 'warning', code: 'RATE_TRANSITION_REQUIRED', blockIds: [c.sourceBlock, c.targetBlock],
-      message: `Block '${nameOf(byId.get(c.sourceBlock)!)}' (Ts=${fmt(t1)}) feeds block '${nameOf(byId.get(c.targetBlock)!)}' (Ts=${fmt(t2)}) directly; insert a Rate Transition.`,
+      message: `Block '${nameOf(byId.get(c.sourceBlock)!)}' (Ts=${fmt(t1)}) feeds block '${nameOf(byId.get(c.targetBlock)!)}' (Ts=${fmt(t2)}) directly. X-Bridges has no Rate Transition block: insert a Unit Delay (Delay, N = 1) whose sample time is the slower of the two, or give both blocks the same sample time.`,
     });
   }
   return out;

@@ -8298,12 +8298,12 @@
       "sourcePath": "src/components/xbridges/XbridgesWorkspace.tsx",
       "status": "mapped",
       "featureIds": [
-        "ui:xbridges/XbridgesWorkspace:d928378d041c"
+        "ui:xbridges/XbridgesWorkspace:a3feed12fada"
       ],
       "reason": "Source-specific instructions grounded in this callback’s selected field/command/action.",
       "sourceEvidence": [
         "src/components/xbridges/XbridgesWorkspace.tsx",
-        "{e => setStepSizeInput(normalizeNumerals(e.target.value).replace(/[^0-9.]/g, ''))}"
+        "{e => setStepSizeInput(normalizeNumerals(e.target.value).replace(/[^0-9a-zA-Z.+-]/g, ''))}"
       ]
     },
     {
@@ -8311,12 +8311,25 @@
       "sourcePath": "src/components/xbridges/XbridgesWorkspace.tsx",
       "status": "mapped",
       "featureIds": [
-        "ui:xbridges/XbridgesWorkspace:84388e80584d"
+        "ui:xbridges/XbridgesWorkspace:0f1f63961b7b"
       ],
       "reason": "Source-specific instructions grounded in this callback’s selected field/command/action.",
       "sourceEvidence": [
         "src/components/xbridges/XbridgesWorkspace.tsx",
-        "{e => setSimLimitInput(normalizeNumerals(e.target.value).replace(/[^0-9.]/g, ''))}"
+        "{e => setStopTimeInput(normalizeNumerals(e.target.value).replace(/[^0-9a-zA-Z.+-]/g, ''))}"
+      ]
+    },
+    {
+      "candidateId": "src/components/xbridges/XbridgesWorkspace.tsx:3352",
+      "sourcePath": "src/components/xbridges/XbridgesWorkspace.tsx",
+      "status": "mapped",
+      "featureIds": [
+        "ui:xbridges/XbridgesWorkspace:cb8a7f3d200e"
+      ],
+      "reason": "Source-specific instructions grounded in this callback’s selected field/command/action.",
+      "sourceEvidence": [
+        "src/components/xbridges/XbridgesWorkspace.tsx",
+        "{e => setStartTimeInput(normalizeNumerals(e.target.value).replace(/[^0-9a-zA-Z.+-]/g, ''))}"
       ]
     },
     {
