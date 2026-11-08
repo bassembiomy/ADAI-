@@ -2109,7 +2109,13 @@ export const XbridgesWorkspace: React.FC<{
               const block = engineRef.current!['blockMap'].get(node.id);
               if (block) {
                 if (paramUpdates[node.id]) {
-                  Object.assign(block.params, paramUpdates[node.id]);
+                  // Evaluates MATLAB-style text; an invalid value is reported and the last valid one is kept.
+                  // An Inport driven by a State Machine variable takes its value from that variable below, so its
+                  // stored 'value' is not re-applied (that would rebuild the block every frame).
+                  const updates = inportOverrides[node.id] !== undefined
+                    ? Object.fromEntries(Object.entries(paramUpdates[node.id]).filter(([key]) => key !== 'value'))
+                    : paramUpdates[node.id];
+                  engineRef.current!.applyParameterUpdates(node.id, updates);
                 }
                 if (inportOverrides[node.id] !== undefined) {
                   engineRef.current!.setSignalValue(node.id, 'out', inportOverrides[node.id]);
@@ -2119,6 +2125,15 @@ export const XbridgesWorkspace: React.FC<{
             });
 
             stepLiveSolver(engineRef.current, solverType, timeRef.current, stepNow);
+
+            if (engineRef.current.hasFatalError()) {
+              // A block raised an exception (BLOCK_RUNTIME_FAULT): stop the live run and mark it Failed.
+              addDiagnostics(engineRef.current.diagnostics);
+              setStatusTime(timeRef.current);
+              setRunFailed(true);
+              setIsSimulating(false);
+              return;
+            }
 
             timeRef.current += stepNow;
 

@@ -4,6 +4,8 @@
 // Catalog: docs/superpowers/plans/2026-11-08-xbridges-simulink-diagnostics.md
 import type { ModelDiagnostic, SolverOptions, XBlock } from './types';
 import { parseMatrixEditorValue } from '../../utils/stateMachine/stateSpaceValidation';
+import { evaluateParameter, type ParameterKind } from './parameterEvaluation';
+import { XB_PARAMETER_SCHEMA } from './parameterSchema';
 
 export interface FlatConnection {
   sourceBlock: string;
@@ -63,6 +65,45 @@ const matrixDims = (m: unknown[][] | null): { rows: number; cols: number } | nul
 };
 
 const isNonFiniteNumber = (v: unknown): boolean => typeof v === 'number' && !Number.isFinite(v);
+
+/** Schema entry (parameter name -> kind) of a block type; the type is matched case-insensitively like the engine does. */
+export function parameterKindsOf(type: string): Record<string, ParameterKind> {
+  const schema = XB_PARAMETER_SCHEMA as Record<string, Record<string, ParameterKind>>;
+  if (schema[type]) return schema[type];
+  const key = Object.keys(schema).find((k) => k.toLowerCase() === String(type).toLowerCase());
+  return key ? schema[key] : {};
+}
+
+export interface ParameterProblem { param: string; raw: unknown; code: string; reason: string }
+export interface BlockParameterEvaluation {
+  /** Evaluated values of the parameters entered as text that evaluate to something different (numbers, arrays, booleans). */
+  resolved: Record<string, unknown>;
+  problems: ParameterProblem[];
+}
+
+/** Evaluates every schema parameter of a block that is set (Simulink: the block dialog's "Invalid setting" checks). */
+export function evaluateBlockParameters(b: XBlock): BlockParameterEvaluation {
+  const resolved: Record<string, unknown> = {};
+  const problems: ParameterProblem[] = [];
+  const params = b.params || {};
+  for (const [param, kind] of Object.entries(parameterKindsOf(b.type))) {
+    if (!(param in params) || params[param] === undefined) continue;
+    const raw = params[param];
+    const r = evaluateParameter(raw, kind);
+    if (!r.ok) { problems.push({ param, raw, code: r.code, reason: r.reason }); continue; }
+    // Only text needs resolving; numbers and arrays already stored as values keep their stored form.
+    if (typeof raw === 'string' && kind.kind !== 'option' && JSON.stringify(r.value) !== JSON.stringify(raw)) resolved[param] = r.value;
+  }
+  return { resolved, problems };
+}
+
+export const describeParameterProblem = (b: XBlock, p: ParameterProblem): string =>
+  `Invalid setting in block '${nameOf(b)}': parameter '${p.param}' = ${fmt(p.raw)} - ${p.reason}`;
+
+const CONSTANT_INTEGER_RANGES: Readonly<Record<string, readonly [number, number]>> = {
+  int8: [-128, 127], uint8: [0, 255], int16: [-32768, 32767], uint16: [0, 65535],
+  int32: [-2147483648, 2147483647], uint32: [0, 4294967295],
+};
 
 /** A. Connectivity */
 export function checkConnectivity(blocks: XBlock[], conns: FlatConnection[]): ModelDiagnostic[] {
@@ -180,7 +221,38 @@ export function checkParameters(blocks: XBlock[]): ModelDiagnostic[] {
 
   for (const b of blocks) {
     const p = b.params || {};
+    for (const problem of evaluateBlockParameters(b).problems) {
+      out.push({ severity: 'error', code: problem.code, message: describeParameterProblem(b, problem), blockIds: [b.id] });
+    }
     switch (b.type) {
+      case 'Sum': {
+        const signs = typeof p.signs === 'string' ? p.signs : null;
+        if (signs !== null) {
+          const count = [...signs].filter((c) => c === '+' || c === '-').length;
+          const n = p.numInputs === undefined ? null : Number(p.numInputs);
+          if (/[^+\-|]/.test(signs)) {
+            err(b, 'SUM_SIGNS_INVALID', `Block '${nameOf(b)}': the list of signs '${signs}' may only contain +, - and |.`);
+          } else if (n !== null && Number.isFinite(n) && count !== n) {
+            err(b, 'SUM_SIGNS_INVALID', `Block '${nameOf(b)}': the list of signs '${signs}' has ${count} signs but the block has ${n} inputs.`);
+          }
+        }
+        break;
+      }
+      case 'Constant': {
+        const outType = typeof p.output_type === 'string' ? p.output_type : 'auto';
+        const range = CONSTANT_INTEGER_RANGES[outType];
+        const ev = evaluateParameter(p.value, { kind: 'numeric' });
+        if (range && ev.ok && typeof ev.value !== 'string' && typeof ev.value !== 'boolean') {
+          for (const x of ([ev.value] as unknown[]).flat(2) as number[]) {
+            if (!Number.isInteger(x)) {
+              err(b, 'CONSTANT_VALUE_NOT_REPRESENTABLE', `Block '${nameOf(b)}': value ${x} is not an integer and cannot be represented as ${outType}.`);
+            } else if (x < range[0] || x > range[1]) {
+              err(b, 'CONSTANT_VALUE_OUT_OF_RANGE', `Block '${nameOf(b)}': value ${x} is outside the ${outType} range [${range[0]}, ${range[1]}].`);
+            }
+          }
+        }
+        break;
+      }
       case 'TRANSFER_FUNCTION':
       case 'DISCRETE_TRANSFER_FUNCTION':
       case 'ZERO_POLE_GAIN': {

@@ -264,7 +264,7 @@ export class StiffSolver {
       return m;
     };
 
-    while (t < stopTime) {
+    while (t < stopTime && !engine.hasFatalError()) {
       let currentStep = dt;
       if (t + currentStep > stopTime) currentStep = stopTime - t;
 
@@ -411,7 +411,7 @@ export class StiffSolver {
     let h = Math.min(hMax, span / 100);
     const landTol = 1e-12 * Math.max(1, Math.abs(stopTime));
 
-    while (stopTime - t > landTol) {
+    while (stopTime - t > landTol && !engine.hasFatalError()) {
       const remaining = stopTime - t;
       let hTry = Math.min(h, hMax, remaining);
       if (remaining - hTry < hMin) hTry = remaining <= hMax ? remaining : remaining / 2;

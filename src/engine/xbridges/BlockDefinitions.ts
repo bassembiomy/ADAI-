@@ -6,6 +6,8 @@ import { BUS_FACTORIES, BUS_CATEGORY } from './bus/busBlocks';
 import { isBus, flattenBus } from './bus/busCore';
 import { POWERTRAIN_FACTORIES, POWERTRAIN_CATEGORIES } from './powertrain/index';
 import * as math from 'mathjs';
+import { evaluateParameter } from './parameterEvaluation';
+import { XB_PARAMETER_SCHEMA } from './parameterSchema';
 import {
   evaluateDOEModel,
   evaluateLegacyDOEEquation,
@@ -11608,6 +11610,40 @@ return block;
   ...BUS_FACTORIES,
   ...POWERTRAIN_FACTORIES
 };
+
+/**
+ * Parameter text is MATLAB-style ('2*pi', '[1 2 3]'). Factories receive the evaluated values; text the evaluator
+ * rejects is kept verbatim on the block (factories would otherwise replace it by a default and hide the mistake), so
+ * the compile-time checks report it ("Invalid setting in block").
+ */
+for (const type of Object.keys(BLOCK_LIBRARY)) {
+  const kinds = (XB_PARAMETER_SCHEMA as Record<string, Record<string, any>>)[type];
+  if (!kinds) continue;
+  const build = BLOCK_LIBRARY[type];
+  BLOCK_LIBRARY[type] = (id, params) => {
+    if (!params || typeof params !== 'object') return build(id, params);
+    const resolved: Record<string, any> = { ...params };
+    const invalid: string[] = [];
+    for (const [name, kind] of Object.entries(kinds)) {
+      const raw = params[name];
+      if (raw === undefined || raw === null) continue;
+      const r = evaluateParameter(raw, kind);
+      if (!r.ok) invalid.push(name);
+      else if (typeof raw === 'string' && kind.kind !== 'option') resolved[name] = r.value;
+    }
+    let block: XBlock;
+    try {
+      block = build(id, resolved);
+    } catch (e) {
+      if (invalid.length === 0) throw e;
+      const safe = { ...resolved };
+      for (const name of invalid) delete safe[name];
+      block = build(id, safe);
+    }
+    for (const name of invalid) block.params[name] = params[name];
+    return block;
+  };
+}
 
 
 export const XBRIDGES_CATEGORIES = [

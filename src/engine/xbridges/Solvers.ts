@@ -46,7 +46,7 @@ export class Solvers {
     
     engine.options = options;
     
-    while (t < stopTime) {
+    while (t < stopTime && !engine.hasFatalError()) {
       let currentStep = dt;
       if (t + currentStep > stopTime) {
         currentStep = stopTime - t;
@@ -101,7 +101,7 @@ export class Solvers {
     engine.options = options;
     const n = Math.max(0, Math.round((stopTime - startTime) / dt - 1e-9));
     const steps = startTime + n * dt < stopTime - 1e-12 ? n + 1 : n;
-    for (let i = 0; i < steps; i++) {
+    for (let i = 0; i < steps && !engine.hasFatalError(); i++) {
       const t = startTime + i * dt;
       this.stepDiscrete(engine, t, Math.min(dt, stopTime - t));
     }
@@ -149,7 +149,7 @@ export class Solvers {
     
     engine.options = options;
     
-    while (t < stopTime) {
+    while (t < stopTime && !engine.hasFatalError()) {
       let currentStep = dt;
       if (t + currentStep > stopTime) {
         currentStep = stopTime - t;
@@ -253,7 +253,7 @@ export class Solvers {
     
     engine.options = options;
     
-    while (t < stopTime) {
+    while (t < stopTime && !engine.hasFatalError()) {
       let currentStep = dt;
       if (t + currentStep > stopTime) {
         currentStep = stopTime - t;
@@ -369,7 +369,7 @@ export class Solvers {
     
     engine.options = options;
     
-    while (t < stopTime) {
+    while (t < stopTime && !engine.hasFatalError()) {
       let currentStep = dt;
       if (t + currentStep > stopTime) {
         currentStep = stopTime - t;
@@ -466,7 +466,7 @@ export class Solvers {
     
     engine.options = options;
     
-    while (t < stopTime) {
+    while (t < stopTime && !engine.hasFatalError()) {
       let currentStep = h;
       if (t + currentStep > stopTime) {
         currentStep = stopTime - t;

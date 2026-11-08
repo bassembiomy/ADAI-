@@ -1,3 +1,4 @@
+import { resolveXBParameterExpressions } from './xbParameterResolution';
 import { getXBBlockCapability, xbNodeDirectFeedthrough } from './xbCapabilities';
 import { resolveGraphShapes } from './xbShapeResolver';
 import { validateStateSpaceNode } from './stateSpaceValidation';
@@ -1253,13 +1254,15 @@ export const buildXBSemanticModel = (
   }
   const target = rawInput.target ?? STATE_MACHINE_XB_TARGET_CAPABILITIES;
 
+  const resolution = resolveXBParameterExpressions(materializeXBControlPortDefaults(flattenXBSubsystems(rawInput.model)));
   const input: XBSemanticBuildInput = {
     ...rawInput,
-    model: materializeXBControlPortDefaults(flattenXBSubsystems(rawInput.model)),
+    model: resolution.model,
     variables: variablesRecord,
     target,
   };
   const diagnostics: ModelDiagnostic[] = [];
+  if (resolution.diagnostics.length > 0) return { diagnostics: resolution.diagnostics };
 
   const solverStep = rationalFromFiniteNumber(input.model.solver.stepSeconds);
   const baseTick = rationalFromFiniteNumber(input.baseTickMs);

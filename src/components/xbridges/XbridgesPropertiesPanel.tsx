@@ -4,6 +4,8 @@ import { XBlock, XPort } from '../../engine/xbridges/types';
 import { X, Plus, Trash2, Settings2, Hash, Layers, Activity } from 'lucide-react';
 import { polyToString, zpgToString } from '../../engine/xbridges/BlockDefinitions';
 import { VectorUtils } from '../../engine/xbridges/VectorUtils';
+import { evaluateParameter } from '../../engine/xbridges/parameterEvaluation';
+import { parameterKind } from '../../engine/xbridges/parameterSchema';
 import { getPowertrainSpec } from '../../engine/xbridges/powertrain';
 import { DoeSweeperPanel } from './powertrain/DoeSweeperPanel';
 
@@ -850,6 +852,13 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
                 );
               }
 
+              // Simulink-style check of the entered text: the value is still stored, the model refuses to run until it is fixed.
+              const paramKind = parameterKind(block.type, key);
+              const shownText = localInputValues[key] !== undefined ? localInputValues[key] : String(displayValue);
+              const paramCheck = paramKind ? evaluateParameter(shownText, paramKind) : null;
+              const paramError = paramCheck && !paramCheck.ok ? paramCheck.reason : null;
+              const paramErrorId = `xb-param-error-${block.id}-${key}`;
+
               return (
                 <div key={key}>
                   <label className="block text-xs font-medium text-slate-400 mb-1 capitalize">
@@ -1236,8 +1245,13 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
                           (e.target as HTMLInputElement).blur();
                         }
                       }}
-                      className="w-full text-sm font-mono px-2.5 py-1.5 border border-[#333] bg-[#0a0a0a] text-[#e0e0e0] rounded focus:border-[#c9a86c] outline-none transition-all"
+                      aria-invalid={paramError ? true : undefined}
+                      aria-describedby={paramError ? paramErrorId : undefined}
+                      className={`w-full text-sm font-mono px-2.5 py-1.5 border bg-[#0a0a0a] text-[#e0e0e0] rounded outline-none transition-all ${paramError ? 'border-red-500 focus:border-red-400' : 'border-[#333] focus:border-[#c9a86c]'}`}
                     />
+                  )}
+                  {paramError && (
+                    <p id={paramErrorId} role="alert" className="text-[10px] text-red-400 mt-1">{paramError}</p>
                   )}
                   {key === 'value' && block.type === 'Constant' && (
                     <p className="text-[10px] text-slate-400 mt-1">Hint: Type `[1, 2, 3]` or MATLAB style `[1 2 3]` for vectors.</p>

@@ -5,6 +5,7 @@ import { getXBConformanceStatus } from './xbConformanceStatus';
 import { resolveGraphShapes } from './xbShapeResolver';
 import { flattenXBSubsystems } from './xbSubsystemFlattener';
 import { materializeXBControlPortDefaults } from './xbControlPortDefaults';
+import { resolveXBParameterExpressions } from './xbParameterResolution';
 import type { ModelDiagnostic } from './smModel';
 import type { SemanticVariable } from './smSemanticModel';
 import type {
@@ -449,8 +450,9 @@ export const validateXBModel = (
   variables: Readonly<Record<string, SemanticVariable>>,
   target: XBTargetCapabilities,
 ): ModelDiagnostic[] => {
-  const model = materializeXBControlPortDefaults(flattenXBSubsystems(rawModel));
-  const diagnostics: ModelDiagnostic[] = [];
+  const resolution = resolveXBParameterExpressions(materializeXBControlPortDefaults(flattenXBSubsystems(rawModel)));
+  const model = resolution.model;
+  const diagnostics: ModelDiagnostic[] = [...resolution.diagnostics];
   const shapeResult = resolveGraphShapes(model);
   diagnostics.push(...shapeResult.diagnostics);
 

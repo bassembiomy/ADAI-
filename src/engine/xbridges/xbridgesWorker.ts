@@ -91,7 +91,11 @@ export function handleXbridgesWorkerMessage(request: XbridgesWorkerRequest): Xbr
     // Dynamic parameter tuning
     if (request.paramUpdates) {
       for (const [id, params] of Object.entries(request.paramUpdates)) {
-        workerEngine.patchBlockParams(id, params);
+        // An Inport driven by a State Machine variable takes 'value' from inportOverrides below.
+        const overridden = request.inportOverrides && Object.prototype.hasOwnProperty.call(request.inportOverrides, id);
+        workerEngine.applyParameterUpdates(id, overridden
+          ? Object.fromEntries(Object.entries(params as Record<string, unknown>).filter(([key]) => key !== 'value'))
+          : params);
       }
     }
 
@@ -137,7 +141,7 @@ export function handleXbridgesWorkerMessage(request: XbridgesWorkerRequest): Xbr
     const batchSize = Math.max(1, request.batchSize || 1);
     let currentTime = request.time;
 
-    for (let i = 0; i < batchSize; i++) {
+    for (let i = 0; i < batchSize && !workerEngine.hasFatalError(); i++) {
       if (solver === 'rk4') Solvers.stepRK4(workerEngine, currentTime, dt);
       else if (solver === 'ode2') Solvers.stepODE2(workerEngine, currentTime, dt);
       else if (solver === 'ode3') Solvers.stepODE3(workerEngine, currentTime, dt);
@@ -150,6 +154,18 @@ export function handleXbridgesWorkerMessage(request: XbridgesWorkerRequest): Xbr
       else Solvers.stepEuler(workerEngine, currentTime, dt);
 
       currentTime += dt;
+    }
+
+    if (workerEngine.hasFatalError()) {
+      // A block raised an exception (BLOCK_RUNTIME_FAULT): the run stops, the caller marks the simulation Failed.
+      return {
+        requestId,
+        ok: false,
+        simulationTime: currentTime,
+        engineRunId,
+        diagnostics: workerEngine.diagnostics,
+        error: { message: workerEngine.diagnostics.find(d => d.code === 'BLOCK_RUNTIME_FAULT')?.message || 'A block raised an exception' },
+      };
     }
 
     return {

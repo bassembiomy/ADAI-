@@ -60,7 +60,7 @@ export class AdaptiveSolver {
 
     engine.compile(startTime);
 
-    while (t < stopTime) {
+    while (t < stopTime && !engine.hasFatalError()) {
       if (t + h > stopTime) {
         h = stopTime - t;
       }
@@ -70,7 +70,7 @@ export class AdaptiveSolver {
       let hNext = h;
       let nextK1: Map<string, any> = new Map();
 
-      while (!stepAccepted) {
+      while (!stepAccepted && !engine.hasFatalError()) {
         if (h < hMin) {
           h = hMin;
           stepAccepted = true; 
@@ -256,7 +256,7 @@ export class AdaptiveSolver {
 
     engine.compile(startTime);
 
-    while (t < stopTime) {
+    while (t < stopTime && !engine.hasFatalError()) {
       if (t + h > stopTime) {
         h = stopTime - t;
       }
@@ -266,7 +266,7 @@ export class AdaptiveSolver {
       let hNext = h;
       let nextK1: Map<string, any> = new Map();
 
-      while (!stepAccepted) {
+      while (!stepAccepted && !engine.hasFatalError()) {
         if (h < hMin) {
           h = hMin;
           stepAccepted = true;

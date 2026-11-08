@@ -2,7 +2,8 @@
 import { XModel, XBlock, ModelDiagnostic, SolverOptions } from './types';
 import { BLOCK_LIBRARY, getPolynomialCoefficients, trimLeadingZeros } from './BlockDefinitions';
 import { VectorUtils } from './VectorUtils';
-import { runModelChecks, getBlockSampleTime } from './modelChecks';
+import { runModelChecks, getBlockSampleTime, evaluateBlockParameters, parameterKindsOf, describeParameterProblem } from './modelChecks';
+import { evaluateParameter } from './parameterEvaluation';
 import * as math from 'mathjs';
 
 export class XbridgesEngine {
@@ -13,6 +14,22 @@ export class XbridgesEngine {
   private signalValues = new Map<string, any>(); // key: "blockId.portId"
   public diagnostics: ModelDiagnostic[] = [];
   public options: SolverOptions | null = null;
+  /** Set when a block threw an exception; solver run loops and the live loop stop (Simulink stops on a runtime error). */
+  private fatal = false;
+  public hasFatalError(): boolean { return this.fatal; }
+
+  /** Records an exception raised inside a block as a BLOCK_RUNTIME_FAULT error (once per block) and stops the run. */
+  private reportBlockException(block: XBlock, where: string, err: unknown) {
+    this.fatal = true;
+    if (this.diagnostics.some(d => d.code === 'BLOCK_RUNTIME_FAULT' && d.blockIds?.includes(block.id))) return;
+    const text = err instanceof Error ? err.message : String(err);
+    this.diagnostics.push({
+      severity: 'error',
+      code: 'BLOCK_RUNTIME_FAULT',
+      message: `Block '${block.label || block.type}' raised an exception while ${where}: ${text}`,
+      blockIds: [block.id],
+    });
+  }
 
   private sortedBlocks: XBlock[] = [];
   private cycleBlocks: XBlock[] = [];
@@ -210,9 +227,73 @@ export class XbridgesEngine {
     });
   }
 
+  /**
+   * Parameters typed as MATLAB expressions ('2*pi', '[1 2 3]') are evaluated and the block is rebuilt from the
+   * evaluated values (some factories derive values, e.g. TF -> A..D). A block with an invalid parameter is left
+   * untouched; modelChecks reports the problem and the model is not simulated.
+   */
+  private resolveParameters() {
+    for (const b of this.flatBlocks) {
+      const { resolved, problems } = evaluateBlockParameters(b);
+      if (problems.length > 0 || Object.keys(resolved).length === 0) continue;
+      this.rebuildBlock(b, { ...b.params, ...resolved });
+    }
+  }
+
+  /** Re-instantiates the block's behaviour from `params` in place (id, label and the object identity are kept). */
+  private rebuildBlock(b: XBlock, params: Record<string, any>) {
+    const typeKey = BLOCK_LIBRARY[b.type] ? b.type : Object.keys(BLOCK_LIBRARY).find(k => k.toLowerCase() === b.type.toLowerCase());
+    if (!typeKey) { b.params = params; return; }
+    try {
+      const fresh = BLOCK_LIBRARY[typeKey](b.id, params);
+      const keep = new Set(['id', 'type', 'label', 'parentId', 'params']);
+      for (const k of Object.keys(fresh)) if (!keep.has(k)) (b as any)[k] = (fresh as any)[k];
+      b.params = { ...params, ...fresh.params };
+    } catch {
+      b.params = params;
+    }
+  }
+
+  /**
+   * Live parameter edit (Simulink: change a block parameter while the model runs). Text is evaluated like at compile;
+   * valid values replace the block's parameters (re-seeding derived values through patchBlockParams); an invalid
+   * value adds one PARAMETER_* error and the last valid value is kept.
+   */
+  public applyParameterUpdates(blockId: string, updates: Record<string, any>) {
+    const block = this.blockMap.get(blockId);
+    if (!block || !updates) return;
+    const kinds = parameterKindsOf(block.type);
+    const accepted: Record<string, any> = {};
+    for (const [param, raw] of Object.entries(updates)) {
+      const kind = kinds[param];
+      const tag = `parameter '${param}'`;
+      const stale = (d: { code: string; blockIds?: string[]; message: string }) =>
+        d.code.startsWith('PARAMETER_') && d.blockIds?.length === 1 && d.blockIds[0] === blockId && d.message.includes(tag);
+      if (!kind) {
+        if (JSON.stringify(raw) !== JSON.stringify(block.params[param])) accepted[param] = raw;
+        continue;
+      }
+      const r = evaluateParameter(raw, kind);
+      if (!r.ok) {
+        const problem = { param, raw, code: r.code, reason: r.reason };
+        const message = describeParameterProblem(block, problem);
+        if (!this.diagnostics.some(d => d.code === r.code && d.message === message && stale(d))) {
+          this.diagnostics.push({ severity: 'error', code: r.code, message, blockIds: [blockId] });
+        }
+        continue;
+      }
+      this.diagnostics = this.diagnostics.filter(d => !stale(d));
+      const value = typeof raw === 'string' && kind.kind !== 'option' ? r.value : raw;
+      if (JSON.stringify(value) !== JSON.stringify(block.params[param])) accepted[param] = value;
+    }
+    if (Object.keys(accepted).length > 0) this.patchBlockParams(blockId, accepted);
+  }
+
   public compile(startTime = 0): ModelDiagnostic[] {
     this.diagnostics = [];
+    this.fatal = false;
     this.flatten();
+    this.resolveParameters();
     this.validateConnections();
     
     // Validate parameters of Fuzzy Surface Viewer blocks
@@ -386,6 +467,7 @@ export class XbridgesEngine {
   }
 
   private executeBlockOrCache(block: XBlock, time: number, tempStates?: Map<string, any>) {
+    if (this.fatal) return;
     const ts = this.sampleTimeOf(block);
     if (ts > 0) {
       const nextTime = block.nextTick ?? this.nextSampleTime.get(block.id) ?? 0;
@@ -442,7 +524,7 @@ export class XbridgesEngine {
         this.lastOutputs.set(block.id, [...result.outputs]);
       }
     } catch (err: any) {
-       console.error(`Error executing block ${block.label || block.type}: ${err.message}`);
+      this.reportBlockException(block, 'executing', err);
     }
   }
 
@@ -612,6 +694,7 @@ export class XbridgesEngine {
   public computeDerivatives(time: number, tempStates?: Map<string, any>): Map<string, any> {
     const derivatives = new Map<string, any>();
     for (const block of this.executionOrder) {
+      if (this.fatal) break;
       if (block.evaluateDerivatives) {
         const inputValues = this.gatherInputs(block);
         const currentState = tempStates?.has(block.id) ? tempStates.get(block.id) : block.state;
@@ -620,7 +703,7 @@ export class XbridgesEngine {
           this.checkNumericalStability(block, dx, 'Derivative');
           derivatives.set(block.id, dx);
         } catch (err: any) {
-          console.error(`Error computing derivative for ${block.label || block.type}: ${err.message}`);
+          this.reportBlockException(block, 'computing its derivatives', err);
         }
       }
     }
@@ -631,6 +714,7 @@ export class XbridgesEngine {
 
   public updateDiscreteStates(time: number) {
     for (const block of this.executionOrder) {
+      if (this.fatal) break;
       if (block.evaluateDerivatives && block.updateDiscrete) {
         // Hybrid block: once per major step. A retried step at the same time with the same committed state is skipped;
         // after a rollback the state object differs, so the update is applied again.
@@ -639,7 +723,7 @@ export class XbridgesEngine {
         try {
           const next = block.updateDiscrete(this.gatherInputs(block), block.params, block.state, time);
           if (next !== undefined) block.state = next;
-        } catch (err: any) {}
+        } catch (err: any) { this.reportBlockException(block, 'updating its discrete states', err); }
         this.hybridUpdates.set(block.id, { time, state: block.state });
         continue;
       }
@@ -657,7 +741,7 @@ export class XbridgesEngine {
               const nextScheduled = nextTime + ts;
               block.nextTick = nextScheduled;
               this.nextSampleTime.set(block.id, nextScheduled);
-            } catch (err: any) {}
+            } catch (err: any) { this.reportBlockException(block, "updating its discrete states", err); }
           }
         } else {
           const inputValues = this.gatherInputs(block);
@@ -666,7 +750,7 @@ export class XbridgesEngine {
             if (result.nextState !== undefined) {
                block.state = result.nextState;
             }
-          } catch (err: any) {}
+          } catch (err: any) { this.reportBlockException(block, "updating its discrete states", err); }
         }
       }
     }
