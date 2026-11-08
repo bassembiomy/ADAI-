@@ -126,6 +126,14 @@ const cloneLegacyPorts = (
         port[key] = cloneParameterValue(entry[key], `${path}[${index}].${key}`);
       }
     }
+    // A control input keeps its default value so an unconnected port can use it (e.g. PID Enable = 1).
+    if (
+      expectedDirection === 'input'
+      && entry.type === 'control'
+      && (typeof entry.value === 'number' || typeof entry.value === 'boolean')
+    ) {
+      port.value = entry.value;
+    }
     return port;
   });
 };

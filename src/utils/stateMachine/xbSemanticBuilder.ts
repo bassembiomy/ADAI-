@@ -1,4 +1,4 @@
-import { getXBBlockCapability } from './xbCapabilities';
+import { getXBBlockCapability, xbNodeDirectFeedthrough } from './xbCapabilities';
 import { resolveGraphShapes } from './xbShapeResolver';
 import { validateStateSpaceNode } from './stateSpaceValidation';
 import type { ModelDiagnostic } from './smModel';
@@ -32,6 +32,7 @@ import { STATE_MACHINE_XB_TARGET_CAPABILITIES } from './smSemanticValidator';
 import { compileEkfVectorExpressions } from './xbEkfExpressions';
 import { alignRuntimeThreshold, convertTime } from './smTiming';
 import { flattenXBSubsystems } from './xbSubsystemFlattener';
+import { materializeXBControlPortDefaults } from './xbControlPortDefaults';
 
 
 type UnknownRecord = Record<string, unknown>;
@@ -633,7 +634,7 @@ const deterministicExecutionOrder = (
   for (const edge of edges) {
     const target = nodeById.get(edge.targetNodeId);
     if (target === undefined
-      || getXBBlockCapability(target.type)?.directFeedthrough !== true
+      || !xbNodeDirectFeedthrough(target)
       || !nodeById.has(edge.sourceNodeId)) {
       continue;
     }
@@ -1207,7 +1208,7 @@ const stateBoundaryForNode = (
     return boundary([]);
   }
 
-  return boundary(outputSignalIds.map((signalId) => {
+  const fallbackSlots: XBSemanticStateSlot[] = outputSignalIds.map((signalId) => {
     const signal = signals[signalId];
     return {
       id: `${signalId}$state`,
@@ -1217,7 +1218,23 @@ const stateBoundaryForNode = (
       shape: signal.shape,
       initialValues: initialValuesForSignal(node, signal, diagnostics),
     };
-  }));
+  });
+  // Tustin needs u(k-1), with u(-1) = 0 (Simulink).
+  const integratorMethod = String(node.parameters.method ?? 'forward_euler');
+  if (node.type === 'INTEGRATOR_DISCRETE' && (integratorMethod === 'tustin' || integratorMethod === 'trapezoidal')) {
+    const first = signals[outputSignalIds[0] ?? ''];
+    if (first !== undefined) {
+      fallbackSlots.push({
+        id: `${node.id}:u_prev$state`,
+        role: 'u_prev',
+        signalId: null,
+        numericType: first.numericType,
+        shape: first.shape,
+        initialValues: Array.from({ length: first.elementCount }, () => 0),
+      });
+    }
+  }
+  return boundary(fallbackSlots);
 };
 
 export const buildXBSemanticModel = (
@@ -1238,7 +1255,7 @@ export const buildXBSemanticModel = (
 
   const input: XBSemanticBuildInput = {
     ...rawInput,
-    model: flattenXBSubsystems(rawInput.model),
+    model: materializeXBControlPortDefaults(flattenXBSubsystems(rawInput.model)),
     variables: variablesRecord,
     target,
   };
@@ -1644,7 +1661,7 @@ export const buildXBSemanticModel = (
         .map((port) => `${node.id}:${port.id}`),
       outputSignalIds,
       parameters: clonedParams,
-      directFeedthrough: capability.directFeedthrough,
+      directFeedthrough: xbNodeDirectFeedthrough(node),
       stateful: isStateful,
       conversion: conversionForNode(node, diagnostics),
       state: isStateful ? stateBoundary : null,

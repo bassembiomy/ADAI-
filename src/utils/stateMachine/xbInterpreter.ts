@@ -755,12 +755,14 @@ const evaluateDirectOperation = (
       const ctrl = Number((ctrlSignal ?? (operation.inputSignalIds.length === 3 ? inputs[0] : inputs[1]))?.[0] ?? 0);
       const u1 = getSignal(['u1', 'in1', 'pass', 'u_true']) ?? (ctrlSignal === inputs[0] ? inputs[1] : inputs[0]) ?? [0];
       const u2 = getSignal(['u2', 'in2', 'fail', 'u_false']) ?? inputs[2] ?? [0];
-      const threshold = Number(parameter(operation, ['threshold', 'Threshold'], 0.5));
-      const criteria = String(parameter(operation, ['criteria'], 0) || 'u2 >= Threshold');
+      const threshold = Number(parameter(operation, ['threshold', 'Threshold'], 0));
+      const criteria = String(parameter(operation, ['criteria'], 0) || '>=');
       let pass = false;
-      if (criteria === 'u2 > Threshold') pass = ctrl > threshold;
+      if (criteria === '>' || criteria === 'u2 > Threshold') pass = ctrl > threshold;
+      else if (criteria === '<') pass = ctrl < threshold;
+      else if (criteria === '<=') pass = ctrl <= threshold;
       else if (criteria === 'u2 ~= 0') pass = ctrl !== 0;
-      else pass = ctrl >= threshold;
+      else pass = ctrl >= threshold; // '>=' (Simulink default), 'u2 >= Threshold' or missing
       return [pass ? u1 : u2];
     }
     case 'IF_ELSE': {
@@ -927,6 +929,23 @@ const evaluateDirectOperation = (
     case 'PID_BASIC':
     case 'PID_CONTROLLER': {
       return [[pidValues(runtime, operation).output]];
+    }
+    case 'INTEGRATOR_DISCRETE': {
+      // Direct-feedthrough methods only: y(k) = y(k-1) + T*u(k) (backward Euler),
+      // y(k) = y(k-1) + T/2*(u(k) + u(k-1)) (Tustin); the state slot holds y(k-1).
+      const dt = Number(parameter(operation, ['sample_time', 'sampleTime', 'dt'], 1));
+      const method = String(operation.parameters.method ?? 'forward_euler');
+      const yPrevSlot = operation.state?.slots.find((s) => s.role !== 'u_prev');
+      const uPrevSlot = stateSlotForRole(operation, 'u_prev');
+      const yPrev = yPrevSlot ? (runtime.stateSlots[yPrevSlot.id] ?? yPrevSlot.initialValues) : [0];
+      const uPrev = uPrevSlot ? (runtime.stateSlots[uPrevSlot.id] ?? uPrevSlot.initialValues) : [];
+      const u = inputs[0] ?? [0];
+      const tustin = method === 'trapezoidal' || method === 'tustin';
+      return [yPrev.map((value, index) => {
+        const uCurr = Number(u[index % u.length] ?? 0);
+        const uOld = Number(uPrev[index] ?? 0);
+        return Number(value) + (tustin ? 0.5 * dt * (uCurr + uOld) : dt * uCurr);
+      })];
     }
     case 'DISCRETE_TRANSFER_FUNCTION':
     case 'STATE_SPACE': {
@@ -1603,7 +1622,9 @@ function writeStateOutputs(
       const off = Number(parameter(operation, ['switchOff'], 0));
       const current_on_prev = Boolean((runtime.stateSlots[onSlot.id] ?? onSlot.initialValues)[0]);
       const current_on = u >= on || (current_on_prev && u > off);
-      writeSignal(runtime, outputId, [current_on], faults, operation);
+      const onValue = Number(parameter(operation, ['onValue'], 1));
+      const offValue = Number(parameter(operation, ['offValue'], 0));
+      writeSignal(runtime, outputId, [current_on ? onValue : offValue], faults, operation);
     }
     return;
   }

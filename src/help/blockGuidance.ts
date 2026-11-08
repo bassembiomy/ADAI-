@@ -90,6 +90,7 @@ for (const [id, formula, example] of [
   ['TAN', 'tan(u)', 'angle_unit=degrees and u=45 produce approximately 1.'],
   ['COT', '1/tan(u)', 'angle_unit=degrees and u=45 produce approximately 1.'],
   ['SEC', '1/cos(u)', 'angle_unit=degrees and u=60 produce approximately 2.'],
+  ['COSEC', '1/sin(u)', 'angle_unit=degrees and u=30 produce approximately 2.'],
 ] as const) add(id, `Computes ${formula} on a numeric scalar. When angle_unit is degrees, converts input to radians first. Singularities follow JavaScript floating-point arithmetic.`, example);
 for (const [id, formula, example] of [
   ['ASIN', 'asin(u)', 'u=0.5 with angle_unit=degrees produces approximately 30.'],
@@ -107,7 +108,7 @@ for (const [id, formula, example] of [
   ['ATANH', 'atanh(u)', 'u=0 produces 0.'], ['ACOTH', 'atanh(1/u)', 'u=2 produces approximately 0.5493.'],
   ['ASECH', 'acosh(1/u)', 'u=1 produces 0.'],
 ] as const) add(id, `Computes ${formula} on Number(input), using JavaScript hyperbolic functions. These blocks have no angle-unit conversion or editable parameters.`, `Numerical example: ${example}`);
-add('ACOSECH', 'The current implementation computes reciprocal sine, 1/sin(u), rather than inverse hyperbolic cosecant. It has no declared editable parameters; default input interpretation is radians.', 'Input π/2 produces 1. This documents the implemented behavior and the naming discrepancy.');
+add('ACOSECH', 'Computes the inverse hyperbolic cosecant asinh(1/u) (MATLAB acsch), not the reciprocal sine 1/sin(u). It has no declared editable parameters and no angle-unit conversion.', 'Input 2 produces approximately 0.4812.');
 add('THREE_PHASE_PWM', 'Compares three normalized phase references with an accumulated sawtooth phase; Saddle/SVPWM methods subtract the midpoint of the largest and smallest reference before comparison.', 'At t=0, references [0,0,0] normalize to 0.5 and all three gates output 1.');
 add('SIX_STEP_COMMUTATION', 'Thresholds three Hall inputs at 0.5, decodes their three-bit code and selects six high/low gate commands; invalid codes 000 and 111 disable every gate.', 'Hall [1,0,1] produces [AH,AL,BH,BL,CH,CL]=[1,0,0,1,0,0].');
 add('SENSORLESS_SIX_STEP', 'Detects sign changes of the floating phase voltage relative to the three-phase average; advances a six-step sequence and estimates speed from twice the zero-crossing interval. Threshold and Vdc are currently unused.', 'Initial step 1 produces phase commands [1,-1,0]; a floating-phase sign change advances to step 2.');
@@ -135,8 +136,8 @@ add('SVPWM_GATE_GENERATOR', 'Folds time within Ts around Ts/2 and compares it wi
 add('ZERO_SEQUENCE_INJECTION', 'Subtracts the midpoint of the largest and smallest phase reference from all three phases.', 'Input [1,0,-0.5] has midpoint 0.25 and produces [0.75,-0.25,-0.75].');
 add('SATURATION', 'Clamps a numeric input between lowerLimit and upperLimit; NaN is propagated.', 'With default limits -1 and 1, input 3 produces 1.');
 add('DEADZONE', 'Returns zero inside [lowerLimit,upperLimit]; outside, subtracts the nearest bound from the input. NaN is propagated.', 'Default bounds ±0.5 give input 2 an output of 1.5.');
-add('RATE_LIMITER', 'Clamps the change from previousOutput using risingSlewRate and fallingSlewRate times Number(sampleTime)||1. Inherited sample time therefore uses dt=1 in this execute function.', 'With defaults and previous output 0, an input 5 produces output 1.');
-add('RELAY', 'Turns on for u>=switchOn, stays on while u>switchOff and turns off at or below switchOff.', 'With defaults, inputs 1,0.5,0 produce outputs true,true,false.');
+add('RATE_LIMITER', 'Clamps the change from the previous output using risingSlewRate and fallingSlewRate (units per second) times the time elapsed since the previous output. With an explicit sampleTime the block updates at its sample hits; inherited sample time uses the elapsed solver time.', 'With defaults (1 and -1 per second), a step from 0 to 10 reaches about 1 after 1 second.');
+add('RELAY', 'Turns on for u>=switchOn, stays on while u>switchOff and turns off at or below switchOff.', 'With defaults, inputs 1,0.5,0 produce outputs 1,1,0 (onValue and offValue set the on and off output values).');
 add('WHITE_NOISE', 'Generates Gaussian samples using Box–Muller and scales by sqrt(variance), then adds mean; it uses Math.random and is not deterministically seeded.', 'Mean 2 and variance 4 produce samples centered on 2 with standard deviation 2.');
 add('BAND_LIMITED_NOISE', 'Generates Gaussian noise and applies a first-order low-pass recursion with τ=1/(2πfc), dt=max(1e-6,t-lastTime) and α=dt/(τ+dt).', 'Set fc=100 and connect y to Scope; observe a filtered random signal with state carried between steps.');
 add('HIGH_PASS_FILTER', 'For positive sampleTime, uses y=α(y_prev+u−u_prev) with α=τ/(τ+sampleTime). Continuous mode outputs state.y+u with derivative −2πfc*(state.y+u).', 'A constant step initially appears at the output and decays toward zero.');
@@ -170,7 +171,7 @@ const elementaryExamples: Record<string, string> = {
   Sum: 'Set signs to +-; inputs 5 and 2 produce 3.',
   MUX: 'Inputs 2 and 5 produce the vector [2,5], preserving input ordering.',
   GAIN: 'Set gain=3; input [1,2] produces [3,6].',
-  SWITCH: 'Default criteria > and threshold 0 select u1=5 for ctrl=1, otherwise u2=2.',
+  SWITCH: 'Default criteria >= and threshold 0 select u1=5 for ctrl=1, otherwise u2=2.',
   SIN: 'angle_unit=degrees with input 90 produces 1.',
   INTEGRATOR_DISCRETE: 'For backward_euler, constant u=2 over an elapsed dt=0.1 adds 0.2 to the stored integral.',
   INTEGRATOR: 'Set initialCondition=0 and constant input 1; with limits disabled the continuous output is y=t.',

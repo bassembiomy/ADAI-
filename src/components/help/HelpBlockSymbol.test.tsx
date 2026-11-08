@@ -34,7 +34,8 @@ describe('catalog-backed block symbol preview', () => {
     expect(html).toContain('data-side="bottom"'); // enable/reset inputs
     expect(html).toContain(`${pid.ports.find(port => port.id === 'enable')!.name} [enable]`);
     expect(html).toContain(`${pid.ports.find(port => port.id === 'u')!.name} [u]`);
-    const unavailable = refs.find(ref => ref.id === 'xbridges:COSEC')!;
+    // Every palette entry now has a factory (COSEC was added), so the palette-only glyph is checked on a synthetic reference.
+    const unavailable = { ...refs.find(ref => ref.id === 'xbridges:COSEC')!, availability: 'palette-only' as const, ports: [], inputs: [], outputs: [] };
     expect(renderToStaticMarkup(<HelpBlockSymbol block={unavailable} />)).toContain('Palette glyph only');
   });
 });

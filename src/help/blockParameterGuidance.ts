@@ -89,7 +89,7 @@ const meanings: Record<string, string> = {
   externalReset: 'Reset selection controlling when external reset restores the integration state.',
   risingSlewRate: 'Maximum permitted positive rate of output change.',
   fallingSlewRate: 'Maximum permitted negative rate of output change.',
-  switchOn: 'Relay input threshold that sets the output on.', switchOff: 'Relay input threshold that sets the output off.',
+  switchOn: 'Relay input threshold that sets the output on.', switchOff: 'Relay input threshold that sets the output off.', onValue: 'Relay output value while the relay is on (Simulink Output when on).', offValue: 'Relay output value while the relay is off (Simulink Output when off).',
   initialState: 'Declared relay initial state; check the documented factory state initialization behavior.',
   tau: 'Time constant of the derivative block’s smoothing state.',
   A: 'State-transition/system matrix for the selected state-space representation.',

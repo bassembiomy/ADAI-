@@ -64,12 +64,10 @@ describe('registry-backed block help', () => {
     const refs = getBlockHelpReferences();
     const palette = new Set(XBRIDGES_CATEGORIES.flatMap(category => category.blocks.map(block => block.type)));
     for (const typeId of palette) expect(refs.find(ref => ref.id === `xbridges:${typeId}`), typeId).toBeDefined();
-    const unavailable = refs.find(ref => ref.id === 'xbridges:COSEC')!;
-    expect(getBlockHelpGaps().paletteOnly).toContain('COSEC');
-    expect(unavailable.availability).toBe('palette-only');
-    expect(unavailable.behavior).toMatch(/no.*factory|not executable/i);
-    expect(unavailable.ports).toEqual([]);
-    expect(unavailable.example).not.toMatch(/connect .*COSEC.*Scope/i);
+    // Every palette entry has a factory (COSEC was the last palette-only item), so none is palette-only any more.
+    expect(getBlockHelpGaps().paletteOnly).toEqual([]);
+    expect(refs.find(ref => ref.id === 'xbridges:COSEC')!.availability).toBe('available');
+    expect(refs.filter(ref => ref.availability === 'palette-only')).toEqual([]);
   });
   it('derives symbol and terminal positions from live palettes and distinguishes embedded C eligibility', () => {
     const refs = getBlockHelpReferences();

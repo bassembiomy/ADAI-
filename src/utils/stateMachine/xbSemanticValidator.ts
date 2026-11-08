@@ -1,9 +1,10 @@
 import { VectorUtils } from '../../engine/xbridges/VectorUtils';
 import { validateStateSpaceNode } from './stateSpaceValidation';
-import { getXBBlockCapability, isMatrixSolveBlockType } from './xbCapabilities';
+import { getXBBlockCapability, isMatrixSolveBlockType, xbNodeDirectFeedthrough } from './xbCapabilities';
 import { getXBConformanceStatus } from './xbConformanceStatus';
 import { resolveGraphShapes } from './xbShapeResolver';
 import { flattenXBSubsystems } from './xbSubsystemFlattener';
+import { materializeXBControlPortDefaults } from './xbControlPortDefaults';
 import type { ModelDiagnostic } from './smModel';
 import type { SemanticVariable } from './smSemanticModel';
 import type {
@@ -374,7 +375,7 @@ const hasAlgebraicCycle = (
 ): boolean => {
   const directNodeIds = new Set(
     model.nodes
-      .filter((node) => getXBBlockCapability(node.type)?.directFeedthrough === true)
+      .filter((node) => xbNodeDirectFeedthrough(node))
       .map((node) => node.id),
   );
   const adjacency = new Map<string, string[]>();
@@ -448,7 +449,7 @@ export const validateXBModel = (
   variables: Readonly<Record<string, SemanticVariable>>,
   target: XBTargetCapabilities,
 ): ModelDiagnostic[] => {
-  const model = flattenXBSubsystems(rawModel);
+  const model = materializeXBControlPortDefaults(flattenXBSubsystems(rawModel));
   const diagnostics: ModelDiagnostic[] = [];
   const shapeResult = resolveGraphShapes(model);
   diagnostics.push(...shapeResult.diagnostics);

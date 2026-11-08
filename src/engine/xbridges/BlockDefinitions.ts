@@ -3680,14 +3680,14 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
   // --- Memory & Delay ---
   'DELAY': (id, params) => ({
     id, type: 'DELAY',
-    params: { delay_length: params.delay_length || 1, initial_condition: params.initial_condition || 0 },
+    params: { delay_length: params.delay_length || 1, initial_condition: params.initial_condition || 0, sampleTime: params.sampleTime ?? -1 },
     isStateful: true,
     inputs: [createPort('u', 'u', 'input')],
     outputs: [createPort('y', 'y', 'output')],
     state: { buffer: [], index: 0 },
     icon: 'database',
     equation: 'y(k) = u(k - N)',
-    description: 'Delays the input signal by a specified number of simulation steps. Useful for modeling transport delays or discrete-time pipelines.',
+    description: 'Delays the input signal by a specified number of samples (of its sample time; inherited = solver steps). Useful for modeling transport delays or discrete-time pipelines.',
     execute: (ins, p, state) => {
       const N = Number(p.delay_length);
       const u = ins[0];
@@ -3811,7 +3811,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
   // --- Logic & Control Flow ---
   'SWITCH': (id, params) => ({
     id, type: 'SWITCH',
-    params: { threshold: params.threshold || 0, criteria: params.criteria || '>' },
+    params: { threshold: params.threshold || 0, criteria: params.criteria || '>=' },
     inputs: [
       createPort('u1', 'u1', 'input'),
       createPort('u2', 'u2', 'input'),
@@ -3819,7 +3819,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     ],
     outputs: [createPort('y', 'y', 'output')],
     icon: 'activity',
-    equation: 'y = (ctrl > th) ? u1 : u2',
+    equation: 'y = (ctrl >= th) ? u1 : u2',
     description: 'Passes either the first or second input based on whether a control signal meets a threshold criteria.',
     execute: (ins, p) => {
       const u1 = ins[0];
@@ -4053,6 +4053,16 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     }
   }),
 
+  'COSEC': (id, params) => ({
+    id, type: 'COSEC', params: { angle_unit: params.angle_unit || 'radians' },
+    inputs: [createPort('u', 'u', 'input')],
+    outputs: [createPort('y', 'y', 'output')],
+    execute: (ins, p) => {
+      const u = p.angle_unit === 'degrees' ? (Number(ins[0]) * Math.PI) / 180 : Number(ins[0]);
+      return { outputs: [1 / Math.sin(u)] };
+    }
+  }),
+
   // --- Inverse Trigonometric Functions ---
   'ASIN': (id, params) => ({
     id, type: 'ASIN', params: { angle_unit: params.angle_unit || 'radians' },
@@ -4233,10 +4243,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     id, type: 'ACOSECH', params: {},
     inputs: [createPort('u', 'u', 'input')],
     outputs: [createPort('y', 'y', 'output')],
-    execute: (ins, p) => {
-      const u = p.angle_unit === 'degrees' ? (Number(ins[0]) * Math.PI) / 180 : Number(ins[0]);
-      return { outputs: [1 / Math.sin(u)] };
-    }
+    execute: (ins) => ({ outputs: [Math.asinh(1 / Number(ins[0]))] })
   }),
 
   'PID_CONTROLLER': (id, params) => {
@@ -4340,8 +4347,8 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
             nextState: { i_state: nextI, d_state: nextD, last_e: error, last_ed: ed }
           };
         } else {
-          const I = state.i_state || 0;
-          const D = p.Kd * p.N * (ed - (state.d_state || 0));
+          const I = String(p.mode).includes('I') ? (state.i_state || 0) : 0;
+          const D = String(p.mode).includes('D') ? p.Kd * p.N * (ed - (state.d_state || 0)) : 0;
           const u_unlimited = P + I + D;
           const u = Math.max(p.min, Math.min(p.max, u_unlimited));
 
@@ -4360,17 +4367,19 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       const ed = p.gamma * r - y;
 
       const P = p.Kp * (p.beta * r - y);
-      const I = state.i_state || 0;
-      const D = p.Kd * p.N * (ed - (state.d_state || 0));
+      const hasI = String(p.mode).includes('I');
+      const hasD = String(p.mode).includes('D');
+      const I = hasI ? (state.i_state || 0) : 0;
+      const D = hasD ? p.Kd * p.N * (ed - (state.d_state || 0)) : 0;
       const u_unlimited = P + I + D;
 
-      let di = p.Ki * error;
-      if (p.Ki !== 0) {
+      let di = hasI ? p.Ki * error : 0;
+      if (hasI && p.Ki !== 0) {
         if ((u_unlimited > p.max && error > 0) || (u_unlimited < p.min && error < 0)) {
           di = 0;
         }
       }
-      const dd = p.N * (ed - (state.d_state || 0));
+      const dd = hasD ? p.N * (ed - (state.d_state || 0)) : 0;
       return { i_state: di, d_state: dd };
     };
     }
@@ -4527,30 +4536,35 @@ return block;
           params: { risingSlewRate, fallingSlewRate, initialCondition, sampleTime },
           inputs: [createPort('u', 'u', 'input')],
           outputs: [createPort('y', 'y', 'output')],
-          state: { previousOutput: initialCondition },
-          execute: (ins: any[], p: any, state: any) => {
-            const dt = Number(p.sampleTime) || 1;
+          state: { previousOutput: initialCondition, lastTime: undefined },
+          execute: (ins: any[], p: any, state: any, time?: number) => {
             const u = Number(ins[0]);
             const prev = state.previousOutput ?? initialCondition;
-            if (Number.isNaN(u) || Number.isNaN(prev)) return { outputs: [NaN], nextState: { previousOutput: NaN } };
+            if (Number.isNaN(u) || Number.isNaN(prev)) return { outputs: [NaN], nextState: { previousOutput: NaN, lastTime: time } };
+            // Slew rates are per second: limit on the time elapsed since the previous output (first call: no time elapsed).
+            const t = Number(time);
+            const last = state.lastTime;
+            const dt = Number.isFinite(t) && typeof last === 'number' && Number.isFinite(last) ? Math.max(0, t - last) : 0;
             const maxIncrease = p.risingSlewRate * dt;
             const maxDecrease = p.fallingSlewRate * dt;
             const delta = u - prev;
             let y = u;
             if (delta > maxIncrease) y = prev + maxIncrease;
             else if (delta < maxDecrease) y = prev + maxDecrease;
-            return { outputs: [y], nextState: { previousOutput: y } };
+            return { outputs: [y], nextState: { previousOutput: y, lastTime: Number.isFinite(t) ? t : last } };
           }
         };
       },
 
-            'RELAY': (id, params) => ({
+                  'RELAY': (id, params) => ({
               id, type: 'RELAY',
               isStateful: true,
               params: {
                 switchOn: params.switchOn ?? 1,
                 switchOff: params.switchOff ?? 0,
                 initialState: params.initialState ?? false,
+                onValue: params.onValue ?? 1,
+                offValue: params.offValue ?? 0,
               },
               inputs: [createPort('u', 'u', 'input')],
               outputs: [createPort('y', 'y', 'output')],
@@ -4558,7 +4572,7 @@ return block;
               execute: (ins: any[], p: any, state: any) => {
                 const u = Number(ins[0]);
                 const current_on = u >= p.switchOn || (state.current_on && u > p.switchOff);
-                return { outputs: [current_on], nextState: { current_on } };
+                return { outputs: [current_on ? Number(p.onValue) : Number(p.offValue)], nextState: { current_on } };
               }
             }),
 
@@ -4942,8 +4956,8 @@ return block;
                                     nextState: { i_state: nextI, d_state: nextD, last_e: error }
                                   };
                                 } else {
-                                  const I = state.i_state || 0;
-                                  const D = p.Kd * p.N * (error - (state.d_state || 0));
+                                  const I = String(p.mode).includes('I') ? (state.i_state || 0) : 0;
+                                  const D = String(p.mode).includes('D') ? p.Kd * p.N * (error - (state.d_state || 0)) : 0;
                                   const u_unlimited = P + I + D;
                                   const u = Math.max(p.min, Math.min(p.max, u_unlimited));
 
@@ -4956,17 +4970,19 @@ return block;
                               block.evaluateDerivatives = (ins, p, state) => {
                                 const error = Number(ins[0]) || 0;
                                 const P = p.Kp * error;
-                                const I = state.i_state || 0;
-                                const D = p.Kd * p.N * (error - (state.d_state || 0));
+                                const hasI = String(p.mode).includes('I');
+                                const hasD = String(p.mode).includes('D');
+                                const I = hasI ? (state.i_state || 0) : 0;
+                                const D = hasD ? p.Kd * p.N * (error - (state.d_state || 0)) : 0;
                                 const u_unlimited = P + I + D;
 
-                                let di = p.Ki * error;
-                                if (p.Ki !== 0) {
+                                let di = hasI ? p.Ki * error : 0;
+                                if (hasI && p.Ki !== 0) {
                                   if ((u_unlimited > p.max && error > 0) || (u_unlimited < p.min && error < 0)) {
                                     di = 0;
                                   }
                                 }
-                                const dd = p.N * (error - (state.d_state || 0));
+                                const dd = hasD ? p.N * (error - (state.d_state || 0)) : 0;
                                 return { i_state: di, d_state: dd };
                               };
                             }

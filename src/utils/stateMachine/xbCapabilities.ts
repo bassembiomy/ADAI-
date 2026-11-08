@@ -545,6 +545,22 @@ export const isMatrixSolveBlockType = (type: string): boolean => {
   return clean === 'matrixsolve' || clean.endsWith('matrixsolve') || clean.includes('matrixsolve');
 };
 
+/** Discrete integrator methods whose output includes the current input (Simulink: direct feedthrough). */
+export const isXBDirectDiscreteIntegratorMethod = (method: unknown): boolean => {
+  const m = String(method ?? 'forward_euler');
+  return m === 'backward_euler' || m === 'trapezoidal' || m === 'tustin';
+};
+
+/** Direct feedthrough of one node: the type's contract, except the discrete integrator which depends on its method. */
+export const xbNodeDirectFeedthrough = (
+  node: { type: string; parameters?: Record<string, unknown> },
+): boolean => {
+  if (node.type === 'INTEGRATOR_DISCRETE') {
+    return isXBDirectDiscreteIntegratorMethod(node.parameters?.method);
+  }
+  return getXBBlockCapability(node.type)?.directFeedthrough === true;
+};
+
 export const getXBBlockCapability = (
   type: string,
 ): XBBlockCapability | null => {

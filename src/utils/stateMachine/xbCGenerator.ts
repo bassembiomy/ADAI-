@@ -1626,11 +1626,13 @@ const emitSwitch = emitSingleOutput((inputs, operation) => {
   );
   const control = inputs[1] ?? '0.0';
   const criteriaValue = operation.parameters.criteria;
+  if (criteriaValue === 'u2 ~= 0') {
+    return `((${control}) != 0.0 ? (${inputs[0] ?? '0.0'}) : (${inputs[2] ?? '0.0'}))`;
+  }
   const criteria = criteriaValue === '<'
-    || criteriaValue === '>='
     || criteriaValue === '<='
     ? criteriaValue
-    : '>';
+    : (criteriaValue === '>' || criteriaValue === 'u2 > Threshold' ? '>' : '>=');
   return `((${control}) ${criteria} ${threshold} ? (${inputs[0] ?? '0.0'}) : (${inputs[2] ?? '0.0'}))`;
 });
 
@@ -2325,6 +2327,23 @@ const renderStateOutputs = (
       }
     }
   }
+  if (operation.type === 'INTEGRATOR_DISCRETE' && operation.directFeedthrough) {
+    // Backward Euler / Tustin: y(k) = y(k-1) + T*u(k) (+ T/2*(u(k) + u(k-1))); the state slot holds y(k-1).
+    const yPrevSlot = operation.state?.slots.find((s) => s.role !== 'u_prev');
+    const uPrevSlot = stateSlotForRole(operation, 'u_prev');
+    const outputSignalId = operation.outputSignalIds[0];
+    const inputSignalId = operation.inputSignalIds[0];
+    if (yPrevSlot !== undefined && outputSignalId !== undefined && inputSignalId !== undefined) {
+      const dt = cNumber(scalarParameter(operation, ['sample_time', 'sampleTime', 'dt'], 1));
+      const u = signalElementRealExpression(state, inputSignalId, layout, member, '0U');
+      const yPrev = stateSlotRealExpression(yPrevSlot, layout, member);
+      const method = String(operation.parameters.method ?? 'forward_euler');
+      const expr = (method === 'tustin' || method === 'trapezoidal') && uPrevSlot !== undefined
+        ? `${yPrev} + (0.5 * (${dt})) * ((${u}) + (${stateSlotRealExpression(uPrevSlot, layout, member)}))`
+        : `${yPrev} + (${dt}) * (${u})`;
+      return [...renderSignalWrite(state, operation, operationIndex, 0, outputSignalId, expr, layout, member)];
+    }
+  }
   if (operation.type === 'PID_BASIC') {
     const outputSignalId = operation.outputSignalIds.find((signalId) =>
       state.xBridges!.signals[signalId]?.portId === 'u');
@@ -2526,7 +2545,9 @@ const renderStateOutputs = (
       const switchOff = cNumber(scalarParameter(operation, ['switchOff'], 0));
       // In C, boolean is typically 1 or 0, but it might be bool if stdbool.h is included.
       // We'll write an expression that evaluates to 1.0 or 0.0 based on the numeric type.
-      const current_on = `(${u} >= ${switchOn} || (${prev_on} != 0.0 && ${u} > ${switchOff})) ? 1.0 : 0.0`;
+      const onValue = cNumber(scalarParameter(operation, ['onValue'], 1));
+      const offValue = cNumber(scalarParameter(operation, ['offValue'], 0));
+      const current_on = `(${u} >= ${switchOn} || (${prev_on} != 0.0 && ${u} > ${switchOff})) ? (${onValue}) : (${offValue})`;
       return [...renderSignalWrite(state, operation, operationIndex, 0, outputSignalId, current_on, layout, member)];
     }
   }
@@ -3724,7 +3745,9 @@ const renderDiscreteStateUpdates = (
           ? stateSlotRealExpression(uPrevSlot, layout, member)
           : input;
         let updateExpr: string;
-        if (method === 'trapezoidal' || method === 'tustin') {
+        if (slot.role === 'u_prev') {
+          updateExpr = `${input}`;
+        } else if (method === 'trapezoidal' || method === 'tustin') {
           const uPrev = uPrevSlot ? stateSlotRealExpression(uPrevSlot, layout, member) : input;
           updateExpr = `${stateExpr} + (0.5 * (${dt})) * ((${input}) + (${uPrev}))`;
         } else {
