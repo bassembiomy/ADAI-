@@ -853,7 +853,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
               return (
                 <div key={key}>
                   <label className="block text-xs font-medium text-slate-400 mb-1 capitalize">
-                    {key.replace(/([A-Z])/g, ' $1').trim()}
+                    {key === 'output_type' ? 'Output data type' : key.replace(/([A-Z])/g, ' $1').trim()}
                   </label>
 
                   {(() => {
