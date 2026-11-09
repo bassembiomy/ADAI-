@@ -33,12 +33,13 @@ describe('stateMachineClipboard', () => {
       [], [], [], [], []
     );
 
-    const pastedTopState = result.newStates.find((s: StateData) => s.name === 'State_1_copy');
+    // Pasted into an empty layer: the name is free there, so it is kept (unique names are per layer).
+    const pastedTopState = result.newStates.find((s: StateData) => s.name === 'State_1');
     expect(pastedTopState).toBeDefined();
     expect(pastedTopState?.parentId).toBe('target_layer');
     expect(pastedTopState?.x).toBe(120);
 
-    const pastedSubState = result.newStates.find((s: StateData) => s.name === 'Sub_1_copy');
+    const pastedSubState = result.newStates.find((s: StateData) => s.name === 'Sub_1' && s.id !== 's1_sub1');
     expect(pastedSubState).toBeDefined();
     expect(pastedSubState?.parentId).not.toBe('l_child'); // Should point to cloned child layer ID
   });
@@ -76,8 +77,8 @@ describe('stateMachineClipboard', () => {
     const newTrans = result.newTransitions[0];
     expect(newTrans.id).not.toBe('t1');
 
-    const newS1 = result.newStates.find((s: StateData) => s.name === 'State_1_copy')!;
-    const newS2 = result.newStates.find((s: StateData) => s.name === 'State_2_copy')!;
+    const newS1 = result.newStates.find((s: StateData) => s.name === 'State_3')!;
+    const newS2 = result.newStates.find((s: StateData) => s.name === 'State_4')!;
     expect(newTrans.sourceId).toBe(newS1.id);
     expect(newTrans.targetId).toBe(newS2.id);
 
