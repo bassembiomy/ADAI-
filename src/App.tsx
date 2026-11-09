@@ -3839,7 +3839,7 @@ const WorkspaceTabBar = ({
 
   return (
     <div className="workspace-tab-bar ui-surface h-10 bg-[var(--surface-canvas)] border-b border-[var(--border-default)] flex items-center px-4 shrink-0 justify-between select-none">
-      <div className="flex items-center gap-1 overflow-x-auto no-scrollbar flex-1 h-full pt-1">
+      <div onWheel={handleHorizontalToolbarWheel} className="flex items-center gap-1 overflow-x-auto overflow-y-hidden adia-toolbar-scrollbar min-w-0 flex-1 h-full pt-1">
         {openTabIds.map((tabId) => {
           const file = workspaceFiles.find(f => f.id === tabId);
           if (!file) return null;
@@ -14978,7 +14978,7 @@ const ADIA = () => {
         <input data-help-feature="app-open" data-help-source="src/App.tsx" type="file" ref={projectImportRef} onChange={handleProjectFileChange} className="hidden" accept=".adia,.json" />
 
         {/* Top Toolbar - Modernized & Unified Semantic Header */}
-        <header className="h-14 ui-surface bg-[var(--surface-panel)] border-b border-[var(--border-default)] flex items-center px-4 gap-3 shrink-0 overflow-x-auto no-scrollbar">
+        <header onWheel={handleHorizontalToolbarWheel} className="h-14 ui-surface bg-[var(--surface-panel)] border-b border-[var(--border-default)] flex items-center px-4 gap-3 shrink-0 overflow-x-auto overflow-y-hidden adia-toolbar-scrollbar">
           {/* Brand & Project Identity Group */}
           <div className="flex items-center gap-2.5 shrink-0">
             <button data-help-feature="app-asset-manager" data-help-source="src/App.tsx"
@@ -15387,7 +15387,7 @@ const ADIA = () => {
             data-testid="diagram-workspace-tabs"
             className="ui-surface bg-[var(--surface-canvas)] border-b border-[var(--border-default)] flex items-center px-4 shrink-0 select-none"
           >
-            <div className="flex items-center gap-1 overflow-x-auto no-scrollbar flex-1 h-9 pt-1">
+            <div onWheel={handleHorizontalToolbarWheel} className="flex items-center gap-1 overflow-x-auto overflow-y-hidden adia-toolbar-scrollbar min-w-0 flex-1 h-9 pt-1">
               {moduleWorkspaceFiles.map(file => {
                 const isActive = activeWorkspaceTab.key === moduleWorkspaceTabKey(file.id);
                 return (

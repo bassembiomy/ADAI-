@@ -45,12 +45,12 @@ export const XbridgesDiagnosticPopup: React.FC<XbridgesDiagnosticPopupProps> = (
   return (
     <div
       role={hasError ? 'alert' : 'status'}
-      className="w-[360px] max-w-[calc(100%-2rem)] bg-[#1a1a1a] border border-[#333] rounded-xl shadow-2xl text-[#e0e0e0] overflow-hidden"
+      className="w-[360px] max-w-full max-h-full min-h-0 flex flex-col bg-[#1a1a1a] border border-[#333] rounded-xl shadow-2xl text-[#e0e0e0] overflow-hidden"
     >
-      <div className="px-3 py-2 border-b border-[#333] bg-[#111]/60 text-[10px] font-black uppercase tracking-widest text-slate-300">
+      <div className="shrink-0 px-3 py-2 border-b border-[#333] bg-[#111]/60 text-[10px] font-black uppercase tracking-widest text-slate-300">
         Run diagnostics: {heading.join(', ')}
       </div>
-      <ul className="m-0 p-2 space-y-1.5 list-none max-h-[260px] overflow-y-auto custom-scrollbar">
+      <ul className="m-0 p-2 space-y-1.5 list-none min-h-0 max-h-[260px] overflow-y-auto custom-scrollbar">
         {shown.map((raw, i) => {
           const d = describeDiagnostic(raw);
           return (
@@ -62,8 +62,8 @@ export const XbridgesDiagnosticPopup: React.FC<XbridgesDiagnosticPopupProps> = (
           );
         })}
       </ul>
-      {more > 0 && <div className="px-3 pb-1 text-[10px] text-slate-500">+{more} more</div>}
-      <div className="flex justify-end gap-2 px-3 py-2 border-t border-[#333]">
+      {more > 0 && <div className="shrink-0 px-3 pb-1 text-[10px] text-slate-500">+{more} more</div>}
+      <div className="shrink-0 flex justify-end gap-2 px-3 py-2 border-t border-[#333]">
         <button data-help-feature="live:components/xbridges/diagnostics/XbridgesDiagnosticPopup:1bdc27f5f835" type="button" onClick={onShowAll} className="px-2 py-0.5 rounded border border-[#444] text-[10px] font-bold text-[#c9a86c] hover:bg-[#222]">
           View all
         </button>

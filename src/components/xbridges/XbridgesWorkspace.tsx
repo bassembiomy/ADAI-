@@ -3326,7 +3326,7 @@ export const XbridgesWorkspace: React.FC<{
       </ResizablePanel>
 
       {/* Main Canvas Area */}
-      <div className="flex-1 relative flex flex-col min-h-0">
+      <div className="flex-1 relative flex flex-col min-w-0 min-h-0">
         {/* Premium Top Toolbar */}
         <div data-help-feature="live:components/xbridges/XbridgesWorkspace:2baeda448e81"
           onWheel={handleHorizontalToolbarWheel}
@@ -3603,7 +3603,7 @@ export const XbridgesWorkspace: React.FC<{
           })}
         </div>
 
-        <div className="flex-1 relative flex min-h-0">
+        <div className="flex-1 relative flex min-w-0 min-h-0">
           <div className="flex-1 relative flex flex-col min-w-0 min-h-0">
           <div ref={flowContainerRef} className="flex-1 relative min-h-0" onContextMenu={(e) => e.preventDefault()} style={{ cursor: copyDragging ? 'copy' : undefined }}>
             {/* Copy-mode indicator badge */}
@@ -3834,7 +3834,7 @@ export const XbridgesWorkspace: React.FC<{
             </button>
 
             {popupDiagnostics.length > 0 && (
-              <div className="absolute top-14 right-4 z-[60]">
+              <div className="absolute top-14 right-14 bottom-4 left-4 z-[60] flex flex-col items-end pointer-events-none [&>*]:pointer-events-auto">
                 <XbridgesDiagnosticPopup
                   diagnostics={popupDiagnostics}
                   onDismiss={dismissPopup}
