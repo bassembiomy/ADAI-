@@ -92,7 +92,7 @@ None in the registered feature inventory.
 
 ## Current source scan
 
-1560 handler sites across 107 production TSX files were scanned from the current source, including callback wiring and gestures omitted from the earlier snapshot. Status: {"documented":1397,"excluded":163}. The live report retains source signatures and a fingerprint; tests reject stale evidence and demonstrate failure for a new unmapped inline control. Callback wiring, profiler hooks and propagation wrappers are explicitly excluded rather than counted as user features.
+1561 handler sites across 108 production TSX files were scanned from the current source, including callback wiring and gestures omitted from the earlier snapshot. Status: {"documented":1397,"excluded":163,"unreviewed":1}. The live report retains source signatures and a fingerprint; tests reject stale evidence and demonstrate failure for a new unmapped inline control. Callback wiring, profiler hooks and propagation wrappers are explicitly excluded rather than counted as user features.
 
 ## Implementation limits
 

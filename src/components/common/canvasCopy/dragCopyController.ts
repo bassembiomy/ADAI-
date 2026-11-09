@@ -1,9 +1,9 @@
 /**
- * Drag-copy gesture for X-Bridges (right-drag and Ctrl + left-drag), one state machine:
+ * Drag-copy gesture shared by X-Bridges, V-Lab and OPM (right-drag and Ctrl + left-drag), one state machine:
  * idle -> pending (pressed, below the threshold) -> dragging (copies exist and follow the pointer) -> idle.
  * It holds no React state, so a state update can never lose a listener or leave a gesture half finished.
  */
-import { copyBlocks, type CopyEdge, type CopyNode } from './blockCopy';
+import { copyBlocks, type CopyEdge, type CopyNode, type NodeShape } from './blockCopy';
 
 export const DRAG_COPY_THRESHOLD_PX = 6;
 /** How long after a drag the context menu event that follows the right-button release is still swallowed. */
@@ -20,6 +20,8 @@ export interface DragCopyHost {
   /** Called once when the copies are dropped (save). */
   commit: () => void;
   /** Optional: tells the UI (cursor, badge) whether a copy is being dragged. */
+  /** Where the canvas keeps names and nesting; X-Bridges when omitted. */
+  shape?: NodeShape;
   onDraggingChange?: (dragging: boolean) => void;
 }
 
@@ -69,7 +71,7 @@ export function createDragCopyController(host: DragCopyHost) {
     if (!source) { setPhase({ kind: 'idle' }); return false; }
     const ids = source.selected ? nodes.filter((n) => n.selected).map((n) => n.id) : [p.nodeId];
     host.pushHistory();
-    const result = copyBlocks(nodes, edges, ids, { offset: { x: 0, y: 0 } });
+    const result = copyBlocks(nodes, edges, ids, { offset: { x: 0, y: 0 }, shape: host.shape });
     const base = new Map<string, { x: number; y: number }>();
     for (const n of result.nodes) if (n.selected) base.set(n.id, { ...n.position });
     setPhase({ kind: 'dragging', button: p.button, startX: p.startX, startY: p.startY, before: { nodes, edges }, base });

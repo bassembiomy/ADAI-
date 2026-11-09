@@ -1,6 +1,7 @@
 import { MultibodyConstraintDiagnosticError } from '../../engine/vlab/vlabConstraintDiagnostics';
 import React, { useCallback, useState, useMemo, useEffect, useRef } from 'react';
-import { beginRightDragCopy, moveRightDragCopy } from '../../services/rightDragCopyGesture';
+import { copyBlocks, snapshotBlocks, VLAB_NODE_SHAPE } from '../common/canvasCopy/blockCopy';
+import { createDragCopyController } from '../common/canvasCopy/dragCopyController';
 import {
   ReactFlow,
   Background,
@@ -1089,7 +1090,8 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
   const [solverConfigTab, setSolverConfigTab] = useState<'general' | 'numerical' | 'tolerances' | 'diagnostics'>('numerical');
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [clipboard, setClipboard] = useState<any[]>([]);
+  const [clipboard, setClipboard] = useState<{ nodes: any[]; edges: any[] } | null>(null);
+  const pasteCountRef = useRef<{ clipboard: unknown; count: number }>({ clipboard: null, count: 0 });
   const [history, setHistory] = useState<{ nodes: any[], edges: any[] }[]>([]);
   const [isSimulating, setIsSimulating] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
@@ -1298,89 +1300,97 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
   reactFlowInstanceRef.current = reactFlowInstance;
   useReactFlowCadNavigation(flowContainerRef, () => reactFlowInstanceRef.current);
 
-  // Right-click drag-to-copy state
-  const [rightClickDrag, setRightClickDrag] = useState<{
-    clonedNodeId: string;
-    startMouseX: number;
-    startMouseY: number;
-    startNodeX: number;
-    startNodeY: number;
-  } | null>(null);
-  const rightCopyGestureRef = useRef<ReturnType<typeof beginRightDragCopy> | null>(null);
-  const pendingRightCopyNodeRef = useRef<string | null>(null);
+  // Drag-copy (right-drag or Ctrl + left-drag): one controller, window listeners registered once.
+  const [copyDragging, setCopyDragging] = useState(false);
+  const ctrlPressNodeRef = useRef<string | null>(null);
+  const dragCopyRef = useRef<ReturnType<typeof createDragCopyController> | null>(null);
+  if (!dragCopyRef.current) {
+    dragCopyRef.current = createDragCopyController({
+      shape: VLAB_NODE_SHAPE,
+      getNodes: () => nodesRef.current as any,
+      getEdges: () => edgesRef.current as any,
+      setGraph: (nextNodes, nextEdges) => {
+        nodesRef.current = nextNodes as any;
+        edgesRef.current = nextEdges as any;
+        setNodes(nextNodes as any);
+        setEdges(nextEdges as any);
+      },
+      getZoom: () => reactFlowInstanceRef.current?.getZoom?.() || 1,
+      pushHistory: () => {
+        const snapshot = { nodes: nodesRef.current, edges: edgesRef.current };
+        setHistory(h => [...h, snapshot].slice(-20));
+      },
+      // The debounced save effect on nodes/edges persists the drop: one save for the whole gesture.
+      commit: () => {
+        const selected = nodesRef.current.filter(n => n.selected);
+        setSelectedNodeId(selected.length === 1 ? selected[0].id : null);
+      },
+      onDraggingChange: (dragging) => setCopyDragging(dragging),
+    });
+  }
 
   useEffect(() => {
-    if (!rightClickDrag) return;
-
-    const handleWindowMouseMove = (e: MouseEvent) => {
-      const zoom = reactFlowInstance?.getZoom() || 1;
-      const dx = (e.clientX - rightClickDrag.startMouseX) / zoom;
-      const dy = (e.clientY - rightClickDrag.startMouseY) / zoom;
-      
-      setNodes(nds => nds.map(n => n.id === rightClickDrag.clonedNodeId ? {
-        ...n,
-        position: {
-          x: rightClickDrag.startNodeX + dx,
-          y: rightClickDrag.startNodeY + dy
-        }
-      } : n));
-    };
-
-    const handleWindowMouseUp = (e: MouseEvent) => {
-      if (e.button === 2) {
-        e.preventDefault();
-        setRightClickDrag(null);
+    const ctl = dragCopyRef.current!;
+    const onMouseDown = (event: MouseEvent) => {
+      if (event.button !== 2 && !(event.button === 0 && event.ctrlKey)) return;
+      const target = event.target as Element | null;
+      const container = flowContainerRef.current;
+      if (!target || !container || !container.contains(target)) return;
+      const nodeEl = target.closest?.('.react-flow__node') as HTMLElement | null;
+      const nodeId = nodeEl?.getAttribute('data-id');
+      if (!nodeId) return;
+      // Ctrl + left press on a handle, an input or a no-drag control keeps its normal meaning.
+      if (event.button === 0 && target.closest('.react-flow__handle, .nodrag, input, textarea, select, button')) return;
+      if (ctl.pointerDown({ button: event.button, ctrlKey: event.ctrlKey, clientX: event.clientX, clientY: event.clientY }, nodeId)) {
+        // Capture phase on window: React Flow's own drag never sees this press, so the original does not move.
+        event.preventDefault();
+        event.stopPropagation();
+        ctrlPressNodeRef.current = event.button === 0 ? nodeId : null;
       }
     };
-
-    const handleContextMenu = (e: MouseEvent) => {
-      e.preventDefault();
+    const onMouseMove = (event: MouseEvent) => ctl.pointerMove({ clientX: event.clientX, clientY: event.clientY, buttons: event.buttons });
+    const onMouseUp = (event: MouseEvent) => {
+      const wasDragging = ctl.isDragging();
+      const pressedNode = ctrlPressNodeRef.current;
+      const wasActive = ctl.isActive();
+      ctl.pointerUp({ button: event.button, clientX: event.clientX, clientY: event.clientY });
+      if (wasActive && !ctl.isActive()) {
+        ctrlPressNodeRef.current = null;
+        if (event.button === 2 || wasDragging) event.preventDefault();
+        // A Ctrl + click without movement keeps the multi-select toggle.
+        if (pressedNode && !wasDragging && event.button === 0) {
+          const nextNodes = nodesRef.current.map(n => (n.id === pressedNode ? { ...n, selected: !n.selected } : n));
+          nodesRef.current = nextNodes;
+          setNodes(nextNodes);
+        }
+      }
     };
-
-    window.addEventListener('mousemove', handleWindowMouseMove);
-    window.addEventListener('mouseup', handleWindowMouseUp);
-    window.addEventListener('contextmenu', handleContextMenu);
-
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (ctl.keyDown({ key: event.key })) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    };
+    const onContextMenu = (event: MouseEvent) => {
+      if (ctl.contextMenu()) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    };
+    window.addEventListener('mousedown', onMouseDown, true);
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+    window.addEventListener('keydown', onKeyDown, true);
+    window.addEventListener('contextmenu', onContextMenu, true);
     return () => {
-      window.removeEventListener('mousemove', handleWindowMouseMove);
-      window.removeEventListener('mouseup', handleWindowMouseUp);
-      window.removeEventListener('contextmenu', handleContextMenu);
+      window.removeEventListener('mousedown', onMouseDown, true);
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+      window.removeEventListener('keydown', onKeyDown, true);
+      window.removeEventListener('contextmenu', onContextMenu, true);
     };
-  }, [rightClickDrag, reactFlowInstance, setNodes]);
-
-  useEffect(() => {
-    const handleMove = (event: MouseEvent) => {
-      const gesture = rightCopyGestureRef.current;
-      const nodeId = pendingRightCopyNodeRef.current;
-      if (!gesture || !nodeId || rightClickDrag) return;
-      const moved = moveRightDragCopy(gesture, { clientX: event.clientX, clientY: event.clientY });
-      rightCopyGestureRef.current = moved;
-      if (moved.phase !== 'dragging') return;
-      const node = nodes.find(candidate => candidate.id === nodeId);
-      if (!node) return;
-      const newNodeId = `${node.data.type}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-      setHistory(history => [...history, { nodes, edges }].slice(-20));
-      setNodes(current => [...current.map(candidate => ({ ...candidate, selected: false })), {
-        ...node, id: newNodeId, selected: true,
-        data: { ...node.data, id: newNodeId, selected: true },
-      }]);
-      setSelectedNodeId(newNodeId);
-      setRightClickDrag({ clonedNodeId: newNodeId, startMouseX: event.clientX, startMouseY: event.clientY, startNodeX: node.position.x, startNodeY: node.position.y });
-    };
-    const handleUp = () => { rightCopyGestureRef.current = null; pendingRightCopyNodeRef.current = null; };
-    window.addEventListener('mousemove', handleMove);
-    window.addEventListener('mouseup', handleUp);
-    return () => { window.removeEventListener('mousemove', handleMove); window.removeEventListener('mouseup', handleUp); };
-  }, [rightClickDrag, nodes, edges, setNodes]);
-
-  const handleNodeMouseDown = useCallback((event: React.MouseEvent, node: Node) => {
-    if (event.button === 2) {
-      event.preventDefault();
-      event.stopPropagation();
-      rightCopyGestureRef.current = beginRightDragCopy({ sourceIds: [node.id], clientX: event.clientX, clientY: event.clientY });
-      pendingRightCopyNodeRef.current = node.id;
-    }
-  }, []);
+    // Registered once: everything the handlers need lives in refs.
+  }, [setNodes]);
 
   const scopeParamsRef = useRef<any>({});
   useEffect(() => {
@@ -2009,7 +2019,8 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
       if (e.ctrlKey && e.key === 'c') {
         const selectedNodes = nodes.filter(n => n.selected);
         if (selectedNodes.length > 0) {
-          setClipboard(selectedNodes);
+          // A deep snapshot (with the selected blocks' contents and the lines between them): later edits do not change what is pasted.
+          setClipboard(snapshotBlocks(nodes as any[], edges as any[], selectedNodes.map(n => n.id), VLAB_NODE_SHAPE));
         } else {
           const allCollapsed = isLibCollapsed && isPropsCollapsed;
           if (allCollapsed) {
@@ -2024,14 +2035,23 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
 
       // Ctrl + V (Paste)
       if (e.ctrlKey && e.key === 'v') {
-        if (clipboard.length > 0) {
-          const pastedNodes = clipboard.map(n => ({
-            ...n,
-            id: `${n.data.type}_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
-            position: { x: n.position.x + 40, y: n.position.y + 40 },
-            selected: true
-          }));
-          setNodes(nds => nds.map(n => ({ ...n, selected: false })).concat(pastedNodes));
+        if (clipboard && clipboard.nodes.length > 0) {
+          setHistory(h => [...h, { nodes, edges }].slice(-20));
+          if (pasteCountRef.current.clipboard !== clipboard) pasteCountRef.current = { clipboard, count: 0 };
+          pasteCountRef.current.count += 1;
+          const step = 40 * pasteCountRef.current.count;
+          const clipIds = new Set(clipboard.nodes.map((n: any) => n.id));
+          const topIds = clipboard.nodes.filter((n: any) => !clipIds.has(n.data?.parentId)).map((n: any) => n.id);
+          const pasted = copyBlocks(clipboard.nodes, clipboard.edges, topIds, {
+            offset: { x: step, y: step },
+            shape: VLAB_NODE_SHAPE,
+            reservedLabels: nodes.map(n => (n.data as any)?.label).filter(Boolean) as string[],
+          });
+          // Top-level pasted blocks land in the level that is open now.
+          const topCopies = new Set(topIds.map((id: string) => pasted.idMap[id]));
+          const newNodes = pasted.nodes.map(n => (topCopies.has(n.id) ? { ...n, data: { ...n.data, parentId: currentParentId } } : n));
+          setNodes(nds => nds.map(n => ({ ...n, selected: false })).concat(newNodes as any[]));
+          if (pasted.edges.length > 0) setEdges(eds => eds.concat(pasted.edges as any[]));
         }
       }
 
@@ -2091,7 +2111,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [nodes, edges, clipboard, setNodes, setEdges, isLibCollapsed, isPropsCollapsed, setIsSimulating, reactFlowInstance]);
+  }, [nodes, edges, clipboard, setNodes, setEdges, isLibCollapsed, isPropsCollapsed, setIsSimulating, reactFlowInstance, currentParentId]);
 
   const filteredLibrary = useMemo(() => {
     if (!searchQuery.trim()) return VLAB_LIBRARY;
@@ -3134,7 +3154,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
         </div>
 
         {/* Center: Flow Canvas */}
-        <div data-help-feature="ui:vlab/VLabWorkspace:f4ba75cf7913" data-help-source="src/components/vlab/VLabWorkspace.tsx" ref={flowContainerRef} className={`flex-1 relative bg-[#0a0a0a] ${isConnecting ? 'react-flow--connection-active' : ''}`} onDrop={onDrop} onDragOver={onDragOver} onContextMenu={(e) => e.preventDefault()}>
+        <div data-help-feature="ui:vlab/VLabWorkspace:f4ba75cf7913" data-help-source="src/components/vlab/VLabWorkspace.tsx" ref={flowContainerRef} className={`flex-1 relative bg-[#0a0a0a] ${isConnecting ? 'react-flow--connection-active' : ''}`} onDrop={onDrop} onDragOver={onDragOver} onContextMenu={(e) => e.preventDefault()} style={{ cursor: copyDragging ? 'copy' : undefined }}>
           <ReactFlow data-help-feature="live:components/vlab/VLabWorkspace:99dea21cf220"
             deleteKeyCode={null}
             proOptions={{ hideAttribution: true }}
@@ -3144,7 +3164,6 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                 ...n.data,
                 // display-only (never saved): the blocks / ports a failed run points at
                 diagnosticPorts: diagnosticTargetMap.has(n.id) ? [...diagnosticTargetMap.get(n.id)!] : undefined,
-                onNodeMouseDown: (e: React.MouseEvent) => handleNodeMouseDown(e, n),
                 onRenameNode: (nodeId: string, newLabel: string) => {
                   setNodes(nds => nds.map(nd => {
                     if (nd.id === nodeId) {
@@ -3163,7 +3182,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                   }));
                 }
               }
-            })), [nodes, currentParentId, handleNodeMouseDown, setNodes, diagnosticTargetMap])}
+            })), [nodes, currentParentId, setNodes, diagnosticTargetMap])}
             edges={useMemo(() => edges.filter(e => {
               const sourceNode = nodes.find(n => n.id === e.source);
               return sourceNode && (sourceNode.data.parentId || 'root') === currentParentId;

@@ -55,6 +55,8 @@ import { OPM_EXAMPLES } from './EntropyExamples';
 import { OpmFloatingWindow } from './OpmFloatingWindow';
 import { OpmRightPanelContent } from './OpmRightPanelContent';
 import { useReactFlowCadNavigation } from '../../utils/useCadNavigation';
+import { copyBlocks, snapshotBlocks, OPM_NODE_SHAPE } from '../common/canvasCopy/blockCopy';
+import { createDragCopyController } from '../common/canvasCopy/dragCopyController';
 
 const nodeTypes = {
   opmObject: OPMObjectNode,
@@ -215,6 +217,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
   const flowContainerRef = useRef<HTMLDivElement>(null);
   useReactFlowCadNavigation(flowContainerRef, () => reactFlowInstanceRef.current, 0.01, 15);
   const opmClipboardRef = useRef<{ nodes: AppNode[]; edges: AppEdge[] } | null>(null);
+  const opmPasteCountRef = useRef<{ clipboard: unknown; count: number }>({ clipboard: null, count: 0 });
   const isSpacePressed = useRef<boolean>(false);
   const spaceComboUsed = useRef<boolean>(false);
   const [showShortcutsModal, setShowShortcutsModal] = useState<boolean>(false);
@@ -1479,6 +1482,107 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
     });
   }, [filteredEdges, nodes, simRunning, handleEdgeTypeChange, handleEdgeDelete]);
 
+  // --- Drag-copy (right-drag or Ctrl + left-drag on a thing): one controller, window listeners registered once ---
+  const [copyDragging, setCopyDragging] = useState(false);
+  const opmNodesRef = useRef<AppNode[]>(nodes);
+  const opmEdgesRef = useRef<AppEdge[]>(edges);
+  opmNodesRef.current = nodes;
+  opmEdgesRef.current = edges;
+  const ctrlPressNodeRef = useRef<string | null>(null);
+  const dragCopyHostRef = useRef({ saveHistory, onSave, invalidateSimState, bumpModelRevision });
+  dragCopyHostRef.current = { saveHistory, onSave, invalidateSimState, bumpModelRevision };
+  const dragCopyRef = useRef<ReturnType<typeof createDragCopyController> | null>(null);
+  if (!dragCopyRef.current) {
+    dragCopyRef.current = createDragCopyController({
+      shape: OPM_NODE_SHAPE,
+      getNodes: () => opmNodesRef.current as any,
+      getEdges: () => opmEdgesRef.current as any,
+      setGraph: (nextNodes, nextEdges) => {
+        opmNodesRef.current = nextNodes as any;
+        opmEdgesRef.current = nextEdges as any;
+        setNodes(nextNodes as any);
+        setEdges(nextEdges as any);
+      },
+      getZoom: () => reactFlowInstanceRef.current?.getZoom?.() || 1,
+      pushHistory: () => dragCopyHostRef.current.saveHistory(opmNodesRef.current, opmEdgesRef.current),
+      commit: () => {
+        const current = opmNodesRef.current;
+        const selected = current.filter(n => n.selected);
+        setSelectedNode(selected[0] ?? null);
+        setSelectedEdge(null);
+        const host = dragCopyHostRef.current;
+        host.invalidateSimState({ nodes: current, edges: opmEdgesRef.current });
+        host.bumpModelRevision();
+        if (host.onSave) host.onSave(current, opmEdgesRef.current);
+      },
+      onDraggingChange: (dragging) => setCopyDragging(dragging),
+    });
+  }
+
+  useEffect(() => {
+    const ctl = dragCopyRef.current!;
+    const onMouseDown = (event: MouseEvent) => {
+      if (event.button !== 2 && !(event.button === 0 && event.ctrlKey)) return;
+      const target = event.target as Element | null;
+      const container = flowContainerRef.current;
+      if (!target || !container || !container.contains(target)) return;
+      // Only a thing starts a copy: a press on the pane keeps its navigation / selection meaning.
+      const nodeEl = target.closest?.('.react-flow__node') as HTMLElement | null;
+      const nodeId = nodeEl?.getAttribute('data-id');
+      if (!nodeId) return;
+      // A state is copied with its object, never alone.
+      if (opmNodesRef.current.find(n => n.id === nodeId)?.data?.type === 'state') return;
+      if (event.button === 0 && target.closest('.react-flow__handle, .nodrag, input, textarea, select, button')) return;
+      if (ctl.pointerDown({ button: event.button, ctrlKey: event.ctrlKey, clientX: event.clientX, clientY: event.clientY }, nodeId)) {
+        event.preventDefault();
+        event.stopPropagation();
+        ctrlPressNodeRef.current = event.button === 0 ? nodeId : null;
+      }
+    };
+    const onMouseMove = (event: MouseEvent) => ctl.pointerMove({ clientX: event.clientX, clientY: event.clientY, buttons: event.buttons });
+    const onMouseUp = (event: MouseEvent) => {
+      const wasDragging = ctl.isDragging();
+      const pressedNode = ctrlPressNodeRef.current;
+      const wasActive = ctl.isActive();
+      ctl.pointerUp({ button: event.button, clientX: event.clientX, clientY: event.clientY });
+      if (wasActive && !ctl.isActive()) {
+        ctrlPressNodeRef.current = null;
+        if (event.button === 2 || wasDragging) event.preventDefault();
+        // A Ctrl + click without movement keeps the multi-select toggle.
+        if (pressedNode && !wasDragging && event.button === 0) {
+          const nextNodes = opmNodesRef.current.map(n => (n.id === pressedNode ? { ...n, selected: !n.selected } : n));
+          opmNodesRef.current = nextNodes;
+          setNodes(nextNodes);
+        }
+      }
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (ctl.keyDown({ key: event.key })) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    };
+    const onContextMenu = (event: MouseEvent) => {
+      if (ctl.contextMenu()) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    };
+    window.addEventListener('mousedown', onMouseDown, true);
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+    window.addEventListener('keydown', onKeyDown, true);
+    window.addEventListener('contextmenu', onContextMenu, true);
+    return () => {
+      window.removeEventListener('mousedown', onMouseDown, true);
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+      window.removeEventListener('keydown', onKeyDown, true);
+      window.removeEventListener('contextmenu', onContextMenu, true);
+    };
+    // Registered once: everything the handlers need lives in refs.
+  }, [setNodes]);
+
   // --- Comprehensive Keyboard Shortcuts (Ctrl+S, Ctrl+Z, Ctrl+Y, Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+X, Ctrl+D, Ctrl+R, Ctrl+P, Ctrl+O, Ctrl+L, Zoom, Delete, Escape, Space) ---
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -1552,15 +1656,8 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
         if (activeSelectedNodes.length > 0) {
           e.preventDefault();
           e.stopPropagation();
-          const selectedObjIds = new Set(activeSelectedNodes.map(n => n.id));
-          const childStates = nodes.filter(n => n.parentId && selectedObjIds.has(n.parentId));
-          const toCopyNodes = [...new Set([...activeSelectedNodes, ...childStates])];
-          const toCopyIds = new Set(toCopyNodes.map(n => n.id));
-          const toCopyEdges = edges.filter(ed => toCopyIds.has(ed.source) && toCopyIds.has(ed.target));
-          opmClipboardRef.current = {
-            nodes: JSON.parse(JSON.stringify(toCopyNodes)),
-            edges: JSON.parse(JSON.stringify(toCopyEdges)),
-          };
+          // A deep snapshot of the selection, its states and the links between them.
+          opmClipboardRef.current = snapshotBlocks(nodes as any[], edges as any[], activeSelectedNodes.map(n => n.id), OPM_NODE_SHAPE) as { nodes: AppNode[]; edges: AppEdge[] };
           logSim('info', `Copied ${activeSelectedNodes.length} element(s) (Ctrl+C).`);
         }
         return;
@@ -1572,46 +1669,33 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
           e.preventDefault();
           e.stopPropagation();
           saveHistory(nodes, edges);
-          const idMap = new Map<string, string>();
-          opmClipboardRef.current.nodes.forEach(n => idMap.set(n.id, uuidv4()));
-
-          const newPastedNodes: AppNode[] = opmClipboardRef.current.nodes.map(n => {
-            const newId = idMap.get(n.id)!;
-            const isChild = Boolean(n.parentId);
-            const parentId = n.parentId ? idMap.get(n.parentId) || n.parentId : undefined;
-            return {
-              ...n,
-              id: newId,
-              selected: true,
-              parentId,
-              position: isChild
-                ? { ...n.position }
-                : { x: n.position.x + 35, y: n.position.y + 35 },
-              data: {
-                ...n.data,
-                parentId: parentId || null,
-              }
-            };
+          const clipboard = opmClipboardRef.current;
+          // Each paste of the same clipboard lands 35 px further; names stay unique.
+          if (opmPasteCountRef.current.clipboard !== clipboard) opmPasteCountRef.current = { clipboard, count: 0 };
+          opmPasteCountRef.current.count += 1;
+          const step = 35 * opmPasteCountRef.current.count;
+          const clipIds = new Set(clipboard.nodes.map(n => n.id));
+          const topIds = clipboard.nodes.filter(n => !clipIds.has((n.parentId ?? n.data?.parentId) as string)).map(n => n.id);
+          const pasted = copyBlocks(clipboard.nodes as any[], clipboard.edges as any[], topIds, {
+            offset: { x: step, y: step },
+            shape: OPM_NODE_SHAPE,
+            reservedLabels: nodes.map(n => n.data?.name).filter(Boolean) as string[],
           });
-
-          const newPastedEdges: AppEdge[] = opmClipboardRef.current.edges.map(edge => {
-            const newSource = idMap.get(edge.source) || edge.source;
-            const newTarget = idMap.get(edge.target) || edge.target;
-            return {
-              ...edge,
-              id: `e-${newSource}-${newTarget}-${uuidv4().slice(0, 6)}`,
-              source: newSource,
-              target: newTarget,
-              selected: false,
-            };
-          });
+          // Objects and processes land in the level that is open now; a lone state stays in its object.
+          const newPastedNodes = pasted.nodes.map(n => (
+            n.selected && (n.data as any)?.type !== 'state'
+              ? { ...n, data: { ...n.data, parentId: activeParentId } }
+              : n
+          )) as unknown as AppNode[];
+          const newPastedEdges = pasted.edges.map(edge => ({ ...edge, id: `e-${edge.source}-${edge.target}-${uuidv4().slice(0, 6)}`, selected: false })) as unknown as AppEdge[];
 
           setNodes(prev => [...prev.map(n => ({ ...n, selected: false })), ...newPastedNodes]);
           setEdges(prev => [...prev.map(ed => ({ ...ed, selected: false })), ...newPastedEdges]);
           if (newPastedNodes.length > 0) {
-            setSelectedNode(newPastedNodes[0]);
+            setSelectedNode(newPastedNodes.find(n => n.selected) ?? newPastedNodes[0]);
           }
-          logSim('info', `Pasted ${newPastedNodes.filter(n => !n.parentId).length} element(s) (Ctrl+V).`);
+          if (onSave) onSave([...nodes.map(n => ({ ...n, selected: false })), ...newPastedNodes], [...edges, ...newPastedEdges]);
+          logSim('info', `Pasted ${newPastedNodes.filter(n => n.selected).length} element(s) (Ctrl+V).`);
         }
         return;
       }
@@ -1840,7 +1924,8 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
     resetSimulation,
     triggerAutoLayout,
     saveHistory,
-    logSim
+    logSim,
+    activeParentId
   ]);
 
   const numIn = selectedNode?.data?.inputs?.length || 0;
@@ -2552,7 +2637,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
           <div className="relative min-h-0 flex-1">
 
           {/* React Flow Canvas */}
-          <div ref={flowContainerRef} className="absolute inset-0">
+          <div ref={flowContainerRef} className="absolute inset-0" style={{ cursor: copyDragging ? 'copy' : undefined }}>
             <ReactFlow data-help-feature="live:components/entropy/EntropyWorkspace:7f1236c98c39"
               proOptions={{ hideAttribution: true }}
               nodes={filteredNodes}

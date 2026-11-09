@@ -61,6 +61,7 @@ import {
   calculateSeparatedRelationshipPath,
   calculateOrthogonalConnectorPath,
 } from './utils/sysmlConnectionRouting';
+import { dragCopyStates } from './utils/stateMachineDragCopy';
 import { createStateMachineClipboard, pasteStateMachineClipboard, StateMachineClipboardData } from './utils/stateMachineClipboard';
 import { pruneStateHierarchy, pruneMultipleStatesHierarchy, countDescendants } from './utils/stateMachine/smStatePruner';
 import { generateMISRACCode, getCTimeType, validateInitialValue } from './utils/stateMachineCodeGenerator';
@@ -4888,6 +4889,18 @@ const ADIA = () => {
   const zoomIndicatorTimerRef = useRef<number | null>(null);
   const worldGroupRef = useRef<SVGGElement>(null);
   const rightDragCopyRef = useRef<RightDragCopyState | null>(null);
+  // State Machine: the state a Ctrl + left press started a copy gesture on (a click without movement still toggles its selection).
+  const ctrlCopyPressRef = useRef<string | null>(null);
+  useEffect(() => {
+    // Esc cancels a copy gesture that has not been dropped yet; nothing was created before the drop.
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== 'Escape' || !rightDragCopyRef.current) return;
+      rightDragCopyRef.current = null;
+      ctrlCopyPressRef.current = null;
+    };
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, []);
   const [smCanvasContextMenu, setSmCanvasContextMenu] = useState<{
     x: number;
     y: number;
@@ -10764,6 +10777,12 @@ const ADIA = () => {
     if (!isDragging) setMousePos({ x: worldX, y: worldY });
 
     if (rightDragCopyRef.current) {
+      if (e.buttons === 0) {
+        // The button was released outside the canvas: end the gesture without a copy.
+        rightDragCopyRef.current = null;
+        ctrlCopyPressRef.current = null;
+        return;
+      }
       rightDragCopyRef.current = moveRightDragCopy(rightDragCopyRef.current, {
         clientX: e.clientX,
         clientY: e.clientY,
@@ -10945,32 +10964,39 @@ const ADIA = () => {
   }, [isDragging, draggedPort, selectedIds, states, junctions, blocks, parts, sysmlCanvasView, view, snapEnabled, updateState, updateJunction, updateBlock, updatePart, diagramMode, currentLayerId, activeSysmlDiagramId, sysmlDiagramPresentations, isResizing, resizeStart, resizeHandle, layers, handleExecuteSysmlCommand, addError, setDiagramDragOffset, addToHistory, packageNestingNodes, diagramShortcuts]);
 
   const handleMouseUp = useCallback((e: MouseEvent<HTMLDivElement>) => {
-    if (e.button === 2 && rightDragCopyRef.current) {
+    if ((e.button === 2 || (e.button === 0 && ctrlCopyPressRef.current)) && rightDragCopyRef.current) {
       const completedGesture = endRightDragCopy(rightDragCopyRef.current);
       rightDragCopyRef.current = null;
+      const ctrlPressedStateId = ctrlCopyPressRef.current;
+      ctrlCopyPressRef.current = null;
+      if (completedGesture.kind === 'contextMenu' && ctrlPressedStateId) {
+        setSelectedIds(prev => prev.includes(ctrlPressedStateId) ? prev.filter(id => id !== ctrlPressedStateId) : [...prev, ctrlPressedStateId]);
+      }
       if (completedGesture.kind === 'copy') {
         const rect = canvasRef.current?.getBoundingClientRect();
         if (rect) {
           const x = ((completedGesture.clientX - rect.left) / uiZoom - view.offsetX) / view.scale;
           const y = ((completedGesture.clientY - rect.top) / uiZoom - view.offsetY) / view.scale;
           const stateSources = completedGesture.sourceIds
-            .map(id => states.find(state => state.id === id))
-            .filter((state): state is StateData => Boolean(state));
-          if (stateSources.length === completedGesture.sourceIds.length) {
+            .map(id => states.find(state => state.id === id) ?? junctions.find(junction => junction.id === id))
+            .filter((node): node is StateData | JunctionData => Boolean(node));
+          if (diagramMode === 'statemachine' && stateSources.length === completedGesture.sourceIds.length) {
+            // The group keeps its shape; the pressed state's top-left lands under the pointer.
+            const sourceSet = new Set(completedGesture.sourceIds);
+            const topLeftX = Math.min(...stateSources.map(source => source.x));
+            const topLeftY = Math.min(...stateSources.map(source => source.y));
             const origin = stateSources[0];
-            const clones = stateSources.map(source => ({
-              ...source,
-              id: uuidv4(),
-              name: `${source.name}_copy`,
-              x: x + (source.x - origin.x),
-              y: y + (source.y - origin.y),
-            }));
+            const result = dragCopyStates(
+              { states, junctions, transitions, layers },
+              [...sourceSet],
+              { layerId: currentLayerId, drop: { x: x + (topLeftX - origin.x), y: y + (topLeftY - origin.y) } },
+            );
             addToHistory();
-            setStates(previous => [...previous, ...clones]);
-            setLayers(previous => previous.map(layer => layer.id === currentLayerId
-              ? { ...layer, stateIds: [...layer.stateIds, ...clones.map(clone => clone.id)] }
-              : layer));
-            setSelectedIds(clones.map(clone => clone.id));
+            setStates(result.states);
+            setJunctions(result.junctions);
+            setTransitions(result.transitions);
+            setLayers(result.layers);
+            setSelectedIds([...result.newTopLevelStateIds, ...result.newTopLevelJunctionIds]);
             return;
           }
           const diagramId = activeSysmlDiagramId;
@@ -11116,7 +11142,7 @@ const ADIA = () => {
       setPresentationDrafts({});
       dragRawPositionsRef.current = {};
     }
-  }, [bddFeatureDrag, dropBddFeatureOnBlock, sysmlCanvasView, uiZoom, view, isDragging, draggedPort, isResizing, selectedIds, diagramMode, currentLayerId, activeSysmlDiagramId, handleExecuteSysmlCommand, sysmlDiagramPresentations, canonicalSysmlRepository, packageNestingNodes, requestPackageOwnershipMove, addError]);
+  }, [states, junctions, transitions, layers, addToHistory, bddFeatureDrag, dropBddFeatureOnBlock, sysmlCanvasView, uiZoom, view, isDragging, draggedPort, isResizing, selectedIds, diagramMode, currentLayerId, activeSysmlDiagramId, handleExecuteSysmlCommand, sysmlDiagramPresentations, canonicalSysmlRepository, packageNestingNodes, requestPackageOwnershipMove, addError]);
 
   const diagramMouseHandlersRef = useRef({ move: handleMouseMove, up: handleMouseUp });
   diagramMouseHandlersRef.current = { move: handleMouseMove, up: handleMouseUp };
@@ -11356,6 +11382,18 @@ const ADIA = () => {
       return;
     }
 
+    if (e.button === 0 && e.ctrlKey && diagramMode === 'statemachine') {
+      // Ctrl + left-drag copies; a Ctrl + click without movement still toggles the selection (on release).
+      e.preventDefault();
+      ctrlCopyPressRef.current = stateId;
+      rightDragCopyRef.current = beginRightDragCopy({
+        sourceIds: selectedIds.includes(stateId) ? selectedIds : [stateId],
+        clientX: e.clientX,
+        clientY: e.clientY,
+      });
+      return;
+    }
+
     if (e.ctrlKey) {
       setSelectedIds(prev => prev.includes(stateId) ? prev.filter(id => id !== stateId) : [...prev, stateId]);
     } else {
@@ -11369,7 +11407,7 @@ const ADIA = () => {
 
     // For dragging, we track the mouse position relative to world
     setDiagramDragOffset({ x: worldX, y: worldY });
-  }, [isCreatingTransition, transitionSourceId, states, view, createTransition, selectedIds, addToHistory, uiZoom, currentLayerId]);
+  }, [isCreatingTransition, transitionSourceId, states, view, createTransition, selectedIds, addToHistory, uiZoom, currentLayerId, diagramMode]);
 
   const handleJunctionMouseDown = useCallback((e: MouseEvent<SVGGElement>, junctionId: string) => {
     e.stopPropagation();
