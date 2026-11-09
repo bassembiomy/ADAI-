@@ -1,5 +1,6 @@
 import { MultibodyConstraintDiagnosticError } from '../../engine/vlab/vlabConstraintDiagnostics';
 import React, { useCallback, useState, useMemo, useEffect, useRef } from 'react';
+import { ResizablePanel } from '../common/ResizablePanel';
 import { copyBlocks, snapshotBlocks, VLAB_NODE_SHAPE } from '../common/canvasCopy/blockCopy';
 import { createDragCopyController } from '../common/canvasCopy/dragCopyController';
 import {
@@ -2950,7 +2951,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
 
       <div className="flex flex-1 mt-12 overflow-hidden">
         {/* Left Sidebar: Block Library / Learning Labs */}
-        <div className={`${isLibCollapsed ? 'w-12' : 'w-72'} vlab-panel border-r border-[var(--border-default)] flex flex-col transition-all duration-500 ease-in-out relative group shrink-0`}>
+        <ResizablePanel id="vlab.library" label="Library" edge="right" defaultSize={288} minSize={200} maxSize={640} className={`${isLibCollapsed ? '!w-12 [&>[role=separator]]:hidden' : ''} vlab-panel border-r border-[var(--border-default)] flex flex-col group`}>
           {/* Header */}
           <div className="p-4 border-b border-[#222] flex items-center justify-between overflow-hidden shrink-0">
             {!isLibCollapsed && (
@@ -3151,7 +3152,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
               )}
             </>
           )}
-        </div>
+        </ResizablePanel>
 
         {/* Center: Flow Canvas */}
         <div data-help-feature="ui:vlab/VLabWorkspace:f4ba75cf7913" data-help-source="src/components/vlab/VLabWorkspace.tsx" ref={flowContainerRef} className={`flex-1 relative bg-[#0a0a0a] ${isConnecting ? 'react-flow--connection-active' : ''}`} onDrop={onDrop} onDragOver={onDragOver} onContextMenu={(e) => e.preventDefault()} style={{ cursor: copyDragging ? 'copy' : undefined }}>
@@ -3411,7 +3412,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
         </div>
 
         {/* Right Sidebar: Properties & Equations */}
-        <div className={`${isPropsCollapsed ? 'w-12' : 'w-80'} vlab-panel border-l border-[var(--border-default)] flex flex-col transition-all duration-500 ease-in-out relative group shrink-0`}>
+        <ResizablePanel id="vlab.properties" label="Properties" edge="left" defaultSize={320} minSize={220} maxSize={720} className={`${isPropsCollapsed ? '!w-12 [&>[role=separator]]:hidden' : ''} vlab-panel border-l border-[var(--border-default)] flex flex-col group`}>
           {/* Header */}
           <div className="p-4 border-b border-[#222] flex items-center justify-between overflow-hidden shrink-0">
             {!isPropsCollapsed && (
@@ -4092,7 +4093,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
               </div>
             )
           )}
-        </div>
+        </ResizablePanel>
       </div>
 
       {/* Individual MATLAB/Simulink Scope Windows */}

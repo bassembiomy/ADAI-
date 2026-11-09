@@ -2954,5 +2954,47 @@
     "featureIds": [
       "live:components/xbridges/diagnostics/XbridgesStatusBar:a1cc4a27dd3f"
     ]
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "ResizablePanel|onSizeChange:{notifyShellPanelResize}",
+    "id": "live:App:9709528598aa",
+    "status": "excluded",
+    "reason": "ResizablePanel callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "ResizablePanel|onSizeChange:{notifyShellPanelResize}",
+    "id": "live:App:9709528598aa",
+    "status": "excluded",
+    "reason": "ResizablePanel callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "ResizablePanel|onSizeChange:{notifyShellPanelResize}",
+    "id": "live:App:9709528598aa",
+    "status": "excluded",
+    "reason": "ResizablePanel callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "ResizablePanel|onSizeChange:{notifyShellPanelResize}",
+    "id": "live:App:9709528598aa",
+    "status": "excluded",
+    "reason": "ResizablePanel callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
+  },
+  {
+    "source": "src/components/common/ResizablePanel.tsx",
+    "signature": "div|onDoubleClick:{onHandleDoubleClick}|onKeyDown:{onHandleKeyDown}|onMouseDown:{onHandleMouseDown}",
+    "id": "live:components/common/ResizablePanel:82b534eeb763",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/common/ResizablePanel:82b534eeb763"
+    ]
   }
 ]

@@ -1,10 +1,10 @@
 {
-  "files": 108,
-  "fingerprint": "9ed2ec0daadbfb8358883974b258e5ccae9df017f1e61fb470aabc8e73ed902f",
+  "files": 109,
+  "fingerprint": "9a6212c554027da192229f1642396ab57e0f97b0345b03c628b099859b8b71e6",
   "items": [
     {
       "source": "src/App.tsx",
-      "line": 591,
+      "line": 592,
       "tag": "AppModelExplorer",
       "signature": "AppModelExplorer|onCommandResult:{props.onCommandResult}|onCommitStateMachineSnapshot:{props.onCommitStateMachineSnapshot}|onDoubleClick:{props.onDoubleClick}|onExecuteSysmlCommand:{props.onExecuteSysmlCommand}|onOpenSpecification:{props.onOpenSpecification}|onSelect:{props.onSelect}|onSelectMultiple:{props.onSelectMultiple}",
       "handlers": {
@@ -16,16 +16,16 @@
         "onExecuteSysmlCommand": "{props.onExecuteSysmlCommand}",
         "onCommandResult": "{props.onCommandResult}"
       },
-      "id": "ui:modelExplorer/ModelTreeRow:d6ca5f847c12",
+      "feature": "ui:modelExplorer/ModelTreeRow:d6ca5f847c12",
       "status": "documented",
-      "reason": "Additional source handler reviewed against its component implementation (2026-10-19 release review).",
       "featureIds": [
         "ui:modelExplorer/ModelTreeRow:d6ca5f847c12"
-      ]
+      ],
+      "reason": "Direct stable feature binding resolves to a live instructional destination."
     },
     {
       "source": "src/App.tsx",
-      "line": 734,
+      "line": 735,
       "tag": "div",
       "signature": "div|onMouseDown:{()=>!isMobile&&onUpdate(windowState.id,{zIndex:Date.now()})}",
       "handlers": {
@@ -40,7 +40,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 767,
+      "line": 768,
       "tag": "div",
       "signature": "div|onMouseDown:{(e)=>{if(isMobile||windowState.isMaximized)return;e.stopPropagation();setIsDragging(true);setDragOffset({x:e.clientX-windowState.pos.x,y:e.clientY-windowState.pos.y});}}",
       "handlers": {
@@ -55,7 +55,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 780,
+      "line": 781,
       "tag": "div",
       "signature": "div|onMouseDown:{(e)=>e.stopPropagation()}",
       "handlers": {
@@ -68,7 +68,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 782,
+      "line": 783,
       "tag": "button",
       "signature": "button|onClick:{()=>onUpdate(windowState.id,{isMinimized:!windowState.isMinimized})}",
       "handlers": {
@@ -83,7 +83,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 802,
+      "line": 803,
       "tag": "button",
       "signature": "button|onClick:{()=>onUpdate(windowState.id,{isMaximized:!windowState.isMaximized,isMinimized:false})}",
       "handlers": {
@@ -98,7 +98,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 820,
+      "line": 821,
       "tag": "button",
       "signature": "button|onClick:{onClose}",
       "handlers": {
@@ -113,7 +113,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 838,
+      "line": 839,
       "tag": "div",
       "signature": "div|onMouseDown:{(e)=>{e.stopPropagation();e.preventDefault();setIsResizing(true);setResizeStart({w:windowState.size.width,h:windowState.size.height,x:e.clientX,y:e.clientY});}}",
       "handlers": {
@@ -128,7 +128,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 1021,
+      "line": 1022,
       "tag": "select",
       "signature": "select|onChange:{e=>setFilterStatus(e.target.value)}",
       "handlers": {
@@ -143,7 +143,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 1029,
+      "line": 1030,
       "tag": "Button",
       "signature": "Button|onClick:{exportExcel}",
       "handlers": {
@@ -158,7 +158,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 1168,
+      "line": 1169,
       "tag": "div",
       "signature": "div|onMouseDown:{e=>e.stopPropagation()}",
       "handlers": {
@@ -171,7 +171,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 1201,
+      "line": 1202,
       "tag": "button",
       "signature": "button|onClick:{()=>setActiveFile(f.name)}",
       "handlers": {
@@ -186,7 +186,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 1257,
+      "line": 1258,
       "tag": "Button",
       "signature": "Button|onClick:{onClose}",
       "handlers": {
@@ -201,7 +201,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 1265,
+      "line": 1266,
       "tag": "Button",
       "signature": "Button|onClick:{async()=>{try{constJSZip=awaitloadJsZip();constzip=newJSZip();files.forEach(f=>{zip.file(f.name,f.content);});constblob=awaitzip.generateAsync({type:'blob'});consturl=URL.createObjectURL(blob);constelement=document.createElement('a');element.setAttribute('href',url);element.setAttribute('download',`generated_code_${newDate().getTime()}.zip`);element.style.display='none';document.body.appendChild(element);element.click();document.body.removeChild(element);URL.revokeObjectURL(url);addError('info','CodepackagedownloadedsuccessfullyasZIP');onClose();}catch(err){console.error('FailedtogenerateZIPpackage:',err);addError('error','FailedtogenerateZIPpackage.');}}}",
       "handlers": {
@@ -216,7 +216,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 1301,
+      "line": 1302,
       "tag": "div",
       "signature": "div|onMouseDown:{handleModalResizeStart}",
       "handlers": {
@@ -231,7 +231,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 1463,
+      "line": 1464,
       "tag": "input",
       "signature": "input|onChange:{handlePidFileChange}",
       "handlers": {
@@ -246,7 +246,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 1464,
+      "line": 1465,
       "tag": "Button",
       "signature": "Button|onClick:{handleLoadPidData}",
       "handlers": {
@@ -261,7 +261,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 1469,
+      "line": 1470,
       "tag": "Input",
       "signature": "Input|onChange:{e=>setPidKp(e.target.value)}",
       "handlers": {
@@ -276,7 +276,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 1470,
+      "line": 1471,
       "tag": "Input",
       "signature": "Input|onChange:{e=>setPidKi(e.target.value)}",
       "handlers": {
@@ -291,7 +291,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 1471,
+      "line": 1472,
       "tag": "Input",
       "signature": "Input|onChange:{e=>setPidKd(e.target.value)}",
       "handlers": {
@@ -306,7 +306,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 1475,
+      "line": 1476,
       "tag": "Button",
       "signature": "Button|onClick:{()=>runPidSimulation(true)}",
       "handlers": {
@@ -321,7 +321,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 1476,
+      "line": 1477,
       "tag": "Button",
       "signature": "Button|onClick:{handleAutoTune}",
       "handlers": {
@@ -336,7 +336,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 1477,
+      "line": 1478,
       "tag": "Button",
       "signature": "Button|onClick:{handleExportPidCode}",
       "handlers": {
@@ -351,7 +351,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 1743,
+      "line": 1744,
       "tag": "button",
       "signature": "button|onClick:{()=>rotate(-1)}",
       "handlers": {
@@ -366,7 +366,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 1750,
+      "line": 1751,
       "tag": "button",
       "signature": "button|onClick:{()=>rotate(1)}",
       "handlers": {
@@ -381,7 +381,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 1760,
+      "line": 1761,
       "tag": "div",
       "signature": "div|onMouseDown:{handleMouseDown}|onMouseLeave:{handleMouseLeave}|onMouseUp:{handleMouseUp}",
       "handlers": {
@@ -398,7 +398,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 1849,
+      "line": 1850,
       "tag": "div",
       "signature": "div|onClick:{()=>handleSelect(idx)}",
       "handlers": {
@@ -413,7 +413,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 1955,
+      "line": 1956,
       "tag": "div",
       "signature": "div|onMouseDown:{onMouseDown}",
       "handlers": {
@@ -426,7 +426,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 2659,
+      "line": 2660,
       "tag": "button",
       "signature": "button|onClick:{m.action}",
       "handlers": {
@@ -441,7 +441,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 2674,
+      "line": 2675,
       "tag": "Button",
       "signature": "Button|onClick:{()=>setShowDesignBuilder(true)}",
       "handlers": {
@@ -456,7 +456,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 2687,
+      "line": 2688,
       "tag": "input",
       "signature": "input|onChange:{handleFileUpload}",
       "handlers": {
@@ -471,7 +471,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 2688,
+      "line": 2689,
       "tag": "Button",
       "signature": "Button|onClick:{handleExportProject}",
       "handlers": {
@@ -486,7 +486,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 2697,
+      "line": 2698,
       "tag": "Button",
       "signature": "Button|onClick:{()=>fileInputRef.current?.click()}",
       "handlers": {
@@ -501,7 +501,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 2705,
+      "line": 2706,
       "tag": "Button",
       "signature": "Button|onClick:{generateReport}",
       "handlers": {
@@ -516,7 +516,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 2714,
+      "line": 2715,
       "tag": "Button",
       "signature": "Button|onClick:{onClose}",
       "handlers": {
@@ -531,7 +531,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 2734,
+      "line": 2735,
       "tag": "Button",
       "signature": "Button|onClick:{handleExportToXBridges}",
       "handlers": {
@@ -546,7 +546,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 2742,
+      "line": 2743,
       "tag": "Button",
       "signature": "Button|onClick:{handleExportToVLab}",
       "handlers": {
@@ -561,7 +561,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 2786,
+      "line": 2787,
       "tag": "button",
       "signature": "button|onClick:{()=>setResponseTableTab('sn')}",
       "handlers": {
@@ -576,7 +576,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 2792,
+      "line": 2793,
       "tag": "button",
       "signature": "button|onClick:{()=>setResponseTableTab('mean')}",
       "handlers": {
@@ -591,7 +591,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 2942,
+      "line": 2943,
       "tag": "Button",
       "signature": "Button|onClick:{handleExportToVLab}",
       "handlers": {
@@ -606,7 +606,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 2950,
+      "line": 2951,
       "tag": "Button",
       "signature": "Button|onClick:{handleExportToXBridges}",
       "handlers": {
@@ -621,7 +621,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 2959,
+      "line": 2960,
       "tag": "Button",
       "signature": "Button|onClick:{()=>setEqFontSize(p=>Math.max(8,p-1))}",
       "handlers": {
@@ -636,7 +636,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 2960,
+      "line": 2961,
       "tag": "Button",
       "signature": "Button|onClick:{()=>setEqFontSize(p=>Math.min(32,p+1))}",
       "handlers": {
@@ -651,7 +651,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 2996,
+      "line": 2997,
       "tag": "select",
       "signature": "select|onChange:{e=>setPlotFactors(prev=>({...prev,x:Number(e.target.value)}))}",
       "handlers": {
@@ -666,7 +666,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 3006,
+      "line": 3007,
       "tag": "select",
       "signature": "select|onChange:{e=>setPlotFactors(prev=>({...prev,y:Number(e.target.value)}))}",
       "handlers": {
@@ -681,7 +681,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 3030,
+      "line": 3031,
       "tag": "button",
       "signature": "button|onClick:{()=>setPlotType(p.idasany)}",
       "handlers": {
@@ -696,7 +696,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 3053,
+      "line": 3054,
       "tag": "select",
       "signature": "select|onChange:{(e)=>{constnewVals=[...holdValues];newVals[i]=Number(e.target.value);setHoldValues(newVals);}}",
       "handlers": {
@@ -711,7 +711,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 3101,
+      "line": 3102,
       "tag": "select",
       "signature": "select|onChange:{e=>setTaguchiConfig(prev=>({...prev,objective:e.target.valueasany}))}",
       "handlers": {
@@ -726,7 +726,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 3116,
+      "line": 3117,
       "tag": "input",
       "signature": "input|onChange:{e=>setTaguchiConfig(prev=>({...prev,targetValue:Number(e.target.value)}))}",
       "handlers": {
@@ -741,7 +741,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 3138,
+      "line": 3139,
       "tag": "input",
       "signature": "input|onChange:{e=>{constnewHolds=[...holdValues];newHolds[i]=Number(e.target.value);setHoldValues(newHolds);}}",
       "handlers": {
@@ -756,7 +756,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 3179,
+      "line": 3180,
       "tag": "input",
       "signature": "input|onChange:{handleBuilderNumFactorsChange}",
       "handlers": {
@@ -771,7 +771,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 3203,
+      "line": 3204,
       "tag": "input",
       "signature": "input|onChange:{(e)=>handleBuilderFactorNameChange(idx,e.target.value)}",
       "handlers": {
@@ -786,7 +786,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 3211,
+      "line": 3212,
       "tag": "select",
       "signature": "select|onChange:{(e)=>handleBuilderFactorLevelsChange(idx,Number(e.target.value))}",
       "handlers": {
@@ -801,7 +801,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 3249,
+      "line": 3250,
       "tag": "Button",
       "signature": "Button|onClick:{()=>setShowDesignBuilder(false)}",
       "handlers": {
@@ -816,7 +816,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 3250,
+      "line": 3251,
       "tag": "Button",
       "signature": "Button|onClick:{handleGenerateDesign}",
       "handlers": {
@@ -831,7 +831,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 3269,
+      "line": 3270,
       "tag": "Button",
       "signature": "Button|onClick:{()=>setShowDesignBuilder(true)}",
       "handlers": {
@@ -846,7 +846,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 3286,
+      "line": 3287,
       "tag": "button",
       "signature": "button|onClick:{()=>setPlotType(p.idasany)}",
       "handlers": {
@@ -861,7 +861,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 3315,
+      "line": 3316,
       "tag": "ManualEntryTable",
       "signature": "ManualEntryTable|onChange:{(nd,nh)=>{setData(nd);setHeaders(nh);}}",
       "handlers": {
@@ -880,7 +880,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 3354,
+      "line": 3355,
       "tag": "button",
       "signature": "button|onClick:{()=>setIsOpen(!isOpen)}",
       "handlers": {
@@ -895,7 +895,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 3367,
+      "line": 3368,
       "tag": "button",
       "signature": "button|onClick:{()=>setIsOpen(false)}",
       "handlers": {
@@ -910,7 +910,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 3383,
+      "line": 3384,
       "tag": "button",
       "signature": "button|onClick:{()=>{onSelect(emoji);setIsOpen(false);}}",
       "handlers": {
@@ -925,7 +925,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 3418,
+      "line": 3419,
       "tag": "div",
       "signature": "div|onMouseDown:{onClose}",
       "handlers": {
@@ -940,7 +940,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 3419,
+      "line": 3420,
       "tag": "div",
       "signature": "div|onMouseDown:{e=>e.stopPropagation()}",
       "handlers": {
@@ -953,7 +953,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 3426,
+      "line": 3427,
       "tag": "Input",
       "signature": "Input|onChange:{e=>setProjectName(e.target.value)}",
       "handlers": {
@@ -968,7 +968,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 3430,
+      "line": 3431,
       "tag": "Input",
       "signature": "Input|onChange:{e=>setAuthor(e.target.value)}",
       "handlers": {
@@ -983,7 +983,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 3432,
+      "line": 3433,
       "tag": "Button",
       "signature": "Button|onClick:{()=>onGenerate(projectName,author)}",
       "handlers": {
@@ -998,7 +998,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 3449,
+      "line": 3450,
       "tag": "div",
       "signature": "div|onMouseDown:{onClose}",
       "handlers": {
@@ -1013,7 +1013,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 3450,
+      "line": 3451,
       "tag": "div",
       "signature": "div|onMouseDown:{(e:React.MouseEvent)=>e.stopPropagation()}",
       "handlers": {
@@ -1026,7 +1026,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 3457,
+      "line": 3458,
       "tag": "Input",
       "signature": "Input|onChange:{(e:React.ChangeEvent<HTMLInputElement>)=>setName(e.target.value)}|onKeyDown:{(e:React.KeyboardEvent<HTMLInputElement>)=>{if(e.key==='Enter'&&name.trim()){onCreate(name.trim());}}}",
       "handlers": {
@@ -1042,7 +1042,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 3471,
+      "line": 3472,
       "tag": "Button",
       "signature": "Button|onClick:{onClose}",
       "handlers": {
@@ -1057,7 +1057,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 3472,
+      "line": 3473,
       "tag": "Button",
       "signature": "Button|onClick:{()=>name.trim()&&onCreate(name.trim())}",
       "handlers": {
@@ -1072,7 +1072,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 3584,
+      "line": 3585,
       "tag": "div",
       "signature": "div|onMouseDown:{onClose}",
       "handlers": {
@@ -1087,7 +1087,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 3585,
+      "line": 3586,
       "tag": "div",
       "signature": "div|onMouseDown:{(e)=>e.stopPropagation()}",
       "handlers": {
@@ -1100,7 +1100,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 3593,
+      "line": 3594,
       "tag": "button",
       "signature": "button|onClick:{onClose}",
       "handlers": {
@@ -1115,7 +1115,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 3598,
+      "line": 3599,
       "tag": "button",
       "signature": "button|onClick:{()=>setActiveTab('create')}",
       "handlers": {
@@ -1130,7 +1130,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 3604,
+      "line": 3605,
       "tag": "button",
       "signature": "button|onClick:{()=>setActiveTab('manage')}",
       "handlers": {
@@ -1145,7 +1145,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 3610,
+      "line": 3611,
       "tag": "button",
       "signature": "button|onClick:{()=>setActiveTab('import')}",
       "handlers": {
@@ -1160,7 +1160,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 3625,
+      "line": 3626,
       "tag": "div",
       "signature": "div|onClick:{()=>setSelectedType('project')}",
       "handlers": {
@@ -1175,7 +1175,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 3643,
+      "line": 3644,
       "tag": "div",
       "signature": "div|onClick:{()=>setSelectedType(m.id)}",
       "handlers": {
@@ -1190,7 +1190,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 3665,
+      "line": 3666,
       "tag": "Input",
       "signature": "Input|onChange:{e=>setProjectName(e.target.value)}|onKeyDown:{(e:React.KeyboardEvent<HTMLInputElement>)=>e.key==='Enter'&&handleCreate()}",
       "handlers": {
@@ -1206,7 +1206,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 3677,
+      "line": 3678,
       "tag": "Input",
       "signature": "Input|onChange:{e=>setFileName(e.target.value)}|onKeyDown:{(e:React.KeyboardEvent<HTMLInputElement>)=>e.key==='Enter'&&handleCreate()}",
       "handlers": {
@@ -1222,7 +1222,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 3689,
+      "line": 3690,
       "tag": "Button",
       "signature": "Button|onClick:{onClose}",
       "handlers": {
@@ -1237,7 +1237,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 3690,
+      "line": 3691,
       "tag": "Button",
       "signature": "Button|onClick:{handleCreate}",
       "handlers": {
@@ -1252,7 +1252,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 3720,
+      "line": 3721,
       "tag": "tr",
       "signature": "tr|onDoubleClick:{()=>!isOpen&&onOpenFile(file.id)}",
       "handlers": {
@@ -1267,7 +1267,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 3736,
+      "line": 3737,
       "tag": "button",
       "signature": "button|onClick:{()=>onOpenFile(file.id)}",
       "handlers": {
@@ -1282,7 +1282,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 3746,
+      "line": 3747,
       "tag": "button",
       "signature": "button|onClick:{()=>onDeleteFile(file.id)}",
       "handlers": {
@@ -1297,7 +1297,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 3765,
+      "line": 3766,
       "tag": "div",
       "signature": "div|onClick:{()=>importInputRef.current?.click()}",
       "handlers": {
@@ -1312,7 +1312,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 3769,
+      "line": 3770,
       "tag": "input",
       "signature": "input|onChange:{handleFileChange}",
       "handlers": {
@@ -1331,7 +1331,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 3791,
+      "line": 3792,
       "tag": "Input",
       "signature": "Input|onChange:{e=>setImportFileName(e.target.value)}",
       "handlers": {
@@ -1346,7 +1346,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 3798,
+      "line": 3799,
       "tag": "Button",
       "signature": "Button|onClick:{()=>setImportedJson(null)}",
       "handlers": {
@@ -1361,7 +1361,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 3799,
+      "line": 3800,
       "tag": "Button",
       "signature": "Button|onClick:{handleImportExecute}",
       "handlers": {
@@ -1376,7 +1376,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 3850,
+      "line": 3851,
       "tag": "div",
       "signature": "div|onClick:{()=>onSwitchTab(tabId)}",
       "handlers": {
@@ -1391,7 +1391,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 3867,
+      "line": 3868,
       "tag": "button",
       "signature": "button|onClick:{(e)=>{e.stopPropagation();onCloseTab(tabId);}}",
       "handlers": {
@@ -1406,7 +1406,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 3881,
+      "line": 3882,
       "tag": "button",
       "signature": "button|onClick:{onOpenDialog}",
       "handlers": {
@@ -1421,7 +1421,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 3933,
+      "line": 3934,
       "tag": "div",
       "signature": "div|onMouseDown:{onClose}",
       "handlers": {
@@ -1436,7 +1436,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 3934,
+      "line": 3935,
       "tag": "div",
       "signature": "div|onMouseDown:{(e:React.MouseEvent)=>e.stopPropagation()}",
       "handlers": {
@@ -1449,7 +1449,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 3937,
+      "line": 3938,
       "tag": "button",
       "signature": "button|onClick:{handleToggleAll}",
       "handlers": {
@@ -1464,7 +1464,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 3953,
+      "line": 3954,
       "tag": "input",
       "signature": "input|onChange:{()=>handleToggle(m.id)}",
       "handlers": {
@@ -1479,7 +1479,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 3969,
+      "line": 3970,
       "tag": "Button",
       "signature": "Button|onClick:{onClose}",
       "handlers": {
@@ -1494,7 +1494,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 3975,
+      "line": 3976,
       "tag": "Button",
       "signature": "Button|onClick:{()=>onSave(selectedKeys)}",
       "handlers": {
@@ -1509,7 +1509,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 4005,
+      "line": 4006,
       "tag": "Input",
       "signature": "Input|onBlur:{commit}|onChange:{(e)=>setLocalValue(e.target.value)}|onKeyDown:{(e:React.KeyboardEvent)=>{if(e.key==='Enter')commit();}}",
       "handlers": {
@@ -1526,7 +1526,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 4077,
+      "line": 4078,
       "tag": "Button",
       "signature": "Button|onClick:{addFactor}",
       "handlers": {
@@ -1541,7 +1541,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 4085,
+      "line": 4086,
       "tag": "Button",
       "signature": "Button|onClick:{addRow}",
       "handlers": {
@@ -1556,7 +1556,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 4095,
+      "line": 4096,
       "tag": "div",
       "signature": "div|onPaste:{handlePaste}",
       "handlers": {
@@ -1571,7 +1571,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 4114,
+      "line": 4115,
       "tag": "input",
       "signature": "input|onChange:{(e)=>updateCell(rIdx,cIdx,e.target.value)}",
       "handlers": {
@@ -1586,7 +1586,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 4123,
+      "line": 4124,
       "tag": "button",
       "signature": "button|onClick:{()=>removeRow(rIdx)}",
       "handlers": {
@@ -1601,7 +1601,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 4235,
+      "line": 4236,
       "tag": "button",
       "signature": "button|onClick:{()=>setLayout('1-col')}",
       "handlers": {
@@ -1616,7 +1616,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 4242,
+      "line": 4243,
       "tag": "button",
       "signature": "button|onClick:{()=>setLayout('2-col')}",
       "handlers": {
@@ -1631,7 +1631,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 4251,
+      "line": 4252,
       "tag": "Button",
       "signature": "Button|onClick:{exportToPDF}",
       "handlers": {
@@ -1646,7 +1646,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 4254,
+      "line": 4255,
       "tag": "Button",
       "signature": "Button|onClick:{exportToWord}",
       "handlers": {
@@ -1661,7 +1661,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 4257,
+      "line": 4258,
       "tag": "button",
       "signature": "button|onClick:{onClose}",
       "handlers": {
@@ -1676,7 +1676,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 4466,
+      "line": 4467,
       "tag": "button",
       "signature": "button|onClick:{()=>setLayout('1-col')}",
       "handlers": {
@@ -1691,7 +1691,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 4473,
+      "line": 4474,
       "tag": "button",
       "signature": "button|onClick:{()=>setLayout('2-col')}",
       "handlers": {
@@ -1706,7 +1706,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 4482,
+      "line": 4483,
       "tag": "Button",
       "signature": "Button|onClick:{exportToHTML}",
       "handlers": {
@@ -1721,7 +1721,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 4485,
+      "line": 4486,
       "tag": "Button",
       "signature": "Button|onClick:{exportToWord}",
       "handlers": {
@@ -1736,7 +1736,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 4488,
+      "line": 4489,
       "tag": "button",
       "signature": "button|onClick:{onClose}",
       "handlers": {
@@ -1751,7 +1751,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 13129,
+      "line": 13088,
       "tag": "g",
       "signature": "g|onDoubleClick:{(e)=>handleStateDoubleClick(e,state.id)}|onMouseDown:{(e)=>handleStateMouseDown(e,state.id)}",
       "handlers": {
@@ -1767,7 +1767,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 13140,
+      "line": 13099,
       "tag": "rect",
       "signature": "rect|onMouseDown:{(e)=>handleResizeMouseDown(e,h,state.id)}",
       "handlers": {
@@ -1782,7 +1782,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 13312,
+      "line": 13271,
       "tag": "g",
       "signature": "g|onMouseDown:{(e)=>handleJunctionMouseDown(e,junction.id)}",
       "handlers": {
@@ -1797,7 +1797,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 13419,
+      "line": 13378,
       "tag": "path",
       "signature": "path|onDoubleClick:{(e:MouseEvent<SVGPathElement>)=>{e.stopPropagation();resetTransitionCurve(transition.id);}}|onMouseDown:{(e:MouseEvent<SVGPathElement>)=>{startTransitionDrag(transition.id,e,'curve');}}|onMouseEnter:{()=>setHoveredTransitionId(transition.id)}|onMouseLeave:{()=>setHoveredTransitionId(prev=>prev===transition.id?null:prev)}",
       "handlers": {
@@ -1815,7 +1815,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 13491,
+      "line": 13450,
       "tag": "circle",
       "signature": "circle|onDoubleClick:{(e:MouseEvent<SVGCircleElement>)=>{e.stopPropagation();resetTransitionCurve(transition.id);}}|onMouseDown:{(e:MouseEvent<SVGCircleElement>)=>{startTransitionDrag(transition.id,e,'handle');}}|onMouseEnter:{()=>setHoveredTransitionId(transition.id)}",
       "handlers": {
@@ -1832,7 +1832,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 13527,
+      "line": 13486,
       "tag": "g",
       "signature": "g|onDoubleClick:{(event)=>{event.stopPropagation();if(openCanvasSymbolDiagram(pkg.id))return;//Nodiagramtoopen:showthePackage'sspecificationinstead(Cameobehaviour).setSelectedIds([pkg.id]);addError('info',`${sysmlObjectLabel(pkg,'Package')}hasnodiagram;itsspecificationisshowninthePropertiespanel.`);}}|onMouseDown:{(event)=>handleBlockMouseDown(event,pkg.id)}",
       "handlers": {
@@ -1848,7 +1848,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 13555,
+      "line": 13514,
       "tag": "rect",
       "signature": "rect|onMouseDown:{event=>handleResizeMouseDown(event,handle,pkg.id)}",
       "handlers": {
@@ -1863,7 +1863,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 13606,
+      "line": 13565,
       "tag": "g",
       "signature": "g|onDoubleClick:{(event)=>{event.stopPropagation();openExactDiagramById(shortcut.id,{pushOrigin:true,preserveReturnStack:true});}}|onMouseDown:{(event)=>{if(packageRelationshipTool){event.stopPropagation();addError('warning','Adiagramshortcutcannotbearelationshipend.','SysML',shortcut.id);return;}handleBlockMouseDown(event,shortcut.id);}}",
       "handlers": {
@@ -1879,7 +1879,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 13690,
+      "line": 13649,
       "tag": "rect",
       "signature": "rect|onClick:{(e)=>{e.stopPropagation();setSelectedIds([block.id]);}}|onMouseDown:{(e)=>handleBlockMouseDown(e,block.id)}",
       "handlers": {
@@ -1901,7 +1901,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 13701,
+      "line": 13660,
       "tag": "rect",
       "signature": "rect|onMouseDown:{(e)=>handleResizeMouseDown(e,h,block.id)}",
       "handlers": {
@@ -1916,7 +1916,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 13728,
+      "line": 13687,
       "tag": "IbdConnectorEndpoint",
       "signature": "IbdConnectorEndpoint|onClick:{(_endpoint,e)=>handlePortClick(easany,block.id,port.id)}|onMouseDown:{(e)=>handlePortMouseDown(easany,block.id,port.id)}",
       "handlers": {
@@ -1938,7 +1938,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 13795,
+      "line": 13754,
       "tag": "g",
       "signature": "g|onDoubleClick:{(e:MouseEvent<SVGGElement>)=>{e.stopPropagation();if(openCanvasSymbolDiagram(block.id))return;constdecision=resolveBlockDoubleClickAction(diagramMode,block);if(decision.action==='enterBlock'&&diagramMode==='ibd'){enterBlock(decision.targetId!);}}}|onMouseDown:{(e)=>handleBlockMouseDown(e,block.id)}|onMouseUp:{(e:MouseEvent<SVGGElement>)=>{if(diagramMode==='bdd'&&bddFeatureDrag){e.stopPropagation();if(block.id!==bddFeatureDrag.ownerId)dropBddFeatureOnBlock(e,block.id);elsesetBddFeatureDrag(null);}}}",
       "handlers": {
@@ -1955,7 +1955,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 13861,
+      "line": 13820,
       "tag": "text",
       "signature": "text|onMouseDown:{(e)=>{e.stopPropagation();if(isCreatingTransition){e.stopPropagation();if(transitionSourceId){if(transitionSourceId!==prop.id){constresolveEntity=(id:string)=>{constdirect=blocks.find(b=>b.id===id)??states.find(s=>s.id===id)??parts.find(p=>p.id===id);if(direct)returndirect;returnblocks.flatMap(b=>b.properties??[]).find(p=>p.id===id);};constsource=resolveEntity(transitionSourceId);if(!source)return;constlegalKinds=getCanvasRelationshipKinds({blocks,parts,relationships,states},transitionSourceId,prop.id,diagramMode==='ibd'?'ibd':diagramMode==='requirements'?'requirements':'bdd');if(legalKinds.length>0){setRequirementConnectionPicker({sourceId:transitionSourceId,targetId:prop.id});}else{constreversedKinds=getCanvasRelationshipKinds({blocks,parts,relationships,states},prop.id,transitionSourceId,diagramMode==='ibd'?'ibd':diagramMode==='requirements'?'requirements':'bdd');if(reversedKinds.length>0){setRequirementConnectionPicker({sourceId:prop.id,targetId:transitionSourceId,reversedKinds});}else{showConnectionPolicyError({relationshipKind:'relationship',source:classifyLegacyEndpoint(source),target:classifyLegacyEndpoint(prop),diagnostic:{code:'NO_LEGAL_RELATIONSHIP',message:`Noavailablerelationshipcanconnect${source.name}to${prop.name}onthisdiagram.`,correctiveAction:'Choosecompatibleendpointsortheappropriatediagram.',},});}}setIsCreatingTransition(false);setTransitionSourceId(null);}}else{setTransitionSourceId(prop.id);}return;}startBddFeatureDrag(e,{kind:'property',ownerId:block.id,featureId:prop.id,name:prop.name,typeId:prop.typeId,typeName:blocks.find(candidate=>candidate.id===prop.typeId)?.name??prop.type,multiplicity:prop.multiplicity??'1',});}}",
       "handlers": {
@@ -1970,7 +1970,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 13930,
+      "line": 13889,
       "tag": "text",
       "signature": "text|onMouseDown:{(e)=>startBddFeatureDrag(e,{kind:'operation',ownerId:block.id,name:op})}",
       "handlers": {
@@ -1985,7 +1985,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 14014,
+      "line": 13973,
       "tag": "rect",
       "signature": "rect|onMouseDown:{(e)=>handleResizeMouseDown(e,h,block.id)}",
       "handlers": {
@@ -2000,7 +2000,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 14197,
+      "line": 14156,
       "tag": "g",
       "signature": "g|onClick:{(e)=>{e.stopPropagation();setSelectedIds([rel.id]);}}",
       "handlers": {
@@ -2015,7 +2015,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 14331,
+      "line": 14290,
       "tag": "g",
       "signature": "g|onDoubleClick:{(event)=>{event.stopPropagation();if(!isNested)openCanvasSymbolDiagram(part.id);}}|onMouseDown:{(e)=>(isNested?handleNestedPartMouseDown(e,part.id):handlePartMouseDown(e,part.id))}",
       "handlers": {
@@ -2031,7 +2031,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 14373,
+      "line": 14332,
       "tag": "IbdConnectorEndpoint",
       "signature": "IbdConnectorEndpoint|onClick:{(_endpoint,e)=>handlePortClick(easany,part.id,port.id)}|onMouseDown:{(e)=>(isNested?e.stopPropagation():handlePortMouseDown(easany,part.id,port.id))}",
       "handlers": {
@@ -2053,7 +2053,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 14405,
+      "line": 14364,
       "tag": "rect",
       "signature": "rect|onMouseDown:{(e)=>handleResizeMouseDown(e,h,part.id)}",
       "handlers": {
@@ -2068,7 +2068,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 14499,
+      "line": 14458,
       "tag": "g",
       "signature": "g|onClick:{(e)=>{e.stopPropagation();setSelectedIds([conn.id]);}}",
       "handlers": {
@@ -2083,7 +2083,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 14566,
+      "line": 14525,
       "tag": "g",
       "signature": "g|onClick:{(e)=>{e.stopPropagation();setSelectedIds([id]);}}",
       "handlers": {
@@ -2098,7 +2098,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 14898,
+      "line": 14857,
       "tag": "IntroStandbyOverlay",
       "signature": "IntroStandbyOverlay|onClose:{()=>setShowWelcome(false)}",
       "handlers": {
@@ -2111,7 +2111,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 14901,
+      "line": 14860,
       "tag": "IntroStandbyOverlay",
       "signature": "IntroStandbyOverlay|onClose:{()=>setShowStandby(false)}",
       "handlers": {
@@ -2124,7 +2124,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 14903,
+      "line": 14862,
       "tag": "HelpModal",
       "signature": "HelpModal|onClose:{()=>setShowHelpModal(false)}",
       "handlers": {
@@ -2137,7 +2137,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 14904,
+      "line": 14863,
       "tag": "FactoryIOGateway",
       "signature": "FactoryIOGateway|onClose:{()=>setShowFactoryIOGateway(false)}",
       "handlers": {
@@ -2150,7 +2150,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 14914,
+      "line": 14873,
       "tag": "AiArchitectSidebar",
       "signature": "AiArchitectSidebar|onExecuteActions:{handleExecuteAiActions}|onToggle:{()=>setIsAiSidebarOpen(!isAiSidebarOpen)}",
       "handlers": {
@@ -2164,7 +2164,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 14920,
+      "line": 14879,
       "tag": "AgentPanel",
       "signature": "AgentPanel|onClose:{()=>setIsAgentPanelOpen(false)}|onToggle:{()=>setIsAgentPanelOpen(prev=>!prev)}",
       "handlers": {
@@ -2178,7 +2178,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 14937,
+      "line": 14896,
       "tag": "GlobalReportPreviewModal",
       "signature": "GlobalReportPreviewModal|onClose:{()=>setShowGlobalReportPreview(false)}",
       "handlers": {
@@ -2191,7 +2191,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 14942,
+      "line": 14901,
       "tag": "ReportPreviewModal",
       "signature": "ReportPreviewModal|onClose:{()=>setShowReportPreview(false)}",
       "handlers": {
@@ -2204,7 +2204,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 14951,
+      "line": 14910,
       "tag": "LargeModelDiagnostics",
       "signature": "LargeModelDiagnostics|onClose:{()=>setShowSysmlDiagnostics(false)}",
       "handlers": {
@@ -2217,7 +2217,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 14964,
+      "line": 14923,
       "tag": "SysmlUpgradeReportDialog",
       "signature": "SysmlUpgradeReportDialog|onClose:{()=>setSysmlUpgrade(null)}",
       "handlers": {
@@ -2230,7 +2230,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 14972,
+      "line": 14931,
       "tag": "div",
       "signature": "div|onMouseDown:{()=>setImportValidationError(null)}",
       "handlers": {
@@ -2245,7 +2245,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 14973,
+      "line": 14932,
       "tag": "div",
       "signature": "div|onMouseDown:{(e)=>e.stopPropagation()}",
       "handlers": {
@@ -2258,7 +2258,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 14982,
+      "line": 14941,
       "tag": "button",
       "signature": "button|onClick:{()=>setImportValidationError(null)}",
       "handlers": {
@@ -2273,7 +2273,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 14998,
+      "line": 14957,
       "tag": "button",
       "signature": "button|onClick:{()=>setImportValidationError(null)}",
       "handlers": {
@@ -2288,7 +2288,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 15008,
+      "line": 14967,
       "tag": "Profiler",
       "signature": "Profiler|onRender:{(_,phase,actualDuration)=>recordRenderCommit('workspace',phase,actualDuration)}",
       "handlers": {
@@ -2301,7 +2301,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 15019,
+      "line": 14978,
       "tag": "input",
       "signature": "input|onChange:{handleProjectFileChange}",
       "handlers": {
@@ -2316,7 +2316,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 15025,
+      "line": 14984,
       "tag": "button",
       "signature": "button|onClick:{()=>setShowWorkspaceFileDialog(true)}",
       "handlers": {
@@ -2331,7 +2331,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 15037,
+      "line": 14996,
       "tag": "input",
       "signature": "input|onChange:{(e:React.ChangeEvent<HTMLInputElement>)=>setCurrentProjectName(e.target.value)}",
       "handlers": {
@@ -2346,7 +2346,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 15056,
+      "line": 15015,
       "tag": "TickRateInput",
       "signature": "TickRateInput|onChange:{setTickMs}",
       "handlers": {
@@ -2365,7 +2365,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 15064,
+      "line": 15023,
       "tag": "Button",
       "signature": "Button|onClick:{isRunning?pauseSimulation:startSimulation}",
       "handlers": {
@@ -2380,7 +2380,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 15091,
+      "line": 15050,
       "tag": "Button",
       "signature": "Button|onClick:{stepSimulation}",
       "handlers": {
@@ -2395,7 +2395,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 15105,
+      "line": 15064,
       "tag": "Button",
       "signature": "Button|onClick:{resetSimulation}",
       "handlers": {
@@ -2410,7 +2410,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 15121,
+      "line": 15080,
       "tag": "Button",
       "signature": "Button|onClick:{()=>{if(validateModel())addError('info','Modelvalidationpassed.');}}",
       "handlers": {
@@ -2425,7 +2425,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 15135,
+      "line": 15094,
       "tag": "Button",
       "signature": "Button|onClick:{validateWithAI}",
       "handlers": {
@@ -2440,7 +2440,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 15163,
+      "line": 15122,
       "tag": "Checkbox",
       "signature": "Checkbox|onCheckedChange:{(c)=>setSafetyMode(casboolean)}",
       "handlers": {
@@ -2455,7 +2455,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 15180,
+      "line": 15139,
       "tag": "Button",
       "signature": "Button|onClick:{generateCode}",
       "handlers": {
@@ -2470,7 +2470,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 15195,
+      "line": 15154,
       "tag": "Button",
       "signature": "Button|onClick:{generateAutosarCode}",
       "handlers": {
@@ -2485,7 +2485,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 15212,
+      "line": 15171,
       "tag": "Button",
       "signature": "Button|onClick:{()=>saveUnifiedProject(false)}",
       "handlers": {
@@ -2500,7 +2500,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 15224,
+      "line": 15183,
       "tag": "Button",
       "signature": "Button|onClick:{()=>saveUnifiedProject(true)}",
       "handlers": {
@@ -2515,7 +2515,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 15235,
+      "line": 15194,
       "tag": "Button",
       "signature": "Button|onClick:{handleOpenProjectDialog}",
       "handlers": {
@@ -2530,7 +2530,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 15246,
+      "line": 15205,
       "tag": "Button",
       "signature": "Button|onClick:{handleExportProject}",
       "handlers": {
@@ -2545,7 +2545,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 15256,
+      "line": 15215,
       "tag": "Button",
       "signature": "Button|onClick:{()=>setShowReportDialog(true)}",
       "handlers": {
@@ -2560,7 +2560,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 15271,
+      "line": 15230,
       "tag": "Button",
       "signature": "Button|onClick:{()=>toggleWindow('hmi')}",
       "handlers": {
@@ -2575,7 +2575,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 15286,
+      "line": 15245,
       "tag": "Button",
       "signature": "Button|onClick:{()=>toggleWindow('pid')}",
       "handlers": {
@@ -2590,7 +2590,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 15301,
+      "line": 15260,
       "tag": "Button",
       "signature": "Button|onClick:{()=>toggleWindow('doe')}",
       "handlers": {
@@ -2605,7 +2605,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 15313,
+      "line": 15272,
       "tag": "Button",
       "signature": "Button|onClick:{()=>setShowFactoryIOGateway(true)}",
       "handlers": {
@@ -2620,7 +2620,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 15331,
+      "line": 15290,
       "tag": "Button",
       "signature": "Button|onClick:{()=>setShow3DXGateway(true)}",
       "handlers": {
@@ -2635,7 +2635,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 15343,
+      "line": 15302,
       "tag": "Button",
       "signature": "Button|onClick:{()=>setShowSysmlDiagnostics(true)}",
       "handlers": {
@@ -2650,7 +2650,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 15360,
+      "line": 15319,
       "tag": "Button",
       "signature": "Button|onClick:{()=>handleOpenHelp()}",
       "handlers": {
@@ -2665,7 +2665,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 15376,
+      "line": 15335,
       "tag": "button",
       "signature": "button|onClick:{()=>{constnext=toggleTheme();setCurrentTheme(next);}}",
       "handlers": {
@@ -2680,7 +2680,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 15435,
+      "line": 15394,
       "tag": "div",
       "signature": "div|onClick:{()=>activateWorkspaceTarget({kind:'file',fileId:file.id})}",
       "handlers": {
@@ -2695,7 +2695,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 15448,
+      "line": 15407,
       "tag": "button",
       "signature": "button|onClick:{(event)=>{event.stopPropagation();closeTab(file.id);}}",
       "handlers": {
@@ -2710,7 +2710,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 15470,
+      "line": 15429,
       "tag": "div",
       "signature": "div|onClick:{()=>activateWorkspaceTarget({kind:'diagram',tab})}",
       "handlers": {
@@ -2725,7 +2725,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 15483,
+      "line": 15442,
       "tag": "button",
       "signature": "button|onClick:{(e)=>{e.stopPropagation();closeDiagramWorkspaceTab(diagramId);}}",
       "handlers": {
@@ -2740,7 +2740,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 15497,
+      "line": 15456,
       "tag": "button",
       "signature": "button|onClick:{()=>setShowWorkspaceFileDialog(true)}",
       "handlers": {
@@ -2755,22 +2755,20 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 15508,
-      "tag": "div",
-      "signature": "div|onMouseUp:{()=>setResizingPanel(null)}",
+      "line": 15470,
+      "tag": "ResizablePanel",
+      "signature": "ResizablePanel|onSizeChange:{notifyShellPanelResize}",
       "handlers": {
-        "onMouseUp": "{() => setResizingPanel(null)}"
+        "onSizeChange": "{notifyShellPanelResize}"
       },
-      "feature": "live:App:eca48c76262c",
-      "status": "documented",
-      "featureIds": [
-        "live:App:eca48c76262c"
-      ],
-      "reason": "Direct stable feature binding resolves to a live instructional destination."
+      "id": "live:App:9709528598aa",
+      "status": "excluded",
+      "reason": "ResizablePanel callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+      "featureIds": []
     },
     {
       "source": "src/App.tsx",
-      "line": 15523,
+      "line": 15483,
       "tag": "button",
       "signature": "button|onClick:{()=>setIsHierarchyCollapsed(!isHierarchyCollapsed)}",
       "handlers": {
@@ -2785,7 +2783,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 15531,
+      "line": 15491,
       "tag": "Profiler",
       "signature": "Profiler|onRender:{(_,phase,actualDuration)=>recordRenderCommit('explorer',phase,actualDuration)}",
       "handlers": {
@@ -2798,7 +2796,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 15532,
+      "line": 15492,
       "tag": "HierarchyTree",
       "signature": "HierarchyTree|onCommandResult:{handleExplorerCommand}|onCommitStateMachineSnapshot:{handleCommitStateMachineSnapshot}|onDoubleClick:{(id:string,kind?:string,contextDiagramId?:string)=>activateHierarchyNode(id,kind,contextDiagramId)}|onExecuteSysmlCommand:{handleExecuteSysmlCommand}|onOpenSpecification:{(id:string)=>{//selecttheelementandbringitsproperties(specification)panelintoviewopenTreeElementInWorkspace(id);setIsPropertiesCollapsed(false);if(isMobile)setMobileTab('properties');}}|onSelect:{(id:string,multiSelect?:boolean,contextDiagramId?:string)=>{if(multiSelect){setSelectedIds([id]);}elseif(isDiagramHierarchyNode(id)){activateHierarchyNode(id,'diagram');setSelectedIds([id]);}else{openTreeElementInWorkspace(id,contextDiagramId);}}}|onSelectMultiple:{(ids:string[])=>setSelectedIds(ids)}",
       "handlers": {
@@ -2810,31 +2808,29 @@
         "onExecuteSysmlCommand": "{handleExecuteSysmlCommand}",
         "onCommandResult": "{handleExplorerCommand}"
       },
-      "id": "ui:modelExplorer/ModelTreeRow:d6ca5f847c12",
+      "feature": "ui:modelExplorer/ModelTreeRow:d6ca5f847c12",
       "status": "documented",
-      "reason": "Additional source handler reviewed against its component implementation (2026-10-19 release review).",
       "featureIds": [
         "ui:modelExplorer/ModelTreeRow:d6ca5f847c12"
-      ]
-    },
-    {
-      "source": "src/App.tsx",
-      "line": 15594,
-      "tag": "Resizer",
-      "signature": "Resizer|onMouseDown:{(e)=>handleResizeStart(e,'hierarchy')}",
-      "handlers": {
-        "onMouseDown": "{(e) => handleResizeStart(e, 'hierarchy')}"
-      },
-      "feature": "live:App:590d20381723",
-      "status": "documented",
-      "featureIds": [
-        "live:App:590d20381723"
       ],
       "reason": "Direct stable feature binding resolves to a live instructional destination."
     },
     {
       "source": "src/App.tsx",
-      "line": 15610,
+      "line": 15559,
+      "tag": "ResizablePanel",
+      "signature": "ResizablePanel|onSizeChange:{notifyShellPanelResize}",
+      "handlers": {
+        "onSizeChange": "{notifyShellPanelResize}"
+      },
+      "id": "live:App:9709528598aa",
+      "status": "excluded",
+      "reason": "ResizablePanel callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+      "featureIds": []
+    },
+    {
+      "source": "src/App.tsx",
+      "line": 15572,
       "tag": "button",
       "signature": "button|onClick:{()=>setIsVariablesCollapsed(!isVariablesCollapsed)}",
       "handlers": {
@@ -2849,7 +2845,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 15627,
+      "line": 15589,
       "tag": "Input",
       "signature": "Input|onChange:{(e)=>setNewVarName(e.target.value)}",
       "handlers": {
@@ -2864,7 +2860,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 15633,
+      "line": 15595,
       "tag": "select",
       "signature": "select|onChange:{(e)=>{constt=e.target.valueasVariableType;setNewVarType(t);setNewVarValue(getDefaultValue(t));}}",
       "handlers": {
@@ -2879,7 +2875,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 15646,
+      "line": 15608,
       "tag": "Input",
       "signature": "Input|onChange:{(e)=>setNewVarValue(e.target.value)}",
       "handlers": {
@@ -2894,7 +2890,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 15652,
+      "line": 15614,
       "tag": "Button",
       "signature": "Button|onClick:{addVariable}",
       "handlers": {
@@ -2909,7 +2905,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 15670,
+      "line": 15632,
       "tag": "Checkbox",
       "signature": "Checkbox|onCheckedChange:{()=>toggleVariableVisibility(variable.id)}",
       "handlers": {
@@ -2924,7 +2920,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 15681,
+      "line": 15643,
       "tag": "button",
       "signature": "button|onClick:{()=>removeVariable(variable.id)}",
       "handlers": {
@@ -2939,7 +2935,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 15692,
+      "line": 15654,
       "tag": "select",
       "signature": "select|onChange:{(e)=>updateVariableType(variable.id,e.target.valueasVariableType)}",
       "handlers": {
@@ -2954,7 +2950,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 15699,
+      "line": 15661,
       "tag": "select",
       "signature": "select|onChange:{(e)=>updateVariableOverflowPolicy(variable.id,e.target.valueasVariableOverflowPolicy)}",
       "handlers": {
@@ -2969,7 +2965,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 15709,
+      "line": 15671,
       "tag": "Input",
       "signature": "Input|onChange:{(e)=>updateVariableInitValue(variable.id,e.target.value)}",
       "handlers": {
@@ -2984,7 +2980,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 15718,
+      "line": 15680,
       "tag": "Input",
       "signature": "Input|onChange:{(e)=>updateVariableValue(variable.id,e.target.value)}",
       "handlers": {
@@ -2999,22 +2995,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 15740,
-      "tag": "Resizer",
-      "signature": "Resizer|onMouseDown:{(e)=>handleResizeStart(e,'variables')}",
-      "handlers": {
-        "onMouseDown": "{(e) => handleResizeStart(e, 'variables')}"
-      },
-      "feature": "live:App:76a83fd32464",
-      "status": "documented",
-      "featureIds": [
-        "live:App:76a83fd32464"
-      ],
-      "reason": "Direct stable feature binding resolves to a live instructional destination."
-    },
-    {
-      "source": "src/App.tsx",
-      "line": 15747,
+      "line": 15710,
       "tag": "XbridgesWorkspace",
       "signature": "XbridgesWorkspace|onBack:{()=>{if(xBridgesStateId)setXBridgesStateId(null);elsesetDiagramMode('statemachine');}}|onClipboardChange:{setSharedClipboard}|onExportDoeData:{(doeHeaders,doeData)=>{setHeaders(doeHeaders);setData(doeData);setManagedWindows(prev=>(prev.doe.isOpen?{...prev,doe:{...prev.doe,isMinimized:false}}:{...prev,doe:{...prev.doe,isOpen:true}}));}}|onLaunchDoe:{()=>toggleWindow('doe')}|onOpenHelp:{handleOpenHelp}|onSave:{handleXBridgesSave}|onSaveAll:{handleExportProject}",
       "handlers": {
@@ -3033,7 +3014,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 15778,
+      "line": 15741,
       "tag": "RequirementAssignmentsPanel",
       "signature": "RequirementAssignmentsPanel|onRepositoryChange:{handleSimVerificationRepositoryChange}",
       "handlers": {
@@ -3046,7 +3027,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 15792,
+      "line": 15755,
       "tag": "PlantUmlWorkspace",
       "signature": "PlantUmlWorkspace|onChange:{setPlantUmlDiagram}|onExport:{exportPlantUmlSource}|onSave:{()=>addError('info','PlantUMLdiagramsavedinthecurrentprojectsession.')}",
       "handlers": {
@@ -3067,7 +3048,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 15803,
+      "line": 15766,
       "tag": "UseCaseWorkspace",
       "signature": "UseCaseWorkspace|onExecute:{handleExecuteSysmlCommand}|onNavigate:{(elementId)=>{if(!openCanvasSymbolDiagram(elementId))setSelectedIds([elementId]);}}|onSelect:{setSelectedIds}",
       "handlers": {
@@ -3088,7 +3069,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 15818,
+      "line": 15781,
       "tag": "ActivityWorkspace",
       "signature": "ActivityWorkspace|onExecute:{handleExecuteSysmlCommand}|onNavigate:{(elementId)=>{if(!openCanvasSymbolDiagram(elementId))setSelectedIds([elementId]);}}|onSelect:{setSelectedIds}",
       "handlers": {
@@ -3109,7 +3090,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 15833,
+      "line": 15796,
       "tag": "SequenceWorkspace",
       "signature": "SequenceWorkspace|onExecute:{handleExecuteSysmlCommand}|onNavigate:{(elementId)=>{if(!openCanvasSymbolDiagram(elementId))setSelectedIds([elementId]);}}|onSelect:{(ids)=>{pendingSequenceSelectionRef.current=null;setSelectedIds(ids);}}",
       "handlers": {
@@ -3130,7 +3111,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 15850,
+      "line": 15813,
       "tag": "VLabWorkspace",
       "signature": "VLabWorkspace|onBack:{()=>setDiagramMode('statemachine')}|onEdgesChange:{(edges)=>setVlabEdges(edges)}|onNavigateToXbridges:{(nodeId?:string)=>{constfindMatchingNode=(targetNodes:any[],sourceNodeId?:string):any=>{if(!sourceNodeId)returnnull;constsrcLower=sourceNodeId.toLowerCase();constgroups=[['pid','controller','ctrl','ps_pid_ctrl','pid_basic','pid_controller'],['motor','plant','ac_motor','ac_induction_motor','induction','engine'],['inverter','pwm','gate','pwm_3ph_2level','three_phase_inverter','commutation'],['error','subtract','sub','error_calc','error_sub','ps_subtract','vectorsub'],['ref','constant','gen','signal','ref_speed','ref_signal','ps_constant','waveformgen']];letmatch=targetNodes.find((n:any)=>n.id===sourceNodeId);if(match)returnmatch;for(constgroupofgroups){constisSourceInGroup=group.some(keyword=>srcLower.includes(keyword));if(isSourceInGroup){match=targetNodes.find((n:any)=>{constid=n.id.toLowerCase();consttype=(n.data?.type||n.type||'').toLowerCase();returngroup.some(keyword=>id.includes(keyword)||type.includes(keyword));});if(match)returnmatch;}}constcleanId=srcLower.replace(/_[0-9]+$/,'');returntargetNodes.find((n:any)=>{constid=n.id.toLowerCase();consttype=(n.data?.type||n.type||'').toLowerCase();returnid.includes(cleanId)||type.includes(cleanId)||cleanId.includes(id)||cleanId.includes(type);});};consttargetNodes=xBridgesStateId?Array.from(states.find(s=>s.id===xBridgesStateId)?.xBridgesModel?.nodes||[]):globalXBridgesNodes;consttargetNode=findMatchingNode(targetNodes,nodeId);if(targetNode){setXBridgesSelectedNodeId(targetNode.id);}else{setXBridgesSelectedNodeId(null);}setDiagramMode('xbridges');setTimeout(()=>setXBridgesSelectedNodeId(null),1000);}}|onNodesChange:{(nodes)=>setVlabNodes(nodes)}|onResult:{(res)=>console.log('V-LabResult:',res)}|onSendToDOE:{(data)=>{toggleWindow('doe');}}",
       "handlers": {
@@ -3148,7 +3129,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 15862,
+      "line": 15825,
       "tag": "RequirementAssignmentsPanel",
       "signature": "RequirementAssignmentsPanel|onRepositoryChange:{handleSimVerificationRepositoryChange}",
       "handlers": {
@@ -3161,7 +3142,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 15918,
+      "line": 15881,
       "tag": "HILWorkspace",
       "signature": "HILWorkspace|onBack:{()=>setDiagramMode('statemachine')}|onChangeConfig:{setHilConfig}|onChangeSessionState:{setHilSessionState}",
       "handlers": {
@@ -3176,7 +3157,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 15937,
+      "line": 15900,
       "tag": "EntropyWorkspace",
       "signature": "EntropyWorkspace|onAddError:{addError}|onBack:{()=>setDiagramMode('statemachine')}|onOpenHelp:{(topic)=>handleOpenHelp(topic||'entropy-opm')}|onOpmSimulationConfigChange:{setOpmSimulationConfig}|onSave:{(nodes,edges)=>{setEntropyNodes(nodes);setEntropyEdges(edges);}}|onTickMsChange:{setTickMs}|onVariablesChange:{setVariables}",
       "handlers": {
@@ -3195,7 +3176,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 15970,
+      "line": 15933,
       "tag": "div",
       "signature": "div|onWheel:{handleHorizontalToolbarWheel}",
       "handlers": {
@@ -3210,7 +3191,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 15979,
+      "line": 15942,
       "tag": "button",
       "signature": "button|onClick:{index<layerPath.length-1?()=>goToLayer(index):undefined}",
       "handlers": {
@@ -3225,7 +3206,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 16005,
+      "line": 15968,
       "tag": "Button",
       "signature": "Button|onClick:{()=>{constrect=canvasRef.current?.getBoundingClientRect();if(rect){createState(((rect.width/uiZoom)/2-view.offsetX)/view.scale,((rect.height/uiZoom)/2-view.offsetY)/view.scale);}}}",
       "handlers": {
@@ -3240,7 +3221,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 16026,
+      "line": 15989,
       "tag": "Button",
       "signature": "Button|onClick:{()=>{constrect=canvasRef.current?.getBoundingClientRect();if(rect){createJunction(((rect.width/uiZoom)/2-view.offsetX)/view.scale,((rect.height/uiZoom)/2-view.offsetY)/view.scale);}}}",
       "handlers": {
@@ -3255,7 +3236,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 16046,
+      "line": 16009,
       "tag": "Button",
       "signature": "Button|onClick:{()=>{constrect=canvasRef.current?.getBoundingClientRect();if(rect){createXBridgesState(((rect.width/uiZoom)/2-view.offsetX)/view.scale,((rect.height/uiZoom)/2-view.offsetY)/view.scale);}}}",
       "handlers": {
@@ -3270,7 +3251,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 16071,
+      "line": 16034,
       "tag": "Button",
       "signature": "Button|onClick:{navigateDiagramBack}",
       "handlers": {
@@ -3285,7 +3266,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 16080,
+      "line": 16043,
       "tag": "Button",
       "signature": "Button|onClick:{()=>{constrect=canvasRef.current?.getBoundingClientRect();if(rect)createSysmlElementOnActiveDiagram((rect.width/2-view.offsetX)/view.scale,(rect.height/2-view.offsetY)/view.scale,'Package');}}",
       "handlers": {
@@ -3300,7 +3281,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 16092,
+      "line": 16055,
       "tag": "Button",
       "signature": "Button|onClick:{()=>{constrect=canvasRef.current?.getBoundingClientRect();if(rect)createSysmlElementOnActiveDiagram((rect.width/2-view.offsetX)/view.scale,(rect.height/2-view.offsetY)/view.scale,'ModelLibrary');}}",
       "handlers": {
@@ -3315,7 +3296,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 16105,
+      "line": 16068,
       "tag": "Button",
       "signature": "Button|onClick:{()=>{constrect=canvasRef.current?.getBoundingClientRect();if(rect)createSysmlElementOnActiveDiagram((rect.width/2-view.offsetX)/view.scale,(rect.height/2-view.offsetY)/view.scale,'Block');}}",
       "handlers": {
@@ -3330,7 +3311,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 16117,
+      "line": 16080,
       "tag": "PortKindActions",
       "signature": "PortKindActions|onAddPort:{handleAddPortToSelected}",
       "handlers": {
@@ -3343,7 +3324,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 16132,
+      "line": 16095,
       "tag": "Button",
       "signature": "Button|onClick:{()=>{setPackageRelationshipTool(kind);setPackageRelationshipSourceId(null);}}",
       "handlers": {
@@ -3358,7 +3339,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 16141,
+      "line": 16104,
       "tag": "Button",
       "signature": "Button|onClick:{displayPackagePaths}",
       "handlers": {
@@ -3373,7 +3354,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 16152,
+      "line": 16115,
       "tag": "Button",
       "signature": "Button|onClick:{()=>{constrect=canvasRef.current?.getBoundingClientRect();if(rect)createSysmlElementOnActiveDiagram((rect.width/2-view.offsetX)/view.scale,(rect.height/2-view.offsetY)/view.scale,'Package');}}",
       "handlers": {
@@ -3388,7 +3369,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 16163,
+      "line": 16126,
       "tag": "Button",
       "signature": "Button|onClick:{()=>{constrect=canvasRef.current?.getBoundingClientRect();if(rect)createSysmlElementOnActiveDiagram((rect.width/2-view.offsetX)/view.scale,(rect.height/2-view.offsetY)/view.scale,'Requirement');}}",
       "handlers": {
@@ -3403,7 +3384,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 16174,
+      "line": 16137,
       "tag": "Button",
       "signature": "Button|onClick:{()=>{constrect=canvasRef.current?.getBoundingClientRect();if(rect)createSysmlElementOnActiveDiagram((rect.width/2-view.offsetX)/view.scale,(rect.height/2-view.offsetY)/view.scale,'Block');}}",
       "handlers": {
@@ -3418,7 +3399,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 16185,
+      "line": 16148,
       "tag": "Button",
       "signature": "Button|onClick:{()=>{constrect=canvasRef.current?.getBoundingClientRect();if(rect)createSysmlElementOnActiveDiagram((rect.width/2-view.offsetX)/view.scale,(rect.height/2-view.offsetY)/view.scale,'TestCase');}}",
       "handlers": {
@@ -3433,7 +3414,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 16196,
+      "line": 16159,
       "tag": "Button",
       "signature": "Button|onClick:{()=>toggleWindow('rtm')}",
       "handlers": {
@@ -3448,7 +3429,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 16204,
+      "line": 16167,
       "tag": "Button",
       "signature": "Button|onClick:{()=>toggleWindow('allocation')}",
       "handlers": {
@@ -3463,7 +3444,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 16212,
+      "line": 16175,
       "tag": "Button",
       "signature": "Button|onClick:{handleAutoLayout}",
       "handlers": {
@@ -3478,7 +3459,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 16225,
+      "line": 16188,
       "tag": "Button",
       "signature": "Button|onClick:{()=>{constrect=canvasRef.current?.getBoundingClientRect();if(rect)createPart((rect.width/2-view.offsetX)/view.scale,(rect.height/2-view.offsetY)/view.scale);}}",
       "handlers": {
@@ -3493,7 +3474,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 16237,
+      "line": 16200,
       "tag": "Button",
       "signature": "Button|onClick:{()=>handleAddPortToSelected('standard')}",
       "handlers": {
@@ -3508,7 +3489,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 16238,
+      "line": 16201,
       "tag": "Button",
       "signature": "Button|onClick:{()=>handleAddPortToSelected('flow')}",
       "handlers": {
@@ -3523,7 +3504,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 16239,
+      "line": 16202,
       "tag": "Button",
       "signature": "Button|onClick:{()=>handleAddPortToSelected('proxy')}",
       "handlers": {
@@ -3538,7 +3519,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 16240,
+      "line": 16203,
       "tag": "Button",
       "signature": "Button|onClick:{()=>handleAddPortToSelected('full')}",
       "handlers": {
@@ -3553,7 +3534,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 16242,
+      "line": 16205,
       "tag": "Button",
       "signature": "Button|onClick:{()=>{if(isCreatingConnector){setIsCreatingConnector(false);setConnectorSource(null);connectorSourceRef.current=null;}else{setIsCreatingConnector(true);}}}",
       "handlers": {
@@ -3568,7 +3549,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 16258,
+      "line": 16221,
       "tag": "Button",
       "signature": "Button|onClick:{()=>setShowNestedParts(prev=>!prev)}",
       "handlers": {
@@ -3583,7 +3564,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 16269,
+      "line": 16232,
       "tag": "select",
       "signature": "select|onChange:{(event)=>setNestedPartDepth(Number(event.target.value))}",
       "handlers": {
@@ -3598,7 +3579,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 16286,
+      "line": 16249,
       "tag": "Button",
       "signature": "Button|onClick:{()=>{if(isCreatingTransition){setIsCreatingTransition(false);setTransitionSourceId(null);}else{setIsCreatingTransition(true);}}}",
       "handlers": {
@@ -3613,7 +3594,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 16311,
+      "line": 16274,
       "tag": "Button",
       "signature": "Button|onClick:{()=>setGridEnabled(!gridEnabled)}",
       "handlers": {
@@ -3628,7 +3609,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 16323,
+      "line": 16286,
       "tag": "Button",
       "signature": "Button|onClick:{()=>setSnapEnabled(!snapEnabled)}",
       "handlers": {
@@ -3643,7 +3624,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 16338,
+      "line": 16301,
       "tag": "Button",
       "signature": "Button|onClick:{()=>setView(prev=>({...prev,scale:Math.min(MAX_SCALE,prev.scale*1.2)}))}",
       "handlers": {
@@ -3658,7 +3639,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 16354,
+      "line": 16317,
       "tag": "Button",
       "signature": "Button|onClick:{()=>setView(prev=>({...prev,scale:Math.max(MIN_SCALE,prev.scale/1.2)}))}",
       "handlers": {
@@ -3673,7 +3654,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 16365,
+      "line": 16328,
       "tag": "Button",
       "signature": "Button|onClick:{()=>setView({scale:1,offsetX:0,offsetY:0})}",
       "handlers": {
@@ -3688,7 +3669,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 16386,
+      "line": 16349,
       "tag": "button",
       "signature": "button|onClick:{()=>{setPackageRelationshipTool(null);setPackageRelationshipSourceId(null);}}",
       "handlers": {
@@ -3703,7 +3684,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 16403,
+      "line": 16366,
       "tag": "Profiler",
       "signature": "Profiler|onRender:{(_,phase,actualDuration)=>recordRenderCommit('canvas',phase,actualDuration)}",
       "handlers": {
@@ -3716,7 +3697,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 16404,
+      "line": 16367,
       "tag": "div",
       "signature": "div|onContextMenu:{(e)=>{e.preventDefault();if(suppressContextMenuRef.current){suppressContextMenuRef.current=false;e.stopPropagation();return;}if(diagramMode==='statemachine'){constrect=canvasRef.current?.getBoundingClientRect();if(!rect)return;constworldX=((e.clientX-rect.left)/uiZoom-view.offsetX)/view.scale;constworldY=((e.clientY-rect.top)/uiZoom-view.offsetY)/view.scale;setSmCanvasContextMenu({x:e.clientX,y:e.clientY,worldX,worldY,});}}}|onDoubleClick:{handleDoubleClick}|onDragOver:{(e)=>{if(e.dataTransfer.types.includes('application/x-adia-model-element')){e.preventDefault();e.dataTransfer.dropEffect='copy';}}}|onDrop:{(e)=>{constpayload=parseModelExplorerDragData(e.dataTransfer);if(!payload)return;e.preventDefault();constrect=canvasRef.current?.getBoundingClientRect();if(!rect)return;constworldPoint={x:((e.clientX-rect.left)/uiZoom-view.offsetX)/view.scale,y:((e.clientY-rect.top)/uiZoom-view.offsetY)/view.scale,};constactiveDiagId=resolveActiveSysmlDiagramTarget({diagramMode,activeDiagramId:activeSysmlDiagramId,currentLayerId,});constelemIds=payload.semanticIds??[payload.semanticId];handleExecuteSysmlCommand({type:'addToDiagram',diagramId:activeDiagId,elementIds:elemIds,coordinates:{[payload.semanticId]:worldPoint,},});}}|onMouseDown:{handleMouseDown}|onMouseDownCapture:{handleNavigationMouseDownCapture}|onMouseLeave:{(e)=>{if(pendingBddBlockGestureRef.current||isDraggingRef.current)return;handleMouseUp(e);}}|onMouseMove:{handleMouseMove}|onMouseUp:{handleMouseUp}",
       "handlers": {
@@ -3739,22 +3720,20 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 16633,
-      "tag": "Resizer",
-      "signature": "Resizer|onMouseDown:{(e)=>handleResizeStart(e,'scope')}",
+      "line": 16597,
+      "tag": "ResizablePanel",
+      "signature": "ResizablePanel|onSizeChange:{notifyShellPanelResize}",
       "handlers": {
-        "onMouseDown": "{(e) => handleResizeStart(e, 'scope')}"
+        "onSizeChange": "{notifyShellPanelResize}"
       },
-      "feature": "live:App:ca067bd95989",
-      "status": "documented",
-      "featureIds": [
-        "live:App:ca067bd95989"
-      ],
-      "reason": "Direct stable feature binding resolves to a live instructional destination."
+      "id": "live:App:9709528598aa",
+      "status": "excluded",
+      "reason": "ResizablePanel callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+      "featureIds": []
     },
     {
       "source": "src/App.tsx",
-      "line": 16635,
+      "line": 16599,
       "tag": "div",
       "signature": "div|onDoubleClick:{()=>setIsScopeDetached(!isScopeDetached)}",
       "handlers": {
@@ -3769,7 +3748,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 16641,
+      "line": 16605,
       "tag": "button",
       "signature": "button|onClick:{(e)=>{e.stopPropagation();setIsScopeCollapsed(!isScopeCollapsed);}}",
       "handlers": {
@@ -3784,7 +3763,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 16654,
+      "line": 16618,
       "tag": "div",
       "signature": "div|onClick:{(e)=>e.stopPropagation()}",
       "handlers": {
@@ -3803,7 +3782,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 16668,
+      "line": 16632,
       "tag": "div",
       "signature": "div|onClick:{(e)=>{e.stopPropagation();toggleVariableVisibility(v.id);}}",
       "handlers": {
@@ -3818,7 +3797,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 16676,
+      "line": 16640,
       "tag": "Checkbox",
       "signature": "Checkbox|onCheckedChange:{()=>{}}",
       "handlers": {
@@ -3837,7 +3816,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 16690,
+      "line": 16654,
       "tag": "Checkbox",
       "signature": "Checkbox|onCheckedChange:{(checked)=>setSampleOnTransitionOnly(checkedasboolean)}",
       "handlers": {
@@ -3852,7 +3831,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 16700,
+      "line": 16664,
       "tag": "Button",
       "signature": "Button|onClick:{exportScopeCSV}",
       "handlers": {
@@ -3867,7 +3846,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 16713,
+      "line": 16677,
       "tag": "Button",
       "signature": "Button|onClick:{clearScope}",
       "handlers": {
@@ -3882,7 +3861,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 16725,
+      "line": 16689,
       "tag": "Button",
       "signature": "Button|onClick:{()=>setIsScopeDetached(!isScopeDetached)}",
       "handlers": {
@@ -3897,7 +3876,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 16739,
+      "line": 16703,
       "tag": "div",
       "signature": "div|onDoubleClick:{()=>setIsScopeDetached(!isScopeDetached)}",
       "handlers": {
@@ -3912,7 +3891,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 16822,
+      "line": 16786,
       "tag": "StateMachineCanvasContextMenu",
       "signature": "StateMachineCanvasContextMenu|onAddJunction:{(wx,wy)=>createJunction(wx,wy)}|onAddState:{(wx,wy)=>createState(wx,wy)}|onAddXBridgesState:{(wx,wy)=>createXBridgesState(wx,wy)}|onClose:{()=>setSmCanvasContextMenu(null)}",
       "handlers": {
@@ -3928,22 +3907,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 16837,
-      "tag": "Resizer",
-      "signature": "Resizer|onMouseDown:{(e)=>handleResizeStart(e,'properties')}",
-      "handlers": {
-        "onMouseDown": "{(e) => handleResizeStart(e, 'properties')}"
-      },
-      "feature": "live:App:1991d07ad9b1",
-      "status": "documented",
-      "featureIds": [
-        "live:App:1991d07ad9b1"
-      ],
-      "reason": "Direct stable feature binding resolves to a live instructional destination."
-    },
-    {
-      "source": "src/App.tsx",
-      "line": 16842,
+      "line": 16807,
       "tag": "Profiler",
       "signature": "Profiler|onRender:{(_,phase,actualDuration)=>recordRenderCommit('inspector',phase,actualDuration)}",
       "handlers": {
@@ -3956,7 +3920,20 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 16854,
+      "line": 16808,
+      "tag": "ResizablePanel",
+      "signature": "ResizablePanel|onSizeChange:{notifyShellPanelResize}",
+      "handlers": {
+        "onSizeChange": "{notifyShellPanelResize}"
+      },
+      "id": "live:App:9709528598aa",
+      "status": "excluded",
+      "reason": "ResizablePanel callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+      "featureIds": []
+    },
+    {
+      "source": "src/App.tsx",
+      "line": 16820,
       "tag": "button",
       "signature": "button|onClick:{()=>setIsPropertiesCollapsed(!isPropertiesCollapsed)}",
       "handlers": {
@@ -3971,7 +3948,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 16875,
+      "line": 16841,
       "tag": "Input",
       "signature": "Input|onChange:{(e)=>updateState(selectedState.id,{name:e.target.value})}",
       "handlers": {
@@ -3986,7 +3963,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 16894,
+      "line": 16860,
       "tag": "Button",
       "signature": "Button|onClick:{()=>handleAutoFix(err)}",
       "handlers": {
@@ -4001,7 +3978,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 16909,
+      "line": 16875,
       "tag": "Input",
       "signature": "Input|onChange:{(e)=>updateState(selectedState.id,{priority:parseInt(e.target.value)||0})}",
       "handlers": {
@@ -4016,7 +3993,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 16918,
+      "line": 16884,
       "tag": "Checkbox",
       "signature": "Checkbox|onCheckedChange:{(checked)=>updateState(selectedState.id,{isParallel:checkedasboolean})}",
       "handlers": {
@@ -4031,7 +4008,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 16929,
+      "line": 16895,
       "tag": "Input",
       "signature": "Input|onChange:{(e)=>updateState(selectedState.id,{regionId:e.target.value||null})}",
       "handlers": {
@@ -4046,7 +4023,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 16939,
+      "line": 16905,
       "tag": "Checkbox",
       "signature": "Checkbox|onCheckedChange:{(checked)=>updateState(selectedState.id,{autostart:checkedasboolean})}",
       "handlers": {
@@ -4061,7 +4038,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 16948,
+      "line": 16914,
       "tag": "Checkbox",
       "signature": "Checkbox|onCheckedChange:{(checked)=>updateState(selectedState.id,{isSafeState:checkedasboolean})}",
       "handlers": {
@@ -4076,7 +4053,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 16957,
+      "line": 16923,
       "tag": "Checkbox",
       "signature": "Checkbox|onCheckedChange:{(checked)=>updateState(selectedState.id,checked?{isTerminalState:true}:{isTerminalState:false,isTerminal:undefined})}",
       "handlers": {
@@ -4091,7 +4068,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 16966,
+      "line": 16932,
       "tag": "Checkbox",
       "signature": "Checkbox|onCheckedChange:{(checked)=>updateState(selectedState.id,{isXBridges:checkedasboolean})}",
       "handlers": {
@@ -4106,7 +4083,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 16983,
+      "line": 16949,
       "tag": "Button",
       "signature": "Button|onClick:{()=>{constmappings=selectedState.xBridgesModel?.mappings||[];updateState(selectedState.id,{xBridgesModel:{...selectedState.xBridgesModel,nodes:Array.from(selectedState.xBridgesModel?.nodes||[]),edges:Array.from(selectedState.xBridgesModel?.edges||[]),mappings:[...mappings,createXBBoundaryMapping(mappingVariables[0].id,targets[0])],},});}}",
       "handlers": {
@@ -4121,7 +4098,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17010,
+      "line": 16976,
       "tag": "select",
       "signature": "select|onChange:{(e)=>{constnewMaps=[...selectedState.xBridgesModel!.mappings!];newMaps[idx]={...map,smVarId:e.target.value};updateState(selectedState.id,{xBridgesModel:{...selectedState.xBridgesModel,nodes:Array.from(selectedState.xBridgesModel?.nodes||[]),edges:Array.from(selectedState.xBridgesModel?.edges||[]),mappings:newMaps}});}}",
       "handlers": {
@@ -4136,7 +4113,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17042,
+      "line": 17008,
       "tag": "select",
       "signature": "select|onChange:{(e)=>{consttarget=targets[Number(e.target.value)];if(!target)return;constnewMaps=[...selectedState.xBridgesModel!.mappings!];newMaps[idx]=createXBBoundaryMapping(map.smVarId,target);updateState(selectedState.id,{xBridgesModel:{...selectedState.xBridgesModel,nodes:Array.from(selectedState.xBridgesModel?.nodes||[]),edges:Array.from(selectedState.xBridgesModel?.edges||[]),mappings:newMaps,},});}}",
       "handlers": {
@@ -4151,7 +4128,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17070,
+      "line": 17036,
       "tag": "button",
       "signature": "button|onClick:{()=>{constnewMaps=selectedState.xBridgesModel!.mappings!.filter((_,i)=>i!==idx);updateState(selectedState.id,{xBridgesModel:{...selectedState.xBridgesModel,nodes:Array.from(selectedState.xBridgesModel?.nodes||[]),edges:Array.from(selectedState.xBridgesModel?.edges||[]),mappings:newMaps}});}}",
       "handlers": {
@@ -4166,7 +4143,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17097,
+      "line": 17063,
       "tag": "select",
       "signature": "select|onChange:{(e)=>setStateHistory(selectedState.id,e.target.valueasStateHistoryType)}",
       "handlers": {
@@ -4181,7 +4158,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17111,
+      "line": 17077,
       "tag": "Button",
       "signature": "Button|onClick:{()=>{constcurrent=selectedState.internalTransitions?selectedState.internalTransitions+'\\n':'';updateState(selectedState.id,{internalTransitions:current+'[condition]/action;'});}}",
       "handlers": {
@@ -4196,7 +4173,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17147,
+      "line": 17113,
       "tag": "select",
       "signature": "select|onChange:{e=>updateLine(e.target.value,condition,afterTicks,action)}",
       "handlers": {
@@ -4211,7 +4188,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17157,
+      "line": 17123,
       "tag": "button",
       "signature": "button|onClick:{()=>{constallLines=(selectedState.internalTransitions||'').split('\\n').filter(l=>l.trim());allLines.splice(idx,1);updateState(selectedState.id,{internalTransitions:allLines.join('\\n')});}}",
       "handlers": {
@@ -4226,7 +4203,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17164,
+      "line": 17130,
       "tag": "Input",
       "signature": "Input|onChange:{e=>updateLine(type,e.target.value,afterTicks,action)}",
       "handlers": {
@@ -4241,7 +4218,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17167,
+      "line": 17133,
       "tag": "Input",
       "signature": "Input|onChange:{e=>updateLine(type,condition,e.target.value,action)}",
       "handlers": {
@@ -4256,7 +4233,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17171,
+      "line": 17137,
       "tag": "Input",
       "signature": "Input|onChange:{e=>updateLine(type,condition,afterTicks,e.target.value)}",
       "handlers": {
@@ -4271,7 +4248,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17184,
+      "line": 17150,
       "tag": "textarea",
       "signature": "textarea|onChange:{(e)=>updateState(selectedState.id,{entry:e.target.value})}",
       "handlers": {
@@ -4286,7 +4263,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17194,
+      "line": 17160,
       "tag": "textarea",
       "signature": "textarea|onChange:{(e)=>updateState(selectedState.id,{during:e.target.value})}",
       "handlers": {
@@ -4301,7 +4278,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17205,
+      "line": 17171,
       "tag": "Button",
       "signature": "Button|onClick:{()=>{constcurrent=selectedState.internalTransitions?selectedState.internalTransitions+'\\n':'';updateState(selectedState.id,{internalTransitions:current+'[condition]/action;'});}}",
       "handlers": {
@@ -4316,7 +4293,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17210,
+      "line": 17176,
       "tag": "textarea",
       "signature": "textarea|onChange:{(e)=>updateState(selectedState.id,{internalTransitions:e.target.value})}",
       "handlers": {
@@ -4331,7 +4308,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17220,
+      "line": 17186,
       "tag": "textarea",
       "signature": "textarea|onChange:{(e)=>updateState(selectedState.id,{exit:e.target.value})}",
       "handlers": {
@@ -4346,7 +4323,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17228,
+      "line": 17194,
       "tag": "RequirementAssignmentsPanel",
       "signature": "RequirementAssignmentsPanel|onRepositoryChange:{handleSimVerificationRepositoryChange}",
       "handlers": {
@@ -4359,7 +4336,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17236,
+      "line": 17202,
       "tag": "Button",
       "signature": "Button|onClick:{()=>enterLayer(selectedState.id)}",
       "handlers": {
@@ -4374,7 +4351,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17249,
+      "line": 17215,
       "tag": "Button",
       "signature": "Button|onClick:{()=>deleteState(selectedState.id)}",
       "handlers": {
@@ -4389,7 +4366,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17267,
+      "line": 17233,
       "tag": "Input",
       "signature": "Input|onChange:{(e)=>updateJunction(selectedJunction.id,{name:e.target.value})}",
       "handlers": {
@@ -4404,7 +4381,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17275,
+      "line": 17241,
       "tag": "Checkbox",
       "signature": "Checkbox|onCheckedChange:{(checked)=>updateJunction(selectedJunction.id,{autostart:checkedasboolean})}",
       "handlers": {
@@ -4419,7 +4396,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17283,
+      "line": 17249,
       "tag": "Button",
       "signature": "Button|onClick:{()=>deleteJunction(selectedJunction.id)}",
       "handlers": {
@@ -4434,7 +4411,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17298,
+      "line": 17264,
       "tag": "SysmlPropertyPanel",
       "signature": "SysmlPropertyPanel|onExecuteCommand:{dispatchInspectorCommand}",
       "handlers": {
@@ -4447,7 +4424,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17309,
+      "line": 17275,
       "tag": "Button",
       "signature": "Button|onClick:{()=>removeFromDiagram(selectedPackage.id)}",
       "handlers": {
@@ -4462,7 +4439,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17312,
+      "line": 17278,
       "tag": "Button",
       "signature": "Button|onClick:{()=>deleteSemanticPackage(selectedPackage.id)}",
       "handlers": {
@@ -4477,7 +4454,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17321,
+      "line": 17287,
       "tag": "SysmlPropertyPanel",
       "signature": "SysmlPropertyPanel|onExecuteCommand:{dispatchInspectorCommand}",
       "handlers": {
@@ -4490,7 +4467,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17335,
+      "line": 17301,
       "tag": "select",
       "signature": "select|onChange:{(e)=>updateBlock(selectedBlock.id,{stereotype:e.target.value})}",
       "handlers": {
@@ -4505,7 +4482,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17358,
+      "line": 17324,
       "tag": "button",
       "signature": "button|onClick:{()=>setActivePropTab('general')}",
       "handlers": {
@@ -4520,7 +4497,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17368,
+      "line": 17334,
       "tag": "button",
       "signature": "button|onClick:{()=>setActivePropTab('assign')}",
       "handlers": {
@@ -4535,7 +4512,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17378,
+      "line": 17344,
       "tag": "button",
       "signature": "button|onClick:{()=>setActivePropTab('governance')}",
       "handlers": {
@@ -4550,7 +4527,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17392,
+      "line": 17358,
       "tag": "Input",
       "signature": "Input|onChange:{(e)=>updateBlock(selectedBlock.id,{reqId:e.target.value})}",
       "handlers": {
@@ -4565,7 +4542,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17394,
+      "line": 17360,
       "tag": "select",
       "signature": "select|onChange:{(e)=>updateBlock(selectedBlock.id,{status:e.target.value})}",
       "handlers": {
@@ -4580,7 +4557,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17405,
+      "line": 17371,
       "tag": "select",
       "signature": "select|onChange:{(e)=>updateBlock(selectedBlock.id,{priority:e.target.value})}",
       "handlers": {
@@ -4595,7 +4572,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17413,
+      "line": 17379,
       "tag": "textarea",
       "signature": "textarea|onChange:{(e)=>updateBlock(selectedBlock.id,{description:e.target.value})}",
       "handlers": {
@@ -4610,7 +4587,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17416,
+      "line": 17382,
       "tag": "select",
       "signature": "select|onChange:{(e)=>updateBlock(selectedBlock.id,{risk:e.target.value})}",
       "handlers": {
@@ -4625,7 +4602,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17424,
+      "line": 17390,
       "tag": "Input",
       "signature": "Input|onChange:{(e)=>updateBlock(selectedBlock.id,{source:e.target.value})}",
       "handlers": {
@@ -4640,7 +4617,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17425,
+      "line": 17391,
       "tag": "Input",
       "signature": "Input|onChange:{(e)=>updateBlock(selectedBlock.id,{version:e.target.value})}",
       "handlers": {
@@ -4655,7 +4632,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17426,
+      "line": 17392,
       "tag": "textarea",
       "signature": "textarea|onChange:{(e)=>updateBlock(selectedBlock.id,{rationale:e.target.value})}",
       "handlers": {
@@ -4670,7 +4647,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17427,
+      "line": 17393,
       "tag": "Input",
       "signature": "Input|onChange:{(e)=>updateBlock(selectedBlock.id,{baselineId:e.target.value||undefined})}",
       "handlers": {
@@ -4685,7 +4662,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17434,
+      "line": 17400,
       "tag": "Input",
       "signature": "Input|onChange:{(e)=>updateBlock(selectedBlock.id,{assignedTo:e.target.value})}",
       "handlers": {
@@ -4700,7 +4677,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17446,
+      "line": 17412,
       "tag": "button",
       "signature": "button|onClick:{()=>updateBlock(selectedBlock.id,{assignedTo:team})}",
       "handlers": {
@@ -4715,7 +4692,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17491,
+      "line": 17457,
       "tag": "RequirementGovernancePanel",
       "signature": "RequirementGovernancePanel|onAuthorizeBaseline:{(baselineId)=>{setAuthorizedBaselineIds(prev=>prev.includes(baselineId)?prev:[...prev,baselineId]);addError('info',`Recordedexplicitdeletionauthorizationforprotectedbaseline${sysmlObjectLabel(canonicalSysmlRepository.baselines[baselineId],'Baseline')}`);}}|onClearSuspect:{(relId)=>{constres=handleExecuteSysmlCommand({type:'clearSuspectLink',relationshipId:relId});if(!res.committed)return;addError('info',`Clearedsuspectflagonlink:${resolveSysmlReferenceLabel(canonicalSysmlRepository,relId,'Relationship')}`);}}|onCloneBaseline:{(baselineId)=>{constres=handleExecuteSysmlCommand({type:'cloneBaselineAsWorkingCopy',baselineId,name:`Workingcopyof${sysmlObjectLabel(canonicalSysmlRepository.baselines[baselineId],'Baseline')}`});if(!res.committed)return;addError('info',`Clonedprotectedbaseline${sysmlObjectLabel(canonicalSysmlRepository.baselines[baselineId],'Baseline')}intounprotectedworkingcopy${sysmlObjectLabel(res.baseline,'Baseline')}`);}}|onCreateBaseline:{(name)=>{constres=handleExecuteSysmlCommand({type:'createModelBaseline',name});if(!res.committed)return;addError('info',`Createdbaseline:${name}`);}}|onSyncFromMaster:{()=>{constres=handleExecuteSysmlCommand({type:'synchronizeRequirementCopy',requirementId:selectedBlock.id});if(!res.committed)return;addError('info','Synchronizedcopyrequirementfrommaster');}}",
       "handlers": {
@@ -4732,7 +4709,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17533,
+      "line": 17499,
       "tag": "Input",
       "signature": "Input|onChange:{(e)=>updateBlock(selectedBlock.id,{verificationMethod:e.target.value})}",
       "handlers": {
@@ -4747,7 +4724,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17535,
+      "line": 17501,
       "tag": "select",
       "signature": "select|onChange:{(e)=>updateBlock(selectedBlock.id,{verificationResult:e.target.value?e.target.valueas'passed'|'failed':undefined,executedAt:e.target.value?newDate().toISOString():undefined})}",
       "handlers": {
@@ -4762,7 +4739,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17541,
+      "line": 17507,
       "tag": "select",
       "signature": "select|onChange:{(e)=>{constplan=buildSetVerificationBehaviorCommand(canonicalSysmlRepository,{verificationCaseId:selectedBlock.id,behaviorId:e.target.value||undefined});if(plan.ok)handleExecuteSysmlCommand(plan.command);elseaddError('warning',plan.diagnostics.map(d=>d.message).join(''));}}",
       "handlers": {
@@ -4777,7 +4754,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17555,
+      "line": 17521,
       "tag": "Input",
       "signature": "Input|onChange:{(e)=>updateBlock(selectedBlock.id,{artifactUri:e.target.value})}",
       "handlers": {
@@ -4792,7 +4769,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17562,
+      "line": 17528,
       "tag": "input",
       "signature": "input|onChange:{(e)=>updateBlock(selectedBlock.id,{isAbstract:e.target.checked})}",
       "handlers": {
@@ -4807,7 +4784,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17563,
+      "line": 17529,
       "tag": "input",
       "signature": "input|onChange:{(e)=>updateBlock(selectedBlock.id,{isLeaf:e.target.checked})}",
       "handlers": {
@@ -4822,7 +4799,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17571,
+      "line": 17537,
       "tag": "Input",
       "signature": "Input|onChange:{(e)=>{constnewPorts=[...selectedBlock.ports];newPorts[i]={...port,name:e.target.value};updateBlock(selectedBlock.id,{ports:newPorts});}}",
       "handlers": {
@@ -4837,7 +4814,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17582,
+      "line": 17548,
       "tag": "Input",
       "signature": "Input|onChange:{(e)=>{constnewPorts=[...selectedBlock.ports];newPorts[i]={...port,type:e.target.value};updateBlock(selectedBlock.id,{ports:newPorts});}}",
       "handlers": {
@@ -4852,7 +4829,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17592,
+      "line": 17558,
       "tag": "select",
       "signature": "select|onChange:{(e)=>{constnewPorts=[...selectedBlock.ports];newPorts[i]={...port,kind:e.target.valueasany};updateBlock(selectedBlock.id,{ports:newPorts});}}",
       "handlers": {
@@ -4867,7 +4844,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17607,
+      "line": 17573,
       "tag": "select",
       "signature": "select|onChange:{(e)=>{constnewPorts=[...selectedBlock.ports];newPorts[i]={...port,direction:e.target.valueasany};updateBlock(selectedBlock.id,{ports:newPorts});}}",
       "handlers": {
@@ -4882,7 +4859,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17620,
+      "line": 17586,
       "tag": "Input",
       "signature": "Input|onChange:{(e)=>{constnewPorts=[...selectedBlock.ports];newPorts[i]={...port,unit:e.target.value};updateBlock(selectedBlock.id,{ports:newPorts});}}",
       "handlers": {
@@ -4897,7 +4874,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17630,
+      "line": 17596,
       "tag": "button",
       "signature": "button|onClick:{()=>{constnewPorts=selectedBlock.ports.filter(p=>p.id!==port.id);updateBlock(selectedBlock.id,{ports:newPorts});}}",
       "handlers": {
@@ -4912,7 +4889,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17643,
+      "line": 17609,
       "tag": "Button",
       "signature": "Button|onClick:{()=>handleAddPortToSelected('standard')}",
       "handlers": {
@@ -4927,7 +4904,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17644,
+      "line": 17610,
       "tag": "Button",
       "signature": "Button|onClick:{()=>handleAddPortToSelected('flow')}",
       "handlers": {
@@ -4942,7 +4919,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17645,
+      "line": 17611,
       "tag": "Button",
       "signature": "Button|onClick:{()=>handleAddPortToSelected('proxy')}",
       "handlers": {
@@ -4957,7 +4934,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17646,
+      "line": 17612,
       "tag": "Button",
       "signature": "Button|onClick:{()=>handleAddPortToSelected('full')}",
       "handlers": {
@@ -4972,7 +4949,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17651,
+      "line": 17617,
       "tag": "textarea",
       "signature": "textarea|onChange:{(e)=>updateBlock(selectedBlock.id,{operations:e.target.value.split('\\n').filter(s=>s)})}",
       "handlers": {
@@ -4987,7 +4964,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17669,
+      "line": 17635,
       "tag": "input",
       "signature": "input|onChange:{(event)=>{constnext=event.target.checked?[...received,signal.id]:received.filter(id=>id!==signal.id);constresult=handleExecuteSysmlCommand({type:'updateElement',elementId:definition.id,patch:{receptions:next}});if(!result.committed)result.diagnostics.forEach(d=>addError(d.severity,d.message,'SysML',d.elementId));}}",
       "handlers": {
@@ -5002,7 +4979,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17687,
+      "line": 17653,
       "tag": "textarea",
       "signature": "textarea|onChange:{(e)=>updateBlock(selectedBlock.id,{constraints:e.target.value.split('\\n').filter(s=>s)})}",
       "handlers": {
@@ -5017,7 +4994,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17696,
+      "line": 17662,
       "tag": "BlockPropertiesEditor",
       "signature": "BlockPropertiesEditor|onChange:{(properties)=>updateBlock(selectedBlock.id,{properties})}",
       "handlers": {
@@ -5036,7 +5013,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17709,
+      "line": 17675,
       "tag": "select",
       "signature": "select|onChange:{(e)=>{constselected=Array.from(e.target.selectedOptions,option=>option.value);updateBlock(selectedBlock.id,{satisfiedReqIds:selected});}}",
       "handlers": {
@@ -5051,7 +5028,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17726,
+      "line": 17692,
       "tag": "Button",
       "signature": "Button|onClick:{()=>createSequenceDiagramForBlock(selectedBlock.id)}",
       "handlers": {
@@ -5066,7 +5043,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17744,
+      "line": 17710,
       "tag": "button",
       "signature": "button|onClick:{()=>{//Thesequenceworkspaceremountsperdiagramandreportsitsown(empty)selection,sohanditthisone.if(usage.diagramIds[0]!==activeSysmlDiagramId)pendingSequenceSelectionRef.current={diagramId:usage.diagramIds[0],elementIds:usage.elementIds};if(openExactDiagramById(usage.diagramIds[0],{pushOrigin:true}))setSelectedIds(usage.elementIds);elsependingSequenceSelectionRef.current=null;}}",
       "handlers": {
@@ -5081,7 +5058,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17762,
+      "line": 17728,
       "tag": "Button",
       "signature": "Button|onClick:{()=>removeFromDiagram(selectedBlock.id)}",
       "handlers": {
@@ -5096,7 +5073,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17770,
+      "line": 17736,
       "tag": "Button",
       "signature": "Button|onClick:{()=>deleteBlock(selectedBlock.id)}",
       "handlers": {
@@ -5111,7 +5088,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17782,
+      "line": 17748,
       "tag": "SysmlPropertyPanel",
       "signature": "SysmlPropertyPanel|onExecuteCommand:{dispatchInspectorCommand}",
       "handlers": {
@@ -5124,7 +5101,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17787,
+      "line": 17753,
       "tag": "Button",
       "signature": "Button|onClick:{()=>removeFromDiagram(selectedRelationship.id)}",
       "handlers": {
@@ -5139,7 +5116,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17792,
+      "line": 17758,
       "tag": "RelationshipEndEditor",
       "signature": "RelationshipEndEditor|onChange:{(updatedRel)=>{updateRelationship(selectedRelationship.id,{type:updatedRel.kind==='sharedAggregation'?'aggregation':updatedRel.kind==='deriveReqt'?'derive':updatedRel.kindasany,sourceRole:updatedRel.sourceRole,targetRole:updatedRel.targetRole,sourceMultiplicity:updatedRel.sourceMultiplicity?`${updatedRel.sourceMultiplicity.lower}..${updatedRel.sourceMultiplicity.upper}`:undefined,targetMultiplicity:updatedRel.targetMultiplicity?`${updatedRel.targetMultiplicity.lower}..${updatedRel.targetMultiplicity.upper}`:undefined,sourceNavigable:updatedRel.sourceNavigable,targetNavigable:updatedRel.targetNavigable,sourceAggregation:updatedRel.sourceAggregation,targetAggregation:updatedRel.targetAggregation,}asany);}}|onInvalidChange:{(rejection)=>showConnectionPolicyError(rejection,selectedRelationship.id)}",
       "handlers": {
@@ -5159,7 +5136,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17834,
+      "line": 17800,
       "tag": "Button",
       "signature": "Button|onClick:{()=>deleteRelationship(selectedRelationship.id)}",
       "handlers": {
@@ -5174,7 +5151,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17838,
+      "line": 17804,
       "tag": "SysmlPropertyPanel",
       "signature": "SysmlPropertyPanel|onExecuteCommand:{dispatchInspectorCommand}",
       "handlers": {
@@ -5187,7 +5164,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17844,
+      "line": 17810,
       "tag": "Input",
       "signature": "Input|onChange:{(e)=>updatePart(selectedPart.id,{multiplicity:e.target.value})}",
       "handlers": {
@@ -5202,7 +5179,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17849,
+      "line": 17815,
       "tag": "button",
       "signature": "button|onClick:{()=>{constdefId=uuidv4();constdefName=`${selectedPart.name}_Def`;constresult=handleExecuteSysmlCommand(buildCreatePartDefinitionCommand({partId:selectedPart.id,definitionId:defId,definitionName:defName,repository:canonicalSysmlRepository,}));if(result.committed)addError('info',`Createddefinition'${defName}'forpart.`);elseresult.diagnostics.forEach(diagnostic=>addError(diagnostic.severity,diagnostic.message,'SysML',diagnostic.elementId));}}",
       "handlers": {
@@ -5217,7 +5194,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17868,
+      "line": 17834,
       "tag": "select",
       "signature": "select|onChange:{(e)=>updatePart(selectedPart.id,{typeId:e.target.value||null})}",
       "handlers": {
@@ -5232,7 +5209,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17881,
+      "line": 17847,
       "tag": "select",
       "signature": "select|onChange:{(e)=>updatePart(selectedPart.id,{aggregation:e.target.valueas'composite'|'reference'})}",
       "handlers": {
@@ -5247,7 +5224,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17901,
+      "line": 17867,
       "tag": "Input",
       "signature": "Input|onChange:{(e)=>{constnewPorts=[...block.ports];newPorts[i]={...port,name:e.target.value};updateBlock(block.id,{ports:newPorts});}}",
       "handlers": {
@@ -5262,7 +5239,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17911,
+      "line": 17877,
       "tag": "Input",
       "signature": "Input|onChange:{(e)=>{constnewPorts=[...block.ports];newPorts[i]={...port,type:e.target.value};updateBlock(block.id,{ports:newPorts});}}",
       "handlers": {
@@ -5277,7 +5254,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17920,
+      "line": 17886,
       "tag": "select",
       "signature": "select|onChange:{(e)=>{constnewPorts=[...block.ports];newPorts[i]={...port,kind:e.target.valueasany};updateBlock(block.id,{ports:newPorts});}}",
       "handlers": {
@@ -5292,7 +5269,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17934,
+      "line": 17900,
       "tag": "select",
       "signature": "select|onChange:{(e)=>{constnewPorts=[...block.ports];newPorts[i]={...port,direction:e.target.valueasany};updateBlock(block.id,{ports:newPorts});}}",
       "handlers": {
@@ -5307,7 +5284,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17948,
+      "line": 17914,
       "tag": "button",
       "signature": "button|onClick:{()=>{constnewPorts=block.ports.filter(p=>p.id!==port.id);updateBlock(block.id,{ports:newPorts});}}",
       "handlers": {
@@ -5322,7 +5299,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17961,
+      "line": 17927,
       "tag": "Button",
       "signature": "Button|onClick:{()=>handleAddPortToSelected('standard')}",
       "handlers": {
@@ -5337,7 +5314,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17962,
+      "line": 17928,
       "tag": "Button",
       "signature": "Button|onClick:{()=>handleAddPortToSelected('flow')}",
       "handlers": {
@@ -5352,7 +5329,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17963,
+      "line": 17929,
       "tag": "Button",
       "signature": "Button|onClick:{()=>handleAddPortToSelected('proxy')}",
       "handlers": {
@@ -5367,7 +5344,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17964,
+      "line": 17930,
       "tag": "Button",
       "signature": "Button|onClick:{()=>handleAddPortToSelected('full')}",
       "handlers": {
@@ -5382,7 +5359,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17974,
+      "line": 17940,
       "tag": "select",
       "signature": "select|onChange:{(e)=>{constselected=Array.from(e.target.selectedOptions,option=>option.value);updatePart(selectedPart.id,{satisfiedReqIds:selected});}}",
       "handlers": {
@@ -5397,7 +5374,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17989,
+      "line": 17955,
       "tag": "Button",
       "signature": "Button|onClick:{()=>deletePart(selectedPart.id)}",
       "handlers": {
@@ -5412,22 +5389,22 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 17993,
+      "line": 17959,
       "tag": "IbdConnectorEditor",
       "signature": "IbdConnectorEditor|onChange:{(updatedConn)=>{constplan=buildConnectorUpdateCommand(canonicalSysmlRepository,selectedConnector.id,updatedConn);if(!plan.ok){plan.diagnostics.forEach(d=>addError(d.severity,d.message,'SysML',d.elementId));return;}if(!plan.command)return;constresult=handleExecuteSysmlCommand(plan.command);if(!result.committed)result.diagnostics.forEach(d=>addError(d.severity,d.message,'SysML',d.elementId));}}",
       "handlers": {
         "onChange": "{(updatedConn) => {\n                      const plan = buildConnectorUpdateCommand(canonicalSysmlRepository, selectedConnector.id, updatedConn);\n                      if (!plan.ok) {\n                        plan.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));\n                        return;\n                      }\n                      if (!plan.command) return;\n                      const result = handleExecuteSysmlCommand(plan.command);\n                      if (!result.committed) result.diagnostics.forEach(d => addError(d.severity, d.message, 'SysML', d.elementId));\n                    }}"
       },
-      "id": "sysml:relationship:Connector",
+      "feature": "sysml:relationship:Connector",
       "status": "documented",
-      "reason": "Additional source handler reviewed against its component implementation (2026-10-19 release review).",
       "featureIds": [
         "sysml:relationship:Connector"
-      ]
+      ],
+      "reason": "Direct stable feature binding resolves to a live instructional destination."
     },
     {
       "source": "src/App.tsx",
-      "line": 18023,
+      "line": 17989,
       "tag": "Button",
       "signature": "Button|onClick:{()=>deleteConnector(selectedConnector.id)}",
       "handlers": {
@@ -5442,7 +5419,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18031,
+      "line": 17997,
       "tag": "Button",
       "signature": "Button|onClick:{()=>deleteInterfaceRealization(selectedInterfaceRealization.id)}",
       "handlers": {
@@ -5457,7 +5434,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18059,
+      "line": 18025,
       "tag": "Button",
       "signature": "Button|onClick:{()=>{constdefaultGuard=variables.length>0?`${variables[0].name}==1U`:'flag==true';updateTransition(selectedTransition.id,{type:'condition',condition:defaultGuard});addError('info',`Addedguardcondition:[${defaultGuard}]`);}}",
       "handlers": {
@@ -5472,7 +5449,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18071,
+      "line": 18037,
       "tag": "Button",
       "signature": "Button|onClick:{()=>{updateTransition(selectedTransition.id,{type:'after',afterTicks:5});addError('info',`Addedafter-timer:after(5)`);}}",
       "handlers": {
@@ -5487,7 +5464,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18084,
+      "line": 18050,
       "tag": "Button",
       "signature": "Button|onClick:{()=>handleAutoFix(err)}",
       "handlers": {
@@ -5502,7 +5479,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18100,
+      "line": 18066,
       "tag": "Input",
       "signature": "Input|onChange:{(e)=>updateTransition(selectedTransition.id,{order:parseInt(e.target.value)||0})}",
       "handlers": {
@@ -5517,7 +5494,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18115,
+      "line": 18081,
       "tag": "Checkbox",
       "signature": "Checkbox|onCheckedChange:{(checked)=>updateTransition(selectedTransition.id,{isInternal:checkedasboolean})}",
       "handlers": {
@@ -5532,7 +5509,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18130,
+      "line": 18096,
       "tag": "select",
       "signature": "select|onChange:{(e)=>updateTransition(selectedTransition.id,{type:e.target.valueasany})}",
       "handlers": {
@@ -5547,7 +5524,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18144,
+      "line": 18110,
       "tag": "textarea",
       "signature": "textarea|onChange:{(e)=>updateTransition(selectedTransition.id,{condition:e.target.valueasany})}",
       "handlers": {
@@ -5562,7 +5539,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18156,
+      "line": 18122,
       "tag": "Input",
       "signature": "Input|onChange:{(e)=>updateTransition(selectedTransition.id,{afterTicks:e.target.value?parseInt(e.target.value):null})}",
       "handlers": {
@@ -5577,7 +5554,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18171,
+      "line": 18137,
       "tag": "textarea",
       "signature": "textarea|onChange:{(e)=>updateTransition(selectedTransition.id,{action:e.target.value})}",
       "handlers": {
@@ -5592,7 +5569,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18179,
+      "line": 18145,
       "tag": "Button",
       "signature": "Button|onClick:{()=>deleteTransition(selectedTransition.id)}",
       "handlers": {
@@ -5607,7 +5584,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18193,
+      "line": 18159,
       "tag": "InteractionElementInspector",
       "signature": "InteractionElementInspector|onExecute:{handleExecuteSysmlCommand}",
       "handlers": {
@@ -5620,7 +5597,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18205,
+      "line": 18171,
       "tag": "SysmlPropertyPanel",
       "signature": "SysmlPropertyPanel|onExecuteCommand:{dispatchInspectorCommand}",
       "handlers": {
@@ -5633,7 +5610,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18233,
+      "line": 18200,
       "tag": "button",
       "signature": "button|onClick:{()=>setMobileTab('hierarchy')}",
       "handlers": {
@@ -5648,7 +5625,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18244,
+      "line": 18211,
       "tag": "button",
       "signature": "button|onClick:{()=>setMobileTab('variables')}",
       "handlers": {
@@ -5663,7 +5640,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18255,
+      "line": 18222,
       "tag": "button",
       "signature": "button|onClick:{()=>setMobileTab('canvas')}",
       "handlers": {
@@ -5678,7 +5655,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18265,
+      "line": 18232,
       "tag": "button",
       "signature": "button|onClick:{()=>setMobileTab('properties')}",
       "handlers": {
@@ -5693,7 +5670,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18293,
+      "line": 18260,
       "tag": "Input",
       "signature": "Input|onChange:{(e)=>setNewVarName(e.target.value)}",
       "handlers": {
@@ -5708,7 +5685,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18298,
+      "line": 18265,
       "tag": "select",
       "signature": "select|onChange:{(e)=>{setNewVarType(e.target.valueasVariableType);setNewVarValue(getDefaultValue(e.target.valueasVariableType));}}",
       "handlers": {
@@ -5723,7 +5700,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18310,
+      "line": 18277,
       "tag": "Input",
       "signature": "Input|onChange:{(e)=>setNewVarValue(e.target.value)}",
       "handlers": {
@@ -5738,7 +5715,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18316,
+      "line": 18283,
       "tag": "Button",
       "signature": "Button|onClick:{addVariable}",
       "handlers": {
@@ -5753,7 +5730,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18337,
+      "line": 18304,
       "tag": "Checkbox",
       "signature": "Checkbox|onCheckedChange:{()=>toggleVariableVisibility(variable.id)}",
       "handlers": {
@@ -5768,7 +5745,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18349,
+      "line": 18316,
       "tag": "Input",
       "signature": "Input|onChange:{(e)=>updateVariableInitValue(variable.id,e.target.value)}",
       "handlers": {
@@ -5783,7 +5760,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18365,
+      "line": 18332,
       "tag": "Input",
       "signature": "Input|onChange:{(e)=>updateVariableValue(variable.id,e.target.value)}",
       "handlers": {
@@ -5798,7 +5775,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18379,
+      "line": 18346,
       "tag": "Button",
       "signature": "Button|onClick:{()=>setShowWorkspaceModal(false)}",
       "handlers": {
@@ -5813,7 +5790,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18386,
+      "line": 18353,
       "tag": "Button",
       "signature": "Button|onClick:{()=>{resetVariables();setShowWorkspaceModal(false);}}",
       "handlers": {
@@ -5828,7 +5805,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18406,
+      "line": 18373,
       "tag": "div",
       "signature": "div|onMouseDown:{()=>setShowCodegenDialog(false)}",
       "handlers": {
@@ -5843,7 +5820,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18407,
+      "line": 18374,
       "tag": "CodeGenerationDialog",
       "signature": "CodeGenerationDialog|onClose:{()=>setShowCodegenDialog(false)}",
       "handlers": {
@@ -5856,7 +5833,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18420,
+      "line": 18387,
       "tag": "ReportDialog",
       "signature": "ReportDialog|onClose:{()=>setShowReportDialog(false)}|onGenerate:{handleGenerateReport}",
       "handlers": {
@@ -5870,7 +5847,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18428,
+      "line": 18395,
       "tag": "WorkspaceFileDialog",
       "signature": "WorkspaceFileDialog|onClose:{()=>setShowWorkspaceFileDialog(false)}|onCreateFile:{createNewFile}|onCreateProject:{(name)=>{setShowWorkspaceFileDialog(false);constnewUrl=`${window.location.origin}${window.location.pathname}?projectName=${encodeURIComponent(name)}`;window.open(newUrl,'_blank');}}|onDeleteFile:{(id)=>{setWorkspaceFiles(prev=>prev.filter(f=>f.id!==id));setOpenTabIds(prev=>prev.filter(tid=>tid!==id));}}|onImportFile:{handleImportFile}|onOpenFile:{openFileInTab}|onValidationError:{setImportValidationError}",
       "handlers": {
@@ -5889,7 +5866,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18450,
+      "line": 18417,
       "tag": "div",
       "signature": "div|onMouseDown:{()=>setDeleteConfirmState(null)}",
       "handlers": {
@@ -5904,7 +5881,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18451,
+      "line": 18418,
       "tag": "div",
       "signature": "div|onMouseDown:{e=>e.stopPropagation()}",
       "handlers": {
@@ -5917,7 +5894,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18457,
+      "line": 18424,
       "tag": "button",
       "signature": "button|onClick:{()=>setDeleteConfirmState(null)}",
       "handlers": {
@@ -5932,7 +5909,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18494,
+      "line": 18461,
       "tag": "Button",
       "signature": "Button|onClick:{()=>setDeleteConfirmState(null)}",
       "handlers": {
@@ -5947,7 +5924,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18501,
+      "line": 18468,
       "tag": "Button",
       "signature": "Button|onClick:{()=>executeDeleteState(deleteConfirmState.ids,deleteConfirmState.otherDeletedIds)}",
       "handlers": {
@@ -5962,7 +5939,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18514,
+      "line": 18481,
       "tag": "div",
       "signature": "div|onMouseDown:{()=>setSysmlDeleteConfirm(null)}",
       "handlers": {
@@ -5977,7 +5954,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18515,
+      "line": 18482,
       "tag": "div",
       "signature": "div|onMouseDown:{e=>e.stopPropagation()}",
       "handlers": {
@@ -5990,7 +5967,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18521,
+      "line": 18488,
       "tag": "button",
       "signature": "button|onClick:{()=>setSysmlDeleteConfirm(null)}",
       "handlers": {
@@ -6005,7 +5982,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18586,
+      "line": 18553,
       "tag": "Button",
       "signature": "Button|onClick:{()=>setSysmlDeleteConfirm(null)}",
       "handlers": {
@@ -6020,7 +5997,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18594,
+      "line": 18561,
       "tag": "Button",
       "signature": "Button|onClick:{()=>{constfn=sysmlDeleteConfirm.onConfirm;setSysmlDeleteConfirm(null);fn();}}",
       "handlers": {
@@ -6035,7 +6012,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18612,
+      "line": 18579,
       "tag": "CreateNewTypeActionPrompt",
       "signature": "CreateNewTypeActionPrompt|onCreate:{handleCreateNewTypeAction}|onDismiss:{()=>setPendingCreateNewTypeAction(null)}",
       "handlers": {
@@ -6049,7 +6026,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18621,
+      "line": 18588,
       "tag": "TypeSelectionPrompt",
       "signature": "TypeSelectionPrompt|onCancel:{()=>setPortTypePrompt(null)}|onCreateNewType:{handleCreateNewTypeForPort}|onSelectType:{handlePortTypeSelected}",
       "handlers": {
@@ -6064,7 +6041,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18633,
+      "line": 18600,
       "tag": "TypeSelectionPrompt",
       "signature": "TypeSelectionPrompt|onCancel:{()=>setPropertyTypePrompt(null)}|onCreateNewType:{handleCreateNewTypeForProperty}|onSelectType:{handlePropertyTypeSelected}",
       "handlers": {
@@ -6079,7 +6056,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18646,
+      "line": 18613,
       "tag": "div",
       "signature": "div|onMouseDown:{()=>setRequirementConnectionPicker(null)}",
       "handlers": {
@@ -6094,7 +6071,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18650,
+      "line": 18617,
       "tag": "div",
       "signature": "div|onMouseDown:{(e)=>e.stopPropagation()}",
       "handlers": {
@@ -6107,7 +6084,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18684,
+      "line": 18651,
       "tag": "Button",
       "signature": "Button|onClick:{()=>{createRelationship(requirementConnectionPicker.sourceId,requirementConnectionPicker.targetId,kind);setRequirementConnectionPicker(null);}}",
       "handlers": {
@@ -6122,7 +6099,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18714,
+      "line": 18681,
       "tag": "Button",
       "signature": "Button|onClick:{()=>setRequirementConnectionPicker(null)}",
       "handlers": {
@@ -6137,7 +6114,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18728,
+      "line": 18695,
       "tag": "div",
       "signature": "div|onMouseDown:{()=>setPackageDiagramChooser(null)}",
       "handlers": {
@@ -6152,7 +6129,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18732,
+      "line": 18699,
       "tag": "div",
       "signature": "div|onMouseDown:{(e)=>e.stopPropagation()}",
       "handlers": {
@@ -6165,7 +6142,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18745,
+      "line": 18712,
       "tag": "Button",
       "signature": "Button|onClick:{()=>{setActivePackageDiagramId(id);openExactDiagramById(id,{preserveReturnStack:true});setPackageDiagramChooser(null);}}",
       "handlers": {
@@ -6180,7 +6157,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18761,
+      "line": 18728,
       "tag": "Button",
       "signature": "Button|onClick:{()=>{constnewId=uuidv4();constdiagram:ModelDiagramDefinition={id:newId,kind:'diagram',diagramKind:'package',ownerId:'model',namespace:['model'],name:`PackageDiagram${packageDiagramChooser.diagramIds.length+1}`,};constresult=handleExecuteSysmlCommand({type:'createDiagram',diagram,});if(result.committed){constcreatedId=newId;setActivePackageDiagramId(createdId);openExactDiagramById(createdId);setPackageDiagramChooser(null);}else{result.diagnostics.forEach(d=>addError(d.severity,d.message,'SysML',d.elementId));}}}",
       "handlers": {
@@ -6195,7 +6172,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18790,
+      "line": 18757,
       "tag": "Button",
       "signature": "Button|onClick:{()=>setPackageDiagramChooser(null)}",
       "handlers": {
@@ -6210,7 +6187,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18817,
+      "line": 18784,
       "tag": "div",
       "signature": "div|onMouseDown:{revertDrop}",
       "handlers": {
@@ -6225,7 +6202,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18818,
+      "line": 18785,
       "tag": "div",
       "signature": "div|onMouseDown:{(e)=>e.stopPropagation()}",
       "handlers": {
@@ -6238,7 +6215,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18831,
+      "line": 18798,
       "tag": "Button",
       "signature": "Button|onClick:{revertDrop}",
       "handlers": {
@@ -6253,7 +6230,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18832,
+      "line": 18799,
       "tag": "Button",
       "signature": "Button|onClick:{()=>{constresult=handleExecuteSysmlCommand({type:'moveElements',elementIds:pendingPackageMove.elementIds,targetOwnerId:pendingPackageMove.targetOwnerId,});if(result.committed){setPendingPackageMove(null);addError('info',`Moved${elementNames.join(',')}to${targetName}`);}else{result.diagnostics.forEach(d=>addError(d.severity,d.message,'SysML',d.elementId));revertDrop();}}}",
       "handlers": {
@@ -6268,7 +6245,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18853,
+      "line": 18820,
       "tag": "div",
       "signature": "div|onMouseDown:{()=>setDiagramTargetChooser(null)}",
       "handlers": {
@@ -6283,7 +6260,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18857,
+      "line": 18824,
       "tag": "div",
       "signature": "div|onMouseDown:{(e)=>e.stopPropagation()}",
       "handlers": {
@@ -6296,7 +6273,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18873,
+      "line": 18840,
       "tag": "Button",
       "signature": "Button|onClick:{()=>{setDiagramTargetChooser(null);openExactDiagramById(id,{pushOrigin:true,preserveReturnStack:true});}}",
       "handlers": {
@@ -6311,7 +6288,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18888,
+      "line": 18855,
       "tag": "Button",
       "signature": "Button|onClick:{()=>setDiagramTargetChooser(null)}",
       "handlers": {
@@ -6326,7 +6303,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18896,
+      "line": 18863,
       "tag": "SaveSelectionDialog",
       "signature": "SaveSelectionDialog|onClose:{()=>setShowSaveSelectionModal(false)}|onSave:{(selectedKeys)=>{setShowSaveSelectionModal(false);executeExportProject(selectedKeys);}}",
       "handlers": {
@@ -6340,7 +6317,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18907,
+      "line": 18874,
       "tag": "div",
       "signature": "div|onMouseDown:{dismissErrorDialog}",
       "handlers": {
@@ -6355,7 +6332,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18908,
+      "line": 18875,
       "tag": "div",
       "signature": "div|onMouseDown:{e=>e.stopPropagation()}",
       "handlers": {
@@ -6368,7 +6345,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18936,
+      "line": 18903,
       "tag": "Button",
       "signature": "Button|onClick:{()=>handleJumpToError(currentError)}",
       "handlers": {
@@ -6383,7 +6360,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18947,
+      "line": 18914,
       "tag": "Button",
       "signature": "Button|onClick:{()=>{constdefaultGuard=variables.length>0?`${variables[0].name}==1U`:'flag==true';updateTransition(currentError.elementId!,{type:'condition',condition:defaultGuard});addError('info',`Addedguardcondition:[${defaultGuard}]`);setErrors(prev=>prev.filter(e=>e.id!==currentError.id));dismissErrorDialog();}}",
       "handlers": {
@@ -6398,7 +6375,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18959,
+      "line": 18926,
       "tag": "Button",
       "signature": "Button|onClick:{()=>{updateTransition(currentError.elementId!,{type:'after',afterTicks:5});addError('info',`Addedafter-timer:after(5)`);setErrors(prev=>prev.filter(e=>e.id!==currentError.id));dismissErrorDialog();}}",
       "handlers": {
@@ -6413,7 +6390,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18972,
+      "line": 18939,
       "tag": "Button",
       "signature": "Button|onClick:{()=>handleAutoFix(currentError)}",
       "handlers": {
@@ -6428,7 +6405,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18981,
+      "line": 18948,
       "tag": "Button",
       "signature": "Button|onClick:{handleFixAll}",
       "handlers": {
@@ -6443,7 +6420,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18988,
+      "line": 18955,
       "tag": "Button",
       "signature": "Button|onClick:{dismissErrorDialog}",
       "handlers": {
@@ -6458,7 +6435,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 18996,
+      "line": 18963,
       "tag": "Button",
       "signature": "Button|onClick:{()=>{clearErrors();dismissErrorDialog();}}",
       "handlers": {
@@ -6473,7 +6450,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 19013,
+      "line": 18980,
       "tag": "FloatingWindow",
       "signature": "FloatingWindow|onClose:{()=>toggleWindow('pid')}|onUpdate:{updateManagedWindow}",
       "handlers": {
@@ -6487,7 +6464,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 19018,
+      "line": 18985,
       "tag": "PidWorkspaceDialog",
       "signature": "PidWorkspaceDialog|onClose:{()=>toggleWindow('pid')}",
       "handlers": {
@@ -6500,7 +6477,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 19025,
+      "line": 18992,
       "tag": "FloatingWindow",
       "signature": "FloatingWindow|onClose:{()=>toggleWindow('rtm')}|onUpdate:{updateManagedWindow}",
       "handlers": {
@@ -6514,7 +6491,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 19032,
+      "line": 18999,
       "tag": "CanonicalTraceabilityMatrix",
       "signature": "CanonicalTraceabilityMatrix|onNavigate:{(elementId)=>{setSelectedIds([elementId]);if(blocks.some(block=>block.id===elementId&&block.stereotype==='requirement'))setDiagramMode('requirements');elseif(blocks.some(block=>block.id===elementId))setDiagramMode('bdd');elseif(parts.some(part=>part.id===elementId)||connectors.some(connector=>connector.id===elementId))setDiagramMode('ibd');}}|onRunAllSimulations:{handleRunAllSimulations}|onSimulate:{setSimVerificationRequirementId}",
       "handlers": {
@@ -6529,7 +6506,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 19048,
+      "line": 19015,
       "tag": "button",
       "signature": "button|onClick:{()=>setSimVerificationRequirementId(null)}",
       "handlers": {
@@ -6544,7 +6521,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 19049,
+      "line": 19016,
       "tag": "SimVerificationPanel",
       "signature": "SimVerificationPanel|onRepositoryChange:{handleSimVerificationRepositoryChange}",
       "handlers": {
@@ -6557,7 +6534,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 19064,
+      "line": 19031,
       "tag": "FloatingWindow",
       "signature": "FloatingWindow|onClose:{()=>toggleWindow('allocation')}|onUpdate:{updateManagedWindow}",
       "handlers": {
@@ -6571,7 +6548,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 19069,
+      "line": 19036,
       "tag": "CanonicalAllocationMatrix",
       "signature": "CanonicalAllocationMatrix|onExecute:{handleExecuteSysmlCommand}|onNavigate:{(elementId)=>setSelectedIds([elementId])}",
       "handlers": {
@@ -6585,7 +6562,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 19080,
+      "line": 19047,
       "tag": "FloatingWindow",
       "signature": "FloatingWindow|onClose:{()=>toggleWindow('hmi')}|onUpdate:{updateManagedWindow}",
       "handlers": {
@@ -6599,7 +6576,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 19086,
+      "line": 19053,
       "tag": "HmiWorkspace",
       "signature": "HmiWorkspace|onClose:{()=>toggleWindow('hmi')}|onInput:{handleHmiInput}|onSimulationCommand:{command=>{if(command==='pause')pauseSimulation();elseif(command==='reset')voidresetSimulation();elseif(command==='step')voidstepSimulation();elseif(command==='resume'&&simulationSessionRef.current){if(simulationSessionRef.current.runtime.error)addError('error','Resetthefailedsimulationbeforeresuming.','HMI');elsesetIsRunning(true);}elsevoidstartSimulation();}}",
       "handlers": {
@@ -6614,7 +6591,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 19112,
+      "line": 19079,
       "tag": "FloatingWindow",
       "signature": "FloatingWindow|onClose:{()=>toggleWindow('doe')}|onUpdate:{updateManagedWindow}",
       "handlers": {
@@ -6628,7 +6605,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 19117,
+      "line": 19084,
       "tag": "DoeWorkspace",
       "signature": "DoeWorkspace|onClose:{()=>toggleWindow('doe')}|onExportToVLab:{onExportToVLab}|onExportToXBridges:{onExportToXBridges}",
       "handlers": {
@@ -6643,7 +6620,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 19152,
+      "line": 19119,
       "tag": "ThreeDXGateway",
       "signature": "ThreeDXGateway|onClose:{()=>setShow3DXGateway(false)}|onImportJson:{(jsonStr)=>{try{constparsed=JSON.parse(jsonStr);if(parsed&&typeofparsed==='object'){hydrateProject(parsed);addError('info','3DEXPERIENCE:Projectimportedsuccessfully.');}}catch{addError('error','3DEXPERIENCE:DownloadedfileisnotvalidJSON.');}setShow3DXGateway(false);}}",
       "handlers": {
@@ -6657,7 +6634,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 19173,
+      "line": 19140,
       "tag": "div",
       "signature": "div|onDoubleClick:{()=>setIsScopeDetached(false)}",
       "handlers": {
@@ -6672,7 +6649,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 19186,
+      "line": 19153,
       "tag": "Button",
       "signature": "Button|onClick:{exportScopeCSV}",
       "handlers": {
@@ -6687,7 +6664,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 19194,
+      "line": 19161,
       "tag": "Button",
       "signature": "Button|onClick:{clearScope}",
       "handlers": {
@@ -6702,7 +6679,7 @@
     },
     {
       "source": "src/App.tsx",
-      "line": 19202,
+      "line": 19169,
       "tag": "Button",
       "signature": "Button|onClick:{()=>setIsScopeDetached(false)}",
       "handlers": {
@@ -8113,9 +8090,12 @@
         "onDoubleClick": "{onHandleDoubleClick}",
         "onKeyDown": "{onHandleKeyDown}"
       },
-      "status": "unreviewed",
-      "featureIds": [],
-      "reason": "New or changed handler has no direct reviewed binding or matching reviewed source signature."
+      "feature": "live:components/common/ResizablePanel:82b534eeb763",
+      "status": "documented",
+      "featureIds": [
+        "live:components/common/ResizablePanel:82b534eeb763"
+      ],
+      "reason": "Direct stable feature binding resolves to a live instructional destination."
     },
     {
       "source": "src/components/common/ResizableSplitPane.tsx",
@@ -20114,7 +20094,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 689,
+      "line": 690,
       "tag": "button",
       "signature": "button|onClick:{()=>setZoomLevel(prev=>prev/1.25)}",
       "handlers": {
@@ -20129,7 +20109,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 697,
+      "line": 698,
       "tag": "button",
       "signature": "button|onClick:{()=>setZoomLevel(prev=>prev*1.25)}",
       "handlers": {
@@ -20144,7 +20124,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 706,
+      "line": 707,
       "tag": "button",
       "signature": "button|onClick:{handleAutoScale}",
       "handlers": {
@@ -20159,7 +20139,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 714,
+      "line": 715,
       "tag": "button",
       "signature": "button|onClick:{(e)=>{e.stopPropagation();e.preventDefault();onExpand();}}",
       "handlers": {
@@ -20174,7 +20154,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 776,
+      "line": 777,
       "tag": "div",
       "signature": "div|onDoubleClick:{()=>setIsMaximized(!isMaximized)}|onMouseDown:{()=>!isMaximized&&setIsDragging(true)}",
       "handlers": {
@@ -20190,7 +20170,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 786,
+      "line": 787,
       "tag": "button",
       "signature": "button|onClick:{handleExportCSV}",
       "handlers": {
@@ -20205,7 +20185,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 794,
+      "line": 795,
       "tag": "button",
       "signature": "button|onClick:{()=>setShowSettings(!showSettings)}",
       "handlers": {
@@ -20220,7 +20200,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 802,
+      "line": 803,
       "tag": "button",
       "signature": "button|onClick:{()=>setIsMinimized(!isMinimized)}",
       "handlers": {
@@ -20235,7 +20215,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 809,
+      "line": 810,
       "tag": "button",
       "signature": "button|onClick:{()=>{setIsMaximized(!isMaximized);setIsMinimized(false);}}",
       "handlers": {
@@ -20250,7 +20230,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 816,
+      "line": 817,
       "tag": "button",
       "signature": "button|onClick:{onClose}",
       "handlers": {
@@ -20265,7 +20245,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 833,
+      "line": 834,
       "tag": "input",
       "signature": "input|onChange:{(e)=>{constval=Math.max(1,Math.min(8,parseInt(e.target.value)||1));onUpdate({numSignals:{...params.numSignals,value:val}});}}",
       "handlers": {
@@ -20280,7 +20260,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 849,
+      "line": 850,
       "tag": "select",
       "signature": "select|onChange:{(e)=>{constval=e.target.value==='auto'?'auto':parseFloat(e.target.value);onUpdate({time_range:{...params.time_range,value:val}});}}",
       "handlers": {
@@ -20295,7 +20275,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 870,
+      "line": 871,
       "tag": "select",
       "signature": "select|onChange:{(e)=>onUpdate({limit_data_points:{...params.limit_data_points,value:e.target.value}})}",
       "handlers": {
@@ -20310,7 +20290,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 883,
+      "line": 884,
       "tag": "input",
       "signature": "input|onChange:{(e)=>onUpdate({buffer_size:{...params.buffer_size,value:parseInt(e.target.value)||1000}})}",
       "handlers": {
@@ -20325,7 +20305,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 894,
+      "line": 895,
       "tag": "input",
       "signature": "input|onChange:{(e)=>onUpdate({decimation:{...params.decimation,value:parseInt(e.target.value)||1}})}",
       "handlers": {
@@ -20340,7 +20320,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 906,
+      "line": 907,
       "tag": "input",
       "signature": "input|onChange:{(e)=>onUpdate({sample_time:{...params.sample_time,value:parseFloat(e.target.value)||-1}})}",
       "handlers": {
@@ -20355,7 +20335,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 918,
+      "line": 919,
       "tag": "select",
       "signature": "select|onChange:{(e)=>onUpdate({show_grid:{...params.show_grid,value:e.target.value}})}",
       "handlers": {
@@ -20370,7 +20350,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 931,
+      "line": 932,
       "tag": "select",
       "signature": "select|onChange:{(e)=>onUpdate({show_legend:{...params.show_legend,value:e.target.value}})}",
       "handlers": {
@@ -20385,7 +20365,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 2860,
+      "line": 2861,
       "tag": "div",
       "signature": "div|onWheel:{handleHorizontalToolbarWheel}",
       "handlers": {
@@ -20400,7 +20380,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 2865,
+      "line": 2866,
       "tag": "button",
       "signature": "button|onClick:{onBack}",
       "handlers": {
@@ -20415,7 +20395,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 2882,
+      "line": 2883,
       "tag": "input",
       "signature": "input|onChange:{e=>handleVlabLimitChange(e.target.value)}",
       "handlers": {
@@ -20430,7 +20410,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 2894,
+      "line": 2895,
       "tag": "button",
       "signature": "button|onClick:{handleStartSimulation}",
       "handlers": {
@@ -20445,7 +20425,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 2902,
+      "line": 2903,
       "tag": "button",
       "signature": "button|onClick:{()=>{setIsSimulating(false);setIsPaused(false);simPhysicsStateRef.current=null;setStatus({message:'Simulationstopped.',type:'info'});setTimeout(()=>setStatus({message:'SystemReady',type:'idle'}),3000);}}",
       "handlers": {
@@ -20460,7 +20440,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 2917,
+      "line": 2918,
       "tag": "button",
       "signature": "button|onClick:{exportToExcel}",
       "handlers": {
@@ -20475,7 +20455,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 2926,
+      "line": 2927,
       "tag": "button",
       "signature": "button|onClick:{()=>onSendToDOE({nodes,edges})}",
       "handlers": {
@@ -20490,7 +20470,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 2933,
+      "line": 2934,
       "tag": "button",
       "signature": "button|onClick:{()=>handle3dxSyncInit('push')}",
       "handlers": {
@@ -20505,7 +20485,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 2941,
+      "line": 2942,
       "tag": "button",
       "signature": "button|onClick:{()=>handle3dxSyncInit('pull')}",
       "handlers": {
@@ -20520,7 +20500,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 2962,
+      "line": 2963,
       "tag": "button",
       "signature": "button|onClick:{()=>setIsLibCollapsed(!isLibCollapsed)}",
       "handlers": {
@@ -20535,7 +20515,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 2975,
+      "line": 2976,
       "tag": "button",
       "signature": "button|onClick:{()=>setActiveSidebarTab('library')}",
       "handlers": {
@@ -20550,7 +20530,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 2985,
+      "line": 2986,
       "tag": "button",
       "signature": "button|onClick:{()=>setActiveSidebarTab('labs')}",
       "handlers": {
@@ -20565,7 +20545,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 3001,
+      "line": 3002,
       "tag": "input",
       "signature": "input|onChange:{(e)=>setSearchQuery(e.target.value)}",
       "handlers": {
@@ -20580,7 +20560,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 3025,
+      "line": 3026,
       "tag": "button",
       "signature": "button|onClick:{()=>toggleDomain(domain.type)}",
       "handlers": {
@@ -20595,7 +20575,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 3050,
+      "line": 3051,
       "tag": "button",
       "signature": "button|onClick:{()=>toggleCategory(catKey)}",
       "handlers": {
@@ -20610,7 +20590,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 3066,
+      "line": 3067,
       "tag": "div",
       "signature": "div|onClick:{()=>addBlockToCenter(block)}|onDragStart:{(e)=>onDragStart(e,block)}",
       "handlers": {
@@ -20626,7 +20606,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 3107,
+      "line": 3108,
       "tag": "div",
       "signature": "div|onClick:{()=>loadLabTemplate(lab.id)}|onMouseEnter:{()=>setHoveredLabId(lab.id)}|onMouseLeave:{()=>setHoveredLabId(null)}",
       "handlers": {
@@ -20643,7 +20623,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 3157,
+      "line": 3158,
       "tag": "div",
       "signature": "div|onContextMenu:{(e)=>e.preventDefault()}|onDragOver:{onDragOver}|onDrop:{onDrop}",
       "handlers": {
@@ -20660,7 +20640,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 3158,
+      "line": 3159,
       "tag": "ReactFlow",
       "signature": "ReactFlow|onConnect:{onConnect}|onConnectEnd:{onConnectEnd}|onConnectStart:{onConnectStart}|onEdgesChange:{onLocalEdgesChange}|onInit:{setReactFlowInstance}|onNodeClick:{onNodeClick}|onNodeDoubleClick:{onNodeDoubleClick}|onNodeDragStop:{onNodeDragStop}|onNodesChange:{onLocalNodesChange}|onPaneClick:{onPaneClick}",
       "handlers": {
@@ -20684,7 +20664,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 3221,
+      "line": 3222,
       "tag": "button",
       "signature": "button|onClick:{()=>reactFlowInstance?.zoomOut({duration:300})}",
       "handlers": {
@@ -20699,7 +20679,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 3228,
+      "line": 3229,
       "tag": "button",
       "signature": "button|onClick:{()=>reactFlowInstance?.zoomTo(1.0,{duration:300})}",
       "handlers": {
@@ -20714,7 +20694,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 3235,
+      "line": 3236,
       "tag": "button",
       "signature": "button|onClick:{()=>reactFlowInstance?.zoomIn({duration:300})}",
       "handlers": {
@@ -20729,7 +20709,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 3243,
+      "line": 3244,
       "tag": "button",
       "signature": "button|onClick:{()=>reactFlowInstance?.fitView({padding:0.2,duration:400})}",
       "handlers": {
@@ -20744,7 +20724,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 3252,
+      "line": 3253,
       "tag": "button",
       "signature": "button|onClick:{()=>setSnapEnabled(prev=>!prev)}",
       "handlers": {
@@ -20759,7 +20739,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 3275,
+      "line": 3276,
       "tag": "button",
       "signature": "button|onClick:{()=>setViewPath(viewPath.slice(0,idx+1))}",
       "handlers": {
@@ -20774,7 +20754,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 3299,
+      "line": 3300,
       "tag": "input",
       "signature": "input|onChange:{(e)=>setQuickSearchQuery(e.target?.value||'')}|onKeyDown:{(e)=>{if(e.key==='Escape')setIsQuickSearchOpen(false);if(e.key==='Enter'&&quickSearchResults.length>0){addBlockAtPos(quickSearchResults[0],quickSearchPos);}}}",
       "handlers": {
@@ -20790,7 +20770,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 3316,
+      "line": 3317,
       "tag": "button",
       "signature": "button|onClick:{()=>addBlockAtPos(block,quickSearchPos)}",
       "handlers": {
@@ -20805,7 +20785,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 3343,
+      "line": 3344,
       "tag": "ScopeView",
       "signature": "ScopeView|onExpand:{()=>setOpenScopes(prev=>prev.includes(selectedNode.id)?prev:[...prev,selectedNode.id])}",
       "handlers": {
@@ -20818,7 +20798,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 3361,
+      "line": 3362,
       "tag": "VLabDiagnosticsPanel",
       "signature": "VLabDiagnosticsPanel|onDismiss:{()=>setRunDiagnostic(null)}|onSelectBlock:{(blockId)=>setSelectedNodeId(blockId)}",
       "handlers": {
@@ -20832,7 +20812,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 3367,
+      "line": 3368,
       "tag": "VLabMigrationBanner",
       "signature": "VLabMigrationBanner|onSelectBlock:{(blockId)=>setSelectedNodeId(blockId)}",
       "handlers": {
@@ -20845,7 +20825,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 3404,
+      "line": 3405,
       "tag": "button",
       "signature": "button|onClick:{()=>setShowConfirmClear(true)}",
       "handlers": {
@@ -20860,7 +20840,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 3423,
+      "line": 3424,
       "tag": "button",
       "signature": "button|onClick:{()=>setIsPropsCollapsed(!isPropsCollapsed)}",
       "handlers": {
@@ -20875,7 +20855,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 3454,
+      "line": 3455,
       "tag": "input",
       "signature": "input|onChange:{(e)=>{constnewLabel=e.target.value;setNodes(nds=>nds.map(nd=>{if(nd.id===selectedNode.id){return{...nd,data:{...nd.data,label:newLabel,params:nd.data.params?.name?{...nd.data.params,name:{...nd.data.params.name,value:newLabel}}:nd.data.params}};}returnnd;}));}}",
       "handlers": {
@@ -20890,7 +20870,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 3491,
+      "line": 3492,
       "tag": "button",
       "signature": "button|onClick:{()=>setSolverConfigTab(tab)}",
       "handlers": {
@@ -20905,7 +20885,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 3510,
+      "line": 3511,
       "tag": "input",
       "signature": "input|onChange:{(e)=>updateParameter('startTime',parseFloat(e.target.value)||0)}",
       "handlers": {
@@ -20920,7 +20900,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 3519,
+      "line": 3520,
       "tag": "input",
       "signature": "input|onChange:{(e)=>updateParameter('stopTime',parseFloat(e.target.value)||10)}",
       "handlers": {
@@ -20935,7 +20915,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 3539,
+      "line": 3540,
       "tag": "select",
       "signature": "select|onChange:{(e)=>updateParameter('solver',e.target.value)}",
       "handlers": {
@@ -20950,7 +20930,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 3575,
+      "line": 3576,
       "tag": "input",
       "signature": "input|onChange:{(e)=>updateParameter('initialStep',parseFloat(e.target.value)||0.001)}",
       "handlers": {
@@ -20965,7 +20945,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 3586,
+      "line": 3587,
       "tag": "input",
       "signature": "input|onChange:{(e)=>updateParameter('minimumStep',parseFloat(e.target.value)||1e-6)}",
       "handlers": {
@@ -20980,7 +20960,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 3596,
+      "line": 3597,
       "tag": "input",
       "signature": "input|onChange:{(e)=>updateParameter('maximumStep',parseFloat(e.target.value)||0.05)}",
       "handlers": {
@@ -20995,7 +20975,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 3608,
+      "line": 3609,
       "tag": "input",
       "signature": "input|onChange:{(e)=>updateParameter('relativeTolerance',parseFloat(e.target.value)||1e-3)}",
       "handlers": {
@@ -21010,7 +20990,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 3618,
+      "line": 3619,
       "tag": "input",
       "signature": "input|onChange:{(e)=>updateParameter('absoluteTolerance',parseFloat(e.target.value)||1e-6)}",
       "handlers": {
@@ -21025,7 +21005,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 3635,
+      "line": 3636,
       "tag": "input",
       "signature": "input|onChange:{(e)=>updateParameter('nonlinearTolerance',parseFloat(e.target.value)||1e-8)}",
       "handlers": {
@@ -21040,7 +21020,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 3645,
+      "line": 3646,
       "tag": "input",
       "signature": "input|onChange:{(e)=>updateParameter('maximumIterations',parseInt(e.target.value)||50)}",
       "handlers": {
@@ -21055,7 +21035,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 3655,
+      "line": 3656,
       "tag": "select",
       "signature": "select|onChange:{(e)=>updateParameter('enableDiagnostics',e.target.value)}",
       "handlers": {
@@ -21070,7 +21050,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 3666,
+      "line": 3667,
       "tag": "select",
       "signature": "select|onChange:{(e)=>updateParameter('enableLogging',e.target.value)}",
       "handlers": {
@@ -21085,7 +21065,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 3709,
+      "line": 3710,
       "tag": "input",
       "signature": "input|onChange:{(e)=>{constval=parseFloat(e.target.value)||0;updateParameter('referencePressure',{value:val,unit:pRefUnit,label:'ReferencePressure'}asany);}}",
       "handlers": {
@@ -21100,7 +21080,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 3719,
+      "line": 3720,
       "tag": "select",
       "signature": "select|onChange:{(e)=>{updateParameter('referencePressure',{value:pRef,unit:e.target.value,label:'ReferencePressure'}asany);}}",
       "handlers": {
@@ -21115,7 +21095,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 3743,
+      "line": 3744,
       "tag": "button",
       "signature": "button|onClick:{()=>updateParameter('pressureType',{value:t,unit:'',label:'PressureType'}asany)}",
       "handlers": {
@@ -21130,7 +21110,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 3772,
+      "line": 3773,
       "tag": "input",
       "signature": "input|onChange:{(e)=>{constval=parseFloat(e.target.value)||0;updateParameter('atmosphericPressure',{value:val,unit:pAtmUnit,label:'AtmosphericPressure'}asany);}}",
       "handlers": {
@@ -21145,7 +21125,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 3782,
+      "line": 3783,
       "tag": "select",
       "signature": "select|onChange:{(e)=>{updateParameter('atmosphericPressure',{value:pAtm,unit:e.target.value,label:'AtmosphericPressure'}asany);}}",
       "handlers": {
@@ -21160,7 +21140,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 3807,
+      "line": 3808,
       "tag": "input",
       "signature": "input|onChange:{(e)=>{updateParameter('elevationCorrection',{value:e.target.checked?'true':'false',unit:'',label:'EnableElevationCorrection'}asany);}}",
       "handlers": {
@@ -21175,7 +21155,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 3825,
+      "line": 3826,
       "tag": "input",
       "signature": "input|onChange:{(e)=>{constval=parseFloat(e.target.value)||0;updateParameter('referenceElevation',{value:val,unit:zRefUnit,label:'ReferenceElevation'}asany);}}",
       "handlers": {
@@ -21190,7 +21170,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 3835,
+      "line": 3836,
       "tag": "select",
       "signature": "select|onChange:{(e)=>{updateParameter('referenceElevation',{value:zRef,unit:e.target.value,label:'ReferenceElevation'}asany);}}",
       "handlers": {
@@ -21205,7 +21185,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 3864,
+      "line": 3865,
       "tag": "select",
       "signature": "select|onChange:{(e)=>updateParameter('initializationPriority',{value:e.target.value,unit:'',label:'InitializationPriority'}asany)}",
       "handlers": {
@@ -21220,7 +21200,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 3902,
+      "line": 3903,
       "tag": "select",
       "signature": "select|onChange:{(e)=>updateParameter(key,e.target.value)}",
       "handlers": {
@@ -21235,7 +21215,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 3911,
+      "line": 3912,
       "tag": "select",
       "signature": "select|onChange:{(e)=>{constval=e.target.value==='auto'?'auto':parseFloat(e.target.value);updateParameter(key,val);}}",
       "handlers": {
@@ -21250,7 +21230,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 3929,
+      "line": 3930,
       "tag": "select",
       "signature": "select|onChange:{(e)=>updateParameter(key,parseInt(e.target.value))}",
       "handlers": {
@@ -21265,7 +21245,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 3939,
+      "line": 3940,
       "tag": "select",
       "signature": "select|onChange:{(e)=>updateParameter(key,e.target.value)}",
       "handlers": {
@@ -21280,7 +21260,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 3952,
+      "line": 3953,
       "tag": "VLabParamField",
       "signature": "VLabParamField|onCommit:{(val)=>updateParameter(key,val)}",
       "handlers": {
@@ -21293,7 +21273,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 3993,
+      "line": 3994,
       "tag": "input",
       "signature": "input|onChange:{(e)=>{constportBlockId=port.id;constnewName=e.target.value;setNodes(nds=>nds.map(n=>{if(n.id===portBlockId){return{...n,data:{...n.data,label:newName,params:{...n.data.params,name:{...n.data.params.name,value:newName}}}};}returnn;}));}}",
       "handlers": {
@@ -21308,7 +21288,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 4103,
+      "line": 4104,
       "tag": "VLabSimulinkScope",
       "signature": "VLabSimulinkScope|onClear:{()=>{setPerScopeData(prev=>({...prev,[scopeId]:[]}));setScopeData([]);}}|onClose:{()=>setOpenScopes(prev=>prev.filter(id=>id!==scopeId))}|onSpeedChange:{setSimSpeed}|onUpdate:{(newData)=>{setNodes(nds=>nds.map(n=>{if(n.id===scopeId){constupdatedParams={...n.data.params,...newData};constupdatedData:Record<string,any>={...n.data,params:updatedParams};if(newData.numSignals){constnum=Math.max(1,Math.min(8,Number(newData.numSignals.value)||1));updatedData.ports=Array.from({length:num},(_,i)=>({id:`in${i+1}`,pos:'left',label:`${i+1}`,domain:'Physical',direction:'in'}));//PruneanyincomingedgestochannelsexceedingnewcapacitysetEdges(eds=>eds.filter(e=>{if(e.target!==scopeId)returntrue;//exactscopechannelid(sameportIdFromHandlepathastheassembler),notasuffixstrip+digitscrapeconstportId=portIdFromHandle({id:scopeId,data:{type:'scope'}},e.targetHandle)??'in1';constch=Number(portId.match(/^in(\\d+)$/)?.[1]??1);returnch<=num;}));}return{...n,data:updatedData};}returnn;}));}}",
       "handlers": {
@@ -21324,7 +21304,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 4162,
+      "line": 4163,
       "tag": "button",
       "signature": "button|onClick:{()=>setShow3dxSyncModal(false)}",
       "handlers": {
@@ -21339,7 +21319,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 4194,
+      "line": 4195,
       "tag": "select",
       "signature": "select|onChange:{(e)=>setSelectedTdxWorkspace(e.target.value)}",
       "handlers": {
@@ -21354,7 +21334,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 4204,
+      "line": 4205,
       "tag": "button",
       "signature": "button|onClick:{handle3dxPush}",
       "handlers": {
@@ -21369,7 +21349,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 4219,
+      "line": 4220,
       "tag": "div",
       "signature": "div|onClick:{()=>handle3dxPull(doc.id)}",
       "handlers": {
@@ -21384,7 +21364,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 4239,
+      "line": 4240,
       "tag": "div",
       "signature": "div|onMouseDown:{()=>setShowConfirmClear(false)}",
       "handlers": {
@@ -21399,7 +21379,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 4240,
+      "line": 4241,
       "tag": "div",
       "signature": "div|onMouseDown:{e=>e.stopPropagation()}",
       "handlers": {
@@ -21412,7 +21392,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 4255,
+      "line": 4256,
       "tag": "button",
       "signature": "button|onClick:{()=>setShowConfirmClear(false)}",
       "handlers": {
@@ -21427,7 +21407,7 @@
     },
     {
       "source": "src/components/vlab/VLabWorkspace.tsx",
-      "line": 4261,
+      "line": 4262,
       "tag": "button",
       "signature": "button|onClick:{()=>{setIsSimulating(false);setIsPaused(false);isSavingRef.current=true;setNodes([]);setEdges([]);setSelectedNodeId(null);setScopeData([]);setPerScopeData({});setHistory([]);setStatus({message:'SystemReady',type:'idle'});setShowConfirmClear(false);if(onNodesChange)onNodesChange([]);if(onEdgesChange)onEdgesChange([]);requestAnimationFrame(()=>requestAnimationFrame(()=>{isSavingRef.current=false;}));}}",
       "handlers": {
@@ -22570,7 +22550,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3125,
+      "line": 3126,
       "tag": "div",
       "signature": "div|onClick:{(e)=>e.stopPropagation()}",
       "handlers": {
@@ -22590,7 +22570,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3132,
+      "line": 3133,
       "tag": "input",
       "signature": "input|onChange:{(e)=>setSearchTerm(e.target.value)}|onKeyDown:{(e)=>{if(e.key==='Enter'&&filteredBlocks.length>0){addBlockAtPos(filteredBlocks[0].type,searchMenuPos.x,searchMenuPos.y);}elseif(e.key==='Escape'){setSearchMenuPos(null);}}}",
       "handlers": {
@@ -22606,7 +22586,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3149,
+      "line": 3150,
       "tag": "div",
       "signature": "div|onClick:{()=>addBlockAtPos(b.type,searchMenuPos.x,searchMenuPos.y)}",
       "handlers": {
@@ -22621,7 +22601,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3189,
+      "line": 3190,
       "tag": "button",
       "signature": "button|onClick:{()=>setIsLibCollapsed(!isLibCollapsed)}",
       "handlers": {
@@ -22636,7 +22616,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3203,
+      "line": 3204,
       "tag": "input",
       "signature": "input|onChange:{(e)=>setSearchTerm(e.target.value)}",
       "handlers": {
@@ -22651,7 +22631,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3216,
+      "line": 3217,
       "tag": "button",
       "signature": "button|onClick:{()=>setActiveSidebarTab('library')}",
       "handlers": {
@@ -22666,7 +22646,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3226,
+      "line": 3227,
       "tag": "button",
       "signature": "button|onClick:{()=>setActiveSidebarTab('labs')}",
       "handlers": {
@@ -22681,7 +22661,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3245,
+      "line": 3246,
       "tag": "button",
       "signature": "button|onClick:{()=>toggleCategory(cat.name)}",
       "handlers": {
@@ -22696,7 +22676,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3259,
+      "line": 3260,
       "tag": "div",
       "signature": "div|onDragStart:{(e)=>onDragStart(e,b.type)}",
       "handlers": {
@@ -22711,7 +22691,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3291,
+      "line": 3292,
       "tag": "div",
       "signature": "div|onClick:{()=>loadLabTemplate(lab.id)}",
       "handlers": {
@@ -22726,7 +22706,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3330,
+      "line": 3331,
       "tag": "div",
       "signature": "div|onWheel:{handleHorizontalToolbarWheel}",
       "handlers": {
@@ -22741,7 +22721,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3336,
+      "line": 3337,
       "tag": "button",
       "signature": "button|onClick:{()=>!coSimEngine&&setIsSimulating(!isSimulating)}",
       "handlers": {
@@ -22756,7 +22736,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3350,
+      "line": 3351,
       "tag": "button",
       "signature": "button|onClick:{()=>setIsPaused(!isPaused)}",
       "handlers": {
@@ -22771,7 +22751,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3361,
+      "line": 3362,
       "tag": "button",
       "signature": "button|onClick:{stepSimulation}",
       "handlers": {
@@ -22786,7 +22766,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3383,
+      "line": 3384,
       "tag": "select",
       "signature": "select|onChange:{e=>setSolverType(e.target.valueasany)}",
       "handlers": {
@@ -22801,7 +22781,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3407,
+      "line": 3408,
       "tag": "select",
       "signature": "select|onChange:{e=>{constnewType=e.target.valueasany;setEdgeType(newType);setEdges(eds=>eds.map(edge=>({...edge,type:newType})));}}",
       "handlers": {
@@ -22816,7 +22796,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3425,
+      "line": 3426,
       "tag": "button",
       "signature": "button|onClick:{()=>setSnapEnabled(prev=>!prev)}",
       "handlers": {
@@ -22831,7 +22811,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3443,
+      "line": 3444,
       "tag": "input",
       "signature": "input|onChange:{e=>setStartTimeInput(normalizeNumerals(e.target.value).replace(/[^0-9a-zA-Z.+-]/g,''))}",
       "handlers": {
@@ -22846,7 +22826,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3459,
+      "line": 3460,
       "tag": "input",
       "signature": "input|onChange:{e=>setStopTimeInput(normalizeNumerals(e.target.value).replace(/[^0-9a-zA-Z.+-]/g,''))}",
       "handlers": {
@@ -22861,7 +22841,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3476,
+      "line": 3477,
       "tag": "input",
       "signature": "input|onChange:{e=>setStepSizeInput(normalizeNumerals(e.target.value).replace(/[^0-9a-zA-Z.+-]/g,''))}",
       "handlers": {
@@ -22876,7 +22856,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3505,
+      "line": 3506,
       "tag": "button",
       "signature": "button|onClick:{()=>setShowDiagnostics(v=>!v)}",
       "handlers": {
@@ -22891,7 +22871,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3528,
+      "line": 3529,
       "tag": "button",
       "signature": "button|onClick:{()=>handle3dxSyncInit('push')}",
       "handlers": {
@@ -22906,7 +22886,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3536,
+      "line": 3537,
       "tag": "button",
       "signature": "button|onClick:{()=>handle3dxSyncInit('pull')}",
       "handlers": {
@@ -22921,7 +22901,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3570,
+      "line": 3571,
       "tag": "button",
       "signature": "button|onClick:{()=>{if(onSave)persistWorkspace(nodes,edges);onBack();}}",
       "handlers": {
@@ -22936,7 +22916,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3593,
+      "line": 3594,
       "tag": "button",
       "signature": "button|onClick:{()=>setViewPath(viewPath.slice(0,idx+1))}",
       "handlers": {
@@ -22951,7 +22931,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3607,
+      "line": 3608,
       "tag": "div",
       "signature": "div|onContextMenu:{(e)=>e.preventDefault()}",
       "handlers": {
@@ -22971,7 +22951,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3626,
+      "line": 3627,
       "tag": "ReactFlow",
       "signature": "ReactFlow|onConnect:{onConnect}|onDragOver:{(e)=>e.preventDefault()}|onDrop:{onDrop}|onEdgesChange:{onEdgesChange}|onInit:{setReactFlowInstance}|onNodeClick:{onNodeClick}|onNodeDoubleClick:{onNodeDoubleClick}|onNodeDragStop:{onNodeDragStop}|onNodesChange:{onNodesChange}|onNodesDelete:{onNodesDelete}|onPaneClick:{(e)=>{if(e.detail===2){setSearchMenuPos({x:e.clientX,y:e.clientY});}else{setSearchMenuPos(null);setSearchTerm('');}setSelectedNodeId(null);}}|onSelectionChange:{({nodes:selectedNodes})=>{if(selectedNodes.length===1){setSelectedNodeId(selectedNodes[0].id);}elseif(selectedNodes.length===0){setSelectedNodeId(null);}}}",
       "handlers": {
@@ -22997,7 +22977,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3696,
+      "line": 3697,
       "tag": "button",
       "signature": "button|onClick:{()=>setIsLabGuideMinimized(false)}",
       "handlers": {
@@ -23012,7 +22992,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3712,
+      "line": 3713,
       "tag": "button",
       "signature": "button|onClick:{()=>setIsLabGuideMinimized(true)}",
       "handlers": {
@@ -23027,7 +23007,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3724,
+      "line": 3725,
       "tag": "button",
       "signature": "button|onClick:{exitActiveLab}",
       "handlers": {
@@ -23042,7 +23022,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3785,
+      "line": 3786,
       "tag": "button",
       "signature": "button|onClick:{()=>{if(currentStepIndex>0){setCurrentStepIndex(currentStepIndex-1);setCompletedObjectives({});}}}",
       "handlers": {
@@ -23057,7 +23037,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3797,
+      "line": 3798,
       "tag": "button",
       "signature": "button|onClick:{()=>{if(allDone){if(currentStepIndex<totalSteps-1){setCurrentStepIndex(currentStepIndex+1);setCompletedObjectives({});}else{setLabCompleted(true);}}}}",
       "handlers": {
@@ -23072,7 +23052,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3827,
+      "line": 3828,
       "tag": "button",
       "signature": "button|onClick:{()=>setShowConfirmClear(true)}",
       "handlers": {
@@ -23087,7 +23067,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3837,
+      "line": 3838,
       "tag": "XbridgesDiagnosticPopup",
       "signature": "XbridgesDiagnosticPopup|onDismiss:{dismissPopup}|onShowAll:{showAllDiagnostics}",
       "handlers": {
@@ -23101,7 +23081,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3845,
+      "line": 3846,
       "tag": "XbridgesStatusBar",
       "signature": "XbridgesStatusBar|onExpandedChange:{setShowDiagnostics}|onOpenHelp:{(topicId,sectionId)=>onOpenHelp?.(topicId,sectionId)}|onSelectBlocks:{showDiagnosticBlocks}",
       "handlers": {
@@ -23116,7 +23096,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3860,
+      "line": 3865,
       "tag": "XbridgesPropertiesPanel",
       "signature": "XbridgesPropertiesPanel|onClose:{()=>setSelectedNodeId(null)}|onCollapseToggle:{setIsPropsCollapsed}|onExportDoeData:{onExportDoeData}|onLaunchDoe:{onLaunchDoe}|onUpdate:{updateBlock}",
       "handlers": {
@@ -23133,7 +23113,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3880,
+      "line": 3886,
       "tag": "XbridgesRootLocusWindow",
       "signature": "XbridgesRootLocusWindow|onClose:{()=>setOpenScopes(prev=>prev.filter(id=>id!==scopeId))}|onUpdate:{(newData)=>updateBlock(scopeId,{params:{...scopeNode.data.params,...newData}})}",
       "handlers": {
@@ -23147,7 +23127,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3891,
+      "line": 3897,
       "tag": "XbridgesScopeWindow",
       "signature": "XbridgesScopeWindow|onClose:{()=>setOpenScopes(prev=>prev.filter(id=>id!==scopeId))}|onUpdate:{(newData)=>updateBlock(scopeId,{params:{...scopeNode.data.params,...newData}})}",
       "handlers": {
@@ -23161,7 +23141,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3964,
+      "line": 3970,
       "tag": "button",
       "signature": "button|onClick:{exitActiveLab}",
       "handlers": {
@@ -23176,7 +23156,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3983,
+      "line": 3989,
       "tag": "button",
       "signature": "button|onClick:{()=>setShow3dxSyncModal(false)}",
       "handlers": {
@@ -23191,7 +23171,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 4015,
+      "line": 4021,
       "tag": "select",
       "signature": "select|onChange:{(e)=>setSelectedTdxWorkspace(e.target.value)}",
       "handlers": {
@@ -23206,7 +23186,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 4025,
+      "line": 4031,
       "tag": "button",
       "signature": "button|onClick:{handle3dxPush}",
       "handlers": {
@@ -23221,7 +23201,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 4040,
+      "line": 4046,
       "tag": "div",
       "signature": "div|onClick:{()=>handle3dxPull(doc.id)}",
       "handlers": {
@@ -23236,7 +23216,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 4060,
+      "line": 4066,
       "tag": "div",
       "signature": "div|onMouseDown:{()=>setShowConfirmClear(false)}",
       "handlers": {
@@ -23251,7 +23231,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 4061,
+      "line": 4067,
       "tag": "div",
       "signature": "div|onMouseDown:{e=>e.stopPropagation()}",
       "handlers": {
@@ -23264,7 +23244,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 4076,
+      "line": 4082,
       "tag": "button",
       "signature": "button|onClick:{()=>setShowConfirmClear(false)}",
       "handlers": {
@@ -23279,7 +23259,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 4082,
+      "line": 4088,
       "tag": "button",
       "signature": "button|onClick:{()=>{setNodes([]);setEdges([]);setSelectedNodeId(null);setShowConfirmClear(false);}}",
       "handlers": {
@@ -23324,7 +23304,7 @@
     },
     {
       "source": "src/components/xbridges/diagnostics/XbridgesStatusBar.tsx",
-      "line": 78,
+      "line": 81,
       "tag": "button",
       "signature": "button|onClick:{()=>onSelectBlocks(d.blockIds)}",
       "handlers": {
@@ -23339,7 +23319,7 @@
     },
     {
       "source": "src/components/xbridges/diagnostics/XbridgesStatusBar.tsx",
-      "line": 86,
+      "line": 89,
       "tag": "button",
       "signature": "button|onClick:{()=>onOpenHelp(d.helpTopicId,d.helpSectionId)}",
       "handlers": {
@@ -23354,7 +23334,7 @@
     },
     {
       "source": "src/components/xbridges/diagnostics/XbridgesStatusBar.tsx",
-      "line": 111,
+      "line": 115,
       "tag": "button",
       "signature": "button|onClick:{()=>setOpen(!open)}",
       "handlers": {
@@ -23534,8 +23514,7 @@
     }
   ],
   "statusCounts": {
-    "documented": 1397,
-    "excluded": 163,
-    "unreviewed": 1
+    "documented": 1393,
+    "excluded": 167
   }
 }

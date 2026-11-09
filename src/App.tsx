@@ -2,6 +2,8 @@ import React, { useState, useRef, useEffect, useCallback, useMemo, MouseEvent, K
 import { recordRenderCommit, resetProjectLoadTelemetry } from './features/sysml/performance/renderTelemetry';
 import { projectExternalEndpoints, projectExternalEndpointSignature, projectSimSources, buildSimEndpoints } from './engine/trmSim/simEndpoints';
 import { repositoryChangeCommands, runAllSimulationCases, simEvidenceStatusFor } from './engine/trmSim/simVerification';
+import { ResizablePanel } from './components/common/ResizablePanel';
+import { notifyShellPanelResize, HIDE_PANEL_HANDLE } from './components/AppShellPanels';
 import { SimVerificationPanel } from './components/trmSim/SimVerificationPanel';
 import { useXBridgesWorkspaceInputs } from './components/xbridges/xbridgesWorkspaceInputs';
 import { buildSimExternalElements } from './engine/trmSim/simExternalElements';
@@ -324,7 +326,6 @@ import {
   Separator,
   Triangle,
   Checkbox,
-  Resizer,
   EngineeringButton,
   EngineeringInput,
   EngineeringLabel,
@@ -588,7 +589,7 @@ class Plant {
 };
 
 const HierarchyTree: React.FC<any> = (props) => (
-  <AppModelExplorer
+  <AppModelExplorer data-help-feature="ui:modelExplorer/ModelTreeRow:d6ca5f847c12"
     diagramMode={props.diagramMode}
     states={props.states}
     layers={props.layers}
@@ -6363,12 +6364,6 @@ const ADIA = () => {
   const [resizeHandle, setResizeHandle] = useState<string | null>(null);
   const [resizeStart, setResizeStart] = useState<{ id: string, x: number, y: number, w: number, h: number, mx: number, my: number, type?: 'block' | 'package' | 'state' | 'ibdContext' | 'part' } | null>(null);
 
-  // Panel resizing state
-  const [hierarchyWidth, setHierarchyWidth] = useState(256);
-  const [variablesWidth, setVariablesWidth] = useState(288);
-  const [propertiesWidth, setPropertiesWidth] = useState(352);
-  const [scopeHeight, setScopeHeight] = useState(224);
-  const [resizingPanel, setResizingPanel] = useState<string | null>(null);
 
   // ERROR SYSTEM
   const addError = useCallback((type: 'error' | 'warning' | 'info', message: string, source?: string, elementId?: string) => {
@@ -10435,42 +10430,6 @@ const ADIA = () => {
     addError('info', 'Disconnected interface');
   }, [addError, addToHistory]);
 
-  const handleResizeStart = useCallback((e: React.MouseEvent, panel: string) => {
-    e.preventDefault();
-    setResizingPanel(panel);
-  }, []);
-
-  useEffect(() => {
-    const handleResizeMove = (e: globalThis.MouseEvent) => {
-      if (!resizingPanel) return;
-
-      if (resizingPanel === 'hierarchy') {
-        setHierarchyWidth(prev => Math.max(150, Math.min(500, prev + e.movementX / uiZoom)));
-      } else if (resizingPanel === 'variables') {
-        setVariablesWidth(prev => Math.max(150, Math.min(500, prev + e.movementX / uiZoom)));
-      } else if (resizingPanel === 'properties') {
-        setPropertiesWidth(prev => Math.max(200, Math.min(600, prev - e.movementX / uiZoom)));
-      } else if (resizingPanel === 'scope') {
-        setScopeHeight(prev => Math.max(100, Math.min(window.innerHeight - 200, prev - e.movementY / uiZoom)));
-      }
-    };
-
-    const handleResizeEnd = () => {
-      setResizingPanel(null);
-    };
-
-    if (resizingPanel) {
-      window.addEventListener('mousemove', handleResizeMove);
-      window.addEventListener('mouseup', handleResizeEnd);
-      window.addEventListener('mouseleave', handleResizeEnd);
-    }
-
-    return () => {
-      window.removeEventListener('mousemove', handleResizeMove);
-      window.removeEventListener('mouseup', handleResizeEnd);
-      window.removeEventListener('mouseleave', handleResizeEnd);
-    };
-  }, [resizingPanel, uiZoom]);
 
   const handleResizeMouseDown = useCallback((e: MouseEvent<SVGRectElement>, handle: string, id: string) => {
     e.stopPropagation();
@@ -15505,10 +15464,11 @@ const ADIA = () => {
         )}
 
         {/* Main Content Area */}
-        <div data-help-feature="live:App:eca48c76262c" className="flex flex-1 overflow-hidden" onMouseUp={() => setResizingPanel(null)}>
+        <div data-help-feature="live:App:eca48c76262c" className="flex flex-1 overflow-hidden">
           {/* Left Sidebar - Hierarchy */}
           {![ 'hil', 'entropy'].includes(diagramMode) && (
-            <aside style={{ width: isMobile ? '100%' : (isHierarchyCollapsed ? '48px' : `${hierarchyWidth}px`), display: isMobile && mobileTab !== 'hierarchy' ? 'none' : 'flex' }} className="ui-surface bg-[var(--surface-panel)] border-r border-[var(--border-default)] flex flex-col shrink-0 transition-all duration-300 overflow-hidden">
+<ResizablePanel id="shell.hierarchy" label="Hierarchy" edge="right" defaultSize={256} minSize={180} maxSize={640} onSizeChange={notifyShellPanelResize} style={{ display: isMobile && mobileTab !== 'hierarchy' ? 'none' : 'flex' }} className={isMobile ? `!w-full ${HIDE_PANEL_HANDLE}` : isHierarchyCollapsed ? `!w-12 ${HIDE_PANEL_HANDLE}` : ''}>
+<aside className="ui-surface bg-[var(--surface-panel)] border-r border-[var(--border-default)] flex flex-col shrink-0 transition-all duration-300 overflow-hidden w-full h-full">
               <div className="h-10 flex items-center justify-between px-4 border-b border-[var(--border-default)]">
                 {!isHierarchyCollapsed && (
                   <div className="flex items-center overflow-hidden whitespace-nowrap">
@@ -15529,7 +15489,7 @@ const ADIA = () => {
               </div>
               {!isHierarchyCollapsed && (
                 <Profiler id="explorer" onRender={(_, phase, actualDuration) => recordRenderCommit('explorer', phase, actualDuration)}>
-                  <HierarchyTree
+                  <HierarchyTree data-help-feature="ui:modelExplorer/ModelTreeRow:d6ca5f847c12"
                     states={states}
                     layers={layers}
                     transitions={transitions}
@@ -15590,12 +15550,14 @@ const ADIA = () => {
                 </Profiler>
               )}
             </aside>
+</ResizablePanel>
           )}
-          {!isMobile && !isHierarchyCollapsed && !['xbridges', 'vlab', 'hil', 'entropy'].includes(diagramMode) && <Resizer data-help-feature="live:App:590d20381723" onMouseDown={(e) => handleResizeStart(e, 'hierarchy')} />}
+
 
           {/* Left Sidebar - Variables */}
           {!['xbridges', 'vlab', 'hil', 'entropy'].includes(diagramMode) && (
-            <aside style={{ width: isMobile ? '100%' : (isVariablesCollapsed ? '48px' : `${variablesWidth}px`), display: isMobile && mobileTab !== 'variables' ? 'none' : 'flex' }} className="bg-[#1a1a1a] flex flex-col shrink-0 transition-all duration-300 overflow-hidden">
+<ResizablePanel id="shell.variables" label="Variables" edge="right" defaultSize={288} minSize={180} maxSize={640} onSizeChange={notifyShellPanelResize} style={{ display: isMobile && mobileTab !== 'variables' ? 'none' : 'flex' }} className={isMobile ? `!w-full ${HIDE_PANEL_HANDLE}` : isVariablesCollapsed ? `!w-12 ${HIDE_PANEL_HANDLE}` : ''}>
+<aside className="bg-[#1a1a1a] flex flex-col shrink-0 transition-all duration-300 overflow-hidden w-full h-full">
               <div className="h-10 flex items-center justify-between px-4 border-b border-[#222]">
                 {!isVariablesCollapsed && (
                   <div className="flex items-center overflow-hidden whitespace-nowrap">
@@ -15736,8 +15698,9 @@ const ADIA = () => {
                 </div>
               )}
             </aside>
+</ResizablePanel>
           )}
-          {!isMobile && !['xbridges', 'vlab', 'hil', 'entropy'].includes(diagramMode) && <Resizer data-help-feature="live:App:76a83fd32464" onMouseDown={(e) => handleResizeStart(e, 'variables')} />}
+
 
           {/* Canvas Area */}
           <div style={{ display: isMobile && mobileTab !== 'canvas' ? 'none' : 'flex' }} className="flex-1 flex flex-col min-w-0">
@@ -16630,8 +16593,9 @@ const ADIA = () => {
             {!['xbridges', 'vlab', 'hil', 'entropy'].includes(diagramMode) && (
               <>
                 {/* Bottom Panel */}
-            {!isMobile && !isScopeCollapsed && <Resizer data-help-feature="live:App:ca067bd95989" onMouseDown={(e) => handleResizeStart(e, 'scope')} orientation="horizontal" />}
-            <div style={{ height: isMobile ? '30%' : (isScopeCollapsed ? '40px' : `${scopeHeight}px`), display: isMobile && mobileTab !== 'canvas' ? 'none' : 'flex' }} className="bg-[#1a1a1a] border-t border-[#222] flex flex-col shrink-0 transition-all duration-300 overflow-hidden">
+
+<ResizablePanel id="shell.scope" label="Scope" edge="top" defaultSize={224} minSize={100} maxSize={600} onSizeChange={notifyShellPanelResize} style={{ display: isMobile && mobileTab !== 'canvas' ? 'none' : 'flex' }} className={isMobile ? `!h-[30%] ${HIDE_PANEL_HANDLE}` : isScopeCollapsed ? `!h-10 ${HIDE_PANEL_HANDLE}` : ''}>
+<div className="bg-[#1a1a1a] border-t border-[#222] flex flex-col shrink-0 transition-all duration-300 overflow-hidden w-full h-full">
               <div data-help-feature="app-scope-dock" data-help-source="src/App.tsx"
                 onDoubleClick={() => setIsScopeDetached(!isScopeDetached)}
                 title="Double-click header to expand/dock Scope window"
@@ -16831,16 +16795,18 @@ const ADIA = () => {
                 />
               )}
             </div>
+</ResizablePanel>
 
               </>
             )}          </div>
-          {!isMobile && !['xbridges', 'vlab', 'hil', 'entropy'].includes(diagramMode) && <Resizer data-help-feature="live:App:1991d07ad9b1" onMouseDown={(e) => handleResizeStart(e, 'properties')} />}
+
 
           {!['xbridges', 'vlab', 'hil', 'entropy'].includes(diagramMode) && (
             <>
             {/* Right Dock: Properties */}
             <Profiler id="inspector" onRender={(_, phase, actualDuration) => recordRenderCommit('inspector', phase, actualDuration)}>
-              <aside style={{ width: isMobile ? '100%' : (isPropertiesCollapsed ? '48px' : `${propertiesWidth}px`), display: isMobile && mobileTab !== 'properties' ? 'none' : 'flex' }} className="bg-[#1a1a1a] border-l border-[#222] flex flex-col shrink-0 transition-all duration-300 overflow-hidden">
+<ResizablePanel id="shell.properties" label="Properties panel" edge="left" defaultSize={352} minSize={220} maxSize={720} onSizeChange={notifyShellPanelResize} style={{ display: isMobile && mobileTab !== 'properties' ? 'none' : 'flex' }} className={isMobile ? `!w-full ${HIDE_PANEL_HANDLE}` : isPropertiesCollapsed ? `!w-12 ${HIDE_PANEL_HANDLE}` : ''}>
+<aside className="bg-[#1a1a1a] border-l border-[#222] flex flex-col shrink-0 transition-all duration-300 overflow-hidden w-full h-full">
             <div className="h-10 flex items-center justify-between px-4 border-b border-[#222]">
               {!isPropertiesCollapsed && (
                 <div className="flex items-center overflow-hidden whitespace-nowrap">
@@ -17990,7 +17956,7 @@ const ADIA = () => {
                 </>
               ) : selectedConnector ? (
                 <>
-                  {editedConnector && <IbdConnectorEditor
+                  {editedConnector && <IbdConnectorEditor data-help-feature="sysml:relationship:Connector"
                     connector={editedConnector}
                     availablePorts={[
                       ...((blocksById.get(currentLayerId)?.ports ?? []).map(port => ({
@@ -18222,6 +18188,7 @@ const ADIA = () => {
               )}
             </div>
           </aside>
+</ResizablePanel>
         </Profiler>
             </>
           )}

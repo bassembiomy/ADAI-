@@ -139,8 +139,8 @@ export const ResizablePanel: React.FC<ResizablePanelProps> = ({
     : { height: `${size}px` };
 
   const handlePosition: React.CSSProperties = vertical
-    ? { top: 0, bottom: 0, width: 6, ...(edge === 'left' ? { left: -3 } : { right: -3 }) }
-    : { left: 0, right: 0, height: 6, ...(edge === 'top' ? { top: -3 } : { bottom: -3 }) };
+    ? { top: 0, bottom: 0, width: 6, ...(edge === 'left' ? { left: 0 } : { right: 0 }) }
+    : { left: 0, right: 0, height: 6, ...(edge === 'top' ? { top: 0 } : { bottom: 0 }) };
 
   const highlightClass = vertical
     ? 'inset-y-0 left-1/2 w-0.5 -translate-x-1/2'
@@ -153,7 +153,7 @@ export const ResizablePanel: React.FC<ResizablePanelProps> = ({
       style={{ ...style, ...sizeStyle, position: 'relative', flexShrink: 0 }}
     >
       {children}
-      <div
+      <div data-help-feature="live:components/common/ResizablePanel:82b534eeb763"
         role="separator"
         aria-label={`Resize ${label}`}
         aria-orientation={vertical ? 'vertical' : 'horizontal'}
@@ -165,7 +165,7 @@ export const ResizablePanel: React.FC<ResizablePanelProps> = ({
         onDoubleClick={onHandleDoubleClick}
         onKeyDown={onHandleKeyDown}
         className="group absolute focus:outline-none"
-        style={{ ...handlePosition, cursor, zIndex: 30 }}
+        style={{ ...handlePosition, cursor, zIndex: 70 }}
       >
         <span
           aria-hidden="true"

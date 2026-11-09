@@ -1566,6 +1566,15 @@ export const LIVE_UI_FEATURES: HelpFeature[] = [
     "sourcePath": "src/components/xbridges/diagnostics/XbridgesStatusBar.tsx",
     "kind": "action",
     "module": "system"
+  },
+  {
+    "id": "live:components/common/ResizablePanel:82b534eeb763",
+    "label": "Resize a docked panel",
+    "topicId": "live:components/common/ResizablePanel:82b534eeb763",
+    "sectionId": "use",
+    "sourcePath": "src/components/common/ResizablePanel.tsx",
+    "kind": "action",
+    "module": "system"
   }
 ];
 export const LIVE_UI_TOPICS: Record<string,HelpTopic> = {
@@ -4873,6 +4882,25 @@ export const LIVE_UI_TOPICS: Record<string,HelpTopic> = {
     ],
     "sources": [
       "src/components/xbridges/diagnostics/XbridgesStatusBar.tsx"
+    ]
+  },
+  "live:components/common/ResizablePanel:82b534eeb763": {
+    "title": "Resize a docked panel",
+    "category": "Workspace Controls",
+    "description": "Every docked panel (Hierarchy, Variables, Properties and Scope in the main workspace; the library, properties and Problems panels of X-Bridges; the library and properties panels of V-Lab) has a thin resize handle on the edge it shares with the canvas. Hovering the handle shows the resize cursor and highlights the edge. Press and drag to change the width (or, for Scope and the Problems list, the height); the size stays between the limits of that panel. Double-click the handle to restore the default size. With the handle focused (Tab), use the arrow keys to resize in steps of 16 px, or hold Shift for steps of 64 px; the arrow that points away from the panel grows it. The size of each panel is remembered on this computer and restored the next time you open the application. A collapsed panel has no handle; expanding it brings back the remembered size.",
+    "content": "Every docked panel (Hierarchy, Variables, Properties and Scope in the main workspace; the library, properties and Problems panels of X-Bridges; the library and properties panels of V-Lab) has a thin resize handle on the edge it shares with the canvas. Hovering the handle shows the resize cursor and highlights the edge. Press and drag to change the width (or, for Scope and the Problems list, the height); the size stays between the limits of that panel. Double-click the handle to restore the default size. With the handle focused (Tab), use the arrow keys to resize in steps of 16 px, or hold Shift for steps of 64 px; the arrow that points away from the panel grows it. The size of each panel is remembered on this computer and restored the next time you open the application. A collapsed panel has no handle; expanding it brings back the remembered size.",
+    "sections": [
+      {
+        "id": "use",
+        "title": "Resize a docked panel",
+        "body": "Every docked panel (Hierarchy, Variables, Properties and Scope in the main workspace; the library, properties and Problems panels of X-Bridges; the library and properties panels of V-Lab) has a thin resize handle on the edge it shares with the canvas. Hovering the handle shows the resize cursor and highlights the edge. Press and drag to change the width (or, for Scope and the Problems list, the height); the size stays between the limits of that panel. Double-click the handle to restore the default size. With the handle focused (Tab), use the arrow keys to resize in steps of 16 px, or hold Shift for steps of 64 px; the arrow that points away from the panel grows it. The size of each panel is remembered on this computer and restored the next time you open the application. A collapsed panel has no handle; expanding it brings back the remembered size.",
+        "sources": [
+          "src/components/common/ResizablePanel.tsx"
+        ]
+      }
+    ],
+    "sources": [
+      "src/components/common/ResizablePanel.tsx"
     ]
   }
 };

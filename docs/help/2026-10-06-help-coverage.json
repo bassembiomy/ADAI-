@@ -1,7 +1,7 @@
 {
   "scope": "Registered semantic features; UI source candidates reported separately.",
-  "total": 2200,
-  "documented": 2200,
+  "total": 2201,
+  "documented": 2201,
   "missing": 0,
   "coverage": 100,
   "duplicateFeatureIds": [],
@@ -14493,6 +14493,15 @@
       "topicId": "live:components/xbridges/diagnostics/XbridgesStatusBar:a1cc4a27dd3f",
       "sectionId": "use",
       "sourcePath": "src/components/xbridges/diagnostics/XbridgesStatusBar.tsx",
+      "kind": "action",
+      "module": "system"
+    },
+    {
+      "id": "live:components/common/ResizablePanel:82b534eeb763",
+      "label": "Resize a docked panel",
+      "topicId": "live:components/common/ResizablePanel:82b534eeb763",
+      "sectionId": "use",
+      "sourcePath": "src/components/common/ResizablePanel.tsx",
       "kind": "action",
       "module": "system"
     },

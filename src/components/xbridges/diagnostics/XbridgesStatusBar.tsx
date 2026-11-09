@@ -32,10 +32,12 @@ export interface XbridgesStatusBarProps {
   /** Controlled open state of the problem list; uncontrolled when omitted. */
   expanded?: boolean;
   onExpandedChange?: (expanded: boolean) => void;
+  /** Optional frame around the problem list, e.g. a ResizablePanel that makes its height resizable. */
+  renderProblemsFrame?: (list: React.ReactNode) => React.ReactNode;
 }
 
 export const XbridgesStatusBar: React.FC<XbridgesStatusBarProps> = ({
-  status, time, solver, stopTime, fixedStep, diagnostics, onSelectBlocks, onOpenHelp, expanded, onExpandedChange,
+  status, time, solver, stopTime, fixedStep, diagnostics, onSelectBlocks, onOpenHelp, expanded, onExpandedChange, renderProblemsFrame,
 }) => {
   const [localExpanded, setLocalExpanded] = useState(false);
   const open = expanded ?? localExpanded;
@@ -57,10 +59,11 @@ export const XbridgesStatusBar: React.FC<XbridgesStatusBarProps> = ({
   return (
     <div className="shrink-0 border-t border-[#333] bg-[#111] text-[#e0e0e0]">
       {open && (
+        (renderProblemsFrame ?? ((list) => list))(
         <ul
           role="list"
           aria-label="Problems"
-          className="max-h-[220px] overflow-y-auto custom-scrollbar p-2 space-y-1 border-b border-[#333] m-0 list-none"
+          className={`${renderProblemsFrame ? 'h-full' : 'max-h-[220px]'} overflow-y-auto custom-scrollbar p-2 space-y-1 border-b border-[#333] m-0 list-none`}
         >
           {described.length === 0 && (
             <li className="px-2 py-1.5 text-[11px] text-slate-500">No problems in the last run.</li>
@@ -94,6 +97,7 @@ export const XbridgesStatusBar: React.FC<XbridgesStatusBarProps> = ({
             </li>
           ))}
         </ul>
+        )
       )}
       <div
         role="status"

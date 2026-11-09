@@ -375,7 +375,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
 
   return (
     <div className={
-      (isCollapsed ? 'w-12' : 'w-80') + 
+      'w-full' + 
       ' xbridges-panel ui-card bg-[#1a1a1a] border-l border-[#333] flex flex-col h-full shadow-2xl z-50 text-[#e0e0e0] transition-all duration-300 overflow-hidden select-text'
     }>
       {/* Header */}

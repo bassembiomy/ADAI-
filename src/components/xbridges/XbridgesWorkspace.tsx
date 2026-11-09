@@ -101,6 +101,7 @@ import { Solvers } from '../../engine/xbridges/Solvers';
 import { AdaptiveSolver } from '../../engine/xbridges/AdaptiveSolver';
 import { StiffSolver } from '../../engine/xbridges/StiffSolver';
 import { ModelDiagnostic } from '../../engine/xbridges/types';
+import { ResizablePanel } from '../common/ResizablePanel';
 import { XbridgesStatusBar, type XbRunStatus } from './diagnostics/XbridgesStatusBar';
 import { XbridgesDiagnosticPopup } from './diagnostics/XbridgesDiagnosticPopup';
 import { mergeDiagnostics, newDiagnostics } from './diagnostics/xbDiagnosticsModel';
@@ -3172,7 +3173,7 @@ export const XbridgesWorkspace: React.FC<{
         </div>
       )}
       {/* Sidebar Library */}
-      <div className={`${isLibCollapsed ? 'w-12' : 'w-72'} bg-[#1a1a1a] border-r border-[#333] flex flex-col shadow-sm z-40 transition-all duration-500 ease-in-out relative group`}>
+      <ResizablePanel id="xbridges.library" label="Library" edge="right" defaultSize={275} minSize={200} maxSize={640} className={`${isLibCollapsed ? '!w-12 [&>[role=separator]]:hidden' : ''} bg-[#1a1a1a] border-r border-[#333] flex flex-col shadow-sm z-40 group`}>
         {/* Cinematic Header */}
         <div className="p-5 border-b border-[#333] bg-gradient-to-br from-[#222] to-transparent flex items-center justify-between overflow-hidden">
           {!isLibCollapsed && (
@@ -3322,7 +3323,7 @@ export const XbridgesWorkspace: React.FC<{
             </div>
           )}
         </div>
-      </div>
+      </ResizablePanel>
 
       {/* Main Canvas Area */}
       <div className="flex-1 relative flex flex-col min-h-0">
@@ -3843,6 +3844,9 @@ export const XbridgesWorkspace: React.FC<{
             )}
           </div>
           <XbridgesStatusBar
+            renderProblemsFrame={(list) => (
+              <ResizablePanel id="xbridges.problems" label="Problems list" edge="top" defaultSize={220} minSize={80} maxSize={500}>{list}</ResizablePanel>
+            )}
             status={runStatus}
             time={activeSimulating && coSimEngine && isSmSimulating ? simulationTime : statusTime}
             solver={SOLVER_LABELS[solverType] ?? String(solverType)}
@@ -3857,6 +3861,7 @@ export const XbridgesWorkspace: React.FC<{
           </div>
 
           {selectedNode && (
+            <ResizablePanel id="xbridges.properties" label="Properties" edge="left" defaultSize={320} minSize={220} maxSize={720} className={`${isPropsCollapsed ? '!w-12 [&>[role=separator]]:hidden' : ''} flex h-full z-50`}>
             <XbridgesPropertiesPanel
               block={selectedNode.data as any}
               availableVariables={availableVariables}
@@ -3870,6 +3875,7 @@ export const XbridgesWorkspace: React.FC<{
               onCollapseToggle={setIsPropsCollapsed}
               requirementAssignments={renderRequirementAssignments?.(selectedNode.id)}
             />
+            </ResizablePanel>
           )}
 
           {openScopes.map(scopeId => {
