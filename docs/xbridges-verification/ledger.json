@@ -200,7 +200,7 @@
    "deps": [
     "WP-03"
    ],
-   "status": "in_progress",
+   "status": "done",
    "note": "Tests by Sonnet from the controller oracle spec (D7); controller review: relay spec item was wrong (removed the pin, kept the rule test), comparator test restricted to unambiguous points; findings XBV-062..068. Awaiting Fable.",
    "rework": [
     {
@@ -214,7 +214,11 @@
      ],
      "fix": "XBV-067 rescoped to the engine and re-pinned on a plain Integrator; euler anti-windup test passes; XBV-069 pinned; tolerances 1e-8; claim removed"
     }
-   ]
+   ],
+   "verification": {
+    "executor": "Sonnet wrote the tests from the controller oracle spec (D7)",
+    "verifier": "Fable FAIL (XBV-067 misdiagnosed, limit sag unpinned, tolerances), PASS round 2 (569 passed, 94 expected fail, twice); minor wording fixed afterwards"
+   }
   },
   {
    "id": "WP-07",
@@ -992,7 +996,7 @@
    "severity": "S1",
    "gate": "V5",
    "status": "open",
-   "summary": "Engine (canvas fixed-step loop): discontinuous sources change inside a step - the rk4 stage at t + dt already sees a Step's new value, so the plain Integrator of Step(0 -> 1 at 0.5) loses h/3 (y(0.5) is not 0; the verifier measured 0.49667 for a 1 -> -1 step). Simulink updates block modes (Step, limits, switches) at major steps only. The limited INTEGRATOR itself has anti-windup (euler gives y(0.8) = 0 exactly); its 0.001667 = h/6 under rk4 is this engine effect. Pinned in xbEquations.dynamics.test.ts. Related: XBV-005 (zero crossings), D2."
+   "summary": "Engine (canvas fixed-step loop): discontinuous sources change inside a step - the rk4 stage at t + dt already sees a Step's new value, so the plain Integrator of Step(0 -> 1 at 0.5) is off by h/6 per unit jump (Step 0 -> 1 at 0.5, rk4 dt 0.1: y(0.5) = 0.016667, y(1) = 0.516667 instead of 0 and 0.5). Simulink updates block modes (Step, limits, switches) at major steps only. The limited INTEGRATOR itself has anti-windup (euler gives y(0.8) = 0 exactly); its 0.001667 = h/6 under rk4 is this engine effect. Pinned in xbEquations.dynamics.test.ts. Related: XBV-005 (zero crossings), D2. The major-step mode rule is from the verifier's memory - confirm in WP-15."
   },
   {
    "id": "XBV-068",
