@@ -65,8 +65,9 @@ Findings that shape the plan:
 - **F6 Capability without a factory**: `SUM_JUNCTION` is `codegen: true` in `XB_CAPABILITIES` and has no
   `BLOCK_LIBRARY` entry; 3 library types have no capability entry. (Palette → factory is now closed by review test
   R1; the capability registry is not.)
-- **F7 Two palettes** (`BlockDefinitions.ts` for the canvas, `src/utils/xbridges/XbridgesLibrary.ts` for help and the
-  AI catalogue) with no test that they list the same blocks.
+- **F7 Two palettes that differ** (`BlockDefinitions.ts` for the canvas, `src/utils/xbridges/XbridgesLibrary.ts` for
+  help and the AI catalogue): 20 types are only on the canvas palette and 55 only on the help palette; no test
+  compares them.
 - **F8 Signal mismatches on a connection are still warnings** (`XbridgesEngine.validateConnections`):
   `DIMENSION_MISMATCH`, `DATA_TYPE_MISMATCH`, `SIGNAL_TYPE_MISMATCH`, `SAMPLE_RATE_MISMATCH`. Parameter and sample-time
   problems are now compile errors (`modelChecks.ts`); Simulink also errors on dimension and data-type mismatch.
@@ -225,7 +226,7 @@ A test never computes its expectation by calling the code under test.
   the 2026-11-08 catalogue. Seven codes are named in no test file today and get theirs here:
   `EXECUTION_EXCEPTION`, `FRAME_INCONSISTENCY`, `INVALID_GMDH_LAYERS`, `INVALID_TAGUCHI_LEVELS`,
   `NO_MODEL_CONFIGURED`, `SAMPLE_RATE_MISMATCH`, `SIGNAL_TYPE_MISMATCH`. Each error code must stop the run; each warning must not. F8 (warning vs
-  Simulink error) is decided with the user (§12) and then pinned.
+  Simulink error) follows decision D1 (§12).
 - **Malformed models**: dangling edge, edge to a missing port, two drivers on one input, self-loop on a
   direct-feedthrough block, duplicate block ids, unknown block type, legacy edge keys (`source`/`targetHandle`),
   0 blocks, 10 000 blocks (time and memory budget).
@@ -314,7 +315,7 @@ planner, E = executor, M = MATLAB on the user's machine.
 
 | WP | Scope | Exec | Deps |
 | --- | --- | --- | --- |
-| 00 | Setup: ledger `docs/xbridges-verification/ledger.json` (one row per block, gates V1–V8 + G), `scripts/xbridges-verification/inventory.ts` (reproduces §1), baseline run of every existing X-Bridges suite on the user's machine, `npm run test:xbridges` script, loop skill and executor agent files | P | — |
+| 00 (done) | Setup: ledger `docs/xbridges-verification/ledger.json` (one row per block, gates V1–V8 + G), `scripts/xbridges-verification/inventory.ts` (reproduces §1), baseline run of every existing X-Bridges suite on the user's machine, `npm run test:xbridges` script, loop skill and executor agent files | P | — |
 | 01 | V1 contract snapshot for 290 blocks + catalogue closure tests (F6, F7, capability closure, every block has `equation` and help entry, every port has a unit or an explicit `unitless`) | P + E | 00 |
 | 02 | Test kit `src/engine/xbridges/testkit/`: model builder, stimulus sets, oracle helpers, reference integrator, tolerance comparators, random graph generator, C compile-and-run helper reused from `smCHarness` | E | 00 |
 | 03 | Universal battery U1–U16 over all blocks | P + E | 01, 02 |
@@ -377,13 +378,19 @@ Order of execution: 00 → 01, 02 → 03 → (04–11, 12, 13, 19 in parallel) �
 - UI: `npx playwright test tests/e2e/xbridges --project=chromium --trace off`
 - Never the whole `src/utils` directory in one run (a state-machine test creates and deletes build folders).
 
-## 12. Decisions needed from the user
-1. **F8**: should dimension and data-type mismatches on a connection stop the run (Simulink) or stay warnings?
-2. **F5**: add zero-crossing detection to `SATURATION`, `DEADZONE`, `RELAY`, `SWITCH`, `Abs`, PWM carriers (Simulink
-   behaviour with variable-step solvers), or document X-Bridges as sample-accurate only for those blocks?
-3. **F3/F4**: should `ode23`/`ode45`/`ode23tb` control error on the canvas with user tolerances, and should
-   `ode113`/`ode15s`/`ode23s` be implemented or removed from `SolverOptions`?
-4. **Simulink goldens**: confirm MATLAB R2024b with Simulink, Control System, DSP System, Motor Control Blockset
-   and Fuzzy Logic Toolbox is available for WP-15; blocks whose toolbox is missing stay on oracles 1, 2, 4 and 5.
-5. **ADIA-only blocks** (robot vacuum, DEM/CFD, learning; ≈ 90): verified by invariants and closed-loop runs only —
-   confirm that is the intended bar, since no Simulink reference exists for them.
+## 12. Decisions (2026-11-10; recorded in the ledger as D1–D5)
+1. **D1 (F8)** — `DIMENSION_MISMATCH` and `DATA_TYPE_MISMATCH` on a connection become compile errors that stop the
+   run, as in Simulink. Different discrete rates on a direct connection stay the existing
+   `RATE_TRANSITION_REQUIRED` warning; nothing is inserted automatically.
+2. **D2 (F5)** — `ZeroCrossingFn` is added to `SATURATION`, `DEADZONE`, `RELAY`, `SWITCH`, `Abs` and the PWM carrier
+   blocks.
+3. **D3 (F3/F4)** — canvas `ode23`, `ode45` and `ode23tb` control error with the user's `RelTol`/`AbsTol` inside
+   each output step. `ode113`, `ode15s` and `ode23s` are removed from `SolverOptions`; an unknown name keeps
+   `UNSUPPORTED_SOLVER`.
+4. **D4 (goldens)** — goldens for every block whose toolbox is installed in the user's MATLAB R2024b; otherwise
+   **G** stays `pending` and the block is verified by oracles 1, 2, 4 and 5.
+5. **D5 (ADIA-only blocks)** — verified by U1–U16, conservation and bounded-state invariants and 60 s closed-loop
+   lab runs; **G** is `n/a`.
+
+D1–D3 change the engine. Each is a WP-21 fix: acceptance tests first (WP-12 for D3, WP-13 for D1 and D2), then the
+change, then V6 and V7 for the whole catalogue.

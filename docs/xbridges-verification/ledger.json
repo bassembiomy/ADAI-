@@ -1,0 +1,4424 @@
+{
+ "plan": "docs/superpowers/plans/2026-11-10-xbridges-full-verification.md",
+ "baseline": "54b71aa",
+ "statuses": "todo | in_progress | waiting_matlab | done | blocked",
+ "exec_legend": "P = planner (main session), E = xbv-executor, M = MATLAB on the user's machine",
+ "gates_legend": "per block V1 contract, V2 equation, V3 corner cases, V4 time behaviour, V5 solver behaviour, V6 execution parity, V7 code parity, V8 UI: todo | pass | fail | n/a. G Simulink goldens: tbd (until the WP-15 map) | pending | pass | n/a | powertrain-ledger. Initial n/a: V5 without evaluateDerivatives, V6 without a codegen capability (the interpreter does not run the block), V8 for blocks not on the canvas palette, G for ADIA-only blocks.",
+ "decisions": [
+  {
+   "id": "D1",
+   "date": "2026-11-10",
+   "topic": "F8 connection mismatches",
+   "decision": "DIMENSION_MISMATCH and DATA_TYPE_MISMATCH become compile errors that stop the run. Different discrete rates on a direct connection stay the existing RATE_TRANSITION_REQUIRED warning; nothing is inserted automatically."
+  },
+  {
+   "id": "D2",
+   "date": "2026-11-10",
+   "topic": "F5 zero crossings",
+   "decision": "Add ZeroCrossingFn to SATURATION, DEADZONE, RELAY, SWITCH, Abs and the PWM carrier blocks."
+  },
+  {
+   "id": "D3",
+   "date": "2026-11-10",
+   "topic": "F3/F4 solvers",
+   "decision": "Canvas ode23, ode45 and ode23tb control error with the user's RelTol and AbsTol inside each output step. ode113, ode15s and ode23s are removed from SolverOptions; an unknown name keeps UNSUPPORTED_SOLVER."
+  },
+  {
+   "id": "D4",
+   "date": "2026-11-10",
+   "topic": "Simulink goldens",
+   "decision": "Goldens for every block whose toolbox is installed in the user's MATLAB R2024b; otherwise G stays pending and the block is verified by oracles 1, 2, 4 and 5."
+  },
+  {
+   "id": "D5",
+   "date": "2026-11-10",
+   "topic": "ADIA-only blocks",
+   "decision": "Verified by U1-U16, conservation and bounded-state invariants and 60 s closed-loop lab runs; G is n/a."
+  }
+ ],
+ "wps": [
+  {
+   "id": "WP-00",
+   "title": "Setup: ledger, inventory script, baseline, npm scripts, loop skill and executor agent",
+   "exec": "P",
+   "deps": [],
+   "status": "done",
+   "baseline": {
+    "date": "2026-11-10",
+    "commit": "54b71aa",
+    "command": "npm run test:xbridges",
+    "result": "72 files: 67 files / 1323 tests passed; the other 5 (src/components/xbridges UI tests) could not load in the first run because the scratch install lacked @testing-library/dom, and passed after it was added (src/components/xbridges: 8 files / 55 tests passed)",
+    "env": "cloud: node_modules from package.json minus the xlsx tarball (cdn.sheetjs.com denied), installed in the scratchpad and symlinked for the run; gcc present; Playwright suites not run"
+   }
+  },
+  {
+   "id": "WP-01",
+   "title": "V1 contract snapshot and catalogue closure tests",
+   "exec": "P+E",
+   "deps": [
+    "WP-00"
+   ],
+   "status": "todo"
+  },
+  {
+   "id": "WP-02",
+   "title": "Test kit",
+   "exec": "E",
+   "deps": [
+    "WP-00"
+   ],
+   "status": "todo"
+  },
+  {
+   "id": "WP-03",
+   "title": "Universal battery U1-U16",
+   "exec": "P+E",
+   "deps": [
+    "WP-01",
+    "WP-02"
+   ],
+   "status": "todo"
+  },
+  {
+   "id": "WP-04",
+   "title": "V2/V3 sources, element-wise math, reductions, trigonometric",
+   "exec": "P+E",
+   "deps": [
+    "WP-03"
+   ],
+   "status": "todo"
+  },
+  {
+   "id": "WP-05",
+   "title": "V2/V3 linear algebra, routing, logic, bitwise, sequential, sinks",
+   "exec": "P+E",
+   "deps": [
+    "WP-03"
+   ],
+   "status": "todo"
+  },
+  {
+   "id": "WP-06",
+   "title": "V2/V3/V4 continuous, discrete and delay, discontinuities, lookup, buses",
+   "exec": "P+E",
+   "deps": [
+    "WP-03"
+   ],
+   "status": "todo"
+  },
+  {
+   "id": "WP-07",
+   "title": "V2/V3/V4 control, signal processing and observers, optimisation and modelling",
+   "exec": "P+E",
+   "deps": [
+    "WP-06"
+   ],
+   "status": "todo"
+  },
+  {
+   "id": "WP-08",
+   "title": "V2/V3 power electronics, PWM, motor control, torque optimisation",
+   "exec": "P+E",
+   "deps": [
+    "WP-06"
+   ],
+   "status": "todo"
+  },
+  {
+   "id": "WP-09",
+   "title": "V2/V3 fuzzy, learning",
+   "exec": "P+E",
+   "deps": [
+    "WP-03"
+   ],
+   "status": "todo"
+  },
+  {
+   "id": "WP-10",
+   "title": "V2/V3 navigation, robot vacuum, DEM/CFD",
+   "exec": "P+E",
+   "deps": [
+    "WP-03"
+   ],
+   "status": "todo"
+  },
+  {
+   "id": "WP-11",
+   "title": "Powertrain: U1-U16, V6, V8; import powertrain ledger verdicts",
+   "exec": "P+E",
+   "deps": [
+    "WP-03"
+   ],
+   "status": "todo"
+  },
+  {
+   "id": "WP-12",
+   "title": "Solvers",
+   "exec": "P+E",
+   "deps": [
+    "WP-02"
+   ],
+   "status": "todo"
+  },
+  {
+   "id": "WP-13",
+   "title": "Engine semantics",
+   "exec": "P+E",
+   "deps": [
+    "WP-02"
+   ],
+   "status": "todo"
+  },
+  {
+   "id": "WP-14",
+   "title": "Worker parity and protocol",
+   "exec": "P+E",
+   "deps": [
+    "WP-13"
+   ],
+   "status": "todo"
+  },
+  {
+   "id": "WP-15",
+   "title": "Simulink goldens",
+   "exec": "P+M",
+   "deps": [
+    "WP-04",
+    "WP-05",
+    "WP-06",
+    "WP-07",
+    "WP-08"
+   ],
+   "status": "todo"
+  },
+  {
+   "id": "WP-16",
+   "title": "Canvas / interpreter parity and model corpus",
+   "exec": "P+E",
+   "deps": [
+    "WP-04",
+    "WP-05",
+    "WP-06",
+    "WP-07",
+    "WP-08",
+    "WP-13"
+   ],
+   "status": "todo"
+  },
+  {
+   "id": "WP-17",
+   "title": "Per-block code parity, registry closure, compile matrix, limits",
+   "exec": "P+E",
+   "deps": [
+    "WP-16"
+   ],
+   "status": "todo"
+  },
+  {
+   "id": "WP-18",
+   "title": "State-machine alignment incl. AUTOSAR path",
+   "exec": "P+E",
+   "deps": [
+    "WP-17"
+   ],
+   "status": "todo"
+  },
+  {
+   "id": "WP-19",
+   "title": "UI component tests",
+   "exec": "P+E",
+   "deps": [
+    "WP-01"
+   ],
+   "status": "todo"
+  },
+  {
+   "id": "WP-20",
+   "title": "UI end-to-end",
+   "exec": "P+E",
+   "deps": [
+    "WP-19"
+   ],
+   "status": "todo"
+  },
+  {
+   "id": "WP-21",
+   "title": "Fix loop, one commit per finding",
+   "exec": "E",
+   "deps": [],
+   "status": "todo"
+  },
+  {
+   "id": "WP-22",
+   "title": "CI workflow, nightly random graphs, mutation run",
+   "exec": "E",
+   "deps": [
+    "WP-03",
+    "WP-20"
+   ],
+   "status": "todo"
+  },
+  {
+   "id": "WP-23",
+   "title": "Close-out report",
+   "exec": "P",
+   "deps": [
+    "WP-21",
+    "WP-22"
+   ],
+   "status": "todo"
+  }
+ ],
+ "findings": [
+  {
+   "id": "XBV-001",
+   "plan_ref": "F1",
+   "severity": "S1",
+   "gate": "V6",
+   "status": "open",
+   "summary": "Canvas engine and state-machine interpreter are compared only by xbSimEmbeddedParity.test.ts: unit-constant input, 6 ticks, scalar, discrete solver."
+  },
+  {
+   "id": "XBV-002",
+   "plan_ref": "F2",
+   "severity": "S3",
+   "gate": "V5",
+   "status": "open",
+   "summary": "Solver dispatch is written three times: XbridgesWorkspace.tsx stepLiveSolver, xbridgesWorker.ts, Solvers.runFixedStep; no test that they agree."
+  },
+  {
+   "id": "XBV-003",
+   "plan_ref": "F3",
+   "severity": "S1",
+   "gate": "V5",
+   "status": "open",
+   "summary": "Canvas ode23/ode45/ode23tb are stepped with the fixed step and hard-coded tolerances; no error control. Decision D3: control error with the user's RelTol/AbsTol."
+  },
+  {
+   "id": "XBV-004",
+   "plan_ref": "F4",
+   "severity": "S3",
+   "gate": "V5",
+   "status": "open",
+   "summary": "SolverOptions.solver admits ode113, ode23s, ode15s that no dispatcher implements. Decision D3: remove them from the type; unknown names keep UNSUPPORTED_SOLVER."
+  },
+  {
+   "id": "XBV-005",
+   "plan_ref": "F5",
+   "severity": "S1",
+   "gate": "V5",
+   "status": "open",
+   "summary": "Only Step and three PT_ blocks declare zero crossings. Decision D2: add ZeroCrossingFn to SATURATION, DEADZONE, RELAY, SWITCH, Abs and the PWM carrier blocks."
+  },
+  {
+   "id": "XBV-006",
+   "plan_ref": "F6",
+   "severity": "S3",
+   "gate": "V7",
+   "status": "open",
+   "summary": "SUM_JUNCTION has a codegen capability and no factory; DiagExtract, ExtractDiag, Diag have a factory and no capability entry of their own."
+  },
+  {
+   "id": "XBV-007",
+   "plan_ref": "F7",
+   "severity": "S3",
+   "gate": "V8",
+   "status": "open",
+   "summary": "The canvas palette and the help/AI palette differ: 20 types only on the canvas palette, 55 only on the help palette (inventory.json: onCanvasPaletteOnly, onHelpPaletteOnly)."
+  },
+  {
+   "id": "XBV-008",
+   "plan_ref": "F8",
+   "severity": "S1",
+   "gate": "V3",
+   "status": "open",
+   "summary": "DIMENSION_MISMATCH and DATA_TYPE_MISMATCH on a connection are warnings. Decision D1: compile errors, as in Simulink."
+  },
+  {
+   "id": "XBV-009",
+   "plan_ref": "F9",
+   "severity": "S4",
+   "gate": "V7",
+   "status": "open",
+   "summary": "docs/XBRIDGES_EMBEDDED_CODEGEN.md lists about 40 embedded-capable types and two solvers; the registry has 100 and three."
+  },
+  {
+   "id": "XBV-010",
+   "plan_ref": "F10",
+   "severity": "S3",
+   "gate": "V7",
+   "status": "open",
+   "summary": "Embedded limits (fixed-step euler/rk4/discrete, no algebraic loops, vector 16, matrix 8) have no test on both sides of each boundary."
+  },
+  {
+   "id": "XBV-011",
+   "plan_ref": "F11",
+   "severity": "S3",
+   "gate": "V3",
+   "status": "open",
+   "summary": "The parameter schema covers 74 of 290 block types; PARAMETER_* errors do not apply to the others."
+  }
+ ],
+ "blocks": {
+  "ROBOT_VACUUM_LIDAR_SENSOR": {
+   "category": "library-only",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "n/a",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_ODOMETRY_SENSOR": {
+   "category": "library-only",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "n/a",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_CLIFF_IR": {
+   "category": "library-only",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "n/a",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_DUSTBIN_SENSOR": {
+   "category": "library-only",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "n/a",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_MOTOR_CURRENT": {
+   "category": "library-only",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "n/a",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_SENSOR_FUSION_EKF": {
+   "category": "library-only",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "n/a",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_ROOM_SEGMENTATION": {
+   "category": "library-only",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "n/a",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_SEMANTIC_MAP": {
+   "category": "library-only",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "n/a",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_COVERAGE_PLANNER": {
+   "category": "library-only",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "n/a",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_ROOM_SCHEDULER": {
+   "category": "library-only",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "n/a",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_BATTERY_MONITOR": {
+   "category": "library-only",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "n/a",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_GOAL_MANAGER": {
+   "category": "library-only",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "n/a",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_3D_VIZ_COLORS": {
+   "category": "library-only",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "n/a",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_WAYPOINT_GEN": {
+   "category": "library-only",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "n/a",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_COLLISION_AVOID": {
+   "category": "library-only",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "n/a",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_SURFACE_ADAPTER": {
+   "category": "library-only",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "n/a",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_CLIFF_HALT": {
+   "category": "library-only",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "n/a",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_VELOCITY_PID": {
+   "category": "library-only",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "n/a",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_MODE_SUPERVISOR": {
+   "category": "library-only",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "n/a",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_BUMPER_SENSOR": {
+   "category": "library-only",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "n/a",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_SIDE_BRUSH": {
+   "category": "library-only",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "n/a",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_SUCTION_PWM": {
+   "category": "library-only",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "n/a",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_TERRAIN_MODEL": {
+   "category": "library-only",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "n/a",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_COLLISION_MESH": {
+   "category": "library-only",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "n/a",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_DOCK_BEACON": {
+   "category": "library-only",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "n/a",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_CAPACITY_THRESHOLD": {
+   "category": "library-only",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "n/a",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_HALT_ALERT": {
+   "category": "library-only",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "n/a",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_DOCK_DETECT": {
+   "category": "library-only",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "n/a",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_RESUME_SCHEDULER": {
+   "category": "library-only",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "n/a",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_3D_SCENE_VIEW": {
+   "category": "library-only",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "n/a",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_FURNITURE_MESH": {
+   "category": "library-only",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "n/a",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_DIRT_DENSITY": {
+   "category": "library-only",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "n/a",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_ROOM_ZONE_COLORS": {
+   "category": "library-only",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "n/a",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_COVERAGE_HEATMAP": {
+   "category": "library-only",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "n/a",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_DOCK_ICON": {
+   "category": "library-only",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "n/a",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_BATTERY_HUD": {
+   "category": "library-only",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "n/a",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_DUSTBIN_HUD": {
+   "category": "library-only",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "n/a",
+    "G": "n/a"
+   }
+  },
+  "AND": {
+   "category": "Logic Gates",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "OR": {
+   "category": "Logic Gates",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "NOT": {
+   "category": "Logic Gates",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "NAND": {
+   "category": "Logic Gates",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "NOR": {
+   "category": "Logic Gates",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "XOR": {
+   "category": "Logic Gates",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "BitwiseAND": {
+   "category": "Bitwise",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "BitwiseOR": {
+   "category": "Bitwise",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "BitwiseXOR": {
+   "category": "Bitwise",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "BitwiseNOT": {
+   "category": "Bitwise",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "ShiftLeft": {
+   "category": "Bitwise",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "ShiftRight": {
+   "category": "Bitwise",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "DFlipFlop": {
+   "category": "Sequential",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "JKFlipFlop": {
+   "category": "Sequential",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "Register": {
+   "category": "Sequential",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "Counter": {
+   "category": "Discrete & Delay",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "Clock": {
+   "category": "Sources",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "WaveformGen": {
+   "category": "Sources",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "Constant": {
+   "category": "Sources",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "Step": {
+   "category": "Sources",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "Sum": {
+   "category": "Element-wise Math",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "VectorAdd": {
+   "category": "Element-wise Math",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "VectorSub": {
+   "category": "Element-wise Math",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "VectorMul": {
+   "category": "Element-wise Math",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "VectorDiv": {
+   "category": "Element-wise Math",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "VectorPow": {
+   "category": "Element-wise Math",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "UnaryNeg": {
+   "category": "Element-wise Math",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "Abs": {
+   "category": "Element-wise Math",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "SumElements": {
+   "category": "Reductions",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "Mean": {
+   "category": "Reductions",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "Max": {
+   "category": "Reductions",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "MatrixMul": {
+   "category": "Linear Algebra",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "Transpose": {
+   "category": "Linear Algebra",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "Inverse": {
+   "category": "Linear Algebra",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "Determinant": {
+   "category": "Linear Algebra",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "MatrixConcat": {
+   "category": "Linear Algebra",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "MatrixDiag": {
+   "category": "Linear Algebra",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "DiagExtract": {
+   "category": "library-only",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "n/a",
+    "G": "tbd"
+   }
+  },
+  "ExtractDiag": {
+   "category": "library-only",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "n/a",
+    "G": "tbd"
+   }
+  },
+  "Diag": {
+   "category": "library-only",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "n/a",
+    "G": "tbd"
+   }
+  },
+  "IdentityMatrix": {
+   "category": "Linear Algebra",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "SubMatrix": {
+   "category": "Linear Algebra",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "MatrixSolve": {
+   "category": "Linear Algebra",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "Integrator": {
+   "category": "Continuous Systems",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "todo",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "Scope": {
+   "category": "Sinks",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "Inport": {
+   "category": "Ports",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "Outport": {
+   "category": "Ports",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "Subsystem": {
+   "category": "Subsystem Architecture",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "PWM_GENERATOR": {
+   "category": "PWM & Modulation",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "THREE_PHASE_PWM": {
+   "category": "PWM & Modulation",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "SIX_STEP_COMMUTATION": {
+   "category": "Motor Control",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "SENSORLESS_SIX_STEP": {
+   "category": "Motor Control",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "DC_VOLTAGE_SOURCE": {
+   "category": "library-only",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "n/a",
+    "G": "tbd"
+   }
+  },
+  "THREE_PHASE_LOAD": {
+   "category": "library-only",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "n/a",
+    "G": "tbd"
+   }
+  },
+  "THREE_PHASE_INVERTER": {
+   "category": "Power Electronics & Bridges",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "SINGLE_PHASE_H_BRIDGE": {
+   "category": "Power Electronics & Bridges",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "VOLTAGE_REFERENCE_GENERATOR": {
+   "category": "Control & Feedback",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "FIELD_ORIENTED_CONTROL": {
+   "category": "Control & Feedback",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "CLARKE_TRANSFORM": {
+   "category": "library-only",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "n/a",
+    "G": "tbd"
+   }
+  },
+  "PARK_TRANSFORM": {
+   "category": "library-only",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "n/a",
+    "G": "tbd"
+   }
+  },
+  "INVERSE_PARK": {
+   "category": "library-only",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "n/a",
+    "G": "tbd"
+   }
+  },
+  "INVERSE_CLARKE": {
+   "category": "library-only",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "n/a",
+    "G": "tbd"
+   }
+  },
+  "CURRENT_CONTROLLER_DQ": {
+   "category": "Control & Feedback",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "DOE_MODEL": {
+   "category": "Optimization & Modeling",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "SPEED_CONTROLLER": {
+   "category": "Control & Feedback",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "FLUX_REFERENCE": {
+   "category": "Control & Feedback",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "ROTOR_POSITION_ESTIMATOR": {
+   "category": "Signal Processing & Observers",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "SVPWM_CORE": {
+   "category": "PWM & Modulation",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "SECTOR_SELECTOR": {
+   "category": "library-only",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "n/a",
+    "G": "tbd"
+   }
+  },
+  "SWITCHING_TIME_CALCULATOR": {
+   "category": "library-only",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "n/a",
+    "G": "tbd"
+   }
+  },
+  "SVPWM_GATE_GENERATOR": {
+   "category": "PWM & Modulation",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "ZERO_SEQUENCE_INJECTION": {
+   "category": "PWM & Modulation",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "SVPWM_MODULATOR": {
+   "category": "PWM & Modulation",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "DELAY": {
+   "category": "Discrete & Delay",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "INTEGRATOR_CONTINUOUS": {
+   "category": "Continuous Systems",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "todo",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "INTEGRATOR_DISCRETE": {
+   "category": "Discrete & Delay",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "MUX": {
+   "category": "Routing & Control Flow",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "DEMUX": {
+   "category": "Routing & Control Flow",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "GAIN": {
+   "category": "Element-wise Math",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "PRODUCT": {
+   "category": "Element-wise Math",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "SWITCH": {
+   "category": "Routing & Control Flow",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "IF_ELSE": {
+   "category": "Routing & Control Flow",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "SWITCH_CASE": {
+   "category": "Routing & Control Flow",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "DATA_TYPE_CONVERSION": {
+   "category": "Routing & Control Flow",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "TERMINATOR": {
+   "category": "Routing & Control Flow",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "SIN": {
+   "category": "Trigonometric & Hyperbolic",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "COS": {
+   "category": "Trigonometric & Hyperbolic",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "TAN": {
+   "category": "Trigonometric & Hyperbolic",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "COT": {
+   "category": "Trigonometric & Hyperbolic",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "SEC": {
+   "category": "Trigonometric & Hyperbolic",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "COSEC": {
+   "category": "Trigonometric & Hyperbolic",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "ASIN": {
+   "category": "Trigonometric & Hyperbolic",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "ACOS": {
+   "category": "Trigonometric & Hyperbolic",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "ATAN": {
+   "category": "Trigonometric & Hyperbolic",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "ACOT": {
+   "category": "Trigonometric & Hyperbolic",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "ASEC": {
+   "category": "Trigonometric & Hyperbolic",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "ACOSEC": {
+   "category": "Trigonometric & Hyperbolic",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "SINH": {
+   "category": "Trigonometric & Hyperbolic",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "COSH": {
+   "category": "Trigonometric & Hyperbolic",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "TANH": {
+   "category": "Trigonometric & Hyperbolic",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "COTH": {
+   "category": "Trigonometric & Hyperbolic",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "SECH": {
+   "category": "Trigonometric & Hyperbolic",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "COSECH": {
+   "category": "Trigonometric & Hyperbolic",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "ASINH": {
+   "category": "Trigonometric & Hyperbolic",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "ACOSH": {
+   "category": "Trigonometric & Hyperbolic",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "ATANH": {
+   "category": "Trigonometric & Hyperbolic",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "ACOTH": {
+   "category": "Trigonometric & Hyperbolic",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "ASECH": {
+   "category": "Trigonometric & Hyperbolic",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "ACOSECH": {
+   "category": "Trigonometric & Hyperbolic",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "PID_CONTROLLER": {
+   "category": "Control & Feedback",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "todo",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "INTEGRATOR": {
+   "category": "library-only",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "todo",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "n/a",
+    "G": "tbd"
+   }
+  },
+  "UNIT_DELAY": {
+   "category": "library-only",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "n/a",
+    "G": "tbd"
+   }
+  },
+  "MEMORY": {
+   "category": "library-only",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "n/a",
+    "G": "tbd"
+   }
+  },
+  "SATURATION": {
+   "category": "Discontinuities",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "DEADZONE": {
+   "category": "Discontinuities",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "RATE_LIMITER": {
+   "category": "Discontinuities",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "RELAY": {
+   "category": "Discontinuities",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "DERIVATIVE": {
+   "category": "library-only",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "todo",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "n/a",
+    "G": "tbd"
+   }
+  },
+  "STATE_SPACE": {
+   "category": "Continuous Systems",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "todo",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "TRANSFER_FUNCTION": {
+   "category": "Continuous Systems",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "todo",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "ZERO_POLE_GAIN": {
+   "category": "Continuous Systems",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "todo",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "LAPLACE_TRANSFORM": {
+   "category": "Continuous Systems",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "todo",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "DISCRETE_TRANSFER_FUNCTION": {
+   "category": "Discrete & Delay",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "PID_BASIC": {
+   "category": "Control & Feedback",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "todo",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "WHITE_NOISE": {
+   "category": "Signal Processing & Observers",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "BAND_LIMITED_NOISE": {
+   "category": "Signal Processing & Observers",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "DISCRETE_IMPULSE": {
+   "category": "Signal Processing & Observers",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "LOW_PASS_FILTER": {
+   "category": "Signal Processing & Observers",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "todo",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "HIGH_PASS_FILTER": {
+   "category": "Signal Processing & Observers",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "todo",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "MOVING_AVERAGE": {
+   "category": "Signal Processing & Observers",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "KALMAN_FILTER": {
+   "category": "Signal Processing & Observers",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "EXTENDED_KALMAN_FILTER": {
+   "category": "Signal Processing & Observers",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "MPC_CONTROLLER": {
+   "category": "Optimization & Modeling",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "NUMERIC_REPRESENTATION": {
+   "category": "Routing & Control Flow",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "todo",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "DOE_MODULE": {
+   "category": "Optimization & Modeling",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "AC_INDUCTION_MOTOR": {
+   "category": "Motor Control",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "todo",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "IM_SCALAR_CONTROL": {
+   "category": "Motor Control",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "IM_FOC_CONTROL": {
+   "category": "Motor Control",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "IM_FLUX_OBSERVER": {
+   "category": "Motor Control",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "todo",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "VF_SLIP_COMP": {
+   "category": "Motor Control",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "FIELD_WEAKENING": {
+   "category": "Torque Optimization",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "MTPA_CONTROLLER": {
+   "category": "Torque Optimization",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "MTPA_FW_MANAGER": {
+   "category": "Torque Optimization",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "AC_MOTOR_PID_CONTROL": {
+   "category": "Learning Models",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "todo",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "n/a"
+   }
+  },
+  "LMS_ADAPTIVE_FILTER": {
+   "category": "Learning Models",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "n/a"
+   }
+  },
+  "NEURAL_NEURON_LEARNING": {
+   "category": "Learning Models",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "n/a"
+   }
+  },
+  "RL_Q_LEARNING_CONTROLLER": {
+   "category": "Learning Models",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "n/a"
+   }
+  },
+  "AIR_FRYER_LEARNING_MODEL": {
+   "category": "Learning Models",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_BATTERY": {
+   "category": "Learning Models",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "todo",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_COMM": {
+   "category": "Learning Models",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_BOUSTROPHEDON_SWEEP": {
+   "category": "Navigation & Autonomous",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_ERODE_MASK": {
+   "category": "Navigation & Autonomous",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_DOOR_TRACKER": {
+   "category": "Navigation & Autonomous",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_DOOR_CROSSING": {
+   "category": "Navigation & Autonomous",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_CONTINUOUS_ENERGY": {
+   "category": "Navigation & Autonomous",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_TOPOLOGY_RETURN": {
+   "category": "Navigation & Autonomous",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_THETA_STAR": {
+   "category": "Navigation & Autonomous",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_DIGITAL_TWIN": {
+   "category": "Learning Models",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "todo",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_MOTOR": {
+   "category": "Learning Models",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "todo",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_DYNAMICS": {
+   "category": "Learning Models",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "todo",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_ENVIRONMENT": {
+   "category": "Learning Models",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_ODOMETRY": {
+   "category": "Learning Models",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_FUSION": {
+   "category": "Learning Models",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_SLAM": {
+   "category": "Learning Models",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_NAV": {
+   "category": "Learning Models",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_KINEMATICS": {
+   "category": "Learning Models",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_WHEEL_CONTROL": {
+   "category": "Learning Models",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "todo",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_ENCODER": {
+   "category": "Learning Models",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_LIDAR": {
+   "category": "Learning Models",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_LOCALIZATION": {
+   "category": "Learning Models",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_MAPPING": {
+   "category": "Learning Models",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_COVERAGE": {
+   "category": "Learning Models",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_GLOBAL_PLANNER": {
+   "category": "Learning Models",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_OBSTACLE_AVOIDANCE": {
+   "category": "Learning Models",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_MOTION_CONTROLLER": {
+   "category": "Learning Models",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_MOTOR_COMMAND": {
+   "category": "Learning Models",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "n/a"
+   }
+  },
+  "ROBOT_VACUUM_VISUALIZATION": {
+   "category": "Learning Models",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "n/a"
+   }
+  },
+  "FUZZY_MF_TRIMF": {
+   "category": "Fuzzy Logic",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "FUZZY_MF_TRAPMF": {
+   "category": "Fuzzy Logic",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "FUZZY_MF_GAUSSMF": {
+   "category": "Fuzzy Logic",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "FUZZY_MF_SIGMF": {
+   "category": "Fuzzy Logic",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "FUZZY_AND": {
+   "category": "Fuzzy Logic",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "FUZZY_OR": {
+   "category": "Fuzzy Logic",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "FUZZY_NOT": {
+   "category": "Fuzzy Logic",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "FUZZY_RULE": {
+   "category": "Fuzzy Logic",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "FUZZY_INFERENCE_SYSTEM": {
+   "category": "Fuzzy Control Systems",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "FUZZY_DEFUZZIFY": {
+   "category": "Fuzzy Logic",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "FUZZY_PID_CONTROLLER": {
+   "category": "Fuzzy Control Systems",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "todo",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "FUZZY_SURFACE_VIEWER": {
+   "category": "Fuzzy Control Systems",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "DEM_WASHING_MACHINE_TWIN": {
+   "category": "library-only",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "n/a",
+    "G": "n/a"
+   }
+  },
+  "DEM_DRUM": {
+   "category": "library-only",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "n/a",
+    "G": "n/a"
+   }
+  },
+  "DEM_PARTICLE_SYSTEM": {
+   "category": "library-only",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "n/a",
+    "G": "n/a"
+   }
+  },
+  "DEM_HERTZ_CONTACT": {
+   "category": "library-only",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "n/a",
+    "G": "n/a"
+   }
+  },
+  "DEM_BOND_FABRIC": {
+   "category": "library-only",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "n/a",
+    "G": "n/a"
+   }
+  },
+  "DEM_FLUID_COUPLING": {
+   "category": "library-only",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "n/a",
+    "G": "n/a"
+   }
+  },
+  "CFD_SPH_WATER_SOLVER": {
+   "category": "library-only",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "n/a",
+    "G": "n/a"
+   }
+  },
+  "DEM_CFD_COSIMULATION_INTERFACE": {
+   "category": "library-only",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "n/a",
+    "G": "n/a"
+   }
+  },
+  "FABRIC_HARMONIC_ANALYZER": {
+   "category": "library-only",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "n/a",
+    "G": "tbd"
+   }
+  },
+  "CFD_DEM_SURROGATE_LEARNER": {
+   "category": "library-only",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "n/a",
+    "G": "n/a"
+   }
+  },
+  "ROOT_LOCUS": {
+   "category": "Continuous Systems",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "todo",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "Note": {
+   "category": "Annotations",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "LOOKUP_1D": {
+   "category": "Lookup Tables",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "LOOKUP_2D": {
+   "category": "Lookup Tables",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "LOOKUP_ND": {
+   "category": "Lookup Tables",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "PRELOOKUP": {
+   "category": "Lookup Tables",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "INTERP_PRELOOKUP": {
+   "category": "Lookup Tables",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "BUS_CREATOR": {
+   "category": "Buses",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "BUS_SELECTOR": {
+   "category": "Buses",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "tbd"
+   }
+  },
+  "PT_DRIVE_CYCLE_SOURCE": {
+   "category": "Powertrain Blockset",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "powertrain-ledger"
+   }
+  },
+  "PT_LONGITUDINAL_DRIVER": {
+   "category": "Powertrain Blockset",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "todo",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "powertrain-ledger"
+   }
+  },
+  "PT_VEHICLE_BODY_1DOF": {
+   "category": "Powertrain Blockset",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "todo",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "powertrain-ledger"
+   }
+  },
+  "PT_DATASHEET_BATTERY": {
+   "category": "Powertrain Blockset",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "todo",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "powertrain-ledger"
+   }
+  },
+  "PT_EQUIVALENT_CIRCUIT_BATTERY": {
+   "category": "Powertrain Blockset",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "todo",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "powertrain-ledger"
+   }
+  },
+  "PT_MAPPED_MOTOR": {
+   "category": "Powertrain Blockset",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "todo",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "powertrain-ledger"
+   }
+  },
+  "PT_LONGITUDINAL_WHEEL": {
+   "category": "Powertrain Blockset",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "todo",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "powertrain-ledger"
+   }
+  },
+  "PT_ROTATIONAL_INERTIA": {
+   "category": "Powertrain Blockset",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "todo",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "powertrain-ledger"
+   }
+  },
+  "PT_TORSIONAL_COMPLIANCE": {
+   "category": "Powertrain Blockset",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "todo",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "powertrain-ledger"
+   }
+  },
+  "PT_DISC_CLUTCH": {
+   "category": "Powertrain Blockset",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "todo",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "powertrain-ledger"
+   }
+  },
+  "PT_TORQUE_CONVERTER": {
+   "category": "Powertrain Blockset",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "powertrain-ledger"
+   }
+  },
+  "PT_PLANETARY_GEAR": {
+   "category": "Powertrain Blockset",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "todo",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "powertrain-ledger"
+   }
+  },
+  "PT_FLOW_BOUNDARY": {
+   "category": "Powertrain Blockset",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "powertrain-ledger"
+   }
+  },
+  "PT_FLOW_RESTRICTION": {
+   "category": "Powertrain Blockset",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "powertrain-ledger"
+   }
+  },
+  "PT_CONTROL_VOLUME": {
+   "category": "Powertrain Blockset",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "todo",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "powertrain-ledger"
+   }
+  },
+  "PT_HEAT_EXCHANGER": {
+   "category": "Powertrain Blockset",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "powertrain-ledger"
+   }
+  },
+  "PT_COMPRESSOR": {
+   "category": "Powertrain Blockset",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "powertrain-ledger"
+   }
+  },
+  "PT_TURBINE": {
+   "category": "Powertrain Blockset",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "powertrain-ledger"
+   }
+  },
+  "PT_DRIVE_SHAFT": {
+   "category": "Powertrain Blockset",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "todo",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "powertrain-ledger"
+   }
+  },
+  "PT_CI_CORE_ENGINE": {
+   "category": "Powertrain Blockset",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "powertrain-ledger"
+   }
+  },
+  "PT_IDEAL_FIXED_GEAR_TRANSMISSION": {
+   "category": "Powertrain Blockset",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "powertrain-ledger"
+   }
+  },
+  "PT_AUTOMATED_MANUAL_TRANSMISSION": {
+   "category": "Powertrain Blockset",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "todo",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "powertrain-ledger"
+   }
+  },
+  "PT_DUAL_CLUTCH_TRANSMISSION": {
+   "category": "Powertrain Blockset",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "todo",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "powertrain-ledger"
+   }
+  },
+  "PT_CONTINUOUSLY_VARIABLE_TRANSMISSION": {
+   "category": "Powertrain Blockset",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "todo",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "powertrain-ledger"
+   }
+  },
+  "PT_AMT_CONTROLLER": {
+   "category": "Powertrain Blockset",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "powertrain-ledger"
+   }
+  },
+  "PT_DCT_CONTROLLER": {
+   "category": "Powertrain Blockset",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "powertrain-ledger"
+   }
+  },
+  "PT_CVT_CONTROLLER": {
+   "category": "Powertrain Blockset",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "powertrain-ledger"
+   }
+  },
+  "PT_CI_CONTROLLER": {
+   "category": "Powertrain Blockset",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "powertrain-ledger"
+   }
+  },
+  "PT_MAPPED_SI_ENGINE": {
+   "category": "Powertrain Blockset",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "powertrain-ledger"
+   }
+  },
+  "PT_MAPPED_CI_ENGINE": {
+   "category": "Powertrain Blockset",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "powertrain-ledger"
+   }
+  },
+  "PT_OPEN_DIFFERENTIAL": {
+   "category": "Powertrain Blockset",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "powertrain-ledger"
+   }
+  },
+  "PT_LIMITED_SLIP_DIFFERENTIAL": {
+   "category": "Powertrain Blockset",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "todo",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "powertrain-ledger"
+   }
+  },
+  "PT_TRANSFER_CASE": {
+   "category": "Powertrain Blockset",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "powertrain-ledger"
+   }
+  },
+  "PT_AMBIENT": {
+   "category": "Powertrain Blockset",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "powertrain-ledger"
+   }
+  },
+  "PT_THROTTLE_BODY": {
+   "category": "Powertrain Blockset",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "powertrain-ledger"
+   }
+  },
+  "PT_INTAKE_MANIFOLD": {
+   "category": "Powertrain Blockset",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "todo",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "powertrain-ledger"
+   }
+  },
+  "PT_TURBOCHARGER": {
+   "category": "Powertrain Blockset",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "todo",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "powertrain-ledger"
+   }
+  },
+  "PT_DOE_SWEEPER": {
+   "category": "Powertrain Blockset",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "powertrain-ledger"
+   }
+  },
+  "PT_ENGINE_DYNO": {
+   "category": "Powertrain Blockset",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "todo",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "powertrain-ledger"
+   }
+  },
+  "PT_CALIBRATION_ECU": {
+   "category": "Powertrain Blockset",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "powertrain-ledger"
+   }
+  },
+  "PT_CALIBRATION_MAP_2D": {
+   "category": "Powertrain Blockset",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "powertrain-ledger"
+   }
+  },
+  "PT_CI_CYLINDER": {
+   "category": "Powertrain Blockset",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "powertrain-ledger"
+   }
+  },
+  "PT_SI_CYLINDER": {
+   "category": "Powertrain Blockset",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "powertrain-ledger"
+   }
+  },
+  "PT_FUEL_INJECTOR": {
+   "category": "Powertrain Blockset",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "powertrain-ledger"
+   }
+  },
+  "PT_VVT_VALVETRAIN": {
+   "category": "Powertrain Blockset",
+   "gates": {
+    "V1": "todo",
+    "V2": "todo",
+    "V3": "todo",
+    "V4": "todo",
+    "V5": "n/a",
+    "V6": "n/a",
+    "V7": "todo",
+    "V8": "todo",
+    "G": "powertrain-ledger"
+   }
+  }
+ }
+}

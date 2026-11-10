@@ -56,6 +56,8 @@
     "verify:sm:codegen": "tsx scripts/verify_sm_codegen.ts",
     "verify:autosar": "tsx scripts/verify_autosar.ts",
     "verify:repository-codegen-isolation": "vitest run src/utils/stateMachineCodeGenerator.repositoryIsolation.test.ts src/utils/stateMachineCodeGenerator.golden.test.ts && npm run verify:sm:codegen",
+    "xbv:inventory": "tsx scripts/xbridges-verification/inventory.ts",
+    "test:xbridges": "vitest run src/engine/xbridges src/components/xbridges src/services/xbridgesWorkerClient.test.ts src/utils/stateMachine/xb src/utils/stateMachine/smXBridgesAppIntegration.test.ts --reporter=dot",
     "test:workers": "vitest run src/services/backgroundWorkerClient.test.ts src/services/vlabWorkerClient.test.ts src/services/xbridgesWorkerClient.test.ts src/engine/xbridges/xbridgesWorker.test.ts src/engine/sysml/reportWorker.test.ts src/services/doeWorkerClient.test.ts src/engine/doe/doeWorker.test.ts src/services/hilTelemetryBuffer.test.ts",
     "test:freeze-gate": "playwright test tests/performance/no-renderer-blocking.spec.ts",
     "test:sysml:scalability": "playwright test tests/performance/sysml-scalability.spec.ts --project=chromium",
