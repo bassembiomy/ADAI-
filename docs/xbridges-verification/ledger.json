@@ -201,7 +201,20 @@
     "WP-03"
    ],
    "status": "in_progress",
-   "note": "Tests by Sonnet from the controller oracle spec (D7); controller review: relay spec item was wrong (removed the pin, kept the rule test), comparator test restricted to unambiguous points; findings XBV-062..068. Awaiting Fable."
+   "note": "Tests by Sonnet from the controller oracle spec (D7); controller review: relay spec item was wrong (removed the pin, kept the rule test), comparator test restricted to unambiguous points; findings XBV-062..068. Awaiting Fable.",
+   "rework": [
+    {
+     "round": 1,
+     "by": "Fable FAIL",
+     "items": [
+      "XBV-067 misdiagnosed (INTEGRATOR has anti-windup; rk4 stage sees the post-step input - engine effect)",
+      "limit approach sag unpinned",
+      "1e-7 tolerances on first-order cases (spec 1e-8)",
+      "unverified 'as Simulink ode4 does' claim"
+     ],
+     "fix": "XBV-067 rescoped to the engine and re-pinned on a plain Integrator; euler anti-windup test passes; XBV-069 pinned; tolerances 1e-8; claim removed"
+    }
+   ]
   },
   {
    "id": "WP-07",
@@ -975,11 +988,11 @@
   },
   {
    "id": "XBV-067",
-   "plan_ref": "4.2 continuous / discrete / discontinuities / buses",
+   "plan_ref": "5.2 events / minor steps",
    "severity": "S1",
-   "gate": "V2",
+   "gate": "V5",
    "status": "open",
-   "summary": "INTEGRATOR with limits winds up: only the output is clamped, the state keeps integrating, so after the input reverses the output stays at the limit too long (Step 1 -> -1 at 0.5, limit 0.3: y(0.8) = 0.001667 instead of 0). Found by the WP-06 executor; pinned in xbEquations.dynamics.test.ts."
+   "summary": "Engine (canvas fixed-step loop): discontinuous sources change inside a step - the rk4 stage at t + dt already sees a Step's new value, so the plain Integrator of Step(0 -> 1 at 0.5) loses h/3 (y(0.5) is not 0; the verifier measured 0.49667 for a 1 -> -1 step). Simulink updates block modes (Step, limits, switches) at major steps only. The limited INTEGRATOR itself has anti-windup (euler gives y(0.8) = 0 exactly); its 0.001667 = h/6 under rk4 is this engine effect. Pinned in xbEquations.dynamics.test.ts. Related: XBV-005 (zero crossings), D2."
   },
   {
    "id": "XBV-068",
@@ -988,6 +1001,14 @@
    "gate": "V2",
    "status": "open",
    "summary": "MOVING_AVERAGE starts with its window filled with the first sample (3, 6, 9, 12 -> 3, 4, 6, 9); a sliding-window average with zero initial state gives 1, 3, 6, 9. Found by the WP-06 executor; pinned in xbEquations.dynamics.test.ts."
+  },
+  {
+   "id": "XBV-069",
+   "plan_ref": "4.2 continuous",
+   "severity": "S1",
+   "gate": "V2",
+   "status": "open",
+   "summary": "INTEGRATOR with an output limit under rk4 arrives below the limit: y(0.3) = 0.29833 instead of 0.3 with limit 0.3, and with limit 0.305 it sags to 0.30333 at t = 0.5 (the saturated derivative is used in the stages of the step that reaches the limit). Simulink evaluates the limit mode at major steps: y = min(t, limit) at every sample. Found by the WP-06 verifier; pinned in xbEquations.dynamics.test.ts."
   }
  ],
  "blocks": {

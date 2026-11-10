@@ -94,19 +94,36 @@ describe('A. continuous blocks (rk4, dt 0.01)', () => {
   const limited = (input: B, wires: string[]) => sim(
     [input, { id: 'i', type: 'INTEGRATOR', params: { initialCondition: 0, limitOutput: true, upperLimit: 0.3, lowerLimit: -1 } }],
     wires, ['i.y'], { stop: 1 });
-  it('INTEGRATOR limits [-1, 0.3] on Constant 1: y = min(t, 0.3), exactly 0.3 at t = 1', () => {
+  it('INTEGRATOR limits [-1, 0.3] on Constant 1: y = t below the limit and exactly 0.3 at t = 1', () => {
     const r = limited(constant('c', 1), ['c.out -> i.u']);
     near(num(valueAt(r, 'i.y', 0.2)), 0.2, 1e-8);
     expect(num(valueAt(r, 'i.y', 1))).toBe(0.3);
+  });
+  // Under rk4 the stages of the step that reaches the limit see a saturated derivative, so the output arrives below
+  // the limit (0.29833 at t = 0.3; with limit 0.305 it sags to 0.30333 at t = 0.5). Simulink evaluates the limit mode
+  // at major steps only: y = min(t, limit) at every sample.
+  it.fails('XBV-069: INTEGRATOR limited at 0.3 (rk4, dt 0.01) gives y = min(t, 0.3) at every sample, including t = 0.3', () => {
+    const r = limited(constant('c', 1), ['c.out -> i.u']);
+    r.t.forEach((t, k) => near(num(r.signals['i.y'][k]), Math.min(t, 0.3), 1e-9, `t=${t}`));
   });
   const negatingInput: B = { id: 'c', type: 'Step', params: { stepTime: 0.5, initialValue: 1, finalValue: -1 } };
   it('INTEGRATOR limit: the output sits at the 0.3 limit until the input turns negative (y(0.5) = 0.3)', () => {
     near(num(valueAt(limited(negatingInput, ['c.out -> i.u']), 'i.y', 0.5)), 0.3, 1e-8);
   });
-  // Simulink limits the state itself: once the input turns negative the output leaves the limit at once, so
-  // y(0.8) = 0.3 - 0.3 = 0 (no wind-up).
-  it.fails('XBV-067: INTEGRATOR limit has no wind-up: Step(1 -> -1 at 0.5) gives y(0.8) = 0', () => {
-    near(num(valueAt(limited(negatingInput, ['c.out -> i.u']), 'i.y', 0.8)), 0.0, 1e-8, 'y(0.8)');
+  // The state is limited (anti-windup): with euler, where every stage is a major step, y(0.8) = 0.3 - 0.3 = 0.
+  it('INTEGRATOR limit has no wind-up (euler): Step(1 -> -1 at 0.5) gives y(0.8) = 0', () => {
+    const r = sim([negatingInput, { id: 'i', type: 'INTEGRATOR', params: { initialCondition: 0, limitOutput: true, upperLimit: 0.3, lowerLimit: -1 } }],
+      ['c.out -> i.u'], ['i.y'], { stop: 1, solver: 'euler' });
+    near(num(valueAt(r, 'i.y', 0.8)), 0.0, 1e-8, 'y(0.8)');
+  });
+  // Engine defect, not a block defect: on the canvas rk4 loop the last stage of the step ending at the Step time
+  // already sees the new Step value. Simulink updates a Step's output (its mode) at major steps only, so the integral
+  // of Step(0 -> 1 at 0.5) is 0 at t = 0.5 and 0.5 at t = 1; the canvas loses h/3 at the step.
+  it.fails('XBV-067: plain Integrator of Step(0 -> 1 at 0.5), rk4 dt 0.1: y(0.5) = 0 and y(1) = 0.5', () => {
+    const r = sim([{ id: 's', type: 'Step', params: { stepTime: 0.5, initialValue: 0, finalValue: 1 } }, { id: 'i', type: 'Integrator' }],
+      ['s.out -> i.in'], ['i.out'], { stop: 1, dt: 0.1 });
+    near(num(valueAt(r, 'i.out', 0.5)), 0, 1e-12, 'y(0.5)');
+    near(num(valueAt(r, 'i.out', 1)), 0.5, 1e-12, 'y(1)');
   });
 
   // Oracle: G = 1/(s+1), unit step: y = 1 - e^-t.
@@ -114,7 +131,7 @@ describe('A. continuous blocks (rk4, dt 0.01)', () => {
     sim([constant('c', 1), { id: 'tf', type, params: { numerator: num_, denominator: den, ...extra } }], ['c.out -> tf.u'], ['tf.y'], { stop });
   it('TRANSFER_FUNCTION 1/(s+1) step response: y = 1 - e^-t at t = 0.5, 1, 2', () => {
     const r = tfRun([1], [1, 1], 2);
-    for (const t of [0.5, 1, 2]) near(num(valueAt(r, 'tf.y', t)), 1 - Math.exp(-t), 1e-7, `t=${t}`);
+    for (const t of [0.5, 1, 2]) near(num(valueAt(r, 'tf.y', t)), 1 - Math.exp(-t), 1e-8, `t=${t}`);
   });
   // Oracle: wn^2/(s^2 + 2 zeta wn s + wn^2), wn = 2, unit step.
   const WN = 2;
@@ -142,14 +159,14 @@ describe('A. continuous blocks (rk4, dt 0.01)', () => {
   it('TRANSFER_FUNCTION (s+2)/(s+1) with direct feedthrough: step response 2 - e^-t, y(0) = 1', () => {
     const r = tfRun([1, 2], [1, 1], 2);
     near(num(valueAt(r, 'tf.y', 0)), 1, 1e-12, 'y(0)');
-    for (const t of [0.5, 1, 2]) near(num(valueAt(r, 'tf.y', t)), 2 - Math.exp(-t), 1e-7, `t=${t}`);
+    for (const t of [0.5, 1, 2]) near(num(valueAt(r, 'tf.y', t)), 2 - Math.exp(-t), 1e-8, `t=${t}`);
   });
   // Oracle: 1/(s^2 + 3 s + 2) step = 1/2 - e^-t + e^-2t / 2.
   const ssBlock = (over: Record<string, unknown> = {}): B => ({
     id: 'ss', type: 'STATE_SPACE', params: { A: [[0, 1], [-2, -3]], B: [[0], [1]], C: [[1, 0]], D: [[0]], ...over } });
   it('STATE_SPACE A = [[0 1] [-2 -3]], B = [0 1]^T, C = [1 0], D = 0: step response 1/2 - e^-t + e^-2t/2', () => {
     const r = sim([constant('c', 1), ssBlock()], ['c.out -> ss.u'], ['ss.y'], { stop: 2 });
-    for (const t of [0.5, 1, 2]) near(num(valueAt(r, 'ss.y', t)), 0.5 - Math.exp(-t) + 0.5 * Math.exp(-2 * t), 1e-7, `t=${t}`);
+    for (const t of [0.5, 1, 2]) near(num(valueAt(r, 'ss.y', t)), 0.5 - Math.exp(-t) + 0.5 * Math.exp(-2 * t), 1e-8, `t=${t}`);
   });
   it('STATE_SPACE with A 2x2 and B 3x1: compile error STATE_SPACE_DIMENSION_MISMATCH', () => {
     const r = sim([constant('c', 1), ssBlock({ B: [[0], [1], [1]] })], ['c.out -> ss.u'], ['ss.y']);
@@ -160,7 +177,7 @@ describe('A. continuous blocks (rk4, dt 0.01)', () => {
     const r = sim([constant('c', 1), { id: 'z', type: 'ZERO_POLE_GAIN', params: { zeros: [-2], poles: [-1], gain: 1 } }],
       ['c.out -> z.u'], ['z.y'], { stop: 2 });
     near(num(valueAt(r, 'z.y', 0)), 1, 1e-12, 'y(0)');
-    for (const t of [0.5, 1, 2]) near(num(valueAt(r, 'z.y', t)), 2 - Math.exp(-t), 1e-7, `t=${t}`);
+    for (const t of [0.5, 1, 2]) near(num(valueAt(r, 'z.y', t)), 2 - Math.exp(-t), 1e-8, `t=${t}`);
   });
 
   // Oracle: ideal derivative of a unit ramp is 1; the block is a filtered derivative s/(tau s + 1).
@@ -169,9 +186,8 @@ describe('A. continuous blocks (rk4, dt 0.01)', () => {
       ['c.out -> i.in', 'i.out -> d.u'], ['d.y'], { stop: 0.5 });
     near(num(valueAt(r, 'd.y', 0.5)), 1, 1e-6);
   });
-  // Simulink Derivative of a step: a one-step spike (1/dt) then 0. The filtered derivative must show a spike (rk4
-  // evaluates the step source at the stage t = 0.5 of the previous step, as Simulink ode4 does, so the spike height
-  // is not exactly 1/tau) and must return to 0 (it does not stay at a non-zero value).
+  // Simulink Derivative of a step: a one-step spike then 0. The filtered derivative must show a spike (its height
+  // depends on when the stage sees the step, see XBV-067) and must return to 0 (it does not stay non-zero).
   it('DERIVATIVE of Step(0.5), tau = dt = 0.01: spike at the step, back to 0 afterwards', () => {
     const r = sim([{ id: 's', type: 'Step', params: { stepTime: 0.5, initialValue: 0, finalValue: 1 } },
       { id: 'd', type: 'DERIVATIVE', params: { tau: 0.01 } }], ['s.out -> d.u'], ['d.y'], { stop: 1 });
