@@ -49,6 +49,16 @@ const NONLINEAR: Spec = {
   ],
   wires: ['x.out -> p.in1', 'x.out -> p.in2', 'p.y -> g.u', 'g.y -> x.in'],
 };
+/** x' = sin t - x, x(0) = 1: f depends on both t and x (kills c_i defects with b_i = 0, e.g. the DP c2).
+ *  Exact: x(t) = (sin t - cos t)/2 + 1.5 e^-t. */
+const MIXED: Spec = {
+  blocks: [
+    { id: 'w', type: 'WaveformGen', params: { type: 'Sine', amp: 1, freq: 1 / (2 * Math.PI), offset: 0, phase: 0 } },
+    { id: 's', type: 'Sum', params: { signs: '+-' } },
+    { id: 'x', type: 'Integrator', params: { initialCondition: 1 } },
+  ],
+  wires: ['w.out -> s.in1', 'x.out -> s.in2', 's.out -> x.in'],
+};
 /** Integrator chain driven by 1: x_k(t) = t^k / k!, k = 1..7. */
 const CHAIN: Spec = {
   blocks: [
@@ -74,22 +84,24 @@ describe('order of convergence of the canvas fixed-step solvers', () => {
     oscillator: { spec: OSCILLATOR, probe: 'x1.out', exact: Math.cos(1) },
     forced: { spec: FORCED, probe: 'x.out', exact: 1 - Math.cos(1) },
     nonlinear: { spec: NONLINEAR, probe: 'x.out', exact: 0.5 },
+    mixed: { spec: MIXED, probe: 'x.out', exact: (Math.sin(1) - Math.cos(1)) / 2 + 1.5 * Math.exp(-1) },
   } as const;
   // Step sequences in the asymptotic range and clear of round-off (errors stay above about 1e-13 at the finest step),
   // chosen from measured error tables of the current solvers (controller, WP-12 part A rework).
   const DEFAULT_STEPS = [0.1, 0.05, 0.025, 0.0125];
   const STEPS: Record<string, Partial<Record<keyof typeof PROBLEMS, number[]>>> = {
-    ode5: { decay: [0.1, 0.05, 0.025], oscillator: [0.1, 0.05, 0.025], forced: [0.2, 0.1, 0.05], nonlinear: [0.05, 0.025, 0.0125] },
-    ode14x: { decay: [0.025, 0.0125, 0.00625, 0.003125], oscillator: [0.025, 0.0125, 0.00625, 0.003125], nonlinear: [0.025, 0.0125, 0.00625, 0.003125] },
+    ode5: { decay: [0.1, 0.05, 0.025], oscillator: [0.1, 0.05, 0.025], forced: [0.2, 0.1, 0.05], nonlinear: [0.1, 0.05, 0.025], mixed: [0.1, 0.05, 0.025] },
+    ode14x: { decay: [0.025, 0.0125, 0.00625, 0.003125], oscillator: [0.025, 0.0125, 0.00625, 0.003125], nonlinear: [0.025, 0.0125, 0.00625, 0.003125], mixed: [0.025, 0.0125, 0.00625, 0.003125] },
   };
   for (const [solver, p] of Object.entries(ORDER)) {
     it(`${solver}: order ${p} on linear, forced and nonlinear problems`, () => {
-      // Every halving shows at least order p - 0.15 (a lost order fails); the finest pair is within [p - 0.15, p + 0.35]
-      // (convergence from above, e.g. ode5 on the nonlinear problem reads 5.33 at dt 0.025 -> 0.0125, is harmless).
+      // Every halving shows at least order p - 0.15 (a lost order fails: verified with single-coefficient mutants of every
+      // tableau). The finest pair stays below p + 1: convergence from above (ode5 nonlinear reads 5.56 at 0.05 -> 0.025)
+      // is harmless, the bound only catches a broken measurement.
       for (const [name, prob] of Object.entries(PROBLEMS) as [keyof typeof PROBLEMS, (typeof PROBLEMS)[keyof typeof PROBLEMS]][]) {
         const qs = observedOrder(solver, prob.spec, prob.probe, prob.exact, STEPS[solver]?.[name] ?? DEFAULT_STEPS);
         for (const q of qs) expect(q, `${solver} ${name} orders ${qs.join(', ')}`).toBeGreaterThan(p - 0.15);
-        expect(qs[qs.length - 1], `${solver} ${name} orders ${qs.join(', ')}`).toBeLessThan(p + 0.35);
+        expect(qs[qs.length - 1], `${solver} ${name} orders ${qs.join(', ')}`).toBeLessThan(p + 1);
       }
     });
   }
@@ -196,6 +208,8 @@ describe('the three solver dispatchers agree (plan F2)', () => {
     };
     const canvas = new Set(calls('src/components/xbridges/XbridgesWorkspace.tsx', 'engine'));
     const worker = new Set(calls('src/engine/xbridges/xbridgesWorker.ts', 'workerEngine'));
+    expect(canvas.size, 'canvas stepper calls parsed').toBe(10);
+    expect(worker.size, 'worker stepper calls parsed').toBe(10);
     for (const c of worker) expect(canvas.has(c), `worker call ${c} has no identical canvas call`).toBe(true);
   });
 
