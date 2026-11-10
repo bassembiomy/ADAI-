@@ -309,9 +309,12 @@ on state configuration, every mapped variable and every X-Bridges state slot:
 
 ## 8. Work packages
 
-Loop as in the powertrain plan: the planner (main session) writes the acceptance tests and reviews; an executor
-subagent implements harnesses and fixes; MATLAB work goes to the user's machine. One WP per commit. Exec: P =
-planner, E = executor, M = MATLAB on the user's machine.
+Loop (`.claude/skills/xb-verification-loop/SKILL.md`, decision D6): **Opus** controls the loop — writes the acceptance
+tests and briefs, owns the ledger and commits. **Sonnet** and **Haiku** (`xbv-executor`) implement and run the tests
+(Sonnet: harnesses, equations, fixes; Haiku: mechanical work and suite runs). **Fable** (`xbv-verifier`) verifies
+every WP — re-run, scope, hunks, oracles, one hand calculation — and its PASS is required before commit. MATLAB work
+goes to the user's machine. One WP per commit. In the table, P = controller, E = executor (the ledger names Sonnet or
+Haiku per WP), M = MATLAB on the user's machine.
 
 | WP | Scope | Exec | Deps |
 | --- | --- | --- | --- |

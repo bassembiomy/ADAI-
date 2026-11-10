@@ -2,7 +2,7 @@
  "plan": "docs/superpowers/plans/2026-11-10-xbridges-full-verification.md",
  "baseline": "54b71aa",
  "statuses": "todo | in_progress | waiting_matlab | done | blocked",
- "exec_legend": "P = planner (main session), E = xbv-executor, M = MATLAB on the user's machine",
+ "exec_legend": "Controller: Opus (main session). Executors: S = Sonnet xbv-executor, H = Haiku xbv-executor. Verifier: F = Fable xbv-verifier (PASS required before commit). M = MATLAB on the user's machine.",
  "gates_legend": "per block V1 contract, V2 equation, V3 corner cases, V4 time behaviour, V5 solver behaviour, V6 execution parity, V7 code parity, V8 UI: todo | pass | fail | n/a. G Simulink goldens: tbd (until the WP-15 map) | pending | pass | n/a | powertrain-ledger. Initial n/a: V5 without evaluateDerivatives, V6 without a codegen capability (the interpreter does not run the block), V8 for blocks not on the canvas palette, G for ADIA-only blocks.",
  "decisions": [
   {
@@ -34,6 +34,12 @@
    "date": "2026-11-10",
    "topic": "ADIA-only blocks",
    "decision": "Verified by U1-U16, conservation and bounded-state invariants and 60 s closed-loop lab runs; G is n/a."
+  },
+  {
+   "id": "D6",
+   "date": "2026-11-10",
+   "topic": "Loop roles",
+   "decision": "Opus controls the loop (acceptance tests, briefs, ledger, commits); Sonnet and Haiku are the executors and run the tests; Fable verifies every work package before it is committed."
   }
  ],
  "wps": [
@@ -54,25 +60,25 @@
   {
    "id": "WP-01",
    "title": "V1 contract snapshot and catalogue closure tests",
-   "exec": "P+E",
+   "exec": "H / F",
    "deps": [
     "WP-00"
    ],
-   "status": "todo"
+   "status": "in_progress"
   },
   {
    "id": "WP-02",
    "title": "Test kit",
-   "exec": "E",
+   "exec": "S / F",
    "deps": [
     "WP-00"
    ],
-   "status": "todo"
+   "status": "in_progress"
   },
   {
    "id": "WP-03",
    "title": "Universal battery U1-U16",
-   "exec": "P+E",
+   "exec": "S / F",
    "deps": [
     "WP-01",
     "WP-02"
@@ -82,7 +88,7 @@
   {
    "id": "WP-04",
    "title": "V2/V3 sources, element-wise math, reductions, trigonometric",
-   "exec": "P+E",
+   "exec": "S / F",
    "deps": [
     "WP-03"
    ],
@@ -91,7 +97,7 @@
   {
    "id": "WP-05",
    "title": "V2/V3 linear algebra, routing, logic, bitwise, sequential, sinks",
-   "exec": "P+E",
+   "exec": "S / F",
    "deps": [
     "WP-03"
    ],
@@ -100,7 +106,7 @@
   {
    "id": "WP-06",
    "title": "V2/V3/V4 continuous, discrete and delay, discontinuities, lookup, buses",
-   "exec": "P+E",
+   "exec": "S / F",
    "deps": [
     "WP-03"
    ],
@@ -109,7 +115,7 @@
   {
    "id": "WP-07",
    "title": "V2/V3/V4 control, signal processing and observers, optimisation and modelling",
-   "exec": "P+E",
+   "exec": "S / F",
    "deps": [
     "WP-06"
    ],
@@ -118,7 +124,7 @@
   {
    "id": "WP-08",
    "title": "V2/V3 power electronics, PWM, motor control, torque optimisation",
-   "exec": "P+E",
+   "exec": "S / F",
    "deps": [
     "WP-06"
    ],
@@ -127,7 +133,7 @@
   {
    "id": "WP-09",
    "title": "V2/V3 fuzzy, learning",
-   "exec": "P+E",
+   "exec": "S / F",
    "deps": [
     "WP-03"
    ],
@@ -136,7 +142,7 @@
   {
    "id": "WP-10",
    "title": "V2/V3 navigation, robot vacuum, DEM/CFD",
-   "exec": "P+E",
+   "exec": "S / F",
    "deps": [
     "WP-03"
    ],
@@ -145,7 +151,7 @@
   {
    "id": "WP-11",
    "title": "Powertrain: U1-U16, V6, V8; import powertrain ledger verdicts",
-   "exec": "P+E",
+   "exec": "H / F",
    "deps": [
     "WP-03"
    ],
@@ -154,7 +160,7 @@
   {
    "id": "WP-12",
    "title": "Solvers",
-   "exec": "P+E",
+   "exec": "S / F",
    "deps": [
     "WP-02"
    ],
@@ -163,7 +169,7 @@
   {
    "id": "WP-13",
    "title": "Engine semantics",
-   "exec": "P+E",
+   "exec": "S / F",
    "deps": [
     "WP-02"
    ],
@@ -172,7 +178,7 @@
   {
    "id": "WP-14",
    "title": "Worker parity and protocol",
-   "exec": "P+E",
+   "exec": "S / F",
    "deps": [
     "WP-13"
    ],
@@ -181,7 +187,7 @@
   {
    "id": "WP-15",
    "title": "Simulink goldens",
-   "exec": "P+M",
+   "exec": "M+H / F",
    "deps": [
     "WP-04",
     "WP-05",
@@ -194,7 +200,7 @@
   {
    "id": "WP-16",
    "title": "Canvas / interpreter parity and model corpus",
-   "exec": "P+E",
+   "exec": "S / F",
    "deps": [
     "WP-04",
     "WP-05",
@@ -208,7 +214,7 @@
   {
    "id": "WP-17",
    "title": "Per-block code parity, registry closure, compile matrix, limits",
-   "exec": "P+E",
+   "exec": "S / F",
    "deps": [
     "WP-16"
    ],
@@ -217,7 +223,7 @@
   {
    "id": "WP-18",
    "title": "State-machine alignment incl. AUTOSAR path",
-   "exec": "P+E",
+   "exec": "S / F",
    "deps": [
     "WP-17"
    ],
@@ -226,7 +232,7 @@
   {
    "id": "WP-19",
    "title": "UI component tests",
-   "exec": "P+E",
+   "exec": "S / F",
    "deps": [
     "WP-01"
    ],
@@ -235,7 +241,7 @@
   {
    "id": "WP-20",
    "title": "UI end-to-end",
-   "exec": "P+E",
+   "exec": "S / F",
    "deps": [
     "WP-19"
    ],
@@ -244,14 +250,14 @@
   {
    "id": "WP-21",
    "title": "Fix loop, one commit per finding",
-   "exec": "E",
+   "exec": "S / F",
    "deps": [],
    "status": "todo"
   },
   {
    "id": "WP-22",
    "title": "CI workflow, nightly random graphs, mutation run",
-   "exec": "E",
+   "exec": "H / F",
    "deps": [
     "WP-03",
     "WP-20"
@@ -261,7 +267,7 @@
   {
    "id": "WP-23",
    "title": "Close-out report",
-   "exec": "P",
+   "exec": "O / F",
    "deps": [
     "WP-21",
     "WP-22"
@@ -357,6 +363,30 @@
    "gate": "V3",
    "status": "open",
    "summary": "The parameter schema covers 74 of 290 block types; PARAMETER_* errors do not apply to the others."
+  },
+  {
+   "id": "XBV-012",
+   "plan_ref": "V1",
+   "severity": "S4",
+   "gate": "V1",
+   "status": "open",
+   "summary": "174 blocks have no equation text in their factory; ratchet list in tests/fixtures/xbridges/known-gaps.json."
+  },
+  {
+   "id": "XBV-013",
+   "plan_ref": "V1",
+   "severity": "S4",
+   "gate": "V1",
+   "status": "open",
+   "summary": "233 blocks have at least one port without a unit; ratchet list in tests/fixtures/xbridges/known-gaps.json."
+  },
+  {
+   "id": "XBV-014",
+   "plan_ref": "V1",
+   "severity": "S3",
+   "gate": "V1",
+   "status": "open",
+   "summary": "56 blocks use port types outside XSignalType (control, object, data, load, boolean); the engine's type checks do not know them. Ratchet list in tests/fixtures/xbridges/known-gaps.json."
   }
  ],
  "blocks": {
