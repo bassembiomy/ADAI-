@@ -277,7 +277,28 @@
    "deps": [
     "WP-13"
    ],
-   "status": "in_progress"
+   "status": "in_progress",
+   "rework": [
+    {
+     "round": 1,
+     "by": "Fable FAIL",
+     "items": [
+      "XBV-039 pin expected 2.25 (could never flip); correct value 2.5",
+      "test's deep function strip hid a DataCloneError in the real client for 2 PT blocks (XBV-047)",
+      "gaps: cancel mid-batch; snapshot of every stateful block (ROBOT_VACUUM_COMM deterministic but fails round trip)"
+     ],
+     "fix": "XBV-039 expectation 2.5 and scope/severity corrected; real XbridgesWorkerClient through a structured-clone fake worker for all 290 blocks (XBV-047 pinned); remaining gaps -> WP-14b"
+    }
+   ]
+  },
+  {
+   "id": "WP-14b",
+   "title": "Worker part B: snapshot round trip of every stateful block through the real client (ROBOT_VACUUM_COMM), cancel mid-batch, hybrid blocks with gear-shift stimulus after XBV-047, full node params and accumulated time in the parity reference",
+   "exec": "S / F",
+   "deps": [
+    "WP-14"
+   ],
+   "status": "todo"
   },
   {
    "id": "WP-15",
@@ -678,10 +699,10 @@
   {
    "id": "XBV-039",
    "plan_ref": "7.2 boundary mappings",
-   "severity": "S1",
+   "severity": "S2",
    "gate": "V6",
    "status": "open",
-   "summary": "In canvas simulation (main thread and worker) a state-machine variable mapped to a top-level Inport never reaches the X-Bridges model: the canvas writes the value with setSignalValue and params.value, but Inport.execute returns its own unconnected input (default 0), which overwrites it at the next evaluation (BlockDefinitions.ts ~2610). Measured: Inport override 2.5 into an Integrator for 1 s gives 0 instead of 2.5. Pinned in xbWorker.test.ts. The embedded interpreter/C path is checked in WP-16/18."
+   "summary": "In canvas simulation (main thread and worker) a state-machine variable mapped to a top-level Inport never reaches the X-Bridges model: the canvas writes the value with setSignalValue and params.value, but Inport.execute returns its own unconnected input (default 0), which overwrites it at the next evaluation (BlockDefinitions.ts ~2610). Measured: Inport override 2.5 into an Integrator for 1 s gives 0 instead of 2.5. Pinned in xbWorker.test.ts. The embedded interpreter/C path is checked in WP-16/18. Scope (verifier): this is the canvas run inside the X-Bridges workspace; a state machine running in the app uses App.tsx runAppSimulationTick -> smAppAdapter -> smInterpreter -> xbInterpreter, which WP-16/18 verify. Also: an Inport's own 'value' parameter (2.5, no override) gives 0 on the canvas. Severity lowered to S2."
   },
   {
    "id": "XBV-040",
@@ -738,6 +759,14 @@
    "gate": "V2",
    "status": "open",
    "summary": "All 24 trigonometric/hyperbolic blocks return null for a vector input; Simulink Trigonometric/Math Function blocks are element-wise. Pinned in xbEquations.math.test.ts."
+  },
+  {
+   "id": "XBV-047",
+   "plan_ref": "5.2 worker",
+   "severity": "S2",
+   "gate": "V6",
+   "status": "open",
+   "summary": "The canvas worker client (serializeModelForWorker) strips execute, evaluateDerivatives and ZeroCrossingFn but not updateDiscrete, so postMessage throws DataCloneError for PT_AUTOMATED_MANUAL_TRANSMISSION and PT_DUAL_CLUTCH_TRANSMISSION (worker run impossible for any model containing them). The worker engine also never re-creates updateDiscrete (XbridgesEngine.ts ~88-94), so once cloning is fixed these hybrid blocks would lose their discrete updates; WP-11 checks this with a gear-shift stimulus. Pinned (clone list) in xbWorker.test.ts."
   }
  ],
  "blocks": {

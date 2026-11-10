@@ -15,6 +15,8 @@ import { AdaptiveSolver } from '../AdaptiveSolver';
 import { StiffSolver } from '../StiffSolver';
 import { handleXbridgesWorkerMessage } from '../xbridgesWorker';
 import type { XbridgesWorkerRequest, XbridgesWorkerResponse } from '../xbridgesWorkerProtocol';
+import { BLOCK_LIBRARY } from '../BlockDefinitions';
+import { XbridgesWorkerClient } from '../../../services/xbridgesWorkerClient';
 import { buildModel, randomGraph } from '../testkit';
 
 type Spec = Parameters<typeof buildModel>[0];
@@ -161,7 +163,9 @@ describe('worker protocol', () => {
       for (let k = 0; k < 10; k++) r = send({ type: 'step', time: k * 0.1, dt: 0.1, solverType: 'rk4', inportOverrides: { in: 2.5 } });
       return r!;
     })();
-    expect(Math.abs(Number(viaInport.outputValues?.['x.out']) - 2.5 * 0.9)).toBeLessThan(1e-12);
+    // Reference: the same sequence with Constant 2.5 instead of the Inport gives x.out = 2.5 and state 2.5 after 10
+    // rk4 steps of 0.1 s (the published output is the last stage, evaluated at t = 1).
+    expect(Math.abs(Number(viaInport.outputValues?.['x.out']) - 2.5)).toBeLessThan(1e-12);
     expect(Math.abs(Number(viaInport.engineSnapshot?.blockStates.x) - 2.5)).toBeLessThan(1e-12);
   });
 
@@ -187,3 +191,36 @@ describe('worker protocol', () => {
     expect(send({ type: 'step', time: 0, dt: 0.1, solverType: 'rk4' }).ok).toBe(true);
   });
 });
+
+describe('the real worker client and a structured-clone boundary (as in the browser)', () => {
+  /** A Worker stand-in: postMessage structured-clones the request (DataCloneError on functions), the handler answers. */
+  const fakeWorker = () => {
+    const w: { onmessage: ((e: { data: XbridgesWorkerResponse }) => void) | null; onerror: unknown; postMessage: (m: unknown) => void; terminate: () => void } = {
+      onmessage: null,
+      onerror: null,
+      postMessage(message: unknown) {
+        const cloned = structuredClone(message) as XbridgesWorkerRequest;
+        const response = handleXbridgesWorkerMessage(cloned);
+        queueMicrotask(() => w.onmessage?.({ data: structuredClone(response) }));
+      },
+      terminate() {},
+    };
+    return w as unknown as Worker;
+  };
+
+  it('XBV-047: library blocks whose compile request cannot cross the boundary are exactly the pinned list', async () => {
+    const failing: string[] = [];
+    for (const type of Object.keys(BLOCK_LIBRARY).sort()) {
+      const client = new XbridgesWorkerClient(fakeWorker);
+      try {
+        await client.compile(buildModel({ blocks: [{ id: 'u', type }], wires: [] }), 0);
+      } catch (e) {
+        if (/clone/i.test(String((e as Error)?.message ?? e)) || (e as Error)?.name === 'DataCloneError') failing.push(type);
+      }
+    }
+    // serializeModelForWorker strips execute, evaluateDerivatives and ZeroCrossingFn but not updateDiscrete.
+    expect(failing).toEqual(['PT_AUTOMATED_MANUAL_TRANSMISSION', 'PT_DUAL_CLUTCH_TRANSMISSION']);
+  });
+
+});
+
