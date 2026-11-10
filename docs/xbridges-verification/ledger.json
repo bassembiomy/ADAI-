@@ -40,6 +40,12 @@
    "date": "2026-11-10",
    "topic": "Loop roles",
    "decision": "Opus controls the loop (acceptance tests, briefs, ledger, commits); Sonnet and Haiku are the executors and run the tests; Fable verifies every work package before it is committed."
+  },
+  {
+   "id": "D7",
+   "date": "2026-11-10",
+   "topic": "Who writes family acceptance tests",
+   "decision": "From WP-06 on, the controller writes an oracle specification per block (stimulus, closed-form expected values and their source, tolerances, Simulink rule) in the brief; the Sonnet executor turns it into the test file and pins product defects as it.fails with proposed finding ids; the controller reviews every expected value against the spec before dispatching the Fable verifier. Expected values never come from the code under test."
   }
  ],
  "wps": [
@@ -176,11 +182,11 @@
   {
    "id": "WP-06",
    "title": "V2/V3/V4 continuous, discrete and delay, discontinuities, lookup, buses",
-   "exec": "S / F",
+   "exec": "S (tests from controller oracle spec, D7) / F",
    "deps": [
     "WP-03"
    ],
-   "status": "todo"
+   "status": "in_progress"
   },
   {
    "id": "WP-07",

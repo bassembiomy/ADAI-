@@ -16,7 +16,7 @@ You are the **controller**. Follow `docs/superpowers/plans/2026-11-10-xbridges-f
 Each iteration:
 1. Read `docs/xbridges-verification/ledger.json`. Pick the first `todo` WP whose deps are all `done` (WP-21 fixes run alongside from the first finding).
    - `exec` contains `M` (MATLAB) and this session has no MATLAB: write the self-contained brief to `docs/xbridges-verification/matlab/<WP>-*.md`, set the WP to `waiting_matlab`, tell the user in one line which brief to run, and pick the next WP.
-2. Write the acceptance tests for that WP. Every expected value comes from a §3 oracle and names it in a comment. Run them once.
+2. Write the acceptance tests for that WP (from WP-06 on, decision D7: for block-family WPs write the oracle specification per block in the brief instead — stimulus, closed-form expected values with their source, tolerances, Simulink rule — and let the Sonnet executor write the test file from it; review every expected value against the spec before verification). Every expected value comes from a §3 oracle and names it in a comment. Run them once.
    - A test that fails because the harness does not exist yet is the executor's job.
    - A test that fails because the product is wrong is a **finding**: add `XBV-nnn` to the ledger (block, gate, expected and source, actual, severity S1–S4) and mark the test `it.fails` with the finding id. Never `skip`.
 3. Write the brief: WP id and goal; plan sections; the inventory rows of its blocks; the oracle per block; exact files the executor may change with `file:line` pointers; acceptance test file(s) and command (plan §11); anything learned from earlier WPs.
