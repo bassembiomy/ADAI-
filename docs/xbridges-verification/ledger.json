@@ -64,7 +64,13 @@
    "deps": [
     "WP-00"
    ],
-   "status": "in_progress"
+   "status": "done",
+   "verification": {
+    "executor": "Haiku: run-only, 300 passed / 3 expected fail twice; X-Bridges regression 74 files / 1657 passed",
+    "verifier": "Fable PASS (4 minor)",
+    "minors_addressed": "port frame, sampleRate and initial value plus initial state value added to the contract; it.fails for XBV-006/007 replaced by exact pinned lists; determinism checked across two block ids",
+    "final": "verification + testkit suites 327 passed"
+   }
   },
   {
    "id": "WP-02",
@@ -393,7 +399,7 @@
   "ROBOT_VACUUM_LIDAR_SENSOR": {
    "category": "library-only",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -407,7 +413,7 @@
   "ROBOT_VACUUM_ODOMETRY_SENSOR": {
    "category": "library-only",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -421,7 +427,7 @@
   "ROBOT_VACUUM_CLIFF_IR": {
    "category": "library-only",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -435,7 +441,7 @@
   "ROBOT_VACUUM_DUSTBIN_SENSOR": {
    "category": "library-only",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -449,7 +455,7 @@
   "ROBOT_VACUUM_MOTOR_CURRENT": {
    "category": "library-only",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -463,7 +469,7 @@
   "ROBOT_VACUUM_SENSOR_FUSION_EKF": {
    "category": "library-only",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -477,7 +483,7 @@
   "ROBOT_VACUUM_ROOM_SEGMENTATION": {
    "category": "library-only",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -491,7 +497,7 @@
   "ROBOT_VACUUM_SEMANTIC_MAP": {
    "category": "library-only",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -505,7 +511,7 @@
   "ROBOT_VACUUM_COVERAGE_PLANNER": {
    "category": "library-only",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -519,7 +525,7 @@
   "ROBOT_VACUUM_ROOM_SCHEDULER": {
    "category": "library-only",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -533,7 +539,7 @@
   "ROBOT_VACUUM_BATTERY_MONITOR": {
    "category": "library-only",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -547,7 +553,7 @@
   "ROBOT_VACUUM_GOAL_MANAGER": {
    "category": "library-only",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -561,7 +567,7 @@
   "ROBOT_VACUUM_3D_VIZ_COLORS": {
    "category": "library-only",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -575,7 +581,7 @@
   "ROBOT_VACUUM_WAYPOINT_GEN": {
    "category": "library-only",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -589,7 +595,7 @@
   "ROBOT_VACUUM_COLLISION_AVOID": {
    "category": "library-only",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -603,7 +609,7 @@
   "ROBOT_VACUUM_SURFACE_ADAPTER": {
    "category": "library-only",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -617,7 +623,7 @@
   "ROBOT_VACUUM_CLIFF_HALT": {
    "category": "library-only",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -631,7 +637,7 @@
   "ROBOT_VACUUM_VELOCITY_PID": {
    "category": "library-only",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -645,7 +651,7 @@
   "ROBOT_VACUUM_MODE_SUPERVISOR": {
    "category": "library-only",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -659,7 +665,7 @@
   "ROBOT_VACUUM_BUMPER_SENSOR": {
    "category": "library-only",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -673,7 +679,7 @@
   "ROBOT_VACUUM_SIDE_BRUSH": {
    "category": "library-only",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -687,7 +693,7 @@
   "ROBOT_VACUUM_SUCTION_PWM": {
    "category": "library-only",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -701,7 +707,7 @@
   "ROBOT_VACUUM_TERRAIN_MODEL": {
    "category": "library-only",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -715,7 +721,7 @@
   "ROBOT_VACUUM_COLLISION_MESH": {
    "category": "library-only",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -729,7 +735,7 @@
   "ROBOT_VACUUM_DOCK_BEACON": {
    "category": "library-only",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -743,7 +749,7 @@
   "ROBOT_VACUUM_CAPACITY_THRESHOLD": {
    "category": "library-only",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -757,7 +763,7 @@
   "ROBOT_VACUUM_HALT_ALERT": {
    "category": "library-only",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -771,7 +777,7 @@
   "ROBOT_VACUUM_DOCK_DETECT": {
    "category": "library-only",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -785,7 +791,7 @@
   "ROBOT_VACUUM_RESUME_SCHEDULER": {
    "category": "library-only",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -799,7 +805,7 @@
   "ROBOT_VACUUM_3D_SCENE_VIEW": {
    "category": "library-only",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013,XBV-014",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -813,7 +819,7 @@
   "ROBOT_VACUUM_FURNITURE_MESH": {
    "category": "library-only",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -827,7 +833,7 @@
   "ROBOT_VACUUM_DIRT_DENSITY": {
    "category": "library-only",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -841,7 +847,7 @@
   "ROBOT_VACUUM_ROOM_ZONE_COLORS": {
    "category": "library-only",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -855,7 +861,7 @@
   "ROBOT_VACUUM_COVERAGE_HEATMAP": {
    "category": "library-only",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -869,7 +875,7 @@
   "ROBOT_VACUUM_DOCK_ICON": {
    "category": "library-only",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -883,7 +889,7 @@
   "ROBOT_VACUUM_BATTERY_HUD": {
    "category": "library-only",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -897,7 +903,7 @@
   "ROBOT_VACUUM_DUSTBIN_HUD": {
    "category": "library-only",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -911,7 +917,7 @@
   "AND": {
    "category": "Logic Gates",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -925,7 +931,7 @@
   "OR": {
    "category": "Logic Gates",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -939,7 +945,7 @@
   "NOT": {
    "category": "Logic Gates",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -953,7 +959,7 @@
   "NAND": {
    "category": "Logic Gates",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -967,7 +973,7 @@
   "NOR": {
    "category": "Logic Gates",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -981,7 +987,7 @@
   "XOR": {
    "category": "Logic Gates",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -995,7 +1001,7 @@
   "BitwiseAND": {
    "category": "Bitwise",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1009,7 +1015,7 @@
   "BitwiseOR": {
    "category": "Bitwise",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1023,7 +1029,7 @@
   "BitwiseXOR": {
    "category": "Bitwise",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1037,7 +1043,7 @@
   "BitwiseNOT": {
    "category": "Bitwise",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1051,7 +1057,7 @@
   "ShiftLeft": {
    "category": "Bitwise",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1065,7 +1071,7 @@
   "ShiftRight": {
    "category": "Bitwise",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1079,7 +1085,7 @@
   "DFlipFlop": {
    "category": "Sequential",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1093,7 +1099,7 @@
   "JKFlipFlop": {
    "category": "Sequential",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1107,7 +1113,7 @@
   "Register": {
    "category": "Sequential",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1121,7 +1127,7 @@
   "Counter": {
    "category": "Discrete & Delay",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1135,7 +1141,7 @@
   "Clock": {
    "category": "Sources",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1149,7 +1155,7 @@
   "WaveformGen": {
    "category": "Sources",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1163,7 +1169,7 @@
   "Constant": {
    "category": "Sources",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1177,7 +1183,7 @@
   "Step": {
    "category": "Sources",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1191,7 +1197,7 @@
   "Sum": {
    "category": "Element-wise Math",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1205,7 +1211,7 @@
   "VectorAdd": {
    "category": "Element-wise Math",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1219,7 +1225,7 @@
   "VectorSub": {
    "category": "Element-wise Math",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1233,7 +1239,7 @@
   "VectorMul": {
    "category": "Element-wise Math",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1247,7 +1253,7 @@
   "VectorDiv": {
    "category": "Element-wise Math",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1261,7 +1267,7 @@
   "VectorPow": {
    "category": "Element-wise Math",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1275,7 +1281,7 @@
   "UnaryNeg": {
    "category": "Element-wise Math",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1289,7 +1295,7 @@
   "Abs": {
    "category": "Element-wise Math",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1303,7 +1309,7 @@
   "SumElements": {
    "category": "Reductions",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1317,7 +1323,7 @@
   "Mean": {
    "category": "Reductions",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1331,7 +1337,7 @@
   "Max": {
    "category": "Reductions",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1345,7 +1351,7 @@
   "MatrixMul": {
    "category": "Linear Algebra",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1359,7 +1365,7 @@
   "Transpose": {
    "category": "Linear Algebra",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1373,7 +1379,7 @@
   "Inverse": {
    "category": "Linear Algebra",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1387,7 +1393,7 @@
   "Determinant": {
    "category": "Linear Algebra",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1401,7 +1407,7 @@
   "MatrixConcat": {
    "category": "Linear Algebra",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1415,7 +1421,7 @@
   "MatrixDiag": {
    "category": "Linear Algebra",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1429,7 +1435,7 @@
   "DiagExtract": {
    "category": "library-only",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1443,7 +1449,7 @@
   "ExtractDiag": {
    "category": "library-only",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1457,7 +1463,7 @@
   "Diag": {
    "category": "library-only",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1471,7 +1477,7 @@
   "IdentityMatrix": {
    "category": "Linear Algebra",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1485,7 +1491,7 @@
   "SubMatrix": {
    "category": "Linear Algebra",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1499,7 +1505,7 @@
   "MatrixSolve": {
    "category": "Linear Algebra",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1513,7 +1519,7 @@
   "Integrator": {
    "category": "Continuous Systems",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1527,7 +1533,7 @@
   "Scope": {
    "category": "Sinks",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1541,7 +1547,7 @@
   "Inport": {
    "category": "Ports",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1555,7 +1561,7 @@
   "Outport": {
    "category": "Ports",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1569,7 +1575,7 @@
   "Subsystem": {
    "category": "Subsystem Architecture",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1583,7 +1589,7 @@
   "PWM_GENERATOR": {
    "category": "PWM & Modulation",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013,XBV-014",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1597,7 +1603,7 @@
   "THREE_PHASE_PWM": {
    "category": "PWM & Modulation",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013,XBV-014",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1611,7 +1617,7 @@
   "SIX_STEP_COMMUTATION": {
    "category": "Motor Control",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1625,7 +1631,7 @@
   "SENSORLESS_SIX_STEP": {
    "category": "Motor Control",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1639,7 +1645,7 @@
   "DC_VOLTAGE_SOURCE": {
    "category": "library-only",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1653,7 +1659,7 @@
   "THREE_PHASE_LOAD": {
    "category": "library-only",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1667,7 +1673,7 @@
   "THREE_PHASE_INVERTER": {
    "category": "Power Electronics & Bridges",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1681,7 +1687,7 @@
   "SINGLE_PHASE_H_BRIDGE": {
    "category": "Power Electronics & Bridges",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1695,7 +1701,7 @@
   "VOLTAGE_REFERENCE_GENERATOR": {
    "category": "Control & Feedback",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013,XBV-014",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1709,7 +1715,7 @@
   "FIELD_ORIENTED_CONTROL": {
    "category": "Control & Feedback",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013,XBV-014",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1723,7 +1729,7 @@
   "CLARKE_TRANSFORM": {
    "category": "library-only",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1737,7 +1743,7 @@
   "PARK_TRANSFORM": {
    "category": "library-only",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1751,7 +1757,7 @@
   "INVERSE_PARK": {
    "category": "library-only",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1765,7 +1771,7 @@
   "INVERSE_CLARKE": {
    "category": "library-only",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1779,7 +1785,7 @@
   "CURRENT_CONTROLLER_DQ": {
    "category": "Control & Feedback",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013,XBV-014",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1793,7 +1799,7 @@
   "DOE_MODEL": {
    "category": "Optimization & Modeling",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1807,7 +1813,7 @@
   "SPEED_CONTROLLER": {
    "category": "Control & Feedback",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013,XBV-014",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1821,7 +1827,7 @@
   "FLUX_REFERENCE": {
    "category": "Control & Feedback",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013,XBV-014",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1835,7 +1841,7 @@
   "ROTOR_POSITION_ESTIMATOR": {
    "category": "Signal Processing & Observers",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1849,7 +1855,7 @@
   "SVPWM_CORE": {
    "category": "PWM & Modulation",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1863,7 +1869,7 @@
   "SECTOR_SELECTOR": {
    "category": "library-only",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1877,7 +1883,7 @@
   "SWITCHING_TIME_CALCULATOR": {
    "category": "library-only",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013,XBV-014",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1891,7 +1897,7 @@
   "SVPWM_GATE_GENERATOR": {
    "category": "PWM & Modulation",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1905,7 +1911,7 @@
   "ZERO_SEQUENCE_INJECTION": {
    "category": "PWM & Modulation",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013,XBV-014",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1919,7 +1925,7 @@
   "SVPWM_MODULATOR": {
    "category": "PWM & Modulation",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1933,7 +1939,7 @@
   "DELAY": {
    "category": "Discrete & Delay",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1947,7 +1953,7 @@
   "INTEGRATOR_CONTINUOUS": {
    "category": "Continuous Systems",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1961,7 +1967,7 @@
   "INTEGRATOR_DISCRETE": {
    "category": "Discrete & Delay",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1975,7 +1981,7 @@
   "MUX": {
    "category": "Routing & Control Flow",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -1989,7 +1995,7 @@
   "DEMUX": {
    "category": "Routing & Control Flow",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2003,7 +2009,7 @@
   "GAIN": {
    "category": "Element-wise Math",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2017,7 +2023,7 @@
   "PRODUCT": {
    "category": "Element-wise Math",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2031,7 +2037,7 @@
   "SWITCH": {
    "category": "Routing & Control Flow",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013,XBV-014",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2045,7 +2051,7 @@
   "IF_ELSE": {
    "category": "Routing & Control Flow",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2059,7 +2065,7 @@
   "SWITCH_CASE": {
    "category": "Routing & Control Flow",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2073,7 +2079,7 @@
   "DATA_TYPE_CONVERSION": {
    "category": "Routing & Control Flow",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2087,7 +2093,7 @@
   "TERMINATOR": {
    "category": "Routing & Control Flow",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2101,7 +2107,7 @@
   "SIN": {
    "category": "Trigonometric & Hyperbolic",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2115,7 +2121,7 @@
   "COS": {
    "category": "Trigonometric & Hyperbolic",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2129,7 +2135,7 @@
   "TAN": {
    "category": "Trigonometric & Hyperbolic",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2143,7 +2149,7 @@
   "COT": {
    "category": "Trigonometric & Hyperbolic",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2157,7 +2163,7 @@
   "SEC": {
    "category": "Trigonometric & Hyperbolic",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2171,7 +2177,7 @@
   "COSEC": {
    "category": "Trigonometric & Hyperbolic",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2185,7 +2191,7 @@
   "ASIN": {
    "category": "Trigonometric & Hyperbolic",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2199,7 +2205,7 @@
   "ACOS": {
    "category": "Trigonometric & Hyperbolic",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2213,7 +2219,7 @@
   "ATAN": {
    "category": "Trigonometric & Hyperbolic",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2227,7 +2233,7 @@
   "ACOT": {
    "category": "Trigonometric & Hyperbolic",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2241,7 +2247,7 @@
   "ASEC": {
    "category": "Trigonometric & Hyperbolic",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2255,7 +2261,7 @@
   "ACOSEC": {
    "category": "Trigonometric & Hyperbolic",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2269,7 +2275,7 @@
   "SINH": {
    "category": "Trigonometric & Hyperbolic",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2283,7 +2289,7 @@
   "COSH": {
    "category": "Trigonometric & Hyperbolic",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2297,7 +2303,7 @@
   "TANH": {
    "category": "Trigonometric & Hyperbolic",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2311,7 +2317,7 @@
   "COTH": {
    "category": "Trigonometric & Hyperbolic",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2325,7 +2331,7 @@
   "SECH": {
    "category": "Trigonometric & Hyperbolic",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2339,7 +2345,7 @@
   "COSECH": {
    "category": "Trigonometric & Hyperbolic",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2353,7 +2359,7 @@
   "ASINH": {
    "category": "Trigonometric & Hyperbolic",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2367,7 +2373,7 @@
   "ACOSH": {
    "category": "Trigonometric & Hyperbolic",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2381,7 +2387,7 @@
   "ATANH": {
    "category": "Trigonometric & Hyperbolic",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2395,7 +2401,7 @@
   "ACOTH": {
    "category": "Trigonometric & Hyperbolic",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2409,7 +2415,7 @@
   "ASECH": {
    "category": "Trigonometric & Hyperbolic",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2423,7 +2429,7 @@
   "ACOSECH": {
    "category": "Trigonometric & Hyperbolic",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2437,7 +2443,7 @@
   "PID_CONTROLLER": {
    "category": "Control & Feedback",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013,XBV-014",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2451,7 +2457,7 @@
   "INTEGRATOR": {
    "category": "library-only",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2465,7 +2471,7 @@
   "UNIT_DELAY": {
    "category": "library-only",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2479,7 +2485,7 @@
   "MEMORY": {
    "category": "library-only",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2493,7 +2499,7 @@
   "SATURATION": {
    "category": "Discontinuities",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2507,7 +2513,7 @@
   "DEADZONE": {
    "category": "Discontinuities",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2521,7 +2527,7 @@
   "RATE_LIMITER": {
    "category": "Discontinuities",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2535,7 +2541,7 @@
   "RELAY": {
    "category": "Discontinuities",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2549,7 +2555,7 @@
   "DERIVATIVE": {
    "category": "library-only",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2563,7 +2569,7 @@
   "STATE_SPACE": {
    "category": "Continuous Systems",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2577,7 +2583,7 @@
   "TRANSFER_FUNCTION": {
    "category": "Continuous Systems",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2591,7 +2597,7 @@
   "ZERO_POLE_GAIN": {
    "category": "Continuous Systems",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2605,7 +2611,7 @@
   "LAPLACE_TRANSFORM": {
    "category": "Continuous Systems",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013,XBV-014",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2619,7 +2625,7 @@
   "DISCRETE_TRANSFER_FUNCTION": {
    "category": "Discrete & Delay",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2633,7 +2639,7 @@
   "PID_BASIC": {
    "category": "Control & Feedback",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013,XBV-014",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2647,7 +2653,7 @@
   "WHITE_NOISE": {
    "category": "Signal Processing & Observers",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2661,7 +2667,7 @@
   "BAND_LIMITED_NOISE": {
    "category": "Signal Processing & Observers",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2675,7 +2681,7 @@
   "DISCRETE_IMPULSE": {
    "category": "Signal Processing & Observers",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2689,7 +2695,7 @@
   "LOW_PASS_FILTER": {
    "category": "Signal Processing & Observers",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2703,7 +2709,7 @@
   "HIGH_PASS_FILTER": {
    "category": "Signal Processing & Observers",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2717,7 +2723,7 @@
   "MOVING_AVERAGE": {
    "category": "Signal Processing & Observers",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2731,7 +2737,7 @@
   "KALMAN_FILTER": {
    "category": "Signal Processing & Observers",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2745,7 +2751,7 @@
   "EXTENDED_KALMAN_FILTER": {
    "category": "Signal Processing & Observers",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2759,7 +2765,7 @@
   "MPC_CONTROLLER": {
    "category": "Optimization & Modeling",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013,XBV-014",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2773,7 +2779,7 @@
   "NUMERIC_REPRESENTATION": {
    "category": "Routing & Control Flow",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2787,7 +2793,7 @@
   "DOE_MODULE": {
    "category": "Optimization & Modeling",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013,XBV-014",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2801,7 +2807,7 @@
   "AC_INDUCTION_MOTOR": {
    "category": "Motor Control",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013,XBV-014",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2815,7 +2821,7 @@
   "IM_SCALAR_CONTROL": {
    "category": "Motor Control",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013,XBV-014",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2829,7 +2835,7 @@
   "IM_FOC_CONTROL": {
    "category": "Motor Control",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013,XBV-014",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2843,7 +2849,7 @@
   "IM_FLUX_OBSERVER": {
    "category": "Motor Control",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2857,7 +2863,7 @@
   "VF_SLIP_COMP": {
    "category": "Motor Control",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013,XBV-014",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2871,7 +2877,7 @@
   "FIELD_WEAKENING": {
    "category": "Torque Optimization",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013,XBV-014",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2885,7 +2891,7 @@
   "MTPA_CONTROLLER": {
    "category": "Torque Optimization",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013,XBV-014",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2899,7 +2905,7 @@
   "MTPA_FW_MANAGER": {
    "category": "Torque Optimization",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013,XBV-014",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2913,7 +2919,7 @@
   "AC_MOTOR_PID_CONTROL": {
    "category": "Learning Models",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013,XBV-014",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2927,7 +2933,7 @@
   "LMS_ADAPTIVE_FILTER": {
    "category": "Learning Models",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013,XBV-014",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2941,7 +2947,7 @@
   "NEURAL_NEURON_LEARNING": {
    "category": "Learning Models",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013,XBV-014",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2955,7 +2961,7 @@
   "RL_Q_LEARNING_CONTROLLER": {
    "category": "Learning Models",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013,XBV-014",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2969,7 +2975,7 @@
   "AIR_FRYER_LEARNING_MODEL": {
    "category": "Learning Models",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013,XBV-014",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2983,7 +2989,7 @@
   "ROBOT_VACUUM_BATTERY": {
    "category": "Learning Models",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013,XBV-014",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -2997,7 +3003,7 @@
   "ROBOT_VACUUM_COMM": {
    "category": "Learning Models",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013,XBV-014",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3011,7 +3017,7 @@
   "ROBOT_VACUUM_BOUSTROPHEDON_SWEEP": {
    "category": "Navigation & Autonomous",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013,XBV-014",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3025,7 +3031,7 @@
   "ROBOT_VACUUM_ERODE_MASK": {
    "category": "Navigation & Autonomous",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3039,7 +3045,7 @@
   "ROBOT_VACUUM_DOOR_TRACKER": {
    "category": "Navigation & Autonomous",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3053,7 +3059,7 @@
   "ROBOT_VACUUM_DOOR_CROSSING": {
    "category": "Navigation & Autonomous",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013,XBV-014",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3067,7 +3073,7 @@
   "ROBOT_VACUUM_CONTINUOUS_ENERGY": {
    "category": "Navigation & Autonomous",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013,XBV-014",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3081,7 +3087,7 @@
   "ROBOT_VACUUM_TOPOLOGY_RETURN": {
    "category": "Navigation & Autonomous",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013,XBV-014",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3095,7 +3101,7 @@
   "ROBOT_VACUUM_THETA_STAR": {
    "category": "Navigation & Autonomous",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013,XBV-014",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3109,7 +3115,7 @@
   "ROBOT_VACUUM_DIGITAL_TWIN": {
    "category": "Learning Models",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013,XBV-014",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3123,7 +3129,7 @@
   "ROBOT_VACUUM_MOTOR": {
    "category": "Learning Models",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013,XBV-014",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3137,7 +3143,7 @@
   "ROBOT_VACUUM_DYNAMICS": {
    "category": "Learning Models",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013,XBV-014",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3151,7 +3157,7 @@
   "ROBOT_VACUUM_ENVIRONMENT": {
    "category": "Learning Models",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013,XBV-014",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3165,7 +3171,7 @@
   "ROBOT_VACUUM_ODOMETRY": {
    "category": "Learning Models",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013,XBV-014",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3179,7 +3185,7 @@
   "ROBOT_VACUUM_FUSION": {
    "category": "Learning Models",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013,XBV-014",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3193,7 +3199,7 @@
   "ROBOT_VACUUM_SLAM": {
    "category": "Learning Models",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013,XBV-014",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3207,7 +3213,7 @@
   "ROBOT_VACUUM_NAV": {
    "category": "Learning Models",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013,XBV-014",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3221,7 +3227,7 @@
   "ROBOT_VACUUM_KINEMATICS": {
    "category": "Learning Models",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013,XBV-014",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3235,7 +3241,7 @@
   "ROBOT_VACUUM_WHEEL_CONTROL": {
    "category": "Learning Models",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013,XBV-014",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3249,7 +3255,7 @@
   "ROBOT_VACUUM_ENCODER": {
    "category": "Learning Models",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-014",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3263,7 +3269,7 @@
   "ROBOT_VACUUM_LIDAR": {
    "category": "Learning Models",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-014",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3277,7 +3283,7 @@
   "ROBOT_VACUUM_LOCALIZATION": {
    "category": "Learning Models",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-014",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3291,7 +3297,7 @@
   "ROBOT_VACUUM_MAPPING": {
    "category": "Learning Models",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-014",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3305,7 +3311,7 @@
   "ROBOT_VACUUM_COVERAGE": {
    "category": "Learning Models",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-014",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3319,7 +3325,7 @@
   "ROBOT_VACUUM_GLOBAL_PLANNER": {
    "category": "Learning Models",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-014",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3333,7 +3339,7 @@
   "ROBOT_VACUUM_OBSTACLE_AVOIDANCE": {
    "category": "Learning Models",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-014",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3347,7 +3353,7 @@
   "ROBOT_VACUUM_MOTION_CONTROLLER": {
    "category": "Learning Models",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-014",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3361,7 +3367,7 @@
   "ROBOT_VACUUM_MOTOR_COMMAND": {
    "category": "Learning Models",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-014",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3375,7 +3381,7 @@
   "ROBOT_VACUUM_VISUALIZATION": {
    "category": "Learning Models",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-014",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3389,7 +3395,7 @@
   "FUZZY_MF_TRIMF": {
    "category": "Fuzzy Logic",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3403,7 +3409,7 @@
   "FUZZY_MF_TRAPMF": {
    "category": "Fuzzy Logic",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3417,7 +3423,7 @@
   "FUZZY_MF_GAUSSMF": {
    "category": "Fuzzy Logic",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3431,7 +3437,7 @@
   "FUZZY_MF_SIGMF": {
    "category": "Fuzzy Logic",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3445,7 +3451,7 @@
   "FUZZY_AND": {
    "category": "Fuzzy Logic",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3459,7 +3465,7 @@
   "FUZZY_OR": {
    "category": "Fuzzy Logic",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3473,7 +3479,7 @@
   "FUZZY_NOT": {
    "category": "Fuzzy Logic",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3487,7 +3493,7 @@
   "FUZZY_RULE": {
    "category": "Fuzzy Logic",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3501,7 +3507,7 @@
   "FUZZY_INFERENCE_SYSTEM": {
    "category": "Fuzzy Control Systems",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3515,7 +3521,7 @@
   "FUZZY_DEFUZZIFY": {
    "category": "Fuzzy Logic",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3529,7 +3535,7 @@
   "FUZZY_PID_CONTROLLER": {
    "category": "Fuzzy Control Systems",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013,XBV-014",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3543,7 +3549,7 @@
   "FUZZY_SURFACE_VIEWER": {
    "category": "Fuzzy Control Systems",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3557,7 +3563,7 @@
   "DEM_WASHING_MACHINE_TWIN": {
    "category": "library-only",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3571,7 +3577,7 @@
   "DEM_DRUM": {
    "category": "library-only",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3585,7 +3591,7 @@
   "DEM_PARTICLE_SYSTEM": {
    "category": "library-only",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3599,7 +3605,7 @@
   "DEM_HERTZ_CONTACT": {
    "category": "library-only",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3613,7 +3619,7 @@
   "DEM_BOND_FABRIC": {
    "category": "library-only",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3627,7 +3633,7 @@
   "DEM_FLUID_COUPLING": {
    "category": "library-only",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3641,7 +3647,7 @@
   "CFD_SPH_WATER_SOLVER": {
    "category": "library-only",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3655,7 +3661,7 @@
   "DEM_CFD_COSIMULATION_INTERFACE": {
    "category": "library-only",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3669,7 +3675,7 @@
   "FABRIC_HARMONIC_ANALYZER": {
    "category": "library-only",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3683,7 +3689,7 @@
   "CFD_DEM_SURROGATE_LEARNER": {
    "category": "library-only",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012,XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3697,7 +3703,7 @@
   "ROOT_LOCUS": {
    "category": "Continuous Systems",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3711,7 +3717,7 @@
   "Note": {
    "category": "Annotations",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-012",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3725,7 +3731,7 @@
   "LOOKUP_1D": {
    "category": "Lookup Tables",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3739,7 +3745,7 @@
   "LOOKUP_2D": {
    "category": "Lookup Tables",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3753,7 +3759,7 @@
   "LOOKUP_ND": {
    "category": "Lookup Tables",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3767,7 +3773,7 @@
   "PRELOOKUP": {
    "category": "Lookup Tables",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3781,7 +3787,7 @@
   "INTERP_PRELOOKUP": {
    "category": "Lookup Tables",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3795,7 +3801,7 @@
   "BUS_CREATOR": {
    "category": "Buses",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3809,7 +3815,7 @@
   "BUS_SELECTOR": {
    "category": "Buses",
    "gates": {
-    "V1": "todo",
+    "V1": "fail: XBV-013",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3823,7 +3829,7 @@
   "PT_DRIVE_CYCLE_SOURCE": {
    "category": "Powertrain Blockset",
    "gates": {
-    "V1": "todo",
+    "V1": "pass",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3837,7 +3843,7 @@
   "PT_LONGITUDINAL_DRIVER": {
    "category": "Powertrain Blockset",
    "gates": {
-    "V1": "todo",
+    "V1": "pass",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3851,7 +3857,7 @@
   "PT_VEHICLE_BODY_1DOF": {
    "category": "Powertrain Blockset",
    "gates": {
-    "V1": "todo",
+    "V1": "pass",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3865,7 +3871,7 @@
   "PT_DATASHEET_BATTERY": {
    "category": "Powertrain Blockset",
    "gates": {
-    "V1": "todo",
+    "V1": "pass",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3879,7 +3885,7 @@
   "PT_EQUIVALENT_CIRCUIT_BATTERY": {
    "category": "Powertrain Blockset",
    "gates": {
-    "V1": "todo",
+    "V1": "pass",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3893,7 +3899,7 @@
   "PT_MAPPED_MOTOR": {
    "category": "Powertrain Blockset",
    "gates": {
-    "V1": "todo",
+    "V1": "pass",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3907,7 +3913,7 @@
   "PT_LONGITUDINAL_WHEEL": {
    "category": "Powertrain Blockset",
    "gates": {
-    "V1": "todo",
+    "V1": "pass",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3921,7 +3927,7 @@
   "PT_ROTATIONAL_INERTIA": {
    "category": "Powertrain Blockset",
    "gates": {
-    "V1": "todo",
+    "V1": "pass",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3935,7 +3941,7 @@
   "PT_TORSIONAL_COMPLIANCE": {
    "category": "Powertrain Blockset",
    "gates": {
-    "V1": "todo",
+    "V1": "pass",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3949,7 +3955,7 @@
   "PT_DISC_CLUTCH": {
    "category": "Powertrain Blockset",
    "gates": {
-    "V1": "todo",
+    "V1": "pass",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3963,7 +3969,7 @@
   "PT_TORQUE_CONVERTER": {
    "category": "Powertrain Blockset",
    "gates": {
-    "V1": "todo",
+    "V1": "pass",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3977,7 +3983,7 @@
   "PT_PLANETARY_GEAR": {
    "category": "Powertrain Blockset",
    "gates": {
-    "V1": "todo",
+    "V1": "pass",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -3991,7 +3997,7 @@
   "PT_FLOW_BOUNDARY": {
    "category": "Powertrain Blockset",
    "gates": {
-    "V1": "todo",
+    "V1": "pass",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -4005,7 +4011,7 @@
   "PT_FLOW_RESTRICTION": {
    "category": "Powertrain Blockset",
    "gates": {
-    "V1": "todo",
+    "V1": "pass",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -4019,7 +4025,7 @@
   "PT_CONTROL_VOLUME": {
    "category": "Powertrain Blockset",
    "gates": {
-    "V1": "todo",
+    "V1": "pass",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -4033,7 +4039,7 @@
   "PT_HEAT_EXCHANGER": {
    "category": "Powertrain Blockset",
    "gates": {
-    "V1": "todo",
+    "V1": "pass",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -4047,7 +4053,7 @@
   "PT_COMPRESSOR": {
    "category": "Powertrain Blockset",
    "gates": {
-    "V1": "todo",
+    "V1": "pass",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -4061,7 +4067,7 @@
   "PT_TURBINE": {
    "category": "Powertrain Blockset",
    "gates": {
-    "V1": "todo",
+    "V1": "pass",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -4075,7 +4081,7 @@
   "PT_DRIVE_SHAFT": {
    "category": "Powertrain Blockset",
    "gates": {
-    "V1": "todo",
+    "V1": "pass",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -4089,7 +4095,7 @@
   "PT_CI_CORE_ENGINE": {
    "category": "Powertrain Blockset",
    "gates": {
-    "V1": "todo",
+    "V1": "pass",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -4103,7 +4109,7 @@
   "PT_IDEAL_FIXED_GEAR_TRANSMISSION": {
    "category": "Powertrain Blockset",
    "gates": {
-    "V1": "todo",
+    "V1": "pass",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -4117,7 +4123,7 @@
   "PT_AUTOMATED_MANUAL_TRANSMISSION": {
    "category": "Powertrain Blockset",
    "gates": {
-    "V1": "todo",
+    "V1": "pass",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -4131,7 +4137,7 @@
   "PT_DUAL_CLUTCH_TRANSMISSION": {
    "category": "Powertrain Blockset",
    "gates": {
-    "V1": "todo",
+    "V1": "pass",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -4145,7 +4151,7 @@
   "PT_CONTINUOUSLY_VARIABLE_TRANSMISSION": {
    "category": "Powertrain Blockset",
    "gates": {
-    "V1": "todo",
+    "V1": "pass",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -4159,7 +4165,7 @@
   "PT_AMT_CONTROLLER": {
    "category": "Powertrain Blockset",
    "gates": {
-    "V1": "todo",
+    "V1": "pass",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -4173,7 +4179,7 @@
   "PT_DCT_CONTROLLER": {
    "category": "Powertrain Blockset",
    "gates": {
-    "V1": "todo",
+    "V1": "pass",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -4187,7 +4193,7 @@
   "PT_CVT_CONTROLLER": {
    "category": "Powertrain Blockset",
    "gates": {
-    "V1": "todo",
+    "V1": "pass",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -4201,7 +4207,7 @@
   "PT_CI_CONTROLLER": {
    "category": "Powertrain Blockset",
    "gates": {
-    "V1": "todo",
+    "V1": "pass",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -4215,7 +4221,7 @@
   "PT_MAPPED_SI_ENGINE": {
    "category": "Powertrain Blockset",
    "gates": {
-    "V1": "todo",
+    "V1": "pass",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -4229,7 +4235,7 @@
   "PT_MAPPED_CI_ENGINE": {
    "category": "Powertrain Blockset",
    "gates": {
-    "V1": "todo",
+    "V1": "pass",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -4243,7 +4249,7 @@
   "PT_OPEN_DIFFERENTIAL": {
    "category": "Powertrain Blockset",
    "gates": {
-    "V1": "todo",
+    "V1": "pass",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -4257,7 +4263,7 @@
   "PT_LIMITED_SLIP_DIFFERENTIAL": {
    "category": "Powertrain Blockset",
    "gates": {
-    "V1": "todo",
+    "V1": "pass",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -4271,7 +4277,7 @@
   "PT_TRANSFER_CASE": {
    "category": "Powertrain Blockset",
    "gates": {
-    "V1": "todo",
+    "V1": "pass",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -4285,7 +4291,7 @@
   "PT_AMBIENT": {
    "category": "Powertrain Blockset",
    "gates": {
-    "V1": "todo",
+    "V1": "pass",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -4299,7 +4305,7 @@
   "PT_THROTTLE_BODY": {
    "category": "Powertrain Blockset",
    "gates": {
-    "V1": "todo",
+    "V1": "pass",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -4313,7 +4319,7 @@
   "PT_INTAKE_MANIFOLD": {
    "category": "Powertrain Blockset",
    "gates": {
-    "V1": "todo",
+    "V1": "pass",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -4327,7 +4333,7 @@
   "PT_TURBOCHARGER": {
    "category": "Powertrain Blockset",
    "gates": {
-    "V1": "todo",
+    "V1": "pass",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -4341,7 +4347,7 @@
   "PT_DOE_SWEEPER": {
    "category": "Powertrain Blockset",
    "gates": {
-    "V1": "todo",
+    "V1": "pass",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -4355,7 +4361,7 @@
   "PT_ENGINE_DYNO": {
    "category": "Powertrain Blockset",
    "gates": {
-    "V1": "todo",
+    "V1": "pass",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -4369,7 +4375,7 @@
   "PT_CALIBRATION_ECU": {
    "category": "Powertrain Blockset",
    "gates": {
-    "V1": "todo",
+    "V1": "pass",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -4383,7 +4389,7 @@
   "PT_CALIBRATION_MAP_2D": {
    "category": "Powertrain Blockset",
    "gates": {
-    "V1": "todo",
+    "V1": "pass",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -4397,7 +4403,7 @@
   "PT_CI_CYLINDER": {
    "category": "Powertrain Blockset",
    "gates": {
-    "V1": "todo",
+    "V1": "pass",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -4411,7 +4417,7 @@
   "PT_SI_CYLINDER": {
    "category": "Powertrain Blockset",
    "gates": {
-    "V1": "todo",
+    "V1": "pass",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -4425,7 +4431,7 @@
   "PT_FUEL_INJECTOR": {
    "category": "Powertrain Blockset",
    "gates": {
-    "V1": "todo",
+    "V1": "pass",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",
@@ -4439,7 +4445,7 @@
   "PT_VVT_VALVETRAIN": {
    "category": "Powertrain Blockset",
    "gates": {
-    "V1": "todo",
+    "V1": "pass",
     "V2": "todo",
     "V3": "todo",
     "V4": "todo",

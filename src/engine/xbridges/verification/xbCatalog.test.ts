@@ -2,11 +2,9 @@
  * WP-01 — catalogue closure: palettes, factories, code-generation registry, help and port well-formedness agree.
  * Plan: docs/superpowers/plans/2026-11-10-xbridges-full-verification.md (sections 1 F6/F7, 2 V1, 4.1 U1).
  *
- * Gaps that exist today are pinned in two ways, never skipped:
- *  - a single defect is an `it.fails` tied to its ledger finding; it turns red as soon as the defect is fixed, and the
- *    fix commit changes `it.fails` to `it`;
- *  - a gap shared by many blocks is a ratchet list in tests/fixtures/xbridges/known-gaps.json: the actual list must
- *    equal the pinned one, so a new block cannot join it and a fixed block must be removed from it.
+ * Gaps that exist today are pinned, never skipped: each is a ratchet list in tests/fixtures/xbridges/known-gaps.json
+ * keyed by its ledger finding. The actual list must equal the pinned one, so a new gap cannot appear unnoticed and a
+ * fixed gap must be removed from the list (the closing condition of the finding is an empty list).
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -39,8 +37,9 @@ describe('palettes and factories', () => {
     expect(HELP.filter((t) => typeof BLOCK_LIBRARY[t] !== 'function')).toEqual([]);
   });
 
-  it.fails('XBV-007: the canvas palette and the help/AI palette list the same block types', () => {
-    expect(HELP).toEqual(CANVAS);
+  it('XBV-007: types on only one of the two palettes are exactly the pinned lists', () => {
+    expect(CANVAS.filter((t) => !HELP.includes(t))).toEqual(gaps['XBV-007 types only on the canvas palette']);
+    expect(HELP.filter((t) => !CANVAS.includes(t))).toEqual(gaps['XBV-007 types only on the help palette']);
   });
 
   it('every factory builds a block whose type is its library key', () => {
@@ -54,12 +53,14 @@ describe('palettes and factories', () => {
 });
 
 describe('code-generation registry closure (XBV-006)', () => {
-  it.fails('XBV-006: every XB_CAPABILITIES entry has a factory', () => {
-    expect(Object.keys(XB_CAPABILITIES).filter((t) => typeof BLOCK_LIBRARY[t] !== 'function')).toEqual([]);
+  it('XBV-006: capability entries without a factory are exactly the pinned list', () => {
+    expect(Object.keys(XB_CAPABILITIES).filter((t) => typeof BLOCK_LIBRARY[t] !== 'function').sort())
+      .toEqual(gaps['XBV-006 capability entries without a factory']);
   });
 
-  it.fails('XBV-006: every factory has its own XB_CAPABILITIES entry', () => {
-    expect(TYPES.filter((t) => !Object.prototype.hasOwnProperty.call(XB_CAPABILITIES, t))).toEqual([]);
+  it('XBV-006: factories without their own XB_CAPABILITIES entry are exactly the pinned list', () => {
+    expect(TYPES.filter((t) => !Object.prototype.hasOwnProperty.call(XB_CAPABILITIES, t)))
+      .toEqual(gaps['XBV-006 factories without a capability entry']);
   });
 
   it('every capability that is not codegen-capable states a reason', () => {

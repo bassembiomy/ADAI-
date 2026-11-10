@@ -3,8 +3,8 @@
  * Plan: docs/superpowers/plans/2026-11-10-xbridges-full-verification.md (section 2, V1).
  *
  * The contract of a block is what a model, the properties panel, the code generator and the state-machine mappings
- * rely on: ports (id, name, direction, order, type, unit, dimensions, position, data type), parameter names with
- * their default values, the shape of the initial state, and the execution flags. Any change to it must be
+ * rely on: ports (id, name, direction, order, type, unit, dimensions, position, data type, frame, sample rate, initial
+ * value), parameter names with their default values, the initial state (shape and value), and the execution flags. Any change to it must be
  * deliberate: it shows up as a diff of tests/fixtures/xbridges/contracts.json and is reviewed like code.
  *
  * Regenerate after a reviewed, intended change only:
@@ -51,6 +51,9 @@ const portOf = (p: XPort) => ({
   dimensions: p.dimensions ?? null,
   position: p.position ?? null,
   dataType: p.dataType ?? null,
+  frame: p.frame ?? null,
+  sampleRate: p.sampleRate ?? null,
+  initialValue: defaultOf(p.value),
 });
 
 const stateShapeOf = (state: unknown): unknown => {
@@ -60,14 +63,15 @@ const stateShapeOf = (state: unknown): unknown => {
   return { kind: typeof state };
 };
 
-export const contractOf = (type: string) => {
-  const b = BLOCK_LIBRARY[type]('contract', {});
+export const contractOf = (type: string, id = 'contract') => {
+  const b = BLOCK_LIBRARY[type](id, {});
   return {
     type: b.type,
     inputs: b.inputs.map(portOf),
     outputs: b.outputs.map(portOf),
     parameters: Object.fromEntries(Object.keys(b.params ?? {}).sort().map((k) => [k, defaultOf(b.params[k])])),
     state: stateShapeOf(b.state),
+    initialState: defaultOf(b.state),
     flags: {
       isStateful: Boolean(b.isStateful),
       directFeedthrough: b.directFeedthrough ?? null,
@@ -84,8 +88,8 @@ export const contractOf = (type: string) => {
 const TYPES = Object.keys(BLOCK_LIBRARY).sort();
 
 describe('V1 contract snapshot', () => {
-  it('default construction is deterministic (two instances give the same contract)', () => {
-    for (const type of TYPES) expect(contractOf(type), type).toEqual(contractOf(type));
+  it('default construction is deterministic and independent of the block id', () => {
+    for (const type of TYPES) expect(contractOf(type, 'blockA'), type).toEqual(contractOf(type, 'other_block_2'));
   });
 
   it('every library block matches tests/fixtures/xbridges/contracts.json', async () => {
