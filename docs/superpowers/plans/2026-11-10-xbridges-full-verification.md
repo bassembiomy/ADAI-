@@ -1,6 +1,6 @@
 # X-Bridges full verification plan (blocks, ports, equations, UI, simulation, solvers, C code, state machine)
 
-Branch: `automative`. Baseline: `6b0b19d`. Status: plan only — no test or production code is changed by this commit.
+Branch: `automative`. Baseline: `54b71aa`. Status: plan only — no test or production code is changed by this commit.
 
 ## 0. User mandate
 2026-11-10: "Make a full implementation plan for testing the X-Bridges module: its equations, ports, UI, simulation
@@ -17,52 +17,67 @@ What this plan commits to:
 - Tests are written first and are never weakened, skipped or deleted to get green. A failing test is a finding
   (§9), fixed in its own commit with the Simulink rule it follows.
 
-## 1. Baseline (measured on `6b0b19d`, scripts in §8 WP-00 reproduce every number)
+## 1. Baseline (measured on `54b71aa`, scripts in §8 WP-00 reproduce every number)
 
 | Fact | Value |
 | --- | --- |
-| Block factories in `BLOCK_LIBRARY` (`src/engine/xbridges/BlockDefinitions.ts:916`) | 289 (45 are `PT_*`) |
+| Block factories in `BLOCK_LIBRARY` (`src/engine/xbridges/BlockDefinitions.ts`) | 290 (45 are `PT_*`) |
 | Blocks on the canvas palette (`XBRIDGES_CATEGORIES`, 30 categories) | 228 |
 | Library blocks not on the palette (reachable from labs, files, agent, DOE, TRM) | 62 |
-| Ports in the catalogue / ports with a unit | 1267 / 374 |
-| Blocks with an `equation` text / without | 116 / 173 |
+| Ports in the catalogue / ports with a unit | 1269 / 374 |
+| Blocks with an `equation` text / without | 116 / 174 |
+| Block types with a parameter schema (`parameterSchema.ts`: kind, integer rule, option list) | 74 of 290 |
 | Stateful blocks / with `evaluateDerivatives` / with `ZeroCrossingFn` / with `updateDiscrete` | 107 / 41 / 4 / 2 |
 | Blocks with dynamic inputs / outputs | 14 / 1 |
 | Entries in `XB_CAPABILITIES` / `codegen: true` | 288 / 100 |
-| Blocks named in any test file / in an engine-level test / in no test at all | 213 / 141 / 76 |
-| Palette blocks with no engine-level test | 100 |
-| Solvers offered on the canvas | 9: `euler`, `ode2`, `ode3`, `rk4`, `ode5`, `ode23`, `ode45`, `ode14x`, `ode23tb` |
+| Blocks named in any test file / in an engine-level test / in no test at all | 215 / 162 / 75 |
+| Palette blocks with no engine-level test | 80 |
+| Solvers offered on the canvas | 10: `euler`, `ode2`, `ode3`, `rk4`, `ode5`, `ode23`, `ode45`, `ode14x`, `ode23tb`, `discrete` |
+| Solvers accepted by the embedded (state-machine) path | 3: `euler`, `rk4`, `discrete` |
+| Diagnostic codes the engine can emit (`XbridgesEngine.ts`, `modelChecks.ts`, `simulationConfig.ts`, `parameterEvaluation.ts`) | 36 |
 | Playwright specs that run an X-Bridges model | 1 (`tests/e2e/xbridges-run-engine.spec.ts`) |
+
+Already in place (this plan extends these suites and does not duplicate them): the 2026-11-08 work —
+`simulinkBlockReview.test.ts` (palette integrity, rate limiter, delay, PID form, relay, switch criterion),
+`simulinkDiagnostics.test.ts` (connectivity, sample time, parameter constraints, runtime math, s/z mixing),
+`parameterValidation.test.ts`, `xbDiscreteSolver.test.ts`, `xbSimEmbeddedParity.test.ts`,
+`xbConstantDataType.test.ts`, `xbParameterExpressions.test.ts`; the interpreter ↔ C conformance cases
+(`xbCConformanceCases.ts`, 26 ids each); the powertrain suites.
 
 Findings that shape the plan:
 - **F1 Three independent implementations of block math.** Canvas: `BlockDefinitions.ts` `execute` /
-  `evaluateDerivatives` driven by `XbridgesEngine` + `Solvers`/`AdaptiveSolver`/`StiffSolver`. State machine
+  `evaluateDerivatives` driven by `XbridgesEngine` + `Solvers`/`AdaptiveSolver`/`StiffSolver`. State-machine
   simulation: `src/utils/stateMachine/xbInterpreter.ts` (own block math, no import of `BLOCK_LIBRARY`). C:
-  `xbCGenerator.ts`. Existing conformance pairs interpreter ↔ C (26 case ids each). **Nothing pairs the canvas
-  engine with the interpreter**, so a block can simulate one way on the canvas and another way inside a state.
-- **F2 The solver dispatch is written four times**: `XbridgesWorkspace.tsx:1932` (run loop), `:2742` (single
-  step), `xbridgesWorker.ts:138`, `Solvers.ts:495`. Each must be proven to pick the same stepper.
-- **F3 Canvas "adaptive" solvers are called with the fixed step** (`AdaptiveSolver.stepODE23/45(engine, t,
-  fixedStep)`, `stepODE23TB(..., 1e-3, 1e-6)` with hard-coded tolerances). Whether error control is active on the
-  canvas, and what the user's tolerance means, has no test.
+  `xbCGenerator.ts`. Interpreter ↔ C is paired by the conformance cases. Canvas ↔ interpreter is paired only by
+  `xbSimEmbeddedParity.test.ts`: **one unit-constant input, 6 ticks, scalar, `discrete` solver**. Steps, sign
+  changes, saturation entry/exit, vectors, matrices, `euler`/`rk4` and multi-block graphs are not compared, so a
+  block can still simulate one way on the canvas and another way inside a state.
+- **F2 The solver dispatch is written three times**: `stepLiveSolver` (`XbridgesWorkspace.tsx:167`),
+  `xbridgesWorker.ts:145`, `Solvers.runFixedStep` (`Solvers.ts:541`). Each must be proven to pick the same stepper.
+- **F3 Canvas "adaptive" solvers are called with the fixed step** (`AdaptiveSolver.stepODE23/45(engine, t, dt)`,
+  `stepODE23TB(..., 1e-3, 1e-6)` with hard-coded tolerances). Whether error control is active on the canvas, and
+  what the user's tolerance means, has no test.
 - **F4 `SolverOptions.solver` admits `ode113`, `ode23s`, `ode15s`**, which no dispatcher implements
   (`UNSUPPORTED_SOLVER`). The contract must be pinned by a test.
 - **F5 Only 4 blocks declare zero crossings** (`Step`, `PT_DISC_CLUTCH`, `PT_AUTOMATED_MANUAL_TRANSMISSION`,
   `PT_DUAL_CLUTCH_TRANSMISSION`). `SATURATION`, `DEADZONE`, `RELAY`, `SWITCH`, `Abs`, `RATE_LIMITER`, hit-style
   logic and PWM carriers do not; with variable-step solvers Simulink locates these events and X-Bridges will not.
-- **F6 Palette entry with no factory**: `COSEC` is in both palettes (`BlockDefinitions.ts:11657`,
-  `XbridgesLibrary.ts:316`) and in `XB_CAPABILITIES`, but `BLOCK_LIBRARY` has no `COSEC` key, so the drop is a silent
-  no-op (`XbridgesWorkspace.tsx:2171`). `SUM_JUNCTION` likewise has a capability and no factory.
+- **F6 Capability without a factory**: `SUM_JUNCTION` is `codegen: true` in `XB_CAPABILITIES` and has no
+  `BLOCK_LIBRARY` entry; 3 library types have no capability entry. (Palette → factory is now closed by review test
+  R1; the capability registry is not.)
 - **F7 Two palettes** (`BlockDefinitions.ts` for the canvas, `src/utils/xbridges/XbridgesLibrary.ts` for help and the
   AI catalogue) with no test that they list the same blocks.
-- **F8 Connection checks are warnings only** (`XbridgesEngine.validateConnections`): type, unit, frame, data type,
-  sample rate and dimension mismatches never stop a run. Simulink errors on dimension and data-type mismatch.
-- **F9 `docs/XBRIDGES_EMBEDDED_CODEGEN.md` lists ~40 embedded-capable types; the registry has 100.** The document
-  and the registry must be reconciled by a test, not by hand.
-- **F10 The embedded path allows only `euler`/`rk4`, fixed step, no algebraic loops**
+- **F8 Signal mismatches on a connection are still warnings** (`XbridgesEngine.validateConnections`):
+  `DIMENSION_MISMATCH`, `DATA_TYPE_MISMATCH`, `SIGNAL_TYPE_MISMATCH`, `SAMPLE_RATE_MISMATCH`. Parameter and sample-time
+  problems are now compile errors (`modelChecks.ts`); Simulink also errors on dimension and data-type mismatch.
+- **F9 `docs/XBRIDGES_EMBEDDED_CODEGEN.md` lists ~40 embedded-capable types and only `euler`/`rk4`; the registry has
+  100 and the model has `discrete`.** The document and the registry must be reconciled by a test, not by hand.
+- **F10 The embedded path allows only fixed-step `euler`/`rk4`/`discrete`, no algebraic loops**
   (`XB_ALGEBRAIC_LOOP_UNSUPPORTED`), max vector 16, max matrix 8; the canvas allows more. Each limit needs a test
   on both sides of the boundary.
-- **F11 No Simulink in this environment** (no MATLAB; `npm ci` is blocked by `cdn.sheetjs.com`, so suites run on
+- **F11 The parameter schema covers 74 of 290 block types.** For the other 216, Simulink-style parameter
+  evaluation and errors (`PARAMETER_*` codes) do not apply; U7/U8 (§4.1) decide per block whether that is a defect.
+- **F12 No Simulink in this environment** (no MATLAB; `npm ci` is blocked by `cdn.sheetjs.com`, so suites run on
   the user's machine or CI). MATLAB R2024b is on the user's Windows machine (powertrain plan F11).
 
 ## 2. Definition of "works like Simulink": eight gates per block
@@ -120,7 +135,7 @@ A test never computes its expectation by calling the code under test.
 
 ## 4. Corner-case matrix
 
-### 4.1 Universal battery (generated for all 289 blocks from the contract; `xbCorners.universal.test.ts`)
+### 4.1 Universal battery (generated for all 290 blocks from the contract; `xbCorners.universal.test.ts`)
 
 | # | Case | Expected |
 | --- | --- | --- |
@@ -130,7 +145,7 @@ A test never computes its expectation by calling the code under test.
 | U4 | Inputs `NaN`, `±Infinity` | propagates as IEEE or raises `NUMERICAL_INSTABILITY`; never turns into a plausible finite number |
 | U5 | Wrong value kind (boolean, string, `null`, `undefined`, object, nested array) on each input | block `error` or documented coercion; no throw that kills the run |
 | U6 | Scalar / vector `[n]` (n = 1, 2, 3, 16, 17) / matrix (1×1, 1×n, n×1, 8×8, 9×9) / empty `[]` / ragged matrix | per declared shapes: correct broadcast, or a dimension error |
-| U7 | Every numeric parameter at 0, negative, fractional, huge, `NaN`, numeric string, MATLAB-style string (`[1 2;3 4]`) | valid where physical; otherwise block `error`; **no `||` default that turns a legitimate 0 into the default** |
+| U7 | Every numeric parameter at 0, negative, fractional, huge, `NaN`, empty, numeric string, MATLAB-style string (`[1 2;3 4]`), expression (`2*pi`, `1e-3`) | valid where physical; otherwise the matching `PARAMETER_*` compile error (as `parameterEvaluation.ts` does for the 74 schema'd types — F11); **no `||` default that turns a legitimate 0 into the default** |
 | U8 | Every enum parameter: each declared value, wrong case, unknown value | each value changes behaviour as documented; unknown → error |
 | U9 | Determinism: two fresh instances, same inputs, 1000 steps | identical outputs (seeded noise included) |
 | U10 | Purity: `execute` must not mutate `inputs`, `params` or the incoming `state` | deep-equal before/after |
@@ -171,6 +186,9 @@ A test never computes its expectation by calling the code under test.
 - **Order of convergence** for each fixed-step method on `ẋ = −x`, a harmonic oscillator, a nonlinear logistic
   problem and a time-dependent forcing `ẋ = cos t`: halve `dt` five times; the observed order must be 1 (`euler`),
   2 (`ode2`), 3 (`ode3`), 4 (`rk4`), 5 (`ode5`) within ±0.15; `ode14x` order equals its extrapolation order.
+- **`discrete`**: purely discrete models give the same samples as `euler`/`rk4` at every hit; a model with
+  continuous states is refused (`CONTINUOUS_STATES_WITH_DISCRETE_SOLVER`) on the canvas and in the embedded path;
+  `fixedStep: 'auto'` resolves to the fundamental sample time (GCD of the block rates), else `(stop − start)/50`.
 - **Butcher tableau check**: one step on `ẋ = f(t)` polynomials of degree p integrates exactly up to the method's
   order and not above — catches a wrong coefficient that an order test on one problem can hide.
 - **Adaptive (`ode23`, `ode45`)**: global error scales with `RelTol`; `AbsTol` governs near zero; `maxStep` and
@@ -179,9 +197,10 @@ A test never computes its expectation by calling the code under test.
   either controls error or the UI says "fixed step" — the test pins which.
 - **Stiff (`ode14x`, `ode23tb`)**: Van der Pol μ = 1000, Robertson kinetics, a linear system with eigenvalues
   −1 and −1e6: stable at steps where explicit methods blow up; Newton failure → diagnostic, not `NaN`.
-- **Contract**: every name in `SolverOptions.solver` either runs or returns `UNSUPPORTED_SOLVER` (F4); the four
-  dispatchers (F2) select the same stepper for every name — one table-driven test imports all four paths.
-- **Edge inputs**: `dt = 0`, negative, `NaN`, larger than the stop time, `stop < start`, `stop = start`,
+- **Contract**: every name in `SolverOptions.solver` either runs or returns `UNSUPPORTED_SOLVER` (F4); the three
+  dispatchers (F2) select the same stepper for every name — one table-driven test imports all three paths.
+- **Edge inputs**: `dt = 0`, negative, `NaN`, larger than the stop time, `stop < start`, `stop = start`, `stop =
+  inf` (live run vs batch `STOP_TIME_INFINITE_BATCH`), `START_TIME_INVALID`, `FIXED_STEP_INVALID`,
   10^7 steps, start time ≠ 0, time accumulation error (`t_n` must equal `t0 + n·dt` computed by multiplication, not
   repeated addition, to 1 ULP).
 
@@ -201,11 +220,12 @@ A test never computes its expectation by calling the code under test.
   event. F5 blocks are tested for the Simulink behaviour and recorded as findings where they miss it.
 - **Subsystems**: flattened result = hand-flattened model; nested; an empty subsystem; unconnected ports; engine
   flatten (`XbridgesEngine.flatten`) = state-machine flatten (`xbSubsystemFlattener`).
-- **Diagnostics**: every `ModelDiagnostic.code` the engine can emit has a test that provokes it and one that proves
-  a clean model does not: `SIGNAL_TYPE_MISMATCH`, `UNIT_INCONSISTENCY`, `FRAME_INCONSISTENCY`, `DATA_TYPE_MISMATCH`,
-  `SAMPLE_RATE_MISMATCH`, `DIMENSION_MISMATCH`, `MISSING_FIS_CONFIG`, `ALGEBRAIC_LOOP`,
-  `ALGEBRAIC_LOOP_NOT_CONVERGED`, `NUMERICAL_INSTABILITY`, `BLOCK_RUNTIME_FAULT`, `UNSUPPORTED_SOLVER`. F8
-  (warning vs Simulink error) is decided with the user (§10) and then pinned.
+- **Diagnostics**: a closure test lists every `code:` literal in the engine sources (36 today) and requires, for
+  each, one test that provokes it and one that proves a clean model does not. `simulinkDiagnostics.test.ts` covers
+  the 2026-11-08 catalogue. Seven codes are named in no test file today and get theirs here:
+  `EXECUTION_EXCEPTION`, `FRAME_INCONSISTENCY`, `INVALID_GMDH_LAYERS`, `INVALID_TAGUCHI_LEVELS`,
+  `NO_MODEL_CONFIGURED`, `SAMPLE_RATE_MISMATCH`, `SIGNAL_TYPE_MISMATCH`. Each error code must stop the run; each warning must not. F8 (warning vs
+  Simulink error) is decided with the user (§12) and then pinned.
 - **Malformed models**: dangling edge, edge to a missing port, two drivers on one input, self-loop on a
   direct-feedthrough block, duplicate block ids, unknown block type, legacy edge keys (`source`/`targetHandle`),
   0 blocks, 10 000 blocks (time and memory budget).
@@ -222,13 +242,14 @@ Component tests (vitest + Testing Library, `src/components/xbridges/*.test.tsx`)
 | --- | --- |
 | Palette | every palette entry has a factory (F6) and drops a node; both palettes list the same types (F7); search finds each block by label and alias; category expand/collapse persists; 62 library-only blocks are listed in the ledger with where they are reachable from |
 | Node (`XBlockNode.tsx`) | **parametrised over all 228 palette blocks**: one handle per port in contract order and position, port labels, symbol rendered (Lucide or `PtSymbol`), no overlap at default size, light and dark theme (`npm run lint:theme`); dynamic-port blocks add/remove handles and keep edges attached |
-| Wiring | output→input only; one driver per input; fan-out; reconnect; delete node removes its edges; type/unit/dimension mismatch shows the engine diagnostic on the edge; edge styles (orthogonal, bezier, straight); snap; right-drag copy; copy/paste/duplicate keep parameters and get new ids; undo/redo over every edit type |
+| Wiring | output→input only; one driver per input; fan-out; reconnect; delete node removes its edges; type/unit/dimension mismatch shows the engine diagnostic on the edge; edge styles (orthogonal, bezier, straight); snap; right-drag, Ctrl+drag and Ctrl+C/Ctrl+V copy keep parameters and get new ids (also across subsystem levels and for a selection with its internal edges); undo/redo over every edit type |
 | Properties panel (`XbridgesPropertiesPanel.tsx`) | **parametrised over all blocks**: every contract parameter has an editor of the right kind; edits reach `params` with the right type (0, negatives and fractions are accepted — extends `xbridgesWorkspaceInputs.test.tsx`); invalid text shows an error and does not corrupt the model; matrix/vector entry in MATLAB style; enum popups rebuild ports for variant blocks; edit during a run uses `patchBlockParams` and takes effect at the next step |
-| Simulation controls | Run, Pause, Resume, Stop, Single Step, stop-time limit, step-size input (0, negative, text), each of the 9 solvers selectable and actually used (spy on the stepper), solver change mid-run, diagnostics panel lists compile and runtime diagnostics and selects the offending block, run with errors is refused with a message |
+| Simulation controls | Run, Pause, Resume, Stop, Single Step, stop-time limit, step-size input (0, negative, text), start/stop time fields (`inf`, negative, stop < start, Arabic-Indic digits and comma decimals as `normalizeNumerals` accepts), step `auto`, each of the 10 solvers selectable and actually used (spy on the stepper), solver change mid-run, diagnostics pop-up and status bar list compile and runtime diagnostics, stay inside the window, and select the offending block, run with errors is refused with a message |
 | Scope (`XbridgesScopeWindow.tsx`), root locus | plotted samples = engine samples (value and time) for scalar, vector, matrix, bus; autoscale, zoom, cursors, legend, export; open/close during a run; many scopes; root-locus window roots = engine roots |
 | Subsystems | create from selection, enter, breadcrumb back, rename ports, nested, delete; results unchanged by grouping |
 | Persistence | save → close → reopen in the unmodified app: nodes, edges, parameters, solver, step, subsystems and state-machine mappings identical; `.adia` round trip; old-format files load (`legacy edge keys`); Save & Exit inside a state returns mappings (`reconcileXBBoundaryMappings`) |
 | Labs | every built-in lab loads, compiles with no error diagnostic and runs 5 s without console errors (generalises `xbridges-run-engine.spec.ts`) |
+| Panels | library and properties panels: resize by drag and keyboard, double-click reset, remembered size, collapse; canvas and toolbars stay inside the window at 1024×600 and 1920×1080 |
 | Responsiveness | 500-block model: drag stays under the freeze-gate budget (`tests/performance/no-renderer-blocking.spec.ts`), run does not block the renderer |
 | Accessibility | keyboard: delete, copy, paste, undo, run/stop shortcuts; focus order in the properties panel; contrast in both themes |
 
@@ -250,7 +271,7 @@ Component tests (vitest + Testing Library, `src/components/xbridges/*.test.tsx`)
   loops, no unused state, every state slot initialised in `SM_Reset()`, identifiers legal and unique (U16),
   deterministic output (generate twice → identical bytes), `src/security/generatedCodeVerifier.cjs` passes.
 - Limits on both sides (F10): vector 16 / 17, matrix 8 / 9, `MatrixSolve` bound 1…8, `PID_BASIC` without a positive
-  sample time, continuous `STATE_SPACE`, variable-step solver, algebraic loop, float64/float16 on the production
+  sample time, continuous `STATE_SPACE`, variable-step solver, continuous states with `discrete`, algebraic loop, float64/float16 on the production
   profile, missing math library → the exact diagnostic code, never truncated or silently changed code.
 
 ### 7.2 Alignment with the state machine (`xbStateMachineAlignment.test.ts`, extends `smDifferential.test.ts`)
@@ -274,7 +295,9 @@ on state configuration, every mapped variable and every X-Bridges state slot:
 - **AUTOSAR path**: the same corpus through `npm run verify:autosar` — runnable step equals the plain C step.
 
 ### 7.3 Canvas ↔ state-machine parity (V6, closes F1)
-- `xbTriParity.test.ts`: for every block type both paths support, the same graph, solver (`euler`, `rk4`) and step
+- `xbTriParity.test.ts` (generalises `xbSimEmbeddedParity.test.ts` from one constant input to the full §4 stimulus
+  set, every declared shape and all three embedded solvers): for every block type both paths support, the same
+  graph, solver (`euler`, `rk4`, `discrete`) and step
   run in `XbridgesEngine` (main thread and worker) and in `xbInterpreter`; outputs equal per step. Differences are
   findings: either one implementation is wrong against the §3 oracle, or the difference is intended and is written
   into the block's help.
@@ -292,7 +315,7 @@ planner, E = executor, M = MATLAB on the user's machine.
 | WP | Scope | Exec | Deps |
 | --- | --- | --- | --- |
 | 00 | Setup: ledger `docs/xbridges-verification/ledger.json` (one row per block, gates V1–V8 + G), `scripts/xbridges-verification/inventory.ts` (reproduces §1), baseline run of every existing X-Bridges suite on the user's machine, `npm run test:xbridges` script, loop skill and executor agent files | P | — |
-| 01 | V1 contract snapshot for 289 blocks + catalogue closure tests (F6, F7, capability closure, every block has `equation` and help entry, every port has a unit or an explicit `unitless`) | P + E | 00 |
+| 01 | V1 contract snapshot for 290 blocks + catalogue closure tests (F6, F7, capability closure, every block has `equation` and help entry, every port has a unit or an explicit `unitless`) | P + E | 00 |
 | 02 | Test kit `src/engine/xbridges/testkit/`: model builder, stimulus sets, oracle helpers, reference integrator, tolerance comparators, random graph generator, C compile-and-run helper reused from `smCHarness` | E | 00 |
 | 03 | Universal battery U1–U16 over all blocks | P + E | 01, 02 |
 | 04 | V2/V3: sources, element-wise math, reductions, trig/hyperbolic (≈ 45 blocks) | P + E | 03 |
@@ -329,10 +352,10 @@ Order of execution: 00 → 01, 02 → 03 → (04–11, 12, 13, 19 in parallel) �
   into the block's help and the test pins the ADIA behaviour, with the user's decision recorded.
 - Engine or generator changes outside the block under fix need the planner's review of every hunk and a re-run of
   V6 and V7 for the whole catalogue.
-- F1–F10 are entered as the first findings in WP-00.
+- F1–F11 are entered as the first findings in WP-00.
 
 ## 10. Exit criteria
-1. Ledger: every one of the 289 blocks has every applicable gate `pass`; no gate is empty.
+1. Ledger: every one of the 290 blocks has every applicable gate `pass`; no gate is empty.
 2. No open S1 or S2 finding; S3/S4 open only with the user's written acceptance.
 3. Simulink gate **G**: `pass` for every block with a Simulink counterpart, or `pending` only for blocks whose
    goldens the user has not yet run (listed in the report).
