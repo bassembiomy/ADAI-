@@ -276,6 +276,16 @@ describe('multirate and events', () => {
     }, 30_000);
   }
 
+  for (const solver of ['ode14x', 'ode23tb']) {
+    // The batch runner stops on STIFF_SOLVER_*; the canvas loop stops only on a fatal flag, which reportError never sets.
+    it.fails(`XBV-033: a stiff solver error (${solver}, non-finite derivative) stops the canvas run`, () => {
+      const r = runModel(buildModel({ blocks: [{ id: 'k', type: 'Constant', params: { value: 'inf' } }, { id: 'i', type: 'Integrator' }], wires: ['k.out -> i.in'] }),
+        { solver, dt: 0.1, stopTime: 0.5, probes: ['i.out'] });
+      expect(r.diagnostics.map((d) => d.code)).toContain('STIFF_SOLVER_NONFINITE');
+      expect(r.t.length).toBeLessThan(6);
+    });
+  }
+
   it('an empty subsystem compiles without error', () => {
     const e = new XbridgesEngine({ blocks: [BLOCK_LIBRARY.Subsystem('sub', {})], connections: [] });
     expect(errors(e.compile(0))).toEqual([]);

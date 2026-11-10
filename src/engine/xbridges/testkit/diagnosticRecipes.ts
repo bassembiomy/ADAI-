@@ -48,8 +48,8 @@ function batchSteps(spec: ModelSpec, options: SolverOptions): { diagnostics: Mod
 }
 
 const VALID_BATCH: SolverOptions = { solver: 'euler', fixedStep: 0.25, startTime: 0, stopTime: 1 };
-function batch(spec: ModelSpec, options: SolverOptions): DiagnosticRun {
-  const planned = batchSteps(spec, VALID_BATCH).steps;
+function batch(spec: ModelSpec, options: SolverOptions, valid: SolverOptions = VALID_BATCH, validSpec: ModelSpec = spec): DiagnosticRun {
+  const planned = batchSteps(validSpec, valid).steps;
   const r = batchSteps(spec, options);
   return { diagnostics: r.diagnostics, steps: r.steps, plannedSteps: planned };
 }
@@ -101,10 +101,19 @@ const robotWire = (from: [string, string, string], to: [string, string, string])
   wires: [`a.${from[1]} -> b.${to[1]}`],
 });
 
-const doeFault = (note: string, params: Record<string, unknown>, value: unknown = 1): DiagnosticRecipe => ({
+/** Constant -> Arcsine -> block -> Terminator: a constant above 1 gives a NaN a user can produce. */
+const nanThen = (block: BlockSpec, value: number, outPort: string): ModelSpec => {
+  const inPort = INPUT_OF[block.type] ?? 'u';
+  return {
+    blocks: [konst('k', value), { id: 'as', type: 'ASIN' }, block, term('t')],
+    wires: ['k.out -> as.u', `as.y -> ${block.id}.${inPort}`, `${block.id}.${outPort} -> t.u`],
+  };
+};
+
+const doeFault = (note: string, params: Record<string, unknown>, value: unknown = 1, viaAsin = false): DiagnosticRecipe => ({
   note,
-  provoke: () => live(doeChain(params, value)),
-  clean: () => live(doeChain(DOE_RSM)),
+  provoke: () => live(viaAsin ? nanThen({ id: 'm', type: 'DOE_MODEL', params: { inputNames: ['X1'], ...params } }, value as number, 'out') : doeChain(params, value)),
+  clean: () => live(viaAsin ? nanThen({ id: 'm', type: 'DOE_MODEL', params: { inputNames: ['X1'], ...params } }, 0.5, 'out') : doeChain(DOE_RSM)),
 });
 
 /** Ports of the DIMENSION_MISMATCH recipe: no library block declares output dimensions, so a model loaded with them is patched in. */
@@ -115,6 +124,18 @@ const withDimensions = (outDims: number[], inDims: number[]) => (m: XModel): voi
 const dimensionModel = (): ModelSpec => ({
   blocks: [konst('k', 1), { id: 'g1', type: 'GAIN' }, { id: 'g2', type: 'GAIN' }, term('t')],
   wires: ['k.out -> g1.u', 'g1.y -> g2.u', 'g2.y -> t.u'],
+});
+
+const pid = (N: number): ModelSpec => ({
+  blocks: [konst('k', 1), { id: 'p', type: 'PID_CONTROLLER', params: { mode: 'PID', N } }, term('t')],
+  wires: ['k.out -> p.r', 'p.u -> t.u'],
+});
+const STIFF14: SolverOptions = { solver: 'ode14x', fixedStep: 0.25, startTime: 0, stopTime: 1 };
+const TB: SolverOptions = { solver: 'ode23tb', startTime: 0, stopTime: 10 };
+/** Integrator whose input is its own output through a Gain: x' = gain * x. */
+const feedback = (gain: number): ModelSpec => ({
+  blocks: [{ id: 'i', type: 'INTEGRATOR', params: { initialCondition: 1 } }, { id: 'g', type: 'GAIN', params: { gain } }, term('t')],
+  wires: ['i.y -> g.u', 'g.y -> i.u', 'i.y -> t.u'],
 });
 
 export const DIAGNOSTIC_RECIPES: Record<string, DiagnosticRecipe> = {
@@ -159,7 +180,7 @@ export const DIAGNOSTIC_RECIPES: Record<string, DiagnosticRecipe> = {
     [{ blocks: [konst('n', 1), konst('d', 2), { id: 'v', type: 'VectorDiv' }, term('t')], wires: ['n.out -> v.in1', 'd.out -> v.in2', 'v.out -> t.u'] }],
   ),
   EXECUTION_EXCEPTION: doeFault(
-    'DOE_MODEL Taguchi with a null level entry throws inside execute; the code is only stored in nextState.lastFault (BlockDefinitions.ts:3350), the engine reports BLOCK_RUNTIME_FAULT',
+    'DOE_MODEL Taguchi with a null level entry (file-only value, not enterable in the UI) throws inside execute; the code is only stored in nextState.lastFault (BlockDefinitions.ts:3350), the engine reports BLOCK_RUNTIME_FAULT',
     { modelType: 'Taguchi', grandMean: 0, factorLevels: [{ factorName: 'X1', means: [null] }] },
   ),
   FIXED_STEP_INVALID: {
@@ -186,9 +207,9 @@ export const DIAGNOSTIC_RECIPES: Record<string, DiagnosticRecipe> = {
     { modelType: 'Taguchi' },
   ),
   LOGIC_NAN_INPUT: liveRecipe(
-    'NaN into a NOT block: BlockDefinitions.ts:264 (logicNanDiagnostic), typed diagnostic from execute (XbridgesEngine.ts:510)',
-    [chain({ id: 'n', type: 'NOT' }, NaN)],
-    [chain({ id: 'n', type: 'NOT' }, 1)],
+    'Constant 2 -> Arcsine (NaN) -> NOT: BlockDefinitions.ts:264 (logicNanDiagnostic), typed diagnostic from execute (XbridgesEngine.ts:510); clean constant 0.5',
+    [nanThen({ id: 'n', type: 'NOT' }, 2, 'out')],
+    [nanThen({ id: 'n', type: 'NOT' }, 0.5, 'out')],
   ),
   MATH_DOMAIN_ERROR: liveRecipe(
     'asin of 2: BlockDefinitions.ts:269 (ASIN, line 4077); clean input 0.5',
@@ -201,18 +222,19 @@ export const DIAGNOSTIC_RECIPES: Record<string, DiagnosticRecipe> = {
     [{ blocks: [{ id: 'f', type: 'FUZZY_SURFACE_VIEWER', params: { fisConfig: { name: 'fis' } } }], wires: [] }],
   ),
   NON_FINITE_INPUT: doeFault(
-    'DOE_MODEL GMDH with layers and a NaN input; the code is only stored in nextState.lastFault (BlockDefinitions.ts:3299), the engine reports BLOCK_RUNTIME_FAULT',
+    'DOE_MODEL GMDH (layers from a trained model file) fed NaN from Constant 2 -> Arcsine; the code is only stored in nextState.lastFault (BlockDefinitions.ts:3299), the engine reports BLOCK_RUNTIME_FAULT',
     { modelType: 'GMDH', layers: [[{ inputs: [0], coeffs: [0, 1, 0, 0, 0, 0] }]] },
-    NaN,
+    2,
+    true,
   ),
   NO_MODEL_CONFIGURED: doeFault(
-    'DOE_MODEL with an unknown model type; the code is only stored in nextState.lastFault (BlockDefinitions.ts:3347), the engine reports BLOCK_RUNTIME_FAULT',
+    'DOE_MODEL with an unknown model type (file-only value, the UI offers RSM/GMDH/Taguchi); the code is only stored in nextState.lastFault (BlockDefinitions.ts:3347), the engine reports BLOCK_RUNTIME_FAULT',
     { modelType: 'Unknown' },
   ),
   NUMERICAL_INSTABILITY: liveRecipe(
-    'Constant NaN output: XbridgesEngine.ts:455; clean constant 1',
-    [chain({ id: 'g', type: 'GAIN' }, NaN)],
-    [chain({ id: 'g', type: 'GAIN' }, 1)],
+    'Constant 2 -> Arcsine gives NaN: XbridgesEngine.ts:455; clean constant 0.5',
+    [nanThen({ id: 'g', type: 'GAIN' }, 2, 'y')],
+    [nanThen({ id: 'g', type: 'GAIN' }, 0.5, 'y')],
   ),
   PARAMETER_EMPTY: liveRecipe(
     "Delay length field left empty: parameterEvaluation.ts evaluate() (empty text); reported by modelChecks.ts:225",
@@ -230,7 +252,7 @@ export const DIAGNOSTIC_RECIPES: Record<string, DiagnosticRecipe> = {
     [chain({ id: 'd', type: 'DELAY', params: { delay_length: 1 } })],
   ),
   PARAMETER_OPTION_INVALID: liveRecipe(
-    "Arcsine angle unit 'grads' is not radians or degrees: parameterEvaluation.ts option kind; reported by modelChecks.ts:225",
+    "Arcsine angle unit 'grads' (file-only value, the UI offers a list) is not radians or degrees: parameterEvaluation.ts option kind; reported by modelChecks.ts:225",
     [chain({ id: 'a', type: 'ASIN', params: { angle_unit: 'grads' } }, 0.5)],
     [chain({ id: 'a', type: 'ASIN', params: { angle_unit: 'degrees' } }, 0.5)],
   ),
@@ -293,5 +315,76 @@ export const DIAGNOSTIC_RECIPES: Record<string, DiagnosticRecipe> = {
     note: "Batch run with solver 'ode113' (declared, not implemented): Solvers.ts:564 (runFixedStep)",
     provoke: () => batch(integratorChain(), { ...VALID_BATCH, solver: 'ode113' }),
     clean: () => batch(integratorChain(), VALID_BATCH),
+  },
+
+  CONSTANT_VALUE_NOT_REPRESENTABLE: liveRecipe(
+    'Constant 1.5 with output type int8: modelChecks.ts:248; clean value 1',
+    [{ blocks: [{ id: 'c', type: 'Constant', params: { value: 1.5, output_type: 'int8' } }, term('t')], wires: ['c.out -> t.u'] }],
+    [{ blocks: [{ id: 'c', type: 'Constant', params: { value: 1, output_type: 'int8' } }, term('t')], wires: ['c.out -> t.u'] }],
+  ),
+  CONSTANT_VALUE_OUT_OF_RANGE: liveRecipe(
+    'Constant 200 with output type int8: modelChecks.ts:250; clean value 100',
+    [{ blocks: [{ id: 'c', type: 'Constant', params: { value: 200, output_type: 'int8' } }, term('t')], wires: ['c.out -> t.u'] }],
+    [{ blocks: [{ id: 'c', type: 'Constant', params: { value: 100, output_type: 'int8' } }, term('t')], wires: ['c.out -> t.u'] }],
+  ),
+  DELAY_LENGTH_INVALID: liveRecipe(
+    'Delay length 0 (also PARAMETER_OUT_OF_RANGE): modelChecks.ts:337',
+    [chain({ id: 'd', type: 'DELAY', params: { delay_length: 0 } })],
+    [chain({ id: 'd', type: 'DELAY', params: { delay_length: 1 } })],
+  ),
+  LIMITS_INVALID: liveRecipe(
+    'Saturation with lower limit 2 above upper limit 1: modelChecks.ts:298',
+    [chain({ id: 's', type: 'SATURATION', params: { lowerLimit: 2, upperLimit: 1 } })],
+    [chain({ id: 's', type: 'SATURATION', params: { lowerLimit: -1, upperLimit: 1 } })],
+  ),
+  PARAMETER_NOT_FINITE: liveRecipe(
+    "Gain typed as 'inf': modelChecks.ts:288",
+    [gainChain({ gain: 'inf' })],
+    [gainChain({ gain: 2 })],
+  ),
+  PID_FILTER_COEFFICIENT_INVALID: liveRecipe(
+    'PID controller in PID mode with derivative filter coefficient N = 0: modelChecks.ts:329',
+    [pid(0)],
+    [pid(100)],
+  ),
+  STATE_SPACE_DIMENSION_MISMATCH: liveRecipe(
+    'State space with 2x2 A and 1x1 B: modelChecks.ts:357; clean B is 2x1',
+    [chain({ id: 'ss', type: 'STATE_SPACE', params: { A: [[0, 1], [-1, -1]], B: [[1]], C: [[1, 0]], D: [[0]] } })],
+    [chain({ id: 'ss', type: 'STATE_SPACE', params: { A: [[0, 1], [-1, -1]], B: [[0], [1]], C: [[1, 0]], D: [[0]] } })],
+  ),
+  SUM_SIGNS_INVALID: liveRecipe(
+    "Sum with signs '+-+' but 2 inputs: modelChecks.ts:236; clean '+-'",
+    [{ blocks: [konst('a', 1), konst('b', 1), { id: 's', type: 'Sum', params: { signs: '+-+', numInputs: 2 } }, term('t')], wires: ['a.out -> s.in1', 'b.out -> s.in2', 's.out -> t.u'] }],
+    [{ blocks: [konst('a', 1), konst('b', 1), { id: 's', type: 'Sum', params: { signs: '+-', numInputs: 2 } }, term('t')], wires: ['a.out -> s.in1', 'b.out -> s.in2', 's.out -> t.u'] }],
+  ),
+  TF_DENOMINATOR_LEADING_ZERO: liveRecipe(
+    'Transfer function with denominator [0 1]: modelChecks.ts:278; clean [1 1]',
+    [chain({ id: 'tf', type: 'TRANSFER_FUNCTION', params: { numerator: [1], denominator: [0, 1] } })],
+    [chain({ id: 'tf', type: 'TRANSFER_FUNCTION', params: { numerator: [1], denominator: [1, 1] } })],
+  ),
+  TF_IMPROPER: liveRecipe(
+    'Transfer function s^2 / (s + 1): modelChecks.ts:280; clean 1 / (s + 1)',
+    [chain({ id: 'tf', type: 'TRANSFER_FUNCTION', params: { numerator: [1, 0, 0], denominator: [1, 1] } })],
+    [chain({ id: 'tf', type: 'TRANSFER_FUNCTION', params: { numerator: [1], denominator: [1, 1] } })],
+  ),
+  STIFF_SOLVER_INVALID_OPTION: {
+    note: 'Batch ode14x with extrapolationOrder 0 (a solver option, not editable on the canvas): StiffSolver.ts:189 via runODE14x',
+    provoke: () => batch(integratorChain(), { ...STIFF14, extrapolationOrder: 0 }, STIFF14),
+    clean: () => batch(integratorChain(), STIFF14, STIFF14),
+  },
+  STIFF_SOLVER_NONFINITE: {
+    note: 'Batch ode14x with Constant inf into an Integrator (non-finite derivative): StiffSolver.ts:106; clean constant 1',
+    provoke: () => batch(chain({ id: 'i', type: 'INTEGRATOR' }, 'inf'), STIFF14, STIFF14, integratorChain()),
+    clean: () => batch(integratorChain(), STIFF14, STIFF14),
+  },
+  STIFF_SOLVER_SINGULAR: {
+    note: 'Batch ode14x, step 1, on x\' = x (Integrator fed back through Gain 1) so that I - h*J is singular: StiffSolver.ts:172; clean gain -1',
+    provoke: () => batch(feedback(1), { ...STIFF14, fixedStep: 1, stopTime: 2 }, { ...STIFF14, fixedStep: 1, stopTime: 2 }, feedback(-1)),
+    clean: () => batch(feedback(-1), { ...STIFF14, fixedStep: 1, stopTime: 2 }, { ...STIFF14, fixedStep: 1, stopTime: 2 }),
+  },
+  STIFF_SOLVER_STEP_TOO_SMALL: {
+    note: 'Batch ode23tb with minStep 1 above the first step (a solver option, not editable on the canvas): StiffSolver.ts:419 via runODE23TB',
+    provoke: () => batch(integratorChain(), { ...TB, minStep: 1 }, TB),
+    clean: () => batch(integratorChain(), TB, TB),
   },
 };

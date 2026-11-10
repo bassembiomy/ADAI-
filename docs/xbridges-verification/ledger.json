@@ -618,7 +618,7 @@
    "severity": "S2",
    "gate": "V4",
    "status": "open",
-   "summary": "Runtime diagnostics of severity error do not stop the run: a block's typed diagnostic (e.g. LOGIC_NAN_INPUT) and a block-returned error (BLOCK_RUNTIME_FAULT via result.error) are recorded but never set the engine's fatal flag (XbridgesEngine.ts ~495-517); only thrown exceptions stop. Simulink halts on errors. Pinned in xbDiagnostics.test.ts."
+   "summary": "Runtime diagnostics of severity error do not stop the run: a block's typed diagnostic (e.g. LOGIC_NAN_INPUT) and a block-returned error (BLOCK_RUNTIME_FAULT via result.error) are recorded but never set the engine's fatal flag (XbridgesEngine.ts ~495-517); only thrown exceptions stop. Simulink halts on errors. Pinned in xbDiagnostics.test.ts. Also: STIFF_SOLVER_* errors stop a batch run but not the canvas run (ode14x/ode23tb keep stepping to the stop time; reportError never sets the fatal flag) - pinned in xbEngine.test.ts."
   },
   {
    "id": "XBV-034",
@@ -643,6 +643,14 @@
    "gate": "V5",
    "status": "open",
    "summary": "Batch variable-step runs (Solvers.runFixedStep with ode45 or ode23) hang - no result after 60 s - as soon as they bracket a Step event: Step at 0.3, 0.5 or 0.55 s with default tolerances, or at the stop time with relTol 1e-8. Fixed-step batch rk4 finishes. Used by DOE, TRM and every batch caller. Pinned with a child-process probe and a 15 s limit in xbEngine.test.ts."
+  },
+  {
+   "id": "XBV-037",
+   "plan_ref": "5.1",
+   "severity": "S4",
+   "gate": "V5",
+   "status": "open",
+   "summary": "Stiff-solver options (ode14x extrapolationOrder/newtonIterations, ode23tb relTol/absTol/minStep/maxStep) are not editable on the canvas; STIFF_SOLVER_INVALID_OPTION and STIFF_SOLVER_STEP_TOO_SMALL are reachable only from a batch configuration. Related to decision D3 (user tolerances)."
   }
  ],
  "blocks": {
