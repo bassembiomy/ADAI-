@@ -133,7 +133,21 @@
     "WP-03"
    ],
    "status": "in_progress",
-   "note": "Closed-form tests for sources, element-wise math, reductions, trig (controller); 7 findings pinned; awaiting Fable."
+   "note": "Closed-form tests for sources, element-wise math, reductions, trig (controller); 7 findings pinned; awaiting Fable.",
+   "rework": [
+    {
+     "round": 1,
+     "by": "Fable FAIL",
+     "items": [
+      "XBV-043 title/assert mismatch",
+      "Mean of a matrix expectation copied from the code (MATLAB: column-wise)",
+      "Square oracle was the block's own equation",
+      "split multi-case it.fails",
+      "blockers: NaN/ties/empty in Max, negative-base power, domain edges with diagnostics, poles, large arguments"
+     ],
+     "fix": "all addressed; new findings XBV-048..051"
+    }
+   ]
   },
   {
    "id": "WP-05",
@@ -734,7 +748,7 @@
    "severity": "S1",
    "gate": "V2",
    "status": "open",
-   "summary": "Max (element-wise mode) uses Number(x) || 0, so negative-only comparisons against 0-replaced NaN and NaN inputs give wrong results; MATLAB/Simulink max returns the larger element (and NaN handling per MinMax rules). Pinned in xbEquations.math.test.ts."
+   "summary": "Max (element-wise, two inputs) turns NaN into 0 (Number(x) || 0): Max(NaN, -3) = 0; MATLAB max ignores NaN (-3), Simulink MinMax propagates NaN. Negative values and ties are correct. Pinned in xbEquations.math.test.ts."
   },
   {
    "id": "XBV-044",
@@ -742,7 +756,7 @@
    "severity": "S1",
    "gate": "V2",
    "status": "open",
-   "summary": "Sum signs with the '|' spacer before a sign ('+|-', '|+-') add instead of subtract: the spacer shifts the sign positions at execute time (factory strips it for the port count only). '+-|' works. Pinned in xbEquations.math.test.ts."
+   "summary": "Sum signs with the '|' spacer before a sign ('+|-', '|+-', '+ -') add instead of subtract: the spacer shifts the sign positions at execute time (factory strips it for the port count only). '+-|' works. Pinned in xbEquations.math.test.ts."
   },
   {
    "id": "XBV-045",
@@ -758,7 +772,7 @@
    "severity": "S1",
    "gate": "V2",
    "status": "open",
-   "summary": "All 24 trigonometric/hyperbolic blocks return null for a vector input; Simulink Trigonometric/Math Function blocks are element-wise. Pinned in xbEquations.math.test.ts."
+   "summary": "All 24 trigonometric/hyperbolic blocks return NaN for a vector input; Simulink Trigonometric/Math Function blocks are element-wise. Pinned in xbEquations.math.test.ts."
   },
   {
    "id": "XBV-047",
@@ -767,6 +781,38 @@
    "gate": "V6",
    "status": "open",
    "summary": "The canvas worker client (serializeModelForWorker) strips execute, evaluateDerivatives and ZeroCrossingFn but not updateDiscrete, so postMessage throws DataCloneError for PT_AUTOMATED_MANUAL_TRANSMISSION and PT_DUAL_CLUTCH_TRANSMISSION (worker run impossible for any model containing them). The worker engine also never re-creates updateDiscrete (XbridgesEngine.ts ~88-94), so once cloning is fixed these hybrid blocks would lose their discrete updates; WP-11 checks this with a gear-shift stimulus. Pinned (clone list) in xbWorker.test.ts."
+  },
+  {
+   "id": "XBV-048",
+   "plan_ref": "4.2 element-wise math / reductions / sources",
+   "severity": "S1",
+   "gate": "V2",
+   "status": "open",
+   "summary": "Mean of a matrix returns the mean of all elements (3 for [1 2; 3 6]); MATLAB mean and the Simulink Mean block default (each column) give the column means [2 4]. Pinned in xbEquations.math.test.ts."
+  },
+  {
+   "id": "XBV-049",
+   "plan_ref": "4.2 element-wise math / reductions / sources",
+   "severity": "S3",
+   "gate": "V2",
+   "status": "open",
+   "summary": "WaveformGen Square is amp*sign(sin(...)): 0 at t = 0 and every crossing, and +amp at t = T/2 because sin(pi) = 1.2e-16; a 50 % square wave is +amp on [0, T/2), -amp on [T/2, T). Pinned in xbEquations.math.test.ts."
+  },
+  {
+   "id": "XBV-050",
+   "plan_ref": "4.2 element-wise math / reductions / sources",
+   "severity": "S2",
+   "gate": "V2",
+   "status": "open",
+   "summary": "VectorPow of a negative base with a non-integer exponent returns a mathjs Complex object instead of a number (e.g. (-8)^(1/3) -> {re: 1, im: 1.732}); downstream blocks receive an object. Simulink real power gives NaN (or an error). Pinned in xbEquations.math.test.ts."
+  },
+  {
+   "id": "XBV-051",
+   "plan_ref": "4.2 element-wise math / reductions / sources",
+   "severity": "S2",
+   "gate": "V2",
+   "status": "open",
+   "summary": "Max and Mean throw on an empty vector (mathjs 'Cannot calculate ... of an empty array'), stopping the run. Pinned in xbEquations.math.test.ts."
   }
  ],
  "blocks": {
@@ -4831,5 +4877,10 @@
    }
   }
  },
- "notes_for_later_wps": []
+ "notes_for_later_wps": [
+  {
+   "wp": "WP-04b",
+   "note": "From the WP-04 verifier: integer overflow per data type, Gain matrix mode (K*u; ADIA only has element-wise, which is the Simulink default), exact degree values (sind(180) = 1.2e-16, tand(90) finite), Inf in Sum, PRODUCT with a single vector input (NaN, part of XBV-042)."
+  }
+ ]
 }

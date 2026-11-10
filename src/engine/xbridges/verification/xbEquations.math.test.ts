@@ -41,16 +41,24 @@ describe('sources', () => {
     const p = { type: 'Sine', amp: 2, freq: 0.5, phase: 0.3, offset: -1 };
     for (const t of [0, 0.1, 0.77, 3]) close(out('WaveformGen', p, [], t), 2 * Math.sin(2 * Math.PI * 0.5 * t + 0.3) - 1);
   });
-  it('WaveformGen Square: amp * sign(sin(2 pi f t + phase)) + offset', () => {
+  it('WaveformGen Square: +amp in the first half period, -amp in the second (inside each half)', () => {
     const p = { type: 'Square', amp: 1.5, freq: 1, phase: 0, offset: 0 };
-    expect([0.1, 0.6].map((t) => out('WaveformGen', p, [], t))).toEqual([1.5, -1.5]);
+    expect([0.1, 0.4, 0.6, 0.9].map((t) => out('WaveformGen', p, [], t))).toEqual([1.5, 1.5, -1.5, -1.5]);
+  });
+  // Oracle: a square wave of duty 50 % is +A on [0, T/2) and -A on [T/2, T) (MATLAB square, Simulink pulse/square);
+  // never 0. sign(sin) gives 0 at t = 0 and +A at t = T/2 because sin(pi) = 1.2e-16.
+  it.fails('XBV-049: WaveformGen Square at the edges: +amp at t = 0, -amp at t = T/2', () => {
+    const p = { type: 'Square', amp: 1.5, freq: 1, phase: 0, offset: 0 };
+    expect([0, 0.5, 1].map((t) => out('WaveformGen', p, [], t))).toEqual([1.5, -1.5, 1.5]);
   });
   it.fails('XBV-040: WaveformGen with amplitude 0 outputs 0 (amp 0 is replaced by 1)', () => {
     expect(out('WaveformGen', { type: 'Sine', amp: 0, freq: 1, phase: 0.5, offset: 0 }, [], 0.1)).toBe(0);
   });
-  it.fails('XBV-041: the Sources "Clock" outputs the simulation time, like the Simulink Clock block', () => {
-    for (const t of [0, 0.3, 1.7]) expect(out('Clock', {}, [], t)).toBe(t);
-  });
+  for (const t of [0.3, 1.7]) {
+    it.fails(`XBV-041: the Sources "Clock" outputs the simulation time, like the Simulink Clock block (t = ${t})`, () => {
+      expect(out('Clock', {}, [], t)).toBe(t);
+    });
+  }
 });
 
 describe('element-wise math', () => {
@@ -61,10 +69,11 @@ describe('element-wise math', () => {
     expect(out('Sum', { signs: '+-' }, [[1, 2], [3, 5]])).toEqual([-2, -3]);
     expect(out('Sum', { signs: '+++' }, [1, 2, 3])).toBe(6);
   });
-  it.fails('XBV-044: the "|" spacer only separates ports: signs "+|-" and "|+-" subtract like "+-"', () => {
-    expect(out('Sum', { signs: '+|-' }, [5, 3])).toBe(2);
-    expect(out('Sum', { signs: '|+-' }, [5, 3])).toBe(2);
-  });
+  for (const signs of ['+|-', '|+-', '+ -']) {
+    it.fails(`XBV-044: Sum signs "${signs}" subtract like "+-" (the spacer only separates ports)`, () => {
+      expect(out('Sum', { signs }, [5, 3])).toBe(2);
+    });
+  }
   it.fails('XBV-045: Sum with one "+" input sums the elements of a vector (Simulink single-input Sum)', () => {
     expect(out('Sum', { signs: '+' }, [[1, 2, 3.5]])).toBe(6.5);
   });
@@ -90,6 +99,12 @@ describe('element-wise math', () => {
     expect(out('VectorDiv', {}, [[1, 3], [2, 4]])).toEqual([0.5, 0.75]);
     expect(out('VectorPow', {}, [[2, 3, 0], [3, 2, 0]])).toEqual([8, 9, 1]);
   });
+  // Oracle: real-valued power of a negative base with a non-integer exponent is NaN (Simulink Math Function, real output).
+  it.fails('XBV-050: VectorPow(-8, 1/3) is a real number (NaN), not a complex object', () => {
+    const y = out('VectorPow', {}, [-8, 1 / 3]);
+    expect(typeof y).toBe('number');
+    expect(Number.isNaN(y as number)).toBe(true);
+  });
   it('UnaryNeg and Abs, including -0 and vectors', () => {
     expect(out('UnaryNeg', {}, [[1, -2]])).toEqual([-1, 2]);
     expect(out('Abs', {}, [-3.5])).toBe(3.5);
@@ -103,16 +118,28 @@ describe('reductions', () => {
     expect(out('SumElements', {}, [[1, 2, 3.5]])).toBe(6.5);
     expect(out('SumElements', {}, [[[1, 2], [3, 4]]])).toBe(10);
     expect(out('Mean', {}, [[1, 2, 3, 6]])).toBe(3);
-    expect(out('Mean', {}, [[[1, 2], [3, 6]]])).toBe(3);
     expect(out('Max', {}, [[-5, -2, -9]])).toBe(-2);
     expect(out('Max', { numInputs: 2 }, [[1, 5], [3, 2]])).toEqual([3, 5]);
   });
-  it.fails('XBV-043: Max does not turn a NaN or a negative-only element into 0 (element-wise Max of [-1 NaN] and -3)', () => {
-    const r = out('Max', { numInputs: 2 }, [[-1, -7], -3]) as number[];
-    expect(r).toEqual([-1, -3]);
+  it('Max element-wise with negative values and ties', () => {
+    expect(out('Max', { numInputs: 2 }, [[-1, -7], -3])).toEqual([-1, -3]);
+    expect(out('Max', {}, [[3, 3]])).toBe(3);
+  });
+  // Oracle: MATLAB max ignores NaN (max(NaN, -3) = -3); Simulink MinMax propagates it. Either is acceptable, 0 is not.
+  it.fails('XBV-043: Max of NaN and -3 is -3 or NaN, never 0', () => {
     const n = out('Max', { numInputs: 2 }, [Number.NaN, -3]);
     expect(n === -3 || Number.isNaN(Number(n))).toBe(true);
   });
+  // Oracle: MATLAB mean(M) and the Simulink Mean block default ("Each column") give the column means.
+  it.fails('XBV-048: Mean of a matrix gives the column means [2 4] (MATLAB / Simulink default), not the mean of all elements', () => {
+    expect(out('Mean', {}, [[[1, 2], [3, 6]]])).toEqual([2, 4]);
+  });
+  it('SumElements of an empty vector is 0 (MATLAB sum([]) = 0)', () => { expect(out('SumElements', {}, [[]])).toBe(0); });
+  for (const type of ['Max', 'Mean']) {
+    it.fails(`XBV-051: ${type} of an empty vector does not throw`, () => {
+      expect(() => out(type, {}, [[]])).not.toThrow();
+    });
+  }
 });
 
 describe('trigonometric and hyperbolic functions (MATLAB definitions)', () => {
@@ -154,12 +181,29 @@ describe('trigonometric and hyperbolic functions (MATLAB definitions)', () => {
       for (const x of [0.1, 0.3, 0.7]) expect(out(type, {}, [-x]), type).toBe(-Number(out(type, {}, [x])));
     }
   });
-  it.fails('XBV-046: vector inputs are processed element-wise by all 24 trigonometric/hyperbolic blocks', () => {
-    for (const [type, f] of [...FORWARD, ...INVERSE.map(([t, g]) => [t, g] as [string, (x: number) => number]), ...HYPER.map(([t, g]) => [t, g] as [string, (x: number) => number])]) {
+  for (const [type, f] of [...FORWARD, ...INVERSE.map(([t, g]) => [t, g] as [string, (x: number) => number]), ...HYPER.map(([t, g]) => [t, g] as [string, (x: number) => number])]) {
+    it.fails(`XBV-046: ${type} processes a vector input element-wise`, () => {
       const xs = [0.5, 0.6];
-      const y = out(type, {}, [xs]);
-      expect(Array.isArray(y), `${type} returned ${JSON.stringify(y)}`).toBe(true);
-      closeAll(y, xs.map(f));
+      closeAll(out(type, {}, [xs]), xs.map(f));
+    });
+  }
+  it('domain edges: asin/acos just outside [-1, 1] and acosh(0.5) give NaN with MATH_DOMAIN_ERROR', () => {
+    for (const [type, x] of [['ASIN', 1 + 2 ** -52], ['ACOS', -1 - 2 ** -52], ['ACOSH', 0.5]] as const) {
+      const b = BLOCK_LIBRARY[type]('x', {});
+      const r = b.execute([x] as never, b.params, b.state, 0);
+      expect(Number.isNaN(Number(r.outputs[0])), type).toBe(true);
+      expect(r.diagnostic?.code, type).toBe('MATH_DOMAIN_ERROR');
     }
+  });
+  it('limits and poles follow IEEE: atanh(+-1) = +-Inf, cot(0) = csc(0) = Inf, tan(pi/2) is the finite IEEE value', () => {
+    expect(out('ATANH', {}, [1])).toBe(Infinity);
+    expect(out('ATANH', {}, [-1])).toBe(-Infinity);
+    expect(out('COT', {}, [0])).toBe(Infinity);
+    expect(out('COSEC', {}, [0])).toBe(Infinity);
+    close(out('TAN', {}, [Math.PI / 2]), Math.tan(Math.PI / 2));
+  });
+  it('large arguments use the full-precision reduction of the platform: sin(1e8), cos(1e8)', () => {
+    close(out('SIN', {}, [1e8]), Math.sin(1e8));
+    close(out('COS', {}, [1e8]), Math.cos(1e8));
   });
 });
