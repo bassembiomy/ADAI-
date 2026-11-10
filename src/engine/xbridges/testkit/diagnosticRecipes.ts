@@ -8,7 +8,7 @@
  *
  * Live runs use runModel (the canvas loop; steps = samples - 1, 0 when compile refused). Batch-only codes
  * (Solvers.runFixedStep: simulation configuration, infinite stop time, unsupported solver) count steps with a wrapper
- * on the engine instance's computeOutputs (one top-level call per major step plus the final output evaluation).
+ * on the engine instance's commitStateUpdates (one commit per completed major step).
  */
 import { buildModel, runModel, type ModelSpec } from './model';
 import { XbridgesEngine } from '../XbridgesEngine';
@@ -34,17 +34,17 @@ function live(spec: ModelSpec, opts: LiveOptions = {}): DiagnosticRun {
   return { diagnostics: r.diagnostics, steps: Math.max(0, r.t.length - 1), plannedSteps: Math.ceil(stopTime / dt - 1e-9) };
 }
 
-/** Batch run (Solvers.runFixedStep); steps = top-level output evaluations minus the final one. */
+/** Batch run (Solvers.runFixedStep); steps = completed steps, counted as state commits (a failed step commits nothing). */
 function batchSteps(spec: ModelSpec, options: SolverOptions): { diagnostics: ModelDiagnostic[]; steps: number } {
   const engine = new XbridgesEngine(buildModel(spec));
-  let calls = 0;
-  const original = engine.computeOutputs.bind(engine);
-  engine.computeOutputs = ((time: number, temp?: Map<string, any>) => {
-    if (temp === undefined) calls++;
-    return original(time, temp);
-  }) as typeof engine.computeOutputs;
+  let commits = 0;
+  const original = engine.commitStateUpdates.bind(engine);
+  engine.commitStateUpdates = ((...args: Parameters<typeof engine.commitStateUpdates>) => {
+    commits++;
+    return original(...args);
+  }) as typeof engine.commitStateUpdates;
   Solvers.runFixedStep(engine, options);
-  return { diagnostics: [...engine.diagnostics], steps: Math.max(0, calls - 1) };
+  return { diagnostics: [...engine.diagnostics], steps: commits };
 }
 
 const VALID_BATCH: SolverOptions = { solver: 'euler', fixedStep: 0.25, startTime: 0, stopTime: 1 };
@@ -222,8 +222,8 @@ export const DIAGNOSTIC_RECIPES: Record<string, DiagnosticRecipe> = {
     [{ blocks: [{ id: 'f', type: 'FUZZY_SURFACE_VIEWER', params: { fisConfig: { name: 'fis' } } }], wires: [] }],
   ),
   NON_FINITE_INPUT: doeFault(
-    'DOE_MODEL GMDH (layers from a trained model file) fed NaN from Constant 2 -> Arcsine; the code is only stored in nextState.lastFault (BlockDefinitions.ts:3299), the engine reports BLOCK_RUNTIME_FAULT',
-    { modelType: 'GMDH', layers: [[{ inputs: [0], coeffs: [0, 1, 0, 0, 0, 0] }]] },
+    'DOE_MODEL GMDH with a two-input neuron over X1, X2 (X2 left open) and X1 fed NaN from Constant 2 -> Arcsine; the code is only stored in nextState.lastFault (BlockDefinitions.ts:3299), the engine reports BLOCK_RUNTIME_FAULT',
+    { modelType: 'GMDH', inputNames: ['X1', 'X2'], layers: [[{ inputs: [0, 1], coeffs: [0, 1, 0, 0, 0, 0] }]] },
     2,
     true,
   ),
