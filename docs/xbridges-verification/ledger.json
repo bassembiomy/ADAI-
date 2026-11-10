@@ -109,7 +109,7 @@
     "WP-02"
    ],
    "status": "in_progress",
-   "note": "Part A (U1-U5, U7, U9-U11, U14) written; first run flags 195 entries; Sonnet triage in progress. U6, U8, U12, U13, U15, U16 follow as WP-03b."
+   "note": "Part A pinned: rules corrected from the triage (diagnosed NaN accepted, overflow range, seeded randomness for U11/U14, ragged array removed, factory-level U7 added); every pinned entry is a triaged product defect. Awaiting Fable verification. U6, U8, U12, U13, U15, U16 follow as WP-03b."
   },
   {
    "id": "WP-04",
@@ -437,6 +437,62 @@
    "gate": "V5",
    "status": "open",
    "summary": "The canvas accumulates time (timeRef += stepNow) instead of t0 + n*dt; the test kit uses multiplication (plan 5.1). Against an accumulating emulation, signals differ at rounding level for 40 block types (verifier measured counts, not size). WP-12 measures the drift and pins the canvas rule."
+  },
+  {
+   "id": "XBV-018",
+   "plan_ref": "U14",
+   "severity": "S1",
+   "gate": "V4",
+   "status": "open",
+   "summary": "28 stateful blocks are sorted by the engine as non-direct-feedthrough although their output depends on the current input (DERIVATIVE, HIGH_PASS_FILTER, MOVING_AVERAGE, KALMAN_FILTER, EXTENDED_KALMAN_FILTER, LMS, PID/FOC/field-weakening blocks, several ROBOT_VACUUM_* and DEM_DRUM). Result depends on block order: MOVING_AVERAGE window 1 placed before its source gives y = [0,1,0,1,0,1] for u = [1,0,1,0,1,1]. Fix per block: either declare directFeedthrough (true feedthrough in Simulink) or output the pre-update state (plant blocks). List: universal-gaps.json XBV-U14."
+  },
+  {
+   "id": "XBV-019",
+   "plan_ref": "U7f",
+   "severity": "S1",
+   "gate": "V3",
+   "status": "open",
+   "summary": "153 numeric parameters are replaced by their default when set to 0 because factories use `params.x || default`; the canvas rebuilds blocks through the factory on Play, so the user's 0 is lost (GAIN.gain is XBV-015). List: universal-gaps.json XBV-U7f; engine-level list XBV-U7 (5)."
+  },
+  {
+   "id": "XBV-020",
+   "plan_ref": "U10",
+   "severity": "S1",
+   "gate": "V5",
+   "status": "open",
+   "summary": "16 blocks mutate their state (or inputs/params) in place inside execute; solver stages then see already-updated state. ROBOT_VACUUM_FUSION with x_true = 1: euler 0.99795, rk4 0.9999998, ode45 about 1 (one update per step: 0.9547). List: XBV-U10."
+  },
+  {
+   "id": "XBV-021",
+   "plan_ref": "U1/U4/U5",
+   "severity": "S2",
+   "gate": "V3",
+   "status": "open",
+   "summary": "Blocks throw inside execute (stopping the run with BLOCK_RUNTIME_FAULT): on default inputs 9 (MPC_CONTROLLER default Q 2x2 vs 1 output; MatrixConcat, MatrixSolve, SubMatrix on scalars; DEM_*; ROBOT_VACUUM_ERODE_MASK, THETA_STAR), on NaN/Inf 9, on a wrong value kind 29. Lists XBV-U1, XBV-U4, XBV-U5."
+  },
+  {
+   "id": "XBV-022",
+   "plan_ref": "U2/U3",
+   "severity": "S2",
+   "gate": "V3",
+   "status": "open",
+   "summary": "Undefined outputs or unreported NaN: 5 blocks alone with unconnected inputs (DEMUX out2 undefined stops a downstream Abs), 11 blocks on finite edge inputs (incl. SECTOR_SELECTOR sector -3 for theta = -10 rad). Lists XBV-U2, XBV-U3."
+  },
+  {
+   "id": "XBV-023",
+   "plan_ref": "U9",
+   "severity": "S3",
+   "gate": "V3",
+   "status": "open",
+   "summary": "15 noise/stochastic blocks use unseeded Math.random: runs are not repeatable (Simulink noise blocks are seeded). With a fixed seed, state also survives a clone (U11 clean). List XBV-U9."
+  },
+  {
+   "id": "XBV-024",
+   "plan_ref": "review",
+   "severity": "S4",
+   "gate": "V3",
+   "status": "open",
+   "summary": "PWM_GENERATOR logs to the console inside execute and uses a golden-ratio phase offset; MPC_CONTROLLER keeps a class instance in state that does not survive a clone (hidden while it throws). Found during WP-03 triage."
   }
  ],
  "blocks": {

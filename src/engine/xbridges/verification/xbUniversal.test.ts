@@ -2,7 +2,7 @@
  * WP-03 — universal corner-case battery (plan section 4.1), run on every block of BLOCK_LIBRARY.
  * Plan: docs/superpowers/plans/2026-11-10-xbridges-full-verification.md.
  *
- * Part A covers U1, U2, U3, U4, U5, U7, U9, U10, U11 and U14. U6 (shapes), U8 (enums), U12 (reset), U13 (long runs),
+ * Part A covers U1, U2, U3, U4, U5, U7 (engine and factory level), U9, U10, U11 and U14. U6 (shapes), U8 (enums), U12 (reset), U13 (long runs),
  * U15 (dynamic ports) and U16 (names) follow in WP-03b.
  *
  * Every case computes, for all blocks, the list of blocks that break the rule. The list must equal the one pinned in
@@ -15,11 +15,13 @@
  */
 import { appendFileSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { BLOCK_LIBRARY } from '../BlockDefinitions';
 import { XbridgesEngine } from '../XbridgesEngine';
 import type { XBlock } from '../types';
-import { buildModel, runModel } from '../testkit';
+import { buildModel, mulberry32, runModel } from '../testkit';
+import { parameterKind } from '../parameterSchema';
+import { evaluateParameter } from '../parameterEvaluation';
 
 const TYPES = Object.keys(BLOCK_LIBRARY).sort();
 const make = (type: string, params: Record<string, unknown> = {}): XBlock => BLOCK_LIBRARY[type]('u', params);
@@ -60,11 +62,11 @@ const snapshot = <T>(v: T): T => {
   try { return structuredClone(v); } catch { return JSON.parse(JSON.stringify(v ?? null)) as T; }
 };
 
-interface Exec { threw: string | null; outputs: unknown[]; nextState: unknown; error?: string }
+interface Exec { threw: string | null; outputs: unknown[]; nextState: unknown; error?: string; diagnostic?: string }
 const exec = (b: XBlock, inputs: unknown[], state: unknown, t: number): Exec => {
   try {
     const r = b.execute(inputs as never, b.params, state, t);
-    return { threw: null, outputs: r?.outputs ?? [], nextState: r?.nextState === undefined ? state : r.nextState, error: r?.error };
+    return { threw: null, outputs: r?.outputs ?? [], nextState: r?.nextState === undefined ? state : r.nextState, error: r?.error, diagnostic: r?.diagnostic?.code };
   } catch (e) {
     return { threw: String((e as Error)?.message ?? e), outputs: [], nextState: state };
   }
@@ -86,7 +88,17 @@ const trajectory = (b: XBlock, n: number, u: (k: number, port: number) => unknow
 
 const FINITE_SPECIALS = [0, -0, 1, -1, Number.MAX_VALUE, -Number.MAX_VALUE, Number.MIN_VALUE, 1e-300, -1e-300, 1e300, -1e300];
 const NON_FINITE = [NaN, Infinity, -Infinity];
-const WRONG_KINDS: unknown[] = [true, 'abc', null, undefined, {}, [[1, [2]]], []];
+/** A ragged nested array is not included: no model can produce one (the parameter parser rejects it). */
+const WRONG_KINDS: unknown[] = [true, 'abc', null, undefined, {}, []];
+/** Above this magnitude IEEE overflow (Inf - Inf, 0 * Inf) legitimately produces NaN; only the no-throw rule applies. */
+const OVERFLOW_RANGE = 1e150;
+
+/** Runs fn with Math.random replaced by a fixed-seed generator, so randomness cannot masquerade as another defect. */
+const seeded = <T>(fn: () => T, seed = 12345): T => {
+  const rng = mulberry32(seed);
+  const spy = vi.spyOn(Math, 'random').mockImplementation(rng);
+  try { return fn(); } finally { spy.mockRestore(); }
+};
 
 describe('WP-03 universal battery, part A', () => {
   it('U1: default construction and one execute with unit inputs never throw', () => {
@@ -95,24 +107,30 @@ describe('WP-03 universal battery, part A', () => {
     }));
   });
 
-  it('U2: a block alone (all inputs unconnected) compiles and runs 5 euler steps without a fault or an undefined/NaN output', () => {
+  it('U2: a block alone (inputs unconnected) runs 5 euler steps without an exception, an undefined output, or a NaN it does not report', () => {
     pin('XBV-U2 fails alone with unconnected inputs', TYPES.filter((type) => {
       const b = make(type);
       const probes = b.outputs.map((p) => `u.${p.id}`);
       try {
-        const r = runModel(buildModel({ blocks: [{ id: 'u', type }], wires: [] }), { solver: 'euler', dt: 0.01, stopTime: 0.05, probes });
-        if (r.diagnostics.some((d) => ['BLOCK_RUNTIME_FAULT', 'EXECUTION_EXCEPTION', 'NUMERICAL_INSTABILITY'].includes(d.code))) return true;
-        if (r.diagnostics.some((d) => d.severity === 'error')) return true;
-        return probes.some((p) => r.signals[p].some((v) => v === undefined || numbersIn(v).some(Number.isNaN)));
+        const r = runModel(buildModel({ blocks: [{ id: 'u', type }], wires: [] }), { solver: 'euler', dt: 0.001, stopTime: 0.005, probes });
+        // A fault or configuration error the block reports itself is a diagnosed stop (Simulink also refuses an
+        // unconfigured block). An exception raised inside execute is not.
+        const raised = r.diagnostics.some((d) => d.code === 'EXECUTION_EXCEPTION'
+          || (d.code === 'BLOCK_RUNTIME_FAULT' && !d.message.includes('reported a runtime fault')));
+        if (raised) return true;
+        const reported = r.diagnostics.some((d) => (d.blockIds ?? []).includes('u') && d.code !== 'NUMERICAL_INSTABILITY');
+        return probes.some((p) => r.signals[p].some((v) => v === undefined || (!reported && numbersIn(v).some(Number.isNaN))));
       } catch { return true; }
     }));
   });
 
-  it('U3: finite edge inputs give no throw and no NaN output unless the block reports an error', () => {
+  it('U3: finite edge inputs never throw, and give no NaN the block does not report (|u| <= 1e150)', () => {
     pin('XBV-U3 throws or silent NaN on finite edge inputs', TYPES.filter((type) => FINITE_SPECIALS.some((v) => {
       const b = make(type);
       const r = exec(b, b.inputs.map(() => v), b.state, 0);
-      return r.threw !== null || (!r.error && numbersIn(r.outputs).some(Number.isNaN));
+      if (r.threw !== null) return true;
+      if (Math.abs(v) > OVERFLOW_RANGE) return false;
+      return !r.error && !r.diagnostic && numbersIn(r.outputs).some(Number.isNaN);
     })));
   });
 
@@ -155,6 +173,21 @@ describe('WP-03 universal battery, part A', () => {
     pin('XBV-U7 zero parameter silently replaced', offenders);
   });
 
+  it('U7: the factory keeps a numeric parameter set to 0 unless its schema rejects 0 (the canvas rebuilds blocks through the factory on Play)', () => {
+    const offenders: string[] = [];
+    for (const type of TYPES) {
+      for (const [param, value] of Object.entries(make(type).params ?? {})) {
+        if (typeof value !== 'number' || !Number.isFinite(value) || value === 0) continue;
+        const kind = parameterKind(type, param);
+        if (kind && !evaluateParameter(0, kind).ok) continue;
+        let kept: unknown;
+        try { kept = make(type, { [param]: 0 }).params?.[param]; } catch { kept = 'threw'; }
+        if (!(typeof kept === 'number' && kept === 0)) offenders.push(`${type}.${param}`);
+      }
+    }
+    pin('XBV-U7f factory replaces a zero parameter', offenders);
+  });
+
   it('U9: two fresh instances with the same inputs give identical outputs for 50 steps', () => {
     pin('XBV-U9 non-deterministic', TYPES.filter((type) => {
       const u = (k: number, i: number) => Math.sin(0.3 * k + i);
@@ -183,8 +216,8 @@ describe('WP-03 universal battery, part A', () => {
   it('U11: replacing the state by its clone mid-run (worker snapshot, save/reopen) does not change the trajectory', () => {
     pin('XBV-U11 state does not survive a clone', TYPES.filter((type) => {
       const u = (k: number, i: number) => 0.5 + 0.1 * k - i;
-      const plain = trajectory(make(type), 20, u);
-      const cloned = trajectory(make(type), 20, u, 0.01, (k, s) => (k === 10 ? JSON.parse(JSON.stringify(s ?? null)) ?? s : s));
+      const plain = seeded(() => trajectory(make(type), 20, u));
+      const cloned = seeded(() => trajectory(make(type), 20, u, 0.01, (k, s) => (k === 10 ? JSON.parse(JSON.stringify(s ?? null)) ?? s : s)));
       return plain.threw === null && cloned.threw === null && !sameValue(plain.outs, cloned.outs);
     }));
   });
@@ -194,8 +227,8 @@ describe('WP-03 universal battery, part A', () => {
     pin('XBV-U14 declared non-feedthrough but output depends on the current input', nonFeedthrough.filter((type) => {
       const b = make(type);
       const s = snapshot(b.state);
-      const r1 = exec(make(type), b.inputs.map(() => 1), snapshot(s), 0);
-      const r2 = exec(make(type), b.inputs.map(() => 7), snapshot(s), 0);
+      const r1 = seeded(() => exec(make(type), b.inputs.map(() => 1), snapshot(s), 0));
+      const r2 = seeded(() => exec(make(type), b.inputs.map(() => 7), snapshot(s), 0));
       return r1.threw === null && r2.threw === null && !sameValue(r1.outputs, r2.outputs);
     }));
   });

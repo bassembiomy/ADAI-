@@ -1,0 +1,1681 @@
+{
+ "XBV-U1 throws on default construction or execute": [
+  {
+   "entry": "DEM_BOND_FABRIC",
+   "verdict": "product",
+   "root_cause": "RC-SCALAR-ARRAY-PORT",
+   "severity": "S3",
+   "evidence": "positions=1 -> positions.length undefined -> new Array(NaN): RangeError \"Invalid array length\"",
+   "file": "BlockDefinitions.ts:10720"
+  },
+  {
+   "entry": "DEM_FLUID_COUPLING",
+   "verdict": "product",
+   "root_cause": "RC-SCALAR-ARRAY-PORT",
+   "severity": "S3",
+   "evidence": "same: \"Invalid array length\"",
+   "file": "BlockDefinitions.ts:10834"
+  },
+  {
+   "entry": "DEM_HERTZ_CONTACT",
+   "verdict": "product",
+   "root_cause": "RC-SCALAR-ARRAY-PORT",
+   "severity": "S3",
+   "evidence": "same: positions.length/2 undefined -> new Array(NaN) at BlockDefinitions.ts:~10667",
+   "file": "BlockDefinitions.ts:10638"
+  },
+  {
+   "entry": "MPC_CONTROLLER",
+   "verdict": "product",
+   "root_cause": "RC-MPC-DEFAULTS",
+   "severity": "S2",
+   "evidence": "Throws \"Dimension mismatch in multiplication. Matrix A columns (10) must match Matrix B rows (20)\" for ANY input shape with default params.",
+   "file": "BlockDefinitions.ts:5367"
+  },
+  {
+   "entry": "MatrixConcat",
+   "verdict": "product",
+   "root_cause": "RC-MATRIX-SCALAR",
+   "severity": "S2",
+   "evidence": "math.concat(1,1,0): \"Dimension must be specified as last argument\" (axis default 0 with scalars)",
+   "file": "BlockDefinitions.ts:2390"
+  },
+  {
+   "entry": "MatrixSolve",
+   "verdict": "product",
+   "root_cause": "RC-MATRIX-SCALAR",
+   "severity": "S2",
+   "evidence": "math.lusolve(1,1): unexpected type of argument",
+   "file": "BlockDefinitions.ts:2472"
+  },
+  {
+   "entry": "SubMatrix",
+   "verdict": "product",
+   "root_cause": "RC-MATRIX-SCALAR",
+   "severity": "S2",
+   "evidence": "\"Input must be a vector or matrix\" for scalar (Simulink Submatrix of a scalar with row 1:1 returns the scalar)",
+   "file": "BlockDefinitions.ts:2453"
+  },
+  {
+   "entry": "ROBOT_VACUUM_ERODE_MASK",
+   "verdict": "product",
+   "root_cause": "RC-SCALAR-ARRAY-PORT",
+   "severity": "S3",
+   "evidence": "grid=1 -> grid[r][c] on number: \"Cannot read properties of undefined (reading '0')\"",
+   "file": "BlockDefinitions.ts:6667"
+  },
+  {
+   "entry": "ROBOT_VACUUM_THETA_STAR",
+   "verdict": "product",
+   "root_cause": "RC-SCALAR-ARRAY-PORT",
+   "severity": "S3",
+   "evidence": "grid=1 -> grid[r][c] on number: \"Cannot read properties of undefined (reading '0')\"",
+   "file": "BlockDefinitions.ts:6909"
+  }
+ ],
+ "XBV-U4 throws on NaN or infinite inputs": [
+  {
+   "entry": "DEM_BOND_FABRIC",
+   "verdict": "product",
+   "root_cause": "RC-SCALAR-ARRAY-PORT",
+   "severity": "S3",
+   "evidence": "positions=1 -> positions.length undefined -> new Array(NaN) (same as U1; any non-array input incl. NaN/Infinity throws, the non-finite value is irrelevant)",
+   "file": "BlockDefinitions.ts:10720"
+  },
+  {
+   "entry": "DEM_FLUID_COUPLING",
+   "verdict": "product",
+   "root_cause": "RC-SCALAR-ARRAY-PORT",
+   "severity": "S3",
+   "evidence": "same (same as U1; any non-array input incl. NaN/Infinity throws, the non-finite value is irrelevant)",
+   "file": "BlockDefinitions.ts:10834"
+  },
+  {
+   "entry": "DEM_HERTZ_CONTACT",
+   "verdict": "product",
+   "root_cause": "RC-SCALAR-ARRAY-PORT",
+   "severity": "S3",
+   "evidence": "same (same as U1; any non-array input incl. NaN/Infinity throws, the non-finite value is irrelevant)",
+   "file": "BlockDefinitions.ts:10638"
+  },
+  {
+   "entry": "MPC_CONTROLLER",
+   "verdict": "product",
+   "root_cause": "RC-MPC-DEFAULTS",
+   "severity": "S2",
+   "evidence": "Throws \"Dimension mismatch in multiplication. Matrix A columns (10) must match Matrix B rows (20)\" for ANY input shape with default params. (same as U1; any non-array input incl. NaN/Infinity throws, the non-finite value is irrelevant)",
+   "file": "BlockDefinitions.ts:5367"
+  },
+  {
+   "entry": "MatrixConcat",
+   "verdict": "product",
+   "root_cause": "RC-MATRIX-SCALAR",
+   "severity": "S2",
+   "evidence": "math.concat(1,1,0) (same as U1; any non-array input incl. NaN/Infinity throws, the non-finite value is irrelevant)",
+   "file": "BlockDefinitions.ts:2390"
+  },
+  {
+   "entry": "MatrixSolve",
+   "verdict": "product",
+   "root_cause": "RC-MATRIX-SCALAR",
+   "severity": "S2",
+   "evidence": "math.lusolve(1,1) (same as U1; any non-array input incl. NaN/Infinity throws, the non-finite value is irrelevant)",
+   "file": "BlockDefinitions.ts:2472"
+  },
+  {
+   "entry": "SubMatrix",
+   "verdict": "product",
+   "root_cause": "RC-MATRIX-SCALAR",
+   "severity": "S2",
+   "evidence": "\"Input must be a vector or matrix\" for scalar (Simulink Submatrix of a scalar with row 1 (same as U1; any non-array input incl. NaN/Infinity throws, the non-finite value is irrelevant)",
+   "file": "BlockDefinitions.ts:2453"
+  },
+  {
+   "entry": "ROBOT_VACUUM_ERODE_MASK",
+   "verdict": "product",
+   "root_cause": "RC-SCALAR-ARRAY-PORT",
+   "severity": "S3",
+   "evidence": "grid=1 -> grid[r][c] on number (same as U1; any non-array input incl. NaN/Infinity throws, the non-finite value is irrelevant)",
+   "file": "BlockDefinitions.ts:6667"
+  },
+  {
+   "entry": "ROBOT_VACUUM_THETA_STAR",
+   "verdict": "product",
+   "root_cause": "RC-SCALAR-ARRAY-PORT",
+   "severity": "S3",
+   "evidence": "grid=1 -> grid[r][c] on number (same as U1; any non-array input incl. NaN/Infinity throws, the non-finite value is irrelevant)",
+   "file": "BlockDefinitions.ts:6909"
+  }
+ ],
+ "XBV-U2 fails alone with unconnected inputs": [
+  {
+   "entry": "ACOSEC",
+   "verdict": "test",
+   "root_cause": "RC-U2-GROUNDED-ZERO",
+   "severity": null,
+   "evidence": "asin(1/0)=asin(Inf)=NaN; only NUMERICAL_INSTABILITY warning in the engine",
+   "file": "BlockDefinitions.ts:4127",
+   "rule_change": "Do not count NUMERICAL_INSTABILITY (severity warning) nor NaN/Inf outputs when the run also carries MATH_DOMAIN_ERROR/DIVIDE_BY_ZERO/NUMERICAL_INSTABILITY for that block; keep BLOCK_RUNTIME_FAULT, EXECUTION_EXCEPTION, error-severity diagnostics and undefined outputs as failures."
+  },
+  {
+   "entry": "ACOSECH",
+   "verdict": "test",
+   "root_cause": "RC-U2-GROUNDED-ZERO",
+   "severity": null,
+   "evidence": "asinh(1/0)=Inf; only NUMERICAL_INSTABILITY warning in the engine",
+   "file": "BlockDefinitions.ts:4244",
+   "rule_change": "Do not count NUMERICAL_INSTABILITY (severity warning) nor NaN/Inf outputs when the run also carries MATH_DOMAIN_ERROR/DIVIDE_BY_ZERO/NUMERICAL_INSTABILITY for that block; keep BLOCK_RUNTIME_FAULT, EXECUTION_EXCEPTION, error-severity diagnostics and undefined outputs as failures."
+  },
+  {
+   "entry": "ACOSH",
+   "verdict": "test",
+   "root_cause": "RC-U2-GROUNDED-ZERO",
+   "severity": null,
+   "evidence": "acosh(0)=NaN (domain u>=1); only NUMERICAL_INSTABILITY warning in the engine",
+   "file": "BlockDefinitions.ts:4204",
+   "rule_change": "Do not count NUMERICAL_INSTABILITY (severity warning) nor NaN/Inf outputs when the run also carries MATH_DOMAIN_ERROR/DIVIDE_BY_ZERO/NUMERICAL_INSTABILITY for that block; keep BLOCK_RUNTIME_FAULT, EXECUTION_EXCEPTION, error-severity diagnostics and undefined outputs as failures."
+  },
+  {
+   "entry": "ACOTH",
+   "verdict": "test",
+   "root_cause": "RC-U2-GROUNDED-ZERO",
+   "severity": null,
+   "evidence": "atanh(1/0)=NaN; only NUMERICAL_INSTABILITY warning in the engine",
+   "file": "BlockDefinitions.ts:4224",
+   "rule_change": "Do not count NUMERICAL_INSTABILITY (severity warning) nor NaN/Inf outputs when the run also carries MATH_DOMAIN_ERROR/DIVIDE_BY_ZERO/NUMERICAL_INSTABILITY for that block; keep BLOCK_RUNTIME_FAULT, EXECUTION_EXCEPTION, error-severity diagnostics and undefined outputs as failures."
+  },
+  {
+   "entry": "ASEC",
+   "verdict": "test",
+   "root_cause": "RC-U2-GROUNDED-ZERO",
+   "severity": null,
+   "evidence": "acos(1/0)=NaN; only NUMERICAL_INSTABILITY warning in the engine",
+   "file": "BlockDefinitions.ts:4115",
+   "rule_change": "Do not count NUMERICAL_INSTABILITY (severity warning) nor NaN/Inf outputs when the run also carries MATH_DOMAIN_ERROR/DIVIDE_BY_ZERO/NUMERICAL_INSTABILITY for that block; keep BLOCK_RUNTIME_FAULT, EXECUTION_EXCEPTION, error-severity diagnostics and undefined outputs as failures."
+  },
+  {
+   "entry": "ASECH",
+   "verdict": "test",
+   "root_cause": "RC-U2-GROUNDED-ZERO",
+   "severity": null,
+   "evidence": "acosh(1/0)=Inf; only NUMERICAL_INSTABILITY warning in the engine",
+   "file": "BlockDefinitions.ts:4234",
+   "rule_change": "Do not count NUMERICAL_INSTABILITY (severity warning) nor NaN/Inf outputs when the run also carries MATH_DOMAIN_ERROR/DIVIDE_BY_ZERO/NUMERICAL_INSTABILITY for that block; keep BLOCK_RUNTIME_FAULT, EXECUTION_EXCEPTION, error-severity diagnostics and undefined outputs as failures."
+  },
+  {
+   "entry": "COSEC",
+   "verdict": "test",
+   "root_cause": "RC-U2-GROUNDED-ZERO",
+   "severity": null,
+   "evidence": "1/sin(0)=Inf; only NUMERICAL_INSTABILITY warning in the engine",
+   "file": "BlockDefinitions.ts:4058",
+   "rule_change": "Do not count NUMERICAL_INSTABILITY (severity warning) nor NaN/Inf outputs when the run also carries MATH_DOMAIN_ERROR/DIVIDE_BY_ZERO/NUMERICAL_INSTABILITY for that block; keep BLOCK_RUNTIME_FAULT, EXECUTION_EXCEPTION, error-severity diagnostics and undefined outputs as failures."
+  },
+  {
+   "entry": "COSECH",
+   "verdict": "test",
+   "root_cause": "RC-U2-GROUNDED-ZERO",
+   "severity": null,
+   "evidence": "1/sinh(0)=Inf; only NUMERICAL_INSTABILITY warning in the engine",
+   "file": "BlockDefinitions.ts:4185",
+   "rule_change": "Do not count NUMERICAL_INSTABILITY (severity warning) nor NaN/Inf outputs when the run also carries MATH_DOMAIN_ERROR/DIVIDE_BY_ZERO/NUMERICAL_INSTABILITY for that block; keep BLOCK_RUNTIME_FAULT, EXECUTION_EXCEPTION, error-severity diagnostics and undefined outputs as failures."
+  },
+  {
+   "entry": "COT",
+   "verdict": "test",
+   "root_cause": "RC-U2-GROUNDED-ZERO",
+   "severity": null,
+   "evidence": "1/tan(0)=Inf; only NUMERICAL_INSTABILITY warning in the engine",
+   "file": "BlockDefinitions.ts:4038",
+   "rule_change": "Do not count NUMERICAL_INSTABILITY (severity warning) nor NaN/Inf outputs when the run also carries MATH_DOMAIN_ERROR/DIVIDE_BY_ZERO/NUMERICAL_INSTABILITY for that block; keep BLOCK_RUNTIME_FAULT, EXECUTION_EXCEPTION, error-severity diagnostics and undefined outputs as failures."
+  },
+  {
+   "entry": "COTH",
+   "verdict": "test",
+   "root_cause": "RC-U2-GROUNDED-ZERO",
+   "severity": null,
+   "evidence": "1/tanh(0)=Inf; only NUMERICAL_INSTABILITY warning in the engine",
+   "file": "BlockDefinitions.ts:4167",
+   "rule_change": "Do not count NUMERICAL_INSTABILITY (severity warning) nor NaN/Inf outputs when the run also carries MATH_DOMAIN_ERROR/DIVIDE_BY_ZERO/NUMERICAL_INSTABILITY for that block; keep BLOCK_RUNTIME_FAULT, EXECUTION_EXCEPTION, error-severity diagnostics and undefined outputs as failures."
+  },
+  {
+   "entry": "Inverse",
+   "verdict": "test",
+   "root_cause": "RC-U2-GROUNDED-ZERO",
+   "severity": null,
+   "evidence": "inv(0)=Inf (singular, MATLAB warns); only NUMERICAL_INSTABILITY warning in the engine",
+   "file": "BlockDefinitions.ts:2376",
+   "rule_change": "Do not count NUMERICAL_INSTABILITY (severity warning) nor NaN/Inf outputs when the run also carries MATH_DOMAIN_ERROR/DIVIDE_BY_ZERO/NUMERICAL_INSTABILITY for that block; keep BLOCK_RUNTIME_FAULT, EXECUTION_EXCEPTION, error-severity diagnostics and undefined outputs as failures."
+  },
+  {
+   "entry": "VectorDiv",
+   "verdict": "test",
+   "root_cause": "RC-U2-GROUNDED-ZERO",
+   "severity": null,
+   "evidence": "0/0=NaN, block emits DIVIDE_BY_ZERO; only NUMERICAL_INSTABILITY warning in the engine",
+   "file": "BlockDefinitions.ts:2286",
+   "rule_change": "Do not count NUMERICAL_INSTABILITY (severity warning) nor NaN/Inf outputs when the run also carries MATH_DOMAIN_ERROR/DIVIDE_BY_ZERO/NUMERICAL_INSTABILITY for that block; keep BLOCK_RUNTIME_FAULT, EXECUTION_EXCEPTION, error-severity diagnostics and undefined outputs as failures."
+  },
+  {
+   "entry": "BUS_SELECTOR",
+   "verdict": "test",
+   "root_cause": "RC-U2-REQUIRES-CONFIG",
+   "severity": null,
+   "evidence": "BLOCK_RUNTIME_FAULT \"Input must be a bus signal\" returned as block error; Simulink: Bus Selector with non-bus input = compile error",
+   "file": "bus/busBlocks.ts:67",
+   "rule_change": "Exempt blocks whose block-reported fault is a typed input-contract error."
+  },
+  {
+   "entry": "DEMUX",
+   "verdict": "product",
+   "root_cause": "RC-DEMUX-SCALAR",
+   "severity": "S2",
+   "evidence": "out2 = undefined for the grounded scalar input (probe u.out2 undefined); no diagnostic; downstream gets undefined",
+   "file": "BlockDefinitions.ts:3771"
+  },
+  {
+   "entry": "DOE_MODEL",
+   "verdict": "test",
+   "root_cause": "RC-U2-REQUIRES-CONFIG",
+   "severity": null,
+   "evidence": "No deployment model: block error INVALID_EQUATION_STRING \"Equation string is empty or invalid.\" (typed error, not a throw)",
+   "file": "BlockDefinitions.ts:3218",
+   "rule_change": "Same exemption (block needs a trained model)."
+  },
+  {
+   "entry": "FUZZY_SURFACE_VIEWER",
+   "verdict": "test",
+   "root_cause": "RC-U2-REQUIRES-CONFIG",
+   "severity": null,
+   "evidence": "Compile error MISSING_FIS_CONFIG (XbridgesEngine.ts:300-308) by design; Simulink Fuzzy viewer needs an FIS",
+   "file": "BlockDefinitions.ts:10241",
+   "rule_change": "Exempt blocks that need a linked configuration."
+  },
+  {
+   "entry": "INTEGRATOR_DISCRETE",
+   "verdict": "test",
+   "root_cause": "RC-U2-SAMPLE-TIME",
+   "severity": null,
+   "evidence": "SAMPLE_TIME_NOT_MULTIPLE_OF_FIXED_STEP: Ts=0.001 vs dt=0.01",
+   "file": "BlockDefinitions.ts:3720",
+   "rule_change": "Run each block with dt = its sample time (or 0.001 for all)."
+  },
+  {
+   "entry": "MPC_CONTROLLER",
+   "verdict": "product",
+   "root_cause": "RC-MPC-DEFAULTS",
+   "severity": "S2",
+   "evidence": "BLOCK_RUNTIME_FAULT \"raised an exception ... Dimension mismatch\" (default Q size)",
+   "file": "BlockDefinitions.ts:5367"
+  },
+  {
+   "entry": "MatrixConcat",
+   "verdict": "product",
+   "root_cause": "RC-MATRIX-SCALAR",
+   "severity": "S2",
+   "evidence": "BLOCK_RUNTIME_FAULT \"raised an exception\" on the grounded scalar input; run stops",
+   "file": "BlockDefinitions.ts:2390"
+  },
+  {
+   "entry": "MatrixSolve",
+   "verdict": "product",
+   "root_cause": "RC-MATRIX-SCALAR",
+   "severity": "S2",
+   "evidence": "BLOCK_RUNTIME_FAULT \"raised an exception\" on the grounded scalar input; run stops",
+   "file": "BlockDefinitions.ts:2472"
+  },
+  {
+   "entry": "SubMatrix",
+   "verdict": "product",
+   "root_cause": "RC-MATRIX-SCALAR",
+   "severity": "S2",
+   "evidence": "BLOCK_RUNTIME_FAULT \"raised an exception\" on the grounded scalar input; run stops",
+   "file": "BlockDefinitions.ts:2453"
+  },
+  {
+   "entry": "PT_AUTOMATED_MANUAL_TRANSMISSION",
+   "verdict": "test",
+   "root_cause": "RC-U2-REQUIRES-CONFIG",
+   "severity": null,
+   "evidence": "Block-reported error (not a throw) for physically invalid grounded input (0 K / 0 Pa / 0 rpm / gear 0 / 0 V / missing state bus), via ptBlock.ts:122-132 validation",
+   "file": "powertrain/blocks/transmissions.ts:228",
+   "rule_change": "Count only thrown exceptions; accept block-reported faults. Optional S4 to the controller: PT ports could default to nominal values."
+  },
+  {
+   "entry": "PT_CI_CORE_ENGINE",
+   "verdict": "test",
+   "root_cause": "RC-U2-REQUIRES-CONFIG",
+   "severity": null,
+   "evidence": "Block-reported error (not a throw) for physically invalid grounded input (0 K / 0 Pa / 0 rpm / gear 0 / 0 V / missing state bus), via ptBlock.ts:122-132 validation",
+   "file": "powertrain/blocks/coreEngines.ts:57",
+   "rule_change": "Count only thrown exceptions; accept block-reported faults. Optional S4 to the controller: PT ports could default to nominal values."
+  },
+  {
+   "entry": "PT_COMPRESSOR",
+   "verdict": "test",
+   "root_cause": "RC-U2-REQUIRES-CONFIG",
+   "severity": null,
+   "evidence": "Block-reported error (not a throw) for physically invalid grounded input (0 K / 0 Pa / 0 rpm / gear 0 / 0 V / missing state bus), via ptBlock.ts:122-132 validation",
+   "file": "powertrain/blocks/boostDrive.ts:86",
+   "rule_change": "Count only thrown exceptions; accept block-reported faults. Optional S4 to the controller: PT ports could default to nominal values."
+  },
+  {
+   "entry": "PT_DUAL_CLUTCH_TRANSMISSION",
+   "verdict": "test",
+   "root_cause": "RC-U2-REQUIRES-CONFIG",
+   "severity": null,
+   "evidence": "Block-reported error (not a throw) for physically invalid grounded input (0 K / 0 Pa / 0 rpm / gear 0 / 0 V / missing state bus), via ptBlock.ts:122-132 validation",
+   "file": "powertrain/blocks/transmissions.ts:302",
+   "rule_change": "Count only thrown exceptions; accept block-reported faults. Optional S4 to the controller: PT ports could default to nominal values."
+  },
+  {
+   "entry": "PT_FLOW_RESTRICTION",
+   "verdict": "test",
+   "root_cause": "RC-U2-REQUIRES-CONFIG",
+   "severity": null,
+   "evidence": "Block-reported error (not a throw) for physically invalid grounded input (0 K / 0 Pa / 0 rpm / gear 0 / 0 V / missing state bus), via ptBlock.ts:122-132 validation",
+   "file": "powertrain/blocks/fundamentalFlow.ts:98",
+   "rule_change": "Count only thrown exceptions; accept block-reported faults. Optional S4 to the controller: PT ports could default to nominal values."
+  },
+  {
+   "entry": "PT_HEAT_EXCHANGER",
+   "verdict": "test",
+   "root_cause": "RC-U2-REQUIRES-CONFIG",
+   "severity": null,
+   "evidence": "Block-reported error (not a throw) for physically invalid grounded input (0 K / 0 Pa / 0 rpm / gear 0 / 0 V / missing state bus), via ptBlock.ts:122-132 validation",
+   "file": "powertrain/blocks/fundamentalFlow.ts:217",
+   "rule_change": "Count only thrown exceptions; accept block-reported faults. Optional S4 to the controller: PT ports could default to nominal values."
+  },
+  {
+   "entry": "PT_INTAKE_MANIFOLD",
+   "verdict": "test",
+   "root_cause": "RC-U2-REQUIRES-CONFIG",
+   "severity": null,
+   "evidence": "Block-reported error (not a throw) for physically invalid grounded input (0 K / 0 Pa / 0 rpm / gear 0 / 0 V / missing state bus), via ptBlock.ts:122-132 validation",
+   "file": "powertrain/blocks/airPath.ts:139",
+   "rule_change": "Count only thrown exceptions; accept block-reported faults. Optional S4 to the controller: PT ports could default to nominal values."
+  },
+  {
+   "entry": "PT_MAPPED_MOTOR",
+   "verdict": "test",
+   "root_cause": "RC-U2-REQUIRES-CONFIG",
+   "severity": null,
+   "evidence": "Block-reported error (not a throw) for physically invalid grounded input (0 K / 0 Pa / 0 rpm / gear 0 / 0 V / missing state bus), via ptBlock.ts:122-132 validation",
+   "file": "powertrain/blocks/electricMotors.ts:14",
+   "rule_change": "Count only thrown exceptions; accept block-reported faults. Optional S4 to the controller: PT ports could default to nominal values."
+  },
+  {
+   "entry": "PT_THROTTLE_BODY",
+   "verdict": "test",
+   "root_cause": "RC-U2-REQUIRES-CONFIG",
+   "severity": null,
+   "evidence": "Block-reported error (not a throw) for physically invalid grounded input (0 K / 0 Pa / 0 rpm / gear 0 / 0 V / missing state bus), via ptBlock.ts:122-132 validation",
+   "file": "powertrain/blocks/airPath.ts:70",
+   "rule_change": "Count only thrown exceptions; accept block-reported faults. Optional S4 to the controller: PT ports could default to nominal values."
+  },
+  {
+   "entry": "PT_TURBINE",
+   "verdict": "test",
+   "root_cause": "RC-U2-REQUIRES-CONFIG",
+   "severity": null,
+   "evidence": "Block-reported error (not a throw) for physically invalid grounded input (0 K / 0 Pa / 0 rpm / gear 0 / 0 V / missing state bus), via ptBlock.ts:122-132 validation",
+   "file": "powertrain/blocks/boostDrive.ts:142",
+   "rule_change": "Count only thrown exceptions; accept block-reported faults. Optional S4 to the controller: PT ports could default to nominal values."
+  },
+  {
+   "entry": "PT_TURBOCHARGER",
+   "verdict": "test",
+   "root_cause": "RC-U2-REQUIRES-CONFIG",
+   "severity": null,
+   "evidence": "Block-reported error (not a throw) for physically invalid grounded input (0 K / 0 Pa / 0 rpm / gear 0 / 0 V / missing state bus), via ptBlock.ts:122-132 validation",
+   "file": "powertrain/blocks/turbocharger.ts:17",
+   "rule_change": "Count only thrown exceptions; accept block-reported faults. Optional S4 to the controller: PT ports could default to nominal values."
+  },
+  {
+   "entry": "PT_VEHICLE_BODY_1DOF",
+   "verdict": "test",
+   "root_cause": "RC-U2-REQUIRES-CONFIG",
+   "severity": null,
+   "evidence": "Block-reported error (not a throw) for physically invalid grounded input (0 K / 0 Pa / 0 rpm / gear 0 / 0 V / missing state bus), via ptBlock.ts:122-132 validation",
+   "file": "powertrain/blocks/vehicleBody.ts:18",
+   "rule_change": "Count only thrown exceptions; accept block-reported faults. Optional S4 to the controller: PT ports could default to nominal values."
+  },
+  {
+   "entry": "PT_VVT_VALVETRAIN",
+   "verdict": "test",
+   "root_cause": "RC-U2-REQUIRES-CONFIG",
+   "severity": null,
+   "evidence": "Block-reported error (not a throw) for physically invalid grounded input (0 K / 0 Pa / 0 rpm / gear 0 / 0 V / missing state bus), via ptBlock.ts:122-132 validation",
+   "file": "powertrain/blocks/fuelingActuation.ts:89",
+   "rule_change": "Count only thrown exceptions; accept block-reported faults. Optional S4 to the controller: PT ports could default to nominal values."
+  }
+ ],
+ "XBV-U3 throws or silent NaN on finite edge inputs": [
+  {
+   "entry": "ACOS",
+   "verdict": "test",
+   "root_cause": "RC-DOMAIN-DIAG-NOT-SEEN",
+   "severity": null,
+   "evidence": "NaN only for out-of-domain input and result.diagnostic MATH_DOMAIN_ERROR/DIVIDE_BY_ZERO is present",
+   "file": "BlockDefinitions.ts:4081",
+   "rule_change": "exec() must also read r.diagnostic; NaN is accepted when result.diagnostic is present (any severity)."
+  },
+  {
+   "entry": "ACOSEC",
+   "verdict": "test",
+   "root_cause": "RC-DOMAIN-DIAG-NOT-SEEN",
+   "severity": null,
+   "evidence": "NaN only for out-of-domain input and result.diagnostic MATH_DOMAIN_ERROR/DIVIDE_BY_ZERO is present",
+   "file": "BlockDefinitions.ts:4127",
+   "rule_change": "exec() must also read r.diagnostic; NaN is accepted when result.diagnostic is present (any severity)."
+  },
+  {
+   "entry": "ACOSH",
+   "verdict": "test",
+   "root_cause": "RC-DOMAIN-DIAG-NOT-SEEN",
+   "severity": null,
+   "evidence": "NaN only for out-of-domain input and result.diagnostic MATH_DOMAIN_ERROR/DIVIDE_BY_ZERO is present",
+   "file": "BlockDefinitions.ts:4204",
+   "rule_change": "exec() must also read r.diagnostic; NaN is accepted when result.diagnostic is present (any severity)."
+  },
+  {
+   "entry": "ACOTH",
+   "verdict": "test",
+   "root_cause": "RC-DOMAIN-DIAG-NOT-SEEN",
+   "severity": null,
+   "evidence": "NaN only for out-of-domain input and result.diagnostic MATH_DOMAIN_ERROR/DIVIDE_BY_ZERO is present",
+   "file": "BlockDefinitions.ts:4224",
+   "rule_change": "exec() must also read r.diagnostic; NaN is accepted when result.diagnostic is present (any severity)."
+  },
+  {
+   "entry": "ASEC",
+   "verdict": "test",
+   "root_cause": "RC-DOMAIN-DIAG-NOT-SEEN",
+   "severity": null,
+   "evidence": "NaN only for out-of-domain input and result.diagnostic MATH_DOMAIN_ERROR/DIVIDE_BY_ZERO is present",
+   "file": "BlockDefinitions.ts:4115",
+   "rule_change": "exec() must also read r.diagnostic; NaN is accepted when result.diagnostic is present (any severity)."
+  },
+  {
+   "entry": "ASECH",
+   "verdict": "test",
+   "root_cause": "RC-DOMAIN-DIAG-NOT-SEEN",
+   "severity": null,
+   "evidence": "NaN only for out-of-domain input and result.diagnostic MATH_DOMAIN_ERROR/DIVIDE_BY_ZERO is present",
+   "file": "BlockDefinitions.ts:4234",
+   "rule_change": "exec() must also read r.diagnostic; NaN is accepted when result.diagnostic is present (any severity)."
+  },
+  {
+   "entry": "ASIN",
+   "verdict": "test",
+   "root_cause": "RC-DOMAIN-DIAG-NOT-SEEN",
+   "severity": null,
+   "evidence": "NaN only for out-of-domain input and result.diagnostic MATH_DOMAIN_ERROR/DIVIDE_BY_ZERO is present",
+   "file": "BlockDefinitions.ts:4069",
+   "rule_change": "exec() must also read r.diagnostic; NaN is accepted when result.diagnostic is present (any severity)."
+  },
+  {
+   "entry": "ATANH",
+   "verdict": "test",
+   "root_cause": "RC-DOMAIN-DIAG-NOT-SEEN",
+   "severity": null,
+   "evidence": "NaN only for out-of-domain input and result.diagnostic MATH_DOMAIN_ERROR/DIVIDE_BY_ZERO is present",
+   "file": "BlockDefinitions.ts:4214",
+   "rule_change": "exec() must also read r.diagnostic; NaN is accepted when result.diagnostic is present (any severity)."
+  },
+  {
+   "entry": "VectorDiv",
+   "verdict": "test",
+   "root_cause": "RC-DOMAIN-DIAG-NOT-SEEN",
+   "severity": null,
+   "evidence": "NaN only for out-of-domain input and result.diagnostic MATH_DOMAIN_ERROR/DIVIDE_BY_ZERO is present",
+   "file": "BlockDefinitions.ts:2286",
+   "rule_change": "exec() must also read r.diagnostic; NaN is accepted when result.diagnostic is present (any severity)."
+  },
+  {
+   "entry": "AIR_FRYER_LEARNING_MODEL",
+   "verdict": "test",
+   "root_cause": "RC-IEEE-OVERFLOW",
+   "severity": null,
+   "evidence": "NaN only for |input| >= 1e300 (Inf-Inf / Inf*0 / Inf%360); finite 1,-1,0,1e-300 are fine",
+   "file": "BlockDefinitions.ts:6241",
+   "rule_change": "Check silent NaN only for |v|<=1e150; keep throw check for all."
+  },
+  {
+   "entry": "CFD_SPH_WATER_SOLVER",
+   "verdict": "test",
+   "root_cause": "RC-IEEE-OVERFLOW",
+   "severity": null,
+   "evidence": "NaN only for |input| >= 1e300 (Inf-Inf / Inf*0 / Inf%360); finite 1,-1,0,1e-300 are fine",
+   "file": "BlockDefinitions.ts:10893",
+   "rule_change": "Check silent NaN only for |v|<=1e150; keep throw check for all."
+  },
+  {
+   "entry": "FIELD_ORIENTED_CONTROL",
+   "verdict": "test",
+   "root_cause": "RC-IEEE-OVERFLOW",
+   "severity": null,
+   "evidence": "NaN only for |input| >= 1e300 (Inf-Inf / Inf*0 / Inf%360); finite 1,-1,0,1e-300 are fine",
+   "file": "BlockDefinitions.ts:2991",
+   "rule_change": "Check silent NaN only for |v|<=1e150; keep throw check for all."
+  },
+  {
+   "entry": "IM_FOC_CONTROL",
+   "verdict": "test",
+   "root_cause": "RC-IEEE-OVERFLOW",
+   "severity": null,
+   "evidence": "NaN only for |input| >= 1e300 (Inf-Inf / Inf*0 / Inf%360); finite 1,-1,0,1e-300 are fine",
+   "file": "BlockDefinitions.ts:5669",
+   "rule_change": "Check silent NaN only for |v|<=1e150; keep throw check for all."
+  },
+  {
+   "entry": "MTPA_FW_MANAGER",
+   "verdict": "test",
+   "root_cause": "RC-IEEE-OVERFLOW",
+   "severity": null,
+   "evidence": "NaN only for |input| >= 1e300 (Inf-Inf / Inf*0 / Inf%360); finite 1,-1,0,1e-300 are fine",
+   "file": "BlockDefinitions.ts:5859",
+   "rule_change": "Check silent NaN only for |v|<=1e150; keep throw check for all."
+  },
+  {
+   "entry": "ROTOR_POSITION_ESTIMATOR",
+   "verdict": "test",
+   "root_cause": "RC-IEEE-OVERFLOW",
+   "severity": null,
+   "evidence": "NaN only for |input| >= 1e300 (Inf-Inf / Inf*0 / Inf%360); finite 1,-1,0,1e-300 are fine",
+   "file": "BlockDefinitions.ts:3394",
+   "rule_change": "Check silent NaN only for |v|<=1e150; keep throw check for all."
+  },
+  {
+   "entry": "SECTOR_SELECTOR",
+   "verdict": "test",
+   "root_cause": "RC-IEEE-OVERFLOW",
+   "severity": null,
+   "evidence": "NaN only for |input| >= 1e300 (Inf-Inf / Inf*0 / Inf%360); finite 1,-1,0,1e-300 are fine",
+   "file": "BlockDefinitions.ts:3534",
+   "rule_change": "Check silent NaN only for |v|<=1e150; keep throw check for all."
+  },
+  {
+   "entry": "VF_SLIP_COMP",
+   "verdict": "test",
+   "root_cause": "RC-IEEE-OVERFLOW",
+   "severity": null,
+   "evidence": "NaN only for |input| >= 1e300 (Inf-Inf / Inf*0 / Inf%360); finite 1,-1,0,1e-300 are fine",
+   "file": "BlockDefinitions.ts:5759",
+   "rule_change": "Check silent NaN only for |v|<=1e150; keep throw check for all."
+  },
+  {
+   "entry": "VOLTAGE_REFERENCE_GENERATOR",
+   "verdict": "test",
+   "root_cause": "RC-IEEE-OVERFLOW",
+   "severity": null,
+   "evidence": "NaN only for |input| >= 1e300 (Inf-Inf / Inf*0 / Inf%360); finite 1,-1,0,1e-300 are fine",
+   "file": "BlockDefinitions.ts:2969",
+   "rule_change": "Check silent NaN only for |v|<=1e150; keep throw check for all."
+  },
+  {
+   "entry": "DEM_BOND_FABRIC",
+   "verdict": "product",
+   "root_cause": "RC-SCALAR-ARRAY-PORT",
+   "severity": "S3",
+   "evidence": "throws for every finite value (scalar on array port)",
+   "file": "BlockDefinitions.ts:10720"
+  },
+  {
+   "entry": "DEM_FLUID_COUPLING",
+   "verdict": "product",
+   "root_cause": "RC-SCALAR-ARRAY-PORT",
+   "severity": "S3",
+   "evidence": "throws for every finite value (scalar on array port)",
+   "file": "BlockDefinitions.ts:10834"
+  },
+  {
+   "entry": "DEM_HERTZ_CONTACT",
+   "verdict": "product",
+   "root_cause": "RC-SCALAR-ARRAY-PORT",
+   "severity": "S3",
+   "evidence": "throws for every finite value (scalar on array port)",
+   "file": "BlockDefinitions.ts:10638"
+  },
+  {
+   "entry": "MPC_CONTROLLER",
+   "verdict": "product",
+   "root_cause": "RC-MPC-DEFAULTS",
+   "severity": "S2",
+   "evidence": "throws for every value",
+   "file": "BlockDefinitions.ts:5367"
+  },
+  {
+   "entry": "MatrixConcat",
+   "verdict": "product",
+   "root_cause": "RC-MATRIX-SCALAR",
+   "severity": "S2",
+   "evidence": "throws for every finite value",
+   "file": "BlockDefinitions.ts:2390"
+  },
+  {
+   "entry": "MatrixSolve",
+   "verdict": "product",
+   "root_cause": "RC-MATRIX-SCALAR",
+   "severity": "S2",
+   "evidence": "throws for every finite value",
+   "file": "BlockDefinitions.ts:2472"
+  },
+  {
+   "entry": "SubMatrix",
+   "verdict": "product",
+   "root_cause": "RC-MATRIX-SCALAR",
+   "severity": "S2",
+   "evidence": "throws for every finite value",
+   "file": "BlockDefinitions.ts:2453"
+  },
+  {
+   "entry": "ROBOT_VACUUM_ERODE_MASK",
+   "verdict": "product",
+   "root_cause": "RC-SCALAR-ARRAY-PORT",
+   "severity": "S3",
+   "evidence": "throws for every finite value",
+   "file": "BlockDefinitions.ts:6667"
+  },
+  {
+   "entry": "ROBOT_VACUUM_THETA_STAR",
+   "verdict": "product",
+   "root_cause": "RC-SCALAR-ARRAY-PORT",
+   "severity": "S3",
+   "evidence": "throws for every finite value",
+   "file": "BlockDefinitions.ts:6909"
+  },
+  {
+   "entry": "ROBOT_VACUUM_CONTINUOUS_ENERGY",
+   "verdict": "product",
+   "root_cause": "RC-SCALAR-ON-VECTOR-NAN",
+   "severity": "S3",
+   "evidence": "e_required=NaN for every scalar input (1, -1, 5e-324 ...), return_trigger computed from NaN; no error",
+   "file": "BlockDefinitions.ts:6804"
+  },
+  {
+   "entry": "SWITCHING_TIME_CALCULATOR",
+   "verdict": "product",
+   "root_cause": "RC-SWITCHING-NODIAG",
+   "severity": "S3",
+   "evidence": "all inputs 0 (vdc=0): t1,t2,t0 = NaN with no diagnostic (3*Vref/Vdc = 0/0)",
+   "file": "BlockDefinitions.ts:3545"
+  }
+ ],
+ "XBV-U5 throws on a wrong value kind": [
+  {
+   "entry": "DEM_BOND_FABRIC",
+   "verdict": "product",
+   "root_cause": "RC-SCALAR-ARRAY-PORT",
+   "severity": "S3",
+   "evidence": "throws for true/{}/string/null/undefined/ragged/[] on port 0 and 1 (16-23 of 49 combos)",
+   "file": "BlockDefinitions.ts:10720"
+  },
+  {
+   "entry": "DEM_FLUID_COUPLING",
+   "verdict": "product",
+   "root_cause": "RC-SCALAR-ARRAY-PORT",
+   "severity": "S3",
+   "evidence": "throws for true/{}/string/null/undefined/ragged/[] on port 0 and 1 (16-23 of 49 combos)",
+   "file": "BlockDefinitions.ts:10834"
+  },
+  {
+   "entry": "DEM_HERTZ_CONTACT",
+   "verdict": "product",
+   "root_cause": "RC-SCALAR-ARRAY-PORT",
+   "severity": "S3",
+   "evidence": "throws for true/{}/string/null/undefined/ragged/[] on port 0 and 1 (16-23 of 49 combos)",
+   "file": "BlockDefinitions.ts:10638"
+  },
+  {
+   "entry": "ROBOT_VACUUM_ERODE_MASK",
+   "verdict": "product",
+   "root_cause": "RC-SCALAR-ARRAY-PORT",
+   "severity": "S3",
+   "evidence": "throws for any non-matrix input",
+   "file": "BlockDefinitions.ts:6667"
+  },
+  {
+   "entry": "ROBOT_VACUUM_THETA_STAR",
+   "verdict": "product",
+   "root_cause": "RC-SCALAR-ARRAY-PORT",
+   "severity": "S3",
+   "evidence": "throws for any non-matrix input",
+   "file": "BlockDefinitions.ts:6909"
+  },
+  {
+   "entry": "MPC_CONTROLLER",
+   "verdict": "product",
+   "root_cause": "RC-MPC-DEFAULTS",
+   "severity": "S2",
+   "evidence": "throws for every kind (default parameter inconsistency)",
+   "file": "BlockDefinitions.ts:5367"
+  },
+  {
+   "entry": "MatrixConcat",
+   "verdict": "product",
+   "root_cause": "RC-MATRIX-SCALAR",
+   "severity": "S3",
+   "evidence": "throws for true/string/null/undefined/{}/ragged/[]",
+   "file": "BlockDefinitions.ts:2390"
+  },
+  {
+   "entry": "MatrixSolve",
+   "verdict": "product",
+   "root_cause": "RC-MATRIX-SCALAR",
+   "severity": "S3",
+   "evidence": "throws for true/string/null/undefined/{}/ragged/[]",
+   "file": "BlockDefinitions.ts:2472"
+  },
+  {
+   "entry": "SubMatrix",
+   "verdict": "product",
+   "root_cause": "RC-MATRIX-SCALAR",
+   "severity": "S3",
+   "evidence": "throws for true/string/null/undefined/{}/ragged/[]",
+   "file": "BlockDefinitions.ts:2453"
+  },
+  {
+   "entry": "Abs",
+   "verdict": "product",
+   "root_cause": "RC-LIB-THROW",
+   "severity": "S3",
+   "evidence": "throws on string/null/undefined (math.js TypeError text); null/undefined reachable via DEMUX.out2 (demo: Abs after DEMUX.out2 -> fatal BLOCK_RUNTIME_FAULT)",
+   "file": "BlockDefinitions.ts:2307"
+  },
+  {
+   "entry": "GAIN",
+   "verdict": "product",
+   "root_cause": "RC-LIB-THROW",
+   "severity": "S3",
+   "evidence": "throws on string/null/undefined (math.js TypeError text); null/undefined reachable via DEMUX.out2 (demo: Abs after DEMUX.out2 -> fatal BLOCK_RUNTIME_FAULT)",
+   "file": "BlockDefinitions.ts:3781"
+  },
+  {
+   "entry": "Inverse",
+   "verdict": "product",
+   "root_cause": "RC-LIB-THROW",
+   "severity": "S3",
+   "evidence": "throws on string/null/undefined (math.js TypeError text); null/undefined reachable via DEMUX.out2 (demo: Abs after DEMUX.out2 -> fatal BLOCK_RUNTIME_FAULT)",
+   "file": "BlockDefinitions.ts:2376"
+  },
+  {
+   "entry": "Max",
+   "verdict": "product",
+   "root_cause": "RC-LIB-THROW",
+   "severity": "S3",
+   "evidence": "throws on string/null/undefined (math.js TypeError text); null/undefined reachable via DEMUX.out2 (demo: Abs after DEMUX.out2 -> fatal BLOCK_RUNTIME_FAULT)",
+   "file": "BlockDefinitions.ts:2329"
+  },
+  {
+   "entry": "Mean",
+   "verdict": "product",
+   "root_cause": "RC-LIB-THROW",
+   "severity": "S3",
+   "evidence": "throws on string/null/undefined (math.js TypeError text); null/undefined reachable via DEMUX.out2 (demo: Abs after DEMUX.out2 -> fatal BLOCK_RUNTIME_FAULT)",
+   "file": "BlockDefinitions.ts:2322"
+  },
+  {
+   "entry": "MatrixMul",
+   "verdict": "product",
+   "root_cause": "RC-LIB-THROW",
+   "severity": "S3",
+   "evidence": "throws on string/null/undefined (math.js TypeError text); null/undefined reachable via DEMUX.out2 (demo: Abs after DEMUX.out2 -> fatal BLOCK_RUNTIME_FAULT)",
+   "file": "BlockDefinitions.ts:2362"
+  },
+  {
+   "entry": "Sum",
+   "verdict": "product",
+   "root_cause": "RC-LIB-THROW",
+   "severity": "S3",
+   "evidence": "throws on string/null/undefined (math.js TypeError text); null/undefined reachable via DEMUX.out2 (demo: Abs after DEMUX.out2 -> fatal BLOCK_RUNTIME_FAULT)",
+   "file": "BlockDefinitions.ts:2202"
+  },
+  {
+   "entry": "UnaryNeg",
+   "verdict": "product",
+   "root_cause": "RC-LIB-THROW",
+   "severity": "S3",
+   "evidence": "throws on string/null/undefined (math.js TypeError text); null/undefined reachable via DEMUX.out2 (demo: Abs after DEMUX.out2 -> fatal BLOCK_RUNTIME_FAULT)",
+   "file": "BlockDefinitions.ts:2300"
+  },
+  {
+   "entry": "VectorAdd",
+   "verdict": "product",
+   "root_cause": "RC-LIB-THROW",
+   "severity": "S3",
+   "evidence": "throws on string/null/undefined (math.js TypeError text); null/undefined reachable via DEMUX.out2 (demo: Abs after DEMUX.out2 -> fatal BLOCK_RUNTIME_FAULT)",
+   "file": "BlockDefinitions.ts:2239"
+  },
+  {
+   "entry": "VectorDiv",
+   "verdict": "product",
+   "root_cause": "RC-LIB-THROW",
+   "severity": "S3",
+   "evidence": "throws on string/null/undefined (math.js TypeError text); null/undefined reachable via DEMUX.out2 (demo: Abs after DEMUX.out2 -> fatal BLOCK_RUNTIME_FAULT)",
+   "file": "BlockDefinitions.ts:2286"
+  },
+  {
+   "entry": "VectorMul",
+   "verdict": "product",
+   "root_cause": "RC-LIB-THROW",
+   "severity": "S3",
+   "evidence": "throws on string/null/undefined (math.js TypeError text); null/undefined reachable via DEMUX.out2 (demo: Abs after DEMUX.out2 -> fatal BLOCK_RUNTIME_FAULT)",
+   "file": "BlockDefinitions.ts:2266"
+  },
+  {
+   "entry": "VectorPow",
+   "verdict": "product",
+   "root_cause": "RC-LIB-THROW",
+   "severity": "S3",
+   "evidence": "throws on string/null/undefined (math.js TypeError text); null/undefined reachable via DEMUX.out2 (demo: Abs after DEMUX.out2 -> fatal BLOCK_RUNTIME_FAULT)",
+   "file": "BlockDefinitions.ts:2293"
+  },
+  {
+   "entry": "VectorSub",
+   "verdict": "product",
+   "root_cause": "RC-LIB-THROW",
+   "severity": "S3",
+   "evidence": "throws on string/null/undefined (math.js TypeError text); null/undefined reachable via DEMUX.out2 (demo: Abs after DEMUX.out2 -> fatal BLOCK_RUNTIME_FAULT)",
+   "file": "BlockDefinitions.ts:2259"
+  },
+  {
+   "entry": "SumElements",
+   "verdict": "product",
+   "root_cause": "RC-LIB-THROW",
+   "severity": "S4",
+   "evidence": "throws only for string \"abc\" (math.sum)",
+   "file": "BlockDefinitions.ts:2315"
+  },
+  {
+   "entry": "Diag",
+   "verdict": "product",
+   "root_cause": "RC-EMPTY-ARRAY",
+   "severity": "S4",
+   "evidence": "diag([]) throws \"Size values must be positive integers\"; MATLAB diag([])=[]",
+   "file": "BlockDefinitions.ts:2434"
+  },
+  {
+   "entry": "DiagExtract",
+   "verdict": "product",
+   "root_cause": "RC-EMPTY-ARRAY",
+   "severity": "S4",
+   "evidence": "diag([]) throws \"Size values must be positive integers\"; MATLAB diag([])=[]",
+   "file": "BlockDefinitions.ts:2418"
+  },
+  {
+   "entry": "ExtractDiag",
+   "verdict": "product",
+   "root_cause": "RC-EMPTY-ARRAY",
+   "severity": "S4",
+   "evidence": "diag([]) throws \"Size values must be positive integers\"; MATLAB diag([])=[]",
+   "file": "BlockDefinitions.ts:2426"
+  },
+  {
+   "entry": "MatrixDiag",
+   "verdict": "product",
+   "root_cause": "RC-EMPTY-ARRAY",
+   "severity": "S4",
+   "evidence": "diag([]) throws \"Size values must be positive integers\"; MATLAB diag([])=[]",
+   "file": "BlockDefinitions.ts:2410"
+  },
+  {
+   "entry": "KALMAN_FILTER",
+   "verdict": "product",
+   "root_cause": "RC-EMPTY-ARRAY",
+   "severity": "S4",
+   "evidence": "[] on u/y_meas throws a math.js dimension error instead of a block error (EKF also on ragged)",
+   "file": "BlockDefinitions.ts:5149"
+  },
+  {
+   "entry": "EXTENDED_KALMAN_FILTER",
+   "verdict": "product",
+   "root_cause": "RC-EMPTY-ARRAY",
+   "severity": "S4",
+   "evidence": "[] on u/y_meas throws a math.js dimension error instead of a block error (EKF also on ragged)",
+   "file": "BlockDefinitions.ts:5207"
+  },
+  {
+   "entry": "Determinant",
+   "verdict": "test",
+   "root_cause": "RC-RAGGED",
+   "severity": null,
+   "evidence": "fails only for ragged [[1,[2]]]",
+   "file": "BlockDefinitions.ts:2383",
+   "rule_change": "Remove ragged array from WRONG_KINDS or accept a throw for it."
+  },
+  {
+   "entry": "Transpose",
+   "verdict": "test",
+   "root_cause": "RC-RAGGED",
+   "severity": null,
+   "evidence": "fails only for ragged [[1,[2]]]",
+   "file": "BlockDefinitions.ts:2369",
+   "rule_change": "Remove ragged array from WRONG_KINDS or accept a throw for it."
+  }
+ ],
+ "XBV-U7 zero parameter silently replaced": [
+  {
+   "entry": "GAIN.gain",
+   "verdict": "product",
+   "root_cause": "RC-ZERO-OR",
+   "severity": "S1",
+   "evidence": "params.gain||1 at BlockDefinitions.ts:3783: gain 0 -> 1 after reseed (Simulink Gain=0 outputs 0)",
+   "file": "BlockDefinitions.ts:3781"
+  },
+  {
+   "entry": "NEURAL_NEURON_LEARNING.initW1",
+   "verdict": "product",
+   "root_cause": "RC-ZERO-OR",
+   "severity": "S1",
+   "evidence": "initW1||0.5 (line 6069): 0 -> 0.5",
+   "file": "BlockDefinitions.ts:6067"
+  },
+  {
+   "entry": "NEURAL_NEURON_LEARNING.initW2",
+   "verdict": "product",
+   "root_cause": "RC-ZERO-OR",
+   "severity": "S1",
+   "evidence": "initW2||-0.5 (line 6069): 0 -> -0.5",
+   "file": "BlockDefinitions.ts:6067"
+  },
+  {
+   "entry": "RL_Q_LEARNING_CONTROLLER.numStates",
+   "verdict": "product",
+   "root_cause": "RC-ZERO-OR",
+   "severity": "S3",
+   "evidence": "numStates||5 (6120): 0 is invalid and must give PARAMETER_ error, not silently 5",
+   "file": "BlockDefinitions.ts:6119"
+  },
+  {
+   "entry": "RL_Q_LEARNING_CONTROLLER.numActions",
+   "verdict": "product",
+   "root_cause": "RC-ZERO-OR",
+   "severity": "S3",
+   "evidence": "numActions||3 (6121): same",
+   "file": "BlockDefinitions.ts:6119"
+  }
+ ],
+ "XBV-U9 non-deterministic": [
+  {
+   "entry": "BAND_LIMITED_NOISE",
+   "verdict": "product",
+   "root_cause": "RC-UNSEEDED-RANDOM",
+   "severity": "S3",
+   "evidence": "Math.random called (verified: outputs identical when Math.random is replaced by a seeded generator)",
+   "file": "BlockDefinitions.ts:5010"
+  },
+  {
+   "entry": "CFD_SPH_WATER_SOLVER",
+   "verdict": "product",
+   "root_cause": "RC-UNSEEDED-RANDOM",
+   "severity": "S3",
+   "evidence": "Math.random called (verified: outputs identical when Math.random is replaced by a seeded generator)",
+   "file": "BlockDefinitions.ts:10893"
+  },
+  {
+   "entry": "DEM_PARTICLE_SYSTEM",
+   "verdict": "product",
+   "root_cause": "RC-UNSEEDED-RANDOM",
+   "severity": "S3",
+   "evidence": "Math.random called (verified: outputs identical when Math.random is replaced by a seeded generator)",
+   "file": "BlockDefinitions.ts:10349"
+  },
+  {
+   "entry": "RL_Q_LEARNING_CONTROLLER",
+   "verdict": "product",
+   "root_cause": "RC-UNSEEDED-RANDOM",
+   "severity": "S3",
+   "evidence": "Math.random called (verified: outputs identical when Math.random is replaced by a seeded generator)",
+   "file": "BlockDefinitions.ts:6119"
+  },
+  {
+   "entry": "ROBOT_VACUUM_COMM",
+   "verdict": "product",
+   "root_cause": "RC-UNSEEDED-RANDOM",
+   "severity": "S3",
+   "evidence": "Math.random called (verified: outputs identical when Math.random is replaced by a seeded generator)",
+   "file": "BlockDefinitions.ts:6490"
+  },
+  {
+   "entry": "ROBOT_VACUUM_DIGITAL_TWIN",
+   "verdict": "product",
+   "root_cause": "RC-UNSEEDED-RANDOM",
+   "severity": "S3",
+   "evidence": "Math.random called (verified: outputs identical when Math.random is replaced by a seeded generator)",
+   "file": "BlockDefinitions.ts:6981"
+  },
+  {
+   "entry": "ROBOT_VACUUM_DUSTBIN_SENSOR",
+   "verdict": "product",
+   "root_cause": "RC-UNSEEDED-RANDOM",
+   "severity": "S3",
+   "evidence": "Math.random called (verified: outputs identical when Math.random is replaced by a seeded generator)",
+   "file": "BlockDefinitions.ts:1021"
+  },
+  {
+   "entry": "ROBOT_VACUUM_ENCODER",
+   "verdict": "product",
+   "root_cause": "RC-UNSEEDED-RANDOM",
+   "severity": "S3",
+   "evidence": "Math.random called (verified: outputs identical when Math.random is replaced by a seeded generator)",
+   "file": "BlockDefinitions.ts:8908"
+  },
+  {
+   "entry": "ROBOT_VACUUM_ENVIRONMENT",
+   "verdict": "product",
+   "root_cause": "RC-UNSEEDED-RANDOM",
+   "severity": "S3",
+   "evidence": "Math.random called (verified: outputs identical when Math.random is replaced by a seeded generator)",
+   "file": "BlockDefinitions.ts:8132"
+  },
+  {
+   "entry": "ROBOT_VACUUM_LIDAR",
+   "verdict": "product",
+   "root_cause": "RC-UNSEEDED-RANDOM",
+   "severity": "S3",
+   "evidence": "Math.random called (verified: outputs identical when Math.random is replaced by a seeded generator)",
+   "file": "BlockDefinitions.ts:8953"
+  },
+  {
+   "entry": "ROBOT_VACUUM_LIDAR_SENSOR",
+   "verdict": "product",
+   "root_cause": "RC-UNSEEDED-RANDOM",
+   "severity": "S3",
+   "evidence": "Math.random called (verified: outputs identical when Math.random is replaced by a seeded generator)",
+   "file": "BlockDefinitions.ts:939"
+  },
+  {
+   "entry": "ROBOT_VACUUM_MOTOR",
+   "verdict": "product",
+   "root_cause": "RC-UNSEEDED-RANDOM",
+   "severity": "S3",
+   "evidence": "Math.random called (verified: outputs identical when Math.random is replaced by a seeded generator)",
+   "file": "BlockDefinitions.ts:7995"
+  },
+  {
+   "entry": "ROBOT_VACUUM_ODOMETRY",
+   "verdict": "product",
+   "root_cause": "RC-UNSEEDED-RANDOM",
+   "severity": "S3",
+   "evidence": "Math.random called (verified: outputs identical when Math.random is replaced by a seeded generator)",
+   "file": "BlockDefinitions.ts:8289"
+  },
+  {
+   "entry": "ROBOT_VACUUM_SLAM",
+   "verdict": "product",
+   "root_cause": "RC-UNSEEDED-RANDOM",
+   "severity": "S3",
+   "evidence": "Math.random called (verified: outputs identical when Math.random is replaced by a seeded generator)",
+   "file": "BlockDefinitions.ts:8440"
+  },
+  {
+   "entry": "WHITE_NOISE",
+   "verdict": "product",
+   "root_cause": "RC-UNSEEDED-RANDOM",
+   "severity": "S3",
+   "evidence": "Math.random called (verified: outputs identical when Math.random is replaced by a seeded generator)",
+   "file": "BlockDefinitions.ts:4996"
+  }
+ ],
+ "XBV-U10 execute mutates inputs, params or state": [
+  {
+   "entry": "PWM_GENERATOR",
+   "verdict": "product",
+   "root_cause": "RC-INPLACE-STATE",
+   "severity": "S3",
+   "evidence": "mutates state in place (inputs and params untouched); outputs idempotent on repeated calls, but breaks the snapshot/rollback contract",
+   "file": "BlockDefinitions.ts:2639"
+  },
+  {
+   "entry": "ROBOT_VACUUM_BOUSTROPHEDON_SWEEP",
+   "verdict": "product",
+   "root_cause": "RC-INPLACE-STATE",
+   "severity": "S3",
+   "evidence": "mutates state in place (inputs and params untouched); outputs idempotent on repeated calls, but breaks the snapshot/rollback contract",
+   "file": "BlockDefinitions.ts:6581"
+  },
+  {
+   "entry": "ROBOT_VACUUM_COMM",
+   "verdict": "product",
+   "root_cause": "RC-INPLACE-STATE",
+   "severity": "S3",
+   "evidence": "mutates state in place (inputs and params untouched); outputs idempotent on repeated calls, but breaks the snapshot/rollback contract",
+   "file": "BlockDefinitions.ts:6490"
+  },
+  {
+   "entry": "ROBOT_VACUUM_COVERAGE",
+   "verdict": "product",
+   "root_cause": "RC-INPLACE-STATE",
+   "severity": "S3",
+   "evidence": "mutates state in place (inputs and params untouched); outputs idempotent on repeated calls, but breaks the snapshot/rollback contract",
+   "file": "BlockDefinitions.ts:9159"
+  },
+  {
+   "entry": "ROBOT_VACUUM_DIGITAL_TWIN",
+   "verdict": "product",
+   "root_cause": "RC-INPLACE-STATE-COUNT",
+   "severity": "S1",
+   "evidence": "mutates state in place; output changes on every repeated call at same t/state/inputs (call-count dependent => solver dependent)",
+   "file": "BlockDefinitions.ts:6981"
+  },
+  {
+   "entry": "ROBOT_VACUUM_DOOR_TRACKER",
+   "verdict": "product",
+   "root_cause": "RC-INPLACE-STATE",
+   "severity": "S3",
+   "evidence": "mutates state in place (inputs and params untouched); outputs idempotent on repeated calls, but breaks the snapshot/rollback contract",
+   "file": "BlockDefinitions.ts:6723"
+  },
+  {
+   "entry": "ROBOT_VACUUM_DUSTBIN_SENSOR",
+   "verdict": "product",
+   "root_cause": "RC-INPLACE-STATE",
+   "severity": "S3",
+   "evidence": "mutates state in place (inputs and params untouched); outputs idempotent on repeated calls, but breaks the snapshot/rollback contract",
+   "file": "BlockDefinitions.ts:1021"
+  },
+  {
+   "entry": "ROBOT_VACUUM_ENVIRONMENT",
+   "verdict": "product",
+   "root_cause": "RC-INPLACE-STATE",
+   "severity": "S3",
+   "evidence": "mutates state in place (inputs and params untouched); outputs idempotent on repeated calls, but breaks the snapshot/rollback contract",
+   "file": "BlockDefinitions.ts:8132"
+  },
+  {
+   "entry": "ROBOT_VACUUM_FUSION",
+   "verdict": "product",
+   "root_cause": "RC-INPLACE-STATE-COUNT",
+   "severity": "S1",
+   "evidence": "mutates state in place; output changes on every repeated call at same t/state/inputs (call-count dependent => solver dependent)",
+   "file": "BlockDefinitions.ts:8350"
+  },
+  {
+   "entry": "ROBOT_VACUUM_LOCALIZATION",
+   "verdict": "product",
+   "root_cause": "RC-INPLACE-STATE-COUNT",
+   "severity": "S1",
+   "evidence": "mutates state in place; output changes on every repeated call at same t/state/inputs (call-count dependent => solver dependent)",
+   "file": "BlockDefinitions.ts:8998"
+  },
+  {
+   "entry": "ROBOT_VACUUM_NAV",
+   "verdict": "product",
+   "root_cause": "RC-INPLACE-STATE",
+   "severity": "S3",
+   "evidence": "mutates state in place (inputs and params untouched); outputs idempotent on repeated calls, but breaks the snapshot/rollback contract",
+   "file": "BlockDefinitions.ts:8550"
+  },
+  {
+   "entry": "ROBOT_VACUUM_ODOMETRY",
+   "verdict": "product",
+   "root_cause": "RC-INPLACE-STATE",
+   "severity": "S3",
+   "evidence": "mutates state in place (inputs and params untouched); outputs idempotent on repeated calls, but breaks the snapshot/rollback contract",
+   "file": "BlockDefinitions.ts:8289"
+  },
+  {
+   "entry": "ROBOT_VACUUM_SENSOR_FUSION_EKF",
+   "verdict": "product",
+   "root_cause": "RC-INPLACE-STATE",
+   "severity": "S3",
+   "evidence": "mutates state in place (inputs and params untouched); outputs idempotent on repeated calls, but breaks the snapshot/rollback contract",
+   "file": "BlockDefinitions.ts:1065"
+  },
+  {
+   "entry": "ROBOT_VACUUM_VISUALIZATION",
+   "verdict": "product",
+   "root_cause": "RC-INPLACE-STATE",
+   "severity": "S3",
+   "evidence": "mutates state in place (inputs and params untouched); outputs idempotent on repeated calls, but breaks the snapshot/rollback contract",
+   "file": "BlockDefinitions.ts:9446"
+  },
+  {
+   "entry": "ROOT_LOCUS",
+   "verdict": "product",
+   "root_cause": "RC-INPLACE-STATE",
+   "severity": "S3",
+   "evidence": "mutates state in place (inputs and params untouched); outputs idempotent on repeated calls, but breaks the snapshot/rollback contract",
+   "file": "BlockDefinitions.ts:11446"
+  },
+  {
+   "entry": "THREE_PHASE_PWM",
+   "verdict": "product",
+   "root_cause": "RC-INPLACE-STATE",
+   "severity": "S3",
+   "evidence": "mutates state in place (inputs and params untouched); outputs idempotent on repeated calls, but breaks the snapshot/rollback contract",
+   "file": "BlockDefinitions.ts:2720"
+  }
+ ],
+ "XBV-U11 state does not survive a clone": [
+  {
+   "entry": "BAND_LIMITED_NOISE",
+   "verdict": "test",
+   "root_cause": "RC-U11-RANDOM-CONFOUND",
+   "severity": null,
+   "evidence": "identical trajectory after state clone once Math.random is seeded",
+   "file": "BlockDefinitions.ts:5010",
+   "rule_change": "Seed Math.random with the same deterministic generator before each trajectory (or skip blocks pinned in U9). Also stop skipping blocks that throw: report them separately."
+  },
+  {
+   "entry": "CFD_SPH_WATER_SOLVER",
+   "verdict": "test",
+   "root_cause": "RC-U11-RANDOM-CONFOUND",
+   "severity": null,
+   "evidence": "identical trajectory after state clone once Math.random is seeded",
+   "file": "BlockDefinitions.ts:10893",
+   "rule_change": "Seed Math.random with the same deterministic generator before each trajectory (or skip blocks pinned in U9). Also stop skipping blocks that throw: report them separately."
+  },
+  {
+   "entry": "DEM_PARTICLE_SYSTEM",
+   "verdict": "test",
+   "root_cause": "RC-U11-RANDOM-CONFOUND",
+   "severity": null,
+   "evidence": "identical trajectory after state clone once Math.random is seeded",
+   "file": "BlockDefinitions.ts:10349",
+   "rule_change": "Seed Math.random with the same deterministic generator before each trajectory (or skip blocks pinned in U9). Also stop skipping blocks that throw: report them separately."
+  },
+  {
+   "entry": "RL_Q_LEARNING_CONTROLLER",
+   "verdict": "test",
+   "root_cause": "RC-U11-RANDOM-CONFOUND",
+   "severity": null,
+   "evidence": "identical trajectory after state clone once Math.random is seeded",
+   "file": "BlockDefinitions.ts:6119",
+   "rule_change": "Seed Math.random with the same deterministic generator before each trajectory (or skip blocks pinned in U9). Also stop skipping blocks that throw: report them separately."
+  },
+  {
+   "entry": "ROBOT_VACUUM_DIGITAL_TWIN",
+   "verdict": "test",
+   "root_cause": "RC-U11-RANDOM-CONFOUND",
+   "severity": null,
+   "evidence": "identical trajectory after state clone once Math.random is seeded",
+   "file": "BlockDefinitions.ts:6981",
+   "rule_change": "Seed Math.random with the same deterministic generator before each trajectory (or skip blocks pinned in U9). Also stop skipping blocks that throw: report them separately."
+  },
+  {
+   "entry": "ROBOT_VACUUM_DUSTBIN_SENSOR",
+   "verdict": "test",
+   "root_cause": "RC-U11-RANDOM-CONFOUND",
+   "severity": null,
+   "evidence": "identical trajectory after state clone once Math.random is seeded",
+   "file": "BlockDefinitions.ts:1021",
+   "rule_change": "Seed Math.random with the same deterministic generator before each trajectory (or skip blocks pinned in U9). Also stop skipping blocks that throw: report them separately."
+  },
+  {
+   "entry": "ROBOT_VACUUM_ENCODER",
+   "verdict": "test",
+   "root_cause": "RC-U11-RANDOM-CONFOUND",
+   "severity": null,
+   "evidence": "identical trajectory after state clone once Math.random is seeded",
+   "file": "BlockDefinitions.ts:8908",
+   "rule_change": "Seed Math.random with the same deterministic generator before each trajectory (or skip blocks pinned in U9). Also stop skipping blocks that throw: report them separately."
+  },
+  {
+   "entry": "ROBOT_VACUUM_ENVIRONMENT",
+   "verdict": "test",
+   "root_cause": "RC-U11-RANDOM-CONFOUND",
+   "severity": null,
+   "evidence": "identical trajectory after state clone once Math.random is seeded",
+   "file": "BlockDefinitions.ts:8132",
+   "rule_change": "Seed Math.random with the same deterministic generator before each trajectory (or skip blocks pinned in U9). Also stop skipping blocks that throw: report them separately."
+  },
+  {
+   "entry": "ROBOT_VACUUM_LIDAR",
+   "verdict": "test",
+   "root_cause": "RC-U11-RANDOM-CONFOUND",
+   "severity": null,
+   "evidence": "identical trajectory after state clone once Math.random is seeded",
+   "file": "BlockDefinitions.ts:8953",
+   "rule_change": "Seed Math.random with the same deterministic generator before each trajectory (or skip blocks pinned in U9). Also stop skipping blocks that throw: report them separately."
+  },
+  {
+   "entry": "ROBOT_VACUUM_LIDAR_SENSOR",
+   "verdict": "test",
+   "root_cause": "RC-U11-RANDOM-CONFOUND",
+   "severity": null,
+   "evidence": "identical trajectory after state clone once Math.random is seeded",
+   "file": "BlockDefinitions.ts:939",
+   "rule_change": "Seed Math.random with the same deterministic generator before each trajectory (or skip blocks pinned in U9). Also stop skipping blocks that throw: report them separately."
+  },
+  {
+   "entry": "ROBOT_VACUUM_MOTOR",
+   "verdict": "test",
+   "root_cause": "RC-U11-RANDOM-CONFOUND",
+   "severity": null,
+   "evidence": "identical trajectory after state clone once Math.random is seeded",
+   "file": "BlockDefinitions.ts:7995",
+   "rule_change": "Seed Math.random with the same deterministic generator before each trajectory (or skip blocks pinned in U9). Also stop skipping blocks that throw: report them separately."
+  },
+  {
+   "entry": "ROBOT_VACUUM_ODOMETRY",
+   "verdict": "test",
+   "root_cause": "RC-U11-RANDOM-CONFOUND",
+   "severity": null,
+   "evidence": "identical trajectory after state clone once Math.random is seeded",
+   "file": "BlockDefinitions.ts:8289",
+   "rule_change": "Seed Math.random with the same deterministic generator before each trajectory (or skip blocks pinned in U9). Also stop skipping blocks that throw: report them separately."
+  },
+  {
+   "entry": "ROBOT_VACUUM_SLAM",
+   "verdict": "test",
+   "root_cause": "RC-U11-RANDOM-CONFOUND",
+   "severity": null,
+   "evidence": "identical trajectory after state clone once Math.random is seeded",
+   "file": "BlockDefinitions.ts:8440",
+   "rule_change": "Seed Math.random with the same deterministic generator before each trajectory (or skip blocks pinned in U9). Also stop skipping blocks that throw: report them separately."
+  },
+  {
+   "entry": "WHITE_NOISE",
+   "verdict": "test",
+   "root_cause": "RC-U11-RANDOM-CONFOUND",
+   "severity": null,
+   "evidence": "identical trajectory after state clone once Math.random is seeded",
+   "file": "BlockDefinitions.ts:4996",
+   "rule_change": "Seed Math.random with the same deterministic generator before each trajectory (or skip blocks pinned in U9). Also stop skipping blocks that throw: report them separately."
+  }
+ ],
+ "XBV-U14 declared non-feedthrough but output depends on the current input": [
+  {
+   "entry": "AC_MOTOR_PID_CONTROL",
+   "verdict": "product",
+   "root_cause": "RC-U14-FLAG",
+   "severity": "S1",
+   "evidence": "error=ref-meas with Kp!=0 is direct feedthrough",
+   "file": "BlockDefinitions.ts:5940"
+  },
+  {
+   "entry": "AIR_FRYER_LEARNING_MODEL",
+   "verdict": "product",
+   "root_cause": "RC-U14-FLAG",
+   "severity": "S1",
+   "evidence": "prediction_error depends on current measured input",
+   "file": "BlockDefinitions.ts:6241"
+  },
+  {
+   "entry": "CFD_DEM_SURROGATE_LEARNER",
+   "verdict": "product",
+   "root_cause": "RC-U14-FLAG",
+   "severity": "S1",
+   "evidence": "predicted_* is a forward pass of current inputs",
+   "file": "BlockDefinitions.ts:11331"
+  },
+  {
+   "entry": "CFD_SPH_WATER_SOLVER",
+   "verdict": "test",
+   "root_cause": "RC-U14-RANDOM",
+   "severity": null,
+   "evidence": "outputs equal for u=1 and u=7 once Math.random is seeded",
+   "file": "BlockDefinitions.ts:10893",
+   "rule_change": "Seed Math.random identically for both executions."
+  },
+  {
+   "entry": "DEM_DRUM",
+   "verdict": "product",
+   "root_cause": "RC-U14-PLANT",
+   "severity": "S1",
+   "evidence": "post-update state returned as output so output depends on current input (e.g. DEM_DRUM): fix by outputting pre-update state, not by flagging feedthrough",
+   "file": "BlockDefinitions.ts:10308"
+  },
+  {
+   "entry": "DEM_PARTICLE_SYSTEM",
+   "verdict": "test",
+   "root_cause": "RC-U14-RANDOM",
+   "severity": null,
+   "evidence": "outputs equal for u=1 and u=7 once Math.random is seeded",
+   "file": "BlockDefinitions.ts:10349",
+   "rule_change": "Seed Math.random identically for both executions."
+  },
+  {
+   "entry": "DERIVATIVE",
+   "verdict": "product",
+   "root_cause": "RC-U14-FLAG",
+   "severity": "S1",
+   "evidence": "y=(u-x)/tau reads u (BlockDefinitions.ts:4581-4592); s/(tau s+1) has D=1/tau; Simulink Derivative is direct feedthrough",
+   "file": "BlockDefinitions.ts:4581"
+  },
+  {
+   "entry": "EXTENDED_KALMAN_FILTER",
+   "verdict": "product",
+   "root_cause": "RC-U14-FLAG",
+   "severity": "S1",
+   "evidence": "same as KALMAN_FILTER",
+   "file": "BlockDefinitions.ts:5207"
+  },
+  {
+   "entry": "FIELD_ORIENTED_CONTROL",
+   "verdict": "product",
+   "root_cause": "RC-U14-FLAG",
+   "severity": "S1",
+   "evidence": "vd,vq,va_ref.. depend on current id/iq/theta (P terms)",
+   "file": "BlockDefinitions.ts:2991"
+  },
+  {
+   "entry": "FIELD_WEAKENING",
+   "verdict": "product",
+   "root_cause": "RC-U14-FLAG",
+   "severity": "S1",
+   "evidence": "id_ref depends on current inputs (Kp term)",
+   "file": "BlockDefinitions.ts:5794"
+  },
+  {
+   "entry": "HIGH_PASS_FILTER",
+   "verdict": "product",
+   "root_cause": "RC-U14-FLAG",
+   "severity": "S1",
+   "evidence": "y=state.y+u (continuous) / alpha*(y+u-last_u) (discrete); TF s/(s+wc) has D=1",
+   "file": "BlockDefinitions.ts:5091"
+  },
+  {
+   "entry": "IM_FOC_CONTROL",
+   "verdict": "product",
+   "root_cause": "RC-U14-FLAG",
+   "severity": "S1",
+   "evidence": "va,vb,vc depend on current inputs",
+   "file": "BlockDefinitions.ts:5669"
+  },
+  {
+   "entry": "KALMAN_FILTER",
+   "verdict": "product",
+   "root_cause": "RC-U14-FLAG",
+   "severity": "S1",
+   "evidence": "x_hat,y_hat,innovation use current u,y_meas (current estimator, feedthrough)",
+   "file": "BlockDefinitions.ts:5149"
+  },
+  {
+   "entry": "LMS_ADAPTIVE_FILTER",
+   "verdict": "product",
+   "root_cause": "RC-U14-FLAG",
+   "severity": "S1",
+   "evidence": "err=d-w.x uses current x,d (Simulink LMS Filter is direct feedthrough)",
+   "file": "BlockDefinitions.ts:6026"
+  },
+  {
+   "entry": "MOVING_AVERAGE",
+   "verdict": "product",
+   "root_cause": "RC-U14-FLAG",
+   "severity": "S1",
+   "evidence": "y includes current u; demo shows one-step lag when listed before its source",
+   "file": "BlockDefinitions.ts:5128"
+  },
+  {
+   "entry": "NEURAL_NEURON_LEARNING",
+   "verdict": "product",
+   "root_cause": "RC-U14-FLAG",
+   "severity": "S1",
+   "evidence": "err/output = forward pass of current x1,x2,target",
+   "file": "BlockDefinitions.ts:6067"
+  },
+  {
+   "entry": "ROBOT_VACUUM_BOUSTROPHEDON_SWEEP",
+   "verdict": "product",
+   "root_cause": "RC-U14-FLAG",
+   "severity": "S1",
+   "evidence": "outputs (estimator/controller/planner) computed from current inputs in execute; Simulink: direct feedthrough",
+   "file": "BlockDefinitions.ts:6581"
+  },
+  {
+   "entry": "ROBOT_VACUUM_COVERAGE",
+   "verdict": "product",
+   "root_cause": "RC-U14-FLAG",
+   "severity": "S1",
+   "evidence": "outputs (estimator/controller/planner) computed from current inputs in execute; Simulink: direct feedthrough",
+   "file": "BlockDefinitions.ts:9159"
+  },
+  {
+   "entry": "ROBOT_VACUUM_DIGITAL_TWIN",
+   "verdict": "test",
+   "root_cause": "RC-U14-RANDOM",
+   "severity": null,
+   "evidence": "outputs equal for u=1 and u=7 once Math.random is seeded",
+   "file": "BlockDefinitions.ts:6981",
+   "rule_change": "Seed Math.random identically for both executions."
+  },
+  {
+   "entry": "ROBOT_VACUUM_DUSTBIN_SENSOR",
+   "verdict": "test",
+   "root_cause": "RC-U14-RANDOM",
+   "severity": null,
+   "evidence": "outputs equal for u=1 and u=7 once Math.random is seeded",
+   "file": "BlockDefinitions.ts:1021",
+   "rule_change": "Seed Math.random identically for both executions."
+  },
+  {
+   "entry": "ROBOT_VACUUM_DYNAMICS",
+   "verdict": "product",
+   "root_cause": "RC-U14-PLANT",
+   "severity": "S1",
+   "evidence": "post-update state returned as output so output depends on current input (e.g. ROBOT_VACUUM_DYNAMICS): fix by outputting pre-update state, not by flagging feedthrough",
+   "file": "BlockDefinitions.ts:8057"
+  },
+  {
+   "entry": "ROBOT_VACUUM_ENCODER",
+   "verdict": "product",
+   "root_cause": "RC-U14-PLANT",
+   "severity": "S1",
+   "evidence": "post-update state returned as output so output depends on current input (e.g. ROBOT_VACUUM_ENCODER): fix by outputting pre-update state, not by flagging feedthrough",
+   "file": "BlockDefinitions.ts:8908"
+  },
+  {
+   "entry": "ROBOT_VACUUM_ENVIRONMENT",
+   "verdict": "product",
+   "root_cause": "RC-U14-FLAG",
+   "severity": "S1",
+   "evidence": "outputs (estimator/controller/planner) computed from current inputs in execute; Simulink: direct feedthrough",
+   "file": "BlockDefinitions.ts:8132"
+  },
+  {
+   "entry": "ROBOT_VACUUM_FUSION",
+   "verdict": "product",
+   "root_cause": "RC-U14-FLAG",
+   "severity": "S1",
+   "evidence": "outputs (estimator/controller/planner) computed from current inputs in execute; Simulink: direct feedthrough",
+   "file": "BlockDefinitions.ts:8350"
+  },
+  {
+   "entry": "ROBOT_VACUUM_LOCALIZATION",
+   "verdict": "product",
+   "root_cause": "RC-U14-FLAG",
+   "severity": "S1",
+   "evidence": "outputs (estimator/controller/planner) computed from current inputs in execute; Simulink: direct feedthrough",
+   "file": "BlockDefinitions.ts:8998"
+  },
+  {
+   "entry": "ROBOT_VACUUM_MOTOR",
+   "verdict": "test",
+   "root_cause": "RC-U14-RANDOM",
+   "severity": null,
+   "evidence": "outputs equal for u=1 and u=7 once Math.random is seeded",
+   "file": "BlockDefinitions.ts:7995",
+   "rule_change": "Seed Math.random identically for both executions."
+  },
+  {
+   "entry": "ROBOT_VACUUM_NAV",
+   "verdict": "product",
+   "root_cause": "RC-U14-FLAG",
+   "severity": "S1",
+   "evidence": "outputs (estimator/controller/planner) computed from current inputs in execute; Simulink: direct feedthrough",
+   "file": "BlockDefinitions.ts:8550"
+  },
+  {
+   "entry": "ROBOT_VACUUM_OBSTACLE_AVOIDANCE",
+   "verdict": "product",
+   "root_cause": "RC-U14-FLAG",
+   "severity": "S1",
+   "evidence": "outputs (estimator/controller/planner) computed from current inputs in execute; Simulink: direct feedthrough",
+   "file": "BlockDefinitions.ts:9272"
+  },
+  {
+   "entry": "ROBOT_VACUUM_ODOMETRY",
+   "verdict": "product",
+   "root_cause": "RC-U14-PLANT",
+   "severity": "S1",
+   "evidence": "post-update state returned as output so output depends on current input (e.g. ROBOT_VACUUM_ODOMETRY): fix by outputting pre-update state, not by flagging feedthrough",
+   "file": "BlockDefinitions.ts:8289"
+  },
+  {
+   "entry": "ROBOT_VACUUM_ODOMETRY_SENSOR",
+   "verdict": "product",
+   "root_cause": "RC-U14-PLANT",
+   "severity": "S1",
+   "evidence": "post-update state returned as output so output depends on current input (e.g. ROBOT_VACUUM_ODOMETRY_SENSOR): fix by outputting pre-update state, not by flagging feedthrough",
+   "file": "BlockDefinitions.ts:973"
+  },
+  {
+   "entry": "ROBOT_VACUUM_SENSOR_FUSION_EKF",
+   "verdict": "product",
+   "root_cause": "RC-U14-FLAG",
+   "severity": "S1",
+   "evidence": "outputs (estimator/controller/planner) computed from current inputs in execute; Simulink: direct feedthrough",
+   "file": "BlockDefinitions.ts:1065"
+  },
+  {
+   "entry": "ROBOT_VACUUM_SLAM",
+   "verdict": "product",
+   "root_cause": "RC-U14-FLAG",
+   "severity": "S1",
+   "evidence": "outputs (estimator/controller/planner) computed from current inputs in execute; Simulink: direct feedthrough",
+   "file": "BlockDefinitions.ts:8440"
+  },
+  {
+   "entry": "ROBOT_VACUUM_WAYPOINT_GEN",
+   "verdict": "product",
+   "root_cause": "RC-U14-FLAG",
+   "severity": "S1",
+   "evidence": "outputs (estimator/controller/planner) computed from current inputs in execute; Simulink: direct feedthrough",
+   "file": "BlockDefinitions.ts:1313"
+  }
+ ],
+ "root_causes": {
+  "RC-SCALAR-ARRAY-PORT": "Block assumes an array/matrix on a vector/matrix port and has no shape validation: a scalar (or true/{}/null) input throws a raw TypeError/RangeError (Invalid array length, Cannot read properties of undefined) instead of returning a block error. Engine turns the throw into a fatal BLOCK_RUNTIME_FAULT that stops the run (XbridgesEngine.reportBlockException).",
+  "RC-MATRIX-SCALAR": "Generic matrix blocks (MatrixConcat axis 0, MatrixSolve, SubMatrix) wrap math.js without promoting a scalar to a 1x1 matrix; Simulink Matrix Concatenate / Matrix Solve / Submatrix accept scalars (1x1). Throw on the most basic input.",
+  "RC-MPC-DEFAULTS": "MPC_CONTROLLER default Q=[[10,0],[0,10]] is state-sized but MpcSolver.expandWeightingMatrix(Q,Np) needs an output-sized (ny x ny, ny=C.length=1) weight; Su is 10 rows, Qext 20x20 -> mat-mul dimension mismatch on every execute with default parameters. Also state.solver is a MpcSolver class instance placed in state (mutated in place, lost by JSON/structuredClone: after clone state.solver.solve is not a function).",
+  "RC-DOMAIN-DIAG-NOT-SEEN": "TEST: the harness only reads result.error, but ACOS/ASIN/ATANH/ACOSH/ASEC/ASECH/ACOSEC/ACOTH/VectorDiv report out-of-domain/zero-divisor input through result.diagnostic (MATH_DOMAIN_ERROR / DIVIDE_BY_ZERO). IEEE NaN for an out-of-domain real input is what Simulink Trigonometric Function (C math library) gives; there is no error. Rule must accept result.diagnostic.",
+  "RC-IEEE-OVERFLOW": "TEST: inputs of magnitude >= 1e300 overflow double arithmetic (Inf-Inf, Inf*0, Inf%360) to NaN. Simulink doubles do the same silently. Not a physical input range. Rule should restrict silent-NaN check to |v| <= 1e150 (or accept NaN when |v| >= 1e154).",
+  "RC-U2-GROUNDED-ZERO": "TEST: an unconnected input is grounded to 0 (Simulink does the same, with a warning). For reciprocal/inverse-trig/Inverse/VectorDiv blocks 0 is outside the domain and IEEE gives Inf or NaN; the engine only raises NUMERICAL_INSTABILITY as a WARNING (checkNumericalStability) and the blocks emit MATH_DOMAIN_ERROR/DIVIDE_BY_ZERO. U2 lists NUMERICAL_INSTABILITY as a fault and counts NaN with the domain diagnostic present. MATLAB: acosh(0)/asec(0)/acoth(0) are complex; Simulink real-output blocks return NaN (no error); 1/tan(0)=Inf; inv(0)=Inf + singular warning.",
+  "RC-U2-REQUIRES-CONFIG": "TEST: block cannot run without a configuration or a typed input (bus, FIS config, DOE deployment, physically valid temperature/pressure/speed/gear); it reports it as a typed error/compile error (not a throw), which is the intended contract (Simulink: unconnected Bus Selector / Fuzzy Viewer without FIS is a compile error). Rule should count only thrown exceptions (message \"raised an exception\"), undefined outputs and NaN with no diagnostic; accept block-reported runtime faults and MISSING_* compile errors for blocks with required config.",
+  "RC-U2-SAMPLE-TIME": "TEST: harness fixed step 0.01 > INTEGRATOR_DISCRETE default Ts 0.001; engine correctly reports SAMPLE_TIME_NOT_MULTIPLE_OF_FIXED_STEP (Simulink fixed-step also requires Ts to be an integer multiple of the base step). Harness should use dt = min positive block sample time (or fixed 0.001).",
+  "RC-DEMUX-SCALAR": "DEMUX with scalar input and numOutputs=2 returns outputs=[x] only, so out2 is undefined; engine stores undefined into signalValues and downstream blocks receive undefined (demo: Constant->DEMUX.out2->Abs stops the run with BLOCK_RUNTIME_FAULT in Abs). Simulink Demux gives a compile-time dimension error. No diagnostic here.",
+  "RC-LIB-THROW": "VectorUtils wrappers (applyElementWise/applyUnaryElementWise/sum/mean/max/matMul/inverse) rethrow math.js TypeErrors for string/null/undefined input. undefined and null are reachable in ADIA (DEMUX.out2, missing bus field, Constant with output_type string) and the throw stops the whole run. Should return a block error.",
+  "RC-EMPTY-ARRAY": "diag()/Kalman blocks throw for an empty array [] (initial value of several array ports, e.g. MPC pred_y, THETA_STAR path); MATLAB diag([]) = [] (empty).",
+  "RC-RAGGED": "TEST: [[1,[2]]] is a ragged array; no Simulink signal can have this shape. Remove ragged arrays from WRONG_KINDS (or accept throw for them).",
+  "RC-SWITCHING-NODIAG": "SWITCHING_TIME_CALCULATOR divides by vdc (input default 400 but harness/ unconnected 0): Vref/Vdc=0/0 -> NaN, Math.max(0,NaN)=NaN, no divide-by-zero diagnostic (BlockDefinitions.ts:3557-3562). Simulink would give NaN as well but the block should report DIVIDE_BY_ZERO like VectorDiv does.",
+  "RC-SCALAR-ON-VECTOR-NAN": "ROBOT_VACUUM_CONTINUOUS_ENERGY reads pose[0], dock_pos[0] of a scalar => undefined -> NaN e_required for ANY scalar input (incl. 1). Silent NaN, no error. Simulink: dimension mismatch compile error.",
+  "RC-UNSEEDED-RANDOM": "Noise/stochastic blocks call Math.random() directly (no Seed parameter, PRNG state not in `state`): runs are not repeatable and cannot be reproduced after a worker snapshot or save/reopen. Simulink noise blocks (Band-Limited White Noise, Random Number, Uniform Random) take a Seed and are repeatable; Simulink C-code gen needs a defined generator.",
+  "RC-U11-RANDOM-CONFOUND": "TEST: every U11 entry is an U9 entry. With Math.random replaced by a seeded generator, all 14 trajectories are identical after a JSON clone of state (verified), so the failure is randomness only, not lost state. U11 also silently skips blocks that throw (MPC_CONTROLLER, whose state.solver class instance does NOT survive a clone: real defect hidden behind U1).",
+  "RC-U14-FLAG": "Stateful block without directFeedthrough whose execute computes outputs from the current input (controller/filter/estimator/learner). Engine treats isStateful && !directFeedthrough as non-feedthrough (XbridgesEngine.ts:313) so the block can be sorted before its source and read a stale input: one-step lag depending only on block insertion order. Demo: MOVING_AVERAGE window 1 (y must equal u) listed before its Clock source gives y=[0,1,0,1,0,1] vs u=[1,0,1,0,1,1]; listed after it gives y=u. Fix: directFeedthrough:true (Simulink: Derivative, discrete high-pass, moving average, Kalman (current), LMS, PID with Kp, FOC with proportional terms are all direct feedthrough). Caveat: loops closed through it become algebraic-loop diagnostics, correct per Simulink.",
+  "RC-U14-PLANT": "Plant-like stateful block (particle/CFD/drum/robot dynamics/odometry/encoder/motor) whose execute performs the integration step inside the output call and returns the POST-update state as output, so the output depends on the current input. Simulink semantics: output = current state (independent of u), update in the update pass. Setting directFeedthrough:true would create false algebraic loops in feedback models; fix is to output the pre-update state (or split output/update).",
+  "RC-U14-RANDOM": "TEST: the output difference is Math.random noise, not input dependence (identical when Math.random is seeded). Rule must seed Math.random identically for the two runs.",
+  "RC-INPLACE-STATE": "execute mutates the incoming state object in place (and often returns the same object as nextState). The engine calls execute once in the output pass and once in updateDiscreteStates (and per RK/adaptive stage for blocks without evaluateDerivatives), so in-place updates are applied once per call. Simulink output/update separation violated; also defeats state snapshots/rollback.",
+  "RC-INPLACE-STATE-COUNT": "Subset of RC-INPLACE-STATE where the in-place update changes the OUTPUT depending on the number of execute calls: 4 repeated calls at identical time/state/inputs give different outputs. Demo (FUSION, x_true=1, gain 0.06, 50 steps dt=0.01): euler x_est=0.99795 (=1-0.94^100, two updates per step), rk4 0.9999998, ode45 0.99999999999; ideal single update per step is 1-0.94^50=0.9547. Result depends on the solver.",
+  "RC-ZERO-OR": "Factory writes a numeric parameter with `params.x || default` so a legitimate 0 becomes the default; patchBlockParams -> reseed re-runs the factory (XbridgesEngine.ts:912-920) and workspace Play rebuilds every block through the factory with factory params winning (XbridgesWorkspace.tsx:1943-1946, 2656-2658).",
+  "RC-U7-GAP": "TEST GAP (not in pinned list): U7 only exercises engine.applyParameterUpdates, which keeps 0 for most blocks. The Play/load path (BLOCK_LIBRARY[type](id,{p:0}).params.p) replaces 0 for 153 numeric parameters (list in extra.u7_factory_or). Rule should additionally assert factory(type,{p:0}).params[p]===0 or a PARAMETER_ diagnostic.",
+  "RC-PWM-LOG": "PWM_GENERATOR logs every execute (console.log at BlockDefinitions.ts:2654) and uses a golden-ratio phase hack when dt is an integer number of periods (2678-2690); not in the U cases, recorded for the controller.",
+  "RC-SECTOR-NEG": "SECTOR_SELECTOR uses (deg+360)%360 which is negative for theta < -2pi (theta=-10 rad -> sector -3, theta=-7 -> 0); sector must be 1..6. Not a U case; recorded."
+ },
+ "extra": {
+  "u7_factory_or_count": 153,
+  "note": "see wp03-u7-factory-or.txt"
+ }
+}
