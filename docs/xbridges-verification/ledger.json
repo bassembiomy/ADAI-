@@ -223,20 +223,20 @@
   {
    "id": "WP-07",
    "title": "V2/V3/V4 control, signal processing and observers, optimisation and modelling",
-   "exec": "S / F",
+   "exec": "S (tests from controller oracle spec, D7) / F",
    "deps": [
     "WP-06"
    ],
-   "status": "todo"
+   "status": "in_progress"
   },
   {
    "id": "WP-08",
    "title": "V2/V3 power electronics, PWM, motor control, torque optimisation",
-   "exec": "S / F",
+   "exec": "S (tests from controller oracle spec, D7) / F",
    "deps": [
     "WP-06"
    ],
-   "status": "todo"
+   "status": "in_progress"
   },
   {
    "id": "WP-09",
