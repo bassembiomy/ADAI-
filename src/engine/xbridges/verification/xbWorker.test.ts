@@ -210,14 +210,21 @@ describe('the real worker client and a structured-clone boundary (as in the brow
 
   it('XBV-047: library blocks whose compile request cannot cross the boundary are exactly the pinned list', async () => {
     const failing: string[] = [];
+    const other: string[] = [];
+    let compiled = 0;
     for (const type of Object.keys(BLOCK_LIBRARY).sort()) {
       const client = new XbridgesWorkerClient(fakeWorker);
       try {
         await client.compile(buildModel({ blocks: [{ id: 'u', type }], wires: [] }), 0);
+        compiled++;
       } catch (e) {
         if (/clone/i.test(String((e as Error)?.message ?? e)) || (e as Error)?.name === 'DataCloneError') failing.push(type);
+        else other.push(type);
       }
     }
+    // The only non-clone rejection is a genuine compile error (no FIS configuration linked).
+    expect(other).toEqual(['FUZZY_SURFACE_VIEWER']);
+    expect(compiled + failing.length + other.length).toBe(Object.keys(BLOCK_LIBRARY).length);
     // serializeModelForWorker strips execute, evaluateDerivatives and ZeroCrossingFn but not updateDiscrete.
     expect(failing).toEqual(['PT_AUTOMATED_MANUAL_TRANSMISSION', 'PT_DUAL_CLUTCH_TRANSMISSION']);
   });

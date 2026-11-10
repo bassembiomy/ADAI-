@@ -135,11 +135,14 @@ describe('reductions', () => {
     expect(out('Mean', {}, [[[1, 2], [3, 6]]])).toEqual([2, 4]);
   });
   it('SumElements of an empty vector is 0 (MATLAB sum([]) = 0)', () => { expect(out('SumElements', {}, [[]])).toBe(0); });
-  for (const type of ['Max', 'Mean']) {
-    it.fails(`XBV-051: ${type} of an empty vector does not throw`, () => {
-      expect(() => out(type, {}, [[]])).not.toThrow();
-    });
-  }
+  // MATLAB: mean([]) = NaN; max([]) = [] (empty). Either an empty result or NaN is acceptable; a throw is not.
+  it.fails('XBV-051: Mean of an empty vector is NaN (MATLAB mean([]))', () => {
+    expect(Number.isNaN(Number(out('Mean', {}, [[]])))).toBe(true);
+  });
+  it.fails('XBV-051: Max of an empty vector is empty or NaN (MATLAB max([]) = [])', () => {
+    const y = out('Max', {}, [[]]);
+    expect((Array.isArray(y) && y.length === 0) || Number.isNaN(Number(y))).toBe(true);
+  });
 });
 
 describe('trigonometric and hyperbolic functions (MATLAB definitions)', () => {
@@ -183,7 +186,8 @@ describe('trigonometric and hyperbolic functions (MATLAB definitions)', () => {
   });
   for (const [type, f] of [...FORWARD, ...INVERSE.map(([t, g]) => [t, g] as [string, (x: number) => number]), ...HYPER.map(([t, g]) => [t, g] as [string, (x: number) => number])]) {
     it.fails(`XBV-046: ${type} processes a vector input element-wise`, () => {
-      const xs = [0.5, 0.6];
+      // In-domain inputs for every function (asec, acsc, acosh, acoth need |x| >= 1 or x > 1), so the oracle is finite.
+      const xs = ['ASEC', 'ACOSEC', 'ACOSH', 'ACOTH'].includes(type) ? [1.5, 2] : [0.5, 0.6];
       closeAll(out(type, {}, [xs]), xs.map(f));
     });
   }
@@ -200,10 +204,11 @@ describe('trigonometric and hyperbolic functions (MATLAB definitions)', () => {
     expect(out('ATANH', {}, [-1])).toBe(-Infinity);
     expect(out('COT', {}, [0])).toBe(Infinity);
     expect(out('COSEC', {}, [0])).toBe(Infinity);
-    close(out('TAN', {}, [Math.PI / 2]), Math.tan(Math.PI / 2));
+    close(out('TAN', {}, [Math.PI / 2]), 1.633123935319537e16);
   });
   it('large arguments use the full-precision reduction of the platform: sin(1e8), cos(1e8)', () => {
-    close(out('SIN', {}, [1e8]), Math.sin(1e8));
-    close(out('COS', {}, [1e8]), Math.cos(1e8));
+    // Literals from a 60-digit decimal argument reduction (WP-04 verifier), not from Math.sin/cos.
+    close(out('SIN', {}, [1e8]), 0.931639027109726);
+    close(out('COS', {}, [1e8]), -0.3633850893556905);
   });
 });

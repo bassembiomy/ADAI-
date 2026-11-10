@@ -127,7 +127,7 @@ describe('WP-03 universal battery, part A', () => {
         return probes.some((p) => r.signals[p].some((v) => v === undefined || (!reported && numbersIn(v).some(Number.isNaN))));
       } catch { return true; }
     }));
-  });
+  }, 120_000);
 
   it('U3: finite edge inputs never throw, and give no NaN the block does not report (|u| <= 1e150)', () => {
     pin('XBV-U3 throws or silent NaN on finite edge inputs', TYPES.filter((type) => FINITE_SPECIALS.some((v) => {

@@ -132,7 +132,7 @@
    "deps": [
     "WP-03"
    ],
-   "status": "in_progress",
+   "status": "done",
    "note": "Closed-form tests for sources, element-wise math, reductions, trig (controller); 7 findings pinned; awaiting Fable.",
    "rework": [
     {
@@ -147,7 +147,10 @@
      ],
      "fix": "all addressed; new findings XBV-048..051"
     }
-   ]
+   ],
+   "verification": {
+    "verifier": "Fable FAIL (Max/Mean/Square oracles, pins), PASS round 2 (489 passed, 65 expected fail, twice); minors fixed afterwards: in-domain inputs for XBV-046, literal oracles for sin/cos(1e8) and tan(pi/2), explicit XBV-051 targets"
+   }
   },
   {
    "id": "WP-05",
@@ -156,7 +159,8 @@
    "deps": [
     "WP-03"
    ],
-   "status": "todo"
+   "status": "in_progress",
+   "note": "Closed-form/semantic tests for linear algebra, routing, logic, bitwise, sequential (controller); findings XBV-052..055; awaiting Fable."
   },
   {
    "id": "WP-06",
@@ -291,7 +295,7 @@
    "deps": [
     "WP-13"
    ],
-   "status": "in_progress",
+   "status": "done",
    "rework": [
     {
      "round": 1,
@@ -303,7 +307,10 @@
      ],
      "fix": "XBV-039 expectation 2.5 and scope/severity corrected; real XbridgesWorkerClient through a structured-clone fake worker for all 290 blocks (XBV-047 pinned); remaining gaps -> WP-14b"
     }
-   ]
+   ],
+   "verification": {
+    "verifier": "Fable FAIL (XBV-039 pin unflippable, hidden DataCloneError), PASS round 2: fake worker faithful, XBV-039 flips with a patched Inport; minors fixed afterwards: XBV-047 counts asserted, client stays inFlight recorded, U2 timeout (WP-03) raised to 120 s after timeouts under load"
+   }
   },
   {
    "id": "WP-14b",
@@ -780,7 +787,7 @@
    "severity": "S2",
    "gate": "V6",
    "status": "open",
-   "summary": "The canvas worker client (serializeModelForWorker) strips execute, evaluateDerivatives and ZeroCrossingFn but not updateDiscrete, so postMessage throws DataCloneError for PT_AUTOMATED_MANUAL_TRANSMISSION and PT_DUAL_CLUTCH_TRANSMISSION (worker run impossible for any model containing them). The worker engine also never re-creates updateDiscrete (XbridgesEngine.ts ~88-94), so once cloning is fixed these hybrid blocks would lose their discrete updates; WP-11 checks this with a gear-shift stimulus. Pinned (clone list) in xbWorker.test.ts."
+   "summary": "The canvas worker client (serializeModelForWorker) strips execute, evaluateDerivatives and ZeroCrossingFn but not updateDiscrete, so postMessage throws DataCloneError for PT_AUTOMATED_MANUAL_TRANSMISSION and PT_DUAL_CLUTCH_TRANSMISSION (worker run impossible for any model containing them). The worker engine also never re-creates updateDiscrete (XbridgesEngine.ts ~88-94), so once cloning is fixed these hybrid blocks would lose their discrete updates; WP-11 checks this with a gear-shift stimulus. Pinned (clone list) in xbWorker.test.ts. Also: after the DataCloneError the client stays inFlight (activePending is set before postMessage throws, xbridgesWorkerClient.ts ~134), so later requests queue forever."
   },
   {
    "id": "XBV-048",
@@ -788,7 +795,7 @@
    "severity": "S1",
    "gate": "V2",
    "status": "open",
-   "summary": "Mean of a matrix returns the mean of all elements (3 for [1 2; 3 6]); MATLAB mean and the Simulink Mean block default (each column) give the column means [2 4]. Pinned in xbEquations.math.test.ts."
+   "summary": "Mean of a matrix returns the mean of all elements (3 for [1 2; 3 6]); MATLAB mean and the Simulink Mean block default (each column) give the column means [2 4]. Pinned in xbEquations.math.test.ts. (MATLAB mean is certain; the Simulink Mean block default 'each column' is from the verifier's memory - confirm against the documentation in WP-15.)"
   },
   {
    "id": "XBV-049",
@@ -813,6 +820,38 @@
    "gate": "V2",
    "status": "open",
    "summary": "Max and Mean throw on an empty vector (mathjs 'Cannot calculate ... of an empty array'), stopping the run. Pinned in xbEquations.math.test.ts."
+  },
+  {
+   "id": "XBV-052",
+   "plan_ref": "4.2 linear algebra / routing",
+   "severity": "S3",
+   "gate": "V2",
+   "status": "open",
+   "summary": "SubMatrix uses zero-based start/end indices (defaults 0); Simulink Submatrix uses one-based indices, so the same numbers select a different block. Pinned in xbEquations.routing.test.ts."
+  },
+  {
+   "id": "XBV-053",
+   "plan_ref": "4.2 linear algebra / routing",
+   "severity": "S1",
+   "gate": "V2",
+   "status": "open",
+   "summary": "MUX nests vector inputs ([1, [2, 3]]) instead of concatenating them into one flat vector [1 2 3] as Simulink Mux does; downstream widths and element indices are wrong. Pinned in xbEquations.routing.test.ts."
+  },
+  {
+   "id": "XBV-054",
+   "plan_ref": "4.2 linear algebra / routing",
+   "severity": "S3",
+   "gate": "V2",
+   "status": "open",
+   "summary": "Switch lacks the Simulink criterion 'u2 ~= 0' (canvas offers >, <, >=, <=) and silently passes u2 for an unknown criterion. Pinned in xbEquations.routing.test.ts."
+  },
+  {
+   "id": "XBV-055",
+   "plan_ref": "4.2 linear algebra / routing",
+   "severity": "S2",
+   "gate": "V2",
+   "status": "open",
+   "summary": "MatrixSolve (singular, inconsistent system) Inverse (singular matrix) and MatrixMul (non-conformable sizes) throw ('Solve Error: ... matrix is singular'), stopping the run instead of reporting it. Pinned in xbEquations.routing.test.ts."
   }
  ],
  "blocks": {
