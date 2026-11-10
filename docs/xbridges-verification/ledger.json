@@ -575,6 +575,30 @@
    "gate": "V3",
    "status": "open",
    "summary": "DIMENSION_MISMATCH and DATA_TYPE_MISMATCH on a connection are warnings and the run continues; decision D1 (Simulink): compile errors that stop the run. Pinned by it.fails in xbDiagnostics.test.ts. Supersedes XBV-008."
+  },
+  {
+   "id": "XBV-030",
+   "plan_ref": "5.2",
+   "severity": "S2",
+   "gate": "V4",
+   "status": "open",
+   "summary": "An algebraic loop without a solution (y = 1 + y) emits ALGEBRAIC_LOOP_NOT_CONVERGED but the run continues every step with a meaningless value; Simulink stops. Pinned in xbEngine.test.ts."
+  },
+  {
+   "id": "XBV-031",
+   "plan_ref": "5.2 malformed models",
+   "severity": "S2",
+   "gate": "V4",
+   "status": "open",
+   "summary": "The engine accepts malformed models silently: two drivers on one input port, two blocks with the same id, and an unknown block type (skipped as a no-op) give no compile error. The canvas may prevent some of these, but files, the agent and DOE/TRM build models directly. Pinned in xbEngine.test.ts."
+  },
+  {
+   "id": "XBV-032",
+   "plan_ref": "5.2 scale",
+   "severity": "S3",
+   "gate": "V4",
+   "status": "open",
+   "summary": "Run time is quadratic in the number of blocks (1000/2000/4000-block chains: 188/435/1633 ms for 10 rk4 steps; 10 000 blocks about 22 s); gatherInputs searches the connection list per input. Pinned against a 5 s budget in xbEngine.test.ts."
   }
  ],
  "blocks": {
