@@ -92,6 +92,8 @@ const NON_FINITE = [NaN, Infinity, -Infinity];
 const WRONG_KINDS: unknown[] = [true, 'abc', null, undefined, {}, []];
 /** Above this magnitude IEEE overflow (Inf - Inf, 0 * Inf) legitimately produces NaN; only the no-throw rule applies. */
 const OVERFLOW_RANGE = 1e150;
+/** Typed diagnostics with which a block reports a numeric condition itself (types.ts XBlock execute result). */
+const BLOCK_NUMERIC_DIAGNOSTICS = new Set(['MATH_DOMAIN_ERROR', 'DIVIDE_BY_ZERO', 'LOGIC_NAN_INPUT', 'NON_FINITE_INPUT']);
 
 /** Runs fn with Math.random replaced by a fixed-seed generator, so randomness cannot masquerade as another defect. */
 const seeded = <T>(fn: () => T, seed = 12345): T => {
@@ -107,18 +109,21 @@ describe('WP-03 universal battery, part A', () => {
     }));
   });
 
-  it('U2: a block alone (inputs unconnected) runs 5 euler steps without an exception, an undefined output, or a NaN it does not report', () => {
+  it('U2: a block alone (inputs unconnected) runs 0.2 s of rk4, the canvas default (at least two hits of a 0.1 s sample time) without an exception, an undefined output, or a NaN it does not report', () => {
     pin('XBV-U2 fails alone with unconnected inputs', TYPES.filter((type) => {
       const b = make(type);
       const probes = b.outputs.map((p) => `u.${p.id}`);
       try {
-        const r = runModel(buildModel({ blocks: [{ id: 'u', type }], wires: [] }), { solver: 'euler', dt: 0.001, stopTime: 0.005, probes });
+        const r = runModel(buildModel({ blocks: [{ id: 'u', type }], wires: [] }), { solver: 'rk4', dt: 0.001, stopTime: 0.2, probes });
         // A fault or configuration error the block reports itself is a diagnosed stop (Simulink also refuses an
         // unconfigured block). An exception raised inside execute is not.
         const raised = r.diagnostics.some((d) => d.code === 'EXECUTION_EXCEPTION'
           || (d.code === 'BLOCK_RUNTIME_FAULT' && !d.message.includes('reported a runtime fault')));
         if (raised) return true;
-        const reported = r.diagnostics.some((d) => (d.blockIds ?? []).includes('u') && d.code !== 'NUMERICAL_INSTABILITY');
+        // "Reported" means the block itself flagged the condition: an error, or a typed numeric diagnostic.
+        // Connectivity warnings (every lone block has them) and the engine's generic NaN check do not count.
+        const reported = r.diagnostics.some((d) => (d.blockIds ?? []).includes('u')
+          && (d.severity === 'error' || BLOCK_NUMERIC_DIAGNOSTICS.has(d.code)));
         return probes.some((p) => r.signals[p].some((v) => v === undefined || (!reported && numbersIn(v).some(Number.isNaN))));
       } catch { return true; }
     }));
@@ -231,5 +236,23 @@ describe('WP-03 universal battery, part A', () => {
       const r2 = seeded(() => exec(make(type), b.inputs.map(() => 7), snapshot(s), 0));
       return r1.threw === null && r2.threw === null && !sameValue(r1.outputs, r2.outputs);
     }));
+  });
+});
+
+describe('pinned single defects found by the battery', () => {
+  // Oracle (closed form, plan 3.1): the space-vector sector of an angle is floor(mod(theta, 2*pi) / (pi/3)) + 1, in 1..6.
+  const sectorOf = (theta: number) => Math.floor((((theta % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI)) / (Math.PI / 3)) + 1;
+  it.fails('XBV-025: SECTOR_SELECTOR gives the sector of any angle, including large negative ones', () => {
+    for (const theta of [-10, -7, -4, 13]) {
+      const b = make('SECTOR_SELECTOR');
+      expect(exec(b, [theta], b.state, 0).outputs[0], `theta ${theta}`).toBe(sectorOf(theta));
+    }
+  });
+  it('SECTOR_SELECTOR matches the closed form on one turn either side of zero', () => {
+    for (let theta = -2 * Math.PI + 0.05; theta < 2 * Math.PI; theta += 0.1) {
+      if (theta < -0.01 && theta > -2 * Math.PI) continue; // negative turn is covered by XBV-025 above
+      const b = make('SECTOR_SELECTOR');
+      expect(exec(b, [theta], b.state, 0).outputs[0], `theta ${theta}`).toBe(sectorOf(theta));
+    }
   });
 });

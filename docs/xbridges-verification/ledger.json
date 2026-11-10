@@ -108,8 +108,22 @@
     "WP-01",
     "WP-02"
    ],
-   "status": "in_progress",
-   "note": "Part A pinned: rules corrected from the triage (diagnosed NaN accepted, overflow range, seeded randomness for U11/U14, ragged array removed, factory-level U7 added); every pinned entry is a triaged product defect. Awaiting Fable verification. U6, U8, U12, U13, U15, U16 follow as WP-03b."
+   "status": "done",
+   "note": "Part A done. U6, U8, U12, U13, U15, U16 (and the ragged-array input dropped from U5) follow as WP-03b.",
+   "verification": {
+    "executor": "Sonnet triage of 195 entries",
+    "verifier": "Fable FAIL (U2 'reported' was always true through connectivity warnings; nothing hidden); fixed by the controller: whitelist of block numeric diagnostics, 0.2 s rk4 run, SECTOR_SELECTOR pinned as XBV-025, XBV-024 raised to S3. Re-run: 12 passed, 1 expected fail; pinned lists unchanged.",
+    "reproduced_by_verifier": "19 pinned entries reproduced as product defects; 7 test verdicts confirmed"
+   }
+  },
+  {
+   "id": "WP-03b",
+   "title": "Universal battery part B: U6 shapes (incl. ragged), U8 enums, U12 reset, U13 long runs, U15 dynamic ports, U16 names",
+   "exec": "S / F",
+   "deps": [
+    "WP-03"
+   ],
+   "status": "todo"
   },
   {
    "id": "WP-04",
@@ -476,7 +490,7 @@
    "severity": "S2",
    "gate": "V3",
    "status": "open",
-   "summary": "Undefined outputs or unreported NaN: 5 blocks alone with unconnected inputs (DEMUX out2 undefined stops a downstream Abs), 11 blocks on finite edge inputs (incl. SECTOR_SELECTOR sector -3 for theta = -10 rad). Lists XBV-U2, XBV-U3."
+   "summary": "Undefined outputs or unreported NaN: 5 blocks alone with unconnected inputs (DEMUX out2 undefined stops a downstream Abs), 11 blocks on finite edge inputs. Lists XBV-U2, XBV-U3. SECTOR_SELECTOR moved to XBV-025."
   },
   {
    "id": "XBV-023",
@@ -489,10 +503,18 @@
   {
    "id": "XBV-024",
    "plan_ref": "review",
-   "severity": "S4",
+   "severity": "S3",
    "gate": "V3",
    "status": "open",
-   "summary": "PWM_GENERATOR logs to the console inside execute and uses a golden-ratio phase offset; MPC_CONTROLLER keeps a class instance in state that does not survive a clone (hidden while it throws). Found during WP-03 triage."
+   "summary": "PWM_GENERATOR logs to the console inside execute and uses a golden-ratio phase offset; MPC_CONTROLLER keeps a class instance in state that does not survive a clone (hidden while it throws). Found during WP-03 triage. Severity raised from S4 (verifier): the PWM phase offset changes numbers and the MPC state is lost on clone; both are checked against oracles in WP-08 and WP-07."
+  },
+  {
+   "id": "XBV-025",
+   "plan_ref": "U3",
+   "severity": "S1",
+   "gate": "V2",
+   "status": "open",
+   "summary": "SECTOR_SELECTOR returns sector -3 for theta = -10 rad (closed form: sector 2); negative angles beyond one turn are not wrapped. Pinned by it.fails in xbUniversal.test.ts."
   }
  ],
  "blocks": {
@@ -4556,5 +4578,11 @@
     "G": "powertrain-ledger"
    }
   }
- }
+ },
+ "notes_for_later_wps": [
+  {
+   "wp": "WP-08",
+   "note": "AC_MOTOR_PID_CONTROL with defaults settles near omega = 78 rad/s for w_ref = 157 (rk4 and ode45 agree); check against the closed-loop oracle. Explicit Euler at 1 ms diverges for this block (numerical, not a block defect)."
+  }
+ ]
 }
