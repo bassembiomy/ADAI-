@@ -114,13 +114,23 @@ describe('routing', () => {
   for (const sel of [0, 3, -1, Number.NaN]) {
     it.fails(`XBV-058: Switch Case with control ${sel} (outside 1..2) is reported, not silently routed`, () => {
       const r = run('SWITCH_CASE', { numCases: 2 }, [sel, 11, 22]);
-      expect(Boolean(r.error) || r.threw !== null).toBe(true);
+      // A throw would stop the run (XBV-021/055); the target is a reported error.
+      expect(r.threw).toBeNull();
+      expect(Boolean(r.error)).toBe(true);
     });
   }
-  // Simulink Demux: a 3-wide signal into 2 outputs needs explicit widths; default is an error, never 3 scalars.
-  it.fails('XBV-060: Demux of a 3-vector into 2 outputs is reported, not split into 3 values', () => {
+  // Simulink Demux, n elements into p outputs, n mod p = m: m outputs of floor(n/p) + 1 elements, then p - m of
+  // floor(n/p). A 3-vector into 2 outputs gives [1 2] and [3]. Only p > n is an error.
+  it.fails('XBV-060: Demux of a 3-vector into 2 outputs gives [1 2] and [3]', () => {
     const r = run('DEMUX', { numOutputs: 2 }, [[1, 2, 3]]);
-    expect(r.y.length <= 2 && (Boolean(r.error) || r.threw !== null)).toBe(true);
+    expect(r.y.length).toBe(2);
+    expect(r.y[0]).toEqual([1, 2]);
+    expect([3, [3]]).toContainEqual(r.y[1]);
+  });
+  it.fails('XBV-060: Demux of a scalar into 2 outputs (more outputs than elements) is a reported error, not a throw', () => {
+    const r = run('DEMUX', { numOutputs: 2 }, [5]);
+    expect(r.threw).toBeNull();
+    expect(Boolean(r.error)).toBe(true);
   });
 });
 
@@ -155,7 +165,7 @@ describe('logic on vectors (Simulink: element-wise)', () => {
 });
 
 describe('bitwise', () => {
-  it('AND / OR / XOR on 12 and 10; NOT is an involution', () => {
+  it('AND / OR / XOR on 12 and 10; NOT is two\'s complement', () => {
     expect(Number(y0('BitwiseAND', {}, [12, 10]))).toBe(8);
     expect(Number(y0('BitwiseOR', {}, [12, 10]))).toBe(14);
     expect(Number(y0('BitwiseXOR', {}, [12, 10]))).toBe(6);
@@ -165,8 +175,10 @@ describe('bitwise', () => {
   });
   // Oracle (Simulink Bit Shift, 32-bit word): shifting by the word length or more shifts every bit out; a negative
   // shift count shifts the other way. JavaScript masks the count to 5 bits, so 1 << 32 is 1.
-  it.fails('XBV-057: shift by the word length or more gives 0 (1 << 32, 16 >> 32)', () => {
+  it.fails('XBV-057: shift left by the word length gives 0 (1 << 32)', () => {
     expect(Number(y0('ShiftLeft', {}, [1, 32]))).toBe(0);
+  });
+  it.fails('XBV-057: shift right by the word length gives 0 (16 >> 32)', () => {
     expect(Number(y0('ShiftRight', {}, [16, 32]))).toBe(0);
   });
   it.fails('XBV-057: a negative shift count shifts the other way (4 << -1 = 2)', () => {

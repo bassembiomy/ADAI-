@@ -176,6 +176,16 @@
       "BitwiseNOT without an oracle"
      ],
      "fix": "XBV-056..061 pinned, BitwiseNOT oracle ~x = -x-1, MatrixSolve shape pinned, remaining minors -> WP-05b"
+    },
+    {
+     "round": 2,
+     "by": "Fable FAIL",
+     "items": [
+      "XBV-060 oracle wrong (Simulink splits 3 into [1 2],[3]; only p > n is an error)",
+      "XBV-058 accepted a throw",
+      "XBV-057 two asserts in one pin; test title"
+     ],
+     "fix": "all applied"
     }
    ]
   },
@@ -892,7 +902,7 @@
    "severity": "S2",
    "gate": "V2",
    "status": "open",
-   "summary": "SWITCH_CASE with a selector outside 1..n silently routes: sel 0 returns the selector value itself, sel 3, -1 and NaN return case 1; Simulink Multiport Switch reports an error (or uses the declared default). Found by the WP-05 verifier; pinned in xbEquations.routing.test.ts."
+   "summary": "SWITCH_CASE with a selector outside 1..n silently routes: sel 0 returns the selector value itself, sel 3, -1 and NaN return case 1; Simulink Multiport Switch reports an error (or uses the declared default). Found by the WP-05 verifier; pinned in xbEquations.routing.test.ts. Target: a reported error (not a throw, cf. XBV-021/055)."
   },
   {
    "id": "XBV-059",
@@ -908,7 +918,7 @@
    "severity": "S2",
    "gate": "V2",
    "status": "open",
-   "summary": "DEMUX of a vector whose width differs from numOutputs emits one value per element (3-vector into 2 ports gives 3 values) instead of reporting a width mismatch. Found by the WP-05 verifier; pinned in xbEquations.routing.test.ts."
+   "summary": "DEMUX does not follow the Simulink split rule: a 3-vector into 2 outputs emits 3 values instead of [1 2] and [3] (n mod p = m: m outputs of floor(n/p)+1 elements, then p-m of floor(n/p)); a scalar into 2 outputs (p > n, a Simulink error) silently emits 1 output. Split rule from the verifier's memory of the Demux documentation - confirm in WP-15. Pinned in xbEquations.routing.test.ts."
   },
   {
    "id": "XBV-061",
