@@ -276,7 +276,7 @@
    "deps": [
     "WP-13"
    ],
-   "status": "todo"
+   "status": "in_progress"
   },
   {
    "id": "WP-15",
@@ -673,6 +673,14 @@
    "gate": "V3",
    "status": "open",
    "summary": "CONSTANT_VALUE_NOT_REPRESENTABLE (a Constant value that loses precision in its data type) is a compile error that refuses the model; Simulink reports parameter precision loss as a warning by default (out-of-range overflow stays an error). Pinned in xbDiagnostics.test.ts."
+  },
+  {
+   "id": "XBV-039",
+   "plan_ref": "7.2 boundary mappings",
+   "severity": "S1",
+   "gate": "V6",
+   "status": "open",
+   "summary": "In canvas simulation (main thread and worker) a state-machine variable mapped to a top-level Inport never reaches the X-Bridges model: the canvas writes the value with setSignalValue and params.value, but Inport.execute returns its own unconnected input (default 0), which overwrites it at the next evaluation (BlockDefinitions.ts ~2610). Measured: Inport override 2.5 into an Integrator for 1 s gives 0 instead of 2.5. Pinned in xbWorker.test.ts. The embedded interpreter/C path is checked in WP-16/18."
   }
  ],
  "blocks": {
