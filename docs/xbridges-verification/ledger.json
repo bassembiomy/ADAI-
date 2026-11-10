@@ -199,12 +199,12 @@
   },
   {
    "id": "WP-12",
-   "title": "Solvers",
+   "title": "Solvers part A: orders on 5 problems, polynomial exactness, stiff stability, algebraic loop per solver, dispatcher and argument agreement, batch edge inputs",
    "exec": "S / F",
    "deps": [
     "WP-02"
    ],
-   "status": "in_progress",
+   "status": "done",
    "note": "Part A (orders, polynomial exactness, stiff stability, algebraic loop per solver, dispatcher agreement, batch edge inputs) written by the controller; adaptive error control (D3) is part B.",
    "rework": [
     {
@@ -217,7 +217,21 @@
      ],
      "fix": "forced (WaveformGen sine) and nonlinear (x' = -x^2) problems with per-problem step sets; criterion: every halving >= p - 0.15, finest pair < p + 0.35; argument equality canvas/worker; XBV-028 pinned; FIXED_STEP_INVALID asserted; XBV-026 non-stiff case pinned"
     }
-   ]
+   ],
+   "verification": {
+    "verifier": "Fable FAIL x2 (linear-only problems let tableau mutants pass; then the ode5 c2 mutant), PASS round 2: 59 single-coefficient mutants of ode2/ode3/rk4/ode5 at 10% and 1% all killed except equivalent stage-7 coefficients; ode14x order 3/5 killed",
+    "acceptance": "371 passed, 6 expected fail, twice",
+    "sensitivity_limit": "coefficient errors of 1e-3 relative or less in ode5 c2 (1e-4 in ode2 c2) are below the resolution of these step sets"
+   }
+  },
+  {
+   "id": "WP-12b",
+   "title": "Solvers part B: adaptive error control on the canvas (D3: ode23/ode45/ode23tb with RelTol/AbsTol), outputTimes and stop-time hit, maxStep/minStep, stiffness diagnostic, Van der Pol and Robertson, time accumulation (XBV-017)",
+   "exec": "S / F",
+   "deps": [
+    "WP-12"
+   ],
+   "status": "todo"
   },
   {
    "id": "WP-13",
