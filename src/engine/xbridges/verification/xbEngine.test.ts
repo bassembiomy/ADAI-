@@ -6,6 +6,8 @@
  * Oracles: hand-computed sequences (delay ring, sampled ramp), analytic fixed points of linear and piecewise-linear
  * loops, metamorphic equality (block order and ids must not matter; a subsystem equals its flattened content).
  */
+import { execFileSync } from 'node:child_process';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { BLOCK_LIBRARY } from '../BlockDefinitions';
 import { XbridgesEngine } from '../XbridgesEngine';
@@ -37,6 +39,32 @@ describe('execution order is a property of the graph, not of the file', () => {
         expect(b.signals[q], `seed ${seed} ${p}`).toEqual(a.signals[p]);
       }
     }
+  });
+});
+
+describe('execution order is a valid topological order (plan 5.2)', () => {
+  it('seeds 1..50: every feed-through dependency outside an algebraic loop is evaluated after its source', () => {
+    for (let seed = 1; seed <= 50; seed++) {
+      const model = buildModel(randomGraph(seed, { blocks: 14 }));
+      const e = new XbridgesEngine(model);
+      e.compile(0);
+      const pos = new Map(e.executionOrder.map((b, i) => [b.id, i]));
+      for (const c of model.connections) {
+        const target = model.blocks.find((b) => b.id === c.targetBlock)!;
+        const feedthrough = target.directFeedthrough ?? !target.isStateful;
+        if (!feedthrough || c.sourceBlock === c.targetBlock) continue;
+        expect(pos.get(c.sourceBlock)!, `seed ${seed}: ${c.sourceBlock} before ${c.targetBlock}`).toBeLessThan(pos.get(c.targetBlock)!);
+      }
+    }
+  });
+  it('a hand-built chain listed in reverse is still evaluated source first', () => {
+    const model = buildModel({
+      blocks: [{ id: 't', type: 'TERMINATOR' }, { id: 'g2', type: 'GAIN' }, { id: 'g1', type: 'GAIN' }, { id: 'k', type: 'Constant' }],
+      wires: ['k.out -> g1.u', 'g1.y -> g2.u', 'g2.y -> t.u'],
+    });
+    const e = new XbridgesEngine(model);
+    e.compile(0);
+    expect(e.executionOrder.map((b) => b.id)).toEqual(['k', 'g1', 'g2', 't']);
   });
 });
 
@@ -126,6 +154,42 @@ describe('algebraic loops (analytic fixed points)', () => {
     expect(Math.abs(Number(at(r, 'sat.y')) - 1 / 3)).toBeLessThan(1e-6);
   });
 
+  it('a self-loop on a feed-through block (y = 0.5 y) gives y = 0 and is reported as an algebraic loop', () => {
+    const r = runModel(buildModel({ blocks: [{ id: 'g', type: 'GAIN', params: { gain: 0.5 } }], wires: ['g.y -> g.u'] }),
+      { solver: 'rk4', dt: 0.1, stopTime: 0.2, probes: ['g.y'] });
+    expect(r.diagnostics.map((d) => d.code)).toContain('ALGEBRAIC_LOOP');
+    expect(Math.abs(Number(at(r, 'g.y')))).toBeLessThan(1e-9);
+  });
+
+  it('a loop with two solutions (y = sat(1 + 2y, -1, 1): y = 1 or y = -1) converges to one of them', () => {
+    const r = runModel(buildModel({
+      blocks: [
+        { id: 'c', type: 'Constant', params: { value: 1 } },
+        { id: 's', type: 'Sum', params: { signs: '++' } },
+        { id: 'sat', type: 'SATURATION', params: { lowerLimit: -1, upperLimit: 1 } },
+        { id: 'g', type: 'GAIN', params: { gain: 2 } },
+      ],
+      wires: ['c.out -> s.in1', 's.out -> sat.u', 'sat.y -> g.u', 'g.y -> s.in2'],
+    }), { solver: 'rk4', dt: 0.1, stopTime: 0.2, probes: ['sat.y'] });
+    const y = Number(at(r, 'sat.y'));
+    expect(Math.abs(y - Math.min(1, Math.max(-1, 1 + 2 * y)))).toBeLessThan(1e-6);
+  });
+
+  it('a loop through a subsystem (y = 1 + 0.5 * [Inport -> Gain -> Outport](y)) gives y = 2', () => {
+    const blk = (type: string, id: string, params: Record<string, unknown> = {}, parentId?: string) =>
+      Object.assign(BLOCK_LIBRARY[type](id, params), parentId ? { parentId } : {});
+    const conn = (sourceBlock: string, sourcePort: string, targetBlock: string, targetPort: string) => ({ sourceBlock, sourcePort, targetBlock, targetPort });
+    const e = new XbridgesEngine({
+      blocks: [blk('Constant', 'c', { value: 1 }), blk('Sum', 's', { signs: '++' }), blk('Subsystem', 'sub'),
+        blk('Inport', 'si', {}, 'sub'), blk('GAIN', 'g', { gain: 0.5 }, 'sub'), blk('Outport', 'so', {}, 'sub')],
+      connections: [conn('c', 'out', 's', 'in1'), conn('s', 'out', 'sub', 'si'), conn('si', 'out', 'g', 'u'), conn('g', 'y', 'so', 'in'), conn('sub', 'so', 's', 'in2')],
+    });
+    expect(errors(e.compile(0))).toEqual([]);
+    e.computeOutputs(0);
+    // Loop tolerance is relative (algTol 1e-6 on |y| = 2): measured error 1.9e-6.
+    expect(Math.abs(Number(e.getSignalValue('s', 'out')) - 2)).toBeLessThan(1e-5);
+  });
+
   // The diagnostic is emitted but the run continues with a meaningless value (Simulink stops).
   it.fails('XBV-030: a loop with no solution (y = 1 + y) stops the run with ALGEBRAIC_LOOP_NOT_CONVERGED', () => {
     const r = runModel(buildModel({
@@ -165,6 +229,56 @@ describe('subsystems', () => {
         conn('g5', 'y', 'bo', 'in'), conn('B', 'bo', 'ao', 'in'), conn('A', 'ao', 't', 'u')],
     }, ['ao', 'out']);
     expect(nested).toBe(30);
+  });
+});
+
+describe('multirate and events', () => {
+  it('two delays at 0.1 s and 0.25 s on one ramp each hold their own last sample (rk4, dt 0.05)', () => {
+    const r = runModel(buildModel({
+      blocks: [
+        { id: 'one', type: 'Constant', params: { value: 1 } },
+        { id: 'ramp', type: 'Integrator', params: { initialCondition: 0 } },
+        { id: 'a', type: 'UNIT_DELAY', params: { initialCondition: 0, sampleTime: 0.1 } },
+        { id: 'b', type: 'UNIT_DELAY', params: { initialCondition: 0, sampleTime: 0.25 } },
+      ],
+      wires: ['one.out -> ramp.in', 'ramp.out -> a.u', 'ramp.out -> b.u'],
+    }), { solver: 'rk4', dt: 0.05, stopTime: 1, probes: ['a.y', 'b.y'] });
+    expect(errors(r.diagnostics)).toEqual([]);
+    const held = (ts: number) => (t: number) => { const k = Math.floor(t / ts + 1e-9); return k <= 1 ? 0 : (k - 1) * ts; };
+    r.t.forEach((t, i) => {
+      expect(Math.abs(Number(r.signals['a.y'][i]) - held(0.1)(t)), `a at ${t}`).toBeLessThan(1e-12);
+      expect(Math.abs(Number(r.signals['b.y'][i]) - held(0.25)(t)), `b at ${t}`).toBeLessThan(1e-12);
+    });
+  });
+
+  // The probe runs in a child process with a 15 s limit: batch ode45/ode23 hang as soon as they bracket the Step event
+  // (step inside the interval, or at the stop time with tight tolerances); no result after 60 s.
+  const probe = (solver: string, stepTime: number) => {
+    const script = join(__dirname, 'probes', 'stepEventProbe.ts');
+    try {
+      const out = execFileSync(process.execPath, ['--import', 'tsx', script, solver, String(stepTime)], { timeout: 15_000, encoding: 'utf8' });
+      return JSON.parse(out) as { y: number; errors: string[] };
+    } catch (e) {
+      return { y: Number.NaN, errors: [(e as { killed?: boolean }).killed ? 'TIMEOUT' : String(e)] };
+    }
+  };
+  it('the probe itself works: batch rk4 with the same Step finishes with a finite integral between 0.4 and 0.5', () => {
+    const r = probe('rk4', 0.55);
+    expect(r.errors).toEqual([]);
+    expect(r.y).toBeGreaterThan(0.4);
+    expect(r.y).toBeLessThan(0.5);
+  }, 30_000);
+  for (const solver of ['ode45', 'ode23']) {
+    it.fails(`XBV-036: batch ${solver} locates the Step event: integral of Step(0.55) over [0, 1] is 0.45 (finishes in 15 s)`, () => {
+      const r = probe(solver, 0.55);
+      expect(r.errors).toEqual([]);
+      expect(Math.abs(r.y - 0.45)).toBeLessThan(1e-6);
+    }, 30_000);
+  }
+
+  it('an empty subsystem compiles without error', () => {
+    const e = new XbridgesEngine({ blocks: [BLOCK_LIBRARY.Subsystem('sub', {})], connections: [] });
+    expect(errors(e.compile(0))).toEqual([]);
   });
 });
 

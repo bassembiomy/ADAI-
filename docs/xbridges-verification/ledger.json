@@ -241,7 +241,19 @@
     "WP-02"
    ],
    "status": "in_progress",
-   "note": "Diagnostics closure (36 recipes by Sonnet; 9 pinned behaviours) and engine semantics (controller) written; awaiting Fable verification."
+   "note": "Diagnostics closure (36 recipes by Sonnet; 9 pinned behaviours) and engine semantics (controller) written; awaiting Fable verification.",
+   "rework": [
+    {
+     "round": 1,
+     "by": "Fable FAIL",
+     "items": [
+      "closure scan missed 14 codes emitted via err()/reportError()/StiffSolverError",
+      "no valid-topological-order assertion; missing zero crossings, subsystem loop, two-solution loop, non-integer rates, empty subsystem, self-loop",
+      "XBV-035 had no pin of its own"
+     ],
+     "fix": "scan covers all four emission forms, 14 severities added (recipes by Sonnet); topological-order tests; new loop, multirate, event and subsystem cases; XBV-035 pinned on a canvas-buildable model; XBV-036 found (batch ode45/ode23 hang on a Step event)"
+    }
+   ]
   },
   {
    "id": "WP-14",
@@ -623,6 +635,14 @@
    "gate": "V3",
    "status": "open",
    "summary": "Dimension checking is inactive: library factories never set port dimensions (only PT_VEHICLE_BODY_1DOF inputs do), so DIMENSION_MISMATCH cannot fire for any canvas-built model; Simulink propagates and checks dimensions. The recipe has to patch dimensions onto ports to provoke the code."
+  },
+  {
+   "id": "XBV-036",
+   "plan_ref": "5.2 zero crossings",
+   "severity": "S2",
+   "gate": "V5",
+   "status": "open",
+   "summary": "Batch variable-step runs (Solvers.runFixedStep with ode45 or ode23) hang - no result after 60 s - as soon as they bracket a Step event: Step at 0.3, 0.5 or 0.55 s with default tolerances, or at the stop time with relTol 1e-8. Fixed-step batch rk4 finishes. Used by DOE, TRM and every batch caller. Pinned with a child-process probe and a 15 s limit in xbEngine.test.ts."
   }
  ],
  "blocks": {

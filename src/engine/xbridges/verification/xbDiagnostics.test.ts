@@ -18,7 +18,10 @@ import { DIAGNOSTIC_RECIPES } from '../testkit/diagnosticRecipes';
 const ENGINE_DIR = join(__dirname, '..');
 const engineCodes = [...new Set(readdirSync(ENGINE_DIR)
   .filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts'))
-  .flatMap((f) => [...readFileSync(join(ENGINE_DIR, f), 'utf8').matchAll(/code: '([A-Z_]+)'/g)].map((m) => m[1])))].sort();
+  // Emission forms: `code: 'X'` (diagnostic objects), `err(block, 'X', ...)` (modelChecks.ts),
+  // `reportError(engine, 'X', ...)` and `new StiffSolverError('X', ...)` (StiffSolver.ts).
+  .flatMap((f) => [...readFileSync(join(ENGINE_DIR, f), 'utf8')
+    .matchAll(/(?:code: |\berr\([^,()]+, |\breportError\([^,()]+, |new StiffSolverError\()'([A-Z][A-Z0-9_]+)'/g)].map((m) => m[1])))].sort();
 
 /** Expected severity per code (controller). D1: dimension and data-type mismatches on a connection are errors. */
 const EXPECTED: Record<string, 'error' | 'warning' | 'info'> = {
@@ -58,6 +61,22 @@ const EXPECTED: Record<string, 'error' | 'warning' | 'info'> = {
   UNCONNECTED_OUTPUT_PORT: 'warning',
   UNIT_INCONSISTENCY: 'warning',
   UNSUPPORTED_SOLVER: 'error',
+  // Compile-time parameter constraints (modelChecks.ts err()): Simulink refuses to update the diagram.
+  CONSTANT_VALUE_NOT_REPRESENTABLE: 'error',
+  CONSTANT_VALUE_OUT_OF_RANGE: 'error',
+  DELAY_LENGTH_INVALID: 'error',
+  LIMITS_INVALID: 'error',
+  PARAMETER_NOT_FINITE: 'error',
+  PID_FILTER_COEFFICIENT_INVALID: 'error',
+  STATE_SPACE_DIMENSION_MISMATCH: 'error',
+  SUM_SIGNS_INVALID: 'error',
+  TF_DENOMINATOR_LEADING_ZERO: 'error',
+  TF_IMPROPER: 'error',
+  // Stiff solver failures (StiffSolver.ts): Simulink stops with a solver error.
+  STIFF_SOLVER_INVALID_OPTION: 'error',
+  STIFF_SOLVER_NONFINITE: 'error',
+  STIFF_SOLVER_SINGULAR: 'error',
+  STIFF_SOLVER_STEP_TOO_SMALL: 'error',
 };
 /** Codes whose current behaviour contradicts the expectation; each turns red when fixed (then leaves this map). */
 const PINNED_SEVERITY: Record<string, string> = {
@@ -75,6 +94,18 @@ const PINNED_SEVERITY: Record<string, string> = {
 describe('diagnostics closure', () => {
   it('the engine emits exactly the codes the controller has a severity for (a new code needs a decision)', () => {
     expect(engineCodes).toEqual(Object.keys(EXPECTED).sort());
+  });
+
+  // XBV-035 on its own: a canvas-buildable dimension mismatch ([1 2 3] + [1 2] into Sum) must be detected at all.
+  it.fails('XBV-035: Constant [1 2 3] and Constant [1 2] into one Sum give DIMENSION_MISMATCH', async () => {
+    const { buildModel } = await import('../testkit');
+    const { XbridgesEngine } = await import('../XbridgesEngine');
+    const e = new XbridgesEngine(buildModel({
+      blocks: [{ id: 'a', type: 'Constant', params: { value: '[1 2 3]' } }, { id: 'b', type: 'Constant', params: { value: '[1 2]' } },
+        { id: 's', type: 'Sum', params: { signs: '++' } }],
+      wires: ['a.out -> s.in1', 'b.out -> s.in2'],
+    }));
+    expect(e.compile(0).map((d) => d.code)).toContain('DIMENSION_MISMATCH');
   });
 
   it('every engine code has a recipe', () => {
