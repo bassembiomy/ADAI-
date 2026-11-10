@@ -108,7 +108,8 @@
     "WP-01",
     "WP-02"
    ],
-   "status": "todo"
+   "status": "in_progress",
+   "note": "Part A (U1-U5, U7, U9-U11, U14) written; first run flags 195 entries; Sonnet triage in progress. U6, U8, U12, U13, U15, U16 follow as WP-03b."
   },
   {
    "id": "WP-04",
