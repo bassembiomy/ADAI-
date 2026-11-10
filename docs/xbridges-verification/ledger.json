@@ -240,7 +240,8 @@
    "deps": [
     "WP-02"
    ],
-   "status": "todo"
+   "status": "in_progress",
+   "note": "Diagnostics closure: controller test written, Sonnet writing recipes. Engine semantics tests: controller writing."
   },
   {
    "id": "WP-14",
@@ -404,7 +405,7 @@
    "plan_ref": "F8",
    "severity": "S1",
    "gate": "V3",
-   "status": "open",
+   "status": "superseded by XBV-029",
    "summary": "DIMENSION_MISMATCH and DATA_TYPE_MISMATCH on a connection are warnings. Decision D1: compile errors, as in Simulink."
   },
   {
@@ -566,6 +567,14 @@
    "gate": "V5",
    "status": "open",
    "summary": "Canvas (stepLiveSolver) and worker fall back to explicit Euler for any unknown solver name, silently; the batch runner returns UNSUPPORTED_SOLVER. Decision D3: unknown names are refused. Pinned by it.fails in xbSolvers.test.ts."
+  },
+  {
+   "id": "XBV-029",
+   "plan_ref": "F8 / D1",
+   "severity": "S1",
+   "gate": "V3",
+   "status": "open",
+   "summary": "DIMENSION_MISMATCH and DATA_TYPE_MISMATCH on a connection are warnings and the run continues; decision D1 (Simulink): compile errors that stop the run. Pinned by it.fails in xbDiagnostics.test.ts. Supersedes XBV-008."
   }
  ],
  "blocks": {
