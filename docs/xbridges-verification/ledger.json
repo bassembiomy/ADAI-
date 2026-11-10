@@ -165,7 +165,7 @@
    "deps": [
     "WP-03"
    ],
-   "status": "in_progress",
+   "status": "done",
    "note": "Closed-form/semantic tests for linear algebra, routing, logic, bitwise, sequential (controller); findings XBV-052..055; awaiting Fable.",
    "rework": [
     {
@@ -187,7 +187,11 @@
      ],
      "fix": "all applied"
     }
-   ]
+   ],
+   "verification": {
+    "verifier": "Fable FAIL x2 (unpinned defects, NOT oracle; Demux oracle wrong), PASS round 3 (509 passed, 85 expected fail, twice)",
+    "open_question": "Demux split rule from the verifier's memory - confirm in WP-15"
+   }
   },
   {
    "id": "WP-06",
