@@ -62,7 +62,7 @@ const EXPECTED: Record<string, 'error' | 'warning' | 'info'> = {
   UNIT_INCONSISTENCY: 'warning',
   UNSUPPORTED_SOLVER: 'error',
   // Compile-time parameter constraints (modelChecks.ts err()): Simulink refuses to update the diagram.
-  CONSTANT_VALUE_NOT_REPRESENTABLE: 'error',
+  CONSTANT_VALUE_NOT_REPRESENTABLE: 'warning', // Simulink: parameter precision loss is a warning by default
   CONSTANT_VALUE_OUT_OF_RANGE: 'error',
   DELAY_LENGTH_INVALID: 'error',
   LIMITS_INVALID: 'error',
@@ -88,6 +88,7 @@ const PINNED_SEVERITY: Record<string, string> = {
   INVALID_GMDH_LAYERS: 'XBV-034 (DOE fault code only inside a BLOCK_RUNTIME_FAULT message)',
   INVALID_TAGUCHI_LEVELS: 'XBV-034 (DOE fault code only inside a BLOCK_RUNTIME_FAULT message)',
   NO_MODEL_CONFIGURED: 'XBV-034 (DOE fault code only inside a BLOCK_RUNTIME_FAULT message)',
+  CONSTANT_VALUE_NOT_REPRESENTABLE: 'XBV-038 (precision loss is an error in ADIA, a warning in Simulink)',
   NON_FINITE_INPUT: 'XBV-034 (DOE fault code only inside a BLOCK_RUNTIME_FAULT message)',
 };
 

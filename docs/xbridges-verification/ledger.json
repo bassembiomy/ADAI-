@@ -240,7 +240,7 @@
    "deps": [
     "WP-02"
    ],
-   "status": "in_progress",
+   "status": "done",
    "note": "Diagnostics closure (36 recipes by Sonnet; 9 pinned behaviours) and engine semantics (controller) written; awaiting Fable verification.",
    "rework": [
     {
@@ -253,7 +253,21 @@
      ],
      "fix": "scan covers all four emission forms, 14 severities added (recipes by Sonnet); topological-order tests; new loop, multirate, event and subsystem cases; XBV-035 pinned on a canvas-buildable model; XBV-036 found (batch ode45/ode23 hang on a Step event)"
     }
-   ]
+   ],
+   "verification": {
+    "executor": "Sonnet: 50 diagnostic recipes in two rounds",
+    "verifier": "Fable FAIL (14 helper-emitted codes missed; order test only metamorphic), PASS on re-verification (433 passed, 25 expected fail, twice); minors fixed afterwards: order test now shuffles blocks and records the actual execute order; CONSTANT_VALUE_NOT_REPRESENTABLE expected as a warning (XBV-038); recipe minors sent to Sonnet",
+    "deferred": "algTol/maxIter observability, more rate ratios, remaining zero-crossing cases (after XBV-036), DOE evaluator codes in src/engine/doe outside the scan -> WP-13b"
+   }
+  },
+  {
+   "id": "WP-13b",
+   "title": "Engine part B: algTol/maxIter, more rate ratios, zero crossings for D2 blocks once XBV-036 is fixed, DOE evaluator diagnostic codes (src/engine/doe)",
+   "exec": "S / F",
+   "deps": [
+    "WP-13"
+   ],
+   "status": "todo"
   },
   {
    "id": "WP-14",
@@ -651,6 +665,14 @@
    "gate": "V5",
    "status": "open",
    "summary": "Stiff-solver options (ode14x extrapolationOrder/newtonIterations, ode23tb relTol/absTol/minStep/maxStep) are not editable on the canvas; STIFF_SOLVER_INVALID_OPTION and STIFF_SOLVER_STEP_TOO_SMALL are reachable only from a batch configuration. Related to decision D3 (user tolerances)."
+  },
+  {
+   "id": "XBV-038",
+   "plan_ref": "5.2 diagnostics",
+   "severity": "S3",
+   "gate": "V3",
+   "status": "open",
+   "summary": "CONSTANT_VALUE_NOT_REPRESENTABLE (a Constant value that loses precision in its data type) is a compile error that refuses the model; Simulink reports parameter precision loss as a warning by default (out-of-range overflow stays an error). Pinned in xbDiagnostics.test.ts."
   }
  ],
  "blocks": {

@@ -43,18 +43,28 @@ describe('execution order is a property of the graph, not of the file', () => {
 });
 
 describe('execution order is a valid topological order (plan 5.2)', () => {
-  it('seeds 1..50: every feed-through dependency outside an algebraic loop is evaluated after its source', () => {
+  it('seeds 1..50 (blocks shuffled): in the executed order, every feed-through dependency outside a loop runs after its source', () => {
     for (let seed = 1; seed <= 50; seed++) {
-      const model = buildModel(randomGraph(seed, { blocks: 14 }));
+      const spec = randomGraph(seed, { blocks: 14 });
+      const rng = mulberry32(seed * 104729);
+      const model = buildModel({ ...spec, blocks: [...spec.blocks].sort(() => rng() - 0.5) });
       const e = new XbridgesEngine(model);
       e.compile(0);
-      const pos = new Map(e.executionOrder.map((b, i) => [b.id, i]));
+      // Record the order in which blocks actually execute during one output evaluation.
+      const executed: string[] = [];
+      for (const b of model.blocks) {
+        const original = b.execute;
+        b.execute = (...args) => { executed.push(b.id); return original(...args); };
+      }
+      e.computeOutputs(0);
+      const pos = new Map(executed.map((id, i) => [id, executed.indexOf(id) === i ? i : executed.indexOf(id)]));
       for (const c of model.connections) {
         const target = model.blocks.find((b) => b.id === c.targetBlock)!;
         const feedthrough = target.directFeedthrough ?? !target.isStateful;
-        if (!feedthrough || c.sourceBlock === c.targetBlock) continue;
+        if (!feedthrough || c.sourceBlock === c.targetBlock || !pos.has(c.sourceBlock) || !pos.has(c.targetBlock)) continue;
         expect(pos.get(c.sourceBlock)!, `seed ${seed}: ${c.sourceBlock} before ${c.targetBlock}`).toBeLessThan(pos.get(c.targetBlock)!);
       }
+      expect(new Set(executed).size, `seed ${seed}: every block executed`).toBe(model.blocks.length);
     }
   });
   it('a hand-built chain listed in reverse is still evaluated source first', () => {
