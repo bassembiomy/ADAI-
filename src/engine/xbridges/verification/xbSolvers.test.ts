@@ -32,6 +32,23 @@ const OSCILLATOR: Spec = {
   ],
   wires: ['x1.out -> g.u', 'g.y -> x2.in', 'x2.out -> x1.in'],
 };
+/** x' = sin t, x(0) = 0 (non-autonomous; the source is WaveformGen sine at 1/(2 pi) Hz). Exact: x(1) = 1 - cos 1. */
+const FORCED: Spec = {
+  blocks: [
+    { id: 'w', type: 'WaveformGen', params: { type: 'Sine', amp: 1, freq: 1 / (2 * Math.PI), offset: 0, phase: 0 } },
+    { id: 'x', type: 'Integrator', params: { initialCondition: 0 } },
+  ],
+  wires: ['w.out -> x.in'],
+};
+/** x' = -x^2, x(0) = 1 (nonlinear). Exact: x(t) = 1 / (1 + t), x(1) = 0.5. */
+const NONLINEAR: Spec = {
+  blocks: [
+    { id: 'x', type: 'Integrator', params: { initialCondition: 1 } },
+    { id: 'p', type: 'PRODUCT' },
+    { id: 'g', type: 'GAIN', params: { gain: -1 } },
+  ],
+  wires: ['x.out -> p.in1', 'x.out -> p.in2', 'p.y -> g.u', 'g.y -> x.in'],
+};
 /** Integrator chain driven by 1: x_k(t) = t^k / k!, k = 1..7. */
 const CHAIN: Spec = {
   blocks: [
@@ -50,23 +67,29 @@ const observedOrder = (solver: string, spec: Spec, probe: string, exact: number,
 };
 
 describe('order of convergence of the canvas fixed-step solvers', () => {
-  // Step sequences are in the asymptotic range (coarser steps show pre-asymptotic orders such as 4.15 for rk4 at
-  // dt = 0.25) and keep the error well above round-off (1e-13) at the finest step.
-  const STEPS: Record<string, number[]> = {
-    euler: [0.1, 0.05, 0.025, 0.0125],
-    ode2: [0.1, 0.05, 0.025, 0.0125],
-    ode3: [0.2, 0.1, 0.05, 0.025],
-    rk4: [0.1, 0.05, 0.025, 0.0125],
-    ode5: [0.1, 0.05, 0.025],
-    ode14x: [0.025, 0.0125, 0.00625, 0.003125],
+  // Four problems: linear autonomous (decay, oscillator), non-autonomous (forced) and nonlinear. Linear autonomous
+  // problems alone only check b.A^(k-1).e = 1/k! and miss wrong c_i or nonlinear-order conditions (WP-12 verifier).
+  const PROBLEMS = {
+    decay: { spec: DECAY, probe: 'x.out', exact: Math.exp(-1) },
+    oscillator: { spec: OSCILLATOR, probe: 'x1.out', exact: Math.cos(1) },
+    forced: { spec: FORCED, probe: 'x.out', exact: 1 - Math.cos(1) },
+    nonlinear: { spec: NONLINEAR, probe: 'x.out', exact: 0.5 },
+  } as const;
+  // Step sequences in the asymptotic range and clear of round-off (errors stay above about 1e-13 at the finest step),
+  // chosen from measured error tables of the current solvers (controller, WP-12 part A rework).
+  const DEFAULT_STEPS = [0.1, 0.05, 0.025, 0.0125];
+  const STEPS: Record<string, Partial<Record<keyof typeof PROBLEMS, number[]>>> = {
+    ode5: { decay: [0.1, 0.05, 0.025], oscillator: [0.1, 0.05, 0.025], forced: [0.2, 0.1, 0.05], nonlinear: [0.05, 0.025, 0.0125] },
+    ode14x: { decay: [0.025, 0.0125, 0.00625, 0.003125], oscillator: [0.025, 0.0125, 0.00625, 0.003125], nonlinear: [0.025, 0.0125, 0.00625, 0.003125] },
   };
   for (const [solver, p] of Object.entries(ORDER)) {
-    it(`${solver}: order ${p} on x' = -x (exact e^-1) and on the harmonic oscillator (exact cos 1)`, () => {
-      // Every halving shows at least order p - 0.15, and the finest pair is within 0.15 of p (the asymptotic order).
-      for (const [name, spec, probe, exact] of [['decay', DECAY, 'x.out', Math.exp(-1)], ['oscillator', OSCILLATOR, 'x1.out', Math.cos(1)]] as const) {
-        const qs = observedOrder(solver, spec, probe, exact, STEPS[solver]);
+    it(`${solver}: order ${p} on linear, forced and nonlinear problems`, () => {
+      // Every halving shows at least order p - 0.15 (a lost order fails); the finest pair is within [p - 0.15, p + 0.35]
+      // (convergence from above, e.g. ode5 on the nonlinear problem reads 5.33 at dt 0.025 -> 0.0125, is harmless).
+      for (const [name, prob] of Object.entries(PROBLEMS) as [keyof typeof PROBLEMS, (typeof PROBLEMS)[keyof typeof PROBLEMS]][]) {
+        const qs = observedOrder(solver, prob.spec, prob.probe, prob.exact, STEPS[solver]?.[name] ?? DEFAULT_STEPS);
         for (const q of qs) expect(q, `${solver} ${name} orders ${qs.join(', ')}`).toBeGreaterThan(p - 0.15);
-        expect(Math.abs(qs[qs.length - 1] - p), `${solver} ${name} orders ${qs.join(', ')}`).toBeLessThan(0.15);
+        expect(qs[qs.length - 1], `${solver} ${name} orders ${qs.join(', ')}`).toBeLessThan(p + 0.35);
       }
     });
   }
@@ -106,15 +129,10 @@ describe('stiff problems', () => {
   // The canvas calls StiffSolver.stepODE23TB once per output step and ignores { accepted: false }: a rejected step
   // leaves the state unchanged, silently, at every step size (x stays 1 for dt = 0.01, 0.001, 1e-4).
   it.fails('XBV-026: ode23tb stays stable and decays monotonically to 0 at dt = 0.01', stable('ode23tb'));
-  for (const solver of [] as string[]) {
-    it(`${solver} stays stable and decays monotonically to 0 at dt = 0.01`, () => {
-      const r = runModel(buildModel(STIFF), { solver, dt: 0.01, stopTime: 1, probes: ['x.out'] });
-      const xs = r.signals['x.out'].map(Number);
-      expect(xs.every(Number.isFinite)).toBe(true);
-      expect(Math.abs(xs[xs.length - 1])).toBeLessThan(1e-6);
-      for (let i = 1; i < xs.length; i++) expect(Math.abs(xs[i])).toBeLessThanOrEqual(Math.abs(xs[i - 1]) + 1e-15);
-    });
-  }
+  it.fails('XBV-026: ode23tb also freezes on a non-stiff problem when the first step is rejected (x\' = -x, dt 0.5)', () => {
+    const r = runModel(buildModel(DECAY), { solver: 'ode23tb', dt: 0.5, stopTime: 1, probes: ['x.out'] });
+    expect(Math.abs(Number(r.signals['x.out'].at(-1)) - Math.exp(-1))).toBeLessThan(1e-2);
+  });
 });
 
 describe('algebraic loop under every solver', () => {
@@ -169,6 +187,24 @@ describe('the three solver dispatchers agree (plan F2)', () => {
     }
     expect(batch.euler).toBe('EULER');
   });
+
+  it('canvas and worker pass the same arguments to every stepper (e.g. ode23tb tolerances)', () => {
+    const calls = (file: string, engineVar: string) => {
+      const text = readFileSync(join(root, file), 'utf8');
+      return [...text.matchAll(/(Solvers|AdaptiveSolver|StiffSolver)\.(step[A-Za-z0-9]+)\(([^;]*?)\);/g)]
+        .map((m) => `${m[1]}.${m[2]}(${m[3].replace(new RegExp(`\\b${engineVar}\\b`, 'g'), 'E').replace(/\b(t|currentTime|timeRef\.current)\b/g, 'T').replace(/\b(dt|stepNow)\b/g, 'H').replace(/\s+/g, '')})`);
+    };
+    const canvas = new Set(calls('src/components/xbridges/XbridgesWorkspace.tsx', 'engine'));
+    const worker = new Set(calls('src/engine/xbridges/xbridgesWorker.ts', 'workerEngine'));
+    for (const c of worker) expect(canvas.has(c), `worker call ${c} has no identical canvas call`).toBe(true);
+  });
+
+  it.fails('XBV-028: canvas and worker refuse an unknown solver name instead of silently running Euler (decision D3)', () => {
+    for (const file of ['src/components/xbridges/XbridgesWorkspace.tsx', 'src/engine/xbridges/xbridgesWorker.ts']) {
+      const text = readFileSync(join(root, file), 'utf8');
+      expect(/else\s+Solvers\.stepEuler\(/.test(text), `${file} falls back to Euler`).toBe(false);
+    }
+  });
 });
 
 describe('batch runner edge inputs (Solvers.runFixedStep)', () => {
@@ -178,8 +214,8 @@ describe('batch runner edge inputs (Solvers.runFixedStep)', () => {
     return engine;
   };
   for (const fixedStep of [0, -0.1, Number.NaN]) {
-    it(`fixed step ${fixedStep} is refused with an error`, () => {
-      expect(run({ fixedStep }).diagnostics.some((d) => d.severity === 'error')).toBe(true);
+    it(`fixed step ${fixedStep} is refused with FIXED_STEP_INVALID`, () => {
+      expect(run({ fixedStep }).diagnostics.filter((d) => d.severity === 'error').map((d) => d.code)).toContain('FIXED_STEP_INVALID');
     });
   }
   it('stop before start is refused with STOP_TIME_BEFORE_START', () => {

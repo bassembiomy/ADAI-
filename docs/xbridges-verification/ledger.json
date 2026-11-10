@@ -205,7 +205,19 @@
     "WP-02"
    ],
    "status": "in_progress",
-   "note": "Part A (orders, polynomial exactness, stiff stability, algebraic loop per solver, dispatcher agreement, batch edge inputs) written by the controller; adaptive error control (D3) is part B."
+   "note": "Part A (orders, polynomial exactness, stiff stability, algebraic loop per solver, dispatcher agreement, batch edge inputs) written by the controller; adaptive error control (D3) is part B.",
+   "rework": [
+    {
+     "round": 1,
+     "by": "Fable FAIL",
+     "items": [
+      "order tests were all linear autonomous: three mutants (rk4 stage-3 time, DP c3, ode3 tableau) passed",
+      "dispatcher test blind to arguments and fallback",
+      "dead loop; edge tests accepted any error"
+     ],
+     "fix": "forced (WaveformGen sine) and nonlinear (x' = -x^2) problems with per-problem step sets; criterion: every halving >= p - 0.15, finest pair < p + 0.35; argument equality canvas/worker; XBV-028 pinned; FIXED_STEP_INVALID asserted; XBV-026 non-stiff case pinned"
+    }
+   ]
   },
   {
    "id": "WP-13",
@@ -443,7 +455,7 @@
    "severity": "S1",
    "gate": "V5",
    "status": "open",
-   "summary": "Stiff solvers with an algebraic loop: y = 0.5*y + 1 feeding an Integrator, dt 0.1, stop 1 (expected integral 2): ode14x gives 51.588135932457256, ode23tb 1.7999999999948573; every other solver gives about 2. Canvas emulation gives the same. Found by the WP-02 verifier."
+   "summary": "Stiff solvers with an algebraic loop: y = 0.5*y + 1 feeding an Integrator, dt 0.1, stop 1 (expected integral 2): ode14x gives 51.588135932457256, ode23tb 1.7999999999948573; every other solver gives about 2. Canvas emulation gives the same. Found by the WP-02 verifier. Root causes (verifier): ode23tb is the XBV-026 mechanism (first step rejected, 9 x 0.2 = 1.8); ode14x is not Newton itself - the loop is warm-started only to algTol 1e-6, so f(t, x) drifts and the finite-difference Jacobian reads 0.5 instead of 0; with algTol 1e-10 it gives 2."
   },
   {
    "id": "XBV-017",
@@ -523,7 +535,7 @@
    "severity": "S1",
    "gate": "V5",
    "status": "open",
-   "summary": "Canvas ode23tb freezes silently: the canvas and worker call StiffSolver.stepODE23TB once per output step with tolerances 1e-3/1e-6 and ignore { accepted: false }; a rejected step leaves the state unchanged with no diagnostic. On x' = -1e4 x the state stays at 1 for dt = 0.01, 0.001 and 1e-4. Pinned by it.fails in xbSolvers.test.ts."
+   "summary": "Canvas ode23tb freezes silently: the canvas and worker call StiffSolver.stepODE23TB once per output step with tolerances 1e-3/1e-6 and ignore { accepted: false }; a rejected step leaves the state unchanged with no diagnostic. On x' = -1e4 x the state stays at 1 for dt = 0.01, 0.001 and 1e-4. Pinned by it.fails in xbSolvers.test.ts. Not stiff-only: x' = -x at dt 0.5 also freezes (first step rejected). The worker path keeps the state at 1 but publishes a stale trial output (-0.044) - checked again in WP-14."
   },
   {
    "id": "XBV-027",
@@ -532,6 +544,14 @@
    "gate": "V2",
    "status": "open",
    "summary": "AC_MOTOR_PID_CONTROL with defaults settles at omega = w_ref / P = 78.5 rad/s for w_ref = 157 (stator frequency fixed at w_ref, P = 2), so the PID never removes the speed error, its integral winds up and last_e is never updated (verifier analysis; rk4, ode45 and euler 1e-5 agree). Replaces the WP-08 note."
+  },
+  {
+   "id": "XBV-028",
+   "plan_ref": "5.1 / D3",
+   "severity": "S3",
+   "gate": "V5",
+   "status": "open",
+   "summary": "Canvas (stepLiveSolver) and worker fall back to explicit Euler for any unknown solver name, silently; the batch runner returns UNSUPPORTED_SOLVER. Decision D3: unknown names are refused. Pinned by it.fails in xbSolvers.test.ts."
   }
  ],
  "blocks": {
