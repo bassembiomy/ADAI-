@@ -243,14 +243,13 @@ describe('pinned single defects found by the battery', () => {
   // Oracle (closed form, plan 3.1): the space-vector sector of an angle is floor(mod(theta, 2*pi) / (pi/3)) + 1, in 1..6.
   const sectorOf = (theta: number) => Math.floor((((theta % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI)) / (Math.PI / 3)) + 1;
   it.fails('XBV-025: SECTOR_SELECTOR gives the sector of any angle, including large negative ones', () => {
-    for (const theta of [-10, -7, -4, 13]) {
+    for (const theta of [-10, -7]) {
       const b = make('SECTOR_SELECTOR');
       expect(exec(b, [theta], b.state, 0).outputs[0], `theta ${theta}`).toBe(sectorOf(theta));
     }
   });
-  it('SECTOR_SELECTOR matches the closed form on one turn either side of zero', () => {
-    for (let theta = -2 * Math.PI + 0.05; theta < 2 * Math.PI; theta += 0.1) {
-      if (theta < -0.01 && theta > -2 * Math.PI) continue; // negative turn is covered by XBV-025 above
+  it('SECTOR_SELECTOR matches the closed form on (-2*pi, 4*pi) (it is wrong only below -2*pi, XBV-025)', () => {
+    for (let theta = -2 * Math.PI + 0.05; theta < 4 * Math.PI; theta += 0.1) {
       const b = make('SECTOR_SELECTOR');
       expect(exec(b, [theta], b.state, 0).outputs[0], `theta ${theta}`).toBe(sectorOf(theta));
     }
