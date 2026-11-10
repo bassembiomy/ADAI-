@@ -200,7 +200,8 @@
    "deps": [
     "WP-03"
    ],
-   "status": "in_progress"
+   "status": "in_progress",
+   "note": "Tests by Sonnet from the controller oracle spec (D7); controller review: relay spec item was wrong (removed the pin, kept the rule test), comparator test restricted to unambiguous points; findings XBV-062..068. Awaiting Fable."
   },
   {
    "id": "WP-07",
@@ -931,6 +932,62 @@
    "gate": "V2",
    "status": "open",
    "summary": "MatrixSolve returns a 2x1 matrix for a 1-D b instead of x with the shape of b. Found by the WP-05 verifier; pinned in xbEquations.routing.test.ts."
+  },
+  {
+   "id": "XBV-062",
+   "plan_ref": "4.2 continuous / discrete / discontinuities / buses",
+   "severity": "S1",
+   "gate": "V2",
+   "status": "open",
+   "summary": "INTEGRATOR_CONTINUOUS is scalar-only: vector IC [1 2] with input [1 1] stays [1 2] (Number(vector) = NaN; NUMERICAL_INSTABILITY), Simulink integrates element-wise to [2 3] at t = 1. Found by the WP-06 executor; pinned in xbEquations.dynamics.test.ts."
+  },
+  {
+   "id": "XBV-063",
+   "plan_ref": "4.2 continuous / discrete / discontinuities / buses",
+   "severity": "S1",
+   "gate": "V2",
+   "status": "open",
+   "summary": "INTEGRATOR (limited/reset integrator) drops a vector initial condition (Number([1 2]) || 0 = 0) and keeps a scalar state; vector integration gives 0 instead of [2 3]. Found by the WP-06 executor; pinned in xbEquations.dynamics.test.ts."
+  },
+  {
+   "id": "XBV-064",
+   "plan_ref": "4.2 continuous / discrete / discontinuities / buses",
+   "severity": "S2",
+   "gate": "V2",
+   "status": "open",
+   "summary": "DELAY with delay_length 0 is refused: the factory turns 0 into 1 (`||`) and compile reports DELAY_LENGTH_INVALID and PARAMETER_OUT_OF_RANGE; Simulink Delay accepts 0 as direct feedthrough. Found by the WP-06 executor; pinned in xbEquations.dynamics.test.ts."
+  },
+  {
+   "id": "XBV-065",
+   "plan_ref": "4.2 continuous / discrete / discontinuities / buses",
+   "severity": "S1",
+   "gate": "V2",
+   "status": "open",
+   "summary": "SATURATION is scalar-only: a vector input or vector limits give NaN (Number(array)); Simulink Saturation is element-wise with scalar or vector limits. Found by the WP-06 executor; pinned in xbEquations.dynamics.test.ts."
+  },
+  {
+   "id": "XBV-066",
+   "plan_ref": "4.2 continuous / discrete / discontinuities / buses",
+   "severity": "S2",
+   "gate": "V2",
+   "status": "open",
+   "summary": "A bus through UNIT_DELAY outputs scalar 0 at the first sample (IC not expanded over the bus elements), so a downstream BUS_SELECTOR raises BLOCK_RUNTIME_FAULT 'Input must be a bus signal' at t = 0. Found by the WP-06 executor; pinned in xbEquations.dynamics.test.ts."
+  },
+  {
+   "id": "XBV-067",
+   "plan_ref": "4.2 continuous / discrete / discontinuities / buses",
+   "severity": "S1",
+   "gate": "V2",
+   "status": "open",
+   "summary": "INTEGRATOR with limits winds up: only the output is clamped, the state keeps integrating, so after the input reverses the output stays at the limit too long (Step 1 -> -1 at 0.5, limit 0.3: y(0.8) = 0.001667 instead of 0). Found by the WP-06 executor; pinned in xbEquations.dynamics.test.ts."
+  },
+  {
+   "id": "XBV-068",
+   "plan_ref": "4.2 continuous / discrete / discontinuities / buses",
+   "severity": "S1",
+   "gate": "V2",
+   "status": "open",
+   "summary": "MOVING_AVERAGE starts with its window filled with the first sample (3, 6, 9, 12 -> 3, 4, 6, 9); a sliding-window average with zero initial state gives 1, 3, 6, 9. Found by the WP-06 executor; pinned in xbEquations.dynamics.test.ts."
   }
  ],
  "blocks": {
@@ -5003,6 +5060,10 @@
   {
    "wp": "WP-05b",
    "note": "From the WP-05 verifier, not yet pinned: Switch scalar expansion and vector ctrl; IF_ELSE with NaN (false) and [0] (true); MatrixConcat with unequal widths returns a ragged matrix; SubMatrix clamps out-of-range ends; MatrixSolve on a rank-deficient consistent system returns one solution silently; Inverse/Determinant of a non-square matrix throw (XBV-055 family); MatrixDiag ignores diagMode (auto-detects by shape); cond 1e12/1e16; single-input XOR; clock high at step 0 counted as an edge."
+  },
+  {
+   "wp": "WP-06b",
+   "note": "From WP-06: DERIVATIVE tau 0 or negative is replaced by 0.01 (instance of XBV-019); derivative of a Step under rk4 spikes at 83.3 (step seen at the mid stage of the previous step) - compare with Simulink Derivative in WP-15; INTERP_PRELOOKUP default table differs from LOOKUP_ND default; Flat/Nearest lookup require ExtrapMethod 'Clip' (linear extrapolation rejected) - check against Simulink."
   }
  ]
 }

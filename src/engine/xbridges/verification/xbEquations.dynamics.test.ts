@@ -10,7 +10,7 @@
  *    Interpolation Using Prelookup, Bus Creator and Bus Selector.
  * Dynamic cases run through the canvas loop (testkit runModel); discrete/sequential logic is also driven
  * block-level with the state threaded through execute as the engine does.
- * Failures of the product are pinned with it.fails and a provisional finding id (XBV-1xx, renumbered by the planner).
+ * Failures of the product are pinned with it.fails and their finding id (docs/xbridges-verification/ledger.json).
  */
 import { describe, expect, it } from 'vitest';
 import { BLOCK_LIBRARY } from '../BlockDefinitions';
@@ -78,8 +78,8 @@ describe('A. continuous blocks (rk4, dt 0.01)', () => {
   }
   for (const [type, inPort, outPort, icKey, finding] of [
     ['Integrator', 'in', 'out', 'initialCondition', null],
-    ['INTEGRATOR_CONTINUOUS', 'u', 'y', 'initial_condition', 'XBV-101'],
-    ['INTEGRATOR', 'u', 'y', 'initialCondition', 'XBV-102'],
+    ['INTEGRATOR_CONTINUOUS', 'u', 'y', 'initial_condition', 'XBV-062'],
+    ['INTEGRATOR', 'u', 'y', 'initialCondition', 'XBV-063'],
   ] as const) {
     const body = () => {
       const r = sim([constant('c', '[1 1]'), { id: 'i', type, params: { [icKey]: [1, 2] } }], [`c.out -> i.${inPort}`], [`i.${outPort}`]);
@@ -105,7 +105,7 @@ describe('A. continuous blocks (rk4, dt 0.01)', () => {
   });
   // Simulink limits the state itself: once the input turns negative the output leaves the limit at once, so
   // y(0.8) = 0.3 - 0.3 = 0 (no wind-up).
-  it.fails('XBV-108: INTEGRATOR limit has no wind-up: Step(1 -> -1 at 0.5) gives y(0.8) = 0', () => {
+  it.fails('XBV-067: INTEGRATOR limit has no wind-up: Step(1 -> -1 at 0.5) gives y(0.8) = 0', () => {
     near(num(valueAt(limited(negatingInput, ['c.out -> i.u']), 'i.y', 0.8)), 0.0, 1e-8, 'y(0.8)');
   });
 
@@ -232,7 +232,7 @@ describe('B. discrete and delay blocks', () => {
     });
   }
   // Simulink Delay allows a delay length of 0 (the block is then direct feedthrough: y = u).
-  it.fails('XBV-103: DELAY length 0 is accepted and behaves as direct feedthrough (y = u)', () => {
+  it.fails('XBV-064: DELAY length 0 is accepted and behaves as direct feedthrough (y = u)', () => {
     const r = sim([constant('c', 4), { id: 'd', type: 'DELAY', params: { delay_length: 0, initial_condition: -1, sampleTime: 0.1 } }],
       ['c.out -> d.u'], ['d.y'], { solver: 'discrete', dt: 0.1, stop: 0.3 });
     expect(errorCodes(r)).not.toContain('DELAY_LENGTH_INVALID');
@@ -276,7 +276,7 @@ describe('B. discrete and delay blocks', () => {
   });
 
   // Oracle: mean of the last N samples with zero initial buffer: input 3, 6, 9, 12, N = 3 -> 1, 3, 6, 9.
-  it.fails('XBV-109: MOVING_AVERAGE window 3, input 3, 6, 9, 12: y = 1, 3, 6, 9 (buffer starts filled with zeros)', () => {
+  it.fails('XBV-068: MOVING_AVERAGE window 3, input 3, 6, 9, 12: y = 1, 3, 6, 9 (buffer starts filled with zeros)', () => {
     nearAll(thread('MOVING_AVERAGE', { window_size: 3 }, [3, 6, 9, 12]), [1, 3, 6, 9], 1e-12);
   });
   it('MOVING_AVERAGE window 1 is the identity', () => {
@@ -304,10 +304,10 @@ describe('C. discontinuities', () => {
     expect(errorCodes(r)).toContain('LIMITS_INVALID');
   });
   // Simulink Saturation is element-wise for vector signals and for vector limits.
-  it.fails('XBV-104: SATURATION is element-wise on a vector input ([-3 0.5 5] with [-1, 2] -> [-1 0.5 2])', () => {
+  it.fails('XBV-065: SATURATION is element-wise on a vector input ([-3 0.5 5] with [-1, 2] -> [-1 0.5 2])', () => {
     nearAll(sat(-1, 2, [-3, 0.5, 5]).y[0], [-1, 0.5, 2], 0);
   });
-  it.fails('XBV-105: SATURATION with vector limits lower [0 1], upper [1 2] is element-wise ([-5 5] -> [0 2], [0.5 1.5] -> [0.5 1.5])', () => {
+  it.fails('XBV-065: SATURATION with vector limits lower [0 1], upper [1 2] is element-wise ([-5 5] -> [0 2], [0.5 1.5] -> [0.5 1.5])', () => {
     nearAll(sat([0, 1], [1, 2], [-5, 5]).y[0], [0, 2], 0);
     nearAll(sat([0, 1], [1, 2], [0.5, 1.5]).y[0], [0.5, 1.5], 0);
   });
@@ -350,13 +350,9 @@ describe('C. discontinuities', () => {
   it('RELAY hysteresis per the stated rule (on at u >= 1, off at u <= 0): 0, 0.5, 1, 0.5, 0, -1, 0.5 -> -5, -5, 5, 5, -5, -5, -5', () => {
     expect(relay(R, SEQ)).toEqual([-5, -5, 5, 5, -5, -5, -5]);
   });
-  // The WP-06 spec lists 5 (not -5) for the fifth sample, where u = 0 equals the switch-off point; that contradicts
-  // its own rule "off when u <= off". Pinned as written; see the report notes.
-  it.fails('XBV-106: RELAY spec sequence 0, 0.5, 1, 0.5, 0, -1, 0.5 -> -5, -5, 5, 5, 5, -5, -5 (stays on at u = switch-off)', () => {
-    expect(relay(R, SEQ)).toEqual([-5, -5, 5, 5, 5, -5, -5]);
-  });
-  it('RELAY with switchOn == switchOff is a comparator (u >= threshold)', () => {
-    expect(relay({ switchOn: 0.5, switchOff: 0.5, onValue: 5, offValue: -5 }, [0.6, 0.5, 0.4, 0.5, 0.1])).toEqual([5, 5, -5, 5, -5]);
+  // Only points away from the shared threshold: at u equal to it, on (u >= on) and off (u <= off) both apply.
+  it('RELAY with switchOn == switchOff is a comparator away from the threshold', () => {
+    expect(relay({ switchOn: 0.5, switchOff: 0.5, onValue: 5, offValue: -5 }, [0.6, 0.4, 0.7, 0.1])).toEqual([5, -5, 5, -5]);
   });
 });
 
@@ -462,7 +458,7 @@ describe('E. buses', () => {
   });
   // Simulink Unit Delay on a bus signal applies the initial condition 0 to every element: the output at t = 0 is the
   // bus {a: 0, b: [0 0]}, so a Bus Selector behind it never sees a non-bus.
-  it.fails('XBV-107: a bus through UNIT_DELAY has the bus structure from the first sample (IC 0 applied to every element)', () => {
+  it.fails('XBV-066: a bus through UNIT_DELAY has the bus structure from the first sample (IC 0 applied to every element)', () => {
     const r = sim(busModel(0), busWires, ['d.y'], { solver: 'discrete', dt: 0.1, stop: 0.4 });
     expect(errorCodes(r)).toEqual([]);
     expect(valueAt(r, 'd.y', 0)).toEqual({ a: 0, b: [0, 0] });
