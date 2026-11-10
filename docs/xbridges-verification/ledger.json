@@ -79,7 +79,7 @@
    "deps": [
     "WP-00"
    ],
-   "status": "in_progress",
+   "status": "done",
    "rework": [
     {
      "round": 1,
@@ -91,7 +91,14 @@
      ],
      "acceptance_hash": "d3b1dd88ebf16d838d4596135ba900b8893e8ade"
     }
-   ]
+   ],
+   "verification": {
+    "executor": "Sonnet, 2 rounds",
+    "verifier": "Fable FAIL (round 0), PASS (round 1): 27/27 twice; 290 types x 10 solvers identical to a canvas main-thread emulation (t, signals, states, diagnostics); merge order equals the canvas; random and algebraic-loop cases identical",
+    "commits": [
+     "bc036dc"
+    ]
+   }
   },
   {
    "id": "WP-03",
@@ -413,6 +420,22 @@
    "gate": "V3",
    "status": "open",
    "summary": "GAIN treats gain 0 (and -0) as 1: factory uses params.gain || 1 (BlockDefinitions.ts ~3783); confirmed by run, also with per-tick applyParameterUpdates: input 3 gives 3, Simulink gives 0. PRODUCT numInputs 0 becomes 2 the same way (~3797). Found by the WP-02 executor, confirmed by the verifier; the U7 sweep in WP-03 will look for the same pattern in every block."
+  },
+  {
+   "id": "XBV-016",
+   "plan_ref": "5.1/5.2",
+   "severity": "S1",
+   "gate": "V5",
+   "status": "open",
+   "summary": "Stiff solvers with an algebraic loop: y = 0.5*y + 1 feeding an Integrator, dt 0.1, stop 1 (expected integral 2): ode14x gives 51.588135932457256, ode23tb 1.7999999999948573; every other solver gives about 2. Canvas emulation gives the same. Found by the WP-02 verifier."
+  },
+  {
+   "id": "XBV-017",
+   "plan_ref": "5.1",
+   "severity": "S3",
+   "gate": "V5",
+   "status": "open",
+   "summary": "The canvas accumulates time (timeRef += stepNow) instead of t0 + n*dt; the test kit uses multiplication (plan 5.1). Against an accumulating emulation, signals differ at rounding level for 40 block types (verifier measured counts, not size). WP-12 measures the drift and pins the canvas rule."
   }
  ],
  "blocks": {
