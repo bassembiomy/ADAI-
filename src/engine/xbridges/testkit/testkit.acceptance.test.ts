@@ -9,8 +9,11 @@
  *   buildModel(spec)                       -> XModel; spec = { blocks: {id, type, params?}[], wires: 'a.out -> b.u'[] }
  *   runModel(model, options)               -> { t: number[]; signals: Record<'block.port', unknown[]>; diagnostics }
  *       options = { solver, dt, stopTime, startTime?, probes: 'block.port'[] }
- *       samples: index 0 at startTime (after compile and the first output evaluation), then one after every major
- *       step; t[i] = startTime + i * dt computed by multiplication; the run never steps past stopTime.
+ *       Mirrors the canvas live loop (XbridgesWorkspace.tsx: stepLiveSolver, applyParameterUpdates every tick, last
+ *       step shortened to land on the stop time) and adds no output evaluation the canvas does not make: sample i is
+ *       read right after the canvas's own computeOutputs(t_i) at the start of step i; the only extra evaluation is
+ *       one computeOutputs(stopTime) after the last step. t[i] = startTime + i * dt (multiplication) for full steps,
+ *       the last sample is stopTime exactly. No sample after a step that raised a fatal error.
  *       If compile reports an error diagnostic the model is not stepped: t = [], signals empty, diagnostics returned.
  *   SOLVER_NAMES                           -> the solver names runModel accepts (the 10 canvas solvers)
  *   stimulus(kind, options)                -> (t) => number   kinds: 'step' | 'ramp' | 'sine' | 'square'
@@ -22,7 +25,7 @@
  *   randomGraph(seed, { blocks?, types? }) -> a buildModel spec; DEFAULT_RANDOM_GRAPH_TYPES
  *   compileAndRunC({ files, main?, flags?, args? }) -> { ok, compilerOutput, stdout, exitCode }
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { BLOCK_LIBRARY } from '../BlockDefinitions';
 import { XbridgesEngine } from '../XbridgesEngine';
 import {
@@ -65,6 +68,44 @@ describe('buildModel / runModel', () => {
     }), { solver: 'euler', dt: 0.1, startTime: 2, stopTime: 3, probes: ['k.out'] });
     expect(r.t).toHaveLength(11);
     r.t.forEach((t, i) => expect(t).toBe(2 + i * 0.1));
+  });
+
+  it('a partial last step is shortened to land on the stop time (canvas rule)', () => {
+    const r = runModel(buildModel({
+      blocks: [{ id: 'k', type: 'Constant', params: { value: 1 } }, { id: 'i', type: 'Integrator' }, { id: 't', type: 'TERMINATOR' }],
+      wires: ['k.out -> i.in', 'i.out -> t.u'],
+    }), { solver: 'euler', dt: 0.3, stopTime: 1, probes: ['i.out'] });
+    expect(r.t.length).toBe(5);
+    expect(r.t.slice(0, 4)).toEqual([0, 0.3, 0.6, 0.3 * 3]);
+    expect(r.t[4]).toBe(1);
+    expect(Math.abs(Number(r.signals['i.out'][4]) - 1)).toBeLessThan(1e-12);
+  });
+
+  it('makes no output evaluation beyond the canvas loop: euler, N steps -> N + 1 top-level computeOutputs calls', () => {
+    const spy = vi.spyOn(XbridgesEngine.prototype, 'computeOutputs');
+    try {
+      runModel(buildModel({
+        blocks: [{ id: 'k', type: 'Constant' }, { id: 'i', type: 'Integrator' }, { id: 't', type: 'TERMINATOR' }],
+        wires: ['k.out -> i.in', 'i.out -> t.u'],
+      }), { solver: 'euler', dt: 0.1, stopTime: 1, probes: ['i.out'] });
+      const topLevel = spy.mock.calls.filter((c) => c[1] === undefined).length;
+      expect(topLevel).toBe(10 + 1);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('re-applies the model parameters every step, as the canvas does', () => {
+    const spy = vi.spyOn(XbridgesEngine.prototype, 'applyParameterUpdates');
+    try {
+      runModel(buildModel({
+        blocks: [{ id: 'k', type: 'Constant', params: { value: 2 } }, { id: 't', type: 'TERMINATOR' }], wires: ['k.out -> t.u'],
+      }), { solver: 'euler', dt: 0.1, stopTime: 0.5, probes: [] });
+      expect(spy.mock.calls.filter((c) => c[0] === 'k').length).toBe(5);
+      expect(spy.mock.calls.find((c) => c[0] === 'k')?.[1]).toMatchObject({ value: 2 });
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('integrator of a unit constant with rk4: y(t) = t (closed form), y(0) = 0', () => {

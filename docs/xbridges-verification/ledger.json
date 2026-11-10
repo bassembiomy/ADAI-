@@ -79,7 +79,19 @@
    "deps": [
     "WP-00"
    ],
-   "status": "in_progress"
+   "status": "in_progress",
+   "rework": [
+    {
+     "round": 1,
+     "by": "Fable FAIL",
+     "items": [
+      "runModel added a computeOutputs per step that the canvas does not make (perturbs stateful/random blocks and algebraic loops)",
+      "partial last step dropped instead of shortened",
+      "parameters not merged/re-applied every tick as on the canvas"
+     ],
+     "acceptance_hash": "d3b1dd88ebf16d838d4596135ba900b8893e8ade"
+    }
+   ]
   },
   {
    "id": "WP-03",
@@ -393,6 +405,14 @@
    "gate": "V1",
    "status": "open",
    "summary": "56 blocks use port types outside XSignalType (control, object, data, load, boolean); the engine's type checks do not know them. Ratchet list in tests/fixtures/xbridges/known-gaps.json."
+  },
+  {
+   "id": "XBV-015",
+   "plan_ref": "U7",
+   "severity": "S1",
+   "gate": "V3",
+   "status": "open",
+   "summary": "GAIN treats gain 0 (and -0) as 1: factory uses params.gain || 1 (BlockDefinitions.ts ~3783); confirmed by run, also with per-tick applyParameterUpdates: input 3 gives 3, Simulink gives 0. PRODUCT numInputs 0 becomes 2 the same way (~3797). Found by the WP-02 executor, confirmed by the verifier; the U7 sweep in WP-03 will look for the same pattern in every block."
   }
  ],
  "blocks": {
