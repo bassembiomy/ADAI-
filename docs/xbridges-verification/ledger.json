@@ -132,7 +132,8 @@
    "deps": [
     "WP-03"
    ],
-   "status": "todo"
+   "status": "in_progress",
+   "note": "Closed-form tests for sources, element-wise math, reductions, trig (controller); 7 findings pinned; awaiting Fable."
   },
   {
    "id": "WP-05",
@@ -681,6 +682,62 @@
    "gate": "V6",
    "status": "open",
    "summary": "In canvas simulation (main thread and worker) a state-machine variable mapped to a top-level Inport never reaches the X-Bridges model: the canvas writes the value with setSignalValue and params.value, but Inport.execute returns its own unconnected input (default 0), which overwrites it at the next evaluation (BlockDefinitions.ts ~2610). Measured: Inport override 2.5 into an Integrator for 1 s gives 0 instead of 2.5. Pinned in xbWorker.test.ts. The embedded interpreter/C path is checked in WP-16/18."
+  },
+  {
+   "id": "XBV-040",
+   "plan_ref": "4.2 sources / element-wise math / reductions / trig",
+   "severity": "S1",
+   "gate": "V2",
+   "status": "open",
+   "summary": "WaveformGen amplitude 0 (also freq 0, offset 0) is replaced by 1/1/0 through `||` (instance of XBV-019); a 0-amplitude sine outputs a full sine. Pinned in xbEquations.math.test.ts."
+  },
+  {
+   "id": "XBV-041",
+   "plan_ref": "4.2 sources / element-wise math / reductions / trig",
+   "severity": "S3",
+   "gate": "V2",
+   "status": "open",
+   "summary": "The Sources 'Clock' block is a 50% square-wave pulse generator (freq parameter), not the Simulink Clock (output = simulation time); a Simulink user wiring Clock as time gets a 0/1 square wave. No block outputs t. Pinned in xbEquations.math.test.ts."
+  },
+  {
+   "id": "XBV-042",
+   "plan_ref": "4.2 sources / element-wise math / reductions / trig",
+   "severity": "S1",
+   "gate": "V2",
+   "status": "open",
+   "summary": "PRODUCT works on scalars only (Number(vector) = NaN); Simulink Product multiplies/divides vectors and matrices element-wise. Pinned in xbEquations.math.test.ts."
+  },
+  {
+   "id": "XBV-043",
+   "plan_ref": "4.2 sources / element-wise math / reductions / trig",
+   "severity": "S1",
+   "gate": "V2",
+   "status": "open",
+   "summary": "Max (element-wise mode) uses Number(x) || 0, so negative-only comparisons against 0-replaced NaN and NaN inputs give wrong results; MATLAB/Simulink max returns the larger element (and NaN handling per MinMax rules). Pinned in xbEquations.math.test.ts."
+  },
+  {
+   "id": "XBV-044",
+   "plan_ref": "4.2 sources / element-wise math / reductions / trig",
+   "severity": "S1",
+   "gate": "V2",
+   "status": "open",
+   "summary": "Sum signs with the '|' spacer before a sign ('+|-', '|+-') add instead of subtract: the spacer shifts the sign positions at execute time (factory strips it for the port count only). '+-|' works. Pinned in xbEquations.math.test.ts."
+  },
+  {
+   "id": "XBV-045",
+   "plan_ref": "4.2 sources / element-wise math / reductions / trig",
+   "severity": "S1",
+   "gate": "V2",
+   "status": "open",
+   "summary": "Sum with a single '+' input returns the vector unchanged; Simulink's single-input Sum sums the elements. Pinned in xbEquations.math.test.ts."
+  },
+  {
+   "id": "XBV-046",
+   "plan_ref": "4.2 sources / element-wise math / reductions / trig",
+   "severity": "S1",
+   "gate": "V2",
+   "status": "open",
+   "summary": "All 24 trigonometric/hyperbolic blocks return null for a vector input; Simulink Trigonometric/Math Function blocks are element-wise. Pinned in xbEquations.math.test.ts."
   }
  ],
  "blocks": {
