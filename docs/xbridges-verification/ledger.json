@@ -236,7 +236,8 @@
    "deps": [
     "WP-06"
    ],
-   "status": "in_progress"
+   "status": "in_progress",
+   "note": "Tests by Sonnet from the controller oracle spec (D7); controller review added XBV-074 (PWM duty 1 at the carrier peak - passed only by floating-point luck); findings XBV-070..074. Awaiting Fable."
   },
   {
    "id": "WP-09",
@@ -1013,6 +1014,46 @@
    "gate": "V2",
    "status": "open",
    "summary": "INTEGRATOR with an output limit under rk4 arrives below the limit: y(0.3) = 0.29833 instead of 0.3 with limit 0.3, and with limit 0.305 it sags to 0.30333 at t = 0.5 (the saturated derivative is used in the stages of the step that reaches the limit). Simulink evaluates the limit mode at major steps: y = min(t, limit) at every sample. Found by the WP-06 verifier; pinned in xbEquations.dynamics.test.ts."
+  },
+  {
+   "id": "XBV-070",
+   "plan_ref": "4.2 power electronics / PWM / torque optimisation",
+   "severity": "S3",
+   "gate": "V2",
+   "status": "open",
+   "summary": "THREE_PHASE_PWM uses a sawtooth carrier (raw phase 0..1) instead of the symmetric triangle of sinusoidal PWM: the average duty is right, but pulses are left-aligned (v_ref 0.5 gives a pulse in the first 75 % of the period), changing the harmonic spectrum and current ripple. Pinned in xbEquations.motor.test.ts."
+  },
+  {
+   "id": "XBV-071",
+   "plan_ref": "4.2 power electronics / PWM / torque optimisation",
+   "severity": "S2",
+   "gate": "V2",
+   "status": "open",
+   "summary": "SVPWM_CORE over-modulation is not handled: only t0 is clamped to 0, so t1 + t2 exceeds Ts (|V| = 300 at 30 deg, Vdc 400: t1 = t2 = 6.5e-5, sum 1.3e-4 > 1e-4); the standard rule scales t1, t2 to sum Ts and keeps their ratio. Pinned in xbEquations.motor.test.ts."
+  },
+  {
+   "id": "XBV-072",
+   "plan_ref": "4.2 power electronics / PWM / torque optimisation",
+   "severity": "S1",
+   "gate": "V2",
+   "status": "open",
+   "summary": "MTPA_CONTROLLER does not deliver the requested torque: it hard-codes 2 pole pairs and id = -0.2 |iq| and ignores Ld, Lq; for te_ref = 1 it returns iq = 3.333, id = -0.667, i.e. Te = 0.533 (p = 1) or 1.067 (p = 2). Pinned in xbEquations.motor.test.ts."
+  },
+  {
+   "id": "XBV-073",
+   "plan_ref": "4.2 power electronics / PWM / torque optimisation",
+   "severity": "S1",
+   "gate": "V2",
+   "status": "open",
+   "summary": "MTPA_CONTROLLER's operating point is not the maximum-torque-per-ampere point: on its constant-torque curve d|i|^2/d id is about +0.75 at te_ref = 1 (should be 0). Pinned in xbEquations.motor.test.ts."
+  },
+  {
+   "id": "XBV-074",
+   "plan_ref": "4.2 power electronics / PWM / torque optimisation",
+   "severity": "S3",
+   "gate": "V2",
+   "status": "open",
+   "summary": "PWM_GENERATOR with duty 1 turns off at the carrier peak (strict 'duty > carrier'; the carrier reaches exactly 1 at t = 0.01 s at 50 Hz), so a 100 % command produces a glitch every period; a sampled run only escapes it when floating-point phase accumulation misses the peak. Pinned in xbEquations.motor.test.ts."
   }
  ],
  "blocks": {
@@ -5089,6 +5130,10 @@
   {
    "wp": "WP-06b",
    "note": "From WP-06: DERIVATIVE tau 0 or negative is replaced by 0.01 (instance of XBV-019); derivative of a Step under rk4 spikes at 83.3 (step seen at the mid stage of the previous step) - compare with Simulink Derivative in WP-15; INTERP_PRELOOKUP default table differs from LOOKUP_ND default; Flat/Nearest lookup require ExtrapMethod 'Clip' (linear extrapolation rejected) - check against Simulink."
+  },
+  {
+   "wp": "WP-08b",
+   "note": "From WP-08: IM_SCALAR_CONTROL ignores rated_f (no constant-voltage region above rated frequency) and uses |w_ref| (a negative command does not reverse the phase sequence); at w_ref = 0 it outputs a DC set of amplitude 10; THREE_PHASE_INVERTER ignores its Ron and Vf parameters; SVPWM 'Holtz 1992' over-modulation rule from the executor's memory - confirm in WP-15; factory `||` fallbacks such as Ts || 1e-4 not probed (XBV-019 covers them)."
   }
  ]
 }
