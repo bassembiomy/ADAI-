@@ -160,7 +160,18 @@
     "WP-03"
    ],
    "status": "in_progress",
-   "note": "Closed-form/semantic tests for linear algebra, routing, logic, bitwise, sequential (controller); findings XBV-052..055; awaiting Fable."
+   "note": "Closed-form/semantic tests for linear algebra, routing, logic, bitwise, sequential (controller); findings XBV-052..055; awaiting Fable.",
+   "rework": [
+    {
+     "round": 1,
+     "by": "Fable FAIL",
+     "items": [
+      "real defects unpinned (Register 32 bits, shifts, Switch Case range, vector logic/bitwise, Demux width)",
+      "BitwiseNOT without an oracle"
+     ],
+     "fix": "XBV-056..061 pinned, BitwiseNOT oracle ~x = -x-1, MatrixSolve shape pinned, remaining minors -> WP-05b"
+    }
+   ]
   },
   {
    "id": "WP-06",
@@ -852,6 +863,54 @@
    "gate": "V2",
    "status": "open",
    "summary": "MatrixSolve (singular, inconsistent system) Inverse (singular matrix) and MatrixMul (non-conformable sizes) throw ('Solve Error: ... matrix is singular'), stopping the run instead of reporting it. Pinned in xbEquations.routing.test.ts."
+  },
+  {
+   "id": "XBV-056",
+   "plan_ref": "4.2 routing / logic / bitwise / sequential / linear algebra",
+   "severity": "S1",
+   "gate": "V2",
+   "status": "open",
+   "summary": "Register with bitWidth 32 always stores 0: the mask (1 << 32) - 1 evaluates to 0 in JavaScript. Found by the WP-05 verifier; pinned in xbEquations.routing.test.ts."
+  },
+  {
+   "id": "XBV-057",
+   "plan_ref": "4.2 routing / logic / bitwise / sequential / linear algebra",
+   "severity": "S1",
+   "gate": "V2",
+   "status": "open",
+   "summary": "ShiftLeft/ShiftRight use JavaScript shifts, which mask the count to 5 bits: 1 << 32 = 1, 16 >> 32 = 16; a negative count gives 4 << -1 = 0. Simulink Bit Shift shifts every bit out at >= word length and shifts the other way for a negative count. Found by the WP-05 verifier; pinned in xbEquations.routing.test.ts."
+  },
+  {
+   "id": "XBV-058",
+   "plan_ref": "4.2 routing / logic / bitwise / sequential / linear algebra",
+   "severity": "S2",
+   "gate": "V2",
+   "status": "open",
+   "summary": "SWITCH_CASE with a selector outside 1..n silently routes: sel 0 returns the selector value itself, sel 3, -1 and NaN return case 1; Simulink Multiport Switch reports an error (or uses the declared default). Found by the WP-05 verifier; pinned in xbEquations.routing.test.ts."
+  },
+  {
+   "id": "XBV-059",
+   "plan_ref": "4.2 routing / logic / bitwise / sequential / linear algebra",
+   "severity": "S1",
+   "gate": "V2",
+   "status": "open",
+   "summary": "Logic and bitwise blocks are scalar-only: AND([1 0],[1 1]) = true, NOT([0 1]) = false, BitwiseAND of vectors = 0; Simulink Logical/Bitwise Operator blocks are element-wise. Found by the WP-05 verifier; pinned in xbEquations.routing.test.ts."
+  },
+  {
+   "id": "XBV-060",
+   "plan_ref": "4.2 routing / logic / bitwise / sequential / linear algebra",
+   "severity": "S2",
+   "gate": "V2",
+   "status": "open",
+   "summary": "DEMUX of a vector whose width differs from numOutputs emits one value per element (3-vector into 2 ports gives 3 values) instead of reporting a width mismatch. Found by the WP-05 verifier; pinned in xbEquations.routing.test.ts."
+  },
+  {
+   "id": "XBV-061",
+   "plan_ref": "4.2 routing / logic / bitwise / sequential / linear algebra",
+   "severity": "S3",
+   "gate": "V2",
+   "status": "open",
+   "summary": "MatrixSolve returns a 2x1 matrix for a 1-D b instead of x with the shape of b. Found by the WP-05 verifier; pinned in xbEquations.routing.test.ts."
   }
  ],
  "blocks": {
@@ -4920,6 +4979,10 @@
   {
    "wp": "WP-04b",
    "note": "From the WP-04 verifier: integer overflow per data type, Gain matrix mode (K*u; ADIA only has element-wise, which is the Simulink default), exact degree values (sind(180) = 1.2e-16, tand(90) finite), Inf in Sum, PRODUCT with a single vector input (NaN, part of XBV-042)."
+  },
+  {
+   "wp": "WP-05b",
+   "note": "From the WP-05 verifier, not yet pinned: Switch scalar expansion and vector ctrl; IF_ELSE with NaN (false) and [0] (true); MatrixConcat with unequal widths returns a ragged matrix; SubMatrix clamps out-of-range ends; MatrixSolve on a rank-deficient consistent system returns one solution silently; Inverse/Determinant of a non-square matrix throw (XBV-055 family); MatrixDiag ignores diagMode (auto-detects by shape); cond 1e12/1e16; single-input XOR; clock high at step 0 counted as an edge."
   }
  ]
 }

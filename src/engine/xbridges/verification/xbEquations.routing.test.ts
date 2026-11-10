@@ -49,6 +49,10 @@ describe('linear algebra', () => {
   it('MatrixSolve: A x = b for a well-conditioned system', () => {
     near(y0('MatrixSolve', {}, [[[2, 1], [1, 3]], [3, 5]]), [0.8, 1.4]);
   });
+  // Simulink returns x with the shape of b; a 1-D b gives a 1-D x.
+  it.fails('XBV-061: MatrixSolve returns x with the shape of b ([0.8 1.4] for a 1-D b, not a 2x1 matrix)', () => {
+    expect(y0('MatrixSolve', {}, [[[2, 1], [1, 3]], [3, 5]])).toEqual([0.8, 1.4].map((v) => expect.closeTo(v, 12)));
+  });
   it.fails('XBV-055: MatrixMul of non-conformable matrices (1x2 * 1x2) is reported by the block, not thrown', () => {
     expect(run('MatrixMul', {}, [[[1, 2]], [[1, 2]]]).threw).toBeNull();
   });
@@ -76,7 +80,7 @@ describe('linear algebra', () => {
 });
 
 describe('routing', () => {
-  it('Switch: u1 when ctrl >= threshold (default), u2 otherwise; ">" and "~=0" criteria', () => {
+  it('Switch: u1 when ctrl >= threshold (default), u2 otherwise; ">" criterion; vector data inputs', () => {
     expect(y0('SWITCH', { threshold: 0.5, criteria: '>=' }, [10, 20, 0.5])).toBe(10);
     expect(y0('SWITCH', { threshold: 0.5, criteria: '>=' }, [10, 20, 0.4])).toBe(20);
     expect(y0('SWITCH', { threshold: 0.5, criteria: '>' }, [10, 20, 0.5])).toBe(20);
@@ -105,6 +109,19 @@ describe('routing', () => {
     expect(y0('SWITCH_CASE', { numCases: 2 }, [1, 11, 22])).toBe(11);
     expect(y0('SWITCH_CASE', { numCases: 2 }, [2, 11, 22])).toBe(22);
   });
+  // Simulink Multiport Switch: a control value outside 1..n is an error (or the declared default case); it is never
+  // passed through and never silently mapped to case 1.
+  for (const sel of [0, 3, -1, Number.NaN]) {
+    it.fails(`XBV-058: Switch Case with control ${sel} (outside 1..2) is reported, not silently routed`, () => {
+      const r = run('SWITCH_CASE', { numCases: 2 }, [sel, 11, 22]);
+      expect(Boolean(r.error) || r.threw !== null).toBe(true);
+    });
+  }
+  // Simulink Demux: a 3-wide signal into 2 outputs needs explicit widths; default is an error, never 3 scalars.
+  it.fails('XBV-060: Demux of a 3-vector into 2 outputs is reported, not split into 3 values', () => {
+    const r = run('DEMUX', { numOutputs: 2 }, [[1, 2, 3]]);
+    expect(r.y.length <= 2 && (Boolean(r.error) || r.threw !== null)).toBe(true);
+  });
 });
 
 describe('logic (non-zero is true)', () => {
@@ -128,12 +145,35 @@ describe('logic (non-zero is true)', () => {
   });
 });
 
+describe('logic on vectors (Simulink: element-wise)', () => {
+  it.fails('XBV-059: AND([1 0], [1 1]) = [1 0]', () => {
+    expect((y0('AND', {}, [[1, 0], [1, 1]]) as unknown[]).map(Number)).toEqual([1, 0]);
+  });
+  it.fails('XBV-059: NOT([0 1]) = [1 0]', () => {
+    expect((y0('NOT', {}, [[0, 1]]) as unknown[]).map(Number)).toEqual([1, 0]);
+  });
+});
+
 describe('bitwise', () => {
   it('AND / OR / XOR on 12 and 10; NOT is an involution', () => {
     expect(Number(y0('BitwiseAND', {}, [12, 10]))).toBe(8);
     expect(Number(y0('BitwiseOR', {}, [12, 10]))).toBe(14);
     expect(Number(y0('BitwiseXOR', {}, [12, 10]))).toBe(6);
-    expect(Number(y0('BitwiseNOT', {}, [y0('BitwiseNOT', {}, [77])]))).toBe(77);
+    // Oracle: two's complement NOT of a signed integer: ~x = -x - 1 (Simulink Bitwise Operator on intN).
+    expect(Number(y0('BitwiseNOT', {}, [77]))).toBe(-78);
+    expect(Number(y0('BitwiseNOT', {}, [0]))).toBe(-1);
+  });
+  // Oracle (Simulink Bit Shift, 32-bit word): shifting by the word length or more shifts every bit out; a negative
+  // shift count shifts the other way. JavaScript masks the count to 5 bits, so 1 << 32 is 1.
+  it.fails('XBV-057: shift by the word length or more gives 0 (1 << 32, 16 >> 32)', () => {
+    expect(Number(y0('ShiftLeft', {}, [1, 32]))).toBe(0);
+    expect(Number(y0('ShiftRight', {}, [16, 32]))).toBe(0);
+  });
+  it.fails('XBV-057: a negative shift count shifts the other way (4 << -1 = 2)', () => {
+    expect(Number(y0('ShiftLeft', {}, [4, -1]))).toBe(2);
+  });
+  it.fails('XBV-059: bitwise and logic blocks work element-wise on vectors', () => {
+    expect(y0('BitwiseAND', {}, [[12, 6], [10, 3]])).toEqual([8, 2]);
   });
   it('shifts: 3 << 2 = 12, 16 >> 2 = 4, -16 >> 2 = -4 (arithmetic for signed), shift by 0 is identity', () => {
     expect(Number(y0('ShiftLeft', {}, [3, 2]))).toBe(12);
@@ -153,6 +193,9 @@ describe('sequential (edge-triggered, state threaded)', () => {
     //               j  k  clk rst
     const q = sequence('JKFlipFlop', {}, [[1, 0, 0, 0], [1, 0, 1, 0], [0, 0, 0, 0], [0, 0, 1, 0], [0, 1, 0, 0], [0, 1, 1, 0], [1, 1, 0, 0], [1, 1, 1, 0], [1, 1, 0, 0], [1, 1, 1, 0]]);
     expect(q).toEqual([0, 1, 1, 1, 1, 0, 0, 1, 1, 0]);
+  });
+  it.fails('XBV-056: Register with bitWidth 32 stores the value (mask (1 << 32) - 1 is 0 in JavaScript)', () => {
+    expect(sequence('Register', { bitWidth: 32 }, [[5, 0, 1, 0], [5, 1, 1, 0]])).toEqual([0, 5]);
   });
   it('Register: loads the input masked to bitWidth on a rising edge when enabled; reset clears it', () => {
     //                                  in  clk en rst
