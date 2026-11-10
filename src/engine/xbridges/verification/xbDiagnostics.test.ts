@@ -39,7 +39,7 @@ const EXPECTED: Record<string, 'error' | 'warning' | 'info'> = {
   LOGIC_NAN_INPUT: 'error',
   MATH_DOMAIN_ERROR: 'warning',
   MISSING_FIS_CONFIG: 'error',
-  NON_FINITE_INPUT: 'warning',
+  NON_FINITE_INPUT: 'error',
   NO_MODEL_CONFIGURED: 'error',
   NUMERICAL_INSTABILITY: 'warning',
   PARAMETER_EMPTY: 'error',
@@ -59,10 +59,17 @@ const EXPECTED: Record<string, 'error' | 'warning' | 'info'> = {
   UNIT_INCONSISTENCY: 'warning',
   UNSUPPORTED_SOLVER: 'error',
 };
-/** Codes whose current severity contradicts a decision; each must turn red when fixed (then move out of this set). */
+/** Codes whose current behaviour contradicts the expectation; each turns red when fixed (then leaves this map). */
 const PINNED_SEVERITY: Record<string, string> = {
-  DIMENSION_MISMATCH: 'XBV-029 (decision D1)',
+  DIMENSION_MISMATCH: 'XBV-029 (decision D1; also XBV-035: unreachable from library ports)',
   DATA_TYPE_MISMATCH: 'XBV-029 (decision D1)',
+  ALGEBRAIC_LOOP_NOT_CONVERGED: 'XBV-030 (error does not stop the run)',
+  LOGIC_NAN_INPUT: 'XBV-033 (runtime error diagnostic does not stop the run)',
+  EXECUTION_EXCEPTION: 'XBV-034 (DOE fault code only inside a BLOCK_RUNTIME_FAULT message)',
+  INVALID_GMDH_LAYERS: 'XBV-034 (DOE fault code only inside a BLOCK_RUNTIME_FAULT message)',
+  INVALID_TAGUCHI_LEVELS: 'XBV-034 (DOE fault code only inside a BLOCK_RUNTIME_FAULT message)',
+  NO_MODEL_CONFIGURED: 'XBV-034 (DOE fault code only inside a BLOCK_RUNTIME_FAULT message)',
+  NON_FINITE_INPUT: 'XBV-034 (DOE fault code only inside a BLOCK_RUNTIME_FAULT message)',
 };
 
 describe('diagnostics closure', () => {

@@ -241,7 +241,7 @@
     "WP-02"
    ],
    "status": "in_progress",
-   "note": "Diagnostics closure: controller test written, Sonnet writing recipes. Engine semantics tests: controller writing."
+   "note": "Diagnostics closure (36 recipes by Sonnet; 9 pinned behaviours) and engine semantics (controller) written; awaiting Fable verification."
   },
   {
    "id": "WP-14",
@@ -599,6 +599,30 @@
    "gate": "V4",
    "status": "open",
    "summary": "Run time is quadratic in the number of blocks (1000/2000/4000-block chains: 188/435/1633 ms for 10 rk4 steps; 10 000 blocks about 22 s); gatherInputs searches the connection list per input. Pinned against a 5 s budget in xbEngine.test.ts."
+  },
+  {
+   "id": "XBV-033",
+   "plan_ref": "5.2 diagnostics",
+   "severity": "S2",
+   "gate": "V4",
+   "status": "open",
+   "summary": "Runtime diagnostics of severity error do not stop the run: a block's typed diagnostic (e.g. LOGIC_NAN_INPUT) and a block-returned error (BLOCK_RUNTIME_FAULT via result.error) are recorded but never set the engine's fatal flag (XbridgesEngine.ts ~495-517); only thrown exceptions stop. Simulink halts on errors. Pinned in xbDiagnostics.test.ts."
+  },
+  {
+   "id": "XBV-034",
+   "plan_ref": "5.2 diagnostics",
+   "severity": "S3",
+   "gate": "V4",
+   "status": "open",
+   "summary": "DOE_MODEL fault codes EXECUTION_EXCEPTION, INVALID_GMDH_LAYERS, INVALID_TAGUCHI_LEVELS, NO_MODEL_CONFIGURED, NON_FINITE_INPUT exist only in nextState.lastFault and inside one BLOCK_RUNTIME_FAULT message; they never appear as diagnostics, and the run continues (XBV-033). Pinned in xbDiagnostics.test.ts."
+  },
+  {
+   "id": "XBV-035",
+   "plan_ref": "5.2 / F8",
+   "severity": "S1",
+   "gate": "V3",
+   "status": "open",
+   "summary": "Dimension checking is inactive: library factories never set port dimensions (only PT_VEHICLE_BODY_1DOF inputs do), so DIMENSION_MISMATCH cannot fire for any canvas-built model; Simulink propagates and checks dimensions. The recipe has to patch dimensions onto ports to provoke the code."
   }
  ],
  "blocks": {
