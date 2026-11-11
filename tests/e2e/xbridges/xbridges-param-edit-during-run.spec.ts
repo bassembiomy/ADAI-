@@ -8,6 +8,7 @@ import { test, expect } from '@playwright/test';
 import {
   useLocalChromium, openXbridges, buildIntegratorModel, setToolbar, runButton, stopButton, scopeSamples,
   setConstantValue, constantValueInput, selectNode, expectSamplesFollow, saveProject, modelFacts,
+  SAVE_DEBOUNCE_SETTLE_MS,
 } from './xbHelpers';
 
 useLocalChromium();
@@ -72,6 +73,7 @@ test.describe('X-Bridges parameter edit during a run', () => {
     const samples = await scopeSamples(page, m.scope);
     for (const [, y] of samples) expect(Number.isFinite(y)).toBe(true);
     expectSamplesFollow(samples, 2, 1e-9); // engine kept the last valid value
+    await page.waitForTimeout(SAVE_DEBOUNCE_SETTLE_MS); // XBV-149: otherwise Save may write the pre-edit model
     const stored = modelFacts(await saveProject(page)).nodes.find(n => n.id === m.constant)!;
     expect(stored.params.value).toBe(2);
   });

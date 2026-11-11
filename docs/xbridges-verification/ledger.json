@@ -583,7 +583,7 @@
     "WP-20"
    ],
    "status": "in_progress",
-   "note": "Workflow .github/workflows/xbridges-verification.yml added (controller): unit (verification + kit, test:xbridges, powertrain, inventory and report up to date), embedded (V6 tri-parity, V7 code parity with gcc/clang, state-machine alignment + AUTOSAR), e2e (Playwright Chromium), nightly schedule. Not yet: nightly seed rotation (random graphs use fixed seeds), mutation run (no mutation tool in the repo), float32 parity (WP-17b). First GitHub run not yet observed.",
+   "note": "Workflow .github/workflows/xbridges-verification.yml added (controller): unit (verification + kit, test:xbridges, powertrain, inventory and report up to date), embedded (V6 tri-parity, V7 code parity with gcc/clang, state-machine alignment + AUTOSAR), e2e (Playwright Chromium), nightly schedule. Not yet: nightly seed rotation (random graphs use fixed seeds), mutation run (no mutation tool in the repo), float32 parity (WP-17b). CI runs observed: see ci_runs.",
    "ci_runs": [
     {
      "run": "43019317831",
@@ -595,6 +595,18 @@
       "e2e: labs #9 and #10 stopped at t = 4.980 s instead of 5.000 (Euler, step 0.02) and the XBV-138 pin passed on the runner although it fails locally - possibly timing-dependent; observe on the next run before changing anything"
      ],
      "passed": "verification suites + test kit, canvas vs interpreter parity (V6), 31 of 35 e2e tests"
+    },
+    {
+     "run": "43024282693",
+     "sha": "ea79cd37",
+     "result": "unit and embedded green; e2e 33 of 34 (lab #2 stopped at t = 4.900 s, RK4 auto step)",
+     "diagnosis": [
+      "unit/regression, verification suites, powertrain, inventory and report checks: pass",
+      "embedded: V6 tri-parity, V7 code parity (gcc/clang, sanitizers), state-machine alignment and AUTOSAR verify: pass (locale fix confirmed)",
+      "e2e early stop moved from labs #9/#10 (run 1) to lab #2 (run 2): a status-bar refresh race, not an early stop. A local probe recorded the Run button reappearing with 4.600/4.900/4.960 s and the final 5.000 s 38-126 ms later in all three labs. New finding XBV-148 (S3); the specs now wait until the status stops changing (value not assumed, so a real early stop still fails)",
+      "XBV-138 pin failed as expected on run 2; its pass on run 1 traced to XBV-149 (S2, new): the spec saved within the 300 ms store debounce after the run, so the file held the pre-edit 2. The spec now waits 1 s before Save; XBV-149 pinned with a deterministic case (Save during a run)"
+     ],
+     "passed": "all unit and embedded steps; 33 of 34 e2e"
     }
    ]
   },
@@ -1777,6 +1789,22 @@
    "gate": "V8",
    "status": "open",
    "summary": "The Robot Vacuum Navigation & Mapping lab shows EKF error Infinity and confidence 0 % after 5 s at the default step (same stiffness class as XBV-127). Found by the WP-20 executor (Playwright, real Chromium); pinned in tests/e2e/xbridges/."
+  },
+  {
+   "id": "XBV-148",
+   "plan_ref": "6 UI",
+   "severity": "S3",
+   "gate": "V8",
+   "status": "open",
+   "summary": "When a run ends at the stop time the Run button reappears before the status bar shows the final time: the status time is refreshed on every 4th tick and, at the end, only from the run effect's cleanup, so for about 40-130 ms it shows a time up to four steps short (observed 4.600/4.900/4.960 s, then 5.000 s, labs #2, #9, #10, local Chromium probe). The run itself ends at the stop time. Found by the controller from CI runs 1 and 2 (WP-22); e2e specs wait for the status to settle (waitForStatusSettled); not pinned because the window is timing-dependent."
+  },
+  {
+   "id": "XBV-149",
+   "plan_ref": "6 UI persistence",
+   "severity": "S2",
+   "gate": "V8",
+   "status": "open",
+   "summary": "Save writes a stale model: the X-Bridges canvas reaches the project store through a 300 ms debounce (XbridgesWorkspace.tsx, debounced onSave) that every canvas change restarts, and Save does not flush it. A Save within 300 ms of an edit leaves the edit out (saved 2 after setting 3), and nothing is stored while a run is going (the run changes the canvas every 4th tick): a Save 2 s after an edit made during a run held the pre-run value. Found by the controller while diagnosing the XBV-138 pin passing on CI run 1; pinned in tests/e2e/xbridges/xbridges-persistence.spec.ts."
   }
  ],
  "blocks": {

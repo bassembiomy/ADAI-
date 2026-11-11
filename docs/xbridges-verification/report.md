@@ -5,10 +5,10 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 ## Summary
 
 - Work packages: 20 done of 29; 1 in progress; 8 to do.
-- Findings: 144 open, 2 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
+- Findings: 146 open, 2 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
   - S1 (wrong number in simulation or generated C): 48 open
-  - S2 (crash, stop, freeze or silent no-op): 36 open
-  - S3 (diagnostic, UI or convention deviation): 51 open
+  - S2 (crash, stop, freeze or silent no-op): 37 open
+  - S3 (diagnostic, UI or convention deviation): 52 open
   - S4 (documentation): 9 open
 - Decisions recorded: 9; open: 1 (D9).
 
@@ -121,7 +121,7 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 | XBV-121 | V2 | 4.2 fuzzy | FUZZY_INFERENCE_SYSTEM output shoulders (NB [-1, -1, -0.5], PB at the range end) are 0 at the end point, so the defuzzified output is off: at (-0.5, -0.2) y = -0.250623 instead of -0.252217. Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts. |
 | XBV-146 | V8 | 6 UI end-to-end | Opening a saved .adia project while the X-Bridges tab is active leaves the canvas empty (also after switching tabs); opening from another tab works (src/App.tsx hydrateProject / workspaceFiles ~5765-5780). The user sees an empty model and may save over it. Found by the WP-20 executor (Playwright, real Chromium); pinned in tests/e2e/xbridges/. |
 
-### S2 - crash, stop, freeze or silent no-op (36)
+### S2 - crash, stop, freeze or silent no-op (37)
 
 | Id | Gate | Plan ref | Summary |
 | --- | --- | --- | --- |
@@ -161,8 +161,9 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 | XBV-140 | V8 | 6 UI | Canvas wiring accepts a second driver on an already-connected input: onConnect adds the edge and the workspace has no isValidConnection (XbridgesWorkspace.tsx ~2306); the canvas side of XBV-031. Found by the WP-19 executor; pinned in src/components/xbridges/xbV8Ui.test.tsx. |
 | XBV-144 | V8 | 6 UI end-to-end | Toolbar Single Step does nothing during a live run: the live run uses the worker engine, engineRef is null and stepSimulation returns immediately (XbridgesWorkspace.tsx ~2929); time stays unchanged after 3 clicks. Found by the WP-20 executor (Playwright, real Chromium); pinned in tests/e2e/xbridges/. |
 | XBV-147 | V8 | 6 UI end-to-end | The Robot Vacuum Navigation & Mapping lab shows EKF error Infinity and confidence 0 % after 5 s at the default step (same stiffness class as XBV-127). Found by the WP-20 executor (Playwright, real Chromium); pinned in tests/e2e/xbridges/. |
+| XBV-149 | V8 | 6 UI persistence | Save writes a stale model: the X-Bridges canvas reaches the project store through a 300 ms debounce (XbridgesWorkspace.tsx, debounced onSave) that every canvas change restarts, and Save does not flush it. A Save within 300 ms of an edit leaves the edit out (saved 2 after setting 3), and nothing is stored while a run is going (the run changes the canvas every 4th tick): a Save 2 s after an edit made during a run held the pre-run value. Found by the controller while diagnosing the XBV-138 pin passing on CI run 1; pinned in tests/e2e/xbridges/xbridges-persistence.spec.ts. |
 
-### S3 - diagnostic, UI or convention deviation (51)
+### S3 - diagnostic, UI or convention deviation (52)
 
 | Id | Gate | Plan ref | Summary |
 | --- | --- | --- | --- |
@@ -217,6 +218,7 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 | XBV-142 | V8 | 6 UI | There is no redo (Ctrl+Y / Ctrl+Shift+Z) in the X-Bridges workspace. Found by the WP-19 executor; pinned in src/components/xbridges/xbV8Ui.test.tsx. |
 | XBV-143 | V8 | 6 UI end-to-end | A canvas run does not log a sample at the stop time: for 0..1 s at h = 0.01 the last Scope sample is t = 0.99 (y = 1.98); Simulink logs t = 1 (y = 2). Every logged sample is correct (y = 2t within 1e-9). Found by the WP-20 executor (Playwright, real Chromium); pinned in tests/e2e/xbridges/. |
 | XBV-145 | V8 | 6 UI end-to-end | A block dragged from the library is placed at the centre of the pane, not where it is dropped (pointer position ignored, XbridgesWorkspace.tsx ~2379-2395). Found by the WP-20 executor (Playwright, real Chromium); pinned in tests/e2e/xbridges/. |
+| XBV-148 | V8 | 6 UI | When a run ends at the stop time the Run button reappears before the status bar shows the final time: the status time is refreshed on every 4th tick and, at the end, only from the run effect's cleanup, so for about 40-130 ms it shows a time up to four steps short (observed 4.600/4.900/4.960 s, then 5.000 s, labs #2, #9, #10, local Chromium probe). The run itself ends at the stop time. Found by the controller from CI runs 1 and 2 (WP-22); e2e specs wait for the status to settle (waitForStatusSettled); not pinned because the window is timing-dependent. |
 
 ### S4 - documentation (9)
 

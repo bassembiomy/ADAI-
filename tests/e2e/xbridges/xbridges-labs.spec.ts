@@ -5,7 +5,7 @@
  */
 import { test, expect } from '@playwright/test';
 import {
-  useLocalChromium, trackErrors, openXbridges, runButton, stopButton, problemsSummary, statusText, statusBar,
+  useLocalChromium, trackErrors, openXbridges, runButton, stopButton, problemsSummary, statusBar, waitForStatusSettled,
 } from './xbHelpers';
 
 useLocalChromium();
@@ -52,7 +52,7 @@ test.describe('X-Bridges built-in labs', () => {
       await runButton(page).click();
       // a compile error stops the run at once (status Failed); otherwise it ends at the stop time
       await expect(runButton(page)).toBeVisible({ timeout: 180_000 });
-      const status = await statusText(page);
+      const status = await waitForStatusSettled(page); // XBV-148: final time lands just after the Run button
       const summary = await problemsSummary(page);
 
       expect.soft(status, `lab "${name}" status bar`).not.toContain('Failed');

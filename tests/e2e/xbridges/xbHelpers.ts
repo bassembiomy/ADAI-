@@ -171,7 +171,32 @@ export const stopButton = (page: Page): Locator => page.getByRole('button', { na
 export async function runToEnd(page: Page, timeout = 60_000): Promise<void> {
   await runButton(page).click();
   await expect(runButton(page)).toBeVisible({ timeout });
+  await waitForStatusSettled(page);
 }
+
+/**
+ * XBV-148: when a run ends the Run button comes back one render before the status bar shows the final time (the
+ * status is refreshed on every 4th tick and, at the end, from the effect cleanup), so the bar can show a time up to
+ * four steps short for about 40-130 ms. Wait until two reads 250 ms apart agree; the value itself is not assumed,
+ * so a run that really stops early still fails the caller's check.
+ */
+export async function waitForStatusSettled(page: Page, timeoutMs = 3_000): Promise<string> {
+  const deadline = Date.now() + timeoutMs;
+  let previous = await statusText(page);
+  for (;;) {
+    await page.waitForTimeout(250);
+    const current = await statusText(page);
+    if (current === previous || Date.now() > deadline) return current;
+    previous = current;
+  }
+}
+
+/**
+ * XBV-149: the workspace reaches the project store through a 300 ms debounce that every canvas change restarts (a run
+ * changes the canvas on every 4th tick), and Save does not flush it. Before a Save whose content is asserted, wait
+ * until the canvas has been still for longer than the debounce.
+ */
+export const SAVE_DEBOUNCE_SETTLE_MS = 1_000;
 
 export const statusBar = (page: Page): Locator => page.getByRole('status', { name: 'X-Bridges status bar' });
 

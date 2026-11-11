@@ -10,6 +10,7 @@ import * as path from 'path';
 import {
   useLocalChromium, trackErrors, openXbridges, buildIntegratorModel, setToolbar, saveProject, openProjectFile,
   modelFacts, selectNode, constantValueInput, edgeIds, node, runToEnd, scopeSamples, expectSamplesFollow,
+  runButton, stopButton, setConstantValue, SAVE_DEBOUNCE_SETTLE_MS,
 } from './xbHelpers';
 
 useLocalChromium();
@@ -83,5 +84,23 @@ test.describe('X-Bridges persistence', () => {
   // switching tabs back and forth: the opened model is not shown (and the stale canvas is what the next Save writes).
   test.fail('XBV-146 opening a project file while the X-Bridges tab is active shows the opened model', async ({ page }) => {
     await roundTrip(page, true, true);
+  });
+
+  // XBV-149: the canvas reaches the project store through a 300 ms debounce that every canvas change restarts, and a
+  // running simulation changes the canvas on every 4th tick, so nothing is stored while a run is going; Save does not
+  // flush the pending store. A Save made 2 s after an edit during a run holds the value from before the run.
+  test.fail('XBV-149 Save during a run contains a parameter edited during that run', async ({ page }) => {
+    await openXbridges(page);
+    const m = await buildIntegratorModel(page, '2');
+    await setToolbar(page, { solver: 'rk4', start: 0, stop: 30, step: 0.01 });
+    await page.waitForTimeout(SAVE_DEBOUNCE_SETTLE_MS);
+    await runButton(page).click();
+    await expect(stopButton(page)).toBeVisible();
+    await page.waitForTimeout(800);
+    await setConstantValue(page, m.constant, '5');
+    await page.waitForTimeout(2_000);
+    const stored = modelFacts(await saveProject(page)).nodes.find(n => n.id === m.constant)!;
+    await stopButton(page).click();
+    expect(stored.params.value).toBe(5);
   });
 });
