@@ -281,7 +281,7 @@
    "deps": [
     "WP-03"
    ],
-   "status": "todo"
+   "status": "in_progress"
   },
   {
    "id": "WP-10",
@@ -299,7 +299,7 @@
    "deps": [
     "WP-03"
    ],
-   "status": "todo"
+   "status": "in_progress"
   },
   {
    "id": "WP-12",
@@ -494,8 +494,13 @@
    "deps": [
     "WP-17"
    ],
-   "status": "in_progress",
-   "note": "Scenario corpus by Sonnet from the controller spec: 42 tests, simulator = standalone runtime = compiled C on every scenario (float32 production target), AUTOSAR verify ACCEPTED; findings XBV-106..108 (limitations). Awaiting the Opus verifier."
+   "status": "done",
+   "note": "Scenario corpus by Sonnet from the controller spec: 42 tests, simulator = standalone runtime = compiled C on every scenario (float32 production target), AUTOSAR verify ACCEPTED; findings XBV-106..108 (limitations). Awaiting the Opus verifier.",
+   "verification": {
+    "executor": "Sonnet from controller spec (D7)",
+    "verifier": "Opus subagent (D8) PASS (42 passed twice; AUTOSAR ACCEPTED same fingerprint); verifier mutations of the C trace (state value +1e-9, swapped state ids, swapped X-Bridges entries, timer +100 ms) all caught",
+    "minor": "AUTOSAR test does not check that the X-Bridges step affected the runnable -> WP-18b"
+   }
   },
   {
    "id": "WP-19",
