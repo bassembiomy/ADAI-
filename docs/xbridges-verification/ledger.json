@@ -620,6 +620,15 @@
       "XBV-138 pin failed as expected on run 2; its pass on run 1 traced to XBV-149 (S2, new): the spec saved within the 300 ms store debounce after the run, so the file held the pre-edit 2. The spec now waits 1 s before Save; XBV-149 pinned with a deterministic case (Save during a run)"
      ],
      "passed": "all unit and embedded steps; 33 of 34 e2e"
+    },
+    {
+     "run": "43030228423",
+     "sha": "ff3f10ee",
+     "result": "all 3 jobs green (unit, embedded, e2e)",
+     "diagnosis": [
+      "e2e flake diagnosis of run 2 confirmed: with waitForStatusSettled (XBV-148) and the save-debounce wait (XBV-149) every lab reaches t = 5.000 s and the pins fail as expected"
+     ],
+     "passed": "all steps"
     }
    ]
   },
