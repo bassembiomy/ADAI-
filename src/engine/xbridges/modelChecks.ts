@@ -333,8 +333,8 @@ export function checkParameters(blocks: XBlock[]): ModelDiagnostic[] {
       }
       case 'DELAY': {
         const n = Number(p.delay_length);
-        if (!(Number.isInteger(n) && n >= 1)) {
-          err(b, 'DELAY_LENGTH_INVALID', `Block '${nameOf(b)}': delay length ${fmt(p.delay_length)} must be a positive integer.`);
+        if (!(Number.isInteger(n) && n >= 0)) {
+          err(b, 'DELAY_LENGTH_INVALID', `Block '${nameOf(b)}': delay length ${fmt(p.delay_length)} must be a non-negative integer (0 = direct feedthrough).`);
         }
         break;
       }
