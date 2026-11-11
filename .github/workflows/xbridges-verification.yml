@@ -1,0 +1,110 @@
+name: X-Bridges Verification
+
+# Plan: docs/superpowers/plans/2026-11-10-xbridges-full-verification.md (WP-22).
+# Pinned defects are it.fails / test.fail: they keep the run green while open and turn it red when fixed
+# without the pin being removed, so a green run means "no change to the known state", not "no defects".
+
+on:
+  push:
+    paths:
+      - 'src/engine/xbridges/**'
+      - 'src/components/xbridges/**'
+      - 'src/utils/stateMachine/xb*'
+      - 'src/utils/stateMachine/smInterpreter.ts'
+      - 'src/utils/stateMachine/smCHarness.ts'
+      - 'src/services/xbridgesWorkerClient.ts'
+      - 'tests/e2e/xbridges/**'
+      - 'tests/fixtures/xbridges/**'
+      - 'docs/xbridges-verification/**'
+      - 'scripts/xbridges-verification/**'
+      - '.github/workflows/xbridges-verification.yml'
+  pull_request:
+    paths:
+      - 'src/engine/xbridges/**'
+      - 'src/components/xbridges/**'
+      - 'src/utils/stateMachine/xb*'
+      - 'src/utils/stateMachine/smInterpreter.ts'
+      - 'src/utils/stateMachine/smCHarness.ts'
+      - 'src/services/xbridgesWorkerClient.ts'
+      - 'tests/e2e/xbridges/**'
+      - 'tests/fixtures/xbridges/**'
+      - 'docs/xbridges-verification/**'
+      - 'scripts/xbridges-verification/**'
+      - '.github/workflows/xbridges-verification.yml'
+  schedule:
+    - cron: '23 3 * * *'
+  workflow_dispatch:
+
+jobs:
+  unit:
+    name: Blocks, solvers, engine, worker, UI components (vitest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CI: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+      - run: npm ci
+      - name: Verification suites and test kit
+        run: npx vitest run src/engine/xbridges/verification src/engine/xbridges/testkit --reporter=dot
+      - name: X-Bridges regression (engine, components, worker client, state-machine xb*)
+        run: npm run -s test:xbridges
+      - name: Powertrain suites
+        run: npx vitest run src/engine/xbridges/powertrain --reporter=dot
+      - name: Inventory is up to date
+        run: |
+          npm run -s xbv:inventory
+          git diff --exit-code docs/xbridges-verification/inventory.json
+      - name: Report is up to date with the ledger
+        run: |
+          npm run -s xbv:report
+          git diff --exit-code docs/xbridges-verification/report.md
+
+  embedded:
+    name: Canvas = interpreter = generated C, state-machine alignment (gcc, clang)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      CI: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+      - name: C toolchains
+        run: sudo apt-get update && sudo apt-get install -y clang gcc make
+      - run: npm ci
+      - name: Canvas vs interpreter parity (V6)
+        run: npx vitest run src/utils/stateMachine/xbTriParity.test.ts --reporter=dot
+      - name: Interpreter vs generated C, compile matrix, sanitizers, limits (V7)
+        run: npx vitest run src/utils/stateMachine/xbCodeParity.test.ts --reporter=dot
+      - name: State-machine alignment (simulator, runtime, compiled C) and AUTOSAR verify
+        run: npx vitest run src/utils/stateMachine/xbStateMachineAlignment.test.ts --reporter=dot
+
+  e2e:
+    name: UI end-to-end (Playwright, Chromium)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+      - run: npm ci
+      - name: Install Chromium for Playwright
+        run: npx playwright install --with-deps chromium
+      - name: X-Bridges end-to-end specs
+        run: npx playwright test tests/e2e/xbridges --project=chromium --trace off --workers=1
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xbridges-e2e-report
+          path: playwright-report/
+          if-no-files-found: ignore

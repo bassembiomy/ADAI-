@@ -111,15 +111,9 @@
    "ExtractDiag",
    "Diag"
   ],
-  "namedInAnyTest": 215,
-  "namedInEngineTest": 162,
+  "namedInAnyTest": 247,
+  "namedInEngineTest": 239,
   "namedInNoTest": [
-   "ROBOT_VACUUM_LIDAR_SENSOR",
-   "ROBOT_VACUUM_ODOMETRY_SENSOR",
-   "ROBOT_VACUUM_CLIFF_IR",
-   "ROBOT_VACUUM_DUSTBIN_SENSOR",
-   "ROBOT_VACUUM_MOTOR_CURRENT",
-   "ROBOT_VACUUM_SENSOR_FUSION_EKF",
    "ROBOT_VACUUM_ROOM_SEGMENTATION",
    "ROBOT_VACUUM_SEMANTIC_MAP",
    "ROBOT_VACUUM_COVERAGE_PLANNER",
@@ -127,12 +121,10 @@
    "ROBOT_VACUUM_BATTERY_MONITOR",
    "ROBOT_VACUUM_GOAL_MANAGER",
    "ROBOT_VACUUM_3D_VIZ_COLORS",
-   "ROBOT_VACUUM_WAYPOINT_GEN",
    "ROBOT_VACUUM_SURFACE_ADAPTER",
    "ROBOT_VACUUM_CLIFF_HALT",
    "ROBOT_VACUUM_VELOCITY_PID",
    "ROBOT_VACUUM_MODE_SUPERVISOR",
-   "ROBOT_VACUUM_BUMPER_SENSOR",
    "ROBOT_VACUUM_SIDE_BRUSH",
    "ROBOT_VACUUM_SUCTION_PWM",
    "ROBOT_VACUUM_TERRAIN_MODEL",
@@ -150,47 +142,23 @@
    "ROBOT_VACUUM_DOCK_ICON",
    "ROBOT_VACUUM_BATTERY_HUD",
    "ROBOT_VACUUM_DUSTBIN_HUD",
-   "Inverse",
-   "Determinant",
-   "SINGLE_PHASE_H_BRIDGE",
    "FIELD_ORIENTED_CONTROL",
-   "SPEED_CONTROLLER",
    "FLUX_REFERENCE",
-   "SVPWM_CORE",
-   "SECTOR_SELECTOR",
    "SWITCHING_TIME_CALCULATOR",
    "SVPWM_GATE_GENERATOR",
-   "ZERO_SEQUENCE_INJECTION",
    "SVPWM_MODULATOR",
-   "SWITCH_CASE",
    "BAND_LIMITED_NOISE",
-   "MPC_CONTROLLER",
    "DOE_MODULE",
-   "IM_SCALAR_CONTROL",
    "IM_FOC_CONTROL",
    "IM_FLUX_OBSERVER",
    "VF_SLIP_COMP",
-   "MTPA_CONTROLLER",
-   "ROBOT_VACUUM_COMM",
-   "ROBOT_VACUUM_BOUSTROPHEDON_SWEEP",
    "ROBOT_VACUUM_ERODE_MASK",
    "ROBOT_VACUUM_DOOR_TRACKER",
    "ROBOT_VACUUM_DOOR_CROSSING",
    "ROBOT_VACUUM_CONTINUOUS_ENERGY",
-   "ROBOT_VACUUM_TOPOLOGY_RETURN",
-   "FUZZY_MF_TRIMF",
-   "FUZZY_MF_TRAPMF",
-   "FUZZY_MF_GAUSSMF",
-   "FUZZY_MF_SIGMF",
-   "FUZZY_AND",
-   "FUZZY_OR",
-   "FUZZY_NOT",
-   "FUZZY_RULE",
-   "FUZZY_INFERENCE_SYSTEM",
-   "FUZZY_PID_CONTROLLER",
-   "DEM_WASHING_MACHINE_TWIN"
+   "ROBOT_VACUUM_TOPOLOGY_RETURN"
   ],
-  "canvasPaletteBlocksWithoutEngineTest": 80,
+  "canvasPaletteBlocksWithoutEngineTest": 17,
   "diagnosticCodes": [
    "ALGEBRAIC_LOOP",
    "ALGEBRAIC_LOOP_NOT_CONVERGED",
@@ -200,6 +168,7 @@
    "DIMENSION_MISMATCH",
    "DISCRETE_BLOCK_CONTINUOUS_SAMPLE_TIME",
    "DIVIDE_BY_ZERO",
+   "EMBEDDED_THROW",
    "EXECUTION_EXCEPTION",
    "FIXED_STEP_INVALID",
    "FRAME_INCONSISTENCY",
@@ -217,6 +186,7 @@
    "PARAMETER_NOT_INTEGER",
    "PARAMETER_OPTION_INVALID",
    "PARAMETER_OUT_OF_RANGE",
+   "PARITY_THROW",
    "RATE_TRANSITION_REQUIRED",
    "SAMPLE_RATE_MISMATCH",
    "SAMPLE_TIME_NOT_MULTIPLE_OF_FIXED_STEP",
@@ -230,13 +200,8 @@
    "UNSUPPORTED_SOLVER"
   ],
   "diagnosticCodesWithoutTest": [
-   "EXECUTION_EXCEPTION",
-   "FRAME_INCONSISTENCY",
-   "INVALID_GMDH_LAYERS",
-   "INVALID_TAGUCHI_LEVELS",
-   "NO_MODEL_CONFIGURED",
-   "SAMPLE_RATE_MISMATCH",
-   "SIGNAL_TYPE_MISMATCH"
+   "EMBEDDED_THROW",
+   "PARITY_THROW"
   ]
  },
  "blocks": [
@@ -262,7 +227,9 @@
    "dynamicInputs": false,
    "dynamicOutputs": false,
    "capability": "host-only",
-   "namedInTests": []
+   "namedInTests": [
+    "engine"
+   ]
   },
   {
    "type": "ROBOT_VACUUM_ODOMETRY_SENSOR",
@@ -287,7 +254,9 @@
    "dynamicInputs": false,
    "dynamicOutputs": false,
    "capability": "host-only",
-   "namedInTests": []
+   "namedInTests": [
+    "engine"
+   ]
   },
   {
    "type": "ROBOT_VACUUM_CLIFF_IR",
@@ -310,7 +279,9 @@
    "dynamicInputs": false,
    "dynamicOutputs": false,
    "capability": "host-only",
-   "namedInTests": []
+   "namedInTests": [
+    "engine"
+   ]
   },
   {
    "type": "ROBOT_VACUUM_DUSTBIN_SENSOR",
@@ -331,7 +302,9 @@
    "dynamicInputs": false,
    "dynamicOutputs": false,
    "capability": "host-only",
-   "namedInTests": []
+   "namedInTests": [
+    "engine"
+   ]
   },
   {
    "type": "ROBOT_VACUUM_MOTOR_CURRENT",
@@ -352,7 +325,9 @@
    "dynamicInputs": false,
    "dynamicOutputs": false,
    "capability": "host-only",
-   "namedInTests": []
+   "namedInTests": [
+    "engine"
+   ]
   },
   {
    "type": "ROBOT_VACUUM_SENSOR_FUSION_EKF",
@@ -375,7 +350,9 @@
    "dynamicInputs": false,
    "dynamicOutputs": false,
    "capability": "host-only",
-   "namedInTests": []
+   "namedInTests": [
+    "engine"
+   ]
   },
   {
    "type": "ROBOT_VACUUM_ROOM_SEGMENTATION",
@@ -546,7 +523,9 @@
    "dynamicInputs": false,
    "dynamicOutputs": false,
    "capability": "host-only",
-   "namedInTests": []
+   "namedInTests": [
+    "engine"
+   ]
   },
   {
    "type": "ROBOT_VACUUM_COLLISION_AVOID",
@@ -679,7 +658,9 @@
    "dynamicInputs": false,
    "dynamicOutputs": false,
    "capability": "host-only",
-   "namedInTests": []
+   "namedInTests": [
+    "engine"
+   ]
   },
   {
    "type": "ROBOT_VACUUM_SIDE_BRUSH",
@@ -1089,6 +1070,7 @@
    "dynamicOutputs": false,
    "capability": "codegen",
    "namedInTests": [
+    "engine",
     "other",
     "stateMachine"
    ]
@@ -1113,6 +1095,7 @@
    "dynamicOutputs": false,
    "capability": "codegen",
    "namedInTests": [
+    "engine",
     "stateMachine"
    ]
   },
@@ -1188,6 +1171,7 @@
    "dynamicOutputs": false,
    "capability": "codegen",
    "namedInTests": [
+    "engine",
     "stateMachine"
    ]
   },
@@ -1211,6 +1195,7 @@
    "dynamicOutputs": false,
    "capability": "codegen",
    "namedInTests": [
+    "engine",
     "stateMachine"
    ]
   },
@@ -1234,6 +1219,7 @@
    "dynamicOutputs": false,
    "capability": "codegen",
    "namedInTests": [
+    "engine",
     "stateMachine"
    ]
   },
@@ -1257,6 +1243,7 @@
    "dynamicOutputs": false,
    "capability": "codegen",
    "namedInTests": [
+    "engine",
     "stateMachine"
    ]
   },
@@ -1280,6 +1267,7 @@
    "dynamicOutputs": false,
    "capability": "codegen",
    "namedInTests": [
+    "engine",
     "stateMachine"
    ]
   },
@@ -1303,6 +1291,7 @@
    "dynamicOutputs": false,
    "capability": "codegen",
    "namedInTests": [
+    "engine",
     "stateMachine"
    ]
   },
@@ -1326,6 +1315,7 @@
    "dynamicOutputs": false,
    "capability": "codegen",
    "namedInTests": [
+    "engine",
     "stateMachine"
    ]
   },
@@ -1349,6 +1339,7 @@
    "dynamicOutputs": false,
    "capability": "codegen",
    "namedInTests": [
+    "engine",
     "stateMachine"
    ]
   },
@@ -1372,6 +1363,7 @@
    "dynamicOutputs": false,
    "capability": "codegen",
    "namedInTests": [
+    "engine",
     "stateMachine"
    ]
   },
@@ -1423,6 +1415,7 @@
    "dynamicOutputs": false,
    "capability": "codegen",
    "namedInTests": [
+    "engine",
     "other",
     "ui"
    ]
@@ -1449,6 +1442,7 @@
    "dynamicOutputs": false,
    "capability": "codegen",
    "namedInTests": [
+    "engine",
     "stateMachine",
     "ui"
    ]
@@ -1507,6 +1501,7 @@
    "dynamicOutputs": false,
    "capability": "codegen",
    "namedInTests": [
+    "e2e",
     "engine",
     "other",
     "stateMachine",
@@ -1593,6 +1588,7 @@
    "dynamicOutputs": false,
    "capability": "codegen",
    "namedInTests": [
+    "engine",
     "stateMachine"
    ]
   },
@@ -1616,6 +1612,7 @@
    "dynamicOutputs": false,
    "capability": "codegen",
    "namedInTests": [
+    "engine",
     "stateMachine"
    ]
   },
@@ -1641,6 +1638,7 @@
    "dynamicOutputs": false,
    "capability": "codegen",
    "namedInTests": [
+    "engine",
     "other",
     "stateMachine"
    ]
@@ -1665,6 +1663,7 @@
    "dynamicOutputs": false,
    "capability": "codegen",
    "namedInTests": [
+    "engine",
     "other",
     "stateMachine"
    ]
@@ -1714,6 +1713,7 @@
    "dynamicOutputs": false,
    "capability": "codegen",
    "namedInTests": [
+    "engine",
     "stateMachine"
    ]
   },
@@ -1737,6 +1737,7 @@
    "dynamicOutputs": false,
    "capability": "codegen",
    "namedInTests": [
+    "engine",
     "other",
     "stateMachine"
    ]
@@ -1785,6 +1786,7 @@
    "dynamicOutputs": false,
    "capability": "codegen",
    "namedInTests": [
+    "engine",
     "stateMachine"
    ]
   },
@@ -1858,6 +1860,7 @@
    "dynamicOutputs": false,
    "capability": "codegen",
    "namedInTests": [
+    "engine",
     "stateMachine"
    ]
   },
@@ -1880,7 +1883,9 @@
    "dynamicInputs": false,
    "dynamicOutputs": false,
    "capability": "host-only",
-   "namedInTests": []
+   "namedInTests": [
+    "engine"
+   ]
   },
   {
    "type": "Determinant",
@@ -1901,7 +1906,9 @@
    "dynamicInputs": false,
    "dynamicOutputs": false,
    "capability": "host-only",
-   "namedInTests": []
+   "namedInTests": [
+    "engine"
+   ]
   },
   {
    "type": "MatrixConcat",
@@ -2132,6 +2139,7 @@
    "dynamicOutputs": false,
    "capability": "codegen",
    "namedInTests": [
+    "e2e",
     "engine",
     "other",
     "stateMachine",
@@ -2201,8 +2209,10 @@
    "dynamicOutputs": false,
    "capability": "codegen",
    "namedInTests": [
+    "engine",
     "other",
-    "stateMachine"
+    "stateMachine",
+    "ui"
    ]
   },
   {
@@ -2231,8 +2241,10 @@
    "dynamicOutputs": false,
    "capability": "codegen",
    "namedInTests": [
+    "engine",
     "other",
-    "stateMachine"
+    "stateMachine",
+    "ui"
    ]
   },
   {
@@ -2259,6 +2271,8 @@
    "dynamicOutputs": false,
    "capability": "codegen",
    "namedInTests": [
+    "e2e",
+    "engine",
     "other",
     "stateMachine",
     "ui"
@@ -2287,7 +2301,9 @@
    "dynamicOutputs": false,
    "capability": "host-only",
    "namedInTests": [
-    "engine"
+    "engine",
+    "stateMachine",
+    "ui"
    ]
   },
   {
@@ -2337,6 +2353,7 @@
    "dynamicOutputs": false,
    "capability": "codegen",
    "namedInTests": [
+    "engine",
     "stateMachine"
    ]
   },
@@ -2440,6 +2457,7 @@
    "dynamicOutputs": false,
    "capability": "host-only",
    "namedInTests": [
+    "engine",
     "other"
    ]
   },
@@ -2464,7 +2482,9 @@
    "dynamicInputs": false,
    "dynamicOutputs": false,
    "capability": "host-only",
-   "namedInTests": []
+   "namedInTests": [
+    "engine"
+   ]
   },
   {
    "type": "VOLTAGE_REFERENCE_GENERATOR",
@@ -2489,6 +2509,7 @@
    "dynamicOutputs": false,
    "capability": "host-only",
    "namedInTests": [
+    "engine",
     "other"
    ]
   },
@@ -2538,6 +2559,7 @@
    "dynamicOutputs": false,
    "capability": "codegen",
    "namedInTests": [
+    "engine",
     "stateMachine"
    ]
   },
@@ -2561,6 +2583,7 @@
    "dynamicOutputs": false,
    "capability": "codegen",
    "namedInTests": [
+    "engine",
     "stateMachine"
    ]
   },
@@ -2584,6 +2607,7 @@
    "dynamicOutputs": false,
    "capability": "codegen",
    "namedInTests": [
+    "engine",
     "stateMachine"
    ]
   },
@@ -2607,6 +2631,7 @@
    "dynamicOutputs": false,
    "capability": "codegen",
    "namedInTests": [
+    "engine",
     "stateMachine"
    ]
   },
@@ -2690,7 +2715,9 @@
    "dynamicInputs": false,
    "dynamicOutputs": false,
    "capability": "host-only",
-   "namedInTests": []
+   "namedInTests": [
+    "engine"
+   ]
   },
   {
    "type": "FLUX_REFERENCE",
@@ -2767,7 +2794,9 @@
    "dynamicInputs": false,
    "dynamicOutputs": false,
    "capability": "host-only",
-   "namedInTests": []
+   "namedInTests": [
+    "engine"
+   ]
   },
   {
    "type": "SECTOR_SELECTOR",
@@ -2788,7 +2817,9 @@
    "dynamicInputs": false,
    "dynamicOutputs": false,
    "capability": "host-only",
-   "namedInTests": []
+   "namedInTests": [
+    "engine"
+   ]
   },
   {
    "type": "SWITCHING_TIME_CALCULATOR",
@@ -2856,7 +2887,9 @@
    "dynamicInputs": false,
    "dynamicOutputs": false,
    "capability": "host-only",
-   "namedInTests": []
+   "namedInTests": [
+    "engine"
+   ]
   },
   {
    "type": "SVPWM_MODULATOR",
@@ -3125,6 +3158,7 @@
    "dynamicOutputs": false,
    "capability": "codegen",
    "namedInTests": [
+    "engine",
     "stateMachine"
    ]
   },
@@ -3149,7 +3183,9 @@
    "dynamicInputs": false,
    "dynamicOutputs": false,
    "capability": "host-only",
-   "namedInTests": []
+   "namedInTests": [
+    "engine"
+   ]
   },
   {
    "type": "DATA_TYPE_CONVERSION",
@@ -3230,6 +3266,7 @@
    "dynamicOutputs": false,
    "capability": "codegen",
    "namedInTests": [
+    "engine",
     "stateMachine"
    ]
   },
@@ -3255,6 +3292,7 @@
    "dynamicOutputs": false,
    "capability": "codegen",
    "namedInTests": [
+    "engine",
     "stateMachine"
    ]
   },
@@ -3280,6 +3318,7 @@
    "dynamicOutputs": false,
    "capability": "codegen",
    "namedInTests": [
+    "engine",
     "stateMachine"
    ]
   },
@@ -3305,6 +3344,7 @@
    "dynamicOutputs": false,
    "capability": "codegen",
    "namedInTests": [
+    "engine",
     "stateMachine"
    ]
   },
@@ -3330,6 +3370,7 @@
    "dynamicOutputs": false,
    "capability": "codegen",
    "namedInTests": [
+    "engine",
     "stateMachine"
    ]
   },
@@ -3489,6 +3530,7 @@
    "dynamicOutputs": false,
    "capability": "codegen",
    "namedInTests": [
+    "engine",
     "stateMachine"
    ]
   },
@@ -3514,6 +3556,7 @@
    "dynamicOutputs": false,
    "capability": "codegen",
    "namedInTests": [
+    "engine",
     "stateMachine"
    ]
   },
@@ -3633,6 +3676,7 @@
    "dynamicOutputs": false,
    "capability": "codegen",
    "namedInTests": [
+    "engine",
     "stateMachine"
    ]
   },
@@ -3656,6 +3700,7 @@
    "dynamicOutputs": false,
    "capability": "codegen",
    "namedInTests": [
+    "engine",
     "stateMachine"
    ]
   },
@@ -3751,6 +3796,7 @@
    "dynamicOutputs": false,
    "capability": "codegen",
    "namedInTests": [
+    "engine",
     "stateMachine"
    ]
   },
@@ -3774,6 +3820,7 @@
    "dynamicOutputs": false,
    "capability": "codegen",
    "namedInTests": [
+    "engine",
     "stateMachine"
    ]
   },
@@ -3865,7 +3912,8 @@
    "dynamicOutputs": false,
    "capability": "host-only",
    "namedInTests": [
-    "engine"
+    "engine",
+    "stateMachine"
    ]
   },
   {
@@ -4059,7 +4107,8 @@
    "dynamicOutputs": false,
    "capability": "host-only",
    "namedInTests": [
-    "engine"
+    "engine",
+    "stateMachine"
    ]
   },
   {
@@ -4126,7 +4175,9 @@
    "capability": "host-only",
    "namedInTests": [
     "engine",
-    "other"
+    "other",
+    "stateMachine",
+    "ui"
    ]
   },
   {
@@ -4159,7 +4210,9 @@
    "dynamicOutputs": false,
    "capability": "host-only",
    "namedInTests": [
-    "engine"
+    "engine",
+    "stateMachine",
+    "ui"
    ]
   },
   {
@@ -4197,7 +4250,8 @@
    "capability": "host-only",
    "namedInTests": [
     "engine",
-    "other"
+    "other",
+    "ui"
    ]
   },
   {
@@ -4232,7 +4286,8 @@
    "namedInTests": [
     "engine",
     "other",
-    "stateMachine"
+    "stateMachine",
+    "ui"
    ]
   },
   {
@@ -4400,6 +4455,7 @@
    "dynamicOutputs": false,
    "capability": "codegen",
    "namedInTests": [
+    "engine",
     "stateMachine"
    ]
   },
@@ -4521,7 +4577,9 @@
    "dynamicInputs": false,
    "dynamicOutputs": false,
    "capability": "host-only",
-   "namedInTests": []
+   "namedInTests": [
+    "engine"
+   ]
   },
   {
    "type": "NUMERIC_REPRESENTATION",
@@ -4612,7 +4670,9 @@
    "dynamicOutputs": false,
    "capability": "host-only",
    "namedInTests": [
-    "other"
+    "engine",
+    "other",
+    "stateMachine"
    ]
   },
   {
@@ -4638,7 +4698,9 @@
    "dynamicInputs": false,
    "dynamicOutputs": false,
    "capability": "host-only",
-   "namedInTests": []
+   "namedInTests": [
+    "engine"
+   ]
   },
   {
    "type": "IM_FOC_CONTROL",
@@ -4774,7 +4836,9 @@
    "dynamicInputs": false,
    "dynamicOutputs": false,
    "capability": "host-only",
-   "namedInTests": []
+   "namedInTests": [
+    "engine"
+   ]
   },
   {
    "type": "MTPA_FW_MANAGER",
@@ -5015,7 +5079,9 @@
    "dynamicInputs": false,
    "dynamicOutputs": false,
    "capability": "host-only",
-   "namedInTests": []
+   "namedInTests": [
+    "engine"
+   ]
   },
   {
    "type": "ROBOT_VACUUM_BOUSTROPHEDON_SWEEP",
@@ -5038,7 +5104,9 @@
    "dynamicInputs": false,
    "dynamicOutputs": false,
    "capability": "host-only",
-   "namedInTests": []
+   "namedInTests": [
+    "engine"
+   ]
   },
   {
    "type": "ROBOT_VACUUM_ERODE_MASK",
@@ -5394,7 +5462,8 @@
    "dynamicOutputs": false,
    "capability": "host-only",
    "namedInTests": [
-    "engine"
+    "engine",
+    "stateMachine"
    ]
   },
   {
@@ -5727,7 +5796,9 @@
    "dynamicInputs": false,
    "dynamicOutputs": false,
    "capability": "host-only",
-   "namedInTests": []
+   "namedInTests": [
+    "engine"
+   ]
   },
   {
    "type": "FUZZY_MF_TRAPMF",
@@ -5753,7 +5824,9 @@
    "dynamicInputs": false,
    "dynamicOutputs": false,
    "capability": "host-only",
-   "namedInTests": []
+   "namedInTests": [
+    "engine"
+   ]
   },
   {
    "type": "FUZZY_MF_GAUSSMF",
@@ -5777,7 +5850,9 @@
    "dynamicInputs": false,
    "dynamicOutputs": false,
    "capability": "host-only",
-   "namedInTests": []
+   "namedInTests": [
+    "engine"
+   ]
   },
   {
    "type": "FUZZY_MF_SIGMF",
@@ -5801,7 +5876,9 @@
    "dynamicInputs": false,
    "dynamicOutputs": false,
    "capability": "host-only",
-   "namedInTests": []
+   "namedInTests": [
+    "engine"
+   ]
   },
   {
    "type": "FUZZY_AND",
@@ -5825,7 +5902,9 @@
    "dynamicInputs": true,
    "dynamicOutputs": false,
    "capability": "host-only",
-   "namedInTests": []
+   "namedInTests": [
+    "engine"
+   ]
   },
   {
    "type": "FUZZY_OR",
@@ -5849,7 +5928,9 @@
    "dynamicInputs": true,
    "dynamicOutputs": false,
    "capability": "host-only",
-   "namedInTests": []
+   "namedInTests": [
+    "engine"
+   ]
   },
   {
    "type": "FUZZY_NOT",
@@ -5870,7 +5951,9 @@
    "dynamicInputs": false,
    "dynamicOutputs": false,
    "capability": "host-only",
-   "namedInTests": []
+   "namedInTests": [
+    "engine"
+   ]
   },
   {
    "type": "FUZZY_RULE",
@@ -5895,7 +5978,10 @@
    "dynamicInputs": true,
    "dynamicOutputs": false,
    "capability": "host-only",
-   "namedInTests": []
+   "namedInTests": [
+    "engine",
+    "ui"
+   ]
   },
   {
    "type": "FUZZY_INFERENCE_SYSTEM",
@@ -5927,7 +6013,9 @@
    "dynamicInputs": false,
    "dynamicOutputs": false,
    "capability": "host-only",
-   "namedInTests": []
+   "namedInTests": [
+    "engine"
+   ]
   },
   {
    "type": "FUZZY_DEFUZZIFY",
@@ -5990,7 +6078,9 @@
    "dynamicInputs": false,
    "dynamicOutputs": false,
    "capability": "host-only",
-   "namedInTests": []
+   "namedInTests": [
+    "engine"
+   ]
   },
   {
    "type": "FUZZY_SURFACE_VIEWER",
@@ -6040,7 +6130,9 @@
    "dynamicInputs": false,
    "dynamicOutputs": false,
    "capability": "host-only",
-   "namedInTests": []
+   "namedInTests": [
+    "engine"
+   ]
   },
   {
    "type": "DEM_DRUM",
@@ -6304,7 +6396,8 @@
    "dynamicOutputs": false,
    "capability": "host-only",
    "namedInTests": [
-    "engine"
+    "engine",
+    "ui"
    ]
   },
   {

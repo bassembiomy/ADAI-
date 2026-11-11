@@ -582,7 +582,8 @@
     "WP-03",
     "WP-20"
    ],
-   "status": "todo"
+   "status": "in_progress",
+   "note": "Workflow .github/workflows/xbridges-verification.yml added (controller): unit (verification + kit, test:xbridges, powertrain, inventory and report up to date), embedded (V6 tri-parity, V7 code parity with gcc/clang, state-machine alignment + AUTOSAR), e2e (Playwright Chromium), nightly schedule. Not yet: nightly seed rotation (random graphs use fixed seeds), mutation run (no mutation tool in the repo), float32 parity (WP-17b). First GitHub run not yet observed."
   },
   {
    "id": "WP-23",
