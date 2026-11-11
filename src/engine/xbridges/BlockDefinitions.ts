@@ -3836,9 +3836,15 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     inputs: [createPort('u', 'u', 'input')],
     outputs: [createPort('y', 'y', 'output')],
     state: { y: Array.isArray(params.initial_condition) ? params.initial_condition : (params.initial_condition || 0) },
-    execute: (ins, p, state) => ({ outputs: [state.y] }),
+    // A scalar initial condition expands over a vector input (Simulink Integrator).
+    execute: (ins, p, state) => ({ outputs: [typeof state.y === 'number' && Array.isArray(ins[0]) ? expandLike(state.y, ins[0]) : state.y] }),
     // A vector input integrates element-wise into a vector state: the derivative is keyed by the state field.
-    evaluateDerivatives: (ins) => (Array.isArray(ins[0]) ? { y: ins[0] } : [Number(ins[0])])
+    evaluateDerivatives: (ins, p, state) => {
+      if (!Array.isArray(ins[0])) return [Number(ins[0])];
+      // The state is still the scalar IC: expand it once over the input before the solver integrates it.
+      if (typeof state?.y === 'number') state.y = expandLike(state.y, ins[0]);
+      return { y: ins[0] };
+    }
   }),
 
   'INTEGRATOR_DISCRETE': (id, params) => {
@@ -4563,7 +4569,8 @@ return block;
     equation: 'y = ∫ u dt',
     description: 'Continuous-time integration of the input signal. Supports saturation limits and external reset triggers.',
     execute: (ins, p, state) => {
-      let x = Array.isArray(state.x) ? state.x : (Number(state.x) || 0);
+      let x = Array.isArray(state.x) ? state.x : Number(state.x ?? 0);
+      if (typeof x === 'number' && Array.isArray(ins[0])) x = expandLike(x, ins[0]); // scalar IC over a vector input
       let prevReset = Number(state.prevReset) || 0;
 
       if (p.externalReset !== 'none') {
@@ -4591,8 +4598,11 @@ return block;
     },
     evaluateDerivatives: (ins, p, state) => {
       // Scalars, vectors and matrices integrate element-wise (state, input and limits).
-      const xs = Array.isArray(state.x) ? state.x : (Number(state.x) || 0);
-      const us = Array.isArray(ins[0]) ? ins[0].map((e: any) => Number(e) || 0) : (Number(ins[0]) || 0);
+      // An unconnected input is 0; a NaN element propagates into the derivative and the state (never zeroed).
+      const asInput = (e: any): any => (Array.isArray(e) ? e.map(asInput) : (e === undefined || e === null ? 0 : Number(e)));
+      if (typeof state.x === 'number' && Array.isArray(ins[0])) state.x = expandLike(state.x, ins[0]); // scalar IC over a vector input
+      const xs = Array.isArray(state.x) ? state.x : Number(state.x ?? 0);
+      const us = asInput(ins[0]);
       return {
         x: ewMap([us, xs, p.lowerLimit, p.upperLimit], (v) => {
           const [u, x, lo, hi] = v;
