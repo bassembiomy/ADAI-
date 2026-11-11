@@ -231,6 +231,16 @@ export function getPolynomialCoefficients(
   }
 }
 
+/**
+ * A numeric parameter keeps exactly the value the user entered (0 and -0 included). The default applies only when the
+ * parameter is absent or not a finite number; a parameter whose schema excludes 0 is rejected at compile.
+ */
+const numParam = (value: unknown, fallback: number): number => {
+  if (value === undefined || value === null || value === '') return fallback;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+};
+
 const createPort = (
   id: string,
   name: string,
@@ -937,7 +947,7 @@ export const raycastTwin = (rx: number, ry: number, angle: number, maxRange: num
 export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> = {
   // --- Autonomous Vacuum Cleaner Learning Blocks ---
   'ROBOT_VACUUM_LIDAR_SENSOR': (id, params) => ({
-    id, type: 'ROBOT_VACUUM_LIDAR_SENSOR', params: { lidar_max_range: params.lidar_max_range || 5.5, lidar_noise_std: params.lidar_noise_std || 0.015 },
+    id, type: 'ROBOT_VACUUM_LIDAR_SENSOR', params: { lidar_max_range: params.lidar_max_range ?? 5.5, lidar_noise_std: params.lidar_noise_std ?? 0.015 },
     // Accepts either a pose array [x,y,theta,...] as ins[0] OR individual x/y/theta
     inputs: [createPort('x', 'X / Pose Array', 'input'), createPort('y', 'Y', 'input'), createPort('theta', 'θ', 'input')],
     outputs: [createPort('ranges', 'Ranges', 'output', Array(45).fill(0), 'right', 'vector'), createPort('x_odom', 'X_odom', 'output', 0)],
@@ -971,7 +981,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
   }),
 
   'ROBOT_VACUUM_ODOMETRY_SENSOR': (id, params) => ({
-    id, type: 'ROBOT_VACUUM_ODOMETRY_SENSOR', params: { wheel_radius: params.wheel_radius || 0.033, wheel_separation: params.wheel_separation || 0.16, encoder_cpr: params.encoder_cpr || 360 },
+    id, type: 'ROBOT_VACUUM_ODOMETRY_SENSOR', params: { wheel_radius: params.wheel_radius ?? 0.033, wheel_separation: params.wheel_separation ?? 0.16, encoder_cpr: params.encoder_cpr ?? 360 },
     inputs: [createPort('enc_L', 'Enc L', 'input'), createPort('enc_R', 'Enc R', 'input')],
     outputs: [createPort('x_odom', 'X_odom', 'output'), createPort('y_odom', 'Y_odom', 'output'), createPort('theta_odom', 'θ_odom', 'output')],
     icon: 'graduation-cap',
@@ -998,7 +1008,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
   }),
 
   'ROBOT_VACUUM_CLIFF_IR': (id, params) => ({
-    id, type: 'ROBOT_VACUUM_CLIFF_IR', params: { cliff_threshold: params.cliff_threshold || 0.2 },
+    id, type: 'ROBOT_VACUUM_CLIFF_IR', params: { cliff_threshold: params.cliff_threshold ?? 0.2 },
     // Accepts pose array [x,y,...] as ins[0] OR separate x/y
     inputs: [createPort('x', 'X / Pose Array', 'input'), createPort('y', 'Y', 'input')],
     outputs: [createPort('cliff_val', 'Cliff', 'output')],
@@ -1063,7 +1073,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
   }),
 
   'ROBOT_VACUUM_SENSOR_FUSION_EKF': (id, params) => ({
-    id, type: 'ROBOT_VACUUM_SENSOR_FUSION_EKF', params: { filter_gain: params.filter_gain || 0.06 },
+    id, type: 'ROBOT_VACUUM_SENSOR_FUSION_EKF', params: { filter_gain: params.filter_gain ?? 0.06 },
     inputs: [
       createPort('x_true', 'X_true', 'input'),
       createPort('y_true', 'Y_true', 'input'),
@@ -1259,7 +1269,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
   }),
 
   'ROBOT_VACUUM_BATTERY_MONITOR': (id, params) => ({
-    id, type: 'ROBOT_VACUUM_BATTERY_MONITOR', params: { drain_rate: params.drain_rate || 0.5, safety_margin: params.safety_margin || 5.0 },
+    id, type: 'ROBOT_VACUUM_BATTERY_MONITOR', params: { drain_rate: params.drain_rate ?? 0.5, safety_margin: params.safety_margin ?? 5.0 },
     inputs: [
       createPort('battery_level', 'Bat %', 'input'),
       createPort('x_est', 'X_est', 'input'),
@@ -1273,8 +1283,8 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       const y = Number(ins[2] ?? 0);
       // Distance to dock at (0, -2.8)
       const dist = Math.sqrt(Math.pow(x, 2) + Math.pow(y - (-2.8), 2));
-      const drain_rate = Number(p.drain_rate) || 0.5;
-      const safety_margin = Number(p.safety_margin) || 5.0;
+      const drain_rate = numParam(p.drain_rate, 0.5);
+      const safety_margin = numParam(p.safety_margin, 5.0);
 
       const needed_power = (dist * drain_rate) + safety_margin;
       const status = bat <= needed_power ? 1 : 0;
@@ -1420,7 +1430,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
   }),
 
   'ROBOT_VACUUM_COLLISION_AVOID': (id, params) => ({
-    id, type: 'ROBOT_VACUUM_COLLISION_AVOID', params: { collision_dist: params.collision_dist || 0.4 },
+    id, type: 'ROBOT_VACUUM_COLLISION_AVOID', params: { collision_dist: params.collision_dist ?? 0.4 },
     inputs: [
       createPort('current', 'I_motor', 'input'),
       createPort('waypoints', 'Waypoints', 'input'),
@@ -1568,7 +1578,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
   }),
 
   'ROBOT_VACUUM_VELOCITY_PID': (id, params) => ({
-    id, type: 'ROBOT_VACUUM_VELOCITY_PID', params: { Kp: params.Kp || 2.0, Ki: params.Ki || 0.5 },
+    id, type: 'ROBOT_VACUUM_VELOCITY_PID', params: { Kp: params.Kp ?? 2.0, Ki: params.Ki ?? 0.5 },
     inputs: [createPort('vel_cmd', 'Velocity CMD', 'input')],
     outputs: [createPort('speed_pwm', 'Speed PWM', 'output')],
     icon: 'graduation-cap',
@@ -1671,7 +1681,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
   }),
 
   'ROBOT_VACUUM_CAPACITY_THRESHOLD': (id, params) => ({
-    id, type: 'ROBOT_VACUUM_CAPACITY_THRESHOLD', params: { limit: params.limit || 85.0 },
+    id, type: 'ROBOT_VACUUM_CAPACITY_THRESHOLD', params: { limit: params.limit ?? 85.0 },
     inputs: [createPort('dust', 'Dust Sensor', 'input')],
     outputs: [createPort('flag', 'Threshold Exceeded', 'output')],
     icon: 'graduation-cap',
@@ -2108,8 +2118,8 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
   'WaveformGen': (id, params) => ({
     id, type: 'WaveformGen', params: {
       type: params.type || 'Sine',
-      amp: params.amp || 1,
-      freq: params.freq || 1,
+      amp: params.amp ?? 1,
+      freq: params.freq ?? 1,
       offset: params.offset || 0,
       phase: params.phase ?? 0
     },
@@ -2719,7 +2729,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
 
   'THREE_PHASE_PWM': (id, params) => ({
     id, type: 'THREE_PHASE_PWM',
-    params: { frequency: params.frequency || 5000, method: params.method || 'SPWM' },
+    params: { frequency: params.frequency ?? 5000, method: params.method || 'SPWM' },
     inputs: [
       createPort('va_ref', 'Va*', 'input', 0, 'left', 'control'),
       createPort('vb_ref', 'Vb*', 'input', 0, 'left', 'control'),
@@ -2793,7 +2803,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
 
   'SENSORLESS_SIX_STEP': (id, params) => ({
     id, type: 'SENSORLESS_SIX_STEP',
-    params: { threshold: params.threshold || 0.1 },
+    params: { threshold: params.threshold ?? 0.1 },
     isStateful: true,
     inputs: [
       createPort('va', 'Va', 'input', 0, 'left', 'measurement'),
@@ -2917,7 +2927,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
 
   'THREE_PHASE_INVERTER': (id, params) => ({
     id, type: 'THREE_PHASE_INVERTER',
-    params: { Ron: params.Ron || 0.01, Vf: params.Vf || 0.7 },
+    params: { Ron: params.Ron ?? 0.01, Vf: params.Vf ?? 0.7 },
     inputs: [
       createPort('vdc_p', 'Vdc+', 'input', 24, 'left', 'power'),
       createPort('vdc_n', 'Vdc-', 'input', 0, 'left', 'power'),
@@ -2946,7 +2956,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
 
   'SINGLE_PHASE_H_BRIDGE': (id, params) => ({
     id, type: 'SINGLE_PHASE_H_BRIDGE',
-    params: { Ron: params.Ron || 0.01 },
+    params: { Ron: params.Ron ?? 0.01 },
     inputs: [
       createPort('vdc_p', 'Vdc+', 'input', 12, 'left', 'power'),
       createPort('vdc_n', 'Vdc-', 'input', 0, 'left', 'power'),
@@ -2968,8 +2978,8 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
   // --- Control & Modulation ---
   'VOLTAGE_REFERENCE_GENERATOR': (id, params) => ({
     id, type: 'VOLTAGE_REFERENCE_GENERATOR',
-    params: { frequency: params.frequency || 50, amplitude: params.amplitude || 1 },
-    inputs: [createPort('f', 'Freq', 'input', params.frequency || 50, 'left', 'control')],
+    params: { frequency: params.frequency ?? 50, amplitude: params.amplitude ?? 1 },
+    inputs: [createPort('f', 'Freq', 'input', params.frequency ?? 50, 'left', 'control')],
     outputs: [
       createPort('va', 'Va*', 'output', 0, 'right', 'control'),
       createPort('vb', 'Vb*', 'output', 0, 'right', 'control'),
@@ -3356,7 +3366,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
 
   'SPEED_CONTROLLER': (id, params) => ({
     id, type: 'SPEED_CONTROLLER',
-    params: { Kp: params.Kp || 0.5, Ki: params.Ki || 5, maxIq: params.maxIq || 10 },
+    params: { Kp: params.Kp ?? 0.5, Ki: params.Ki ?? 5, maxIq: params.maxIq ?? 10 },
     isStateful: true,
     inputs: [
       createPort('speed_ref', 'ω*', 'input', 0, 'left', 'control'),
@@ -3395,10 +3405,10 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     id, type: 'ROTOR_POSITION_ESTIMATOR',
     params: {
       method: params.method || 'Sensorless_SMO',
-      Rs: params.Rs || 0.5,
-      Ls: params.Ls || 0.01,
-      psi_m: params.psi_m || 0.12,
-      P: params.P || 2
+      Rs: params.Rs ?? 0.5,
+      Ls: params.Ls ?? 0.01,
+      psi_m: params.psi_m ?? 0.12,
+      P: params.P ?? 2
     },
     isStateful: true,
     inputs: [
@@ -3496,7 +3506,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
   // --- SVPWM Core ---
   'SVPWM_CORE': (id, params) => ({
     id, type: 'SVPWM_CORE',
-    params: { Ts: params.Ts || 0.0001, Vdc: params.Vdc || 400 },
+    params: { Ts: params.Ts ?? 0.0001, Vdc: params.Vdc ?? 400 },
     inputs: [
       createPort('v_alpha', 'Vα', 'input', 0, 'left', 'transform'),
       createPort('v_beta', 'Vβ', 'input', 0, 'left', 'transform')
@@ -3544,7 +3554,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
 
   'SWITCHING_TIME_CALCULATOR': (id, params) => ({
     id, type: 'SWITCHING_TIME_CALCULATOR',
-    params: { Vdc: params.Vdc || 400, Ts: params.Ts || 0.0001 },
+    params: { Vdc: params.Vdc ?? 400, Ts: params.Ts ?? 0.0001 },
     inputs: [
       createPort('vref', 'Vref', 'input', 0, 'left', 'control'),
       createPort('theta_s', 'θs', 'input', 0, 'left', 'measurement'),
@@ -3572,7 +3582,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
 
   'SVPWM_GATE_GENERATOR': (id, params) => ({
     id, type: 'SVPWM_GATE_GENERATOR',
-    params: { Ts: params.Ts || 0.0001 },
+    params: { Ts: params.Ts ?? 0.0001 },
     isStateful: true,
     inputs: [
       createPort('sector', 'Sec', 'input', 1, 'left', 'discrete'),
@@ -3652,7 +3662,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
 
   'SVPWM_MODULATOR': (id, params) => ({
     id, type: 'SVPWM_MODULATOR',
-    params: { Ts: params.Ts || 0.0001, Vdc: params.Vdc || 400 },
+    params: { Ts: params.Ts ?? 0.0001, Vdc: params.Vdc ?? 400 },
     isStateful: true,
     inputs: [
       createPort('v_alpha', 'Vα', 'input', 0, 'left', 'transform'),
@@ -3682,17 +3692,20 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
   // --- Memory & Delay ---
   'DELAY': (id, params) => ({
     id, type: 'DELAY',
-    params: { delay_length: params.delay_length || 1, initial_condition: params.initial_condition || 0, sampleTime: params.sampleTime ?? -1 },
+    params: { delay_length: params.delay_length ?? 1, initial_condition: params.initial_condition || 0, sampleTime: params.sampleTime ?? -1 },
     isStateful: true,
     inputs: [createPort('u', 'u', 'input')],
     outputs: [createPort('y', 'y', 'output')],
     state: { buffer: [], index: 0 },
+    // Simulink Delay: length 0 is allowed and the block is then direct feedthrough (y = u).
+    ...(Number(params.delay_length ?? 1) === 0 ? { directFeedthrough: true } : {}),
     icon: 'database',
     equation: 'y(k) = u(k - N)',
     description: 'Delays the input signal by a specified number of samples (of its sample time; inherited = solver steps). Useful for modeling transport delays or discrete-time pipelines.',
     execute: (ins, p, state) => {
       const N = Number(p.delay_length);
       const u = ins[0];
+      if (N === 0) return { outputs: [u], nextState: { buffer: [], index: 0 } };
       let buffer = state.buffer.length === 0
         ? new Array(N).fill(p.initial_condition)
         : [...state.buffer];
@@ -3780,7 +3793,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
   // --- Math Operations ---
   'GAIN': (id, params) => ({
     id, type: 'GAIN',
-    params: { gain: params.gain || 1 },
+    params: { gain: params.gain ?? 1 },
     inputs: [createPort('u', 'u', 'input')],
     outputs: [createPort('y', 'y', 'output')],
     icon: 'activity',
@@ -4579,7 +4592,7 @@ return block;
             }),
 
               'DERIVATIVE': (id, params) => {
-                const tau = Number(params.tau) || 0.01;
+                const tau = numParam(params.tau, 0.01);
                 return {
                   id, type: 'DERIVATIVE',
                   params: { tau },
@@ -4995,7 +5008,7 @@ return block;
                             // --- Noise Sources ---
                             'WHITE_NOISE': (id, params) => ({
                               id, type: 'WHITE_NOISE',
-                              params: { mean: params.mean || 0, variance: params.variance || 1 },
+                              params: { mean: params.mean || 0, variance: params.variance ?? 1 },
                               inputs: [],
                               outputs: [createPort('y', 'y', 'output')],
                               execute: (ins, p) => {
@@ -5009,7 +5022,7 @@ return block;
 
                               'BAND_LIMITED_NOISE': (id, params) => ({
                                 id, type: 'BAND_LIMITED_NOISE',
-                                params: { mean: params.mean || 0, variance: params.variance || 1, fc: params.fc || 100 },
+                                params: { mean: params.mean || 0, variance: params.variance ?? 1, fc: params.fc || 100 },
                                 isStateful: true,
                                 inputs: [],
                                 outputs: [createPort('y', 'y', 'output')],
@@ -5365,8 +5378,8 @@ return block;
                                           },
 
                                             'MPC_CONTROLLER': (id, params) => {
-                                              const Np = Number(params.Np) || 10;
-                                              const Nc = Number(params.Nc) || 3;
+                                              const Np = numParam(params.Np, 10);
+                                              const Nc = numParam(params.Nc, 3);
                                               const A = params.A || [[1, 0.1], [0, 1]];
                                               const B = params.B || [[0], [0.1]];
                                               const C = params.C || [[1, 0]];
@@ -5557,8 +5570,8 @@ return block;
                                                     modelType: params.modelType || 'RSM',
                                                     factors: params.factors || ['X1', 'X2'],
                                                     response: params.response || 'Y',
-                                                    maxLayers: params.maxLayers || 5,
-                                                    neuronsPerLayer: params.neuronsPerLayer || 10
+                                                    maxLayers: params.maxLayers ?? 5,
+                                                    neuronsPerLayer: params.neuronsPerLayer ?? 10
                                                   },
                                                   isStateful: true,
                                                   inputs: [
@@ -5577,10 +5590,10 @@ return block;
                                                   'AC_INDUCTION_MOTOR': (id: string, params: any) => ({
                                                     id, type: 'AC_INDUCTION_MOTOR',
                                                     params: {
-                                                      Rs: params.Rs || 0.5, Ls: params.Ls || 0.1,
-                                                      Rr: params.Rr || 0.4, Lr: params.Lr || 0.1,
-                                                      Lm: params.Lm || 0.09, P: params.P || 2,
-                                                      J: params.J || 0.01, B: params.B || 0.001
+                                                      Rs: params.Rs ?? 0.5, Ls: params.Ls ?? 0.1,
+                                                      Rr: params.Rr ?? 0.4, Lr: params.Lr ?? 0.1,
+                                                      Lm: params.Lm ?? 0.09, P: params.P ?? 2,
+                                                      J: params.J ?? 0.01, B: params.B ?? 0.001
                                                     },
                                                     isStateful: true,
                                                     inputs: [
@@ -5640,9 +5653,9 @@ return block;
                                                     'IM_SCALAR_CONTROL': (id: string, params: any) => ({
                                                       id, type: 'IM_SCALAR_CONTROL',
                                                       params: {
-                                                        v_f_ratio: params.v_f_ratio || 4,
-                                                        boost: params.boost || 10,
-                                                        rated_f: params.rated_f || 50
+                                                        v_f_ratio: params.v_f_ratio ?? 4,
+                                                        boost: params.boost ?? 10,
+                                                        rated_f: params.rated_f ?? 50
                                                       },
                                                       inputs: [createPort('w_ref', 'ω*', 'input', 0, 'left', 'control')],
                                                       outputs: [
@@ -5727,7 +5740,7 @@ return block;
 
                                                         'IM_FLUX_OBSERVER': (id: string, params: any) => ({
                                                           id, type: 'IM_FLUX_OBSERVER',
-                                                          params: { Lm: params.Lm || 0.09, Lr: params.Lr || 0.1, Rr: params.Rr || 0.4, P: params.P || 2 },
+                                                          params: { Lm: params.Lm ?? 0.09, Lr: params.Lr ?? 0.1, Rr: params.Rr ?? 0.4, P: params.P ?? 2 },
                                                           isStateful: true,
                                                           inputs: [
                                                             createPort('ia', 'Ia', 'input', 0, 'left', 'measurement'),
@@ -5759,9 +5772,9 @@ return block;
                                                           'VF_SLIP_COMP': (id: string, params: any) => ({
                                                             id, type: 'VF_SLIP_COMP',
                                                             params: {
-                                                              v_f_ratio: params.v_f_ratio || 4,
-                                                              rated_slip: params.rated_slip || 0.05,
-                                                              rated_iq: params.rated_iq || 10
+                                                              v_f_ratio: params.v_f_ratio ?? 4,
+                                                              rated_slip: params.rated_slip ?? 0.05,
+                                                              rated_iq: params.rated_iq ?? 10
                                                             },
                                                             inputs: [
                                                               createPort('w_ref', 'ω*', 'input', 0, 'left', 'control'),
@@ -5794,9 +5807,9 @@ return block;
                                                             'FIELD_WEAKENING': (id: string, params: any) => ({
                                                               id, type: 'FIELD_WEAKENING',
                                                               params: {
-                                                                v_max: params.v_max || 300,
-                                                                Kp: params.Kp || 0.1,
-                                                                Ki: params.Ki || 1,
+                                                                v_max: params.v_max ?? 300,
+                                                                Kp: params.Kp ?? 0.1,
+                                                                Ki: params.Ki ?? 1,
                                                                 id_min: params.id_min !== undefined ? params.id_min : (params.min !== undefined ? params.min : -20),
                                                                 id_max: params.id_max !== undefined ? params.id_max : (params.max !== undefined ? params.max : 10)
                                                               },
@@ -5839,7 +5852,7 @@ return block;
 
                                                               'MTPA_CONTROLLER': (id: string, params: any) => ({
                                                                 id, type: 'MTPA_CONTROLLER',
-                                                                params: { Ld: params.Ld || 0.01, Lq: params.Lq || 0.02, psi_m: params.psi_m || 0.1 },
+                                                                params: { Ld: params.Ld ?? 0.01, Lq: params.Lq ?? 0.02, psi_m: params.psi_m ?? 0.1 },
                                                                 inputs: [createPort('te_ref', 'Te*', 'input', 0, 'left', 'control')],
                                                                 outputs: [
                                                                   createPort('id_ref', 'Id*', 'output', 0, 'right', 'control'),
@@ -5859,12 +5872,12 @@ return block;
                                                                 'MTPA_FW_MANAGER': (id, params) => ({
                                                                   id, type: 'MTPA_FW_MANAGER',
                                                                   params: {
-                                                                    Ld: params.Ld || 0.005,
-                                                                    Lq: params.Lq || 0.012,
-                                                                    psi_m: params.psi_m || 0.12,
-                                                                    P: params.P || 2,
-                                                                    i_max: params.i_max || 20,
-                                                                    v_max: params.v_max || 300
+                                                                    Ld: params.Ld ?? 0.005,
+                                                                    Lq: params.Lq ?? 0.012,
+                                                                    psi_m: params.psi_m ?? 0.12,
+                                                                    P: params.P ?? 2,
+                                                                    i_max: params.i_max ?? 20,
+                                                                    v_max: params.v_max ?? 300
                                                                   },
                                                                   inputs: [
                                                                     createPort('te_ref', 'Te*', 'input', 0, 'left', 'control'),
@@ -5946,20 +5959,20 @@ return block;
                                                                     return {
                                                                       id, type: 'AC_MOTOR_PID_CONTROL',
                                                                       params: {
-                                                                        Kp: params.Kp || 2.5, Ki: params.Ki || 1.2, Kd: params.Kd || 0.1,
-                                                                        w_ref: params.w_ref || 157,
+                                                                        Kp: params.Kp ?? 2.5, Ki: params.Ki ?? 1.2, Kd: params.Kd ?? 0.1,
+                                                                        w_ref: params.w_ref ?? 157,
                                                                         tl: params.tl || 0,
-                                                                        Rs: params.Rs || 0.5, Ls: params.Ls || 0.1,
-                                                                        Rr: params.Rr || 0.4, Lr: params.Lr || 0.1,
-                                                                        Lm: params.Lm || 0.09, P: params.P || 2,
-                                                                        J: params.J || 0.01, B: params.B || 0.001,
-                                                                        N: params.N || 100
+                                                                        Rs: params.Rs ?? 0.5, Ls: params.Ls ?? 0.1,
+                                                                        Rr: params.Rr ?? 0.4, Lr: params.Lr ?? 0.1,
+                                                                        Lm: params.Lm ?? 0.09, P: params.P ?? 2,
+                                                                        J: params.J ?? 0.01, B: params.B ?? 0.001,
+                                                                        N: params.N ?? 100
                                                                       },
                                                                       isStateful: true,
                                                                       icon: 'graduation-cap',
                                                                       description: 'A complete pedagogical model for PID Speed Control of an Induction Motor. It integrates the motor dynamics and the speed regulator into one block for easy analysis of tuning effects.',
                                                                       inputs: [
-                                                                        createPort('w_ref', 'ω*', 'input', params.w_ref || 157, 'left', 'control'),
+                                                                        createPort('w_ref', 'ω*', 'input', params.w_ref ?? 157, 'left', 'control'),
                                                                         createPort('tl', 'Tl', 'input', params.tl || 0, 'bottom', 'load')
                                                                       ],
                                                                       outputs: [
@@ -6010,12 +6023,12 @@ return block;
                                                                         const dpsibr = (p.Lm / tr) * state.ibs - (1 / tr) * state.psibr + p.P * state.omega * state.psiar;
 
                                                                         const Te = 1.5 * p.P * kr * (state.psiar * state.ibs - state.psibr * state.ias);
-                                                                        const domega = (Te - tl - (p.B || 0.001) * state.omega) / (p.J || 0.01);
+                                                                        const domega = (Te - tl - (p.B ?? 0.001) * state.omega) / (p.J ?? 0.01);
                                                                         const dtheta = state.omega;
 
                                                                         // 4. PID Derivatives
                                                                         const di = p.Ki * error;
-                                                                        const N = p.N || 100;
+                                                                        const N = p.N ?? 100;
                                                                         const dd = N * (p.Kd * N * (error - (state.last_e || 0)) - state.d_state);
 
                                                                         return [dias, dibs, dpsiar, dpsibr, domega, dtheta, di, dd];
@@ -6025,12 +6038,12 @@ return block;
 
                                                                     'LMS_ADAPTIVE_FILTER': (id: string, params: any) => ({
                                                                       id, type: 'LMS_ADAPTIVE_FILTER',
-                                                                      params: { lr: params.lr || 0.05 },
+                                                                      params: { lr: params.lr ?? 0.05 },
                                                                       isStateful: true,
                                                                       inputs: [
                                                                         createPort('x', 'x', 'input', 0, 'left', 'control'),
                                                                         createPort('d', 'd', 'input', 0, 'left', 'control'),
-                                                                        createPort('lr', 'Learning Rate', 'input', params.lr || 0.05, 'bottom', 'control')
+                                                                        createPort('lr', 'Learning Rate', 'input', params.lr ?? 0.05, 'bottom', 'control')
                                                                       ],
                                                                       outputs: [
                                                                         createPort('y', 'y', 'output', 0, 'right', 'control'),
@@ -6066,24 +6079,24 @@ return block;
 
                                                                       'NEURAL_NEURON_LEARNING': (id: string, params: any) => ({
                                                                         id, type: 'NEURAL_NEURON_LEARNING',
-                                                                        params: { lr: params.lr || 0.1, initW1: params.initW1 || 0.5, initW2: params.initW2 || -0.5, initBias: params.initBias || 0.0 },
+                                                                        params: { lr: params.lr ?? 0.1, initW1: params.initW1 ?? 0.5, initW2: params.initW2 ?? -0.5, initBias: params.initBias || 0.0 },
                                                                         isStateful: true,
                                                                         inputs: [
                                                                           createPort('x1', 'x1', 'input', 0, 'left', 'control'),
                                                                           createPort('x2', 'x2', 'input', 0, 'left', 'control'),
                                                                           createPort('target', 'target', 'input', 0, 'left', 'control'),
-                                                                          createPort('lr', 'Learning Rate', 'input', params.lr || 0.1, 'bottom', 'control')
+                                                                          createPort('lr', 'Learning Rate', 'input', params.lr ?? 0.1, 'bottom', 'control')
                                                                         ],
                                                                         outputs: [
                                                                           createPort('y', 'y', 'output', 0, 'right', 'control'),
                                                                           createPort('err', 'err', 'output', 0, 'right', 'control'),
-                                                                          createPort('w1', 'w1', 'output', params.initW1 || 0.5, 'right', 'control'),
-                                                                          createPort('w2', 'w2', 'output', params.initW2 || -0.5, 'right', 'control'),
+                                                                          createPort('w1', 'w1', 'output', params.initW1 ?? 0.5, 'right', 'control'),
+                                                                          createPort('w2', 'w2', 'output', params.initW2 ?? -0.5, 'right', 'control'),
                                                                           createPort('bias', 'bias', 'output', params.initBias || 0.0, 'right', 'control')
                                                                         ],
                                                                         state: {
-                                                                          w1: params.initW1 || 0.5,
-                                                                          w2: params.initW2 || -0.5,
+                                                                          w1: params.initW1 ?? 0.5,
+                                                                          w2: params.initW2 ?? -0.5,
                                                                           bias: params.initBias || 0.0
                                                                         },
                                                                         icon: 'graduation-cap',
@@ -6095,8 +6108,8 @@ return block;
                                                                           const target = Number(ins[2] ?? 0);
                                                                           const lr = Number(ins[3] ?? p.lr ?? 0.1);
 
-                                                                          const w1 = state.w1 !== undefined ? state.w1 : (p.initW1 || 0.5);
-                                                                          const w2 = state.w2 !== undefined ? state.w2 : (p.initW2 || -0.5);
+                                                                          const w1 = state.w1 !== undefined ? state.w1 : (p.initW1 ?? 0.5);
+                                                                          const w2 = state.w2 !== undefined ? state.w2 : (p.initW2 ?? -0.5);
                                                                           const bias = state.bias !== undefined ? state.bias : (p.initBias || 0.0);
 
                                                                           const net = w1 * x1 + w2 * x2 + bias;
@@ -6117,8 +6130,8 @@ return block;
                                                                       }),
 
                                                                         'RL_Q_LEARNING_CONTROLLER': (id: string, params: any) => {
-                                                                          const numStates = params.numStates || 5;
-                                                                          const numActions = params.numActions || 3;
+                                                                          const numStates = params.numStates ?? 5;
+                                                                          const numActions = params.numActions ?? 3;
                                                                           return {
                                                                             id, type: 'RL_Q_LEARNING_CONTROLLER',
                                                                             params: {
@@ -6437,10 +6450,10 @@ return block;
                                                                             'ROBOT_VACUUM_BATTERY': (id: string, params: any) => ({
                                                                               id, type: 'ROBOT_VACUUM_BATTERY',
                                                                               params: {
-                                                                                nominal_voltage: params.nominal_voltage || 12.0,
-                                                                                capacity_Ah: params.capacity_Ah || 2.6,
-                                                                                static_draw_A: params.static_draw_A || 0.1,
-                                                                                charge_rate: params.charge_rate || 5.0
+                                                                                nominal_voltage: params.nominal_voltage ?? 12.0,
+                                                                                capacity_Ah: params.capacity_Ah ?? 2.6,
+                                                                                static_draw_A: params.static_draw_A ?? 0.1,
+                                                                                charge_rate: params.charge_rate ?? 5.0
                                                                               },
                                                                               isStateful: true,
                                                                               inputs: [
@@ -6459,7 +6472,7 @@ return block;
                                                                               icon: 'graduation-cap',
                                                                               description: 'Simulates robot battery system. Integrates motor and static current draw to compute discharge rate, and charges at a fixed rate when docked.',
                                                                               execute: (ins: any[], p: any, state: any, time: number) => {
-                                                                                const nominal_voltage = Number(p.nominal_voltage || 12.0);
+                                                                                const nominal_voltage = Number(p.nominal_voltage ?? 12.0);
                                                                                 state.battery_level = Math.max(0, Math.min(100.0, state.battery_level ?? 100.0));
                                                                                 state.battery_voltage = nominal_voltage * (0.7 + 0.3 * (state.battery_level / 100.0));
                                                                                 return {
@@ -6472,9 +6485,9 @@ return block;
                                                                                 const I_R = Number(ins[1] ?? 0);
                                                                                 const is_docked = !!ins[2];
 
-                                                                                const capacity_Ah = Number(p.capacity_Ah || 2.6);
-                                                                                const static_draw_A = Number(p.static_draw_A || 0.1);
-                                                                                const charge_rate = Number(p.charge_rate || 5.0);
+                                                                                const capacity_Ah = Number(p.capacity_Ah ?? 2.6);
+                                                                                const static_draw_A = Number(p.static_draw_A ?? 0.1);
+                                                                                const charge_rate = Number(p.charge_rate ?? 5.0);
 
                                                                                 let dbat = 0;
                                                                                 if (is_docked) {
@@ -6581,7 +6594,7 @@ return block;
                                                                                 'ROBOT_VACUUM_BOUSTROPHEDON_SWEEP': (id: string, params: any) => ({
                                                                                   id, type: 'ROBOT_VACUUM_BOUSTROPHEDON_SWEEP',
                                                                                   params: {
-                                                                                    spacing: params.spacing || 0.54
+                                                                                    spacing: params.spacing ?? 0.54
                                                                                   },
                                                                                   isStateful: true,
                                                                                   inputs: [
@@ -6607,7 +6620,7 @@ return block;
                                                                                     const pose = ins[2] as number[] || [0, 0, 0];
                                                                                     const rx = pose[0] ?? 0;
                                                                                     const ry = pose[1] ?? 0;
-                                                                                    const spacing = Number(p.spacing || 0.54);
+                                                                                    const spacing = Number(p.spacing ?? 0.54);
 
                                                                                     if (state.currentRoom !== room_id || state.sweepWaypoints.length === 0) {
                                                                                       state.currentRoom = room_id;
@@ -6667,7 +6680,7 @@ return block;
                                                                                   'ROBOT_VACUUM_ERODE_MASK': (id: string, params: any) => ({
                                                                                     id, type: 'ROBOT_VACUUM_ERODE_MASK',
                                                                                     params: {
-                                                                                      radius: params.radius || 0.3
+                                                                                      radius: params.radius ?? 0.3
                                                                                     },
                                                                                     isStateful: true,
                                                                                     inputs: [
@@ -6683,7 +6696,7 @@ return block;
                                                                                     description: 'Erodes the room free space boundary mask using the robot physical radius to prevent wall collisions.',
                                                                                     execute: (ins: any[], p: any, state: any, time: number) => {
                                                                                       const grid = ins[0] as number[][];
-                                                                                      const radius = Number(p.radius || 0.3);
+                                                                                      const radius = Number(p.radius ?? 0.3);
                                                                                       const cell_size = 12.0 / 30.0;
                                                                                       const k_cells = Math.max(1, Math.round(radius / cell_size));
 
@@ -6804,8 +6817,8 @@ return block;
                                                                                         'ROBOT_VACUUM_CONTINUOUS_ENERGY': (id: string, params: any) => ({
                                                                                           id, type: 'ROBOT_VACUUM_CONTINUOUS_ENERGY',
                                                                                           params: {
-                                                                                            energy_per_meter: params.energy_per_meter || 0.005,
-                                                                                            safety_margin: params.safety_margin || 5.0
+                                                                                            energy_per_meter: params.energy_per_meter ?? 0.005,
+                                                                                            safety_margin: params.safety_margin ?? 5.0
                                                                                           },
                                                                                           isStateful: false,
                                                                                           inputs: [
@@ -6828,8 +6841,8 @@ return block;
                                                                                             const dock_pos = ins[2] as number[] || [-5.1, -5.1];
                                                                                             const exits = ins[3] as [number, number][];
 
-                                                                                            const energy_per_meter = Number(p.energy_per_meter || 0.005);
-                                                                                            const safety_margin = Number(p.safety_margin || 5.0);
+                                                                                            const energy_per_meter = Number(p.energy_per_meter ?? 0.005);
+                                                                                            const safety_margin = Number(p.safety_margin ?? 5.0);
 
                                                                                             let dist = 0;
                                                                                             let cx = rx, cy = ry;
@@ -6909,7 +6922,7 @@ return block;
                                                                                             'ROBOT_VACUUM_THETA_STAR': (id: string, params: any) => ({
                                                                                               id, type: 'ROBOT_VACUUM_THETA_STAR',
                                                                                               params: {
-                                                                                                inflation: params.inflation || 0.3
+                                                                                                inflation: params.inflation ?? 0.3
                                                                                               },
                                                                                               isStateful: true,
                                                                                               inputs: [
@@ -6981,18 +6994,18 @@ return block;
                                                                                               'ROBOT_VACUUM_DIGITAL_TWIN': (id: string, params: any) => ({
                                                                                                 id, type: 'ROBOT_VACUUM_DIGITAL_TWIN',
                                                                                                 params: {
-                                                                                                  wheel_radius: params.wheel_radius || 0.033,
-                                                                                                  wheel_separation: params.wheel_separation || 0.16,
-                                                                                                  encoder_cpr: params.encoder_cpr || 360,
-                                                                                                  motor_R: params.motor_R || 2.5,
-                                                                                                  motor_L: params.motor_L || 0.005,
-                                                                                                  motor_K: params.motor_K || 0.04,
-                                                                                                  robot_mass: params.robot_mass || 2.5,
-                                                                                                  robot_inertia: params.robot_inertia || 0.015,
-                                                                                                  Kp_wheel: params.Kp_wheel || 12.0,
-                                                                                                  Ki_wheel: params.Ki_wheel || 45.0,
-                                                                                                  lidar_noise_std: params.lidar_noise_std || 0.015,
-                                                                                                  lidar_max_range: params.lidar_max_range || 5.5
+                                                                                                  wheel_radius: params.wheel_radius ?? 0.033,
+                                                                                                  wheel_separation: params.wheel_separation ?? 0.16,
+                                                                                                  encoder_cpr: params.encoder_cpr ?? 360,
+                                                                                                  motor_R: params.motor_R ?? 2.5,
+                                                                                                  motor_L: params.motor_L ?? 0.005,
+                                                                                                  motor_K: params.motor_K ?? 0.04,
+                                                                                                  robot_mass: params.robot_mass ?? 2.5,
+                                                                                                  robot_inertia: params.robot_inertia ?? 0.015,
+                                                                                                  Kp_wheel: params.Kp_wheel ?? 12.0,
+                                                                                                  Ki_wheel: params.Ki_wheel ?? 45.0,
+                                                                                                  lidar_noise_std: params.lidar_noise_std ?? 0.015,
+                                                                                                  lidar_max_range: params.lidar_max_range ?? 5.5
                                                                                                 },
                                                                                                 isStateful: true,
                                                                                                 inputs: [
@@ -7090,8 +7103,8 @@ return block;
                                                                                                   const mode_select = Number(ins[2] ?? 4);
                                                                                                   const vel_cmd_in = ins[3] as number[];
 
-                                                                                                  const lidar_noise_std = Number(p.lidar_noise_std || 0.015);
-                                                                                                  const lidar_max_range = Number(p.lidar_max_range || 5.5);
+                                                                                                  const lidar_noise_std = Number(p.lidar_noise_std ?? 0.015);
+                                                                                                  const lidar_max_range = Number(p.lidar_max_range ?? 5.5);
 
                                                                                                   const dt = 0.08; // Fixed step in MATLAB
                                                                                                   state.lastTime = time;
@@ -7791,8 +7804,8 @@ return block;
                                                                                                   }
 
                                                                                                   // Convert v, w reference to motor wheel velocity commands
-                                                                                                  const wheel_radius = Number(p.wheel_radius || 0.033);
-                                                                                                  const wheel_separation = Number(p.wheel_separation || 0.16);
+                                                                                                  const wheel_radius = Number(p.wheel_radius ?? 0.033);
+                                                                                                  const wheel_separation = Number(p.wheel_separation ?? 0.16);
                                                                                                   state.omegaL = (v - w * wheel_separation / 2) / wheel_radius;
                                                                                                   state.omegaR = (v + w * wheel_separation / 2) / wheel_radius;
 
@@ -7863,15 +7876,15 @@ return block;
                                                                                                   };
                                                                                                 },
                                                                                                 evaluateDerivatives: (ins: any[], p: any, state: any, time: number) => {
-                                                                                                  const wheel_radius = Number(p.wheel_radius || 0.033);
-                                                                                                  const wheel_separation = Number(p.wheel_separation || 0.16);
+                                                                                                  const wheel_radius = Number(p.wheel_radius ?? 0.033);
+                                                                                                  const wheel_separation = Number(p.wheel_separation ?? 0.16);
                                                                                                   const V_bat = 12.0;
-                                                                                                  const motor_R = Number(p.motor_R || 2.5);
-                                                                                                  const motor_L = Number(p.motor_L || 0.005);
-                                                                                                  const motor_K = Number(p.motor_K || 0.04);
-                                                                                                  const robot_inertia = Number(p.robot_inertia || 0.015);
-                                                                                                  const Kp_wheel = Number(p.Kp_wheel || 12.0);
-                                                                                                  const Ki_wheel = Number(p.Ki_wheel || 45.0);
+                                                                                                  const motor_R = Number(p.motor_R ?? 2.5);
+                                                                                                  const motor_L = Number(p.motor_L ?? 0.005);
+                                                                                                  const motor_K = Number(p.motor_K ?? 0.04);
+                                                                                                  const robot_inertia = Number(p.robot_inertia ?? 0.015);
+                                                                                                  const Kp_wheel = Number(p.Kp_wheel ?? 12.0);
+                                                                                                  const Ki_wheel = Number(p.Ki_wheel ?? 45.0);
 
                                                                                                   // Get target velocities v, w
                                                                                                   const vel_cmd_in = ins[3] as number[];
@@ -7995,11 +8008,11 @@ return block;
                                                                                                 'ROBOT_VACUUM_MOTOR': (id: string, params: any) => ({
                                                                                                   id, type: 'ROBOT_VACUUM_MOTOR',
                                                                                                   params: {
-                                                                                                    motor_R: params.motor_R || 2.5,
-                                                                                                    motor_L: params.motor_L || 0.005,
-                                                                                                    motor_K: params.motor_K || 0.04,
-                                                                                                    inertia: params.inertia || 0.0075,
-                                                                                                    encoder_cpr: params.encoder_cpr || 360,
+                                                                                                    motor_R: params.motor_R ?? 2.5,
+                                                                                                    motor_L: params.motor_L ?? 0.005,
+                                                                                                    motor_K: params.motor_K ?? 0.04,
+                                                                                                    inertia: params.inertia ?? 0.0075,
+                                                                                                    encoder_cpr: params.encoder_cpr ?? 360,
                                                                                                     encoder_noise_std: params.encoder_noise_std ?? 0.1
                                                                                                   },
                                                                                                   isStateful: true,
@@ -8021,7 +8034,7 @@ return block;
                                                                                                   icon: 'graduation-cap',
                                                                                                   description: 'Simulates single-wheel DC motor H-Bridge terminal voltage scaling, mechanical dynamics, and noisy quantized incremental encoder counts.',
                                                                                                   execute: (ins: any[], p: any, state: any, time: number) => {
-                                                                                                    const encoder_cpr = Number(p.encoder_cpr || 360);
+                                                                                                    const encoder_cpr = Number(p.encoder_cpr ?? 360);
                                                                                                     const noise_std = Number(p.encoder_noise_std ?? 0.1);
 
                                                                                                     const raw_ticks = state.theta_wheel * (encoder_cpr / (2 * Math.PI));
@@ -8041,10 +8054,10 @@ return block;
                                                                                                     const pwm_duty = Math.max(-1.0, Math.min(1.0, Math.abs(pwm_duty_raw) > 1.0001 ? pwm_duty_raw / v_bat : pwm_duty_raw));
                                                                                                     const V_in = pwm_duty * v_bat;
 
-                                                                                                    const motor_R = Number(p.motor_R || 2.5);
-                                                                                                    const motor_L = Number(p.motor_L || 0.005);
-                                                                                                    const motor_K = Number(p.motor_K || 0.04);
-                                                                                                    const inertia = Number(p.inertia || 0.0075);
+                                                                                                    const motor_R = Number(p.motor_R ?? 2.5);
+                                                                                                    const motor_L = Number(p.motor_L ?? 0.005);
+                                                                                                    const motor_K = Number(p.motor_K ?? 0.04);
+                                                                                                    const inertia = Number(p.inertia ?? 0.0075);
 
                                                                                                     const dcurrent = (V_in - motor_R * state.current - motor_K * state.omega) / motor_L;
                                                                                                     const domega = (motor_K * state.current - 0.02 * state.omega) / inertia;
@@ -8057,11 +8070,11 @@ return block;
                                                                                                   'ROBOT_VACUUM_DYNAMICS': (id: string, params: any) => ({
                                                                                                     id, type: 'ROBOT_VACUUM_DYNAMICS',
                                                                                                     params: {
-                                                                                                      wheel_radius: params.wheel_radius || 0.033,
-                                                                                                      wheel_separation: params.wheel_separation || 0.16,
-                                                                                                      robot_mass: params.robot_mass || 2.5,
-                                                                                                      robot_inertia: params.robot_inertia || 0.015,
-                                                                                                      wheel_friction: params.wheel_friction || 0.02,
+                                                                                                      wheel_radius: params.wheel_radius ?? 0.033,
+                                                                                                      wheel_separation: params.wheel_separation ?? 0.16,
+                                                                                                      robot_mass: params.robot_mass ?? 2.5,
+                                                                                                      robot_inertia: params.robot_inertia ?? 0.015,
+                                                                                                      wheel_friction: params.wheel_friction ?? 0.02,
                                                                                                       cg_offset: params.cg_offset || 0.0
                                                                                                     },
                                                                                                     isStateful: true,
@@ -8086,8 +8099,8 @@ return block;
                                                                                                     execute: (ins: any[], p: any, state: any, time: number) => {
                                                                                                       const omega_L = Number(ins[0] ?? 0);
                                                                                                       const omega_R = Number(ins[1] ?? 0);
-                                                                                                      const wheel_radius = Number(p.wheel_radius || 0.033);
-                                                                                                      const wheel_separation = Number(p.wheel_separation || 0.16);
+                                                                                                      const wheel_radius = Number(p.wheel_radius ?? 0.033);
+                                                                                                      const wheel_separation = Number(p.wheel_separation ?? 0.16);
 
                                                                                                       const vL = omega_L * wheel_radius;
                                                                                                       const vR = omega_R * wheel_radius;
@@ -8102,11 +8115,11 @@ return block;
                                                                                                     evaluateDerivatives: (ins: any[], p: any, state: any, time: number) => {
                                                                                                       const omega_L = Number(ins[0] ?? 0);
                                                                                                       const omega_R = Number(ins[1] ?? 0);
-                                                                                                      const wheel_radius = Number(p.wheel_radius || 0.033);
-                                                                                                      const wheel_separation = Number(p.wheel_separation || 0.16);
+                                                                                                      const wheel_radius = Number(p.wheel_radius ?? 0.033);
+                                                                                                      const wheel_separation = Number(p.wheel_separation ?? 0.16);
                                                                                                       const cg_offset = Number(p.cg_offset || 0.0);
-                                                                                                      const wheel_friction = Number(p.wheel_friction || 0.02);
-                                                                                                      const robot_mass = Number(p.robot_mass || 2.5);
+                                                                                                      const wheel_friction = Number(p.wheel_friction ?? 0.02);
+                                                                                                      const robot_mass = Number(p.robot_mass ?? 2.5);
 
                                                                                                       // Calculate speeds with basic damping/friction effects
                                                                                                       const slip_factor = Math.max(0.1, 1.0 - (wheel_friction / robot_mass));
@@ -8132,8 +8145,8 @@ return block;
                                                                                                     'ROBOT_VACUUM_ENVIRONMENT': (id: string, params: any) => ({
                                                                                                       id, type: 'ROBOT_VACUUM_ENVIRONMENT',
                                                                                                       params: {
-                                                                                                        lidar_max_range: params.lidar_max_range || 4.0,
-                                                                                                        lidar_noise_std: params.lidar_noise_std || 0.02
+                                                                                                        lidar_max_range: params.lidar_max_range ?? 4.0,
+                                                                                                        lidar_noise_std: params.lidar_noise_std ?? 0.02
                                                                                                       },
                                                                                                       isStateful: true,
                                                                                                       inputs: [
@@ -8238,8 +8251,8 @@ return block;
                                                                                                           }
                                                                                                         }
 
-                                                                                                        const lidar_max_range = Number(p.lidar_max_range || 4.0);
-                                                                                                        const lidar_noise_std = Number(p.lidar_noise_std || 0.02);
+                                                                                                        const lidar_max_range = Number(p.lidar_max_range ?? 4.0);
+                                                                                                        const lidar_noise_std = Number(p.lidar_noise_std ?? 0.02);
 
                                                                                                         // 1. Raycast LiDAR with configurable scan rate / frequency / missed detections
                                                                                                         const numBeams = 8;
@@ -8289,9 +8302,9 @@ return block;
                                                                                                       'ROBOT_VACUUM_ODOMETRY': (id: string, params: any) => ({
                                                                                                         id, type: 'ROBOT_VACUUM_ODOMETRY',
                                                                                                         params: {
-                                                                                                          wheel_radius: params.wheel_radius || 0.033,
-                                                                                                          wheel_separation: params.wheel_separation || 0.16,
-                                                                                                          encoder_cpr: params.encoder_cpr || 360
+                                                                                                          wheel_radius: params.wheel_radius ?? 0.033,
+                                                                                                          wheel_separation: params.wheel_separation ?? 0.16,
+                                                                                                          encoder_cpr: params.encoder_cpr ?? 360
                                                                                                         },
                                                                                                         isStateful: true,
                                                                                                         inputs: [
@@ -8316,9 +8329,9 @@ return block;
                                                                                                           const enc_L = Number(ins[0] ?? 0);
                                                                                                           const enc_R = Number(ins[1] ?? 0);
 
-                                                                                                          const wheel_radius = Number(p.wheel_radius || 0.033);
-                                                                                                          const wheel_separation = Number(p.wheel_separation || 0.16);
-                                                                                                          const encoder_cpr = Number(p.encoder_cpr || 360);
+                                                                                                          const wheel_radius = Number(p.wheel_radius ?? 0.033);
+                                                                                                          const wheel_separation = Number(p.wheel_separation ?? 0.16);
+                                                                                                          const encoder_cpr = Number(p.encoder_cpr ?? 360);
 
                                                                                                           const delta_encL = enc_L - state.prev_enc_L;
                                                                                                           const delta_encR = enc_R - state.prev_enc_R;
@@ -8350,7 +8363,7 @@ return block;
                                                                                                         'ROBOT_VACUUM_FUSION': (id: string, params: any) => ({
                                                                                                           id, type: 'ROBOT_VACUUM_FUSION',
                                                                                                           params: {
-                                                                                                            filter_gain: params.filter_gain || 0.06
+                                                                                                            filter_gain: params.filter_gain ?? 0.06
                                                                                                           },
                                                                                                           isStateful: true,
                                                                                                           inputs: [
@@ -8389,7 +8402,7 @@ return block;
                                                                                                             const theta_true = Number(ins[5] ?? 0);
                                                                                                             const yaw_rate_imu = Number(ins[6] ?? 0);
 
-                                                                                                            const filter_gain = Number(p.filter_gain || 0.06);
+                                                                                                            const filter_gain = Number(p.filter_gain ?? 0.06);
                                                                                                             const dt = Math.max(1e-4, time - (state.last_time || 0));
                                                                                                             state.last_time = time;
 
@@ -8440,7 +8453,7 @@ return block;
                                                                                                           'ROBOT_VACUUM_SLAM': (id: string, params: any) => ({
                                                                                                             id, type: 'ROBOT_VACUUM_SLAM',
                                                                                                             params: {
-                                                                                                              lidar_max_range: params.lidar_max_range || 4.0
+                                                                                                              lidar_max_range: params.lidar_max_range ?? 4.0
                                                                                                             },
                                                                                                             isStateful: true,
                                                                                                             inputs: [
@@ -8474,7 +8487,7 @@ return block;
                                                                                                               const x_true = Number(ins[4] ?? x_est);
                                                                                                               const y_true = Number(ins[5] ?? y_est);
                                                                                                               const theta_true = Number(ins[6] ?? theta_est);
-                                                                                                              const lidar_max_range = Number(p.lidar_max_range || 4.0);
+                                                                                                              const lidar_max_range = Number(p.lidar_max_range ?? 4.0);
 
                                                                                                               if (!state.grid || state.grid.length !== 30) {
                                                                                                                 state.grid = Array.from({ length: 30 }, () => Array(30).fill(0));
@@ -8799,8 +8812,8 @@ return block;
                                                                                                               'ROBOT_VACUUM_KINEMATICS': (id: string, params: any) => ({
                                                                                                                 id, type: 'ROBOT_VACUUM_KINEMATICS',
                                                                                                                 params: {
-                                                                                                                  wheel_radius: params.wheel_radius || 0.033,
-                                                                                                                  wheel_separation: params.wheel_separation || 0.16
+                                                                                                                  wheel_radius: params.wheel_radius ?? 0.033,
+                                                                                                                  wheel_separation: params.wheel_separation ?? 0.16
                                                                                                                 },
                                                                                                                 inputs: [
                                                                                                                   createPort('v_ref', 'V_ref', 'input', 0, 'left', 'control'),
@@ -8815,8 +8828,8 @@ return block;
                                                                                                                 execute: (ins: any[], p: any, state: any, time: number) => {
                                                                                                                   const v_ref = Number(ins[0] ?? 0);
                                                                                                                   const w_ref = Number(ins[1] ?? 0);
-                                                                                                                  const wheel_radius = Number(p.wheel_radius || 0.033);
-                                                                                                                  const wheel_separation = Number(p.wheel_separation || 0.16);
+                                                                                                                  const wheel_radius = Number(p.wheel_radius ?? 0.033);
+                                                                                                                  const wheel_separation = Number(p.wheel_separation ?? 0.16);
 
                                                                                                                   const omegaL_ref = (v_ref - w_ref * wheel_separation / 2) / wheel_radius;
                                                                                                                   const omegaR_ref = (v_ref + w_ref * wheel_separation / 2) / wheel_radius;
@@ -8830,9 +8843,9 @@ return block;
                                                                                                                 'ROBOT_VACUUM_WHEEL_CONTROL': (id: string, params: any) => ({
                                                                                                                   id, type: 'ROBOT_VACUUM_WHEEL_CONTROL',
                                                                                                                   params: {
-                                                                                                                    Kp_wheel: params.Kp_wheel || 12.0,
-                                                                                                                    Ki_wheel: params.Ki_wheel || 45.0,
-                                                                                                                    V_bat: params.V_bat || 12.0
+                                                                                                                    Kp_wheel: params.Kp_wheel ?? 12.0,
+                                                                                                                    Ki_wheel: params.Ki_wheel ?? 45.0,
+                                                                                                                    V_bat: params.V_bat ?? 12.0
                                                                                                                   },
                                                                                                                   isStateful: true,
                                                                                                                   inputs: [
@@ -8857,9 +8870,9 @@ return block;
                                                                                                                     const omega_L = Number(ins[2] ?? 0);
                                                                                                                     const omega_R = Number(ins[3] ?? 0);
 
-                                                                                                                    const Kp_wheel = Number(p.Kp_wheel || 12.0);
-                                                                                                                    const Ki_wheel = Number(p.Ki_wheel || 45.0);
-                                                                                                                    const V_bat = Number(p.V_bat || 12.0);
+                                                                                                                    const Kp_wheel = Number(p.Kp_wheel ?? 12.0);
+                                                                                                                    const Ki_wheel = Number(p.Ki_wheel ?? 45.0);
+                                                                                                                    const V_bat = Number(p.V_bat ?? 12.0);
 
                                                                                                                     const eL = omegaL_ref - omega_L;
                                                                                                                     const eR = omegaR_ref - omega_R;
@@ -8881,9 +8894,9 @@ return block;
                                                                                                                     const omega_L = Number(ins[2] ?? 0);
                                                                                                                     const omega_R = Number(ins[3] ?? 0);
 
-                                                                                                                    const Kp_wheel = Number(p.Kp_wheel || 12.0);
-                                                                                                                    const Ki_wheel = Number(p.Ki_wheel || 45.0);
-                                                                                                                    const V_bat = Number(p.V_bat || 12.0);
+                                                                                                                    const Kp_wheel = Number(p.Kp_wheel ?? 12.0);
+                                                                                                                    const Ki_wheel = Number(p.Ki_wheel ?? 45.0);
+                                                                                                                    const V_bat = Number(p.V_bat ?? 12.0);
 
                                                                                                                     const eL = omegaL_ref - omega_L;
                                                                                                                     const eR = omegaR_ref - omega_R;
@@ -8908,7 +8921,7 @@ return block;
                                                                                                                   'ROBOT_VACUUM_ENCODER': (id: string, params: any) => ({
                                                                                                                     id, type: 'ROBOT_VACUUM_ENCODER',
                                                                                                                     params: {
-                                                                                                                      encoder_cpr: params.encoder_cpr || 360,
+                                                                                                                      encoder_cpr: params.encoder_cpr ?? 360,
                                                                                                                       noise_std: params.noise_std ?? 0.1
                                                                                                                     },
                                                                                                                     isStateful: true,
@@ -8930,7 +8943,7 @@ return block;
                                                                                                                     execute: (ins: any[], p: any, state: any, time: number) => {
                                                                                                                       const omega_L = Number(ins[0] ?? 0);
                                                                                                                       const omega_R = Number(ins[1] ?? 0);
-                                                                                                                      const cpr = Number(p.encoder_cpr || 360);
+                                                                                                                      const cpr = Number(p.encoder_cpr ?? 360);
                                                                                                                       const noise_std = Number(p.noise_std ?? 0.1);
 
                                                                                                                       const dt = state.lastTime === 0 ? 0.02 : Math.max(1e-4, time - state.lastTime);
@@ -8953,8 +8966,8 @@ return block;
                                                                                                                     'ROBOT_VACUUM_LIDAR': (id: string, params: any) => ({
                                                                                                                       id, type: 'ROBOT_VACUUM_LIDAR',
                                                                                                                       params: {
-                                                                                                                        lidar_max_range: params.lidar_max_range || 4.0,
-                                                                                                                        lidar_noise_std: params.lidar_noise_std || 0.02
+                                                                                                                        lidar_max_range: params.lidar_max_range ?? 4.0,
+                                                                                                                        lidar_noise_std: params.lidar_noise_std ?? 0.02
                                                                                                                       },
                                                                                                                       inputs: [
                                                                                                                         createPort('x', 'X_true', 'input', 0, 'left', 'control', 'float32', 'm', 50, 'world'),
@@ -8973,8 +8986,8 @@ return block;
                                                                                                                         const y = Number(ins[1] ?? 0);
                                                                                                                         const theta = Number(ins[2] ?? 0);
 
-                                                                                                                        const max_range = Number(p.lidar_max_range || 4.0);
-                                                                                                                        const noise_std = Number(p.lidar_noise_std || 0.02);
+                                                                                                                        const max_range = Number(p.lidar_max_range ?? 4.0);
+                                                                                                                        const noise_std = Number(p.lidar_noise_std ?? 0.02);
 
                                                                                                                         const numBeams = 8;
                                                                                                                         const beamAngles = [0, Math.PI / 4, Math.PI / 2, 3 * Math.PI / 4, Math.PI, -3 * Math.PI / 4, -Math.PI / 2, -Math.PI / 4];
@@ -8998,7 +9011,7 @@ return block;
                                                                                                                       'ROBOT_VACUUM_LOCALIZATION': (id: string, params: any) => ({
                                                                                                                         id, type: 'ROBOT_VACUUM_LOCALIZATION',
                                                                                                                         params: {
-                                                                                                                          filter_gain: params.filter_gain || 0.06,
+                                                                                                                          filter_gain: params.filter_gain ?? 0.06,
                                                                                                                           algorithm: params.algorithm || 'EKF'
                                                                                                                         },
                                                                                                                         isStateful: true,
@@ -9037,7 +9050,7 @@ return block;
                                                                                                                           const y_true = Number(ins[5] ?? 0);
                                                                                                                           const theta_true = Number(ins[6] ?? 0);
 
-                                                                                                                          const filter_gain = Number(p.filter_gain || 0.06);
+                                                                                                                          const filter_gain = Number(p.filter_gain ?? 0.06);
 
                                                                                                                           if (!state.has_initialized) {
                                                                                                                             state.x_est = x_odom;
@@ -9087,7 +9100,7 @@ return block;
                                                                                                                         'ROBOT_VACUUM_MAPPING': (id: string, params: any) => ({
                                                                                                                           id, type: 'ROBOT_VACUUM_MAPPING',
                                                                                                                           params: {
-                                                                                                                            lidar_max_range: params.lidar_max_range || 4.0
+                                                                                                                            lidar_max_range: params.lidar_max_range ?? 4.0
                                                                                                                           },
                                                                                                                           isStateful: true,
                                                                                                                           inputs: [
@@ -9115,7 +9128,7 @@ return block;
                                                                                                                             const theta_est = Number(ins[2] ?? 0);
                                                                                                                             const lidar_ranges = ins[3] || [0, 0, 0, 0, 0, 0, 0, 0];
 
-                                                                                                                            const lidar_max_range = Number(p.lidar_max_range || 4.0);
+                                                                                                                            const lidar_max_range = Number(p.lidar_max_range ?? 4.0);
 
                                                                                                                             if (!state.grid || state.grid.length !== 30) {
                                                                                                                               state.grid = Array.from({ length: 30 }, () => Array(30).fill(0));
@@ -9385,10 +9398,10 @@ return block;
                                                                                                                                   'ROBOT_VACUUM_MOTOR_COMMAND': (id: string, params: any) => ({
                                                                                                                                     id, type: 'ROBOT_VACUUM_MOTOR_COMMAND',
                                                                                                                                     params: {
-                                                                                                                                      wheel_radius: params.wheel_radius || 0.033,
-                                                                                                                                      wheel_separation: params.wheel_separation || 0.16,
-                                                                                                                                      Kp_wheel: params.Kp_wheel || 12.0,
-                                                                                                                                      Ki_wheel: params.Ki_wheel || 45.0
+                                                                                                                                      wheel_radius: params.wheel_radius ?? 0.033,
+                                                                                                                                      wheel_separation: params.wheel_separation ?? 0.16,
+                                                                                                                                      Kp_wheel: params.Kp_wheel ?? 12.0,
+                                                                                                                                      Ki_wheel: params.Ki_wheel ?? 45.0
                                                                                                                                     },
                                                                                                                                     isStateful: true,
                                                                                                                                     inputs: [
@@ -9414,10 +9427,10 @@ return block;
                                                                                                                                       const omega_L = Number(ins[2] ?? 0);
                                                                                                                                       const omega_R = Number(ins[3] ?? 0);
 
-                                                                                                                                      const wheel_radius = Number(p.wheel_radius || 0.033);
-                                                                                                                                      const wheel_separation = Number(p.wheel_separation || 0.16);
-                                                                                                                                      const Kp = Number(p.Kp_wheel || 12.0);
-                                                                                                                                      const Ki = Number(p.Ki_wheel || 45.0);
+                                                                                                                                      const wheel_radius = Number(p.wheel_radius ?? 0.033);
+                                                                                                                                      const wheel_separation = Number(p.wheel_separation ?? 0.16);
+                                                                                                                                      const Kp = Number(p.Kp_wheel ?? 12.0);
+                                                                                                                                      const Ki = Number(p.Ki_wheel ?? 45.0);
                                                                                                                                       const V_bat = 12.0;
 
                                                                                                                                       const omegaL_ref = (v_cmd - w_cmd * wheel_separation / 2) / wheel_radius;
@@ -9651,9 +9664,9 @@ return block;
 
                                                                                                                                               'FUZZY_AND': (id, params) => ({
                                                                                                                                                 id, type: 'FUZZY_AND',
-                                                                                                                                                params: { method: params.method || 'min', numInputs: params.numInputs || 2 },
+                                                                                                                                                params: { method: params.method || 'min', numInputs: params.numInputs ?? 2 },
                                                                                                                                                 allowDynamicInputs: true,
-                                                                                                                                                inputs: Array.from({ length: params.numInputs || 2 }, (_, i) => createPort(`in${i + 1}`, `μ${i + 1}`, 'input', 0, 'left', 'continuous')),
+                                                                                                                                                inputs: Array.from({ length: params.numInputs ?? 2 }, (_, i) => createPort(`in${i + 1}`, `μ${i + 1}`, 'input', 0, 'left', 'continuous')),
                                                                                                                                                 outputs: [createPort('out', 'μ_out', 'output', 0, 'right', 'continuous')],
                                                                                                                                                 icon: 'plus',
                                                                                                                                                 equation: 'min: μ = min(μ₁,μ₂,...)\nprod: μ = Π(μᵢ)',
@@ -9672,9 +9685,9 @@ return block;
 
                                                                                                                                                 'FUZZY_OR': (id, params) => ({
                                                                                                                                                   id, type: 'FUZZY_OR',
-                                                                                                                                                  params: { method: params.method || 'max', numInputs: params.numInputs || 2 },
+                                                                                                                                                  params: { method: params.method || 'max', numInputs: params.numInputs ?? 2 },
                                                                                                                                                   allowDynamicInputs: true,
-                                                                                                                                                  inputs: Array.from({ length: params.numInputs || 2 }, (_, i) => createPort(`in${i + 1}`, `μ${i + 1}`, 'input', 0, 'left', 'continuous')),
+                                                                                                                                                  inputs: Array.from({ length: params.numInputs ?? 2 }, (_, i) => createPort(`in${i + 1}`, `μ${i + 1}`, 'input', 0, 'left', 'continuous')),
                                                                                                                                                   outputs: [createPort('out', 'μ_out', 'output', 0, 'right', 'continuous')],
                                                                                                                                                   icon: 'grid',
                                                                                                                                                   equation: 'max: μ = max(μ₁,μ₂,...)\nprobor: μ = μ₁+μ₂−μ₁·μ₂',
@@ -9711,11 +9724,11 @@ return block;
                                                                                                                                                       params: {
                                                                                                                                                         operator: params.operator || 'AND',
                                                                                                                                                         implication: params.implication || 'min',
-                                                                                                                                                        numAntecedents: params.numAntecedents || 2
+                                                                                                                                                        numAntecedents: params.numAntecedents ?? 2
                                                                                                                                                       },
                                                                                                                                                       allowDynamicInputs: true,
                                                                                                                                                       inputs: [
-                                                                                                                                                        ...Array.from({ length: params.numAntecedents || 2 }, (_, i) => createPort(`ant${i + 1}`, `μ_ant${i + 1}`, 'input', 0, 'left', 'continuous')),
+                                                                                                                                                        ...Array.from({ length: params.numAntecedents ?? 2 }, (_, i) => createPort(`ant${i + 1}`, `μ_ant${i + 1}`, 'input', 0, 'left', 'continuous')),
                                                                                                                                                         createPort('cons', 'Cons', 'input', 0, 'bottom', 'continuous')
                                                                                                                                                       ],
                                                                                                                                                       outputs: [
@@ -9726,7 +9739,7 @@ return block;
                                                                                                                                                       equation: 'strength = op(μ₁,μ₂,...)\nweighted = strength × consequent',
                                                                                                                                                       description: 'Evaluates a single fuzzy rule. Combines antecedent membership grades via AND/OR to produce a firing strength, then applies implication to the consequent.',
                                                                                                                                                       execute: (ins, p) => {
-                                                                                                                                                        const numAnt = Number(p.numAntecedents) || 2;
+                                                                                                                                                        const numAnt = numParam(p.numAntecedents, 2);
                                                                                                                                                         const antecedents = ins.slice(0, numAnt).map(v => Math.max(0, Math.min(1, Number(v) || 0)));
                                                                                                                                                         const consequent = Number(ins[numAnt]) || 0;
 
@@ -9745,7 +9758,7 @@ return block;
                                                                                                                                                     }),
 
                                                                                                                                                       'FUZZY_INFERENCE_SYSTEM': (id, params) => {
-                                                                                                                                                        const numInputs = Number(params.numInputs) || 2;
+                                                                                                                                                        const numInputs = numParam(params.numInputs, 2);
 
                                                                                                                                                         // Helper: evaluate a single membership function
                                                                                                                                                         const evalMF = (x: number, mf: any): number => {
@@ -9784,7 +9797,7 @@ return block;
                                                                                                                                                             andMethod: params.andMethod || 'min',
                                                                                                                                                             orMethod: params.orMethod || 'max',
                                                                                                                                                             defuzzMethod: params.defuzzMethod || 'centroid',
-                                                                                                                                                            defuzzResolution: params.defuzzResolution || 101,
+                                                                                                                                                            defuzzResolution: params.defuzzResolution ?? 101,
                                                                                                                                                             inputMFs: params.inputMFs || [
                                                                                                                                                               {
                                                                                                                                                                 name: 'Error', range: [-3, 3], mfs: [
@@ -9852,7 +9865,7 @@ return block;
                                                                                                                                                               const rules = p.rules || [];
                                                                                                                                                               const andMethod = p.andMethod || 'min';
                                                                                                                                                               const defuzzMethod = p.defuzzMethod || 'centroid';
-                                                                                                                                                              const resolution = Number(p.defuzzResolution) || 101;
+                                                                                                                                                              const resolution = numParam(p.defuzzResolution, 101);
 
                                                                                                                                                               // 1. Fuzzification: compute membership grades for each input
                                                                                                                                                               const inputGrades: number[][] = crispInputs.map((x, i) => {
@@ -10000,7 +10013,7 @@ return block;
                                                                                                                                                           id, type: 'FUZZY_DEFUZZIFY',
                                                                                                                                                           params: {
                                                                                                                                                             method: params.method || params.defuzzMethod || 'centroid',
-                                                                                                                                                            resolution: params.resolution || 101,
+                                                                                                                                                            resolution: params.resolution ?? 101,
                                                                                                                                                             range_min: params.range_min ?? -1,
                                                                                                                                                             range_max: params.range_max ?? 1
                                                                                                                                                           },
@@ -10065,7 +10078,7 @@ return block;
 
                                                                                                                                                           'FUZZY_PID_CONTROLLER': (id, params) => {
                                                                                                                                                             // Build the internal FIS for gain scheduling
-                                                                                                                                                            const numMFs = Number(params.numMFs) || 5;
+                                                                                                                                                            const numMFs = numParam(params.numMFs, 5);
                                                                                                                                                             const eRange = params.error_universe || [-10, 10];
                                                                                                                                                             const deRange = params.derror_universe || [-5, 5];
 
@@ -10241,7 +10254,7 @@ return block;
                                                                                                                                                             'FUZZY_SURFACE_VIEWER': (id, params) => ({
                                                                                                                                                               id, type: 'FUZZY_SURFACE_VIEWER',
                                                                                                                                                               params: {
-                                                                                                                                                                resolution: params.resolution || 25,
+                                                                                                                                                                resolution: params.resolution ?? 25,
                                                                                                                                                                 input1_range: params.input1_range || [-3, 3],
                                                                                                                                                                 input2_range: params.input2_range || [-3, 3],
                                                                                                                                                                 fisConfig: params.fisConfig || null
@@ -10274,7 +10287,7 @@ return block;
 
                                                                                                                                                                 // Compute surface on first call or when resolution changes
                                                                                                                                                                 if (!state.computed && p.fisConfig && fisBlock) {
-                                                                                                                                                                  const res = Number(p.resolution) || 25;
+                                                                                                                                                                  const res = numParam(p.resolution, 25);
                                                                                                                                                                   const r1 = p.input1_range || [-3, 3];
                                                                                                                                                                   const r2 = p.input2_range || [-3, 3];
                                                                                                                                                                   const surface: number[][] = [];

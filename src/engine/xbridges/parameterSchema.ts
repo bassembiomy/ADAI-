@@ -74,7 +74,7 @@ export const XB_PARAMETER_SCHEMA: Record<string, Record<string, ParameterKind>> 
   RELAY: { switchOn: number, switchOff: number, onValue: number, offValue: number },
 
   // Discrete and delay
-  DELAY: { delay_length: int1, initial_condition: numeric, sampleTime },
+  DELAY: { delay_length: int0, initial_condition: numeric, sampleTime },
   INTEGRATOR_DISCRETE: { initial_condition: numeric, sample_time: sampleTime, method: option('forward_euler', 'backward_euler', 'tustin') },
   DISCRETE_TRANSFER_FUNCTION: { numerator: vector, denominator: vector, representation: CONTINUOUS_DISCRETE, sampleTime },
   Counter: { maxValue: int1 },
@@ -111,7 +111,7 @@ export const XB_PARAMETER_SCHEMA: Record<string, Record<string, ParameterKind>> 
   FLUX_REFERENCE: { mode: option('constant', 'field_weakening'), value: number },
   FIELD_ORIENTED_CONTROL: { Kp: number, Ki: number },
   ROTOR_POSITION_ESTIMATOR: {
-    method: option('Sensorless_SMO', 'Hall_sensor'), Rs: number, Ls: number, psi_m: number, P: number,
+    method: option('Sensorless_SMO', 'Hall_sensor'), Rs: number, Ls: number, psi_m: number, P: positive,
   },
 
   // Signal processing and observers
@@ -150,6 +150,37 @@ export const XB_PARAMETER_SCHEMA: Record<string, Record<string, ParameterKind>> 
   // Ports
   Inport: { port_index: int1, value: numeric, dimension: int1 },
   Outport: { port_index: int1, dimension: int1 },
+
+  // Parameters that are a divisor, a count or a grid size in the block equation: 0 is kept in the block and rejected
+  // at compile (the factory never replaces it with a default).
+  DERIVATIVE: { tau: positive },
+  AC_INDUCTION_MOTOR: { J: positive, Ls: positive, Lr: positive, Rr: positive },
+  AC_MOTOR_PID_CONTROL: { J: positive, Ls: positive, Lr: positive, Rr: positive },
+  IM_FLUX_OBSERVER: { Lr: positive, Rr: positive },
+  MTPA_CONTROLLER: { psi_m: positive },
+  MTPA_FW_MANAGER: { Ld: positive, Lq: positive, P: positive, psi_m: positive },
+  VF_SLIP_COMP: { rated_iq: positive },
+  SVPWM_CORE: { Vdc: positive },
+  SVPWM_MODULATOR: { Vdc: positive },
+  SWITCHING_TIME_CALCULATOR: { Vdc: positive },
+  MPC_CONTROLLER: { Np: int1, Nc: int1 },
+  FUZZY_AND: { numInputs: int1 },
+  FUZZY_OR: { numInputs: int1 },
+  FUZZY_INFERENCE_SYSTEM: { numInputs: int1, defuzzResolution: { kind: 'integer', min: 2 } },
+  FUZZY_PID_CONTROLLER: { numMFs: int1 },
+  FUZZY_DEFUZZIFY: { resolution: { kind: 'integer', min: 2 } },
+  FUZZY_SURFACE_VIEWER: { resolution: { kind: 'integer', min: 2 } },
+  RL_Q_LEARNING_CONTROLLER: { numStates: int1, numActions: int1 },
+  ROBOT_VACUUM_BATTERY: { capacity_Ah: positive },
+  ROBOT_VACUUM_BOUSTROPHEDON_SWEEP: { spacing: positive },
+  ROBOT_VACUUM_CONTINUOUS_ENERGY: { energy_per_meter: positive },
+  ROBOT_VACUUM_DIGITAL_TWIN: { motor_L: positive, robot_inertia: positive, wheel_radius: positive, wheel_separation: positive },
+  ROBOT_VACUUM_DYNAMICS: { robot_mass: positive, wheel_separation: positive },
+  ROBOT_VACUUM_KINEMATICS: { wheel_radius: positive },
+  ROBOT_VACUUM_MOTOR: { inertia: positive, motor_L: positive },
+  ROBOT_VACUUM_MOTOR_COMMAND: { wheel_radius: positive },
+  ROBOT_VACUUM_ODOMETRY: { encoder_cpr: positive, wheel_separation: positive },
+  ROBOT_VACUUM_ODOMETRY_SENSOR: { encoder_cpr: positive, wheel_separation: positive },
 
   // Sinks
   Scope: {
