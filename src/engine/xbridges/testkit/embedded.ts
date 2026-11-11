@@ -48,11 +48,10 @@ export interface EmbeddedResult {
 }
 
 /**
- * Embedded tick index holding the canvas sample k (value at t = k*dt). Determined analytically:
- *  - WaveformGen: canvas sample k = A sin(2 pi f k dt + phi) = embedded tick k (checked against the closed form).
- *  - Constant 1 -> Integrator IC 0 (y = t): canvas sample k = k*dt (equals closed form, euler and rk4); embedded tick k
- *    = (k+1)*dt, i.e. the embedded integrator reports its state after the tick's update (one tick ahead of y = t).
- * The mapping is therefore k -> k for every block; the Integrator offset is a parity finding, not a mapping.
+ * Embedded tick index compared with the canvas sample k (value at t = k*dt). The mapping k -> k is fixed by the
+ * time-varying sources: WaveformGen and Clock in embedded tick k equal the closed form at t = k*dt. (The integrator
+ * case y = t does not fix it: inside one embedded tick, sources and UNIT_DELAY are at t_k while Integrator/RATE_LIMITER
+ * report their post-update state and Step uses t_(k+1) - finding XBV-084, convention to be decided, decision D9.)
  */
 export const EMBEDDED_STEP_FOR_CANVAS_SAMPLE = (k: number): number => k;
 

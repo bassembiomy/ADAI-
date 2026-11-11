@@ -52,6 +52,12 @@
    "date": "2026-11-11",
    "topic": "Verifier model",
    "decision": "User: take Fable out of the loop; Opus does the verification. The xbv-verifier role now runs as an independent Opus subagent (not the controller itself), with the same checks. Verdicts before this date were given by Fable."
+  },
+  {
+   "id": "D9",
+   "date": "2026-11-11",
+   "topic": "Embedded tick time base (XBV-084)",
+   "decision": "OPEN - needs the user: should X-Bridges inside a state publish outputs for the start of the tick (t_k, Simulink major-step semantics, same as the canvas) or for the end of the tick (t_(k+1), what guards see today)? Until decided, the parity test asserts the t_k convention and pins the difference."
   }
  ],
  "wps": [
@@ -426,7 +432,19 @@
     "WP-13"
    ],
    "status": "in_progress",
-   "note": "Harness (testkit/embedded.ts) and xbTriParity.test.ts by Sonnet from the controller spec; controller confirmed XBV-083 in the source (interpreter ignores Sum signs while the C generator applies them); findings XBV-083..095 (089 unused). Awaiting the Opus verifier."
+   "note": "Harness (testkit/embedded.ts) and xbTriParity.test.ts by Sonnet from the controller spec; controller confirmed XBV-083 in the source (interpreter ignores Sum signs while the C generator applies them); findings XBV-083..095 (089 unused). Awaiting the Opus verifier.",
+   "rework": [
+    {
+     "round": 1,
+     "by": "Opus verifier FAIL (D8)",
+     "items": [
+      "XBV-084/085 blamed the embedded side, but C and the state-machine timers share its convention; the defect is a mixed time base within a tick",
+      "corpus labels named one cause where several apply",
+      "embedded.ts alignment comment wrong"
+     ],
+     "fix": "084+085 merged into one mixed-time-base finding with an open decision D9; corpus pins labelled multi-cause (not bisected); comment corrected; XBV-093 reworded as a capabilities mismatch"
+    }
+   ]
   },
   {
    "id": "WP-17",
@@ -1163,14 +1181,14 @@
    "severity": "S1",
    "gate": "V6",
    "status": "open",
-   "summary": "Embedded stateful blocks (Integrator, INTEGRATOR_CONTINUOUS, RATE_LIMITER) report their post-update state, one tick ahead: Constant 1 -> Integrator gives 0.035 at t = 0 instead of 0 (closed form y = t; the canvas matches). Found by the WP-16 executor; pinned in src/utils/stateMachine/xbTriParity.test.ts."
+   "summary": "Mixed time base inside one embedded tick (interpreter and generated C): Clock, WaveformGen and UNIT_DELAY are evaluated at t_k, while Integrator, INTEGRATOR_CONTINUOUS and RATE_LIMITER publish their post-update state (C writes the post-update value, xbCGenerator.ts ~4094) and Step evaluates t_(k+1) (C uses state timers; smInterpreter advances timers before stepXBState, so a guard in tick k sees time (k+1) dt). The canvas uses t_k for everything. Which convention is right is an open decision (D9): 'outputs at the start of the tick' (Simulink major-step semantics, canvas) or 'outputs at the end of the tick' (what guards see today). Either way all blocks of one tick must use the same time. Merged XBV-085 (Step) into this finding after the WP-16 Opus verifier showed the C and timers share the embedded convention."
   },
   {
    "id": "XBV-085",
    "plan_ref": "7.3 canvas / interpreter parity",
    "severity": "S1",
    "gate": "V6",
-   "status": "open",
+   "status": "merged into XBV-084",
    "summary": "Embedded Step switches one tick early (evaluates t + dt, xbInterpreter.ts ~994): Step at T = 1 gives 1 at t = 0.95; the canvas gives 0 (Simulink: y = final for t >= T). Found by the WP-16 executor; pinned in src/utils/stateMachine/xbTriParity.test.ts."
   },
   {
@@ -1227,7 +1245,7 @@
    "severity": "S2",
    "gate": "V6",
    "status": "open",
-   "summary": "Parity gap: the embedded path refuses STATE_SPACE (continuous representation, XB_DISCRETE_REPRESENTATION_REQUIRED) and DISCRETE_TRANSFER_FUNCTION with the default initial state (XB_STATE_INITIAL_VALUE_INVALID) for models the canvas runs. Found by the WP-16 executor; pinned in src/utils/stateMachine/xbTriParity.test.ts."
+   "summary": "Parity gap: the embedded path refuses STATE_SPACE (continuous representation, XB_DISCRETE_REPRESENTATION_REQUIRED) and DISCRETE_TRANSFER_FUNCTION with the default initial state (XB_STATE_INITIAL_VALUE_INVALID) for models the canvas runs. Found by the WP-16 executor; pinned in src/utils/stateMachine/xbTriParity.test.ts. (Verifier: a diagnosed restriction of the embedded path - a capabilities mismatch rather than a numeric defect.)"
   },
   {
    "id": "XBV-094",
