@@ -7,8 +7,9 @@
  *  - MATLAB Fuzzy Logic Toolbox definitions of trimf / trapmf / gaussmf / sigmf (with MATLAB's NaN-ignoring `min`, so
  *    the degenerate shoulders a = b and c = d return 1 at the vertex), probor, defuzz (centroid, bisector, mom, som,
  *    lom) and the Mamdani pipeline (min AND, max OR, min implication, max aggregation, centroid on the same grid);
- *  - the documented Fuzzy PID law (gain scheduling by a Sugeno weighted average of the output centres, gains
- *    = base * (lo + s (hi - lo)), backward-Euler integral and N-filtered derivative) evaluated by hand;
+ *  - Fuzzy PID: the gain ranges are the oracle; the scheduling (Sugeno weighted average of the output centres,
+ *    gains = base * (lo + s (hi - lo))), backward-Euler integral and N-filtered derivative are characterization of the
+ *    block's undocumented law;
  *  - LMS system identification d = 0.7 x(n) - 0.3 x(n-1) and the LMS update w <- w + lr err x_vec;
  *  - the neuron's documented tanh activation / delta rule and the tabular Q-learning update, by hand;
  *  - Math.random replaced by mulberry32 wherever a block draws random numbers (XBV-023).
