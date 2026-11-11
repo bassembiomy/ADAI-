@@ -573,7 +573,7 @@
    "exec": "S / H, verifier opus",
    "deps": [],
    "status": "in_progress",
-   "note": "User go-ahead 2026-11-11 (fix all findings). Plan: docs/xbridges-verification/wp21-fix-plan.md. Round 1 dispatched: A zero parameters, B embedded quick fixes, C workspace UI. Batch B merged (a3daf970): 9 findings closed; new XBV-150 (embedded PID semantics), XBV-151 (embedded DELAY 0), XBV-152 (vacuous PID parity case). LIBM_CONDITIONED bound (8 eps max(1,|y|), 17 keys) added to xbCodeParity, verifier re-measured worst ratio 3.85."
+   "note": "User go-ahead 2026-11-11 (fix all findings). Plan: docs/xbridges-verification/wp21-fix-plan.md. Round 1 dispatched: A zero parameters, B embedded quick fixes, C workspace UI. Batch B merged (a3daf970): 9 findings closed; new XBV-150 (embedded PID semantics), XBV-151 (embedded DELAY 0), XBV-152 (vacuous PID parity case). LIBM_CONDITIONED bound (8 eps max(1,|y|), 17 keys) added to xbCodeParity, verifier re-measured worst ratio 3.85. Batch A merged (c8facc19): XBV-015, 019, 040, 064 closed; DELAY delay_length is not tunable during a run (live change to/from 0 refused with PARAMETER_OUT_OF_RANGE, Simulink); XBV-137 ratchet shrunk 463 -> 418; new XBV-153."
   },
   {
    "id": "WP-22",
@@ -740,8 +740,9 @@
    "plan_ref": "U7",
    "severity": "S1",
    "gate": "V3",
-   "status": "open",
-   "summary": "GAIN treats gain 0 (and -0) as 1: factory uses params.gain || 1 (BlockDefinitions.ts ~3783); confirmed by run, also with per-tick applyParameterUpdates: input 3 gives 3, Simulink gives 0. PRODUCT numInputs 0 becomes 2 the same way (~3797). Found by the WP-02 executor, confirmed by the verifier; the U7 sweep in WP-03 will look for the same pattern in every block."
+   "status": "closed",
+   "summary": "GAIN treats gain 0 (and -0) as 1: factory uses params.gain || 1 (BlockDefinitions.ts ~3783); confirmed by run, also with per-tick applyParameterUpdates: input 3 gives 3, Simulink gives 0. PRODUCT numInputs 0 becomes 2 the same way (~3797). Found by the WP-02 executor, confirmed by the verifier; the U7 sweep in WP-03 will look for the same pattern in every block.",
+   "fix": "WP-21 batch A (merge c8facc19, rework 7c00f9e4), verifier PASS"
   },
   {
    "id": "XBV-016",
@@ -772,8 +773,9 @@
    "plan_ref": "U7f",
    "severity": "S1",
    "gate": "V3",
-   "status": "open",
-   "summary": "153 numeric parameters are replaced by their default when set to 0 because factories use `params.x || default`; the canvas rebuilds blocks through the factory on Play, so the user's 0 is lost (GAIN.gain is XBV-015). List: universal-gaps.json XBV-U7f; engine-level list XBV-U7 (5)."
+   "status": "closed",
+   "summary": "153 numeric parameters are replaced by their default when set to 0 because factories use `params.x || default`; the canvas rebuilds blocks through the factory on Play, so the user's 0 is lost (GAIN.gain is XBV-015). List: universal-gaps.json XBV-U7f; engine-level list XBV-U7 (5).",
+   "fix": "WP-21 batch A (merge c8facc19, rework 7c00f9e4), verifier PASS"
   },
   {
    "id": "XBV-020",
@@ -940,8 +942,9 @@
    "plan_ref": "4.2 sources / element-wise math / reductions / trig",
    "severity": "S1",
    "gate": "V2",
-   "status": "open",
-   "summary": "WaveformGen amplitude 0 (also freq 0, offset 0) is replaced by 1/1/0 through `||` (instance of XBV-019); a 0-amplitude sine outputs a full sine. Pinned in xbEquations.math.test.ts."
+   "status": "closed",
+   "summary": "WaveformGen amplitude 0 (also freq 0, offset 0) is replaced by 1/1/0 through `||` (instance of XBV-019); a 0-amplitude sine outputs a full sine. Pinned in xbEquations.math.test.ts.",
+   "fix": "WP-21 batch A (merge c8facc19, rework 7c00f9e4), verifier PASS"
   },
   {
    "id": "XBV-041",
@@ -1132,8 +1135,9 @@
    "plan_ref": "4.2 continuous / discrete / discontinuities / buses",
    "severity": "S2",
    "gate": "V2",
-   "status": "open",
-   "summary": "DELAY with delay_length 0 is refused: the factory turns 0 into 1 (`||`) and compile reports DELAY_LENGTH_INVALID and PARAMETER_OUT_OF_RANGE; Simulink Delay accepts 0 as direct feedthrough. Found by the WP-06 executor; pinned in xbEquations.dynamics.test.ts."
+   "status": "closed",
+   "summary": "DELAY with delay_length 0 is refused: the factory turns 0 into 1 (`||`) and compile reports DELAY_LENGTH_INVALID and PARAMETER_OUT_OF_RANGE; Simulink Delay accepts 0 as direct feedthrough. Found by the WP-06 executor; pinned in xbEquations.dynamics.test.ts.",
+   "fix": "WP-21 batch A (merge c8facc19, rework 7c00f9e4), verifier PASS"
   },
   {
    "id": "XBV-065",
@@ -1839,6 +1843,14 @@
    "gate": "V6",
    "status": "open",
    "summary": "The per-block V6 parity case for PID_CONTROLLER is vacuous: every input port gets the same source, so r = y and e = 0; it passes without exercising the controller. Test-side gap (controller), to be replaced with distinct reference and measurement sources in batch F. Found by the WP-21 batch B verifier."
+  },
+  {
+   "id": "XBV-153",
+   "plan_ref": "U7 / 5.2 diagnostics",
+   "severity": "S2",
+   "gate": "V3",
+   "status": "open",
+   "summary": "Six divisor parameters give a non-finite output without a diagnostic when set to 0 (present before WP-21): IM_FOC_CONTROL.Lm, AIR_FRYER_LEARNING_MODEL tau_h, tau_f, tau_c, tau_s, FABRIC_HARMONIC_ANALYZER.drum_mass. They need parameterSchema entries rejecting 0 (batch J). Found by the WP-21 batch A verifier's zero-parameter scan."
   }
  ],
  "blocks": {

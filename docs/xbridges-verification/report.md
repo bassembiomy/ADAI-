@@ -5,8 +5,8 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 ## Summary
 
 - Work packages: 20 done of 29; 2 in progress; 7 to do.
-- Findings: 140 open, 11 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
-  - S1 (wrong number in simulation or generated C): 46 open
+- Findings: 137 open, 15 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
+  - S1 (wrong number in simulation or generated C): 43 open
   - S2 (crash, stop, freeze or silent no-op): 35 open
   - S3 (diagnostic, UI or convention deviation): 51 open
   - S4 (documentation): 8 open
@@ -68,24 +68,21 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 
 ## Open findings by severity
 
-### S1 - wrong number in simulation or generated C (46)
+### S1 - wrong number in simulation or generated C (43)
 
 | Id | Gate | Plan ref | Summary |
 | --- | --- | --- | --- |
 | XBV-001 | V6 | F1 | Canvas engine and state-machine interpreter are compared only by xbSimEmbeddedParity.test.ts: unit-constant input, 6 ticks, scalar, discrete solver. WP-16 measured it: 281 (type, solver) cases, 178 equal; random graphs fail via XBV-083/084/085. |
 | XBV-003 | V5 | F3 | Canvas ode23/ode45/ode23tb are stepped with the fixed step and hard-coded tolerances; no error control. Decision D3: control error with the user's RelTol/AbsTol. |
 | XBV-005 | V5 | F5 | Only Step and three PT_ blocks declare zero crossings. Decision D2: add ZeroCrossingFn to SATURATION, DEADZONE, RELAY, SWITCH, Abs and the PWM carrier blocks. |
-| XBV-015 | V3 | U7 | GAIN treats gain 0 (and -0) as 1: factory uses params.gain \|\| 1 (BlockDefinitions.ts ~3783); confirmed by run, also with per-tick applyParameterUpdates: input 3 gives 3, Simulink gives 0. PRODUCT numInputs 0 becomes 2 the same way (~3797). Found by the WP-02 executor, confirmed by the verifier; the U7 sweep in WP-03 will look for the same pattern in every block. |
 | XBV-016 | V5 | 5.1/5.2 | Stiff solvers with an algebraic loop: y = 0.5*y + 1 feeding an Integrator, dt 0.1, stop 1 (expected integral 2): ode14x gives 51.588135932457256, ode23tb 1.7999999999948573; every other solver gives about 2. Canvas emulation gives the same. Found by the WP-02 verifier. Root causes (verifier): ode23tb is the XBV-026 mechanism (first step rejected, 9 x 0.2 = 1.8); ode14x is not Newton itself - the loop is warm-started only to algTol 1e-6, so f(t, x) drifts and the finite-difference Jacobian reads 0.5 instead of 0; with algTol 1e-10 it gives 2. |
 | XBV-018 | V4 | U14 | 28 stateful blocks are sorted by the engine as non-direct-feedthrough although their output depends on the current input (DERIVATIVE, HIGH_PASS_FILTER, MOVING_AVERAGE, KALMAN_FILTER, EXTENDED_KALMAN_FILTER, LMS, PID/FOC/field-weakening blocks, several ROBOT_VACUUM_* and DEM_DRUM). Result depends on block order: MOVING_AVERAGE window 1 placed before its source gives y = [0,1,0,1,0,1] for u = [1,0,1,0,1,1]. Fix per block: either declare directFeedthrough (true feedthrough in Simulink) or output the pre-update state (plant blocks). List: universal-gaps.json XBV-U14. |
-| XBV-019 | V3 | U7f | 153 numeric parameters are replaced by their default when set to 0 because factories use `params.x \|\| default`; the canvas rebuilds blocks through the factory on Play, so the user's 0 is lost (GAIN.gain is XBV-015). List: universal-gaps.json XBV-U7f; engine-level list XBV-U7 (5). |
 | XBV-020 | V5 | U10 | 16 blocks mutate their state (or inputs/params) in place inside execute; solver stages then see already-updated state. ROBOT_VACUUM_FUSION with x_true = 1: euler 0.99795, rk4 0.9999998, ode45 about 1 (one update per step: 0.9547). List: XBV-U10. |
 | XBV-025 | V2 | U3 | SECTOR_SELECTOR returns sector -3 for theta = -10 rad (closed form floor(mod(theta, 2*pi)/(pi/3)) + 1 = 3); angles below -2*pi are not wrapped. Correct on (-2*pi, 4*pi). Pinned by it.fails in xbUniversal.test.ts. |
 | XBV-026 | V5 | 5.1 | Canvas ode23tb freezes silently: the canvas and worker call StiffSolver.stepODE23TB once per output step with tolerances 1e-3/1e-6 and ignore { accepted: false }; a rejected step leaves the state unchanged with no diagnostic. On x' = -1e4 x the state stays at 1 for dt = 0.01, 0.001 and 1e-4. Pinned by it.fails in xbSolvers.test.ts. Not stiff-only: x' = -x at dt 0.5 also freezes (first step rejected). The worker path keeps the state at 1 but publishes a stale trial output (-0.044) - checked again in WP-14. |
 | XBV-027 | V2 | 4.2 motor control | AC_MOTOR_PID_CONTROL with defaults settles at omega = w_ref / P = 78.5 rad/s for w_ref = 157 (stator frequency fixed at w_ref, P = 2), so the PID never removes the speed error, its integral winds up and last_e is never updated (verifier analysis; rk4, ode45 and euler 1e-5 agree). Replaces the WP-08 note. |
 | XBV-029 | V3 | F8 / D1 | DIMENSION_MISMATCH and DATA_TYPE_MISMATCH on a connection are warnings and the run continues; decision D1 (Simulink): compile errors that stop the run. Pinned by it.fails in xbDiagnostics.test.ts. Supersedes XBV-008. |
 | XBV-035 | V3 | 5.2 / F8 | Dimension checking is inactive: library factories never set port dimensions (only PT_VEHICLE_BODY_1DOF inputs do), so DIMENSION_MISMATCH cannot fire for any canvas-built model; Simulink propagates and checks dimensions. The recipe has to patch dimensions onto ports to provoke the code. |
-| XBV-040 | V2 | 4.2 sources / element-wise math / reductions / trig | WaveformGen amplitude 0 (also freq 0, offset 0) is replaced by 1/1/0 through `\|\|` (instance of XBV-019); a 0-amplitude sine outputs a full sine. Pinned in xbEquations.math.test.ts. |
 | XBV-042 | V2 | 4.2 sources / element-wise math / reductions / trig | PRODUCT works on scalars only (Number(vector) = NaN); Simulink Product multiplies/divides vectors and matrices element-wise. Pinned in xbEquations.math.test.ts. |
 | XBV-043 | V2 | 4.2 sources / element-wise math / reductions / trig | Max (element-wise, two inputs) turns NaN into 0 (Number(x) \|\| 0): Max(NaN, -3) = 0; MATLAB max ignores NaN (-3), Simulink MinMax propagates NaN. Negative values and ties are correct. Pinned in xbEquations.math.test.ts. |
 | XBV-044 | V2 | 4.2 sources / element-wise math / reductions / trig | Sum signs with the '\|' spacer before a sign ('+\|-', '\|+-', '+ -') add instead of subtract: the spacer shifts the sign positions at execute time (factory strips it for the port count only). '+-\|' works. Pinned in xbEquations.math.test.ts. |
@@ -136,7 +133,6 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 | XBV-055 | V2 | 4.2 linear algebra / routing | MatrixSolve (singular, inconsistent system) Inverse (singular matrix) and MatrixMul (non-conformable sizes) throw ('Solve Error: ... matrix is singular'), stopping the run instead of reporting it. Pinned in xbEquations.routing.test.ts. |
 | XBV-058 | V2 | 4.2 routing / logic / bitwise / sequential / linear algebra | SWITCH_CASE with a selector outside 1..n silently routes: sel 0 returns the selector value itself, sel 3, -1 and NaN return case 1; Simulink Multiport Switch reports an error (or uses the declared default). Found by the WP-05 verifier; pinned in xbEquations.routing.test.ts. Target: a reported error (not a throw, cf. XBV-021/055). |
 | XBV-060 | V2 | 4.2 routing / logic / bitwise / sequential / linear algebra | DEMUX does not follow the Simulink split rule: a 3-vector into 2 outputs emits 3 values instead of [1 2] and [3] (n mod p = m: m outputs of floor(n/p)+1 elements, then p-m of floor(n/p)); a scalar into 2 outputs (p > n, a Simulink error) silently emits 1 output. Split rule from the verifier's memory of the Demux documentation - confirm in WP-15. Pinned in xbEquations.routing.test.ts. |
-| XBV-064 | V2 | 4.2 continuous / discrete / discontinuities / buses | DELAY with delay_length 0 is refused: the factory turns 0 into 1 (`\|\|`) and compile reports DELAY_LENGTH_INVALID and PARAMETER_OUT_OF_RANGE; Simulink Delay accepts 0 as direct feedthrough. Found by the WP-06 executor; pinned in xbEquations.dynamics.test.ts. |
 | XBV-066 | V2 | 4.2 continuous / discrete / discontinuities / buses | A bus through UNIT_DELAY outputs scalar 0 at the first sample (IC not expanded over the bus elements), so a downstream BUS_SELECTOR raises BLOCK_RUNTIME_FAULT 'Input must be a bus signal' at t = 0. Found by the WP-06 executor; pinned in xbEquations.dynamics.test.ts. |
 | XBV-071 | V2 | 4.2 power electronics / PWM / torque optimisation | SVPWM_CORE over-modulation is not handled: only t0 is clamped to 0, so t1 + t2 exceeds Ts (\|V\| = 300 at 30 deg, Vdc 400: t1 = t2 = 6.5e-5, sum 1.3e-4 > 1e-4); the standard rule scales t1, t2 to sum Ts and keeps their ratio. Pinned in xbEquations.motor.test.ts. |
 | XBV-075 | V2 | 4.2 control / observers | Continuous PID_BASIC ignores enable: its integrator keeps accumulating while enable = 0 (evaluateDerivatives ignores the enable input; execute's nextState is not used for continuous blocks). Enable 0 -> 1 at 0.5 should give u(1) = 1.5. Found by the WP-07 executor; pinned in xbEquations.control.test.ts. |
@@ -158,6 +154,7 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 | XBV-147 | V8 | 6 UI end-to-end | The Robot Vacuum Navigation & Mapping lab shows EKF error Infinity and confidence 0 % after 5 s at the default step (same stiffness class as XBV-127). Found by the WP-20 executor (Playwright, real Chromium); pinned in tests/e2e/xbridges/. |
 | XBV-149 | V8 | 6 UI persistence | Save writes a stale model: the X-Bridges canvas reaches the project store through a 300 ms debounce (XbridgesWorkspace.tsx, debounced onSave) that every canvas change restarts, and Save does not flush it. A Save within 300 ms of an edit leaves the edit out (saved 2 after setting 3), and nothing is stored while a run is going (the run changes the canvas every 4th tick): a Save 2 s after an edit made during a run held the pre-run value. Found by the controller while diagnosing the XBV-138 pin passing on CI run 1; pinned in tests/e2e/xbridges/xbridges-persistence.spec.ts. |
 | XBV-151 | V6 | 7.3 canvas / interpreter parity | The embedded builder still refuses DELAY delay_length 0 (xbSemanticBuilder.ts ~1146 XB_DELAY_LENGTH_INVALID, diagnosticGuidance.ts) although the canvas now treats it as direct feedthrough (XBV-064, Simulink Delay). Found by the WP-21 batch A executor. |
+| XBV-153 | V3 | U7 / 5.2 diagnostics | Six divisor parameters give a non-finite output without a diagnostic when set to 0 (present before WP-21): IM_FOC_CONTROL.Lm, AIR_FRYER_LEARNING_MODEL tau_h, tau_f, tau_c, tau_s, FABRIC_HARMONIC_ANALYZER.drum_mass. They need parameterSchema entries rejecting 0 (batch J). Found by the WP-21 batch A verifier's zero-parameter scan. |
 
 ### S3 - diagnostic, UI or convention deviation (51)
 
@@ -231,6 +228,10 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 ## Closed, merged or superseded findings
 
 - XBV-008 (superseded by XBV-029): DIMENSION_MISMATCH and DATA_TYPE_MISMATCH on a connection are warnings. Decision D1: compile errors, as in Simulink.
+- XBV-015 (closed): GAIN treats gain 0 (and -0) as 1: factory uses params.gain \|\| 1 (BlockDefinitions.ts ~3783); confirmed by run, also with per-tick applyParameterUpdates: input 3 gives 3, Simulink gives 0. PRODUCT nu
+- XBV-019 (closed): 153 numeric parameters are replaced by their default when set to 0 because factories use `params.x \|\| default`; the canvas rebuilds blocks through the factory on Play, so the user's 0 is lost (GAIN.
+- XBV-040 (closed): WaveformGen amplitude 0 (also freq 0, offset 0) is replaced by 1/1/0 through `\|\|` (instance of XBV-019); a 0-amplitude sine outputs a full sine. Pinned in xbEquations.math.test.ts.
+- XBV-064 (closed): DELAY with delay_length 0 is refused: the factory turns 0 into 1 (`\|\|`) and compile reports DELAY_LENGTH_INVALID and PARAMETER_OUT_OF_RANGE; Simulink Delay accepts 0 as direct feedthrough. Found by 
 - XBV-083 (closed): The state-machine X-Bridges interpreter ignores Sum signs and always adds (xbInterpreter.ts ~530, case 'Sum'/'SUM_JUNCTION'/'VectorAdd'): '+-' gives u1 + u2. The canvas subtracts, and the C generator 
 - XBV-085 (merged into XBV-084): Embedded Step switches one tick early (evaluates t + dt, xbInterpreter.ts ~994): Step at T = 1 gives 1 at t = 0.95; the canvas gives 0 (Simulink: y = final for t >= T). Found by the WP-16 executor; pi
 - XBV-095 (closed): buildXBSemanticModel throws 'Invalid PID mode: PID' (xbPidContract.ts ~18) for PID_CONTROLLER with the canvas default mode 'PID' instead of returning a diagnostic. Found by the WP-16 executor; pinned 
