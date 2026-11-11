@@ -76,7 +76,16 @@ const pidParametersOrDiagnostic = (
   diagnostics: ModelDiagnostic[],
 ): XBPidParameters | undefined => {
   try {
-    return normalizePidParameters(node.parameters, solver);
+    // Canvas PID_CONTROLLER: 'trapezoidal' is not an allowed method (forward_euler, backward_euler, tustin) and a
+    // sampleTime of 0 means continuous time, executed here on the solver step grid (like an inherited sample time).
+    const method = String(node.parameters.method ?? '').toLowerCase().replace(/[_\s-]/g, '');
+    if (method === 'trapezoidal') {
+      throw new Error("method 'trapezoidal' is not one of the allowed values: forward_euler, backward_euler, tustin.");
+    }
+    const parameters = node.parameters.sampleTime === 0
+      ? { ...node.parameters, sampleTime: -1 }
+      : node.parameters;
+    return normalizePidParameters(parameters, solver);
   } catch (error) {
     diagnostics.push(diagnostic(
       'XB_PARAMETER_INVALID',
@@ -1167,14 +1176,16 @@ const stateBoundaryForNode = (
         ));
         return boundary([]);
       }
-      if (typeof lengthParam !== 'number' || !Number.isInteger(lengthParam) || lengthParam <= 0) {
+      if (typeof lengthParam !== 'number' || !Number.isInteger(lengthParam) || lengthParam < 0) {
         diagnostics.push(diagnostic(
           'XB_DELAY_LENGTH_INVALID',
-          `DELAY block '${node.id}' parameter 'delay_length' must be a positive integer.`,
+          `DELAY block '${node.id}' parameter 'delay_length' must be a non-negative integer.`,
           node.id,
         ));
         return boundary([]);
       }
+      // Simulink Delay with delay length 0: direct feedthrough y = u, no state (XBV-151).
+      if (lengthParam === 0) return boundary([]);
       if (lengthParam > 65536) {
         diagnostics.push(diagnostic(
           'XB_DELAY_STORAGE_LIMIT_EXCEEDED',
@@ -1699,7 +1710,7 @@ export const buildXBSemanticModel = (
         fallback: isStateful ? 'previous-value' : 'zero',
         errorSignalId: outputSignalIds.find((signalId) => {
           const portId = signals[signalId]?.portId;
-          return portId === 'error' || (
+          return (portId === 'error' && node.type !== 'PID_CONTROLLER') || (
             portId === 'e'
             && node.type !== 'DATA_TYPE_CONVERSION'
             && node.type !== 'NUMERIC_REPRESENTATION'
@@ -1711,7 +1722,7 @@ export const buildXBSemanticModel = (
         : undefined,
     };
 
-    if (node.type === 'DELAY' || node.type === 'UNIT_DELAY') {
+    if ((node.type === 'DELAY' || node.type === 'UNIT_DELAY') && isStateful) {
       const schedule = operations[node.id].schedule;
       const lengthParam = node.type === 'UNIT_DELAY'
         ? 1

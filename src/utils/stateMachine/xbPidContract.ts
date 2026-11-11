@@ -10,6 +10,7 @@ const PID_METHOD_ALIASES: Readonly<Record<string, string>> = {
   forwardeuler: 'ForwardEuler',
   backwardeuler: 'BackwardEuler',
   trapezoidal: 'Trapezoidal',
+  tustin: 'Trapezoidal',
 };
 
 /**
@@ -38,8 +39,9 @@ export const normalizePidParameters = (
   const ki = Number(parameters.Ki ?? parameters.I ?? 0);
   const kd = Number(parameters.Kd ?? parameters.D ?? 0);
   const filterN = Number(parameters.N ?? 100);
-  const beta = Number(parameters.b ?? 1);
-  const gamma = Number(parameters.c ?? 1);
+  // Setpoint weights: canvas names beta / gamma (defaults 1 and 0), contract names b / c.
+  const beta = Number(parameters.beta ?? parameters.b ?? 1);
+  const gamma = Number(parameters.gamma ?? parameters.c ?? 0);
   
   const minimum = Number(parameters.min ?? parameters.LowerSaturationLimit ?? -Infinity);
   const maximum = Number(parameters.max ?? parameters.UpperSaturationLimit ?? Infinity);

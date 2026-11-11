@@ -235,6 +235,18 @@ semantic priority order. This selected ordering is tested for simulator/C
 parity, but it is not a claim that every MathWorks Stateflow option or Simulink
 block semantic is implemented.
 
+## Time base of one tick
+
+Within one state-machine tick every block sees the start-of-tick time t_k
+(decision D9, Simulink output-then-update order). Clock, WaveformGen and Step
+(compared with `t_k`, not `t_k + dt`) read t_k; Integrator, INTEGRATOR_CONTINUOUS
+and the discrete state blocks publish their state at t_k and are advanced to
+t_(k+1) after all outputs of the tick are computed. Under `rk4` the minor stages
+evaluate time-driven blocks at t_k + h/2 and t_k + h and the published values are
+restored to t_k before the state update. Bitwise and shift blocks work on int32
+two's complement in the interpreter and in the generated C (decision D10; the C
+performs the bit operations on `uint32_t` casts and converts back).
+
 ## Numeric faults and safety behavior
 
 Runtime faults include fixed overflow configured as `error`, non-finite
@@ -244,8 +256,17 @@ the next state tick and remains sticky across all substeps of the current tick.
 Stateful operations update transactionally: a fault retains the previous output
 and block state rather than committing a partial multi-element update.
 
-With `signal-only`, the block publishes its error indication and deterministic
-fallback while the state machine continues. With `escalate`, generated code sets
+Out-of-domain results of the math blocks (for example `ACOS`, `ASIN`, `ACOSH`,
+`ATANH`, `ASEC`, `ACOSEC`, `ACOTH`, `ASECH`, `VectorPow`, `(-8)^(1/3)`) follow
+Simulink and libm: the block publishes `NaN` (or the infinity of the result) and
+raises the numeric fault on the interpreter and in the generated C. There is no
+fallback `0` for these results (decision D11). Two boundaries keep the safe-zero
+fallback: non-finite values mapped into the model from state-machine variables
+and the division-by-zero fault of `VectorDiv`.
+
+With `signal-only`, the block publishes its error indication (and, for the
+division-by-zero and boundary cases above, the deterministic fallback) while the
+state machine continues. With `escalate`, generated code sets
 `SM_ERR_XBRIDGES_NUMERIC`, latches the state-machine fault, applies configured
 safe outputs, and suppresses the watchdog kick through the normal safety path.
 Target integration must implement and verify the safe-output behavior.

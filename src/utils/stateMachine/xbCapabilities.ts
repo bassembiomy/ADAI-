@@ -558,6 +558,11 @@ export const xbNodeDirectFeedthrough = (
   if (node.type === 'INTEGRATOR_DISCRETE') {
     return isXBDirectDiscreteIntegratorMethod(node.parameters?.method);
   }
+  // Delay with delay length 0 passes its input straight through (Simulink Delay, XBV-151).
+  if (node.type === 'DELAY') {
+    const length = node.parameters?.delay_length ?? node.parameters?.delayLength ?? node.parameters?.delay_samples ?? node.parameters?.N;
+    if (length === 0) return true;
+  }
   return getXBBlockCapability(node.type)?.directFeedthrough === true;
 };
 
