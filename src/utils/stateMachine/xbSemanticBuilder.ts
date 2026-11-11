@@ -1691,6 +1691,8 @@ export const buildXBSemanticModel = (
         clonedParams.sampleTime = parsedDt;
       } else {
         clonedParams.sampleTime = input.model.solver.stepSeconds;
+        // The raw sample time was inherited/continuous: the first output is the initial condition (D12).
+        clonedParams.sampleTimeInherited = true;
       }
     }
 

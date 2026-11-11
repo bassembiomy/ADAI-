@@ -891,7 +891,10 @@ const evaluateDirectOperation = (
         : -Math.abs(Number(parameter(operation, ['fallingLimit'], 1)));
       const rawDt = operation.parameters.sampleTime ?? operation.parameters.dt;
       const parsedDt = typeof rawDt === 'number' ? rawDt : (typeof rawDt === 'string' ? parseFloat(rawDt) : NaN);
-      const dt = Number.isFinite(parsedDt) && parsedDt > 0 ? parsedDt : (runtime.ir.solver?.stepSeconds ?? 0.01);
+      // D12: with an inherited/continuous sample time the first output is the initial condition (no time elapsed).
+    const dt = operation.parameters.sampleTimeInherited === true && (runtime.simTime ?? 0) === 0
+      ? 0
+      : (Number.isFinite(parsedDt) && parsedDt > 0 ? parsedDt : (runtime.ir.solver?.stepSeconds ?? 0.01));
 
       const maxIncrease = rising * dt;
       const maxDecrease = falling * dt;
@@ -899,8 +902,6 @@ const evaluateDirectOperation = (
       const yVec = uSig.map((uVal, idx) => {
         const u = Number(uVal);
         const prev = prevSig[idx % prevSig.length] ?? 0;
-        // Simulink Rate Limiter: the first output is the input; later outputs are rate limited.
-        if ((runtime.simTime ?? 0) === 0) return u;
         if (Number.isNaN(u) || Number.isNaN(prev)) return NaN;
         const delta = u - prev;
         if (delta > maxIncrease) return prev + maxIncrease;
@@ -1763,7 +1764,10 @@ function writeStateOutputs(
         : -Math.abs(Number(parameter(operation, ['fallingLimit'], 1)));
       const rawDt = operation.parameters.sampleTime ?? operation.parameters.dt;
       const parsedDt = typeof rawDt === 'number' ? rawDt : (typeof rawDt === 'string' ? parseFloat(rawDt) : NaN);
-      const dt = Number.isFinite(parsedDt) && parsedDt > 0 ? parsedDt : (runtime.ir.solver?.stepSeconds ?? 0.01);
+      // D12: with an inherited/continuous sample time the first output is the initial condition (no time elapsed).
+    const dt = operation.parameters.sampleTimeInherited === true && (runtime.simTime ?? 0) === 0
+      ? 0
+      : (Number.isFinite(parsedDt) && parsedDt > 0 ? parsedDt : (runtime.ir.solver?.stepSeconds ?? 0.01));
 
       const maxIncrease = rising * dt;
       const maxDecrease = falling * dt;
@@ -1771,8 +1775,6 @@ function writeStateOutputs(
       const yVec = uSig.map((uVal, idx) => {
         const u = Number(uVal);
         const prev = prevSig[idx % prevSig.length] ?? 0;
-        // Simulink Rate Limiter: the first output is the input; later outputs are rate limited.
-        if ((runtime.simTime ?? 0) === 0) return u;
         if (Number.isNaN(u) || Number.isNaN(prev)) return NaN;
         const delta = u - prev;
         if (delta > maxIncrease) return prev + maxIncrease;
@@ -1901,7 +1903,10 @@ const statefulUpdate = (
       : -Math.abs(Number(parameter(operation, ['fallingLimit'], 1)));
     const rawDt = operation.parameters.sampleTime ?? operation.parameters.dt;
     const parsedDt = typeof rawDt === 'number' ? rawDt : (typeof rawDt === 'string' ? parseFloat(rawDt) : NaN);
-    const dt = Number.isFinite(parsedDt) && parsedDt > 0 ? parsedDt : (runtime.ir.solver?.stepSeconds ?? 0.01);
+    // D12: with an inherited/continuous sample time the first output is the initial condition (no time elapsed).
+    const dt = operation.parameters.sampleTimeInherited === true && (runtime.simTime ?? 0) === 0
+      ? 0
+      : (Number.isFinite(parsedDt) && parsedDt > 0 ? parsedDt : (runtime.ir.solver?.stepSeconds ?? 0.01));
 
     const maxIncrease = rising * dt;
     const maxDecrease = falling * dt;
@@ -1909,7 +1914,6 @@ const statefulUpdate = (
     const nextPrev = uSig.map((uVal, idx) => {
       const u = Number(uVal);
       const prev = prevSig[idx % prevSig.length] ?? 0;
-      if ((runtime.simTime ?? 0) === 0) return convertValue(u, prevSlot.numericType, faults, operation);
       if (Number.isNaN(u) || Number.isNaN(prev)) return NaN;
       const delta = u - prev;
       let y = u;

@@ -2590,7 +2590,11 @@ const renderStateOutputs = (
         : `(-fabs(${cNumber(scalarParameter(operation, ['fallingLimit'], 1))}))`;
       const rawDt = operation.parameters.sampleTime ?? operation.parameters.dt;
       const parsedDt = typeof rawDt === 'number' ? rawDt : (typeof rawDt === 'string' ? parseFloat(rawDt) : NaN);
-      const dt = cNumber(Number.isFinite(parsedDt) && parsedDt > 0 ? parsedDt : (state.xBridges?.solver?.stepSeconds ?? 0.01));
+      const dtValue = cNumber(Number.isFinite(parsedDt) && parsedDt > 0 ? parsedDt : (state.xBridges?.solver?.stepSeconds ?? 0.01));
+        // D12: with an inherited/continuous sample time the first output is the initial condition (no time elapsed).
+        const dt = operation.parameters.sampleTimeInherited === true
+          ? `((instance->${member}.sim_time == 0.0) ? 0.0 : ${dtValue})`
+          : dtValue;
 
       const count = outputSignal.elementCount;
       const sanitizedId = toCIdentifier(operation.id);
@@ -2606,9 +2610,7 @@ const renderStateOutputs = (
           `        const double ${sanitizedId}_u = ${u};`,
           `        const double ${sanitizedId}_prev = ${prev};`,
           `        double ${sanitizedId}_y = ${sanitizedId}_u;`,
-          `        if (instance->${member}.sim_time == 0.0) {`,
-          `            ${sanitizedId}_y = ${sanitizedId}_u;`,
-          `        } else if (${isnanFn}(${sanitizedId}_u) || ${isnanFn}(${sanitizedId}_prev)) {`,
+          `        if (${isnanFn}(${sanitizedId}_u) || ${isnanFn}(${sanitizedId}_prev)) {`,
           `            ${sanitizedId}_y = ${nanVal};`,
           `        } else if (${sanitizedId}_u - ${sanitizedId}_prev > ${sanitizedId}_max_inc) {`,
           `            ${sanitizedId}_y = ${sanitizedId}_prev + ${sanitizedId}_max_inc;`,
@@ -2623,9 +2625,7 @@ const renderStateOutputs = (
           `            const double ${sanitizedId}_u = ${signalElementRealExpression(state, inputSignalId, layout, member, 'xb_i')};`,
           `            const double ${sanitizedId}_prev = ${stateSlotElementRealExpression(prevSlot, layout, member, 'xb_i')};`,
           `            double ${sanitizedId}_y = ${sanitizedId}_u;`,
-          `            if (instance->${member}.sim_time == 0.0) {`,
-          `                ${sanitizedId}_y = ${sanitizedId}_u;`,
-          `            } else if (${isnanFn}(${sanitizedId}_u) || ${isnanFn}(${sanitizedId}_prev)) {`,
+          `            if (${isnanFn}(${sanitizedId}_u) || ${isnanFn}(${sanitizedId}_prev)) {`,
           `                ${sanitizedId}_y = ${nanVal};`,
           `            } else if (${sanitizedId}_u - ${sanitizedId}_prev > ${sanitizedId}_max_inc) {`,
           `                ${sanitizedId}_y = ${sanitizedId}_prev + ${sanitizedId}_max_inc;`,
@@ -4062,7 +4062,11 @@ const renderDiscreteStateUpdates = (
           : `(-fabs(${cNumber(scalarParameter(operation, ['fallingLimit'], 1))}))`;
         const rawDt = operation.parameters.sampleTime ?? operation.parameters.dt;
         const parsedDt = typeof rawDt === 'number' ? rawDt : (typeof rawDt === 'string' ? parseFloat(rawDt) : NaN);
-        const dt = cNumber(Number.isFinite(parsedDt) && parsedDt > 0 ? parsedDt : (state.xBridges?.solver?.stepSeconds ?? 0.01));
+        const dtValue = cNumber(Number.isFinite(parsedDt) && parsedDt > 0 ? parsedDt : (state.xBridges?.solver?.stepSeconds ?? 0.01));
+        // D12: with an inherited/continuous sample time the first output is the initial condition (no time elapsed).
+        const dt = operation.parameters.sampleTimeInherited === true
+          ? `((instance->${member}.sim_time == 0.0) ? 0.0 : ${dtValue})`
+          : dtValue;
         const inputId = operation.inputSignalIds[0];
         const inputSignal = inputId === undefined ? undefined : requireSignal(state, inputId);
         if (inputSignal?.shape.kind !== 'scalar' || slot.shape.kind !== 'scalar') {
@@ -4072,7 +4076,7 @@ const renderDiscreteStateUpdates = (
             const indexText = `${index}U`;
             const current = signalElementRealExpression(state, inputId, layout, member, indexText);
             const previous = stateSlotElementRealExpression(slot, layout, member, indexText);
-            const expr = `(instance->${member}.sim_time == 0.0) ? (${current}) : (${isnanFn}(${current}) || ${isnanFn}(${previous})) ? ${nanVal} : (((${current}) - (${previous}) > (${rising}) * (${dt})) ? (${previous}) + (${rising}) * (${dt}) : (((${current}) - (${previous}) < (${falling}) * (${dt})) ? (${previous}) + (${falling}) * (${dt}) : (${current})))`;
+            const expr = `(${isnanFn}(${current}) || ${isnanFn}(${previous})) ? ${nanVal} : (((${current}) - (${previous}) > (${rising}) * (${dt})) ? (${previous}) + (${rising}) * (${dt}) : (((${current}) - (${previous}) < (${falling}) * (${dt})) ? (${previous}) + (${falling}) * (${dt}) : (${current})))`;
             return renderStateSlotElementAssignment(
               state, slot, indexText, expr, layout,
               member,
@@ -4083,7 +4087,7 @@ const renderDiscreteStateUpdates = (
         }
         const prev_y = stateSlotRealExpression(slot, layout, member);
 
-        const expr = `(instance->${member}.sim_time == 0.0) ? (${input}) : (${isnanFn}(${input}) || ${isnanFn}(${prev_y})) ? ${nanVal} : (((${input}) - (${prev_y}) > (${rising}) * (${dt})) ? (${prev_y}) + (${rising}) * (${dt}) : (((${input}) - (${prev_y}) < (${falling}) * (${dt})) ? (${prev_y}) + (${falling}) * (${dt}) : (${input})))`;
+        const expr = `(${isnanFn}(${input}) || ${isnanFn}(${prev_y})) ? ${nanVal} : (((${input}) - (${prev_y}) > (${rising}) * (${dt})) ? (${prev_y}) + (${rising}) * (${dt}) : (((${input}) - (${prev_y}) < (${falling}) * (${dt})) ? (${prev_y}) + (${falling}) * (${dt}) : (${input})))`;
 
         return renderStateSlotAssignment(
           state, slot,
