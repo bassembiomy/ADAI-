@@ -559,7 +559,8 @@
    "deps": [
     "WP-19"
    ],
-   "status": "in_progress"
+   "status": "in_progress",
+   "note": "9 Playwright specs by Sonnet (real Chromium): 34 tests, 25 pass, 9 pinned; findings XBV-143..147 (+ pins under XBV-127, 138, 140). Awaiting the Opus verifier."
   },
   {
    "id": "WP-21",
@@ -1717,6 +1718,46 @@
    "gate": "V8",
    "status": "open",
    "summary": "There is no redo (Ctrl+Y / Ctrl+Shift+Z) in the X-Bridges workspace. Found by the WP-19 executor; pinned in src/components/xbridges/xbV8Ui.test.tsx."
+  },
+  {
+   "id": "XBV-143",
+   "plan_ref": "6 UI end-to-end",
+   "severity": "S3",
+   "gate": "V8",
+   "status": "open",
+   "summary": "A canvas run does not log a sample at the stop time: for 0..1 s at h = 0.01 the last Scope sample is t = 0.99 (y = 1.98); Simulink logs t = 1 (y = 2). Every logged sample is correct (y = 2t within 1e-9). Found by the WP-20 executor (Playwright, real Chromium); pinned in tests/e2e/xbridges/."
+  },
+  {
+   "id": "XBV-144",
+   "plan_ref": "6 UI end-to-end",
+   "severity": "S2",
+   "gate": "V8",
+   "status": "open",
+   "summary": "Toolbar Single Step does nothing during a live run: the live run uses the worker engine, engineRef is null and stepSimulation returns immediately (XbridgesWorkspace.tsx ~2929); time stays unchanged after 3 clicks. Found by the WP-20 executor (Playwright, real Chromium); pinned in tests/e2e/xbridges/."
+  },
+  {
+   "id": "XBV-145",
+   "plan_ref": "6 UI end-to-end",
+   "severity": "S3",
+   "gate": "V8",
+   "status": "open",
+   "summary": "A block dragged from the library is placed at the centre of the pane, not where it is dropped (pointer position ignored, XbridgesWorkspace.tsx ~2379-2395). Found by the WP-20 executor (Playwright, real Chromium); pinned in tests/e2e/xbridges/."
+  },
+  {
+   "id": "XBV-146",
+   "plan_ref": "6 UI end-to-end",
+   "severity": "S1",
+   "gate": "V8",
+   "status": "open",
+   "summary": "Opening a saved .adia project while the X-Bridges tab is active leaves the canvas empty (also after switching tabs); opening from another tab works (src/App.tsx hydrateProject / workspaceFiles ~5765-5780). The user sees an empty model and may save over it. Found by the WP-20 executor (Playwright, real Chromium); pinned in tests/e2e/xbridges/."
+  },
+  {
+   "id": "XBV-147",
+   "plan_ref": "6 UI end-to-end",
+   "severity": "S2",
+   "gate": "V8",
+   "status": "open",
+   "summary": "The Robot Vacuum Navigation & Mapping lab shows EKF error Infinity and confidence 0 % after 5 s at the default step (same stiffness class as XBV-127). Found by the WP-20 executor (Playwright, real Chromium); pinned in tests/e2e/xbridges/."
   }
  ],
  "blocks": {
@@ -5829,6 +5870,10 @@
   {
    "wp": "WP-20",
    "note": "Not reachable in jsdom (WP-19): real drag-to-connect and reconnect, snap and edge styles, drop at pointer position, node overlap, light/dark theme, panel resize, run and edit during a run, save and reopen. Library search is by label only (no alias search exists). XbridgesWorkspace loops forever if initialMappings or availableVariables are omitted (unstable default arrays) - check in WP-20 whether any caller can omit them."
+  },
+  {
+   "wp": "WP-22",
+   "note": "WP-20 environment: vite fails here without the xlsx package (cdn.sheetjs.com blocked); the e2e run used a dev server started from a scratchpad vite config aliasing xlsx to a stub (outside the repo). Playwright 1.65 expects chromium_headless_shell-1254 but 1243 is installed; tests/e2e/xbridges/xbHelpers.ts falls back to /opt/pw-browsers chromium only when the default build is absent. The older tests/e2e/xbridges-run-engine.spec.ts fails here ('Executable doesn't exist') and uses a toolbar 'X-Bridges' button that this build does not show. The e2e suite takes ~11 minutes. 11 labs exist; 9 run clean; the app has no create-subsystem-from-selection command (plan 6 assumed one)."
   }
  ]
 }
