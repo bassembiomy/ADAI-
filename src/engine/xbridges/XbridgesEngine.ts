@@ -286,6 +286,17 @@ export class XbridgesEngine {
       const value = typeof raw === 'string' && kind.kind !== 'option' ? r.value : raw;
       if (JSON.stringify(value) !== JSON.stringify(block.params[param])) accepted[param] = value;
     }
+    // Delay length 0 makes the Delay direct feedthrough, which changes the execution order fixed at compile: a live
+    // change across 0 is refused (last valid value kept) until the model is recompiled.
+    if (block.type === 'DELAY' && accepted.delay_length !== undefined
+        && (Number(accepted.delay_length) === 0) !== (Number(block.params.delay_length) === 0)) {
+      this.diagnostics.push({
+        severity: 'error', code: 'PARAMETER_OUT_OF_RANGE',
+        message: `Block '${block.label || block.id}': parameter 'delay_length' cannot change to or from 0 while the model runs (0 makes the Delay direct feedthrough and changes the execution order). Stop, edit the value and compile again.`,
+        blockIds: [blockId],
+      });
+      delete accepted.delay_length;
+    }
     if (Object.keys(accepted).length > 0) this.patchBlockParams(blockId, accepted);
   }
 

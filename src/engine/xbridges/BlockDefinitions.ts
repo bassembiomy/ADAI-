@@ -9740,6 +9740,7 @@ return block;
                                                                                                                                                       description: 'Evaluates a single fuzzy rule. Combines antecedent membership grades via AND/OR to produce a firing strength, then applies implication to the consequent.',
                                                                                                                                                       execute: (ins, p) => {
                                                                                                                                                         const numAnt = numParam(p.numAntecedents, 2);
+                                                                                                                                                        if (!(Number.isInteger(numAnt) && numAnt >= 1)) return { outputs: [0, 0], error: `Fuzzy rule needs at least 1 antecedent (numAntecedents = ${numAnt}).` };
                                                                                                                                                         const antecedents = ins.slice(0, numAnt).map(v => Math.max(0, Math.min(1, Number(v) || 0)));
                                                                                                                                                         const consequent = Number(ins[numAnt]) || 0;
 
