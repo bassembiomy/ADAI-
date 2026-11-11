@@ -283,6 +283,59 @@ const divideByZeroDiagnostic = (divisors: any[]): { diagnostic?: BlockDiagnostic
     ? { diagnostic: { code: 'DIVIDE_BY_ZERO', severity: 'warning', message: 'division by zero (IEEE result: Inf or NaN).' } }
     : {};
 
+const isBusObject = (v: any): boolean => typeof v === 'object' && v !== null && !Array.isArray(v);
+
+/** Raised by the element-wise helpers for non-conformable sizes; the block reports it as its `error`. */
+class ElementWiseError extends Error {}
+/**
+ * Simulink element-wise evaluation over scalars, vectors and matrices with scalar expansion: `f` receives the
+ * scalars at one element position (one per input). Arrays of different sizes raise ElementWiseError.
+ */
+const ewMap = (ins: any[], f: (vals: any[]) => any): any => {
+  const arrays = ins.filter((v) => Array.isArray(v));
+  if (arrays.length === 0) return f(ins);
+  const n = (arrays[0] as any[]).length;
+  if (arrays.some((a) => (a as any[]).length !== n)) {
+    throw new ElementWiseError(`input sizes are not conformable (${arrays.map((a) => (a as any[]).length).join(' vs ')}).`);
+  }
+  return Array.from({ length: n }, (_, i) => ewMap(ins.map((v) => (Array.isArray(v) ? v[i] : v)), f));
+};
+/** ewMap that returns the block result: `{ outputs }`, or `{ outputs: [NaN], error }` for a size or value error. */
+const ewResult = (ins: any[], f: (vals: any[]) => any, extra?: { diagnostic?: BlockDiagnostic }): any => {
+  try {
+    return { outputs: [ewMap(ins, f)], ...(extra ?? {}) };
+  } catch (e) {
+    if (e instanceof ElementWiseError) return { outputs: [NaN], error: e.message };
+    throw e;
+  }
+};
+/** Expands a scalar initial condition over the structure (vector, matrix or bus) of `like`. */
+const expandLike = (ic: any, like: any): any => {
+  if (Array.isArray(like)) return like.map((x) => expandLike(ic, x));
+  if (isBusObject(like)) {
+    const out: Record<string, any> = {};
+    for (const k of Object.keys(like)) out[k] = expandLike(ic, like[k]);
+    return out;
+  }
+  return ic;
+};
+const SHIFT_WORD_LENGTH = 32;
+const shiftLeft32 = (x: number, n: number): number => {
+  if (!Number.isFinite(x) || !Number.isFinite(n)) throw new ElementWiseError('shift operands must be finite.');
+  const c = Math.trunc(n);
+  if (c < 0) return shiftRight32(x, -c);
+  return c >= SHIFT_WORD_LENGTH ? 0 : x << c;
+};
+const shiftRight32 = (x: number, n: number): number => {
+  if (!Number.isFinite(x) || !Number.isFinite(n)) throw new ElementWiseError('shift operands must be finite.');
+  const c = Math.trunc(n);
+  if (c < 0) return shiftLeft32(x, -c);
+  // Arithmetic shift for signed values: every bit shifted out leaves the sign.
+  return c >= SHIFT_WORD_LENGTH ? (x < 0 ? -1 : 0) : x >> c;
+};
+const flatLength = (v: any): number => (Array.isArray(v) ? v.reduce((n: number, x: any) => n + flatLength(x), 0) : 1);
+const numberOrVector = (v: any, fallback: number): any =>
+  v === undefined ? fallback : (Array.isArray(v) ? v.map(Number) : Number(v));
 
 // // Helper functions and waypoints for ROBOT_VACUUM_DIGITAL_TWIN
 export const ROOM_WALLS = [
@@ -1873,7 +1926,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     outputs: [createPort('out', 'Out', 'output')],
     icon: 'activity',
     equation: 'Out = A & B & ...',
-    execute: (ins) => ({ outputs: [ins.every(val => !!val)], ...logicNanDiagnostic(ins) })
+    execute: (ins) => ewResult(ins, (v) => v.every(val => !!val), logicNanDiagnostic(ins))
   }),
 
   'OR': (id, params) => ({
@@ -1883,7 +1936,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     outputs: [createPort('out', 'Out', 'output')],
     icon: 'activity',
     equation: 'Out = A | B | ...',
-    execute: (ins) => ({ outputs: [ins.some(val => !!val)], ...logicNanDiagnostic(ins) })
+    execute: (ins) => ewResult(ins, (v) => v.some(val => !!val), logicNanDiagnostic(ins))
   }),
 
   'NOT': (id) => ({
@@ -1892,7 +1945,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     outputs: [createPort('out', 'Out', 'output')],
     icon: 'zap',
     equation: 'Out = !In',
-    execute: (ins) => ({ outputs: [!ins[0]], ...logicNanDiagnostic(ins) })
+    execute: (ins) => ewResult([ins[0]], (v) => !v[0], logicNanDiagnostic(ins))
   }),
 
   'NAND': (id, params) => ({
@@ -1903,7 +1956,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     icon: 'activity',
     equation: 'Out = !(A & B & ...)',
     description: 'A Not-AND gate. The output is LOW (0) only if all inputs are HIGH (1).',
-    execute: (ins) => ({ outputs: [!ins.every(val => !!val)], ...logicNanDiagnostic(ins) })
+    execute: (ins) => ewResult(ins, (v) => !v.every(val => !!val), logicNanDiagnostic(ins))
   }),
 
   'NOR': (id, params) => ({
@@ -1914,7 +1967,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     icon: 'activity',
     equation: 'Out = !(A | B | ...)',
     description: 'A Not-OR gate. The output is HIGH (1) only if all inputs are LOW (0).',
-    execute: (ins) => ({ outputs: [!ins.some(val => !!val)], ...logicNanDiagnostic(ins) })
+    execute: (ins) => ewResult(ins, (v) => !v.some(val => !!val), logicNanDiagnostic(ins))
   }),
 
   'XOR': (id, params) => ({
@@ -1924,7 +1977,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     outputs: [createPort('out', 'Out', 'output')],
     icon: 'activity',
     equation: 'Out = Σ(Inputs) % 2',
-    execute: (ins) => ({ outputs: [ins.filter(val => !!val).length % 2 !== 0], ...logicNanDiagnostic(ins) })
+    execute: (ins) => ewResult(ins, (v) => v.filter(val => !!val).length % 2 !== 0, logicNanDiagnostic(ins))
   }),
 
   // --- Bitwise Operations ---
@@ -1935,42 +1988,42 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     icon: 'cpu',
     equation: 'Out = A & B (Bitwise)',
     description: 'Performs a bitwise AND operation on two integer inputs.',
-    execute: (ins) => ({ outputs: [Number(ins[0]) & Number(ins[1])] })
+    execute: (ins) => ewResult(ins, (v) => Number(v[0]) & Number(v[1]))
   }),
 
   'BitwiseOR': (id) => ({
     id, type: 'BitwiseOR', params: {},
     inputs: [createPort('in1', 'A', 'input'), createPort('in2', 'B', 'input')],
     outputs: [createPort('out', 'Out', 'output')],
-    execute: (ins) => ({ outputs: [Number(ins[0]) | Number(ins[1])] })
+    execute: (ins) => ewResult(ins, (v) => Number(v[0]) | Number(v[1]))
   }),
 
   'BitwiseXOR': (id) => ({
     id, type: 'BitwiseXOR', params: {},
     inputs: [createPort('in1', 'A', 'input'), createPort('in2', 'B', 'input')],
     outputs: [createPort('out', 'Out', 'output')],
-    execute: (ins) => ({ outputs: [Number(ins[0]) ^ Number(ins[1])] })
+    execute: (ins) => ewResult(ins, (v) => Number(v[0]) ^ Number(v[1]))
   }),
 
   'BitwiseNOT': (id) => ({
     id, type: 'BitwiseNOT', params: {},
     inputs: [createPort('in', 'In', 'input')],
     outputs: [createPort('out', 'Out', 'output')],
-    execute: (ins) => ({ outputs: [~Number(ins[0])] })
+    execute: (ins) => ewResult([ins[0]], (v) => ~Number(v[0]))
   }),
 
   'ShiftLeft': (id) => ({
     id, type: 'ShiftLeft', params: {},
     inputs: [createPort('in', 'In', 'input'), createPort('sh', 'Shift', 'input')],
     outputs: [createPort('out', 'Out', 'output')],
-    execute: (ins) => ({ outputs: [Number(ins[0]) << Number(ins[1])] })
+    execute: (ins) => ewResult(ins, (v) => shiftLeft32(Number(v[0]), Number(v[1])))
   }),
 
   'ShiftRight': (id) => ({
     id, type: 'ShiftRight', params: {},
     inputs: [createPort('in', 'In', 'input'), createPort('sh', 'Shift', 'input')],
     outputs: [createPort('out', 'Out', 'output')],
-    execute: (ins) => ({ outputs: [Number(ins[0]) >> Number(ins[1])] })
+    execute: (ins) => ewResult(ins, (v) => shiftRight32(Number(v[0]), Number(v[1])))
   }),
   // --- Sequential Logic ---
   'DFlipFlop': (id) => ({
@@ -2065,7 +2118,8 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       if (rst) {
         nextVal = 0;
       } else if (en && clk && !state.lastClk) {
-        nextVal = data & ((1 << p.bitWidth) - 1);
+        // (1 << 32) is 1 in JavaScript: a 32-bit register keeps the whole int32 word.
+        nextVal = Number(p.bitWidth) >= 32 ? data | 0 : data & ((1 << p.bitWidth) - 1);
       }
 
       return { outputs: [nextVal], nextState: { value: nextVal, lastClk: clk ? 1 : 0 } };
@@ -2136,7 +2190,11 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       const offset = Number(p.offset);
 
       if (p.type === 'Sine') val = amp * Math.sin(omega + phase) + offset;
-      else if (p.type === 'Square') val = amp * Math.sign(Math.sin(omega + phase)) + offset;
+      else if (p.type === 'Square') {
+        // 50 % duty: +amp on [0, T/2), -amp on [T/2, T) of each period, decided on the phase fraction (no sign(sin)).
+        const cycles = freq * time + phase / (2 * Math.PI);
+        val = (cycles - Math.floor(cycles) < 0.5 ? amp : -amp) + offset;
+      }
 
       return { outputs: [val] };
     }
@@ -2231,7 +2289,13 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       equation: 'y = Σ(sᵢ · uᵢ)  where sᵢ ∈ {+1, −1}',
       description: 'Sums multiple inputs with configurable per-port signs (+/−). Equivalent to Simulink Sum block.',
       execute: (ins: any[], p: any) => {
-        const signs: string = (p.signs && typeof p.signs === 'string') ? p.signs : '+'.repeat(ins.length);
+        // '|' is only a spacer: the k-th '+'/'-' belongs to input k (same rule as xbSumSigns in the embedded path).
+        const signs: string = (p.signs && typeof p.signs === 'string') ? p.signs.replace(/[^+\-]/g, '') : '+'.repeat(ins.length);
+        if (ins.length === 1 && Array.isArray(ins[0])) {
+          // Single-input Sum block: sums the elements of the vector (negated for '-').
+          const total = VectorUtils.sum(ins[0]);
+          return { outputs: [signs[0] === '-' ? -total : total] };
+        }
         let result = (signs[0] === '-')
           ? VectorUtils.applyElementWise(ins[0], -1, 'multiply')
           : ins[0];
@@ -2304,7 +2368,19 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     id, type: 'VectorPow', params: {},
     inputs: [createPort('in1', 'Base', 'input'), createPort('in2', 'Exp', 'input')],
     outputs: [createPort('out', 'Out', 'output')],
-    execute: (ins) => ({ outputs: [VectorUtils.applyElementWise(ins[0], ins[1], 'pow')] })
+    execute: (ins) => {
+      // A real power of a negative base with a non-integer exponent is NaN (a mathjs Complex must not leak out).
+      let complex = false;
+      const real = (v: any): any => {
+        if (Array.isArray(v)) return v.map(real);
+        if (typeof v === 'object' && v !== null && typeof v.re === 'number' && typeof v.im === 'number') { complex = true; return NaN; }
+        return v;
+      };
+      const y = real(VectorUtils.applyElementWise(ins[0], ins[1], 'pow'));
+      return complex
+        ? { outputs: [y], diagnostic: { code: 'MATH_DOMAIN_ERROR', severity: 'warning', message: 'a negative base with a non-integer exponent has no real power (NaN).' } as BlockDiagnostic }
+        : { outputs: [y] };
+    }
   }),
 
   'UnaryNeg': (id) => ({
@@ -2333,7 +2409,15 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     id, type: 'Mean', params: {},
     inputs: [createPort('in', 'In', 'input')],
     outputs: [createPort('out', 'Out', 'output')],
-    execute: (ins) => ({ outputs: [VectorUtils.mean(ins[0])] })
+    execute: (ins) => {
+      const u = ins[0];
+      // MATLAB mean / Simulink Mean (each column): a matrix gives its column means.
+      if (Array.isArray(u) && u.length > 0 && Array.isArray(u[0])) {
+        const rows = u as number[][];
+        return { outputs: [rows[0].map((_, j) => VectorUtils.sum(rows.map((r) => r[j])) / rows.length)] };
+      }
+      return { outputs: [flatLength(u) === 0 ? NaN : VectorUtils.mean(u)] };
+    }
   }),
 
   'Max': (id, params) => {
@@ -2346,7 +2430,10 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       outputs: [createPort('out', 'Out', 'output')],
       execute: (ins) => {
         // If single input array, return max of array. If multiple inputs, return element-wise max.
-        if (ins.length === 1) return { outputs: [VectorUtils.max(ins[0])] };
+        if (ins.length === 1) {
+          // MATLAB max([]) = []; no throw on an empty vector.
+          return { outputs: [flatLength(ins[0]) === 0 ? [] : VectorUtils.max(ins[0])] };
+        }
 
         const elementWiseMax = (a: any, b: any): any => {
           if (Array.isArray(a) && Array.isArray(b)) {
@@ -2356,7 +2443,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
           } else if (Array.isArray(b)) {
             return b.map(val => elementWiseMax(a, val));
           }
-          return Math.max(Number(a) || 0, Number(b) || 0);
+          return Math.max(Number(a), Number(b)); // NaN propagates (Simulink MinMax)
         };
 
         let result = ins[0];
@@ -2373,7 +2460,10 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     id, type: 'MatrixMul', params: {},
     inputs: [createPort('in1', 'A', 'input'), createPort('in2', 'B', 'input')],
     outputs: [createPort('out', 'Out', 'output')],
-    execute: (ins) => ({ outputs: [VectorUtils.matMul(ins[0], ins[1])] })
+    execute: (ins) => {
+      try { return { outputs: [VectorUtils.matMul(ins[0], ins[1])] }; }
+      catch (e: any) { return { outputs: [NaN], error: String(e?.message ?? e) }; }
+    }
   }),
 
   'Transpose': (id) => ({
@@ -2387,7 +2477,10 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     id, type: 'Inverse', params: {},
     inputs: [createPort('in', 'In', 'input')],
     outputs: [createPort('out', 'Out', 'output')],
-    execute: (ins) => ({ outputs: [VectorUtils.inverse(ins[0])] })
+    execute: (ins) => {
+      try { return { outputs: [VectorUtils.inverse(ins[0])] }; }
+      catch (e: any) { return { outputs: [NaN], error: String(e?.message ?? e) }; }
+    }
   }),
 
   'Determinant': (id) => ({
@@ -2463,19 +2556,29 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
   'SubMatrix': (id, params) => ({
     id, type: 'SubMatrix',
     params: {
-      rowStart: params.rowStart ?? 0,
-      rowEnd: params.rowEnd ?? 0,
-      colStart: params.colStart ?? 0,
-      colEnd: params.colEnd ?? 0
+      rowStart: params.rowStart ?? 1,
+      rowEnd: params.rowEnd ?? 1,
+      colStart: params.colStart ?? 1,
+      colEnd: params.colEnd ?? 1
     },
     inputs: [createPort('in', 'In', 'input')],
     outputs: [createPort('out', 'Out', 'output')],
     execute: (ins, p) => {
-      const rStart = Number(p.rowStart ?? 0);
-      const rEnd = Number(p.rowEnd ?? 0);
-      const cStart = Number(p.colStart ?? 0);
-      const cEnd = Number(p.colEnd ?? 0);
-      return { outputs: [VectorUtils.submatrix(ins[0], rStart, rEnd, cStart, cEnd)] };
+      // Simulink Submatrix: one-based, inclusive indices; an index outside the input is an error (never clamped).
+      const rStart = Number(p.rowStart ?? 1);
+      const rEnd = Number(p.rowEnd ?? 1);
+      const cStart = Number(p.colStart ?? 1);
+      const cEnd = Number(p.colEnd ?? 1);
+      const u = ins[0];
+      if (!Array.isArray(u)) return { outputs: [NaN], error: 'SubMatrix input must be a vector or matrix.' };
+      const isMatrix = Array.isArray(u[0]);
+      const rows = u.length;
+      const cols = isMatrix ? (u[0] as any[]).length : 1;
+      const bad = (a: number, b: number, n: number) => !Number.isInteger(a) || !Number.isInteger(b) || a < 1 || b < a || b > n;
+      if (bad(rStart, rEnd, rows) || (isMatrix && bad(cStart, cEnd, cols))) {
+        return { outputs: [NaN], error: `SubMatrix indices (rows ${rStart}..${rEnd}${isMatrix ? `, columns ${cStart}..${cEnd}` : ''}) are outside the ${rows}${isMatrix ? `x${cols}` : ''} input (one-based).` };
+      }
+      return { outputs: [VectorUtils.submatrix(u, rStart - 1, rEnd - 1, cStart - 1, cEnd - 1)] };
     }
   }),
 
@@ -2483,7 +2586,14 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     id, type: 'MatrixSolve', params: {},
     inputs: [createPort('in1', 'A', 'input'), createPort('in2', 'B', 'input')],
     outputs: [createPort('out', 'x', 'output')],
-    execute: (ins) => ({ outputs: [VectorUtils.solve(ins[0], ins[1])] })
+    execute: (ins) => {
+      try {
+        const x = VectorUtils.solve(ins[0], ins[1]) as any;
+        // x has the shape of b: a 1-D b gives a 1-D x (lusolve returns a column matrix).
+        const oneD = Array.isArray(ins[1]) && !Array.isArray((ins[1] as any[])[0]);
+        return { outputs: [oneD && Array.isArray(x) ? x.flat() : x] };
+      } catch (e: any) { return { outputs: [NaN], error: String(e?.message ?? e) }; }
+    }
   }),
 
   // --- Continuous ---
@@ -3721,13 +3831,14 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
   // --- Integrators ---
   'INTEGRATOR_CONTINUOUS': (id, params) => ({
     id, type: 'INTEGRATOR_CONTINUOUS',
-    params: { initial_condition: params.initial_condition || 0 },
+    params: { initial_condition: Array.isArray(params.initial_condition) ? params.initial_condition : (params.initial_condition || 0) },
     isStateful: true,
     inputs: [createPort('u', 'u', 'input')],
     outputs: [createPort('y', 'y', 'output')],
-    state: { y: params.initial_condition || 0 },
+    state: { y: Array.isArray(params.initial_condition) ? params.initial_condition : (params.initial_condition || 0) },
     execute: (ins, p, state) => ({ outputs: [state.y] }),
-    evaluateDerivatives: (ins) => [Number(ins[0])]
+    // A vector input integrates element-wise into a vector state: the derivative is keyed by the state field.
+    evaluateDerivatives: (ins) => (Array.isArray(ins[0]) ? { y: ins[0] } : [Number(ins[0])])
   }),
 
   'INTEGRATOR_DISCRETE': (id, params) => {
@@ -3778,7 +3889,8 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     outputs: [createPort('y', 'y', 'output', 0, 'right', 'vector')],
     icon: 'rows',
     description: 'Bundles multiple scalar signals into a single vector signal for cleaner routing.',
-    execute: (ins) => ({ outputs: [ins as any] })
+    // Simulink Mux concatenates vector inputs into one flat vector.
+    execute: (ins) => ({ outputs: [ins.flatMap((v: any) => (Array.isArray(v) ? (v as any[]).flat(Infinity) : [v])) as any] })
   }),
 
   'DEMUX': (id, params) => ({
@@ -3787,7 +3899,26 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     allowDynamicOutputs: true,
     inputs: [createPort('u', 'u', 'input', 0, 'left', 'vector')],
     outputs: Array.from({ length: params.numOutputs || 2 }, (_, i) => createPort(`out${i + 1}`, `y${i + 1}`, 'output')),
-    execute: (ins) => ({ outputs: Array.isArray(ins[0]) ? ins[0] : [ins[0]] })
+    execute: (ins, p) => {
+      // Simulink Demux: n elements into q outputs, n mod q = m: m outputs of floor(n/q)+1 elements, then q-m of floor(n/q).
+      const elems: any[] = Array.isArray(ins[0]) ? (ins[0] as any[]).flat(Infinity) : [ins[0]];
+      const q = Math.floor(Number(p.numOutputs ?? 2));
+      const n = elems.length;
+      if (!Number.isFinite(q) || q < 1 || q > n) {
+        return { outputs: Array.from({ length: Math.max(1, q || 1) }, () => NaN), error: `Demux cannot split ${n} element(s) into ${q} outputs (more outputs than elements).` };
+      }
+      const base = Math.floor(n / q);
+      const m = n % q;
+      const outputs: any[] = [];
+      let at = 0;
+      for (let i = 0; i < q; i++) {
+        const len = base + (i < m ? 1 : 0);
+        const chunk = elems.slice(at, at + len);
+        at += len;
+        outputs.push(len === 1 ? chunk[0] : chunk);
+      }
+      return { outputs };
+    }
   }),
 
   // --- Math Operations ---
@@ -3812,14 +3943,15 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     inputs: Array.from({ length: params.numInputs || 2 }, (_, i) => createPort(`in${i + 1}`, `u${i + 1}`, 'input')),
     outputs: [createPort('y', 'y', 'output')],
     execute: (ins, p) => {
+      // Element-wise over scalars, vectors and matrices with scalar expansion (Simulink Product, element-wise mode).
       if (p.operation === 'divide') {
         // y = in1 / in2 / ... with IEEE semantics (x/0 = +-Inf, 0/0 = NaN); a single input gives 1/in1.
-        const nums = ins.map(Number);
-        const divisors = nums.length === 1 ? nums : nums.slice(1);
-        const y = nums.length === 1 ? 1 / nums[0] : divisors.reduce((acc, val) => acc / val, nums[0]);
-        return { outputs: [y], ...divideByZeroDiagnostic(divisors) };
+        return ewResult(ins, (v) => {
+          const nums = v.map(Number);
+          return nums.length === 1 ? 1 / nums[0] : nums.slice(1).reduce((acc, val) => acc / val, nums[0]);
+        }, divideByZeroDiagnostic(ins.length === 1 ? ins : ins.slice(1)));
       }
-      return { outputs: [ins.reduce((acc: number, val) => acc * Number(val), 1)] };
+      return ewResult(ins, (v) => v.reduce((acc: number, val) => acc * Number(val), 1));
     }
   }),
 
@@ -3847,6 +3979,9 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
         case '<': pass = ctrl < th; break;
         case '>=': pass = ctrl >= th; break;
         case '<=': pass = ctrl <= th; break;
+        case '~=0': pass = ctrl !== 0; break; // Simulink "u2 ~= 0" (NaN ~= 0 is true as in MATLAB)
+        default:
+          return { outputs: [NaN], error: `Switch criterion '${String(p.criteria)}' is not supported.` };
       }
       return { outputs: [pass ? u1 : u2] };
     }
@@ -3877,8 +4012,11 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
         const sel = Math.floor(Number(ins[0]));
         // selector is 1-indexed for the cases (input 1 is case 1, input 2 is case 2, etc.)
         // ins[0] is selector. ins[1] is case 1, ins[2] is case 2...
-        const val = ins[sel] !== undefined ? ins[sel] : ins[1];
-        return { outputs: [val] };
+        // Simulink Multiport Switch: a control outside 1..n is an error, never routed to another case.
+        if (!(sel >= 1 && sel <= numCases)) {
+          return { outputs: [NaN], error: `Switch Case control ${String(ins[0])} is outside 1..${numCases}.` };
+        }
+        return { outputs: [ins[sel]] };
       }
     };
   },
@@ -4403,10 +4541,10 @@ return block;
   },
 
 'INTEGRATOR': (id, params) => {
-  const x0 = Number(params.initialCondition) || 0;
+  const x0 = Array.isArray(params.initialCondition) ? params.initialCondition.map(Number) : (Number(params.initialCondition) || 0);
   const limit = !!params.limitOutput;
-  const maxVal = params.upperLimit !== undefined ? Number(params.upperLimit) : Infinity;
-  const minVal = params.lowerLimit !== undefined ? Number(params.lowerLimit) : -Infinity;
+  const maxVal = numberOrVector(params.upperLimit, Infinity);
+  const minVal = numberOrVector(params.lowerLimit, -Infinity);
   const resetMode = params.externalReset || 'none';
 
   const inputs = [createPort('u', 'u', 'input')];
@@ -4425,7 +4563,7 @@ return block;
     equation: 'y = ∫ u dt',
     description: 'Continuous-time integration of the input signal. Supports saturation limits and external reset triggers.',
     execute: (ins, p, state) => {
-      let x = Number(state.x) || 0;
+      let x = Array.isArray(state.x) ? state.x : (Number(state.x) || 0);
       let prevReset = Number(state.prevReset) || 0;
 
       if (p.externalReset !== 'none') {
@@ -4443,7 +4581,7 @@ return block;
       }
 
       if (p.limitOutput) {
-        x = Math.max(p.lowerLimit, Math.min(p.upperLimit, x));
+        x = ewMap([x, p.lowerLimit, p.upperLimit], (v) => Math.max(v[1], Math.min(v[2], v[0])));
       }
 
       return {
@@ -4452,14 +4590,19 @@ return block;
       };
     },
     evaluateDerivatives: (ins, p, state) => {
-      const u = Number(ins[0]) || 0;
-      const x = Number(state.x) || 0;
-
-      if (p.limitOutput) {
-        if (x >= p.upperLimit && u > 0) return { x: 0 };
-        if (x <= p.lowerLimit && u < 0) return { x: 0 };
-      }
-      return { x: u };
+      // Scalars, vectors and matrices integrate element-wise (state, input and limits).
+      const xs = Array.isArray(state.x) ? state.x : (Number(state.x) || 0);
+      const us = Array.isArray(ins[0]) ? ins[0].map((e: any) => Number(e) || 0) : (Number(ins[0]) || 0);
+      return {
+        x: ewMap([us, xs, p.lowerLimit, p.upperLimit], (v) => {
+          const [u, x, lo, hi] = v;
+          if (p.limitOutput) {
+            if (x >= hi && u > 0) return 0;
+            if (x <= lo && u < 0) return 0;
+          }
+          return u;
+        })
+      };
     }
   };
 },
@@ -4478,8 +4621,10 @@ return block;
       equation: 'y(k) = u(k-1)',
       description: 'Discrete-time unit delay. Delays the input signal by one sample period.',
       execute: (ins, p, state) => {
+        // The initial condition applies to every element of a vector, matrix or bus input (first sample).
+        const held = typeof state.x === 'number' || typeof state.x === 'boolean' ? expandLike(state.x, ins[0]) : state.x;
         return {
-          outputs: [state.x],
+          outputs: [held],
           nextState: { x: ins[0] }
         };
       }
@@ -4516,9 +4661,11 @@ return block;
           inputs: [createPort('u', 'u', 'input')],
           outputs: [createPort('y', 'y', 'output')],
           execute: (ins: any[], p: any) => {
-            const u = Number(ins[0]);
-            if (Number.isNaN(u)) return { outputs: [NaN] };
-            return { outputs: [Math.max(p.lowerLimit, Math.min(p.upperLimit, u))] };
+            // Element-wise for vector or matrix inputs, with scalar or vector limits.
+            return ewResult([ins[0], p.lowerLimit, p.upperLimit], (v) => {
+              const u = Number(v[0]);
+              return Number.isNaN(u) ? NaN : Math.max(Number(v[1]), Math.min(Number(v[2]), u));
+            });
           }
         };
       },
@@ -5151,7 +5298,7 @@ return block;
                                         execute: (ins, p, state) => {
                                           const u = Number(ins[0]);
                                           const N = Number(p.window_size);
-                                          let buffer = state.buffer.length === 0 ? new Array(N).fill(u) : [...state.buffer];
+                                          let buffer = state.buffer.length === 0 ? new Array(N).fill(0) : [...state.buffer]; // zero initial state
                                           buffer[state.index] = u;
                                           const nextIndex = (state.index + 1) % N;
                                           const y = buffer.reduce((a: number, b: number) => a + b, 0) / N;
@@ -11624,6 +11771,27 @@ return block;
   ...BUS_FACTORIES,
   ...POWERTRAIN_FACTORIES
 };
+
+/** Trigonometric and hyperbolic blocks are element-wise for vector and matrix inputs (Simulink Trigonometric Function). */
+for (const type of ['SIN', 'COS', 'TAN', 'COT', 'SEC', 'COSEC', 'ASIN', 'ACOS', 'ATAN', 'ACOT', 'ASEC', 'ACOSEC',
+  'SINH', 'COSH', 'TANH', 'COTH', 'SECH', 'COSECH', 'ASINH', 'ACOSH', 'ATANH', 'ACOTH', 'ASECH', 'ACOSECH']) {
+  const build = BLOCK_LIBRARY[type];
+  BLOCK_LIBRARY[type] = (id, params) => {
+    const block = build(id, params);
+    const scalarExecute = block.execute;
+    block.execute = (ins, p, state, time) => {
+      if (!Array.isArray(ins[0])) return scalarExecute(ins, p, state, time);
+      let diagnostic: BlockDiagnostic | undefined;
+      const y = ewMap([ins[0]], (v) => {
+        const r = scalarExecute([v[0]], p, state, time);
+        diagnostic ??= (r as any).diagnostic;
+        return r.outputs[0];
+      });
+      return diagnostic ? { outputs: [y], diagnostic } : { outputs: [y] };
+    };
+    return block;
+  };
+}
 
 /**
  * Parameter text is MATLAB-style ('2*pi', '[1 2 3]'). Factories receive the evaluated values; text the evaluator
