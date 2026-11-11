@@ -1058,8 +1058,11 @@ const emitSum = emitSingleOutput((inputs, operation) => {
 });
 const emitSumJunction: OperationEmitter = (...args) => emitSum(...args);
 const emitVectorAdd: OperationEmitter = (...args) => emitSum(...args);
-const emitProduct = emitSingleOutput((inputs) =>
-  reduceExpression(inputs, '*', '1.0'));
+const emitProduct = emitSingleOutput((inputs, operation) => operation.type === 'PRODUCT' && operation.parameters.operation === 'divide'
+  ? (inputs.length === 0 ? '1.0' : inputs.length === 1
+    ? `(1.0 / (${inputs[0]}))`
+    : `(${inputs.map((input) => `(${input})`).join(' / ')})`)
+  : reduceExpression(inputs, '*', '1.0'));
 const emitVectorMultiply: OperationEmitter = (...args) =>
   emitProduct(...args);
 const emitSubtract = emitSingleOutput((inputs) =>

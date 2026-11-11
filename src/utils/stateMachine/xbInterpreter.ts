@@ -548,6 +548,15 @@ const evaluateDirectOperation = (
     }
     case 'PRODUCT':
     case 'VectorMul': {
+      if (operation.type === 'PRODUCT' && operation.parameters.operation === 'divide') {
+        // Simulink Product '/': y = u1 / u2 / ... (a single input gives 1/u1); IEEE results for x/0 (fault via non-finite).
+        if (inputs.length === 0) return [[1]];
+        if (inputs.length === 1) return [binary([1], inputs[0], (left, right) => left / right)];
+        return [inputs.slice(1).reduce<readonly XBScalar[]>(
+          (quotient, input) => binary(quotient, input, (left, right) => left / right),
+          inputs[0],
+        )];
+      }
       const result = inputs.reduce<readonly XBScalar[]>(
         (product, input) =>
           binary(product, input, (left, right) => left * right),

@@ -332,7 +332,7 @@ describe('WP-21 batch F acceptance: embedded PID, Delay 0, Product divide equal 
         ],
         wires: ['a.out -> b.in1', 'k.out -> b.in2'],
       };
-      assertOutcome(compareSpec(`PRODUCT divide ${solver}`, spec, solver, ['b.out']));
+      assertOutcome(compareSpec(`PRODUCT divide ${solver}`, spec, solver, ['b.y']));
     });
   }
 });
