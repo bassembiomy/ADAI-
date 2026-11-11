@@ -40,174 +40,33 @@ const PIN_CAUSE: Record<string, string> = {
   'XBV-091': 'canvas y(0)=0 then explicit-Euler instability (|y| exceeds the closed-form bound amp=1.3 from step 3), embedded stays bounded but one tick ahead; filter discretisation differs, neither exact, unresolved',
 };
 const PINS: Record<string, string> = {
-  'ACOS|euler': 'XBV-086',
-  'ACOS|rk4': 'XBV-086',
-  'ACOS|discrete': 'XBV-086',
-  'ACOSEC|euler': 'XBV-086',
-  'ACOSEC|rk4': 'XBV-086',
-  'ACOSEC|discrete': 'XBV-086',
-  'ACOSH|euler': 'XBV-086',
-  'ACOSH|rk4': 'XBV-086',
-  'ACOSH|discrete': 'XBV-086',
-  'ACOTH|euler': 'XBV-086',
-  'ACOTH|rk4': 'XBV-086',
-  'ACOTH|discrete': 'XBV-086',
-  'ASEC|euler': 'XBV-086',
-  'ASEC|rk4': 'XBV-086',
-  'ASEC|discrete': 'XBV-086',
-  'ASECH|euler': 'XBV-086',
-  'ASECH|rk4': 'XBV-086',
-  'ASECH|discrete': 'XBV-086',
-  'ASIN|euler': 'XBV-086',
-  'ASIN|rk4': 'XBV-086',
-  'ASIN|discrete': 'XBV-086',
-  'ATANH|euler': 'XBV-086',
-  'ATANH|rk4': 'XBV-086',
-  'ATANH|discrete': 'XBV-086',
+  'SIX_STEP_COMMUTATION|euler': 'XBV-090',
+  'SIX_STEP_COMMUTATION|rk4': 'XBV-090',
+  'SIX_STEP_COMMUTATION|discrete': 'XBV-090',
   'BAND_LIMITED_NOISE|euler': 'XBV-088',
   'BAND_LIMITED_NOISE|rk4': 'XBV-088',
   'BAND_LIMITED_NOISE|discrete': 'XBV-088',
-  'BitwiseAND|euler': 'XBV-087',
-  'BitwiseAND|rk4': 'XBV-087',
-  'BitwiseAND|discrete': 'XBV-087',
-  'BitwiseNOT|euler': 'XBV-087',
-  'BitwiseNOT|rk4': 'XBV-087',
-  'BitwiseNOT|discrete': 'XBV-087',
-  'BitwiseOR|euler': 'XBV-087',
-  'BitwiseOR|rk4': 'XBV-087',
-  'BitwiseOR|discrete': 'XBV-087',
-  'BitwiseXOR|euler': 'XBV-087',
-  'BitwiseXOR|rk4': 'XBV-087',
-  'BitwiseXOR|discrete': 'XBV-087',
   'Clock|euler': 'XBV-041',
   'Clock|rk4': 'XBV-041',
   'Clock|discrete': 'XBV-041',
   'DEADZONE|euler': 'XBV-065',
   'DEADZONE|rk4': 'XBV-065',
   'DEADZONE|discrete': 'XBV-065',
-  'DISCRETE_TRANSFER_FUNCTION|euler': 'XBV-093',
-  'DISCRETE_TRANSFER_FUNCTION|rk4': 'XBV-093',
-  'DISCRETE_TRANSFER_FUNCTION|discrete': 'XBV-093',
-  'HIGH_PASS_FILTER|euler': 'XBV-091',
-  'HIGH_PASS_FILTER|rk4': 'XBV-091',
-  'INTEGRATOR_CONTINUOUS|euler': 'XBV-084',
-  'INTEGRATOR_CONTINUOUS|rk4': 'XBV-084',
-  'Integrator|euler': 'XBV-084',
-  'Integrator|rk4': 'XBV-084',
   'KALMAN_FILTER|euler': 'XBV-092',
   'KALMAN_FILTER|rk4': 'XBV-092',
   'KALMAN_FILTER|discrete': 'XBV-092',
-  'LOW_PASS_FILTER|euler': 'XBV-091',
-  'LOW_PASS_FILTER|rk4': 'XBV-091',
   'MOVING_AVERAGE|euler': 'XBV-068',
   'MOVING_AVERAGE|rk4': 'XBV-068',
   'MOVING_AVERAGE|discrete': 'XBV-068',
-  'RATE_LIMITER|euler': 'XBV-084',
-  'RATE_LIMITER|rk4': 'XBV-084',
-  'RATE_LIMITER|discrete': 'XBV-084',
   'RELAY|rk4': 'XBV-067',
   'SATURATION|euler': 'XBV-065',
   'SATURATION|rk4': 'XBV-065',
   'SATURATION|discrete': 'XBV-065',
-  'SIX_STEP_COMMUTATION|euler': 'XBV-090',
-  'SIX_STEP_COMMUTATION|rk4': 'XBV-090',
-  'SIX_STEP_COMMUTATION|discrete': 'XBV-090',
-  'STATE_SPACE|euler': 'XBV-093',
-  'STATE_SPACE|rk4': 'XBV-093',
-  'ShiftLeft|euler': 'XBV-087',
-  'ShiftLeft|rk4': 'XBV-087',
-  'ShiftLeft|discrete': 'XBV-087',
-  'ShiftRight|euler': 'XBV-087',
-  'ShiftRight|rk4': 'XBV-087',
-  'ShiftRight|discrete': 'XBV-087',
-  'Step|euler': 'XBV-084',
-  'Step|rk4': 'XBV-084',
-  'Step|discrete': 'XBV-084',
-  'VectorAdd|euler': 'XBV-094',
-  'VectorAdd|rk4': 'XBV-094',
-  'VectorAdd|discrete': 'XBV-094',
-  'VectorDiv|euler': 'XBV-094',
-  'VectorDiv|rk4': 'XBV-094',
-  'VectorDiv|discrete': 'XBV-094',
-  'VectorMul|euler': 'XBV-094',
-  'VectorMul|rk4': 'XBV-094',
-  'VectorMul|discrete': 'XBV-094',
-  'VectorSub|euler': 'XBV-094',
-  'VectorSub|rk4': 'XBV-094',
-  'VectorSub|discrete': 'XBV-094',
   'WHITE_NOISE|euler': 'XBV-088',
   'WHITE_NOISE|rk4': 'XBV-088',
   'WHITE_NOISE|discrete': 'XBV-088',
 };
 const CORPUS_PINS: Record<string, string> = {
-  'all|euler|1': 'XBV-MULTI',
-  'all|euler|4': 'XBV-MULTI',
-  'all|euler|5': 'XBV-MULTI',
-  'all|euler|6': 'XBV-MULTI',
-  'all|euler|7': 'XBV-MULTI',
-  'all|euler|9': 'XBV-MULTI',
-  'all|euler|10': 'XBV-MULTI',
-  'all|euler|12': 'XBV-MULTI',
-  'all|euler|14': 'XBV-MULTI',
-  'all|euler|15': 'XBV-MULTI',
-  'all|euler|17': 'XBV-MULTI',
-  'all|euler|18': 'XBV-MULTI',
-  'all|euler|19': 'XBV-MULTI',
-  'all|euler|20': 'XBV-MULTI',
-  'all|euler|22': 'XBV-MULTI',
-  'all|euler|23': 'XBV-MULTI',
-  'all|euler|24': 'XBV-MULTI',
-  'all|euler|25': 'XBV-MULTI',
-  'all|euler|26': 'XBV-MULTI',
-  'all|euler|28': 'XBV-MULTI',
-  'all|euler|29': 'XBV-MULTI',
-  'all|euler|30': 'XBV-MULTI',
-  'all|rk4|1': 'XBV-MULTI',
-  'all|rk4|4': 'XBV-MULTI',
-  'all|rk4|5': 'XBV-MULTI',
-  'all|rk4|6': 'XBV-MULTI',
-  'all|rk4|7': 'XBV-MULTI',
-  'all|rk4|9': 'XBV-MULTI',
-  'all|rk4|10': 'XBV-MULTI',
-  'all|rk4|12': 'XBV-MULTI',
-  'all|rk4|14': 'XBV-MULTI',
-  'all|rk4|15': 'XBV-MULTI',
-  'all|rk4|17': 'XBV-MULTI',
-  'all|rk4|18': 'XBV-MULTI',
-  'all|rk4|19': 'XBV-MULTI',
-  'all|rk4|20': 'XBV-MULTI',
-  'all|rk4|22': 'XBV-MULTI',
-  'all|rk4|23': 'XBV-MULTI',
-  'all|rk4|24': 'XBV-MULTI',
-  'all|rk4|25': 'XBV-MULTI',
-  'all|rk4|26': 'XBV-MULTI',
-  'all|rk4|28': 'XBV-MULTI',
-  'all|rk4|29': 'XBV-MULTI',
-  'all|rk4|30': 'XBV-MULTI',
-  'no-step|euler|2': 'XBV-MULTI',
-  'no-step|euler|3': 'XBV-MULTI',
-  'no-step|euler|8': 'XBV-MULTI',
-  'no-step|euler|10': 'XBV-MULTI',
-  'no-step|euler|17': 'XBV-MULTI',
-  'no-step|euler|21': 'XBV-MULTI',
-  'no-step|euler|22': 'XBV-MULTI',
-  'no-step|euler|23': 'XBV-MULTI',
-  'no-step|euler|24': 'XBV-MULTI',
-  'no-step|euler|26': 'XBV-MULTI',
-  'no-step|euler|28': 'XBV-MULTI',
-  'no-step|euler|30': 'XBV-MULTI',
-  'no-step|rk4|2': 'XBV-MULTI',
-  'no-step|rk4|3': 'XBV-MULTI',
-  'no-step|rk4|8': 'XBV-MULTI',
-  'no-step|rk4|10': 'XBV-MULTI',
-  'no-step|rk4|17': 'XBV-MULTI',
-  'no-step|rk4|21': 'XBV-MULTI',
-  'no-step|rk4|22': 'XBV-MULTI',
-  'no-step|rk4|23': 'XBV-MULTI',
-  'no-step|rk4|24': 'XBV-MULTI',
-  'no-step|rk4|26': 'XBV-MULTI',
-  'no-step|rk4|28': 'XBV-MULTI',
-  'no-step|rk4|30': 'XBV-MULTI',
 };
 
 const pinTitle = (pin: string, title: string) => `${pin.split(' ')[0]}: ${title} - ${PIN_CAUSE[pin.split(' ')[0]]}${pin.includes(' ') ? ` ${pin.slice(pin.indexOf(' ') + 1)}` : ''}`;
@@ -419,4 +278,61 @@ import { afterAll } from 'vitest';
 import { writeFileSync } from 'node:fs';
 afterAll(() => {
   if (process.env.XBTRI_REPORT) writeFileSync(process.env.XBTRI_REPORT, JSON.stringify(REPORT, null, 1));
+});
+
+// ---------------------------------------------------------------- WP-21 batch F acceptance (controller)
+// XBV-150 / XBV-152: the per-block PID case above drives r and y from related sources and enable/reset from the same
+// constant, so it cannot show the PID semantics. Here r and y are two different sines, enable = 1 and reset = 0, and
+// every PID output is compared, including 'error' (= r - y on the canvas, a signal, not the fault flag).
+// Oracle: the canvas PID_CONTROLLER (Simulink PID, parallel form with setpoint weights b, c and derivative filter N).
+describe('WP-21 batch F acceptance: embedded PID, Delay 0, Product divide equal the canvas', () => {
+  const pidSpec = (params: Record<string, unknown>): ModelSpec => ({
+    blocks: [
+      { id: 'b', type: 'PID_CONTROLLER', params },
+      { id: 'r', type: 'WaveformGen', params: SINE_A },
+      { id: 'y', type: 'WaveformGen', params: SINE_B },
+      { id: 'en', type: 'Constant', params: { value: 1 } },
+      { id: 'rs', type: 'Constant', params: { value: 0 } },
+    ],
+    wires: ['r.out -> b.r', 'y.out -> b.y', 'en.out -> b.enable', 'rs.out -> b.reset'],
+  });
+  const PID_PROBES = ['b.u', 'b.error', 'b.p_term', 'b.i_term', 'b.d_term'];
+  const variants: [string, Record<string, unknown>][] = [
+    ['factory defaults (beta 1, gamma 0, forward_euler, inherited sample time)', {}],
+    ['setpoint weights beta 0.6, gamma 0.4', { beta: 0.6, gamma: 0.4 }],
+    ['backward_euler', { method: 'backward_euler' }],
+    ['sample time 0.1', { sampleTime: 0.1 }],
+    ['sample time 0 (continuous on the canvas)', { sampleTime: 0 }],
+  ];
+  for (const solver of ['euler', 'rk4'] as const) {
+    for (const [name, params] of variants) {
+      it(`XBV-150: PID_CONTROLLER ${name}, ${solver}: canvas = embedded on u, error, p_term, i_term, d_term`, () => {
+        assertOutcome(compareSpec(`PID ${name} ${solver}`, pidSpec(params), solver, PID_PROBES));
+      });
+    }
+    it(`XBV-150: PID_CONTROLLER method 'trapezoidal' is refused by both paths (${solver})`, () => {
+      const o = compareSpec(`PID trapezoidal ${solver}`, pidSpec({ method: 'trapezoidal' }), solver, PID_PROBES);
+      expect(o.kind, (o as { detail?: string }).detail).toBe('both-refused');
+    });
+  }
+  for (const solver of ['euler', 'rk4', 'discrete'] as const) {
+    it(`XBV-151: DELAY delay_length 0 is direct feedthrough y = u in both paths (${solver})`, () => {
+      const spec: ModelSpec = {
+        blocks: [{ id: 'b', type: 'DELAY', params: { delay_length: 0, sampleTime: 0.1 } }, { id: 's', type: 'WaveformGen', params: SINE_A }],
+        wires: ['s.out -> b.u'],
+      };
+      assertOutcome(compareSpec(`DELAY 0 ${solver}`, spec, solver, ['b.y']));
+    });
+    it(`XBV-107: PRODUCT operation 'divide' runs in the embedded path and equals the canvas (${solver})`, () => {
+      const spec: ModelSpec = {
+        blocks: [
+          { id: 'b', type: 'PRODUCT', params: { numInputs: 2, operation: 'divide' } },
+          { id: 'a', type: 'WaveformGen', params: SINE_A },
+          { id: 'k', type: 'Constant', params: { value: 0.7 } },
+        ],
+        wires: ['a.out -> b.in1', 'k.out -> b.in2'],
+      };
+      assertOutcome(compareSpec(`PRODUCT divide ${solver}`, spec, solver, ['b.out']));
+    });
+  }
 });

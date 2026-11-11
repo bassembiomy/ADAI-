@@ -5,16 +5,12 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 ## Summary
 
 - Work packages: 20 done of 29; 2 in progress; 7 to do.
-- Findings: 137 open, 15 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
+- Findings: 136 open, 16 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
   - S1 (wrong number in simulation or generated C): 43 open
   - S2 (crash, stop, freeze or silent no-op): 35 open
-  - S3 (diagnostic, UI or convention deviation): 51 open
+  - S3 (diagnostic, UI or convention deviation): 50 open
   - S4 (documentation): 8 open
-- Decisions recorded: 9; open: 1 (D9).
-
-## Open decisions
-
-- **D9 - Embedded tick time base (XBV-084).** OPEN - needs the user: should X-Bridges inside a state publish every output for the start of the tick (t_k, Simulink major-step semantics, same as the canvas; Integrator/RATE_LIMITER would publish the pre-update state and Step use t_k, and the generated C changes accordingly) or for the end of the tick (t_(k+1); Clock, WaveformGen and UNIT_DELAY would move to t_(k+1))? Today guards see a mix. Until decided, the parity test asserts the t_k convention and pins the difference. Controller recommendation: start of tick.
+- Decisions recorded: 11; open: 0.
 
 ## Work packages
 
@@ -156,7 +152,7 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 | XBV-151 | V6 | 7.3 canvas / interpreter parity | The embedded builder still refuses DELAY delay_length 0 (xbSemanticBuilder.ts ~1146 XB_DELAY_LENGTH_INVALID, diagnosticGuidance.ts) although the canvas now treats it as direct feedthrough (XBV-064, Simulink Delay). Found by the WP-21 batch A executor. |
 | XBV-153 | V3 | U7 / 5.2 diagnostics | Six divisor parameters give a non-finite output without a diagnostic when set to 0 (present before WP-21): IM_FOC_CONTROL.Lm, AIR_FRYER_LEARNING_MODEL tau_h, tau_f, tau_c, tau_s, FABRIC_HARMONIC_ANALYZER.drum_mass. They need parameterSchema entries rejecting 0 (batch J). Found by the WP-21 batch A verifier's zero-parameter scan. |
 
-### S3 - diagnostic, UI or convention deviation (51)
+### S3 - diagnostic, UI or convention deviation (50)
 
 | Id | Gate | Plan ref | Summary |
 | --- | --- | --- | --- |
@@ -189,7 +185,6 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 | XBV-091 | V6 | 7.3 canvas / interpreter parity | LOW_PASS_FILTER / HIGH_PASS_FILTER at fc 10 Hz, dt 0.05 (dt/tau = 3.1): the canvas output grows (\|y\| > 1.3 from step 3, explicit integration beyond its stability limit), the embedded path stays bounded (different discretisation). Unresolved which matches Simulink at this step; both must at least agree on the discretisation rule. Found by the WP-16 executor; pinned in src/utils/stateMachine/xbTriParity.test.ts. |
 | XBV-094 | V6 | 7.3 canvas / interpreter parity | Parity gap: VectorAdd/VectorSub/VectorMul/VectorDiv are registered with a scalar shape but the embedded validator rejects scalar inputs (XB_SHAPE_MISMATCH). Found by the WP-16 executor; pinned in src/utils/stateMachine/xbTriParity.test.ts. |
 | XBV-106 | V7 | 7.2 state-machine alignment | State-machine variables are scalar only: mapping a vector (3) or matrix (2x2) X-Bridges port to an SM variable is refused (XB_MAPPING_INVALID), so plan 7.2's vector/matrix boundary mappings are not expressible; vector/matrix signals work inside the model. Reported by the WP-18 executor. |
-| XBV-107 | V7 | 7.2 state-machine alignment | PRODUCT with operation 'divide' is not available in the embedded (state-machine / C) path although the canvas offers it; divide inside a state requires VectorDiv on vectors. Reported by the WP-18 executor. |
 | XBV-112 | V2 | 4.2 fuzzy | FUZZY_AND clips its inputs to [0, 1] and turns NaN into 0 silently (min(1.5, 2) = 1, product = 1 instead of 1.5 and 3); MATLAB does not clip. Out-of-range memberships are invalid inputs, so clipping is defensible, but it is undiagnosed. Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts. |
 | XBV-113 | V2 | 4.2 fuzzy | FUZZY_OR clips its inputs to [0, 1] without a diagnostic (max(1.5, 2) = 1 instead of 2). Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts. |
 | XBV-114 | V2 | 4.2 fuzzy | FUZZY_NOT clips its input to [0, 1] without a diagnostic (1 - 1.5 gives 0 instead of -0.5). Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts. |
@@ -242,6 +237,7 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 - XBV-100 (closed): Generated C with Bitwise/Shift blocks fails -Wall -Werror: SM_XB_ShiftLeft32 / SM_XB_ShiftRight32 are emitted but unused. Found by the WP-17 executor; pinned in src/utils/stateMachine/xbCodeParity.tes
 - XBV-104 (closed): Generated C for an integrator loop fails -Wshadow (gcc and clang): 'xb_value_0_0_i_out' shadows a previous local (sm_core.c:78). Found by the WP-17 executor; pinned in src/utils/stateMachine/xbCodePar
 - XBV-105 (closed): Generated C for discontinuity blocks fails -Wdouble-promotion (gcc sm_core.c:143, clang sm_core.c:100): float promoted to double in a conditional. Found by the WP-17 executor; pinned in src/utils/stat
+- XBV-107 (closed): PRODUCT with operation 'divide' is not available in the embedded (state-machine / C) path although the canvas offers it; divide inside a state requires VectorDiv on vectors. Reported by the WP-18 exec
 
 ## Decisions
 
@@ -253,7 +249,9 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 - **D6** (2026-11-10, Loop roles): Opus controls the loop (acceptance tests, briefs, ledger, commits); Sonnet and Haiku are the executors and run the tests; Fable verifies every work package before it is committed.
 - **D7** (2026-11-10, Who writes family acceptance tests): From WP-06 on, the controller writes an oracle specification per block (stimulus, closed-form expected values and their source, tolerances, Simulink rule) in the brief; the Sonnet executor turns it into the test file and pins product defects as it.fails with proposed finding ids; the controller reviews every expected value against the spec before dispatching the Fable verifier. Expected values never come from the code under test.
 - **D8** (2026-11-11, Verifier model): User: take Fable out of the loop; Opus does the verification. The xbv-verifier role now runs as an independent Opus subagent (not the controller itself), with the same checks. Verdicts before this date were given by Fable.
-- **D9** (2026-11-11, Embedded tick time base (XBV-084)): OPEN - needs the user: should X-Bridges inside a state publish every output for the start of the tick (t_k, Simulink major-step semantics, same as the canvas; Integrator/RATE_LIMITER would publish the pre-update state and Step use t_k, and the generated C changes accordingly) or for the end of the tick (t_(k+1); Clock, WaveformGen and UNIT_DELAY would move to t_(k+1))? Today guards see a mix. Until decided, the parity test asserts the t_k convention and pins the difference. Controller recommendation: start of tick.
+- **D9** (2026-11-11, Embedded tick time base (XBV-084)): Start-of-tick time base in the embedded path (interpreter and generated C), adopted by the controller under the user's 'fix all findings' go-ahead (2026-11-11, recommended option, reversible): every block in tick k sees t_k, continuous and discrete states publish their value at t_k and are updated to t_{k+1} after all outputs (Simulink output-then-update order, which the canvas already follows).
+- **D10** (2026-11-11, bitwise data type (XBV-087, XBV-101)): Bitwise and shift blocks work on int32 two's complement on every path (canvas, interpreter, C); the generated C performs the bit operations on uint32 casts and converts back, so every operation is defined behaviour. Adopted by the controller under the 'fix all' go-ahead; the canvas and the C already used int32, only the interpreter changes.
+- **D11** (2026-11-11, out-of-domain math in the embedded path (XBV-086)): Out-of-domain inputs (acos(2), atanh(1.5), (-8)^(1/3)) publish NaN and raise the numeric fault on every path, as the canvas (NaN + MATH_DOMAIN_ERROR) and Simulink-generated C (libm returns NaN) do; the documented 'deterministic fallback 0' of the signal-only fault policy is replaced by NaN + fault flag. Adopted by the controller under the 'fix all' go-ahead.
 
 ## Deferred items (notes for follow-up WPs)
 
