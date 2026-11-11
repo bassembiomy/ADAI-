@@ -6,17 +6,12 @@
   "DEM_HERTZ_CONTACT",
   "MPC_CONTROLLER",
   "MatrixConcat",
-  "MatrixSolve",
   "ROBOT_VACUUM_ERODE_MASK",
-  "ROBOT_VACUUM_THETA_STAR",
-  "SubMatrix"
+  "ROBOT_VACUUM_THETA_STAR"
  ],
  "XBV-U2 fails alone with unconnected inputs": [
-  "DEMUX",
   "MPC_CONTROLLER",
-  "MatrixConcat",
-  "MatrixSolve",
-  "SubMatrix"
+  "MatrixConcat"
  ],
  "XBV-U3 throws or silent NaN on finite edge inputs": [
   "DEM_BOND_FABRIC",
@@ -24,12 +19,10 @@
   "DEM_HERTZ_CONTACT",
   "MPC_CONTROLLER",
   "MatrixConcat",
-  "MatrixSolve",
   "ROBOT_VACUUM_CONTINUOUS_ENERGY",
   "ROBOT_VACUUM_ERODE_MASK",
   "ROBOT_VACUUM_THETA_STAR",
-  "SWITCHING_TIME_CALCULATOR",
-  "SubMatrix"
+  "SWITCHING_TIME_CALCULATOR"
  ],
  "XBV-U4 throws on NaN or infinite inputs": [
   "DEM_BOND_FABRIC",
@@ -37,10 +30,8 @@
   "DEM_HERTZ_CONTACT",
   "MPC_CONTROLLER",
   "MatrixConcat",
-  "MatrixSolve",
   "ROBOT_VACUUM_ERODE_MASK",
-  "ROBOT_VACUUM_THETA_STAR",
-  "SubMatrix"
+  "ROBOT_VACUUM_THETA_STAR"
  ],
  "XBV-U5 throws on a wrong value kind": [
   "Abs",
@@ -52,18 +43,14 @@
   "EXTENDED_KALMAN_FILTER",
   "ExtractDiag",
   "GAIN",
-  "Inverse",
   "KALMAN_FILTER",
   "MPC_CONTROLLER",
   "MatrixConcat",
   "MatrixDiag",
-  "MatrixMul",
-  "MatrixSolve",
   "Max",
   "Mean",
   "ROBOT_VACUUM_ERODE_MASK",
   "ROBOT_VACUUM_THETA_STAR",
-  "SubMatrix",
   "Sum",
   "SumElements",
   "UnaryNeg",

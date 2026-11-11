@@ -585,7 +585,7 @@
    "exec": "S / H, verifier opus",
    "deps": [],
    "status": "in_progress",
-   "note": "User go-ahead 2026-11-11 (fix all findings). Plan: docs/xbridges-verification/wp21-fix-plan.md. Round 1 dispatched: A zero parameters, B embedded quick fixes, C workspace UI. Batch B merged (a3daf970): 9 findings closed; new XBV-150 (embedded PID semantics), XBV-151 (embedded DELAY 0), XBV-152 (vacuous PID parity case). LIBM_CONDITIONED bound (8 eps max(1,|y|), 17 keys) added to xbCodeParity, verifier re-measured worst ratio 3.85. Batch A merged (c8facc19): XBV-015, 019, 040, 064 closed; DELAY delay_length is not tunable during a run (live change to/from 0 refused with PARAMETER_OUT_OF_RANGE, Simulink); XBV-137 ratchet shrunk 463 -> 418; new XBV-153. Batch D dispatched (acceptance 624b6a44). Batch F acceptance: pins removed for XBV-084, 086, 087, 091, 093, 094, 101, 102, 103 and the XBV-084 seeds; new tests for XBV-150 (PID with distinct r and y), 151 (DELAY 0), 107 (passes: closed). XBV-088, 090, 092 stay pinned (canvas-side causes, later batches). Batch C committed (13 findings closed, verifier PASS, e2e 36/36); new XBV-157, 158. WP-20 re-check by the verifier: spec gap (no end-time check in solvers/persistence/subsystem/param-edit) fixed by the controller; XBV-149 pin ordering fixed."
+   "note": "User go-ahead 2026-11-11 (fix all findings). Plan: docs/xbridges-verification/wp21-fix-plan.md. Round 1 dispatched: A zero parameters, B embedded quick fixes, C workspace UI. Batch B merged (a3daf970): 9 findings closed; new XBV-150 (embedded PID semantics), XBV-151 (embedded DELAY 0), XBV-152 (vacuous PID parity case). LIBM_CONDITIONED bound (8 eps max(1,|y|), 17 keys) added to xbCodeParity, verifier re-measured worst ratio 3.85. Batch A merged (c8facc19): XBV-015, 019, 040, 064 closed; DELAY delay_length is not tunable during a run (live change to/from 0 refused with PARAMETER_OUT_OF_RANGE, Simulink); XBV-137 ratchet shrunk 463 -> 418; new XBV-153. Batch D dispatched (acceptance 624b6a44). Batch F acceptance: pins removed for XBV-084, 086, 087, 091, 093, 094, 101, 102, 103 and the XBV-084 seeds; new tests for XBV-150 (PID with distinct r and y), 151 (DELAY 0), 107 (passes: closed). XBV-088, 090, 092 stay pinned (canvas-side causes, later batches). Batch C committed (13 findings closed, verifier PASS, e2e 36/36); new XBV-157, 158. WP-20 re-check by the verifier: spec gap (no end-time check in solvers/persistence/subsystem/param-edit) fixed by the controller; XBV-149 pin ordering fixed. Batch D merged (22 findings closed; XBV-066 moved to E; new XBV-154, 155, 156). XBV-057: right shift of a negative int32 by >= 32 gives -1 (arithmetic shift, Simulink signed shift)."
   },
   {
    "id": "WP-22",
@@ -980,40 +980,45 @@
    "plan_ref": "4.2 sources / element-wise math / reductions / trig",
    "severity": "S1",
    "gate": "V2",
-   "status": "open",
-   "summary": "PRODUCT works on scalars only (Number(vector) = NaN); Simulink Product multiplies/divides vectors and matrices element-wise. Pinned in xbEquations.math.test.ts."
+   "status": "closed",
+   "summary": "PRODUCT works on scalars only (Number(vector) = NaN); Simulink Product multiplies/divides vectors and matrices element-wise. Pinned in xbEquations.math.test.ts.",
+   "fix": "WP-21 batch D (rework d14a17e8), verifier PASS"
   },
   {
    "id": "XBV-043",
    "plan_ref": "4.2 sources / element-wise math / reductions / trig",
    "severity": "S1",
    "gate": "V2",
-   "status": "open",
-   "summary": "Max (element-wise, two inputs) turns NaN into 0 (Number(x) || 0): Max(NaN, -3) = 0; MATLAB max ignores NaN (-3), Simulink MinMax propagates NaN. Negative values and ties are correct. Pinned in xbEquations.math.test.ts."
+   "status": "closed",
+   "summary": "Max (element-wise, two inputs) turns NaN into 0 (Number(x) || 0): Max(NaN, -3) = 0; MATLAB max ignores NaN (-3), Simulink MinMax propagates NaN. Negative values and ties are correct. Pinned in xbEquations.math.test.ts.",
+   "fix": "WP-21 batch D (rework d14a17e8), verifier PASS"
   },
   {
    "id": "XBV-044",
    "plan_ref": "4.2 sources / element-wise math / reductions / trig",
    "severity": "S1",
    "gate": "V2",
-   "status": "open",
-   "summary": "Sum signs with the '|' spacer before a sign ('+|-', '|+-', '+ -') add instead of subtract: the spacer shifts the sign positions at execute time (factory strips it for the port count only). '+-|' works. Pinned in xbEquations.math.test.ts."
+   "status": "closed",
+   "summary": "Sum signs with the '|' spacer before a sign ('+|-', '|+-', '+ -') add instead of subtract: the spacer shifts the sign positions at execute time (factory strips it for the port count only). '+-|' works. Pinned in xbEquations.math.test.ts.",
+   "fix": "WP-21 batch D (rework d14a17e8), verifier PASS"
   },
   {
    "id": "XBV-045",
    "plan_ref": "4.2 sources / element-wise math / reductions / trig",
    "severity": "S1",
    "gate": "V2",
-   "status": "open",
-   "summary": "Sum with a single '+' input returns the vector unchanged; Simulink's single-input Sum sums the elements. Pinned in xbEquations.math.test.ts."
+   "status": "closed",
+   "summary": "Sum with a single '+' input returns the vector unchanged; Simulink's single-input Sum sums the elements. Pinned in xbEquations.math.test.ts.",
+   "fix": "WP-21 batch D (rework d14a17e8), verifier PASS"
   },
   {
    "id": "XBV-046",
    "plan_ref": "4.2 sources / element-wise math / reductions / trig",
    "severity": "S1",
    "gate": "V2",
-   "status": "open",
-   "summary": "All 24 trigonometric/hyperbolic blocks return NaN for a vector input; Simulink Trigonometric/Math Function blocks are element-wise. Pinned in xbEquations.math.test.ts."
+   "status": "closed",
+   "summary": "All 24 trigonometric/hyperbolic blocks return NaN for a vector input; Simulink Trigonometric/Math Function blocks are element-wise. Pinned in xbEquations.math.test.ts.",
+   "fix": "WP-21 batch D (rework d14a17e8), verifier PASS"
   },
   {
    "id": "XBV-047",
@@ -1028,128 +1033,144 @@
    "plan_ref": "4.2 element-wise math / reductions / sources",
    "severity": "S1",
    "gate": "V2",
-   "status": "open",
-   "summary": "Mean of a matrix returns the mean of all elements (3 for [1 2; 3 6]); MATLAB mean and the Simulink Mean block default (each column) give the column means [2 4]. Pinned in xbEquations.math.test.ts. (MATLAB mean is certain; the Simulink Mean block default 'each column' is from the verifier's memory - confirm against the documentation in WP-15.)"
+   "status": "closed",
+   "summary": "Mean of a matrix returns the mean of all elements (3 for [1 2; 3 6]); MATLAB mean and the Simulink Mean block default (each column) give the column means [2 4]. Pinned in xbEquations.math.test.ts. (MATLAB mean is certain; the Simulink Mean block default 'each column' is from the verifier's memory - confirm against the documentation in WP-15.)",
+   "fix": "WP-21 batch D (rework d14a17e8), verifier PASS"
   },
   {
    "id": "XBV-049",
    "plan_ref": "4.2 element-wise math / reductions / sources",
    "severity": "S3",
    "gate": "V2",
-   "status": "open",
-   "summary": "WaveformGen Square is amp*sign(sin(...)): 0 at t = 0 and every crossing, and +amp at t = T/2 because sin(pi) = 1.2e-16; a 50 % square wave is +amp on [0, T/2), -amp on [T/2, T). Pinned in xbEquations.math.test.ts."
+   "status": "closed",
+   "summary": "WaveformGen Square is amp*sign(sin(...)): 0 at t = 0 and every crossing, and +amp at t = T/2 because sin(pi) = 1.2e-16; a 50 % square wave is +amp on [0, T/2), -amp on [T/2, T). Pinned in xbEquations.math.test.ts.",
+   "fix": "WP-21 batch D (rework d14a17e8), verifier PASS"
   },
   {
    "id": "XBV-050",
    "plan_ref": "4.2 element-wise math / reductions / sources",
    "severity": "S2",
    "gate": "V2",
-   "status": "open",
-   "summary": "VectorPow of a negative base with a non-integer exponent returns a mathjs Complex object instead of a number (e.g. (-8)^(1/3) -> {re: 1, im: 1.732}); downstream blocks receive an object. Simulink real power gives NaN (or an error). Pinned in xbEquations.math.test.ts."
+   "status": "closed",
+   "summary": "VectorPow of a negative base with a non-integer exponent returns a mathjs Complex object instead of a number (e.g. (-8)^(1/3) -> {re: 1, im: 1.732}); downstream blocks receive an object. Simulink real power gives NaN (or an error). Pinned in xbEquations.math.test.ts.",
+   "fix": "WP-21 batch D (rework d14a17e8), verifier PASS"
   },
   {
    "id": "XBV-051",
    "plan_ref": "4.2 element-wise math / reductions / sources",
    "severity": "S2",
    "gate": "V2",
-   "status": "open",
-   "summary": "Max and Mean throw on an empty vector (mathjs 'Cannot calculate ... of an empty array'), stopping the run. Pinned in xbEquations.math.test.ts."
+   "status": "closed",
+   "summary": "Max and Mean throw on an empty vector (mathjs 'Cannot calculate ... of an empty array'), stopping the run. Pinned in xbEquations.math.test.ts.",
+   "fix": "WP-21 batch D (rework d14a17e8), verifier PASS"
   },
   {
    "id": "XBV-052",
    "plan_ref": "4.2 linear algebra / routing",
    "severity": "S3",
    "gate": "V2",
-   "status": "open",
-   "summary": "SubMatrix uses zero-based start/end indices (defaults 0); Simulink Submatrix uses one-based indices, so the same numbers select a different block. Pinned in xbEquations.routing.test.ts."
+   "status": "closed",
+   "summary": "SubMatrix uses zero-based start/end indices (defaults 0); Simulink Submatrix uses one-based indices, so the same numbers select a different block. Pinned in xbEquations.routing.test.ts.",
+   "fix": "WP-21 batch D (rework d14a17e8), verifier PASS"
   },
   {
    "id": "XBV-053",
    "plan_ref": "4.2 linear algebra / routing",
    "severity": "S1",
    "gate": "V2",
-   "status": "open",
-   "summary": "MUX nests vector inputs ([1, [2, 3]]) instead of concatenating them into one flat vector [1 2 3] as Simulink Mux does; downstream widths and element indices are wrong. Pinned in xbEquations.routing.test.ts."
+   "status": "closed",
+   "summary": "MUX nests vector inputs ([1, [2, 3]]) instead of concatenating them into one flat vector [1 2 3] as Simulink Mux does; downstream widths and element indices are wrong. Pinned in xbEquations.routing.test.ts.",
+   "fix": "WP-21 batch D (rework d14a17e8), verifier PASS"
   },
   {
    "id": "XBV-054",
    "plan_ref": "4.2 linear algebra / routing",
    "severity": "S3",
    "gate": "V2",
-   "status": "open",
-   "summary": "Switch lacks the Simulink criterion 'u2 ~= 0' (canvas offers >, <, >=, <=) and silently passes u2 for an unknown criterion. Pinned in xbEquations.routing.test.ts."
+   "status": "closed",
+   "summary": "Switch lacks the Simulink criterion 'u2 ~= 0' (canvas offers >, <, >=, <=) and silently passes u2 for an unknown criterion. Pinned in xbEquations.routing.test.ts.",
+   "fix": "WP-21 batch D (rework d14a17e8), verifier PASS"
   },
   {
    "id": "XBV-055",
    "plan_ref": "4.2 linear algebra / routing",
    "severity": "S2",
    "gate": "V2",
-   "status": "open",
-   "summary": "MatrixSolve (singular, inconsistent system) Inverse (singular matrix) and MatrixMul (non-conformable sizes) throw ('Solve Error: ... matrix is singular'), stopping the run instead of reporting it. Pinned in xbEquations.routing.test.ts."
+   "status": "closed",
+   "summary": "MatrixSolve (singular, inconsistent system) Inverse (singular matrix) and MatrixMul (non-conformable sizes) throw ('Solve Error: ... matrix is singular'), stopping the run instead of reporting it. Pinned in xbEquations.routing.test.ts.",
+   "fix": "WP-21 batch D (rework d14a17e8), verifier PASS"
   },
   {
    "id": "XBV-056",
    "plan_ref": "4.2 routing / logic / bitwise / sequential / linear algebra",
    "severity": "S1",
    "gate": "V2",
-   "status": "open",
-   "summary": "Register with bitWidth 32 always stores 0: the mask (1 << 32) - 1 evaluates to 0 in JavaScript. Found by the WP-05 verifier; pinned in xbEquations.routing.test.ts."
+   "status": "closed",
+   "summary": "Register with bitWidth 32 always stores 0: the mask (1 << 32) - 1 evaluates to 0 in JavaScript. Found by the WP-05 verifier; pinned in xbEquations.routing.test.ts.",
+   "fix": "WP-21 batch D (rework d14a17e8), verifier PASS"
   },
   {
    "id": "XBV-057",
    "plan_ref": "4.2 routing / logic / bitwise / sequential / linear algebra",
    "severity": "S1",
    "gate": "V2",
-   "status": "open",
-   "summary": "ShiftLeft/ShiftRight use JavaScript shifts, which mask the count to 5 bits: 1 << 32 = 1, 16 >> 32 = 16; a negative count gives 4 << -1 = 0. Simulink Bit Shift shifts every bit out at >= word length and shifts the other way for a negative count. Found by the WP-05 verifier; pinned in xbEquations.routing.test.ts."
+   "status": "closed",
+   "summary": "ShiftLeft/ShiftRight use JavaScript shifts, which mask the count to 5 bits: 1 << 32 = 1, 16 >> 32 = 16; a negative count gives 4 << -1 = 0. Simulink Bit Shift shifts every bit out at >= word length and shifts the other way for a negative count. Found by the WP-05 verifier; pinned in xbEquations.routing.test.ts.",
+   "fix": "WP-21 batch D (rework d14a17e8), verifier PASS"
   },
   {
    "id": "XBV-058",
    "plan_ref": "4.2 routing / logic / bitwise / sequential / linear algebra",
    "severity": "S2",
    "gate": "V2",
-   "status": "open",
-   "summary": "SWITCH_CASE with a selector outside 1..n silently routes: sel 0 returns the selector value itself, sel 3, -1 and NaN return case 1; Simulink Multiport Switch reports an error (or uses the declared default). Found by the WP-05 verifier; pinned in xbEquations.routing.test.ts. Target: a reported error (not a throw, cf. XBV-021/055)."
+   "status": "closed",
+   "summary": "SWITCH_CASE with a selector outside 1..n silently routes: sel 0 returns the selector value itself, sel 3, -1 and NaN return case 1; Simulink Multiport Switch reports an error (or uses the declared default). Found by the WP-05 verifier; pinned in xbEquations.routing.test.ts. Target: a reported error (not a throw, cf. XBV-021/055).",
+   "fix": "WP-21 batch D (rework d14a17e8), verifier PASS"
   },
   {
    "id": "XBV-059",
    "plan_ref": "4.2 routing / logic / bitwise / sequential / linear algebra",
    "severity": "S1",
    "gate": "V2",
-   "status": "open",
-   "summary": "Logic and bitwise blocks are scalar-only: AND([1 0],[1 1]) = true, NOT([0 1]) = false, BitwiseAND of vectors = 0; Simulink Logical/Bitwise Operator blocks are element-wise. Found by the WP-05 verifier; pinned in xbEquations.routing.test.ts."
+   "status": "closed",
+   "summary": "Logic and bitwise blocks are scalar-only: AND([1 0],[1 1]) = true, NOT([0 1]) = false, BitwiseAND of vectors = 0; Simulink Logical/Bitwise Operator blocks are element-wise. Found by the WP-05 verifier; pinned in xbEquations.routing.test.ts.",
+   "fix": "WP-21 batch D (rework d14a17e8), verifier PASS"
   },
   {
    "id": "XBV-060",
    "plan_ref": "4.2 routing / logic / bitwise / sequential / linear algebra",
    "severity": "S2",
    "gate": "V2",
-   "status": "open",
-   "summary": "DEMUX does not follow the Simulink split rule: a 3-vector into 2 outputs emits 3 values instead of [1 2] and [3] (n mod p = m: m outputs of floor(n/p)+1 elements, then p-m of floor(n/p)); a scalar into 2 outputs (p > n, a Simulink error) silently emits 1 output. Split rule from the verifier's memory of the Demux documentation - confirm in WP-15. Pinned in xbEquations.routing.test.ts."
+   "status": "closed",
+   "summary": "DEMUX does not follow the Simulink split rule: a 3-vector into 2 outputs emits 3 values instead of [1 2] and [3] (n mod p = m: m outputs of floor(n/p)+1 elements, then p-m of floor(n/p)); a scalar into 2 outputs (p > n, a Simulink error) silently emits 1 output. Split rule from the verifier's memory of the Demux documentation - confirm in WP-15. Pinned in xbEquations.routing.test.ts.",
+   "fix": "WP-21 batch D (rework d14a17e8), verifier PASS"
   },
   {
    "id": "XBV-061",
    "plan_ref": "4.2 routing / logic / bitwise / sequential / linear algebra",
    "severity": "S3",
    "gate": "V2",
-   "status": "open",
-   "summary": "MatrixSolve returns a 2x1 matrix for a 1-D b instead of x with the shape of b. Found by the WP-05 verifier; pinned in xbEquations.routing.test.ts."
+   "status": "closed",
+   "summary": "MatrixSolve returns a 2x1 matrix for a 1-D b instead of x with the shape of b. Found by the WP-05 verifier; pinned in xbEquations.routing.test.ts.",
+   "fix": "WP-21 batch D (rework d14a17e8), verifier PASS"
   },
   {
    "id": "XBV-062",
    "plan_ref": "4.2 continuous / discrete / discontinuities / buses",
    "severity": "S1",
    "gate": "V2",
-   "status": "open",
-   "summary": "INTEGRATOR_CONTINUOUS is scalar-only: vector IC [1 2] with input [1 1] stays [1 2] (Number(vector) = NaN; NUMERICAL_INSTABILITY), Simulink integrates element-wise to [2 3] at t = 1. Found by the WP-06 executor; pinned in xbEquations.dynamics.test.ts."
+   "status": "closed",
+   "summary": "INTEGRATOR_CONTINUOUS is scalar-only: vector IC [1 2] with input [1 1] stays [1 2] (Number(vector) = NaN; NUMERICAL_INSTABILITY), Simulink integrates element-wise to [2 3] at t = 1. Found by the WP-06 executor; pinned in xbEquations.dynamics.test.ts.",
+   "fix": "WP-21 batch D (rework d14a17e8), verifier PASS"
   },
   {
    "id": "XBV-063",
    "plan_ref": "4.2 continuous / discrete / discontinuities / buses",
    "severity": "S1",
    "gate": "V2",
-   "status": "open",
-   "summary": "INTEGRATOR (limited/reset integrator) drops a vector initial condition (Number([1 2]) || 0 = 0) and keeps a scalar state; vector integration gives 0 instead of [2 3]. Found by the WP-06 executor; pinned in xbEquations.dynamics.test.ts."
+   "status": "closed",
+   "summary": "INTEGRATOR (limited/reset integrator) drops a vector initial condition (Number([1 2]) || 0 = 0) and keeps a scalar state; vector integration gives 0 instead of [2 3]. Found by the WP-06 executor; pinned in xbEquations.dynamics.test.ts.",
+   "fix": "WP-21 batch D (rework d14a17e8), verifier PASS"
   },
   {
    "id": "XBV-064",
@@ -1166,7 +1187,7 @@
    "severity": "S1",
    "gate": "V2",
    "status": "open",
-   "summary": "SATURATION is scalar-only: a vector input or vector limits give NaN (Number(array)); Simulink Saturation is element-wise with scalar or vector limits. Found by the WP-06 executor; pinned in xbEquations.dynamics.test.ts. DEADZONE is scalar-only on the canvas too; the embedded path is element-wise and correct (WP-16)."
+   "summary": "SATURATION is scalar-only: a vector input or vector limits give NaN (Number(array)); Simulink Saturation is element-wise with scalar or vector limits. Found by the WP-06 executor; pinned in xbEquations.dynamics.test.ts. DEADZONE is scalar-only on the canvas too; the embedded path is element-wise and correct (WP-16). WP-21 batch D: SATURATION element-wise fixed; DEADZONE vector parity pins remain open."
   },
   {
    "id": "XBV-066",
@@ -1174,7 +1195,7 @@
    "severity": "S2",
    "gate": "V2",
    "status": "open",
-   "summary": "A bus through UNIT_DELAY outputs scalar 0 at the first sample (IC not expanded over the bus elements), so a downstream BUS_SELECTOR raises BLOCK_RUNTIME_FAULT 'Input must be a bus signal' at t = 0. Found by the WP-06 executor; pinned in xbEquations.dynamics.test.ts."
+   "summary": "A bus through UNIT_DELAY outputs scalar 0 at the first sample (IC not expanded over the bus elements), so a downstream BUS_SELECTOR raises BLOCK_RUNTIME_FAULT 'Input must be a bus signal' at t = 0. Found by the WP-06 executor; pinned in xbEquations.dynamics.test.ts. WP-21: moved to the engine batch E (UNIT_DELAY runs before BUS_CREATOR at t = 0; the block cannot know the bus shape)."
   },
   {
    "id": "XBV-067",
@@ -1189,8 +1210,9 @@
    "plan_ref": "4.2 continuous / discrete / discontinuities / buses",
    "severity": "S1",
    "gate": "V2",
-   "status": "open",
-   "summary": "MOVING_AVERAGE starts with its window filled with the first sample (3, 6, 9, 12 -> 3, 4, 6, 9); a sliding-window average with zero initial state gives 1, 3, 6, 9. Found by the WP-06 executor; pinned in xbEquations.dynamics.test.ts. The embedded path starts from zeros and is correct (WP-16)."
+   "status": "closed",
+   "summary": "MOVING_AVERAGE starts with its window filled with the first sample (3, 6, 9, 12 -> 3, 4, 6, 9); a sliding-window average with zero initial state gives 1, 3, 6, 9. Found by the WP-06 executor; pinned in xbEquations.dynamics.test.ts. The embedded path starts from zeros and is correct (WP-16).",
+   "fix": "WP-21 batch D (rework d14a17e8), verifier PASS"
   },
   {
    "id": "XBV-069",
@@ -1902,6 +1924,30 @@
    "gate": "V8",
    "status": "open",
    "summary": "The worker logs the final sample at the summed time (stop time within a few ULP), the main-thread path at exactly the stop time. Found by the WP-21 batch C verifier."
+  },
+  {
+   "id": "XBV-154",
+   "plan_ref": "7.3 canvas / interpreter parity",
+   "severity": "S1",
+   "gate": "V6",
+   "status": "open",
+   "summary": "Embedded Mean (mean of all elements) and SubMatrix (zero-based indices) still follow the pre-WP-21 canvas rules; the canvas now gives MATLAB/Simulink column means and one-based indices (WP-21 batch D). Pinned in xbTriParity."
+  },
+  {
+   "id": "XBV-155",
+   "plan_ref": "4.2 continuous",
+   "severity": "S2",
+   "gate": "V2",
+   "status": "open",
+   "summary": "A vector input with a scalar initial condition is not scalar-expanded for the plain Integrator (bare-number state) on any solver, and for INTEGRATOR / INTEGRATOR_CONTINUOUS on the stiff solvers ode14x and ode23tb (StiffSolver.buildLayout reads the scalar state before the first derivative call; getAt ': 0' fallback): the output stays at the IC with no diagnostic. Simulink expands the IC. Also y(0) is scalar when the input is computed after the integrator at t = 0 (XBV-066 class). Engine batch E. Found by the WP-21 batch D executor and verifier."
+  },
+  {
+   "id": "XBV-156",
+   "plan_ref": "6 UI",
+   "severity": "S3",
+   "gate": "V8",
+   "status": "open",
+   "summary": "The properties panel's Switch criterion dropdown (XbridgesPropertiesPanel.tsx ~1077) does not offer the new 'u2 ~= 0' criterion, and blockGuidance still documents SubMatrix indices as zero-based ('defaults 0'). Found by the WP-21 batch D executor."
   }
  ],
  "blocks": {

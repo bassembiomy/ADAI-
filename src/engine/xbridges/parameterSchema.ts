@@ -47,7 +47,7 @@ export const XB_PARAMETER_SCHEMA: Record<string, Record<string, ParameterKind>> 
   MatrixConcat: { axis: { kind: 'integer', min: 0, max: 1 }, numInputs: int1 },
   MatrixDiag: { diagMode: option('create', 'extract') },
   IdentityMatrix: { dim: int1 },
-  SubMatrix: { rowStart: int0, rowEnd: int0, colStart: int0, colEnd: int0 },
+  SubMatrix: { rowStart: int1, rowEnd: int1, colStart: int1, colEnd: int1 },
 
   // Continuous systems
   Integrator: { initialCondition: numeric },
@@ -124,7 +124,7 @@ export const XB_PARAMETER_SCHEMA: Record<string, Record<string, ParameterKind>> 
   EXTENDED_KALMAN_FILTER: { Q: matrix, R: matrix, P0: matrix, x0: vector },
 
   // Routing and control flow
-  SWITCH: { threshold: number, criteria: option('>', '<', '>=', '<=') },
+  SWITCH: { threshold: number, criteria: option('>', '<', '>=', '<=', '~=0') },
   SWITCH_CASE: { numCases: int1 },
   MUX: { numInputs: int1 },
   DEMUX: { numOutputs: int1 },
