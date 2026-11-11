@@ -5,10 +5,10 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 ## Summary
 
 - Work packages: 20 done of 29; 2 in progress; 7 to do.
-- Findings: 106 open, 51 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
+- Findings: 107 open, 50 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
   - S1 (wrong number in simulation or generated C): 30 open
   - S2 (crash, stop, freeze or silent no-op): 28 open
-  - S3 (diagnostic, UI or convention deviation): 40 open
+  - S3 (diagnostic, UI or convention deviation): 41 open
   - S4 (documentation): 8 open
 - Decisions recorded: 11; open: 0.
 
@@ -132,7 +132,7 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 | XBV-153 | V3 | U7 / 5.2 diagnostics | Six divisor parameters give a non-finite output without a diagnostic when set to 0 (present before WP-21): IM_FOC_CONTROL.Lm, AIR_FRYER_LEARNING_MODEL tau_h, tau_f, tau_c, tau_s, FABRIC_HARMONIC_ANALYZER.drum_mass. They need parameterSchema entries rejecting 0 (batch J). Found by the WP-21 batch A verifier's zero-parameter scan. |
 | XBV-155 | V2 | 4.2 continuous | A vector input with a scalar initial condition is not scalar-expanded for the plain Integrator (bare-number state) on any solver, and for INTEGRATOR / INTEGRATOR_CONTINUOUS on the stiff solvers ode14x and ode23tb (StiffSolver.buildLayout reads the scalar state before the first derivative call; getAt ': 0' fallback): the output stays at the IC with no diagnostic. Simulink expands the IC. Also y(0) is scalar when the input is computed after the integrator at t = 0 (XBV-066 class). Engine batch E. Found by the WP-21 batch D executor and verifier. |
 
-### S3 - diagnostic, UI or convention deviation (40)
+### S3 - diagnostic, UI or convention deviation (41)
 
 | Id | Gate | Plan ref | Summary |
 | --- | --- | --- | --- |
@@ -161,6 +161,7 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 | XBV-091 | V6 | 7.3 canvas / interpreter parity | LOW_PASS_FILTER / HIGH_PASS_FILTER at fc 10 Hz, dt 0.05 (dt/tau = 3.1): the canvas output grows (\|y\| > 1.3 from step 3, explicit integration beyond its stability limit), the embedded path stays bounded (different discretisation). Unresolved which matches Simulink at this step; both must at least agree on the discretisation rule. Found by the WP-16 executor; pinned in src/utils/stateMachine/xbTriParity.test.ts. |
 | XBV-094 | V6 | 7.3 canvas / interpreter parity | Parity gap: VectorAdd/VectorSub/VectorMul/VectorDiv are registered with a scalar shape but the embedded validator rejects scalar inputs (XB_SHAPE_MISMATCH). Found by the WP-16 executor; pinned in src/utils/stateMachine/xbTriParity.test.ts. |
 | XBV-106 | V7 | 7.2 state-machine alignment | State-machine variables are scalar only: mapping a vector (3) or matrix (2x2) X-Bridges port to an SM variable is refused (XB_MAPPING_INVALID), so plan 7.2's vector/matrix boundary mappings are not expressible; vector/matrix signals work inside the model. Reported by the WP-18 executor. |
+| XBV-107 | V7 | 7.2 state-machine alignment | PRODUCT with operation 'divide' is not available in the embedded (state-machine / C) path although the canvas offers it; divide inside a state requires VectorDiv on vectors. Reported by the WP-18 executor. REOPENED (WP-21): the first acceptance test probed 'b.out' but PRODUCT's output port is 'y', so it compared undefined with undefined; corrected, it shows the embedded path multiplies for operation 'divide' (0.18079 = 0.25826 x 0.7, canvas 0.36896 = 0.25826 / 0.7). Given to batch F. |
 | XBV-112 | V2 | 4.2 fuzzy | FUZZY_AND clips its inputs to [0, 1] and turns NaN into 0 silently (min(1.5, 2) = 1, product = 1 instead of 1.5 and 3); MATLAB does not clip. Out-of-range memberships are invalid inputs, so clipping is defensible, but it is undiagnosed. Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts. |
 | XBV-113 | V2 | 4.2 fuzzy | FUZZY_OR clips its inputs to [0, 1] without a diagnostic (max(1.5, 2) = 1 instead of 2). Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts. |
 | XBV-114 | V2 | 4.2 fuzzy | FUZZY_NOT clips its input to [0, 1] without a diagnostic (1 - 1.5 gives 0 instead of -0.5). Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts. |
@@ -229,7 +230,6 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 - XBV-100 (closed): Generated C with Bitwise/Shift blocks fails -Wall -Werror: SM_XB_ShiftLeft32 / SM_XB_ShiftRight32 are emitted but unused. Found by the WP-17 executor; pinned in src/utils/stateMachine/xbCodeParity.tes
 - XBV-104 (closed): Generated C for an integrator loop fails -Wshadow (gcc and clang): 'xb_value_0_0_i_out' shadows a previous local (sm_core.c:78). Found by the WP-17 executor; pinned in src/utils/stateMachine/xbCodePar
 - XBV-105 (closed): Generated C for discontinuity blocks fails -Wdouble-promotion (gcc sm_core.c:143, clang sm_core.c:100): float promoted to double in a conditional. Found by the WP-17 executor; pinned in src/utils/stat
-- XBV-107 (closed): PRODUCT with operation 'divide' is not available in the embedded (state-machine / C) path although the canvas offers it; divide inside a state requires VectorDiv on vectors. Reported by the WP-18 exec
 - XBV-135 (closed): Properties panel renders MatrixConcat.axis, SWITCH_CASE.numCases, Scope.numSignals and Scope.bufferSize as selects, so values such as 0, -2.5 or 0.125 cannot be entered (ratchet in xbV8Ui.test.tsx). F
 - XBV-136 (closed): Properties panel renders LAPLACE_TRANSFORM.mappingType (schema kind option) as free text instead of a select. Found by the WP-19 executor; pinned in src/components/xbridges/xbV8Ui.test.tsx.
 - XBV-138 (closed): Typing 'abc' into any numeric parameter and leaving the field stores the raw string 'abc' as the parameter value (576 numeric parameters); plan 6: invalid text must not overwrite the stored value. Fou

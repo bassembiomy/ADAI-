@@ -226,7 +226,7 @@ describe('the real worker client and a structured-clone boundary (as in the brow
     expect(other).toEqual(['FUZZY_SURFACE_VIEWER']);
     expect(compiled + failing.length + other.length).toBe(Object.keys(BLOCK_LIBRARY).length);
     // serializeModelForWorker strips execute, evaluateDerivatives and ZeroCrossingFn but not updateDiscrete.
-    expect(failing).toEqual(['PT_AUTOMATED_MANUAL_TRANSMISSION', 'PT_DUAL_CLUTCH_TRANSMISSION']);
+    expect(failing).toEqual([]); // XBV-047 fixed in WP-21 batch E
   });
 
 });

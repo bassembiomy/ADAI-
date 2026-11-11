@@ -169,7 +169,7 @@ describe('B. PID_CONTROLLER (setpoint weighting, outputs, closed loop)', () => {
   // (XbridgesEngine.isFeedthrough: directFeedthrough ?? !isStateful) although u contains Kp (beta r - y). In a loop the
   // controller then reads the plant output of the previous evaluation and rk4 degrades to first order (error 4.6e-5 at
   // t = 1 for dt 0.001, halving with dt; the same loop built from Sum + Integrator has 3e-11).
-  it.fails('XBV-080: closed loop PI Kp 1 Ki 1 with plant 1/(s+1) is rk4-accurate: y = 1 - e^{-t} at t = 0.5, 1, 3 (1e-6); PID_CONTROLLER needs directFeedthrough', () => {
+  it('XBV-080: closed loop PI Kp 1 Ki 1 with plant 1/(s+1) is rk4-accurate: y = 1 - e^{-t} at t = 0.5, 1, 3 (1e-6); PID_CONTROLLER needs directFeedthrough', () => {
     const r = loop({ mode: 'PI', Kp: 1, Ki: 1 }, 3);
     for (const t of [0.5, 1, 3]) near(num(valueAt(r, 'g.y', t)), 1 - Math.exp(-t), 1e-6, `t=${t}`);
   });

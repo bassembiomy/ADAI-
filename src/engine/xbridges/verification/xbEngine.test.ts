@@ -201,7 +201,7 @@ describe('algebraic loops (analytic fixed points)', () => {
   });
 
   // The diagnostic is emitted but the run continues with a meaningless value (Simulink stops).
-  it.fails('XBV-030: a loop with no solution (y = 1 + y) stops the run with ALGEBRAIC_LOOP_NOT_CONVERGED', () => {
+  it('XBV-030: a loop with no solution (y = 1 + y) stops the run with ALGEBRAIC_LOOP_NOT_CONVERGED', () => {
     const r = runModel(buildModel({
       blocks: [{ id: 'c', type: 'Constant', params: { value: 1 } }, { id: 's', type: 'Sum', params: { signs: '++' } }, { id: 'g', type: 'GAIN', params: { gain: 1 } }],
       wires: ['c.out -> s.in1', 's.out -> g.u', 'g.y -> s.in2'],
@@ -279,7 +279,7 @@ describe('multirate and events', () => {
     expect(r.y).toBeLessThan(0.5);
   }, 30_000);
   for (const solver of ['ode45', 'ode23']) {
-    it.fails(`XBV-036: batch ${solver} locates the Step event: integral of Step(0.55) over [0, 1] is 0.45 (finishes in 15 s)`, () => {
+    it(`XBV-036: batch ${solver} locates the Step event: integral of Step(0.55) over [0, 1] is 0.45 (finishes in 15 s)`, () => {
       const r = probe(solver, 0.55);
       expect(r.errors).toEqual([]);
       expect(Math.abs(r.y - 0.45)).toBeLessThan(1e-6);
@@ -288,7 +288,7 @@ describe('multirate and events', () => {
 
   for (const solver of ['ode14x', 'ode23tb']) {
     // The batch runner stops on STIFF_SOLVER_*; the canvas loop stops only on a fatal flag, which reportError never sets.
-    it.fails(`XBV-033: a stiff solver error (${solver}, non-finite derivative) stops the canvas run`, () => {
+    it(`XBV-033: a stiff solver error (${solver}, non-finite derivative) stops the canvas run`, () => {
       const r = runModel(buildModel({ blocks: [{ id: 'k', type: 'Constant', params: { value: 'inf' } }, { id: 'i', type: 'Integrator' }], wires: ['k.out -> i.in'] }),
         { solver, dt: 0.1, stopTime: 0.5, probes: ['i.out'] });
       expect(r.diagnostics.map((d) => d.code)).toContain('STIFF_SOLVER_NONFINITE');
@@ -316,18 +316,18 @@ describe('malformed models', () => {
     ]));
     expect(() => { e.compile(0); e.computeOutputs(0); }).not.toThrow();
   });
-  it.fails('XBV-031: two signals driving one input port is a compile error (Simulink: one driver per input)', () => {
+  it('XBV-031: two signals driving one input port is a compile error (Simulink: one driver per input)', () => {
     const e = new XbridgesEngine(model([BLOCK_LIBRARY.Constant('a', { value: 1 }), BLOCK_LIBRARY.Constant('b', { value: 2 }), BLOCK_LIBRARY.GAIN('g', {})], [
       { sourceBlock: 'a', sourcePort: 'out', targetBlock: 'g', targetPort: 'u' },
       { sourceBlock: 'b', sourcePort: 'out', targetBlock: 'g', targetPort: 'u' },
     ]));
     expect(errors(e.compile(0)).length).toBeGreaterThan(0);
   });
-  it.fails('XBV-031: two blocks with the same id is a compile error', () => {
+  it('XBV-031: two blocks with the same id is a compile error', () => {
     const e = new XbridgesEngine(model([BLOCK_LIBRARY.Constant('x', { value: 1 }), BLOCK_LIBRARY.GAIN('x', {})], []));
     expect(errors(e.compile(0)).length).toBeGreaterThan(0);
   });
-  it.fails('XBV-031: an unknown block type is a compile error, not a silent no-op', () => {
+  it('XBV-031: an unknown block type is a compile error, not a silent no-op', () => {
     const e = new XbridgesEngine(model([{ id: 'u', type: 'NO_SUCH_BLOCK', params: {}, inputs: [], outputs: [] }], []));
     let threw = false;
     let diags: { severity: string }[] = [];
@@ -338,7 +338,7 @@ describe('malformed models', () => {
 
 describe('scale', () => {
   // Measured: 1000 / 2000 / 4000 blocks run in 188 / 435 / 1633 ms (quadratic); 10 000 blocks take about 22 s.
-  it.fails('XBV-032: a 10 000-block gain chain compiles in under 5 s and runs 10 rk4 steps in under 5 s with the right value', () => {
+  it('XBV-032: a 10 000-block gain chain compiles in under 5 s and runs 10 rk4 steps in under 5 s with the right value', () => {
     const n = 10_000;
     const blocks: Spec['blocks'] = [{ id: 'k', type: 'Constant', params: { value: 1 } }];
     const wires: string[] = [];

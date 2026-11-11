@@ -102,7 +102,7 @@ describe('A. continuous blocks (rk4, dt 0.01)', () => {
   // Under rk4 the stages of the step that reaches the limit see a saturated derivative, so the output arrives below
   // the limit (0.29833 at t = 0.3; with limit 0.305 it sags to 0.30333 at t = 0.5). Simulink evaluates the limit mode
   // at major steps only: y = min(t, limit) at every sample.
-  it.fails('XBV-069: INTEGRATOR limited at 0.3 (rk4, dt 0.01) gives y = min(t, 0.3) at every sample, including t = 0.3', () => {
+  it('XBV-069: INTEGRATOR limited at 0.3 (rk4, dt 0.01) gives y = min(t, 0.3) at every sample, including t = 0.3', () => {
     const r = limited(constant('c', 1), ['c.out -> i.u']);
     r.t.forEach((t, k) => near(num(r.signals['i.y'][k]), Math.min(t, 0.3), 1e-9, `t=${t}`));
   });
@@ -119,7 +119,7 @@ describe('A. continuous blocks (rk4, dt 0.01)', () => {
   // Engine defect, not a block defect: on the canvas rk4 loop the last stage of the step ending at the Step time
   // already sees the new Step value. Simulink updates a Step's output (its mode) at major steps only, so the integral
   // of Step(0 -> 1 at 0.5) is 0 at t = 0.5 and 0.5 at t = 1; the canvas gains h/6 (0.016667) at the step.
-  it.fails('XBV-067: plain Integrator of Step(0 -> 1 at 0.5), rk4 dt 0.1: y(0.5) = 0 and y(1) = 0.5', () => {
+  it('XBV-067: plain Integrator of Step(0 -> 1 at 0.5), rk4 dt 0.1: y(0.5) = 0 and y(1) = 0.5', () => {
     const r = sim([{ id: 's', type: 'Step', params: { stepTime: 0.5, initialValue: 0, finalValue: 1 } }, { id: 'i', type: 'Integrator' }],
       ['s.out -> i.in'], ['i.out'], { stop: 1, dt: 0.1 });
     near(num(valueAt(r, 'i.out', 0.5)), 0, 1e-12, 'y(0.5)');
@@ -474,7 +474,7 @@ describe('E. buses', () => {
   });
   // Simulink Unit Delay on a bus signal applies the initial condition 0 to every element: the output at t = 0 is the
   // bus {a: 0, b: [0 0]}, so a Bus Selector behind it never sees a non-bus.
-  it.fails('XBV-066: a bus through UNIT_DELAY has the bus structure from the first sample (IC 0 applied to every element)', () => {
+  it('XBV-066: a bus through UNIT_DELAY has the bus structure from the first sample (IC 0 applied to every element)', () => {
     const r = sim(busModel(0), busWires, ['d.y'], { solver: 'discrete', dt: 0.1, stop: 0.4 });
     expect(errorCodes(r)).toEqual([]);
     expect(valueAt(r, 'd.y', 0)).toEqual({ a: 0, b: [0, 0] });

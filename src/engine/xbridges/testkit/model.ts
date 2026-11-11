@@ -23,6 +23,9 @@ export interface RunOptions {
   stopTime: number;
   startTime?: number;
   probes: string[];
+  /** Variable-step tolerances passed to the engine like the canvas solver settings (Simulink RelTol / AbsTol). */
+  relTol?: number;
+  absTol?: number;
 }
 
 export interface RunResult {
@@ -93,7 +96,11 @@ export function runModel(model: XModel, options: RunOptions): RunResult {
     throw new Error(`runModel: invalid time range [${startTime}, ${stopTime}]`);
   }
   const engine = new XbridgesEngine(model);
-  engine.options = { solver: solver as SolverOptions['solver'], fixedStep: dt, startTime, stopTime };
+  engine.options = {
+    solver: solver as SolverOptions['solver'], fixedStep: dt, startTime, stopTime,
+    ...(options.relTol !== undefined ? { relTol: options.relTol } : {}),
+    ...(options.absTol !== undefined ? { absTol: options.absTol } : {}),
+  };
   const diagnostics = engine.compile(startTime);
   const signals: Record<string, unknown[]> = {};
   for (const p of options.probes) signals[p] = [];

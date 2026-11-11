@@ -66,7 +66,6 @@ const PINS: Record<string, string> = {
   'MOVING_AVERAGE|euler': 'XBV-068',
   'MOVING_AVERAGE|rk4': 'XBV-068',
   'MOVING_AVERAGE|discrete': 'XBV-068',
-  'RELAY|rk4': 'XBV-067',
   'WHITE_NOISE|euler': 'XBV-088',
   'WHITE_NOISE|rk4': 'XBV-088',
   'WHITE_NOISE|discrete': 'XBV-088',
@@ -337,7 +336,7 @@ describe('WP-21 batch F acceptance: embedded PID, Delay 0, Product divide equal 
         ],
         wires: ['a.out -> b.in1', 'k.out -> b.in2'],
       };
-      assertOutcome(compareSpec(`PRODUCT divide ${solver}`, spec, solver, ['b.out']));
+      assertOutcome(compareSpec(`PRODUCT divide ${solver}`, spec, solver, ['b.y']));
     });
   }
 });

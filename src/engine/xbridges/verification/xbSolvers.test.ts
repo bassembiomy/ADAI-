@@ -140,8 +140,8 @@ describe('stiff problems', () => {
   it('ode14x stays stable and decays monotonically to 0 at dt = 0.01', stable('ode14x'));
   // The canvas calls StiffSolver.stepODE23TB once per output step and ignores { accepted: false }: a rejected step
   // leaves the state unchanged, silently, at every step size (x stays 1 for dt = 0.01, 0.001, 1e-4).
-  it.fails('XBV-026: ode23tb stays stable and decays monotonically to 0 at dt = 0.01', stable('ode23tb'));
-  it.fails('XBV-026: ode23tb also freezes on a non-stiff problem when the first step is rejected (x\' = -x, dt 0.5)', () => {
+  it('XBV-026: ode23tb stays stable and decays monotonically to 0 at dt = 0.01', stable('ode23tb'));
+  it('XBV-026: ode23tb also freezes on a non-stiff problem when the first step is rejected (x\' = -x, dt 0.5)', () => {
     const r = runModel(buildModel(DECAY), { solver: 'ode23tb', dt: 0.5, stopTime: 1, probes: ['x.out'] });
     expect(Math.abs(Number(r.signals['x.out'].at(-1)) - Math.exp(-1))).toBeLessThan(1e-2);
   });
@@ -166,7 +166,7 @@ describe('algebraic loop under every solver', () => {
     });
   }
   for (const solver of ['ode14x', 'ode23tb']) {
-    it.fails(`XBV-016: ${solver}: loop output 2 and integral 2 at t = 1`, () => {
+    it(`XBV-016: ${solver}: loop output 2 and integral 2 at t = 1`, () => {
       const r = runModel(buildModel(LOOP), { solver, dt: 0.1, stopTime: 1, probes: ['s.out', 'i.out'] });
       expect(Math.abs(last(r, 's.out') - 2)).toBeLessThan(1e-6);
       expect(Math.abs(last(r, 'i.out') - 2)).toBeLessThan(1e-6);
@@ -213,7 +213,7 @@ describe('the three solver dispatchers agree (plan F2)', () => {
     for (const c of worker) expect(canvas.has(c), `worker call ${c} has no identical canvas call`).toBe(true);
   });
 
-  it.fails('XBV-028: canvas and worker refuse an unknown solver name instead of silently running Euler (decision D3)', () => {
+  it('XBV-028: canvas and worker refuse an unknown solver name instead of silently running Euler (decision D3)', () => {
     for (const file of ['src/components/xbridges/XbridgesWorkspace.tsx', 'src/engine/xbridges/xbridgesWorker.ts']) {
       const text = readFileSync(join(root, file), 'utf8');
       expect(/else\s+Solvers\.stepEuler\(/.test(text), `${file} falls back to Euler`).toBe(false);

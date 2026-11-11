@@ -80,10 +80,6 @@ const EXPECTED: Record<string, 'error' | 'warning' | 'info'> = {
 };
 /** Codes whose current behaviour contradicts the expectation; each turns red when fixed (then leaves this map). */
 const PINNED_SEVERITY: Record<string, string> = {
-  DIMENSION_MISMATCH: 'XBV-029 (decision D1; also XBV-035: unreachable from library ports)',
-  DATA_TYPE_MISMATCH: 'XBV-029 (decision D1)',
-  ALGEBRAIC_LOOP_NOT_CONVERGED: 'XBV-030 (error does not stop the run)',
-  LOGIC_NAN_INPUT: 'XBV-033 (runtime error diagnostic does not stop the run)',
   EXECUTION_EXCEPTION: 'XBV-034 (DOE fault code only inside a BLOCK_RUNTIME_FAULT message)',
   INVALID_GMDH_LAYERS: 'XBV-034 (DOE fault code only inside a BLOCK_RUNTIME_FAULT message)',
   INVALID_TAGUCHI_LEVELS: 'XBV-034 (DOE fault code only inside a BLOCK_RUNTIME_FAULT message)',
@@ -98,7 +94,7 @@ describe('diagnostics closure', () => {
   });
 
   // XBV-035 on its own: a canvas-buildable dimension mismatch ([1 2 3] + [1 2] into Sum) must be detected at all.
-  it.fails('XBV-035: Constant [1 2 3] and Constant [1 2] into one Sum give DIMENSION_MISMATCH', async () => {
+  it('XBV-035: Constant [1 2 3] and Constant [1 2] into one Sum give DIMENSION_MISMATCH', async () => {
     const { buildModel } = await import('../testkit');
     const { XbridgesEngine } = await import('../XbridgesEngine');
     const e = new XbridgesEngine(buildModel({
