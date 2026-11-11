@@ -110,6 +110,27 @@ const LIBM_CALL = /\b(sin|cos|tan|asin|acos|atan|atan2|sinh|cosh|tanh|asinh|acos
 
 /** LOOSE_ABS: when set, values within this absolute distance pass (secondary check for whole-class XBV-098 pins). */
 let LOOSE_ABS = 0;
+
+/**
+ * libm-conditioned cases (WP-21 batch B, after XBV-098 was fixed): the wave argument is bit-identical in C and in the
+ * interpreter, but glibc sin and V8 Math.sin may differ by 1 ULP (tick 5: 0.91536666461344529 vs ...507), and these
+ * blocks cancel (Park/Clarke sums, high-pass difference, quantisation error) or amplify (atanh, condition about 6) that
+ * input difference. For exactly these keys the bound is the propagated one, |C - interpreter| <= 8 eps max(1, |y|):
+ * one input ULP on a unit-scale signal through a condition number of at most 8. Observed worst 1.3e-15 (ATANH, |y| 1.56,
+ * bound 2.8e-15); others <= 4.5e-16. Ratchet: a key is added only after the same analysis, never to make a case pass.
+ */
+const LIBM_CONDITIONED = new Set([
+  'ATANH|euler|sine', 'ATANH|rk4|sine', 'ATANH|discrete|sine',
+  'HIGH_PASS_FILTER|euler|sine', 'HIGH_PASS_FILTER|rk4|sine',
+  'INVERSE_CLARKE|euler|sine', 'INVERSE_CLARKE|rk4|sine', 'INVERSE_CLARKE|discrete|sine',
+  'INVERSE_PARK|euler|sine', 'INVERSE_PARK|rk4|sine', 'INVERSE_PARK|discrete|sine',
+  'NUMERIC_REPRESENTATION|euler|sine', 'NUMERIC_REPRESENTATION|rk4|sine', 'NUMERIC_REPRESENTATION|discrete|sine',
+  'PARK_TRANSFORM|euler|sine', 'PARK_TRANSFORM|rk4|sine', 'PARK_TRANSFORM|discrete|sine',
+]);
+const conditionedKey = (label: string) => {
+  const [type, solver, cls] = label.split('/');
+  return `${type}|${solver}|${(cls ?? '').split('+')[0]}`;
+};
 const compareTraces = (label: string, a: PerTick, b: PerTick, probes: string[], maxUlp: number): { detail?: string; values: number; worst: number } => {
   let values = 0;
   let worst = 0;
@@ -123,6 +144,8 @@ const compareTraces = (label: string, a: PerTick, b: PerTick, probes: string[], 
         if (Number.isNaN(x[i]) && Number.isNaN(y[i])) continue;
         if (x[i] === y[i]) continue;
         if (LOOSE_ABS > 0 && Math.abs(x[i] - y[i]) <= LOOSE_ABS) continue;
+        if (LIBM_CONDITIONED.has(conditionedKey(label)) && Number.isFinite(x[i]) && Number.isFinite(y[i])
+          && Math.abs(x[i] - y[i]) <= 8 * ULP_ONE * Math.max(1, Math.abs(x[i]))) { worst = Math.max(worst, ulpDistance(x[i], y[i])); continue; }
         const u = ulpDistance(x[i], y[i]);
         // Absolute floor of maxUlp ULP of 1.0, only near a zero crossing (|value| < 1e-3): there the ULP of the tiny result
         // is meaningless (sin(pi) = 1.2e-16 in both, 1 ULP of the argument apart). Elsewhere the plain ULP bound applies.
@@ -242,6 +265,10 @@ const PIN_CAUSE: Record<string, string> = {
 const PINS: Record<string, string> = {
   // Revealed when the absolute ULP floor was restricted to |x| < 1e-3 (WP-17 verifier): sub-1e-15 differences from
   // the XBV-098 time rounding; each has a 1e-13 secondary check below.
+  // ATANH sine inputs leave the domain at tick 7 (amplitude 1.3): XBV-086; ticks before are within the libm-conditioned bound.
+  'ATANH|discrete|sine': 'XBV-086',
+  'ATANH|euler|sine': 'XBV-086',
+  'ATANH|rk4|sine': 'XBV-086',
   'ACOSEC|discrete|sine': 'XBV-086',
   'ACOSEC|discrete|static': 'XBV-086',
   'ACOSEC|euler|sine': 'XBV-086',
