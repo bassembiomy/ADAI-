@@ -553,6 +553,30 @@ export const validateXBModel = (
         ));
       }
     }
+    if (['LOW_PASS_FILTER', 'HIGH_PASS_FILTER', 'MOVING_AVERAGE', 'IF_ELSE', 'SWITCH'].includes(node.type)) {
+      // Element-wise blocks: a data input has one element (broadcast) or as many as the output; the code generator
+      // relies on this and must never see anything else.
+      const countOf = (portId: string): number | null => {
+        const shape = shapeResult.portShapes.get(`${node.id}:${portId}`);
+        return shape !== undefined && shape.kind !== 'unresolved' ? shape.elementCount : null;
+      };
+      const outputPort = ports.find((p) => p.direction === 'output');
+      const outputCount = outputPort === undefined ? null : countOf(outputPort.id);
+      const controlIds = node.type === 'IF_ELSE'
+        ? ['cond', 'condition', 'ctrl', 'control']
+        : node.type === 'SWITCH' ? ['ctrl', 'control', 'cond', 'condition', 'u3'] : [];
+      for (const port of ports.filter((p) => p.direction === 'input')) {
+        if (controlIds.includes(port.id.toLowerCase())) continue;
+        const count = countOf(port.id);
+        if (outputCount !== null && count !== null && count !== 1 && count !== outputCount) {
+          diagnostics.push(diagnostic(
+            'XB_SHAPE_MISMATCH',
+            `${node.type} '${node.id}' input '${port.id}' has ${count} elements; it must have 1 or ${outputCount} (the output size).`,
+            node.id,
+          ));
+        }
+      }
+    }
     if (node.type === 'PID_BASIC' && !(typeof parameters.sampleTime === 'number' && parameters.sampleTime > 0)) {
       diagnostics.push(diagnostic(
         'XB_DISCRETE_SAMPLE_TIME_REQUIRED',

@@ -579,3 +579,13 @@ export const getXBBlockCapability = (
   }
   return null;
 };
+
+/**
+ * Simulink Sum rule for the list-of-signs parameter: '|' only spaces the ports
+ * and every other character except '+' and '-' is ignored; the k-th remaining
+ * sign belongs to input k. Inputs without a sign are added.
+ */
+export const xbSumSigns = (signs: unknown, inputCount: number): readonly (1 | -1)[] => {
+  const signChars = typeof signs === 'string' ? signs.replace(/[^+-]/g, '') : '';
+  return Array.from({ length: inputCount }, (_, index) => (signChars[index] === '-' ? -1 : 1));
+};

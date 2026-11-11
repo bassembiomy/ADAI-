@@ -1,6 +1,7 @@
 import { toCIdentifier } from './smExpressions';
 import type { SemanticModel, SemanticState } from './smSemanticModel';
 import { STATE_MACHINE_XB_TARGET_CAPABILITIES } from './smSemanticValidator';
+import { xbSumSigns } from './xbCapabilities';
 import type {
   XBSemanticMapping,
   XBSemanticModel,
@@ -158,7 +159,7 @@ const stateLayout = (state: SemanticState): XBStateLayout => {
     }
   }
 
-  if (Object.values(xb.operations).some((op) => op.type === 'Clock' || op.type === 'CLOCK')) {
+  if (usesSimTime(xb)) {
     declarations.push('    double sim_time;');
   }
 
@@ -978,14 +979,33 @@ const emitStep: OperationEmitter = (state, operation, operationIndex, layout, me
   );
 };
 
+const SIM_TIME_BLOCK_TYPES: ReadonlySet<string> = new Set(['Clock', 'CLOCK', 'WaveformGen', 'WAVEFORM_GEN']);
+
+/** True when any block reads the simulation time (sim_time member, advanced once per solver substep). */
+const usesSimTime = (xb: XBSemanticModel): boolean =>
+  Object.values(xb.operations).some((op) => SIM_TIME_BLOCK_TYPES.has(op.type));
+
+/** Input element expression: a one-element input broadcasts, otherwise the element index selects. */
+const broadcastElementExpression = (
+  state: SemanticState,
+  signalId: string,
+  count: number,
+  layout: XBStateLayout,
+  member: string,
+  index: string,
+): string => {
+  const input = requireSignal(state, signalId);
+  if (input.elementCount !== 1 && input.elementCount !== count) {
+    throw new Error(`X-Bridges XB_SHAPE_MISMATCH: input '${signalId}' has ${input.elementCount} elements, expected 1 or ${count}`);
+  }
+  return signalElementRealExpression(state, signalId, layout, member, input.elementCount === 1 ? '0U' : index);
+};
+
 const emitClock: OperationEmitter = (state, operation, operationIndex, layout, member) => {
   const outputSignalId = operation.outputSignalIds[0];
   if (outputSignalId === undefined) return [];
-  const dt = cNumber(state.xBridges!.solver.stepSeconds);
-  return [
-    ...renderSignalWrite(state, operation, operationIndex, 0, outputSignalId, `instance->${member}.sim_time`, layout, member),
-    `    instance->${member}.sim_time += (${dt});`,
-  ];
+  // sim_time is advanced once per solver substep (end of SolverSubstep), like runtime.simTime in the interpreter.
+  return renderSignalWrite(state, operation, operationIndex, 0, outputSignalId, `instance->${member}.sim_time`, layout, member);
 };
 
 const emitWaveformGen: OperationEmitter = (state, operation, operationIndex, layout, member) => {
@@ -998,7 +1018,7 @@ const emitWaveformGen: OperationEmitter = (state, operation, operationIndex, lay
   const bias = cNumber(scalarParameter(operation, ['bias', 'offset'], 0.0));
   const prefix = `wave_${operationIndex}`;
   const lines = [
-    `    double ${prefix}_t = instance->${member}.sim_time - (${cNumber(state.xBridges!.solver.stepSeconds)});`,
+    `    double ${prefix}_t = instance->${member}.sim_time;`,
     `    double ${prefix}_arg = 2.0 * 3.14159265358979323846 * (${freq}) * ${prefix}_t + (${phase});`,
     `    double ${prefix}_val = (${bias});`,
   ];
@@ -1027,12 +1047,9 @@ const emitGain = emitSingleOutput((inputs, operation) =>
   ))})`);
 
 const emitSum = emitSingleOutput((inputs, operation) => {
-  const configuredSigns = operation.parameters.signs;
-  const signs = typeof configuredSigns === 'string'
-    ? configuredSigns
-    : '+'.repeat(inputs.length);
+  const signs = xbSumSigns(operation.parameters.signs, inputs.length);
   const terms = inputs.map((input, index) =>
-    signs[index] === '-' ? `(-(${input}))` : `(${input})`);
+    signs[index] === -1 ? `(-(${input}))` : `(${input})`);
   return terms.length === 0 ? '0.0' : `(${terms.join(' + ')})`;
 });
 const emitSumJunction: OperationEmitter = (...args) => emitSum(...args);
@@ -1096,7 +1113,14 @@ const emitDeadzone = emitElementwise((inputs, operation) => {
 });
 
 const emitVectorElementwiseSum: OperationEmitter = (...args) =>
-  emitElementwise((inputs) => reduceExpression(inputs, '+', '0.0'))(...args);
+  emitElementwise((inputs, operation) => {
+    const signs = xbSumSigns(operation.parameters.signs, inputs.length);
+    return reduceExpression(
+      inputs.map((input, index) => (signs[index] === -1 ? `-(${input})` : input)),
+      '+',
+      '0.0',
+    );
+  })(...args);
 const emitVectorElementwiseProduct: OperationEmitter = (...args) =>
   emitElementwise((inputs) => reduceExpression(inputs, '*', '1.0'))(...args);
 const emitVectorElementwiseSubtract: OperationEmitter = (...args) =>
@@ -1620,33 +1644,70 @@ const emitAcoth = emitSingleOutput((inputs) => `atanh(1.0 / (${inputs[0] ?? '0.0
 const emitAsech = emitSingleOutput((inputs) => `acosh(1.0 / (${inputs[0] ?? '0.0'}))`);
 const emitAcosech = emitSingleOutput((inputs) => `asinh(1.0 / (${inputs[0] ?? '0.0'}))`);
 
-const emitSwitch = emitSingleOutput((inputs, operation) => {
-  const threshold = cNumber(
-    scalarParameter(operation, ['threshold', 'Threshold'], 0),
-  );
-  const control = inputs[1] ?? '0.0';
+/**
+ * Selector blocks (SWITCH, IF_ELSE): the control/condition is the first element of its input, the selected data input
+ * passes element-wise (a one-element data input broadcasts), as the interpreter does.
+ */
+const emitSelector = (
+  scalarEmitter: OperationEmitter,
+  controlInputIndex: number,
+  expression: (control: string, first: string, second: string, operation: XBSemanticOperation) => string,
+  dataInputIndexes: readonly [number, number],
+): OperationEmitter => (state, operation, operationIndex, layout, member) => {
+  const outputId = operation.outputSignalIds[0];
+  if (outputId === undefined) return [];
+  const count = requireSignal(state, outputId).elementCount;
+  if (count <= 1) return scalarEmitter(state, operation, operationIndex, layout, member);
+  const idx = `xb_sel_${operationIndex}_i`;
+  const control = operation.inputSignalIds[controlInputIndex];
+  const first = operation.inputSignalIds[dataInputIndexes[0]];
+  const second = operation.inputSignalIds[dataInputIndexes[1]];
+  const at = (id: string | undefined) => id === undefined
+    ? '0.0'
+    : broadcastElementExpression(state, id, count, layout, member, idx);
+  return [
+    '    {',
+    `        for (uint32_t ${idx} = 0U; ${idx} < ${count}U; ++${idx}) {`,
+    ...renderSignalElementWrite(state, operation, operationIndex, 0, outputId, idx,
+      expression(
+        control === undefined ? '0.0' : signalElementRealExpression(state, control, layout, member, '0U'),
+        at(first),
+        at(second),
+        operation,
+      ), layout, member),
+    '        }',
+    '    }',
+  ];
+};
+
+const emitSwitchScalar: OperationEmitter = (...args) => emitSingleOutput((inputs, operation) =>
+  switchExpression(inputs[1] ?? '0.0', inputs[0] ?? '0.0', inputs[2] ?? '0.0', operation))(...args);
+
+const switchExpression = (control: string, first: string, second: string, operation: XBSemanticOperation): string => {
+  const threshold = cNumber(scalarParameter(operation, ['threshold', 'Threshold'], 0));
   const criteriaValue = operation.parameters.criteria;
-  if (criteriaValue === 'u2 ~= 0') {
-    return `((${control}) != 0.0 ? (${inputs[0] ?? '0.0'}) : (${inputs[2] ?? '0.0'}))`;
-  }
-  const criteria = criteriaValue === '<'
-    || criteriaValue === '<='
+  if (criteriaValue === 'u2 ~= 0') return `((${control}) != 0.0 ? (${first}) : (${second}))`;
+  const criteria = criteriaValue === '<' || criteriaValue === '<='
     ? criteriaValue
     : (criteriaValue === '>' || criteriaValue === 'u2 > Threshold' ? '>' : '>=');
-  return `((${control}) ${criteria} ${threshold} ? (${inputs[0] ?? '0.0'}) : (${inputs[2] ?? '0.0'}))`;
-});
+  return `((${control}) ${criteria} ${threshold} ? (${first}) : (${second}))`;
+};
+const emitSwitch: OperationEmitter = (...args) =>
+  emitSelector(emitSwitchScalar, 1, switchExpression, [0, 2])(...args);
 
-const emitIfElse = emitSingleOutput((inputs, operation) => {
-  const cond = inputs[0] ?? '0.0';
-  const trueVal = inputs[1] ?? '0.0';
-  const falseVal = inputs[2] ?? '0.0';
+const ifElseExpression = (cond: string, trueVal: string, falseVal: string, operation: XBSemanticOperation): string => {
   const thresholdParam = operation.parameters.threshold ?? operation.parameters.Threshold;
   if (thresholdParam !== undefined && thresholdParam !== null) {
     const threshold = cNumber(Number(thresholdParam));
     return `((SM_XB_Truth(${cond}) && (${cond}) >= ${threshold}) ? (${trueVal}) : (${falseVal}))`;
   }
   return `(SM_XB_Truth(${cond}) ? (${trueVal}) : (${falseVal}))`;
-});
+};
+const emitIfElse: OperationEmitter = (...args) =>
+  emitSelector(emitIfElseScalar, 0, ifElseExpression, [1, 2])(...args);
+
+const emitIfElseScalar: OperationEmitter = (...args) => emitSingleOutput((inputs, operation) =>
+  ifElseExpression(inputs[0] ?? '0.0', inputs[1] ?? '0.0', inputs[2] ?? '0.0', operation))(...args);
 
 const emitConversion: OperationEmitter = (
   state,
@@ -2063,17 +2124,17 @@ static int32_t SM_XB_ToInt32(double value)
     }
     bits = (uint32_t)residue;
     return SM_XB_BitcastU32ToI32(bits);
-}
+}`;
 
-static int32_t SM_XB_ShiftLeft32(double value, double amount)
+const SHIFT_LEFT_HELPER = `static int32_t SM_XB_ShiftLeft32(double value, double amount)
 {
     const uint32_t shift = SM_XB_BitcastI32ToU32(
         SM_XB_ToInt32(amount)) & UINT32_C(31);
     const uint32_t bits = SM_XB_BitcastI32ToU32(SM_XB_ToInt32(value));
     return SM_XB_BitcastU32ToI32(bits << shift);
-}
+}`;
 
-static int32_t SM_XB_ShiftRight32(double value, double amount)
+const SHIFT_RIGHT_HELPER = `static int32_t SM_XB_ShiftRight32(double value, double amount)
 {
     const uint32_t shift = SM_XB_BitcastI32ToU32(
         SM_XB_ToInt32(amount)) & UINT32_C(31);
@@ -2223,11 +2284,22 @@ const renderPIDComputation = (
   const iSlot = stateSlotForRole(operation, 'i_state');
   const dSlot = stateSlotForRole(operation, 'd_state');
   const lastESlot = stateSlotForRole(operation, 'last_e');
-  const [errorId, enableId, resetId] = operation.inputSignalIds;
+  // PID_CONTROLLER ports r, y, enable, reset are looked up by id (the builder orders ports by id).
+  const portInput = (portId: string) => operation.inputSignalIds.find(
+    (signalId) => state.xBridges!.signals[signalId]?.portId === portId);
+  const isController = operation.type === 'PID_CONTROLLER';
+  const [errorId, enableId, resetId] = isController
+    ? [portInput('r'), portInput('enable'), portInput('reset')]
+    : operation.inputSignalIds;
+  const feedbackId = isController ? portInput('y') : undefined;
   if (iSlot === undefined || dSlot === undefined || lastESlot === undefined
-    || errorId === undefined || enableId === undefined || resetId === undefined) {
-    throw new Error(`X-Bridges PID_BASIC '${operation.id}' requires e, enable, reset, i_state, d_state, and last_e`);
+    || errorId === undefined || enableId === undefined || resetId === undefined
+    || (isController && feedbackId === undefined)) {
+    throw new Error(`X-Bridges ${operation.type} '${operation.id}' requires its error/reference, enable, reset, i_state, d_state, and last_e`);
   }
+  const errorExpression = feedbackId === undefined
+    ? signalRealExpression(state, errorId, layout, member)
+    : `(${signalRealExpression(state, errorId, layout, member)}) - (${signalRealExpression(state, feedbackId, layout, member)})`;
   const identifier = toCIdentifier(operation.id);
   const e = `xb_pid_${identifier}_e`;
   const enabled = `xb_pid_${identifier}_enabled`;
@@ -2238,21 +2310,35 @@ const renderPIDComputation = (
   const derivative = `xb_pid_${identifier}_derivative`;
   const unlimited = `xb_pid_${identifier}_unlimited`;
   const output = `xb_pid_${identifier}_output`;
+  const pTerm = `xb_pid_${identifier}_p_term`;
+  const iTerm = `xb_pid_${identifier}_i_term`;
+  const dTerm = `xb_pid_${identifier}_d_term`;
   const kp = cNumber(scalarParameter(operation, ['Kp', 'kp'], 1));
   const ki = cNumber(scalarParameter(operation, ['Ki', 'ki'], 0));
   const kd = cNumber(scalarParameter(operation, ['Kd', 'kd'], 0));
   const n = cNumber(scalarParameter(operation, ['N', 'n'], 100));
-  const dt = cNumber(scalarParameter(operation, ['sampleTime', 'dt'], 1));
+  const dt = cNumber(operation.pidParameters?.sampleTime
+    ?? scalarParameter(operation, ['sampleTime', 'dt'], 1));
   const minimum = cNumber(scalarParameter(operation, ['min', 'minimum'], -100));
   const maximum = cNumber(scalarParameter(operation, ['max', 'maximum'], 100));
   const mode = operation.parameters.mode;
-  const method = operation.parameters.method;
-  const integralLines = mode === 'PD' ? [] : method === 'forward_euler'
+  const methodKey = String(operation.pidParameters?.method ?? operation.parameters.method ?? '')
+    .toLowerCase().replace(/[_\s-]/g, '');
+  const method = methodKey === 'forwardeuler'
+    ? 'forward_euler'
+    : (methodKey === 'backwardeuler' ? 'backward_euler' : operation.parameters.method);
+  const integralLines = mode === 'PD' || mode === 'P' ? [] : method === 'forward_euler'
     ? [`            ${i} += (${ki}) * ${lastE} * (${dt});`]
     : method === 'backward_euler'
       ? [`            ${i} += (${ki}) * ${e} * (${dt});`]
       : [`            ${i} += (${ki}) * (${e} + ${lastE}) * (${dt}) / 2.0;`];
-  const derivativeLines = mode === 'PI' ? [] : method === 'forward_euler'
+  const derivativeLines = mode === 'PI' || mode === 'P' ? [] : isController
+    ? [
+      // PID_CONTROLLER: the d state holds the filtered derivative of the error (as the interpreter).
+      `            const double ${d}_filtered = (${d} + (${n}) * (${e} - ${lastE})) / (1.0 + (${n}) * (${dt}));`,
+      `            ${derivative} = (${kd}) * ${d}_filtered;`,
+      `            ${d} = ${d}_filtered;`,
+    ] : method === 'forward_euler'
     ? [
       `            ${derivative} = (${kd}) * (${n}) * (${e} - ${d});`,
       `            ${d} += (${n}) * (${e} - ${d}) * (${dt});`,
@@ -2265,7 +2351,7 @@ const renderPIDComputation = (
       `            ${d} = ${e};`,
       ];
   return [
-    `        const double ${e} = ${signalRealExpression(state, errorId, layout, member)};`,
+    `        const double ${e} = ${errorExpression};`,
     `        const double ${enabled} = ${signalRealExpression(state, enableId, layout, member)};`,
     `        const double ${reset} = ${signalRealExpression(state, resetId, layout, member)};`,
     `        double ${i} = ${stateSlotRealExpression(iSlot, layout, member)};`,
@@ -2274,6 +2360,9 @@ const renderPIDComputation = (
     `        double ${derivative} = 0.0;`,
     `        double ${unlimited} = 0.0;`,
     `        double ${output} = 0.0;`,
+    `        double ${pTerm} = 0.0;`,
+    `        double ${iTerm} = 0.0;`,
+    `        double ${dTerm} = 0.0;`,
     `        if (${reset} > 0.5) { ${i} = 0.0; ${d} = 0.0; ${lastE} = 0.0; }`,
     `        else if (${enabled} < 0.5) { ${output} = 0.0; }`,
     '        else {',
@@ -2281,10 +2370,16 @@ const renderPIDComputation = (
     ...derivativeLines,
     `            ${unlimited} = (${kp}) * ${e} + ${i} + ${derivative};`,
     `            ${output} = fmax(${minimum}, fmin(${maximum}, ${unlimited}));`,
+    `            ${pTerm} = (${kp}) * ${e};`,
+    `            ${iTerm} = ${i};`,
+    `            ${dTerm} = ${derivative};`,
     `            if (((${ki}) != 0.0) && (((${unlimited} > ${maximum}) && (${e} > 0.0)) || ((${unlimited} < ${minimum}) && (${e} < 0.0)))) ${i} = ${stateSlotRealExpression(iSlot, layout, member)};`,
     `            ${lastE} = ${e};`,
     '        }',
     `        (void)${output};`,
+    `        (void)${pTerm};`,
+    `        (void)${iTerm};`,
+    `        (void)${dTerm};`,
   ];
 };
 
@@ -2344,13 +2439,26 @@ const renderStateOutputs = (
       return [...renderSignalWrite(state, operation, operationIndex, 0, outputSignalId, expr, layout, member)];
     }
   }
-  if (operation.type === 'PID_BASIC') {
+  if (operation.type === 'PID_BASIC' || operation.type === 'PID_CONTROLLER') {
     const outputSignalId = operation.outputSignalIds.find((signalId) =>
       state.xBridges!.signals[signalId]?.portId === 'u');
     if (outputSignalId === undefined) return [];
-    const outputName = `xb_pid_${toCIdentifier(operation.id)}_output`;
+    const identifier = toCIdentifier(operation.id);
+    const outputName = `xb_pid_${identifier}_output`;
+    const termNames: Record<string, string> = {
+      u: outputName,
+      p_term: `xb_pid_${identifier}_p_term`,
+      i_term: `xb_pid_${identifier}_i_term`,
+      d_term: `xb_pid_${identifier}_d_term`,
+    };
+    const writtenSignalIds = operation.type === 'PID_CONTROLLER'
+      ? operation.outputSignalIds.filter((signalId) => termNames[state.xBridges!.signals[signalId]?.portId ?? ''] !== undefined)
+      : [outputSignalId];
     return ['    {', ...renderPIDComputation(state, operation, layout, member),
-      ...renderSignalWrite(state, operation, operationIndex, 0, outputSignalId, outputName, layout, member).map((line) => `    ${line}`),
+      ...writtenSignalIds.flatMap((signalId, writeIndex) => renderSignalWrite(
+        state, operation, operationIndex, writeIndex, signalId,
+        termNames[state.xBridges!.signals[signalId]?.portId ?? 'u'] ?? outputName, layout, member,
+      ).map((line) => `    ${line}`)),
       '    }'];
   }
   if (operation.type === 'DISCRETE_TRANSFER_FUNCTION' || operation.type === 'STATE_SPACE') {
@@ -2390,7 +2498,7 @@ const renderStateOutputs = (
     if (prevSlot !== undefined && outputSignalId !== undefined && inputSignalId !== undefined) {
       const outputSignal = requireSignal(state, outputSignalId);
       const isnanFn = 'isnan';
-      const nanVal = 'NAN';
+      const nanVal = '((double)NAN)';
 
       const rising = cNumber(scalarParameter(operation, ['risingSlewRate', 'risingLimit'], 1));
       const fallingParam = operation.parameters.fallingSlewRate !== undefined ? scalarParameter(operation, ['fallingSlewRate'], 1) : undefined;
@@ -2494,11 +2602,7 @@ const renderStateOutputs = (
   if (operation.type === 'Clock' || operation.type === 'CLOCK') {
     const outputSignalId = operation.outputSignalIds[0];
     if (outputSignalId !== undefined) {
-      const dt = cNumber(state.xBridges!.solver.stepSeconds);
-      return [
-        ...renderSignalWrite(state, operation, operationIndex, 0, outputSignalId, `instance->${member}.sim_time`, layout, member),
-        `    instance->${member}.sim_time += (${dt});`,
-      ];
+      return [...renderSignalWrite(state, operation, operationIndex, 0, outputSignalId, `instance->${member}.sim_time`, layout, member)];
     }
   }
   if (operation.type === 'WaveformGen' || operation.type === 'WAVEFORM_GEN') {
@@ -2511,10 +2615,8 @@ const renderStateOutputs = (
       const bias = cNumber(scalarParameter(operation, ['bias', 'offset'], 0.0));
       const prefix = `wave_${operationIndex}`;
       const lines = [
-        // Clock advances the shared simulation time before later direct
-        // operations run. The interpreter evaluates WaveformGen at the
-        // beginning of the substep, so compensate for that advance here.
-        `    double ${prefix}_t = instance->${member}.sim_time - (${cNumber(state.xBridges!.solver.stepSeconds)});`,
+        // The interpreter evaluates WaveformGen at the simulation time of the substep start.
+        `    double ${prefix}_t = instance->${member}.sim_time;`,
         `    double ${prefix}_arg = 2.0 * 3.14159265358979323846 * (${freq}) * ${prefix}_t + (${phase});`,
         `    double ${prefix}_val = (${bias});`,
       ];
@@ -2561,6 +2663,21 @@ const renderStateOutputs = (
       const fc = cNumber(scalarParameter(operation, ['cutoff_frequency', 'cutoffFrequency', 'fc'], 1));
       const dt = cNumber(scalarParameter(operation, ['sample_time', 'sampleTime', 'dt'], 0.1));
       const prefix = `lpf_${operationIndex}`;
+      const count = requireSignal(state, outputSignalId).elementCount;
+      if (count > 1) {
+        const idx = `${prefix}_i`;
+        return [
+          `    const double ${prefix}_fc = (${fc});`,
+          `    const double ${prefix}_dt = (${dt});`,
+          `    const double ${prefix}_tau = 1.0 / (2.0 * 3.14159265358979323846 * ${prefix}_fc);`,
+          `    const double ${prefix}_alpha = ${prefix}_dt / (${prefix}_tau + ${prefix}_dt);`,
+          `    for (uint32_t ${idx} = 0U; ${idx} < ${count}U; ++${idx}) {`,
+          `        const double ${prefix}_y = (1.0 - ${prefix}_alpha) * (${stateSlotElementRealExpression(prevYSlot, layout, member, idx)}) + ${prefix}_alpha * (${broadcastElementExpression(state, inputSignalId, count, layout, member, idx)});`,
+          ...renderSignalElementWrite(state, operation, operationIndex, 0, outputSignalId, idx, `${prefix}_y`, layout, member),
+          ...renderStateSlotElementAssignment(state, prevYSlot, idx, `${prefix}_y`, layout, member, `${operation.id}_prev_y_update`, layout.errorFields.get(operation.id), operation),
+          '    }',
+        ];
+      }
       const lines: string[] = [
         `    const double ${prefix}_fc = (${fc});`,
         `    const double ${prefix}_dt = (${dt});`,
@@ -2585,6 +2702,23 @@ const renderStateOutputs = (
       const fc = cNumber(scalarParameter(operation, ['cutoff_frequency', 'cutoffFrequency', 'fc'], 1));
       const dt = cNumber(scalarParameter(operation, ['sample_time', 'sampleTime', 'dt'], 0.1));
       const prefix = `hpf_${operationIndex}`;
+      const count = requireSignal(state, outputSignalId).elementCount;
+      if (count > 1) {
+        const idx = `${prefix}_i`;
+        return [
+          `    const double ${prefix}_fc = (${fc});`,
+          `    const double ${prefix}_dt = (${dt});`,
+          `    const double ${prefix}_tau = 1.0 / (2.0 * 3.14159265358979323846 * ${prefix}_fc);`,
+          `    const double ${prefix}_alpha = ${prefix}_tau / (${prefix}_tau + ${prefix}_dt);`,
+          `    for (uint32_t ${idx} = 0U; ${idx} < ${count}U; ++${idx}) {`,
+          `        const double ${prefix}_u = (${broadcastElementExpression(state, inputSignalId, count, layout, member, idx)});`,
+          `        const double ${prefix}_y = ${prefix}_alpha * ((${stateSlotElementRealExpression(prevYSlot, layout, member, idx)}) + ${prefix}_u - (${stateSlotElementRealExpression(prevUSlot, layout, member, idx)}));`,
+          ...renderSignalElementWrite(state, operation, operationIndex, 0, outputSignalId, idx, `${prefix}_y`, layout, member),
+          ...renderStateSlotElementAssignment(state, prevYSlot, idx, `${prefix}_y`, layout, member, `${operation.id}_prev_y_update`, layout.errorFields.get(operation.id), operation),
+          ...renderStateSlotElementAssignment(state, prevUSlot, idx, `${prefix}_u`, layout, member, `${operation.id}_prev_u_update`, layout.errorFields.get(operation.id), operation),
+          '    }',
+        ];
+      }
       const lines: string[] = [
         `    const double ${prefix}_fc = (${fc});`,
         `    const double ${prefix}_dt = (${dt});`,
@@ -2606,8 +2740,27 @@ const renderStateOutputs = (
     if (bufferSlot !== undefined && indexSlot !== undefined && outputSignalId !== undefined && inputSignalId !== undefined) {
       const u = signalElementRealExpression(state, inputSignalId, layout, member, '0U');
       const indexExpr = stateSlotElementRealExpression(indexSlot, layout, member, '0U');
-      const windowSize = bufferSlot.shape.kind === 'vector' ? bufferSlot.shape.length : 4;
       const prefix = `ma_${operationIndex}`;
+      const count = requireSignal(state, outputSignalId).elementCount;
+      const windowSize = bufferSlot.shape.kind === 'vector' ? Math.max(1, Math.floor(bufferSlot.shape.length / count)) : 4;
+      if (count > 1) {
+        const idx = `${prefix}_e`;
+        return [
+          `    const uint32_t ${prefix}_idx = (uint32_t)(${indexExpr});`,
+          `    for (uint32_t ${idx} = 0U; ${idx} < ${count}U; ++${idx}) {`,
+          `        const double ${prefix}_u = (${broadcastElementExpression(state, inputSignalId, count, layout, member, idx)});`,
+          ...renderStateSlotElementAssignment(state, bufferSlot, `${prefix}_idx * ${count}U + ${idx}`, `${prefix}_u`, layout, member, `${operation.id}_buf_update`, layout.errorFields.get(operation.id), operation),
+          `        double ${prefix}_sum = 0.0;`,
+          `        for (uint32_t ${prefix}_w = 0U; ${prefix}_w < ${windowSize}U; ++${prefix}_w) {`,
+          `            ${prefix}_sum += ${stateSlotElementRealExpression(bufferSlot, layout, member, `${prefix}_w * ${count}U + ${idx}`)};`,
+          '        }',
+          `        const double ${prefix}_y = ${prefix}_sum / ${windowSize}.0;`,
+          ...renderSignalElementWrite(state, operation, operationIndex, 0, outputSignalId, idx, `${prefix}_y`, layout, member),
+          '    }',
+          `    const double ${prefix}_nextIdx = (double)((${prefix}_idx + 1U) % ${windowSize}U);`,
+          ...renderStateSlotElementAssignment(state, indexSlot, '0U', `${prefix}_nextIdx`, layout, member, `${operation.id}_idx_update`, layout.errorFields.get(operation.id), operation),
+        ];
+      }
       const lines: string[] = [
         `    const uint32_t ${prefix}_idx = (uint32_t)(${indexExpr});`,
         `    const double ${prefix}_u = (${u});`,
@@ -3346,7 +3499,10 @@ const renderDiscreteStateUpdates = (
     ),
   ];
   const firstInput = operation.inputSignalIds[0];
-  const firstInputIsVector = operation.type === 'RATE_LIMITER'
+  const firstInputIsVector = (operation.type === 'RATE_LIMITER'
+    || operation.type === 'LOW_PASS_FILTER'
+    || operation.type === 'HIGH_PASS_FILTER'
+    || operation.type === 'MOVING_AVERAGE')
     && firstInput !== undefined
     && state.xBridges!.signals[firstInput]?.shape.kind !== 'scalar';
   const input = (operation.type === 'STATE_SPACE' || operation.type === 'DISCRETE_TRANSFER_FUNCTION' || operation.type === 'KALMAN_FILTER' || operation.type === 'EXTENDED_KALMAN_FILTER' || firstInputIsVector) || operation.inputSignalIds[0] === undefined
@@ -3394,7 +3550,7 @@ const renderDiscreteStateUpdates = (
     if (operation.schedule.hold === 'none' || operation.schedule.periodSubsteps <= 1) return withFaultSync(transactional);
     return withFaultSync([`    if (instance->${member}.${counter} == UINT32_C(0)) {`, ...transactional.map((line) => `    ${line}`), '    }']);
   }
-  if (operation.type === 'PID_BASIC') {
+  if (operation.type === 'PID_BASIC' || operation.type === 'PID_CONTROLLER') {
     const iSlot = stateSlotForRole(operation, 'i_state');
     const dSlot = stateSlotForRole(operation, 'd_state');
     const lastESlot = stateSlotForRole(operation, 'last_e');
@@ -3786,7 +3942,7 @@ const renderDiscreteStateUpdates = (
       }
       case 'RATE_LIMITER': {
         const isnanFn = 'isnan';
-        const nanVal = 'NAN';
+        const nanVal = '((double)NAN)';
 
         const rising = cNumber(scalarParameter(operation, ['risingSlewRate', 'risingLimit'], 1));
         const fallingParam = operation.parameters.fallingSlewRate !== undefined ? scalarParameter(operation, ['fallingSlewRate'], 1) : undefined;
@@ -4101,8 +4257,13 @@ const renderSolverSubstep = (
       // We do NOT use renderTransactionalStateOutputs here because we always want to write
       // the current state, even when there is a latched fault from a previous step.
       if (operation.type === 'INTEGRATOR_CONTINUOUS' || operation.type === 'Integrator') {
-        return renderStateOutputs(state, operation, operationIndex, layout, member)
-          .map((line) => `    ${line}`);
+        // Own block: the output value locals must not shadow the same names in the post-update block (-Wshadow).
+        return [
+          '    {',
+          ...renderStateOutputs(state, operation, operationIndex, layout, member)
+            .map((line) => `    ${line}`),
+          '    }',
+        ];
       }
       if (operation.schedule.hold === 'none' || operation.schedule.periodSubsteps <= 1) {
         return outputs;
@@ -4151,6 +4312,9 @@ const renderSolverSubstep = (
     ...renderDiscreteStateUpdates(state, xb, layout, member).map((line) => `    ${line}`),
     ...renderContinuousStateUpdates(state, xb, layout, member).map((line) => `    ${line}`),
     ...renderScheduleAdvances(xb, layout, member).map((line) => `    ${line}`),
+    ...(usesSimTime(xb)
+      ? [`    instance->${member}.sim_time += (${cNumber(xb.solver.stepSeconds)});`]
+      : []),
   ];
 };
 
@@ -4281,6 +4445,10 @@ const renderStateLifecycle = (
   ).trimEnd();
 };
 
+const renderedStatesUse = (ir: SemanticModel, type: string): boolean =>
+  orderedXBStates(ir).some((state) => state.xBridges!.executionOrder.some((operationId) =>
+    state.xBridges!.operations[operationId]?.type === type));
+
 export const renderXBLifecycleSource = (ir: SemanticModel): string =>
   lines(
     orderedXBStates(ir).some((state) => state.xBridges!.executionOrder.some((operationId) =>
@@ -4294,6 +4462,9 @@ export const renderXBLifecycleSource = (ir: SemanticModel): string =>
         )))
       ? BITWISE_HELPERS
       : null,
+    // The shift helpers are static: emit each only when a block uses it (-Wunused-function).
+    renderedStatesUse(ir, 'ShiftLeft') ? SHIFT_LEFT_HELPER : null,
+    renderedStatesUse(ir, 'ShiftRight') ? SHIFT_RIGHT_HELPER : null,
     ...stateMemberEntries(ir)
       .map(({ state, member }) => renderStateLifecycle(ir, state, member)),
   ).trimEnd();

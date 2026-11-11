@@ -8,6 +8,7 @@ import type {
   XBMappingV1,
   XBNodeV1,
   XBParameterValue,
+  XBSolverConfig,
   XBTargetCapabilities,
 } from './xbModel';
 import type {
@@ -22,6 +23,7 @@ import {
   type XBSemanticBuildResult,
   type XBSemanticConversion,
   type XBSemanticMapping,
+  type XBPidParameters,
   type XBSemanticOperation,
   type XBSemanticSchedule,
   type XBSemanticSignal,
@@ -67,6 +69,23 @@ const diagnostic = (
   elementId,
   severity: 'error',
 });
+
+const pidParametersOrDiagnostic = (
+  node: XBNodeV1,
+  solver: XBSolverConfig,
+  diagnostics: ModelDiagnostic[],
+): XBPidParameters | undefined => {
+  try {
+    return normalizePidParameters(node.parameters, solver);
+  } catch (error) {
+    diagnostics.push(diagnostic(
+      'XB_PARAMETER_INVALID',
+      `PID_CONTROLLER '${node.id}': ${error instanceof Error ? error.message : String(error)}`,
+      node.id,
+    ));
+    return undefined;
+  }
+};
 
 interface KalmanDimensions {
   readonly nStates: number;
@@ -1039,13 +1058,16 @@ const stateBoundaryForNode = (
     const output = outputByPort('y') ?? signals[outputSignalIds[0] ?? ''];
     if (output === undefined) return boundary([]);
     const ic = Number(firstPresentParameter(node.parameters as UnknownRecord, ['initial_condition', 'initialCondition', 'ic']) ?? 0);
+    const elementShape: XBShape = output.elementCount > 1
+      ? { kind: 'vector', length: output.elementCount }
+      : { kind: 'scalar' };
     return boundary([{
       id: `${node.id}:prev_y$state`,
       role: 'prev_y',
       signalId: null,
       numericType: output.numericType,
-      shape: { kind: 'scalar' },
-      initialValues: [ic],
+      shape: elementShape,
+      initialValues: Array.from({ length: output.elementCount }, () => ic),
     }]);
   }
 
@@ -1053,22 +1075,25 @@ const stateBoundaryForNode = (
     const output = outputByPort('y') ?? signals[outputSignalIds[0] ?? ''];
     if (output === undefined) return boundary([]);
     const ic = Number(firstPresentParameter(node.parameters as UnknownRecord, ['initial_condition', 'initialCondition', 'ic']) ?? 0);
+    const elementShape: XBShape = output.elementCount > 1
+      ? { kind: 'vector', length: output.elementCount }
+      : { kind: 'scalar' };
     return boundary([
       {
         id: `${node.id}:prev_y$state`,
         role: 'prev_y',
         signalId: null,
         numericType: output.numericType,
-        shape: { kind: 'scalar' },
-        initialValues: [ic],
+        shape: elementShape,
+        initialValues: Array.from({ length: output.elementCount }, () => ic),
       },
       {
         id: `${node.id}:prev_u$state`,
         role: 'prev_u',
         signalId: null,
         numericType: output.numericType,
-        shape: { kind: 'scalar' },
-        initialValues: [ic],
+        shape: elementShape,
+        initialValues: Array.from({ length: output.elementCount }, () => ic),
       },
     ]);
   }
@@ -1084,8 +1109,9 @@ const stateBoundaryForNode = (
         role: 'buffer',
         signalId: null,
         numericType: output.numericType,
-        shape: { kind: 'vector', length: windowSize },
-        initialValues: Array.from({ length: windowSize }, () => ic),
+        // Window of windowSize samples of every element: sample w, element m at w * elementCount + m.
+        shape: { kind: 'vector', length: windowSize * output.elementCount },
+        initialValues: Array.from({ length: windowSize * output.elementCount }, () => ic),
         storageCategory: 'array',
       },
       {
@@ -1680,7 +1706,9 @@ export const buildXBSemanticModel = (
           );
         }) ?? null,
       },
-      pidParameters: node.type === 'PID_CONTROLLER' ? normalizePidParameters(node.parameters, solverStep as any) : undefined,
+      pidParameters: node.type === 'PID_CONTROLLER'
+        ? pidParametersOrDiagnostic(node, input.model.solver, diagnostics)
+        : undefined,
     };
 
     if (node.type === 'DELAY' || node.type === 'UNIT_DELAY') {

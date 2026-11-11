@@ -2,6 +2,16 @@ import { XBParameterValue } from './xbModel';
 import { XBPidParameters } from './xbSemanticModel';
 import { XBSolverConfig } from './xbModel';
 
+/** Controller structures of the canvas PID_CONTROLLER mode parameter. */
+export const PID_CANVAS_STRUCTURES: readonly string[] = ['P', 'PI', 'PD', 'PID'];
+
+/** Canvas spellings of the discretization method (forward_euler, ...) mapped to the contract names. */
+const PID_METHOD_ALIASES: Readonly<Record<string, string>> = {
+  forwardeuler: 'ForwardEuler',
+  backwardeuler: 'BackwardEuler',
+  trapezoidal: 'Trapezoidal',
+};
+
 /**
  * Normalizes raw UI parameters from a PID_CONTROLLER block into a precise contract.
  * @param parameters The raw parameter dictionary from the block.
@@ -14,10 +24,15 @@ export const normalizePidParameters = (
   solver: XBSolverConfig,
 ): XBPidParameters => {
   const modeParam = String(parameters.mode ?? 'continuous');
-  if (modeParam !== 'continuous' && modeParam !== 'discrete') {
+  // The canvas PID_CONTROLLER mode selects the controller structure (P, PI,
+  // PD, PID). The embedded runtime evaluates that structure on the sampled
+  // grid, so it maps to the 'discrete' contract mode; the structure itself is
+  // read from the block parameter by the interpreter and the C generator.
+  const isCanvasStructure = PID_CANVAS_STRUCTURES.includes(modeParam);
+  if (modeParam !== 'continuous' && modeParam !== 'discrete' && !isCanvasStructure) {
     throw new Error(`Invalid PID mode: ${modeParam}`);
   }
-  const mode = modeParam as 'continuous' | 'discrete';
+  const mode: 'continuous' | 'discrete' = isCanvasStructure ? 'discrete' : modeParam as 'continuous' | 'discrete';
 
   const kp = Number(parameters.Kp ?? parameters.P ?? 0);
   const ki = Number(parameters.Ki ?? parameters.I ?? 0);
@@ -33,7 +48,8 @@ export const normalizePidParameters = (
     throw new Error(`PID minimum (${minimum}) must be less than or equal to maximum (${maximum}).`);
   }
 
-  const methodParam = String(parameters.method ?? 'ForwardEuler');
+  const rawMethod = String(parameters.method ?? 'ForwardEuler');
+  const methodParam = PID_METHOD_ALIASES[rawMethod.toLowerCase().replace(/[_\s-]/g, '')] ?? rawMethod;
   if (
     methodParam !== 'ForwardEuler' &&
     methodParam !== 'BackwardEuler' &&
