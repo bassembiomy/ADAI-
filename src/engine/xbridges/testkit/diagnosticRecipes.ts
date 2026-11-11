@@ -257,8 +257,8 @@ export const DIAGNOSTIC_RECIPES: Record<string, DiagnosticRecipe> = {
     [chain({ id: 'a', type: 'ASIN', params: { angle_unit: 'degrees' } }, 0.5)],
   ),
   PARAMETER_OUT_OF_RANGE: liveRecipe(
-    'Delay length 0 is below the minimum 1: parameterEvaluation.ts integer kind; reported by modelChecks.ts:225',
-    [chain({ id: 'd', type: 'DELAY', params: { delay_length: 0 } })],
+    'Delay length -1 is below the minimum 0 (0 is direct feedthrough, Simulink Delay; XBV-064): parameterEvaluation.ts integer kind; reported by modelChecks.ts:225',
+    [chain({ id: 'd', type: 'DELAY', params: { delay_length: -1 } })],
     [chain({ id: 'd', type: 'DELAY', params: { delay_length: 1 } })],
   ),
   RATE_TRANSITION_REQUIRED: liveRecipe(
@@ -328,8 +328,8 @@ export const DIAGNOSTIC_RECIPES: Record<string, DiagnosticRecipe> = {
     [{ blocks: [{ id: 'c', type: 'Constant', params: { value: 100, output_type: 'int8' } }, term('t')], wires: ['c.out -> t.u'] }],
   ),
   DELAY_LENGTH_INVALID: liveRecipe(
-    'Delay length 0 (also PARAMETER_OUT_OF_RANGE): modelChecks.ts:337',
-    [chain({ id: 'd', type: 'DELAY', params: { delay_length: 0 } })],
+    'Delay length -1 (also PARAMETER_OUT_OF_RANGE; 0 is valid direct feedthrough, XBV-064): modelChecks.ts:337',
+    [chain({ id: 'd', type: 'DELAY', params: { delay_length: -1 } })],
     [chain({ id: 'd', type: 'DELAY', params: { delay_length: 1 } })],
   ),
   LIMITS_INVALID: liveRecipe(
