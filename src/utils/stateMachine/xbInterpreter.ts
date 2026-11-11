@@ -19,7 +19,7 @@ import type {
   XBSemanticOperation,
 } from './xbSemanticModel';
 import { synthesizeTransferFunctionStateSpace } from './xbSemanticBuilder';
-import { isDiagBlockType, isMatrixSolveBlockType } from './xbCapabilities';
+import { isDiagBlockType, isMatrixSolveBlockType, xbSumSigns } from './xbCapabilities';
 
 type XBScalar = number | boolean;
 
@@ -530,8 +530,10 @@ const evaluateDirectOperation = (
     case 'Sum':
     case 'SUM_JUNCTION':
     case 'VectorAdd': {
+      const signs = xbSumSigns(operation.parameters.signs, inputs.length);
       const result = inputs.reduce<readonly XBScalar[]>(
-        (sum, input) => binary(sum, input, (left, right) => left + right),
+        (sum, input, index) => binary(sum, input,
+          (left, right) => left + (signs[index] ?? 1) * right),
         [0],
       );
       return [result];
@@ -890,45 +892,52 @@ const evaluateDirectOperation = (
     }
     case 'LOW_PASS_FILTER': {
       const prevYSlot = stateSlotForRole(operation, 'prev_y');
-      const prev_y = prevYSlot ? Number((runtime.stateSlots[prevYSlot.id] ?? prevYSlot.initialValues)[0] ?? 0) : 0;
-      const u = Number(inputs[0]?.[0] ?? 0);
+      const prevY = prevYSlot ? (runtime.stateSlots[prevYSlot.id] ?? prevYSlot.initialValues).map(Number) : [0];
+      const u = broadcast(inputs[0] ?? [0], prevY.length, operation.id);
       const fc = Number(parameter(operation, ['cutoff_frequency', 'cutoffFrequency', 'fc'], 1));
       const dt = Number(parameter(operation, ['sample_time', 'sampleTime', 'dt'], runtime.ir.solver.stepSeconds));
       const tau = 1 / (2 * Math.PI * fc);
       const alpha = dt / (tau + dt);
-      const y = (1 - alpha) * prev_y + alpha * u;
-      return [[y]];
+      return [prevY.map((prev_y, index) => (1 - alpha) * prev_y + alpha * Number(u[index]))];
     }
     case 'HIGH_PASS_FILTER': {
       const prevYSlot = stateSlotForRole(operation, 'prev_y');
       const prevUSlot = stateSlotForRole(operation, 'prev_u');
-      const prev_y = prevYSlot ? Number((runtime.stateSlots[prevYSlot.id] ?? prevYSlot.initialValues)[0] ?? 0) : 0;
-      const prev_u = prevUSlot ? Number((runtime.stateSlots[prevUSlot.id] ?? prevUSlot.initialValues)[0] ?? 0) : 0;
-      const u = Number(inputs[0]?.[0] ?? 0);
+      const prevY = prevYSlot ? (runtime.stateSlots[prevYSlot.id] ?? prevYSlot.initialValues).map(Number) : [0];
+      const prevU = prevUSlot ? (runtime.stateSlots[prevUSlot.id] ?? prevUSlot.initialValues).map(Number) : [0];
+      const u = broadcast(inputs[0] ?? [0], prevY.length, operation.id);
       const fc = Number(parameter(operation, ['cutoff_frequency', 'cutoffFrequency', 'fc'], 1));
       const dt = Number(parameter(operation, ['sample_time', 'sampleTime', 'dt'], runtime.ir.solver.stepSeconds));
       const tau = 1 / (2 * Math.PI * fc);
       const alpha = tau / (tau + dt);
-      const y = alpha * (prev_y + u - prev_u);
-      return [[y]];
+      return [prevY.map((prev_y, index) => alpha * (prev_y + Number(u[index]) - (prevU[index] ?? 0)))];
     }
     case 'MOVING_AVERAGE': {
       const bufferSlot = stateSlotForRole(operation, 'buffer');
       const indexSlot = stateSlotForRole(operation, 'index');
-      const u = Number(inputs[0]?.[0] ?? 0);
       if (bufferSlot && indexSlot) {
         const currentBuf = [...(runtime.stateSlots[bufferSlot.id] ?? bufferSlot.initialValues)];
         const idx = Number((runtime.stateSlots[indexSlot.id] ?? indexSlot.initialValues)[0] ?? 0);
-        const windowSize = bufferSlot.shape.kind === 'vector' ? bufferSlot.shape.length : 4;
-        currentBuf[idx] = u;
-        const sum = currentBuf.slice(0, windowSize).reduce((acc: number, val) => acc + Number(val), 0);
-        return [[sum / windowSize]];
+        const elementCount = Math.max(1, inputs[0]?.length ?? 1);
+        const windowSize = Math.max(1, Math.floor(currentBuf.length / elementCount));
+        const u = broadcast(inputs[0] ?? [0], elementCount, operation.id);
+        return [Array.from({ length: elementCount }, (_, element) => {
+          let sum = 0;
+          for (let w = 0; w < windowSize; w++) {
+            sum += Number(w === idx ? u[element] : currentBuf[w * elementCount + element]);
+          }
+          return sum / windowSize;
+        })];
       }
-      return [[u]];
+      return [inputs[0] ?? [0]];
     }
     case 'PID_BASIC':
     case 'PID_CONTROLLER': {
-      return [[pidValues(runtime, operation).output]];
+      const values = pidValues(runtime, operation);
+      if (operation.type === 'PID_CONTROLLER') {
+        return operation.outputSignalIds.map((signalId) => [pidPortValue(runtime, signalId, values)]);
+      }
+      return [[values.output]];
     }
     case 'INTEGRATOR_DISCRETE': {
       // Direct-feedthrough methods only: y(k) = y(k-1) + T*u(k) (backward Euler),
@@ -1208,7 +1217,26 @@ interface PIDValues {
   readonly iState: number;
   readonly dState: number;
   readonly lastE: number;
+  /** Terms of the PID_CONTROLLER outputs p_term, i_term, d_term (0 while reset or disabled). */
+  readonly pTerm?: number;
+  readonly iTerm?: number;
+  readonly dTerm?: number;
 }
+
+const pidPortValue = (
+  runtime: XBRuntime,
+  signalId: string,
+  values: PIDValues,
+): number => {
+  switch (runtime.ir.signals[signalId]?.portId) {
+    // The 'error' port of a stateful block carries the numeric-fault flag in the semantic model (fault sync), not the PID error.
+    case 'error': return 0;
+    case 'p_term': return values.pTerm ?? 0;
+    case 'i_term': return values.iTerm ?? 0;
+    case 'd_term': return values.dTerm ?? 0;
+    default: return values.output;
+  }
+};
 
 const pidValues = (
   runtime: XBRuntime,
@@ -1223,7 +1251,18 @@ const pidValues = (
   let error = 0;
   let enabled = 1;
   let reset = 0;
-  if (operation.inputSignalIds.length >= 4) {
+  const portSignal = (portId: string) => operation.inputSignalIds.find(
+    (signalId) => runtime.ir.signals[signalId]?.portId === portId);
+  const refId = portSignal('r');
+  const feedbackId = portSignal('y');
+  const enableId = portSignal('enable');
+  const resetId = portSignal('reset');
+  if (operation.type === 'PID_CONTROLLER' && refId !== undefined && feedbackId !== undefined) {
+    // Canvas ports: r, y, enable, reset (the builder orders the ports by id, so look them up by id).
+    error = Number(signalValues(runtime, refId)[0] ?? 0) - Number(signalValues(runtime, feedbackId)[0] ?? 0);
+    enabled = enableId === undefined ? 1 : Number(signalValues(runtime, enableId)[0] ?? 1);
+    reset = resetId === undefined ? 0 : Number(signalValues(runtime, resetId)[0] ?? 0);
+  } else if (operation.inputSignalIds.length >= 4) {
     const port0 = runtime.ir.signals[operation.inputSignalIds[0] ?? '']?.portId;
     const val0 = Number(signalValues(runtime, operation.inputSignalIds[0] ?? '')[0] ?? 0);
     const val1 = Number(signalValues(runtime, operation.inputSignalIds[1] ?? '')[0] ?? 0);
@@ -1243,9 +1282,9 @@ const pidValues = (
   const previousI = Number((runtime.stateSlots[iSlot.id] ?? iSlot.initialValues)[0] ?? 0);
   const previousD = Number((runtime.stateSlots[dSlot.id] ?? dSlot.initialValues)[0] ?? 0);
   const previousE = Number((runtime.stateSlots[lastESlot.id] ?? lastESlot.initialValues)[0] ?? 0);
-  if (reset > 0.5) return { output: 0, iState: 0, dState: 0, lastE: 0 };
+  if (reset > 0.5) return { output: 0, iState: 0, dState: 0, lastE: 0, pTerm: 0, iTerm: 0, dTerm: 0 };
   if (enabled < 0.5) return {
-    output: 0, iState: previousI, dState: previousD, lastE: previousE,
+    output: 0, iState: previousI, dState: previousD, lastE: previousE, pTerm: 0, iTerm: 0, dTerm: 0,
   };
 
   const pidParams = operation.pidParameters as Record<string, unknown> | undefined;
@@ -1256,19 +1295,23 @@ const pidValues = (
   const dt = Number(pidParams?.sampleTime ?? parameter(operation, ['sampleTime', 'dt'], 1));
   const lower = Number(pidParams?.minimum ?? pidParams?.minimumOutput ?? parameter(operation, ['min', 'minimum'], -100));
   const upper = Number(pidParams?.maximum ?? pidParams?.maximumOutput ?? parameter(operation, ['max', 'maximum'], 100));
-  const mode = (pidParams?.mode ?? operation.parameters.mode) as string | undefined;
+  // Controller structure P / PI / PD / PID (canvas mode parameter); the contract modes 'continuous' / 'discrete'
+  // and a missing mode evaluate the full PID on the sampled grid.
+  const structure = operation.parameters.mode;
+  const mode = typeof structure === 'string' && ['P', 'PI', 'PD', 'PID'].includes(structure) ? structure : 'PID';
   const method = (pidParams?.method ?? operation.parameters.method) as string | undefined;
   const methodLower = String(method ?? 'trapezoidal').toLowerCase();
   let nextI = previousI;
   let nextD = previousD;
   let derivative = 0;
-  if (mode === 'PI' || mode === 'PID' || mode === 'discrete' || mode === undefined) {
+  if (mode === 'PI' || mode === 'PID') {
     if (methodLower.includes('forward')) nextI = previousI + ki * previousE * dt;
     else if (methodLower.includes('backward')) nextI = previousI + ki * error * dt;
     else nextI = previousI + ki * (error + previousE) * dt / 2;
   }
-  if (mode === 'PD' || mode === 'PID' || mode === 'discrete' || mode === undefined) {
+  if (mode === 'PD' || mode === 'PID') {
     if (dSlot?.role === 'd_state' && operation.type === 'PID_CONTROLLER') {
+      // Filtered derivative: the d state holds the filtered derivative of the error.
       const dFiltered = (previousD + n * (error - previousE)) / (1 + n * dt);
       derivative = kd * dFiltered;
       nextD = dFiltered;
@@ -1285,10 +1328,14 @@ const pidValues = (
   }
   const unlimited = kp * error + nextI + derivative;
   const output = Math.max(lower, Math.min(upper, unlimited));
+  const integralTerm = nextI;
   if (ki !== 0 && ((unlimited > upper && error > 0) || (unlimited < lower && error < 0))) {
     nextI = previousI;
   }
-  return { output, iState: nextI, dState: nextD, lastE: error };
+  return {
+    output, iState: nextI, dState: nextD, lastE: error,
+    pTerm: kp * error, iTerm: integralTerm, dTerm: derivative,
+  };
 };
 
 function writeStateOutputs(
@@ -1341,8 +1388,15 @@ function writeStateOutputs(
     return;
   }
   if (operation.type === 'PID_BASIC' || operation.type === 'PID_CONTROLLER') {
+    const values = pidValues(runtime, operation);
+    if (operation.type === 'PID_CONTROLLER') {
+      for (const signalId of operation.outputSignalIds) {
+        writeSignal(runtime, signalId, [pidPortValue(runtime, signalId, values)], faults, operation);
+      }
+      return;
+    }
     const output = operation.outputSignalIds.find((id) => runtime.ir.signals[id]?.portId === 'u') ?? operation.outputSignalIds[0];
-    if (output !== undefined) writeSignal(runtime, output, [pidValues(runtime, operation).output], faults, operation);
+    if (output !== undefined) writeSignal(runtime, output, [values.output], faults, operation);
     return;
   }
   if (operation.type === 'DISCRETE_TRANSFER_FUNCTION' || operation.type === 'STATE_SPACE') {
@@ -1762,14 +1816,16 @@ const statefulUpdate = (
     const prevYSlot = stateSlotForRole(operation, 'prev_y');
     if (prevYSlot === undefined) throw new Error(`X-Bridges LOW_PASS_FILTER '${operation.id}' requires a prev_y state slot`);
     const inputId = operation.inputSignalIds[0];
-    const u = inputId ? Number(signalValues(runtime, inputId)[0] ?? 0) : 0;
+    const prevY = (runtime.stateSlots[prevYSlot.id] ?? prevYSlot.initialValues).map(Number);
+    const u = broadcast(inputId ? signalValues(runtime, inputId) : [0], prevY.length, operation.id);
     const fc = Number(parameter(operation, ['cutoff_frequency', 'cutoffFrequency', 'fc'], 1));
     const dt = Number(parameter(operation, ['sample_time', 'sampleTime', 'dt'], 0.1));
     const tau = 1 / (2 * Math.PI * fc);
     const alpha = dt / (tau + dt);
-    const prev_y = Number((runtime.stateSlots[prevYSlot.id] ?? prevYSlot.initialValues)[0] ?? 0);
-    const y = (1 - alpha) * prev_y + alpha * u;
-    return { [prevYSlot.id]: [convertValue(y, prevYSlot.numericType, faults, operation)] };
+    return {
+      [prevYSlot.id]: prevY.map((prev_y, index) =>
+        convertValue((1 - alpha) * prev_y + alpha * Number(u[index]), prevYSlot.numericType, faults, operation)),
+    };
   }
   if (operation.type === 'HIGH_PASS_FILTER') {
     const prevYSlot = stateSlotForRole(operation, 'prev_y');
@@ -1778,17 +1834,18 @@ const statefulUpdate = (
       throw new Error(`X-Bridges HIGH_PASS_FILTER '${operation.id}' requires prev_y and prev_u state slots`);
     }
     const inputId = operation.inputSignalIds[0];
-    const u = inputId ? Number(signalValues(runtime, inputId)[0] ?? 0) : 0;
+    const prevY = (runtime.stateSlots[prevYSlot.id] ?? prevYSlot.initialValues).map(Number);
+    const prevU = (runtime.stateSlots[prevUSlot.id] ?? prevUSlot.initialValues).map(Number);
+    const u = broadcast(inputId ? signalValues(runtime, inputId) : [0], prevY.length, operation.id);
     const fc = Number(parameter(operation, ['cutoff_frequency', 'cutoffFrequency', 'fc'], 1));
     const dt = Number(parameter(operation, ['sample_time', 'sampleTime', 'dt'], 0.1));
     const tau = 1 / (2 * Math.PI * fc);
     const alpha = tau / (tau + dt);
-    const prev_y = Number((runtime.stateSlots[prevYSlot.id] ?? prevYSlot.initialValues)[0] ?? 0);
-    const prev_u = Number((runtime.stateSlots[prevUSlot.id] ?? prevUSlot.initialValues)[0] ?? 0);
-    const y = alpha * (prev_y + u - prev_u);
     return {
-      [prevYSlot.id]: [convertValue(y, prevYSlot.numericType, faults, operation)],
-      [prevUSlot.id]: [convertValue(u, prevUSlot.numericType, faults, operation)],
+      [prevYSlot.id]: prevY.map((prev_y, index) =>
+        convertValue(alpha * (prev_y + Number(u[index]) - (prevU[index] ?? 0)), prevYSlot.numericType, faults, operation)),
+      [prevUSlot.id]: prevY.map((_, index) =>
+        convertValue(Number(u[index]), prevUSlot.numericType, faults, operation)),
     };
   }
   if (operation.type === 'MOVING_AVERAGE') {
@@ -1798,11 +1855,17 @@ const statefulUpdate = (
       throw new Error(`X-Bridges MOVING_AVERAGE '${operation.id}' requires buffer and index state slots`);
     }
     const inputId = operation.inputSignalIds[0];
-    const u = inputId ? Number(signalValues(runtime, inputId)[0] ?? 0) : 0;
     const buffer = [...(runtime.stateSlots[bufferSlot.id] ?? bufferSlot.initialValues)].map(Number);
     const index = Number((runtime.stateSlots[indexSlot.id] ?? indexSlot.initialValues)[0] ?? 0);
-    buffer[index] = convertValue(u, bufferSlot.numericType, faults, operation) as number;
-    const nextIndex = (index + 1) % buffer.length;
+    const inputValues = inputId ? signalValues(runtime, inputId) : [0];
+    const elementCount = Math.max(1, inputValues.length);
+    const windowSize = Math.max(1, Math.floor(buffer.length / elementCount));
+    const u = broadcast(inputValues, elementCount, operation.id);
+    for (let element = 0; element < elementCount; element++) {
+      buffer[index * elementCount + element] =
+        convertValue(Number(u[element]), bufferSlot.numericType, faults, operation) as number;
+    }
+    const nextIndex = (index + 1) % windowSize;
     return {
       [bufferSlot.id]: buffer,
       [indexSlot.id]: [nextIndex],
