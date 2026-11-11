@@ -7,7 +7,7 @@
  *  - closed forms: two-level inverter phase-to-neutral voltages, H-bridge, SPWM / carrier comparison duty,
  *    SVPWM dwell times T1 = k Ts sin(60 deg - th), T2 = k Ts sin(th), min-max zero-sequence injection;
  *  - physical invariants: balanced sets sum to zero, induction motor below synchronous speed, load lowers speed;
- *  - hand-evaluated documented laws (field weakening PI, scalar V/f).
+ *  - hand-evaluated documented laws (scalar V/f); field weakening by properties only.
  * Failures of the product are pinned with it.fails and a provisional finding id (XBV-0xx, renumbered by the controller).
  */
 import { describe, expect, it } from 'vitest';
@@ -203,8 +203,10 @@ describe('6. THREE_PHASE_PWM (SPWM, 50 Hz carrier)', () => {
   });
   // Simulink: gate = 1 when v_ref > carrier with a symmetric triangle carrier in [-1, 1]; the pulse is therefore
   // symmetric about the carrier period centre: gate(t) = gate(T - t). The block compares with a sawtooth (the phase).
+  // v_ref values chosen off the 1000-point sample grid of the carrier: -0.5 and 0.5 equal the triangle exactly at
+  // k = 125/875 and 375/625, where rounding alone breaks the symmetry even for a correct block (WP-08 verifier).
   it.fails('XBV-070: THREE_PHASE_PWM compares against a triangle carrier: gate pattern symmetric about the period centre', () => {
-    for (const v of [-0.5, 0.5]) {
+    for (const v of [-0.47, 0.53]) {
       const g = gateSeq(v);
       for (let k = 1; k < 1000; k++) expect(g[k], `v_ref ${v}, k=${k}`).toBe(g[1000 - k]);
     }
@@ -313,10 +315,12 @@ describe('9. SIX_STEP_COMMUTATION', () => {
 });
 
 // ---------------------------------------------------------------------------------------------------------------
-describe('10. MTPA_CONTROLLER (Ld 0.01, Lq 0.02, psi_m 0.1; the factory has no pole-pair parameter, so p = 1)', () => {
+describe('10. MTPA_CONTROLLER (Ld 0.01, Lq 0.02, psi_m 0.1, pole pairs P = 1 passed explicitly)', () => {
+  // The factory has no pole-pair parameter today (it hard-codes 2); P = 1 is passed so that a fix that adds the
+  // parameter makes the pins flip (WP-08 verifier).
   const Ld = 0.01, Lq = 0.02, psi = 0.1, p = 1;
   const torque = (id: number, iq: number) => 1.5 * p * (psi * iq + (Ld - Lq) * id * iq);
-  const mtpa = (te: number) => once('MTPA_CONTROLLER', [te], { Ld, Lq, psi_m: psi });
+  const mtpa = (te: number) => once('MTPA_CONTROLLER', [te], { Ld, Lq, psi_m: psi, P: p });
   it('te_ref = 0 gives id = iq = 0', () => {
     const [id, iq] = mtpa(0);
     near(id, 0, 1e-15); near(iq, 0, 1e-15);
@@ -353,8 +357,9 @@ describe('10. MTPA_CONTROLLER (Ld 0.01, Lq 0.02, psi_m 0.1; the factory has no p
 
 // ---------------------------------------------------------------------------------------------------------------
 describe('11. FIELD_WEAKENING', () => {
-  // Documented law (factory code; PI field weakening, Morimoto 1990 style): e = v_max - |V|;
-  // I <- I + e dt if e < 0, else I <- min(0, I + e dt); id_ref = clamp(id_base + Kp min(e, 0) + Ki I, id_min, id_max).
+  // Only properties of any voltage-limiting field-weakening law are checked (limits, no weakening below v_max,
+  // monotone weakening above it). The exact PI law is not a plan section 3 oracle (it would be copied from the
+  // factory), so per-value checks wait for the Simulink/MCB reference in WP-15.
   const params = { v_max: 300, Kp: 0.1, Ki: 1, id_min: -20, id_max: 10 };
   const seq = (vmag: (k: number) => number, idBase: number, n: number, dt: number, extra = {}) => {
     const m = make('FIELD_WEAKENING', { ...params, ...extra });
@@ -362,13 +367,6 @@ describe('11. FIELD_WEAKENING', () => {
     for (let k = 1; k <= n; k++) out.push(m.call([vmag(k), idBase], k * dt)[0]);
     return out;
   };
-  it('hand value: v_mag 400, id_base 10, t = 0.1 gives I = -10, id_ref = 10 + 0.1(-100) + 1(-10) = -10', () => {
-    near(seq(() => 400, 10, 1, 0.1)[0], -10, 1e-12);
-  });
-  it('hand value: second step at t = 0.2 gives I = -20, id_ref = 10 - 10 - 20 = -20 (id_min reached)', () => {
-    const o = seq(() => 400, 10, 2, 0.1);
-    near(o[1], -20, 1e-12);
-  });
   it('id_ref stays within [id_min, id_max] for a sweep of v_mag', () => {
     const o = seq((k) => 150 + 5 * k + 200 * Math.sin(k / 7), 5, 400, 0.01);
     o.forEach((x, k) => {

@@ -244,7 +244,19 @@
     "WP-06"
    ],
    "status": "in_progress",
-   "note": "Tests by Sonnet from the controller oracle spec (D7); controller review added XBV-074 (PWM duty 1 at the carrier peak - passed only by floating-point luck); findings XBV-070..074. Awaiting Fable."
+   "note": "Tests by Sonnet from the controller oracle spec (D7); controller review added XBV-074 (PWM duty 1 at the carrier peak - passed only by floating-point luck); findings XBV-070..074. Awaiting Fable.",
+   "rework": [
+    {
+     "round": 1,
+     "by": "Opus verifier FAIL (D8)",
+     "items": [
+      "XBV-070 pin could not flip (v_ref on the carrier sample grid)",
+      "XBV-072 assumed p = 1 without passing it",
+      "field-weakening hand values copied from the factory"
+     ],
+     "fix": "v_ref -0.47/0.53; P: 1 passed to MTPA; FW hand values removed (properties kept). Notes: ia+ib+ic = 0 is structural (ic computed as -ia-ib); six-step test cannot catch a 60-degree Hall misalignment - WP-08b"
+    }
+   ]
   },
   {
    "id": "WP-09",
@@ -5209,6 +5221,10 @@
   {
    "wp": "WP-07b",
    "note": "BAND_LIMITED_NOISE untested (Simulink: output variance = PSD / Ts); the 'trapezoidal' PID method is named 'tustin' in ADIA (trapezoidal rejected with PARAMETER_OPTION_INVALID) - naming check against Simulink; KF covariance read from nextState (P not an output)."
+  },
+  {
+   "wp": "WP-08b",
+   "note": "From the WP-08 Opus verifier: six-step test cannot detect reversed torque or a 60-degree Hall advance (no Hall alignment oracle); AC motor ia+ib+ic = 0 is structural (ic = -ia - ib), so it is not evidence; field-weakening exact law needs a Simulink/MCB reference (WP-15)."
   }
  ]
 }
