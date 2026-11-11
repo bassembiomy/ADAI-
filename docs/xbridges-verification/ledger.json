@@ -57,7 +57,7 @@
    "id": "D9",
    "date": "2026-11-11",
    "topic": "Embedded tick time base (XBV-084)",
-   "decision": "OPEN - needs the user: should X-Bridges inside a state publish outputs for the start of the tick (t_k, Simulink major-step semantics, same as the canvas) or for the end of the tick (t_(k+1), what guards see today)? Until decided, the parity test asserts the t_k convention and pins the difference."
+   "decision": "OPEN - needs the user: should X-Bridges inside a state publish every output for the start of the tick (t_k, Simulink major-step semantics, same as the canvas; Integrator/RATE_LIMITER would publish the pre-update state and Step use t_k, and the generated C changes accordingly) or for the end of the tick (t_(k+1); Clock, WaveformGen and UNIT_DELAY would move to t_(k+1))? Today guards see a mix. Until decided, the parity test asserts the t_k convention and pins the difference. Controller recommendation: start of tick."
   }
  ],
  "wps": [
@@ -431,7 +431,7 @@
     "WP-08",
     "WP-13"
    ],
-   "status": "in_progress",
+   "status": "done",
    "note": "Harness (testkit/embedded.ts) and xbTriParity.test.ts by Sonnet from the controller spec; controller confirmed XBV-083 in the source (interpreter ignores Sum signs while the C generator applies them); findings XBV-083..095 (089 unused). Awaiting the Opus verifier.",
    "rework": [
     {
@@ -444,7 +444,12 @@
      ],
      "fix": "084+085 merged into one mixed-time-base finding with an open decision D9; corpus pins labelled multi-cause (not bisected); comment corrected; XBV-093 reworded as a capabilities mismatch"
     }
-   ]
+   ],
+   "verification": {
+    "executor": "Sonnet (harness + tests from controller spec, D7)",
+    "verifier": "Opus subagent (D8): FAIL (time-base diagnosis), PASS round 2 (tri-parity 253 passed / 209 expected fail, twice); minors fixed afterwards (D9 wording, XBV-093 cause text)",
+    "evidence": "verifier patched copies of the three causes: 12 of 12 sampled failing seeds become equal"
+   }
   },
   {
    "id": "WP-17",

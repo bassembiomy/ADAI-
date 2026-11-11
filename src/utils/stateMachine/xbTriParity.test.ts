@@ -35,7 +35,7 @@ const PIN_CAUSE: Record<string, string> = {
   'XBV-090': 'canvas thresholds Hall inputs at > 0.5, embedded uses nonzero = true (Simulink double to boolean conversion); canvas deviates',
   'XBV-067': 'rk4 stage sees the post-step input (relay switches one step early under rk4 only, euler equal); canvas wrong',
   'XBV-092': 'canvas x_hat/kg non-numeric and y_hat differs from embedded; no closed form computed, unresolved',
-  'XBV-093': 'parity gap: embedded refuses the model (XB_DISCRETE_REPRESENTATION_REQUIRED for continuous STATE_SPACE / XB_STATE_INITIAL_VALUE_INVALID for vector DISCRETE_TRANSFER_FUNCTION x0), canvas runs',
+  'XBV-093': 'capabilities mismatch: the registry marks the block codegen-capable but the embedded validator refuses the default model (continuous STATE_SPACE: XB_DISCRETE_REPRESENTATION_REQUIRED; DISCRETE_TRANSFER_FUNCTION default state: XB_STATE_INITIAL_VALUE_INVALID) that the canvas runs',
   'XBV-094': 'parity gap: embedded refuses scalar inputs (XB_SHAPE_MISMATCH) while XB_CAPABILITIES lists scalar; canvas runs',
   'XBV-091': 'canvas y(0)=0 then explicit-Euler instability (|y| exceeds the closed-form bound amp=1.3 from step 3), embedded stays bounded but one tick ahead; filter discretisation differs, neither exact, unresolved',
 };
