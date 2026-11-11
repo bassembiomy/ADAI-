@@ -459,7 +459,19 @@
     "WP-16"
    ],
    "status": "in_progress",
-   "note": "Harness (testkit/cParity.ts) and xbCodeParity.test.ts by Sonnet from the controller spec; 506 block cases (369 equal, worst 4 ULP), registry closure, compile matrix, sanitizers, static properties, limits; findings XBV-096..105. Awaiting the Opus verifier."
+   "note": "Harness (testkit/cParity.ts) and xbCodeParity.test.ts by Sonnet from the controller spec; 506 block cases (369 equal, worst 4 ULP), registry closure, compile matrix, sanitizers, static properties, limits; findings XBV-096..105. Awaiting the Opus verifier.",
+   "rework": [
+    {
+     "round": 1,
+     "by": "Opus verifier FAIL (D8)",
+     "items": [
+      "XBV-086 attributed to C, but C follows the documented signal-only contract and the interpreter does not",
+      "absolute ULP floor applied to all |x| < 1",
+      "whole-class XBV-098 pins could hide other C defects on sine inputs"
+     ],
+     "fix": "XBV-086 restated (interpreter wrong; NaN vs fallback is a convention question); floor only near zero (|x| < 1e-3); secondary 1e-13 check inside every XBV-098 class"
+    }
+   ]
   },
   {
    "id": "WP-18",
@@ -1203,7 +1215,7 @@
    "severity": "S1",
    "gate": "V6",
    "status": "open",
-   "summary": "Embedded inverse trigonometric/hyperbolic blocks (ACOS, ACOSEC, ACOSH, ACOTH, ASEC, ASECH, ASIN, ATANH) return 0 outside their domain; the canvas returns NaN with MATH_DOMAIN_ERROR (IEEE/C99 give NaN). Found by the WP-16 executor; pinned in src/utils/stateMachine/xbTriParity.test.ts. WP-17: with the numeric fault policy 'signal-only' the interpreter publishes NaN and the generated C replaces it with 0 (C wrong); with 'escalate' (WP-16 harness) the interpreter gives 0. Both paths must give NaN (or a fault) consistently."
+   "summary": "Out-of-domain inverse trig/hyperbolic and pow (ACOS, ACOSEC, ACOSH, ACOTH, ASEC, ASECH, ASIN, ATANH, VectorPow): the canvas gives NaN with MATH_DOMAIN_ERROR. In the embedded path, under the 'signal-only' fault policy the generated C raises the error flag and publishes the documented deterministic fallback 0 (XBRIDGES_EMBEDDED_CODEGEN.md, Numeric faults) while the interpreter publishes NaN and records no fault (xbInterpreter.ts ~307 shouldRecordFault) - the interpreter breaks the contract; under 'escalate' both stop at tick 1 (WP-16's harness ignored the returned fault and saw the rolled-back 0, hence the earlier opposite attribution). Separate convention question: fallback NaN (canvas, Simulink) or 0 (embedded contract)."
   },
   {
    "id": "XBV-087",

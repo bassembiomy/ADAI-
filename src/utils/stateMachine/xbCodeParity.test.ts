@@ -108,6 +108,8 @@ const scenariosFor = (type: string): Scenario[] => {
 const ULP_ONE = 2 ** -52;
 const LIBM_CALL = /\b(sin|cos|tan|asin|acos|atan|atan2|sinh|cosh|tanh|asinh|acosh|atanh|exp|expm1|log|log10|log2|log1p|pow|sqrt|cbrt|hypot)\s*\(/;
 
+/** LOOSE_ABS: when set, values within this absolute distance pass (secondary check for whole-class XBV-098 pins). */
+let LOOSE_ABS = 0;
 const compareTraces = (label: string, a: PerTick, b: PerTick, probes: string[], maxUlp: number): { detail?: string; values: number; worst: number } => {
   let values = 0;
   let worst = 0;
@@ -120,10 +122,12 @@ const compareTraces = (label: string, a: PerTick, b: PerTick, probes: string[], 
         values++;
         if (Number.isNaN(x[i]) && Number.isNaN(y[i])) continue;
         if (x[i] === y[i]) continue;
+        if (LOOSE_ABS > 0 && Math.abs(x[i] - y[i]) <= LOOSE_ABS) continue;
         const u = ulpDistance(x[i], y[i]);
-        // ULP bound with an absolute floor of maxUlp ULP of 1.0: near a zero crossing (or a cancellation) the ULP of the tiny
-        // result is meaningless (sin(pi) = 1.2e-16 in both, 1 ULP of the argument apart). All signals here are O(1).
-        if (Number.isFinite(x[i]) && Number.isFinite(y[i]) && Math.abs(x[i] - y[i]) <= maxUlp * ULP_ONE) { worst = Math.max(worst, Math.min(u, maxUlp)); continue; }
+        // Absolute floor of maxUlp ULP of 1.0, only near a zero crossing (|value| < 1e-3): there the ULP of the tiny result
+        // is meaningless (sin(pi) = 1.2e-16 in both, 1 ULP of the argument apart). Elsewhere the plain ULP bound applies.
+        if (Number.isFinite(x[i]) && Number.isFinite(y[i]) && Math.min(Math.abs(x[i]), Math.abs(y[i])) < 1e-3
+          && Math.abs(x[i] - y[i]) <= maxUlp * ULP_ONE) { worst = Math.max(worst, Math.min(u, maxUlp)); continue; }
         if (!Number.isFinite(u) || u > maxUlp || !Number.isFinite(x[i]) || !Number.isFinite(y[i])) {
           return { detail: `${label}: first difference at tick ${k + 1} ${p}[${i}]: interpreter ${x[i]} vs C ${y[i]} (${u} ULP, allowed ${maxUlp})`, values, worst };
         }
@@ -219,7 +223,7 @@ const runClass = async (type: string, solver: EmbeddedSolver, cls: ScenarioClass
 // ------------------------------------------------------------------ pins
 const PIN_CAUSE: Record<string, string> = {
   'XBV-083': 'Sum signs: the interpreter ignores the signs parameter and always adds (xbInterpreter.ts:530); Simulink Sum +- subtracts and the generated C applies the signs (xbCGenerator.ts:~1030), interpreter wrong',
-  'XBV-086': 'out-of-domain input: C99 asin/acos/acosh/atanh/pow and Simulink give NaN; the interpreter publishes NaN, the generated C replaces it with 0, C wrong',
+  'XBV-086': 'out-of-domain input under the signal-only fault policy: the generated C raises the error flag and publishes the deterministic fallback 0 (documented contract, XBRIDGES_EMBEDDED_CODEGEN.md "Numeric faults"); the interpreter publishes NaN and records no fault (xbInterpreter.ts ~307), interpreter wrong. Whether the fallback should be NaN or 0 is a separate convention question',
   'XBV-093': 'capabilities mismatch: the registry marks the block codegen-capable but generation refuses the default model (continuous STATE_SPACE: XB_DISCRETE_REPRESENTATION_REQUIRED; DISCRETE_TRANSFER_FUNCTION: XB_STATE_INITIAL_VALUE_INVALID on the vector scenario)',
   'XBV-094': 'registry lists scalar for the Vector* blocks but generation refuses scalar inputs (XB_SHAPE_UNRESOLVED), the block cannot be generated for a scalar graph',
   'XBV-095': 'the factory default mode PID makes buildSemanticModel throw \'Invalid PID mode: PID\' (xbPidContract.ts:18) instead of returning a diagnostic; builder wrong',
@@ -235,6 +239,13 @@ const PIN_CAUSE: Record<string, string> = {
   'XBV-103': 'BAND_LIMITED_NOISE tick 1: interpreter -1.03300 vs C -1.00272 while WHITE_NOISE agrees on both sides; the filter step differs, no closed form for a pseudo-random stream, unresolved',
 };
 const PINS: Record<string, string> = {
+  // Revealed when the absolute ULP floor was restricted to |x| < 1e-3 (WP-17 verifier): sub-1e-15 differences from
+  // the XBV-098 time rounding; each has a 1e-13 secondary check below.
+  'HIGH_PASS_FILTER|euler|sine': 'XBV-098',
+  'HIGH_PASS_FILTER|rk4|sine': 'XBV-098',
+  'NUMERIC_REPRESENTATION|euler|sine': 'XBV-098',
+  'NUMERIC_REPRESENTATION|rk4|sine': 'XBV-098',
+  'NUMERIC_REPRESENTATION|discrete|sine': 'XBV-098',
   'ACOSEC|discrete|sine': 'XBV-086',
   'ACOSEC|discrete|static': 'XBV-086',
   'ACOSEC|euler|sine': 'XBV-086',
@@ -421,6 +432,19 @@ describe('V7 per-block parity: interpreter = generated C, every codegen-capable 
     };
     const pin = PINS[key];
     if (pin) it.fails(pinTitle(pin, title), body); else it(title, body);
+    // A whole-class XBV-098 pin (1e-15 time rounding) must not hide another C defect on sine inputs: re-run the class
+    // with an absolute tolerance of 1e-13 (two orders above the rounding, far below any real defect).
+    if (pin === 'XBV-098') {
+      const stitle = `${type} ${solver} (sine inputs): C = interpreter within 1e-13 (secondary check under the XBV-098 pin)`;
+      // ATANH sees sin inputs of amplitude 1.3, i.e. out of domain: the remaining difference is XBV-086.
+      (type === 'ATANH' ? (t: string, f: () => Promise<void>, ms: number) => it.fails(pinTitle('XBV-086', t), f, ms) : it)(stitle, async () => {
+        LOOSE_ABS = 1e-13;
+        try {
+          const o = await runClass(type, solver, cls, CASES.find((c) => c.type === type && c.solver === solver && c.cls === cls)!.scenarios);
+          if (o.kind !== 'equal') expect.fail(o.detail);
+        } finally { LOOSE_ABS = 0; }
+      }, 300_000);
+    }
     if (cls === 'static') {
       const ctitle = `${type} ${solver}: generated C compiles with -std=c99 -pedantic -Wall -Wextra -Werror`;
       const cbody = () => {
