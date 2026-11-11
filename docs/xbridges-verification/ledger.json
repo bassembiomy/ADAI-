@@ -458,7 +458,8 @@
    "deps": [
     "WP-16"
    ],
-   "status": "in_progress"
+   "status": "in_progress",
+   "note": "Harness (testkit/cParity.ts) and xbCodeParity.test.ts by Sonnet from the controller spec; 506 block cases (369 equal, worst 4 ULP), registry closure, compile matrix, sanitizers, static properties, limits; findings XBV-096..105. Awaiting the Opus verifier."
   },
   {
    "id": "WP-18",
@@ -586,7 +587,7 @@
    "severity": "S4",
    "gate": "V7",
    "status": "open",
-   "summary": "docs/XBRIDGES_EMBEDDED_CODEGEN.md lists about 40 embedded-capable types and two solvers; the registry has 100 and three."
+   "summary": "docs/XBRIDGES_EMBEDDED_CODEGEN.md lists about 40 embedded-capable types and two solvers; the registry has 100 and three. WP-17: the document lists 38 types, the registry has 100 codegen-capable types."
   },
   {
    "id": "XBV-010",
@@ -1202,7 +1203,7 @@
    "severity": "S1",
    "gate": "V6",
    "status": "open",
-   "summary": "Embedded inverse trigonometric/hyperbolic blocks (ACOS, ACOSEC, ACOSH, ACOTH, ASEC, ASECH, ASIN, ATANH) return 0 outside their domain; the canvas returns NaN with MATH_DOMAIN_ERROR (IEEE/C99 give NaN). Found by the WP-16 executor; pinned in src/utils/stateMachine/xbTriParity.test.ts."
+   "summary": "Embedded inverse trigonometric/hyperbolic blocks (ACOS, ACOSEC, ACOSH, ACOTH, ASEC, ASECH, ASIN, ATANH) return 0 outside their domain; the canvas returns NaN with MATH_DOMAIN_ERROR (IEEE/C99 give NaN). Found by the WP-16 executor; pinned in src/utils/stateMachine/xbTriParity.test.ts. WP-17: with the numeric fault policy 'signal-only' the interpreter publishes NaN and the generated C replaces it with 0 (C wrong); with 'escalate' (WP-16 harness) the interpreter gives 0. Both paths must give NaN (or a fault) consistently."
   },
   {
    "id": "XBV-087",
@@ -1267,6 +1268,86 @@
    "gate": "V6",
    "status": "open",
    "summary": "buildXBSemanticModel throws 'Invalid PID mode: PID' (xbPidContract.ts ~18) for PID_CONTROLLER with the canvas default mode 'PID' instead of returning a diagnostic. Found by the WP-16 executor; pinned in src/utils/stateMachine/xbTriParity.test.ts."
+  },
+  {
+   "id": "XBV-096",
+   "plan_ref": "7.1 code parity",
+   "severity": "S1",
+   "gate": "V7",
+   "status": "open",
+   "summary": "Generated C for any model with a WaveformGen and no Clock does not compile: WaveformGen reads instance->xb_controller.sim_time, a member declared only when a Clock block exists (xbCGenerator.ts ~161, ~1001); with a Clock, the waveform time depends on the Clock running first. Found by the WP-17 executor; pinned in src/utils/stateMachine/xbCodeParity.test.ts."
+  },
+  {
+   "id": "XBV-097",
+   "plan_ref": "7.1 code parity",
+   "severity": "S1",
+   "gate": "V7",
+   "status": "open",
+   "summary": "Generated C advances simulation time twice per tick when the model has continuous states: sim_time += dt is emitted in both passes of SolverSubstep (xbCGenerator.ts ~986, ~2500), so time runs at 2x; Integrator of a sine gives 0.040156 instead of 0.033128 at tick 2 (interpreter correct). Found by the WP-17 executor; pinned in src/utils/stateMachine/xbCodeParity.test.ts."
+  },
+  {
+   "id": "XBV-098",
+   "plan_ref": "7.1 code parity",
+   "severity": "S4",
+   "gate": "V7",
+   "status": "open",
+   "summary": "Generated C computes waveform time as (sim_time + dt) - dt, one extra rounding: sine-driven results differ from the interpreter by 6-42 ULP (about 1e-15 absolute); both stay within 1.8e-15 of the closed form. Found by the WP-17 executor; pinned in src/utils/stateMachine/xbCodeParity.test.ts."
+  },
+  {
+   "id": "XBV-099",
+   "plan_ref": "7.1 code parity",
+   "severity": "S2",
+   "gate": "V7",
+   "status": "open",
+   "summary": "The C generator throws a raw Error ('emitter requires scalar signal', xbCGenerator.ts ~500) for vector inputs to LOW_PASS_FILTER, HIGH_PASS_FILTER, MOVING_AVERAGE, IF_ELSE and SWITCH that the capability registry declares, instead of returning a diagnostic. Found by the WP-17 executor; pinned in src/utils/stateMachine/xbCodeParity.test.ts."
+  },
+  {
+   "id": "XBV-100",
+   "plan_ref": "7.1 code parity",
+   "severity": "S2",
+   "gate": "V7",
+   "status": "open",
+   "summary": "Generated C with Bitwise/Shift blocks fails -Wall -Werror: SM_XB_ShiftLeft32 / SM_XB_ShiftRight32 are emitted but unused. Found by the WP-17 executor; pinned in src/utils/stateMachine/xbCodeParity.test.ts."
+  },
+  {
+   "id": "XBV-101",
+   "plan_ref": "7.1 code parity",
+   "severity": "S1",
+   "gate": "V7",
+   "status": "open",
+   "summary": "Bitwise/Shift: the interpreter works in uint32 (~0 = 4294967295), the generated C in int32 (-1), so state-machine simulation and the generated code disagree; no data-type contract decides (see XBV-087 for canvas vs interpreter). Found by the WP-17 executor; pinned in src/utils/stateMachine/xbCodeParity.test.ts."
+  },
+  {
+   "id": "XBV-102",
+   "plan_ref": "7.1 code parity",
+   "severity": "S1",
+   "gate": "V7",
+   "status": "open",
+   "summary": "KALMAN_FILTER: interpreter (0.35195) and generated C (0.66873) disagree with each other and with the block equation (0.63694, u = y = 0.7, factory parameters). Found by the WP-17 executor; pinned in src/utils/stateMachine/xbCodeParity.test.ts."
+  },
+  {
+   "id": "XBV-103",
+   "plan_ref": "7.1 code parity",
+   "severity": "S1",
+   "gate": "V7",
+   "status": "open",
+   "summary": "BAND_LIMITED_NOISE: interpreter and generated C produce different streams from tick 1 (-1.03300 vs -1.00272); WHITE_NOISE agrees on both sides. Found by the WP-17 executor; pinned in src/utils/stateMachine/xbCodeParity.test.ts."
+  },
+  {
+   "id": "XBV-104",
+   "plan_ref": "7.1 code parity",
+   "severity": "S3",
+   "gate": "V7",
+   "status": "open",
+   "summary": "Generated C for an integrator loop fails -Wshadow (gcc and clang): 'xb_value_0_0_i_out' shadows a previous local (sm_core.c:78). Found by the WP-17 executor; pinned in src/utils/stateMachine/xbCodeParity.test.ts."
+  },
+  {
+   "id": "XBV-105",
+   "plan_ref": "7.1 code parity",
+   "severity": "S3",
+   "gate": "V7",
+   "status": "open",
+   "summary": "Generated C for discontinuity blocks fails -Wdouble-promotion (gcc sm_core.c:143, clang sm_core.c:100): float promoted to double in a conditional. Found by the WP-17 executor; pinned in src/utils/stateMachine/xbCodeParity.test.ts."
   }
  ],
  "blocks": {
@@ -5359,6 +5440,10 @@
   {
    "wp": "WP-07b",
    "note": "CURRENT_CONTROLLER_DQ iMax scaling rule is taken from a factory comment, not an oracle - confirm against MCB in WP-15."
+  },
+  {
+   "wp": "WP-17b",
+   "note": "WP-17 parity ran on float64 (EMBEDDED_TARGET); the production state-machine profile refuses float64 (supportsFloat64 = false, smSemanticValidator.ts ~42) and generates float32 - repeat the per-block parity on float32 with float32 tolerances. clang had no sanitizer runtime (UBSan with -fsanitize-trap only); DiagExtract/ExtractDiag/Diag untested (no capability, XBV-006). Workarounds used only to keep comparing numbers when a strict compile fails (unconnected Clock for XBV-096, -Wno-unused-function for XBV-100); the compile failures are pinned separately. Eleven /tmp/xb-cparity-* directories from interrupted executor runs remain (deletion needs user permission)."
   }
  ]
 }
