@@ -570,9 +570,10 @@
   {
    "id": "WP-21",
    "title": "Fix loop, one commit per finding",
-   "exec": "S / F",
+   "exec": "S / H, verifier opus",
    "deps": [],
-   "status": "todo"
+   "status": "in_progress",
+   "note": "User go-ahead 2026-11-11 (fix all findings). Plan: docs/xbridges-verification/wp21-fix-plan.md. Round 1 dispatched: A zero parameters, B embedded quick fixes, C workspace UI."
   },
   {
    "id": "WP-22",

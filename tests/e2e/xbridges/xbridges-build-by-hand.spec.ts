@@ -28,9 +28,31 @@ test.describe('X-Bridges build by hand', () => {
     expect(log.errors).toEqual([]);
   });
 
+  // XBV-148: when the run ends, the status bar already shows the stop time in the same render that brings the Run button
+  // back (an observer records the status text at the first mutation where Run is visible).
+  test('XBV-148 the status bar shows the stop time as soon as the Run button reappears', async ({ page }) => {
+    await openXbridges(page);
+    await buildIntegratorModel(page, '2');
+    await setToolbar(page, { solver: 'rk4', start: 0, stop: 1, step: 0.01 });
+    await page.evaluate(() => {
+      const w = window as unknown as { __firstRunStatus?: string };
+      const bar = () => document.querySelector('[role="status"][aria-label="X-Bridges status bar"]') as HTMLElement | null;
+      const runVisible = () => [...document.querySelectorAll('button')].some(b => (b.getAttribute('aria-label') ?? b.textContent ?? '').trim() === 'Run Engine');
+      let armed = false;
+      new MutationObserver(() => {
+        if (!armed) { if (!runVisible()) armed = true; return; }
+        if (w.__firstRunStatus === undefined && runVisible()) w.__firstRunStatus = bar()?.innerText ?? '';
+      }).observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true });
+    });
+    await runButton(page).click();
+    await expect(runButton(page)).toBeVisible({ timeout: 60_000 });
+    const first = await page.evaluate(() => (window as unknown as { __firstRunStatus?: string }).__firstRunStatus ?? '');
+    expect(first.replace(/\s+/g, ' ')).toMatch(/t = 1\.000 s/);
+  });
+
   // Simulink logs the sample at the stop time (t = 1 is the 101st sample of a fixed-step run 0..1, h = 0.01).
   // ADIA stops after the step that reaches the stop time without executing/logging that final sample.
-  test.fail('XBV-143 the scope logs the sample at the stop time t = 1 with value 2', async ({ page }) => {
+  test('XBV-143 the scope logs the sample at the stop time t = 1 with value 2', async ({ page }) => {
     await openXbridges(page);
     const m = await buildIntegratorModel(page, '2');
     await setToolbar(page, { solver: 'rk4', start: 0, stop: 1, step: 0.01 });
@@ -44,7 +66,7 @@ test.describe('X-Bridges build by hand', () => {
   // Simulink Step Forward advances the simulation by exactly one step. In ADIA the Single Step button calls
   // stepSimulation(), which returns at once when engineRef is null - the live run uses the worker engine
   // (src/components/xbridges/XbridgesWorkspace.tsx:2929-2931), so the click does nothing.
-  test.fail('XBV-144 Single Step while paused advances the time by exactly one step', async ({ page }) => {
+  test('XBV-144 Single Step while paused advances the time by exactly one step', async ({ page }) => {
     await openXbridges(page);
     await buildIntegratorModel(page, '2');
     await setToolbar(page, { solver: 'rk4', start: 0, stop: 5, step: 0.0125 });
@@ -64,7 +86,7 @@ test.describe('X-Bridges build by hand', () => {
 
   // Simulink drops a block where it is dropped. ADIA places every library drop at the centre of the pane
   // (XbridgesWorkspace.onDrop ignores the pointer, src/components/xbridges/XbridgesWorkspace.tsx:2379-2395).
-  test.fail('XBV-145 a library block lands at the pointer position of the drop', async ({ page }) => {
+  test('XBV-145 a library block lands at the pointer position of the drop', async ({ page }) => {
     await openXbridges(page);
     const canvas = page.locator('.react-flow');
     const box = (await canvas.boundingBox())!;

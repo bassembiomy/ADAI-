@@ -248,7 +248,7 @@ describe('B. discrete and delay blocks', () => {
     });
   }
   // Simulink Delay allows a delay length of 0 (the block is then direct feedthrough: y = u).
-  it.fails('XBV-064: DELAY length 0 is accepted and behaves as direct feedthrough (y = u)', () => {
+  it('XBV-064: DELAY length 0 is accepted and behaves as direct feedthrough (y = u)', () => {
     const r = sim([constant('c', 4), { id: 'd', type: 'DELAY', params: { delay_length: 0, initial_condition: -1, sampleTime: 0.1 } }],
       ['c.out -> d.u'], ['d.y'], { solver: 'discrete', dt: 0.1, stop: 0.3 });
     expect(errorCodes(r)).not.toContain('DELAY_LENGTH_INVALID');

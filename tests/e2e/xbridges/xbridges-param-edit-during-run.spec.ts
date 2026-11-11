@@ -58,7 +58,7 @@ test.describe('X-Bridges parameter edit during a run', () => {
   // XBV-138 (open, S3): typing 'abc' into a numeric parameter stores the raw string as params.value; plan section 6
   // says invalid text must not overwrite the stored value. The engine keeps using the last valid value (checked
   // below and passing), but the model that is saved holds 'abc'.
-  test.fail('XBV-138 invalid text "abc" during a run is reported, the engine keeps 2, and the stored value stays 2', async ({ page }) => {
+  test('XBV-138 invalid text "abc" during a run is reported, the engine keeps 2, and the stored value stays 2', async ({ page }) => {
     await openXbridges(page);
     const m = await buildIntegratorModel(page, '2');
     await setToolbar(page, { solver: 'rk4', start: 0, stop: 2, step: H });

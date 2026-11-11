@@ -82,14 +82,14 @@ test.describe('X-Bridges persistence', () => {
 
   // Opening a project while the X-Bridges tab is the active workspace leaves the empty canvas in place, even after
   // switching tabs back and forth: the opened model is not shown (and the stale canvas is what the next Save writes).
-  test.fail('XBV-146 opening a project file while the X-Bridges tab is active shows the opened model', async ({ page }) => {
+  test('XBV-146 opening a project file while the X-Bridges tab is active shows the opened model', async ({ page }) => {
     await roundTrip(page, true, true);
   });
 
   // XBV-149: the canvas reaches the project store through a 300 ms debounce that every canvas change restarts, and a
   // running simulation changes the canvas on every 4th tick, so nothing is stored while a run is going; Save does not
   // flush the pending store. A Save made 2 s after an edit during a run holds the value from before the run.
-  test.fail('XBV-149 Save during a run contains a parameter edited during that run', async ({ page }) => {
+  test('XBV-149 Save during a run contains a parameter edited during that run', async ({ page }) => {
     await openXbridges(page);
     const m = await buildIntegratorModel(page, '2');
     await setToolbar(page, { solver: 'rk4', start: 0, stop: 30, step: 0.01 });

@@ -40,8 +40,6 @@ const PIN_CAUSE: Record<string, string> = {
   'XBV-091': 'canvas y(0)=0 then explicit-Euler instability (|y| exceeds the closed-form bound amp=1.3 from step 3), embedded stays bounded but one tick ahead; filter discretisation differs, neither exact, unresolved',
 };
 const PINS: Record<string, string> = {
-  'PID_CONTROLLER|euler': 'XBV-095',
-  'PID_CONTROLLER|rk4': 'XBV-095',
   'ACOS|euler': 'XBV-086',
   'ACOS|rk4': 'XBV-086',
   'ACOS|discrete': 'XBV-086',
@@ -125,9 +123,6 @@ const PINS: Record<string, string> = {
   'Step|euler': 'XBV-084',
   'Step|rk4': 'XBV-084',
   'Step|discrete': 'XBV-084',
-  'Sum|euler': 'XBV-083',
-  'Sum|rk4': 'XBV-083',
-  'Sum|discrete': 'XBV-083',
   'VectorAdd|euler': 'XBV-094',
   'VectorAdd|rk4': 'XBV-094',
   'VectorAdd|discrete': 'XBV-094',

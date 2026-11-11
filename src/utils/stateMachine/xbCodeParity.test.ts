@@ -242,11 +242,6 @@ const PIN_CAUSE: Record<string, string> = {
 const PINS: Record<string, string> = {
   // Revealed when the absolute ULP floor was restricted to |x| < 1e-3 (WP-17 verifier): sub-1e-15 differences from
   // the XBV-098 time rounding; each has a 1e-13 secondary check below.
-  'HIGH_PASS_FILTER|euler|sine': 'XBV-098',
-  'HIGH_PASS_FILTER|rk4|sine': 'XBV-098',
-  'NUMERIC_REPRESENTATION|euler|sine': 'XBV-098',
-  'NUMERIC_REPRESENTATION|rk4|sine': 'XBV-098',
-  'NUMERIC_REPRESENTATION|discrete|sine': 'XBV-098',
   'ACOSEC|discrete|sine': 'XBV-086',
   'ACOSEC|discrete|static': 'XBV-086',
   'ACOSEC|euler|sine': 'XBV-086',
@@ -280,9 +275,6 @@ const PINS: Record<string, string> = {
   'ASIN|discrete|sine': 'XBV-086',
   'ASIN|euler|sine': 'XBV-086',
   'ASIN|rk4|sine': 'XBV-086',
-  'ATANH|discrete|sine': 'XBV-098',
-  'ATANH|euler|sine': 'XBV-098',
-  'ATANH|rk4|sine': 'XBV-098',
   'BAND_LIMITED_NOISE|discrete|static': 'XBV-103',
   'BAND_LIMITED_NOISE|euler|static': 'XBV-103',
   'BAND_LIMITED_NOISE|rk4|static': 'XBV-103',
@@ -301,68 +293,23 @@ const PINS: Record<string, string> = {
   'BitwiseXOR|discrete|sine': 'XBV-101',
   'BitwiseXOR|euler|sine': 'XBV-101',
   'BitwiseXOR|rk4|sine': 'XBV-101',
-  'CLARKE_TRANSFORM|discrete|sine': 'XBV-098',
-  'CLARKE_TRANSFORM|euler|sine': 'XBV-098',
-  'CLARKE_TRANSFORM|rk4|sine': 'XBV-098',
   'DISCRETE_TRANSFER_FUNCTION|discrete|static': 'XBV-093',
   'DISCRETE_TRANSFER_FUNCTION|euler|static': 'XBV-093',
   'DISCRETE_TRANSFER_FUNCTION|rk4|static': 'XBV-093',
-  'HIGH_PASS_FILTER|euler|static': 'XBV-099',
-  'HIGH_PASS_FILTER|rk4|static': 'XBV-099',
-  'IF_ELSE|discrete|sine': 'XBV-098',
-  'IF_ELSE|discrete|static': 'XBV-099',
-  'IF_ELSE|euler|sine': 'XBV-098',
-  'IF_ELSE|euler|static': 'XBV-099',
-  'IF_ELSE|rk4|sine': 'XBV-098',
-  'IF_ELSE|rk4|static': 'XBV-099',
-  'INTEGRATOR_CONTINUOUS|euler|sine': 'XBV-097',
-  'INTEGRATOR_CONTINUOUS|rk4|sine': 'XBV-097',
-  'INVERSE_CLARKE|discrete|sine': 'XBV-098',
-  'INVERSE_CLARKE|euler|sine': 'XBV-098',
-  'INVERSE_CLARKE|rk4|sine': 'XBV-098',
-  'INVERSE_PARK|discrete|sine': 'XBV-098',
-  'INVERSE_PARK|euler|sine': 'XBV-098',
-  'INVERSE_PARK|rk4|sine': 'XBV-098',
-  'Integrator|euler|sine': 'XBV-097',
-  'Integrator|rk4|sine': 'XBV-097',
   'KALMAN_FILTER|discrete|sine': 'XBV-102',
   'KALMAN_FILTER|discrete|static': 'XBV-102',
   'KALMAN_FILTER|euler|sine': 'XBV-102',
   'KALMAN_FILTER|euler|static': 'XBV-102',
   'KALMAN_FILTER|rk4|sine': 'XBV-102',
   'KALMAN_FILTER|rk4|static': 'XBV-102',
-  'LOW_PASS_FILTER|euler|static': 'XBV-099',
-  'LOW_PASS_FILTER|rk4|static': 'XBV-099',
-  'MOVING_AVERAGE|discrete|static': 'XBV-099',
-  'MOVING_AVERAGE|euler|static': 'XBV-099',
-  'MOVING_AVERAGE|rk4|static': 'XBV-099',
-  'PARK_TRANSFORM|discrete|sine': 'XBV-098',
-  'PARK_TRANSFORM|euler|sine': 'XBV-098',
-  'PARK_TRANSFORM|rk4|sine': 'XBV-098',
-  'PID_CONTROLLER|euler|sine': 'XBV-095',
-  'PID_CONTROLLER|euler|static': 'XBV-095',
-  'PID_CONTROLLER|rk4|sine': 'XBV-095',
-  'PID_CONTROLLER|rk4|static': 'XBV-095',
-  'PRODUCT|discrete|sine': 'XBV-098',
-  'PRODUCT|euler|sine': 'XBV-098',
-  'PRODUCT|rk4|sine': 'XBV-098',
   'STATE_SPACE|euler|static': 'XBV-093',
   'STATE_SPACE|rk4|static': 'XBV-093',
-  'SWITCH|discrete|static': 'XBV-099',
-  'SWITCH|euler|static': 'XBV-099',
-  'SWITCH|rk4|static': 'XBV-099',
   'ShiftLeft|discrete|sine': 'XBV-101',
   'ShiftLeft|euler|sine': 'XBV-101',
   'ShiftLeft|rk4|sine': 'XBV-101',
   'ShiftRight|discrete|sine': 'XBV-101',
   'ShiftRight|euler|sine': 'XBV-101',
   'ShiftRight|rk4|sine': 'XBV-101',
-  'Sum|discrete|signs': 'XBV-083',
-  'Sum|discrete|sine': 'XBV-098',
-  'Sum|euler|signs': 'XBV-083',
-  'Sum|euler|sine': 'XBV-098',
-  'Sum|rk4|signs': 'XBV-083',
-  'Sum|rk4|sine': 'XBV-098',
   'VectorAdd|discrete|sine': 'XBV-094',
   'VectorAdd|euler|sine': 'XBV-094',
   'VectorAdd|rk4|sine': 'XBV-094',
@@ -381,29 +328,8 @@ const PINS: Record<string, string> = {
   'VectorSub|discrete|sine': 'XBV-094',
   'VectorSub|euler|sine': 'XBV-094',
   'VectorSub|rk4|sine': 'XBV-094',
-  'WaveformGen|discrete|sine': 'XBV-098',
-  'WaveformGen|euler|sine': 'XBV-098',
-  'WaveformGen|rk4|sine': 'XBV-098',
 };
 const COMPILE_PINS: Record<string, string> = {
-  'BitwiseAND|discrete|static': 'XBV-100',
-  'BitwiseAND|euler|static': 'XBV-100',
-  'BitwiseAND|rk4|static': 'XBV-100',
-  'BitwiseNOT|discrete|static': 'XBV-100',
-  'BitwiseNOT|euler|static': 'XBV-100',
-  'BitwiseNOT|rk4|static': 'XBV-100',
-  'BitwiseOR|discrete|static': 'XBV-100',
-  'BitwiseOR|euler|static': 'XBV-100',
-  'BitwiseOR|rk4|static': 'XBV-100',
-  'BitwiseXOR|discrete|static': 'XBV-100',
-  'BitwiseXOR|euler|static': 'XBV-100',
-  'BitwiseXOR|rk4|static': 'XBV-100',
-  'ShiftLeft|discrete|static': 'XBV-100',
-  'ShiftLeft|euler|static': 'XBV-100',
-  'ShiftLeft|rk4|static': 'XBV-100',
-  'ShiftRight|discrete|static': 'XBV-100',
-  'ShiftRight|euler|static': 'XBV-100',
-  'ShiftRight|rk4|static': 'XBV-100',
 };
 const pinTitle = (pin: string, title: string) => `${pin}: ${title}${PIN_CAUSE[pin] ? ` (${PIN_CAUSE[pin]})` : ''}`;
 
@@ -543,7 +469,7 @@ function toEmbeddedModelForSm(spec: ModelSpec) {
 
 // ================================================================== 2b. WaveformGen needs a Clock in C (XBV-096)
 describe('V7 WaveformGen in C', () => {
-  it.fails(pinTitle('XBV-096', 'a model with a WaveformGen and no Clock compiles with -std=c99 -pedantic -Wall -Wextra -Werror'), async () => {
+  it(pinTitle('XBV-096', 'a model with a WaveformGen and no Clock compiles with -std=c99 -pedantic -Wall -Wextra -Werror'), async () => {
     const r = await runCParity({ blocks: [{ id: 'b', type: 'WaveformGen', params: SINE_A }], wires: [] }, { solver: 'euler', dt: DT, steps: 4, probes: ['b.out'], flags: DEFAULT_PARITY_FLAGS });
     expect(r.generateError).toBeUndefined();
     expect(r.outcome?.log.slice(0, 300) ?? '').toBe('');
@@ -610,17 +536,9 @@ const compiled = new Map<string, Awaited<ReturnType<typeof compileAndRunParity>>
 
 /** Compile-matrix pins: first compiler diagnostic of each failing flag/model pair. */
 const MATRIX_PINS: Record<string, string> = {
-  'integrator-loop|gcc|-O0': 'XBV-104',
-  'integrator-loop|gcc|-O2': 'XBV-104',
-  'integrator-loop|clang|-O0': 'XBV-104',
-  'integrator-loop|clang|-O2': 'XBV-104',
-  'discontinuities|gcc|-O0': 'XBV-105',
-  'discontinuities|gcc|-O2': 'XBV-105',
-  'discontinuities|clang|-O0': 'XBV-105',
-  'discontinuities|clang|-O2': 'XBV-105',
 };
 /** Interpreter-vs-C pins on the matrix models (the integrator loop uses Sum signs +-). */
-const MATRIX_INTERP_PINS: Record<string, string> = { 'integrator-loop': 'XBV-083' };
+const MATRIX_INTERP_PINS: Record<string, string> = {};
 
 describe('V7 compile matrix, sanitizers, O0 = O2 and static properties on six representative models', () => {
   beforeAll(async () => {

@@ -51,7 +51,7 @@ describe('sources', () => {
     const p = { type: 'Square', amp: 1.5, freq: 1, phase: 0, offset: 0 };
     expect([0, 0.5, 1].map((t) => out('WaveformGen', p, [], t))).toEqual([1.5, -1.5, 1.5]);
   });
-  it.fails('XBV-040: WaveformGen with amplitude 0 outputs 0 (amp 0 is replaced by 1)', () => {
+  it('XBV-040: WaveformGen with amplitude 0 outputs 0 (amp 0 is replaced by 1)', () => {
     expect(out('WaveformGen', { type: 'Sine', amp: 0, freq: 1, phase: 0.5, offset: 0 }, [], 0.1)).toBe(0);
   });
   for (const t of [0.3, 1.7]) {

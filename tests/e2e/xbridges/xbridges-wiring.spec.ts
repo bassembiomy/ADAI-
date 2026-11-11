@@ -33,7 +33,7 @@ test.describe('X-Bridges canvas wiring', () => {
 
   // XBV-140 (open, S2): the canvas accepts a second driver on an input that is already connected. Simulink allows one
   // line per input port; the workspace has no isValidConnection (src/components/xbridges/XbridgesWorkspace.tsx ~2306).
-  test.fail('XBV-140 a second wire dragged into an already-connected input is refused', async ({ page }) => {
+  test('XBV-140 a second wire dragged into an already-connected input is refused', async ({ page }) => {
     await openXbridges(page);
     const m = await twoSourcesOneIntegrator(page);
     await connect(page, m.c1, 'out', m.integrator, 'in');

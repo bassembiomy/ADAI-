@@ -406,7 +406,7 @@ describe('properties panel over every palette block', () => {
 
   // Pinned for every numeric parameter (576): on blur the panel stores the raw text "abc" as the parameter value
   // (the model is then refused at run time by the parameter diagnostics, but the number is lost).
-  it.fails('XBV-138: invalid text ("abc") in a numeric parameter does not overwrite the stored number', () => {
+  it('XBV-138: invalid text ("abc") in a numeric parameter does not overwrite the stored number', () => {
     const bad: string[] = [];
     for (const t of PALETTE_TYPES) {
       const mine = numeric.filter(([tt]) => tt === t);
@@ -428,7 +428,7 @@ describe('properties panel over every palette block', () => {
   }, 240_000);
 });
 
-it.fails('XBV-139: a parameter editor is programmatically tied to its label (getByLabelText finds it)', () => {
+it('XBV-139: a parameter editor is programmatically tied to its label (getByLabelText finds it)', () => {
   // The panel renders <label> and the editor as siblings without htmlFor / aria-label, so assistive technology and
   // getByLabelText cannot reach the editor (Constant.value, GAIN.gain as the sample).
   render(<XbridgesPropertiesPanel block={make('GAIN')} onUpdate={vi.fn()} onClose={vi.fn()} />);
@@ -525,7 +525,7 @@ describe('wiring rules in the workspace', () => {
     }
   });
 
-  it.fails('XBV-140: a second driver on an already-connected input is refused or replaces the first (one driver per input)', async () => {
+  it('XBV-140: a second driver on an already-connected input is refused or replaces the first (one driver per input)', async () => {
     await setup();
     await connect('c1', COUT, 'g1', IN);
     const first = rfEdges().length;
@@ -568,7 +568,7 @@ describe('undo, redo, copy and paste in the workspace', () => {
     expect(rfNodes()).toHaveLength(0);
   });
 
-  it.fails('XBV-141: undo after a parameter change restores the previous value and keeps the block', async () => {
+  it('XBV-141: undo after a parameter change restores the previous value and keeps the block', async () => {
     renderWorkspace();
     await wait(50);
     await dropBlock('Constant');
@@ -581,7 +581,7 @@ describe('undo, redo, copy and paste in the workspace', () => {
     expect(JSON.stringify(dataOf(id).params.value)).toBe(before);
   });
 
-  it.fails('XBV-142: redo (Ctrl+Y or Ctrl+Shift+Z) reapplies an undone addition', async () => {
+  it('XBV-142: redo (Ctrl+Y or Ctrl+Shift+Z) reapplies an undone addition', async () => {
     renderWorkspace();
     await wait(50);
     await dropBlock('Constant');
