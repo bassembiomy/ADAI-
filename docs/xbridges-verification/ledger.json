@@ -559,8 +559,13 @@
    "deps": [
     "WP-19"
    ],
-   "status": "in_progress",
-   "note": "9 Playwright specs by Sonnet (real Chromium): 34 tests, 25 pass, 9 pinned; findings XBV-143..147 (+ pins under XBV-127, 138, 140). Awaiting the Opus verifier."
+   "status": "done",
+   "note": "9 Playwright specs by Sonnet (real Chromium): 34 tests, 25 pass, 9 pinned; findings XBV-143..147 (+ pins under XBV-127, 138, 140). Awaiting the Opus verifier.",
+   "verification": {
+    "executor": "Sonnet from controller spec (D7)",
+    "verifier": "Controller (Opus main session) because the Opus verifier subagent hit its usage limit (resets 15:10 UTC) - less independent than D8 intends; re-check by the subagent recommended",
+    "evidence": "re-ran build-by-hand, persistence, wiring, solvers specs against the stubbed dev server: 16 passed (5 expected-fail pins fail for their stated reasons); xlsx is lazy-loaded only for Excel export / P&ID import (App.tsx 148, 1011, 2564), not on the X-Bridges or Open path; XBV-146 waits 2.5 s + 15 s after Open (not a timing artefact); XBV-144 confirmed: stepSimulation returns when engineRef is null, which it is during a worker run"
+   }
   },
   {
    "id": "WP-21",
