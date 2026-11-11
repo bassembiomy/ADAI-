@@ -281,7 +281,8 @@
    "deps": [
     "WP-03"
    ],
-   "status": "in_progress"
+   "status": "in_progress",
+   "note": "Tests by Sonnet from the controller oracle spec (D7); controller review relabelled 3 code-derived assertions as characterization and lowered the clipping findings to S3; findings XBV-110..121. Awaiting the Opus verifier."
   },
   {
    "id": "WP-10",
@@ -1413,6 +1414,102 @@
    "gate": "G",
    "status": "open",
    "summary": "docs/powertrain/ledger.json has no per-block gate records ('blocks' is {} and no PT_ type appears), so the powertrain G1-G5 verdicts the plan imports do not exist; the 45 PT_* blocks are covered by 28 powertrain test files (204 tests pass) but their Simulink-golden gate is pending everywhere."
+  },
+  {
+   "id": "XBV-110",
+   "plan_ref": "4.2 fuzzy",
+   "severity": "S1",
+   "gate": "V2",
+   "status": "open",
+   "summary": "FUZZY_MF_TRIMF shoulder: with a = b (or b = c) the membership at the shoulder vertex is 0 instead of 1 (x <= a || x >= c returns 0 first); MATLAB trimf gives 1. Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts."
+  },
+  {
+   "id": "XBV-111",
+   "plan_ref": "4.2 fuzzy",
+   "severity": "S1",
+   "gate": "V2",
+   "status": "open",
+   "summary": "FUZZY_MF_TRAPMF shoulder: with a = b (or c = d) the membership at the shoulder vertex is 0 instead of 1. Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts."
+  },
+  {
+   "id": "XBV-112",
+   "plan_ref": "4.2 fuzzy",
+   "severity": "S3",
+   "gate": "V2",
+   "status": "open",
+   "summary": "FUZZY_AND clips its inputs to [0, 1] and turns NaN into 0 silently (min(1.5, 2) = 1, product = 1 instead of 1.5 and 3); MATLAB does not clip. Out-of-range memberships are invalid inputs, so clipping is defensible, but it is undiagnosed. Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts."
+  },
+  {
+   "id": "XBV-113",
+   "plan_ref": "4.2 fuzzy",
+   "severity": "S3",
+   "gate": "V2",
+   "status": "open",
+   "summary": "FUZZY_OR clips its inputs to [0, 1] without a diagnostic (max(1.5, 2) = 1 instead of 2). Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts."
+  },
+  {
+   "id": "XBV-114",
+   "plan_ref": "4.2 fuzzy",
+   "severity": "S3",
+   "gate": "V2",
+   "status": "open",
+   "summary": "FUZZY_NOT clips its input to [0, 1] without a diagnostic (1 - 1.5 gives 0 instead of -0.5). Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts."
+  },
+  {
+   "id": "XBV-115",
+   "plan_ref": "4.2 fuzzy",
+   "severity": "S1",
+   "gate": "V2",
+   "status": "open",
+   "summary": "FUZZY_RULE ignores implication 'min' (the default): weighted = strength * cons (the default branch equals the 'prod' branch); strength 0.4, cons 0.5 gives 0.2 instead of 0.4. Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts."
+  },
+  {
+   "id": "XBV-116",
+   "plan_ref": "4.2 fuzzy",
+   "severity": "S3",
+   "gate": "V2",
+   "status": "open",
+   "summary": "FUZZY_RULE clips antecedents to [0, 1] without a diagnostic. Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts."
+  },
+  {
+   "id": "XBV-117",
+   "plan_ref": "4.2 fuzzy",
+   "severity": "S1",
+   "gate": "V2",
+   "status": "open",
+   "summary": "FUZZY_DEFUZZIFY returns 0 for an all-zero aggregate with centroid (MATLAB: mid-range with a warning; on [0, 10] = 5) - silent wrong value. Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts."
+  },
+  {
+   "id": "XBV-118",
+   "plan_ref": "4.2 fuzzy",
+   "severity": "S2",
+   "gate": "V2",
+   "status": "open",
+   "summary": "FUZZY_DEFUZZIFY returns 0 for an all-zero aggregate with mom (mean of the range expected, 5). Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts."
+  },
+  {
+   "id": "XBV-119",
+   "plan_ref": "4.2 fuzzy",
+   "severity": "S1",
+   "gate": "V2",
+   "status": "open",
+   "summary": "FUZZY_INFERENCE_SYSTEM returns 0 when no rule fires (denominator 0) instead of the output mid-range (output range [2, 6]: 4). Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts."
+  },
+  {
+   "id": "XBV-120",
+   "plan_ref": "4.2 fuzzy",
+   "severity": "S1",
+   "gate": "V2",
+   "status": "open",
+   "summary": "FUZZY_INFERENCE_SYSTEM gives 0 membership at input shoulder vertices (trimf [-3, -3, -1] at -3), so rules on the range edge never fire (same root cause as XBV-110). Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts."
+  },
+  {
+   "id": "XBV-121",
+   "plan_ref": "4.2 fuzzy",
+   "severity": "S1",
+   "gate": "V2",
+   "status": "open",
+   "summary": "FUZZY_INFERENCE_SYSTEM output shoulders (NB [-1, -1, -0.5], PB at the range end) are 0 at the end point, so the defuzzified output is off: at (-0.5, -0.2) y = -0.250623 instead of -0.252217. Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts."
   }
  ],
  "blocks": {
@@ -5513,6 +5610,10 @@
   {
    "wp": "WP-18b",
    "note": "WP-18: the standalone runtime shares the simulator's interpreter code, so simulator vs runtime is a weak comparison (C is the independent execution). Scenario 6 (D9) fires at tick 4 in all three executions because Integrator publishes post-update in both the interpreter and C; revisit after D9 is decided. Scale numbers (50 states, Gain + UNIT_DELAY each): sm_core.c 352,399 bytes, all .c 388,720 bytes, sizeof(ADIA_Instance_t) 2,144 bytes. AUTOSAR verify ACCEPTED, 11/11 gates."
+  },
+  {
+   "wp": "WP-09b",
+   "note": "FIS ignores orMethod and AND 'product' in rules; FUZZY_DEFUZZIFY ignores its 'resolution' parameter (characterization test); bisector of an all-zero aggregate returns range_min (MATLAB result unconfirmed); LMS 'w' outputs are the pre-update weights (Simulink DSP LMS Wts timing unverified); RL tie rule lowest index (undocumented); LMS/neuron divergence with large lr gives silent Inf/NaN; NEURAL_NEURON_LEARNING uses tanh with bipolar targets (docs should say so)."
   }
  ]
 }
