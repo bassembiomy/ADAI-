@@ -295,8 +295,12 @@
    "deps": [
     "WP-03"
    ],
-   "status": "in_progress",
-   "note": "Invariant tests by Sonnet from the controller spec (D5, D7): 148 passed, 13 pinned (XBV-122..134). Awaiting the Opus verifier."
+   "status": "done",
+   "note": "Invariant tests by Sonnet from the controller spec (D5, D7): 148 passed, 13 pinned (XBV-122..134). Awaiting the Opus verifier.",
+   "verification": {
+    "executor": "Sonnet from controller spec (D5, D7)",
+    "verifier": "Opus subagent (D8) PASS (148 passed / 13 expected fail twice; stiffness of XBV-127/133 confirmed by eigenvalues: h*lambda = -10, |R_rk4| = 291); minors applied: 13 undocumented-constant tests labelled characterization, smoke-only blocks named, stiffness pins state the fix direction"
+   }
   },
   {
    "id": "WP-11",
@@ -5740,7 +5744,7 @@
   },
   {
    "wp": "WP-10b",
-   "note": "Smoke-only coverage for the remaining ROBOT_VACUUM_* blocks, FABRIC_HARMONIC_ANALYZER, CFD_DEM_SURROGATE_LEARNER. Not expressible: Hertz contact exposes only K (no E*, R*), gravity fixed in DEM (no KE-conservation test), SLAM/FUSION use truth inputs, pure pursuit has no lookahead parameter, cliff_threshold unused, MOTOR_COMMAND V_bat fixed at 12, rib collisions push particle centres 0.0011 m past R - r."
+   "note": "Smoke-only coverage (no type name in a specific test): CFD_DEM_SURROGATE_LEARNER, ROBOT_VACUUM_3D_SCENE_VIEW, ROBOT_VACUUM_3D_VIZ_COLORS, ROBOT_VACUUM_BATTERY_HUD, ROBOT_VACUUM_BATTERY_MONITOR, ROBOT_VACUUM_CAPACITY_THRESHOLD, ROBOT_VACUUM_CLIFF_HALT, ROBOT_VACUUM_COLLISION_AVOID, ROBOT_VACUUM_COLLISION_MESH, ROBOT_VACUUM_CONTINUOUS_ENERGY, ROBOT_VACUUM_COVERAGE_HEATMAP, ROBOT_VACUUM_COVERAGE_PLANNER, ROBOT_VACUUM_DIRT_DENSITY, ROBOT_VACUUM_DOCK_BEACON, ROBOT_VACUUM_DOCK_DETECT, ROBOT_VACUUM_DOCK_ICON, ROBOT_VACUUM_DOOR_CROSSING, ROBOT_VACUUM_DOOR_TRACKER, ROBOT_VACUUM_DUSTBIN_HUD, ROBOT_VACUUM_ERODE_MASK, ROBOT_VACUUM_FURNITURE_MESH, ROBOT_VACUUM_GOAL_MANAGER, ROBOT_VACUUM_HALT_ALERT, ROBOT_VACUUM_MODE_SUPERVISOR, ROBOT_VACUUM_RESUME_SCHEDULER, ROBOT_VACUUM_ROOM_SCHEDULER, ROBOT_VACUUM_ROOM_SEGMENTATION, ROBOT_VACUUM_ROOM_ZONE_COLORS, ROBOT_VACUUM_SEMANTIC_MAP, ROBOT_VACUUM_SIDE_BRUSH, ROBOT_VACUUM_SUCTION_PWM, ROBOT_VACUUM_SURFACE_ADAPTER, ROBOT_VACUUM_TERRAIN_MODEL, ROBOT_VACUUM_TOPOLOGY_RETURN, ROBOT_VACUUM_VELOCITY_PID, ROBOT_VACUUM_VISUALIZATION. Not expressible: Hertz contact exposes only K (no E*, R*), gravity fixed in DEM (no KE-conservation test), SLAM/FUSION use truth inputs, pure pursuit has no lookahead parameter, cliff_threshold unused, MOTOR_COMMAND V_bat fixed at 12, rib collisions push particle centres 0.0011 m past R - r."
   }
  ]
 }

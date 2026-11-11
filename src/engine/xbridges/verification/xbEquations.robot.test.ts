@@ -1,4 +1,8 @@
 /**
+ * Tests whose title starts with 'characterization' pin undocumented factory constants (thresholds, gains, room geometry);
+ * they protect against unnoticed change but are not V2 evidence. V2 rests on the kinematic, motor, battery, odometry,
+ * Hertz, momentum and closed-loop invariant tests.
+ *
  * WP-10 — gates V2/V3 for the ADIA-only blocks: navigation / robot vacuum (ROBOT_VACUUM_*) and DEM / CFD (DEM_*, CFD_*).
  * Plan: docs/superpowers/plans/2026-11-10-xbridges-full-verification.md (sections 2, 3 oracle 5, 4.2, 9); decision D5:
  * ADIA-only blocks are verified by physical / kinematic invariants, bounded-state checks and closed-loop runs, G is n/a.
@@ -321,13 +325,13 @@ describe('5. Sensors (ENCODER, LIDAR, LIDAR_SENSOR, CLIFF_IR, BUMPER, DUSTBIN, M
   //  135 -> wall x = -3 at sqrt 2; 180 -> wall x = -3 at 1.0; -135 -> corner (-3,-1) at sqrt 2; -90 -> wall y = -1 at 1.0;
   //  -45 -> wall y = -1 at x = -1 at sqrt 2.
   const expected8 = [2, 2 * Math.SQRT2, 1.5, Math.SQRT2, 1, Math.SQRT2, 1, Math.SQRT2];
-  it('LIDAR (noise off via random = 0.5): the 8 beams read the hand-computed wall distances, a wall straight ahead at 2 m reads 2 at angle 0', () => {
+  it('characterization (undocumented factory constants): LIDAR (noise off via random = 0.5): the 8 beams read the hand-computed wall distances, a wall straight ahead at 2 m reads 2 at angle 0', () => {
     noNoise();
     const [ranges, angles] = once(mk('ROBOT_VACUUM_LIDAR'), [LIDAR_X, 0, 0, 0]) as number[][];
     expect(angles[0]).toBe(0);
     expected8.forEach((d, i) => near(ranges[i], d, 1e-9, `beam ${i}`));
   });
-  it('LIDAR rotates with the robot heading: theta = pi/2 puts the 2 m wall on beam index 6 (-90 degrees)', () => {
+  it('characterization (undocumented factory constants): LIDAR rotates with the robot heading: theta = pi/2 puts the 2 m wall on beam index 6 (-90 degrees)', () => {
     noNoise();
     const [ranges] = once(mk('ROBOT_VACUUM_LIDAR'), [LIDAR_X, 0, Math.PI / 2, 0]) as number[][];
     near(ranges[6], 2, 1e-9);
@@ -343,7 +347,7 @@ describe('5. Sensors (ENCODER, LIDAR, LIDAR_SENSOR, CLIFF_IR, BUMPER, DUSTBIN, M
       });
     }
   });
-  it('LIDAR_SENSOR (pose array [-2,0,0], noise off): 45 beams from -180 deg step 8 deg; beams at +-4 deg read 2/cos 4 deg', () => {
+  it('characterization (undocumented factory constants): LIDAR_SENSOR (pose array [-2,0,0], noise off): 45 beams from -180 deg step 8 deg; beams at +-4 deg read 2/cos 4 deg', () => {
     noNoise();
     const [ranges, pose] = once(mk('ROBOT_VACUUM_LIDAR_SENSOR'), [[LIDAR_X, 0, 0]]) as number[][];
     expect(ranges.length).toBe(45);
@@ -367,7 +371,7 @@ describe('5. Sensors (ENCODER, LIDAR, LIDAR_SENSOR, CLIFF_IR, BUMPER, DUSTBIN, M
     // 360 counts = one wheel turn = 2 pi r of arc.
     near(outs[1][0] as number, 2 * 2 * Math.PI * R_W, 1e-12);
   });
-  it('CLIFF_IR reads the low value on the floor and the high value at the edge (|x| or |y| > 2.8)', () => {
+  it('characterization (undocumented factory constants): CLIFF_IR reads the low value on the floor and the high value at the edge (|x| or |y| > 2.8)', () => {
     const b = mk('ROBOT_VACUUM_CLIFF_IR');
     expect(num(once(b, [0, 0])[0])).toBeLessThan(0.2);
     expect(num(once(b, [2.9, 0])[0])).toBeGreaterThan(0.2);
@@ -480,7 +484,7 @@ describe('6. Estimation (FUSION, LOCALIZATION, SENSOR_FUSION_EKF, SLAM)', () => 
       expect(stats[0]).toBeGreaterThanOrEqual(0); expect(stats[0]).toBeLessThanOrEqual(100);
     });
   });
-  it('MAPPING: a hit 1 m ahead of the robot at (-2, 0, 0) marks the cell at (-1, 0) occupied (+25) and the cells before it free (-8), in [-100, 100]', () => {
+  it('characterization (undocumented factory constants): MAPPING: a hit 1 m ahead of the robot at (-2, 0, 0) marks the cell at (-1, 0) occupied (+25) and the cells before it free (-8), in [-100, 100]', () => {
     const b = mk('ROBOT_VACUUM_MAPPING');
     const ranges = [1, 4, 4, 4, 4, 4, 4, 4];
     const [grid] = once(b, [-2, 0, 0, ranges], 0.1) as number[][][];
@@ -554,7 +558,7 @@ describe('7. Planning (THETA_STAR/A*, GLOBAL_PLANNER, COVERAGE, BOUSTROPHEDON_SW
     expect(L).toBeLessThanOrEqual(shortest + 1e-9);
     expect(L).toBeGreaterThan(Math.hypot(GOAL[0] - START[0], GOAL[1] - START[1]) + 1e-6); // it must detour
   });
-  it('THETA_STAR: when the barrier leaves no 0.28 m corridor the safety is relaxed in 0.06 m steps and the path still avoids occupied cells', () => {
+  it('characterization (undocumented factory constants): THETA_STAR: when the barrier leaves no 0.28 m corridor the safety is relaxed in 0.06 m steps and the path still avoids occupied cells', () => {
     const g = barrier(12, 17);
     const { path, failed } = plan(g);
     expect(failed).toBe(0);
@@ -601,7 +605,7 @@ describe('7. Planning (THETA_STAR/A*, GLOBAL_PLANNER, COVERAGE, BOUSTROPHEDON_SW
     expect(path.length).toBe(0);
   });
 
-  it('COVERAGE: robot on waypoint 0 (-2.2,-2.2) advances the target to waypoint 1 (-2.2, 2.2); distance travelled = path length; coverage % non-decreasing in [0, 100]', () => {
+  it('characterization (undocumented factory constants): COVERAGE: robot on waypoint 0 (-2.2,-2.2) advances the target to waypoint 1 (-2.2, 2.2); distance travelled = path length; coverage % non-decreasing in [0, 100]', () => {
     const b = mk('ROBOT_VACUUM_COVERAGE');
     const steps: unknown[][] = [];
     for (let k = 0; k <= 44; k++) steps.push([emptyGrid(), -2.2, -2.2 + 0.1 * k]);
@@ -612,7 +616,7 @@ describe('7. Planning (THETA_STAR/A*, GLOBAL_PLANNER, COVERAGE, BOUSTROPHEDON_SW
     near((outs.at(-1)![2] as number[])[2], 4.4, 1e-9, 'distance');
     expect(prev).toBeGreaterThan(0);
   });
-  it('BOUSTROPHEDON_SWEEP room 0, spacing 0.54: 14 lines (floor(7.2/0.54)+1) = 28 waypoints, alternating direction, inside the room box; done only after the last waypoint is reached', () => {
+  it('characterization (undocumented factory constants): BOUSTROPHEDON_SWEEP room 0, spacing 0.54: 14 lines (floor(7.2/0.54)+1) = 28 waypoints, alternating direction, inside the room box; done only after the last waypoint is reached', () => {
     const b = mk('ROBOT_VACUUM_BOUSTROPHEDON_SWEEP');
     const o0 = b.execute([0, emptyGrid(), [0, 0, 0]] as never, b.params, b.state, 0).outputs as [number[][], number[], number];
     const wps = o0[0];
@@ -631,7 +635,7 @@ describe('7. Planning (THETA_STAR/A*, GLOBAL_PLANNER, COVERAGE, BOUSTROPHEDON_SW
     }
     expect(last[2]).toBe(1);
   });
-  it('WAYPOINT_GEN: room 4 maps its boundary first ((-2.5,-2.5) -> (-2.5,0) -> (0,0) -> (0,-2.5)), battery_status 1 overrides with the dock (0,-2.8)', () => {
+  it('characterization (undocumented factory constants): WAYPOINT_GEN: room 4 maps its boundary first ((-2.5,-2.5) -> (-2.5,0) -> (0,0) -> (0,-2.5)), battery_status 1 overrides with the dock (0,-2.8)', () => {
     const b = mk('ROBOT_VACUUM_WAYPOINT_GEN');
     const corners = [[-2.5, -2.5], [-2.5, 0], [0, 0], [0, -2.5]];
     const steps = corners.map(([x, y]) => [4, 0, x, y]);
@@ -647,7 +651,7 @@ describe('7. Planning (THETA_STAR/A*, GLOBAL_PLANNER, COVERAGE, BOUSTROPHEDON_SW
   const far = [4, 4, 4, 4, 4, 4, 4, 4];
   const navStep = (x: number, y: number, th: number, tx: number, ty: number, mode: number, bat = 100, ranges: number[] = far) =>
     once(mk('ROBOT_VACUUM_NAV'), [x, y, th, ranges, tx, ty, mode, bat, 0]) as [number, number, number, number, number];
-  it('NAV direct navigation (mode 6): v = min(0.22, 0.4 d), w = 1.6 * heading error', () => {
+  it('characterization (undocumented factory constants): NAV direct navigation (mode 6): v = min(0.22, 0.4 d), w = 1.6 * heading error', () => {
     let o = navStep(0, 0, 0, 1, 0, 6);
     near(o[0], 0.22, 1e-12); near(o[1], 0, 1e-12); expect(o[2]).toBe(6);
     o = navStep(0, 0, 0, 0, 0.5, 6);
@@ -655,7 +659,7 @@ describe('7. Planning (THETA_STAR/A*, GLOBAL_PLANNER, COVERAGE, BOUSTROPHEDON_SW
     o = navStep(0, 0, 0, -1, 0, 6); // goal behind: error = +-pi, wrapped
     expect(Math.abs(o[1])).toBeLessThanOrEqual(1.6 * Math.PI + 1e-9);
   });
-  it('NAV: goal reached (d <= 0.1) in mode 6 -> v = w = 0 and back to Idle (1); low battery (< 20 %) forces return-to-dock (8) towards (0, -2.8); obstacle ahead (< 0.4 m) stops (v = 0) and spins (w = 0.9)', () => {
+  it('characterization (undocumented factory constants): NAV: goal reached (d <= 0.1) in mode 6 -> v = w = 0 and back to Idle (1); low battery (< 20 %) forces return-to-dock (8) towards (0, -2.8); obstacle ahead (< 0.4 m) stops (v = 0) and spins (w = 0.9)', () => {
     const done = navStep(1, 0, 0, 1.05, 0, 6);
     expect(done[0]).toBe(0); expect(done[1]).toBe(0); expect(done[2]).toBe(1);
     const dock = navStep(0, 0, -Math.PI / 2, 5, 5, 6, 15);
@@ -681,7 +685,7 @@ describe('7. Planning (THETA_STAR/A*, GLOBAL_PLANNER, COVERAGE, BOUSTROPHEDON_SW
     expect(b.execute([0, 0, 0, 1, 0, [0, 0.9]] as never, b.params, {}, 0).outputs).toEqual([0, 0.9]);
     expect(b.execute([0, 0, 0, 0.1, 0, [0.22, 1.6]] as never, b.params, {}, 0).outputs).toEqual([0, 0]);
   });
-  it('OBSTACLE_AVOIDANCE never allows forward speed when an obstacle is closer than its thresholds (front < 0.4 m, +-45 degrees < 0.35 m): 500 random scans (seeded)', () => {
+  it('characterization (undocumented factory constants): OBSTACLE_AVOIDANCE never allows forward speed when an obstacle is closer than its thresholds (front < 0.4 m, +-45 degrees < 0.35 m): 500 random scans (seeded)', () => {
     const rnd = mulberry32(99);
     for (let k = 0; k < 500; k++) {
       const ranges = Array.from({ length: 8 }, () => 0.05 + 2 * rnd());
@@ -692,7 +696,7 @@ describe('7. Planning (THETA_STAR/A*, GLOBAL_PLANNER, COVERAGE, BOUSTROPHEDON_SW
       else { expect(lim[0]).toBe(0.22); expect(mode).toBe(5); }
     }
   });
-  it('OBSTACLE_AVOIDANCE: resumes the previous mode when the obstacle clears (state threaded)', () => {
+  it('characterization (undocumented factory constants): OBSTACLE_AVOIDANCE: resumes the previous mode when the obstacle clears (state threaded)', () => {
     const { outs } = drive(mk('ROBOT_VACUUM_OBSTACLE_AVOIDANCE'), [[[0.3, 4, 4, 4, 4, 4, 4, 4], 1, 2], [far, 1, 2]]);
     expect(outs[0][3]).toBe(7); expect(outs[1][3]).toBe(5); expect((outs[1][2] as number[])[0]).toBe(0.22);
   });
@@ -797,7 +801,7 @@ describe('8. Closed loop: Robot Vacuum Digital Twin Lab (XbridgesWorkspace labs,
     r.signals['robot_battery.battery_level'].map(num).forEach((b) => { expect(b).toBeGreaterThanOrEqual(0); expect(b).toBeLessThanOrEqual(100); });
     r.signals['robot_fusion.confidence'].map(num).forEach((c) => { expect(c).toBeGreaterThanOrEqual(0); expect(c).toBeLessThanOrEqual(100); });
   }, LONG);
-  it.fails('XBV-127: the lab at the app default (rk4, 0.02 s) stays finite for 60 s (factory run diverges to Infinity within 3 s: motor pole h*lambda = 10)', () => {
+  it.fails('XBV-127: the lab at the app default step (rk4, 0.02 s, XbridgesWorkspace initialStep) stays finite for 60 s - fix model-side (stiff motor L) or with an implicit solver, not by changing the default step (factory run diverges to Infinity within 3 s: motor pole h*lambda = 10)', () => {
     const r = lab(4, 0.02);
     for (const p of PROBES) r.signals[p].forEach((v) => expect(finiteDeep(v)).toBe(true));
   }, LONG);
@@ -827,7 +831,7 @@ describe('8b. ROBOT_VACUUM_DIGITAL_TWIN (single block), 60 s, seeded', () => {
     r.signals['t.lidar_ranges'].forEach((v) => flat(v).forEach((d) => { expect(d).toBeGreaterThanOrEqual(0); expect(d).toBeLessThanOrEqual(5.5 + 1e-9); }));
     r.signals['t.nav_state'].forEach((v) => expect(Number.isInteger(num(v))).toBe(true));
   }, 170_000);
-  it.fails('XBV-133: DIGITAL_TWIN at the app default (rk4, 0.02 s) stays finite for 60 s (factory run diverges within 2 s: motor pole h*lambda = 10)', () => {
+  it.fails('XBV-133: DIGITAL_TWIN at the app default step (rk4, 0.02 s) stays finite for 60 s - fix model-side or with an implicit solver, not by changing the default step (factory run diverges within 2 s: motor pole h*lambda = 10)', () => {
     const { r, probes } = twin('rk4', 0.02);
     for (const p of probes) r.signals[p].forEach((v) => expect(finiteDeep(v)).toBe(true));
   }, 170_000);
