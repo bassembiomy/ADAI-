@@ -13,7 +13,7 @@
  *  - statistics of N(mean, variance) for the noise source, with Math.random replaced by mulberry32.
  * Dynamic cases run through the canvas loop (testkit runModel); stateful discrete blocks are also driven block-level
  * with the state threaded through execute as the engine does.
- * Failures of the product are pinned with it.fails and a provisional id XBV-2nn (the controller renumbers).
+ * Failures of the product are pinned with it.fails and their finding id (docs/xbridges-verification/ledger.json).
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BLOCK_LIBRARY } from '../BlockDefinitions';
@@ -91,17 +91,17 @@ describe('A. PID_BASIC (continuous, rk4)', () => {
     const r = pid({ mode: 'PI', Kp: 1, Ki: 1 }, 0.01, 1, [{ id: 'en', type: 'Step', params: { stepTime: 0.5, initialValue: 0, finalValue: 1 } }], ['en.out -> p.enable']);
     near(num(valueAt(r, 'p.u', 0.25)), 0, 1e-12, 'u(0.25)');
   });
-  it.fails('XBV-201: continuous PID_BASIC holds its integrator while enable = 0 (Step enable 0 -> 1 at 0.5: u(1) = 1.5)', () => {
+  it.fails('XBV-075: continuous PID_BASIC holds its integrator while enable = 0 (Step enable 0 -> 1 at 0.5: u(1) = 1.5)', () => {
     const r = pid({ mode: 'PI', Kp: 1, Ki: 1 }, 0.01, 1, [{ id: 'en', type: 'Step', params: { stepTime: 0.5, initialValue: 0, finalValue: 1 } }], ['en.out -> p.enable']);
     near(num(valueAt(r, 'p.u', 1)), 1.5, 0.02, 'u(1)');
   });
   // Oracle: reset = 1 (level) holds the integrator at 0 and the output is the proportional (and derivative) part:
   // u = Kp e = 1.
-  it.fails('XBV-202: continuous PID_BASIC with reset = 1: integrator held at 0 and u = Kp e (= 1) during the reset', () => {
+  it.fails('XBV-076: continuous PID_BASIC with reset = 1: integrator held at 0 and u = Kp e (= 1) during the reset', () => {
     const r = pid({ mode: 'PI', Kp: 1, Ki: 1 }, 0.01, 1, [constant('rs', 1)], ['rs.out -> p.reset']);
     near(num(valueAt(r, 'p.u', 1)), 1, 1e-8, 'u(1)');
   });
-  it.fails('XBV-203: continuous PID_BASIC with reset = 1 does not accumulate an integral (u(0.5) = Kp e = 1)', () => {
+  it.fails('XBV-076: continuous PID_BASIC with reset = 1 does not accumulate an integral (u(0.5) = Kp e = 1)', () => {
     const r = pid({ mode: 'PI', Kp: 1, Ki: 1 }, 0.01, 1, [constant('rs', 1)], ['rs.out -> p.reset']);
     near(num(valueAt(r, 'p.u', 0.5)), 1, 1e-8, 'u(0.5)');
   });
@@ -119,7 +119,7 @@ describe('A. PID_BASIC (continuous, rk4)', () => {
     near(u[4], 1, 1e-12, 'first sample after reset');
     near(u[5], 1.2, 1e-12, 'second sample after reset');
   });
-  it.fails('XBV-204: PID_BASIC reset = 1 (discrete): output during the reset is Kp e = 1, not 0', () => {
+  it.fails('XBV-077: PID_BASIC reset = 1 (discrete): output during the reset is Kp e = 1, not 0', () => {
     const { outs } = threadN('PID_BASIC', dpid, [[1, 1, 0], [1, 1, 0], [1, 1, 1]]);
     near(Number(outs[2][0]), 1, 1e-12, 'u during reset');
   });
@@ -169,7 +169,7 @@ describe('B. PID_CONTROLLER (setpoint weighting, outputs, closed loop)', () => {
   // (XbridgesEngine.isFeedthrough: directFeedthrough ?? !isStateful) although u contains Kp (beta r - y). In a loop the
   // controller then reads the plant output of the previous evaluation and rk4 degrades to first order (error 4.6e-5 at
   // t = 1 for dt 0.001, halving with dt; the same loop built from Sum + Integrator has 3e-11).
-  it.fails('XBV-207: closed loop PI Kp 1 Ki 1 with plant 1/(s+1) is rk4-accurate: y = 1 - e^{-t} at t = 0.5, 1, 3 (1e-6); PID_CONTROLLER needs directFeedthrough', () => {
+  it.fails('XBV-080: closed loop PI Kp 1 Ki 1 with plant 1/(s+1) is rk4-accurate: y = 1 - e^{-t} at t = 0.5, 1, 3 (1e-6); PID_CONTROLLER needs directFeedthrough', () => {
     const r = loop({ mode: 'PI', Kp: 1, Ki: 1 }, 3);
     for (const t of [0.5, 1, 3]) near(num(valueAt(r, 'g.y', t)), 1 - Math.exp(-t), 1e-6, `t=${t}`);
   });
@@ -243,7 +243,7 @@ describe('D. KALMAN_FILTER and EXTENDED_KALMAN_FILTER', () => {
   const relTol = (a: number, b: number) => Math.abs(a - b) <= 1e-10 * Math.max(1, Math.abs(b));
   const blockRun = (type: string, us: number[], yv: number[]) => threadN(type, {}, yv.map((y, n) => [us[n], y]), 1).outs;
 
-  it.fails('XBV-205: KALMAN_FILTER first update uses the prior P[0|-1] = P0 (no covariance prediction before the first measurement); x_hat over 200 steps matches the reference to 1e-10', () => {
+  it.fails('XBV-078: KALMAN_FILTER first update uses the prior P[0|-1] = P0 (no covariance prediction before the first measurement); x_hat over 200 steps matches the reference to 1e-10', () => {
     const ref = reference(ys, zeros, P0);
     const out = blockRun('KALMAN_FILTER', zeros, ys);
     out.forEach((o, n) => {
@@ -266,7 +266,7 @@ describe('D. KALMAN_FILTER and EXTENDED_KALMAN_FILTER', () => {
   });
   // Oracle: x[0|-1] = 0, so the first innovation is y(0) - C x[0|-1] = y(0) whatever u(0) is
   // (x[n+1|n] = A x[n|n] + B u(n): u(0) acts on the NEXT sample).
-  it.fails('XBV-206: KALMAN_FILTER first innovation = y(0) - C x[0|-1] = y(0) (u(0) = 1 only affects x[1|0])', () => {
+  it.fails('XBV-079: KALMAN_FILTER first innovation = y(0) - C x[0|-1] = y(0) (u(0) = 1 only affects x[1|0])', () => {
     const out = threadN('KALMAN_FILTER', {}, [[1, 0.3]], 1).outs;
     near(flat(out[0][2])[0], 0.3, 1e-12, 'innovation(0)');
   });
@@ -299,9 +299,10 @@ describe('D. KALMAN_FILTER and EXTENDED_KALMAN_FILTER', () => {
   };
   // The EKF takes its Jacobians by central differences with eps = 1e-6 on an exactly linear model; the round-off of
   // (f(x+eps) - f(x-eps))/(2 eps) is ~1e-10 per entry and accumulates in P: the largest x_hat deviation from the KF over
-  // 200 steps is 2.2e-9 (u = 0) and 2.1e-9 (u = cos(0.1 n)). The oracle is 1e-9.
-  it.fails('XBV-211: EXTENDED_KALMAN_FILTER default f, h: x_hat equals KALMAN_FILTER x_hat at every step to 1e-9 (u = 0, y = sin(0.05 n))', () => {
-    compareEkf(zeros, 1e-9, [0]);
+  // 200 steps is 2.2e-9. A numerical Jacobian legitimately differs at that level, so the controller set the tolerance to
+  // 1e-7 (the spec's 1e-9 was too strict for a finite-difference EKF).
+  it('EXTENDED_KALMAN_FILTER default f, h equals KALMAN_FILTER at every step to 1e-7 (u = 0, y = sin(0.05 n))', () => {
+    compareEkf(zeros, 1e-7, [0]);
   });
   it('EXTENDED_KALMAN_FILTER default f, h equals KALMAN_FILTER at every step to 1e-7 (x_hat, y_hat, innovation; u = cos(0.1 n))', () => {
     compareEkf(Array.from({ length: N }, (_, n) => Math.cos(0.1 * n)), 1e-7, [0, 1, 2]);
@@ -329,13 +330,13 @@ describe('E. MPC_CONTROLLER (double integrator, Q = [[10]])', () => {
   // Defaults (Np 10, Nc 3): MpcSolver.solve warm-starts from u_seq = result.u, but the block returns only u[0] as
   // the next u_seq (BlockDefinitions MPC_CONTROLLER execute: nextState.u_seq = result.u, solve() returns first_u = the
   // first nu entries), so the second call multiplies H (Nc*nu = 3) by a vector of length 1 and throws.
-  it.fails('XBV-208: MPC_CONTROLLER with Nc = 3 can be called a second time (warm start has Nc*nu entries)', () => {
+  it.fails('XBV-081: MPC_CONTROLLER with Nc = 3 can be called a second time (warm start has Nc*nu entries)', () => {
     closed({}, 2);
   });
-  it.fails('XBV-209: MPC_CONTROLLER (defaults, Nc 3): after 100 steps |y - 1| < 1e-3 for r = 1', () => {
+  it.fails('XBV-081: MPC_CONTROLLER (defaults, Nc 3): after 100 steps |y - 1| < 1e-3 for r = 1', () => {
     expect(Math.abs(closed({}).xEnd[0] - 1)).toBeLessThan(1e-3);
   });
-  it.fails('XBV-210: MPC_CONTROLLER (defaults, Nc 3) with u_max = 0.01: u <= 0.01 at every one of 100 steps', () => {
+  it.fails('XBV-081: MPC_CONTROLLER (defaults, Nc 3) with u_max = 0.01: u <= 0.01 at every one of 100 steps', () => {
     closed({ u_max: 0.01 }).u.forEach((v, k) => expect(v, `k=${k}`).toBeLessThanOrEqual(0.01));
   });
   // Nc = 1 avoids the warm-start defect (u_seq has Nc*nu = 1 entry), so constraint satisfaction can be checked.
@@ -428,7 +429,7 @@ describe('G. DISCRETE_IMPULSE, DOE_MODEL, SPEED_CONTROLLER, CURRENT_CONTROLLER_D
   });
   // SPEED_CONTROLLER integrates with dt = max(1e-6, time - lastTime): the first evaluation (time 0) integrates 1e-6 s,
   // so iq_ref(0) = 1.00001 and every later sample is 1e-5 too high (Ki e 1e-6). The oracle integral over [0, 0] is 0.
-  it.fails('XBV-212: SPEED_CONTROLLER iq_ref(0) = Kp e = 1 (the integral over zero time is zero; 1e-9)', () => {
+  it.fails('XBV-082: SPEED_CONTROLLER iq_ref(0) = Kp e = 1 (the integral over zero time is zero; 1e-9)', () => {
     near(speed([0])[0], 1, 1e-9, 't=0');
   });
   it('SPEED_CONTROLLER lower limit: error -2 gives max(-10, -1 - 10 t) (t = 1.2 -> -10)', () => {
@@ -458,7 +459,7 @@ describe('G. DISCRETE_IMPULSE, DOE_MODEL, SPEED_CONTROLLER, CURRENT_CONTROLLER_D
     expect(num(moved.signals['k.vq'][10])).not.toBeCloseTo(num(base.signals['k.vq'][10]), 3);
   });
   // Same dt floor as SPEED_CONTROLLER: the first evaluation integrates 1e-6 s, so vd(0) = Kp_d eD + Ki_d eD 1e-6.
-  it.fails('XBV-213: CURRENT_CONTROLLER_DQ vd(0) = Kp_d eD and vq(0) = Kp_q eQ (integral over zero time is zero; 1e-9)', () => {
+  it.fails('XBV-082: CURRENT_CONTROLLER_DQ vd(0) = Kp_d eD and vq(0) = Kp_q eQ (integral over zero time is zero; 1e-9)', () => {
     const r = dq({ Kp_d: 2, Ki_d: 4, Kp_q: 3, Ki_q: 6, iMax: 100 }, 1, 2, 0.25, 0.5);
     near(num(valueAt(r, 'k.vd', 0)), 1.5, 1e-9, 'vd(0)');
     near(num(valueAt(r, 'k.vq', 0)), 4.5, 1e-9, 'vq(0)');

@@ -233,7 +233,8 @@
    "deps": [
     "WP-06"
    ],
-   "status": "in_progress"
+   "status": "in_progress",
+   "note": "Tests by Sonnet from the controller oracle spec (D7); controller review removed the EKF 1e-9 pin (spec too strict for a finite-difference Jacobian; 1e-7 kept) and merged pins per defect; findings XBV-075..082. Awaiting the Opus verifier."
   },
   {
    "id": "WP-08",
@@ -1060,6 +1061,70 @@
    "gate": "V2",
    "status": "open",
    "summary": "PWM_GENERATOR with duty 1 turns off at the carrier peak (strict 'duty > carrier'; the carrier reaches exactly 1 at t = 0.01 s at 50 Hz), so a 100 % command produces a glitch every period; a sampled run only escapes it when floating-point phase accumulation misses the peak. Pinned in xbEquations.motor.test.ts."
+  },
+  {
+   "id": "XBV-075",
+   "plan_ref": "4.2 control / observers",
+   "severity": "S2",
+   "gate": "V2",
+   "status": "open",
+   "summary": "Continuous PID_BASIC ignores enable: its integrator keeps accumulating while enable = 0 (evaluateDerivatives ignores the enable input; execute's nextState is not used for continuous blocks). Enable 0 -> 1 at 0.5 should give u(1) = 1.5. Found by the WP-07 executor; pinned in xbEquations.control.test.ts."
+  },
+  {
+   "id": "XBV-076",
+   "plan_ref": "4.2 control / observers",
+   "severity": "S2",
+   "gate": "V2",
+   "status": "open",
+   "summary": "Continuous PID_BASIC ignores reset: the integral is neither held at 0 nor cleared while reset = 1. Found by the WP-07 executor; pinned in xbEquations.control.test.ts."
+  },
+  {
+   "id": "XBV-077",
+   "plan_ref": "4.2 control / observers",
+   "severity": "S3",
+   "gate": "V2",
+   "status": "open",
+   "summary": "PID_BASIC and PID_CONTROLLER output 0 during reset (all five PID_CONTROLLER outputs 0) instead of the proportional action Kp e. Found by the WP-07 executor; pinned in xbEquations.control.test.ts."
+  },
+  {
+   "id": "XBV-078",
+   "plan_ref": "4.2 control / observers",
+   "severity": "S2",
+   "gate": "V2",
+   "status": "open",
+   "summary": "KALMAN_FILTER predicts before its first update (starts from P[-1|-1] = P0, so the first update uses A P0 A' + Q); the Simulink Kalman Filter starts from x[0|-1] = x0, P[0|-1] = P0 and updates first. Found by the WP-07 executor; pinned in xbEquations.control.test.ts."
+  },
+  {
+   "id": "XBV-079",
+   "plan_ref": "4.2 control / observers",
+   "severity": "S3",
+   "gate": "V2",
+   "status": "open",
+   "summary": "KALMAN_FILTER applies u(n) in the same sample's prior: the first innovation is y(0) - C B u(0) instead of y(0) - C x0; the input acts one sample early. Found by the WP-07 executor; pinned in xbEquations.control.test.ts."
+  },
+  {
+   "id": "XBV-080",
+   "plan_ref": "4.2 control / observers",
+   "severity": "S2",
+   "gate": "V2",
+   "status": "open",
+   "summary": "PID_CONTROLLER is sorted as non-direct-feedthrough (stateful, no directFeedthrough flag) although u contains Kp (beta r - y): in a closed loop it reads the plant output one stage late and the result is first-order accurate (PI on 1/(s+1), rk4 dt 0.001: error 5.7e-5 at t = 0.5 instead of < 1e-6). Same class as XBV-018 but not caught by the U14 battery (also SPEED_CONTROLLER, CURRENT_CONTROLLER_DQ, MPC). Found by the WP-07 executor; pinned in xbEquations.control.test.ts."
+  },
+  {
+   "id": "XBV-081",
+   "plan_ref": "4.2 control / observers",
+   "severity": "S2",
+   "gate": "V2",
+   "status": "open",
+   "summary": "MPC_CONTROLLER with Nc > 1 throws on its second call (RangeError: H is Nc x Nc but the warm-start vector has length nu), so the default MPC (Nc 3) cannot run more than one step; with Nc 1 it converges and respects u limits. Found by the WP-07 executor; pinned in xbEquations.control.test.ts."
+  },
+  {
+   "id": "XBV-082",
+   "plan_ref": "4.2 control / observers",
+   "severity": "S4",
+   "gate": "V2",
+   "status": "open",
+   "summary": "SPEED_CONTROLLER and CURRENT_CONTROLLER_DQ integrate a fake 1e-6 s at their first evaluation (dt = max(1e-6, t - lastTime)), so every output is offset by Ki e 1e-6 (iq_ref(0) = 1.00001 instead of 1). Found by the WP-07 executor; pinned in xbEquations.control.test.ts."
   }
  ],
  "blocks": {
@@ -5140,6 +5205,10 @@
   {
    "wp": "WP-08b",
    "note": "From WP-08: IM_SCALAR_CONTROL ignores rated_f (no constant-voltage region above rated frequency) and uses |w_ref| (a negative command does not reverse the phase sequence); at w_ref = 0 it outputs a DC set of amplitude 10; THREE_PHASE_INVERTER ignores its Ron and Vf parameters; SVPWM 'Holtz 1992' over-modulation rule from the executor's memory - confirm in WP-15; factory `||` fallbacks such as Ts || 1e-4 not probed (XBV-019 covers them)."
+  },
+  {
+   "wp": "WP-07b",
+   "note": "BAND_LIMITED_NOISE untested (Simulink: output variance = PSD / Ts); the 'trapezoidal' PID method is named 'tustin' in ADIA (trapezoidal rejected with PARAMETER_OPTION_INVALID) - naming check against Simulink; KF covariance read from nextState (P not an output)."
   }
  ]
 }
