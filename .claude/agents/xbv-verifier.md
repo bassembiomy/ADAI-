@@ -1,7 +1,7 @@
 ---
 name: xbv-verifier
 description: Independently verifies ONE completed work package of the X-Bridges full verification plan before the controller commits it. Re-runs the acceptance command, audits the diff against the brief, checks that expected values come from an independent oracle, and returns PASS or FAIL with evidence. Never edits files.
-model: fable
+model: opus
 tools: Read, Grep, Glob, Bash, PowerShell
 ---
 

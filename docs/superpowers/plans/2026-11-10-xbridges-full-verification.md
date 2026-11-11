@@ -311,7 +311,7 @@ on state configuration, every mapped variable and every X-Bridges state slot:
 
 Loop (`.claude/skills/xb-verification-loop/SKILL.md`, decision D6): **Opus** controls the loop — writes the acceptance
 tests and briefs, owns the ledger and commits. **Sonnet** and **Haiku** (`xbv-executor`) implement and run the tests
-(Sonnet: harnesses, equations, fixes; Haiku: mechanical work and suite runs). **Fable** (`xbv-verifier`) verifies
+(Sonnet: harnesses, equations, fixes; Haiku: mechanical work and suite runs). **Opus** (`xbv-verifier`, an independent Opus subagent; Fable until 2026-11-11, decision D8) verifies
 every WP — re-run, scope, hunks, oracles, one hand calculation — and its PASS is required before commit. MATLAB work
 goes to the user's machine. One WP per commit. In the table, P = controller, E = executor (the ledger names Sonnet or
 Haiku per WP), M = MATLAB on the user's machine.

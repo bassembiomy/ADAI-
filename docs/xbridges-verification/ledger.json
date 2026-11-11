@@ -2,7 +2,7 @@
  "plan": "docs/superpowers/plans/2026-11-10-xbridges-full-verification.md",
  "baseline": "54b71aa",
  "statuses": "todo | in_progress | waiting_matlab | done | blocked",
- "exec_legend": "Controller: Opus (main session). Executors: S = Sonnet xbv-executor, H = Haiku xbv-executor. Verifier: F = Fable xbv-verifier (PASS required before commit). M = MATLAB on the user's machine.",
+ "exec_legend": "Controller: Opus (main session). Executors: S = Sonnet xbv-executor, H = Haiku xbv-executor. Verifier: F = xbv-verifier (Fable until 2026-11-10, Opus subagent from 2026-11-11, decision D8; PASS required before a WP is done). M = MATLAB on the user's machine.",
  "gates_legend": "per block V1 contract, V2 equation, V3 corner cases, V4 time behaviour, V5 solver behaviour, V6 execution parity, V7 code parity, V8 UI: todo | pass | fail | n/a. G Simulink goldens: tbd (until the WP-15 map) | pending | pass | n/a | powertrain-ledger. Initial n/a: V5 without evaluateDerivatives, V6 without a codegen capability (the interpreter does not run the block), V8 for blocks not on the canvas palette, G for ADIA-only blocks.",
  "decisions": [
   {
@@ -46,6 +46,12 @@
    "date": "2026-11-10",
    "topic": "Who writes family acceptance tests",
    "decision": "From WP-06 on, the controller writes an oracle specification per block (stimulus, closed-form expected values and their source, tolerances, Simulink rule) in the brief; the Sonnet executor turns it into the test file and pins product defects as it.fails with proposed finding ids; the controller reviews every expected value against the spec before dispatching the Fable verifier. Expected values never come from the code under test."
+  },
+  {
+   "id": "D8",
+   "date": "2026-11-11",
+   "topic": "Verifier model",
+   "decision": "User: take Fable out of the loop; Opus does the verification. The xbv-verifier role now runs as an independent Opus subagent (not the controller itself), with the same checks. Verdicts before this date were given by Fable."
   }
  ],
  "wps": [

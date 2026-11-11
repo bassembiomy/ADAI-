@@ -1,6 +1,6 @@
 ---
 name: xb-verification-loop
-description: Run one iteration (or the whole loop) of the X-Bridges full verification plan. Opus controls the loop (acceptance tests, briefs, ledger, commits); Sonnet and Haiku execute and run the tests (xbv-executor); Fable verifies every result (xbv-verifier) before commit; Simulink golden runs go to MATLAB on the user's machine.
+description: Run one iteration (or the whole loop) of the X-Bridges full verification plan. Opus controls the loop (acceptance tests, briefs, ledger, commits); Sonnet and Haiku execute and run the tests (xbv-executor); Opus verifies every result (xbv-verifier, Opus subagent; Fable removed by the user 2026-11-11) before commit; Simulink golden runs go to MATLAB on the user's machine.
 ---
 
 Roles (user decision 2026-11-10):
@@ -9,7 +9,7 @@ Roles (user decision 2026-11-10):
 | Controller | Opus (main session) | picks the WP, writes acceptance tests and the brief, dispatches, decides DONE/REWORK, owns ledger and commits | production code |
 | Executor | Sonnet (`xbv-executor`, default) | harnesses, test kit, equations, engine/interpreter/generator fixes | acceptance tests, ledger, commits |
 | Executor | Haiku (`xbv-executor` with `model: "haiku"`) | mechanical work: run suites, regenerate snapshots/inventory, transcription, fixtures, palette/help boilerplate | equations, engine, generator |
-| Verifier | Fable (`xbv-verifier`) | re-runs the acceptance command, audits scope and hunks, checks oracles, one hand calculation, PASS/FAIL | edits of any kind |
+| Verifier | Opus subagent (`xbv-verifier`, model opus; replaced Fable on 2026-11-11, decision D8) | re-runs the acceptance command, audits scope and hunks, checks oracles, one hand calculation, PASS/FAIL | edits of any kind |
 
 You are the **controller**. Follow `docs/superpowers/plans/2026-11-10-xbridges-full-verification.md` (§2 gates, §3 oracles, §9 findings). Executors never edit acceptance tests or the ledger; the verifier never edits anything.
 
@@ -21,7 +21,7 @@ Each iteration:
    - A test that fails because the product is wrong is a **finding**: add `XBV-nnn` to the ledger (block, gate, expected and source, actual, severity S1–S4) and mark the test `it.fails` with the finding id. Never `skip`.
 3. Write the brief: WP id and goal; plan sections; the inventory rows of its blocks; the oracle per block; exact files the executor may change with `file:line` pointers; acceptance test file(s) and command (plan §11); anything learned from earlier WPs.
 4. Set the WP to `in_progress`, record `git hash-object` of each acceptance test file in the brief, and dispatch `Agent(subagent_type: "xbv-executor", model: "sonnet" | "haiku", prompt: <brief>)` (if that agent type is not loaded, use `general-purpose` with the same model and paste `.claude/agents/xbv-executor.md` into the brief). Independent WPs may run in parallel when their allowed file lists do not overlap. Wait for the notification. Do not poll.
-5. Verify: dispatch `Agent(subagent_type: "xbv-verifier", model: "fable", prompt: <brief + executor report + allowed files + test hashes>)` (if not loaded, `general-purpose` with `model: "fable"` and `.claude/agents/xbv-verifier.md` pasted). Then check yourself:
+5. Verify: dispatch `Agent(subagent_type: "xbv-verifier", model: "opus", prompt: <brief + executor report + allowed files + test hashes>)` (if not loaded, `general-purpose` with `model: "opus"` and `.claude/agents/xbv-verifier.md` pasted). Then check yourself:
    - the verifier's re-run counts equal your own run of the acceptance command;
    - `git diff --stat`; skim every hunk the verifier flagged;
    - for a fix: the `it.fails` marker is removed and nothing else in the test changed; V6 and V7 suites re-run when engine, interpreter or generator files changed.
