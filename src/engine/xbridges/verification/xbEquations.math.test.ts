@@ -47,7 +47,7 @@ describe('sources', () => {
   });
   // Oracle: a square wave of duty 50 % is +A on [0, T/2) and -A on [T/2, T) (MATLAB square, Simulink pulse/square);
   // never 0. sign(sin) gives 0 at t = 0 and +A at t = T/2 because sin(pi) = 1.2e-16.
-  it.fails('XBV-049: WaveformGen Square at the edges: +amp at t = 0, -amp at t = T/2', () => {
+  it('XBV-049: WaveformGen Square at the edges: +amp at t = 0, -amp at t = T/2', () => {
     const p = { type: 'Square', amp: 1.5, freq: 1, phase: 0, offset: 0 };
     expect([0, 0.5, 1].map((t) => out('WaveformGen', p, [], t))).toEqual([1.5, -1.5, 1.5]);
   });
@@ -70,11 +70,11 @@ describe('element-wise math', () => {
     expect(out('Sum', { signs: '+++' }, [1, 2, 3])).toBe(6);
   });
   for (const signs of ['+|-', '|+-', '+ -']) {
-    it.fails(`XBV-044: Sum signs "${signs}" subtract like "+-" (the spacer only separates ports)`, () => {
+    it(`XBV-044: Sum signs "${signs}" subtract like "+-" (the spacer only separates ports)`, () => {
       expect(out('Sum', { signs }, [5, 3])).toBe(2);
     });
   }
-  it.fails('XBV-045: Sum with one "+" input sums the elements of a vector (Simulink single-input Sum)', () => {
+  it('XBV-045: Sum with one "+" input sums the elements of a vector (Simulink single-input Sum)', () => {
     expect(out('Sum', { signs: '+' }, [[1, 2, 3.5]])).toBe(6.5);
   });
   it('Gain: scalar, element-wise vector gain, matrix input', () => {
@@ -89,7 +89,7 @@ describe('element-wise math', () => {
     expect(out('PRODUCT', { operation: 'divide' }, [1, 0])).toBe(Infinity);
     expect(Number.isNaN(Number(out('PRODUCT', { operation: 'divide' }, [0, 0])))).toBe(true);
   });
-  it.fails('XBV-042: Product multiplies vectors element by element (Simulink Product, element-wise mode)', () => {
+  it('XBV-042: Product multiplies vectors element by element (Simulink Product, element-wise mode)', () => {
     expect(out('PRODUCT', { operation: 'multiply' }, [[1, 2, 3], [4, 5, 6]])).toEqual([4, 10, 18]);
   });
   it('VectorAdd/Sub/Mul/Div/Pow: element-wise with scalar expansion', () => {
@@ -100,7 +100,7 @@ describe('element-wise math', () => {
     expect(out('VectorPow', {}, [[2, 3, 0], [3, 2, 0]])).toEqual([8, 9, 1]);
   });
   // Oracle: real-valued power of a negative base with a non-integer exponent is NaN (Simulink Math Function, real output).
-  it.fails('XBV-050: VectorPow(-8, 1/3) is a real number (NaN), not a complex object', () => {
+  it('XBV-050: VectorPow(-8, 1/3) is a real number (NaN), not a complex object', () => {
     const y = out('VectorPow', {}, [-8, 1 / 3]);
     expect(typeof y).toBe('number');
     expect(Number.isNaN(y as number)).toBe(true);
@@ -126,20 +126,20 @@ describe('reductions', () => {
     expect(out('Max', {}, [[3, 3]])).toBe(3);
   });
   // Oracle: MATLAB max ignores NaN (max(NaN, -3) = -3); Simulink MinMax propagates it. Either is acceptable, 0 is not.
-  it.fails('XBV-043: Max of NaN and -3 is -3 or NaN, never 0', () => {
+  it('XBV-043: Max of NaN and -3 is -3 or NaN, never 0', () => {
     const n = out('Max', { numInputs: 2 }, [Number.NaN, -3]);
     expect(n === -3 || Number.isNaN(Number(n))).toBe(true);
   });
   // Oracle: MATLAB mean(M) and the Simulink Mean block default ("Each column") give the column means.
-  it.fails('XBV-048: Mean of a matrix gives the column means [2 4] (MATLAB / Simulink default), not the mean of all elements', () => {
+  it('XBV-048: Mean of a matrix gives the column means [2 4] (MATLAB / Simulink default), not the mean of all elements', () => {
     expect(out('Mean', {}, [[[1, 2], [3, 6]]])).toEqual([2, 4]);
   });
   it('SumElements of an empty vector is 0 (MATLAB sum([]) = 0)', () => { expect(out('SumElements', {}, [[]])).toBe(0); });
   // MATLAB: mean([]) = NaN; max([]) = [] (empty). Either an empty result or NaN is acceptable; a throw is not.
-  it.fails('XBV-051: Mean of an empty vector is NaN (MATLAB mean([]))', () => {
+  it('XBV-051: Mean of an empty vector is NaN (MATLAB mean([]))', () => {
     expect(Number.isNaN(Number(out('Mean', {}, [[]])))).toBe(true);
   });
-  it.fails('XBV-051: Max of an empty vector is empty or NaN (MATLAB max([]) = [])', () => {
+  it('XBV-051: Max of an empty vector is empty or NaN (MATLAB max([]) = [])', () => {
     const y = out('Max', {}, [[]]);
     expect((Array.isArray(y) && y.length === 0) || Number.isNaN(Number(y))).toBe(true);
   });
@@ -185,7 +185,7 @@ describe('trigonometric and hyperbolic functions (MATLAB definitions)', () => {
     }
   });
   for (const [type, f] of [...FORWARD, ...INVERSE.map(([t, g]) => [t, g] as [string, (x: number) => number]), ...HYPER.map(([t, g]) => [t, g] as [string, (x: number) => number])]) {
-    it.fails(`XBV-046: ${type} processes a vector input element-wise`, () => {
+    it(`XBV-046: ${type} processes a vector input element-wise`, () => {
       // In-domain inputs for every function (asec, acsc, acosh, acoth need |x| >= 1 or x > 1), so the oracle is finite.
       const xs = ['ASEC', 'ACOSEC', 'ACOSH', 'ACOTH'].includes(type) ? [1.5, 2] : [0.5, 0.6];
       closeAll(out(type, {}, [xs]), xs.map(f));

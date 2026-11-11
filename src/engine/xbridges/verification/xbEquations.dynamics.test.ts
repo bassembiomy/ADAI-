@@ -78,8 +78,8 @@ describe('A. continuous blocks (rk4, dt 0.01)', () => {
   }
   for (const [type, inPort, outPort, icKey, finding] of [
     ['Integrator', 'in', 'out', 'initialCondition', null],
-    ['INTEGRATOR_CONTINUOUS', 'u', 'y', 'initial_condition', 'XBV-062'],
-    ['INTEGRATOR', 'u', 'y', 'initialCondition', 'XBV-063'],
+    ['INTEGRATOR_CONTINUOUS', 'u', 'y', 'initial_condition', null], // XBV-062 fixed in WP-21 batch D
+    ['INTEGRATOR', 'u', 'y', 'initialCondition', null], // XBV-063 fixed in WP-21 batch D
   ] as const) {
     const body = () => {
       const r = sim([constant('c', '[1 1]'), { id: 'i', type, params: { [icKey]: [1, 2] } }], [`c.out -> i.${inPort}`], [`i.${outPort}`]);
@@ -292,7 +292,7 @@ describe('B. discrete and delay blocks', () => {
   });
 
   // Oracle: mean of the last N samples with zero initial buffer: input 3, 6, 9, 12, N = 3 -> 1, 3, 6, 9.
-  it.fails('XBV-068: MOVING_AVERAGE window 3, input 3, 6, 9, 12: y = 1, 3, 6, 9 (buffer starts filled with zeros)', () => {
+  it('XBV-068: MOVING_AVERAGE window 3, input 3, 6, 9, 12: y = 1, 3, 6, 9 (buffer starts filled with zeros)', () => {
     nearAll(thread('MOVING_AVERAGE', { window_size: 3 }, [3, 6, 9, 12]), [1, 3, 6, 9], 1e-12);
   });
   it('MOVING_AVERAGE window 1 is the identity', () => {
@@ -320,10 +320,10 @@ describe('C. discontinuities', () => {
     expect(errorCodes(r)).toContain('LIMITS_INVALID');
   });
   // Simulink Saturation is element-wise for vector signals and for vector limits.
-  it.fails('XBV-065: SATURATION is element-wise on a vector input ([-3 0.5 5] with [-1, 2] -> [-1 0.5 2])', () => {
+  it('XBV-065: SATURATION is element-wise on a vector input ([-3 0.5 5] with [-1, 2] -> [-1 0.5 2])', () => {
     nearAll(sat(-1, 2, [-3, 0.5, 5]).y[0], [-1, 0.5, 2], 0);
   });
-  it.fails('XBV-065: SATURATION with vector limits lower [0 1], upper [1 2] is element-wise ([-5 5] -> [0 2], [0.5 1.5] -> [0.5 1.5])', () => {
+  it('XBV-065: SATURATION with vector limits lower [0 1], upper [1 2] is element-wise ([-5 5] -> [0 2], [0.5 1.5] -> [0.5 1.5])', () => {
     nearAll(sat([0, 1], [1, 2], [-5, 5]).y[0], [0, 2], 0);
     nearAll(sat([0, 1], [1, 2], [0.5, 1.5]).y[0], [0.5, 1.5], 0);
   });
@@ -474,7 +474,7 @@ describe('E. buses', () => {
   });
   // Simulink Unit Delay on a bus signal applies the initial condition 0 to every element: the output at t = 0 is the
   // bus {a: 0, b: [0 0]}, so a Bus Selector behind it never sees a non-bus.
-  it.fails('XBV-066: a bus through UNIT_DELAY has the bus structure from the first sample (IC 0 applied to every element)', () => {
+  it('XBV-066: a bus through UNIT_DELAY has the bus structure from the first sample (IC 0 applied to every element)', () => {
     const r = sim(busModel(0), busWires, ['d.y'], { solver: 'discrete', dt: 0.1, stop: 0.4 });
     expect(errorCodes(r)).toEqual([]);
     expect(valueAt(r, 'd.y', 0)).toEqual({ a: 0, b: [0, 0] });
