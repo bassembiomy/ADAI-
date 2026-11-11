@@ -7,3 +7,4 @@ export * from './cHarness';
 export * from './diagnosticRecipes';
 export * from './embedded';
 export * from './cParity';
+export * from './smScenario';

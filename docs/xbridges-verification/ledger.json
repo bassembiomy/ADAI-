@@ -494,7 +494,8 @@
    "deps": [
     "WP-17"
    ],
-   "status": "in_progress"
+   "status": "in_progress",
+   "note": "Scenario corpus by Sonnet from the controller spec: 42 tests, simulator = standalone runtime = compiled C on every scenario (float32 production target), AUTOSAR verify ACCEPTED; findings XBV-106..108 (limitations). Awaiting the Opus verifier."
   },
   {
    "id": "WP-19",
@@ -1374,6 +1375,30 @@
    "gate": "V7",
    "status": "open",
    "summary": "Generated C for discontinuity blocks fails -Wdouble-promotion (gcc sm_core.c:143, clang sm_core.c:100): float promoted to double in a conditional. Found by the WP-17 executor; pinned in src/utils/stateMachine/xbCodeParity.test.ts."
+  },
+  {
+   "id": "XBV-106",
+   "plan_ref": "7.2 state-machine alignment",
+   "severity": "S3",
+   "gate": "V7",
+   "status": "open",
+   "summary": "State-machine variables are scalar only: mapping a vector (3) or matrix (2x2) X-Bridges port to an SM variable is refused (XB_MAPPING_INVALID), so plan 7.2's vector/matrix boundary mappings are not expressible; vector/matrix signals work inside the model. Reported by the WP-18 executor."
+  },
+  {
+   "id": "XBV-107",
+   "plan_ref": "7.2 state-machine alignment",
+   "severity": "S3",
+   "gate": "V7",
+   "status": "open",
+   "summary": "PRODUCT with operation 'divide' is not available in the embedded (state-machine / C) path although the canvas offers it; divide inside a state requires VectorDiv on vectors. Reported by the WP-18 executor."
+  },
+  {
+   "id": "XBV-108",
+   "plan_ref": "7.2 state-machine alignment",
+   "severity": "S4",
+   "gate": "V7",
+   "status": "open",
+   "summary": "Under the 'retain' memory policy the discrete sample-hit counter freezes while the owning state is inactive (hits at ticks 1, 3, 7, 9 across exit/re-entry); simulator, runtime and C agree, but docs/XBRIDGES_EMBEDDED_CODEGEN.md does not state it. Reported by the WP-18 executor."
   }
  ],
  "blocks": {
@@ -5470,6 +5495,10 @@
   {
    "wp": "WP-17b",
    "note": "WP-17 parity ran on float64 (EMBEDDED_TARGET); the production state-machine profile refuses float64 (supportsFloat64 = false, smSemanticValidator.ts ~42) and generates float32 - repeat the per-block parity on float32 with float32 tolerances. clang had no sanitizer runtime (UBSan with -fsanitize-trap only); DiagExtract/ExtractDiag/Diag untested (no capability, XBV-006). Workarounds used only to keep comparing numbers when a strict compile fails (unconnected Clock for XBV-096, -Wno-unused-function for XBV-100); the compile failures are pinned separately. Eleven /tmp/xb-cparity-* directories from interrupted executor runs remain (deletion needs user permission)."
+  },
+  {
+   "wp": "WP-18b",
+   "note": "WP-18: the standalone runtime shares the simulator's interpreter code, so simulator vs runtime is a weak comparison (C is the independent execution). Scenario 6 (D9) fires at tick 4 in all three executions because Integrator publishes post-update in both the interpreter and C; revisit after D9 is decided. Scale numbers (50 states, Gain + UNIT_DELAY each): sm_core.c 352,399 bytes, all .c 388,720 bytes, sizeof(ADIA_Instance_t) 2,144 bytes. AUTOSAR verify ACCEPTED, 11/11 gates."
   }
  ]
 }
