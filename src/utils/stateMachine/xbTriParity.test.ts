@@ -22,6 +22,7 @@ import { XB_CAPABILITIES } from './xbCapabilities';
  * Each cause was settled against an oracle (closed form / Simulink definition) where one exists; 'unresolved' means none.
  */
 const PIN_CAUSE: Record<string, string> = {
+  'XBV-154': 'embedded Mean (mean of all elements) and SubMatrix (zero-based indices) follow the pre-WP-21 canvas rules; the canvas now gives MATLAB/Simulink column means and one-based indices (WP-21 batch D), embedded wrong',
   'XBV-095': 'parity gap: the canvas factory default mode \'PID\' makes buildXBSemanticModel throw \'Invalid PID mode: PID\' (xbPidContract.ts:18) instead of returning a diagnostic; invalid parameters must yield a diagnostic, embedded builder wrong',
   'XBV-083': 'embedded Sum ignores the signs parameter and always adds (xbInterpreter.ts:530); Simulink Sum +- subtracts, canvas right',
   'XBV-084': 'mixed time base inside one embedded tick: Clock, WaveformGen and UNIT_DELAY are evaluated at t_k while Integrator/RATE_LIMITER outputs are post-update and Step uses t_(k+1) (the generated C and the state-machine timers share this convention); the canvas uses t_k throughout. The convention is an open decision (D9); this test asserts the t_k convention',
@@ -40,6 +41,13 @@ const PIN_CAUSE: Record<string, string> = {
   'XBV-091': 'canvas y(0)=0 then explicit-Euler instability (|y| exceeds the closed-form bound amp=1.3 from step 3), embedded stays bounded but one tick ahead; filter discretisation differs, neither exact, unresolved',
 };
 const PINS: Record<string, string> = {
+  // XBV-154: the embedded Mean / SubMatrix still follow the pre-WP-21 canvas rules (mean of all elements, zero-based indices).
+  'Mean|euler': 'XBV-154',
+  'Mean|rk4': 'XBV-154',
+  'Mean|discrete': 'XBV-154',
+  'SubMatrix|euler': 'XBV-154',
+  'SubMatrix|rk4': 'XBV-154',
+  'SubMatrix|discrete': 'XBV-154',
   'ACOS|euler': 'XBV-086',
   'ACOS|rk4': 'XBV-086',
   'ACOS|discrete': 'XBV-086',
@@ -106,9 +114,6 @@ const PINS: Record<string, string> = {
   'RATE_LIMITER|rk4': 'XBV-084',
   'RATE_LIMITER|discrete': 'XBV-084',
   'RELAY|rk4': 'XBV-067',
-  'SATURATION|euler': 'XBV-065',
-  'SATURATION|rk4': 'XBV-065',
-  'SATURATION|discrete': 'XBV-065',
   'SIX_STEP_COMMUTATION|euler': 'XBV-090',
   'SIX_STEP_COMMUTATION|rk4': 'XBV-090',
   'SIX_STEP_COMMUTATION|discrete': 'XBV-090',

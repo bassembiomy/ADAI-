@@ -1255,8 +1255,8 @@ describe('X-Bridges Learning Models Block Tests', () => {
       expect(res.outputs[0]).toEqual([[1, 0], [0, 1]]);
     });
 
-    it('should extract submatrices correctly', () => {
-      const subBlock = BLOCK_LIBRARY['SubMatrix']('sub', { rowStart: 0, rowEnd: 0, colStart: 1, colEnd: 2 });
+    it('should extract submatrices correctly (one-based indices, Simulink Submatrix; XBV-052)', () => {
+      const subBlock = BLOCK_LIBRARY['SubMatrix']('sub', { rowStart: 1, rowEnd: 1, colStart: 2, colEnd: 3 });
       const res = subBlock.execute([[[1, 2, 3], [4, 5, 6]]], subBlock.params, {}, 0);
       expect(res.outputs[0]).toEqual([[2, 3]]);
     });
