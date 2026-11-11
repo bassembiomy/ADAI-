@@ -1,7 +1,7 @@
 import { toCIdentifier } from './smExpressions';
 import type { SemanticModel, SemanticState } from './smSemanticModel';
 import { STATE_MACHINE_XB_TARGET_CAPABILITIES } from './smSemanticValidator';
-import { xbSumSigns } from './xbCapabilities';
+import { isContinuousFilter, xbSumSigns } from './xbCapabilities';
 import type {
   XBSemanticMapping,
   XBSemanticModel,
@@ -983,7 +983,7 @@ const emitStep: OperationEmitter = (state, operation, operationIndex, layout, me
   );
 };
 
-const SIM_TIME_BLOCK_TYPES: ReadonlySet<string> = new Set(['Clock', 'CLOCK', 'WaveformGen', 'WAVEFORM_GEN']);
+const SIM_TIME_BLOCK_TYPES: ReadonlySet<string> = new Set(['Clock', 'CLOCK', 'WaveformGen', 'WAVEFORM_GEN', 'RATE_LIMITER']);
 
 /** True when any block reads the simulation time (sim_time member, advanced once per solver substep). */
 const usesSimTime = (xb: XBSemanticModel): boolean =>
@@ -2603,7 +2603,9 @@ const renderStateOutputs = (
           `        const double ${sanitizedId}_u = ${u};`,
           `        const double ${sanitizedId}_prev = ${prev};`,
           `        double ${sanitizedId}_y = ${sanitizedId}_u;`,
-          `        if (${isnanFn}(${sanitizedId}_u) || ${isnanFn}(${sanitizedId}_prev)) {`,
+          `        if (instance->${member}.sim_time == 0.0) {`,
+          `            ${sanitizedId}_y = ${sanitizedId}_u;`,
+          `        } else if (${isnanFn}(${sanitizedId}_u) || ${isnanFn}(${sanitizedId}_prev)) {`,
           `            ${sanitizedId}_y = ${nanVal};`,
           `        } else if (${sanitizedId}_u - ${sanitizedId}_prev > ${sanitizedId}_max_inc) {`,
           `            ${sanitizedId}_y = ${sanitizedId}_prev + ${sanitizedId}_max_inc;`,
@@ -2618,7 +2620,9 @@ const renderStateOutputs = (
           `            const double ${sanitizedId}_u = ${signalElementRealExpression(state, inputSignalId, layout, member, 'xb_i')};`,
           `            const double ${sanitizedId}_prev = ${stateSlotElementRealExpression(prevSlot, layout, member, 'xb_i')};`,
           `            double ${sanitizedId}_y = ${sanitizedId}_u;`,
-          `            if (${isnanFn}(${sanitizedId}_u) || ${isnanFn}(${sanitizedId}_prev)) {`,
+          `            if (instance->${member}.sim_time == 0.0) {`,
+          `                ${sanitizedId}_y = ${sanitizedId}_u;`,
+          `            } else if (${isnanFn}(${sanitizedId}_u) || ${isnanFn}(${sanitizedId}_prev)) {`,
           `                ${sanitizedId}_y = ${nanVal};`,
           `            } else if (${sanitizedId}_u - ${sanitizedId}_prev > ${sanitizedId}_max_inc) {`,
           `                ${sanitizedId}_y = ${sanitizedId}_prev + ${sanitizedId}_max_inc;`,
@@ -2738,6 +2742,11 @@ const renderStateOutputs = (
     const prevYSlot = stateSlotForRole(operation, 'prev_y');
     const outputSignalId = operation.outputSignalIds[0];
     const inputSignalId = operation.inputSignalIds[0];
+    if (isContinuousFilter(operation) && prevYSlot !== undefined && outputSignalId !== undefined) {
+      // Continuous 1/(tau s + 1): no feedthrough, y = x; the solver stages integrate x.
+      return [...renderSignalWrite(state, operation, operationIndex, 0, outputSignalId,
+        stateSlotRealExpression(prevYSlot, layout, member), layout, member)];
+    }
     if (prevYSlot !== undefined && outputSignalId !== undefined && inputSignalId !== undefined) {
       const u = signalElementRealExpression(state, inputSignalId, layout, member, '0U');
       const prev_y = stateSlotElementRealExpression(prevYSlot, layout, member, '0U');
@@ -2776,6 +2785,12 @@ const renderStateOutputs = (
     const prevUSlot = stateSlotForRole(operation, 'prev_u');
     const outputSignalId = operation.outputSignalIds[0];
     const inputSignalId = operation.inputSignalIds[0];
+    if (isContinuousFilter(operation) && prevYSlot !== undefined && outputSignalId !== undefined && inputSignalId !== undefined) {
+      // Continuous s/(tau s + 1) = 1 - 1/(tau s + 1): direct feedthrough, y = u - x.
+      return [...renderSignalWrite(state, operation, operationIndex, 0, outputSignalId,
+        `(${signalRealExpression(state, inputSignalId, layout, member)}) - (${stateSlotRealExpression(prevYSlot, layout, member)})`,
+        layout, member)];
+    }
     if (prevYSlot !== undefined && prevUSlot !== undefined && outputSignalId !== undefined && inputSignalId !== undefined) {
       const u = signalElementRealExpression(state, inputSignalId, layout, member, '0U');
       const prev_y = stateSlotElementRealExpression(prevYSlot, layout, member, '0U');
@@ -4054,7 +4069,7 @@ const renderDiscreteStateUpdates = (
             const indexText = `${index}U`;
             const current = signalElementRealExpression(state, inputId, layout, member, indexText);
             const previous = stateSlotElementRealExpression(slot, layout, member, indexText);
-            const expr = `(${isnanFn}(${current}) || ${isnanFn}(${previous})) ? ${nanVal} : (((${current}) - (${previous}) > (${rising}) * (${dt})) ? (${previous}) + (${rising}) * (${dt}) : (((${current}) - (${previous}) < (${falling}) * (${dt})) ? (${previous}) + (${falling}) * (${dt}) : (${current})))`;
+            const expr = `(instance->${member}.sim_time == 0.0) ? (${current}) : (${isnanFn}(${current}) || ${isnanFn}(${previous})) ? ${nanVal} : (((${current}) - (${previous}) > (${rising}) * (${dt})) ? (${previous}) + (${rising}) * (${dt}) : (((${current}) - (${previous}) < (${falling}) * (${dt})) ? (${previous}) + (${falling}) * (${dt}) : (${current})))`;
             return renderStateSlotElementAssignment(
               state, slot, indexText, expr, layout,
               member,
@@ -4065,7 +4080,7 @@ const renderDiscreteStateUpdates = (
         }
         const prev_y = stateSlotRealExpression(slot, layout, member);
 
-        const expr = `(${isnanFn}(${input}) || ${isnanFn}(${prev_y})) ? ${nanVal} : (((${input}) - (${prev_y}) > (${rising}) * (${dt})) ? (${prev_y}) + (${rising}) * (${dt}) : (((${input}) - (${prev_y}) < (${falling}) * (${dt})) ? (${prev_y}) + (${falling}) * (${dt}) : (${input})))`;
+        const expr = `(instance->${member}.sim_time == 0.0) ? (${input}) : (${isnanFn}(${input}) || ${isnanFn}(${prev_y})) ? ${nanVal} : (((${input}) - (${prev_y}) > (${rising}) * (${dt})) ? (${prev_y}) + (${rising}) * (${dt}) : (((${input}) - (${prev_y}) < (${falling}) * (${dt})) ? (${prev_y}) + (${falling}) * (${dt}) : (${input})))`;
 
         return renderStateSlotAssignment(
           state, slot,
@@ -4144,6 +4159,10 @@ const continuousOperationSlots = (
   xb: XBSemanticModel,
 ): ContinuousOperationSlot[] => xb.executionOrder.flatMap((operationId, operationIndex) => {
   const operation = xb.operations[operationId];
+  if (operation !== undefined && isContinuousFilter(operation)) {
+    const slotIndex = (operation.state?.slots ?? []).findIndex((slot) => slot.role === 'prev_y');
+    return [{ operation, operationIndex, slot: operation.state!.slots[slotIndex], slotIndex }];
+  }
   if (
     operation === undefined
     || (operation.type !== 'INTEGRATOR_CONTINUOUS' && operation.type !== 'Integrator')
@@ -4206,12 +4225,38 @@ const renderContinuousStateUpdates = (
   const step = cNumber(xb.solver.stepSeconds);
   const baseLines = slots.map((entry) =>
     `    const double ${rkName('xb_rk_base', entry)} = ${stateSlotRealExpression(entry.slot, layout, member)};`);
+  const isFilter = (entry: ContinuousOperationSlot): boolean => entry.slot.role === 'prev_y';
   const derivative = (entry: ContinuousOperationSlot): string => {
     const input = entry.operation.inputSignalIds[0];
+    if (isFilter(entry)) {
+      // dx/dt = (u - x)/tau with x the current (stage) state, tau = 1/(2 pi fc) as in the interpreter.
+      const fc = cNumber(scalarParameter(entry.operation, ['cutoff_frequency', 'cutoffFrequency', 'fc'], 1));
+      const u = input === undefined ? '0.0' : signalRealExpression(state, input, layout, member);
+      return `(((${u}) - (${stateSlotRealExpression(entry.slot, layout, member)})) / (1.0 / (2.0 * 3.14159265358979323846 * (${fc}))))`;
+    }
     return input === undefined
       ? '0.0'
       : signalRealExpression(state, input, layout, member);
   };
+  const filterField = (entry: ContinuousOperationSlot): string =>
+    `instance->${member}.${stateSlotField(entry.slot, layout)}`;
+  const filterOutputs = (only?: string): string[] => slots
+    .filter((entry) => isFilter(entry) && (only === undefined || entry.operation.type === only))
+    .flatMap((entry) => renderTransactionalStateOutputs(
+      state, entry.operation,
+      renderStateOutputs(state, entry.operation, entry.operationIndex, layout, member, null),
+      layout, member,
+    ).map((line) => `    ${line}`));
+  const hasHighPass = slots.some((entry) => isFilter(entry) && entry.operation.type === 'HIGH_PASS_FILTER');
+  const evaluateStage = (): string[] => [
+    ...filterOutputs(),
+    ...renderDirectEvaluation(state, xb, layout, member, true).map((line) => `    ${line}`),
+    // A high-pass output depends on the input of this stage: publish it after the direct pass and propagate once.
+    ...(hasHighPass
+      ? [...filterOutputs('HIGH_PASS_FILTER'),
+        ...renderDirectEvaluation(state, xb, layout, member, true).map((line) => `    ${line}`)]
+      : []),
+  ];
   if (xb.solver.kind === 'euler') {
     const nextLines = slots.map((entry) =>
       `    const double ${rkName('xb_euler_next', entry)} = ${rkName('xb_rk_base', entry)} + ${step} * (${derivative(entry)});`);
@@ -4240,7 +4285,9 @@ const renderContinuousStateUpdates = (
   ): string[] => [
     '    {',
     ...setStageTime(stageTime),
-    ...slots.flatMap((entry) => renderTransactionalStateOutputs(
+    ...slots.filter((entry) => isFilter(entry)).map((entry) =>
+      `    ${filterField(entry)} = (${numericCType(entry.slot.numericType)})(${rkName('xb_rk_base', entry)} + ${scale} * ${rkName(`xb_rk_${previous}`, entry)});`),
+    ...slots.filter((entry) => !isFilter(entry)).flatMap((entry) => renderTransactionalStateOutputs(
       state,
       entry.operation,
       renderStateOutputs(
@@ -4254,8 +4301,7 @@ const renderContinuousStateUpdates = (
       layout,
       member,
     ).map((line) => `    ${line}`)),
-    ...renderDirectEvaluation(state, xb, layout, member, true)
-      .map((line) => `    ${line}`),
+    ...evaluateStage(),
     ...slots.map((entry) =>
       `    ${rkName(`xb_rk_${label}`, entry)} = ${derivative(entry)};`),
     '    }',
@@ -4272,7 +4318,10 @@ const renderContinuousStateUpdates = (
   const final = transactionalAssignments(slots, finalExpression, 'rk4');
   const refresh = [
     '    {',
-    ...slots.flatMap((entry) => renderTransactionalStateOutputs(
+    // The minor stages moved the filter states; restore the state at t_k before republishing the outputs.
+    ...slots.filter((entry) => isFilter(entry)).map((entry) =>
+      `    ${filterField(entry)} = (${numericCType(entry.slot.numericType)})${rkName('xb_rk_base', entry)};`),
+    ...slots.filter((entry) => !isFilter(entry)).flatMap((entry) => renderTransactionalStateOutputs(
       state,
       entry.operation,
       renderStateOutputs(
@@ -4281,8 +4330,7 @@ const renderContinuousStateUpdates = (
       layout,
       member,
     ).map((line) => `    ${line}`)),
-    ...renderDirectEvaluation(state, xb, layout, member, true)
-      .map((line) => `    ${line}`),
+    ...evaluateStage(),
     '    }',
   ];
   return [

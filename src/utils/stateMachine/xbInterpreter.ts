@@ -20,7 +20,7 @@ import type {
   XBSemanticOperation,
 } from './xbSemanticModel';
 import { synthesizeTransferFunctionStateSpace } from './xbSemanticBuilder';
-import { isDiagBlockType, isMatrixSolveBlockType, xbSumSigns } from './xbCapabilities';
+import { isContinuousFilter, isDiagBlockType, isMatrixSolveBlockType, xbSumSigns } from './xbCapabilities';
 
 type XBScalar = number | boolean;
 
@@ -504,6 +504,9 @@ const matrixParameter = (
   return fallback;
 };
 
+const filterTau = (operation: XBSemanticOperation): number =>
+  1 / (2 * Math.PI * Number(parameter(operation, ['cutoff_frequency', 'cutoffFrequency', 'fc'], 1)));
+
 const evaluateDirectOperation = (
   runtime: XBRuntime,
   operation: XBSemanticOperation,
@@ -887,6 +890,8 @@ const evaluateDirectOperation = (
       const yVec = uSig.map((uVal, idx) => {
         const u = Number(uVal);
         const prev = prevSig[idx % prevSig.length] ?? 0;
+        // Simulink Rate Limiter: the first output is the input; later outputs are rate limited.
+        if ((runtime.simTime ?? 0) === 0) return u;
         if (Number.isNaN(u) || Number.isNaN(prev)) return NaN;
         const delta = u - prev;
         if (delta > maxIncrease) return prev + maxIncrease;
@@ -898,6 +903,7 @@ const evaluateDirectOperation = (
     case 'LOW_PASS_FILTER': {
       const prevYSlot = stateSlotForRole(operation, 'prev_y');
       const prevY = prevYSlot ? (runtime.stateSlots[prevYSlot.id] ?? prevYSlot.initialValues).map(Number) : [0];
+      if (isContinuousFilter(operation)) return [prevY];
       const u = broadcast(inputs[0] ?? [0], prevY.length, operation.id);
       const fc = Number(parameter(operation, ['cutoff_frequency', 'cutoffFrequency', 'fc'], 1));
       const dt = Number(parameter(operation, ['sample_time', 'sampleTime', 'dt'], runtime.ir.solver.stepSeconds));
@@ -911,6 +917,7 @@ const evaluateDirectOperation = (
       const prevY = prevYSlot ? (runtime.stateSlots[prevYSlot.id] ?? prevYSlot.initialValues).map(Number) : [0];
       const prevU = prevUSlot ? (runtime.stateSlots[prevUSlot.id] ?? prevUSlot.initialValues).map(Number) : [0];
       const u = broadcast(inputs[0] ?? [0], prevY.length, operation.id);
+      if (isContinuousFilter(operation)) return [prevY.map((x, index) => Number(u[index]) - x)];
       const fc = Number(parameter(operation, ['cutoff_frequency', 'cutoffFrequency', 'fc'], 1));
       const dt = Number(parameter(operation, ['sample_time', 'sampleTime', 'dt'], runtime.ir.solver.stepSeconds));
       const tau = 1 / (2 * Math.PI * fc);
@@ -1755,6 +1762,8 @@ function writeStateOutputs(
       const yVec = uSig.map((uVal, idx) => {
         const u = Number(uVal);
         const prev = prevSig[idx % prevSig.length] ?? 0;
+        // Simulink Rate Limiter: the first output is the input; later outputs are rate limited.
+        if ((runtime.simTime ?? 0) === 0) return u;
         if (Number.isNaN(u) || Number.isNaN(prev)) return NaN;
         const delta = u - prev;
         if (delta > maxIncrease) return prev + maxIncrease;
@@ -1891,6 +1900,7 @@ const statefulUpdate = (
     const nextPrev = uSig.map((uVal, idx) => {
       const u = Number(uVal);
       const prev = prevSig[idx % prevSig.length] ?? 0;
+      if ((runtime.simTime ?? 0) === 0) return convertValue(u, prevSlot.numericType, faults, operation);
       if (Number.isNaN(u) || Number.isNaN(prev)) return NaN;
       const delta = u - prev;
       let y = u;
@@ -1910,6 +1920,7 @@ const statefulUpdate = (
     const current_on = u >= on || (current_on_prev && u > off);
     return { [onSlot.id]: [current_on] };
   }
+  if (isContinuousFilter(operation)) return {};
   if (operation.type === 'LOW_PASS_FILTER') {
     const prevYSlot = stateSlotForRole(operation, 'prev_y');
     if (prevYSlot === undefined) throw new Error(`X-Bridges LOW_PASS_FILTER '${operation.id}' requires a prev_y state slot`);
@@ -2283,15 +2294,30 @@ const executeDirectOperations = (
 interface ContinuousSlot {
   readonly operation: XBSemanticOperation;
   readonly slotId: string;
-  readonly signalId: string;
+  /** Signal that publishes the state (integrators); null for the state of a continuous filter. */
+  readonly signalId: string | null;
   readonly numericType: XBNumericType;
   readonly base: readonly XBScalar[];
+  /** Time constant of a continuous filter (dx/dt = (u - x)/tau); undefined for integrators. */
+  readonly tau?: number;
 }
 
 const continuousSlots = (runtime: XBRuntime): ContinuousSlot[] => {
   const slots: ContinuousSlot[] = [];
   for (const operationId of runtime.ir.executionOrder) {
     const operation = runtime.ir.operations[operationId];
+    if (operation !== undefined && isContinuousFilter(operation)) {
+      const slot = (operation.state?.slots ?? []).find((candidate) => candidate.role === 'prev_y')!;
+      slots.push({
+        operation,
+        slotId: slot.id,
+        signalId: null,
+        numericType: slot.numericType,
+        base: runtime.stateSlots[slot.id] ?? slot.initialValues,
+        tau: filterTau(operation),
+      });
+      continue;
+    }
     if (
       operation?.type !== 'INTEGRATOR_CONTINUOUS'
       && operation?.type !== 'Integrator'
@@ -2315,11 +2341,13 @@ const continuousSlots = (runtime: XBRuntime): ContinuousSlot[] => {
 const continuousDerivatives = (
   runtime: XBRuntime,
   slots: readonly ContinuousSlot[],
-): XBScalar[][] => slots.map(({ operation, base }) => broadcast(
-  signalValues(runtime, operation.inputSignalIds[0]),
-  base.length,
-  operation.id,
-).map(Number));
+): XBScalar[][] => slots.map(({ operation, base, slotId, tau }) => {
+  const u = broadcast(signalValues(runtime, operation.inputSignalIds[0]), base.length, operation.id).map(Number);
+  if (tau === undefined) return u;
+  // Continuous filter: dx/dt = (u - x)/tau with x the current (stage) state.
+  const x = runtime.stateSlots[slotId] ?? base;
+  return u.map((value, index) => (value - Number(x[index])) / tau);
+});
 
 const writeContinuousStage = (
   runtime: XBRuntime,
@@ -2333,6 +2361,11 @@ const writeContinuousStage = (
     if (runtime.operationFaults[slot.operation.id]?.active) return;
     const values = slot.base.map((value, valueIndex) =>
       Number(value) + scale * Number(derivatives[index][valueIndex]));
+    if (slot.signalId === null) {
+      // Minor stage of a continuous filter: the stage state is read by the output pass and the derivative.
+      runtime.stateSlots[slot.slotId] = values;
+      return;
+    }
     const faultStart = faults.length;
     writeSignal(runtime, slot.signalId, values, faults, slot.operation);
     const fault = faults[faultStart];
@@ -2358,8 +2391,19 @@ const updateContinuousState = (
   }
   const step = runtime.ir.solver.stepSeconds;
   const k1 = continuousDerivatives(runtime, slots);
+  // States advanced to t_(k+1) by continuous filters; committed after the outputs at t_k are republished.
+  const pendingFilter = new Map<string, XBScalar[]>();
   if (runtime.ir.solver.kind === 'euler') {
-    writeContinuousStage(runtime, slots, k1, step, faults, snapshots);
+    writeContinuousStage(runtime, slots.filter((slot) => slot.signalId !== null), k1.filter((_, i) => slots[i].signalId !== null), step, faults, snapshots);
+    slots.forEach((slot, index) => {
+      if (slot.signalId !== null || runtime.operationFaults[slot.operation.id]?.active) return;
+      const faultStart = faults.length;
+      pendingFilter.set(slot.slotId, slot.base.map((value, valueIndex) => convertValue(
+        Number(value) + step * Number(k1[index][valueIndex]), slot.numericType, faults, slot.operation,
+      )));
+      const fault = faults[faultStart];
+      if (fault !== undefined) recordOperationFault(runtime, slot.operation, fault, snapshots.get(slot.operation.id));
+    });
   } else {
     // Minor stages see the stage time (t + h/2, t + h/2, t + h) like the canvas solver; t_k is restored afterwards.
     const tK = runtime.simTime ?? 0;
@@ -2378,7 +2422,7 @@ const updateContinuousState = (
     slots.forEach((slot, index) => {
       if (runtime.operationFaults[slot.operation.id]?.active) return;
       const faultStart = faults.length;
-      runtime.stateSlots[slot.slotId] = slot.base.map((value, valueIndex) =>
+      const advanced = slot.base.map((value, valueIndex) =>
         convertValue(
           Number(value) + step * (
             Number(k1[index][valueIndex])
@@ -2389,6 +2433,12 @@ const updateContinuousState = (
           slot.numericType,
           faults, slot.operation,
         ));
+      if (slot.signalId === null) {
+        pendingFilter.set(slot.slotId, advanced);
+        runtime.stateSlots[slot.slotId] = [...slot.base];
+      } else {
+        runtime.stateSlots[slot.slotId] = advanced;
+      }
       const fault = faults[faultStart];
       if (fault !== undefined) recordOperationFault(
         runtime, slot.operation, fault, snapshots.get(slot.operation.id),
@@ -2397,6 +2447,7 @@ const updateContinuousState = (
   }
   if (runtime.ir.solver.kind === 'euler') {
     slots.forEach((slot) => {
+      if (slot.signalId === null) return;
       if (runtime.operationFaults[slot.operation.id]?.active) return;
       const faultStart = faults.length;
       runtime.stateSlots[slot.slotId] = signalValues(runtime, slot.signalId)
@@ -2408,11 +2459,13 @@ const updateContinuousState = (
     });
   }
   for (const slot of slots) {
+    if (slot.signalId === null) continue;
     if (runtime.operationFaults[slot.operation.id]?.active) continue;
     // Output-then-update (D9): the tick publishes the state at t_k; the state advanced to t_(k+1) is read next tick.
     writeSignal(runtime, slot.signalId, slot.base, faults, slot.operation);
   }
   executeDirectOperations(runtime, faults, true);
+  for (const [slotId, values] of pendingFilter) runtime.stateSlots[slotId] = values;
 };
 
 const executeSolverSubstep = (

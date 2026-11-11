@@ -594,3 +594,19 @@ export const xbSumSigns = (signs: unknown, inputCount: number): readonly (1 | -1
   const signChars = typeof signs === 'string' ? signs.replace(/[^+-]/g, '') : '';
   return Array.from({ length: inputCount }, (_, index) => (signChars[index] === '-' ? -1 : 1));
 };
+
+/**
+ * Continuous form of LOW_PASS_FILTER / HIGH_PASS_FILTER (canvas sampleTime <= 0): one scalar state x with
+ * dx/dt = (u - x)/tau integrated by the solver stages; LPF y = x (no feedthrough), HPF y = u - x (feedthrough).
+ */
+export const isContinuousFilter = (operation: {
+  type: string;
+  parameters: Readonly<Record<string, unknown>>;
+  state?: { slots: readonly { role: string; shape: { kind: string } }[] } | null;
+}): boolean => {
+  if (operation.type !== 'LOW_PASS_FILTER' && operation.type !== 'HIGH_PASS_FILTER') return false;
+  const raw = operation.parameters.sampleTime ?? operation.parameters.sample_time;
+  const slot = (operation.state?.slots ?? []).find((candidate) => candidate.role === 'prev_y');
+  return typeof raw === 'number' && !(raw > 0) && slot !== undefined && slot.shape.kind === 'scalar';
+};
+
