@@ -534,7 +534,7 @@
    "deps": [
     "WP-01"
    ],
-   "status": "in_progress",
+   "status": "done",
    "note": "Component tests by Sonnet from the controller spec (D7): 228 palette blocks rendered and listed, handles/order/sides clean, 831 parameters with editors, exact numeric edits; findings XBV-135..142. Awaiting the Opus verifier.",
    "rework": [
     {
@@ -546,7 +546,11 @@
      ],
      "fix": "non-INPUT editors skipped in XBV-138 (covered by XBV-135); palette count checked against 228 and category names checked in the DOM"
     }
-   ]
+   ],
+   "verification": {
+    "executor": "Sonnet from controller spec (D7)",
+    "verifier": "Opus subagent (D8): FAIL (XBV-138 unflippable, vacuous palette assertions), PASS at 8f9861f (XBV-138 flips with a patched onBlur; handle ratchets catch dropped/reordered ports)"
+   }
   },
   {
    "id": "WP-20",
@@ -555,7 +559,7 @@
    "deps": [
     "WP-19"
    ],
-   "status": "todo"
+   "status": "in_progress"
   },
   {
    "id": "WP-21",
