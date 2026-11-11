@@ -281,8 +281,12 @@
    "deps": [
     "WP-03"
    ],
-   "status": "in_progress",
-   "note": "Tests by Sonnet from the controller oracle spec (D7); controller review relabelled 3 code-derived assertions as characterization and lowered the clipping findings to S3; findings XBV-110..121. Awaiting the Opus verifier."
+   "status": "done",
+   "note": "Tests by Sonnet from the controller oracle spec (D7); controller review relabelled 3 code-derived assertions as characterization and lowered the clipping findings to S3; findings XBV-110..121. Awaiting the Opus verifier.",
+   "verification": {
+    "executor": "Sonnet from controller spec (D7)",
+    "verifier": "Opus subagent (D8) PASS (697 passed / 123 expected fail, twice; XBV-121 recomputed independently: -0.252217); minors applied afterwards: fuzzy PID scheduling and RL bins/draw order/reset relabelled as characterization, XBV-117 oracle flagged"
+   }
   },
   {
    "id": "WP-10",
@@ -300,8 +304,22 @@
    "deps": [
     "WP-03"
    ],
-   "status": "in_progress",
-   "note": "Haiku evidence collection (scratchpad wp11-powertrain.json): 45 PT types, all tested by powertrain suites (204 pass), none in universal/known-gap lists, all host-only (codegen false), on both palettes; powertrain ledger empty (XBV-109). Ledger gates updated for 45 PT blocks; V8 left for WP-19. Awaiting the Opus verifier together with WP-09."
+   "status": "done",
+   "note": "Haiku evidence collection (scratchpad wp11-powertrain.json): 45 PT types, all tested by powertrain suites (204 pass), none in universal/known-gap lists, all host-only (codegen false), on both palettes; powertrain ledger empty (XBV-109). Ledger gates updated for 45 PT blocks; V8 left for WP-19. Awaiting the Opus verifier together with WP-09.",
+   "rework": [
+    {
+     "round": 1,
+     "by": "Opus verifier FAIL (D8)",
+     "items": [
+      "V6 n/a for all PT rows, but canvas = worker applies and two PT blocks fail it (XBV-047)",
+      "V3 note omitted the U2 diagnosed-error pass"
+     ],
+     "fix": "V6 todo for 43 PT blocks and fail (XBV-047) for 2; V3 note extended"
+    }
+   ],
+   "verification": {
+    "verifier": "Opus subagent: FAIL, fixed as requested (ledger-only WP; no re-run needed beyond the verifier's spot checks: 5 PT types, powertrain 204 pass)"
+   }
   },
   {
    "id": "WP-12",
@@ -1477,7 +1495,7 @@
    "severity": "S1",
    "gate": "V2",
    "status": "open",
-   "summary": "FUZZY_DEFUZZIFY returns 0 for an all-zero aggregate with centroid (MATLAB: mid-range with a warning; on [0, 10] = 5) - silent wrong value. Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts."
+   "summary": "FUZZY_DEFUZZIFY returns 0 for an all-zero aggregate with centroid (MATLAB: mid-range with a warning; on [0, 10] = 5) - silent wrong value. Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts. Oracle uncertain (verifier, from memory): MATLAB defuzz may raise an error on zero area for centroid; the mid-range is evalfis's no-rule-fires rule (XBV-119). Confirm in WP-15; a silent 0 is wrong either way."
   },
   {
    "id": "XBV-118",
@@ -4948,10 +4966,10 @@
    "gates": {
     "V1": "pass",
     "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
-    "V3": "pass (universal battery: no PT entry in any pinned list)",
+    "V3": "pass (universal battery; about 10 PT types pass U2 only because a block-reported error counts as diagnosed - they cannot run with grounded inputs, see wp03-triage.json; optional nominal port defaults)",
     "V4": "todo",
     "V5": "n/a",
-    "V6": "n/a (host-only, codegen false)",
+    "V6": "todo (canvas = worker applies; interpreter leg n/a, host-only)",
     "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
     "G": "pending (powertrain ledger has no per-block gate records)"
@@ -4962,10 +4980,10 @@
    "gates": {
     "V1": "pass",
     "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
-    "V3": "pass (universal battery: no PT entry in any pinned list)",
+    "V3": "pass (universal battery; about 10 PT types pass U2 only because a block-reported error counts as diagnosed - they cannot run with grounded inputs, see wp03-triage.json; optional nominal port defaults)",
     "V4": "todo",
     "V5": "todo",
-    "V6": "n/a (host-only, codegen false)",
+    "V6": "todo (canvas = worker applies; interpreter leg n/a, host-only)",
     "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
     "G": "pending (powertrain ledger has no per-block gate records)"
@@ -4976,10 +4994,10 @@
    "gates": {
     "V1": "pass",
     "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
-    "V3": "pass (universal battery: no PT entry in any pinned list)",
+    "V3": "pass (universal battery; about 10 PT types pass U2 only because a block-reported error counts as diagnosed - they cannot run with grounded inputs, see wp03-triage.json; optional nominal port defaults)",
     "V4": "todo",
     "V5": "todo",
-    "V6": "n/a (host-only, codegen false)",
+    "V6": "todo (canvas = worker applies; interpreter leg n/a, host-only)",
     "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
     "G": "pending (powertrain ledger has no per-block gate records)"
@@ -4990,10 +5008,10 @@
    "gates": {
     "V1": "pass",
     "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
-    "V3": "pass (universal battery: no PT entry in any pinned list)",
+    "V3": "pass (universal battery; about 10 PT types pass U2 only because a block-reported error counts as diagnosed - they cannot run with grounded inputs, see wp03-triage.json; optional nominal port defaults)",
     "V4": "todo",
     "V5": "todo",
-    "V6": "n/a (host-only, codegen false)",
+    "V6": "todo (canvas = worker applies; interpreter leg n/a, host-only)",
     "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
     "G": "pending (powertrain ledger has no per-block gate records)"
@@ -5004,10 +5022,10 @@
    "gates": {
     "V1": "pass",
     "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
-    "V3": "pass (universal battery: no PT entry in any pinned list)",
+    "V3": "pass (universal battery; about 10 PT types pass U2 only because a block-reported error counts as diagnosed - they cannot run with grounded inputs, see wp03-triage.json; optional nominal port defaults)",
     "V4": "todo",
     "V5": "todo",
-    "V6": "n/a (host-only, codegen false)",
+    "V6": "todo (canvas = worker applies; interpreter leg n/a, host-only)",
     "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
     "G": "pending (powertrain ledger has no per-block gate records)"
@@ -5018,10 +5036,10 @@
    "gates": {
     "V1": "pass",
     "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
-    "V3": "pass (universal battery: no PT entry in any pinned list)",
+    "V3": "pass (universal battery; about 10 PT types pass U2 only because a block-reported error counts as diagnosed - they cannot run with grounded inputs, see wp03-triage.json; optional nominal port defaults)",
     "V4": "todo",
     "V5": "todo",
-    "V6": "n/a (host-only, codegen false)",
+    "V6": "todo (canvas = worker applies; interpreter leg n/a, host-only)",
     "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
     "G": "pending (powertrain ledger has no per-block gate records)"
@@ -5032,10 +5050,10 @@
    "gates": {
     "V1": "pass",
     "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
-    "V3": "pass (universal battery: no PT entry in any pinned list)",
+    "V3": "pass (universal battery; about 10 PT types pass U2 only because a block-reported error counts as diagnosed - they cannot run with grounded inputs, see wp03-triage.json; optional nominal port defaults)",
     "V4": "todo",
     "V5": "todo",
-    "V6": "n/a (host-only, codegen false)",
+    "V6": "todo (canvas = worker applies; interpreter leg n/a, host-only)",
     "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
     "G": "pending (powertrain ledger has no per-block gate records)"
@@ -5046,10 +5064,10 @@
    "gates": {
     "V1": "pass",
     "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
-    "V3": "pass (universal battery: no PT entry in any pinned list)",
+    "V3": "pass (universal battery; about 10 PT types pass U2 only because a block-reported error counts as diagnosed - they cannot run with grounded inputs, see wp03-triage.json; optional nominal port defaults)",
     "V4": "todo",
     "V5": "todo",
-    "V6": "n/a (host-only, codegen false)",
+    "V6": "todo (canvas = worker applies; interpreter leg n/a, host-only)",
     "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
     "G": "pending (powertrain ledger has no per-block gate records)"
@@ -5060,10 +5078,10 @@
    "gates": {
     "V1": "pass",
     "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
-    "V3": "pass (universal battery: no PT entry in any pinned list)",
+    "V3": "pass (universal battery; about 10 PT types pass U2 only because a block-reported error counts as diagnosed - they cannot run with grounded inputs, see wp03-triage.json; optional nominal port defaults)",
     "V4": "todo",
     "V5": "todo",
-    "V6": "n/a (host-only, codegen false)",
+    "V6": "todo (canvas = worker applies; interpreter leg n/a, host-only)",
     "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
     "G": "pending (powertrain ledger has no per-block gate records)"
@@ -5074,10 +5092,10 @@
    "gates": {
     "V1": "pass",
     "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
-    "V3": "pass (universal battery: no PT entry in any pinned list)",
+    "V3": "pass (universal battery; about 10 PT types pass U2 only because a block-reported error counts as diagnosed - they cannot run with grounded inputs, see wp03-triage.json; optional nominal port defaults)",
     "V4": "todo",
     "V5": "todo",
-    "V6": "n/a (host-only, codegen false)",
+    "V6": "todo (canvas = worker applies; interpreter leg n/a, host-only)",
     "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
     "G": "pending (powertrain ledger has no per-block gate records)"
@@ -5088,10 +5106,10 @@
    "gates": {
     "V1": "pass",
     "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
-    "V3": "pass (universal battery: no PT entry in any pinned list)",
+    "V3": "pass (universal battery; about 10 PT types pass U2 only because a block-reported error counts as diagnosed - they cannot run with grounded inputs, see wp03-triage.json; optional nominal port defaults)",
     "V4": "todo",
     "V5": "n/a",
-    "V6": "n/a (host-only, codegen false)",
+    "V6": "todo (canvas = worker applies; interpreter leg n/a, host-only)",
     "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
     "G": "pending (powertrain ledger has no per-block gate records)"
@@ -5102,10 +5120,10 @@
    "gates": {
     "V1": "pass",
     "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
-    "V3": "pass (universal battery: no PT entry in any pinned list)",
+    "V3": "pass (universal battery; about 10 PT types pass U2 only because a block-reported error counts as diagnosed - they cannot run with grounded inputs, see wp03-triage.json; optional nominal port defaults)",
     "V4": "todo",
     "V5": "todo",
-    "V6": "n/a (host-only, codegen false)",
+    "V6": "todo (canvas = worker applies; interpreter leg n/a, host-only)",
     "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
     "G": "pending (powertrain ledger has no per-block gate records)"
@@ -5116,10 +5134,10 @@
    "gates": {
     "V1": "pass",
     "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
-    "V3": "pass (universal battery: no PT entry in any pinned list)",
+    "V3": "pass (universal battery; about 10 PT types pass U2 only because a block-reported error counts as diagnosed - they cannot run with grounded inputs, see wp03-triage.json; optional nominal port defaults)",
     "V4": "todo",
     "V5": "n/a",
-    "V6": "n/a (host-only, codegen false)",
+    "V6": "todo (canvas = worker applies; interpreter leg n/a, host-only)",
     "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
     "G": "pending (powertrain ledger has no per-block gate records)"
@@ -5130,10 +5148,10 @@
    "gates": {
     "V1": "pass",
     "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
-    "V3": "pass (universal battery: no PT entry in any pinned list)",
+    "V3": "pass (universal battery; about 10 PT types pass U2 only because a block-reported error counts as diagnosed - they cannot run with grounded inputs, see wp03-triage.json; optional nominal port defaults)",
     "V4": "todo",
     "V5": "n/a",
-    "V6": "n/a (host-only, codegen false)",
+    "V6": "todo (canvas = worker applies; interpreter leg n/a, host-only)",
     "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
     "G": "pending (powertrain ledger has no per-block gate records)"
@@ -5144,10 +5162,10 @@
    "gates": {
     "V1": "pass",
     "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
-    "V3": "pass (universal battery: no PT entry in any pinned list)",
+    "V3": "pass (universal battery; about 10 PT types pass U2 only because a block-reported error counts as diagnosed - they cannot run with grounded inputs, see wp03-triage.json; optional nominal port defaults)",
     "V4": "todo",
     "V5": "todo",
-    "V6": "n/a (host-only, codegen false)",
+    "V6": "todo (canvas = worker applies; interpreter leg n/a, host-only)",
     "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
     "G": "pending (powertrain ledger has no per-block gate records)"
@@ -5158,10 +5176,10 @@
    "gates": {
     "V1": "pass",
     "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
-    "V3": "pass (universal battery: no PT entry in any pinned list)",
+    "V3": "pass (universal battery; about 10 PT types pass U2 only because a block-reported error counts as diagnosed - they cannot run with grounded inputs, see wp03-triage.json; optional nominal port defaults)",
     "V4": "todo",
     "V5": "n/a",
-    "V6": "n/a (host-only, codegen false)",
+    "V6": "todo (canvas = worker applies; interpreter leg n/a, host-only)",
     "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
     "G": "pending (powertrain ledger has no per-block gate records)"
@@ -5172,10 +5190,10 @@
    "gates": {
     "V1": "pass",
     "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
-    "V3": "pass (universal battery: no PT entry in any pinned list)",
+    "V3": "pass (universal battery; about 10 PT types pass U2 only because a block-reported error counts as diagnosed - they cannot run with grounded inputs, see wp03-triage.json; optional nominal port defaults)",
     "V4": "todo",
     "V5": "n/a",
-    "V6": "n/a (host-only, codegen false)",
+    "V6": "todo (canvas = worker applies; interpreter leg n/a, host-only)",
     "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
     "G": "pending (powertrain ledger has no per-block gate records)"
@@ -5186,10 +5204,10 @@
    "gates": {
     "V1": "pass",
     "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
-    "V3": "pass (universal battery: no PT entry in any pinned list)",
+    "V3": "pass (universal battery; about 10 PT types pass U2 only because a block-reported error counts as diagnosed - they cannot run with grounded inputs, see wp03-triage.json; optional nominal port defaults)",
     "V4": "todo",
     "V5": "n/a",
-    "V6": "n/a (host-only, codegen false)",
+    "V6": "todo (canvas = worker applies; interpreter leg n/a, host-only)",
     "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
     "G": "pending (powertrain ledger has no per-block gate records)"
@@ -5200,10 +5218,10 @@
    "gates": {
     "V1": "pass",
     "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
-    "V3": "pass (universal battery: no PT entry in any pinned list)",
+    "V3": "pass (universal battery; about 10 PT types pass U2 only because a block-reported error counts as diagnosed - they cannot run with grounded inputs, see wp03-triage.json; optional nominal port defaults)",
     "V4": "todo",
     "V5": "todo",
-    "V6": "n/a (host-only, codegen false)",
+    "V6": "todo (canvas = worker applies; interpreter leg n/a, host-only)",
     "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
     "G": "pending (powertrain ledger has no per-block gate records)"
@@ -5214,10 +5232,10 @@
    "gates": {
     "V1": "pass",
     "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
-    "V3": "pass (universal battery: no PT entry in any pinned list)",
+    "V3": "pass (universal battery; about 10 PT types pass U2 only because a block-reported error counts as diagnosed - they cannot run with grounded inputs, see wp03-triage.json; optional nominal port defaults)",
     "V4": "todo",
     "V5": "n/a",
-    "V6": "n/a (host-only, codegen false)",
+    "V6": "todo (canvas = worker applies; interpreter leg n/a, host-only)",
     "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
     "G": "pending (powertrain ledger has no per-block gate records)"
@@ -5228,10 +5246,10 @@
    "gates": {
     "V1": "pass",
     "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
-    "V3": "pass (universal battery: no PT entry in any pinned list)",
+    "V3": "pass (universal battery; about 10 PT types pass U2 only because a block-reported error counts as diagnosed - they cannot run with grounded inputs, see wp03-triage.json; optional nominal port defaults)",
     "V4": "todo",
     "V5": "n/a",
-    "V6": "n/a (host-only, codegen false)",
+    "V6": "todo (canvas = worker applies; interpreter leg n/a, host-only)",
     "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
     "G": "pending (powertrain ledger has no per-block gate records)"
@@ -5242,10 +5260,10 @@
    "gates": {
     "V1": "pass",
     "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
-    "V3": "pass (universal battery: no PT entry in any pinned list)",
+    "V3": "pass (universal battery; about 10 PT types pass U2 only because a block-reported error counts as diagnosed - they cannot run with grounded inputs, see wp03-triage.json; optional nominal port defaults)",
     "V4": "todo",
     "V5": "todo",
-    "V6": "n/a (host-only, codegen false)",
+    "V6": "fail (XBV-047: worker DataCloneError)",
     "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
     "G": "pending (powertrain ledger has no per-block gate records)"
@@ -5256,10 +5274,10 @@
    "gates": {
     "V1": "pass",
     "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
-    "V3": "pass (universal battery: no PT entry in any pinned list)",
+    "V3": "pass (universal battery; about 10 PT types pass U2 only because a block-reported error counts as diagnosed - they cannot run with grounded inputs, see wp03-triage.json; optional nominal port defaults)",
     "V4": "todo",
     "V5": "todo",
-    "V6": "n/a (host-only, codegen false)",
+    "V6": "fail (XBV-047: worker DataCloneError)",
     "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
     "G": "pending (powertrain ledger has no per-block gate records)"
@@ -5270,10 +5288,10 @@
    "gates": {
     "V1": "pass",
     "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
-    "V3": "pass (universal battery: no PT entry in any pinned list)",
+    "V3": "pass (universal battery; about 10 PT types pass U2 only because a block-reported error counts as diagnosed - they cannot run with grounded inputs, see wp03-triage.json; optional nominal port defaults)",
     "V4": "todo",
     "V5": "todo",
-    "V6": "n/a (host-only, codegen false)",
+    "V6": "todo (canvas = worker applies; interpreter leg n/a, host-only)",
     "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
     "G": "pending (powertrain ledger has no per-block gate records)"
@@ -5284,10 +5302,10 @@
    "gates": {
     "V1": "pass",
     "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
-    "V3": "pass (universal battery: no PT entry in any pinned list)",
+    "V3": "pass (universal battery; about 10 PT types pass U2 only because a block-reported error counts as diagnosed - they cannot run with grounded inputs, see wp03-triage.json; optional nominal port defaults)",
     "V4": "todo",
     "V5": "n/a",
-    "V6": "n/a (host-only, codegen false)",
+    "V6": "todo (canvas = worker applies; interpreter leg n/a, host-only)",
     "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
     "G": "pending (powertrain ledger has no per-block gate records)"
@@ -5298,10 +5316,10 @@
    "gates": {
     "V1": "pass",
     "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
-    "V3": "pass (universal battery: no PT entry in any pinned list)",
+    "V3": "pass (universal battery; about 10 PT types pass U2 only because a block-reported error counts as diagnosed - they cannot run with grounded inputs, see wp03-triage.json; optional nominal port defaults)",
     "V4": "todo",
     "V5": "n/a",
-    "V6": "n/a (host-only, codegen false)",
+    "V6": "todo (canvas = worker applies; interpreter leg n/a, host-only)",
     "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
     "G": "pending (powertrain ledger has no per-block gate records)"
@@ -5312,10 +5330,10 @@
    "gates": {
     "V1": "pass",
     "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
-    "V3": "pass (universal battery: no PT entry in any pinned list)",
+    "V3": "pass (universal battery; about 10 PT types pass U2 only because a block-reported error counts as diagnosed - they cannot run with grounded inputs, see wp03-triage.json; optional nominal port defaults)",
     "V4": "todo",
     "V5": "n/a",
-    "V6": "n/a (host-only, codegen false)",
+    "V6": "todo (canvas = worker applies; interpreter leg n/a, host-only)",
     "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
     "G": "pending (powertrain ledger has no per-block gate records)"
@@ -5326,10 +5344,10 @@
    "gates": {
     "V1": "pass",
     "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
-    "V3": "pass (universal battery: no PT entry in any pinned list)",
+    "V3": "pass (universal battery; about 10 PT types pass U2 only because a block-reported error counts as diagnosed - they cannot run with grounded inputs, see wp03-triage.json; optional nominal port defaults)",
     "V4": "todo",
     "V5": "n/a",
-    "V6": "n/a (host-only, codegen false)",
+    "V6": "todo (canvas = worker applies; interpreter leg n/a, host-only)",
     "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
     "G": "pending (powertrain ledger has no per-block gate records)"
@@ -5340,10 +5358,10 @@
    "gates": {
     "V1": "pass",
     "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
-    "V3": "pass (universal battery: no PT entry in any pinned list)",
+    "V3": "pass (universal battery; about 10 PT types pass U2 only because a block-reported error counts as diagnosed - they cannot run with grounded inputs, see wp03-triage.json; optional nominal port defaults)",
     "V4": "todo",
     "V5": "n/a",
-    "V6": "n/a (host-only, codegen false)",
+    "V6": "todo (canvas = worker applies; interpreter leg n/a, host-only)",
     "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
     "G": "pending (powertrain ledger has no per-block gate records)"
@@ -5354,10 +5372,10 @@
    "gates": {
     "V1": "pass",
     "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
-    "V3": "pass (universal battery: no PT entry in any pinned list)",
+    "V3": "pass (universal battery; about 10 PT types pass U2 only because a block-reported error counts as diagnosed - they cannot run with grounded inputs, see wp03-triage.json; optional nominal port defaults)",
     "V4": "todo",
     "V5": "n/a",
-    "V6": "n/a (host-only, codegen false)",
+    "V6": "todo (canvas = worker applies; interpreter leg n/a, host-only)",
     "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
     "G": "pending (powertrain ledger has no per-block gate records)"
@@ -5368,10 +5386,10 @@
    "gates": {
     "V1": "pass",
     "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
-    "V3": "pass (universal battery: no PT entry in any pinned list)",
+    "V3": "pass (universal battery; about 10 PT types pass U2 only because a block-reported error counts as diagnosed - they cannot run with grounded inputs, see wp03-triage.json; optional nominal port defaults)",
     "V4": "todo",
     "V5": "n/a",
-    "V6": "n/a (host-only, codegen false)",
+    "V6": "todo (canvas = worker applies; interpreter leg n/a, host-only)",
     "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
     "G": "pending (powertrain ledger has no per-block gate records)"
@@ -5382,10 +5400,10 @@
    "gates": {
     "V1": "pass",
     "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
-    "V3": "pass (universal battery: no PT entry in any pinned list)",
+    "V3": "pass (universal battery; about 10 PT types pass U2 only because a block-reported error counts as diagnosed - they cannot run with grounded inputs, see wp03-triage.json; optional nominal port defaults)",
     "V4": "todo",
     "V5": "todo",
-    "V6": "n/a (host-only, codegen false)",
+    "V6": "todo (canvas = worker applies; interpreter leg n/a, host-only)",
     "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
     "G": "pending (powertrain ledger has no per-block gate records)"
@@ -5396,10 +5414,10 @@
    "gates": {
     "V1": "pass",
     "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
-    "V3": "pass (universal battery: no PT entry in any pinned list)",
+    "V3": "pass (universal battery; about 10 PT types pass U2 only because a block-reported error counts as diagnosed - they cannot run with grounded inputs, see wp03-triage.json; optional nominal port defaults)",
     "V4": "todo",
     "V5": "n/a",
-    "V6": "n/a (host-only, codegen false)",
+    "V6": "todo (canvas = worker applies; interpreter leg n/a, host-only)",
     "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
     "G": "pending (powertrain ledger has no per-block gate records)"
@@ -5410,10 +5428,10 @@
    "gates": {
     "V1": "pass",
     "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
-    "V3": "pass (universal battery: no PT entry in any pinned list)",
+    "V3": "pass (universal battery; about 10 PT types pass U2 only because a block-reported error counts as diagnosed - they cannot run with grounded inputs, see wp03-triage.json; optional nominal port defaults)",
     "V4": "todo",
     "V5": "n/a",
-    "V6": "n/a (host-only, codegen false)",
+    "V6": "todo (canvas = worker applies; interpreter leg n/a, host-only)",
     "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
     "G": "pending (powertrain ledger has no per-block gate records)"
@@ -5424,10 +5442,10 @@
    "gates": {
     "V1": "pass",
     "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
-    "V3": "pass (universal battery: no PT entry in any pinned list)",
+    "V3": "pass (universal battery; about 10 PT types pass U2 only because a block-reported error counts as diagnosed - they cannot run with grounded inputs, see wp03-triage.json; optional nominal port defaults)",
     "V4": "todo",
     "V5": "n/a",
-    "V6": "n/a (host-only, codegen false)",
+    "V6": "todo (canvas = worker applies; interpreter leg n/a, host-only)",
     "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
     "G": "pending (powertrain ledger has no per-block gate records)"
@@ -5438,10 +5456,10 @@
    "gates": {
     "V1": "pass",
     "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
-    "V3": "pass (universal battery: no PT entry in any pinned list)",
+    "V3": "pass (universal battery; about 10 PT types pass U2 only because a block-reported error counts as diagnosed - they cannot run with grounded inputs, see wp03-triage.json; optional nominal port defaults)",
     "V4": "todo",
     "V5": "todo",
-    "V6": "n/a (host-only, codegen false)",
+    "V6": "todo (canvas = worker applies; interpreter leg n/a, host-only)",
     "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
     "G": "pending (powertrain ledger has no per-block gate records)"
@@ -5452,10 +5470,10 @@
    "gates": {
     "V1": "pass",
     "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
-    "V3": "pass (universal battery: no PT entry in any pinned list)",
+    "V3": "pass (universal battery; about 10 PT types pass U2 only because a block-reported error counts as diagnosed - they cannot run with grounded inputs, see wp03-triage.json; optional nominal port defaults)",
     "V4": "todo",
     "V5": "todo",
-    "V6": "n/a (host-only, codegen false)",
+    "V6": "todo (canvas = worker applies; interpreter leg n/a, host-only)",
     "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
     "G": "pending (powertrain ledger has no per-block gate records)"
@@ -5466,10 +5484,10 @@
    "gates": {
     "V1": "pass",
     "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
-    "V3": "pass (universal battery: no PT entry in any pinned list)",
+    "V3": "pass (universal battery; about 10 PT types pass U2 only because a block-reported error counts as diagnosed - they cannot run with grounded inputs, see wp03-triage.json; optional nominal port defaults)",
     "V4": "todo",
     "V5": "n/a",
-    "V6": "n/a (host-only, codegen false)",
+    "V6": "todo (canvas = worker applies; interpreter leg n/a, host-only)",
     "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
     "G": "pending (powertrain ledger has no per-block gate records)"
@@ -5480,10 +5498,10 @@
    "gates": {
     "V1": "pass",
     "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
-    "V3": "pass (universal battery: no PT entry in any pinned list)",
+    "V3": "pass (universal battery; about 10 PT types pass U2 only because a block-reported error counts as diagnosed - they cannot run with grounded inputs, see wp03-triage.json; optional nominal port defaults)",
     "V4": "todo",
     "V5": "todo",
-    "V6": "n/a (host-only, codegen false)",
+    "V6": "todo (canvas = worker applies; interpreter leg n/a, host-only)",
     "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
     "G": "pending (powertrain ledger has no per-block gate records)"
@@ -5494,10 +5512,10 @@
    "gates": {
     "V1": "pass",
     "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
-    "V3": "pass (universal battery: no PT entry in any pinned list)",
+    "V3": "pass (universal battery; about 10 PT types pass U2 only because a block-reported error counts as diagnosed - they cannot run with grounded inputs, see wp03-triage.json; optional nominal port defaults)",
     "V4": "todo",
     "V5": "n/a",
-    "V6": "n/a (host-only, codegen false)",
+    "V6": "todo (canvas = worker applies; interpreter leg n/a, host-only)",
     "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
     "G": "pending (powertrain ledger has no per-block gate records)"
@@ -5508,10 +5526,10 @@
    "gates": {
     "V1": "pass",
     "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
-    "V3": "pass (universal battery: no PT entry in any pinned list)",
+    "V3": "pass (universal battery; about 10 PT types pass U2 only because a block-reported error counts as diagnosed - they cannot run with grounded inputs, see wp03-triage.json; optional nominal port defaults)",
     "V4": "todo",
     "V5": "n/a",
-    "V6": "n/a (host-only, codegen false)",
+    "V6": "todo (canvas = worker applies; interpreter leg n/a, host-only)",
     "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
     "G": "pending (powertrain ledger has no per-block gate records)"
@@ -5522,10 +5540,10 @@
    "gates": {
     "V1": "pass",
     "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
-    "V3": "pass (universal battery: no PT entry in any pinned list)",
+    "V3": "pass (universal battery; about 10 PT types pass U2 only because a block-reported error counts as diagnosed - they cannot run with grounded inputs, see wp03-triage.json; optional nominal port defaults)",
     "V4": "todo",
     "V5": "n/a",
-    "V6": "n/a (host-only, codegen false)",
+    "V6": "todo (canvas = worker applies; interpreter leg n/a, host-only)",
     "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
     "G": "pending (powertrain ledger has no per-block gate records)"
@@ -5536,10 +5554,10 @@
    "gates": {
     "V1": "pass",
     "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
-    "V3": "pass (universal battery: no PT entry in any pinned list)",
+    "V3": "pass (universal battery; about 10 PT types pass U2 only because a block-reported error counts as diagnosed - they cannot run with grounded inputs, see wp03-triage.json; optional nominal port defaults)",
     "V4": "todo",
     "V5": "n/a",
-    "V6": "n/a (host-only, codegen false)",
+    "V6": "todo (canvas = worker applies; interpreter leg n/a, host-only)",
     "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
     "G": "pending (powertrain ledger has no per-block gate records)"
@@ -5550,10 +5568,10 @@
    "gates": {
     "V1": "pass",
     "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
-    "V3": "pass (universal battery: no PT entry in any pinned list)",
+    "V3": "pass (universal battery; about 10 PT types pass U2 only because a block-reported error counts as diagnosed - they cannot run with grounded inputs, see wp03-triage.json; optional nominal port defaults)",
     "V4": "todo",
     "V5": "n/a",
-    "V6": "n/a (host-only, codegen false)",
+    "V6": "todo (canvas = worker applies; interpreter leg n/a, host-only)",
     "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
     "G": "pending (powertrain ledger has no per-block gate records)"
@@ -5564,10 +5582,10 @@
    "gates": {
     "V1": "pass",
     "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
-    "V3": "pass (universal battery: no PT entry in any pinned list)",
+    "V3": "pass (universal battery; about 10 PT types pass U2 only because a block-reported error counts as diagnosed - they cannot run with grounded inputs, see wp03-triage.json; optional nominal port defaults)",
     "V4": "todo",
     "V5": "n/a",
-    "V6": "n/a (host-only, codegen false)",
+    "V6": "todo (canvas = worker applies; interpreter leg n/a, host-only)",
     "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
     "G": "pending (powertrain ledger has no per-block gate records)"

@@ -299,7 +299,7 @@ describe('5. FUZZY_INFERENCE_SYSTEM (Mamdani, default configuration)', () => {
 });
 
 // ---------------------------------------------------------------------------------------------------------------
-describe('6. FUZZY_PID_CONTROLLER', () => {
+describe('6. FUZZY_PID_CONTROLLER (gain ranges are the oracle; the Sugeno-centre scheduling and N-filter discretisation tests below are characterization: the block documents only Kp,Ki,Kd = f_fuzzy(e, de/dt))', () => {
   const base = { Kp_base: 1, Ki_base: 0.5, Kd_base: 0.1 };
   // Documented rule: s = Sugeno average of the output MF centres (centres 0, .25, .5, .75, 1 for 5 MFs);
   // Kx_eff = Kx_base * (lo + s (hi - lo)) with ranges Kp [0.5, 2], Ki [0.1, 1], Kd [0.01, 0.5].
@@ -445,7 +445,7 @@ describe('9. RL_Q_LEARNING_CONTROLLER (alpha 0.1, gamma 0.9, 5 states, 3 actions
     };
   };
 
-  it('state bins of error: <-1 -> 0, <-0.1 -> 1, [-0.1, 0.1] -> 2, >0.1 -> 3, >1 -> 4 (boundaries belong to the inner bin)', () => {
+  it('characterization (undocumented bins): state bins of error <-1 -> 0, <-0.1 -> 1, [-0.1, 0.1] -> 2, >0.1 -> 3, >1 -> 4', () => {
     // Observable through the Q-table cell updated on the next call: reward 1 from Q = 0 gives Q = alpha = 0.1.
     const cases: [number, number][] = [[-5, 0], [-1.0001, 0], [-1, 1], [-0.5, 1], [-0.1001, 1], [-0.1, 2], [0, 2], [0.1, 2],
       [0.1001, 3], [1, 3], [1.0001, 4], [7, 4]];
@@ -485,7 +485,7 @@ describe('9. RL_Q_LEARNING_CONTROLLER (alpha 0.1, gamma 0.9, 5 states, 3 actions
     const o = step(0, 0);             // Q[2][1] += 0.5 (0 - 0) = 0 ; argmax over [-0.5, 0, 0] -> first max = index 1
     expect(o.action).toBe(0);
   });
-  it('epsilon 1 explores uniformly with Math.random: action index = floor(r2 * nA) from the seeded stream', () => {
+  it('characterization (undocumented random draw order): epsilon 1 action index = floor(r2 * nA) from the seeded stream', () => {
     const rnd = mulberry32(11); const ref = mulberry32(11);
     vi.spyOn(Math, 'random').mockImplementation(rnd);
     const step = stepper({ epsilon: 1 });
@@ -503,7 +503,7 @@ describe('9. RL_Q_LEARNING_CONTROLLER (alpha 0.1, gamma 0.9, 5 states, 3 actions
     };
     expect(trace()).toEqual(trace());
   });
-  it('reset = 1 clears the Q-table and the pending transition (episode), then acts from the zero table', () => {
+  it('characterization (undocumented reset detail): reset = 1 clears the Q-table and the pending transition, then acts from the zero table', () => {
     seed(1);
     const step = stepper({ epsilon: 0 });
     step(0, 0); step(0.5, 1); step(0, 1);
