@@ -80,7 +80,7 @@ function expectedHandles(b: any) {
 }
 const key = (h: { id: string; kind: string; pos: string }) => `${h.kind}:${h.id}:${h.pos}`;
 
-const PINNED: Record<string, string[]> = { 'XBV-902': [] };
+const PINNED: Record<string, string[]> = { 'V8-N2': [] };
 const DEBUG = !!process.env.XBV8_DEBUG;
 const report = (name: string, list: string[]) => { if (DEBUG) console.log(`RATCHET ${name} (${list.length}): ${JSON.stringify(list.sort())}`); };
 
@@ -97,18 +97,18 @@ describe('block node (XBlockNode) over every palette block', () => {
     for (const t of PALETTE_TYPES) nodeRun(t);
   }, 240_000);
 
-  it('XBV-901: one handle per contract port, port id as handle id, source for outputs and target for inputs', () => {
+  it('V8-N1: one handle per contract port, port id as handle id, source for outputs and target for inputs', () => {
     const bad = PALETTE_TYPES.filter((t) => {
       const r = nodeRun(t);
       const want = expectedHandles(r.block).map(key).map((k) => k.split(':').slice(0, 2).join(':')).sort();
       const got = r.handles.map(key).map((k) => k.split(':').slice(0, 2).join(':')).sort();
       return JSON.stringify(want) !== JSON.stringify(got);
     });
-    report('XBV-901', bad);
-    ratchet(bad, PINNED['XBV-901'] ?? []);
+    report('V8-N1', bad);
+    ratchet(bad, PINNED['V8-N1'] ?? []);
   }, 240_000);
 
-  it('XBV-902: handles appear in factory order within inputs and within outputs on each side', () => {
+  it('V8-N2: handles appear in factory order within inputs and within outputs on each side', () => {
     const bad = PALETTE_TYPES.filter((t) => {
       const r = nodeRun(t);
       const w = expectedHandles(r.block);
@@ -116,38 +116,38 @@ describe('block node (XBlockNode) over every palette block', () => {
       const order = (list: { id: string; kind: string; pos: string }[], kind: string, pos: string) => list.filter((h) => h.kind === kind && h.pos === pos).map((h) => h.id).join(',');
       return ['left', 'right', 'top', 'bottom'].some((pos) => ['target', 'source'].some((kind) => order(w, kind, pos) !== order(r.handles, kind, pos)));
     });
-    report('XBV-902', bad);
-    ratchet(bad, PINNED['XBV-902'] ?? []);
+    report('V8-N2', bad);
+    ratchet(bad, PINNED['V8-N2'] ?? []);
   }, 240_000);
 
-  it('XBV-903: each handle sits on the side the factory gives (defaults: inputs left, outputs right)', () => {
+  it('V8-N3: each handle sits on the side the factory gives (defaults: inputs left, outputs right)', () => {
     const bad = PALETTE_TYPES.filter((t) => {
       const r = nodeRun(t);
       const got = new Map(r.handles.map((h) => [`${h.kind}:${h.id}`, h.pos]));
       return expectedHandles(r.block).some((h) => got.get(`${h.kind}:${h.id}`) !== h.pos);
     });
-    report('XBV-903', bad);
-    ratchet(bad, PINNED['XBV-903'] ?? []);
+    report('V8-N3', bad);
+    ratchet(bad, PINNED['V8-N3'] ?? []);
   }, 240_000);
 
-  it('XBV-904: the block label (or its type name) is shown', () => {
+  it('V8-N4: the block label (or its type name) is shown', () => {
     const bad = PALETTE_TYPES.filter((t) => {
       const r = nodeRun(t);
       // Inport, Outport and Subsystem are shown by their name parameter (the workspace keeps label and params.name in sync).
       const shown = String(r.block.label ?? (['Inport', 'Outport', 'Subsystem'].includes(t) ? r.block.params?.name : undefined) ?? r.block.type);
       return !r.text.includes(shown) && !r.text.includes(t);
     });
-    report('XBV-904', bad);
-    ratchet(bad, PINNED['XBV-904'] ?? []);
+    report('V8-N4', bad);
+    ratchet(bad, PINNED['V8-N4'] ?? []);
   }, 240_000);
 
-  it('XBV-905: rendering raises no React or console error', () => {
+  it('V8-N5: rendering raises no React or console error', () => {
     const bad = PALETTE_TYPES.filter((t) => nodeRun(t).errors.length > 0);
-    report('XBV-905', bad);
-    ratchet(bad, PINNED['XBV-905'] ?? []);
+    report('V8-N5', bad);
+    ratchet(bad, PINNED['V8-N5'] ?? []);
   }, 240_000);
 
-  it('XBV-906: dynamic-input blocks render numInputs handles for 2 and for 5', () => {
+  it('V8-N6: dynamic-input blocks render numInputs handles for 2 and for 5', () => {
     const dyn = PALETTE_TYPES.filter((t) => make(t).allowDynamicInputs);
     expect(dyn.length).toBe(14);
     const bad = dyn.filter((t) => [2, 5].some((n) => {
@@ -157,8 +157,8 @@ describe('block node (XBlockNode) over every palette block', () => {
       const r = renderNode(block);
       return r.handles.filter((h) => h.kind === 'target').length !== want;
     }));
-    report('XBV-906', bad);
-    ratchet(bad, PINNED['XBV-906'] ?? []);
+    report('V8-N6', bad);
+    ratchet(bad, PINNED['V8-N6'] ?? []);
   }, 120_000);
 });
 
@@ -219,7 +219,7 @@ const lastParam = (calls: any[], name: string) => {
 // Ratchet lists measured on this commit (see the findings in the WP-19 report).
 const PINNED_911 = ["MatrixConcat.axis", "SWITCH_CASE.numCases", "Scope.bufferSize", "Scope.numSignals"];
 const PINNED_912 = ["LAPLACE_TRANSFORM.mappingType"];
-/** XBV-913 pinned as 'Type: param param ...' (type names contain no spaces, parameter names no spaces). */
+/** XBV-137 pinned as 'Type: param param ...' (type names contain no spaces, parameter names no spaces). */
 const PINNED_913_GROUPED = [
   "AC_INDUCTION_MOTOR: B J Lm Lr Ls P Rr Rs",
   "AC_MOTOR_PID_CONTROL: B J Kd Ki Kp Lm Lr Ls N P Rr Rs tl w_ref",
@@ -333,20 +333,20 @@ describe('properties panel over every palette block', () => {
     expect(pairs.length).toBeGreaterThan(300);
   });
 
-  it('XBV-910: every factory parameter has an editor labelled with its name or documented label', () => {
+  it('V8-P0: every factory parameter has an editor labelled with its name or documented label', () => {
     const bad: string[] = [];
     for (const t of PALETTE_TYPES) {
       const run = openPanel(t);
       for (const [n] of paramsOf(t)) if (!editorFor(run.container, t, n)) bad.push(`${t}.${n}`);
       run.unmount();
     }
-    report('XBV-910', bad);
-    ratchet(bad, PINNED['XBV-910'] ?? []);
+    report('V8-P0', bad);
+    ratchet(bad, PINNED['V8-P0'] ?? []);
   }, 240_000);
 
   // Pinned: the numeric parameters edited through a select (MatrixConcat.axis, SWITCH_CASE.numCases, Scope.numSignals,
   // Scope.bufferSize) cannot take 0, -2.5 or 0.125; every text editor stores the exact number.
-  it('XBV-911: editing a numeric parameter to 0, -2.5 and 0.125 stores exactly that number', () => {
+  it('XBV-135: editing a numeric parameter to 0, -2.5 and 0.125 stores exactly that number', () => {
     const bad: string[] = [];
     for (const t of PALETTE_TYPES) {
       const mine = numeric.filter(([tt]) => tt === t);
@@ -365,11 +365,11 @@ describe('properties panel over every palette block', () => {
       }
       run.unmount();
     }
-    report('XBV-911', bad);
+    report('XBV-135', bad);
     ratchet(bad, PINNED_911);
   }, 240_000);
 
-  it('XBV-912: an enumerated parameter is a select whose options include the current default', () => {
+  it('XBV-136: an enumerated parameter is a select whose options include the current default', () => {
     const bad: string[] = [];
     for (const t of PALETTE_TYPES) {
       const mine = enums.filter(([tt]) => tt === t);
@@ -381,11 +381,11 @@ describe('properties panel over every palette block', () => {
       }
       run.unmount();
     }
-    report('XBV-912', bad);
+    report('XBV-136', bad);
     ratchet(bad, PINNED_912);
   }, 240_000);
 
-  it('XBV-913: invalid text ("abc") in a numeric parameter shows an error', () => {
+  it('XBV-137: invalid text ("abc") in a numeric parameter shows an error', () => {
     const bad: string[] = [];
     for (const t of PALETTE_TYPES) {
       const mine = numeric.filter(([tt]) => tt === t);
@@ -400,13 +400,13 @@ describe('properties panel over every palette block', () => {
       }
       run.unmount();
     }
-    report('XBV-913', bad);
+    report('XBV-137', bad);
     ratchet(bad, PINNED_913);
   }, 240_000);
 
   // Pinned for every numeric parameter (576): on blur the panel stores the raw text "abc" as the parameter value
   // (the model is then refused at run time by the parameter diagnostics, but the number is lost).
-  it.fails('XBV-914: invalid text ("abc") in a numeric parameter does not overwrite the stored number', () => {
+  it.fails('XBV-138: invalid text ("abc") in a numeric parameter does not overwrite the stored number', () => {
     const bad: string[] = [];
     for (const t of PALETTE_TYPES) {
       const mine = numeric.filter(([tt]) => tt === t);
@@ -422,12 +422,12 @@ describe('properties panel over every palette block', () => {
       }
       run.unmount();
     }
-    report('XBV-914', bad);
+    report('XBV-138', bad);
     expect(bad).toEqual([]);
   }, 240_000);
 });
 
-it.fails('XBV-915: a parameter editor is programmatically tied to its label (getByLabelText finds it)', () => {
+it.fails('XBV-139: a parameter editor is programmatically tied to its label (getByLabelText finds it)', () => {
   // The panel renders <label> and the editor as siblings without htmlFor / aria-label, so assistive technology and
   // getByLabelText cannot reach the editor (Constant.value, GAIN.gain as the sample).
   render(<XbridgesPropertiesPanel block={make('GAIN')} onUpdate={vi.fn()} onClose={vi.fn()} />);
@@ -438,7 +438,11 @@ it.fails('XBV-915: a parameter editor is programmatically tied to its label (get
 // Workspace: palette, wiring, undo/redo, copy/paste
 // ---------------------------------------------------------------------------------------------------------------------
 const wsNode = (id: string, type: string, x = 0, y = 0) => ({ id, type: 'xblock', position: { x, y }, data: make(type, {}) && { ...BLOCK_LIBRARY[type](id, {}) } });
-const renderWorkspace = (nodes: any[] = [], edges: any[] = []) => render(<XbridgesWorkspace initialNodes={nodes} initialEdges={edges} />);
+// The workspace re-renders endlessly when its default array props are recreated on each render, so stable ones are passed.
+const NO_MAPPINGS: any[] = [];
+const NO_VARIABLES: any[] = [];
+const renderWorkspace = (nodes: any[] = [], edges: any[] = []) =>
+  render(<XbridgesWorkspace initialNodes={nodes} initialEdges={edges} initialMappings={NO_MAPPINGS} availableVariables={NO_VARIABLES} />);
 const rfNodes = () => (captured.props?.nodes ?? []) as any[];
 const rfEdges = () => (captured.props?.edges ?? []) as any[];
 const keyDown = (code: string, extra: Record<string, any> = {}) => act(async () => { fireEvent.keyDown(window, { code, key: code, ...extra }); });
@@ -449,7 +453,9 @@ const fakeDrop = (type: string) => ({
 const dropBlock = async (type: string) => { await act(async () => { captured.props.onDrop(fakeDrop(type)); }); };
 const selectNode = async (id: string) => {
   const n = rfNodes().find((x) => x.id === id);
-  await act(async () => { captured.props.onNodeClick({}, n); });
+  // A click selects the node in React Flow as well; without that React Flow reports an empty selection and the panel closes.
+  await act(async () => { captured.props.onNodesChange([{ type: 'select', id, selected: true }]); });
+  await act(async () => { captured.props.onNodeClick({}, rfNodes().find((x) => x.id === id) ?? n); });
 };
 const dataOf = (id: string) => rfNodes().find((x) => x.id === id)?.data;
 
@@ -457,8 +463,11 @@ describe('palette in the rendered workspace', () => {
   it('lists exactly the XBRIDGES_CATEGORIES entries, with their labels, once the categories are expanded', async () => {
     const { container } = renderWorkspace();
     await wait(50);
-    for (const cat of PALETTE) fireEvent.click(screen.getByText(cat.name, { selector: 'button *, button' }));
-    const shown = Array.from(container.querySelectorAll('[draggable="true"]')).map((e) => (e.textContent ?? '').trim()).sort();
+    for (const cat of PALETTE) {
+      const header = screen.getByText(cat.name, { selector: 'button *, button' }).closest('button') as HTMLElement;
+      if (header.parentElement!.children.length === 1) fireEvent.click(header); // collapsed: no block list next to the header
+    }
+    const shown = Array.from(container.querySelectorAll('[draggable="true"]')).map((e) => (e.lastElementChild?.textContent ?? '').trim()).sort();
     const want = PALETTE.flatMap((c) => c.blocks.map((b) => b.label)).sort();
     expect(shown.length).toBe(228 + (want.length - 228));
     expect(shown).toEqual(want);
@@ -506,7 +515,7 @@ describe('wiring rules in the workspace', () => {
     const p = captured.props;
     // The workspace declares no isValidConnection and no connectionMode; ReactFlow then runs in strict mode, which only
     // connects a source handle to a target handle. Input ports are target handles and output ports are source handles
-    // (see the XBV-901 ratchet), so the two illegal pairs cannot be drawn. onConnect itself has no guard.
+    // (see the V8-N1 ratchet), so the two illegal pairs cannot be drawn. onConnect itself has no guard.
     const mode = p.connectionMode ?? 'strict';
     if (typeof p.isValidConnection === 'function') {
       expect(p.isValidConnection({ source: 'g1', sourceHandle: IN, target: 'g2', targetHandle: IN })).toBe(false);
@@ -516,7 +525,7 @@ describe('wiring rules in the workspace', () => {
     }
   });
 
-  it.fails('XBV-920: a second driver on an already-connected input is refused or replaces the first (one driver per input)', async () => {
+  it.fails('XBV-140: a second driver on an already-connected input is refused or replaces the first (one driver per input)', async () => {
     await setup();
     await connect('c1', COUT, 'g1', IN);
     const first = rfEdges().length;
@@ -559,7 +568,7 @@ describe('undo, redo, copy and paste in the workspace', () => {
     expect(rfNodes()).toHaveLength(0);
   });
 
-  it.fails('XBV-921: undo after a parameter change restores the previous value and keeps the block', async () => {
+  it.fails('XBV-141: undo after a parameter change restores the previous value and keeps the block', async () => {
     renderWorkspace();
     await wait(50);
     await dropBlock('Constant');
@@ -572,7 +581,7 @@ describe('undo, redo, copy and paste in the workspace', () => {
     expect(JSON.stringify(dataOf(id).params.value)).toBe(before);
   });
 
-  it.fails('XBV-922: redo (Ctrl+Y or Ctrl+Shift+Z) reapplies an undone addition', async () => {
+  it.fails('XBV-142: redo (Ctrl+Y or Ctrl+Shift+Z) reapplies an undone addition', async () => {
     renderWorkspace();
     await wait(50);
     await dropBlock('Constant');
