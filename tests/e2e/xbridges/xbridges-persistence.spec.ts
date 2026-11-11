@@ -10,7 +10,7 @@ import * as path from 'path';
 import {
   useLocalChromium, trackErrors, openXbridges, buildIntegratorModel, setToolbar, saveProject, openProjectFile,
   modelFacts, selectNode, constantValueInput, edgeIds, node, runToEnd, scopeSamples, expectSamplesFollow,
-  runButton, stopButton, setConstantValue, SAVE_DEBOUNCE_SETTLE_MS,
+  runButton, stopButton, setConstantValue, SAVE_DEBOUNCE_SETTLE_MS, statusTime,
 } from './xbHelpers';
 
 useLocalChromium();
@@ -63,6 +63,7 @@ async function roundTrip(page: import('@playwright/test').Page, visitOtherTabBef
 
   // and the reopened model still computes the closed form
   await runToEnd(page);
+  expect(Math.abs((await statusTime(page)) - 1)).toBeLessThanOrEqual(5e-4); // the reopened model runs to its stop time
   expectSamplesFollow(await scopeSamples(page, m.scope), 2, 1e-9);
   expect(log.errors).toEqual([]);
 }
@@ -99,8 +100,9 @@ test.describe('X-Bridges persistence', () => {
     await page.waitForTimeout(800);
     await setConstantValue(page, m.constant, '5');
     await page.waitForTimeout(2_000);
+    await expect(stopButton(page)).toBeVisible(); // the run is still going when Save is pressed
     const stored = modelFacts(await saveProject(page)).nodes.find(n => n.id === m.constant)!;
-    await stopButton(page).click();
     expect(stored.params.value).toBe(5);
+    await stopButton(page).click();
   });
 });

@@ -156,6 +156,12 @@ export function handleXbridgesWorkerMessage(request: XbridgesWorkerRequest): Xbr
       currentTime += dt;
     }
 
+    if (request.finalOutputs && !workerEngine.hasFatalError()) {
+      // Outputs and logging at the final time (a Scope logs in its discrete update), no integration.
+      workerEngine.computeOutputs(currentTime);
+      workerEngine.updateDiscreteStates(currentTime);
+    }
+
     if (workerEngine.hasFatalError()) {
       // A block raised an exception (BLOCK_RUNTIME_FAULT): the run stops, the caller marks the simulation Failed.
       return {

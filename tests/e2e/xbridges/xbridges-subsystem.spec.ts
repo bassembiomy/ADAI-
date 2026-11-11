@@ -7,7 +7,7 @@
 import { test, expect } from '@playwright/test';
 import {
   useLocalChromium, trackErrors, openXbridges, dropBlock, moveNodeTo, zoomOut, connect, setConstantValue, setToolbar,
-  runToEnd, scopeSamples, expectSamplesFollow, problemsSummary, node, selectNode, edgeIds,
+  runToEnd, scopeSamples, expectSamplesFollow, problemsSummary, node, selectNode, edgeIds, statusTime,
 } from './xbHelpers';
 
 useLocalChromium();
@@ -56,6 +56,7 @@ test.describe('X-Bridges subsystem', () => {
     await setToolbar(page, { solver: 'rk4', start: 0, stop: 1, step: 0.01 });
     await runToEnd(page);
     expect(await problemsSummary(page)).toBe('No problems');
+    expect(Math.abs((await statusTime(page)) - 1)).toBeLessThanOrEqual(5e-4); // the run reaches the stop time
     expectSamplesFollow(await scopeSamples(page, scope), 2, 1e-9);
     expect(log.errors).toEqual([]);
   });

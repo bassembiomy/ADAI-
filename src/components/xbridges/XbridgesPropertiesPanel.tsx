@@ -21,6 +21,8 @@ interface Props {
   requirementAssignments?: React.ReactNode;
   availableBlocks?: { id: string; type: string; label?: string; params: Record<string, any> }[];
   onExportDoeData?: (headers: string[], data: number[][]) => void;
+  /** Reports invalid text left in a parameter editor (text) or its correction (null); the stored value is unchanged. */
+  onInvalidParameter?: (blockId: string, key: string, text: string | null) => void;
 }
 
 const normalizeNumerals = (val: string) => {
@@ -46,7 +48,8 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
   onCollapseToggle,
   requirementAssignments,
   availableBlocks,
-  onExportDoeData
+  onExportDoeData,
+  onInvalidParameter
 }) => {
   if (!block) return null;
 
@@ -858,10 +861,11 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
               const paramCheck = paramKind ? evaluateParameter(shownText, paramKind) : null;
               const paramError = paramCheck && !paramCheck.ok ? paramCheck.reason : null;
               const paramErrorId = `xb-param-error-${block.id}-${key}`;
+              const paramEditorId = `xb-param-${block.id}-${key}`;
 
               return (
                 <div key={key}>
-                  <label className="block text-xs font-medium text-slate-400 mb-1 capitalize">
+                  <label htmlFor={paramEditorId} className="block text-xs font-medium text-slate-400 mb-1 capitalize">
                     {key === 'output_type' ? 'Output data type' : key.replace(/([A-Z])/g, ' $1').trim()}
                   </label>
 
@@ -870,6 +874,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
                     return ptParam;
                   })() ? (
                     <select data-help-feature="ui:xbridges/XbridgesPropertiesPanel:efa3cb1669d5" data-help-source="src/components/xbridges/XbridgesPropertiesPanel.tsx"
+                      id={paramEditorId}
                       aria-label={getPowertrainSpec(block.type)!.params.find(p => p.name === key)!.label}
                       value={String(displayValue)}
                       onChange={(e) => onUpdate(block.id, { params: { ...block.params, [key]: e.target.value } })}
@@ -877,9 +882,10 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
                     >
                       {(getPowertrainSpec(block.type)!.params.find(p => p.name === key)!.options ?? []).map(o => <option key={o} value={o}>{o}</option>)}
                     </select>
-                  ) : ['representation', 'mode', 'method', 'criteria', 'operation', 'angle_unit', 'output_type', 'rounding', 'overflow', 'type', 'numCases', 'numSignals', 'bufferSize', 'andMethod', 'orMethod', 'defuzzMethod', 'operator', 'implication', 'limitDataPoints', 'showGrid', 'showLegend', 'timeRange', 'diagMode', 'axis', 'carrierType', 'simulationType'].includes(key) && 
+                  ) : ['representation', 'mode', 'method', 'criteria', 'operation', 'angle_unit', 'output_type', 'rounding', 'overflow', 'type', 'andMethod', 'orMethod', 'defuzzMethod', 'operator', 'implication', 'limitDataPoints', 'showGrid', 'showLegend', 'timeRange', 'diagMode', 'axis', 'carrierType', 'simulationType'].includes(key) && !(key === 'axis' && typeof displayValue === 'number') &&
                   (key !== 'type' || block.type === 'WaveformGen' || block.type === 'FUZZY_INFERENCE_SYSTEM') ? (
                     <select data-help-feature="ui:xbridges/XbridgesPropertiesPanel:efa3cb1669d5" data-help-source="src/components/xbridges/XbridgesPropertiesPanel.tsx"
+                      id={paramEditorId}
                       value={String(displayValue)}
                       onChange={(e) => {
                         let val: any = e.target.value;
@@ -1177,8 +1183,20 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
                         </>
                       )}
                     </select>
+                  ) : paramKind?.kind === 'option' ? (
+                    // Option parameter of the schema (for example LAPLACE_TRANSFORM.mappingType): one select over the schema options.
+                    <select data-help-feature="ui:xbridges/XbridgesPropertiesPanel:efa3cb1669d5" data-help-source="src/components/xbridges/XbridgesPropertiesPanel.tsx"
+                      id={paramEditorId}
+                      value={String(displayValue)}
+                      onChange={(e) => onUpdate(block.id, { params: { ...block.params, [key]: e.target.value } })}
+                      className="w-full text-sm px-2.5 py-1.5 border border-[#333] bg-[#0a0a0a] text-emerald-400 font-bold rounded focus:border-[#c9a86c] focus:ring-1 focus:ring-[#c9a86c]/50 outline-none transition-all cursor-pointer"
+                    >
+                      {!paramKind.options.includes(String(displayValue)) && <option value={String(displayValue)}>{String(displayValue)}</option>}
+                      {paramKind.options.map(o => <option key={o} value={o}>{o}</option>)}
+                    </select>
                   ) : key === 'text' ? (
                     <textarea data-help-feature="ui:xbridges/XbridgesPropertiesPanel:fb4ff8adc517" data-help-source="src/components/xbridges/XbridgesPropertiesPanel.tsx"
+                      id={paramEditorId}
                       value={localInputValues[key] !== undefined ? localInputValues[key] : String(displayValue)}
                       onChange={(e) => {
                         setLocalInputValues(prev => ({ ...prev, [key]: e.target.value }));
@@ -1189,6 +1207,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
                     />
                   ) : (
                     <input data-help-feature="ui:xbridges/XbridgesPropertiesPanel:0f948317825a" data-help-source="src/components/xbridges/XbridgesPropertiesPanel.tsx"
+                      id={paramEditorId}
                       type="text"
                       value={localInputValues[key] !== undefined ? localInputValues[key] : String(displayValue)}
                       onChange={(e) => {
@@ -1216,6 +1235,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
                             finalVal = { ...block.params[key], value: val };
                           }
                           onUpdate(block.id, { params: { ...block.params, [key]: finalVal } });
+                          onInvalidParameter?.(block.id, key, null);
                         }
                       }}
                       onBlur={(e) => {
@@ -1232,6 +1252,16 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
                              val = raw;
                            }
                         }
+                        // Invalid text in a numeric parameter must not overwrite the stored number: the error stays shown
+                        // and the stored value is kept until the text is valid (Simulink refuses a bad dialog value).
+                        const notNumeric = typeof val === 'string' && !(trimmedRaw.startsWith('[') || trimmedRaw.startsWith('{'));
+                        const rejected = notNumeric && (paramKind ? !evaluateParameter(raw, paramKind).ok : typeof displayValue === 'number');
+                        if (rejected) {
+                          setLocalInputValues(prev => ({ ...prev, [key]: raw }));
+                          onInvalidParameter?.(block.id, key, raw);
+                          return;
+                        }
+                        onInvalidParameter?.(block.id, key, null);
                         let finalVal = val;
                         if (isObjectParam) {
                           finalVal = { ...block.params[key], value: val };

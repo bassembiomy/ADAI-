@@ -217,8 +217,8 @@ const lastParam = (calls: any[], name: string) => {
 };
 
 // Ratchet lists measured on this commit (see the findings in the WP-19 report).
-const PINNED_911 = ["MatrixConcat.axis", "SWITCH_CASE.numCases", "Scope.bufferSize", "Scope.numSignals"];
-const PINNED_912 = ["LAPLACE_TRANSFORM.mappingType"];
+const PINNED_911: string[] = []; // XBV-135 fixed in WP-21 batch C
+const PINNED_912: string[] = []; // XBV-136 fixed in WP-21 batch C
 /** XBV-137 pinned as 'Type: param param ...' (type names contain no spaces, parameter names no spaces). */
 const PINNED_913_GROUPED = [
   "AC_INDUCTION_MOTOR: B Lm P Rs",
@@ -242,7 +242,6 @@ const PINNED_913_GROUPED = [
   "MPC_CONTROLLER: u_max u_min",
   "MTPA_CONTROLLER: Ld Lq",
   "MTPA_FW_MANAGER: i_max v_max",
-  "MatrixConcat: axis",
   "NEURAL_NEURON_LEARNING: initBias initW1 initW2 lr",
   "PT_AMBIENT: P_amb RH T_amb",
   "PT_AMT_CONTROLLER: Gear_o tHold",
@@ -309,8 +308,6 @@ const PINNED_913_GROUPED = [
   "SVPWM_CORE: Ts",
   "SVPWM_GATE_GENERATOR: Ts",
   "SVPWM_MODULATOR: Ts",
-  "SWITCH_CASE: numCases",
-  "Scope: bufferSize numSignals",
   "THREE_PHASE_INVERTER: Ron Vf",
   "THREE_PHASE_PWM: frequency",
   "VF_SLIP_COMP: rated_slip v_f_ratio",

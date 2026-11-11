@@ -112,6 +112,7 @@ import { XbridgesRootLocusWindow } from './XbridgesRootLocusWindow';
 import { PremiumEdge } from './PremiumEdge';
 import { PremiumConnectionLine } from './PremiumConnectionLine';
 import { WorkspaceContext } from './context';
+import { nodesDifferOnlyInRunState, registerXBridgesSaveFlusher } from './xbridgesWorkspaceInputs';
 
 class XBlockErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean; error: Error | null }> {
   constructor(props: { children: React.ReactNode }) {
@@ -1486,21 +1487,44 @@ export const XbridgesWorkspace: React.FC<{
     }
   }, [initialMappings, setNodes]);
 
-  // Debounced save: fire onSave 300ms after changes settle, but never re-import changes we caused
+  // Debounced save: fire onSave 300ms after changes settle, but never re-import changes we caused.
+  // Run state (data.state, refreshed while a simulation runs) is not an edit: it does not restart the timer, so a
+  // parameter or structure edit made during a run is stored 300 ms later like any other edit.
+  const savePendingRef = React.useRef(false);
+  const lastSavedViewRef = React.useRef<{ nodes: any[]; edges: any[]; key: unknown } | null>(null);
+  const flushPendingSave = useCallback(() => {
+    if (saveTimerRef.current) { clearTimeout(saveTimerRef.current); saveTimerRef.current = null; }
+    if (!savePendingRef.current) return;
+    savePendingRef.current = false;
+    if (!onSave) return;
+    isSavingRef.current = true;
+    persistWorkspaceRef.current(nodesRef.current, edgesRef.current);
+    // Allow inward sync again after two animation frames
+    requestAnimationFrame(() => requestAnimationFrame(() => { isSavingRef.current = false; }));
+  }, [onSave]);
+  const flushPendingSaveRef = React.useRef(flushPendingSave);
+  flushPendingSaveRef.current = flushPendingSave;
+  const discardPendingSave = useCallback(() => {
+    if (saveTimerRef.current) { clearTimeout(saveTimerRef.current); saveTimerRef.current = null; }
+    savePendingRef.current = false;
+  }, []);
+  useEffect(() => registerXBridgesSaveFlusher(() => flushPendingSaveRef.current(), discardPendingSave), [discardPendingSave]);
+
   useEffect(() => {
+    const last = lastSavedViewRef.current;
+    const runStateOnly = last !== null && last.edges === edges && last.key === simulationKey && nodesDifferOnlyInRunState(last.nodes, nodes);
+    lastSavedViewRef.current = { nodes, edges, key: simulationKey };
+    if (runStateOnly) return;
     // Don't start the timer while a copy-drag is in progress; we'll save manually on mouseup
     if (isDraggingCopyRef.current) return;
+    savePendingRef.current = true;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
-      if (onSave) {
-        isSavingRef.current = true;
-        persistWorkspace(nodes, edges);
-        // Allow inward sync again after two animation frames
-        requestAnimationFrame(() => requestAnimationFrame(() => { isSavingRef.current = false; }));
-      }
+      saveTimerRef.current = null;
+      flushPendingSaveRef.current();
     }, 300);
-    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
   }, [nodes, edges, onSave, persistWorkspace, simulationKey]);
+  useEffect(() => () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); }, []);
 
   // Inward sync: only apply when initialNodes/initialEdges change AND we didn't cause the change
   useEffect(() => {
@@ -1531,6 +1555,9 @@ export const XbridgesWorkspace: React.FC<{
   const [searchTerm, setSearchTerm] = useState('');
   const [copiedNode, setCopiedNode] = useState<Node | null>(null);
   const [history, setHistory] = useState<{ nodes: Node[], edges: Edge[] }[]>([]);
+  // Undone states, newest last; any new edit clears it (redo is only valid directly after undo).
+  const [redoHistory, setRedoHistory] = useState<{ nodes: Node[], edges: Edge[] }[]>([]);
+  const lastParamEditRef = React.useRef<{ blockId: string; at: number } | null>(null);
   const [activeSidebarTab, setActiveSidebarTab] = useState<'library' | 'labs'>('library');
   const [diagnostics, setDiagnostics] = useState<ModelDiagnostic[]>([]);
   // Run diagnostics: everything raised in the current run is merged (never dropped); the pop-up shows what has not been announced yet.
@@ -1724,6 +1751,11 @@ export const XbridgesWorkspace: React.FC<{
   }, [coSimEngine, isSmSimulating, setNodes]);
 
   const [reactFlowInstance, setReactFlowInstance] = useState<any>(null);
+  // React Flow's fit-on-init stays queued while the canvas is empty and would re-centre on the first block that is
+  // added, undoing its drop position; the first user-added block cancels it.
+  const [fitViewOnInit, setFitViewOnInitState] = useState(initialNodes.length > 0);
+  const fitViewOnInitRef = React.useRef(initialNodes.length > 0);
+  const setFitViewOnInit = (on: boolean) => { fitViewOnInitRef.current = on; setFitViewOnInitState(on); };
   const flowContainerRef = useRef<HTMLDivElement>(null);
   const reactFlowInstanceRef = useRef<any>(null);
   reactFlowInstanceRef.current = reactFlowInstance;
@@ -1871,7 +1903,7 @@ export const XbridgesWorkspace: React.FC<{
     let t6: NodeJS.Timeout;
     if (reactFlowInstance) {
       t6 = setTimeout(() => {
-        reactFlowInstance.fitView();
+        if (fitViewOnInitRef.current) reactFlowInstance.fitView();
       }, 200);
     }
 
@@ -1975,6 +2007,21 @@ export const XbridgesWorkspace: React.FC<{
         setIsSimulating(false);
         return;
       }
+      const invalidEdits = Object.entries(invalidParamEditsRef.current);
+      if (invalidEdits.length > 0) {
+        addDiagnostics(invalidEdits.map(([id, text]) => {
+          const [blockId, key] = id.split('\u0000');
+          return {
+            severity: 'error' as const,
+            code: 'PARAMETER_INVALID',
+            message: `Parameter '${key}' has invalid text "${text}"; correct it before running (the previous value is kept).`,
+            blockIds: [blockId],
+          };
+        }));
+        setRunFailed(true);
+        setIsSimulating(false);
+        return;
+      }
       const liveStep = resolvedConfig.fixedStep;
       liveStepRef.current = liveStep;
       timeRef.current = resolvedConfig.startTime;
@@ -2048,6 +2095,7 @@ export const XbridgesWorkspace: React.FC<{
           const remaining = stopAt === null ? Infinity : stopAt - timeRef.current;
           if (remaining <= 1e-12) {
             timeRef.current = stopAt ?? timeRef.current;
+            setStatusTime(timeRef.current);
             setIsSimulating(false);
             return;
           }
@@ -2061,6 +2109,8 @@ export const XbridgesWorkspace: React.FC<{
                 solverType,
                 paramUpdates,
                 inportOverrides,
+                // The last step logs the sample at the stop time (outputs once at t_stop), as Simulink does.
+                finalOutputs: stopAt !== null && remaining - stepNow <= 1e-12,
               }).then(res => {
                 if (!res.ok) {
                   addDiagnostics(res.diagnostics);
@@ -2076,6 +2126,7 @@ export const XbridgesWorkspace: React.FC<{
 
                 if (simLimitRef.current !== null && timeRef.current >= simLimitRef.current - 1e-12) {
                   timeRef.current = simLimitRef.current;
+                  setStatusTime(timeRef.current);
                   setIsSimulating(false);
                   setNodes(nds => nds.map(n => {
                     const state = lastWorkerStatesRef.current[n.id];
@@ -2140,6 +2191,11 @@ export const XbridgesWorkspace: React.FC<{
 
             if (simLimitRef.current !== null && timeRef.current >= simLimitRef.current - 1e-12) {
               timeRef.current = simLimitRef.current;
+              // Sample at the stop time: outputs once at t_stop, then the final time is shown with the run's end.
+              engineRef.current.computeOutputs(timeRef.current);
+              engineRef.current.updateDiscreteStates(timeRef.current);
+              addDiagnostics(engineRef.current.diagnostics);
+              setStatusTime(timeRef.current);
               setIsSimulating(false);
               setNodes(nds => nds.map(n => {
                 const engineBlock = engineRef.current!['blockMap'].get(n.id);
@@ -2211,12 +2267,15 @@ export const XbridgesWorkspace: React.FC<{
 
   const saveHistory = useCallback(() => {
     setHistory(prev => [...prev.slice(-19), { nodes, edges }]);
+    setRedoHistory([]);
   }, [nodes, edges]);
 
   // Auto-save on unmount to prevent data loss (FR-Persistence)
   React.useEffect(() => {
     return () => {
-      persistWorkspaceRef.current(nodesRef.current, edgesRef.current);
+      // Only canvas edits that are not stored yet are written: an unchanged canvas must not overwrite a project that
+      // was opened (and has replaced the stored model) while this workspace was still mounted.
+      if (savePendingRef.current) persistWorkspaceRef.current(nodesRef.current, edgesRef.current);
     };
   }, []); // Run ONLY on unmount
 
@@ -2303,7 +2362,20 @@ export const XbridgesWorkspace: React.FC<{
     }
   }, [nodes, edges]);
 
+  // One driver per input (Simulink): a connection is valid only from an output port to an input port that has no driver yet.
+  const isValidConnection = useCallback((c: Connection | Edge) => {
+    if (!c.source || !c.target || !c.sourceHandle || !c.targetHandle) return false;
+    const src = nodesRef.current.find(n => n.id === c.source);
+    const dst = nodesRef.current.find(n => n.id === c.target);
+    const outs = src?.data?.outputs as { id: string }[] | undefined;
+    const ins = dst?.data?.inputs as { id: string }[] | undefined;
+    if (Array.isArray(outs) && !outs.some(p => p.id === c.sourceHandle)) return false;
+    if (Array.isArray(ins) && !ins.some(p => p.id === c.targetHandle)) return false;
+    return !edgesRef.current.some(e => e.target === c.target && e.targetHandle === c.targetHandle);
+  }, []);
+
   const onConnect = useCallback((params: Connection) => {
+    if (!isValidConnection(params)) return;
     saveHistory();
     setEdges((eds) => addEdge({
       ...params,
@@ -2369,7 +2441,7 @@ export const XbridgesWorkspace: React.FC<{
       });
       engineRef.current['compiled'] = false; // Force recompile on next step
     }
-  }, [setEdges, setNodes, isSimulating, saveHistory, edgeType]);
+  }, [setEdges, setNodes, isSimulating, saveHistory, edgeType, isValidConnection]);
 
   const onDragStart = (event: React.DragEvent, nodeType: string) => {
     event.dataTransfer.setData('application/reactflow', nodeType);
@@ -2383,16 +2455,33 @@ export const XbridgesWorkspace: React.FC<{
     if (!type || !BLOCK_LIBRARY[type]) return;
 
     saveHistory();
+    setFitViewOnInit(false);
 
     let position = { x: reactFlowBounds.width / 2 - 70, y: reactFlowBounds.height / 2 - 40 };
     if (reactFlowInstance) {
-      position = reactFlowInstance.screenToFlowPosition({
-        x: reactFlowBounds.left + reactFlowBounds.width / 2,
-        y: reactFlowBounds.top + reactFlowBounds.height / 2
-      });
+      // The block lands where it is dropped (pointer position); without a pointer position the pane centre is used.
+      const hasPointer = Number.isFinite(event.clientX) && Number.isFinite(event.clientY);
+      position = reactFlowInstance.screenToFlowPosition(hasPointer
+        ? { x: event.clientX, y: event.clientY }
+        : {
+          x: reactFlowBounds.left + reactFlowBounds.width / 2,
+          y: reactFlowBounds.top + reactFlowBounds.height / 2
+        });
       // offset slightly for block dimensions
+      const dropCentre = { x: position.x, y: position.y };
       position.x -= 70;
       position.y -= 40;
+      // First block on an empty canvas: the view keeps the zoom that fit-to-view gave a single block (as before),
+      // anchored so that the block stays under the pointer instead of jumping to the centre.
+      const pane = flowContainerRef.current?.getBoundingClientRect();
+      if (hasPointer && nodes.length === 0 && pane && pane.width > 0 && pane.height > 0) {
+        const zoom = Math.min(2.0, pane.width / (140 * 1.2), pane.height / (80 * 1.2));
+        reactFlowInstance.setViewport({
+          x: event.clientX - pane.left - dropCentre.x * zoom,
+          y: event.clientY - pane.top - dropCentre.y * zoom,
+          zoom,
+        });
+      }
     }
 
     // Instantiate block definition to get inputs/outputs/params
@@ -2770,14 +2859,30 @@ export const XbridgesWorkspace: React.FC<{
       }
 
       // Undo (Ctrl+Z or Cmd+Z)
-      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyZ') {
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyZ' && !e.shiftKey) {
         e.preventDefault();
         if (history.length > 0) {
           const previousState = history[history.length - 1];
+          setRedoHistory(prev => [...prev.slice(-19), { nodes, edges }]);
           setNodes(previousState.nodes);
           setEdges(previousState.edges);
           setHistory(prev => prev.slice(0, -1));
           setSelectedNodeId(null);
+          lastParamEditRef.current = null;
+        }
+      }
+
+      // Redo (Ctrl+Y or Ctrl+Shift+Z)
+      if ((e.ctrlKey || e.metaKey) && (e.code === 'KeyY' || (e.code === 'KeyZ' && e.shiftKey))) {
+        e.preventDefault();
+        if (redoHistory.length > 0) {
+          const nextState = redoHistory[redoHistory.length - 1];
+          setHistory(prev => [...prev.slice(-19), { nodes, edges }]);
+          setNodes(nextState.nodes);
+          setEdges(nextState.edges);
+          setRedoHistory(prev => prev.slice(0, -1));
+          setSelectedNodeId(null);
+          lastParamEditRef.current = null;
         }
       }
 
@@ -2857,9 +2962,23 @@ export const XbridgesWorkspace: React.FC<{
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [nodes, edges, history, selectedNodeId, sharedClipboard, onClipboardChange, localClipboard, fileId, setNodes, setEdges, setIsSimulating, saveHistory, isLibCollapsed, isPropsCollapsed, onSave, onSaveAll, persistWorkspace, currentParentId]);
+  }, [nodes, edges, history, redoHistory, selectedNodeId, sharedClipboard, onClipboardChange, localClipboard, fileId, setNodes, setEdges, setIsSimulating, saveHistory, isLibCollapsed, isPropsCollapsed, onSave, onSaveAll, persistWorkspace, currentParentId]);
+
+  // Invalid text left in a parameter editor: the stored value is kept, but a run is refused until the text is fixed.
+  const invalidParamEditsRef = React.useRef<Record<string, string>>({});
+  const onInvalidParameter = useCallback((blockId: string, key: string, text: string | null) => {
+    const id = `${blockId}\u0000${key}`;
+    if (text === null) delete invalidParamEditsRef.current[id];
+    else invalidParamEditsRef.current[id] = text;
+  }, []);
+  useEffect(() => { invalidParamEditsRef.current = {}; }, [selectedNodeId]);
 
   const updateBlock = (blockId: string, data: any) => {
+    // A parameter edit is one undo step; keystrokes into the same block within one second share it.
+    const nowMs = Date.now();
+    const lastEdit = lastParamEditRef.current;
+    if (!lastEdit || lastEdit.blockId !== blockId || nowMs - lastEdit.at > 1000) saveHistory();
+    lastParamEditRef.current = { blockId, at: nowMs };
     setNodes(nds => nds.map(n => {
       if (n.id === blockId) {
         const updatedData = { ...n.data, ...data };
@@ -2926,13 +3045,59 @@ export const XbridgesWorkspace: React.FC<{
     }
   };
 
+  // Single Step while paused: exactly one fixed step, on the engine that runs the live simulation (main thread or worker).
+  const singleStepChainRef = React.useRef<Promise<void>>(Promise.resolve());
   const stepSimulation = () => {
+    const stopAt = simLimitRef.current;
+    const worker = xbridgesWorkerRef.current;
+    if (isSimulating && worker?.available) {
+      // Worker engine: steps are chained so rapid clicks each advance one step from the then-current time.
+      singleStepChainRef.current = singleStepChainRef.current.then(async () => {
+        const client = xbridgesWorkerRef.current;
+        if (!client?.available) return;
+        while (client.inFlight) await new Promise(r => setTimeout(r, 2));
+        const remaining = stopAt === null ? Infinity : stopAt - timeRef.current;
+        if (remaining <= 1e-12) return;
+        const stepNow = Math.min(liveStepRef.current ?? fixedStep, remaining);
+        const reachesStop = stopAt !== null && remaining - stepNow <= 1e-12;
+        try {
+          const res = await client.step({
+            time: timeRef.current,
+            dt: stepNow,
+            solverType,
+            paramUpdates: {},
+            inportOverrides: {},
+            finalOutputs: reachesStop,
+          });
+          timeRef.current = reachesStop ? (stopAt as number) : res.simulationTime;
+          if (res.engineSnapshot?.blockStates) lastWorkerStatesRef.current = res.engineSnapshot.blockStates;
+          addDiagnostics(res.diagnostics);
+          setStatusTime(timeRef.current);
+          setNodes(nds => nds.map(n => {
+            const state = lastWorkerStatesRef.current[n.id];
+            return state !== undefined && n.type === 'xblock' ? { ...n, data: { ...n.data, state } } : n;
+          }));
+        } catch (err) {
+          console.error('Xbridges worker single step error:', err);
+          setRunFailed(true);
+        }
+      });
+      return;
+    }
     if (!engineRef.current) return;
 
-    const stepNow = liveStepRef.current ?? fixedStep;
+    const remaining = stopAt === null ? Infinity : stopAt - timeRef.current;
+    if (remaining <= 1e-12) return;
+    const stepNow = Math.min(liveStepRef.current ?? fixedStep, remaining);
     stepLiveSolver(engineRef.current, solverType, timeRef.current, stepNow);
 
     timeRef.current += stepNow;
+    if (stopAt !== null && timeRef.current >= stopAt - 1e-12) {
+      timeRef.current = stopAt;
+      engineRef.current.computeOutputs(stopAt);
+      engineRef.current.updateDiscreteStates(stopAt);
+    }
+    setStatusTime(timeRef.current);
 
     setNodes(nds => nds.map(n => {
       const engineBlock = engineRef.current!['blockMap'].get(n.id);
@@ -3054,6 +3219,7 @@ export const XbridgesWorkspace: React.FC<{
       }
     };
 
+    setFitViewOnInit(false);
     setNodes(nds => [...nds, newNode]);
     setSearchMenuPos(null);
     setSearchTerm('');
@@ -3637,6 +3803,7 @@ export const XbridgesWorkspace: React.FC<{
               onEdgesChange={onEdgesChange}
               onNodeDragStop={onNodeDragStop}
               onConnect={onConnect}
+              isValidConnection={isValidConnection}
               onDrop={onDrop}
               onDragOver={(e) => e.preventDefault()}
               onNodeClick={onNodeClick}
@@ -3668,7 +3835,7 @@ export const XbridgesWorkspace: React.FC<{
               maxZoom={2.0}
               snapToGrid={snapEnabled}
               snapGrid={[15, 15]}
-              fitView
+              fitView={fitViewOnInit}
               connectionLineStyle={{ stroke: '#4caf50', strokeWidth: 3 }}
               connectionLineType={
                 edgeType === 'straight' ? ConnectionLineType.Straight :
@@ -3870,6 +4037,7 @@ export const XbridgesWorkspace: React.FC<{
               onLaunchDoe={onLaunchDoe}
               availableBlocks={panelBlocks}
               onExportDoeData={onExportDoeData}
+              onInvalidParameter={onInvalidParameter}
               onClose={() => setSelectedNodeId(null)}
               isCollapsed={isPropsCollapsed}
               onCollapseToggle={setIsPropsCollapsed}

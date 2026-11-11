@@ -2,10 +2,11 @@ import React, { useState, useRef, useEffect, useCallback, useMemo, MouseEvent, K
 import { recordRenderCommit, resetProjectLoadTelemetry } from './features/sysml/performance/renderTelemetry';
 import { projectExternalEndpoints, projectExternalEndpointSignature, projectSimSources, buildSimEndpoints } from './engine/trmSim/simEndpoints';
 import { repositoryChangeCommands, runAllSimulationCases, simEvidenceStatusFor } from './engine/trmSim/simVerification';
+import { flushSync } from 'react-dom';
 import { ResizablePanel } from './components/common/ResizablePanel';
 import { notifyShellPanelResize, HIDE_PANEL_HANDLE } from './components/AppShellPanels';
 import { SimVerificationPanel } from './components/trmSim/SimVerificationPanel';
-import { useXBridgesWorkspaceInputs } from './components/xbridges/xbridgesWorkspaceInputs';
+import { discardXBridgesPendingSave, flushXBridgesPendingSave, useXBridgesWorkspaceInputs } from './components/xbridges/xbridgesWorkspaceInputs';
 import { buildSimExternalElements } from './engine/trmSim/simExternalElements';
 import { buildTraceabilityIndex } from './engine/sysml/traceabilityIndex';
 import { parseProjectJsonBuffer } from './utils/projectJsonBuffer';
@@ -6925,6 +6926,8 @@ const ADIA = () => {
 
 
   const hydrateProjectImmediate = useCallback((importedData: any, preloadedResult?: any) => {
+    // The opened project replaces the model: unsaved edits of a mounted X-Bridges canvas must not be written over it.
+    discardXBridgesPendingSave();
     const hydrationSequence = ++pendingHydrationSequenceRef.current;
     try {
       // Canonical repositories are preferred; legacy imports are migrated by
@@ -7354,8 +7357,11 @@ const ADIA = () => {
       return;
     }
     try {
+      // The X-Bridges canvas reaches the project state through a 300 ms debounce: store it now and wait for the
+      // commit, so the file holds the canvas as it is at this moment (the payload builder is re-read after the flush).
+      try { flushSync(() => flushXBridgesPendingSave()); } catch { /* not inside a React-safe context: the debounce stays */ }
       // Both desktop and browser saves prepare format 5 in the Worker.
-      const rawPayload = buildUnifiedProjectPayload({ deferSysmlPreparation: true });
+      const rawPayload = (buildUnifiedProjectPayloadRef.current ?? buildUnifiedProjectPayload)({ deferSysmlPreparation: true });
       let savedSnapshot: string | null = null;
       const buffer = await serializeProjectInWorker(rawPayload, { onSnapshot: value => { savedSnapshot = value; } });
       const electron = (window as any).electronAPI;

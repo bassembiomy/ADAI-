@@ -585,7 +585,7 @@
    "exec": "S / H, verifier opus",
    "deps": [],
    "status": "in_progress",
-   "note": "User go-ahead 2026-11-11 (fix all findings). Plan: docs/xbridges-verification/wp21-fix-plan.md. Round 1 dispatched: A zero parameters, B embedded quick fixes, C workspace UI. Batch B merged (a3daf970): 9 findings closed; new XBV-150 (embedded PID semantics), XBV-151 (embedded DELAY 0), XBV-152 (vacuous PID parity case). LIBM_CONDITIONED bound (8 eps max(1,|y|), 17 keys) added to xbCodeParity, verifier re-measured worst ratio 3.85. Batch A merged (c8facc19): XBV-015, 019, 040, 064 closed; DELAY delay_length is not tunable during a run (live change to/from 0 refused with PARAMETER_OUT_OF_RANGE, Simulink); XBV-137 ratchet shrunk 463 -> 418; new XBV-153. Batch D dispatched (acceptance 624b6a44). Batch F acceptance: pins removed for XBV-084, 086, 087, 091, 093, 094, 101, 102, 103 and the XBV-084 seeds; new tests for XBV-150 (PID with distinct r and y), 151 (DELAY 0), 107 (passes: closed). XBV-088, 090, 092 stay pinned (canvas-side causes, later batches)."
+   "note": "User go-ahead 2026-11-11 (fix all findings). Plan: docs/xbridges-verification/wp21-fix-plan.md. Round 1 dispatched: A zero parameters, B embedded quick fixes, C workspace UI. Batch B merged (a3daf970): 9 findings closed; new XBV-150 (embedded PID semantics), XBV-151 (embedded DELAY 0), XBV-152 (vacuous PID parity case). LIBM_CONDITIONED bound (8 eps max(1,|y|), 17 keys) added to xbCodeParity, verifier re-measured worst ratio 3.85. Batch A merged (c8facc19): XBV-015, 019, 040, 064 closed; DELAY delay_length is not tunable during a run (live change to/from 0 refused with PARAMETER_OUT_OF_RANGE, Simulink); XBV-137 ratchet shrunk 463 -> 418; new XBV-153. Batch D dispatched (acceptance 624b6a44). Batch F acceptance: pins removed for XBV-084, 086, 087, 091, 093, 094, 101, 102, 103 and the XBV-084 seeds; new tests for XBV-150 (PID with distinct r and y), 151 (DELAY 0), 107 (passes: closed). XBV-088, 090, 092 stay pinned (canvas-side causes, later batches). Batch C committed (13 findings closed, verifier PASS, e2e 36/36); new XBV-157, 158. WP-20 re-check by the verifier: spec gap (no end-time check in solvers/persistence/subsystem/param-edit) fixed by the controller; XBV-149 pin ordering fixed."
   },
   {
    "id": "WP-22",
@@ -1727,16 +1727,18 @@
    "plan_ref": "6 UI",
    "severity": "S3",
    "gate": "V8",
-   "status": "open",
-   "summary": "Properties panel renders MatrixConcat.axis, SWITCH_CASE.numCases, Scope.numSignals and Scope.bufferSize as selects, so values such as 0, -2.5 or 0.125 cannot be entered (ratchet in xbV8Ui.test.tsx). Found by the WP-19 executor; pinned in src/components/xbridges/xbV8Ui.test.tsx."
+   "status": "closed",
+   "summary": "Properties panel renders MatrixConcat.axis, SWITCH_CASE.numCases, Scope.numSignals and Scope.bufferSize as selects, so values such as 0, -2.5 or 0.125 cannot be entered (ratchet in xbV8Ui.test.tsx). Found by the WP-19 executor; pinned in src/components/xbridges/xbV8Ui.test.tsx.",
+   "fix": "WP-21 batch C, verifier PASS (full e2e 36/36)"
   },
   {
    "id": "XBV-136",
    "plan_ref": "6 UI",
    "severity": "S3",
    "gate": "V8",
-   "status": "open",
-   "summary": "Properties panel renders LAPLACE_TRANSFORM.mappingType (schema kind option) as free text instead of a select. Found by the WP-19 executor; pinned in src/components/xbridges/xbV8Ui.test.tsx."
+   "status": "closed",
+   "summary": "Properties panel renders LAPLACE_TRANSFORM.mappingType (schema kind option) as free text instead of a select. Found by the WP-19 executor; pinned in src/components/xbridges/xbV8Ui.test.tsx.",
+   "fix": "WP-21 batch C, verifier PASS (full e2e 36/36)"
   },
   {
    "id": "XBV-137",
@@ -1751,72 +1753,81 @@
    "plan_ref": "6 UI",
    "severity": "S3",
    "gate": "V8",
-   "status": "open",
-   "summary": "Typing 'abc' into any numeric parameter and leaving the field stores the raw string 'abc' as the parameter value (576 numeric parameters); plan 6: invalid text must not overwrite the stored value. Found by the WP-19 executor; pinned in src/components/xbridges/xbV8Ui.test.tsx."
+   "status": "closed",
+   "summary": "Typing 'abc' into any numeric parameter and leaving the field stores the raw string 'abc' as the parameter value (576 numeric parameters); plan 6: invalid text must not overwrite the stored value. Found by the WP-19 executor; pinned in src/components/xbridges/xbV8Ui.test.tsx.",
+   "fix": "WP-21 batch C, verifier PASS (full e2e 36/36)"
   },
   {
    "id": "XBV-139",
    "plan_ref": "6 UI",
    "severity": "S4",
    "gate": "V8",
-   "status": "open",
-   "summary": "Properties panel labels are not tied to their editors (no htmlFor, no aria-label), so screen readers cannot name the fields. Found by the WP-19 executor; pinned in src/components/xbridges/xbV8Ui.test.tsx."
+   "status": "closed",
+   "summary": "Properties panel labels are not tied to their editors (no htmlFor, no aria-label), so screen readers cannot name the fields. Found by the WP-19 executor; pinned in src/components/xbridges/xbV8Ui.test.tsx.",
+   "fix": "WP-21 batch C, verifier PASS (full e2e 36/36)"
   },
   {
    "id": "XBV-140",
    "plan_ref": "6 UI",
    "severity": "S2",
    "gate": "V8",
-   "status": "open",
-   "summary": "Canvas wiring accepts a second driver on an already-connected input: onConnect adds the edge and the workspace has no isValidConnection (XbridgesWorkspace.tsx ~2306); the canvas side of XBV-031. Found by the WP-19 executor; pinned in src/components/xbridges/xbV8Ui.test.tsx."
+   "status": "closed",
+   "summary": "Canvas wiring accepts a second driver on an already-connected input: onConnect adds the edge and the workspace has no isValidConnection (XbridgesWorkspace.tsx ~2306); the canvas side of XBV-031. Found by the WP-19 executor; pinned in src/components/xbridges/xbV8Ui.test.tsx.",
+   "fix": "WP-21 batch C, verifier PASS (full e2e 36/36)"
   },
   {
    "id": "XBV-141",
    "plan_ref": "6 UI",
    "severity": "S3",
    "gate": "V8",
-   "status": "open",
-   "summary": "Undo after a parameter edit removes the block: updateBlock does not record history, so Ctrl+Z reverts to the state before the block was added (XbridgesWorkspace.tsx ~2862). Found by the WP-19 executor; pinned in src/components/xbridges/xbV8Ui.test.tsx."
+   "status": "closed",
+   "summary": "Undo after a parameter edit removes the block: updateBlock does not record history, so Ctrl+Z reverts to the state before the block was added (XbridgesWorkspace.tsx ~2862). Found by the WP-19 executor; pinned in src/components/xbridges/xbV8Ui.test.tsx.",
+   "fix": "WP-21 batch C, verifier PASS (full e2e 36/36)"
   },
   {
    "id": "XBV-142",
    "plan_ref": "6 UI",
    "severity": "S3",
    "gate": "V8",
-   "status": "open",
-   "summary": "There is no redo (Ctrl+Y / Ctrl+Shift+Z) in the X-Bridges workspace. Found by the WP-19 executor; pinned in src/components/xbridges/xbV8Ui.test.tsx."
+   "status": "closed",
+   "summary": "There is no redo (Ctrl+Y / Ctrl+Shift+Z) in the X-Bridges workspace. Found by the WP-19 executor; pinned in src/components/xbridges/xbV8Ui.test.tsx.",
+   "fix": "WP-21 batch C, verifier PASS (full e2e 36/36)"
   },
   {
    "id": "XBV-143",
    "plan_ref": "6 UI end-to-end",
    "severity": "S3",
    "gate": "V8",
-   "status": "open",
-   "summary": "A canvas run does not log a sample at the stop time: for 0..1 s at h = 0.01 the last Scope sample is t = 0.99 (y = 1.98); Simulink logs t = 1 (y = 2). Every logged sample is correct (y = 2t within 1e-9). Found by the WP-20 executor (Playwright, real Chromium); pinned in tests/e2e/xbridges/."
+   "status": "closed",
+   "summary": "A canvas run does not log a sample at the stop time: for 0..1 s at h = 0.01 the last Scope sample is t = 0.99 (y = 1.98); Simulink logs t = 1 (y = 2). Every logged sample is correct (y = 2t within 1e-9). Found by the WP-20 executor (Playwright, real Chromium); pinned in tests/e2e/xbridges/.",
+   "fix": "WP-21 batch C, verifier PASS (full e2e 36/36)"
   },
   {
    "id": "XBV-144",
    "plan_ref": "6 UI end-to-end",
    "severity": "S2",
    "gate": "V8",
-   "status": "open",
-   "summary": "Toolbar Single Step does nothing during a live run: the live run uses the worker engine, engineRef is null and stepSimulation returns immediately (XbridgesWorkspace.tsx ~2929); time stays unchanged after 3 clicks. Found by the WP-20 executor (Playwright, real Chromium); pinned in tests/e2e/xbridges/."
+   "status": "closed",
+   "summary": "Toolbar Single Step does nothing during a live run: the live run uses the worker engine, engineRef is null and stepSimulation returns immediately (XbridgesWorkspace.tsx ~2929); time stays unchanged after 3 clicks. Found by the WP-20 executor (Playwright, real Chromium); pinned in tests/e2e/xbridges/.",
+   "fix": "WP-21 batch C, verifier PASS (full e2e 36/36)"
   },
   {
    "id": "XBV-145",
    "plan_ref": "6 UI end-to-end",
    "severity": "S3",
    "gate": "V8",
-   "status": "open",
-   "summary": "A block dragged from the library is placed at the centre of the pane, not where it is dropped (pointer position ignored, XbridgesWorkspace.tsx ~2379-2395). Found by the WP-20 executor (Playwright, real Chromium); pinned in tests/e2e/xbridges/."
+   "status": "closed",
+   "summary": "A block dragged from the library is placed at the centre of the pane, not where it is dropped (pointer position ignored, XbridgesWorkspace.tsx ~2379-2395). Found by the WP-20 executor (Playwright, real Chromium); pinned in tests/e2e/xbridges/.",
+   "fix": "WP-21 batch C, verifier PASS (full e2e 36/36)"
   },
   {
    "id": "XBV-146",
    "plan_ref": "6 UI end-to-end",
    "severity": "S1",
    "gate": "V8",
-   "status": "open",
-   "summary": "Opening a saved .adia project while the X-Bridges tab is active leaves the canvas empty (also after switching tabs); opening from another tab works (src/App.tsx hydrateProject / workspaceFiles ~5765-5780). The user sees an empty model and may save over it. Found by the WP-20 executor (Playwright, real Chromium); pinned in tests/e2e/xbridges/."
+   "status": "closed",
+   "summary": "Opening a saved .adia project while the X-Bridges tab is active leaves the canvas empty (also after switching tabs); opening from another tab works (src/App.tsx hydrateProject / workspaceFiles ~5765-5780). The user sees an empty model and may save over it. Found by the WP-20 executor (Playwright, real Chromium); pinned in tests/e2e/xbridges/.",
+   "fix": "WP-21 batch C, verifier PASS (full e2e 36/36)"
   },
   {
    "id": "XBV-147",
@@ -1831,16 +1842,18 @@
    "plan_ref": "6 UI",
    "severity": "S3",
    "gate": "V8",
-   "status": "open",
-   "summary": "When a run ends at the stop time the Run button reappears before the status bar shows the final time: the status time is refreshed on every 4th tick and, at the end, only from the run effect's cleanup, so for about 40-130 ms it shows a time up to four steps short (observed 4.600/4.900/4.960 s, then 5.000 s, labs #2, #9, #10, local Chromium probe). The run itself ends at the stop time. Found by the controller from CI runs 1 and 2 (WP-22); e2e specs wait for the status to settle (waitForStatusSettled); not pinned because the window is timing-dependent."
+   "status": "closed",
+   "summary": "When a run ends at the stop time the Run button reappears before the status bar shows the final time: the status time is refreshed on every 4th tick and, at the end, only from the run effect's cleanup, so for about 40-130 ms it shows a time up to four steps short (observed 4.600/4.900/4.960 s, then 5.000 s, labs #2, #9, #10, local Chromium probe). The run itself ends at the stop time. Found by the controller from CI runs 1 and 2 (WP-22); e2e specs wait for the status to settle (waitForStatusSettled); not pinned because the window is timing-dependent.",
+   "fix": "WP-21 batch C, verifier PASS (full e2e 36/36)"
   },
   {
    "id": "XBV-149",
    "plan_ref": "6 UI persistence",
    "severity": "S2",
    "gate": "V8",
-   "status": "open",
-   "summary": "Save writes a stale model: the X-Bridges canvas reaches the project store through a 300 ms debounce (XbridgesWorkspace.tsx, debounced onSave) that every canvas change restarts, and Save does not flush it. A Save within 300 ms of an edit leaves the edit out (saved 2 after setting 3), and nothing is stored while a run is going (the run changes the canvas every 4th tick): a Save 2 s after an edit made during a run held the pre-run value. Found by the controller while diagnosing the XBV-138 pin passing on CI run 1; pinned in tests/e2e/xbridges/xbridges-persistence.spec.ts."
+   "status": "closed",
+   "summary": "Save writes a stale model: the X-Bridges canvas reaches the project store through a 300 ms debounce (XbridgesWorkspace.tsx, debounced onSave) that every canvas change restarts, and Save does not flush it. A Save within 300 ms of an edit leaves the edit out (saved 2 after setting 3), and nothing is stored while a run is going (the run changes the canvas every 4th tick): a Save 2 s after an edit made during a run held the pre-run value. Found by the controller while diagnosing the XBV-138 pin passing on CI run 1; pinned in tests/e2e/xbridges/xbridges-persistence.spec.ts.",
+   "fix": "WP-21 batch C, verifier PASS (full e2e 36/36)"
   },
   {
    "id": "XBV-150",
@@ -1873,6 +1886,22 @@
    "gate": "V3",
    "status": "open",
    "summary": "Six divisor parameters give a non-finite output without a diagnostic when set to 0 (present before WP-21): IM_FOC_CONTROL.Lm, AIR_FRYER_LEARNING_MODEL tau_h, tau_f, tau_c, tau_s, FABRIC_HARMONIC_ANALYZER.drum_mass. They need parameterSchema entries rejecting 0 (batch J). Found by the WP-21 batch A verifier's zero-parameter scan."
+  },
+  {
+   "id": "XBV-157",
+   "plan_ref": "6 UI",
+   "severity": "S3",
+   "gate": "V8",
+   "status": "open",
+   "summary": "The record of invalid parameter text is cleared when the selection changes: leaving 'abc' in a field and selecting another block lets Run start again with the last valid value and no message. Found by the WP-21 batch C verifier."
+  },
+  {
+   "id": "XBV-158",
+   "plan_ref": "5.1",
+   "severity": "S4",
+   "gate": "V8",
+   "status": "open",
+   "summary": "The worker logs the final sample at the summed time (stop time within a few ULP), the main-thread path at exactly the stop time. Found by the WP-21 batch C verifier."
   }
  ],
  "blocks": {

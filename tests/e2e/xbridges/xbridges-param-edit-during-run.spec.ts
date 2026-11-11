@@ -36,6 +36,7 @@ test.describe('X-Bridges parameter edit during a run', () => {
     await expect(runButton(page)).toBeVisible({ timeout: 60_000 });
 
     const samples = await scopeSamples(page, m.scope);
+    expect(samples[samples.length - 1][0]).toBeGreaterThanOrEqual(2 - H - 1e-9); // the resumed run reaches the stop time
     const inc = samples.slice(1).map((s, k) => s[1] - samples[k][1]);
     const slow = inc.filter(d => Math.abs(d - 2 * H) <= 1e-9).length;
     const fast = inc.filter(d => Math.abs(d - 4 * H) <= 1e-9).length;

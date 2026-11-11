@@ -5,10 +5,10 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 ## Summary
 
 - Work packages: 20 done of 29; 2 in progress; 7 to do.
-- Findings: 136 open, 16 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
-  - S1 (wrong number in simulation or generated C): 43 open
-  - S2 (crash, stop, freeze or silent no-op): 35 open
-  - S3 (diagnostic, UI or convention deviation): 50 open
+- Findings: 125 open, 29 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
+  - S1 (wrong number in simulation or generated C): 42 open
+  - S2 (crash, stop, freeze or silent no-op): 32 open
+  - S3 (diagnostic, UI or convention deviation): 43 open
   - S4 (documentation): 8 open
 - Decisions recorded: 11; open: 0.
 
@@ -64,7 +64,7 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 
 ## Open findings by severity
 
-### S1 - wrong number in simulation or generated C (43)
+### S1 - wrong number in simulation or generated C (42)
 
 | Id | Gate | Plan ref | Summary |
 | --- | --- | --- | --- |
@@ -109,10 +109,9 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 | XBV-119 | V2 | 4.2 fuzzy | FUZZY_INFERENCE_SYSTEM returns 0 when no rule fires (denominator 0) instead of the output mid-range (output range [2, 6]: 4). Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts. |
 | XBV-120 | V2 | 4.2 fuzzy | FUZZY_INFERENCE_SYSTEM gives 0 membership at input shoulder vertices (trimf [-3, -3, -1] at -3), so rules on the range edge never fire (same root cause as XBV-110). Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts. |
 | XBV-121 | V2 | 4.2 fuzzy | FUZZY_INFERENCE_SYSTEM output shoulders (NB [-1, -1, -0.5], PB at the range end) are 0 at the end point, so the defuzzified output is off: at (-0.5, -0.2) y = -0.250623 instead of -0.252217. Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts. |
-| XBV-146 | V8 | 6 UI end-to-end | Opening a saved .adia project while the X-Bridges tab is active leaves the canvas empty (also after switching tabs); opening from another tab works (src/App.tsx hydrateProject / workspaceFiles ~5765-5780). The user sees an empty model and may save over it. Found by the WP-20 executor (Playwright, real Chromium); pinned in tests/e2e/xbridges/. |
 | XBV-150 | V6 | 7.3 canvas / interpreter parity | Embedded PID_CONTROLLER differs from the canvas PID: the embedded side ignores setpoint weights beta and gamma (unit step, canvas defaults gamma 0: u(0) 1.1667 vs 1.0), always uses the backward-Euler D filter whatever the method, publishes 0 on 'error' (the builder treats any port named error as the fault flag; canvas r - y), runs 'trapezoidal' which the canvas refuses, and refuses sampleTime 0 which the canvas treats as continuous. Mode P/PI/PD/PID is mapped to contract mode 'discrete' (harmless, unread). Found by the WP-21 batch B verifier. |
 
-### S2 - crash, stop, freeze or silent no-op (35)
+### S2 - crash, stop, freeze or silent no-op (32)
 
 | Id | Gate | Plan ref | Summary |
 | --- | --- | --- | --- |
@@ -145,14 +144,11 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 | XBV-129 | V3 | 4.2 navigation / robot vacuum / DEM-CFD (D5) | ROBOT_VACUUM_DYNAMICS default pose (0, 0) lies inside the x = 0 wall zone, so the robot does not move with a forward command (x(1) = 0 instead of 0.099). Found by the WP-10 executor; pinned in xbEquations.robot.test.ts. |
 | XBV-130 | V3 | 4.2 navigation / robot vacuum / DEM-CFD (D5) | DEM_DRUM uses its 4th execute argument (the simulation time) as the step size, so the angle grows quadratically: angle(2) = 20.43 instead of 12.566 for its rpm. Found by the WP-10 executor; pinned in xbEquations.robot.test.ts. |
 | XBV-133 | V3 | 4.2 navigation / robot vacuum / DEM-CFD (D5) | ROBOT_VACUUM_DIGITAL_TWIN diverges within 2 s at rk4 dt 0.02 (finite only at 0.005). Found by the WP-10 executor; pinned in xbEquations.robot.test.ts. |
-| XBV-140 | V8 | 6 UI | Canvas wiring accepts a second driver on an already-connected input: onConnect adds the edge and the workspace has no isValidConnection (XbridgesWorkspace.tsx ~2306); the canvas side of XBV-031. Found by the WP-19 executor; pinned in src/components/xbridges/xbV8Ui.test.tsx. |
-| XBV-144 | V8 | 6 UI end-to-end | Toolbar Single Step does nothing during a live run: the live run uses the worker engine, engineRef is null and stepSimulation returns immediately (XbridgesWorkspace.tsx ~2929); time stays unchanged after 3 clicks. Found by the WP-20 executor (Playwright, real Chromium); pinned in tests/e2e/xbridges/. |
 | XBV-147 | V8 | 6 UI end-to-end | The Robot Vacuum Navigation & Mapping lab shows EKF error Infinity and confidence 0 % after 5 s at the default step (same stiffness class as XBV-127). Found by the WP-20 executor (Playwright, real Chromium); pinned in tests/e2e/xbridges/. |
-| XBV-149 | V8 | 6 UI persistence | Save writes a stale model: the X-Bridges canvas reaches the project store through a 300 ms debounce (XbridgesWorkspace.tsx, debounced onSave) that every canvas change restarts, and Save does not flush it. A Save within 300 ms of an edit leaves the edit out (saved 2 after setting 3), and nothing is stored while a run is going (the run changes the canvas every 4th tick): a Save 2 s after an edit made during a run held the pre-run value. Found by the controller while diagnosing the XBV-138 pin passing on CI run 1; pinned in tests/e2e/xbridges/xbridges-persistence.spec.ts. |
 | XBV-151 | V6 | 7.3 canvas / interpreter parity | The embedded builder still refuses DELAY delay_length 0 (xbSemanticBuilder.ts ~1146 XB_DELAY_LENGTH_INVALID, diagnosticGuidance.ts) although the canvas now treats it as direct feedthrough (XBV-064, Simulink Delay). Found by the WP-21 batch A executor. |
 | XBV-153 | V3 | U7 / 5.2 diagnostics | Six divisor parameters give a non-finite output without a diagnostic when set to 0 (present before WP-21): IM_FOC_CONTROL.Lm, AIR_FRYER_LEARNING_MODEL tau_h, tau_f, tau_c, tau_s, FABRIC_HARMONIC_ANALYZER.drum_mass. They need parameterSchema entries rejecting 0 (batch J). Found by the WP-21 batch A verifier's zero-parameter scan. |
 
-### S3 - diagnostic, UI or convention deviation (50)
+### S3 - diagnostic, UI or convention deviation (43)
 
 | Id | Gate | Plan ref | Summary |
 | --- | --- | --- | --- |
@@ -196,16 +192,9 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 | XBV-131 | V2 | 4.2 navigation / robot vacuum / DEM-CFD (D5) | DEM_PARTICLE_SYSTEM uses time as dt (same cause as XBV-130): free fall vy(0.1) = -2.08 instead of -0.981. Found by the WP-10 executor; pinned in xbEquations.robot.test.ts. |
 | XBV-132 | V2 | 4.2 navigation / robot vacuum / DEM-CFD (D5) | CFD_SPH_WATER_SOLVER never reads its stiffness, density, viscosity or smoothing-length parameters; there are no SPH pressure/viscosity forces. Found by the WP-10 executor; pinned in xbEquations.robot.test.ts. |
 | XBV-134 | V2 | 4.2 navigation / robot vacuum / DEM-CFD (D5) | ROBOT_VACUUM_GLOBAL_PLANNER with no possible path returns [goal] with no failure flag. Found by the WP-10 executor; pinned in xbEquations.robot.test.ts. |
-| XBV-135 | V8 | 6 UI | Properties panel renders MatrixConcat.axis, SWITCH_CASE.numCases, Scope.numSignals and Scope.bufferSize as selects, so values such as 0, -2.5 or 0.125 cannot be entered (ratchet in xbV8Ui.test.tsx). Found by the WP-19 executor; pinned in src/components/xbridges/xbV8Ui.test.tsx. |
-| XBV-136 | V8 | 6 UI | Properties panel renders LAPLACE_TRANSFORM.mappingType (schema kind option) as free text instead of a select. Found by the WP-19 executor; pinned in src/components/xbridges/xbV8Ui.test.tsx. |
 | XBV-137 | V8 | 6 UI | 463 numeric (block, parameter) pairs show no error for invalid text ('abc'): only the 74 block types in parameterSchema.ts are validated (same root as XBV-011; ratchet in xbV8Ui.test.tsx). Found by the WP-19 executor; pinned in src/components/xbridges/xbV8Ui.test.tsx. |
-| XBV-138 | V8 | 6 UI | Typing 'abc' into any numeric parameter and leaving the field stores the raw string 'abc' as the parameter value (576 numeric parameters); plan 6: invalid text must not overwrite the stored value. Found by the WP-19 executor; pinned in src/components/xbridges/xbV8Ui.test.tsx. |
-| XBV-141 | V8 | 6 UI | Undo after a parameter edit removes the block: updateBlock does not record history, so Ctrl+Z reverts to the state before the block was added (XbridgesWorkspace.tsx ~2862). Found by the WP-19 executor; pinned in src/components/xbridges/xbV8Ui.test.tsx. |
-| XBV-142 | V8 | 6 UI | There is no redo (Ctrl+Y / Ctrl+Shift+Z) in the X-Bridges workspace. Found by the WP-19 executor; pinned in src/components/xbridges/xbV8Ui.test.tsx. |
-| XBV-143 | V8 | 6 UI end-to-end | A canvas run does not log a sample at the stop time: for 0..1 s at h = 0.01 the last Scope sample is t = 0.99 (y = 1.98); Simulink logs t = 1 (y = 2). Every logged sample is correct (y = 2t within 1e-9). Found by the WP-20 executor (Playwright, real Chromium); pinned in tests/e2e/xbridges/. |
-| XBV-145 | V8 | 6 UI end-to-end | A block dragged from the library is placed at the centre of the pane, not where it is dropped (pointer position ignored, XbridgesWorkspace.tsx ~2379-2395). Found by the WP-20 executor (Playwright, real Chromium); pinned in tests/e2e/xbridges/. |
-| XBV-148 | V8 | 6 UI | When a run ends at the stop time the Run button reappears before the status bar shows the final time: the status time is refreshed on every 4th tick and, at the end, only from the run effect's cleanup, so for about 40-130 ms it shows a time up to four steps short (observed 4.600/4.900/4.960 s, then 5.000 s, labs #2, #9, #10, local Chromium probe). The run itself ends at the stop time. Found by the controller from CI runs 1 and 2 (WP-22); e2e specs wait for the status to settle (waitForStatusSettled); not pinned because the window is timing-dependent. |
 | XBV-152 | V6 | 7.3 canvas / interpreter parity (test) | The per-block V6 parity case for PID_CONTROLLER is vacuous: every input port gets the same source, so r = y and e = 0; it passes without exercising the controller. Test-side gap (controller), to be replaced with distinct reference and measurement sources in batch F. Found by the WP-21 batch B verifier. |
+| XBV-157 | V8 | 6 UI | The record of invalid parameter text is cleared when the selection changes: leaving 'abc' in a field and selecting another block lets Run start again with the last valid value and no message. Found by the WP-21 batch C verifier. |
 
 ### S4 - documentation (8)
 
@@ -218,7 +207,7 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 | XBV-082 | V2 | 4.2 control / observers | SPEED_CONTROLLER and CURRENT_CONTROLLER_DQ integrate a fake 1e-6 s at their first evaluation (dt = max(1e-6, t - lastTime)), so every output is offset by Ki e 1e-6 (iq_ref(0) = 1.00001 instead of 1). Found by the WP-07 executor; pinned in xbEquations.control.test.ts. |
 | XBV-108 | V7 | 7.2 state-machine alignment | Under the 'retain' memory policy the discrete sample-hit counter freezes while the owning state is inactive (hits at ticks 1, 3, 7, 9 across exit/re-entry); simulator, runtime and C agree, but docs/XBRIDGES_EMBEDDED_CODEGEN.md does not state it. Reported by the WP-18 executor. |
 | XBV-109 | G | WP-11 | docs/powertrain/ledger.json has no per-block gate records ('blocks' is {} and no PT_ type appears), so the powertrain G1-G5 verdicts the plan imports do not exist; the 45 PT_* blocks are covered by 28 powertrain test files (204 tests pass) but their Simulink-golden gate is pending everywhere. |
-| XBV-139 | V8 | 6 UI | Properties panel labels are not tied to their editors (no htmlFor, no aria-label), so screen readers cannot name the fields. Found by the WP-19 executor; pinned in src/components/xbridges/xbV8Ui.test.tsx. |
+| XBV-158 | V8 | 5.1 | The worker logs the final sample at the summed time (stop time within a few ULP), the main-thread path at exactly the stop time. Found by the WP-21 batch C verifier. |
 
 ## Closed, merged or superseded findings
 
@@ -238,6 +227,19 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 - XBV-104 (closed): Generated C for an integrator loop fails -Wshadow (gcc and clang): 'xb_value_0_0_i_out' shadows a previous local (sm_core.c:78). Found by the WP-17 executor; pinned in src/utils/stateMachine/xbCodePar
 - XBV-105 (closed): Generated C for discontinuity blocks fails -Wdouble-promotion (gcc sm_core.c:143, clang sm_core.c:100): float promoted to double in a conditional. Found by the WP-17 executor; pinned in src/utils/stat
 - XBV-107 (closed): PRODUCT with operation 'divide' is not available in the embedded (state-machine / C) path although the canvas offers it; divide inside a state requires VectorDiv on vectors. Reported by the WP-18 exec
+- XBV-135 (closed): Properties panel renders MatrixConcat.axis, SWITCH_CASE.numCases, Scope.numSignals and Scope.bufferSize as selects, so values such as 0, -2.5 or 0.125 cannot be entered (ratchet in xbV8Ui.test.tsx). F
+- XBV-136 (closed): Properties panel renders LAPLACE_TRANSFORM.mappingType (schema kind option) as free text instead of a select. Found by the WP-19 executor; pinned in src/components/xbridges/xbV8Ui.test.tsx.
+- XBV-138 (closed): Typing 'abc' into any numeric parameter and leaving the field stores the raw string 'abc' as the parameter value (576 numeric parameters); plan 6: invalid text must not overwrite the stored value. Fou
+- XBV-139 (closed): Properties panel labels are not tied to their editors (no htmlFor, no aria-label), so screen readers cannot name the fields. Found by the WP-19 executor; pinned in src/components/xbridges/xbV8Ui.test.
+- XBV-140 (closed): Canvas wiring accepts a second driver on an already-connected input: onConnect adds the edge and the workspace has no isValidConnection (XbridgesWorkspace.tsx ~2306); the canvas side of XBV-031. Found
+- XBV-141 (closed): Undo after a parameter edit removes the block: updateBlock does not record history, so Ctrl+Z reverts to the state before the block was added (XbridgesWorkspace.tsx ~2862). Found by the WP-19 executor
+- XBV-142 (closed): There is no redo (Ctrl+Y / Ctrl+Shift+Z) in the X-Bridges workspace. Found by the WP-19 executor; pinned in src/components/xbridges/xbV8Ui.test.tsx.
+- XBV-143 (closed): A canvas run does not log a sample at the stop time: for 0..1 s at h = 0.01 the last Scope sample is t = 0.99 (y = 1.98); Simulink logs t = 1 (y = 2). Every logged sample is correct (y = 2t within 1e-
+- XBV-144 (closed): Toolbar Single Step does nothing during a live run: the live run uses the worker engine, engineRef is null and stepSimulation returns immediately (XbridgesWorkspace.tsx ~2929); time stays unchanged af
+- XBV-145 (closed): A block dragged from the library is placed at the centre of the pane, not where it is dropped (pointer position ignored, XbridgesWorkspace.tsx ~2379-2395). Found by the WP-20 executor (Playwright, rea
+- XBV-146 (closed): Opening a saved .adia project while the X-Bridges tab is active leaves the canvas empty (also after switching tabs); opening from another tab works (src/App.tsx hydrateProject / workspaceFiles ~5765-5
+- XBV-148 (closed): When a run ends at the stop time the Run button reappears before the status bar shows the final time: the status time is refreshed on every 4th tick and, at the end, only from the run effect's cleanup
+- XBV-149 (closed): Save writes a stale model: the X-Bridges canvas reaches the project store through a 300 ms debounce (XbridgesWorkspace.tsx, debounced onSave) that every canvas change restarts, and Save does not flush
 
 ## Decisions
 

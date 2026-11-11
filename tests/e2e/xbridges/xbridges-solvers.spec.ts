@@ -6,7 +6,7 @@
 import { test, expect } from '@playwright/test';
 import {
   useLocalChromium, trackErrors, openXbridges, buildIntegratorModel, setToolbar, runToEnd, scopeSamples,
-  problemsSummary, statusText,
+  problemsSummary, statusText, statusTime,
 } from './xbHelpers';
 
 useLocalChromium();
@@ -47,8 +47,13 @@ test.describe('X-Bridges solver selector', () => {
       else {
         const samples = await scopeSamples(page, m.scope);
         const worst = Math.max(...samples.map(([t, y]) => Math.abs(y - 2 * t)));
+        const tEnd = await statusTime(page);
+        const lastT = samples.length ? samples[samples.length - 1][0] : Number.NaN;
         if (!(samples.length > 1)) verdict = 'no samples';
         else if (!Number.isFinite(worst) || worst > tol) verdict = `max |y - 2t| = ${worst} > ${tol}`;
+        // the run reaches the stop time (status shows 3 decimals) and the Scope logged up to at least one step before it
+        else if (!(Math.abs(tEnd - 1) <= 5e-4)) verdict = `run ended at t = ${tEnd}, stop time 1`;
+        else if (!(lastT >= 1 - 0.01 - 1e-9)) verdict = `last logged sample t = ${lastT} < 1 - h`;
       }
       results[value] = verdict;
     }

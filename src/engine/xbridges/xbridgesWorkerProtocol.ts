@@ -21,6 +21,8 @@ export interface XbridgesWorkerRequest {
   batchSize?: number;
   paramUpdates?: Record<string, Record<string, any>>;
   inportOverrides?: Record<string, any>;
+  /** The step reaches the stop time: compute and log the outputs once at the final time (Simulink logs t_stop). */
+  finalOutputs?: boolean;
 }
 
 export interface XbridgesWorkerResponse {
