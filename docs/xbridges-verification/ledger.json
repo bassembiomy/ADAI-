@@ -295,7 +295,8 @@
    "deps": [
     "WP-03"
    ],
-   "status": "todo"
+   "status": "in_progress",
+   "note": "Invariant tests by Sonnet from the controller spec (D5, D7): 148 passed, 13 pinned (XBV-122..134). Awaiting the Opus verifier."
   },
   {
    "id": "WP-11",
@@ -1528,6 +1529,110 @@
    "gate": "V2",
    "status": "open",
    "summary": "FUZZY_INFERENCE_SYSTEM output shoulders (NB [-1, -1, -0.5], PB at the range end) are 0 at the end point, so the defuzzified output is off: at (-0.5, -0.2) y = -0.250623 instead of -0.252217. Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts."
+  },
+  {
+   "id": "XBV-122",
+   "plan_ref": "4.2 navigation / robot vacuum / DEM-CFD (D5)",
+   "severity": "S3",
+   "gate": "V2",
+   "status": "open",
+   "summary": "ROBOT_VACUUM_DYNAMICS applies a hidden 0.992 slip factor in evaluateDerivatives: a straight run gives x(10) = -1.51792 instead of the kinematic -1.51 (r w t). Found by the WP-10 executor; pinned in xbEquations.robot.test.ts."
+  },
+  {
+   "id": "XBV-123",
+   "plan_ref": "4.2 navigation / robot vacuum / DEM-CFD (D5)",
+   "severity": "S3",
+   "gate": "V2",
+   "status": "open",
+   "summary": "ROBOT_VACUUM_DYNAMICS turning in place: theta(2) = 2.4552 instead of 2.475 (same hidden slip factor). Found by the WP-10 executor; pinned in xbEquations.robot.test.ts."
+  },
+  {
+   "id": "XBV-124",
+   "plan_ref": "4.2 navigation / robot vacuum / DEM-CFD (D5)",
+   "severity": "S3",
+   "gate": "V2",
+   "status": "open",
+   "summary": "ROBOT_VACUUM_THETA_STAR line-of-sight shortcuts ignore the robot radius on the grid (legs pass 0.025 m from occupied cells, 0.15 m expected); its 'inflation' parameter is unused (0.28 literal). Found by the WP-10 executor; pinned in xbEquations.robot.test.ts."
+  },
+  {
+   "id": "XBV-125",
+   "plan_ref": "4.2 navigation / robot vacuum / DEM-CFD (D5)",
+   "severity": "S2",
+   "gate": "V3",
+   "status": "open",
+   "summary": "ROBOT_VACUUM_GLOBAL_PLANNER ignores the grid and the start pose and returns the goal as the only waypoint (no A* path around a barrier). Found by the WP-10 executor; pinned in xbEquations.robot.test.ts."
+  },
+  {
+   "id": "XBV-126",
+   "plan_ref": "4.2 navigation / robot vacuum / DEM-CFD (D5)",
+   "severity": "S3",
+   "gate": "V2",
+   "status": "open",
+   "summary": "ROBOT_VACUUM_ENCODER counts 185 instead of 180 for pi rad/s over 1 s at 360 cpr: with lastTime === 0 the first steps use dt 0.02 twice. Found by the WP-10 executor; pinned in xbEquations.robot.test.ts."
+  },
+  {
+   "id": "XBV-127",
+   "plan_ref": "4.2 navigation / robot vacuum / DEM-CFD (D5)",
+   "severity": "S2",
+   "gate": "V3",
+   "status": "open",
+   "summary": "The built-in Robot Vacuum Twin lab diverges to Infinity within 3 s at the app's default rk4 step 0.02 s (motor pole about -500/s); it needs dt 0.005 s to stay finite. Found by the WP-10 executor; pinned in xbEquations.robot.test.ts."
+  },
+  {
+   "id": "XBV-128",
+   "plan_ref": "4.2 navigation / robot vacuum / DEM-CFD (D5)",
+   "severity": "S2",
+   "gate": "V3",
+   "status": "open",
+   "summary": "Robot Vacuum Twin lab in mode 6 does not reach the commanded goal (1.5, 1.5): the robot stays at (0, 0). Found by the WP-10 executor; pinned in xbEquations.robot.test.ts."
+  },
+  {
+   "id": "XBV-129",
+   "plan_ref": "4.2 navigation / robot vacuum / DEM-CFD (D5)",
+   "severity": "S2",
+   "gate": "V3",
+   "status": "open",
+   "summary": "ROBOT_VACUUM_DYNAMICS default pose (0, 0) lies inside the x = 0 wall zone, so the robot does not move with a forward command (x(1) = 0 instead of 0.099). Found by the WP-10 executor; pinned in xbEquations.robot.test.ts."
+  },
+  {
+   "id": "XBV-130",
+   "plan_ref": "4.2 navigation / robot vacuum / DEM-CFD (D5)",
+   "severity": "S2",
+   "gate": "V3",
+   "status": "open",
+   "summary": "DEM_DRUM uses its 4th execute argument (the simulation time) as the step size, so the angle grows quadratically: angle(2) = 20.43 instead of 12.566 for its rpm. Found by the WP-10 executor; pinned in xbEquations.robot.test.ts."
+  },
+  {
+   "id": "XBV-131",
+   "plan_ref": "4.2 navigation / robot vacuum / DEM-CFD (D5)",
+   "severity": "S3",
+   "gate": "V2",
+   "status": "open",
+   "summary": "DEM_PARTICLE_SYSTEM uses time as dt (same cause as XBV-130): free fall vy(0.1) = -2.08 instead of -0.981. Found by the WP-10 executor; pinned in xbEquations.robot.test.ts."
+  },
+  {
+   "id": "XBV-132",
+   "plan_ref": "4.2 navigation / robot vacuum / DEM-CFD (D5)",
+   "severity": "S3",
+   "gate": "V2",
+   "status": "open",
+   "summary": "CFD_SPH_WATER_SOLVER never reads its stiffness, density, viscosity or smoothing-length parameters; there are no SPH pressure/viscosity forces. Found by the WP-10 executor; pinned in xbEquations.robot.test.ts."
+  },
+  {
+   "id": "XBV-133",
+   "plan_ref": "4.2 navigation / robot vacuum / DEM-CFD (D5)",
+   "severity": "S2",
+   "gate": "V3",
+   "status": "open",
+   "summary": "ROBOT_VACUUM_DIGITAL_TWIN diverges within 2 s at rk4 dt 0.02 (finite only at 0.005). Found by the WP-10 executor; pinned in xbEquations.robot.test.ts."
+  },
+  {
+   "id": "XBV-134",
+   "plan_ref": "4.2 navigation / robot vacuum / DEM-CFD (D5)",
+   "severity": "S3",
+   "gate": "V2",
+   "status": "open",
+   "summary": "ROBOT_VACUUM_GLOBAL_PLANNER with no possible path returns [goal] with no failure flag. Found by the WP-10 executor; pinned in xbEquations.robot.test.ts."
   }
  ],
  "blocks": {
@@ -5632,6 +5737,10 @@
   {
    "wp": "WP-09b",
    "note": "FIS ignores orMethod and AND 'product' in rules; FUZZY_DEFUZZIFY ignores its 'resolution' parameter (characterization test); bisector of an all-zero aggregate returns range_min (MATLAB result unconfirmed); LMS 'w' outputs are the pre-update weights (Simulink DSP LMS Wts timing unverified); RL tie rule lowest index (undocumented); LMS/neuron divergence with large lr gives silent Inf/NaN; NEURAL_NEURON_LEARNING uses tanh with bipolar targets (docs should say so)."
+  },
+  {
+   "wp": "WP-10b",
+   "note": "Smoke-only coverage for the remaining ROBOT_VACUUM_* blocks, FABRIC_HARMONIC_ANALYZER, CFD_DEM_SURROGATE_LEARNER. Not expressible: Hertz contact exposes only K (no E*, R*), gravity fixed in DEM (no KE-conservation test), SLAM/FUSION use truth inputs, pure pursuit has no lookahead parameter, cliff_threshold unused, MOTOR_COMMAND V_bat fixed at 12, rib collisions push particle centres 0.0011 m past R - r."
   }
  ]
 }
