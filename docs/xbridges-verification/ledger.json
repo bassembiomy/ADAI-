@@ -583,7 +583,20 @@
     "WP-20"
    ],
    "status": "in_progress",
-   "note": "Workflow .github/workflows/xbridges-verification.yml added (controller): unit (verification + kit, test:xbridges, powertrain, inventory and report up to date), embedded (V6 tri-parity, V7 code parity with gcc/clang, state-machine alignment + AUTOSAR), e2e (Playwright Chromium), nightly schedule. Not yet: nightly seed rotation (random graphs use fixed seeds), mutation run (no mutation tool in the repo), float32 parity (WP-17b). First GitHub run not yet observed."
+   "note": "Workflow .github/workflows/xbridges-verification.yml added (controller): unit (verification + kit, test:xbridges, powertrain, inventory and report up to date), embedded (V6 tri-parity, V7 code parity with gcc/clang, state-machine alignment + AUTOSAR), e2e (Playwright Chromium), nightly schedule. Not yet: nightly seed rotation (random graphs use fixed seeds), mutation run (no mutation tool in the repo), float32 parity (WP-17b). First GitHub run not yet observed.",
+   "ci_runs": [
+    {
+     "run": "43019317831",
+     "sha": "46585b29",
+     "result": "all 3 jobs failed",
+     "diagnosis": [
+      "unit/regression and embedded: 162 code-parity cases failed because gcc on the runner (UTF-8 locale) quotes identifiers with ‘ ’, so the harness regex that triggers the XBV-096 workaround (straight quotes) never matched - harness fix, regex accepts both",
+      "e2e: path tests/e2e/xbridges also matched the old tests/e2e/xbridges-run-engine.spec.ts (toolbar button not present in this build) - path fixed to tests/e2e/xbridges/",
+      "e2e: labs #9 and #10 stopped at t = 4.980 s instead of 5.000 (Euler, step 0.02) and the XBV-138 pin passed on the runner although it fails locally - possibly timing-dependent; observe on the next run before changing anything"
+     ],
+     "passed": "verification suites + test kit, canvas vs interpreter parity (V6), 31 of 35 e2e tests"
+    }
+   ]
   },
   {
    "id": "WP-23",

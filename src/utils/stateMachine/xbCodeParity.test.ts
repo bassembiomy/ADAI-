@@ -170,7 +170,8 @@ const runScenario = async (label: string, sc: Scenario, solver: EmbeddedSolver):
     if (r.generateError) return { ...base, kind: 'fail', detail: `${label}: generator threw: ${r.generateError}` };
     if (r.outcome && !r.outcome.ok && r.outcome.stage === 'compile') {
       if (base.compileIssue === '') base.compileIssue = firstError(r.outcome.log);
-      if (/no member named 'sim_time'/.test(r.outcome.log) && !base.workarounds.includes('clock')) {
+      // gcc quotes identifiers with ASCII quotes in the C locale and with ‘ ’ in a UTF-8 locale (GitHub runners).
+      if (/no member named [‘'`]sim_time[’'`]/.test(r.outcome.log) && !base.workarounds.includes('clock')) {
         base.workarounds.push('clock');
         spec = { ...spec, blocks: [...spec.blocks, { id: 'a_clk', type: 'Clock' }] };
         continue;

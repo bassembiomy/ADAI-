@@ -100,7 +100,7 @@ jobs:
       - name: Install Chromium for Playwright
         run: npx playwright install --with-deps chromium
       - name: X-Bridges end-to-end specs
-        run: npx playwright test tests/e2e/xbridges --project=chromium --trace off --workers=1
+        run: npx playwright test tests/e2e/xbridges/ --project=chromium --trace off --workers=1
       - name: Upload Playwright report
         if: failure()
         uses: actions/upload-artifact@v4
