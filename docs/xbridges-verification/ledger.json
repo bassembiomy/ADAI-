@@ -233,8 +233,13 @@
    "deps": [
     "WP-06"
    ],
-   "status": "in_progress",
-   "note": "Tests by Sonnet from the controller oracle spec (D7); controller review removed the EKF 1e-9 pin (spec too strict for a finite-difference Jacobian; 1e-7 kept) and merged pins per defect; findings XBV-075..082. Awaiting the Opus verifier."
+   "status": "done",
+   "note": "Tests by Sonnet from the controller oracle spec (D7); controller review removed the EKF 1e-9 pin (spec too strict for a finite-difference Jacobian; 1e-7 kept) and merged pins per defect; findings XBV-075..082. Awaiting the Opus verifier.",
+   "verification": {
+    "executor": "Sonnet from controller spec (D7)",
+    "verifier": "Opus subagent (D8) PASS (657 passed, 111 expected fail, twice); minors fixed afterwards: KF characterization test labelled, noise limits 4 standard errors plus kurtosis, EKF inherits XBV-078/079",
+    "from_memory": "Simulink KF update-first order, level reset semantics"
+   }
   },
   {
    "id": "WP-08",
@@ -243,7 +248,7 @@
    "deps": [
     "WP-06"
    ],
-   "status": "in_progress",
+   "status": "done",
    "note": "Tests by Sonnet from the controller oracle spec (D7); controller review added XBV-074 (PWM duty 1 at the carrier peak - passed only by floating-point luck); findings XBV-070..074. Awaiting Fable.",
    "rework": [
     {
@@ -256,7 +261,12 @@
      ],
      "fix": "v_ref -0.47/0.53; P: 1 passed to MTPA; FW hand values removed (properties kept). Notes: ia+ib+ic = 0 is structural (ic computed as -ia-ib); six-step test cannot catch a 60-degree Hall misalignment - WP-08b"
     }
-   ]
+   ],
+   "verification": {
+    "executor": "Sonnet from controller spec (D7)",
+    "verifier": "Opus subagent (D8) FAIL (XBV-070 unflippable, MTPA P, code-copied FW values), PASS round 2 (657 passed, 111 expected fail, twice)",
+    "from_memory": "SVPWM proportional over-modulation scaling, Simscape duty-1 semantics"
+   }
   },
   {
    "id": "WP-09",
@@ -1104,7 +1114,7 @@
    "severity": "S2",
    "gate": "V2",
    "status": "open",
-   "summary": "KALMAN_FILTER predicts before its first update (starts from P[-1|-1] = P0, so the first update uses A P0 A' + Q); the Simulink Kalman Filter starts from x[0|-1] = x0, P[0|-1] = P0 and updates first. Found by the WP-07 executor; pinned in xbEquations.control.test.ts."
+   "summary": "KALMAN_FILTER predicts before its first update (starts from P[-1|-1] = P0, so the first update uses A P0 A' + Q); the Simulink Kalman Filter starts from x[0|-1] = x0, P[0|-1] = P0 and updates first. Found by the WP-07 executor; pinned in xbEquations.control.test.ts. EXTENDED_KALMAN_FILTER matches KALMAN_FILTER to 1e-7 and therefore inherits this."
   },
   {
    "id": "XBV-079",
@@ -1112,7 +1122,7 @@
    "severity": "S3",
    "gate": "V2",
    "status": "open",
-   "summary": "KALMAN_FILTER applies u(n) in the same sample's prior: the first innovation is y(0) - C B u(0) instead of y(0) - C x0; the input acts one sample early. Found by the WP-07 executor; pinned in xbEquations.control.test.ts."
+   "summary": "KALMAN_FILTER applies u(n) in the same sample's prior: the first innovation is y(0) - C B u(0) instead of y(0) - C x0; the input acts one sample early. Found by the WP-07 executor; pinned in xbEquations.control.test.ts. EXTENDED_KALMAN_FILTER matches KALMAN_FILTER to 1e-7 and therefore inherits this."
   },
   {
    "id": "XBV-080",
@@ -5225,6 +5235,10 @@
   {
    "wp": "WP-08b",
    "note": "From the WP-08 Opus verifier: six-step test cannot detect reversed torque or a 60-degree Hall advance (no Hall alignment oracle); AC motor ia+ib+ic = 0 is structural (ic = -ia - ib), so it is not evidence; field-weakening exact law needs a Simulink/MCB reference (WP-15)."
+  },
+  {
+   "wp": "WP-07b",
+   "note": "CURRENT_CONTROLLER_DQ iMax scaling rule is taken from a factory comment, not an oracle - confirm against MCB in WP-15."
   }
  ]
 }

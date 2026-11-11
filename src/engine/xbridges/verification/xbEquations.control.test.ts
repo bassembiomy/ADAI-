@@ -253,7 +253,9 @@ describe('D. KALMAN_FILTER and EXTENDED_KALMAN_FILTER', () => {
   });
   // Characterization of the variant the block implements: predict-then-update from the posterior x[-1|-1] = 0,
   // P[-1|-1] = P0, i.e. the reference started from P[0|-1] = A P0 A' + Q. Everything after the first sample then agrees.
-  it('KALMAN_FILTER equals the reference started from P[0|-1] = A P0 A\' + Q (x_hat, y_hat, innovation, kg over 200 steps, 1e-10)', () => {
+  // Characterization of today's behaviour (XBV-078): this test is expected to FAIL once XBV-078 is fixed; the fix
+  // commit removes it together with the it.fails marker of XBV-078.
+  it('characterization (XBV-078, remove on fix): KALMAN_FILTER equals the reference started from P[0|-1] = A P0 A\' + Q (200 steps, 1e-10)', () => {
     const ref = reference(ys, zeros, add(mul(mul(A, P0), tr(A)), Q));
     const out = blockRun('KALMAN_FILTER', zeros, ys);
     out.forEach((o, n) => {
@@ -370,20 +372,24 @@ describe('F. noise sources', () => {
     const mean = v.reduce((s, x) => s + x, 0) / n;
     const variance = v.reduce((s, x) => s + (x - mean) ** 2, 0) / n;
     const r1 = v.slice(1).reduce((s, x, i) => s + (x - mean) * (v[i] - mean), 0) / (n - 1) / variance;
-    return { mean, variance, r1 };
+    const kurtosis = v.reduce((s, x) => s + (x - mean) ** 4, 0) / n / variance ** 2;
+    return { mean, variance, r1, kurtosis };
   };
+  // Standard errors for N = 1e5 Gaussian samples: mean sigma/sqrt(N); variance sigma^2 sqrt(2/N) = 0.0045 sigma^2;
+  // lag-1 autocorrelation 1/sqrt(N) = 0.0032; kurtosis sqrt(24/N) = 0.0155. Limits are 4 standard errors.
   const N = 100000;
-  it('WHITE_NOISE mean 0 variance 1 (10^5 samples, mulberry32(1)): |mean| < 4/sqrt(N) sigma, |var - 1| < 0.03, |r1| < 0.02', () => {
+  it('WHITE_NOISE mean 0 variance 1 (10^5 samples, mulberry32(1)): mean, variance, lag-1 correlation and Gaussian kurtosis within 4 standard errors', () => {
     const s = stats(draw({}, N));
     expect(Math.abs(s.mean)).toBeLessThan(4 / Math.sqrt(N));
-    expect(Math.abs(s.variance - 1)).toBeLessThan(0.03);
-    expect(Math.abs(s.r1)).toBeLessThan(0.02);
+    expect(Math.abs(s.variance - 1)).toBeLessThan(4 * Math.sqrt(2 / N));
+    expect(Math.abs(s.r1)).toBeLessThan(4 / Math.sqrt(N));
+    expect(Math.abs(s.kurtosis - 3)).toBeLessThan(4 * Math.sqrt(24 / N));
   });
   it('WHITE_NOISE mean 2 variance 4: mean ~ 2 (4 sigma/sqrt(N) with sigma 2), variance ~ 4 (0.12), |r1| < 0.02', () => {
     const s = stats(draw({ mean: 2, variance: 4 }, N));
     expect(Math.abs(s.mean - 2)).toBeLessThan(4 * 2 / Math.sqrt(N));
-    expect(Math.abs(s.variance - 4)).toBeLessThan(0.12);
-    expect(Math.abs(s.r1)).toBeLessThan(0.02);
+    expect(Math.abs(s.variance - 4)).toBeLessThan(4 * 4 * Math.sqrt(2 / N));
+    expect(Math.abs(s.r1)).toBeLessThan(4 / Math.sqrt(N));
   });
   it('WHITE_NOISE with the same seed twice gives identical sequences; another seed differs', () => {
     const a = draw({}, 1000, 1), b = draw({}, 1000, 1), c = draw({}, 1000, 2);
