@@ -354,8 +354,7 @@ describe('properties panel over every palette block', () => {
       const run = openPanel(t);
       for (const [, n] of mine) {
         const ed = editorFor(run.container, t, n) as HTMLInputElement | null;
-        // Select-edited numeric parameters are XBV-135, not this rule: skip them so this pin can flip on an onBlur fix.
-        if (!ed || ed.tagName !== 'INPUT') continue;
+        if (!ed || ed.tagName !== 'INPUT') { bad.push(`${t}.${n}`); continue; }
         fireEvent.change(ed, { target: { value: '99' } });
         const ok = [0, -2.5, 0.125].every((v) => {
           fireEvent.change(ed, { target: { value: String(v) } });
@@ -415,7 +414,8 @@ describe('properties panel over every palette block', () => {
       const run = openPanel(t);
       for (const [, n] of mine) {
         const ed = editorFor(run.container, t, n) as HTMLInputElement | null;
-        if (!ed || ed.tagName !== 'INPUT') { bad.push(`${t}.${n}`); continue; }
+        // Select-edited numeric parameters are XBV-135, not this rule: skip them so this pin can flip on an onBlur fix.
+        if (!ed || ed.tagName !== 'INPUT') continue;
         fireEvent.change(ed, { target: { value: 'abc' } });
         fireEvent.blur(ed);
         const r = lastParam(run.calls, n);
