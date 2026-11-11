@@ -5,11 +5,11 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 ## Summary
 
 - Work packages: 20 done of 29; 2 in progress; 7 to do.
-- Findings: 146 open, 2 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
-  - S1 (wrong number in simulation or generated C): 48 open
-  - S2 (crash, stop, freeze or silent no-op): 37 open
-  - S3 (diagnostic, UI or convention deviation): 52 open
-  - S4 (documentation): 9 open
+- Findings: 140 open, 11 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
+  - S1 (wrong number in simulation or generated C): 46 open
+  - S2 (crash, stop, freeze or silent no-op): 35 open
+  - S3 (diagnostic, UI or convention deviation): 51 open
+  - S4 (documentation): 8 open
 - Decisions recorded: 9; open: 1 (D9).
 
 ## Open decisions
@@ -68,7 +68,7 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 
 ## Open findings by severity
 
-### S1 - wrong number in simulation or generated C (48)
+### S1 - wrong number in simulation or generated C (46)
 
 | Id | Gate | Plan ref | Summary |
 | --- | --- | --- | --- |
@@ -104,11 +104,8 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 | XBV-069 | V2 | 4.2 continuous | INTEGRATOR with an output limit under rk4 arrives below the limit: y(0.3) = 0.29833 instead of 0.3 with limit 0.3, and with limit 0.305 it sags to 0.30333 at t = 0.5 (the saturated derivative is used in the stages of the step that reaches the limit). Simulink evaluates the limit mode at major steps: y = min(t, limit) at every sample. Found by the WP-06 verifier; pinned in xbEquations.dynamics.test.ts. |
 | XBV-072 | V2 | 4.2 power electronics / PWM / torque optimisation | MTPA_CONTROLLER does not deliver the requested torque: it hard-codes 2 pole pairs and id = -0.2 \|iq\| and ignores Ld, Lq; for te_ref = 1 it returns iq = 3.333, id = -0.667, i.e. Te = 0.533 (p = 1) or 1.067 (p = 2). Pinned in xbEquations.motor.test.ts. |
 | XBV-073 | V2 | 4.2 power electronics / PWM / torque optimisation | MTPA_CONTROLLER's operating point is not the maximum-torque-per-ampere point: on its constant-torque curve d\|i\|^2/d id is about +0.75 at te_ref = 1 (should be 0). Pinned in xbEquations.motor.test.ts. |
-| XBV-083 | V6 | 7.3 canvas / interpreter parity | The state-machine X-Bridges interpreter ignores Sum signs and always adds (xbInterpreter.ts ~530, case 'Sum'/'SUM_JUNCTION'/'VectorAdd'): '+-' gives u1 + u2. The canvas subtracts, and the C generator applies the signs (xbCGenerator.ts ~1030), so for any Sum with a minus sign the interpreter (state-machine simulation, and the reference used by the C conformance cases) differs from both the canvas and the generated C. Found by the WP-16 executor; pinned in src/utils/stateMachine/xbTriParity.test.ts. |
 | XBV-084 | V6 | 7.3 canvas / interpreter parity | Mixed time base inside one embedded tick (interpreter and generated C): Clock, WaveformGen and UNIT_DELAY are evaluated at t_k, while Integrator, INTEGRATOR_CONTINUOUS and RATE_LIMITER publish their post-update state (C writes the post-update value, xbCGenerator.ts ~4094) and Step evaluates t_(k+1) (C uses state timers; smInterpreter advances timers before stepXBState, so a guard in tick k sees time (k+1) dt). The canvas uses t_k for everything. Which convention is right is an open decision (D9): 'outputs at the start of the tick' (Simulink major-step semantics, canvas) or 'outputs at the end of the tick' (what guards see today). Either way all blocks of one tick must use the same time. Merged XBV-085 (Step) into this finding after the WP-16 Opus verifier showed the C and timers share the embedded convention. |
 | XBV-086 | V6 | 7.3 canvas / interpreter parity | Out-of-domain inverse trig/hyperbolic and pow (ACOS, ACOSEC, ACOSH, ACOTH, ASEC, ASECH, ASIN, ATANH, VectorPow): the canvas gives NaN with MATH_DOMAIN_ERROR. In the embedded path, under the 'signal-only' fault policy the generated C raises the error flag and publishes the documented deterministic fallback 0 (XBRIDGES_EMBEDDED_CODEGEN.md, Numeric faults) while the interpreter publishes NaN and records no fault (xbInterpreter.ts ~307 shouldRecordFault) - the interpreter breaks the contract; under 'escalate' both stop at tick 1 (WP-16's harness ignored the returned fault and saw the rolled-back 0, hence the earlier opposite attribution). Separate convention question: fallback NaN (canvas, Simulink) or 0 (embedded contract). |
-| XBV-096 | V7 | 7.1 code parity | Generated C for any model with a WaveformGen and no Clock does not compile: WaveformGen reads instance->xb_controller.sim_time, a member declared only when a Clock block exists (xbCGenerator.ts ~161, ~1001); with a Clock, the waveform time depends on the Clock running first. Found by the WP-17 executor; pinned in src/utils/stateMachine/xbCodeParity.test.ts. |
-| XBV-097 | V7 | 7.1 code parity | Generated C advances simulation time twice per tick when the model has continuous states: sim_time += dt is emitted in both passes of SolverSubstep (xbCGenerator.ts ~986, ~2500), so time runs at 2x; Integrator of a sine gives 0.040156 instead of 0.033128 at tick 2 (interpreter correct). Found by the WP-17 executor; pinned in src/utils/stateMachine/xbCodeParity.test.ts. |
 | XBV-101 | V7 | 7.1 code parity | Bitwise/Shift: the interpreter works in uint32 (~0 = 4294967295), the generated C in int32 (-1), so state-machine simulation and the generated code disagree; no data-type contract decides (see XBV-087 for canvas vs interpreter). Found by the WP-17 executor; pinned in src/utils/stateMachine/xbCodeParity.test.ts. |
 | XBV-102 | V7 | 7.1 code parity | KALMAN_FILTER: interpreter (0.35195) and generated C (0.66873) disagree with each other and with the block equation (0.63694, u = y = 0.7, factory parameters). Found by the WP-17 executor; pinned in src/utils/stateMachine/xbCodeParity.test.ts. |
 | XBV-103 | V7 | 7.1 code parity | BAND_LIMITED_NOISE: interpreter and generated C produce different streams from tick 1 (-1.03300 vs -1.00272); WHITE_NOISE agrees on both sides. Found by the WP-17 executor; pinned in src/utils/stateMachine/xbCodeParity.test.ts. |
@@ -120,8 +117,9 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 | XBV-120 | V2 | 4.2 fuzzy | FUZZY_INFERENCE_SYSTEM gives 0 membership at input shoulder vertices (trimf [-3, -3, -1] at -3), so rules on the range edge never fire (same root cause as XBV-110). Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts. |
 | XBV-121 | V2 | 4.2 fuzzy | FUZZY_INFERENCE_SYSTEM output shoulders (NB [-1, -1, -0.5], PB at the range end) are 0 at the end point, so the defuzzified output is off: at (-0.5, -0.2) y = -0.250623 instead of -0.252217. Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts. |
 | XBV-146 | V8 | 6 UI end-to-end | Opening a saved .adia project while the X-Bridges tab is active leaves the canvas empty (also after switching tabs); opening from another tab works (src/App.tsx hydrateProject / workspaceFiles ~5765-5780). The user sees an empty model and may save over it. Found by the WP-20 executor (Playwright, real Chromium); pinned in tests/e2e/xbridges/. |
+| XBV-150 | V6 | 7.3 canvas / interpreter parity | Embedded PID_CONTROLLER differs from the canvas PID: the embedded side ignores setpoint weights beta and gamma (unit step, canvas defaults gamma 0: u(0) 1.1667 vs 1.0), always uses the backward-Euler D filter whatever the method, publishes 0 on 'error' (the builder treats any port named error as the fault flag; canvas r - y), runs 'trapezoidal' which the canvas refuses, and refuses sampleTime 0 which the canvas treats as continuous. Mode P/PI/PD/PID is mapped to contract mode 'discrete' (harmless, unread). Found by the WP-21 batch B verifier. |
 
-### S2 - crash, stop, freeze or silent no-op (37)
+### S2 - crash, stop, freeze or silent no-op (35)
 
 | Id | Gate | Plan ref | Summary |
 | --- | --- | --- | --- |
@@ -148,9 +146,6 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 | XBV-081 | V2 | 4.2 control / observers | MPC_CONTROLLER with Nc > 1 throws on its second call (RangeError: H is Nc x Nc but the warm-start vector has length nu), so the default MPC (Nc 3) cannot run more than one step; with Nc 1 it converges and respects u limits. Found by the WP-07 executor; pinned in xbEquations.control.test.ts. |
 | XBV-092 | V6 | 7.3 canvas / interpreter parity | KALMAN_FILTER in the parity harness: canvas x_hat and kg are non-numeric and y_hat differs from the embedded path (shape handling of the default matrices). To be bisected in WP-16b. Found by the WP-16 executor; pinned in src/utils/stateMachine/xbTriParity.test.ts. |
 | XBV-093 | V6 | 7.3 canvas / interpreter parity | Parity gap: the embedded path refuses STATE_SPACE (continuous representation, XB_DISCRETE_REPRESENTATION_REQUIRED) and DISCRETE_TRANSFER_FUNCTION with the default initial state (XB_STATE_INITIAL_VALUE_INVALID) for models the canvas runs. Found by the WP-16 executor; pinned in src/utils/stateMachine/xbTriParity.test.ts. (Verifier: a diagnosed restriction of the embedded path - a capabilities mismatch rather than a numeric defect.) |
-| XBV-095 | V6 | 7.3 canvas / interpreter parity | buildXBSemanticModel throws 'Invalid PID mode: PID' (xbPidContract.ts ~18) for PID_CONTROLLER with the canvas default mode 'PID' instead of returning a diagnostic. Found by the WP-16 executor; pinned in src/utils/stateMachine/xbTriParity.test.ts. |
-| XBV-099 | V7 | 7.1 code parity | The C generator throws a raw Error ('emitter requires scalar signal', xbCGenerator.ts ~500) for vector inputs to LOW_PASS_FILTER, HIGH_PASS_FILTER, MOVING_AVERAGE, IF_ELSE and SWITCH that the capability registry declares, instead of returning a diagnostic. Found by the WP-17 executor; pinned in src/utils/stateMachine/xbCodeParity.test.ts. |
-| XBV-100 | V7 | 7.1 code parity | Generated C with Bitwise/Shift blocks fails -Wall -Werror: SM_XB_ShiftLeft32 / SM_XB_ShiftRight32 are emitted but unused. Found by the WP-17 executor; pinned in src/utils/stateMachine/xbCodeParity.test.ts. |
 | XBV-118 | V2 | 4.2 fuzzy | FUZZY_DEFUZZIFY returns 0 for an all-zero aggregate with mom (mean of the range expected, 5). Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts. |
 | XBV-125 | V3 | 4.2 navigation / robot vacuum / DEM-CFD (D5) | ROBOT_VACUUM_GLOBAL_PLANNER ignores the grid and the start pose and returns the goal as the only waypoint (no A* path around a barrier). Found by the WP-10 executor; pinned in xbEquations.robot.test.ts. |
 | XBV-127 | V3 | 4.2 navigation / robot vacuum / DEM-CFD (D5) | The built-in Robot Vacuum Twin lab diverges to Infinity within 3 s at the app's default rk4 step 0.02 s (motor pole about -500/s); it needs dt 0.005 s to stay finite. Found by the WP-10 executor; pinned in xbEquations.robot.test.ts. |
@@ -162,8 +157,9 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 | XBV-144 | V8 | 6 UI end-to-end | Toolbar Single Step does nothing during a live run: the live run uses the worker engine, engineRef is null and stepSimulation returns immediately (XbridgesWorkspace.tsx ~2929); time stays unchanged after 3 clicks. Found by the WP-20 executor (Playwright, real Chromium); pinned in tests/e2e/xbridges/. |
 | XBV-147 | V8 | 6 UI end-to-end | The Robot Vacuum Navigation & Mapping lab shows EKF error Infinity and confidence 0 % after 5 s at the default step (same stiffness class as XBV-127). Found by the WP-20 executor (Playwright, real Chromium); pinned in tests/e2e/xbridges/. |
 | XBV-149 | V8 | 6 UI persistence | Save writes a stale model: the X-Bridges canvas reaches the project store through a 300 ms debounce (XbridgesWorkspace.tsx, debounced onSave) that every canvas change restarts, and Save does not flush it. A Save within 300 ms of an edit leaves the edit out (saved 2 after setting 3), and nothing is stored while a run is going (the run changes the canvas every 4th tick): a Save 2 s after an edit made during a run held the pre-run value. Found by the controller while diagnosing the XBV-138 pin passing on CI run 1; pinned in tests/e2e/xbridges/xbridges-persistence.spec.ts. |
+| XBV-151 | V6 | 7.3 canvas / interpreter parity | The embedded builder still refuses DELAY delay_length 0 (xbSemanticBuilder.ts ~1146 XB_DELAY_LENGTH_INVALID, diagnosticGuidance.ts) although the canvas now treats it as direct feedthrough (XBV-064, Simulink Delay). Found by the WP-21 batch A executor. |
 
-### S3 - diagnostic, UI or convention deviation (52)
+### S3 - diagnostic, UI or convention deviation (51)
 
 | Id | Gate | Plan ref | Summary |
 | --- | --- | --- | --- |
@@ -195,8 +191,6 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 | XBV-090 | V6 | 7.3 canvas / interpreter parity | SIX_STEP_COMMUTATION: the canvas treats a Hall input as high when > 0.5, the embedded path when non-zero; results differ for inputs in (0, 0.5]. Found by the WP-16 executor; pinned in src/utils/stateMachine/xbTriParity.test.ts. |
 | XBV-091 | V6 | 7.3 canvas / interpreter parity | LOW_PASS_FILTER / HIGH_PASS_FILTER at fc 10 Hz, dt 0.05 (dt/tau = 3.1): the canvas output grows (\|y\| > 1.3 from step 3, explicit integration beyond its stability limit), the embedded path stays bounded (different discretisation). Unresolved which matches Simulink at this step; both must at least agree on the discretisation rule. Found by the WP-16 executor; pinned in src/utils/stateMachine/xbTriParity.test.ts. |
 | XBV-094 | V6 | 7.3 canvas / interpreter parity | Parity gap: VectorAdd/VectorSub/VectorMul/VectorDiv are registered with a scalar shape but the embedded validator rejects scalar inputs (XB_SHAPE_MISMATCH). Found by the WP-16 executor; pinned in src/utils/stateMachine/xbTriParity.test.ts. |
-| XBV-104 | V7 | 7.1 code parity | Generated C for an integrator loop fails -Wshadow (gcc and clang): 'xb_value_0_0_i_out' shadows a previous local (sm_core.c:78). Found by the WP-17 executor; pinned in src/utils/stateMachine/xbCodeParity.test.ts. |
-| XBV-105 | V7 | 7.1 code parity | Generated C for discontinuity blocks fails -Wdouble-promotion (gcc sm_core.c:143, clang sm_core.c:100): float promoted to double in a conditional. Found by the WP-17 executor; pinned in src/utils/stateMachine/xbCodeParity.test.ts. |
 | XBV-106 | V7 | 7.2 state-machine alignment | State-machine variables are scalar only: mapping a vector (3) or matrix (2x2) X-Bridges port to an SM variable is refused (XB_MAPPING_INVALID), so plan 7.2's vector/matrix boundary mappings are not expressible; vector/matrix signals work inside the model. Reported by the WP-18 executor. |
 | XBV-107 | V7 | 7.2 state-machine alignment | PRODUCT with operation 'divide' is not available in the embedded (state-machine / C) path although the canvas offers it; divide inside a state requires VectorDiv on vectors. Reported by the WP-18 executor. |
 | XBV-112 | V2 | 4.2 fuzzy | FUZZY_AND clips its inputs to [0, 1] and turns NaN into 0 silently (min(1.5, 2) = 1, product = 1 instead of 1.5 and 3); MATLAB does not clip. Out-of-range memberships are invalid inputs, so clipping is defensible, but it is undiagnosed. Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts. |
@@ -219,8 +213,9 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 | XBV-143 | V8 | 6 UI end-to-end | A canvas run does not log a sample at the stop time: for 0..1 s at h = 0.01 the last Scope sample is t = 0.99 (y = 1.98); Simulink logs t = 1 (y = 2). Every logged sample is correct (y = 2t within 1e-9). Found by the WP-20 executor (Playwright, real Chromium); pinned in tests/e2e/xbridges/. |
 | XBV-145 | V8 | 6 UI end-to-end | A block dragged from the library is placed at the centre of the pane, not where it is dropped (pointer position ignored, XbridgesWorkspace.tsx ~2379-2395). Found by the WP-20 executor (Playwright, real Chromium); pinned in tests/e2e/xbridges/. |
 | XBV-148 | V8 | 6 UI | When a run ends at the stop time the Run button reappears before the status bar shows the final time: the status time is refreshed on every 4th tick and, at the end, only from the run effect's cleanup, so for about 40-130 ms it shows a time up to four steps short (observed 4.600/4.900/4.960 s, then 5.000 s, labs #2, #9, #10, local Chromium probe). The run itself ends at the stop time. Found by the controller from CI runs 1 and 2 (WP-22); e2e specs wait for the status to settle (waitForStatusSettled); not pinned because the window is timing-dependent. |
+| XBV-152 | V6 | 7.3 canvas / interpreter parity (test) | The per-block V6 parity case for PID_CONTROLLER is vacuous: every input port gets the same source, so r = y and e = 0; it passes without exercising the controller. Test-side gap (controller), to be replaced with distinct reference and measurement sources in batch F. Found by the WP-21 batch B verifier. |
 
-### S4 - documentation (9)
+### S4 - documentation (8)
 
 | Id | Gate | Plan ref | Summary |
 | --- | --- | --- | --- |
@@ -229,7 +224,6 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 | XBV-013 | V1 | V1 | 233 blocks have at least one port without a unit; ratchet list in tests/fixtures/xbridges/known-gaps.json. |
 | XBV-037 | V5 | 5.1 | Stiff-solver options (ode14x extrapolationOrder/newtonIterations, ode23tb relTol/absTol/minStep/maxStep) are not editable on the canvas; STIFF_SOLVER_INVALID_OPTION and STIFF_SOLVER_STEP_TOO_SMALL are reachable only from a batch configuration. Related to decision D3 (user tolerances). |
 | XBV-082 | V2 | 4.2 control / observers | SPEED_CONTROLLER and CURRENT_CONTROLLER_DQ integrate a fake 1e-6 s at their first evaluation (dt = max(1e-6, t - lastTime)), so every output is offset by Ki e 1e-6 (iq_ref(0) = 1.00001 instead of 1). Found by the WP-07 executor; pinned in xbEquations.control.test.ts. |
-| XBV-098 | V7 | 7.1 code parity | Generated C computes waveform time as (sim_time + dt) - dt, one extra rounding: sine-driven results differ from the interpreter by 6-42 ULP (about 1e-15 absolute); both stay within 1.8e-15 of the closed form. Found by the WP-17 executor; pinned in src/utils/stateMachine/xbCodeParity.test.ts. |
 | XBV-108 | V7 | 7.2 state-machine alignment | Under the 'retain' memory policy the discrete sample-hit counter freezes while the owning state is inactive (hits at ticks 1, 3, 7, 9 across exit/re-entry); simulator, runtime and C agree, but docs/XBRIDGES_EMBEDDED_CODEGEN.md does not state it. Reported by the WP-18 executor. |
 | XBV-109 | G | WP-11 | docs/powertrain/ledger.json has no per-block gate records ('blocks' is {} and no PT_ type appears), so the powertrain G1-G5 verdicts the plan imports do not exist; the 45 PT_* blocks are covered by 28 powertrain test files (204 tests pass) but their Simulink-golden gate is pending everywhere. |
 | XBV-139 | V8 | 6 UI | Properties panel labels are not tied to their editors (no htmlFor, no aria-label), so screen readers cannot name the fields. Found by the WP-19 executor; pinned in src/components/xbridges/xbV8Ui.test.tsx. |
@@ -237,7 +231,16 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 ## Closed, merged or superseded findings
 
 - XBV-008 (superseded by XBV-029): DIMENSION_MISMATCH and DATA_TYPE_MISMATCH on a connection are warnings. Decision D1: compile errors, as in Simulink.
+- XBV-083 (closed): The state-machine X-Bridges interpreter ignores Sum signs and always adds (xbInterpreter.ts ~530, case 'Sum'/'SUM_JUNCTION'/'VectorAdd'): '+-' gives u1 + u2. The canvas subtracts, and the C generator 
 - XBV-085 (merged into XBV-084): Embedded Step switches one tick early (evaluates t + dt, xbInterpreter.ts ~994): Step at T = 1 gives 1 at t = 0.95; the canvas gives 0 (Simulink: y = final for t >= T). Found by the WP-16 executor; pi
+- XBV-095 (closed): buildXBSemanticModel throws 'Invalid PID mode: PID' (xbPidContract.ts ~18) for PID_CONTROLLER with the canvas default mode 'PID' instead of returning a diagnostic. Found by the WP-16 executor; pinned 
+- XBV-096 (closed): Generated C for any model with a WaveformGen and no Clock does not compile: WaveformGen reads instance->xb_controller.sim_time, a member declared only when a Clock block exists (xbCGenerator.ts ~161, 
+- XBV-097 (closed): Generated C advances simulation time twice per tick when the model has continuous states: sim_time += dt is emitted in both passes of SolverSubstep (xbCGenerator.ts ~986, ~2500), so time runs at 2x; I
+- XBV-098 (closed): Generated C computes waveform time as (sim_time + dt) - dt, one extra rounding: sine-driven results differ from the interpreter by 6-42 ULP (about 1e-15 absolute); both stay within 1.8e-15 of the clos
+- XBV-099 (closed): The C generator throws a raw Error ('emitter requires scalar signal', xbCGenerator.ts ~500) for vector inputs to LOW_PASS_FILTER, HIGH_PASS_FILTER, MOVING_AVERAGE, IF_ELSE and SWITCH that the capabili
+- XBV-100 (closed): Generated C with Bitwise/Shift blocks fails -Wall -Werror: SM_XB_ShiftLeft32 / SM_XB_ShiftRight32 are emitted but unused. Found by the WP-17 executor; pinned in src/utils/stateMachine/xbCodeParity.tes
+- XBV-104 (closed): Generated C for an integrator loop fails -Wshadow (gcc and clang): 'xb_value_0_0_i_out' shadows a previous local (sm_core.c:78). Found by the WP-17 executor; pinned in src/utils/stateMachine/xbCodePar
+- XBV-105 (closed): Generated C for discontinuity blocks fails -Wdouble-promotion (gcc sm_core.c:143, clang sm_core.c:100): float promoted to double in a conditional. Found by the WP-17 executor; pinned in src/utils/stat
 
 ## Decisions
 

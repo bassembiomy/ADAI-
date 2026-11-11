@@ -573,7 +573,7 @@
    "exec": "S / H, verifier opus",
    "deps": [],
    "status": "in_progress",
-   "note": "User go-ahead 2026-11-11 (fix all findings). Plan: docs/xbridges-verification/wp21-fix-plan.md. Round 1 dispatched: A zero parameters, B embedded quick fixes, C workspace UI."
+   "note": "User go-ahead 2026-11-11 (fix all findings). Plan: docs/xbridges-verification/wp21-fix-plan.md. Round 1 dispatched: A zero parameters, B embedded quick fixes, C workspace UI. Batch B merged (a3daf970): 9 findings closed; new XBV-150 (embedded PID semantics), XBV-151 (embedded DELAY 0), XBV-152 (vacuous PID parity case). LIBM_CONDITIONED bound (8 eps max(1,|y|), 17 keys) added to xbCodeParity, verifier re-measured worst ratio 3.85."
   },
   {
    "id": "WP-22",
@@ -1284,8 +1284,9 @@
    "plan_ref": "7.3 canvas / interpreter parity",
    "severity": "S1",
    "gate": "V6",
-   "status": "open",
-   "summary": "The state-machine X-Bridges interpreter ignores Sum signs and always adds (xbInterpreter.ts ~530, case 'Sum'/'SUM_JUNCTION'/'VectorAdd'): '+-' gives u1 + u2. The canvas subtracts, and the C generator applies the signs (xbCGenerator.ts ~1030), so for any Sum with a minus sign the interpreter (state-machine simulation, and the reference used by the C conformance cases) differs from both the canvas and the generated C. Found by the WP-16 executor; pinned in src/utils/stateMachine/xbTriParity.test.ts."
+   "status": "closed",
+   "summary": "The state-machine X-Bridges interpreter ignores Sum signs and always adds (xbInterpreter.ts ~530, case 'Sum'/'SUM_JUNCTION'/'VectorAdd'): '+-' gives u1 + u2. The canvas subtracts, and the C generator applies the signs (xbCGenerator.ts ~1030), so for any Sum with a minus sign the interpreter (state-machine simulation, and the reference used by the C conformance cases) differs from both the canvas and the generated C. Found by the WP-16 executor; pinned in src/utils/stateMachine/xbTriParity.test.ts.",
+   "fix": "WP-21 batch B (merge a3daf970), verifier PASS"
   },
   {
    "id": "XBV-084",
@@ -1372,48 +1373,54 @@
    "plan_ref": "7.3 canvas / interpreter parity",
    "severity": "S2",
    "gate": "V6",
-   "status": "open",
-   "summary": "buildXBSemanticModel throws 'Invalid PID mode: PID' (xbPidContract.ts ~18) for PID_CONTROLLER with the canvas default mode 'PID' instead of returning a diagnostic. Found by the WP-16 executor; pinned in src/utils/stateMachine/xbTriParity.test.ts."
+   "status": "closed",
+   "summary": "buildXBSemanticModel throws 'Invalid PID mode: PID' (xbPidContract.ts ~18) for PID_CONTROLLER with the canvas default mode 'PID' instead of returning a diagnostic. Found by the WP-16 executor; pinned in src/utils/stateMachine/xbTriParity.test.ts.",
+   "fix": "WP-21 batch B (merge a3daf970), verifier PASS"
   },
   {
    "id": "XBV-096",
    "plan_ref": "7.1 code parity",
    "severity": "S1",
    "gate": "V7",
-   "status": "open",
-   "summary": "Generated C for any model with a WaveformGen and no Clock does not compile: WaveformGen reads instance->xb_controller.sim_time, a member declared only when a Clock block exists (xbCGenerator.ts ~161, ~1001); with a Clock, the waveform time depends on the Clock running first. Found by the WP-17 executor; pinned in src/utils/stateMachine/xbCodeParity.test.ts."
+   "status": "closed",
+   "summary": "Generated C for any model with a WaveformGen and no Clock does not compile: WaveformGen reads instance->xb_controller.sim_time, a member declared only when a Clock block exists (xbCGenerator.ts ~161, ~1001); with a Clock, the waveform time depends on the Clock running first. Found by the WP-17 executor; pinned in src/utils/stateMachine/xbCodeParity.test.ts.",
+   "fix": "WP-21 batch B (merge a3daf970), verifier PASS"
   },
   {
    "id": "XBV-097",
    "plan_ref": "7.1 code parity",
    "severity": "S1",
    "gate": "V7",
-   "status": "open",
-   "summary": "Generated C advances simulation time twice per tick when the model has continuous states: sim_time += dt is emitted in both passes of SolverSubstep (xbCGenerator.ts ~986, ~2500), so time runs at 2x; Integrator of a sine gives 0.040156 instead of 0.033128 at tick 2 (interpreter correct). Found by the WP-17 executor; pinned in src/utils/stateMachine/xbCodeParity.test.ts."
+   "status": "closed",
+   "summary": "Generated C advances simulation time twice per tick when the model has continuous states: sim_time += dt is emitted in both passes of SolverSubstep (xbCGenerator.ts ~986, ~2500), so time runs at 2x; Integrator of a sine gives 0.040156 instead of 0.033128 at tick 2 (interpreter correct). Found by the WP-17 executor; pinned in src/utils/stateMachine/xbCodeParity.test.ts.",
+   "fix": "WP-21 batch B (merge a3daf970), verifier PASS"
   },
   {
    "id": "XBV-098",
    "plan_ref": "7.1 code parity",
    "severity": "S4",
    "gate": "V7",
-   "status": "open",
-   "summary": "Generated C computes waveform time as (sim_time + dt) - dt, one extra rounding: sine-driven results differ from the interpreter by 6-42 ULP (about 1e-15 absolute); both stay within 1.8e-15 of the closed form. Found by the WP-17 executor; pinned in src/utils/stateMachine/xbCodeParity.test.ts."
+   "status": "closed",
+   "summary": "Generated C computes waveform time as (sim_time + dt) - dt, one extra rounding: sine-driven results differ from the interpreter by 6-42 ULP (about 1e-15 absolute); both stay within 1.8e-15 of the closed form. Found by the WP-17 executor; pinned in src/utils/stateMachine/xbCodeParity.test.ts.",
+   "fix": "WP-21 batch B (merge a3daf970), verifier PASS"
   },
   {
    "id": "XBV-099",
    "plan_ref": "7.1 code parity",
    "severity": "S2",
    "gate": "V7",
-   "status": "open",
-   "summary": "The C generator throws a raw Error ('emitter requires scalar signal', xbCGenerator.ts ~500) for vector inputs to LOW_PASS_FILTER, HIGH_PASS_FILTER, MOVING_AVERAGE, IF_ELSE and SWITCH that the capability registry declares, instead of returning a diagnostic. Found by the WP-17 executor; pinned in src/utils/stateMachine/xbCodeParity.test.ts."
+   "status": "closed",
+   "summary": "The C generator throws a raw Error ('emitter requires scalar signal', xbCGenerator.ts ~500) for vector inputs to LOW_PASS_FILTER, HIGH_PASS_FILTER, MOVING_AVERAGE, IF_ELSE and SWITCH that the capability registry declares, instead of returning a diagnostic. Found by the WP-17 executor; pinned in src/utils/stateMachine/xbCodeParity.test.ts.",
+   "fix": "WP-21 batch B (merge a3daf970), verifier PASS"
   },
   {
    "id": "XBV-100",
    "plan_ref": "7.1 code parity",
    "severity": "S2",
    "gate": "V7",
-   "status": "open",
-   "summary": "Generated C with Bitwise/Shift blocks fails -Wall -Werror: SM_XB_ShiftLeft32 / SM_XB_ShiftRight32 are emitted but unused. Found by the WP-17 executor; pinned in src/utils/stateMachine/xbCodeParity.test.ts."
+   "status": "closed",
+   "summary": "Generated C with Bitwise/Shift blocks fails -Wall -Werror: SM_XB_ShiftLeft32 / SM_XB_ShiftRight32 are emitted but unused. Found by the WP-17 executor; pinned in src/utils/stateMachine/xbCodeParity.test.ts.",
+   "fix": "WP-21 batch B (merge a3daf970), verifier PASS"
   },
   {
    "id": "XBV-101",
@@ -1444,16 +1451,18 @@
    "plan_ref": "7.1 code parity",
    "severity": "S3",
    "gate": "V7",
-   "status": "open",
-   "summary": "Generated C for an integrator loop fails -Wshadow (gcc and clang): 'xb_value_0_0_i_out' shadows a previous local (sm_core.c:78). Found by the WP-17 executor; pinned in src/utils/stateMachine/xbCodeParity.test.ts."
+   "status": "closed",
+   "summary": "Generated C for an integrator loop fails -Wshadow (gcc and clang): 'xb_value_0_0_i_out' shadows a previous local (sm_core.c:78). Found by the WP-17 executor; pinned in src/utils/stateMachine/xbCodeParity.test.ts.",
+   "fix": "WP-21 batch B (merge a3daf970), verifier PASS"
   },
   {
    "id": "XBV-105",
    "plan_ref": "7.1 code parity",
    "severity": "S3",
    "gate": "V7",
-   "status": "open",
-   "summary": "Generated C for discontinuity blocks fails -Wdouble-promotion (gcc sm_core.c:143, clang sm_core.c:100): float promoted to double in a conditional. Found by the WP-17 executor; pinned in src/utils/stateMachine/xbCodeParity.test.ts."
+   "status": "closed",
+   "summary": "Generated C for discontinuity blocks fails -Wdouble-promotion (gcc sm_core.c:143, clang sm_core.c:100): float promoted to double in a conditional. Found by the WP-17 executor; pinned in src/utils/stateMachine/xbCodeParity.test.ts.",
+   "fix": "WP-21 batch B (merge a3daf970), verifier PASS"
   },
   {
    "id": "XBV-106",
@@ -1806,6 +1815,30 @@
    "gate": "V8",
    "status": "open",
    "summary": "Save writes a stale model: the X-Bridges canvas reaches the project store through a 300 ms debounce (XbridgesWorkspace.tsx, debounced onSave) that every canvas change restarts, and Save does not flush it. A Save within 300 ms of an edit leaves the edit out (saved 2 after setting 3), and nothing is stored while a run is going (the run changes the canvas every 4th tick): a Save 2 s after an edit made during a run held the pre-run value. Found by the controller while diagnosing the XBV-138 pin passing on CI run 1; pinned in tests/e2e/xbridges/xbridges-persistence.spec.ts."
+  },
+  {
+   "id": "XBV-150",
+   "plan_ref": "7.3 canvas / interpreter parity",
+   "severity": "S1",
+   "gate": "V6",
+   "status": "open",
+   "summary": "Embedded PID_CONTROLLER differs from the canvas PID: the embedded side ignores setpoint weights beta and gamma (unit step, canvas defaults gamma 0: u(0) 1.1667 vs 1.0), always uses the backward-Euler D filter whatever the method, publishes 0 on 'error' (the builder treats any port named error as the fault flag; canvas r - y), runs 'trapezoidal' which the canvas refuses, and refuses sampleTime 0 which the canvas treats as continuous. Mode P/PI/PD/PID is mapped to contract mode 'discrete' (harmless, unread). Found by the WP-21 batch B verifier."
+  },
+  {
+   "id": "XBV-151",
+   "plan_ref": "7.3 canvas / interpreter parity",
+   "severity": "S2",
+   "gate": "V6",
+   "status": "open",
+   "summary": "The embedded builder still refuses DELAY delay_length 0 (xbSemanticBuilder.ts ~1146 XB_DELAY_LENGTH_INVALID, diagnosticGuidance.ts) although the canvas now treats it as direct feedthrough (XBV-064, Simulink Delay). Found by the WP-21 batch A executor."
+  },
+  {
+   "id": "XBV-152",
+   "plan_ref": "7.3 canvas / interpreter parity (test)",
+   "severity": "S3",
+   "gate": "V6",
+   "status": "open",
+   "summary": "The per-block V6 parity case for PID_CONTROLLER is vacuous: every input port gets the same source, so r = y and e = 0; it passes without exercising the controller. Test-side gap (controller), to be replaced with distinct reference and measurement sources in batch F. Found by the WP-21 batch B verifier."
   }
  ],
  "blocks": {
