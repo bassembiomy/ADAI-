@@ -5,3 +5,4 @@ export * from './referenceIntegrator';
 export * from './randomGraph';
 export * from './cHarness';
 export * from './diagnosticRecipes';
+export * from './embedded';

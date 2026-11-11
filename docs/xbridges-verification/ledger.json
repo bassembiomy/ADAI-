@@ -425,7 +425,8 @@
     "WP-08",
     "WP-13"
    ],
-   "status": "in_progress"
+   "status": "in_progress",
+   "note": "Harness (testkit/embedded.ts) and xbTriParity.test.ts by Sonnet from the controller spec; controller confirmed XBV-083 in the source (interpreter ignores Sum signs while the C generator applies them); findings XBV-083..095 (089 unused). Awaiting the Opus verifier."
   },
   {
    "id": "WP-17",
@@ -498,7 +499,7 @@
    "severity": "S1",
    "gate": "V6",
    "status": "open",
-   "summary": "Canvas engine and state-machine interpreter are compared only by xbSimEmbeddedParity.test.ts: unit-constant input, 6 ticks, scalar, discrete solver."
+   "summary": "Canvas engine and state-machine interpreter are compared only by xbSimEmbeddedParity.test.ts: unit-constant input, 6 ticks, scalar, discrete solver. WP-16 measured it: 281 (type, solver) cases, 178 equal; random graphs fail via XBV-083/084/085."
   },
   {
    "id": "XBV-002",
@@ -818,7 +819,7 @@
    "severity": "S3",
    "gate": "V2",
    "status": "open",
-   "summary": "The Sources 'Clock' block is a 50% square-wave pulse generator (freq parameter), not the Simulink Clock (output = simulation time); a Simulink user wiring Clock as time gets a 0/1 square wave. No block outputs t. Pinned in xbEquations.math.test.ts."
+   "summary": "The Sources 'Clock' block is a 50% square-wave pulse generator (freq parameter), not the Simulink Clock (output = simulation time); a Simulink user wiring Clock as time gets a 0/1 square wave. No block outputs t. Pinned in xbEquations.math.test.ts. The embedded path implements Clock as time (WP-16), so the canvas and the state machine also disagree."
   },
   {
    "id": "XBV-042",
@@ -1010,7 +1011,7 @@
    "severity": "S1",
    "gate": "V2",
    "status": "open",
-   "summary": "SATURATION is scalar-only: a vector input or vector limits give NaN (Number(array)); Simulink Saturation is element-wise with scalar or vector limits. Found by the WP-06 executor; pinned in xbEquations.dynamics.test.ts."
+   "summary": "SATURATION is scalar-only: a vector input or vector limits give NaN (Number(array)); Simulink Saturation is element-wise with scalar or vector limits. Found by the WP-06 executor; pinned in xbEquations.dynamics.test.ts. DEADZONE is scalar-only on the canvas too; the embedded path is element-wise and correct (WP-16)."
   },
   {
    "id": "XBV-066",
@@ -1034,7 +1035,7 @@
    "severity": "S1",
    "gate": "V2",
    "status": "open",
-   "summary": "MOVING_AVERAGE starts with its window filled with the first sample (3, 6, 9, 12 -> 3, 4, 6, 9); a sliding-window average with zero initial state gives 1, 3, 6, 9. Found by the WP-06 executor; pinned in xbEquations.dynamics.test.ts."
+   "summary": "MOVING_AVERAGE starts with its window filled with the first sample (3, 6, 9, 12 -> 3, 4, 6, 9); a sliding-window average with zero initial state gives 1, 3, 6, 9. Found by the WP-06 executor; pinned in xbEquations.dynamics.test.ts. The embedded path starts from zeros and is correct (WP-16)."
   },
   {
    "id": "XBV-069",
@@ -1147,6 +1148,102 @@
    "gate": "V2",
    "status": "open",
    "summary": "SPEED_CONTROLLER and CURRENT_CONTROLLER_DQ integrate a fake 1e-6 s at their first evaluation (dt = max(1e-6, t - lastTime)), so every output is offset by Ki e 1e-6 (iq_ref(0) = 1.00001 instead of 1). Found by the WP-07 executor; pinned in xbEquations.control.test.ts."
+  },
+  {
+   "id": "XBV-083",
+   "plan_ref": "7.3 canvas / interpreter parity",
+   "severity": "S1",
+   "gate": "V6",
+   "status": "open",
+   "summary": "The state-machine X-Bridges interpreter ignores Sum signs and always adds (xbInterpreter.ts ~530, case 'Sum'/'SUM_JUNCTION'/'VectorAdd'): '+-' gives u1 + u2. The canvas subtracts, and the C generator applies the signs (xbCGenerator.ts ~1030), so for any Sum with a minus sign the interpreter (state-machine simulation, and the reference used by the C conformance cases) differs from both the canvas and the generated C. Found by the WP-16 executor; pinned in src/utils/stateMachine/xbTriParity.test.ts."
+  },
+  {
+   "id": "XBV-084",
+   "plan_ref": "7.3 canvas / interpreter parity",
+   "severity": "S1",
+   "gate": "V6",
+   "status": "open",
+   "summary": "Embedded stateful blocks (Integrator, INTEGRATOR_CONTINUOUS, RATE_LIMITER) report their post-update state, one tick ahead: Constant 1 -> Integrator gives 0.035 at t = 0 instead of 0 (closed form y = t; the canvas matches). Found by the WP-16 executor; pinned in src/utils/stateMachine/xbTriParity.test.ts."
+  },
+  {
+   "id": "XBV-085",
+   "plan_ref": "7.3 canvas / interpreter parity",
+   "severity": "S1",
+   "gate": "V6",
+   "status": "open",
+   "summary": "Embedded Step switches one tick early (evaluates t + dt, xbInterpreter.ts ~994): Step at T = 1 gives 1 at t = 0.95; the canvas gives 0 (Simulink: y = final for t >= T). Found by the WP-16 executor; pinned in src/utils/stateMachine/xbTriParity.test.ts."
+  },
+  {
+   "id": "XBV-086",
+   "plan_ref": "7.3 canvas / interpreter parity",
+   "severity": "S1",
+   "gate": "V6",
+   "status": "open",
+   "summary": "Embedded inverse trigonometric/hyperbolic blocks (ACOS, ACOSEC, ACOSH, ACOTH, ASEC, ASECH, ASIN, ATANH) return 0 outside their domain; the canvas returns NaN with MATH_DOMAIN_ERROR (IEEE/C99 give NaN). Found by the WP-16 executor; pinned in src/utils/stateMachine/xbTriParity.test.ts."
+  },
+  {
+   "id": "XBV-087",
+   "plan_ref": "7.3 canvas / interpreter parity",
+   "severity": "S3",
+   "gate": "V6",
+   "status": "open",
+   "summary": "Bitwise and shift blocks: canvas works in signed int32 (~0 = -1), the embedded path in uint32 (4294967295). No data-type contract decides which is right; Simulink requires an integer data type on the port. Needs a decision (data-type propagation). Found by the WP-16 executor; pinned in src/utils/stateMachine/xbTriParity.test.ts."
+  },
+  {
+   "id": "XBV-088",
+   "plan_ref": "7.3 canvas / interpreter parity",
+   "severity": "S3",
+   "gate": "V6",
+   "status": "open",
+   "summary": "WHITE_NOISE / BAND_LIMITED_NOISE use different random streams on the canvas (Math.random) and in the embedded path (deterministic generator), so a model with noise never matches between the two (related XBV-023). Found by the WP-16 executor; pinned in src/utils/stateMachine/xbTriParity.test.ts."
+  },
+  {
+   "id": "XBV-090",
+   "plan_ref": "7.3 canvas / interpreter parity",
+   "severity": "S3",
+   "gate": "V6",
+   "status": "open",
+   "summary": "SIX_STEP_COMMUTATION: the canvas treats a Hall input as high when > 0.5, the embedded path when non-zero; results differ for inputs in (0, 0.5]. Found by the WP-16 executor; pinned in src/utils/stateMachine/xbTriParity.test.ts."
+  },
+  {
+   "id": "XBV-091",
+   "plan_ref": "7.3 canvas / interpreter parity",
+   "severity": "S3",
+   "gate": "V6",
+   "status": "open",
+   "summary": "LOW_PASS_FILTER / HIGH_PASS_FILTER at fc 10 Hz, dt 0.05 (dt/tau = 3.1): the canvas output grows (|y| > 1.3 from step 3, explicit integration beyond its stability limit), the embedded path stays bounded (different discretisation). Unresolved which matches Simulink at this step; both must at least agree on the discretisation rule. Found by the WP-16 executor; pinned in src/utils/stateMachine/xbTriParity.test.ts."
+  },
+  {
+   "id": "XBV-092",
+   "plan_ref": "7.3 canvas / interpreter parity",
+   "severity": "S2",
+   "gate": "V6",
+   "status": "open",
+   "summary": "KALMAN_FILTER in the parity harness: canvas x_hat and kg are non-numeric and y_hat differs from the embedded path (shape handling of the default matrices). To be bisected in WP-16b. Found by the WP-16 executor; pinned in src/utils/stateMachine/xbTriParity.test.ts."
+  },
+  {
+   "id": "XBV-093",
+   "plan_ref": "7.3 canvas / interpreter parity",
+   "severity": "S2",
+   "gate": "V6",
+   "status": "open",
+   "summary": "Parity gap: the embedded path refuses STATE_SPACE (continuous representation, XB_DISCRETE_REPRESENTATION_REQUIRED) and DISCRETE_TRANSFER_FUNCTION with the default initial state (XB_STATE_INITIAL_VALUE_INVALID) for models the canvas runs. Found by the WP-16 executor; pinned in src/utils/stateMachine/xbTriParity.test.ts."
+  },
+  {
+   "id": "XBV-094",
+   "plan_ref": "7.3 canvas / interpreter parity",
+   "severity": "S3",
+   "gate": "V6",
+   "status": "open",
+   "summary": "Parity gap: VectorAdd/VectorSub/VectorMul/VectorDiv are registered with a scalar shape but the embedded validator rejects scalar inputs (XB_SHAPE_MISMATCH). Found by the WP-16 executor; pinned in src/utils/stateMachine/xbTriParity.test.ts."
+  },
+  {
+   "id": "XBV-095",
+   "plan_ref": "7.3 canvas / interpreter parity",
+   "severity": "S2",
+   "gate": "V6",
+   "status": "open",
+   "summary": "buildXBSemanticModel throws 'Invalid PID mode: PID' (xbPidContract.ts ~18) for PID_CONTROLLER with the canvas default mode 'PID' instead of returning a diagnostic. Found by the WP-16 executor; pinned in src/utils/stateMachine/xbTriParity.test.ts."
   }
  ],
  "blocks": {
