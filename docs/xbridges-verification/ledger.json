@@ -458,7 +458,7 @@
    "deps": [
     "WP-16"
    ],
-   "status": "in_progress",
+   "status": "done",
    "note": "Harness (testkit/cParity.ts) and xbCodeParity.test.ts by Sonnet from the controller spec; 506 block cases (369 equal, worst 4 ULP), registry closure, compile matrix, sanitizers, static properties, limits; findings XBV-096..105. Awaiting the Opus verifier.",
    "rework": [
     {
@@ -471,16 +471,30 @@
      ],
      "fix": "XBV-086 restated (interpreter wrong; NaN vs fallback is a convention question); floor only near zero (|x| < 1e-3); secondary 1e-13 check inside every XBV-098 class"
     }
-   ]
+   ],
+   "verification": {
+    "executor": "Sonnet (harness + tests from controller spec, D7)",
+    "verifier": "Opus subagent (D8): FAIL (XBV-086 attribution, ULP floor, whole-class pins), PASS round 2 (759 passed / 176 expected fail, twice)",
+    "open": "float32 parity -> WP-17b"
+   }
   },
   {
-   "id": "WP-18",
-   "title": "State-machine alignment incl. AUTOSAR path",
+   "id": "WP-17b",
+   "title": "Code parity part B: float32 production profile (per-block parity with float32 tolerances), clang sanitizers with runtime, DiagExtract/ExtractDiag/Diag",
    "exec": "S / F",
    "deps": [
     "WP-17"
    ],
    "status": "todo"
+  },
+  {
+   "id": "WP-18",
+   "title": "State-machine alignment incl. AUTOSAR path",
+   "exec": "S (tests from controller spec, D7) / F (Opus, D8)",
+   "deps": [
+    "WP-17"
+   ],
+   "status": "in_progress"
   },
   {
    "id": "WP-19",
