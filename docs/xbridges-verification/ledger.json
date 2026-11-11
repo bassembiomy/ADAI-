@@ -299,7 +299,8 @@
    "deps": [
     "WP-03"
    ],
-   "status": "in_progress"
+   "status": "in_progress",
+   "note": "Haiku evidence collection (scratchpad wp11-powertrain.json): 45 PT types, all tested by powertrain suites (204 pass), none in universal/known-gap lists, all host-only (codegen false), on both palettes; powertrain ledger empty (XBV-109). Ledger gates updated for 45 PT blocks; V8 left for WP-19. Awaiting the Opus verifier together with WP-09."
   },
   {
    "id": "WP-12",
@@ -1404,6 +1405,14 @@
    "gate": "V7",
    "status": "open",
    "summary": "Under the 'retain' memory policy the discrete sample-hit counter freezes while the owning state is inactive (hits at ticks 1, 3, 7, 9 across exit/re-entry); simulator, runtime and C agree, but docs/XBRIDGES_EMBEDDED_CODEGEN.md does not state it. Reported by the WP-18 executor."
+  },
+  {
+   "id": "XBV-109",
+   "plan_ref": "WP-11",
+   "severity": "S4",
+   "gate": "G",
+   "status": "open",
+   "summary": "docs/powertrain/ledger.json has no per-block gate records ('blocks' is {} and no PT_ type appears), so the powertrain G1-G5 verdicts the plan imports do not exist; the 45 PT_* blocks are covered by 28 powertrain test files (204 tests pass) but their Simulink-golden gate is pending everywhere."
   }
  ],
  "blocks": {
@@ -4841,630 +4850,630 @@
    "category": "Powertrain Blockset",
    "gates": {
     "V1": "pass",
-    "V2": "todo",
-    "V3": "todo",
+    "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
+    "V3": "pass (universal battery: no PT entry in any pinned list)",
     "V4": "todo",
     "V5": "n/a",
-    "V6": "n/a",
-    "V7": "todo",
+    "V6": "n/a (host-only, codegen false)",
+    "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
-    "G": "powertrain-ledger"
+    "G": "pending (powertrain ledger has no per-block gate records)"
    }
   },
   "PT_LONGITUDINAL_DRIVER": {
    "category": "Powertrain Blockset",
    "gates": {
     "V1": "pass",
-    "V2": "todo",
-    "V3": "todo",
+    "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
+    "V3": "pass (universal battery: no PT entry in any pinned list)",
     "V4": "todo",
     "V5": "todo",
-    "V6": "n/a",
-    "V7": "todo",
+    "V6": "n/a (host-only, codegen false)",
+    "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
-    "G": "powertrain-ledger"
+    "G": "pending (powertrain ledger has no per-block gate records)"
    }
   },
   "PT_VEHICLE_BODY_1DOF": {
    "category": "Powertrain Blockset",
    "gates": {
     "V1": "pass",
-    "V2": "todo",
-    "V3": "todo",
+    "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
+    "V3": "pass (universal battery: no PT entry in any pinned list)",
     "V4": "todo",
     "V5": "todo",
-    "V6": "n/a",
-    "V7": "todo",
+    "V6": "n/a (host-only, codegen false)",
+    "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
-    "G": "powertrain-ledger"
+    "G": "pending (powertrain ledger has no per-block gate records)"
    }
   },
   "PT_DATASHEET_BATTERY": {
    "category": "Powertrain Blockset",
    "gates": {
     "V1": "pass",
-    "V2": "todo",
-    "V3": "todo",
+    "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
+    "V3": "pass (universal battery: no PT entry in any pinned list)",
     "V4": "todo",
     "V5": "todo",
-    "V6": "n/a",
-    "V7": "todo",
+    "V6": "n/a (host-only, codegen false)",
+    "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
-    "G": "powertrain-ledger"
+    "G": "pending (powertrain ledger has no per-block gate records)"
    }
   },
   "PT_EQUIVALENT_CIRCUIT_BATTERY": {
    "category": "Powertrain Blockset",
    "gates": {
     "V1": "pass",
-    "V2": "todo",
-    "V3": "todo",
+    "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
+    "V3": "pass (universal battery: no PT entry in any pinned list)",
     "V4": "todo",
     "V5": "todo",
-    "V6": "n/a",
-    "V7": "todo",
+    "V6": "n/a (host-only, codegen false)",
+    "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
-    "G": "powertrain-ledger"
+    "G": "pending (powertrain ledger has no per-block gate records)"
    }
   },
   "PT_MAPPED_MOTOR": {
    "category": "Powertrain Blockset",
    "gates": {
     "V1": "pass",
-    "V2": "todo",
-    "V3": "todo",
+    "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
+    "V3": "pass (universal battery: no PT entry in any pinned list)",
     "V4": "todo",
     "V5": "todo",
-    "V6": "n/a",
-    "V7": "todo",
+    "V6": "n/a (host-only, codegen false)",
+    "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
-    "G": "powertrain-ledger"
+    "G": "pending (powertrain ledger has no per-block gate records)"
    }
   },
   "PT_LONGITUDINAL_WHEEL": {
    "category": "Powertrain Blockset",
    "gates": {
     "V1": "pass",
-    "V2": "todo",
-    "V3": "todo",
+    "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
+    "V3": "pass (universal battery: no PT entry in any pinned list)",
     "V4": "todo",
     "V5": "todo",
-    "V6": "n/a",
-    "V7": "todo",
+    "V6": "n/a (host-only, codegen false)",
+    "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
-    "G": "powertrain-ledger"
+    "G": "pending (powertrain ledger has no per-block gate records)"
    }
   },
   "PT_ROTATIONAL_INERTIA": {
    "category": "Powertrain Blockset",
    "gates": {
     "V1": "pass",
-    "V2": "todo",
-    "V3": "todo",
+    "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
+    "V3": "pass (universal battery: no PT entry in any pinned list)",
     "V4": "todo",
     "V5": "todo",
-    "V6": "n/a",
-    "V7": "todo",
+    "V6": "n/a (host-only, codegen false)",
+    "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
-    "G": "powertrain-ledger"
+    "G": "pending (powertrain ledger has no per-block gate records)"
    }
   },
   "PT_TORSIONAL_COMPLIANCE": {
    "category": "Powertrain Blockset",
    "gates": {
     "V1": "pass",
-    "V2": "todo",
-    "V3": "todo",
+    "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
+    "V3": "pass (universal battery: no PT entry in any pinned list)",
     "V4": "todo",
     "V5": "todo",
-    "V6": "n/a",
-    "V7": "todo",
+    "V6": "n/a (host-only, codegen false)",
+    "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
-    "G": "powertrain-ledger"
+    "G": "pending (powertrain ledger has no per-block gate records)"
    }
   },
   "PT_DISC_CLUTCH": {
    "category": "Powertrain Blockset",
    "gates": {
     "V1": "pass",
-    "V2": "todo",
-    "V3": "todo",
+    "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
+    "V3": "pass (universal battery: no PT entry in any pinned list)",
     "V4": "todo",
     "V5": "todo",
-    "V6": "n/a",
-    "V7": "todo",
+    "V6": "n/a (host-only, codegen false)",
+    "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
-    "G": "powertrain-ledger"
+    "G": "pending (powertrain ledger has no per-block gate records)"
    }
   },
   "PT_TORQUE_CONVERTER": {
    "category": "Powertrain Blockset",
    "gates": {
     "V1": "pass",
-    "V2": "todo",
-    "V3": "todo",
+    "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
+    "V3": "pass (universal battery: no PT entry in any pinned list)",
     "V4": "todo",
     "V5": "n/a",
-    "V6": "n/a",
-    "V7": "todo",
+    "V6": "n/a (host-only, codegen false)",
+    "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
-    "G": "powertrain-ledger"
+    "G": "pending (powertrain ledger has no per-block gate records)"
    }
   },
   "PT_PLANETARY_GEAR": {
    "category": "Powertrain Blockset",
    "gates": {
     "V1": "pass",
-    "V2": "todo",
-    "V3": "todo",
+    "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
+    "V3": "pass (universal battery: no PT entry in any pinned list)",
     "V4": "todo",
     "V5": "todo",
-    "V6": "n/a",
-    "V7": "todo",
+    "V6": "n/a (host-only, codegen false)",
+    "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
-    "G": "powertrain-ledger"
+    "G": "pending (powertrain ledger has no per-block gate records)"
    }
   },
   "PT_FLOW_BOUNDARY": {
    "category": "Powertrain Blockset",
    "gates": {
     "V1": "pass",
-    "V2": "todo",
-    "V3": "todo",
+    "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
+    "V3": "pass (universal battery: no PT entry in any pinned list)",
     "V4": "todo",
     "V5": "n/a",
-    "V6": "n/a",
-    "V7": "todo",
+    "V6": "n/a (host-only, codegen false)",
+    "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
-    "G": "powertrain-ledger"
+    "G": "pending (powertrain ledger has no per-block gate records)"
    }
   },
   "PT_FLOW_RESTRICTION": {
    "category": "Powertrain Blockset",
    "gates": {
     "V1": "pass",
-    "V2": "todo",
-    "V3": "todo",
+    "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
+    "V3": "pass (universal battery: no PT entry in any pinned list)",
     "V4": "todo",
     "V5": "n/a",
-    "V6": "n/a",
-    "V7": "todo",
+    "V6": "n/a (host-only, codegen false)",
+    "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
-    "G": "powertrain-ledger"
+    "G": "pending (powertrain ledger has no per-block gate records)"
    }
   },
   "PT_CONTROL_VOLUME": {
    "category": "Powertrain Blockset",
    "gates": {
     "V1": "pass",
-    "V2": "todo",
-    "V3": "todo",
+    "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
+    "V3": "pass (universal battery: no PT entry in any pinned list)",
     "V4": "todo",
     "V5": "todo",
-    "V6": "n/a",
-    "V7": "todo",
+    "V6": "n/a (host-only, codegen false)",
+    "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
-    "G": "powertrain-ledger"
+    "G": "pending (powertrain ledger has no per-block gate records)"
    }
   },
   "PT_HEAT_EXCHANGER": {
    "category": "Powertrain Blockset",
    "gates": {
     "V1": "pass",
-    "V2": "todo",
-    "V3": "todo",
+    "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
+    "V3": "pass (universal battery: no PT entry in any pinned list)",
     "V4": "todo",
     "V5": "n/a",
-    "V6": "n/a",
-    "V7": "todo",
+    "V6": "n/a (host-only, codegen false)",
+    "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
-    "G": "powertrain-ledger"
+    "G": "pending (powertrain ledger has no per-block gate records)"
    }
   },
   "PT_COMPRESSOR": {
    "category": "Powertrain Blockset",
    "gates": {
     "V1": "pass",
-    "V2": "todo",
-    "V3": "todo",
+    "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
+    "V3": "pass (universal battery: no PT entry in any pinned list)",
     "V4": "todo",
     "V5": "n/a",
-    "V6": "n/a",
-    "V7": "todo",
+    "V6": "n/a (host-only, codegen false)",
+    "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
-    "G": "powertrain-ledger"
+    "G": "pending (powertrain ledger has no per-block gate records)"
    }
   },
   "PT_TURBINE": {
    "category": "Powertrain Blockset",
    "gates": {
     "V1": "pass",
-    "V2": "todo",
-    "V3": "todo",
+    "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
+    "V3": "pass (universal battery: no PT entry in any pinned list)",
     "V4": "todo",
     "V5": "n/a",
-    "V6": "n/a",
-    "V7": "todo",
+    "V6": "n/a (host-only, codegen false)",
+    "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
-    "G": "powertrain-ledger"
+    "G": "pending (powertrain ledger has no per-block gate records)"
    }
   },
   "PT_DRIVE_SHAFT": {
    "category": "Powertrain Blockset",
    "gates": {
     "V1": "pass",
-    "V2": "todo",
-    "V3": "todo",
+    "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
+    "V3": "pass (universal battery: no PT entry in any pinned list)",
     "V4": "todo",
     "V5": "todo",
-    "V6": "n/a",
-    "V7": "todo",
+    "V6": "n/a (host-only, codegen false)",
+    "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
-    "G": "powertrain-ledger"
+    "G": "pending (powertrain ledger has no per-block gate records)"
    }
   },
   "PT_CI_CORE_ENGINE": {
    "category": "Powertrain Blockset",
    "gates": {
     "V1": "pass",
-    "V2": "todo",
-    "V3": "todo",
+    "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
+    "V3": "pass (universal battery: no PT entry in any pinned list)",
     "V4": "todo",
     "V5": "n/a",
-    "V6": "n/a",
-    "V7": "todo",
+    "V6": "n/a (host-only, codegen false)",
+    "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
-    "G": "powertrain-ledger"
+    "G": "pending (powertrain ledger has no per-block gate records)"
    }
   },
   "PT_IDEAL_FIXED_GEAR_TRANSMISSION": {
    "category": "Powertrain Blockset",
    "gates": {
     "V1": "pass",
-    "V2": "todo",
-    "V3": "todo",
+    "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
+    "V3": "pass (universal battery: no PT entry in any pinned list)",
     "V4": "todo",
     "V5": "n/a",
-    "V6": "n/a",
-    "V7": "todo",
+    "V6": "n/a (host-only, codegen false)",
+    "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
-    "G": "powertrain-ledger"
+    "G": "pending (powertrain ledger has no per-block gate records)"
    }
   },
   "PT_AUTOMATED_MANUAL_TRANSMISSION": {
    "category": "Powertrain Blockset",
    "gates": {
     "V1": "pass",
-    "V2": "todo",
-    "V3": "todo",
+    "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
+    "V3": "pass (universal battery: no PT entry in any pinned list)",
     "V4": "todo",
     "V5": "todo",
-    "V6": "n/a",
-    "V7": "todo",
+    "V6": "n/a (host-only, codegen false)",
+    "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
-    "G": "powertrain-ledger"
+    "G": "pending (powertrain ledger has no per-block gate records)"
    }
   },
   "PT_DUAL_CLUTCH_TRANSMISSION": {
    "category": "Powertrain Blockset",
    "gates": {
     "V1": "pass",
-    "V2": "todo",
-    "V3": "todo",
+    "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
+    "V3": "pass (universal battery: no PT entry in any pinned list)",
     "V4": "todo",
     "V5": "todo",
-    "V6": "n/a",
-    "V7": "todo",
+    "V6": "n/a (host-only, codegen false)",
+    "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
-    "G": "powertrain-ledger"
+    "G": "pending (powertrain ledger has no per-block gate records)"
    }
   },
   "PT_CONTINUOUSLY_VARIABLE_TRANSMISSION": {
    "category": "Powertrain Blockset",
    "gates": {
     "V1": "pass",
-    "V2": "todo",
-    "V3": "todo",
+    "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
+    "V3": "pass (universal battery: no PT entry in any pinned list)",
     "V4": "todo",
     "V5": "todo",
-    "V6": "n/a",
-    "V7": "todo",
+    "V6": "n/a (host-only, codegen false)",
+    "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
-    "G": "powertrain-ledger"
+    "G": "pending (powertrain ledger has no per-block gate records)"
    }
   },
   "PT_AMT_CONTROLLER": {
    "category": "Powertrain Blockset",
    "gates": {
     "V1": "pass",
-    "V2": "todo",
-    "V3": "todo",
+    "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
+    "V3": "pass (universal battery: no PT entry in any pinned list)",
     "V4": "todo",
     "V5": "n/a",
-    "V6": "n/a",
-    "V7": "todo",
+    "V6": "n/a (host-only, codegen false)",
+    "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
-    "G": "powertrain-ledger"
+    "G": "pending (powertrain ledger has no per-block gate records)"
    }
   },
   "PT_DCT_CONTROLLER": {
    "category": "Powertrain Blockset",
    "gates": {
     "V1": "pass",
-    "V2": "todo",
-    "V3": "todo",
+    "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
+    "V3": "pass (universal battery: no PT entry in any pinned list)",
     "V4": "todo",
     "V5": "n/a",
-    "V6": "n/a",
-    "V7": "todo",
+    "V6": "n/a (host-only, codegen false)",
+    "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
-    "G": "powertrain-ledger"
+    "G": "pending (powertrain ledger has no per-block gate records)"
    }
   },
   "PT_CVT_CONTROLLER": {
    "category": "Powertrain Blockset",
    "gates": {
     "V1": "pass",
-    "V2": "todo",
-    "V3": "todo",
+    "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
+    "V3": "pass (universal battery: no PT entry in any pinned list)",
     "V4": "todo",
     "V5": "n/a",
-    "V6": "n/a",
-    "V7": "todo",
+    "V6": "n/a (host-only, codegen false)",
+    "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
-    "G": "powertrain-ledger"
+    "G": "pending (powertrain ledger has no per-block gate records)"
    }
   },
   "PT_CI_CONTROLLER": {
    "category": "Powertrain Blockset",
    "gates": {
     "V1": "pass",
-    "V2": "todo",
-    "V3": "todo",
+    "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
+    "V3": "pass (universal battery: no PT entry in any pinned list)",
     "V4": "todo",
     "V5": "n/a",
-    "V6": "n/a",
-    "V7": "todo",
+    "V6": "n/a (host-only, codegen false)",
+    "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
-    "G": "powertrain-ledger"
+    "G": "pending (powertrain ledger has no per-block gate records)"
    }
   },
   "PT_MAPPED_SI_ENGINE": {
    "category": "Powertrain Blockset",
    "gates": {
     "V1": "pass",
-    "V2": "todo",
-    "V3": "todo",
+    "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
+    "V3": "pass (universal battery: no PT entry in any pinned list)",
     "V4": "todo",
     "V5": "n/a",
-    "V6": "n/a",
-    "V7": "todo",
+    "V6": "n/a (host-only, codegen false)",
+    "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
-    "G": "powertrain-ledger"
+    "G": "pending (powertrain ledger has no per-block gate records)"
    }
   },
   "PT_MAPPED_CI_ENGINE": {
    "category": "Powertrain Blockset",
    "gates": {
     "V1": "pass",
-    "V2": "todo",
-    "V3": "todo",
+    "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
+    "V3": "pass (universal battery: no PT entry in any pinned list)",
     "V4": "todo",
     "V5": "n/a",
-    "V6": "n/a",
-    "V7": "todo",
+    "V6": "n/a (host-only, codegen false)",
+    "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
-    "G": "powertrain-ledger"
+    "G": "pending (powertrain ledger has no per-block gate records)"
    }
   },
   "PT_OPEN_DIFFERENTIAL": {
    "category": "Powertrain Blockset",
    "gates": {
     "V1": "pass",
-    "V2": "todo",
-    "V3": "todo",
+    "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
+    "V3": "pass (universal battery: no PT entry in any pinned list)",
     "V4": "todo",
     "V5": "n/a",
-    "V6": "n/a",
-    "V7": "todo",
+    "V6": "n/a (host-only, codegen false)",
+    "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
-    "G": "powertrain-ledger"
+    "G": "pending (powertrain ledger has no per-block gate records)"
    }
   },
   "PT_LIMITED_SLIP_DIFFERENTIAL": {
    "category": "Powertrain Blockset",
    "gates": {
     "V1": "pass",
-    "V2": "todo",
-    "V3": "todo",
+    "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
+    "V3": "pass (universal battery: no PT entry in any pinned list)",
     "V4": "todo",
     "V5": "todo",
-    "V6": "n/a",
-    "V7": "todo",
+    "V6": "n/a (host-only, codegen false)",
+    "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
-    "G": "powertrain-ledger"
+    "G": "pending (powertrain ledger has no per-block gate records)"
    }
   },
   "PT_TRANSFER_CASE": {
    "category": "Powertrain Blockset",
    "gates": {
     "V1": "pass",
-    "V2": "todo",
-    "V3": "todo",
+    "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
+    "V3": "pass (universal battery: no PT entry in any pinned list)",
     "V4": "todo",
     "V5": "n/a",
-    "V6": "n/a",
-    "V7": "todo",
+    "V6": "n/a (host-only, codegen false)",
+    "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
-    "G": "powertrain-ledger"
+    "G": "pending (powertrain ledger has no per-block gate records)"
    }
   },
   "PT_AMBIENT": {
    "category": "Powertrain Blockset",
    "gates": {
     "V1": "pass",
-    "V2": "todo",
-    "V3": "todo",
+    "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
+    "V3": "pass (universal battery: no PT entry in any pinned list)",
     "V4": "todo",
     "V5": "n/a",
-    "V6": "n/a",
-    "V7": "todo",
+    "V6": "n/a (host-only, codegen false)",
+    "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
-    "G": "powertrain-ledger"
+    "G": "pending (powertrain ledger has no per-block gate records)"
    }
   },
   "PT_THROTTLE_BODY": {
    "category": "Powertrain Blockset",
    "gates": {
     "V1": "pass",
-    "V2": "todo",
-    "V3": "todo",
+    "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
+    "V3": "pass (universal battery: no PT entry in any pinned list)",
     "V4": "todo",
     "V5": "n/a",
-    "V6": "n/a",
-    "V7": "todo",
+    "V6": "n/a (host-only, codegen false)",
+    "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
-    "G": "powertrain-ledger"
+    "G": "pending (powertrain ledger has no per-block gate records)"
    }
   },
   "PT_INTAKE_MANIFOLD": {
    "category": "Powertrain Blockset",
    "gates": {
     "V1": "pass",
-    "V2": "todo",
-    "V3": "todo",
+    "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
+    "V3": "pass (universal battery: no PT entry in any pinned list)",
     "V4": "todo",
     "V5": "todo",
-    "V6": "n/a",
-    "V7": "todo",
+    "V6": "n/a (host-only, codegen false)",
+    "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
-    "G": "powertrain-ledger"
+    "G": "pending (powertrain ledger has no per-block gate records)"
    }
   },
   "PT_TURBOCHARGER": {
    "category": "Powertrain Blockset",
    "gates": {
     "V1": "pass",
-    "V2": "todo",
-    "V3": "todo",
+    "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
+    "V3": "pass (universal battery: no PT entry in any pinned list)",
     "V4": "todo",
     "V5": "todo",
-    "V6": "n/a",
-    "V7": "todo",
+    "V6": "n/a (host-only, codegen false)",
+    "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
-    "G": "powertrain-ledger"
+    "G": "pending (powertrain ledger has no per-block gate records)"
    }
   },
   "PT_DOE_SWEEPER": {
    "category": "Powertrain Blockset",
    "gates": {
     "V1": "pass",
-    "V2": "todo",
-    "V3": "todo",
+    "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
+    "V3": "pass (universal battery: no PT entry in any pinned list)",
     "V4": "todo",
     "V5": "n/a",
-    "V6": "n/a",
-    "V7": "todo",
+    "V6": "n/a (host-only, codegen false)",
+    "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
-    "G": "powertrain-ledger"
+    "G": "pending (powertrain ledger has no per-block gate records)"
    }
   },
   "PT_ENGINE_DYNO": {
    "category": "Powertrain Blockset",
    "gates": {
     "V1": "pass",
-    "V2": "todo",
-    "V3": "todo",
+    "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
+    "V3": "pass (universal battery: no PT entry in any pinned list)",
     "V4": "todo",
     "V5": "todo",
-    "V6": "n/a",
-    "V7": "todo",
+    "V6": "n/a (host-only, codegen false)",
+    "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
-    "G": "powertrain-ledger"
+    "G": "pending (powertrain ledger has no per-block gate records)"
    }
   },
   "PT_CALIBRATION_ECU": {
    "category": "Powertrain Blockset",
    "gates": {
     "V1": "pass",
-    "V2": "todo",
-    "V3": "todo",
+    "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
+    "V3": "pass (universal battery: no PT entry in any pinned list)",
     "V4": "todo",
     "V5": "n/a",
-    "V6": "n/a",
-    "V7": "todo",
+    "V6": "n/a (host-only, codegen false)",
+    "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
-    "G": "powertrain-ledger"
+    "G": "pending (powertrain ledger has no per-block gate records)"
    }
   },
   "PT_CALIBRATION_MAP_2D": {
    "category": "Powertrain Blockset",
    "gates": {
     "V1": "pass",
-    "V2": "todo",
-    "V3": "todo",
+    "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
+    "V3": "pass (universal battery: no PT entry in any pinned list)",
     "V4": "todo",
     "V5": "n/a",
-    "V6": "n/a",
-    "V7": "todo",
+    "V6": "n/a (host-only, codegen false)",
+    "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
-    "G": "powertrain-ledger"
+    "G": "pending (powertrain ledger has no per-block gate records)"
    }
   },
   "PT_CI_CYLINDER": {
    "category": "Powertrain Blockset",
    "gates": {
     "V1": "pass",
-    "V2": "todo",
-    "V3": "todo",
+    "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
+    "V3": "pass (universal battery: no PT entry in any pinned list)",
     "V4": "todo",
     "V5": "n/a",
-    "V6": "n/a",
-    "V7": "todo",
+    "V6": "n/a (host-only, codegen false)",
+    "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
-    "G": "powertrain-ledger"
+    "G": "pending (powertrain ledger has no per-block gate records)"
    }
   },
   "PT_SI_CYLINDER": {
    "category": "Powertrain Blockset",
    "gates": {
     "V1": "pass",
-    "V2": "todo",
-    "V3": "todo",
+    "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
+    "V3": "pass (universal battery: no PT entry in any pinned list)",
     "V4": "todo",
     "V5": "n/a",
-    "V6": "n/a",
-    "V7": "todo",
+    "V6": "n/a (host-only, codegen false)",
+    "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
-    "G": "powertrain-ledger"
+    "G": "pending (powertrain ledger has no per-block gate records)"
    }
   },
   "PT_FUEL_INJECTOR": {
    "category": "Powertrain Blockset",
    "gates": {
     "V1": "pass",
-    "V2": "todo",
-    "V3": "todo",
+    "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
+    "V3": "pass (universal battery: no PT entry in any pinned list)",
     "V4": "todo",
     "V5": "n/a",
-    "V6": "n/a",
-    "V7": "todo",
+    "V6": "n/a (host-only, codegen false)",
+    "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
-    "G": "powertrain-ledger"
+    "G": "pending (powertrain ledger has no per-block gate records)"
    }
   },
   "PT_VVT_VALVETRAIN": {
    "category": "Powertrain Blockset",
    "gates": {
     "V1": "pass",
-    "V2": "todo",
-    "V3": "todo",
+    "V2": "powertrain-suites (src/engine/xbridges/powertrain, 204 tests pass)",
+    "V3": "pass (universal battery: no PT entry in any pinned list)",
     "V4": "todo",
     "V5": "n/a",
-    "V6": "n/a",
-    "V7": "todo",
+    "V6": "n/a (host-only, codegen false)",
+    "V7": "n/a (host-only, codegen false: powertrain plan WP-30)",
     "V8": "todo",
-    "G": "powertrain-ledger"
+    "G": "pending (powertrain ledger has no per-block gate records)"
    }
   }
  },
