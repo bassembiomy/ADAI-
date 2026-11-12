@@ -97,7 +97,7 @@ export class MpcSolver {
     return math.matrix(expanded);
   }
 
-  public solve(x0: number[], reference: number[], u_prev_seq?: number[]): { u: number[], pred_y: number[] } {
+  public solve(x0: number[], reference: number[], u_prev_seq?: number[]): { u: number[], u_seq: number[], pred_y: number[] } {
     const { Np, Nc, u_min, u_max } = this.config;
     const ny = this.model.C.length;
     const nu = this.model.B[0].length;
@@ -112,7 +112,8 @@ export class MpcSolver {
     const f = math.multiply(2, math.multiply(math.multiply(math.transpose(this.Su), Qext), error_term)) as math.Matrix;
 
     // Fast Gradient Method
-    let U = u_prev_seq ? math.matrix(u_prev_seq) : math.zeros(Nc * nu) as math.Matrix;
+    // A warm start must have Nc*nu entries; anything else starts from zero.
+    let U = u_prev_seq && u_prev_seq.length === Nc * nu ? math.matrix(u_prev_seq) : math.zeros(Nc * nu) as math.Matrix;
     let Y = math.clone(U);
     let t = 1;
 
@@ -141,6 +142,7 @@ export class MpcSolver {
 
     return { 
       u: first_u, 
+      u_seq: U_final,
       pred_y: PredY.toArray() as number[]
     };
   }

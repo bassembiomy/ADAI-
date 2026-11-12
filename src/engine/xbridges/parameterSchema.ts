@@ -157,7 +157,7 @@ export const XB_PARAMETER_SCHEMA: Record<string, Record<string, ParameterKind>> 
   AC_INDUCTION_MOTOR: { J: positive, Ls: positive, Lr: positive, Rr: positive },
   AC_MOTOR_PID_CONTROL: { J: positive, Ls: positive, Lr: positive, Rr: positive },
   IM_FLUX_OBSERVER: { Lr: positive, Rr: positive },
-  MTPA_CONTROLLER: { psi_m: positive },
+  MTPA_CONTROLLER: { psi_m: positive, P: positive },
   MTPA_FW_MANAGER: { Ld: positive, Lq: nonnegative, P: positive, psi_m: positive },
   VF_SLIP_COMP: { rated_iq: positive },
   SVPWM_CORE: { Vdc: positive },

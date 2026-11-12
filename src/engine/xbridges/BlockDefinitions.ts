@@ -338,6 +338,18 @@ const ewCrossings = (ins: any[], f: (vals: any[]) => number[]): number[] => {
   } catch { return []; }
 };
 
+/** SVPWM dwell times of the two active vectors and the zero vector; over-modulation scales T1, T2 to sum Ts (ratio kept), T0 = 0. */
+const svpwmTimes = (Vref: number, thetaS: number, Vdc: number, Ts: number): { T1: number; T2: number; T0: number } => {
+  let T1 = Math.max(0, Ts * (Math.sqrt(3) * Vref / Vdc) * Math.sin(Math.PI / 3 - thetaS));
+  let T2 = Math.max(0, Ts * (Math.sqrt(3) * Vref / Vdc) * Math.sin(thetaS));
+  const sum = T1 + T2;
+  if (sum > Ts) {
+    T1 = T1 * Ts / sum; T2 = T2 * Ts / sum;
+    return { T1, T2, T0: 0 };
+  }
+  return { T1, T2, T0: Math.max(0, Ts - T1 - T2) };
+};
+
 /** SVPWM gate generator: symmetric triangle carrier t in [0, Ts/2] and the per-phase thresholds of the sector. */
 const svpwmGateCompare = (ins: any[], p: any, time: number): { t: number; da: number; db: number; dc: number } => {
   const Ts = Number(p.Ts);
@@ -372,14 +384,8 @@ const pwmEvaluate = (ins: any[], p: any, state: any, time: number): { duty: numb
   if (isNewStep) {
     if (state && state.lastTime >= 0) {
       const dt = time - state.lastTime;
-      const fracCycles = (dt * freq) % 1;
-      if (fracCycles > 1e-12) {
-        phase = (phase + fracCycles) % 1;
-      } else {
-        // dt is an exact integer multiple of the period: golden-ratio step so consecutive samples land at different phases
-        const PHI = 0.6180339887498949; // (sqrt(5)-1)/2
-        phase = (phase + PHI) % 1;
-      }
+      // The carrier advances by exactly dt * f cycles; a step that is a whole number of periods leaves the phase unchanged.
+      phase = (phase + ((dt * freq) % 1)) % 1;
     } else {
       phase = (time * freq) % 1; // very first call: seed the phase from absolute time
     }
@@ -396,7 +402,7 @@ const pwmEvaluate = (ins: any[], p: any, state: any, time: number): { duty: numb
   return { duty, carrier, phase };
 };
 /** Three-phase PWM: normalized references and the carrier phase from the committed state (pure). */
-const threePhasePwmEvaluate = (ins: any[], p: any, state: any, time: number): { refs: number[]; phase: number } => {
+const threePhasePwmEvaluate = (ins: any[], p: any, state: any, time: number): { refs: number[]; phase: number; carrier: number } => {
   const freq = Number(p.frequency);
   let phase: number;
   if (state && state.lastTime >= 0) {
@@ -409,7 +415,37 @@ const threePhasePwmEvaluate = (ins: any[], p: any, state: any, time: number): { 
     const vOffset = (Math.max(...refs) + Math.min(...refs)) / 2;
     refs = refs.map(v => v - vOffset);
   }
-  return { refs: refs.map(v => Math.max(0, Math.min(1, (v + 1) / 2))), phase }; // map -1..1 to 0..1
+  // Symmetric triangle carrier in [0, 1] (the [-1, 1] carrier of sinusoidal PWM mapped like the references).
+  const carrier = phase < 0.5 ? 2 * phase : 2 * (1 - phase);
+  return { refs: refs.map(v => Math.max(0, Math.min(1, (v + 1) / 2))), phase, carrier }; // map -1..1 to 0..1
+};
+
+/** PID output while the reset input is high: integrator and filter states are cleared, so the output is the proportional
+ *  part plus the derivative term of a zero filter state (Simulink PID Controller reset). */
+const pidResetOutput = (p: any, pTerm: number, dInput: number): { u: number; D: number } => {
+  const hasD = String(p.mode).includes('D');
+  let D = 0;
+  if (hasD) {
+    const dt = Number(p.sampleTime);
+    if (!(dt > 0)) D = p.Kd * p.N * dInput;
+    else if (p.method === 'backward_euler') D = (p.Kd * p.N * dInput) / (1 + p.N * dt);
+    else if (p.method === 'forward_euler') D = p.Kd * p.N * dInput;
+    else D = (2 * p.Kd * p.N * dInput) / (2 + p.N * dt);
+  }
+  return { u: Math.max(p.min, Math.min(p.max, pTerm + D)), D };
+};
+
+/** MPC solvers by parameter object: derived data only, never part of the block state. */
+const mpcSolverCache = new WeakMap<object, MpcSolver>();
+
+/** A finite number or a (nested) vector of finite numbers as a flat array; anything else is rejected with a message. */
+const toFiniteVector = (v: unknown, label: string): number[] => {
+  const flat = (x: unknown): unknown[] => (Array.isArray(x) ? x.flatMap(flat) : [x]);
+  const items = flat(v);
+  if (items.length === 0 || items.some((e) => typeof e !== 'number' || !Number.isFinite(e))) {
+    throw new Error(`${label} must be a finite number or a vector of finite numbers.`);
+  }
+  return items as number[];
 };
 
 /** Deep copy of a block state so that execute works on its own copy (never mutates the committed state). */
@@ -2885,7 +2921,8 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     execute: (ins, p, state, time) => {
       const { duty, carrier, phase } = pwmEvaluate(ins, p, state, time);
       // The phase advances in nextState (applied once per major step); execute never changes its state.
-      return { outputs: [duty > carrier ? 1 : 0], nextState: { phase, lastTime: time } };
+      // Duty 1 means always on (the triangle carrier reaches 1 at its peak, where a strict comparison would switch off).
+      return { outputs: [duty >= 1 || duty > carrier ? 1 : 0], nextState: { phase, lastTime: time } };
     },
     ZeroCrossingFn: (ins, p, state, time) => {
       const { duty, carrier } = pwmEvaluate(ins, p, state, time);
@@ -2911,12 +2948,13 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     ],
     state: { phase: 0, lastTime: -1 },
     execute: (ins, p, state, time) => {
-      const { refs, phase } = threePhasePwmEvaluate(ins, p, state, time);
-      return { outputs: refs.map(ref => (ref > phase ? 1 : 0)), nextState: { phase, lastTime: time } };
+      const { refs, phase, carrier } = threePhasePwmEvaluate(ins, p, state, time);
+      // A reference at or above +1 saturates on (the carrier peak equals 1).
+      return { outputs: refs.map(ref => (ref >= 1 || ref > carrier ? 1 : 0)), nextState: { phase, lastTime: time } };
     },
     ZeroCrossingFn: (ins, p, state, time) => {
-      const { refs, phase } = threePhasePwmEvaluate(ins, p, state, time);
-      return refs.map(r => r - phase);
+      const { refs, carrier } = threePhasePwmEvaluate(ins, p, state, time);
+      return refs.map(r => r - carrier);
     }
   }),
 
@@ -2937,9 +2975,9 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       createPort('cl', 'CL', 'output', 0, 'right', 'logical')
     ],
     execute: (ins) => {
-      const h1 = Number(ins[0]) > 0.5 ? 1 : 0;
-      const h2 = Number(ins[1]) > 0.5 ? 1 : 0;
-      const h3 = Number(ins[2]) > 0.5 ? 1 : 0;
+      const h1 = Boolean(Number(ins[0])) ? 1 : 0; // logical input: any nonzero value is true (NaN is false), as in the embedded path
+      const h2 = Boolean(Number(ins[1])) ? 1 : 0; // logical input: any nonzero value is true (NaN is false), as in the embedded path
+      const h3 = Boolean(Number(ins[2])) ? 1 : 0; // logical input: any nonzero value is true (NaN is false), as in the embedded path
       const h = (h1 << 2) | (h2 << 1) | h3;
       // Outputs: [AH, AL, BH, BL, CH, CL]
       let gates = [0, 0, 0, 0, 0, 0];
@@ -3350,7 +3388,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       ],
       state: { intD: 0, intQ: 0, lastT: 0 },
       execute: (ins, p, state, t) => {
-        const dt = Math.max(1e-6, t - (state.lastT || 0));
+        const dt = Math.max(0, t - (state.lastT ?? 0)); // zero elapsed time integrates nothing
 
         let id_ref = Number(ins[0]);
         let iq_ref = Number(ins[1]);
@@ -3530,7 +3568,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     outputs: [createPort('iq_ref', 'Iq*', 'output', 0, 'right', 'control')],
     state: { integral: 0, lastTime: 0 },
     execute: (ins, p, state, time) => {
-      const dt = Math.max(1e-6, time - (state.lastTime || 0));
+      const dt = Math.max(0, time - (state.lastTime ?? 0)); // zero elapsed time integrates nothing
       const err = Number(ins[0]) - Number(ins[1]);
       const nextInt = state.integral + err * dt;
 
@@ -3688,11 +3726,8 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       const Vref = Math.sqrt(vAlpha * vAlpha + vBeta * vBeta);
       const thetaS = (thetaDeg % 60) * Math.PI / 180;
 
-      const T1 = Ts * (Math.sqrt(3) * Vref / Vdc) * Math.sin(Math.PI / 3 - thetaS);
-      const T2 = Ts * (Math.sqrt(3) * Vref / Vdc) * Math.sin(thetaS);
-      const T0 = Ts - T1 - T2;
-
-      return { outputs: [sector, Math.max(0, T1), Math.max(0, T2), Math.max(0, T0)] };
+      const t = svpwmTimes(Vref, thetaS, Vdc, Ts);
+      return { outputs: [sector, t.T1, t.T2, t.T0] };
     }
   }),
 
@@ -3727,11 +3762,11 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       const Vdc = Number(ins[2]);
       const Ts = Number(ins[3]);
 
-      const T1 = Ts * (Math.sqrt(3) * Vref / Vdc) * Math.sin(Math.PI / 3 - thetaS);
-      const T2 = Ts * (Math.sqrt(3) * Vref / Vdc) * Math.sin(thetaS);
-      const T0 = Ts - T1 - T2;
-
-      return { outputs: [Math.max(0, T1), Math.max(0, T2), Math.max(0, T0)] };
+      if (![Vref, thetaS, Vdc, Ts].every(Number.isFinite)) return { outputs: [NaN, NaN, NaN], error: 'Switching time calculator inputs must be finite numbers.' };
+      if (!(Vdc > 0)) return { outputs: [NaN, NaN, NaN], error: 'Switching time calculator needs a positive DC link voltage Vdc.' };
+      if (!(Ts >= 0)) return { outputs: [NaN, NaN, NaN], error: 'Switching time calculator needs a non-negative sampling period Ts.' };
+      const t = svpwmTimes(Vref, thetaS, Vdc, Ts);
+      return { outputs: [t.T1, t.T2, t.T0] };
     }
   }),
 
@@ -4466,8 +4501,12 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
         const reset = Number(ins[3]);
 
         if (reset > 0.5) {
+          const eR = r - y;
+          const edR = p.gamma * r - y;
+          const PR = p.Kp * (p.beta * r - y);
+          const rr = pidResetOutput(p, PR, edR);
           return {
-            outputs: [0, 0, 0, 0, 0],
+            outputs: [rr.u, eR, PR, 0, rr.D],
             nextState: { i_state: 0, d_state: 0, last_e: 0, last_ed: 0 }
           };
         }
@@ -4537,7 +4576,10 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     };
 
   if(sampleTime <= 0) {
+    block.projectsState = true; // the reset input clears the states at the major step
     block.evaluateDerivatives = (ins, p, state) => {
+      // Disabled or in reset: the integrator and the derivative filter are held.
+      if (!(Number(ins[2]) >= 0.5) || Number(ins[3]) > 0.5) return { i_state: 0, d_state: 0 };
       const r = Number(ins[0]) || 0;
       const y = Number(ins[1]) || 0;
       const error = r - y;
@@ -5118,7 +5160,7 @@ return block;
                                 const enable = Number(ins[1]);
                                 const reset = Number(ins[2]);
 
-                                if (reset > 0.5) return { outputs: [0], nextState: { i_state: 0, d_state: 0, last_e: 0 } };
+                                if (reset > 0.5) return { outputs: [pidResetOutput(p, p.Kp * error, error).u], nextState: { i_state: 0, d_state: 0, last_e: 0 } };
                                 if (enable < 0.5) return { outputs: [0], nextState: state };
 
                                 const P = p.Kp * error;
@@ -5175,8 +5217,11 @@ return block;
                             };
 
                             if (sampleTime <= 0) {
-                              block.evaluateDerivatives = (ins, p, state) => {
-                                const error = Number(ins[0]) || 0;
+    block.projectsState = true; // the reset input clears the states at the major step
+    block.evaluateDerivatives = (ins, p, state) => {
+    const error = Number(ins[0]) || 0;
+    // Disabled or in reset: the integrator and the derivative filter are held (the reset clears them at the major step).
+    if (!(Number(ins[1]) >= 0.5) || Number(ins[2]) > 0.5) return { i_state: 0, d_state: 0 };
                                 const P = p.Kp * error;
                                 const hasI = String(p.mode).includes('I');
                                 const hasD = String(p.mode).includes('D');
@@ -5378,40 +5423,49 @@ return block;
                                           ],
                                           state: { x: null, P: null },
                                           execute: (ins, p, state) => {
-                                            const uArr = Array.isArray(ins[0]) ? ins[0] : [Number(ins[0])];
-                                            const yArr = Array.isArray(ins[1]) ? ins[1] : [Number(ins[1])];
-                                            const u = math.matrix(uArr.map(v => [Number(v)]));
-                                            const y = math.matrix(yArr.map(v => [Number(v)]));
-                                            const A = math.matrix(p.A as number[][]);
-                                            const B = math.matrix(p.B as number[][]);
-                                            const C = math.matrix(p.C as number[][]);
-                                            const Q = math.matrix(p.Q as number[][]);
-                                            const R = math.matrix(p.R as number[][]);
-                                            let x = state.x ? math.matrix(state.x as number[][]) : math.zeros(A.size()[0], 1);
-                                            let P = state.P ? math.matrix(state.P as number[][]) : math.matrix(p.P0 as number[][]);
-                                            const x_minus = math.add(math.multiply(A, x), math.multiply(B, u)) as math.Matrix;
-                                            const P_minus = math.add(math.multiply(math.multiply(A, P), math.transpose(A)), Q) as math.Matrix;
-                                            const S = math.add(math.multiply(math.multiply(C, P_minus), math.transpose(C)), R) as math.Matrix;
-                                            const K = math.multiply(math.multiply(P_minus, math.transpose(C)), math.inv(S)) as math.Matrix;
-                                            const innovation = math.subtract(y, math.multiply(C, x_minus)) as math.Matrix;
-                                            const x_new = math.add(x_minus, math.multiply(K, innovation)) as math.Matrix;
-                                            const I = math.identity(A.size()[0]) as math.Matrix;
-                                            const P_new = math.multiply(math.subtract(I, math.multiply(K, C)), P_minus) as math.Matrix;
-                                            const y_hat = math.multiply(C, x_new) as math.Matrix;
-                                            return {
-                                              outputs: [
-                                                x_new.toArray().map((v: any) => v[0]),
-                                                y_hat.toArray().map((v: any) => v[0]),
-                                                innovation.toArray().map((v: any) => v[0]),
-                                                K.toArray().flat()
-                                              ],
-                                              nextState: { x: x_new.toArray(), P: P_new.toArray() }
-                                            };
-                                          }
-                                        }),
+        // Simulink Kalman Filter order: x[0|-1] = x0 = 0 and P[0|-1] = P0; each sample first updates with y(n) (output x[n|n]),
+        // then predicts the next sample with u(n): x[n+1|n] = A x[n|n] + B u(n), P[n+1|n] = A P[n|n] A' + Q.
+        const nanOut = [[NaN], [NaN], [NaN], [NaN]];
+        try {
+          const u = math.matrix(toFiniteVector(ins[0], 'Kalman filter input u').map((v) => [v]));
+          const y = math.matrix(toFiniteVector(ins[1], 'Kalman filter measurement y_meas').map((v) => [v]));
+          const A = math.matrix(p.A as number[][]);
+          const B = math.matrix(p.B as number[][]);
+          const C = math.matrix(p.C as number[][]);
+          const Q = math.matrix(p.Q as number[][]);
+          const R = math.matrix(p.R as number[][]);
+          const x = state.x ? math.matrix(state.x as number[][]) : math.zeros(A.size()[0], 1);
+          const P = state.P ? math.matrix(state.P as number[][]) : math.matrix(p.P0 as number[][]);
+          const S = math.add(math.multiply(math.multiply(C, P), math.transpose(C)), R) as math.Matrix;
+          const K = math.multiply(math.multiply(P, math.transpose(C)), math.inv(S)) as math.Matrix;
+          const innovation = math.subtract(y, math.multiply(C, x)) as math.Matrix;
+          const x_upd = math.add(x, math.multiply(K, innovation)) as math.Matrix;
+          const I = math.identity(A.size()[0]) as math.Matrix;
+          const P_upd = math.multiply(math.subtract(I, math.multiply(K, C)), P) as math.Matrix;
+          const y_hat = math.multiply(C, x_upd) as math.Matrix;
+          const x_next = math.add(math.multiply(A, x_upd), math.multiply(B, u)) as math.Matrix;
+          const P_next = math.add(math.multiply(math.multiply(A, P_upd), math.transpose(A)), Q) as math.Matrix;
+          const outputs = [
+            x_upd.toArray().map((v: any) => v[0]),
+            y_hat.toArray().map((v: any) => v[0]),
+            innovation.toArray().map((v: any) => v[0]),
+            K.toArray().flat()
+          ];
+          if (!(outputs.flat() as number[]).every(Number.isFinite)) return { outputs: nanOut, error: 'Kalman filter produced a non-finite value (check A, B, C, Q, R, P0 and the inputs).' };
+          return { outputs, nextState: { x: x_next.toArray(), P: P_next.toArray() } };
+        } catch (e: any) {
+          return { outputs: nanOut, error: String(e?.message ?? e) };
+        }
+      }
+    }),
 
-                                          'EXTENDED_KALMAN_FILTER': (id, params) => {
-                                            const evaluateSystemFunction = (expr: any, x: number[], u: number[]): number[] => {
+    'EXTENDED_KALMAN_FILTER': (id, params) => {
+                                            const finiteOrThrow = (v: unknown): number => {
+      const n = Number(v);
+      if (!Number.isFinite(n)) throw new Error('The system function returned a non-finite value.');
+      return n;
+    };
+    const evaluateSystemFunction = (expr: any, x: number[], u: number[]): number[] => {
                                               const scope: Record<string, any> = {};
                                               for (let i = 0; i < x.length; i++) {
                                                 scope[`x${i + 1}`] = x[i];
@@ -5425,7 +5479,7 @@ return block;
                                               if (Array.isArray(expr)) {
                                                 return expr.map(e => {
                                                   const val = math.evaluate(String(e), scope);
-                                                  return Number(val) || 0;
+                                                  return finiteOrThrow(val);
                                                 });
                                               }
 
@@ -5437,13 +5491,13 @@ return block;
                                                 if (Array.isArray(parsed)) {
                                                   return math.flatten(parsed) as number[];
                                                 }
-                                                return [Number(parsed) || 0];
+                                                return [finiteOrThrow(parsed)];
                                               } catch (e) {
                                                 if (strExpr.includes(';') || strExpr.includes('\n')) {
                                                   const lines = strExpr.split(/[;\n]+/).map(s => s.trim()).filter(Boolean);
                                                   return lines.map(line => {
                                                     const val = math.evaluate(line, scope);
-                                                    return Number(val) || 0;
+                                                    return finiteOrThrow(val);
                                                   });
                                                 }
                                                 throw e;
@@ -5503,81 +5557,65 @@ return block;
                                               ],
                                               state: { x: null, P: null },
                                               execute: (ins, p, state) => {
-                                                const uArr = (Array.isArray(ins[0]) ? math.flatten(ins[0] as any) : [Number(ins[0])]) as number[];
-                                                const yArr = (Array.isArray(ins[1]) ? math.flatten(ins[1] as any) : [Number(ins[1])]) as number[];
+        // Same order as KALMAN_FILTER: update with y(n) from the prior x[n|n-1], then predict with u(n).
+        const nanOut = [[NaN], [NaN], [NaN], [NaN]];
+        try {
+          const uArr = toFiniteVector(ins[0], 'Extended Kalman filter input u');
+          const yArr = toFiniteVector(ins[1], 'Extended Kalman filter measurement y_meas');
 
-                                                const rawX0 = p.x0 !== undefined ? p.x0 : [0, 0];
-                                                const x0Arr = Array.isArray(rawX0) ? (math.flatten(rawX0) as number[]) : [Number(rawX0)];
+          const rawX0 = p.x0 !== undefined ? p.x0 : [0, 0];
+          const x0Arr = Array.isArray(rawX0) ? (math.flatten(rawX0) as number[]) : [Number(rawX0)];
 
-                                                let x = state.x ? math.matrix(state.x as number[][]) : math.matrix(x0Arr.map(v => [Number(v)]));
-                                                let P = state.P ? math.matrix(state.P as number[][]) : math.matrix(p.P0 as number[][]);
+          const x = state.x ? math.matrix(state.x as number[][]) : math.matrix(x0Arr.map(v => [Number(v)]));
+          const P = state.P ? math.matrix(state.P as number[][]) : math.matrix(p.P0 as number[][]);
+          const nx = x.size()[0];
+          const xArr = x.toArray().map((v: any) => Number(Array.isArray(v) ? v[0] : v));
 
-                                                const nx = x.size()[0];
-                                                const xArr = x.toArray().map((v: any) => Number(Array.isArray(v) ? v[0] : v));
+          // Update: y_minus = h(x_prior, u), C = dh/dx at x_prior
+          const h_wrap = (xVal: number[]) => evaluateSystemFunction(p.h, xVal, uArr);
+          const y_minus = math.matrix(h_wrap(xArr).map(v => [v]));
+          const C = computeJacobian(h_wrap, xArr);
+          const R = math.matrix(p.R as number[][]);
+          const S = math.add(math.multiply(math.multiply(C, P), math.transpose(C)), R) as math.Matrix;
+          const K = math.multiply(math.multiply(P, math.transpose(C)), math.inv(S)) as math.Matrix;
+          const y = math.matrix(yArr.map(v => [v]));
+          const innovation = math.subtract(y, y_minus) as math.Matrix;
+          const x_upd = math.add(x, math.multiply(K, innovation)) as math.Matrix;
+          const I = math.identity(nx) as math.Matrix;
+          const P_upd = math.multiply(math.subtract(I, math.multiply(K, C)), P) as math.Matrix;
+          const x_upd_arr = x_upd.toArray().map((v: any) => Number(Array.isArray(v) ? v[0] : v));
+          const y_hat = math.matrix(h_wrap(x_upd_arr).map(v => [v]));
 
-                                                // Step 2: Predict state estimate: x_minus = f(x, u)
-                                                const x_minus_arr = evaluateSystemFunction(p.f, xArr, uArr);
-                                                const x_minus = math.matrix(x_minus_arr.map(v => [v]));
+          // Predict: x[n+1|n] = f(x[n|n], u), A = df/dx at x[n|n], P[n+1|n] = A P A' + Q
+          const f_wrap = (xVal: number[]) => evaluateSystemFunction(p.f, xVal, uArr);
+          const x_next = math.matrix(f_wrap(x_upd_arr).map(v => [v]));
+          const A = computeJacobian(f_wrap, x_upd_arr);
+          const Q = math.matrix(p.Q as number[][]);
+          const P_next = math.add(math.multiply(math.multiply(A, P_upd), math.transpose(A)), Q) as math.Matrix;
 
-                                                // Step 3: Compute Jacobian A = df/dx at x, u
-                                                const f_wrap = (xVal: number[]) => evaluateSystemFunction(p.f, xVal, uArr);
-                                                const A = computeJacobian(f_wrap, xArr);
+          const outputs = [
+            x_upd.toArray().map((v: any) => Array.isArray(v) ? v[0] : v),
+            y_hat.toArray().map((v: any) => Array.isArray(v) ? v[0] : v),
+            innovation.toArray().map((v: any) => Array.isArray(v) ? v[0] : v),
+            K.toArray().flat()
+          ];
+          if (!(outputs.flat() as number[]).every(Number.isFinite)) return { outputs: nanOut, error: 'Extended Kalman filter produced a non-finite value (check f, h, Q, R, P0, x0 and the inputs).' };
+          return { outputs, nextState: { x: x_next.toArray(), P: P_next.toArray() } };
+        } catch (e: any) {
+          return { outputs: nanOut, error: String(e?.message ?? e) };
+        }
+      }
+    };
+  },
 
-                                                // Step 4: Predict covariance: P_minus = A * P * A_T + Q
-                                                const Q = math.matrix(p.Q as number[][]);
-                                                const P_minus = math.add(math.multiply(math.multiply(A, P), math.transpose(A)), Q) as math.Matrix;
-
-                                                // Prior measurement estimate for innovation: y_minus = h(x_minus, u)
-                                                const x_minus_flat = x_minus_arr;
-                                                const y_minus_arr = evaluateSystemFunction(p.h, x_minus_flat, uArr);
-                                                const y_minus = math.matrix(y_minus_arr.map(v => [v]));
-
-                                                // Step 6: Compute Jacobian C = dh/dx at x_minus, u
-                                                const h_wrap = (xVal: number[]) => evaluateSystemFunction(p.h, xVal, uArr);
-                                                const C = computeJacobian(h_wrap, x_minus_flat);
-
-                                                // Step 7: Compute innovation covariance: S = C * P_minus * C_T + R
-                                                const R = math.matrix(p.R as number[][]);
-                                                const S = math.add(math.multiply(math.multiply(C, P_minus), math.transpose(C)), R) as math.Matrix;
-
-                                                // Step 8: Compute Kalman Gain: K = P_minus * C_T * S^-1
-                                                const K = math.multiply(math.multiply(P_minus, math.transpose(C)), math.inv(S)) as math.Matrix;
-
-                                                // Step 9: Update state estimate: x_new = x_minus + K * (y_meas - y_minus)
-                                                const y = math.matrix(yArr.map(v => [Number(v)]));
-                                                const innovation = math.subtract(y, y_minus) as math.Matrix;
-                                                const x_new = math.add(x_minus, math.multiply(K, innovation)) as math.Matrix;
-
-                                                // Step 10: Update error covariance: P_new = (I - K * C) * P_minus
-                                                const I = math.identity(nx) as math.Matrix;
-                                                const P_new = math.multiply(math.subtract(I, math.multiply(K, C)), P_minus) as math.Matrix;
-
-                                                // Post/Updated measurement estimate: y_hat = h(x_new, u)
-                                                const x_new_arr = x_new.toArray().map((v: any) => Number(Array.isArray(v) ? v[0] : v));
-                                                const y_hat_arr = evaluateSystemFunction(p.h, x_new_arr, uArr);
-                                                const y_hat = math.matrix(y_hat_arr.map(v => [v]));
-
-                                                return {
-                                                  outputs: [
-                                                    x_new.toArray().map((v: any) => Array.isArray(v) ? v[0] : v),
-                                                    y_hat.toArray().map((v: any) => Array.isArray(v) ? v[0] : v),
-                                                    innovation.toArray().map((v: any) => Array.isArray(v) ? v[0] : v),
-                                                    K.toArray().flat()
-                                                  ],
-                                                  nextState: { x: x_new.toArray(), P: P_new.toArray() }
-                                                };
-                                              }
-                                            };
-                                          },
-
-                                            'MPC_CONTROLLER': (id, params) => {
+  'MPC_CONTROLLER': (id, params) => {
                                               const Np = numParam(params.Np, 10);
                                               const Nc = numParam(params.Nc, 3);
                                               const A = params.A || [[1, 0.1], [0, 1]];
                                               const B = params.B || [[0], [0.1]];
                                               const C = params.C || [[1, 0]];
                                               const D = params.D || [[0]];
-                                              const Q = params.Q || [[10, 0], [0, 10]];
+                                              const Q = params.Q || [[10]]; // output weighting: one weight per output of C (default C has one output)
                                               const R = params.R || [[1]];
                                               const u_min = params.u_min !== undefined ? params.u_min : -10;
                                               const u_max = params.u_max !== undefined ? params.u_max : 10;
@@ -5597,24 +5635,42 @@ return block;
                                                   createPort('u', 'u(k)', 'output', 0, 'right', 'control'),
                                                   createPort('pred_y', 'Predicted Y', 'output', [], 'top', 'vector')
                                                 ],
-                                                state: { solver: null, u_seq: null },
-                                                execute: (ins, p, state) => {
-                                                  const x = Array.isArray(ins[0]) ? ins[0] : [Number(ins[0])];
-                                                  const r_val = Array.isArray(ins[1]) ? ins[1] : [Number(ins[1])];
-                                                  if (!state.solver) {
-                                                    state.solver = new MpcSolver({ A: p.A, B: p.B, C: p.C, D: p.D }, p as any);
-                                                  }
-                                                  const ref_seq = Array(p.Np).fill(r_val).flat();
-                                                  const result = state.solver.solve(x, ref_seq, state.u_seq);
-                                                  return {
-                                                    outputs: [result.u[0], result.pred_y],
-                                                    nextState: { solver: state.solver, u_seq: result.u }
-                                                  };
-                                                }
-                                              };
-                                            },
+                                                state: { u_seq: null },
+execute: (ins, p, state) => {
+        // The state is plain data (the last optimal input sequence, Nc*nu values); the solver is rebuilt from the
+        // parameters (cached per parameter object), so the state survives a structured clone.
+        const nanOut = [NaN, [NaN]];
+        try {
+          const x = toFiniteVector(ins[0], 'MPC state input x');
+          const r_val = toFiniteVector(ins[1], 'MPC reference input r');
+          if (!(p.u_min <= p.u_max)) throw new Error('MPC input limits need u_min <= u_max.');
+          if (!(Number.isInteger(p.Np) && p.Np >= 1 && Number.isInteger(p.Nc) && p.Nc >= 1 && p.Nc <= p.Np)) throw new Error('MPC horizons need integers 1 <= Nc <= Np.');
+          let solver = mpcSolverCache.get(p);
+          if (!solver) {
+            solver = new MpcSolver({ A: p.A, B: p.B, C: p.C, D: p.D }, p as any);
+            mpcSolverCache.set(p, solver);
+          }
+          const nx = p.A.length, nu = p.B[0].length, ny = p.C.length;
+          if (x.length !== nx) throw new Error(`MPC state input x has ${x.length} elements, the model A has ${nx} states.`);
+          if (r_val.length !== ny) throw new Error(`MPC reference input r has ${r_val.length} elements, the model C has ${ny} outputs.`);
+          const ref_seq = Array(p.Np).fill(r_val).flat();
+          // Warm start: the previous optimal sequence shifted by one sample (the last input repeated).
+          const prev: number[] | null = Array.isArray(state.u_seq) && state.u_seq.length === p.Nc * nu ? state.u_seq : null;
+          const warm = prev ? [...prev.slice(nu), ...prev.slice(prev.length - nu)] : undefined;
+          const result = solver.solve(x, ref_seq, warm);
+          if (!result.u.every(Number.isFinite) || !result.pred_y.every(Number.isFinite)) return { outputs: nanOut, error: 'MPC produced a non-finite value (check the model, weights and inputs).' };
+          return {
+            outputs: [result.u[0], result.pred_y],
+            nextState: { u_seq: result.u_seq }
+          };
+        } catch (e: any) {
+          return { outputs: nanOut, error: String(e?.message ?? e) };
+        }
+      }
+    };
+  },
 
-                                              'NUMERIC_REPRESENTATION': (id, params) => {
+  'NUMERIC_REPRESENTATION': (id, params) => {
                                                 const mode = params.mode !== undefined ? String(params.mode) : 'fixed_point';
                                                 // Default output_type is mode-aware: float32 for floating-point, 'fixed_point' for fixed-point
                                                 const output_type = params.output_type !== undefined
@@ -6045,7 +6101,7 @@ return block;
 
                                                               'MTPA_CONTROLLER': (id: string, params: any) => ({
                                                                 id, type: 'MTPA_CONTROLLER',
-                                                                params: { Ld: params.Ld ?? 0.01, Lq: params.Lq ?? 0.02, psi_m: params.psi_m ?? 0.1 },
+                                                                params: { Ld: params.Ld ?? 0.01, Lq: params.Lq ?? 0.02, psi_m: params.psi_m ?? 0.1, P: params.P ?? 2 },
                                                                 inputs: [createPort('te_ref', 'Te*', 'input', 0, 'left', 'control')],
                                                                 outputs: [
                                                                   createPort('id_ref', 'Id*', 'output', 0, 'right', 'control'),
@@ -6055,10 +6111,26 @@ return block;
                                                                 description: 'Maximum Torque Per Ampere (MTPA) trajectory generator for salient-pole motors (IPMSM).',
                                                                 execute: (ins, p) => {
                                                                   const Te = Number(ins[0]);
-                                                                  // Simplified MTPA for learning
-                                                                  const iq = Te / (1.5 * 2 * (p.psi_m)); // Assuming 2 pole pairs
-                                                                  const id = -Math.abs(iq * 0.2); // Rough salient effect
-                                                                  return { outputs: [id, iq] };
+                                                                  const Ld = Number(p.Ld), Lq = Number(p.Lq), psi = Number(p.psi_m), P = Number(p.P);
+                                                                  if (!Number.isFinite(Te)) return { outputs: [NaN, NaN], error: 'MTPA controller needs a finite torque reference.' };
+                                                                  if (!(Number.isFinite(Ld) && Number.isFinite(Lq) && psi > 0 && Number.isFinite(psi) && P > 0 && Number.isFinite(P))) {
+                                                                    return { outputs: [NaN, NaN], error: 'MTPA controller needs finite Ld, Lq and positive psi_m and pole pairs P.' };
+                                                                  }
+                                                                  // Te = 1.5 P iq (psi + (Lq - Ld)(-id)) with the MTPA locus (Lagrange condition d id^2 - psi id - d iq^2 = 0, d = Lq - Ld):
+                                                                  // id(iq) = -2 d iq^2 / (psi + sqrt(psi^2 + 4 d^2 iq^2)); Te(|iq|) is increasing, so bisect for the given torque.
+                                                                  const d = Lq - Ld;
+                                                                  const idOf = (iq: number) => (-2 * d * iq * iq) / (psi + Math.sqrt(psi * psi + 4 * d * d * iq * iq));
+                                                                  const torqueOf = (iq: number) => 1.5 * P * iq * (psi - d * idOf(iq));
+                                                                  const target = Math.abs(Te);
+                                                                  if (target === 0) return { outputs: [0, 0] };
+                                                                  let lo = 0, hi = target / (1.5 * P * psi); // Te >= 1.5 P psi iq when d id <= 0 (always on the locus)
+                                                                  for (let k = 0; k < 200 && hi > lo; k++) {
+                                                                    const mid = 0.5 * (lo + hi);
+                                                                    if (torqueOf(mid) < target) lo = mid; else hi = mid;
+                                                                  }
+                                                                  const iq = 0.5 * (lo + hi);
+                                                                  const id = idOf(iq);
+                                                                  return { outputs: [id, Te < 0 ? -iq : iq] };
                                                                 }
                                                               }),
 
@@ -6154,7 +6226,7 @@ return block;
                                                                       params: {
                                                                         Kp: params.Kp ?? 2.5, Ki: params.Ki ?? 1.2, Kd: params.Kd ?? 0.1,
                                                                         w_ref: params.w_ref ?? 157,
-                                                                        tl: params.tl || 0,
+                                                                        tl: params.tl ?? 0,
                                                                         Rs: params.Rs ?? 0.5, Ls: params.Ls ?? 0.1,
                                                                         Rr: params.Rr ?? 0.4, Lr: params.Lr ?? 0.1,
                                                                         Lm: params.Lm ?? 0.09, P: params.P ?? 2,
@@ -6166,7 +6238,7 @@ return block;
                                                                       description: 'A complete pedagogical model for PID Speed Control of an Induction Motor. It integrates the motor dynamics and the speed regulator into one block for easy analysis of tuning effects.',
                                                                       inputs: [
                                                                         createPort('w_ref', 'ω*', 'input', params.w_ref ?? 157, 'left', 'control'),
-                                                                        createPort('tl', 'Tl', 'input', params.tl || 0, 'bottom', 'load')
+                                                                        createPort('tl', 'Tl', 'input', params.tl ?? 0, 'bottom', 'load')
                                                                       ],
                                                                       outputs: [
                                                                         createPort('omega', 'ω', 'output', 0, 'right', 'measurement'),
@@ -6175,7 +6247,8 @@ return block;
                                                                       ],
                                                                       state: {
                                                                         ias: 0, ibs: 0, psiar: 0.001, psibr: 0, omega: 0, theta: 0, // Motor states
-                                                                        i_state: 0, d_state: 0, last_e: 0, lastTime: 0 // PID states
+                                                                        i_state: 0, d_state: 0, // PID states (integral and derivative-filter state)
+    theta_v: 0, lastTime: 0 // stator voltage angle (integral of the electrical reference frequency P w_ref)
                                                                       },
                                                                       execute: (ins: any[], p: any, state: any) => {
                                                                         const Te = 1.5 * p.P * (p.Lm / p.Lr) * (state.psiar * state.ibs - state.psibr * state.ias);
@@ -6190,15 +6263,22 @@ return block;
                                                                         const w_meas = state.omega;
                                                                         const error = w_ref - w_meas;
 
-                                                                        // 1. PID Logic (Stationary Frame Approximation for Learning)
-                                                                        const P = p.Kp * error;
-                                                                        const I = state.i_state;
-                                                                        const D = state.d_state;
-                                                                        const v_mag = Math.max(0, P + I + D); // Voltage magnitude
+                                                                        // 1. Speed PID. Its output is the slip frequency command (electrical rad/s) of a V/f drive with slip regulation, limited to
+    // the pull-out slip Rr/Lr of the rotor; the integral stops accumulating while the command is saturated (anti-windup).
+    const N = p.N ?? 100;
+    const slipMax = p.Rr / p.Lr;
+    const D = p.Kd * N * (error - state.d_state); // filtered derivative
+    const uPid = p.Kp * error + state.i_state + D;
+    const slip = Math.max(-slipMax, Math.min(slipMax, uPid));
+    const saturated = slip !== uPid && Math.sign(uPid) === Math.sign(error);
 
-                                                                        // 2. Stator Voltage Generation (V/f synchronous)
-                                                                        const theta_v = w_ref * time;
-                                                                        const va = v_mag * Math.sin(theta_v);
+    // 2. Stator voltage generation: the stator field turns at the electrical shaft speed plus the slip, w_e = P w + slip;
+    // constant flux (V/f ratio 4 V/Hz as in IM_SCALAR_CONTROL) plus the stator resistance drop Rs |Is|. The integral action
+    // trims the slip until the speed error is zero.
+    const wE = p.P * state.omega + slip;
+    const v_mag = (4 / (2 * Math.PI)) * Math.abs(wE) + p.Rs * Math.hypot(state.ias, state.ibs);
+    const theta_v = state.theta_v;
+    const va = v_mag * Math.sin(theta_v);
                                                                         const vb = v_mag * Math.sin(theta_v - 2 * Math.PI / 3);
                                                                         const vc = v_mag * Math.sin(theta_v + 2 * Math.PI / 3);
 
@@ -6220,11 +6300,10 @@ return block;
                                                                         const dtheta = state.omega;
 
                                                                         // 4. PID Derivatives
-                                                                        const di = p.Ki * error;
-                                                                        const N = p.N ?? 100;
-                                                                        const dd = N * (p.Kd * N * (error - (state.last_e || 0)) - state.d_state);
+                                                                        const di = saturated ? 0 : p.Ki * error;
+                                                                        const dd = N * (error - state.d_state);
 
-                                                                        return [dias, dibs, dpsiar, dpsibr, domega, dtheta, di, dd];
+    return { ias: dias, ibs: dibs, psiar: dpsiar, psibr: dpsibr, omega: domega, theta: dtheta, i_state: di, d_state: dd, theta_v: wE };
                                                                       }
                                                                     };
                                                                   },
@@ -6325,6 +6404,7 @@ return block;
                                                                         'RL_Q_LEARNING_CONTROLLER': (id: string, params: any) => {
                                                                           const numStates = params.numStates ?? 5;
                                                                           const numActions = params.numActions ?? 3;
+    const seed = Math.trunc(numParam(params.seed, 1));
                                                                           return {
                                                                             id, type: 'RL_Q_LEARNING_CONTROLLER',
                                                                             params: {
@@ -6332,7 +6412,8 @@ return block;
                                                                               gamma: params.gamma !== undefined ? params.gamma : 0.9,
                                                                               epsilon: params.epsilon !== undefined ? params.epsilon : 0.1,
                                                                               numStates,
-                                                                              numActions
+                                                                              numActions,
+                                                                              seed
                                                                             },
                                                                             isStateful: true,
                                                                             inputs: [
@@ -6348,7 +6429,8 @@ return block;
                                                                               qTable: Array.from({ length: numStates }, () => Array(numActions).fill(0)),
                                                                               lastStateIdx: Math.floor(numStates / 2),
                                                                               lastActionIdx: Math.floor(numActions / 2),
-                                                                              hasPrev: 0
+                                                                              hasPrev: 0,
+                                                                              rng: seed
                                                                             },
                                                                             icon: 'graduation-cap',
                                                                             equation: 'Q(s,a) += α*(R + γ*max_q(s\') - Q(s,a))',
@@ -6415,9 +6497,18 @@ return block;
                                                                                 qTable[lastStateIdx][lastActionIdx] = currentQ + alpha * (targetQ - currentQ);
                                                                               }
 
-                                                                              let aIdx = Math.floor(nA / 2);
-                                                                              if (Math.random() < epsilon) {
-                                                                                aIdx = Math.floor(Math.random() * nA);
+                                                                              // Exploration draws come from a seeded generator (mulberry32) whose state lives in the block state, so two fresh
+    // instances with the same seed give the same run.
+    let rngState = Math.trunc(Number(state && state.rng !== undefined ? state.rng : p.seed)) | 0;
+    const draw = (): number => {
+      rngState = (rngState + 0x6D2B79F5) | 0;
+      let t = Math.imul(rngState ^ (rngState >>> 15), 1 | rngState);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    let aIdx = Math.floor(nA / 2);
+    if (draw() < epsilon) {
+      aIdx = Math.floor(draw() * nA);
                                                                               } else {
                                                                                 let maxVal = qTable[s][0];
                                                                                 aIdx = 0;
@@ -6437,7 +6528,8 @@ return block;
                                                                                   qTable,
                                                                                   lastStateIdx: s,
                                                                                   lastActionIdx: aIdx,
-                                                                                  hasPrev: 1
+                                                                                  hasPrev: 1,
+                                                                                  rng: rngState
                                                                                 }
                                                                               };
                                                                             }
