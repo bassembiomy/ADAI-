@@ -4,6 +4,7 @@ import { VectorUtils } from './VectorUtils';
 import { AdaptiveSolver } from './AdaptiveSolver';
 import { StiffSolver } from './StiffSolver';
 import { resolveSimulationConfig } from './simulationConfig';
+import { runBatchSolver, reportUnsupportedSolver } from './liveStep';
 
 // Dormand-Prince coefficients for ODE5 fixed step
 const C_DP = [0, 1/5, 3/10, 4/5, 8/9, 1, 1];
@@ -537,34 +538,8 @@ export class Solvers {
       // A model that fails its compile-time checks is not simulated (Simulink: update diagram fails).
       if (compileDiagnostics.some(d => d.severity === 'error')) return;
 
-      const solver = options.solver as string;
-      if (solver === 'ode45') {
-          AdaptiveSolver.runODE45(engine, options);
-      } else if (solver === 'ode23') {
-          AdaptiveSolver.runODE23(engine, options);
-      } else if (solver === 'ode4' || solver === 'rk4') {
-          this.runRK4(engine, options);
-      } else if (solver === 'ode3') {
-          this.runODE3(engine, options);
-      } else if (solver === 'ode2') {
-          this.runODE2(engine, options);
-      } else if (solver === 'ode5') {
-          this.runODE5(engine, options);
-      } else if (solver === 'ode14x') {
-          StiffSolver.runODE14x(engine, options);
-      } else if (solver === 'ode23tb') {
-          StiffSolver.runODE23TB(engine, options);
-      } else if (solver === 'discrete') {
-          this.runDiscrete(engine, options);
-      } else if (solver === 'euler' || solver === 'ode1' || solver === 'fixedStep') {
-          this.runEuler(engine, options);
-      } else {
-          engine.diagnostics.push({
-            severity: 'error',
-            code: 'UNSUPPORTED_SOLVER',
-            message: `Solver '${solver}' is not supported. Use ode14x or ode23tb for stiff models.`,
-          });
-      }
+      // One dispatch for canvas, worker and batch (liveStep.ts); an unknown name is refused, never run as Euler.
+      if (!runBatchSolver(engine, options.solver as string, options)) reportUnsupportedSolver(engine, options.solver);
   }
 
   // ODE14x: implicit extrapolation (stiff), single step for the live canvas worker

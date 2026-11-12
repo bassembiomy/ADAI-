@@ -1,7 +1,5 @@
 import { XbridgesEngine } from './XbridgesEngine';
-import { Solvers } from './Solvers';
-import { AdaptiveSolver } from './AdaptiveSolver';
-import { StiffSolver } from './StiffSolver';
+import { liveStep } from './liveStep';
 import type { SolverOptions } from './types';
 import type {
   XbridgesWorkerRequest,
@@ -139,38 +137,42 @@ export function handleXbridgesWorkerMessage(request: XbridgesWorkerRequest): Xbr
 
     const dt = request.dt;
     const batchSize = Math.max(1, request.batchSize || 1);
-    let currentTime = request.time;
+    // Canvas time base (plan 5.1): step i of the request starts at time + i * dt, not at an accumulated sum.
+    let stepsTaken = 0;
+    let stepFailed = false;
 
     for (let i = 0; i < batchSize && !workerEngine.hasFatalError(); i++) {
-      if (solver === 'rk4') Solvers.stepRK4(workerEngine, currentTime, dt);
-      else if (solver === 'ode2') Solvers.stepODE2(workerEngine, currentTime, dt);
-      else if (solver === 'ode3') Solvers.stepODE3(workerEngine, currentTime, dt);
-      else if (solver === 'ode5') Solvers.stepODE5(workerEngine, currentTime, dt);
-      else if (solver === 'ode23') AdaptiveSolver.stepODE23(workerEngine, currentTime, dt);
-      else if (solver === 'ode45') AdaptiveSolver.stepODE45(workerEngine, currentTime, dt);
-      else if (solver === 'ode14x') StiffSolver.stepODE14x(workerEngine, currentTime, dt);
-      else if (solver === 'ode23tb') StiffSolver.stepODE23TB(workerEngine, currentTime, dt, 1e-3, 1e-6);
-      else if (solver === 'discrete') Solvers.stepDiscrete(workerEngine, currentTime, dt);
-      else Solvers.stepEuler(workerEngine, currentTime, dt);
-
-      currentTime += dt;
+      // One dispatch for canvas, worker and batch (liveStep.ts); an unknown solver name is refused there.
+      if (!liveStep(workerEngine, solver, request.time + i * dt, dt)) { stepFailed = true; break; }
+      stepsTaken++;
     }
+    let currentTime = request.time + stepsTaken * dt;
 
-    if (request.finalOutputs && !workerEngine.hasFatalError()) {
+    if (request.finalOutputs && !stepFailed && !workerEngine.hasFatalError()) {
+      // The step reaches the stop time: the final sample is logged exactly at the stop time (as the main-thread path does).
+      const stopTime = workerEngine.options?.stopTime;
+      if (typeof stopTime === 'number' && Number.isFinite(stopTime) && Math.abs(stopTime - currentTime) <= 1e-9 * Math.max(1, Math.abs(stopTime))) {
+        currentTime = stopTime;
+      }
       // Outputs and logging at the final time (a Scope logs in its discrete update), no integration.
       workerEngine.computeOutputs(currentTime);
       workerEngine.updateDiscreteStates(currentTime);
     }
 
-    if (workerEngine.hasFatalError()) {
-      // A block raised an exception (BLOCK_RUNTIME_FAULT): the run stops, the caller marks the simulation Failed.
+    if (stepFailed || workerEngine.hasFatalError()) {
+      // A block raised an exception (BLOCK_RUNTIME_FAULT) or the solver could not take the step: the run stops, the
+      // caller marks the simulation Failed.
       return {
         requestId,
         ok: false,
         simulationTime: currentTime,
         engineRunId,
         diagnostics: workerEngine.diagnostics,
-        error: { message: workerEngine.diagnostics.find(d => d.code === 'BLOCK_RUNTIME_FAULT')?.message || 'A block raised an exception' },
+        error: {
+          message: workerEngine.diagnostics.find(d => d.code === 'BLOCK_RUNTIME_FAULT')?.message
+            ?? workerEngine.diagnostics.find(d => d.severity === 'error')?.message
+            ?? 'A block raised an exception',
+        },
       };
     }
 

@@ -97,9 +97,7 @@ const renderLibraryIcon = (iconName: string, size = 14, className?: string) => {
 import { PtLibraryIcon } from './powertrain/PtSymbol';
 import { getPowertrainSpec } from '../../engine/xbridges/powertrain/index';
 import { XbridgesEngine } from '../../engine/xbridges/XbridgesEngine';
-import { Solvers } from '../../engine/xbridges/Solvers';
-import { AdaptiveSolver } from '../../engine/xbridges/AdaptiveSolver';
-import { StiffSolver } from '../../engine/xbridges/StiffSolver';
+import { liveStep as liveSolverStep } from '../../engine/xbridges/liveStep';
 import { ModelDiagnostic } from '../../engine/xbridges/types';
 import { ResizablePanel } from '../common/ResizablePanel';
 import { XbridgesStatusBar, type XbRunStatus } from './diagnostics/XbridgesStatusBar';
@@ -164,18 +162,9 @@ const formatTimeInput = (v: number) => (v === Number.POSITIVE_INFINITY ? 'inf' :
 
 type WorkspaceSolverType = 'euler' | 'ode2' | 'ode3' | 'rk4' | 'ode5' | 'ode23' | 'ode45' | 'ode14x' | 'ode23tb' | 'discrete';
 
-/** One live-canvas step with the selected solver. 'discrete' evaluates outputs and discrete updates only. */
-function stepLiveSolver(engine: XbridgesEngine, solverType: string, t: number, dt: number) {
-  if (solverType === 'rk4') Solvers.stepRK4(engine, t, dt);
-  else if (solverType === 'ode2') Solvers.stepODE2(engine, t, dt);
-  else if (solverType === 'ode3') Solvers.stepODE3(engine, t, dt);
-  else if (solverType === 'ode5') Solvers.stepODE5(engine, t, dt);
-  else if (solverType === 'ode23') AdaptiveSolver.stepODE23(engine, t, dt);
-  else if (solverType === 'ode45') AdaptiveSolver.stepODE45(engine, t, dt);
-  else if (solverType === 'ode14x') StiffSolver.stepODE14x(engine, t, dt);
-  else if (solverType === 'ode23tb') StiffSolver.stepODE23TB(engine, t, dt, 1e-3, 1e-6);
-  else if (solverType === 'discrete') Solvers.stepDiscrete(engine, t, dt);
-  else Solvers.stepEuler(engine, t, dt);
+/** One live-canvas step with the selected solver (the shared dispatch in liveStep.ts). False when the step failed. */
+function stepLiveSolver(engine: XbridgesEngine, solverType: string, t: number, dt: number): boolean {
+  return liveSolverStep(engine, solverType, t, dt);
 }
 
 /** Simulation settings as saved with the model: parsed from the toolbar text, 'auto' step resolved for the model's blocks. */
@@ -1443,6 +1432,13 @@ export const XbridgesWorkspace: React.FC<{
   const simulationKey = `${solverType}|${startTimeInput}|${stopTimeInput}|${stepSizeInput}`;
   const simLimitRef = React.useRef<number | null>(null);
   const liveStepRef = React.useRef<number | null>(null);
+  // Canvas time base (plan 5.1): output step n starts at start + n * step (a product, not an accumulated sum).
+  const liveStartRef = React.useRef(0);
+  const liveIndexRef = React.useRef(0);
+  const liveTimeAfter = (n: number, stepNow: number, stopAt: number | null) => {
+    const t = liveStartRef.current + n * (liveStepRef.current ?? stepNow);
+    return stopAt !== null && t >= stopAt - 1e-12 ? stopAt : t;
+  };
   const isSpacePressedRef = React.useRef(false);
   const spaceComboUsedRef = React.useRef(false);
 
@@ -2024,6 +2020,8 @@ export const XbridgesWorkspace: React.FC<{
       }
       const liveStep = resolvedConfig.fixedStep;
       liveStepRef.current = liveStep;
+      liveStartRef.current = resolvedConfig.startTime;
+      liveIndexRef.current = 0;
       timeRef.current = resolvedConfig.startTime;
       setStatusTime(resolvedConfig.startTime);
       // Configuration warnings (no error) are part of the run's diagnostics too.
@@ -2103,6 +2101,7 @@ export const XbridgesWorkspace: React.FC<{
 
           if (useWorker && xbridgesWorkerRef.current?.available) {
             if (!xbridgesWorkerRef.current.inFlight) {
+              const stepIndexSent = liveIndexRef.current;
               xbridgesWorkerRef.current.step({
                 time: timeRef.current,
                 dt: stepNow,
@@ -2118,7 +2117,8 @@ export const XbridgesWorkspace: React.FC<{
                   setIsSimulating(false);
                   return;
                 }
-                timeRef.current = res.simulationTime;
+                liveIndexRef.current = stepIndexSent + 1;
+                timeRef.current = liveTimeAfter(liveIndexRef.current, stepNow, simLimitRef.current);
                 if (res.engineSnapshot?.blockStates) {
                   lastWorkerStatesRef.current = res.engineSnapshot.blockStates;
                 }
@@ -2138,6 +2138,7 @@ export const XbridgesWorkspace: React.FC<{
                 }
               }).catch(err => {
                 console.error('Xbridges worker step error:', err);
+                if (Array.isArray(err?.diagnostics)) addDiagnostics(err.diagnostics);
                 setRunFailed(true);
                 setIsSimulating(false);
               });
@@ -2176,10 +2177,11 @@ export const XbridgesWorkspace: React.FC<{
               }
             });
 
-            stepLiveSolver(engineRef.current, solverType, timeRef.current, stepNow);
+            const stepped = stepLiveSolver(engineRef.current, solverType, timeRef.current, stepNow);
 
-            if (engineRef.current.hasFatalError()) {
-              // A block raised an exception (BLOCK_RUNTIME_FAULT): stop the live run and mark it Failed.
+            if (engineRef.current.hasFatalError() || !stepped) {
+              // A block raised an exception (BLOCK_RUNTIME_FAULT) or the solver could not take the step
+              // (UNSUPPORTED_SOLVER, step too small, ...): stop the live run and mark it Failed.
               addDiagnostics(engineRef.current.diagnostics);
               setStatusTime(timeRef.current);
               setRunFailed(true);
@@ -2187,7 +2189,8 @@ export const XbridgesWorkspace: React.FC<{
               return;
             }
 
-            timeRef.current += stepNow;
+            liveIndexRef.current += 1;
+            timeRef.current = liveTimeAfter(liveIndexRef.current, stepNow, simLimitRef.current);
 
             if (simLimitRef.current !== null && timeRef.current >= simLimitRef.current - 1e-12) {
               timeRef.current = simLimitRef.current;
@@ -3069,7 +3072,8 @@ export const XbridgesWorkspace: React.FC<{
             inportOverrides: {},
             finalOutputs: reachesStop,
           });
-          timeRef.current = reachesStop ? (stopAt as number) : res.simulationTime;
+          liveIndexRef.current += 1;
+          timeRef.current = reachesStop ? (stopAt as number) : liveTimeAfter(liveIndexRef.current, stepNow, stopAt);
           if (res.engineSnapshot?.blockStates) lastWorkerStatesRef.current = res.engineSnapshot.blockStates;
           addDiagnostics(res.diagnostics);
           setStatusTime(timeRef.current);
@@ -3089,9 +3093,15 @@ export const XbridgesWorkspace: React.FC<{
     const remaining = stopAt === null ? Infinity : stopAt - timeRef.current;
     if (remaining <= 1e-12) return;
     const stepNow = Math.min(liveStepRef.current ?? fixedStep, remaining);
-    stepLiveSolver(engineRef.current, solverType, timeRef.current, stepNow);
+    if (!stepLiveSolver(engineRef.current, solverType, timeRef.current, stepNow) || engineRef.current.hasFatalError()) {
+      addDiagnostics(engineRef.current.diagnostics);
+      setRunFailed(true);
+      setIsSimulating(false);
+      return;
+    }
 
-    timeRef.current += stepNow;
+    liveIndexRef.current += 1;
+    timeRef.current = liveTimeAfter(liveIndexRef.current, stepNow, stopAt);
     if (stopAt !== null && timeRef.current >= stopAt - 1e-12) {
       timeRef.current = stopAt;
       engineRef.current.computeOutputs(stopAt);
