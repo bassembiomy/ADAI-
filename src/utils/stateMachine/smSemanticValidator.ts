@@ -18,7 +18,7 @@ import type {
 } from './smModel';
 
 type StateMachineModelV4 = AnyStateMachineModel;
-import type { SemanticVariable } from './smSemanticModel';
+import { SM_MAX_INPUT_EVENTS, type SemanticVariable } from './smSemanticModel';
 import { DEFAULT_XB_EMBEDDED_LIMITS } from './xbEmbeddedProfile';
 import type { XBTargetCapabilities } from './xbModel';
 import { adaptXBModel } from './xbModelAdapter';
@@ -908,8 +908,30 @@ const validateExpressions = (
     symbolTypes.set(variable.name, type);
   }
 
+  const eventByName = new Map((model.events ?? []).map((event) => [event.name, event]));
+  const checkSends = (actions: readonly ActionNode[], elementId: string): void => {
+    for (const action of actions) {
+      if (action.kind !== 'send') continue;
+      const event = eventByName.get(action.event);
+      if (event === undefined) {
+        diagnostics.push(diagnostic(
+          'SM_SEND_NON_LOCAL_EVENT',
+          `send(${action.event}) on '${elementId}' names an event that is not declared; only declared local events can be sent.`,
+          elementId,
+        ));
+      } else if (event.scope !== 'local') {
+        diagnostics.push(diagnostic(
+          'SM_SEND_NON_LOCAL_EVENT',
+          `send(${action.event}) on '${elementId}' names an input event; only local events can be sent.`,
+          elementId,
+        ));
+      }
+    }
+  };
+
   const actionsHaveValidTypes = (actions: readonly ActionNode[]): boolean =>
     actions.every((action) => {
+      if (action.kind === 'send') return true;
       const targetType = symbolTypes.get(action.target);
       return targetType !== undefined
         && inferExpressionType(action.value, symbolTypes) === targetType;
@@ -918,6 +940,7 @@ const validateExpressions = (
   const validateAction = (source: string, elementId: string): void => {
     try {
       const actions = parseActions(source, symbols);
+      checkSends(actions, elementId);
       if (!actionsHaveValidTypes(actions)) {
         diagnostics.push(diagnostic(
           'ACTION_TYPE_INVALID',
@@ -940,6 +963,7 @@ const validateExpressions = (
     validateAction(state.exit, state.id);
     try {
       const parsed = parseInternalTransitions(state.internalTransitions ?? '', symbols);
+      for (const transition of parsed) checkSends(transition.actions, state.id);
       if (
         parsed.some((transition) =>
           inferExpressionType(transition.guard, symbolTypes) !== 'boolean'
@@ -1002,6 +1026,63 @@ const validateExpressions = (
       diagnostics.push(diagnostic(
         'GUARD_EXPRESSION_INVALID',
         `Guard on '${transition.id}' is invalid: ${String(error)}`,
+        transition.id,
+      ));
+    }
+  }
+  return diagnostics;
+};
+
+const validateEvents = (
+  model: StateMachineModelV4,
+): ModelDiagnostic[] => {
+  const diagnostics: ModelDiagnostic[] = [];
+  const events = model.events ?? [];
+  const names = new Set<string>();
+  const ids = new Set<string>();
+  for (const event of events) {
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(event.name)) {
+      diagnostics.push(diagnostic(
+        'SM_INVALID_EVENT_NAME',
+        `Event name '${event.name}' is not a valid C identifier.`,
+        event.id,
+      ));
+    } else if (['NONE', 'QUEUE_LEN'].includes(event.name)) {
+      diagnostics.push(diagnostic(
+        'SM_INVALID_EVENT_NAME',
+        `Event name '${event.name}' is reserved by the generated SM_EVENT_* constants.`,
+        event.id,
+      ));
+    }
+    if (names.has(event.name)) {
+      diagnostics.push(diagnostic(
+        'SM_DUPLICATE_EVENT',
+        `Event name '${event.name}' is declared more than once.`,
+        event.id,
+      ));
+    }
+    if (ids.has(event.id)) {
+      diagnostics.push(diagnostic(
+        'SM_DUPLICATE_EVENT',
+        `Event id '${event.id}' is declared more than once.`,
+        event.id,
+      ));
+    }
+    names.add(event.name);
+    ids.add(event.id);
+  }
+  const inputCount = events.filter((event) => event.scope === 'input').length;
+  if (inputCount > SM_MAX_INPUT_EVENTS) {
+    diagnostics.push(diagnostic(
+      'SM_TOO_MANY_INPUT_EVENTS',
+      `The chart declares ${inputCount} input events; at most ${SM_MAX_INPUT_EVENTS} are supported.`,
+    ));
+  }
+  for (const transition of model.transitions) {
+    if (transition.event !== undefined && transition.event !== null && !ids.has(transition.event)) {
+      diagnostics.push(diagnostic(
+        'SM_UNKNOWN_EVENT',
+        `Transition '${transition.id}' is triggered by unknown event '${transition.event}'.`,
         transition.id,
       ));
     }
@@ -1131,6 +1212,7 @@ export const validateModelStructure = (
     ...validateHistory(model, junctionLayers),
     ...validateMappings(model),
     ...validateExpressions(model),
+    ...validateEvents(model),
     ...validateInitialValues(model),
     ...validateXBridges(model),
   );

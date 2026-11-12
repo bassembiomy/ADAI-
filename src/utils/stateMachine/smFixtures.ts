@@ -643,6 +643,8 @@ export type DifferentialScenarioStep =
       kind: 'step';
       elapsedMs?: number;
       inputs?: Readonly<Record<string, number | boolean>>;
+      /** Input event names posted before the tick (simulation: postInputEvent; C: SM_PostEvent). */
+      events?: readonly string[];
     }
   | { kind: 'reset' }
   | { kind: 'fault' };

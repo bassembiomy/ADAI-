@@ -230,7 +230,12 @@ const isEnabled = (
   transition: SemanticTransition,
   env: Readonly<ScenarioEnvironment>,
   timerAfterStepMs: number,
+  currentEvent: string | null = null,
 ): { enabled: boolean; guard: boolean; temporal: boolean } | undefined => {
+  // A transition with an event is enabled only in an execution where that event is current.
+  if (transition.eventId != null && transition.eventId !== currentEvent) {
+    return { enabled: false, guard: false, temporal: false };
+  }
   const guardValue = evaluateExpression(ir, transition.guard, env);
   if (guardValue === undefined) return undefined;
   const guard = asNumber(guardValue) !== 0;
@@ -251,6 +256,8 @@ export interface TransitionStimulus {
   readonly sourceTimerMs: number;
   /** Complete variable environment seen by the step. */
   readonly environment: ScenarioEnvironment;
+  /** Input events (ids) to post before the step: the transition's own event in a TRUE case, none otherwise. */
+  readonly events: readonly string[];
 }
 
 const candidateValues = (variable: SemanticVariable, literals: readonly number[]): ScenarioValue[] => {
@@ -282,6 +289,13 @@ export const findTransitionStimulus = (
   want: boolean,
 ): TransitionStimulus | null => {
   const tick = ir.tickMs;
+  // One input event at most is posted: the transition's own in a TRUE case. A local event is
+  // only ever current after a send(), which a single stimulus does not provide.
+  const eventDef = transition.eventId == null
+    ? undefined
+    : (ir.events ?? []).find((event) => event.id === transition.eventId);
+  if (want && transition.eventId != null && eventDef?.scope !== 'input') return null;
+  const currentEvent = want ? transition.eventId ?? null : null;
   const sourceId = transition.sourceStateId;
   const source = ir.states[sourceId];
   if (!source) return null;
@@ -323,7 +337,7 @@ export const findTransitionStimulus = (
     sourceTimer: number,
     subset: readonly SemanticTransition[],
   ): boolean => subset.every((other) => {
-    const result = isEnabled(ir, other, env, timerAfterStep(other.sourceStateId, sourceTimer));
+    const result = isEnabled(ir, other, env, timerAfterStep(other.sourceStateId, sourceTimer), currentEvent);
     return result !== undefined && !result.enabled;
   });
 
@@ -354,7 +368,7 @@ export const findTransitionStimulus = (
       });
       for (const timer of timerCandidates) {
         evaluations += 1;
-        const result = isEnabled(ir, transition, env, timerAfterStep(sourceId, timer));
+        const result = isEnabled(ir, transition, env, timerAfterStep(sourceId, timer), currentEvent);
         if (!result || result.enabled !== want) continue;
         if (!othersDisabled(env, timer, subset)) continue;
         // Prefer a stimulus that isolates the part under test: a TRUE case of an `or` fires by its
@@ -367,7 +381,15 @@ export const findTransitionStimulus = (
         if (best === null || lexicographicallyLess(score, best.score)) {
           const variables: ScenarioEnvironment = {};
           for (const id of guardVariables) variables[id] = env[id];
-          best = { stimulus: { variables, sourceTimerMs: timer, environment: env }, score };
+          best = {
+            stimulus: {
+              variables,
+              sourceTimerMs: timer,
+              environment: env,
+              events: currentEvent === null ? [] : [currentEvent],
+            },
+            score,
+          };
         }
       }
     } while (evaluations < 40000 && advance());
@@ -384,6 +406,7 @@ const applyActions = (
   unknown: Set<string>,
 ): void => {
   for (const action of actions) {
+    if (action.kind === 'send') continue;
     const variable = ir.variables[action.target];
     if (!variable) continue;
     assigned.add(variable.id);
@@ -448,8 +471,33 @@ export const duringAssignedVariables = (
   const result = new Set<string>();
   for (const id of configuration.activeStateIds) {
     for (const action of ir.states[id]?.duringActions ?? []) {
-      if (ir.variables[action.target]) result.add(action.target);
+      if (action.kind === 'assign' && ir.variables[action.target]) result.add(action.target);
     }
   }
   return result;
+};
+
+/**
+ * Whether stepping from `configuration` can send a local event: a send() among the actions of the
+ * transition, of the states it exits or enters, or the during actions of the active states. The
+ * follow-up executions it triggers are not predicted, so no transition test is generated then.
+ */
+export const effectSendsLocalEvent = (
+  ir: SemanticModel,
+  transition: SemanticTransition,
+  configuration: ForcedConfiguration,
+): boolean => {
+  if ((ir.events ?? []).length === 0) return false;
+  const stateIds = new Set<string>([
+    ...configuration.activeStateIds,
+    ...transition.exitStateIds,
+    ...transition.entryStateIds,
+    ...defaultDescendants(ir, transition.destinationStateId),
+  ]);
+  const actions: ActionNode[] = [...transition.actions];
+  for (const id of stateIds) {
+    const state = ir.states[id];
+    if (state) actions.push(...state.entryActions, ...state.duringActions, ...state.exitActions);
+  }
+  return actions.some((action) => action.kind === 'send');
 };

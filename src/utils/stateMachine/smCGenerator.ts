@@ -19,7 +19,13 @@ import type {
   SemanticTransition,
   SemanticTransitionRoute,
 } from './smSemanticModel';
-import { historyStorageUsage, routeExitStateIds } from './smSemanticModel';
+import {
+  historyStorageUsage,
+  routeExitStateIds,
+  SM_EVENT_QUEUE_LEN,
+  SM_MAX_EXECUTIONS_PER_STEP,
+  semanticEvents,
+} from './smSemanticModel';
 import {
   renderXBHeader,
   renderXBInstanceMembers,
@@ -161,14 +167,27 @@ const renderCStringLiteral = (value: string): string => {
   return `"${escaped}"`;
 };
 
+const eventCName = (ir: SemanticModel, eventId: string): string => {
+  const event = semanticEvents(ir).find((candidate) => candidate.id === eventId);
+  if (event === undefined) throw new Error(`event '${eventId}' is absent from semantic IR`);
+  return event.cName;
+};
+
+const eventUsage = (ir: SemanticModel): { any: boolean; input: boolean; local: boolean } => ({
+  any: semanticEvents(ir).length > 0,
+  input: semanticEvents(ir).some((event) => event.scope === 'input'),
+  local: semanticEvents(ir).some((event) => event.scope === 'local'),
+});
+
 const renderActions = (
   ir: SemanticModel,
   actions: SemanticState['entryActions'],
   traceLabel: string,
   indent = '    ',
 ): string => lines(
-  actions.map((action) =>
-    renderCAction(action, ir.variables, ir.verification.cStandard, indent)).join('\n'),
+  actions.map((action) => action.kind === 'send'
+    ? `${indent}SM_SendEvent(instance, SM_EVENT_${eventCName(ir, action.event)});`
+    : renderCAction(action, ir.variables, ir.verification.cStandard, indent)).join('\n'),
   actions.length === 0
     ? null
     : `${indent}SM_TraceAction(instance, ${renderCStringLiteral(traceLabel)});`,
@@ -186,12 +205,19 @@ const renderTransitionEnabled = (
   const temporal = transition.temporalThresholdMs === null
     ? 'false'
     : `(instance->state_timers[${stateIndex(ir, timerStateId)}] >= ${transition.temporalThresholdMs}U)`;
-  switch (transition.triggerMode) {
-    case 'condition': return guard;
-    case 'after': return temporal;
-    case 'and': return `(${guard} && ${temporal})`;
-    case 'or': return `(${guard} || ${temporal})`;
-  }
+  const timing = (() => {
+    switch (transition.triggerMode) {
+      case 'condition': return guard;
+      case 'after': return temporal;
+      case 'and': return `(${guard} && ${temporal})`;
+      case 'or': return `(${guard} || ${temporal})`;
+    }
+  })();
+  if (transition.eventId == null) return timing;
+  // The event is tested first: a guard of a transition whose event is not current is not evaluated.
+  const current = `(instance->current_event == SM_EVENT_${eventCName(ir, transition.eventId)})`;
+  const rest = unwrapTopLevelCondition(timing);
+  return rest === 'true' ? current : `(${current} && (${rest}))`;
 };
 
 const renderRouteEnabled = (
@@ -861,6 +887,116 @@ const cCommentText = (value: string): string => value
 const stateTraceComment = (state: SemanticState): string =>
   `/* State: ${cCommentText(state.name)} | Model ID: ${cCommentText(state.id)} | C enum: ${state.enumName} */`;
 
+const renderEventResetLines = (ir: SemanticModel): string[] => [
+  ...(eventUsage(ir).input ? [
+    '    SM_ENTER_CRITICAL();',
+    '    instance->pending_events = 0U;',
+    '    SM_EXIT_CRITICAL();',
+  ] : []),
+  '    instance->current_event = SM_EVENT_NONE;',
+  ...(eventUsage(ir).local ? [
+    '    instance->event_head = 0U;',
+    '    instance->event_count = 0U;',
+  ] : []),
+];
+
+/*
+ * The executions of one tick: one per pending input event in declaration order (one without an
+ * event when none is pending), each followed by the queued local events (FIFO), at most
+ * SM_MAX_EXECUTIONS_PER_STEP in total. Mirrors executeTickExecutions in smInterpreter.ts.
+ */
+const renderEventExecutionSource = (ir: SemanticModel, index: RenderIndex): string => {
+  const usage = eventUsage(ir);
+  const rootLayer = ir.layers[ir.rootLayerId];
+  return lines(
+    '/* Returns false when the tick must stop (an error other than ARITHMETIC is latched). */',
+    'static bool SM_Execute_Event(ADIA_Instance_t *instance, uint32_t *executions, SM_Event_t event)',
+    '{',
+    '    if (*executions >= SM_MAX_EXECUTIONS_PER_STEP) {',
+    '        if (instance->error_status == SM_ERR_NONE) {',
+    '            instance->error_status = SM_ERR_EVENT_OVERFLOW;',
+    '        }',
+    '        return false;',
+    '    }',
+    '    *executions = *executions + 1U;',
+    '    instance->current_event = event;',
+    `    (void)${layerFunction(index, 'SM_Execute_Layer', rootLayer.id)}(instance);`,
+    '    return (instance->error_status == SM_ERR_NONE) || (instance->error_status == SM_ERR_ARITHMETIC);',
+    '}',
+    '',
+    'static bool SM_Run_Event(ADIA_Instance_t *instance, uint32_t *executions, SM_Event_t event)',
+    '{',
+    '    if (!SM_Execute_Event(instance, executions, event)) {',
+    '        return false;',
+    '    }',
+    ...(usage.local ? [
+      '    while (instance->event_count > 0U) {',
+      '        const SM_Event_t next = instance->event_queue[instance->event_head];',
+      '        instance->event_head = (instance->event_head + 1U) % SM_EVENT_QUEUE_LEN;',
+      '        instance->event_count = instance->event_count - 1U;',
+      '        if (!SM_Execute_Event(instance, executions, next)) {',
+      '            return false;',
+      '        }',
+      '    }',
+    ] : []),
+    '    return true;',
+    '}',
+    '',
+    `static void SM_Run_Executions(ADIA_Instance_t *instance${usage.input ? ', uint32_t pending_mask' : ''})`,
+    '{',
+    '    uint32_t executions = 0U;',
+    ...(usage.input ? [
+      '    uint32_t bit;',
+      '    if (pending_mask == 0U) {',
+      '        (void)SM_Run_Event(instance, &executions, SM_EVENT_NONE);',
+      '    } else {',
+      '        for (bit = 0U; bit < SM_NUM_INPUT_EVENTS; ++bit) {',
+      '            if ((pending_mask & ((uint32_t)1U << bit)) != 0U) {',
+      '                if (!SM_Run_Event(instance, &executions, (SM_Event_t)bit)) {',
+      '                    break;',
+      '                }',
+      '            }',
+      '        }',
+      '    }',
+    ] : [
+      '    (void)SM_Run_Event(instance, &executions, SM_EVENT_NONE);',
+    ]),
+    '    instance->current_event = SM_EVENT_NONE;',
+    '}',
+  );
+};
+
+const renderEventConfig = (ir: SemanticModel): string[] => {
+  const usage = eventUsage(ir);
+  return [
+    '',
+    '/* Events: input events are posted with SM_PostEvent(), local events are queued by send() actions. */',
+    'typedef uint32_t SM_Event_t;',
+    ...semanticEvents(ir).map((event) => `#define SM_EVENT_${event.cName} ${event.index}U`),
+    '#define SM_EVENT_NONE 0xFFFFFFFFU',
+    `#define SM_MAX_EXECUTIONS_PER_STEP ${SM_MAX_EXECUTIONS_PER_STEP}U`,
+    ...(usage.local ? [`#define SM_EVENT_QUEUE_LEN ${SM_EVENT_QUEUE_LEN}U`] : []),
+    ...(usage.input ? [
+      `#define SM_NUM_INPUT_EVENTS ${semanticEvents(ir).filter((event) => event.scope === 'input').length}U`,
+      '/*',
+      ' * SM_PostEvent() may be called from an interrupt. It brackets the update of the pending mask',
+      ' * with SM_ENTER_CRITICAL()/SM_EXIT_CRITICAL(), as does SM_Step() when it takes the mask.',
+      ' * The defaults do nothing: map them to your interrupt masking, for example',
+      ' *   #define SM_ENTER_CRITICAL() __disable_irq()',
+      ' *   #define SM_EXIT_CRITICAL()  __enable_irq()',
+      ' * (or save and restore the interrupt state) before including this file.',
+      ' */',
+      '#ifndef SM_ENTER_CRITICAL',
+      '#define SM_ENTER_CRITICAL() ((void)0)',
+      '#endif',
+      '#ifndef SM_EXIT_CRITICAL',
+      '#define SM_EXIT_CRITICAL() ((void)0)',
+      '#endif',
+    ] : []),
+    '',
+  ];
+};
+
 export const renderConfigHeader = (ir: SemanticModel): string => {
   const index = buildIndex(ir);
   const states = orderedStates(ir);
@@ -916,6 +1052,7 @@ export const renderConfigHeader = (ir: SemanticModel): string => {
     historyStorageUsage(ir).deep
       ? '#define SM_DEEP_HISTORY_BYTES (((SM_NUM_STATES + 1U) + 7U) / 8U)'
       : null,
+    ...(eventUsage(ir).any ? renderEventConfig(ir) : []),
     ...layers.map((layer) =>
       `#define ${layerMacro(layer)} ${index.layerNumber.get(layer.id)!}U`),
     ...states.flatMap((state) => [
@@ -949,7 +1086,9 @@ export const renderConfigHeader = (ir: SemanticModel): string => {
     '    SM_ERR_SAFETY_VIOLATION,',
     '    SM_ERR_XBRIDGES_NUMERIC,',
     '    SM_ERR_INVALID_ARGUMENT,',
-    '    SM_ERR_ARITHMETIC',
+    ...(eventUsage(ir).any
+      ? ['    SM_ERR_ARITHMETIC,', '    SM_ERR_EVENT_OVERFLOW = 8']
+      : ['    SM_ERR_ARITHMETIC']),
     '} SM_Error_t;',
     '',
     'typedef uint32_t SM_Group_t;',
@@ -984,6 +1123,17 @@ export const renderConfigHeader = (ir: SemanticModel): string => {
     '    bool fault_latched;',
     '    bool arith_pending;',
     ir.executeAtInitialization === false ? '    bool chart_entered;' : null,
+    ...(eventUsage(ir).any ? [
+      eventUsage(ir).input
+        ? '    volatile uint32_t pending_events; /* input events posted by SM_PostEvent(), possibly from an ISR */'
+        : null,
+      '    SM_Event_t current_event; /* event of the chart execution in progress, SM_EVENT_NONE if none */',
+      ...(eventUsage(ir).local ? [
+        '    SM_Event_t event_queue[SM_EVENT_QUEUE_LEN]; /* local events queued by send() */',
+        '    uint32_t event_head;',
+        '    uint32_t event_count;',
+      ] : []),
+    ].filter((line): line is string => line !== null) : []),
     '#ifdef SM_TRACE_ENABLED',
     '    SM_TraceSink_t trace_sink;',
     '#endif',
@@ -993,7 +1143,7 @@ export const renderConfigHeader = (ir: SemanticModel): string => {
   );
 };
 
-export const renderCoreHeader = (cStandard?: string): string => lines(
+export const renderCoreHeader = (cStandard?: string, ir?: SemanticModel): string => lines(
   '#ifndef SM_CORE_H',
   '#define SM_CORE_H',
   '',
@@ -1001,10 +1151,29 @@ export const renderCoreHeader = (cStandard?: string): string => lines(
   '',
   renderArithSection(cStandard),
   '',
+  ...(ir !== undefined && eventUsage(ir).local ? [
+    '/* send(NAME): queues a local event; called by the generated actions only, not from interrupts. */',
+    'SM_ARITH_INLINE void SM_SendEvent(ADIA_Instance_t *instance, SM_Event_t event)',
+    '{',
+    '    if (instance->event_count >= SM_EVENT_QUEUE_LEN) {',
+    '        if (instance->error_status == SM_ERR_NONE) {',
+    '            instance->error_status = SM_ERR_EVENT_OVERFLOW;',
+    '        }',
+    '        return;',
+    '    }',
+    '    instance->event_queue[(instance->event_head + instance->event_count) % SM_EVENT_QUEUE_LEN] = event;',
+    '    instance->event_count = instance->event_count + 1U;',
+    '}',
+    '',
+  ] : []),
   'SM_Error_t SM_Init(ADIA_Instance_t *instance);',
   'SM_Error_t SM_Reset(ADIA_Instance_t *instance);',
   'SM_Error_t SM_ReadInputs(ADIA_Instance_t *instance);',
   'SM_Error_t SM_Step(ADIA_Instance_t *instance, uint32_t delta_ms);',
+  ...(ir !== undefined && eventUsage(ir).input ? [
+    '/* Marks an input event pending for the next SM_Step(). Safe to call from an interrupt (see SM_ENTER_CRITICAL). */',
+    'SM_Error_t SM_PostEvent(ADIA_Instance_t *instance, SM_Event_t event);',
+  ] : []),
   'SM_Error_t SM_WriteOutputs(ADIA_Instance_t *instance);',
   'SM_Error_t SM_Sync_IO(ADIA_Instance_t *instance);',
   'SM_Node_t SM_GetActiveSlot(const ADIA_Instance_t *instance, uint32_t slot);',
@@ -1581,6 +1750,7 @@ export const renderCoreSource = (ir: SemanticModel): string => {
     '',
     faultHelpers,
     '',
+    ...(eventUsage(ir).any ? [renderEventExecutionSource(ir, index), ''] : []),
     'SM_Error_t SM_Init(ADIA_Instance_t *instance)',
     '{',
     ...(historyStorageUsage(ir).deep ? ['    uint32_t layer_index;'] : []),
@@ -1632,6 +1802,7 @@ export const renderCoreSource = (ir: SemanticModel): string => {
     '    instance->error_status = SM_ERR_NONE;',
     '    instance->fault_latched = false;',
     '    instance->arith_pending = false;',
+    ...(eventUsage(ir).any ? ['    instance->current_event = SM_EVENT_NONE;'] : []),
     '    instance->error_status = SM_Validate_Mapping_Configuration();',
     '    if (instance->error_status != SM_ERR_NONE) {',
     '        return SM_ERR_CONFIGURATION;',
@@ -1687,6 +1858,7 @@ export const renderCoreSource = (ir: SemanticModel): string => {
     '    instance->error_status = SM_ERR_NONE;',
     '    instance->fault_latched = false;',
     '    instance->arith_pending = false;',
+    ...(eventUsage(ir).any ? renderEventResetLines(ir) : []),
     ...(ir.executeAtInitialization === false
       ? ['    instance->chart_entered = false;']
       : [
@@ -1710,6 +1882,7 @@ export const renderCoreSource = (ir: SemanticModel): string => {
     'SM_Error_t SM_Step(ADIA_Instance_t *instance, uint32_t delta_ms)',
     '{',
     '    uint32_t state_index;',
+    ...(eventUsage(ir).input ? ['    uint32_t pending_mask;'] : []),
     '    if (instance == NULL) {',
     '        return SM_ERR_NULL_INSTANCE;',
     '    }',
@@ -1747,13 +1920,39 @@ export const renderCoreSource = (ir: SemanticModel): string => {
     '            }',
     '        }',
     '    }',
-    `    (void)${layerFunction(index, 'SM_Execute_Layer', rootLayer.id)}(instance);`,
+    ...(eventUsage(ir).any
+      ? [
+        ...(eventUsage(ir).input ? [
+          '    SM_ENTER_CRITICAL();',
+          '    pending_mask = instance->pending_events;',
+          '    instance->pending_events = 0U;',
+          '    SM_EXIT_CRITICAL();',
+        ] : []),
+        `    SM_Run_Executions(instance${eventUsage(ir).input ? ', pending_mask' : ''});`,
+      ]
+      : [`    (void)${layerFunction(index, 'SM_Execute_Layer', rootLayer.id)}(instance);`]),
     '    if (instance->error_status != SM_ERR_NONE) {',
     '        SM_Enter_Fault(instance);',
     '    }',
     '    return instance->error_status;',
     '}',
     '',
+    ...(eventUsage(ir).input ? [
+      'SM_Error_t SM_PostEvent(ADIA_Instance_t *instance, SM_Event_t event)',
+      '{',
+      '    if (instance == NULL) {',
+      '        return SM_ERR_NULL_INSTANCE;',
+      '    }',
+      '    if (event >= SM_NUM_INPUT_EVENTS) {',
+      '        return SM_ERR_INVALID_ARGUMENT;',
+      '    }',
+      '    SM_ENTER_CRITICAL();',
+      '    instance->pending_events = instance->pending_events | ((uint32_t)1U << event);',
+      '    SM_EXIT_CRITICAL();',
+      '    return SM_ERR_NONE;',
+      '}',
+      '',
+    ] : []),
     'SM_Error_t SM_WriteOutputs(ADIA_Instance_t *instance)',
     '{',
     '    if (instance == NULL) {',
@@ -1917,7 +2116,7 @@ export const generateCArtifacts = (
     { name: 'sm_config.h', content: renderConfigHeader(ir) },
     { name: 'sm_mapping.h', content: renderMappingHeader() },
     { name: 'sm_mapping.c', content: renderMappingSource(ir) },
-    { name: 'sm_core.h', content: renderCoreHeader(ir.verification.cStandard) },
+    { name: 'sm_core.h', content: renderCoreHeader(ir.verification.cStandard, ir) },
     { name: 'sm_core.c', content: renderCoreSource(ir) },
     { name: 'sm_safety.h', content: renderSafetyHeader() },
     { name: 'sm_safety.c', content: renderSafetySource(ir) },

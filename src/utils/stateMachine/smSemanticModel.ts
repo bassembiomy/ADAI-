@@ -36,6 +36,29 @@ export interface XBOwnerState {
 }
 
 
+/*
+ * Events. `index` is the value of the generated `SM_EVENT_<cName>` constant: input events are
+ * numbered 0..k-1 in declaration order (the bit position in the pending mask), local events
+ * follow from k in declaration order.
+ */
+export interface SemanticEvent {
+  readonly id: string;
+  readonly name: string;
+  readonly cName: string;
+  readonly scope: 'input' | 'local';
+  readonly index: number;
+}
+
+export const semanticEvents = (ir: Pick<SemanticModel, 'events'>): readonly SemanticEvent[] =>
+  ir.events ?? [];
+
+/** Local event queue capacity per instance. */
+export const SM_EVENT_QUEUE_LEN = 8;
+/** Chart executions (one per event, plus the event-free one) allowed in a single tick. */
+export const SM_MAX_EXECUTIONS_PER_STEP = 16;
+/** Input events are bits of one 32-bit pending mask. */
+export const SM_MAX_INPUT_EVENTS = 32;
+
 export interface SemanticState {
   id: string;
   name: string;
@@ -85,6 +108,8 @@ export interface SemanticTransition {
   triggerMode: 'condition' | 'after' | 'and' | 'or';
   afterTicks: number | null;
   temporalThresholdMs: number | null;
+  /** Event (SemanticEvent.id) that must be current for this transition to be enabled; null: no event. */
+  eventId?: string | null;
   sourceKind: 'state' | 'junction';
   destinationKind: 'state' | 'junction';
   guard: ExpressionNode;
@@ -167,6 +192,8 @@ export interface SemanticModel {
   ioMappings: SemanticIOMapping[];
   activeSlotCount: number;
   traceableElements: TraceableElement[];
+  /** Declared events in declaration order; absent or empty when the chart uses none (read with semanticEvents). */
+  events?: SemanticEvent[];
   modelHash?: string;
   verification: ResolvedSMVerificationConfig;
   /** Undefined means true. When false, the chart is entered on the first step, not at init. */

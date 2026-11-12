@@ -11,7 +11,12 @@ import type { StateMachineLayerV4, StateMachineModelV5 } from './smModel';
 export interface RandomChartFeatures {
   innerTransitions: boolean;
   arithmetic: boolean;
+  /** Declares two input events and one local event; ~30% of the transitions are event-triggered and some actions send the local event. */
+  events?: boolean;
 }
+
+export const RANDOM_INPUT_EVENTS = ['IN_A', 'IN_B'] as const;
+const EVENT_IDS = ['ev_in_a', 'ev_in_b', 'ev_local'] as const;
 
 const mulberry32 = (seed: number) => () => {
   let t = (seed += 0x6d2b79f5);
@@ -60,6 +65,12 @@ export const buildRandomChart = (seed: number, features: RandomChartFeatures): S
       'd0 = abs(d0 - 10.5);',
     ]);
   };
+  /** An action that sometimes also sends the local event (only with the events feature). */
+  const eventAction = (): string => {
+    const base = action();
+    if (!features.events || !chance(0.12)) return base;
+    return base === '' ? 'send(LOCAL);' : `${base} send(LOCAL);`;
+  };
   const guard = (): string => {
     const atoms = features.arithmetic
       ? [...INPUTS, ...INPUTS.map((name) => `!${name}`), 'c0 > 3', 'c1 % 2 == 0', 'u8 < 100', 'd0 > 4.5']
@@ -73,11 +84,12 @@ export const buildRandomChart = (seed: number, features: RandomChartFeatures): S
     transitions.push({
       id, sourceId, targetId,
       condition: kind === 'after' ? '' : guard(),
-      action: chance(0.4) ? action() : '',
+      action: chance(0.4) ? eventAction() : '',
       afterTicks: kind === 'after' || kind === 'and' ? 1 + Math.floor(rnd() * 5) : null,
       type: kind,
       hasControlPoint: false,
       order: 1 + layer.transitionIds.length,
+      ...(features.events ? { event: chance(0.3) ? pick(EVENT_IDS) : null } : {}),
       ...extra,
     });
     layer.transitionIds.push(id);
@@ -93,7 +105,7 @@ export const buildRandomChart = (seed: number, features: RandomChartFeatures): S
       const id = `s${stateCount++}`;
       states.push({
         id, name: id, x: 0, y: 0, width: 100, height: 60,
-        entry: action(), during: chance(0.5) ? action() : '', exit: action(),
+        entry: eventAction(), during: chance(0.5) ? action() : '', exit: action(),
         isActive: false, color: '#000000', parentId: parentStateId, children: [],
         priority: index + 1, isParallel: false, regionId: null,
         autostart: decomposition === 'OR' && index === defaultIndex,
@@ -188,10 +200,22 @@ export const buildRandomChart = (seed: number, features: RandomChartFeatures): S
   model.transitions = transitions;
   model.layers = layers;
   model.variables = baseVariables();
+  if (features.events) {
+    model.events = [
+      { id: 'ev_in_a', name: 'IN_A', scope: 'input' },
+      { id: 'ev_in_b', name: 'IN_B', scope: 'input' },
+      { id: 'ev_local', name: 'LOCAL', scope: 'local' },
+    ];
+  }
   return model;
 };
 
-export const randomStimulus = (seed: number, ticks: number): DifferentialScenarioStep[] => {
+export const randomStimulus = (
+  seed: number,
+  ticks: number,
+  /** Input event names to post at random (omit for charts without events). */
+  inputEvents?: readonly string[],
+): DifferentialScenarioStep[] => {
   const rnd = mulberry32(seed ^ 0x5bd1e995);
   const values: Record<string, boolean> = Object.fromEntries(INPUTS.map((name) => [name, false]));
   const steps: DifferentialScenarioStep[] = [];
@@ -201,7 +225,14 @@ export const randomStimulus = (seed: number, ticks: number): DifferentialScenari
     for (const name of INPUTS) {
       if (rnd() < 0.3) { values[name] = !values[name]; inputs[name] = values[name]; }
     }
-    steps.push(Object.keys(inputs).length > 0 ? { kind: 'step', inputs } : { kind: 'step' });
+    const events = inputEvents === undefined
+      ? []
+      : inputEvents.filter(() => rnd() < 0.3);
+    steps.push({
+      kind: 'step',
+      ...(Object.keys(inputs).length > 0 ? { inputs } : {}),
+      ...(events.length > 0 ? { events } : {}),
+    });
   }
   return steps;
 };

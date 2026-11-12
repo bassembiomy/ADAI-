@@ -1,6 +1,7 @@
 import type { StateData } from '../../types/sm_types';
 import {
-  parseActions,
+  parseActions as parseActionsRaw,
+  type ActionNode,
   parseCondition,
   parseInternalTransitions,
   toCIdentifier,
@@ -17,6 +18,7 @@ import {
 import type {
   ResolvedSMVerificationConfig,
   SemanticBuildResult,
+  SemanticEvent,
   SemanticIOMapping,
   SemanticJunction,
   SemanticLayer,
@@ -385,6 +387,30 @@ export const buildSemanticModel = (
   const activityIndexByStateId = new Map(
     hierarchy.orderedStateIds.map((id, index) => [id, index]),
   );
+  const modelEvents = model.events ?? [];
+  const inputEventCount = modelEvents.filter((event) => event.scope === 'input').length;
+  let nextInputIndex = 0;
+  let nextLocalIndex = inputEventCount;
+  const events: SemanticEvent[] = modelEvents.map((event) => ({
+    id: event.id,
+    name: event.name,
+    cName: toCIdentifier(event.name),
+    scope: event.scope,
+    index: event.scope === 'input' ? nextInputIndex++ : nextLocalIndex++,
+  }));
+  const eventIdByName = new Map(events.map((event) => [event.name, event.id]));
+  /** Parses an action list; `send(NAME)` is resolved to the event id (the validator has checked it). */
+  const parseActions = (
+    source: string,
+    declared?: Parameters<typeof parseActionsRaw>[1],
+  ): ActionNode[] => parseActionsRaw(source, declared).map((action) => {
+    if (action.kind !== 'send') return action;
+    const eventId = eventIdByName.get(action.event);
+    if (eventId === undefined) {
+      throw new Error(`send(${action.event}) names an undeclared event`);
+    }
+    return { kind: 'send', event: eventId };
+  });
   const symbols = new Map<string, { id: string; cName: string }>();
   for (const variable of model.variables) {
     const cName = toCIdentifier(variable.name);
@@ -534,6 +560,7 @@ export const buildSemanticModel = (
       temporalThresholdMs: transition.afterTicks === null
         ? null
         : transition.afterTicks * model.tickMs,
+      eventId: transition.event ?? null,
       sourceKind: sourceIsState ? 'state' : 'junction',
       destinationKind: destinationIsState ? 'state' : 'junction',
       guard: parseCondition(transition.condition, symbols),
@@ -566,6 +593,7 @@ export const buildSemanticModel = (
         temporalThresholdMs: internal.afterTicks === null
           ? null
           : internal.afterTicks * model.tickMs,
+        eventId: null,
         sourceKind: 'state',
         destinationKind: 'state',
         guard: internal.guard,
@@ -824,6 +852,7 @@ export const buildSemanticModel = (
         (slot): slot is number => slot !== null,
       ).length,
       traceableElements,
+      events,
       modelHash: "0000000000000000",
       verification: resolveVerificationConfig((model as Partial<StateMachineModelV5>).verification),
       ...(((model as Partial<StateMachineModelV5>).executeAtInitialization) !== undefined

@@ -15,6 +15,7 @@ import {
   defaultConfiguration,
   defaultDescendants,
   duringAssignedVariables,
+  effectSendsLocalEvent,
   findTransitionStimulus,
   predictFiredEffect,
   type ForcedConfiguration,
@@ -98,7 +99,8 @@ const buildScenarioTransitionCases = (
       want ? ['TEST-TRANS-001', 'TEST-TRANS-002'] : ['TEST-TRANS-003'],
       ['SM_Step'],
     );
-    const stimulus = findTransitionStimulus(ir, t, configuration, want);
+    const sendsLocalEvent = effectSendsLocalEvent(ir, t, configuration);
+    const stimulus = sendsLocalEvent ? null : findTransitionStimulus(ir, t, configuration, want);
     if (!stimulus) {
       result.push({
         id,
@@ -106,8 +108,12 @@ const buildScenarioTransitionCases = (
         name,
         applicability: {
           status: 'not-applicable',
-          reason: want
-            ? 'No variable and timer assignment enables the transition without another transition preempting it.'
+          reason: sendsLocalEvent
+            ? 'The step sends a local event; the executions it triggers are not predicted by the generated test.'
+            : want
+            ? (ir.events ?? []).length > 0
+              ? 'No variable, timer and input-event stimulus enables the transition without another transition preempting it.'
+              : 'No variable and timer assignment enables the transition without another transition preempting it.'
             : 'No variable and timer assignment keeps the transition disabled after one step (for example after(1) always fires on the first tick).',
         },
         operations: [],
@@ -130,6 +136,9 @@ const buildScenarioTransitionCases = (
     }
     for (const [variableId, value] of Object.entries(stimulus.variables)) {
       operations.push({ kind: 'set-variable', variableId, value });
+    }
+    for (const eventId of stimulus.events) {
+      operations.push({ kind: 'post-event', eventId });
     }
     operations.push({ kind: 'step', deltaMs: ir.tickMs });
 
@@ -358,15 +367,25 @@ export const buildSMTestManifest = (ir: SemanticModel): SMTestManifest => {
     if (triggerVar) {
       trueOps.push({ kind: 'set-variable', variableId: triggerVar, value: true });
     }
+    // An event-triggered transition fires only in an execution with its event current: post it.
+    const triggerEvent = t.eventId == null
+      ? undefined
+      : (ir.events ?? []).find((event) => event.id === t.eventId);
+    const needsLocalEvent = triggerEvent !== undefined && triggerEvent.scope === 'local';
+    if (triggerEvent !== undefined && !needsLocalEvent) {
+      trueOps.push({ kind: 'post-event', eventId: triggerEvent.id });
+    }
     trueOps.push({ kind: 'step', deltaMs: ir.tickMs });
 
     cases.push({
       id: `SM-TC-TRANS-${srcName}-${dstName}-TRUE`,
       suite: 'transitions',
       name: `Transition from ${src ? src.name : srcName} to ${dst ? dst.name : dstName} fires when condition is met`,
-      applicability: { status: 'applicable' },
-      operations: trueOps,
-      expectations: trueExpectations,
+      applicability: needsLocalEvent
+        ? { status: 'not-applicable', reason: 'The transition is triggered by a local event, which only a send() action can make current.' }
+        : { status: 'applicable' },
+      operations: needsLocalEvent ? [] : trueOps,
+      expectations: needsLocalEvent ? [] : trueExpectations,
       traceability: makeTraceability(
         `SM-TC-TRANS-${srcName}-${dstName}-TRUE`,
         [t.sourceStateId, t.destinationStateId],
@@ -424,6 +443,12 @@ export const buildSMTestManifest = (ir: SemanticModel): SMTestManifest => {
       const ops: SMTestOperation[] = [{ kind: 'init' }];
       if (incomingTrigger) {
         ops.push({ kind: 'set-variable', variableId: incomingTrigger, value: true });
+      }
+      const incomingEvent = incoming?.eventId == null
+        ? undefined
+        : (ir.events ?? []).find((event) => event.id === incoming.eventId);
+      if (incomingEvent !== undefined && incomingEvent.scope === 'input') {
+        ops.push({ kind: 'post-event', eventId: incomingEvent.id });
       }
       ops.push({ kind: 'step' });
       cases.push({

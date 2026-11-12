@@ -1,6 +1,7 @@
 import type { HILConfig } from '../../engine/hil/hilTypes';
 export type { XBPersistedModelV1 } from './xbModel';
 import type {
+  EventDef,
   JunctionData,
   Layer,
   StateData,
@@ -62,6 +63,7 @@ export interface StateMachineModelV4 {
   layers: StateMachineLayerV4[];
   safetyMode: boolean;
   hilConfig?: HILConfig;
+  events?: EventDef[];
 }
 
 export interface StateMachineModelV5 {
@@ -78,6 +80,8 @@ export interface StateMachineModelV5 {
   diagrams?: StateMachineDiagramData[];
   /** Stateflow "Execute (enter) chart at initialization". Undefined means true (ADIA default). */
   executeAtInitialization?: boolean;
+  /** Declared events in declaration order (input events fire in this order). Optional: absent means no events. */
+  events?: EventDef[];
 }
 
 export type StateMachineModel = StateMachineModelV5;
@@ -96,6 +100,7 @@ export interface LegacyStateMachineModel {
   verification?: Partial<SMVerificationConfig>;
   diagrams?: StateMachineDiagramData[];
   executeAtInitialization?: boolean;
+  events?: EventDef[];
 }
 
 export interface ModelDiagnostic {

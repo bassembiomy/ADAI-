@@ -94,6 +94,16 @@ export interface JunctionData {
   autostart?: boolean;
 }
 
+/**
+ * A chart event. `input` events are posted from outside (SM_PostEvent / simulation stimulus);
+ * `local` events are queued by `send(NAME);` actions and processed within the same tick.
+ */
+export interface EventDef {
+  id: string;
+  name: string;
+  scope: 'input' | 'local';
+}
+
 export interface TransitionData {
   id: string;
   sourceId: string;
@@ -106,6 +116,8 @@ export interface TransitionData {
   hasControlPoint: boolean;
   order: number;
   isInternal?: boolean;
+  /** Id of the event (EventDef.id) that triggers this transition; null or absent: enabled in every execution. */
+  event?: string | null;
 }
 
 export interface Layer {

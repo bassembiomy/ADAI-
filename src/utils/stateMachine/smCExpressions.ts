@@ -300,7 +300,7 @@ const typeBounds = (type: VariableType, ctx: RenderContext): { min: string; max:
 };
 
 export const renderCAction = (
-  action: ActionNode,
+  action: Extract<ActionNode, { kind: 'assign' }>,
   variables: Readonly<Record<string, SemanticVariable>>,
   cStandard?: string,
   indent = '',

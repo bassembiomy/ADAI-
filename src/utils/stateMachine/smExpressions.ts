@@ -28,11 +28,17 @@ export type ExpressionNode =
   | { kind: 'unary'; operator: UnaryOperator; operand: ExpressionNode }
   | { kind: 'call'; functionName: string; argument: ExpressionNode };
 
-export type ActionNode = {
-  kind: 'assign';
-  target: string;
-  value: ExpressionNode;
-};
+export type ActionNode =
+  | {
+    kind: 'assign';
+    target: string;
+    value: ExpressionNode;
+  }
+  /**
+   * `send(NAME);` queues a local event. The parser yields the event name as written; the
+   * semantic builder resolves it to the event id.
+   */
+  | { kind: 'send'; event: string };
 
 export interface ParsedInternalTransition {
   guard: ExpressionNode;
@@ -204,6 +210,14 @@ class Parser {
   }
 
   parseStatement(): ActionNode {
+    const first = this.peek();
+    const second = this.tokens[this.index + 1];
+    if (first.kind === 'identifier' && first.value === 'send' && second?.value === '(') {
+      this.index += 2;
+      const event = this.consume('identifier').value;
+      this.consumeValue(')');
+      return { kind: 'send', event };
+    }
     const targetToken = this.consume('identifier').value;
     this.assertDeclared(targetToken);
     const target = this.resolveSymbol(targetToken).id;

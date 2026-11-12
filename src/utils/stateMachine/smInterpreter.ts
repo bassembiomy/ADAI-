@@ -7,7 +7,13 @@ import type {
   SemanticTransition,
   SemanticTransitionRoute,
 } from './smSemanticModel';
-import { historyStorageUsage, routeExitStateIds } from './smSemanticModel';
+import {
+  historyStorageUsage,
+  routeExitStateIds,
+  SM_EVENT_QUEUE_LEN,
+  SM_MAX_EXECUTIONS_PER_STEP,
+  semanticEvents,
+} from './smSemanticModel';
 import type { SemanticTraceFrame, XBridgesTraceValue } from './smTrace';
 import { xBridgesTraceAction } from './smTrace';
 import {
@@ -31,6 +37,7 @@ import {
 export interface SemanticRuntimeError {
   code:
     | 'ARITHMETIC'
+    | 'EVENT_OVERFLOW'
     | 'INVALID_ELAPSED_MS'
     | 'RUNTIME_EVALUATION_ERROR'
     | 'SAFETY_VIOLATION'
@@ -52,6 +59,12 @@ export interface SemanticRuntime {
   traceSequence: number;
   /** Set by init/reset when the chart does not execute at initialization: the next step enters it. */
   entryPending: boolean;
+  /** Input event ids posted since the last tick (see postInputEvent). Empty unless the chart declares events. */
+  pendingEvents: Set<string>;
+  /** FIFO of local event ids queued by send(); persists across ticks like the C instance queue. */
+  eventQueue: string[];
+  /** The event of the chart execution in progress; null when the execution has no event. */
+  currentEvent: string | null;
 }
 
 interface StepContext {
@@ -132,6 +145,39 @@ export const coerceSemanticValue = (
   return result.value;
 };
 
+/* ---- Events (see smEventSemantics.test.ts) ---- */
+
+const latchEventOverflow = (runtime: SemanticRuntime): void => {
+  if (runtime.error === null) {
+    runtime.error = { code: 'EVENT_OVERFLOW', message: 'event overflow' };
+  }
+};
+
+/** send(NAME): queue a local event; a full queue latches EVENT_OVERFLOW and drops the event. */
+const sendLocalEvent = (runtime: SemanticRuntime, eventId: string): void => {
+  if (runtime.eventQueue.length >= SM_EVENT_QUEUE_LEN) {
+    latchEventOverflow(runtime);
+    return;
+  }
+  runtime.eventQueue.push(eventId);
+};
+
+/** Posts an input event (by name or id) for the next tick. */
+export const postInputEvent = (runtime: SemanticRuntime, reference: string): void => {
+  const event = semanticEvents(runtime.ir).find((candidate) =>
+    candidate.name === reference || candidate.id === reference);
+  if (event === undefined || event.scope !== 'input') {
+    throw new Error(`'${reference}' is not an input event`);
+  }
+  runtime.pendingEvents.add(event.id);
+};
+
+const clearEventState = (runtime: SemanticRuntime): void => {
+  runtime.pendingEvents.clear();
+  runtime.eventQueue.length = 0;
+  runtime.currentEvent = null;
+};
+
 const runActions = (
   context: StepContext,
   actions: readonly ActionNode[],
@@ -139,6 +185,10 @@ const runActions = (
 ): void => {
   if (actions.length === 0) return;
   for (const action of actions) {
+    if (action.kind === 'send') {
+      sendLocalEvent(context.runtime, action.event);
+      continue;
+    }
     const target = context.runtime.ir.variables[action.target];
     if (target === undefined) {
       throw new Error(`action target '${action.target}' is absent from semantic IR`);
@@ -301,6 +351,9 @@ const transitionIsEnabled = (
   transition: SemanticTransition,
   timerStateId: string,
 ): boolean => {
+  if (transition.eventId != null && context.runtime.currentEvent !== transition.eventId) {
+    return false;
+  }
   const guard = evaluateGuard(context.runtime, transition.guard);
   const timerState = context.runtime.ir.states[timerStateId];
   const timerMs = timerState === undefined
@@ -951,6 +1004,9 @@ export const createRuntime = (ir: SemanticModel): SemanticRuntime => {
     error: null,
     traceSequence: 0,
     entryPending: false,
+    pendingEvents: new Set<string>(),
+    eventQueue: [],
+    currentEvent: null,
   };
   restoreDataDefaults(runtime);
   return runtime;
@@ -968,6 +1024,7 @@ export const initializeRuntime = (
   }
   runtime.error = null;
   runtime.traceSequence = 0;
+  clearEventState(runtime);
   const context: StepContext = { runtime, actions: [] };
   runtime.entryPending = !executesAtInitialization(runtime.ir);
   if (runtime.entryPending) return createTraceFrame(context, 0);
@@ -980,6 +1037,46 @@ export const initializeRuntime = (
     latchEvaluationError(runtime, error);
   }
   return createTraceFrame(context, 0);
+};
+
+/**
+ * The chart executions of one tick. Without events this is a single execution. With events:
+ * one execution per pending input event in declaration order (one event-free execution when
+ * none is pending), each followed by the queued local events (FIFO), at most
+ * SM_MAX_EXECUTIONS_PER_STEP executions in total; exceeding it latches EVENT_OVERFLOW.
+ */
+const executeTickExecutions = (context: StepContext): void => {
+  const { runtime } = context;
+  const rootLayerId = runtime.ir.rootLayerId;
+  if (semanticEvents(runtime.ir).length === 0) {
+    executeLayer(context, rootLayerId);
+    return;
+  }
+  const posted = semanticEvents(runtime.ir)
+    .filter((event) => event.scope === 'input' && runtime.pendingEvents.has(event.id))
+    .map((event) => event.id);
+  runtime.pendingEvents.clear();
+  let executions = 0;
+  const execute = (eventId: string | null): boolean => {
+    if (executions >= SM_MAX_EXECUTIONS_PER_STEP) {
+      latchEventOverflow(runtime);
+      return false;
+    }
+    executions += 1;
+    runtime.currentEvent = eventId;
+    executeLayer(context, rootLayerId);
+    return runtime.error === null || runtime.error.code === 'ARITHMETIC';
+  };
+  try {
+    for (const eventId of posted.length === 0 ? [null] : posted) {
+      if (!execute(eventId)) return;
+      while (runtime.eventQueue.length > 0) {
+        if (!execute(runtime.eventQueue.shift()!)) return;
+      }
+    }
+  } finally {
+    runtime.currentEvent = null;
+  }
 };
 
 export const stepRuntime = (
@@ -1012,10 +1109,10 @@ export const stepRuntime = (
       enterLayerDefault(context, runtime.ir.rootLayerId);
     } else {
       incrementActiveTimers(runtime, timing.logicalMs);
-      executeLayer(context, runtime.ir.rootLayerId);
+      executeTickExecutions(context);
     }
     const latched = (runtime.error as SemanticRuntimeError | null)?.code;
-    if (latched === 'XBRIDGES_NUMERIC' || latched === 'ARITHMETIC') {
+    if (latched === 'XBRIDGES_NUMERIC' || latched === 'ARITHMETIC' || latched === 'EVENT_OVERFLOW') {
       enterFaultConfiguration(context);
     }
   } catch (error) {
@@ -1051,6 +1148,7 @@ export const resetRuntime = (
     resetXBState(xBridges);
   }
   runtime.error = null;
+  clearEventState(runtime);
   runtime.entryPending = !executesAtInitialization(runtime.ir);
   if (runtime.entryPending) return createTraceFrame(context, 0);
   try {

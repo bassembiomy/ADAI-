@@ -11,6 +11,7 @@ import {
   createRuntime,
   faultRuntime,
   initializeRuntime,
+  postInputEvent,
   resetRuntime,
   stepRuntime,
 } from './smInterpreter';
@@ -29,7 +30,7 @@ import type {
   SemanticState,
   SemanticVariable,
 } from './smSemanticModel';
-import { historyStorageUsage } from './smSemanticModel';
+import { historyStorageUsage, SM_MAX_EXECUTIONS_PER_STEP, semanticEvents } from './smSemanticModel';
 import type {
   SemanticTraceFrame,
   XBridgesTraceValue,
@@ -416,6 +417,7 @@ export const runInterpreterTrace = (
       continue;
     }
     applyInputs(runtime, operation.inputs ?? {});
+    for (const eventName of operation.events ?? []) postInputEvent(runtime, eventName);
     const frame = stepRuntime(
       runtime,
       operation.elapsedMs ?? runtime.ir.tickMs,
@@ -547,6 +549,18 @@ const renderInputAssignments = (
   return `    instance.data.${variable.cName} = (${renderCType(variable.type)})(${literal});`;
 });
 
+const renderEventPosts = (
+  ir: SemanticModel,
+  operation: Extract<DifferentialScenarioStep, { kind: 'step' }>,
+): string[] => (operation.events ?? []).map((eventName) => {
+  const event = semanticEvents(ir).find((candidate) =>
+    candidate.name === eventName || candidate.id === eventName);
+  if (event === undefined || event.scope !== 'input') {
+    throw new Error(`scenario event '${eventName}' is not an input event`);
+  }
+  return `    (void)SM_PostEvent(&instance, SM_EVENT_${event.cName});`;
+});
+
 const renderScenarioOperations = (
   ir: SemanticModel,
   steps: readonly DifferentialScenarioStep[],
@@ -573,6 +587,7 @@ const renderScenarioOperations = (
   const elapsedMs = operation.elapsedMs ?? ir.tickMs;
   return [
     ...renderInputAssignments(ir, operation),
+    ...renderEventPosts(ir, operation),
     '    action_count = 0U;',
     '    safe_outputs_applied = 0U;',
     '    watchdog_kicks = 0U;',
@@ -846,9 +861,11 @@ export const renderDifferentialHarness = (
   steps: readonly DifferentialScenarioStep[],
 ): string => {
   const states = orderedStates(ir);
+  // A tick with events runs up to SM_MAX_EXECUTIONS_PER_STEP chart executions, each tracing its actions.
+  const executionsPerTick = semanticEvents(ir).length > 0 ? SM_MAX_EXECUTIONS_PER_STEP : 1;
   const actionCapacity = Math.max(
     1,
-    (states.length * 3) + (Object.keys(ir.transitions).length * 2) + 1,
+    ((states.length * 3) + (Object.keys(ir.transitions).length * 2) + 1) * executionsPerTick,
   );
   return [
     '#include "sm_core.h"',
@@ -1052,6 +1069,8 @@ const parseFrame = (line: string): CTraceFrame => {
             ? 'XBRIDGES_NUMERIC: X-Bridges numeric fault'
           : fields.error === '7'
             ? 'ARITHMETIC: arithmetic error'
+          : fields.error === '8'
+            ? 'EVENT_OVERFLOW: event overflow'
           : `C_ERROR_${fields.error}`,
   };
 };

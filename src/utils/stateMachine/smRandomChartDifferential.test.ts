@@ -3,14 +3,15 @@ import type { DifferentialFixture } from './smFixtures';
 import { compileAndRunCTrace, runInterpreterTrace } from './smCHarness';
 import { compareSemanticTraces } from './smTrace';
 import { buildSemanticModel } from './smSemanticBuilder';
-import { buildRandomChart, randomStimulus, type RandomChartFeatures } from './smRandomChartFixture';
+import { buildRandomChart, RANDOM_INPUT_EVENTS, randomStimulus, type RandomChartFeatures } from './smRandomChartFixture';
 
 /*
  * Random-chart differential test: the generated C must reproduce the simulation on every
  * tick (active states, variables, action order, timers, history, errors) for randomly
  * generated charts with nested OR/AND states, shallow and deep history, junctions,
  * temporal and combined guards, cross-level, inner and self transitions, and typed
- * arithmetic that saturates.
+ * arithmetic that saturates; the 'with-events' group adds input and local events
+ * (event-triggered transitions, send() actions, event queue overflow).
  *
  * Deterministic: each chart is built from a seed. A failure message names the group and
  * seed so the chart can be rebuilt with `buildRandomChart(seed, features)`.
@@ -26,6 +27,7 @@ const groups: Array<[string, RandomChartFeatures, number]> = [
   ['with-inner-transitions', { innerTransitions: true, arithmetic: false }, 2_000],
   ['with-typed-arithmetic', { innerTransitions: false, arithmetic: true }, 3_000],
   ['everything', { innerTransitions: true, arithmetic: true }, 4_000],
+  ['with-events', { innerTransitions: true, arithmetic: true, events: true }, 5_000],
 ];
 
 describe('random charts: generated C equals the simulation on every tick', () => {
@@ -42,7 +44,7 @@ describe('random charts: generated C equals the simulation on every tick', () =>
         const built = buildSemanticModel(model);
         if (!built.ir || built.diagnostics.some((item) => item.severity === 'error')) continue;
         compared += 1;
-        const fixture: DifferentialFixture = { name: 'flat-priority', model, steps: randomStimulus(seed, TICKS) };
+        const fixture: DifferentialFixture = { name: 'flat-priority', model, steps: randomStimulus(seed, TICKS, features.events ? RANDOM_INPUT_EVENTS : undefined) };
         try {
           const difference = compareSemanticTraces(runInterpreterTrace(fixture), compileAndRunCTrace(fixture));
           if (difference !== null) {

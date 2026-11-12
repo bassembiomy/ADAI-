@@ -840,7 +840,7 @@ describe('buildSemanticModel', () => {
 
     const result = buildSemanticModel(fixture);
     expect(result.diagnostics).toEqual([]);
-    expect(result.ir!.states.a.entryActions[0].target).toBe('var_go');
+    expect(result.ir!.states.a.entryActions[0]).toMatchObject({ target: 'var_go' });
     expect(result.ir!.transitions.t_ab.guard).toMatchObject({
       kind: 'variable',
       name: 'var_go',

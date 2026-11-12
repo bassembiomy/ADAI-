@@ -108,6 +108,12 @@ const renderOperation = (
       }
       return lines.join('\n');
     }
+    case 'post-event': {
+      const event = (ir.events ?? []).find((candidate) =>
+        candidate.id === op.eventId || candidate.name === op.eventId);
+      if (event === undefined) throw new Error(`post-event: unknown event '${op.eventId}'`);
+      return `    (void)SM_PostEvent(&instance, SM_EVENT_${event.cName});`;
+    }
     case 'set-timer': {
       const idx = resolveStateIndex(ir, op.stateId);
       return `    instance.state_timers[${idx}] = (uint32_t)${op.valueMs};`;

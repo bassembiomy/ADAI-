@@ -40,6 +40,8 @@ export type SMTestOperation =
   | { kind: 'init' }
   | { kind: 'reset'; authorized?: boolean }
   | { kind: 'step'; deltaMs?: number }
+  /** Posts an input event (SemanticEvent id) for the next step. */
+  | { kind: 'post-event'; eventId: string }
   | { kind: 'set-variable'; variableId: string; value: unknown }
   | { kind: 'set-input'; mappingId: string; rawValue: unknown }
   | {
