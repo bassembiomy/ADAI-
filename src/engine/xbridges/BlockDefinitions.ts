@@ -292,10 +292,12 @@ const isBusObject = (v: any): boolean => typeof v === 'object' && v !== null && 
 const fzMin = (...v: number[]): number => { const k = v.filter((x) => !Number.isNaN(x)); return k.length ? Math.min(...k) : NaN; };
 const fzMax = (...v: number[]): number => { const k = v.filter((x) => !Number.isNaN(x)); return k.length ? Math.max(...k) : NaN; };
 const fzTrimf = (x: number, a: number, b: number, c: number): number => {
+  if (a === b && b === c) return x === b ? 1 : 0; // MATLAB trimf.m: a singleton is 1 at its point
   const m = fzMax(fzMin((x - a) / (b - a), (c - x) / (c - b)), 0);
   return Number.isNaN(m) ? 0 : m;
 };
 const fzTrapmf = (x: number, a: number, b: number, c: number, d: number): number => {
+  if (a === b && b === c && c === d) return x === a ? 1 : 0; // singleton: 1 at the point
   const m = fzMax(fzMin((x - a) / (b - a), 1, (d - x) / (d - c)), 0);
   return Number.isNaN(m) ? 0 : m;
 };
@@ -2666,17 +2668,37 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
         const axis = Number(p.axis ?? 0);
         if (axis !== 0 && axis !== 1) return { outputs: [NaN], error: `MatrixConcat: axis must be 0 (vertical) or 1 (horizontal), got ${String(p.axis)}.` };
         if (ins.length === 0) return { outputs: [[]] };
-        // Simulink: a scalar is a 1x1 matrix; a vector is a column when stacked next to a matrix.
+        // Simulink Matrix Concatenate: a scalar is a 1x1 matrix. Next to a matrix a 1-D vector is a row for vertical
+        // (axis 0) and a column for horizontal (axis 1) concatenation. Only 1-D vectors and scalars: axis 0 joins them
+        // into a longer vector, axis 1 makes them columns. Sizes that do not match are a block error, never a ragged array.
         const is2D = (v: any) => Array.isArray(v) && v.length > 0 && Array.isArray(v[0]);
-        const anyMatrix = ins.some(is2D) || ins.every((v) => !Array.isArray(v));
-        const norm = (v: any): any => {
-          if (!Array.isArray(v)) return anyMatrix ? [[v]] : [v];
-          if (is2D(v) || !anyMatrix) return v;
-          return v.map((x: any) => [x]);
-        };
-        let result = norm(ins[0]);
-        for (let i = 1; i < ins.length; i++) {
-          result = VectorUtils.concat(result, norm(ins[i]), axis);
+        const matrixMode = ins.some(is2D) || ins.every((v) => !Array.isArray(v));
+        if (!matrixMode && axis === 0) {
+          return { outputs: [ins.reduce((acc: any[], v: any) => acc.concat(Array.isArray(v) ? v : [v]), [])] };
+        }
+        const mats: any[][][] = ins.map((v: any, k: number) => {
+          let m: any[][];
+          if (!Array.isArray(v)) m = [[v]];
+          else if (is2D(v)) m = v;
+          else m = axis === 0 ? [v] : v.map((x: any) => [x]);
+          if (m.some((row) => !Array.isArray(row) || row.length !== m[0].length)) {
+            throw new Error(`input ${k + 1} is not a rectangular matrix.`);
+          }
+          return m;
+        });
+        const result: any[][] = [];
+        if (axis === 0) {
+          const width = mats[0][0].length;
+          mats.forEach((m, k) => {
+            if (m[0].length !== width) throw new Error(`dimension mismatch: input ${k + 1} has ${m[0].length} columns, expected ${width} for vertical concatenation.`);
+            m.forEach((row) => result.push([...row]));
+          });
+        } else {
+          const height = mats[0].length;
+          mats.forEach((m, k) => {
+            if (m.length !== height) throw new Error(`dimension mismatch: input ${k + 1} has ${m.length} rows, expected ${height} for horizontal concatenation.`);
+          });
+          for (let r = 0; r < height; r++) result.push(mats.flatMap((m) => m[r]));
         }
         return { outputs: [result] };
       }
