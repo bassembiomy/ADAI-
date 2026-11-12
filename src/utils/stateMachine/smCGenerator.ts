@@ -19,7 +19,7 @@ import type {
   SemanticTransition,
   SemanticTransitionRoute,
 } from './smSemanticModel';
-import { routeExitStateIds } from './smSemanticModel';
+import { historyStorageUsage, routeExitStateIds } from './smSemanticModel';
 import {
   renderXBHeader,
   renderXBInstanceMembers,
@@ -322,11 +322,11 @@ const renderRestoreStateBody = (
     const layer = ir.layers[layerId];
     const saved = layer.children
       .map((childId) =>
-        `instance->deep_history[snapshot_layer][${stateIndex(ir, childId)}]`)
+        `SM_DH_GET(instance, snapshot_layer, ${stateIndex(ir, childId)})`)
       .join(' || ') || 'false';
     if (layer.decomposition === 'OR') {
       const choices = layer.children.map((childId, childIndex) => lines(
-        `        ${childIndex === 0 ? 'if' : 'else if'} (instance->deep_history[snapshot_layer][${stateIndex(ir, childId)}]) {`,
+        `        ${childIndex === 0 ? 'if' : 'else if'} (SM_DH_GET(instance, snapshot_layer, ${stateIndex(ir, childId)})) {`,
         `            ${stateFunction(index, 'SM_Restore_State', childId)}(instance, snapshot_layer);`,
         '        }',
       ).trimEnd()).join(' ');
@@ -339,7 +339,7 @@ const renderRestoreStateBody = (
       ).trimEnd();
     }
     return layer.children.map((childId) => lines(
-      `    if (instance->deep_history[snapshot_layer][${stateIndex(ir, childId)}]) {`,
+      `    if (SM_DH_GET(instance, snapshot_layer, ${stateIndex(ir, childId)})) {`,
       `        ${stateFunction(index, 'SM_Restore_State', childId)}(instance, snapshot_layer);`,
       '    } else {',
       `        ${stateFunction(index, 'SM_Enter_Deep', childId)}(instance);`,
@@ -414,6 +414,7 @@ const renderEnterFunctions = (
   ir: SemanticModel,
   index: RenderIndex,
 ): string => {
+  const { deep: hasDeepHistory } = historyStorageUsage(ir);
   const stateFunctions = orderedStates(ir).map((state) => lines(
     `static void ${stateFunction(index, 'SM_Enter_Deep', state.id)}(ADIA_Instance_t *instance)`,
     '{',
@@ -421,11 +422,13 @@ const renderEnterFunctions = (
     ...state.childLayerIds.map((layerId) =>
       `    ${layerFunction(index, 'SM_Enter_Layer_Default', layerId)}(instance);`),
     '}',
-    '',
-    `static void ${stateFunction(index, 'SM_Restore_State', state.id)}(ADIA_Instance_t *instance, uint32_t snapshot_layer)`,
-    '{',
-    renderRestoreStateBody(ir, index, state.id).trimEnd(),
-    '}',
+    ...(hasDeepHistory ? [
+      '',
+      `static void ${stateFunction(index, 'SM_Restore_State', state.id)}(ADIA_Instance_t *instance, uint32_t snapshot_layer)`,
+      '{',
+      renderRestoreStateBody(ir, index, state.id).trimEnd(),
+      '}',
+    ] : []),
   )).join('\n');
 
   const layerFunctions = orderedLayers(ir).map((layer) => {
@@ -452,13 +455,14 @@ const renderExitFunctions = (
   ir: SemanticModel,
   index: RenderIndex,
 ): string => {
+  const storage = historyStorageUsage(ir);
   const recordCases = orderedLayers(ir).map((layer) => lines(
     `        case ${layerMacro(layer)}:`,
     layer.activeSlot === null
       ? null
       : `            instance->history_states[${layer.activeSlot}U] = instance->active_states[${layer.activeSlot}U];`,
-    ...descendantsOfLayer(ir, layer.id).map((state) =>
-      `            instance->deep_history[${layerMacro(layer)}][${stateIndex(ir, state.id)}] = instance->state_active[${stateIndex(ir, state.id)}];`),
+    ...(storage.deep ? descendantsOfLayer(ir, layer.id).map((state) =>
+      `            if (instance->state_active[${stateIndex(ir, state.id)}]) { SM_DH_SET(instance, ${layerMacro(layer)}, ${stateIndex(ir, state.id)}); }`) : []),
     '            break;',
   ).trimEnd()).join('\n');
 
@@ -474,7 +478,7 @@ const renderExitFunctions = (
         .join('\n');
     return lines(
       `        case ${layerMacro(layer)}:`,
-      `            SM_Record_Layer_History(instance, ${layerMacro(layer)});`,
+      storage.shallow ? `            SM_Record_Layer_History(instance, ${layerMacro(layer)});` : null,
       exitChildren,
       '            break;',
     ).trimEnd();
@@ -499,18 +503,20 @@ const renderExitFunctions = (
   ).trimEnd()).join('\n');
 
   return lines(
-    'static void SM_Record_Layer_History(ADIA_Instance_t *instance, uint32_t layer)',
-    '{',
-    '    uint32_t state_index;',
-    '    for (state_index = 0U; state_index <= SM_NUM_STATES; ++state_index) {',
-    '        instance->deep_history[layer][state_index] = false;',
-    '    }',
-    '    switch (layer) {',
-    recordCases,
-    '        default: break;',
-    '    }',
-    '}',
-    '',
+    ...(storage.shallow ? [
+      'static void SM_Record_Layer_History(ADIA_Instance_t *instance, uint32_t layer)',
+      '{',
+      storage.deep ? '    uint32_t byte_index;' : null,
+      storage.deep ? '    for (byte_index = 0U; byte_index < SM_DEEP_HISTORY_BYTES; ++byte_index) {' : null,
+      storage.deep ? '        instance->deep_history[layer][byte_index] = 0U;' : null,
+      storage.deep ? '    }' : null,
+      '    switch (layer) {',
+      recordCases,
+      '        default: break;',
+      '    }',
+      '}',
+      '',
+    ] : []),
     'static void SM_Exit_Layer(ADIA_Instance_t *instance, uint32_t layer)',
     '{',
     '    switch (layer) {',
@@ -521,13 +527,15 @@ const renderExitFunctions = (
     '',
     'static void SM_Exit_State(ADIA_Instance_t *instance, SM_Node_t state, bool record_containing_layer)',
     '{',
-    '    if (record_containing_layer) {',
-    '        switch (state) {',
-    ...orderedStates(ir).map((state) =>
-      `            case ${stateNode(ir, state.id)}: SM_Record_Layer_History(instance, ${layerMacro(ir.layers[state.layerId])}); break;`),
-    '            default: break;',
-    '        }',
-    '    }',
+    ...(storage.shallow ? [
+      '    if (record_containing_layer) {',
+      '        switch (state) {',
+      ...orderedStates(ir).map((state) =>
+        `            case ${stateNode(ir, state.id)}: SM_Record_Layer_History(instance, ${layerMacro(ir.layers[state.layerId])}); break;`),
+      '            default: break;',
+      '        }',
+      '    }',
+    ] : ['    (void)record_containing_layer;']),
     '    switch (state) {',
     exitStateCases,
     '        default: break;',
@@ -547,7 +555,7 @@ const renderRestoreLayer = (
   if (deep) {
     if (layer.decomposition === 'OR') {
       const choices = layer.children.map((childId, childIndex) => lines(
-        `${indent}${childIndex === 0 ? 'if' : 'else if'} (instance->deep_history[${layerMacro(layer)}][${stateIndex(ir, childId)}]) {`,
+        `${indent}${childIndex === 0 ? 'if' : 'else if'} (SM_DH_GET(instance, ${layerMacro(layer)}, ${stateIndex(ir, childId)})) {`,
         `${indent}    ${stateFunction(index, 'SM_Restore_State', childId)}(instance, ${layerMacro(layer)});`,
         `${indent}}`,
       ).trimEnd()).join(' ');
@@ -559,7 +567,7 @@ const renderRestoreLayer = (
       ).trimEnd();
     }
     return layer.children.map((childId) => lines(
-      `${indent}if (instance->deep_history[${layerMacro(layer)}][${stateIndex(ir, childId)}]) {`,
+      `${indent}if (SM_DH_GET(instance, ${layerMacro(layer)}, ${stateIndex(ir, childId)})) {`,
       `${indent}    ${stateFunction(index, 'SM_Restore_State', childId)}(instance, ${layerMacro(layer)});`,
       `${indent}} else {`,
       `${indent}    ${stateFunction(index, 'SM_Enter_Deep', childId)}(instance);`,
@@ -904,6 +912,9 @@ export const renderConfigHeader = (ir: SemanticModel): string => {
     `#define SM_NUM_STATES ${states.length}U`,
     `#define SM_NUM_LAYERS ${layers.length}U`,
     `#define SM_NUM_ACTIVE_SLOTS ${ir.activeSlotCount}U`,
+    historyStorageUsage(ir).deep
+      ? '#define SM_DEEP_HISTORY_BYTES (((SM_NUM_STATES + 1U) + 7U) / 8U)'
+      : null,
     ...layers.map((layer) =>
       `#define ${layerMacro(layer)} ${index.layerNumber.get(layer.id)!}U`),
     ...states.flatMap((state) => [
@@ -916,6 +927,18 @@ export const renderConfigHeader = (ir: SemanticModel): string => {
     ...states.map((state, stateOffset) =>
       `    ${stateNode(ir, state.id)} = ${stateOffset + 1}${stateOffset === states.length - 1 ? '' : ','}`),
     '} SM_Node_t;',
+    '',
+    historyStorageUsage(ir).deep
+      ? lines(
+        '/* Deep history is one bit per state per layer (state 0 is unused). */',
+        '#define SM_DH_GET(inst, layer, idx) \\',
+        '    ((((uint32_t)(inst)->deep_history[(layer)][(uint32_t)(idx) >> 3U] >> ((uint32_t)(idx) & 7U)) & 1U) != 0U)',
+        '#define SM_DH_SET(inst, layer, idx) \\',
+        '    ((inst)->deep_history[(layer)][(uint32_t)(idx) >> 3U] = (uint8_t)((uint32_t)(inst)->deep_history[(layer)][(uint32_t)(idx) >> 3U] | (1UL << ((uint32_t)(idx) & 7U))))',
+        '#define SM_DH_CLR(inst, layer, idx) \\',
+        '    ((inst)->deep_history[(layer)][(uint32_t)(idx) >> 3U] = (uint8_t)((uint32_t)(inst)->deep_history[(layer)][(uint32_t)(idx) >> 3U] & ~(1UL << ((uint32_t)(idx) & 7U))))',
+      ).trimEnd()
+      : null,
     '',
     'typedef enum {',
     '    SM_ERR_NONE = 0,',
@@ -948,10 +971,14 @@ export const renderConfigHeader = (ir: SemanticModel): string => {
     '    SM_Data_t data;',
     ...renderXBInstanceMembers(ir).map((member) => `    ${member}`),
     '    SM_Node_t active_states[(SM_NUM_ACTIVE_SLOTS > 0U) ? SM_NUM_ACTIVE_SLOTS : 1U];',
-    '    SM_Node_t history_states[(SM_NUM_ACTIVE_SLOTS > 0U) ? SM_NUM_ACTIVE_SLOTS : 1U];',
+    historyStorageUsage(ir).shallow
+      ? '    SM_Node_t history_states[(SM_NUM_ACTIVE_SLOTS > 0U) ? SM_NUM_ACTIVE_SLOTS : 1U];'
+      : null,
     '    bool state_active[SM_NUM_STATES + 1U];',
     '    uint32_t state_timers[SM_NUM_STATES + 1U];',
-    '    bool deep_history[SM_NUM_LAYERS][SM_NUM_STATES + 1U];',
+    historyStorageUsage(ir).deep
+      ? '    uint8_t deep_history[SM_NUM_LAYERS][SM_DEEP_HISTORY_BYTES];'
+      : null,
     '    SM_Error_t error_status;',
     '    bool fault_latched;',
     '    bool arith_pending;',
@@ -1221,21 +1248,23 @@ export const renderSafetySource = (ir: SemanticModel): string => {
     '    }',
     '}',
     '',
-    'static bool SM_Is_Layer_Descendant(uint32_t layer_index, SM_Node_t state)',
-    '{',
-    '    switch (layer_index) {',
-    ...descendantCases,
-    '        default: return false;',
-    '    }',
-    '}',
-    '',
+    ...(historyStorageUsage(ir).deep ? [
+      'static bool SM_Is_Layer_Descendant(uint32_t layer_index, SM_Node_t state)',
+      '{',
+      '    switch (layer_index) {',
+      ...descendantCases,
+      '        default: return false;',
+      '    }',
+      '}',
+      '',
+    ] : []),
     'SM_Error_t SM_Validate_State_Consistency(const ADIA_Instance_t *instance)',
     '{',
     '    uint32_t layer_index;',
     '    uint32_t state_index;',
     ir.activeSlotCount > 0 ? '    uint32_t slot_index;' : null,
     '    SM_Node_t active_node;',
-    '    SM_Node_t history_node;',
+    historyStorageUsage(ir).shallow ? '    SM_Node_t history_node;' : null,
     '    int32_t active_slot;',
     '    SM_Node_t parent;',
     '    bool container_active;',
@@ -1283,20 +1312,24 @@ export const renderSafetySource = (ir: SemanticModel): string => {
     '            && (instance->active_states[(uint32_t)active_slot] != SM_NODE_INVALID)) {',
     '            return SM_ERR_CONFIGURATION;',
     '        }',
-    '        if (active_slot >= 0) {',
-    '            history_node = instance->history_states[(uint32_t)active_slot];',
-    '            if ((history_node != SM_NODE_INVALID)',
-    '                && (((uint32_t)history_node > SM_NUM_STATES)',
-    '                    || (!SM_Is_Direct_Layer_Child(layer_index, history_node)))) {',
-    '                return SM_ERR_CONFIGURATION;',
-    '            }',
-    '        }',
-    '        for (state_index = 1U; state_index <= SM_NUM_STATES; ++state_index) {',
-    '            if (instance->deep_history[layer_index][state_index]',
-    '                && (!SM_Is_Layer_Descendant(layer_index, (SM_Node_t)state_index))) {',
-    '                return SM_ERR_CONFIGURATION;',
-    '            }',
-    '        }',
+    ...(historyStorageUsage(ir).shallow ? [
+      '        if (active_slot >= 0) {',
+      '            history_node = instance->history_states[(uint32_t)active_slot];',
+      '            if ((history_node != SM_NODE_INVALID)',
+      '                && (((uint32_t)history_node > SM_NUM_STATES)',
+      '                    || (!SM_Is_Direct_Layer_Child(layer_index, history_node)))) {',
+      '                return SM_ERR_CONFIGURATION;',
+      '            }',
+      '        }',
+    ] : []),
+    ...(historyStorageUsage(ir).deep ? [
+      '        for (state_index = 1U; state_index <= SM_NUM_STATES; ++state_index) {',
+      '            if (SM_DH_GET(instance, layer_index, state_index)',
+      '                && (!SM_Is_Layer_Descendant(layer_index, (SM_Node_t)state_index))) {',
+      '                return SM_ERR_CONFIGURATION;',
+      '            }',
+      '        }',
+    ] : []),
     '    }',
     ir.activeSlotCount > 0
       ? lines(
@@ -1409,10 +1442,14 @@ export const renderCoreSource = (ir: SemanticModel): string => {
     ]),
     ...states.flatMap((state) => [
       `static void ${stateFunction(index, 'SM_Enter_Deep', state.id)}(ADIA_Instance_t *instance);`,
-      `static void ${stateFunction(index, 'SM_Restore_State', state.id)}(ADIA_Instance_t *instance, uint32_t snapshot_layer);`,
+      ...(historyStorageUsage(ir).deep
+        ? [`static void ${stateFunction(index, 'SM_Restore_State', state.id)}(ADIA_Instance_t *instance, uint32_t snapshot_layer);`]
+        : []),
       `static bool ${stateFunction(index, 'SM_Execute_State', state.id)}(ADIA_Instance_t *instance);`,
     ]),
-    'static void SM_Record_Layer_History(ADIA_Instance_t *instance, uint32_t layer);',
+    historyStorageUsage(ir).shallow
+      ? 'static void SM_Record_Layer_History(ADIA_Instance_t *instance, uint32_t layer);'
+      : null,
     'static void SM_Exit_Layer(ADIA_Instance_t *instance, uint32_t layer);',
     'static void SM_Exit_State(ADIA_Instance_t *instance, SM_Node_t state, bool record_containing_layer);',
     'static void SM_Exit_All(ADIA_Instance_t *instance);',
@@ -1534,7 +1571,7 @@ export const renderCoreSource = (ir: SemanticModel): string => {
     '',
     'SM_Error_t SM_Init(ADIA_Instance_t *instance)',
     '{',
-    '    uint32_t layer_index;',
+    ...(historyStorageUsage(ir).deep ? ['    uint32_t layer_index;'] : []),
     ...(ir.activeSlotCount > 0 ? ['    uint32_t slot_index;'] : []),
     '    uint32_t state_index;',
     '    if (instance == NULL) {',
@@ -1551,7 +1588,9 @@ export const renderCoreSource = (ir: SemanticModel): string => {
       `    (void)${layerFunction(index, 'SM_Exit_Layer_No_History', layer.id)};`),
     ...states.flatMap((state) => [
       `    (void)${stateFunction(index, 'SM_Enter_Deep', state.id)};`,
-      `    (void)${stateFunction(index, 'SM_Restore_State', state.id)};`,
+      historyStorageUsage(ir).deep
+        ? `    (void)${stateFunction(index, 'SM_Restore_State', state.id)};`
+        : null,
     ]),
     ...Object.values(ir.variables)
       .sort((left, right) => left.id.localeCompare(right.id))
@@ -1561,15 +1600,19 @@ export const renderCoreSource = (ir: SemanticModel): string => {
       ? lines(
         '    for (slot_index = 0U; slot_index < SM_NUM_ACTIVE_SLOTS; ++slot_index) {',
         '        instance->active_states[slot_index] = SM_NODE_INVALID;',
-        '        instance->history_states[slot_index] = SM_NODE_INVALID;',
+        ...(historyStorageUsage(ir).shallow
+          ? ['        instance->history_states[slot_index] = SM_NODE_INVALID;']
+          : []),
         '    }',
       ).trimEnd()
       : null,
-    '    for (layer_index = 0U; layer_index < SM_NUM_LAYERS; ++layer_index) {',
-    '        for (state_index = 0U; state_index <= SM_NUM_STATES; ++state_index) {',
-    '            instance->deep_history[layer_index][state_index] = false;',
-    '        }',
-    '    }',
+    ...(historyStorageUsage(ir).deep ? [
+      '    for (layer_index = 0U; layer_index < SM_NUM_LAYERS; ++layer_index) {',
+      '        for (state_index = 0U; state_index < SM_DEEP_HISTORY_BYTES; ++state_index) {',
+      '            instance->deep_history[layer_index][state_index] = 0U;',
+      '        }',
+      '    }',
+    ] : []),
     '    for (state_index = 0U; state_index <= SM_NUM_STATES; ++state_index) {',
     '        instance->state_active[state_index] = false;',
     '        instance->state_timers[state_index] = 0U;',
@@ -1590,7 +1633,7 @@ export const renderCoreSource = (ir: SemanticModel): string => {
     '',
     'SM_Error_t SM_Reset(ADIA_Instance_t *instance)',
     '{',
-    '    uint32_t layer_index;',
+    ...(historyStorageUsage(ir).deep ? ['    uint32_t layer_index;'] : []),
     ...(ir.activeSlotCount > 0 ? ['    uint32_t slot_index;'] : []),
     '    uint32_t state_index;',
     '    if (instance == NULL) {',
@@ -1608,15 +1651,19 @@ export const renderCoreSource = (ir: SemanticModel): string => {
       ? lines(
         '    for (slot_index = 0U; slot_index < SM_NUM_ACTIVE_SLOTS; ++slot_index) {',
         '        instance->active_states[slot_index] = SM_NODE_INVALID;',
-        '        instance->history_states[slot_index] = SM_NODE_INVALID;',
+        ...(historyStorageUsage(ir).shallow
+          ? ['        instance->history_states[slot_index] = SM_NODE_INVALID;']
+          : []),
         '    }',
       ).trimEnd()
       : null,
-    '    for (layer_index = 0U; layer_index < SM_NUM_LAYERS; ++layer_index) {',
-    '        for (state_index = 0U; state_index <= SM_NUM_STATES; ++state_index) {',
-    '            instance->deep_history[layer_index][state_index] = false;',
-    '        }',
-    '    }',
+    ...(historyStorageUsage(ir).deep ? [
+      '    for (layer_index = 0U; layer_index < SM_NUM_LAYERS; ++layer_index) {',
+      '        for (state_index = 0U; state_index < SM_DEEP_HISTORY_BYTES; ++state_index) {',
+      '            instance->deep_history[layer_index][state_index] = 0U;',
+      '        }',
+      '    }',
+    ] : []),
     '    for (state_index = 0U; state_index <= SM_NUM_STATES; ++state_index) {',
     '        instance->state_active[state_index] = false;',
     '        instance->state_timers[state_index] = 0U;',
@@ -1798,8 +1845,9 @@ export const renderCoreSource = (ir: SemanticModel): string => {
     '    if ((slot >= SM_NUM_ACTIVE_SLOTS) || ((uint32_t)state > SM_NUM_STATES)) {',
     '        return SM_ERR_INVALID_ARGUMENT;',
     '    }',
-    '    instance->history_states[slot] = state;',
-    '    return SM_ERR_NONE;',
+    ...(historyStorageUsage(ir).shallow
+      ? ['    instance->history_states[slot] = state;', '    return SM_ERR_NONE;']
+      : ['    return SM_ERR_INVALID_ARGUMENT;']),
     '}',
     '',
     'SM_Error_t SM_Test_SetDeepHistory(ADIA_Instance_t *instance, uint32_t layer, SM_Node_t state, bool active)',
@@ -1810,8 +1858,16 @@ export const renderCoreSource = (ir: SemanticModel): string => {
     '    if ((layer >= SM_NUM_LAYERS) || ((uint32_t)state > SM_NUM_STATES)) {',
     '        return SM_ERR_INVALID_ARGUMENT;',
     '    }',
-    '    instance->deep_history[layer][(uint32_t)state] = active;',
-    '    return SM_ERR_NONE;',
+    ...(historyStorageUsage(ir).deep
+      ? [
+        '    if (active) {',
+        '        SM_DH_SET(instance, layer, (uint32_t)state);',
+        '    } else {',
+        '        SM_DH_CLR(instance, layer, (uint32_t)state);',
+        '    }',
+        '    return SM_ERR_NONE;',
+      ]
+      : ['    (void)active;', '    return SM_ERR_INVALID_ARGUMENT;']),
     '}',
     '#endif',
   );

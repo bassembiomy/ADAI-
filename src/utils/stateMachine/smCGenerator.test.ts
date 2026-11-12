@@ -354,7 +354,7 @@ int main(void) {
     inst.history_states[${historySlot}U] = SM_ST_OUTSIDE;
     shallow_invalid = SM_Validate_State_Consistency(&inst) == SM_ERR_CONFIGURATION ? 1U : 0U;
     (void)SM_Init(&inst);
-    inst.deep_history[SM_LYR_WORKSPACE_CHILDREN_IDX][SM_ST_OUTSIDE_IDX] = true;
+    SM_DH_SET(&inst, SM_LYR_WORKSPACE_CHILDREN_IDX, SM_ST_OUTSIDE_IDX);
     deep_invalid = SM_Validate_State_Consistency(&inst) == SM_ERR_CONFIGURATION ? 1U : 0U;
     printf("%u %u\\n", shallow_invalid, deep_invalid);
     return 0;

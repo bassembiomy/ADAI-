@@ -251,3 +251,16 @@ export function routeExitStateIds(
   const layer = ir.layers[ir.states[firstEntryId].layerId];
   return layer.decomposition === 'AND' ? [...layer.children] : [firstEntryId];
 }
+
+/*
+ * History storage exists only for what the model uses: shallow slots when any history junction
+ * (shallow or deep) exists, deep-history snapshots when a deep-history junction exists. The
+ * simulation and the generated C store exactly this, so unrestorable history is never observable.
+ */
+export const historyStorageUsage = (
+  ir: Pick<SemanticModel, 'junctions'>,
+): { shallow: boolean; deep: boolean } => {
+  const kinds = Object.values(ir.junctions).map((junction) => junction.kind);
+  const deep = kinds.includes('deep-history');
+  return { shallow: deep || kinds.includes('history'), deep };
+};

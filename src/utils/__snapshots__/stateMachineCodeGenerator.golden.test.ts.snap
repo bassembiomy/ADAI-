@@ -341,39 +341,19 @@ static void SM_Enter_Layer_Default_0(ADIA_Instance_t *instance);
 static void SM_Exit_Layer_No_History_0(ADIA_Instance_t *instance);
 static bool SM_Execute_Layer_0(ADIA_Instance_t *instance);
 static void SM_Enter_Deep_1(ADIA_Instance_t *instance);
-static void SM_Restore_State_1(ADIA_Instance_t *instance, uint32_t snapshot_layer);
 static bool SM_Execute_State_1(ADIA_Instance_t *instance);
 static void SM_Enter_Deep_2(ADIA_Instance_t *instance);
-static void SM_Restore_State_2(ADIA_Instance_t *instance, uint32_t snapshot_layer);
 static bool SM_Execute_State_2(ADIA_Instance_t *instance);
-static void SM_Record_Layer_History(ADIA_Instance_t *instance, uint32_t layer);
 static void SM_Exit_Layer(ADIA_Instance_t *instance, uint32_t layer);
 static void SM_Exit_State(ADIA_Instance_t *instance, SM_Node_t state, bool record_containing_layer);
 static void SM_Exit_All(ADIA_Instance_t *instance);
 static void SM_Enter_Safe_State(ADIA_Instance_t *instance);
 static void SM_Enter_Fault(ADIA_Instance_t *instance);
 
-static void SM_Record_Layer_History(ADIA_Instance_t *instance, uint32_t layer)
-{
-    uint32_t state_index;
-    for (state_index = 0U; state_index <= SM_NUM_STATES; ++state_index) {
-        instance->deep_history[layer][state_index] = false;
-    }
-    switch (layer) {
-        case SM_LYR_ROOT_IDX:
-            instance->history_states[0U] = instance->active_states[0U];
-            instance->deep_history[SM_LYR_ROOT_IDX][SM_ST_ORDINARY_IDX] = instance->state_active[SM_ST_ORDINARY_IDX];
-            instance->deep_history[SM_LYR_ROOT_IDX][SM_ST_CONTROLLER_IDX] = instance->state_active[SM_ST_CONTROLLER_IDX];
-            break;
-        default: break;
-    }
-}
-
 static void SM_Exit_Layer(ADIA_Instance_t *instance, uint32_t layer)
 {
     switch (layer) {
         case SM_LYR_ROOT_IDX:
-            SM_Record_Layer_History(instance, SM_LYR_ROOT_IDX);
             if (instance->active_states[0U] != SM_NODE_INVALID) {
                 SM_Exit_State(instance, instance->active_states[0U], false);
             }
@@ -384,13 +364,7 @@ static void SM_Exit_Layer(ADIA_Instance_t *instance, uint32_t layer)
 
 static void SM_Exit_State(ADIA_Instance_t *instance, SM_Node_t state, bool record_containing_layer)
 {
-    if (record_containing_layer) {
-        switch (state) {
-            case SM_ST_ORDINARY: SM_Record_Layer_History(instance, SM_LYR_ROOT_IDX); break;
-            case SM_ST_CONTROLLER: SM_Record_Layer_History(instance, SM_LYR_ROOT_IDX); break;
-            default: break;
-        }
-    }
+    (void)record_containing_layer;
     switch (state) {
         case SM_ST_ORDINARY:
             if (!instance->state_active[SM_ST_ORDINARY_IDX]) { break; }
@@ -434,27 +408,8 @@ static void SM_Enter_Deep_1(ADIA_Instance_t *instance)
     SM_ST_ORDINARY_Entry(instance);
 }
 
-static void SM_Restore_State_1(ADIA_Instance_t *instance, uint32_t snapshot_layer)
-{
-    (void)snapshot_layer;
-    instance->state_active[SM_ST_ORDINARY_IDX] = true;
-    instance->state_timers[SM_ST_ORDINARY_IDX] = 0U;
-    instance->active_states[0U] = SM_ST_ORDINARY;
-    SM_ST_ORDINARY_Entry(instance);
-}
-
 static void SM_Enter_Deep_2(ADIA_Instance_t *instance)
 {
-    instance->state_active[SM_ST_CONTROLLER_IDX] = true;
-    instance->state_timers[SM_ST_CONTROLLER_IDX] = 0U;
-    instance->active_states[0U] = SM_ST_CONTROLLER;
-    SM_XB_CONTROLLER_Enter(instance);
-    SM_ST_CONTROLLER_Entry(instance);
-}
-
-static void SM_Restore_State_2(ADIA_Instance_t *instance, uint32_t snapshot_layer)
-{
-    (void)snapshot_layer;
     instance->state_active[SM_ST_CONTROLLER_IDX] = true;
     instance->state_timers[SM_ST_CONTROLLER_IDX] = 0U;
     instance->active_states[0U] = SM_ST_CONTROLLER;
@@ -516,7 +471,6 @@ static void SM_Enter_Fault(ADIA_Instance_t *instance)
 
 SM_Error_t SM_Init(ADIA_Instance_t *instance)
 {
-    uint32_t layer_index;
     uint32_t slot_index;
     uint32_t state_index;
     if (instance == NULL) {
@@ -529,21 +483,13 @@ SM_Error_t SM_Init(ADIA_Instance_t *instance)
     SM_XB_CONTROLLER_Init(instance);
     (void)SM_Exit_Layer_No_History_0;
     (void)SM_Enter_Deep_1;
-    (void)SM_Restore_State_1;
     (void)SM_Enter_Deep_2;
-    (void)SM_Restore_State_2;
     instance->data.count = (double)(1.0);
     instance->data.go = (bool)(false);
     instance->data.ratio = (double)(0.0);
     instance->data.total = (double)(0.0);
     for (slot_index = 0U; slot_index < SM_NUM_ACTIVE_SLOTS; ++slot_index) {
         instance->active_states[slot_index] = SM_NODE_INVALID;
-        instance->history_states[slot_index] = SM_NODE_INVALID;
-    }
-    for (layer_index = 0U; layer_index < SM_NUM_LAYERS; ++layer_index) {
-        for (state_index = 0U; state_index <= SM_NUM_STATES; ++state_index) {
-            instance->deep_history[layer_index][state_index] = false;
-        }
     }
     for (state_index = 0U; state_index <= SM_NUM_STATES; ++state_index) {
         instance->state_active[state_index] = false;
@@ -565,7 +511,6 @@ SM_Error_t SM_Init(ADIA_Instance_t *instance)
 
 SM_Error_t SM_Reset(ADIA_Instance_t *instance)
 {
-    uint32_t layer_index;
     uint32_t slot_index;
     uint32_t state_index;
     if (instance == NULL) {
@@ -579,12 +524,6 @@ SM_Error_t SM_Reset(ADIA_Instance_t *instance)
     instance->data.total = (double)(0.0);
     for (slot_index = 0U; slot_index < SM_NUM_ACTIVE_SLOTS; ++slot_index) {
         instance->active_states[slot_index] = SM_NODE_INVALID;
-        instance->history_states[slot_index] = SM_NODE_INVALID;
-    }
-    for (layer_index = 0U; layer_index < SM_NUM_LAYERS; ++layer_index) {
-        for (state_index = 0U; state_index <= SM_NUM_STATES; ++state_index) {
-            instance->deep_history[layer_index][state_index] = false;
-        }
     }
     for (state_index = 0U; state_index <= SM_NUM_STATES; ++state_index) {
         instance->state_active[state_index] = false;
@@ -759,8 +698,7 @@ SM_Error_t SM_Test_SetHistoryState(ADIA_Instance_t *instance, uint32_t slot, SM_
     if ((slot >= SM_NUM_ACTIVE_SLOTS) || ((uint32_t)state > SM_NUM_STATES)) {
         return SM_ERR_INVALID_ARGUMENT;
     }
-    instance->history_states[slot] = state;
-    return SM_ERR_NONE;
+    return SM_ERR_INVALID_ARGUMENT;
 }
 
 SM_Error_t SM_Test_SetDeepHistory(ADIA_Instance_t *instance, uint32_t layer, SM_Node_t state, bool active)
@@ -771,8 +709,8 @@ SM_Error_t SM_Test_SetDeepHistory(ADIA_Instance_t *instance, uint32_t layer, SM_
     if ((layer >= SM_NUM_LAYERS) || ((uint32_t)state > SM_NUM_STATES)) {
         return SM_ERR_INVALID_ARGUMENT;
     }
-    instance->deep_history[layer][(uint32_t)state] = active;
-    return SM_ERR_NONE;
+    (void)active;
+    return SM_ERR_INVALID_ARGUMENT;
 }
 #endif
 ",
@@ -1105,6 +1043,7 @@ typedef enum {
     SM_ST_S2 = 2
 } SM_Node_t;
 
+
 typedef enum {
     SM_ERR_NONE = 0,
     SM_ERR_NULL_INSTANCE,
@@ -1134,10 +1073,8 @@ typedef struct {
 struct ADIA_Instance {
     SM_Data_t data;
     SM_Node_t active_states[(SM_NUM_ACTIVE_SLOTS > 0U) ? SM_NUM_ACTIVE_SLOTS : 1U];
-    SM_Node_t history_states[(SM_NUM_ACTIVE_SLOTS > 0U) ? SM_NUM_ACTIVE_SLOTS : 1U];
     bool state_active[SM_NUM_STATES + 1U];
     uint32_t state_timers[SM_NUM_STATES + 1U];
-    bool deep_history[SM_NUM_LAYERS][SM_NUM_STATES + 1U];
     SM_Error_t error_status;
     bool fault_latched;
     bool arith_pending;
@@ -1550,39 +1487,19 @@ static void SM_Enter_Layer_Default_0(ADIA_Instance_t *instance);
 static void SM_Exit_Layer_No_History_0(ADIA_Instance_t *instance);
 static bool SM_Execute_Layer_0(ADIA_Instance_t *instance);
 static void SM_Enter_Deep_1(ADIA_Instance_t *instance);
-static void SM_Restore_State_1(ADIA_Instance_t *instance, uint32_t snapshot_layer);
 static bool SM_Execute_State_1(ADIA_Instance_t *instance);
 static void SM_Enter_Deep_2(ADIA_Instance_t *instance);
-static void SM_Restore_State_2(ADIA_Instance_t *instance, uint32_t snapshot_layer);
 static bool SM_Execute_State_2(ADIA_Instance_t *instance);
-static void SM_Record_Layer_History(ADIA_Instance_t *instance, uint32_t layer);
 static void SM_Exit_Layer(ADIA_Instance_t *instance, uint32_t layer);
 static void SM_Exit_State(ADIA_Instance_t *instance, SM_Node_t state, bool record_containing_layer);
 static void SM_Exit_All(ADIA_Instance_t *instance);
 static void SM_Enter_Safe_State(ADIA_Instance_t *instance);
 static void SM_Enter_Fault(ADIA_Instance_t *instance);
 
-static void SM_Record_Layer_History(ADIA_Instance_t *instance, uint32_t layer)
-{
-    uint32_t state_index;
-    for (state_index = 0U; state_index <= SM_NUM_STATES; ++state_index) {
-        instance->deep_history[layer][state_index] = false;
-    }
-    switch (layer) {
-        case SM_LYR_ROOT_IDX:
-            instance->history_states[0U] = instance->active_states[0U];
-            instance->deep_history[SM_LYR_ROOT_IDX][SM_ST_S1_IDX] = instance->state_active[SM_ST_S1_IDX];
-            instance->deep_history[SM_LYR_ROOT_IDX][SM_ST_S2_IDX] = instance->state_active[SM_ST_S2_IDX];
-            break;
-        default: break;
-    }
-}
-
 static void SM_Exit_Layer(ADIA_Instance_t *instance, uint32_t layer)
 {
     switch (layer) {
         case SM_LYR_ROOT_IDX:
-            SM_Record_Layer_History(instance, SM_LYR_ROOT_IDX);
             if (instance->active_states[0U] != SM_NODE_INVALID) {
                 SM_Exit_State(instance, instance->active_states[0U], false);
             }
@@ -1593,13 +1510,7 @@ static void SM_Exit_Layer(ADIA_Instance_t *instance, uint32_t layer)
 
 static void SM_Exit_State(ADIA_Instance_t *instance, SM_Node_t state, bool record_containing_layer)
 {
-    if (record_containing_layer) {
-        switch (state) {
-            case SM_ST_S1: SM_Record_Layer_History(instance, SM_LYR_ROOT_IDX); break;
-            case SM_ST_S2: SM_Record_Layer_History(instance, SM_LYR_ROOT_IDX); break;
-            default: break;
-        }
-    }
+    (void)record_containing_layer;
     switch (state) {
         case SM_ST_S1:
             if (!instance->state_active[SM_ST_S1_IDX]) { break; }
@@ -1643,26 +1554,8 @@ static void SM_Enter_Deep_1(ADIA_Instance_t *instance)
     SM_ST_S1_Entry(instance);
 }
 
-static void SM_Restore_State_1(ADIA_Instance_t *instance, uint32_t snapshot_layer)
-{
-    (void)snapshot_layer;
-    instance->state_active[SM_ST_S1_IDX] = true;
-    instance->state_timers[SM_ST_S1_IDX] = 0U;
-    instance->active_states[0U] = SM_ST_S1;
-    SM_ST_S1_Entry(instance);
-}
-
 static void SM_Enter_Deep_2(ADIA_Instance_t *instance)
 {
-    instance->state_active[SM_ST_S2_IDX] = true;
-    instance->state_timers[SM_ST_S2_IDX] = 0U;
-    instance->active_states[0U] = SM_ST_S2;
-    SM_ST_S2_Entry(instance);
-}
-
-static void SM_Restore_State_2(ADIA_Instance_t *instance, uint32_t snapshot_layer)
-{
-    (void)snapshot_layer;
     instance->state_active[SM_ST_S2_IDX] = true;
     instance->state_timers[SM_ST_S2_IDX] = 0U;
     instance->active_states[0U] = SM_ST_S2;
@@ -1728,7 +1621,6 @@ static void SM_Enter_Fault(ADIA_Instance_t *instance)
 
 SM_Error_t SM_Init(ADIA_Instance_t *instance)
 {
-    uint32_t layer_index;
     uint32_t slot_index;
     uint32_t state_index;
     if (instance == NULL) {
@@ -1740,20 +1632,12 @@ SM_Error_t SM_Init(ADIA_Instance_t *instance)
 #endif
     (void)SM_Exit_Layer_No_History_0;
     (void)SM_Enter_Deep_1;
-    (void)SM_Restore_State_1;
     (void)SM_Enter_Deep_2;
-    (void)SM_Restore_State_2;
     instance->data.log = (uint32_t)(0U);
     instance->data.t1 = (bool)(false);
     instance->data.t2 = (bool)(false);
     for (slot_index = 0U; slot_index < SM_NUM_ACTIVE_SLOTS; ++slot_index) {
         instance->active_states[slot_index] = SM_NODE_INVALID;
-        instance->history_states[slot_index] = SM_NODE_INVALID;
-    }
-    for (layer_index = 0U; layer_index < SM_NUM_LAYERS; ++layer_index) {
-        for (state_index = 0U; state_index <= SM_NUM_STATES; ++state_index) {
-            instance->deep_history[layer_index][state_index] = false;
-        }
     }
     for (state_index = 0U; state_index <= SM_NUM_STATES; ++state_index) {
         instance->state_active[state_index] = false;
@@ -1775,7 +1659,6 @@ SM_Error_t SM_Init(ADIA_Instance_t *instance)
 
 SM_Error_t SM_Reset(ADIA_Instance_t *instance)
 {
-    uint32_t layer_index;
     uint32_t slot_index;
     uint32_t state_index;
     if (instance == NULL) {
@@ -1787,12 +1670,6 @@ SM_Error_t SM_Reset(ADIA_Instance_t *instance)
     instance->data.t2 = (bool)(false);
     for (slot_index = 0U; slot_index < SM_NUM_ACTIVE_SLOTS; ++slot_index) {
         instance->active_states[slot_index] = SM_NODE_INVALID;
-        instance->history_states[slot_index] = SM_NODE_INVALID;
-    }
-    for (layer_index = 0U; layer_index < SM_NUM_LAYERS; ++layer_index) {
-        for (state_index = 0U; state_index <= SM_NUM_STATES; ++state_index) {
-            instance->deep_history[layer_index][state_index] = false;
-        }
     }
     for (state_index = 0U; state_index <= SM_NUM_STATES; ++state_index) {
         instance->state_active[state_index] = false;
@@ -1967,8 +1844,7 @@ SM_Error_t SM_Test_SetHistoryState(ADIA_Instance_t *instance, uint32_t slot, SM_
     if ((slot >= SM_NUM_ACTIVE_SLOTS) || ((uint32_t)state > SM_NUM_STATES)) {
         return SM_ERR_INVALID_ARGUMENT;
     }
-    instance->history_states[slot] = state;
-    return SM_ERR_NONE;
+    return SM_ERR_INVALID_ARGUMENT;
 }
 
 SM_Error_t SM_Test_SetDeepHistory(ADIA_Instance_t *instance, uint32_t layer, SM_Node_t state, bool active)
@@ -1979,8 +1855,8 @@ SM_Error_t SM_Test_SetDeepHistory(ADIA_Instance_t *instance, uint32_t layer, SM_
     if ((layer >= SM_NUM_LAYERS) || ((uint32_t)state > SM_NUM_STATES)) {
         return SM_ERR_INVALID_ARGUMENT;
     }
-    instance->deep_history[layer][(uint32_t)state] = active;
-    return SM_ERR_NONE;
+    (void)active;
+    return SM_ERR_INVALID_ARGUMENT;
 }
 #endif
 ",
@@ -2027,26 +1903,12 @@ static bool SM_Is_Direct_Layer_Child(uint32_t layer_index, SM_Node_t state)
     }
 }
 
-static bool SM_Is_Layer_Descendant(uint32_t layer_index, SM_Node_t state)
-{
-    switch (layer_index) {
-        case SM_LYR_ROOT_IDX:
-            switch (state) {
-                case SM_ST_S1: return true;
-                case SM_ST_S2: return true;
-                default: return false;
-            }
-        default: return false;
-    }
-}
-
 SM_Error_t SM_Validate_State_Consistency(const ADIA_Instance_t *instance)
 {
     uint32_t layer_index;
     uint32_t state_index;
     uint32_t slot_index;
     SM_Node_t active_node;
-    SM_Node_t history_node;
     int32_t active_slot;
     SM_Node_t parent;
     bool container_active;
@@ -2093,20 +1955,6 @@ SM_Error_t SM_Validate_State_Consistency(const ADIA_Instance_t *instance)
         } else if ((active_slot >= 0)
             && (instance->active_states[(uint32_t)active_slot] != SM_NODE_INVALID)) {
             return SM_ERR_CONFIGURATION;
-        }
-        if (active_slot >= 0) {
-            history_node = instance->history_states[(uint32_t)active_slot];
-            if ((history_node != SM_NODE_INVALID)
-                && (((uint32_t)history_node > SM_NUM_STATES)
-                    || (!SM_Is_Direct_Layer_Child(layer_index, history_node)))) {
-                return SM_ERR_CONFIGURATION;
-            }
-        }
-        for (state_index = 1U; state_index <= SM_NUM_STATES; ++state_index) {
-            if (instance->deep_history[layer_index][state_index]
-                && (!SM_Is_Layer_Descendant(layer_index, (SM_Node_t)state_index))) {
-                return SM_ERR_CONFIGURATION;
-            }
         }
     }
     for (slot_index = 0U; slot_index < SM_NUM_ACTIVE_SLOTS; ++slot_index) {
@@ -2334,9 +2182,9 @@ Evidence labels describe only the checks actually recorded for this generated pa
 | Metric | Value |
 |---|---:|
 | Files measured | 10 |
-| Total lines | 1133 |
-| Functional lines | 984 |
-| Comment/blank density | 13.2% |
+| Total lines | 1043 |
+| Functional lines | 897 |
+| Comment/blank density | 14.0% |
 
 ## X-Bridges static code-generation metrics
 

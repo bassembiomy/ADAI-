@@ -7,7 +7,7 @@ import type {
   SemanticTransition,
   SemanticTransitionRoute,
 } from './smSemanticModel';
-import { routeExitStateIds } from './smSemanticModel';
+import { historyStorageUsage, routeExitStateIds } from './smSemanticModel';
 import type { SemanticTraceFrame, XBridgesTraceValue } from './smTrace';
 import { xBridgesTraceAction } from './smTrace';
 import {
@@ -231,12 +231,15 @@ const recordLayerHistory = (
   layerId: string,
 ): void => {
   const layer = runtime.ir.layers[layerId];
-  if (layer.activeSlot !== null) {
+  const storage = historyStorageUsage(runtime.ir);
+  if (storage.shallow && layer.activeSlot !== null) {
     runtime.historySlots[layer.activeSlot] =
       runtime.activeSlots[layer.activeSlot];
   }
-  runtime.deepHistory[layerId] =
-    snapshotDescendantConfiguration(runtime, layerId);
+  if (storage.deep) {
+    runtime.deepHistory[layerId] =
+      snapshotDescendantConfiguration(runtime, layerId);
+  }
 };
 
 function exitLayerConfiguration(

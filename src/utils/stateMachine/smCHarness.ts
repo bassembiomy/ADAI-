@@ -29,6 +29,7 @@ import type {
   SemanticState,
   SemanticVariable,
 } from './smSemanticModel';
+import { historyStorageUsage } from './smSemanticModel';
 import type {
   SemanticTraceFrame,
   XBridgesTraceValue,
@@ -724,10 +725,18 @@ const renderFramePrinter = (ir: SemanticModel): string => {
     `    print_token(${cString(state.id)});`,
     `    printf(":%u", (unsigned)instance->state_timers[${stateIndex(state)}]);`,
   ]);
+  const storage = historyStorageUsage(ir);
   const historyPrints = layers.flatMap((layer) => {
     const shallow = layer.activeSlot === null
       ? null
-      : [
+      : !storage.shallow
+        ? [
+            '    printf("%s", first ? "" : ";");',
+            `    print_token(${cString(layer.id)});`,
+            '    printf(":~");',
+            '    first = false;',
+          ].join('\n')
+        : [
           '    printf("%s", first ? "" : ";");',
           `    print_token(${cString(layer.id)});`,
           '    printf(":");',
@@ -748,7 +757,7 @@ const renderFramePrinter = (ir: SemanticModel): string => {
       return false;
     });
     const hasDeep = descendants.map((state) =>
-      `instance->deep_history[${layerMacro(layer)}][${stateIndex(state)}]`)
+      `SM_DH_GET(instance, ${layerMacro(layer)}, ${stateIndex(state)})`)
       .join(' || ') || 'false';
     const deep = [
       `    if (${hasDeep}) {`,
@@ -758,7 +767,7 @@ const renderFramePrinter = (ir: SemanticModel): string => {
       '        first = false;',
       '        item_first = true;',
       ...descendants.flatMap((state) => [
-        `        if (instance->deep_history[${layerMacro(layer)}][${stateIndex(state)}]) {`,
+        `        if (SM_DH_GET(instance, ${layerMacro(layer)}, ${stateIndex(state)})) {`,
         '            printf("%s", item_first ? "" : ",");',
         `            print_token(${cString(state.id)});`,
         '            item_first = false;',
@@ -767,7 +776,7 @@ const renderFramePrinter = (ir: SemanticModel): string => {
       '        printf("]");',
       '    }',
     ].join('\n');
-    return [shallow, deep].filter((item): item is string => item !== null);
+    return [shallow, storage.deep ? deep : null].filter((item): item is string => item !== null);
   });
   const outputPrints = writeMappings.flatMap((mapping, index) => {
     const channelIndex = channels.indexOf(mapping.channelId);
@@ -806,7 +815,7 @@ const renderFramePrinter = (ir: SemanticModel): string => {
     '{',
     '    unsigned action_index;',
     '    bool first = true;',
-    '    bool item_first = true;',
+    ...(historyStorageUsage(ir).deep ? ['    bool item_first = true;'] : []),
     '    printf("FRAME|%u|elapsed=%u|active=", sequence, elapsed_ms);',
     ...activePrints,
     '    printf("|actions=");',
