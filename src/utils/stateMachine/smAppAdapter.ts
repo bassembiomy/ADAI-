@@ -3,6 +3,7 @@ import {
   coerceSemanticValue,
   createRuntime,
   initializeRuntime,
+  postInputEvent,
   resetRuntime,
   stepRuntime,
   type SemanticRuntime,
@@ -416,6 +417,17 @@ export const stepAppSimulationSession = (
   session: AppSimulationSession,
   elapsedMs: number,
 ): SemanticTraceFrame => stepRuntime(session.runtime, elapsedMs);
+
+/**
+ * Posts an input event (by name or id) so the next tick of the session executes the chart for it.
+ * Throws when the reference is not a declared input event.
+ */
+export const postAppSimulationEvent = (
+  session: AppSimulationSession,
+  eventNameOrId: string,
+): void => {
+  postInputEvent(session.runtime, eventNameOrId);
+};
 
 export const setSessionVariableValue = (
   session: AppSimulationSession,

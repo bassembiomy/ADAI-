@@ -84,6 +84,7 @@ import {
   createFactoryIOMappings,
   createPersistedAppSimulationModel,
   createSimulationModelKey,
+  postAppSimulationEvent,
   resetAppSimulationSession,
   runAppSimulationTick,
   setSessionVariableValue,
@@ -212,6 +213,7 @@ import { projectNormalizedDiagram } from './engine/sysml/normalizedStore';
 import { CreateNewTypeActionPrompt } from './components/sysml/CreateNewTypeActionPrompt';
 import { PortKindActions } from './components/sysml/PortKindActions';
 import { TypeSelectionPrompt } from './components/sysml/TypeSelectionPrompt';
+import { ChartEventsEditor } from './components/statemachine/ChartEventsEditor';
 import { buildCreateOwnedPropertyCommand, planOwnedPortCreation, planOwnedPropertyCreation, suggestedMetaclassForPortKind, type CanonicalPortKind, type CreateNewTypeAction as OwnedFeatureNewTypeAction, type TypeCandidate } from './services/sysmlOwnedFeatureCommands';
 import { buildSysmlPastePlan } from './services/sysmlClipboardAdapter';
 import { buildBlockPropertyUpdateCommand, buildCreatePartDefinitionCommand, buildPartUpdateCommand, buildRelationshipUpdateCommand } from './services/sysmlPropertyCommands';
@@ -269,7 +271,13 @@ import {
 } from './services/sysmlDiagramWorkspace';
 import { ensureRootStateMachineDiagram } from './features/modelExplorer/adapters/stateMachineExplorerAdapter';
 import { resolveCanvasSymbolDiagramTargets, resolveExactDiagramCanvasContext, resolveTreeOpenTarget } from './features/modelExplorer/diagramTreeContext';
-import type { StateMachineDiagramData } from './types/sm_types';
+import type { StateMachineDiagramData, EventDef } from './types/sm_types';
+import {
+  addEvent as addEventDef,
+  deleteEvent as deleteEventDef,
+  renameEvent as renameEventDef,
+  setEventScope as setEventDefScope,
+} from './utils/stateMachine/smEventEditing';
 import { resolveActiveSysmlDiagramTarget } from './services/sysmlDiagramTarget';
 import { planContextualCreation } from './features/sysml/contextualCreation';
 import { beginNavGesture, createFrameBatcher, createMiddleClickTracker, fitViewToBounds, navigationModeForPress, stepNavGesture, switchNavGestureToZoom, wheelZoomFactor, zoomViewAt, type NavGesture } from './utils/canvasNavigation';
@@ -4912,6 +4920,9 @@ const ADIA = () => {
   // REQ-ENGINE-004: Generation log with checksums
   const [generationLog, setGenerationLog] = useState<string[]>([]);
   const [safetyMode, setSafetyMode] = useState(false);
+  const [events, setEvents] = useState<EventDef[]>([]);
+  // Stateflow 'Execute (enter) chart at initialization': undefined/true = enter at init, false = enter on the first step.
+  const [executeAtInitialization, setExecuteAtInitialization] = useState<boolean | undefined>(undefined);
   const [showHelpModal, setShowHelpModal] = useState(false);
 
   // BDD STATE (SysML)
@@ -5584,7 +5595,7 @@ const ADIA = () => {
         return {
           ...createPersistedAppSimulationModel({
             tickMs, states, junctions, transitions, variables, layers,
-            safetyMode, hilConfig,
+            safetyMode, hilConfig, events, executeAtInitialization,
           }),
           view,
         };
@@ -5613,7 +5624,7 @@ const ADIA = () => {
         return null;
     }
   }, [
-    states, junctions, transitions, layers, variables, view, tickMs, safetyMode,
+    states, junctions, transitions, layers, variables, view, tickMs, safetyMode, events, executeAtInitialization,
     blocks, relationships, customStereotypes, parts, connectors, interfaceRealizations,
     globalXBridgesNodes, globalXBridgesEdges, vlabNodes, vlabEdges, hilConfig,
     entropyNodes, entropyEdges, opmSimulationConfig, hmiComponents, headers, data, activeModel, taguchiConfig, results,
@@ -5638,6 +5649,8 @@ const ADIA = () => {
       setTransitions(restored.transitions);
       setLayers(restored.layers);
       setVariables(restored.variables);
+      setEvents(restored.events ?? []);
+      setExecuteAtInitialization(restored.executeAtInitialization);
       setTickMs(restored.tickMs);
       setSafetyMode(restored.safetyMode);
       setHilConfig(restored.hilConfig ?? {
@@ -5657,7 +5670,7 @@ const ADIA = () => {
     if (!file.data) {
       switch (file.type) {
         case 'statemachine':
-          setStates([]); setJunctions([]); setTransitions([]); setLayers([]); setVariables([]);
+          setStates([]); setJunctions([]); setTransitions([]); setLayers([]); setVariables([]); setEvents([]); setExecuteAtInitialization(undefined);
           break;
         case 'bdd':
         case 'requirements':
@@ -6247,7 +6260,7 @@ const ADIA = () => {
     const projectPayload = {
       ...createPersistedAppSimulationModel({
         tickMs, states, junctions, transitions, layers, variables,
-        safetyMode, hilConfig,
+        safetyMode, hilConfig, events, executeAtInitialization,
       }),
       blocks, relationships, parts, connectors, interfaceRealizations,
     };
@@ -6283,7 +6296,7 @@ const ADIA = () => {
         available: vlabNodes && vlabNodes.length > 0,
       },
     ] as AdiaExportItem[];
-  }, [states, junctions, transitions, layers, variables, tickMs, safetyMode, hilConfig, blocks, relationships, parts, connectors, interfaceRealizations, globalXBridgesNodes, globalXBridgesEdges, vlabNodes, vlabEdges]);
+  }, [states, junctions, transitions, layers, variables, tickMs, safetyMode, hilConfig, events, executeAtInitialization, blocks, relationships, parts, connectors, interfaceRealizations, globalXBridgesNodes, globalXBridgesEdges, vlabNodes, vlabEdges]);
 
 
 
@@ -6364,9 +6377,9 @@ const ADIA = () => {
   // TRM simulation verification: the panel edits a repository copy; changes reach the model only as gateway commands.
   const [simVerificationRequirementId, setSimVerificationRequirementId] = useState<string | null>(null);
   const simVerificationProject = useMemo(() => ({
-    states, junctions, transitions, variables, layers, tickMs, hilConfig, safetyMode,
+    states, junctions, transitions, variables, layers, tickMs, hilConfig, safetyMode, events, executeAtInitialization,
     globalXBridgesNodes, globalXBridgesEdges, vlabNodes, vlabEdges,
-  }), [states, junctions, transitions, variables, layers, tickMs, hilConfig, safetyMode, globalXBridgesNodes, globalXBridgesEdges, vlabNodes, vlabEdges]);
+  }), [states, junctions, transitions, variables, layers, tickMs, hilConfig, safetyMode, events, executeAtInitialization, globalXBridgesNodes, globalXBridgesEdges, vlabNodes, vlabEdges]);
   // Stable XbridgesWorkspace inputs: a fresh array per render re-imports the stored model over unsaved edits.
   const xBridgesWorkspaceInputs = useXBridgesWorkspaceInputs(states, xBridgesStateId, globalXBridgesNodes, globalXBridgesEdges);
   const simEvidenceCurrency = useCallback((evidence: { id: string; simulation?: unknown }): 'current' | 'stale' =>
@@ -6756,7 +6769,7 @@ const ADIA = () => {
     const projectFiles: Record<string, any> = {};
     const persistedStateMachine = createPersistedAppSimulationModel({
       tickMs, states, junctions, transitions, layers, variables,
-      safetyMode, hilConfig,
+      safetyMode, hilConfig, events, executeAtInitialization,
     });
 
     if (selectedKeys.includes('statemachine')) {
@@ -6853,7 +6866,7 @@ const ADIA = () => {
     }
     addError('info', 'Selected project modules exported as files.');
   }, [
-    states, junctions, transitions, layers, variables, view, tickMs, safetyMode,
+    states, junctions, transitions, layers, variables, view, tickMs, safetyMode, events, executeAtInitialization,
     blocks, relationships, parts, connectors, interfaceRealizations, customStereotypes,
     hmiComponents, vlabNodes, vlabEdges, globalXBridgesNodes, globalXBridgesEdges,
     hilConfig,
@@ -6932,6 +6945,9 @@ const ADIA = () => {
       if (importedData.transitions) setTransitions(importedData.transitions);
       if (importedData.layers) setLayers(importedData.layers);
       if (importedData.variables) setVariables(importedData.variables);
+      // Absent means no events / default initialization: never keep the previous project's values.
+      setEvents(Array.isArray(importedData.events) ? importedData.events : []);
+      setExecuteAtInitialization(typeof importedData.executeAtInitialization === 'boolean' ? importedData.executeAtInitialization : undefined);
       if (importedData.view) {
         const v = importedData.view;
         const scale = typeof v.scale === 'number' && Number.isFinite(v.scale) && v.scale > 0 ? v.scale : (typeof v.zoom === 'number' && Number.isFinite(v.zoom) && v.zoom > 0 ? v.zoom : 1);
@@ -7224,6 +7240,8 @@ const ADIA = () => {
       transitions,
       layers,
       variables,
+      events,
+      executeAtInitialization,
       safetyMode,
       hilConfig,
       blocks,
@@ -7268,6 +7286,8 @@ const ADIA = () => {
     transitions,
     layers,
     variables,
+    events,
+    executeAtInitialization,
     safetyMode,
     hilConfig,
     blocks,
@@ -7719,6 +7739,52 @@ const ADIA = () => {
     setVariables(prev => prev.map(v => v.id === id ? { ...v, overflowPolicy } : v));
   }, []);
 
+  // EVENTS (Stateflow-style triggers): declared on the chart, referenced by id from transitions and `send(NAME);`.
+  const addChartEvent = useCallback(() => {
+    const result = addEventDef(events, uuidv4(), 'input');
+    if (!result.ok) { addError('error', result.error, 'Events'); return; }
+    setEvents(result.events);
+    addError('info', `Added event: ${result.events[result.events.length - 1].name}`);
+  }, [events, addError]);
+
+  /** Returns the validation error, or null when the rename was applied. */
+  const renameChartEvent = useCallback((id: string, name: string): string | null => {
+    const result = renameEventDef(events, id, name);
+    if (!result.ok) return result.error;
+    setEvents(result.events);
+    return null;
+  }, [events]);
+
+  const setChartEventScope = useCallback((id: string, scope: EventDef['scope']) => {
+    const result = setEventDefScope(events, id, scope);
+    if (!result.ok) { addError('error', result.error, 'Events'); return; }
+    setEvents(result.events);
+  }, [events, addError]);
+
+  const removeChartEvent = useCallback((id: string) => {
+    const name = events.find(ev => ev.id === id)?.name;
+    const outcome = deleteEventDef(events, transitions, id);
+    setEvents(outcome.events);
+    if (outcome.clearedTransitionIds.length > 0) setTransitions(outcome.transitions);
+    addError('info', outcome.clearedTransitionIds.length > 0
+      ? `Removed event: ${name}. Cleared the event on ${outcome.clearedTransitionIds.length} transition(s) that used it.`
+      : `Removed event: ${name}`);
+  }, [events, transitions, addError]);
+
+  const postSimulationEvent = useCallback((eventId: string) => {
+    const session = simulationSessionRef.current;
+    if (!session) {
+      addError('info', 'Start the simulation before posting an event.', 'Simulation');
+      return;
+    }
+    try {
+      postAppSimulationEvent(session, eventId);
+      addError('info', `Posted event ${events.find(ev => ev.id === eventId)?.name ?? eventId} for the next tick`, 'Simulation');
+    } catch (error: any) {
+      addError('error', error.message || String(error), 'Simulation');
+    }
+  }, [events, addError]);
+
   const updateVariableInitValue = useCallback((id: string, value: string) => {
     setVariables(prev => prev.map(v =>
       v.id === id ? { ...v, initialValue: value } : v
@@ -7773,7 +7839,7 @@ const ADIA = () => {
     const snapshot = JSON.stringify({
       ...createPersistedAppSimulationModel({
         tickMs, states, junctions, transitions, layers, variables,
-        safetyMode, hilConfig,
+        safetyMode, hilConfig, events, executeAtInitialization,
       }),
       // SysML history is owned by the canonical gateway patch history.
     });
@@ -7784,7 +7850,7 @@ const ADIA = () => {
       return newHistory;
     });
     setHistoryIndex(prev => Math.min(prev + 1, 49));
-  }, [states, junctions, transitions, layers, variables, tickMs, safetyMode, hilConfig, historyIndex]);
+  }, [states, junctions, transitions, layers, variables, tickMs, safetyMode, hilConfig, events, executeAtInitialization, historyIndex]);
 
   const undo = useCallback(() => {
     if ((sysmlGatewayStateRef.current.patchHistory?.past.length ?? 0) > 0) {
@@ -8075,7 +8141,7 @@ const ADIA = () => {
         const isUntimed = t.afterTicks === null || t.afterTicks === undefined || t.afterTicks <= 0;
         const hasConditionType = t.type === 'condition';
 
-        if (isUnguarded && (isUntimed || hasConditionType)) {
+        if (isUnguarded && !t.event && (isUntimed || hasConditionType)) {
           newErrors.push({
             id: uuidv4(),
             type: 'warning',
@@ -8242,6 +8308,8 @@ const ADIA = () => {
       variables,
       layers,
       safetyMode,
+      events,
+      executeAtInitialization,
       hilConfig: { ...hilConfig, enabled: false }
     });
     if (genRes.errors && genRes.errors.length > 0) {
@@ -8254,7 +8322,7 @@ const ADIA = () => {
     });
 
     return newErrors;
-  }, [states, transitions, junctions, variables, layers, hilConfig, tickMs, safetyMode]);
+  }, [states, transitions, junctions, variables, layers, hilConfig, tickMs, safetyMode, events, executeAtInitialization]);
 
   const validateModel = useCallback(() => {
     const newErrors = performValidation();
@@ -8313,10 +8381,12 @@ const ADIA = () => {
     variables,
     layers,
     safetyMode,
+    events,
+    executeAtInitialization,
     hilConfig
   }, simulationIOMappings), [
     tickMs, states, junctions, transitions, variables, layers,
-    safetyMode, hilConfig, simulationIOMappings
+    safetyMode, hilConfig, events, executeAtInitialization, simulationIOMappings
   ]);
   const previousSimulationModelKeyRef = useRef(simulationModelKey);
   useEffect(() => {
@@ -8348,11 +8418,13 @@ const ADIA = () => {
       variables,
       layers,
       safetyMode,
+      events,
+      executeAtInitialization,
       hilConfig
     }, simulationIOMappings)
   ), [
     tickMs, states, junctions, transitions, variables, layers,
-    safetyMode, hilConfig, simulationIOMappings
+    safetyMode, hilConfig, events, executeAtInitialization, simulationIOMappings
   ]);
 
   const readFactoryInputs = useCallback(async (): Promise<Record<string, AppSimulationValue>> => {
@@ -12935,7 +13007,7 @@ const ADIA = () => {
     await validateWithAI();
 
     try {
-      const chart = { tickMs, states, junctions, transitions, variables, layers, safetyMode, hilConfig };
+      const chart = { tickMs, states, junctions, transitions, variables, layers, safetyMode, events, executeAtInitialization, hilConfig };
       // REQ-ENGINE-003: TS template literals ensure safe string concatenation
       let { files, errors: validationErrors, warnings } = generateMISRACCode(chart);
 
@@ -13025,7 +13097,7 @@ const ADIA = () => {
     } finally {
       setIsGenerating(false);
     }
-  }, [tickMs, states, junctions, transitions, variables, layers, safetyMode, hilConfig, addError, validateModel, calculateChecksum, validateWithAI]);
+  }, [tickMs, states, junctions, transitions, variables, layers, safetyMode, hilConfig, events, executeAtInitialization, addError, validateModel, calculateChecksum, validateWithAI]);
 
   const renderStates = useCallback((): React.ReactNode => {
     return currentStates.map(state => {
@@ -13310,7 +13382,11 @@ const ADIA = () => {
       // Build label
       const parts: string[] = [];
       if (transition.isInternal) parts.push(`«local»`);
-      if (transition.type === 'condition') parts.push(`[${transition.condition || 'true'}]`);
+      const transitionEventName = transition.event ? events.find(e => e.id === transition.event)?.name : undefined;
+      if (transitionEventName) parts.push(transitionEventName);
+      const eventOnlyTrigger = !!transitionEventName && transition.type === 'condition' && (!transition.condition || transition.condition.trim() === 'true');
+      if (eventOnlyTrigger) { /* Stateflow style: a bare event is the whole trigger. */ }
+      else if (transition.type === 'condition') parts.push(`[${transition.condition || 'true'}]`);
       else if (transition.type === 'after') parts.push(`after(${transition.afterTicks || '?'})`);
       else if (transition.type === 'and') parts.push(`[${transition.condition}] && after(${transition.afterTicks})`);
       else if (transition.type === 'or') parts.push(`[${transition.condition}] || after(${transition.afterTicks})`);
@@ -13416,7 +13492,7 @@ const ADIA = () => {
         </g>
       );
     });
-  }, [currentTransitions, states, junctions, view, selectedIds, hoveredTransitionId, firedTransitions, startTransitionDrag, resetTransitionCurve, errors]);
+  }, [currentTransitions, states, junctions, view, selectedIds, hoveredTransitionId, firedTransitions, startTransitionDrag, resetTransitionCurve, errors, events]);
 
   const renderPackages = useCallback((): React.ReactNode => {
     if (diagramMode === 'ibd') return null;
@@ -15022,6 +15098,19 @@ const ADIA = () => {
                   Reset
                 </Button>
 
+                {events.filter(ev => ev.scope === 'input').map(ev => (
+                  <Button key={ev.id} data-help-feature="app-event-post" data-help-source="src/App.tsx"
+                    data-testid={`post-event-${ev.name}`}
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => postSimulationEvent(ev.id)}
+                    className="h-7 px-2 text-xs font-mono text-amber-500 hover:text-amber-400 hover:bg-amber-500/10 whitespace-nowrap"
+                    title={`Post input event ${ev.name} before the next tick`}
+                  >
+                    &#9656; {ev.name}
+                  </Button>
+                ))}
+
                 <Separator orientation="vertical" className="h-4" />
 
                 <Button data-help-feature="app-validate" data-help-source="src/App.tsx"
@@ -15062,6 +15151,21 @@ const ADIA = () => {
                 </Button>
               </>
             )}
+
+            <Separator orientation="vertical" className="h-4" />
+
+            <div className="flex items-center gap-1.5 px-1.5 py-0.5" title="Stateflow default: the chart is entered on the first step instead of at initialization. Unchecked enters the chart at initialization.">
+              <Checkbox data-help-feature="app-chart-enter-first-step" data-help-source="src/App.tsx"
+                checked={executeAtInitialization === false}
+                onCheckedChange={(c) => setExecuteAtInitialization(c === true ? false : undefined)}
+                id="enter-chart-first-step"
+                aria-label="Enter chart at first step (Stateflow default)"
+                className="h-3.5 w-3.5 rounded border-[var(--border-strong)] data-[state=checked]:bg-[#f97316] data-[state=checked]:border-[#f97316]"
+              />
+              <Label htmlFor="enter-chart-first-step" className="text-xs cursor-pointer select-none whitespace-nowrap text-[var(--text-secondary)]">
+                Enter at 1st step
+              </Label>
+            </div>
 
             <Separator orientation="vertical" className="h-4" />
 
@@ -15623,6 +15727,14 @@ const ADIA = () => {
                         </div>
                       )}
                     </div>
+
+                    <ChartEventsEditor data-help-feature="app-event-add" data-help-source="src/App.tsx"
+                      events={events}
+                      onAdd={addChartEvent}
+                      onRename={renameChartEvent}
+                      onScopeChange={setChartEventScope}
+                      onDelete={removeChartEvent}
+                    />
                   </div>
                 </div>
               )}
@@ -15814,6 +15926,8 @@ const ADIA = () => {
                   junctions={junctions}
                   layers={layers}
                   safetyMode={safetyMode}
+                  events={events}
+                  executeAtInitialization={executeAtInitialization}
                   tickMs={tickMs}
                   onBack={() => setDiagramMode('statemachine')}
                 />
@@ -18025,6 +18139,22 @@ const ADIA = () => {
                       <option value="and">Condition AND Timer</option>
                       <option value="or">Condition OR Timer</option>
                     </select>
+
+                    <div>
+                      <Label>Event</Label>
+                      <select data-help-feature="app-transition-event" data-help-source="src/App.tsx"
+                        aria-label="Transition event"
+                        data-testid="transition-event-select"
+                        value={selectedTransition.event ?? ''}
+                        onChange={(e) => updateTransition(selectedTransition.id, { event: e.target.value === '' ? null : e.target.value })}
+                        className="w-full h-8 mt-1 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0]"
+                      >
+                        <option value="">None (enabled in every execution)</option>
+                        {events.map(ev => (
+                          <option key={ev.id} value={ev.id}>{ev.name} ({ev.scope === 'input' ? 'Input' : 'Local'})</option>
+                        ))}
+                      </select>
+                    </div>
 
                     {(selectedTransition.type === 'condition' || selectedTransition.type === 'and' || selectedTransition.type === 'or') && (
                       <div>

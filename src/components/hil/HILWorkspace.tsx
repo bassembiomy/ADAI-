@@ -19,7 +19,7 @@ import {
 import { generateHALCode } from '../../engine/hil/hilCodeGenerator';
 import { generateMISRACCode } from '../../utils/stateMachineCodeGenerator';
 import { handleHorizontalToolbarWheel } from '../../utils/toolbarScroll';
-import { StateData, JunctionData, TransitionData, Layer, VariableDef } from '../../types/sm_types';
+import { StateData, JunctionData, TransitionData, Layer, VariableDef, EventDef } from '../../types/sm_types';
 
 interface HILWorkspaceProps {
   config: HILConfig;
@@ -32,6 +32,8 @@ interface HILWorkspaceProps {
   transitions: TransitionData[];
   layers: Layer[];
   safetyMode: boolean;
+  events?: EventDef[];
+  executeAtInitialization?: boolean;
   tickMs: number;
   onBack: () => void;
 }
@@ -49,6 +51,8 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
   junctions,
   layers,
   safetyMode,
+  events,
+  executeAtInitialization,
   tickMs,
   onBack
 }) => {
@@ -164,10 +168,12 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
       variables,
       layers,
       safetyMode,
+      events,
+      executeAtInitialization,
       hilConfig: { ...config, enabled: true }
     }, { includeTestShims: false });
     return res.files || [];
-  }, [config, variables, states, transitions, junctions, layers, safetyMode, tickMs]);
+  }, [config, variables, states, transitions, junctions, layers, safetyMode, events, executeAtInitialization, tickMs]);
 
   const activeFileContent = useMemo(() => {
     const file = generatedFiles.find(f => f.name === activeFileTab);
@@ -255,6 +261,8 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
       variables,
       layers,
       safetyMode,
+      events,
+      executeAtInitialization,
       hilConfig: { ...config, enabled: true }
     }, { includeTestShims: false });
 
