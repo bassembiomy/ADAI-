@@ -7,6 +7,7 @@ import type {
   SemanticTransition,
   SemanticTransitionRoute,
 } from './smSemanticModel';
+import { routeExitStateIds } from './smSemanticModel';
 import type { SemanticTraceFrame, XBridgesTraceValue } from './smTrace';
 import { xBridgesTraceAction } from './smTrace';
 import {
@@ -647,7 +648,7 @@ const commitTransition = (
     for (
       const stateId of topmostExitStateIds(
         context.runtime.ir,
-        route.exitStateIds,
+        routeExitStateIds(context.runtime.ir, transition, route),
       )
     ) {
       exitState(context, stateId);

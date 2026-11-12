@@ -17,6 +17,7 @@ import type {
   SemanticTransition,
   SemanticTransitionRoute,
 } from './smSemanticModel';
+import { routeExitStateIds } from './smSemanticModel';
 import {
   renderXBHeader,
   renderXBInstanceMembers,
@@ -589,11 +590,14 @@ const renderCommitRoute = (
   const statements: string[] = [];
   if (transition.kind !== 'internal-action') {
     const exitedActiveSlots = new Set<number>();
-    for (const stateId of topmostExitStateIds(ir, route.exitStateIds)) {
+    for (const stateId of topmostExitStateIds(ir, routeExitStateIds(ir, transition, route))) {
       statements.push(
         `${indent}SM_Exit_State(instance, ${stateNode(ir, stateId)}, true);`,
       );
       const exitedState = ir.states[stateId];
+      // An inner route lists the destination child even when it is inactive, so the
+      // slot's active state may be a sibling that still needs the runtime check below.
+      if (transition.kind === 'inner') continue;
       if (exitedState.activeSlot >= 0) {
         exitedActiveSlots.add(exitedState.activeSlot);
       }

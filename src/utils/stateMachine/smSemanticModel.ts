@@ -231,3 +231,23 @@ export function fromSysmlTransitionRelationship(
   };
 }
 
+
+/**
+ * States a committed route exits. Equal to `route.exitStateIds` except for an inner
+ * transition S -> descendant T (Stateflow): there the child of S on the path to T may
+ * already be active (with substates of its own), so it is exited and re-entered; in a
+ * parallel layer every region is exited, because entering one re-enters its siblings.
+ * S itself is never exited. Exiting an inactive state is a no-op in both engines.
+ */
+export function routeExitStateIds(
+  ir: Pick<SemanticModel, 'states' | 'layers'>,
+  transition: Pick<SemanticTransition, 'kind'>,
+  route: Pick<SemanticTransitionRoute, 'exitStateIds' | 'entryStateIds'>,
+): string[] {
+  const firstEntryId = route.entryStateIds[0];
+  if (transition.kind !== 'inner' || firstEntryId === undefined) {
+    return route.exitStateIds;
+  }
+  const layer = ir.layers[ir.states[firstEntryId].layerId];
+  return layer.decomposition === 'AND' ? [...layer.children] : [firstEntryId];
+}
