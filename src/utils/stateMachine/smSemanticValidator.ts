@@ -1046,6 +1046,64 @@ const validateTickPeriod = (
   )];
 };
 
+/*
+ * A transition whose endpoints lie in different regions of one parallel (AND) state is
+ * rejected (Stateflow and UML/SysML). The transition's scope is the innermost layer that
+ * contains both endpoints; an AND scope is an error. Self transitions and transitions
+ * whose source is an ancestor of the target are exempt.
+ */
+const validateParallelRegionTransitions = (
+  model: StateMachineModelV4,
+  stateLayers: ReadonlyMap<string, StateMachineLayerV4[]>,
+  junctionLayers: ReadonlyMap<string, StateMachineLayerV4[]>,
+): ModelDiagnostic[] => {
+  const diagnostics: ModelDiagnostic[] = [];
+  const statesById = new Map(model.states.map((state) => [state.id, state]));
+  const layersById = new Map(model.layers.map((layer) => [layer.id, layer]));
+  const owningLayer = (nodeId: string): StateMachineLayerV4 | undefined =>
+    stateLayers.get(nodeId)?.[0] ?? junctionLayers.get(nodeId)?.[0];
+  const layerChain = (start: StateMachineLayerV4 | undefined): StateMachineLayerV4[] => {
+    const chain: StateMachineLayerV4[] = [];
+    const seen = new Set<string>();
+    let current = start;
+    while (current && !seen.has(current.id)) {
+      chain.push(current);
+      seen.add(current.id);
+      if (current.parentStateId === null) break;
+      current = stateLayers.get(current.parentStateId)?.[0];
+    }
+    return chain;
+  };
+  const ancestorStateIds = (nodeId: string): Set<string> => {
+    const ancestors = new Set<string>();
+    for (const layer of layerChain(owningLayer(nodeId))) {
+      if (layer.parentStateId !== null) ancestors.add(layer.parentStateId);
+    }
+    return ancestors;
+  };
+  for (const transition of model.transitions) {
+    const sourceId = transition.sourceId;
+    const targetId = transition.targetId;
+    if (sourceId === targetId) continue;
+    if (ancestorStateIds(targetId).has(sourceId)) continue;
+    const targetChain = layerChain(owningLayer(targetId));
+    const targetLayerIds = new Set(targetChain.map((layer) => layer.id));
+    const scope = layerChain(owningLayer(sourceId))
+      .find((layer) => targetLayerIds.has(layer.id));
+    if (scope?.decomposition !== 'AND') continue;
+    const parallelStateId = scope.parentStateId;
+    const parallelName = parallelStateId !== null
+      ? statesById.get(parallelStateId)?.name ?? parallelStateId
+      : (layersById.get(scope.id)?.name ?? scope.id);
+    diagnostics.push(diagnostic(
+      'SM_TRANSITION_BETWEEN_PARALLEL_REGIONS',
+      `Transition '${transition.id}' connects two regions of the parallel state '${parallelName}'; transitions between parallel regions are not allowed.`,
+      transition.id,
+    ));
+  }
+  return diagnostics;
+};
+
 export const validateModelStructure = (
   model: StateMachineModelV4,
 ): ModelDiagnostic[] => {
@@ -1064,6 +1122,7 @@ export const validateModelStructure = (
     ...validateHierarchy(model, stateLayers),
     ...validateDecomposition(model),
     ...validateTransitionPaths(model),
+    ...validateParallelRegionTransitions(model, stateLayers, junctionLayers),
     ...validateHistory(model, junctionLayers),
     ...validateMappings(model),
     ...validateExpressions(model),
