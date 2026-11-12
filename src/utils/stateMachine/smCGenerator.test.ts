@@ -1248,8 +1248,8 @@ int main(void) {
       const built = build(model);
       const coreSource = generatedFile(built, 'sm_core.c');
 
-      expect(coreSource).toContain('if (instance->data.x == 1U) {');
-      expect(coreSource).not.toContain('if ((instance->data.x == 1U)) {');
+      expect(coreSource).toContain('if (((int64_t)instance->data.x) == ((int64_t)1)) {');
+      expect(coreSource).not.toContain('if ((((int64_t)instance->data.x) == ((int64_t)1))) {');
     });
 
     it.skipIf(!existsSync('C:/Users/EL-Dawlia/Downloads/delay/statemachine-xbridges-scalar-multisystem-test.json'))(

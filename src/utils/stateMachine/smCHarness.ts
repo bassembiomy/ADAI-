@@ -1041,6 +1041,8 @@ const parseFrame = (line: string): CTraceFrame => {
           ? 'SAFETY_VIOLATION: safety violation'
           : fields.error === '5'
             ? 'XBRIDGES_NUMERIC: X-Bridges numeric fault'
+          : fields.error === '7'
+            ? 'ARITHMETIC: arithmetic error'
           : `C_ERROR_${fields.error}`,
   };
 };

@@ -19,9 +19,18 @@ import {
 } from './xbInterpreter';
 import { normalizeLogicalTick } from './smTiming';
 import { coerceTypedValue } from './smTypedValue';
+import {
+  arithmeticModeFor,
+  arithmeticTruth,
+  convertForAssignment,
+  evaluateArithmetic,
+  type ArithmeticEnv,
+  type ArithmeticValue,
+} from './smArithmetic';
 
 export interface SemanticRuntimeError {
   code:
+    | 'ARITHMETIC'
     | 'INVALID_ELAPSED_MS'
     | 'RUNTIME_EVALUATION_ERROR'
     | 'SAFETY_VIOLATION'
@@ -69,72 +78,46 @@ const orderedLayers = (ir: SemanticModel): SemanticLayer[] =>
 const stateActionLabel = (state: SemanticState): string =>
   state.enumName.replace(/^SM_ST_/, '');
 
-const evaluateExpression = (
+const latchArithmeticError = (runtime: SemanticRuntime): void => {
+  if (runtime.error === null) {
+    runtime.error = { code: 'ARITHMETIC', message: 'arithmetic error' };
+  }
+};
+
+/**
+ * Evaluates with the typed arithmetic of smArithmetic.ts. `faulted` reports whether this one
+ * evaluation hit an arithmetic error (which is also latched on the runtime, first error wins).
+ */
+const evaluateTyped = (
   runtime: SemanticRuntime,
   expression: ExpressionNode,
-): number | boolean => {
-  if (expression.kind === 'literal') return expression.value;
-  if (expression.kind === 'variable') {
-    if (!Object.prototype.hasOwnProperty.call(runtime.data, expression.name)) {
-      throw new Error(`variable '${expression.name}' is not present in runtime data`);
-    }
-    return runtime.data[expression.name];
-  }
-  if (expression.kind === 'unary') {
-    const operand = evaluateExpression(runtime, expression.operand);
-    if (expression.operator === '!') return !operand;
-    if (expression.operator === '+') return +operand;
-    return -Number(operand);
-  }
-
-  if (expression.kind === 'call') {
-    const arg = Number(evaluateExpression(runtime, expression.argument));
-    switch (expression.functionName) {
-      case 'sin': return Math.sin(arg);
-      case 'cos': return Math.cos(arg);
-      case 'exp': return Math.exp(arg);
-      case 'sqrt': return Math.sqrt(arg);
-      case 'abs': return Math.abs(arg);
-      default: throw new Error(`unsupported function '${expression.functionName}'`);
-    }
-  }
-
-  if (expression.kind === 'binary') {
-    if (expression.operator === '&&') {
-      return Boolean(evaluateExpression(runtime, expression.left))
-        && Boolean(evaluateExpression(runtime, expression.right));
-    }
-    if (expression.operator === '||') {
-      return Boolean(evaluateExpression(runtime, expression.left))
-        || Boolean(evaluateExpression(runtime, expression.right));
-    }
-
-    const left = evaluateExpression(runtime, expression.left);
-    const right = evaluateExpression(runtime, expression.right);
-    switch (expression.operator) {
-      case '==': return left === right;
-      case '!=': return left !== right;
-      case '<': return left < right;
-      case '<=': return left <= right;
-      case '>': return left > right;
-      case '>=': return left >= right;
-      case '+': return Number(left) + Number(right);
-      case '-': return Number(left) - Number(right);
-      case '*': return Number(left) * Number(right);
-      case '/': {
-        const divisor = Number(right);
-        if (divisor === 0) throw new Error('division by zero');
-        return Number(left) / divisor;
+): { value: ArithmeticValue; faulted: boolean; env: ArithmeticEnv } => {
+  let faulted = false;
+  const env: ArithmeticEnv = {
+    mode: arithmeticModeFor(runtime.ir.verification?.cStandard),
+    variable: (name) => {
+      if (!Object.prototype.hasOwnProperty.call(runtime.data, name)) {
+        throw new Error(`variable '${name}' is not present in runtime data`);
       }
-      case '%': {
-        const divisor = Number(right);
-        if (divisor === 0) throw new Error('remainder by zero');
-        return Number(left) % divisor;
-      }
-    }
-  }
+      const variable = runtime.ir.variables[name];
+      return { value: runtime.data[name], type: variable?.type ?? 'double' };
+    },
+    fault: () => {
+      faulted = true;
+      latchArithmeticError(runtime);
+    },
+  };
+  const value = evaluateArithmetic(expression, env);
+  return { value, faulted, env };
+};
 
-  throw new Error(`unhandled expression kind '${(expression as ExpressionNode).kind}'`);
+/** A guard that hits an arithmetic error is false. */
+const evaluateGuard = (
+  runtime: SemanticRuntime,
+  expression: ExpressionNode,
+): boolean => {
+  const { value, faulted } = evaluateTyped(runtime, expression);
+  return !faulted && arithmeticTruth(value);
 };
 
 export const coerceSemanticValue = (
@@ -154,19 +137,23 @@ const runActions = (
 ): void => {
   if (actions.length === 0) return;
   for (const action of actions) {
-    const value = evaluateExpression(context.runtime, action.value);
-    if (typeof value === 'number' && !Number.isFinite(value)) {
-      throw new Error(`action '${action.target}' produced a non-finite value`);
-    }
     const target = context.runtime.ir.variables[action.target];
     if (target === undefined) {
       throw new Error(`action target '${action.target}' is absent from semantic IR`);
     }
-    context.runtime.data[action.target] = coerceSemanticValue(
+    const { value, faulted, env } = evaluateTyped(context.runtime, action.value);
+    if (faulted) continue;
+    const converted = convertForAssignment(
       value,
       target.type,
-      target.overflowPolicy,
+      target.overflowPolicy ?? 'saturate',
+      env,
     );
+    if (!converted.ok) {
+      latchArithmeticError(context.runtime);
+      continue;
+    }
+    context.runtime.data[action.target] = converted.value;
   }
   context.actions.push(traceLabel);
 };
@@ -175,7 +162,12 @@ const restoreDataDefaults = (runtime: SemanticRuntime): void => {
   const defaults: Record<string, number | boolean> = {};
   for (const id of Object.keys(runtime.ir.variables).sort((left, right) =>
     left.localeCompare(right))) {
-    defaults[id] = runtime.ir.variables[id].initialValue;
+    const variable = runtime.ir.variables[id];
+    // C stores the initial value in the variable's type (float rounds to single precision).
+    defaults[id] = (variable.type === 'float' || variable.type === 'single')
+      && typeof variable.initialValue === 'number'
+      ? Math.fround(variable.initialValue)
+      : variable.initialValue;
   }
   runtime.data = defaults;
 };
@@ -301,7 +293,7 @@ const transitionIsEnabled = (
   transition: SemanticTransition,
   timerStateId: string,
 ): boolean => {
-  const guard = Boolean(evaluateExpression(context.runtime, transition.guard));
+  const guard = evaluateGuard(context.runtime, transition.guard);
   const timerState = context.runtime.ir.states[timerStateId];
   const timerMs = timerState === undefined
     ? 0
@@ -708,7 +700,8 @@ const executeState = (
   stateId: string,
 ): boolean => {
   const state = context.runtime.ir.states[stateId];
-  if (context.runtime.error !== null) return false;
+  // An arithmetic error is latched but lets the rest of the tick finish.
+  if (context.runtime.error !== null && context.runtime.error.code !== 'ARITHMETIC') return false;
   if (state.terminal) return false;
 
   const outer = selectTransitionPath(context, stateId, 'outer');
@@ -739,6 +732,8 @@ const executeState = (
       };
       return false;
     }
+    // As in the generated C, any latched error (also an arithmetic one) stops this state here.
+    if (context.runtime.error !== null) return false;
     context.actions.push(xBridgesTraceAction(stateActionLabel(state)));
   }
 
@@ -967,6 +962,9 @@ export const initializeRuntime = (
   const context: StepContext = { runtime, actions: [] };
   try {
     enterLayerDefault(context, runtime.ir.rootLayerId);
+    if ((runtime.error as SemanticRuntimeError | null)?.code === 'ARITHMETIC') {
+      enterFaultConfiguration(context);
+    }
   } catch (error) {
     latchEvaluationError(runtime, error);
   }
@@ -999,7 +997,8 @@ export const stepRuntime = (
   try {
     incrementActiveTimers(runtime, timing.logicalMs);
     executeLayer(context, runtime.ir.rootLayerId);
-    if ((runtime.error as SemanticRuntimeError | null)?.code === 'XBRIDGES_NUMERIC') {
+    const latched = (runtime.error as SemanticRuntimeError | null)?.code;
+    if (latched === 'XBRIDGES_NUMERIC' || latched === 'ARITHMETIC') {
       enterFaultConfiguration(context);
     }
   } catch (error) {
@@ -1037,6 +1036,9 @@ export const resetRuntime = (
   runtime.error = null;
   try {
     enterLayerDefault(context, runtime.ir.rootLayerId);
+    if ((runtime.error as SemanticRuntimeError | null)?.code === 'ARITHMETIC') {
+      enterFaultConfiguration(context);
+    }
   } catch (error) {
     latchEvaluationError(runtime, error);
   }

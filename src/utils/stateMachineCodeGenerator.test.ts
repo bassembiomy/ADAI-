@@ -130,7 +130,7 @@ describe('StateMachineCodeGenerator compatibility facade', () => {
     expect(config).toContain('bool go;');
     expect(config).toContain('double total;');
     expect(core).toContain(
-      'instance->data.ratio = (double)((instance->data.total / instance->data.count));',
+      'SM_StoreDouble(instance, SM_DivD(instance, ((double)instance->data.total), ((double)instance->data.count)), &sm_tmp)',
     );
   });
 

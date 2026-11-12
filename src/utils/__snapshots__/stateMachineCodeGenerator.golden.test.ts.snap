@@ -8,6 +8,251 @@ exports[`Golden-file & behavior trace regression tests > locks the integrated X-
 
 #include "sm_config.h"
 
+#include <float.h>
+#include <math.h>
+
+#if defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 199901L)
+#define SM_ARITH_INLINE static inline
+#elif defined(__GNUC__)
+#define SM_ARITH_INLINE static __inline__
+#else
+#define SM_ARITH_INLINE static
+#endif
+
+/* Latches the arithmetic error; the first error of the tick wins. */
+SM_ARITH_INLINE void SM_ArithLatch(ADIA_Instance_t *instance)
+{
+    if (instance->error_status == SM_ERR_NONE) {
+        instance->error_status = SM_ERR_ARITHMETIC;
+    }
+}
+
+SM_ARITH_INLINE void SM_ArithFault(ADIA_Instance_t *instance)
+{
+    SM_ArithLatch(instance);
+    instance->arith_pending = true;
+}
+
+/* Returns true when no arithmetic error occurred since the last consumption. */
+SM_ARITH_INLINE bool SM_ArithTake(ADIA_Instance_t *instance)
+{
+    const bool clean = !instance->arith_pending;
+    instance->arith_pending = false;
+    return clean;
+}
+
+SM_ARITH_INLINE bool SM_GuardOk(ADIA_Instance_t *instance, bool value)
+{
+    const bool clean = SM_ArithTake(instance);
+    return clean && value;
+}
+
+SM_ARITH_INLINE double SM_ChkD(ADIA_Instance_t *instance, double value)
+{
+    if ((value - value) != 0.0) {
+        SM_ArithFault(instance);
+        return 0.0;
+    }
+    return value;
+}
+
+SM_ARITH_INLINE double SM_DivD(ADIA_Instance_t *instance, double a, double b)
+{
+    if (b == 0.0) {
+        SM_ArithFault(instance);
+        return 0.0;
+    }
+    return SM_ChkD(instance, a / b);
+}
+
+SM_ARITH_INLINE double SM_RemD(ADIA_Instance_t *instance, double a, double b)
+{
+    if (b == 0.0) {
+        SM_ArithFault(instance);
+        return 0.0;
+    }
+    return SM_ChkD(instance, fmod(a, b));
+}
+
+SM_ARITH_INLINE bool SM_StoreBool(ADIA_Instance_t *instance, bool value, bool *out)
+{
+    if (!SM_ArithTake(instance)) {
+        return false;
+    }
+    *out = value;
+    return true;
+}
+
+SM_ARITH_INLINE bool SM_StoreDouble(ADIA_Instance_t *instance, double value, double *out)
+{
+    if (!SM_ArithTake(instance)) {
+        return false;
+    }
+    if ((value - value) != 0.0) {
+        SM_ArithLatch(instance);
+        return false;
+    }
+    *out = value;
+    return true;
+}
+
+/* float/single saturate to +-FLT_MAX (or fail under overflow policy error). */
+SM_ARITH_INLINE bool SM_StoreFloat(ADIA_Instance_t *instance, double value, bool error_on_overflow, float *out)
+{
+    if (!SM_ArithTake(instance)) {
+        return false;
+    }
+    if ((value - value) != 0.0) {
+        SM_ArithLatch(instance);
+        return false;
+    }
+    if ((value > (double)FLT_MAX) || (value < -(double)FLT_MAX)) {
+        if (error_on_overflow) {
+            SM_ArithLatch(instance);
+            return false;
+        }
+        value = (value < 0.0) ? -(double)FLT_MAX : (double)FLT_MAX;
+    }
+    *out = (float)value;
+    return true;
+}
+
+/* Integer expressions: signed 64-bit intermediates that saturate and never wrap. */
+SM_ARITH_INLINE int64_t SM_AddI64(int64_t a, int64_t b)
+{
+    if ((b > 0) && (a > (INT64_MAX - b))) {
+        return INT64_MAX;
+    }
+    if ((b < 0) && (a < (INT64_MIN - b))) {
+        return INT64_MIN;
+    }
+    return a + b;
+}
+
+SM_ARITH_INLINE int64_t SM_SubI64(int64_t a, int64_t b)
+{
+    if ((b < 0) && (a > (INT64_MAX + b))) {
+        return INT64_MAX;
+    }
+    if ((b > 0) && (a < (INT64_MIN + b))) {
+        return INT64_MIN;
+    }
+    return a - b;
+}
+
+SM_ARITH_INLINE int64_t SM_MulI64(int64_t a, int64_t b)
+{
+    if ((a == 0) || (b == 0)) {
+        return 0;
+    }
+    if (a > 0) {
+        if (b > 0) {
+            if (a > (INT64_MAX / b)) {
+                return INT64_MAX;
+            }
+        } else if (b < (INT64_MIN / a)) {
+            return INT64_MIN;
+        }
+    } else if (b > 0) {
+        if (a < (INT64_MIN / b)) {
+            return INT64_MIN;
+        }
+    } else if (a < (INT64_MAX / b)) {
+        return INT64_MAX;
+    }
+    return a * b;
+}
+
+SM_ARITH_INLINE int64_t SM_NegI64(int64_t a)
+{
+    return SM_SubI64(0, a);
+}
+
+SM_ARITH_INLINE int64_t SM_AbsI64(int64_t a)
+{
+    return (a < 0) ? SM_NegI64(a) : a;
+}
+
+SM_ARITH_INLINE int64_t SM_DivI64(ADIA_Instance_t *instance, int64_t a, int64_t b)
+{
+    if (b == 0) {
+        SM_ArithFault(instance);
+        return 0;
+    }
+    if ((a == INT64_MIN) && (b == -1)) {
+        return INT64_MAX;
+    }
+    return a / b;
+}
+
+SM_ARITH_INLINE int64_t SM_RemI64(ADIA_Instance_t *instance, int64_t a, int64_t b)
+{
+    if (b == 0) {
+        SM_ArithFault(instance);
+        return 0;
+    }
+    if (b == -1) {
+        return 0;
+    }
+    return a % b;
+}
+
+/* An unsigned 64-bit variable read as an int64 operand saturates at INT64_MAX. */
+SM_ARITH_INLINE int64_t SM_U64ToI64(uint64_t value)
+{
+    return (value > (uint64_t)INT64_MAX) ? INT64_MAX : (int64_t)value;
+}
+
+/* Converts to the target range: saturates, or fails under overflow policy error. */
+SM_ARITH_INLINE bool SM_StoreI64(ADIA_Instance_t *instance, int64_t value, int64_t lo, int64_t hi, bool error_on_overflow, int64_t *out)
+{
+    if (!SM_ArithTake(instance)) {
+        return false;
+    }
+    if ((value < lo) || (value > hi)) {
+        if (error_on_overflow) {
+            SM_ArithLatch(instance);
+            return false;
+        }
+        value = (value < lo) ? lo : hi;
+    }
+    *out = value;
+    return true;
+}
+
+/* Floating to integer: truncates toward zero, then as SM_StoreI64. */
+SM_ARITH_INLINE bool SM_StoreDoubleToI64(ADIA_Instance_t *instance, double value, int64_t lo, int64_t hi, bool error_on_overflow, int64_t *out)
+{
+    int64_t wide;
+    bool beyond = false;
+    if (!SM_ArithTake(instance)) {
+        return false;
+    }
+    if ((value - value) != 0.0) {
+        SM_ArithLatch(instance);
+        return false;
+    }
+    if (value >= 9223372036854775808.0) {
+        wide = INT64_MAX;
+        beyond = true;
+    } else if (value < -9223372036854775808.0) {
+        wide = INT64_MIN;
+        beyond = true;
+    } else {
+        wide = (int64_t)value;
+    }
+    if (beyond || (wide < lo) || (wide > hi)) {
+        if (error_on_overflow) {
+            SM_ArithLatch(instance);
+            return false;
+        }
+        wide = (wide < lo) ? lo : ((wide > hi) ? hi : wide);
+    }
+    *out = wide;
+    return true;
+}
+
+
 SM_Error_t SM_Init(ADIA_Instance_t *instance);
 SM_Error_t SM_Reset(ADIA_Instance_t *instance);
 SM_Error_t SM_ReadInputs(ADIA_Instance_t *instance);
@@ -306,12 +551,16 @@ SM_Error_t SM_Init(ADIA_Instance_t *instance)
     }
     instance->error_status = SM_ERR_NONE;
     instance->fault_latched = false;
+    instance->arith_pending = false;
     instance->error_status = SM_Validate_Mapping_Configuration();
     if (instance->error_status != SM_ERR_NONE) {
         return SM_ERR_CONFIGURATION;
     }
     SM_Enter_Layer_Default_0(instance);
-    return SM_ERR_NONE;
+    if (instance->error_status != SM_ERR_NONE) {
+        SM_Enter_Fault(instance);
+    }
+    return instance->error_status;
 }
 
 SM_Error_t SM_Reset(ADIA_Instance_t *instance)
@@ -343,7 +592,11 @@ SM_Error_t SM_Reset(ADIA_Instance_t *instance)
     }
     instance->error_status = SM_ERR_NONE;
     instance->fault_latched = false;
+    instance->arith_pending = false;
     SM_Enter_Layer_Default_0(instance);
+    if (instance->error_status != SM_ERR_NONE) {
+        SM_Enter_Fault(instance);
+    }
     return SM_WriteOutputs(instance);
 }
 
@@ -859,7 +1112,8 @@ typedef enum {
     SM_ERR_CONFIGURATION,
     SM_ERR_SAFETY_VIOLATION,
     SM_ERR_XBRIDGES_NUMERIC,
-    SM_ERR_INVALID_ARGUMENT
+    SM_ERR_INVALID_ARGUMENT,
+    SM_ERR_ARITHMETIC
 } SM_Error_t;
 
 typedef uint32_t SM_Group_t;
@@ -886,6 +1140,7 @@ struct ADIA_Instance {
     bool deep_history[SM_NUM_LAYERS][SM_NUM_STATES + 1U];
     SM_Error_t error_status;
     bool fault_latched;
+    bool arith_pending;
 #ifdef SM_TRACE_ENABLED
     SM_TraceSink_t trace_sink;
 #endif
@@ -985,6 +1240,251 @@ SM_Error_t SM_Validate_Mapping_Configuration(void)
 #define SM_CORE_H
 
 #include "sm_config.h"
+
+#include <float.h>
+#include <math.h>
+
+#if defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 199901L)
+#define SM_ARITH_INLINE static inline
+#elif defined(__GNUC__)
+#define SM_ARITH_INLINE static __inline__
+#else
+#define SM_ARITH_INLINE static
+#endif
+
+/* Latches the arithmetic error; the first error of the tick wins. */
+SM_ARITH_INLINE void SM_ArithLatch(ADIA_Instance_t *instance)
+{
+    if (instance->error_status == SM_ERR_NONE) {
+        instance->error_status = SM_ERR_ARITHMETIC;
+    }
+}
+
+SM_ARITH_INLINE void SM_ArithFault(ADIA_Instance_t *instance)
+{
+    SM_ArithLatch(instance);
+    instance->arith_pending = true;
+}
+
+/* Returns true when no arithmetic error occurred since the last consumption. */
+SM_ARITH_INLINE bool SM_ArithTake(ADIA_Instance_t *instance)
+{
+    const bool clean = !instance->arith_pending;
+    instance->arith_pending = false;
+    return clean;
+}
+
+SM_ARITH_INLINE bool SM_GuardOk(ADIA_Instance_t *instance, bool value)
+{
+    const bool clean = SM_ArithTake(instance);
+    return clean && value;
+}
+
+SM_ARITH_INLINE double SM_ChkD(ADIA_Instance_t *instance, double value)
+{
+    if ((value - value) != 0.0) {
+        SM_ArithFault(instance);
+        return 0.0;
+    }
+    return value;
+}
+
+SM_ARITH_INLINE double SM_DivD(ADIA_Instance_t *instance, double a, double b)
+{
+    if (b == 0.0) {
+        SM_ArithFault(instance);
+        return 0.0;
+    }
+    return SM_ChkD(instance, a / b);
+}
+
+SM_ARITH_INLINE double SM_RemD(ADIA_Instance_t *instance, double a, double b)
+{
+    if (b == 0.0) {
+        SM_ArithFault(instance);
+        return 0.0;
+    }
+    return SM_ChkD(instance, fmod(a, b));
+}
+
+SM_ARITH_INLINE bool SM_StoreBool(ADIA_Instance_t *instance, bool value, bool *out)
+{
+    if (!SM_ArithTake(instance)) {
+        return false;
+    }
+    *out = value;
+    return true;
+}
+
+SM_ARITH_INLINE bool SM_StoreDouble(ADIA_Instance_t *instance, double value, double *out)
+{
+    if (!SM_ArithTake(instance)) {
+        return false;
+    }
+    if ((value - value) != 0.0) {
+        SM_ArithLatch(instance);
+        return false;
+    }
+    *out = value;
+    return true;
+}
+
+/* float/single saturate to +-FLT_MAX (or fail under overflow policy error). */
+SM_ARITH_INLINE bool SM_StoreFloat(ADIA_Instance_t *instance, double value, bool error_on_overflow, float *out)
+{
+    if (!SM_ArithTake(instance)) {
+        return false;
+    }
+    if ((value - value) != 0.0) {
+        SM_ArithLatch(instance);
+        return false;
+    }
+    if ((value > (double)FLT_MAX) || (value < -(double)FLT_MAX)) {
+        if (error_on_overflow) {
+            SM_ArithLatch(instance);
+            return false;
+        }
+        value = (value < 0.0) ? -(double)FLT_MAX : (double)FLT_MAX;
+    }
+    *out = (float)value;
+    return true;
+}
+
+/* Integer expressions: signed 64-bit intermediates that saturate and never wrap. */
+SM_ARITH_INLINE int64_t SM_AddI64(int64_t a, int64_t b)
+{
+    if ((b > 0) && (a > (INT64_MAX - b))) {
+        return INT64_MAX;
+    }
+    if ((b < 0) && (a < (INT64_MIN - b))) {
+        return INT64_MIN;
+    }
+    return a + b;
+}
+
+SM_ARITH_INLINE int64_t SM_SubI64(int64_t a, int64_t b)
+{
+    if ((b < 0) && (a > (INT64_MAX + b))) {
+        return INT64_MAX;
+    }
+    if ((b > 0) && (a < (INT64_MIN + b))) {
+        return INT64_MIN;
+    }
+    return a - b;
+}
+
+SM_ARITH_INLINE int64_t SM_MulI64(int64_t a, int64_t b)
+{
+    if ((a == 0) || (b == 0)) {
+        return 0;
+    }
+    if (a > 0) {
+        if (b > 0) {
+            if (a > (INT64_MAX / b)) {
+                return INT64_MAX;
+            }
+        } else if (b < (INT64_MIN / a)) {
+            return INT64_MIN;
+        }
+    } else if (b > 0) {
+        if (a < (INT64_MIN / b)) {
+            return INT64_MIN;
+        }
+    } else if (a < (INT64_MAX / b)) {
+        return INT64_MAX;
+    }
+    return a * b;
+}
+
+SM_ARITH_INLINE int64_t SM_NegI64(int64_t a)
+{
+    return SM_SubI64(0, a);
+}
+
+SM_ARITH_INLINE int64_t SM_AbsI64(int64_t a)
+{
+    return (a < 0) ? SM_NegI64(a) : a;
+}
+
+SM_ARITH_INLINE int64_t SM_DivI64(ADIA_Instance_t *instance, int64_t a, int64_t b)
+{
+    if (b == 0) {
+        SM_ArithFault(instance);
+        return 0;
+    }
+    if ((a == INT64_MIN) && (b == -1)) {
+        return INT64_MAX;
+    }
+    return a / b;
+}
+
+SM_ARITH_INLINE int64_t SM_RemI64(ADIA_Instance_t *instance, int64_t a, int64_t b)
+{
+    if (b == 0) {
+        SM_ArithFault(instance);
+        return 0;
+    }
+    if (b == -1) {
+        return 0;
+    }
+    return a % b;
+}
+
+/* An unsigned 64-bit variable read as an int64 operand saturates at INT64_MAX. */
+SM_ARITH_INLINE int64_t SM_U64ToI64(uint64_t value)
+{
+    return (value > (uint64_t)INT64_MAX) ? INT64_MAX : (int64_t)value;
+}
+
+/* Converts to the target range: saturates, or fails under overflow policy error. */
+SM_ARITH_INLINE bool SM_StoreI64(ADIA_Instance_t *instance, int64_t value, int64_t lo, int64_t hi, bool error_on_overflow, int64_t *out)
+{
+    if (!SM_ArithTake(instance)) {
+        return false;
+    }
+    if ((value < lo) || (value > hi)) {
+        if (error_on_overflow) {
+            SM_ArithLatch(instance);
+            return false;
+        }
+        value = (value < lo) ? lo : hi;
+    }
+    *out = value;
+    return true;
+}
+
+/* Floating to integer: truncates toward zero, then as SM_StoreI64. */
+SM_ARITH_INLINE bool SM_StoreDoubleToI64(ADIA_Instance_t *instance, double value, int64_t lo, int64_t hi, bool error_on_overflow, int64_t *out)
+{
+    int64_t wide;
+    bool beyond = false;
+    if (!SM_ArithTake(instance)) {
+        return false;
+    }
+    if ((value - value) != 0.0) {
+        SM_ArithLatch(instance);
+        return false;
+    }
+    if (value >= 9223372036854775808.0) {
+        wide = INT64_MAX;
+        beyond = true;
+    } else if (value < -9223372036854775808.0) {
+        wide = INT64_MIN;
+        beyond = true;
+    } else {
+        wide = (int64_t)value;
+    }
+    if (beyond || (wide < lo) || (wide > hi)) {
+        if (error_on_overflow) {
+            SM_ArithLatch(instance);
+            return false;
+        }
+        wide = (wide < lo) ? lo : ((wide > hi) ? hi : wide);
+    }
+    *out = wide;
+    return true;
+}
+
 
 SM_Error_t SM_Init(ADIA_Instance_t *instance);
 SM_Error_t SM_Reset(ADIA_Instance_t *instance);
@@ -1261,12 +1761,16 @@ SM_Error_t SM_Init(ADIA_Instance_t *instance)
     }
     instance->error_status = SM_ERR_NONE;
     instance->fault_latched = false;
+    instance->arith_pending = false;
     instance->error_status = SM_Validate_Mapping_Configuration();
     if (instance->error_status != SM_ERR_NONE) {
         return SM_ERR_CONFIGURATION;
     }
     SM_Enter_Layer_Default_0(instance);
-    return SM_ERR_NONE;
+    if (instance->error_status != SM_ERR_NONE) {
+        SM_Enter_Fault(instance);
+    }
+    return instance->error_status;
 }
 
 SM_Error_t SM_Reset(ADIA_Instance_t *instance)
@@ -1296,7 +1800,11 @@ SM_Error_t SM_Reset(ADIA_Instance_t *instance)
     }
     instance->error_status = SM_ERR_NONE;
     instance->fault_latched = false;
+    instance->arith_pending = false;
     SM_Enter_Layer_Default_0(instance);
+    if (instance->error_status != SM_ERR_NONE) {
+        SM_Enter_Fault(instance);
+    }
     return SM_WriteOutputs(instance);
 }
 
@@ -1642,38 +2150,64 @@ void SM_ST_S2_Exit(ADIA_Instance_t *instance);
     "name": "sm_user_logic.h",
   },
   {
-    "content": "#include "sm_core.h"
+    "content": "#include <math.h>
+#include "sm_core.h"
 #include "sm_user_logic.h"
 
 /* State: A | Model ID: s1 | C enum: SM_ST_S1 */
 void SM_ST_S1_Entry(ADIA_Instance_t *instance)
 {
-    instance->data.log = (uint32_t)(100U);
+    {
+        int64_t sm_tmp;
+        if (SM_StoreI64(instance, ((int64_t)100), 0, 4294967295LL, false, &sm_tmp)) {
+            instance->data.log = (uint32_t)sm_tmp;
+        }
+    }
     SM_TraceAction(instance, "entry:S1");
 }
 
 void SM_ST_S1_During(ADIA_Instance_t *instance)
 {
-    instance->data.log = (uint32_t)((instance->data.log + 1U));
+    {
+        int64_t sm_tmp;
+        if (SM_StoreI64(instance, SM_AddI64(((int64_t)instance->data.log), ((int64_t)1)), 0, 4294967295LL, false, &sm_tmp)) {
+            instance->data.log = (uint32_t)sm_tmp;
+        }
+    }
     SM_TraceAction(instance, "during:S1");
 }
 
 void SM_ST_S1_Exit(ADIA_Instance_t *instance)
 {
-    instance->data.log = (uint32_t)((instance->data.log + 5U));
+    {
+        int64_t sm_tmp;
+        if (SM_StoreI64(instance, SM_AddI64(((int64_t)instance->data.log), ((int64_t)5)), 0, 4294967295LL, false, &sm_tmp)) {
+            instance->data.log = (uint32_t)sm_tmp;
+        }
+    }
     SM_TraceAction(instance, "exit:S1");
 }
 
 /* State: B | Model ID: s2 | C enum: SM_ST_S2 */
 void SM_ST_S2_Entry(ADIA_Instance_t *instance)
 {
-    instance->data.log = (uint32_t)(200U);
+    {
+        int64_t sm_tmp;
+        if (SM_StoreI64(instance, ((int64_t)200), 0, 4294967295LL, false, &sm_tmp)) {
+            instance->data.log = (uint32_t)sm_tmp;
+        }
+    }
     SM_TraceAction(instance, "entry:S2");
 }
 
 void SM_ST_S2_During(ADIA_Instance_t *instance)
 {
-    instance->data.log = (uint32_t)((instance->data.log + 2U));
+    {
+        int64_t sm_tmp;
+        if (SM_StoreI64(instance, SM_AddI64(((int64_t)instance->data.log), ((int64_t)2)), 0, 4294967295LL, false, &sm_tmp)) {
+            instance->data.log = (uint32_t)sm_tmp;
+        }
+    }
     SM_TraceAction(instance, "during:S2");
 }
 
@@ -1800,9 +2334,9 @@ Evidence labels describe only the checks actually recorded for this generated pa
 | Metric | Value |
 |---|---:|
 | Files measured | 10 |
-| Total lines | 852 |
-| Functional lines | 738 |
-| Comment/blank density | 13.4% |
+| Total lines | 1133 |
+| Functional lines | 984 |
+| Comment/blank density | 13.2% |
 
 ## X-Bridges static code-generation metrics
 

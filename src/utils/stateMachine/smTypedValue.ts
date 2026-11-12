@@ -1,5 +1,8 @@
 import type { VariableOverflowPolicy, VariableType } from '../../types/sm_types';
 
+/** Largest finite single-precision value; float/single saturate to +-FLT_MAX. */
+export const FLT_MAX = 3.4028234663852886e38;
+
 export interface TypedValueResult {
   value: number | boolean;
   overflowed: boolean;
@@ -47,10 +50,6 @@ export const coerceTypedValue = (
   if (bounds !== null) {
     return { value: Math.min(bounds.max, Math.max(bounds.min, Math.trunc(numeric))), overflowed: true };
   }
-  return {
-    value: type === 'float' || type === 'single'
-      ? (numeric < 0 ? -Number.MAX_VALUE : Number.MAX_VALUE)
-      : (numeric < 0 ? -Number.MAX_VALUE : Number.MAX_VALUE),
-    overflowed: true,
-  };
+  const limit = type === 'float' || type === 'single' ? FLT_MAX : Number.MAX_VALUE;
+  return { value: numeric < 0 ? -limit : limit, overflowed: true };
 };

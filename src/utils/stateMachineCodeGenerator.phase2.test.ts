@@ -44,7 +44,7 @@ describe('StateMachineCodeGenerator structured backend remediation', () => {
 
     const internal = generated(interpreterFixture('internal-action'), 'sm_core.c');
     expect(internal).toContain(
-      'instance->data.counter = (double)((instance->data.counter + 1.0));',
+      'SM_StoreDouble(instance, SM_ChkD(instance, (((double)instance->data.counter) + 1.0)), &sm_tmp)',
     );
     const action = internal.indexOf('instance->data.counter =');
     expect(internal.slice(Math.max(0, action - 300), action)).not.toContain(

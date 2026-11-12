@@ -1,3 +1,4 @@
+import { renderArithSection } from './smCArith';
 import type { ErrorItem } from '../../types/sm_types';
 import type { ModelDiagnostic } from './smModel';
 import { analyzeSemanticModel } from '../smAnalysisEngine';
@@ -5,6 +6,7 @@ import { analyzeSemanticModel } from '../smAnalysisEngine';
 import { toCIdentifier } from './smExpressions';
 import {
   renderCAction,
+  renderCGuard,
   renderCExpression,
   renderCInitialValue,
   renderCType,
@@ -166,7 +168,7 @@ const renderActions = (
   indent = '    ',
 ): string => lines(
   actions.map((action) =>
-    `${indent}${renderCAction(action, ir.variables)}`).join('\n'),
+    renderCAction(action, ir.variables, ir.verification.cStandard, indent)).join('\n'),
   actions.length === 0
     ? null
     : `${indent}SM_TraceAction(instance, ${renderCStringLiteral(traceLabel)});`,
@@ -180,7 +182,7 @@ const renderTransitionEnabled = (
   transition: SemanticTransition,
   timerStateId: string,
 ): string => {
-  const guard = renderCExpression(transition.guard, ir.variables);
+  const guard = renderCGuard(transition.guard, ir.variables, ir.verification.cStandard);
   const temporal = transition.temporalThresholdMs === null
     ? 'false'
     : `(instance->state_timers[${stateIndex(ir, timerStateId)}] >= ${transition.temporalThresholdMs}U)`;
@@ -878,6 +880,9 @@ export const renderConfigHeader = (ir: SemanticModel): string => {
           'typedef signed short int16_t;',
           'typedef unsigned long uint32_t;',
           'typedef signed long int32_t;',
+          '#ifndef UINT32_MAX',
+          '#define UINT32_MAX 0xFFFFFFFFUL',
+          '#endif',
           '#endif',
         )
       : lines(
@@ -919,7 +924,8 @@ export const renderConfigHeader = (ir: SemanticModel): string => {
     '    SM_ERR_CONFIGURATION,',
     '    SM_ERR_SAFETY_VIOLATION,',
     '    SM_ERR_XBRIDGES_NUMERIC,',
-    '    SM_ERR_INVALID_ARGUMENT',
+    '    SM_ERR_INVALID_ARGUMENT,',
+    '    SM_ERR_ARITHMETIC',
     '} SM_Error_t;',
     '',
     'typedef uint32_t SM_Group_t;',
@@ -948,6 +954,7 @@ export const renderConfigHeader = (ir: SemanticModel): string => {
     '    bool deep_history[SM_NUM_LAYERS][SM_NUM_STATES + 1U];',
     '    SM_Error_t error_status;',
     '    bool fault_latched;',
+    '    bool arith_pending;',
     '#ifdef SM_TRACE_ENABLED',
     '    SM_TraceSink_t trace_sink;',
     '#endif',
@@ -957,11 +964,13 @@ export const renderConfigHeader = (ir: SemanticModel): string => {
   );
 };
 
-export const renderCoreHeader = (): string => lines(
+export const renderCoreHeader = (cStandard?: string): string => lines(
   '#ifndef SM_CORE_H',
   '#define SM_CORE_H',
   '',
   '#include "sm_config.h"',
+  '',
+  renderArithSection(cStandard),
   '',
   'SM_Error_t SM_Init(ADIA_Instance_t *instance);',
   'SM_Error_t SM_Reset(ADIA_Instance_t *instance);',
@@ -1010,6 +1019,7 @@ export const renderUserLogicHeader = (ir: SemanticModel): string => lines(
 );
 
 export const renderUserLogicSource = (ir: SemanticModel): string => lines(
+  '#include <math.h>',
   '#include "sm_core.h"',
   '#include "sm_user_logic.h"',
   '',
@@ -1486,7 +1496,7 @@ export const renderCoreSource = (ir: SemanticModel): string => {
     '#include <stddef.h>',
     '#include <string.h>',
     '#include "sm_core.h"',
-    '#include "sm_mapping.h"',
+      '#include "sm_mapping.h"',
     '#include "sm_safety.h"',
     '#include "sm_user_logic.h"',
     '#include "mcal_dio.h"',
@@ -1566,12 +1576,16 @@ export const renderCoreSource = (ir: SemanticModel): string => {
     '    }',
     '    instance->error_status = SM_ERR_NONE;',
     '    instance->fault_latched = false;',
+    '    instance->arith_pending = false;',
     '    instance->error_status = SM_Validate_Mapping_Configuration();',
     '    if (instance->error_status != SM_ERR_NONE) {',
     '        return SM_ERR_CONFIGURATION;',
     '    }',
     `    ${layerFunction(index, 'SM_Enter_Layer_Default', rootLayer.id)}(instance);`,
-    '    return SM_ERR_NONE;',
+    '    if (instance->error_status != SM_ERR_NONE) {',
+    '        SM_Enter_Fault(instance);',
+    '    }',
+    '    return instance->error_status;',
     '}',
     '',
     'SM_Error_t SM_Reset(ADIA_Instance_t *instance)',
@@ -1609,7 +1623,11 @@ export const renderCoreSource = (ir: SemanticModel): string => {
     '    }',
     '    instance->error_status = SM_ERR_NONE;',
     '    instance->fault_latched = false;',
+    '    instance->arith_pending = false;',
     `    ${layerFunction(index, 'SM_Enter_Layer_Default', rootLayer.id)}(instance);`,
+    '    if (instance->error_status != SM_ERR_NONE) {',
+    '        SM_Enter_Fault(instance);',
+    '    }',
     '    return SM_WriteOutputs(instance);',
     '}',
     '',
@@ -1813,7 +1831,7 @@ export const generateCArtifacts = (
     { name: 'sm_config.h', content: renderConfigHeader(ir) },
     { name: 'sm_mapping.h', content: renderMappingHeader() },
     { name: 'sm_mapping.c', content: renderMappingSource(ir) },
-    { name: 'sm_core.h', content: renderCoreHeader() },
+    { name: 'sm_core.h', content: renderCoreHeader(ir.verification.cStandard) },
     { name: 'sm_core.c', content: renderCoreSource(ir) },
     { name: 'sm_safety.h', content: renderSafetyHeader() },
     { name: 'sm_safety.c', content: renderSafetySource(ir) },

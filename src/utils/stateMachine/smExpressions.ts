@@ -16,7 +16,8 @@ export type BinaryOperator =
 export type UnaryOperator = '!' | '+' | '-';
 
 export type ExpressionNode =
-  | { kind: 'literal'; value: number | boolean }
+  /** `floating` is set for literals written with '.', an exponent or an f suffix (or too large for int64); they type the expression as floating. */
+  | { kind: 'literal'; value: number | boolean; floating?: boolean }
   | { kind: 'variable'; name: string; cName: string }
   | {
     kind: 'binary';
@@ -287,7 +288,10 @@ class Parser {
       if (!Number.isFinite(value)) {
         throw new SyntaxError(`invalid numeric literal '${token.value}'`);
       }
-      return { kind: 'literal', value };
+      const floating = /[.eEfF]/.test(token.value) || !Number.isSafeInteger(value);
+      return floating
+        ? { kind: 'literal', value, floating: true }
+        : { kind: 'literal', value };
     }
 
     if (token.kind === 'identifier') {

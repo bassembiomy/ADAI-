@@ -207,7 +207,7 @@ describe('Generator validation & trigger coverage', () => {
     expect(coreC).toContain('instance->state_timers[SM_ST_S1_IDX] >= 50U');
 
     /* or without afterTicks: condition only, no "(timer >= 0U)" invariant */
-    expect(coreC).toContain('(instance->data.counter > 3U)');
+    expect(coreC).toContain('(((int64_t)instance->data.counter) > ((int64_t)3))');
     expect(coreC).not.toContain('>= 0U)');
   });
 
