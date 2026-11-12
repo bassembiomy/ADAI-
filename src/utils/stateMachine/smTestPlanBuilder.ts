@@ -11,6 +11,15 @@ import type {
   SemanticTransition,
 } from './smSemanticModel';
 import {
+  configurationContaining,
+  defaultConfiguration,
+  defaultDescendants,
+  duringAssignedVariables,
+  findTransitionStimulus,
+  predictFiredEffect,
+  type ForcedConfiguration,
+} from './smTestScenarioPlanner';
+import {
   sortSMTestCases,
   type SMApplicability,
   type SMTestCase,
@@ -48,6 +57,131 @@ const extractVariableExpectationsFromActions = (
     }
   }
   return expectations;
+};
+
+type TraceabilityFactory = (
+  testCaseId: string,
+  stateIds: readonly string[],
+  transitionIds: readonly string[],
+  requirementIds: readonly string[],
+  generatedFunctions: readonly string[],
+) => SMTestTraceability;
+
+/**
+ * TRUE and FALSE cases for a transition between two plain states. Both start from a forced
+ * configuration in which the source (with its ancestors, default descendants and parallel regions)
+ * is active, supply the guard variables and the source timer, and then step once.
+ */
+const buildScenarioTransitionCases = (
+  ir: SemanticModel,
+  t: SemanticTransition,
+  src: SemanticState,
+  dst: SemanticState,
+  srcName: string,
+  dstName: string,
+  configuration: ForcedConfiguration,
+  makeTraceability: TraceabilityFactory,
+): SMTestCase[] => {
+  const result: SMTestCase[] = [];
+  const active = new Set(configuration.activeStateIds);
+  const outer = t.kind === 'outer' && src.id !== dst.id;
+
+  for (const want of [true, false]) {
+    const id = `SM-TC-TRANS-${srcName}-${dstName}-${want ? 'TRUE' : 'FALSE'}`;
+    const name = want
+      ? `Transition from ${src.name} to ${dst.name} fires when condition is met`
+      : `Transition from ${src.name} to ${dst.name} blocked when condition is false`;
+    const traceability = makeTraceability(
+      id,
+      [t.sourceStateId, t.destinationStateId],
+      [t.id],
+      want ? ['TEST-TRANS-001', 'TEST-TRANS-002'] : ['TEST-TRANS-003'],
+      ['SM_Step'],
+    );
+    const stimulus = findTransitionStimulus(ir, t, configuration, want);
+    if (!stimulus) {
+      result.push({
+        id,
+        suite: 'transitions',
+        name,
+        applicability: {
+          status: 'not-applicable',
+          reason: want
+            ? 'No variable and timer assignment enables the transition without another transition preempting it.'
+            : 'No variable and timer assignment keeps the transition disabled after one step (for example after(1) always fires on the first tick).',
+        },
+        operations: [],
+        expectations: [],
+        traceability,
+      });
+      continue;
+    }
+
+    const operations: SMTestOperation[] = [
+      { kind: 'init' },
+      {
+        kind: 'force-configuration',
+        activeStateIds: configuration.activeStateIds,
+        slots: configuration.slots,
+      },
+    ];
+    if (stimulus.sourceTimerMs > 0) {
+      operations.push({ kind: 'set-timer', stateId: src.id, valueMs: stimulus.sourceTimerMs });
+    }
+    for (const [variableId, value] of Object.entries(stimulus.variables)) {
+      operations.push({ kind: 'set-variable', variableId, value });
+    }
+    operations.push({ kind: 'step', deltaMs: ir.tickMs });
+
+    const fired = predictFiredEffect(ir, t, configuration, stimulus.environment);
+    const enteredSet = new Set(fired.entered);
+    const duringAssigned = duringAssignedVariables(ir, {
+      activeStateIds: configuration.activeStateIds.filter((sid) => !fired.exited.includes(sid)),
+      slots: [],
+    });
+    const expectations: SMTestExpectation[] = [];
+
+    if (want) {
+      expectations.push({ kind: 'active-state', layerId: dst.layerId, stateId: dst.id });
+      for (const sid of defaultDescendants(ir, dst.id)) {
+        expectations.push({ kind: 'active-state', layerId: ir.states[sid].layerId, stateId: sid });
+      }
+      for (const variableId of fired.assigned) {
+        if (fired.unknown.has(variableId) || duringAssigned.has(variableId)) continue;
+        expectations.push({ kind: 'variable', variableId, value: fired.known[variableId] });
+      }
+      if (outer) {
+        const leaving = [
+          src.id,
+          ...configuration.activeStateIds.filter((sid) => ir.states[sid]?.ancestorStateIds.includes(src.id)),
+        ];
+        for (const sid of leaving) {
+          if (sid !== dst.id && !enteredSet.has(sid)) expectations.push({ kind: 'inactive-state', stateId: sid });
+        }
+      }
+      expectations.push({ kind: 'transition-fired', transitionId: t.id });
+    } else {
+      expectations.push({ kind: 'active-state', layerId: src.layerId, stateId: src.id });
+      if (!active.has(dst.id)) expectations.push({ kind: 'inactive-state', stateId: dst.id });
+      // A variable the transition would have changed keeps the value the stimulus gave it.
+      for (const variableId of fired.assigned) {
+        if (fired.unknown.has(variableId) || duringAssigned.has(variableId)) continue;
+        if (fired.known[variableId] === stimulus.environment[variableId]) continue;
+        expectations.push({ kind: 'variable', variableId, value: stimulus.environment[variableId] });
+      }
+    }
+
+    result.push({
+      id,
+      suite: 'transitions',
+      name,
+      applicability: { status: 'applicable' },
+      operations,
+      expectations,
+      traceability,
+    });
+  }
+  return result;
 };
 
 export const buildSMTestManifest = (ir: SemanticModel): SMTestManifest => {
@@ -111,8 +245,12 @@ export const buildSMTestManifest = (ir: SemanticModel): SMTestManifest => {
 
   // SM-TC-INIT-DEFAULT
   const defaultExpectations: SMTestExpectation[] = [];
+  // A nested layer is entered by default only when its parent state is part of the default configuration.
+  const initConfiguration = defaultConfiguration(ir);
+  const initActive = initConfiguration ? new Set(initConfiguration.activeStateIds) : null;
   for (const layer of Object.values(ir.layers)) {
-    if (layer.decomposition === 'OR' && layer.defaultEntryId) {
+    const entered = layer.parentStateId === null || initActive === null || initActive.has(layer.parentStateId);
+    if (entered && layer.decomposition === 'OR' && layer.defaultEntryId) {
       defaultExpectations.push({
         kind: 'active-state',
         layerId: layer.id,
@@ -187,6 +325,14 @@ export const buildSMTestManifest = (ir: SemanticModel): SMTestManifest => {
     const srcName = toCIdentifier(src ? src.id : t.sourceStateId).toUpperCase();
     const dstName = toCIdentifier(dst ? dst.id : t.destinationStateId).toUpperCase();
     const triggerVar = findTriggerVar(t);
+
+    const plain = src !== undefined && dst !== undefined
+      && t.sourceKind === 'state' && t.destinationKind === 'state';
+    const configuration = plain ? configurationContaining(ir, src.id) : null;
+    if (plain && configuration) {
+      cases.push(...buildScenarioTransitionCases(ir, t, src, dst, srcName, dstName, configuration, makeTraceability));
+      continue;
+    }
 
     // TRUE case: Transition fires
     const trueExpectations: SMTestExpectation[] = [];

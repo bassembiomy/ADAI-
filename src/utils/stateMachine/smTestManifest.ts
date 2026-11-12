@@ -48,6 +48,12 @@ export type SMTestOperation =
       targetId: string;
       invalidValue: unknown;
     }
+  | {
+      /** Makes exactly this configuration active (states, active slots) with all timers at zero. */
+      kind: 'force-configuration';
+      activeStateIds: readonly string[];
+      slots: readonly { slot: number; stateId: string }[];
+    }
   | { kind: 'set-timer'; stateId: string; valueMs: number }
   | { kind: 'repeat-step'; cycles: number; deltaMs?: number };
 

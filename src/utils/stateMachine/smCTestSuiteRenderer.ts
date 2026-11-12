@@ -87,6 +87,27 @@ const renderOperation = (
       }
       return `    /* Corrupted field ${op.field} */`;
     }
+    case 'force-configuration': {
+      const lines = [
+        '    {',
+        '        uint32_t fc_index;',
+        '        for (fc_index = 0U; fc_index <= SM_NUM_STATES; fc_index++) {',
+        '            instance.state_active[fc_index] = false;',
+        '            instance.state_timers[fc_index] = 0U;',
+        '        }',
+        '        for (fc_index = 0U; fc_index < SM_NUM_ACTIVE_SLOTS; fc_index++) {',
+        '            instance.active_states[fc_index] = SM_NODE_INVALID;',
+        '        }',
+        '    }',
+      ];
+      for (const stateId of op.activeStateIds) {
+        lines.push(`    instance.state_active[(uint32_t)${resolveStateEnum(ir, stateId)}] = true;`);
+      }
+      for (const slot of op.slots) {
+        lines.push(`    instance.active_states[${slot.slot}U] = ${resolveStateEnum(ir, slot.stateId)};`);
+      }
+      return lines.join('\n');
+    }
     case 'set-timer': {
       const idx = resolveStateIndex(ir, op.stateId);
       return `    instance.state_timers[${idx}] = (uint32_t)${op.valueMs};`;
