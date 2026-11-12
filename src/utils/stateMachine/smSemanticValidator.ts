@@ -1074,8 +1074,9 @@ const validateParallelRegionTransitions = (
     }
     return chain;
   };
+  const junctionIds = new Set(model.junctions.map((junction) => junction.id));
   const ancestorStateIds = (nodeId: string): Set<string> => {
-    const ancestors = new Set<string>();
+    const ancestors = new Set<string>([nodeId]);
     for (const layer of layerChain(owningLayer(nodeId))) {
       if (layer.parentStateId !== null) ancestors.add(layer.parentStateId);
     }
@@ -1085,7 +1086,11 @@ const validateParallelRegionTransitions = (
     const sourceId = transition.sourceId;
     const targetId = transition.targetId;
     if (sourceId === targetId) continue;
-    if (ancestorStateIds(targetId).has(sourceId)) continue;
+    // A junction sits at the level of the state that owns its layer, so its position is that state.
+    const sourcePosition = junctionIds.has(sourceId)
+      ? owningLayer(sourceId)?.parentStateId ?? null
+      : sourceId;
+    if (sourcePosition !== null && ancestorStateIds(targetId).has(sourcePosition)) continue;
     const targetChain = layerChain(owningLayer(targetId));
     const targetLayerIds = new Set(targetChain.map((layer) => layer.id));
     const scope = layerChain(owningLayer(sourceId))

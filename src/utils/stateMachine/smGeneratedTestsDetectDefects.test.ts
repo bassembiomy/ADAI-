@@ -65,7 +65,7 @@ describe('generated tests detect defects in generated code', () => {
   }, 300_000);
 
   it('fails when a guard is swapped to its negation', async () => {
-    const runtime = await runWithMutation('detect-negated-guard', { file: 'sm_core.c', apply: (src) => src.replace('instance->data.y > 5', 'instance->data.y <= 5') });
+    const runtime = await runWithMutation('detect-negated-guard', { file: 'sm_core.c', apply: (src) => src.replace('((int64_t)instance->data.y) > ((int64_t)5)', '((int64_t)instance->data.y) <= ((int64_t)5)') });
     expect(runtime.status).toBe('FAIL');
     const failed = failedTests(runtime);
     expect(failed.some((id) => id.startsWith('SM-TC-TRANS-STATE_2-STATE_3-'))).toBe(true);
@@ -78,7 +78,7 @@ describe('generated tests detect defects in generated code', () => {
   }, 300_000);
 
   it('fails when the entry action of State_3 is dropped', async () => {
-    const runtime = await runWithMutation('detect-entry-action', { file: 'sm_user_logic.c', apply: (src) => src.replace('instance->data.y = (int32_t)((instance->data.y + 1));', '(void)instance;') });
+    const runtime = await runWithMutation('detect-entry-action', { file: 'sm_user_logic.c', apply: (src) => src.replace('SM_AddI64(((int64_t)instance->data.y), ((int64_t)1))', '((int64_t)instance->data.y)') });
     expect(runtime.status).toBe('FAIL');
   }, 300_000);
 });

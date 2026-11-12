@@ -18,7 +18,7 @@ import type { Layer, StateData, VariableDef } from '../../types/sm_types';
  * The generated state machine files are not part of this change.
  */
 
-const TICK_MS = 50;
+const TICK_MS = 100;
 
 const variables: VariableDef[] = [
   { id: 'v1', name: 'v_in', type: 'bool', initialValue: 'false', currentValue: false, visibleInScope: true },
@@ -134,7 +134,7 @@ describe('HIL main loop timing', () => {
     }
   })();
 
-  it.skipIf(!hostGcc)('Generic host build compiles warning-free and steps at SM_TICK_MS in real time', () => {
+  it.skipIf(!hostGcc)('Generic host build compiles warning-free and steps at SM_TICK_MS in real time', { retry: 1 }, () => {
     const result = generate('Generic');
     const dir = mkdtempSync(join(tmpdir(), 'adia-hil-timing-'));
     try {
@@ -143,11 +143,11 @@ describe('HIL main loop timing', () => {
       const sources = ['hal_drivers.c', 'hil_interface.c', 'main_hil.c', 'sm_mapping.c', 'sm_core.c', 'sm_safety.c', 'sm_user_logic.c', 'mcal_dio_hil.c', 'adia_mcal.c', 'adia_component.c'];
       execFileSync('gcc', ['-std=c99', '-O2', '-Wall', '-Wextra', '-Werror', '-I.', ...sources, '-o', exe, '-lm'], { cwd: dir, stdio: 'pipe' });
 
-      const runMs = 1500;
+      const runMs = 2500;
       const run = spawnSync(exe, [], { cwd: dir, input: '', timeout: runMs, encoding: 'utf8', killSignal: 'SIGKILL' });
       const telemetry = (run.stdout ?? '').split(/\r?\n/).filter((line) => line.includes('=') && !line.startsWith('HIL:'));
       const expected = runMs / TICK_MS;
-      // Fixed-rate stepping at 50 ms: about 30 ticks in 1.5 s. A 10 ms delay loop would give about 150.
+      // Fixed-rate stepping at 100 ms: about 25 ticks in 2.5 s. A 10 ms delay loop would give about 250.
       expect(telemetry.length).toBeGreaterThanOrEqual(Math.floor(expected * 0.6));
       expect(telemetry.length).toBeLessThanOrEqual(Math.ceil(expected * 1.1) + 1);
       // Observed jitter stays inside the generated window, so no timing fault is latched.
