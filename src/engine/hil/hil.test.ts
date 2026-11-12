@@ -253,7 +253,7 @@ describe('HIL Code Generator', () => {
     const files = generateHALCode(mockConfig, smVariables);
     const mainHil = files.find(f => f.name === 'main_hil.c')?.content || '';
     expect(mainHil).toContain('(void)SM_ReadInputs(&sm_instance);');
-    expect(mainHil).toContain('(void)SM_Step(&sm_instance, SM_TICK_MS);');
+    expect(mainHil).toMatch(/\(void\)SM_Step\(&sm_instance, (?!SM_TICK_MS\))\w+\);/);
     expect(mainHil).toContain('(void)SM_WriteOutputs(&sm_instance);');
     expect(mainHil).not.toContain('HIL_Sync_Inputs(&sm_instance);');
     expect(mainHil).not.toContain('HIL_Sync_Outputs(&sm_instance);');

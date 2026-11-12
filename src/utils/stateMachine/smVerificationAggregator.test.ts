@@ -150,6 +150,42 @@ describe('smVerificationAggregator fail-closed acceptance policy', () => {
     expect(evaluated.overallStatus).toBe('NOT_RUN');
   });
 
+  for (const gate of ['static-analysis', 'misra-analysis'] as const) {
+    it(`rejects bundle when ${gate} was not run, whatever its details (fail-closed)`, () => {
+      const activities = makeAllPassActivities();
+      activities[gate] = makeActivity(gate, 'NOT_RUN', 'Not evaluated');
+      expect(activities[gate].details).toBeNull();
+
+      const evaluated = deriveAcceptance({
+        schemaVersion: 1,
+        modelHash: 'hash_abc123',
+        generatedAt: new Date().toISOString(),
+        overallStatus: 'PASS',
+        acceptance: false,
+        activities,
+      });
+
+      expect(evaluated.acceptance).toBe(false);
+      expect(evaluated.overallStatus).toBe('NOT_RUN');
+    });
+
+    it(`rejects bundle when ${gate} evidence is missing`, () => {
+      const activities: Partial<Record<VerificationActivity, ActivityEvidence>> = makeAllPassActivities();
+      delete activities[gate];
+
+      const evaluated = deriveAcceptance({
+        schemaVersion: 1,
+        modelHash: 'hash_abc123',
+        generatedAt: new Date().toISOString(),
+        overallStatus: 'PASS',
+        acceptance: false,
+        activities: activities as Record<VerificationActivity, ActivityEvidence>,
+      });
+
+      expect(evaluated.acceptance).toBe(false);
+    });
+  }
+
   it('ensures hardware activity can remain PENDING but is never PASS without hardware test evidence', () => {
     const activities = makeAllPassActivities();
     expect(activities['hardware'].status).toBe('PENDING');
