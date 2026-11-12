@@ -205,7 +205,7 @@ describe('6. THREE_PHASE_PWM (SPWM, 50 Hz carrier)', () => {
   // symmetric about the carrier period centre: gate(t) = gate(T - t). The block compares with a sawtooth (the phase).
   // v_ref values chosen off the 1000-point sample grid of the carrier: -0.5 and 0.5 equal the triangle exactly at
   // k = 125/875 and 375/625, where rounding alone breaks the symmetry even for a correct block (WP-08 verifier).
-  it.fails('XBV-070: THREE_PHASE_PWM compares against a triangle carrier: gate pattern symmetric about the period centre', () => {
+  it('XBV-070: THREE_PHASE_PWM compares against a triangle carrier: gate pattern symmetric about the period centre', () => {
     for (const v of [-0.47, 0.53]) {
       const g = gateSeq(v);
       for (let k = 1; k < 1000; k++) expect(g[k], `v_ref ${v}, k=${k}`).toBe(g[1000 - k]);
@@ -245,7 +245,7 @@ describe('7. SVPWM_CORE (Ts 1e-4, Vdc 400)', () => {
   });
   // Over-modulation (SVPWM literature, e.g. Holtz 1992): when t1 + t2 > Ts, scale t1' = t1 Ts/(t1+t2),
   // t2' = t2 Ts/(t1+t2), t0 = 0, preserving the ratio t1:t2. The block clamps only t0 to 0 and leaves t1 + t2 > Ts.
-  it.fails('XBV-071: SVPWM_CORE over-modulation (|V| = 300 at 30 deg) scales t1, t2 so that t1 + t2 = Ts and t0 = 0', () => {
+  it('XBV-071: SVPWM_CORE over-modulation (|V| = 300 at 30 deg) scales t1, t2 so that t1 + t2 = Ts and t0 = 0', () => {
     const [, t1, t2, t0] = core(300, 30);
     near(t1 + t2, 1e-4, 1e-15, 't1+t2');
     near(t0, 0, 1e-15, 't0');
@@ -336,14 +336,14 @@ describe('10. MTPA_CONTROLLER (Ld 0.01, Lq 0.02, psi_m 0.1, pole pairs P = 1 pas
   });
   // Te = 1.5 p (psi_m iq + (Ld - Lq) id iq) (Krause / MCB PMSM torque). The block hard-codes 2 pole pairs and
   // id = -0.2 |iq|, so the returned currents do not produce te_ref for p = 1 (nor for p = 2).
-  it.fails('XBV-072: MTPA_CONTROLLER returned (id, iq) produce te_ref = 1, 3, 5 (1e-9 relative)', () => {
+  it('XBV-072: MTPA_CONTROLLER returned (id, iq) produce te_ref = 1, 3, 5 (1e-9 relative)', () => {
     for (const te of [1, 3, 5]) {
       const [id, iq] = mtpa(te);
       near(torque(id, iq), te, 1e-9 * te, `te_ref ${te}`);
     }
   });
   // MTPA optimality: on the constant-torque curve through the returned point, the norm is minimal there.
-  it.fails('XBV-073: MTPA_CONTROLLER (id, iq) is the minimum-current point of its constant-torque curve (id +/- 1e-3 raises |i|)', () => {
+  it('XBV-073: MTPA_CONTROLLER (id, iq) is the minimum-current point of its constant-torque curve (id +/- 1e-3 raises |i|)', () => {
     for (const te of [1, 3, 5]) {
       const [id, iq] = mtpa(te);
       const T = torque(id, iq);
@@ -470,7 +470,7 @@ describe('13. IM_SCALAR_CONTROL (v_f_ratio 4, boost 10, rated_f 50; documented V
 describe('PWM edge cases (controller review)', () => {
   // Oracle: duty 1 means always on (Simulink PWM: compare >= carrier, or duty 1 saturates on). The 50 Hz triangle
   // carrier reaches 1 at t = 0.01 s; a strict 'duty > carrier' turns the output off there.
-  it.fails('XBV-074: PWM_GENERATOR with duty 1 stays on at the carrier peak (t = 0.01 s at 50 Hz)', () => {
+  it('XBV-074: PWM_GENERATOR with duty 1 stays on at the carrier peak (t = 0.01 s at 50 Hz)', () => {
     const b = BLOCK_LIBRARY['PWM_GENERATOR']('x', { frequency: 50, carrierType: 'triangle' });
     expect(Number(b.execute([1] as never, b.params, b.state, 0.01).outputs[0])).toBe(1);
   });

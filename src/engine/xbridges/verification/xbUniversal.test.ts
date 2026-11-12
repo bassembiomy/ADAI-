@@ -242,7 +242,7 @@ describe('WP-03 universal battery, part A', () => {
 describe('pinned single defects found by the battery', () => {
   // Oracle (closed form, plan 3.1): the space-vector sector of an angle is floor(mod(theta, 2*pi) / (pi/3)) + 1, in 1..6.
   const sectorOf = (theta: number) => Math.floor((((theta % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI)) / (Math.PI / 3)) + 1;
-  it.fails('XBV-025: SECTOR_SELECTOR gives the sector of any angle, including large negative ones', () => {
+  it('XBV-025: SECTOR_SELECTOR gives the sector of any angle, including large negative ones', () => {
     for (const theta of [-10, -7]) {
       const b = make('SECTOR_SELECTOR');
       expect(exec(b, [theta], b.state, 0).outputs[0], `theta ${theta}`).toBe(sectorOf(theta));

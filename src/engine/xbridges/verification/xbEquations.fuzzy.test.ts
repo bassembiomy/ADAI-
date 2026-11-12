@@ -60,7 +60,7 @@ describe('1. Membership functions (MATLAB trimf / trapmf / gaussmf / sigmf)', ()
   it('FUZZY_MF_TRIMF: degenerate a = b on the slope (x > a) follows (c-x)/(c-b)', () => {
     for (const x of [0.5, 1, 1.5]) near(mu('FUZZY_MF_TRIMF', { a: 0, b: 0, c: 2 }, x), (2 - x) / 2, 1e-15, `x=${x}`);
   });
-  it.fails('XBV-110: FUZZY_MF_TRIMF degenerate a = b / b = c shoulder returns mu = 1 at the vertex (MATLAB trimf)', () => {
+  it('XBV-110: FUZZY_MF_TRIMF degenerate a = b / b = c shoulder returns mu = 1 at the vertex (MATLAB trimf)', () => {
     near(trimf(0, 0, 0, 2), 1, 1e-15, 'reference a=b');
     near(trimf(2, 0, 2, 2), 1, 1e-15, 'reference b=c');
     near(mu('FUZZY_MF_TRIMF', { a: 0, b: 0, c: 2 }, 0), 1, 1e-15, 'a=b, x=a');
@@ -78,7 +78,7 @@ describe('1. Membership functions (MATLAB trimf / trapmf / gaussmf / sigmf)', ()
       near(mu('FUZZY_MF_TRAPMF', { a: 0, b: 1, c: 1, d: 2 }, x), trapmf(x, 0, 1, 1, 2), 1e-15, `x=${x}`);
     }
   });
-  it.fails('XBV-111: FUZZY_MF_TRAPMF degenerate a = b / c = d shoulder returns mu = 1 at the vertex (MATLAB trapmf)', () => {
+  it('XBV-111: FUZZY_MF_TRAPMF degenerate a = b / c = d shoulder returns mu = 1 at the vertex (MATLAB trapmf)', () => {
     near(trapmf(0, 0, 0, 1, 2), 1, 1e-15, 'reference a=b');
     near(trapmf(2, 0, 1, 2, 2), 1, 1e-15, 'reference c=d');
     near(mu('FUZZY_MF_TRAPMF', { a: 0, b: 0, c: 1, d: 2 }, 0), 1, 1e-15, 'a=b, x=a');
@@ -126,15 +126,15 @@ describe('2. FUZZY_AND / FUZZY_OR / FUZZY_NOT', () => {
     near(Number(run('FUZZY_OR', { numInputs: 3, method: 'probor' }, [0.5, 0.5, 0.4]).outputs[0]), 1 - 0.5 * 0.5 * 0.6, 1e-15);
   });
   // MATLAB's fuzzy operators (andmethod 'min', ormethod 'max', etc.) do not clip: min(1.5, 2) = 1.5.
-  it.fails('XBV-112: FUZZY_AND does not clip inputs outside [0,1] (MATLAB min(1.5, 2) = 1.5, product 1.5*2 = 3)', () => {
+  it('XBV-112: FUZZY_AND does not clip inputs outside [0,1] (MATLAB min(1.5, 2) = 1.5, product 1.5*2 = 3)', () => {
     near(Number(run('FUZZY_AND', { method: 'min' }, [1.5, 2]).outputs[0]), 1.5, 1e-15, 'min');
     near(Number(run('FUZZY_AND', { method: 'product' }, [1.5, 2]).outputs[0]), 3, 1e-15, 'product');
   });
-  it.fails('XBV-113: FUZZY_OR does not clip inputs outside [0,1] (MATLAB max(1.5, 2) = 2; negatives kept)', () => {
+  it('XBV-113: FUZZY_OR does not clip inputs outside [0,1] (MATLAB max(1.5, 2) = 2; negatives kept)', () => {
     near(Number(run('FUZZY_OR', { method: 'max' }, [1.5, 2]).outputs[0]), 2, 1e-15, 'max');
     near(Number(run('FUZZY_OR', { method: 'max' }, [-0.5, -0.25]).outputs[0]), -0.25, 1e-15, 'max negative');
   });
-  it.fails('XBV-114: FUZZY_NOT does not clip its input (MATLAB 1 - 1.5 = -0.5, 1 - (-2) = 3)', () => {
+  it('XBV-114: FUZZY_NOT does not clip its input (MATLAB 1 - 1.5 = -0.5, 1 - (-2) = 3)', () => {
     near(Number(run('FUZZY_NOT', {}, [1.5]).outputs[0]), -0.5, 1e-15, '1.5');
     near(Number(run('FUZZY_NOT', {}, [-2]).outputs[0]), 3, 1e-15, '-2');
   });
@@ -153,13 +153,13 @@ describe('3. FUZZY_RULE', () => {
     const [s, w] = rule({ operator: 'AND', implication: 'prod' }, [0.4, 0.9, 0.5]);
     near(s, 0.4, 1e-15); near(w, 0.2, 1e-15);
   });
-  it.fails("XBV-115: FUZZY_RULE implication 'min' returns strength * cons instead of min(strength, cons)", () => {
+  it("XBV-115: FUZZY_RULE implication 'min' returns strength * cons instead of min(strength, cons)", () => {
     const [, w] = rule({ operator: 'AND', implication: 'min' }, [0.4, 0.9, 0.5]);
     near(w, 0.4, 1e-15, 'weighted (min)');
     const [, w2] = rule({ operator: 'OR' }, [0.2, 0.7, 0.5]);
     near(w2, 0.5, 1e-15, 'weighted (default implication, strength 0.7)');
   });
-  it.fails('XBV-116: FUZZY_RULE clips antecedents outside [0,1] (MATLAB does not clip: strength min(1.5, 2) = 1.5)', () => {
+  it('XBV-116: FUZZY_RULE clips antecedents outside [0,1] (MATLAB does not clip: strength min(1.5, 2) = 1.5)', () => {
     near(rule({ operator: 'AND' }, [1.5, 2, 1])[0], 1.5, 1e-15);
   });
 });
@@ -208,11 +208,11 @@ describe('4. FUZZY_DEFUZZIFY (MATLAB defuzz on the block grid linspace(range_min
     for (const m of ['centroid', 'bisector', 'mom', 'som', 'lom']) expect(Number.isFinite(defuzz(m, z, 0, 10))).toBe(true);
   });
   // MATLAB defuzz centroid: total area 0 -> (min(x) + max(x))/2 with a warning. The block silently returns 0.
-  it.fails('XBV-117: FUZZY_DEFUZZIFY centroid of an all-zero aggregate returns the mid-range (MATLAB), not 0', () => {
+  it('XBV-117: FUZZY_DEFUZZIFY centroid of an all-zero aggregate returns the mid-range (MATLAB), not 0', () => {
     expect(defuzz('centroid', new Array(11).fill(0), 0, 10)).toBe(5);
   });
   // MATLAB mom = mean(x(mf == max(mf))); for an all-zero mf every point is a maximum, so the mean is the mid-range.
-  it.fails('XBV-118: FUZZY_DEFUZZIFY mom of an all-zero aggregate is the mean of all points (mid-range), not 0', () => {
+  it('XBV-118: FUZZY_DEFUZZIFY mom of an all-zero aggregate is the mean of all points (mid-range), not 0', () => {
     expect(defuzz('mom', new Array(11).fill(0), 0, 10)).toBe(5);
   });
   it('characterization (undocumented, not an oracle): the block uses length(agg) as the number of points and ignores `resolution`', () => {
@@ -278,13 +278,13 @@ describe('5. FUZZY_INFERENCE_SYSTEM (Mamdani, default configuration)', () => {
     near(got.y, reference(10, 10).y, 1e-12);
     near(got.y, 0, 1e-12);
   });
-  it.fails('XBV-119: FUZZY_INFERENCE_SYSTEM with an empty aggregate (no rule fires) returns 0 instead of the mid-range of the output range [2, 6] (MATLAB evalfis: 4)', () => {
+  it('XBV-119: FUZZY_INFERENCE_SYSTEM with an empty aggregate (no rule fires) returns 0 instead of the mid-range of the output range [2, 6] (MATLAB evalfis: 4)', () => {
     const cfg = { outputMFs: [{ name: 'O', range: [2, 6], mfs: [{ name: 'A', type: 'trimf', params: [2, 4, 6] }] }],
       inputMFs: [{ name: 'e', range: [0, 1], mfs: [{ name: 'L', type: 'trimf', params: [0, 0.25, 0.5] }] }],
       numInputs: 1, rules: [{ antecedents: [0], consequent: 0, weight: 1 }] };
     expect(Number(run('FUZZY_INFERENCE_SYSTEM', cfg, [0.9]).outputs[0])).toBe(4);
   });
-  it.fails('XBV-120: FUZZY_INFERENCE_SYSTEM input shoulder MF (a = b) is 0 at its vertex; MATLAB trimf(-3,[-3 -3 -1]) = 1', () => {
+  it('XBV-120: FUZZY_INFERENCE_SYSTEM input shoulder MF (a = b) is 0 at its vertex; MATLAB trimf(-3,[-3 -3 -1]) = 1', () => {
     // error = -3 is the vertex of NB = trimf [-3 -3 -1]; dError = -3 the vertex of N = trimf [-3 -3 0]: rule [NB, N] fires with 1.
     const ref = reference(-3, -3);
     expect(Math.max(...ref.strengths)).toBe(1);
@@ -292,7 +292,7 @@ describe('5. FUZZY_INFERENCE_SYSTEM (Mamdani, default configuration)', () => {
     expect(Math.max(...got.strengths)).toBe(1);
     near(got.y, ref.y, 1e-12);
   });
-  it.fails('XBV-121: FUZZY_INFERENCE_SYSTEM output shoulder MF (NB = trimf [-1 -1 -0.5]) is 0 at y = -1; MATLAB gives 1 so the centroid differs', () => {
+  it('XBV-121: FUZZY_INFERENCE_SYSTEM output shoulder MF (NB = trimf [-1 -1 -0.5]) is 0 at y = -1; MATLAB gives 1 so the centroid differs', () => {
     // (-0.5, -0.2): rule [NS, N] -> NB fires with strength 0.5 * 0.0667 (min of NS = 0.5, N = 0.0667); rule [Z, N] -> NS also fires.
     const got = exec(-0.5, -0.2); const ref = reference(-0.5, -0.2);
     near(got.y, ref.y, 1e-12);

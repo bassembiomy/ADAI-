@@ -71,9 +71,6 @@ const PINS: Record<string, string> = {
   'DISCRETE_TRANSFER_FUNCTION|discrete': 'XBV-093',
   'STATE_SPACE|euler': 'XBV-093',
   'STATE_SPACE|rk4': 'XBV-093',
-  'SIX_STEP_COMMUTATION|euler': 'XBV-090',
-  'SIX_STEP_COMMUTATION|rk4': 'XBV-090',
-  'SIX_STEP_COMMUTATION|discrete': 'XBV-090',
   // XBV-154: the embedded Mean / SubMatrix still follow the pre-WP-21 canvas rules (mean of all elements, zero-based indices).
   'Mean|euler': 'XBV-154',
   'Mean|rk4': 'XBV-154',
@@ -81,9 +78,6 @@ const PINS: Record<string, string> = {
   'SubMatrix|euler': 'XBV-154',
   'SubMatrix|rk4': 'XBV-154',
   'SubMatrix|discrete': 'XBV-154',
-  'BAND_LIMITED_NOISE|euler': 'XBV-088',
-  'BAND_LIMITED_NOISE|rk4': 'XBV-088',
-  'BAND_LIMITED_NOISE|discrete': 'XBV-088',
   'Clock|euler': 'XBV-041',
   'Clock|rk4': 'XBV-041',
   'Clock|discrete': 'XBV-041',
@@ -93,9 +87,6 @@ const PINS: Record<string, string> = {
   'MOVING_AVERAGE|euler': 'XBV-068',
   'MOVING_AVERAGE|rk4': 'XBV-068',
   'MOVING_AVERAGE|discrete': 'XBV-068',
-  'WHITE_NOISE|euler': 'XBV-088',
-  'WHITE_NOISE|rk4': 'XBV-088',
-  'WHITE_NOISE|discrete': 'XBV-088',
 };
 const CORPUS_PINS: Record<string, string> = {
   'all|rk4|1': 'XBV-164',

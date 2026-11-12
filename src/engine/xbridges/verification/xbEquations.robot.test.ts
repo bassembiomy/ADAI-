@@ -117,7 +117,7 @@ describe('1. Differential-drive kinematics (KINEMATICS, DYNAMICS, ODOMETRY, ODOM
   });
   // Rule: v = r w_wheel = 0.099 m/s so x(t) = x0 + v t. Factory evaluateDerivatives scales the wheel speeds by
   // slip_factor = 1 - wheel_friction/robot_mass = 0.992, while the same block's execute reports V without it.
-  it.fails('XBV-122: equal wheel speeds 3 rad/s: x(10) = x0 + r*w*10 = -1.51 (factory integrates 0.992 of it)', () => {
+  it('XBV-122: equal wheel speeds 3 rad/s: x(10) = x0 + r*w*10 = -1.51 (factory integrates 0.992 of it)', () => {
     const r = plant(3, 3, 10);
     near(num(last(r, 'd.x')), -2.5 + R_W * 3 * 10, 1e-6, 'x(10)');
   });
@@ -128,11 +128,11 @@ describe('1. Differential-drive kinematics (KINEMATICS, DYNAMICS, ODOMETRY, ODOM
       near(num(r.signals['d.y'][k]), -2.5, 1e-9, 'y');
     });
   });
-  it.fails('XBV-123: opposite wheel speeds -3/3 rad/s: theta(2) = (r (wR-wL)/L) * 2 = 2.475 rad (factory integrates 0.992 of it)', () => {
+  it('XBV-123: opposite wheel speeds -3/3 rad/s: theta(2) = (r (wR-wL)/L) * 2 = 2.475 rad (factory integrates 0.992 of it)', () => {
     const r = plant(-3, 3, 2);
     near(num(last(r, 'd.theta')), (R_W * 6 / L_W) * 2, 1e-6, 'theta(2)');
   });
-  it.fails('XBV-129: DYNAMICS from its default pose (0, 0) with both wheels at 3 rad/s moves: x(1) = r w = 0.099 m (the default pose lies inside the x = 0 wall collision zone, so the plant never moves)', () => {
+  it('XBV-129: DYNAMICS from its default pose (0, 0) with both wheels at 3 rad/s moves: x(1) = r w = 0.099 m (the default pose lies inside the x = 0 wall collision zone, so the plant never moves)', () => {
     const r = sim([constant('wl', 3), constant('wr', 3), { id: 'd', type: 'ROBOT_VACUUM_DYNAMICS' }],
       ['wl.out -> d.omega_L', 'wr.out -> d.omega_R'], ['d.x'], { stop: 1, dt: 0.01 });
     near(num(last(r, 'd.x')), R_W * 3 * 1, 0.002, 'x(1)');
@@ -300,7 +300,7 @@ describe('5. Sensors (ENCODER, LIDAR, LIDAR_SENSOR, CLIFF_IR, BUMPER, DUSTBIN, M
   const encRun = (w: number, params: Record<string, unknown>) =>
     sim([constant('w', w), { id: 'e', type: 'ROBOT_VACUUM_ENCODER', params }],
       ['w.out -> e.omega_L', 'w.out -> e.omega_R'], ['e.enc_L', 'e.enc_R'], { solver: 'euler', dt: 0.01, stop: 1 });
-  it.fails('XBV-126: ENCODER (noise 0), w = pi rad/s for 1 s (euler 0.01 s): counts = floor(pi/(2 pi) 360) = 180 (+-1)', () => {
+  it('XBV-126: ENCODER (noise 0), w = pi rad/s for 1 s (euler 0.01 s): counts = floor(pi/(2 pi) 360) = 180 (+-1)', () => {
     seed(5);
     near(num(last(encRun(Math.PI, { noise_std: 0 }), 'e.enc_L')), 180, 1, 'enc_L(1)');
   });
@@ -573,7 +573,7 @@ describe('7. Planning (THETA_STAR/A*, GLOBAL_PLANNER, COVERAGE, BOUSTROPHEDON_SW
   });
   // The block's own line-of-sight check uses a robot radius of 0.15 m (walls) and its A* keeps cell centres 0.28 m from
   // occupied cell centres. A leg must therefore stay >= 0.15 m from every occupied cell (square of side 0.2).
-  it.fails('XBV-124: THETA_STAR legs keep >= 0.15 m (the block robot radius) from every occupied cell square; the shortcut leg passes 0.025 m from the barrier', () => {
+  it('XBV-124: THETA_STAR legs keep >= 0.15 m (the block robot radius) from every occupied cell square; the shortcut leg passes 0.025 m from the barrier', () => {
     const g = barrier(14, 15);
     const { path } = plan(g);
     const occ = occupied(g);
@@ -593,12 +593,12 @@ describe('7. Planning (THETA_STAR/A*, GLOBAL_PLANNER, COVERAGE, BOUSTROPHEDON_SW
     const [, wx, wy] = gp(emptyGrid(), GOAL);
     expect([wx, wy]).toEqual(GOAL);
   });
-  it.fails('XBV-125: GLOBAL_PLANNER with a barrier between start and goal: the next waypoint has a clear line from the start (factory outputs the goal itself)', () => {
+  it('XBV-125: GLOBAL_PLANNER with a barrier between start and goal: the next waypoint has a clear line from the start (factory outputs the goal itself)', () => {
     const g = barrier(14, 15);
     const [, wx, wy] = gp(g, GOAL);
     expect(crosses(g, START, [wx, wy])).toBe(false);
   });
-  it.fails('XBV-134: GLOBAL_PLANNER with the goal enclosed by occupied cells reports no path (empty path or a flag); factory returns [goal]', () => {
+  it('XBV-134: GLOBAL_PLANNER with the goal enclosed by occupied cells reports no path (empty path or a flag); factory returns [goal]', () => {
     const g = emptyGrid();
     for (let r = 13; r <= 15; r++) for (let c = 26; c <= 28; c++) if (!(r === 14 && c === 27)) g[r][c] = 100;
     const [path] = gp(g, GOAL);
@@ -801,12 +801,12 @@ describe('8. Closed loop: Robot Vacuum Digital Twin Lab (XbridgesWorkspace labs,
     r.signals['robot_battery.battery_level'].map(num).forEach((b) => { expect(b).toBeGreaterThanOrEqual(0); expect(b).toBeLessThanOrEqual(100); });
     r.signals['robot_fusion.confidence'].map(num).forEach((c) => { expect(c).toBeGreaterThanOrEqual(0); expect(c).toBeLessThanOrEqual(100); });
   }, LONG);
-  it.fails('XBV-127: the lab at the app default step (rk4, 0.02 s, XbridgesWorkspace initialStep) stays finite for 60 s - fix model-side (stiff motor L) or with an implicit solver, not by changing the default step (factory run diverges to Infinity within 3 s: motor pole h*lambda = 10)', () => {
+  it('XBV-127: the lab at the app default step (rk4, 0.02 s, XbridgesWorkspace initialStep) stays finite for 60 s - fix model-side (stiff motor L) or with an implicit solver, not by changing the default step (factory run diverges to Infinity within 3 s: motor pole h*lambda = 10)', () => {
     const r = lab(4, 0.02);
     for (const p of PROBES) r.signals[p].forEach((v) => expect(finiteDeep(v)).toBe(true));
   }, LONG);
   // Direct navigation (mode 6) to (1.5, 1.5). Documented purpose of the lab: "goal navigation".
-  it.fails('XBV-128: lab in direct-navigation mode 6 (target (1.5, 1.5)): the robot leaves its start (0, 0) and ends within 0.5 m of the target in 60 s (it stays at (0, 0): the start lies on the x = 0 wall collision zone)', () => {
+  it('XBV-128: lab in direct-navigation mode 6 (target (1.5, 1.5)): the robot leaves its start (0, 0) and ends within 0.5 m of the target in 60 s (it stays at (0, 0): the start lies on the x = 0 wall collision zone)', () => {
     const r = lab(6, 0.005);
     const x = r.signals['robot_dynamics.x'].map(num), y = r.signals['robot_dynamics.y'].map(num);
     expect(Math.hypot(x.at(-1)! - 1.5, y.at(-1)! - 1.5)).toBeLessThanOrEqual(0.5);
@@ -910,11 +910,11 @@ describe('9. DEM / CFD (DEM_DRUM, PARTICLE_SYSTEM, HERTZ_CONTACT, BOND_FABRIC, F
   });
   // Rule: angle(t) = integral rpm 2 pi / 60 dt. The factory takes its step from the 4th execute argument, which the engine
   // passes as the simulation TIME: dt = time when 0 < time < 0.05, else 0.016, whatever the solver step.
-  it.fails('XBV-130: DEM_DRUM at 60 rpm for 2 s (euler 0.01 s): angle = 2 pi * 2 = 12.566 rad', () => {
+  it('XBV-130: DEM_DRUM at 60 rpm for 2 s (euler 0.01 s): angle = 2 pi * 2 = 12.566 rad', () => {
     const r = sim([constant('rpm', 60), { id: 'drum', type: 'DEM_DRUM' }], ['rpm.out -> drum.rpm'], ['drum.angle'], { solver: 'euler', dt: 0.01, stop: 2 });
     near(num(last(r, 'drum.angle')), 4 * Math.PI, 0.1, 'angle(2)');
   });
-  it.fails('XBV-131: DEM_PARTICLE_SYSTEM free fall (no forces) for 0.1 s (euler 0.01 s): vertical velocity = -g t = -0.981 m/s (same time-as-step cause)', () => {
+  it('XBV-131: DEM_PARTICLE_SYSTEM free fall (no forces) for 0.1 s (euler 0.01 s): vertical velocity = -g t = -0.981 m/s (same time-as-step cause)', () => {
     seed(31);
     const r = sim([{ id: 'ps', type: 'DEM_PARTICLE_SYSTEM', params: { particle_radius: 0.05 } }], [], ['ps.velocities'], { solver: 'euler', dt: 0.01, stop: 0.1 });
     const v = flat(last(r, 'ps.velocities')).filter((_, i) => i % 2 === 1);
@@ -955,7 +955,7 @@ describe('9. DEM / CFD (DEM_DRUM, PARTICLE_SYSTEM, HERTZ_CONTACT, BOND_FABRIC, F
     });
   });
   // Rule (weakly compressible SPH): pressure p = k (rho - rho0) pushes crowded particles apart, so the stiffness changes the motion.
-  it.fails('XBV-132: SPH sph_stiffness / fluid_density / viscosity / smoothing_length change the particle motion (factory never reads them)', () => {
+  it('XBV-132: SPH sph_stiffness / fluid_density / viscosity / smoothing_length change the particle motion (factory never reads them)', () => {
     const a = sph({ num_fluid_particles: 20, sph_stiffness: 25 }).outs.at(-1)![0] as number[];
     const c = sph({ num_fluid_particles: 20, sph_stiffness: 25000, fluid_viscosity: 50, sph_smoothing_length: 0.3 }).outs.at(-1)![0] as number[];
     expect(a.some((v, i) => Math.abs(v - c[i]) > 1e-9)).toBe(true);
