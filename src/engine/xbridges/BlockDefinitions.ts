@@ -285,6 +285,55 @@ const divideByZeroDiagnostic = (divisors: any[]): { diagnostic?: BlockDiagnostic
 
 const isBusObject = (v: any): boolean => typeof v === 'object' && v !== null && !Array.isArray(v);
 
+/**
+ * Fuzzy Logic Toolbox helpers. MATLAB min / max ignore NaN, so the shoulders a = b and c = d give 1 at the vertex
+ * ((x - a) / (b - a) = 0 / 0 drops out of the min). Memberships are never clipped (MATLAB does not clip).
+ */
+const fzMin = (...v: number[]): number => { const k = v.filter((x) => !Number.isNaN(x)); return k.length ? Math.min(...k) : NaN; };
+const fzMax = (...v: number[]): number => { const k = v.filter((x) => !Number.isNaN(x)); return k.length ? Math.max(...k) : NaN; };
+const fzTrimf = (x: number, a: number, b: number, c: number): number => {
+  const m = fzMax(fzMin((x - a) / (b - a), (c - x) / (c - b)), 0);
+  return Number.isNaN(m) ? 0 : m;
+};
+const fzTrapmf = (x: number, a: number, b: number, c: number, d: number): number => {
+  const m = fzMax(fzMin((x - a) / (b - a), 1, (d - x) / (d - c)), 0);
+  return Number.isNaN(m) ? 0 : m;
+};
+const fzNanDiagnostic = (what: string): { error: string } => ({
+  error: `${what}: a non-numeric or NaN input is not a membership grade.`
+});
+/** True when every entry is a number that is not NaN (infinite values are valid grades for the unclipped operators). */
+const fzValid = (vals: unknown[]): boolean => vals.every((v) => typeof v === 'number' && !Number.isNaN(v));
+/**
+ * MATLAB defuzz on the grid `universe`. An all-zero aggregate has no area: centroid returns the mid-range (MATLAB:
+ * (min(x) + max(x)) / 2 with a warning) and mom the mean of all points (every point is a maximum).
+ */
+const fzDefuzz = (method: string, universe: number[], agg: number[]): { y: number; zero: boolean } => {
+  const n = universe.length;
+  const total = agg.reduce((a, b) => a + b, 0);
+  const maxVal = Math.max(...agg);
+  const zero = !(maxVal > 0);
+  const at = (pred: (i: number) => boolean) => universe.filter((_, i) => pred(i));
+  if (method === 'bisector') {
+    let cum = 0;
+    for (let i = 0; i < n; i++) { cum += agg[i]; if (cum >= total / 2) return { y: universe[i], zero }; }
+    return { y: universe[0], zero };
+  }
+  if (method === 'mom') {
+    const top = at((i) => Math.abs(agg[i] - maxVal) < 1e-10);
+    return { y: top.length ? top.reduce((a, b) => a + b, 0) / top.length : (universe[0] + universe[n - 1]) / 2, zero };
+  }
+  if (method === 'som') return { y: at((i) => Math.abs(agg[i] - maxVal) < 1e-10)[0] ?? universe[0], zero };
+  if (method === 'lom') { const t = at((i) => Math.abs(agg[i] - maxVal) < 1e-10); return { y: t.length ? t[t.length - 1] : universe[n - 1], zero }; }
+  // centroid (default)
+  if (!(total > 0)) return { y: (universe[0] + universe[n - 1]) / 2, zero: true };
+  return { y: agg.reduce((a, v, i) => a + universe[i] * v, 0) / total, zero };
+};
+const fzZeroAggregateWarning = (what: string): { diagnostic: BlockDiagnostic } => ({
+  diagnostic: { code: 'MATH_DOMAIN_ERROR', severity: 'warning', message: `${what}: the aggregated membership is zero everywhere (no rule fired); the output is the mid-range of the output range.` }
+});
+
+
 /** Raised by the element-wise helpers for non-conformable sizes; the block reports it as its `error`. */
 class ElementWiseError extends Error {}
 /**
@@ -2615,10 +2664,19 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       outputs: [createPort('out', 'Out', 'output')],
       execute: (ins, p) => {
         const axis = Number(p.axis ?? 0);
+        if (axis !== 0 && axis !== 1) return { outputs: [NaN], error: `MatrixConcat: axis must be 0 (vertical) or 1 (horizontal), got ${String(p.axis)}.` };
         if (ins.length === 0) return { outputs: [[]] };
-        let result = ins[0];
+        // Simulink: a scalar is a 1x1 matrix; a vector is a column when stacked next to a matrix.
+        const is2D = (v: any) => Array.isArray(v) && v.length > 0 && Array.isArray(v[0]);
+        const anyMatrix = ins.some(is2D) || ins.every((v) => !Array.isArray(v));
+        const norm = (v: any): any => {
+          if (!Array.isArray(v)) return anyMatrix ? [[v]] : [v];
+          if (is2D(v) || !anyMatrix) return v;
+          return v.map((x: any) => [x]);
+        };
+        let result = norm(ins[0]);
         for (let i = 1; i < ins.length; i++) {
-          result = VectorUtils.concat(result, ins[i], axis);
+          result = VectorUtils.concat(result, norm(ins[i]), axis);
         }
         return { outputs: [result] };
       }
@@ -9801,45 +9859,35 @@ return block;
 
                                                                                                                                       // --- Membership Functions ---
 
-                                                                                                                                      'FUZZY_MF_TRIMF': (id, params) => ({
-                                                                                                                                        id, type: 'FUZZY_MF_TRIMF',
-                                                                                                                                        params: { a: params.a ?? -1, b: params.b ?? 0, c: params.c ?? 1 },
-                                                                                                                                        inputs: [createPort('x', 'x', 'input', 0, 'left', 'continuous')],
-                                                                                                                                        outputs: [createPort('mu', 'μ', 'output', 0, 'right', 'continuous')],
-                                                                                                                                        icon: 'activity',
-                                                                                                                                        equation: 'μ = max(0, min((x−a)/(b−a), (c−x)/(c−b)))',
-                                                                                                                                        description: 'Triangular membership function. Computes the degree of membership μ ∈ [0,1] for a crisp input x, given vertex points a ≤ b ≤ c.',
-                                                                                                                                        execute: (ins, p) => {
-                                                                                                                                          const x = Number(ins[0]);
-                                                                                                                                          const a = Number(p.a), b = Number(p.b), c = Number(p.c);
-                                                                                                                                          let mu = 0;
-                                                                                                                                          if (b === a && b === c) mu = (x === b) ? 1 : 0;
-                                                                                                                                          else if (x <= a || x >= c) mu = 0;
-                                                                                                                                          else if (x <= b) mu = (b === a) ? 1 : (x - a) / (b - a);
-                                                                                                                                          else mu = (c === b) ? 1 : (c - x) / (c - b);
-                                                                                                                                          return { outputs: [Math.max(0, Math.min(1, mu))] };
-                                                                                                                                        }
-                                                                                                                                      }),
+  'FUZZY_MF_TRIMF': (id, params) => ({
+    id, type: 'FUZZY_MF_TRIMF',
+    params: { a: params.a ?? -1, b: params.b ?? 0, c: params.c ?? 1 },
+    inputs: [createPort('x', 'x', 'input', 0, 'left', 'continuous')],
+    outputs: [createPort('mu', 'μ', 'output', 0, 'right', 'continuous')],
+    icon: 'activity',
+    equation: 'μ = max(0, min((x−a)/(b−a), (c−x)/(c−b)))',
+    description: 'Triangular membership function. Computes the degree of membership μ ∈ [0,1] for a crisp input x, given vertex points a ≤ b ≤ c.',
+    execute: (ins, p) => {
+      const x = ins[0];
+      if (typeof x !== 'number' || Number.isNaN(x)) return { outputs: [0], ...fzNanDiagnostic('FUZZY_MF_TRIMF') };
+      return { outputs: [fzTrimf(x, Number(p.a), Number(p.b), Number(p.c))] };
+    }
+  }),
 
-                                                                                                                                        'FUZZY_MF_TRAPMF': (id, params) => ({
-                                                                                                                                          id, type: 'FUZZY_MF_TRAPMF',
-                                                                                                                                          params: { a: params.a ?? -2, b: params.b ?? -1, c: params.c ?? 1, d: params.d ?? 2 },
-                                                                                                                                          inputs: [createPort('x', 'x', 'input', 0, 'left', 'continuous')],
-                                                                                                                                          outputs: [createPort('mu', 'μ', 'output', 0, 'right', 'continuous')],
-                                                                                                                                          icon: 'activity',
-                                                                                                                                          equation: 'μ = max(0, min((x−a)/(b−a), 1, (d−x)/(d−c)))',
-                                                                                                                                          description: 'Trapezoidal membership function. Computes μ ∈ [0,1] for input x with shoulder points a, b, c, d where a ≤ b ≤ c ≤ d.',
-                                                                                                                                          execute: (ins, p) => {
-                                                                                                                                            const x = Number(ins[0]);
-                                                                                                                                            const a = Number(p.a), b = Number(p.b), c = Number(p.c), d = Number(p.d);
-                                                                                                                                            let mu = 0;
-                                                                                                                                            if (x <= a || x >= d) mu = 0;
-                                                                                                                                            else if (x >= b && x <= c) mu = 1;
-                                                                                                                                            else if (x < b) mu = (b === a) ? 1 : (x - a) / (b - a);
-                                                                                                                                            else mu = (d === c) ? 1 : (d - x) / (d - c);
-                                                                                                                                            return { outputs: [Math.max(0, Math.min(1, mu))] };
-                                                                                                                                          }
-                                                                                                                                        }),
+  'FUZZY_MF_TRAPMF': (id, params) => ({
+    id, type: 'FUZZY_MF_TRAPMF',
+    params: { a: params.a ?? -2, b: params.b ?? -1, c: params.c ?? 1, d: params.d ?? 2 },
+    inputs: [createPort('x', 'x', 'input', 0, 'left', 'continuous')],
+    outputs: [createPort('mu', 'μ', 'output', 0, 'right', 'continuous')],
+    icon: 'activity',
+    equation: 'μ = max(0, min((x−a)/(b−a), 1, (d−x)/(d−c)))',
+    description: 'Trapezoidal membership function. Computes μ ∈ [0,1] for input x with shoulder points a, b, c, d where a ≤ b ≤ c ≤ d.',
+    execute: (ins, p) => {
+      const x = ins[0];
+      if (typeof x !== 'number' || Number.isNaN(x)) return { outputs: [0], ...fzNanDiagnostic('FUZZY_MF_TRAPMF') };
+      return { outputs: [fzTrapmf(x, Number(p.a), Number(p.b), Number(p.c), Number(p.d))] };
+    }
+  }),
 
                                                                                                                                           'FUZZY_MF_GAUSSMF': (id, params) => ({
                                                                                                                                             id, type: 'FUZZY_MF_GAUSSMF',
@@ -9877,133 +9925,107 @@ return block;
 
                                                                                                                                               // --- Fuzzy Operators ---
 
-                                                                                                                                              'FUZZY_AND': (id, params) => ({
-                                                                                                                                                id, type: 'FUZZY_AND',
-                                                                                                                                                params: { method: params.method || 'min', numInputs: params.numInputs ?? 2 },
-                                                                                                                                                allowDynamicInputs: true,
-                                                                                                                                                inputs: Array.from({ length: params.numInputs ?? 2 }, (_, i) => createPort(`in${i + 1}`, `μ${i + 1}`, 'input', 0, 'left', 'continuous')),
-                                                                                                                                                outputs: [createPort('out', 'μ_out', 'output', 0, 'right', 'continuous')],
-                                                                                                                                                icon: 'plus',
-                                                                                                                                                equation: 'min: μ = min(μ₁,μ₂,...)\nprod: μ = Π(μᵢ)',
-                                                                                                                                                description: 'Fuzzy AND operator (T-norm). Combines membership grades using minimum or algebraic product.',
-                                                                                                                                                execute: (ins, p) => {
-                                                                                                                                                  const vals = ins.map(v => Math.max(0, Math.min(1, Number(v) || 0)));
-                                                                                                                                                  let result: number;
-                                                                                                                                                  if (p.method === 'product') {
-                                                                                                                                                    result = vals.reduce((acc, v) => acc * v, 1);
-                                                                                                                                                  } else {
-                                                                                                                                                    result = Math.min(...vals);
-                                                                                                                                                  }
-                                                                                                                                                  return { outputs: [result] };
-                                                                                                                                                }
-                                                                                                                                              }),
+  'FUZZY_AND': (id, params) => ({
+    id, type: 'FUZZY_AND',
+    params: { method: params.method || 'min', numInputs: params.numInputs ?? 2 },
+    allowDynamicInputs: true,
+    inputs: Array.from({ length: params.numInputs ?? 2 }, (_, i) => createPort(`in${i + 1}`, `μ${i + 1}`, 'input', 0, 'left', 'continuous')),
+    outputs: [createPort('out', 'μ_out', 'output', 0, 'right', 'continuous')],
+    icon: 'plus',
+    equation: 'min: μ = min(μ₁,μ₂,...)\nprod: μ = Π(μᵢ)',
+    description: 'Fuzzy AND operator (T-norm). Combines membership grades using minimum or algebraic product. Grades are not clipped (MATLAB).',
+    execute: (ins, p) => {
+      if (ins.length === 0 || !fzValid(ins)) return { outputs: [NaN], ...fzNanDiagnostic('FUZZY_AND') };
+      const vals = ins as number[];
+      const result = p.method === 'product' ? vals.reduce((acc, v) => acc * v, 1) : Math.min(...vals);
+      return { outputs: [result] };
+    }
+  }),
 
-                                                                                                                                                'FUZZY_OR': (id, params) => ({
-                                                                                                                                                  id, type: 'FUZZY_OR',
-                                                                                                                                                  params: { method: params.method || 'max', numInputs: params.numInputs ?? 2 },
-                                                                                                                                                  allowDynamicInputs: true,
-                                                                                                                                                  inputs: Array.from({ length: params.numInputs ?? 2 }, (_, i) => createPort(`in${i + 1}`, `μ${i + 1}`, 'input', 0, 'left', 'continuous')),
-                                                                                                                                                  outputs: [createPort('out', 'μ_out', 'output', 0, 'right', 'continuous')],
-                                                                                                                                                  icon: 'grid',
-                                                                                                                                                  equation: 'max: μ = max(μ₁,μ₂,...)\nprobor: μ = μ₁+μ₂−μ₁·μ₂',
-                                                                                                                                                  description: 'Fuzzy OR operator (S-norm). Combines membership grades using maximum or probabilistic sum.',
-                                                                                                                                                  execute: (ins, p) => {
-                                                                                                                                                    const vals = ins.map(v => Math.max(0, Math.min(1, Number(v) || 0)));
-                                                                                                                                                    let result: number;
-                                                                                                                                                    if (p.method === 'probor') {
-                                                                                                                                                      result = vals.reduce((acc, v) => acc + v - acc * v, 0);
-                                                                                                                                                    } else {
-                                                                                                                                                      result = Math.max(...vals);
-                                                                                                                                                    }
-                                                                                                                                                    return { outputs: [result] };
-                                                                                                                                                  }
-                                                                                                                                                }),
+  'FUZZY_OR': (id, params) => ({
+    id, type: 'FUZZY_OR',
+    params: { method: params.method || 'max', numInputs: params.numInputs ?? 2 },
+    allowDynamicInputs: true,
+    inputs: Array.from({ length: params.numInputs ?? 2 }, (_, i) => createPort(`in${i + 1}`, `μ${i + 1}`, 'input', 0, 'left', 'continuous')),
+    outputs: [createPort('out', 'μ_out', 'output', 0, 'right', 'continuous')],
+    icon: 'grid',
+    equation: 'max: μ = max(μ₁,μ₂,...)\nprobor: μ = μ₁+μ₂−μ₁·μ₂',
+    description: 'Fuzzy OR operator (S-norm). Combines membership grades using maximum or probabilistic sum. Grades are not clipped (MATLAB).',
+    execute: (ins, p) => {
+      if (ins.length === 0 || !fzValid(ins)) return { outputs: [NaN], ...fzNanDiagnostic('FUZZY_OR') };
+      const vals = ins as number[];
+      const result = p.method === 'probor' ? vals.reduce((acc, v) => acc + v - acc * v, 0) : Math.max(...vals);
+      return { outputs: [result] };
+    }
+  }),
 
-                                                                                                                                                  'FUZZY_NOT': (id) => ({
-                                                                                                                                                    id, type: 'FUZZY_NOT', params: {},
-                                                                                                                                                    inputs: [createPort('in', 'μ', 'input', 0, 'left', 'continuous')],
-                                                                                                                                                    outputs: [createPort('out', '1−μ', 'output', 0, 'right', 'continuous')],
-                                                                                                                                                    icon: 'minus-circle',
-                                                                                                                                                    equation: 'μ_out = 1 − μ_in',
-                                                                                                                                                    description: 'Fuzzy complement (NOT). Outputs the complement of the input membership grade.',
-                                                                                                                                                    execute: (ins) => {
-                                                                                                                                                      const mu = Math.max(0, Math.min(1, Number(ins[0]) || 0));
-                                                                                                                                                      return { outputs: [1 - mu] };
-                                                                                                                                                    }
-                                                                                                                                                  }),
+  'FUZZY_NOT': (id) => ({
+    id, type: 'FUZZY_NOT', params: {},
+    inputs: [createPort('in', 'μ', 'input', 0, 'left', 'continuous')],
+    outputs: [createPort('out', '1−μ', 'output', 0, 'right', 'continuous')],
+    icon: 'minus-circle',
+    equation: 'μ_out = 1 − μ_in',
+    description: 'Fuzzy complement (NOT). Outputs the complement of the input membership grade (not clipped, MATLAB).',
+    execute: (ins) => {
+      if (!fzValid([ins[0]])) return { outputs: [NaN], ...fzNanDiagnostic('FUZZY_NOT') };
+      return { outputs: [1 - (ins[0] as number)] };
+    }
+  }),
 
-                                                                                                                                                    // --- Fuzzy Inference ---
+  // --- Fuzzy Inference ---
 
-                                                                                                                                                    'FUZZY_RULE': (id, params) => ({
-                                                                                                                                                      id, type: 'FUZZY_RULE',
-                                                                                                                                                      params: {
-                                                                                                                                                        operator: params.operator || 'AND',
-                                                                                                                                                        implication: params.implication || 'min',
-                                                                                                                                                        numAntecedents: params.numAntecedents ?? 2
-                                                                                                                                                      },
-                                                                                                                                                      allowDynamicInputs: true,
-                                                                                                                                                      inputs: [
-                                                                                                                                                        ...Array.from({ length: params.numAntecedents ?? 2 }, (_, i) => createPort(`ant${i + 1}`, `μ_ant${i + 1}`, 'input', 0, 'left', 'continuous')),
-                                                                                                                                                        createPort('cons', 'Cons', 'input', 0, 'bottom', 'continuous')
-                                                                                                                                                      ],
-                                                                                                                                                      outputs: [
-                                                                                                                                                        createPort('strength', 'Strength', 'output', 0, 'right', 'continuous'),
-                                                                                                                                                        createPort('weighted', 'Weighted', 'output', 0, 'right', 'continuous')
-                                                                                                                                                      ],
-                                                                                                                                                      icon: 'settings',
-                                                                                                                                                      equation: 'strength = op(μ₁,μ₂,...)\nweighted = strength × consequent',
-                                                                                                                                                      description: 'Evaluates a single fuzzy rule. Combines antecedent membership grades via AND/OR to produce a firing strength, then applies implication to the consequent.',
-                                                                                                                                                      execute: (ins, p) => {
-                                                                                                                                                        const numAnt = numParam(p.numAntecedents, 2);
-                                                                                                                                                        if (!(Number.isInteger(numAnt) && numAnt >= 1)) return { outputs: [0, 0], error: `Fuzzy rule needs at least 1 antecedent (numAntecedents = ${numAnt}).` };
-                                                                                                                                                        const antecedents = ins.slice(0, numAnt).map(v => Math.max(0, Math.min(1, Number(v) || 0)));
-                                                                                                                                                        const consequent = Number(ins[numAnt]) || 0;
-
-                                                                                                                                                        let strength: number;
-                                                                                                                                                        if (p.operator === 'OR') {
-                                                                                                                                                          strength = Math.max(...antecedents);
-                                                                                                                                                        } else {
-                                                                                                                                                          strength = Math.min(...antecedents);
-                                                                                                                                                        }
-
-                                                                                                                                                        if (p.implication === 'prod') {
-                                                                                                                                                          return { outputs: [strength, strength * consequent] };
-                                                                                                                                                        }
-                                                                                                                                                        return { outputs: [strength, strength * consequent] };
-                                                                                                                                                      }
-                                                                                                                                                    }),
+  'FUZZY_RULE': (id, params) => ({
+    id, type: 'FUZZY_RULE',
+    params: {
+      operator: params.operator || 'AND',
+      implication: params.implication || 'min',
+      numAntecedents: params.numAntecedents ?? 2
+    },
+    allowDynamicInputs: true,
+    inputs: [
+      ...Array.from({ length: params.numAntecedents ?? 2 }, (_, i) => createPort(`ant${i + 1}`, `μ_ant${i + 1}`, 'input', 0, 'left', 'continuous')),
+      createPort('cons', 'Cons', 'input', 0, 'bottom', 'continuous')
+    ],
+    outputs: [
+      createPort('strength', 'Strength', 'output', 0, 'right', 'continuous'),
+      createPort('weighted', 'Weighted', 'output', 0, 'right', 'continuous')
+    ],
+    icon: 'settings',
+    equation: 'strength = op(μ₁,μ₂,...)\nweighted = min(strength, consequent)  (implication min)\nweighted = strength × consequent  (implication prod)',
+    description: 'Evaluates a single fuzzy rule. Combines antecedent membership grades via AND/OR to produce a firing strength, then applies the implication (min or prod) to the consequent.',
+    execute: (ins, p) => {
+      const numAnt = numParam(p.numAntecedents, 2);
+      if (!(Number.isInteger(numAnt) && numAnt >= 1)) return { outputs: [0, 0], error: `Fuzzy rule needs at least 1 antecedent (numAntecedents = ${numAnt}).` };
+      const used = ins.slice(0, numAnt + 1);
+      if (used.length < numAnt + 1 || !fzValid(used)) return { outputs: [NaN, NaN], ...fzNanDiagnostic('FUZZY_RULE') };
+      const antecedents = used.slice(0, numAnt) as number[];
+      const consequent = used[numAnt] as number;
+      const strength = p.operator === 'OR' ? Math.max(...antecedents) : Math.min(...antecedents);
+      const weighted = p.implication === 'prod' ? strength * consequent : Math.min(strength, consequent);
+      return { outputs: [strength, weighted] };
+    }
+  }),
 
                                                                                                                                                       'FUZZY_INFERENCE_SYSTEM': (id, params) => {
                                                                                                                                                         const numInputs = numParam(params.numInputs, 2);
 
                                                                                                                                                         // Helper: evaluate a single membership function
-                                                                                                                                                        const evalMF = (x: number, mf: any): number => {
-                                                                                                                                                          const p = mf.params || [];
-                                                                                                                                                          switch (mf.type) {
-                                                                                                                                                            case 'trimf': {
-                                                                                                                                                              const [a, b, c] = p;
-                                                                                                                                                              if (x <= a || x >= c) return 0;
-                                                                                                                                                              if (x <= b) return (b === a) ? 1 : (x - a) / (b - a);
-                                                                                                                                                              return (c === b) ? 1 : (c - x) / (c - b);
-                                                                                                                                                            }
-                                                                                                                                                            case 'trapmf': {
-                                                                                                                                                              const [a, b, c, d] = p;
-                                                                                                                                                              if (x <= a || x >= d) return 0;
-                                                                                                                                                              if (x >= b && x <= c) return 1;
-                                                                                                                                                              if (x < b) return (b === a) ? 1 : (x - a) / (b - a);
-                                                                                                                                                              return (d === c) ? 1 : (d - x) / (d - c);
-                                                                                                                                                            }
-                                                                                                                                                            case 'gaussmf': {
-                                                                                                                                                              const [sigma, c] = p;
-                                                                                                                                                              return Math.exp(-Math.pow(x - c, 2) / (2 * (sigma || 1) * (sigma || 1)));
-                                                                                                                                                            }
-                                                                                                                                                            case 'sigmf': {
-                                                                                                                                                              const [a, c] = p;
-                                                                                                                                                              return 1 / (1 + Math.exp(-(a || 2) * (x - c)));
-                                                                                                                                                            }
-                                                                                                                                                            default: return 0;
-                                                                                                                                                          }
-                                                                                                                                                        };
+    const evalMF = (x: number, mf: any): number => {
+      const p = mf.params || [];
+      switch (mf.type) {
+        case 'trimf': return fzTrimf(x, p[0], p[1], p[2]);
+        case 'trapmf': return fzTrapmf(x, p[0], p[1], p[2], p[3]);
+        case 'gaussmf': {
+          const [sigma, c] = p;
+          return Math.exp(-Math.pow(x - c, 2) / (2 * (sigma || 1) * (sigma || 1)));
+        }
+        case 'sigmf': {
+          const [a, c] = p;
+          return 1 / (1 + Math.exp(-(a || 2) * (x - c)));
+        }
+        default: return 0;
+      }
+    };
 
                                                                                                                                                         return {
                                                                                                                                                           id, type: 'FUZZY_INFERENCE_SYSTEM',
@@ -10073,151 +10095,98 @@ return block;
                                                                                                                                                           icon: 'cpu',
                                                                                                                                                           equation: 'y = Defuzz(Aggregate(Rules(Fuzzify(x))))',
                                                                                                                                                           description: 'A complete Fuzzy Inference System supporting Mamdani (with centroid/bisector/MOM defuzzification) and Sugeno (weighted-average) inference. Configure membership functions, rules, and methods via the properties panel.',
-                                                                                                                                                          execute: (ins, p) => {
-                                                                                                                                                            try {
-                                                                                                                                                              const crispInputs = ins.map(v => Number(v) || 0);
-                                                                                                                                                              const inputMFs = p.inputMFs || [];
-                                                                                                                                                              const outputMFs = p.outputMFs || [];
-                                                                                                                                                              const rules = p.rules || [];
-                                                                                                                                                              const andMethod = p.andMethod || 'min';
-                                                                                                                                                              const defuzzMethod = p.defuzzMethod || 'centroid';
-                                                                                                                                                              const resolution = numParam(p.defuzzResolution, 101);
+    execute: (ins, p) => {
+      try {
+        if (!fzValid(ins)) return { outputs: [NaN, []], ...fzNanDiagnostic('FUZZY_INFERENCE_SYSTEM') };
+        const crispInputs = ins as number[];
+        const inputMFs = p.inputMFs || [];
+        const outputMFs = p.outputMFs || [];
+        const rules = p.rules || [];
+        const andMethod = p.andMethod || 'min';
+        const defuzzMethod = p.defuzzMethod || 'centroid';
+        const resolution = numParam(p.defuzzResolution, 101);
 
-                                                                                                                                                              // 1. Fuzzification: compute membership grades for each input
-                                                                                                                                                              const inputGrades: number[][] = crispInputs.map((x, i) => {
-                                                                                                                                                                const mfSet = inputMFs[i];
-                                                                                                                                                                if (!mfSet || !mfSet.mfs) return [0];
-                                                                                                                                                                return mfSet.mfs.map((mf: any) => evalMF(x, mf));
-                                                                                                                                                              });
+        // 1. Fuzzification
+        const inputGrades: number[][] = crispInputs.map((x, i) => {
+          const mfSet = inputMFs[i];
+          if (!mfSet || !mfSet.mfs) return [0];
+          return mfSet.mfs.map((mf: any) => evalMF(x, mf));
+        });
 
-                                                                                                                                                              // 2. Rule evaluation
-                                                                                                                                                              const firingStrengths: number[] = rules.map((rule: any) => {
-                                                                                                                                                                const antecedentGrades = (rule.antecedents || []).map((mfIdx: number, inputIdx: number) => {
-                                                                                                                                                                  return (inputGrades[inputIdx] || [])[mfIdx] || 0;
-                                                                                                                                                                });
-                                                                                                                                                                const weight = Number(rule.weight ?? 1);
+        // 2. Rule evaluation
+        const firingStrengths: number[] = rules.map((rule: any) => {
+          const antecedentGrades = (rule.antecedents || []).map((mfIdx: number, inputIdx: number) => {
+            return (inputGrades[inputIdx] || [])[mfIdx] || 0;
+          });
+          const weight = Number(rule.weight ?? 1);
+          const strength = andMethod === 'product'
+            ? antecedentGrades.reduce((acc: number, v: number) => acc * v, 1)
+            : Math.min(...antecedentGrades);
+          return strength * weight;
+        });
 
-                                                                                                                                                                let strength: number;
-                                                                                                                                                                if (andMethod === 'product') {
-                                                                                                                                                                  strength = antecedentGrades.reduce((acc: number, v: number) => acc * v, 1);
-                                                                                                                                                                } else {
-                                                                                                                                                                  strength = Math.min(...antecedentGrades);
-                                                                                                                                                                }
-                                                                                                                                                                return strength * weight;
-                                                                                                                                                              });
+        const outRange = (outputMFs[0] && outputMFs[0].range) || [-1, 1];
+        const midRange = (Number(outRange[0]) + Number(outRange[1])) / 2;
 
-                                                                                                                                                              // 3. Inference & Defuzzification
-                                                                                                                                                              let crispOutput = 0;
+        // 3. Inference & Defuzzification
+        let crispOutput = 0;
 
-                                                                                                                                                              if (p.type === 'Sugeno') {
-                                                                                                                                                                // Sugeno: weighted average
-                                                                                                                                                                const coeffs = p.sugenoCoeffs;
-                                                                                                                                                                let numSum = 0, denSum = 0;
-                                                                                                                                                                rules.forEach((rule: any, ri: number) => {
-                                                                                                                                                                  const w = firingStrengths[ri];
-                                                                                                                                                                  if (w > 0) {
-                                                                                                                                                                    let ruleOutput = 0;
-                                                                                                                                                                    if (coeffs && coeffs[rule.consequent]) {
-                                                                                                                                                                      const c = coeffs[rule.consequent];
-                                                                                                                                                                      ruleOutput = crispInputs.reduce((sum: number, x: number, xi: number) => sum + (c[xi] || 0) * x, 0) + (c[crispInputs.length] || 0);
-                                                                                                                                                                    } else {
-                                                                                                                                                                      // Default: use consequent index as constant
-                                                                                                                                                                      const outMfSet = outputMFs[0];
-                                                                                                                                                                      if (outMfSet && outMfSet.mfs && outMfSet.mfs[rule.consequent]) {
-                                                                                                                                                                        const mfParams = outMfSet.mfs[rule.consequent].params || [0];
-                                                                                                                                                                        ruleOutput = mfParams[Math.floor(mfParams.length / 2)] || 0;
-                                                                                                                                                                      }
-                                                                                                                                                                    }
-                                                                                                                                                                    numSum += w * ruleOutput;
-                                                                                                                                                                    denSum += w;
-                                                                                                                                                                  }
-                                                                                                                                                                });
-                                                                                                                                                                crispOutput = denSum > 0 ? numSum / denSum : 0;
-                                                                                                                                                              } else {
-                                                                                                                                                                // Mamdani: aggregate and defuzzify
-                                                                                                                                                                const outMfSet = outputMFs[0];
-                                                                                                                                                                if (!outMfSet || !outMfSet.mfs) {
-                                                                                                                                                                  return { outputs: [0, firingStrengths] };
-                                                                                                                                                                }
+        if (p.type === 'Sugeno') {
+          const coeffs = p.sugenoCoeffs;
+          let numSum = 0, denSum = 0;
+          rules.forEach((rule: any, ri: number) => {
+            const w = firingStrengths[ri];
+            if (w > 0) {
+              let ruleOutput = 0;
+              if (coeffs && coeffs[rule.consequent]) {
+                const c = coeffs[rule.consequent];
+                ruleOutput = crispInputs.reduce((sum: number, x: number, xi: number) => sum + (c[xi] || 0) * x, 0) + (c[crispInputs.length] || 0);
+              } else {
+                const outMfSet = outputMFs[0];
+                if (outMfSet && outMfSet.mfs && outMfSet.mfs[rule.consequent]) {
+                  const mfParams = outMfSet.mfs[rule.consequent].params || [0];
+                  ruleOutput = mfParams[Math.floor(mfParams.length / 2)] || 0;
+                }
+              }
+              numSum += w * ruleOutput;
+              denSum += w;
+            }
+          });
+          if (!(denSum > 0)) return { outputs: [midRange, firingStrengths], ...fzZeroAggregateWarning('FUZZY_INFERENCE_SYSTEM') };
+          crispOutput = numSum / denSum;
+        } else {
+          const outMfSet = outputMFs[0];
+          if (!outMfSet || !outMfSet.mfs) {
+            return { outputs: [0, firingStrengths] };
+          }
+          const range = outMfSet.range || [-1, 1];
+          const step = (range[1] - range[0]) / (resolution - 1);
+          const universe: number[] = [];
+          const aggregated: number[] = [];
+          for (let i = 0; i < resolution; i++) {
+            const y = range[0] + i * step;
+            universe.push(y);
+            let maxMu = 0;
+            rules.forEach((rule: any, ri: number) => {
+              const w = firingStrengths[ri];
+              if (w > 0) {
+                const outMf = outMfSet.mfs[rule.consequent];
+                if (outMf) {
+                  const impliedVal = Math.min(w, evalMF(y, outMf)); // min implication (Mamdani)
+                  maxMu = Math.max(maxMu, impliedVal);               // max aggregation
+                }
+              }
+            });
+            aggregated.push(maxMu);
+          }
+          // MATLAB evalfis: when no rule fires the output is the mid-range of the output range (with a warning).
+          if (!aggregated.some((v) => v > 0)) {
+            return { outputs: [midRange, firingStrengths], ...fzZeroAggregateWarning('FUZZY_INFERENCE_SYSTEM') };
+          }
+          crispOutput = fzDefuzz(defuzzMethod, universe, aggregated).y;
+        }
 
-                                                                                                                                                                const range = outMfSet.range || [-1, 1];
-                                                                                                                                                                const step = (range[1] - range[0]) / (resolution - 1);
-                                                                                                                                                                const universe: number[] = [];
-                                                                                                                                                                const aggregated: number[] = [];
-
-                                                                                                                                                                for (let i = 0; i < resolution; i++) {
-                                                                                                                                                                  const y = range[0] + i * step;
-                                                                                                                                                                  universe.push(y);
-
-                                                                                                                                                                  // For each point, compute aggregated membership
-                                                                                                                                                                  let maxMu = 0;
-                                                                                                                                                                  rules.forEach((rule: any, ri: number) => {
-                                                                                                                                                                    const w = firingStrengths[ri];
-                                                                                                                                                                    if (w > 0) {
-                                                                                                                                                                      const outMf = outMfSet.mfs[rule.consequent];
-                                                                                                                                                                      if (outMf) {
-                                                                                                                                                                        const mfVal = evalMF(y, outMf);
-                                                                                                                                                                        const impliedVal = Math.min(w, mfVal); // min implication (Mamdani)
-                                                                                                                                                                        maxMu = Math.max(maxMu, impliedVal); // max aggregation
-                                                                                                                                                                      }
-                                                                                                                                                                    }
-                                                                                                                                                                  });
-                                                                                                                                                                  aggregated.push(maxMu);
-                                                                                                                                                                }
-
-                                                                                                                                                                // Defuzzification
-                                                                                                                                                                if (defuzzMethod === 'centroid') {
-                                                                                                                                                                  let numSum = 0, denSum = 0;
-                                                                                                                                                                  for (let i = 0; i < resolution; i++) {
-                                                                                                                                                                    numSum += universe[i] * aggregated[i];
-                                                                                                                                                                    denSum += aggregated[i];
-                                                                                                                                                                  }
-                                                                                                                                                                  crispOutput = denSum > 0 ? numSum / denSum : 0;
-                                                                                                                                                                } else if (defuzzMethod === 'bisector') {
-                                                                                                                                                                  const totalArea = aggregated.reduce((a, b) => a + b, 0);
-                                                                                                                                                                  let cumSum = 0;
-                                                                                                                                                                  for (let i = 0; i < resolution; i++) {
-                                                                                                                                                                    cumSum += aggregated[i];
-                                                                                                                                                                    if (cumSum >= totalArea / 2) {
-                                                                                                                                                                      crispOutput = universe[i];
-                                                                                                                                                                      break;
-                                                                                                                                                                    }
-                                                                                                                                                                  }
-                                                                                                                                                                } else if (defuzzMethod === 'mom') {
-                                                                                                                                                                  // Mean of Maximum
-                                                                                                                                                                  const maxVal = Math.max(...aggregated);
-                                                                                                                                                                  if (maxVal > 0) {
-                                                                                                                                                                    let sum = 0, count = 0;
-                                                                                                                                                                    for (let i = 0; i < resolution; i++) {
-                                                                                                                                                                      if (Math.abs(aggregated[i] - maxVal) < 1e-10) {
-                                                                                                                                                                        sum += universe[i];
-                                                                                                                                                                        count++;
-                                                                                                                                                                      }
-                                                                                                                                                                    }
-                                                                                                                                                                    crispOutput = count > 0 ? sum / count : 0;
-                                                                                                                                                                  }
-                                                                                                                                                                } else if (defuzzMethod === 'som') {
-                                                                                                                                                                  // Smallest of Maximum
-                                                                                                                                                                  const maxVal = Math.max(...aggregated);
-                                                                                                                                                                  for (let i = 0; i < resolution; i++) {
-                                                                                                                                                                    if (Math.abs(aggregated[i] - maxVal) < 1e-10) {
-                                                                                                                                                                      crispOutput = universe[i];
-                                                                                                                                                                      break;
-                                                                                                                                                                    }
-                                                                                                                                                                  }
-                                                                                                                                                                } else if (defuzzMethod === 'lom') {
-                                                                                                                                                                  // Largest of Maximum
-                                                                                                                                                                  const maxVal = Math.max(...aggregated);
-                                                                                                                                                                  for (let i = resolution - 1; i >= 0; i--) {
-                                                                                                                                                                    if (Math.abs(aggregated[i] - maxVal) < 1e-10) {
-                                                                                                                                                                      crispOutput = universe[i];
-                                                                                                                                                                      break;
-                                                                                                                                                                    }
-                                                                                                                                                                  }
-                                                                                                                                                                }
-                                                                                                                                                              }
-
-                                                                                                                                                              return { outputs: [crispOutput, firingStrengths] };
+        return { outputs: [crispOutput, firingStrengths] };
                                                                                                                                                             } catch (err) {
                                                                                                                                                               return { outputs: [0, []], error: String(err) };
                                                                                                                                                             }
@@ -10240,54 +10209,24 @@ return block;
                                                                                                                                                           icon: 'filter',
                                                                                                                                                           equation: 'y = Defuzz(aggregated_μ)',
                                                                                                                                                           description: 'Standalone defuzzification block. Takes a discretized aggregated fuzzy set (vector of μ values) and produces a crisp output using centroid, bisector, MOM, SOM, or LOM methods.',
-                                                                                                                                                          execute: (ins, p) => {
-                                                                                                                                                            const aggregated = Array.isArray(ins[0]) ? (ins[0] as number[]) : [Number(ins[0]) || 0];
-                                                                                                                                                            const resolution = aggregated.length;
-                                                                                                                                                            const rangeMin = Number(p.range_min);
-                                                                                                                                                            const rangeMax = Number(p.range_max);
-                                                                                                                                                            const step = resolution > 1 ? (rangeMax - rangeMin) / (resolution - 1) : 1;
-                                                                                                                                                            const universe = Array.from({ length: resolution }, (_, i) => rangeMin + i * step);
-
-                                                                                                                                                            let crispOutput = 0;
-                                                                                                                                                            const method = p.method || p.defuzzMethod || 'centroid';
-
-                                                                                                                                                            if (method === 'centroid') {
-                                                                                                                                                              let numSum = 0, denSum = 0;
-                                                                                                                                                              for (let i = 0; i < resolution; i++) {
-                                                                                                                                                                numSum += universe[i] * (aggregated[i] || 0);
-                                                                                                                                                                denSum += (aggregated[i] || 0);
-                                                                                                                                                              }
-                                                                                                                                                              crispOutput = denSum > 0 ? numSum / denSum : 0;
-                                                                                                                                                            } else if (method === 'bisector') {
-                                                                                                                                                              const totalArea = aggregated.reduce((a, b) => a + b, 0);
-                                                                                                                                                              let cumSum = 0;
-                                                                                                                                                              for (let i = 0; i < resolution; i++) {
-                                                                                                                                                                cumSum += (aggregated[i] || 0);
-                                                                                                                                                                if (cumSum >= totalArea / 2) { crispOutput = universe[i]; break; }
-                                                                                                                                                              }
-                                                                                                                                                            } else if (method === 'mom') {
-                                                                                                                                                              const maxVal = Math.max(...aggregated);
-                                                                                                                                                              if (maxVal > 0) {
-                                                                                                                                                                let sum = 0, count = 0;
-                                                                                                                                                                for (let i = 0; i < resolution; i++) {
-                                                                                                                                                                  if (Math.abs((aggregated[i] || 0) - maxVal) < 1e-10) { sum += universe[i]; count++; }
-                                                                                                                                                                }
-                                                                                                                                                                crispOutput = count > 0 ? sum / count : 0;
-                                                                                                                                                              }
-                                                                                                                                                            } else if (method === 'som') {
-                                                                                                                                                              const maxVal = Math.max(...aggregated);
-                                                                                                                                                              for (let i = 0; i < resolution; i++) {
-                                                                                                                                                                if (Math.abs((aggregated[i] || 0) - maxVal) < 1e-10) { crispOutput = universe[i]; break; }
-                                                                                                                                                              }
-                                                                                                                                                            } else if (method === 'lom') {
-                                                                                                                                                              const maxVal = Math.max(...aggregated);
-                                                                                                                                                              for (let i = resolution - 1; i >= 0; i--) {
-                                                                                                                                                                if (Math.abs((aggregated[i] || 0) - maxVal) < 1e-10) { crispOutput = universe[i]; break; }
-                                                                                                                                                              }
-                                                                                                                                                            }
-
-                                                                                                                                                            return { outputs: [crispOutput] };
-                                                                                                                                                          }
+    execute: (ins, p) => {
+      const agg = ins[0];
+      if (!Array.isArray(agg) || agg.length === 0 || !agg.every((v) => typeof v === 'number' && Number.isFinite(v))) {
+        return { outputs: [NaN], ...fzNanDiagnostic('FUZZY_DEFUZZIFY') };
+      }
+      const aggregated = agg as number[];
+      const resolution = aggregated.length;
+      const rangeMin = Number(p.range_min);
+      const rangeMax = Number(p.range_max);
+      if (!Number.isFinite(rangeMin) || !Number.isFinite(rangeMax)) {
+        return { outputs: [NaN], error: 'FUZZY_DEFUZZIFY: range_min and range_max must be finite numbers.' };
+      }
+      const step = resolution > 1 ? (rangeMax - rangeMin) / (resolution - 1) : 1;
+      const universe = Array.from({ length: resolution }, (_, i) => rangeMin + i * step);
+      const method = p.method || p.defuzzMethod || 'centroid';
+      const r = fzDefuzz(method, universe, aggregated);
+      return { outputs: [r.y], ...(r.zero ? fzZeroAggregateWarning('FUZZY_DEFUZZIFY') : {}) };
+    }
                                                                                                                                                         }),
 
                                                                                                                                                           // --- Fuzzy Control Systems ---
@@ -11897,6 +11836,37 @@ for (const type of Object.keys(BLOCK_LIBRARY)) {
   };
 }
 
+
+/**
+ * Numeric-input guard (universal battery U5). The listed math blocks accept numbers, booleans and (nested) arrays of
+ * them. Any other value kind (text, null, undefined, an object) or an operation the underlying matrix library rejects
+ * (empty vector, non-conformable sizes) is reported as the block `error` with a NaN output instead of an exception.
+ */
+const isNumericValue = (v: unknown): boolean =>
+  typeof v === 'number' || typeof v === 'boolean' || (Array.isArray(v) && v.every(isNumericValue));
+const NUMERIC_INPUT_GUARDED = [
+  'Abs', 'Diag', 'DiagExtract', 'ExtractDiag', 'GAIN', 'MatrixDiag', 'MatrixConcat', 'Max', 'Mean', 'Sum', 'SumElements',
+  'UnaryNeg', 'VectorAdd', 'VectorDiv', 'VectorMul', 'VectorPow', 'VectorSub'
+];
+for (const type of NUMERIC_INPUT_GUARDED) {
+  const build = BLOCK_LIBRARY[type];
+  BLOCK_LIBRARY[type] = (id, params) => {
+    const block = build(id, params);
+    const inner = block.execute;
+    block.execute = (ins, p, state, time, ctx) => {
+      const bad = ins.findIndex((v) => !isNumericValue(v));
+      if (bad >= 0) {
+        return { outputs: [NaN], error: `${type}: input ${bad + 1} is not a numeric value (number, boolean or array of them).` };
+      }
+      try {
+        return inner(ins, p, state, time, ctx);
+      } catch (e: any) {
+        return { outputs: [NaN], error: `${type}: ${String(e?.message ?? e)}` };
+      }
+    };
+    return block;
+  };
+}
 
 export const XBRIDGES_CATEGORIES = [
   {
