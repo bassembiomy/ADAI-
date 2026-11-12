@@ -171,8 +171,19 @@ describe('worker protocol', () => {
   });
 
   it('a block that raises an exception fails the step with BLOCK_RUNTIME_FAULT, and the worker accepts a new model afterwards', () => {
-    send({ type: 'compile', model: buildModel({ blocks: [{ id: 'k', type: 'Constant' }, { id: 'm', type: 'MatrixConcat' }], wires: ['k.out -> m.in1'] }), time: 0, dt: 0.1, solverType: 'rk4' });
-    const failed = send({ type: 'step', time: 0, dt: 0.1, solverType: 'rk4' });
+    // WP-21 round 3: no library block throws any more (universal battery U1-U5 empty), so the fault path is exercised with a
+    // test-only block type registered for this test and removed afterwards.
+    const lib = BLOCK_LIBRARY as Record<string, (id: string, p?: Record<string, unknown>) => unknown>;
+    lib.__TEST_THROWS__ = (id: string) => ({
+      id, type: '__TEST_THROWS__', params: {}, state: null,
+      inputs: [{ id: 'u', label: 'u', type: 'input' }], outputs: [{ id: 'y', label: 'y', type: 'output' }],
+      execute: () => { throw new Error('test-only block fault'); },
+    });
+    let failed: XbridgesWorkerResponse;
+    try {
+      send({ type: 'compile', model: buildModel({ blocks: [{ id: 'k', type: 'Constant' }, { id: 'm', type: '__TEST_THROWS__' }], wires: ['k.out -> m.u'] }), time: 0, dt: 0.1, solverType: 'rk4' });
+      failed = send({ type: 'step', time: 0, dt: 0.1, solverType: 'rk4' });
+    } finally { delete lib.__TEST_THROWS__; }
     expect(failed.ok).toBe(false);
     expect((failed.diagnostics ?? []).map((d) => d.code)).toContain('BLOCK_RUNTIME_FAULT');
     const ok = send({ type: 'compile', model: buildModel(DECAY), time: 0, dt: 0.1, solverType: 'rk4' });
