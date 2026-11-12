@@ -5,11 +5,11 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 ## Summary
 
 - Work packages: 20 done of 29; 2 in progress; 7 to do.
-- Findings: 67 open, 99 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
-  - S1 (wrong number in simulation or generated C): 11 open
-  - S2 (crash, stop, freeze or silent no-op): 18 open
-  - S3 (diagnostic, UI or convention deviation): 29 open
-  - S4 (documentation): 9 open
+- Findings: 54 open, 115 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
+  - S1 (wrong number in simulation or generated C): 10 open
+  - S2 (crash, stop, freeze or silent no-op): 13 open
+  - S3 (diagnostic, UI or convention deviation): 23 open
+  - S4 (documentation): 8 open
 - Decisions recorded: 13; open: 0.
 
 ## Work packages
@@ -64,34 +64,28 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 
 ## Open findings by severity
 
-### S1 - wrong number in simulation or generated C (11)
+### S1 - wrong number in simulation or generated C (10)
 
 | Id | Gate | Plan ref | Summary |
 | --- | --- | --- | --- |
 | XBV-001 | V6 | F1 | Canvas engine and state-machine interpreter are compared only by xbSimEmbeddedParity.test.ts: unit-constant input, 6 ticks, scalar, discrete solver. WP-16 measured it: 281 (type, solver) cases, 178 equal; random graphs fail via XBV-083/084/085. |
 | XBV-025 | V2 | U3 | SECTOR_SELECTOR returns sector -3 for theta = -10 rad (closed form floor(mod(theta, 2*pi)/(pi/3)) + 1 = 3); angles below -2*pi are not wrapped. Correct on (-2*pi, 4*pi). Pinned by it.fails in xbUniversal.test.ts. |
-| XBV-027 | V2 | 4.2 motor control | AC_MOTOR_PID_CONTROL with defaults settles at omega = w_ref / P = 78.5 rad/s for w_ref = 157 (stator frequency fixed at w_ref, P = 2), so the PID never removes the speed error, its integral winds up and last_e is never updated (verifier analysis; rk4, ode45 and euler 1e-5 agree). Replaces the WP-08 note. |
 | XBV-065 | V2 | 4.2 continuous / discrete / discontinuities / buses | SATURATION is scalar-only: a vector input or vector limits give NaN (Number(array)); Simulink Saturation is element-wise with scalar or vector limits. Found by the WP-06 executor; pinned in xbEquations.dynamics.test.ts. DEADZONE is scalar-only on the canvas too; the embedded path is element-wise and correct (WP-16). WP-21 batch D: SATURATION element-wise fixed; DEADZONE vector parity pins remain open. |
-| XBV-072 | V2 | 4.2 power electronics / PWM / torque optimisation | MTPA_CONTROLLER does not deliver the requested torque: it hard-codes 2 pole pairs and id = -0.2 \|iq\| and ignores Ld, Lq; for te_ref = 1 it returns iq = 3.333, id = -0.667, i.e. Te = 0.533 (p = 1) or 1.067 (p = 2). Pinned in xbEquations.motor.test.ts. |
-| XBV-073 | V2 | 4.2 power electronics / PWM / torque optimisation | MTPA_CONTROLLER's operating point is not the maximum-torque-per-ampere point: on its constant-torque curve d\|i\|^2/d id is about +0.75 at te_ref = 1 (should be 0). Pinned in xbEquations.motor.test.ts. |
 | XBV-154 | V6 | 7.3 canvas / interpreter parity | Embedded Mean (mean of all elements) and SubMatrix (zero-based indices) still follow the pre-WP-21 canvas rules; the canvas now gives MATLAB/Simulink column means and one-based indices (WP-21 batch D). Pinned in xbTriParity. |
 | XBV-159 | V6 | 7.3 canvas / interpreter parity | Embedded continuous-form PID_CONTROLLER (sample time <= 0) advances its integrator and derivative-filter states with forward Euler whatever the solver: under rk4 the embedded trace equals the euler trace (d_term grows by \|1 - N h\| per step instead of the RK4 stability factor); Simulink ode4 integrates them with RK4. Found by the WP-21 batch F verifier; the four rk4 continuous PID acceptance cases are pinned to it. |
 | XBV-161 | V6 | 7.3 canvas / interpreter parity | Embedded ShiftLeft/ShiftRight mask the shift count to 5 bits (& 31) in interpreter and C; Simulink and the canvas (since XBV-057, WP-21 batch D) shift every bit out for counts >= 32 (0, or -1 for a negative value under arithmetic right shift) and shift the other way for a negative count. Found when merging WP-21 batches D and F; pinned in xbTriParity. |
 | XBV-163 | V6 | 7.3 canvas / interpreter parity | Embedded RELAY reads the previous tick's input and switches one sample late: SINE_A u(0.30) = 1.0162 >= switch-on 1, so Simulink (and the canvas, direct feedthrough since WP-21 E2) gives 1 at t = 0.3 while the embedded path gives 0. Pinned in xbTriParity. |
 | XBV-164 | V6 | 7.3 canvas / interpreter parity | Embedded rk4 evaluates Step at the stage times; the canvas holds discontinuous outputs at their major-step value during minor steps (Simulink, WP-21 E2 / XBV-067), so 6 rk4 corpus seeds differ by h/6 per unit jump (seeds 1 and 28 checked against the closed form y = IC + max(0, t - 1)). Pinned in xbTriParity. |
+| XBV-167 | V6 | 7.3 canvas / interpreter parity | Embedded KALMAN_FILTER still predicts before the first update (P[0\|-1] = A P0 A' + Q); the canvas follows the Simulink order (update with x[0\|-1] = x0, P0, then predict) since WP-21 batch G (XBV-078/079): x_hat(0) canvas 0.636364 vs embedded 0.636946. Pinned in xbTriParity. |
+| XBV-168 | V6 | 7.3 canvas / interpreter parity | Embedded PID_BASIC / PID_CONTROLLER output 0 while reset is active; Simulink and the canvas (since XBV-077, WP-21 batch G) keep the proportional action Kp e. Pinned in xbTriParity. |
 
-### S2 - crash, stop, freeze or silent no-op (18)
+### S2 - crash, stop, freeze or silent no-op (13)
 
 | Id | Gate | Plan ref | Summary |
 | --- | --- | --- | --- |
 | XBV-021 | V3 | U1/U4/U5 | Blocks throw inside execute (stopping the run with BLOCK_RUNTIME_FAULT): on default inputs 9 (MPC_CONTROLLER default Q 2x2 vs 1 output; MatrixConcat, MatrixSolve, SubMatrix on scalars; DEM_*; ROBOT_VACUUM_ERODE_MASK, THETA_STAR), on NaN/Inf 9, on a wrong value kind 29. Lists XBV-U1, XBV-U4, XBV-U5. WP-21 batch H: the math blocks (MatrixConcat, Abs, Diag*, GAIN, Max, Mean, Sum*, UnaryNeg, Vector*) left the U1-U5 lists; the remaining entries belong to batches G and I. |
 | XBV-022 | V3 | U2/U3 | Undefined outputs or unreported NaN: 5 blocks alone with unconnected inputs (DEMUX out2 undefined stops a downstream Abs), 11 blocks on finite edge inputs. Lists XBV-U2, XBV-U3. SECTOR_SELECTOR moved to XBV-025. WP-21 batch H: the math blocks (MatrixConcat, Abs, Diag*, GAIN, Max, Mean, Sum*, UnaryNeg, Vector*) left the U1-U5 lists; the remaining entries belong to batches G and I. |
 | XBV-039 | V6 | 7.2 boundary mappings | In canvas simulation (main thread and worker) a state-machine variable mapped to a top-level Inport never reaches the X-Bridges model: the canvas writes the value with setSignalValue and params.value, but Inport.execute returns its own unconnected input (default 0), which overwrites it at the next evaluation (BlockDefinitions.ts ~2610). Measured: Inport override 2.5 into an Integrator for 1 s gives 0 instead of 2.5. Pinned in xbWorker.test.ts. The embedded interpreter/C path is checked in WP-16/18. Scope (verifier): this is the canvas run inside the X-Bridges workspace; a state machine running in the app uses App.tsx runAppSimulationTick -> smAppAdapter -> smInterpreter -> xbInterpreter, which WP-16/18 verify. Also: an Inport's own 'value' parameter (2.5, no override) gives 0 on the canvas. Severity lowered to S2. |
-| XBV-071 | V2 | 4.2 power electronics / PWM / torque optimisation | SVPWM_CORE over-modulation is not handled: only t0 is clamped to 0, so t1 + t2 exceeds Ts (\|V\| = 300 at 30 deg, Vdc 400: t1 = t2 = 6.5e-5, sum 1.3e-4 > 1e-4); the standard rule scales t1, t2 to sum Ts and keeps their ratio. Pinned in xbEquations.motor.test.ts. |
-| XBV-075 | V2 | 4.2 control / observers | Continuous PID_BASIC ignores enable: its integrator keeps accumulating while enable = 0 (evaluateDerivatives ignores the enable input; execute's nextState is not used for continuous blocks). Enable 0 -> 1 at 0.5 should give u(1) = 1.5. Found by the WP-07 executor; pinned in xbEquations.control.test.ts. |
-| XBV-076 | V2 | 4.2 control / observers | Continuous PID_BASIC ignores reset: the integral is neither held at 0 nor cleared while reset = 1. Found by the WP-07 executor; pinned in xbEquations.control.test.ts. |
-| XBV-078 | V2 | 4.2 control / observers | KALMAN_FILTER predicts before its first update (starts from P[-1\|-1] = P0, so the first update uses A P0 A' + Q); the Simulink Kalman Filter starts from x[0\|-1] = x0, P[0\|-1] = P0 and updates first. Found by the WP-07 executor; pinned in xbEquations.control.test.ts. EXTENDED_KALMAN_FILTER matches KALMAN_FILTER to 1e-7 and therefore inherits this. |
-| XBV-081 | V2 | 4.2 control / observers | MPC_CONTROLLER with Nc > 1 throws on its second call (RangeError: H is Nc x Nc but the warm-start vector has length nu), so the default MPC (Nc 3) cannot run more than one step; with Nc 1 it converges and respects u limits. Found by the WP-07 executor; pinned in xbEquations.control.test.ts. |
 | XBV-093 | V6 | 7.3 canvas / interpreter parity | Parity gap: the embedded path refuses STATE_SPACE (continuous representation, XB_DISCRETE_REPRESENTATION_REQUIRED) and DISCRETE_TRANSFER_FUNCTION with the default initial state (XB_STATE_INITIAL_VALUE_INVALID) for models the canvas runs. Found by the WP-16 executor; pinned in src/utils/stateMachine/xbTriParity.test.ts. (Verifier: a diagnosed restriction of the embedded path - a capabilities mismatch rather than a numeric defect.) WP-21 batch F: not fixed (scenario dimensions refused by the embedded builder; continuous STATE_SPACE needs generalised integrator slots in interpreter and C). |
 | XBV-125 | V3 | 4.2 navigation / robot vacuum / DEM-CFD (D5) | ROBOT_VACUUM_GLOBAL_PLANNER ignores the grid and the start pose and returns the goal as the only waypoint (no A* path around a barrier). Found by the WP-10 executor; pinned in xbEquations.robot.test.ts. |
 | XBV-127 | V3 | 4.2 navigation / robot vacuum / DEM-CFD (D5) | The built-in Robot Vacuum Twin lab diverges to Infinity within 3 s at the app's default rk4 step 0.02 s (motor pole about -500/s); it needs dt 0.005 s to stay finite. Found by the WP-10 executor; pinned in xbEquations.robot.test.ts. |
@@ -103,7 +97,7 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 | XBV-160 | V6 | 7.3 canvas / interpreter parity | Embedded VectorDiv by zero publishes 0 (documented safe-zero fallback kept by batch F) while the canvas gives Inf with DIVIDE_BY_ZERO and PRODUCT divide gives Inf; D11 (NaN/Inf + fault flag) should apply. Mapped state-machine inputs also keep the safe-zero fallback. Found by the WP-21 batch F verifier. |
 | XBV-165 | V5 | 5.1 / 5.2 diagnostics | A block fault raised in a trial (minor) stage of a variable-step solver stops the run: the om501 lab with ode45 at default tolerance stops at 2.92 s with BLOCK_RUNTIME_FAULT (Intake Manifold P = -4360 at a rejected trial point); Simulink rejects the step and retries smaller. Euler/rk4/ode23/ode23tb and ode45 at RelTol 1e-6 run through. Found by the WP-21 E verifier. |
 
-### S3 - diagnostic, UI or convention deviation (29)
+### S3 - diagnostic, UI or convention deviation (23)
 
 | Id | Gate | Plan ref | Summary |
 | --- | --- | --- | --- |
@@ -113,16 +107,10 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 | XBV-011 | V3 | F11 | The parameter schema covers 74 of 290 block types; PARAMETER_* errors do not apply to the others. |
 | XBV-014 | V1 | V1 | 56 blocks use port types outside XSignalType (control, object, data, load, boolean); the engine's type checks do not know them. Ratchet list in tests/fixtures/xbridges/known-gaps.json. |
 | XBV-023 | V3 | U9 | 15 noise/stochastic blocks use unseeded Math.random: runs are not repeatable (Simulink noise blocks are seeded). With a fixed seed, state also survives a clone (U11 clean). List XBV-U9. |
-| XBV-024 | V3 | review | PWM_GENERATOR logs to the console inside execute and uses a golden-ratio phase offset; MPC_CONTROLLER keeps a class instance in state that does not survive a clone (hidden while it throws). Found during WP-03 triage. Severity raised from S4 (verifier): the PWM phase offset changes numbers and the MPC state is lost on clone; both are checked against oracles in WP-08 and WP-07. |
 | XBV-034 | V4 | 5.2 diagnostics | DOE_MODEL fault codes EXECUTION_EXCEPTION, INVALID_GMDH_LAYERS, INVALID_TAGUCHI_LEVELS, NO_MODEL_CONFIGURED, NON_FINITE_INPUT exist only in nextState.lastFault and inside one BLOCK_RUNTIME_FAULT message; they never appear as diagnostics, and the run continues (XBV-033). Pinned in xbDiagnostics.test.ts. |
 | XBV-038 | V3 | 5.2 diagnostics | CONSTANT_VALUE_NOT_REPRESENTABLE (a Constant value that loses precision in its data type) is a compile error that refuses the model; Simulink reports parameter precision loss as a warning by default (out-of-range overflow stays an error). Pinned in xbDiagnostics.test.ts. |
 | XBV-041 | V2 | 4.2 sources / element-wise math / reductions / trig | The Sources 'Clock' block is a 50% square-wave pulse generator (freq parameter), not the Simulink Clock (output = simulation time); a Simulink user wiring Clock as time gets a 0/1 square wave. No block outputs t. Pinned in xbEquations.math.test.ts. The embedded path implements Clock as time (WP-16), so the canvas and the state machine also disagree. |
-| XBV-070 | V2 | 4.2 power electronics / PWM / torque optimisation | THREE_PHASE_PWM uses a sawtooth carrier (raw phase 0..1) instead of the symmetric triangle of sinusoidal PWM: the average duty is right, but pulses are left-aligned (v_ref 0.5 gives a pulse in the first 75 % of the period), changing the harmonic spectrum and current ripple. Pinned in xbEquations.motor.test.ts. |
-| XBV-074 | V2 | 4.2 power electronics / PWM / torque optimisation | PWM_GENERATOR with duty 1 turns off at the carrier peak (strict 'duty > carrier'; the carrier reaches exactly 1 at t = 0.01 s at 50 Hz), so a 100 % command produces a glitch every period; a sampled run only escapes it when floating-point phase accumulation misses the peak. Pinned in xbEquations.motor.test.ts. |
-| XBV-077 | V2 | 4.2 control / observers | PID_BASIC and PID_CONTROLLER output 0 during reset (all five PID_CONTROLLER outputs 0) instead of the proportional action Kp e. Found by the WP-07 executor; pinned in xbEquations.control.test.ts. |
-| XBV-079 | V2 | 4.2 control / observers | KALMAN_FILTER applies u(n) in the same sample's prior: the first innovation is y(0) - C B u(0) instead of y(0) - C x0; the input acts one sample early. Found by the WP-07 executor; pinned in xbEquations.control.test.ts. EXTENDED_KALMAN_FILTER matches KALMAN_FILTER to 1e-7 and therefore inherits this. |
 | XBV-088 | V6 | 7.3 canvas / interpreter parity | WHITE_NOISE / BAND_LIMITED_NOISE use different random streams on the canvas (Math.random) and in the embedded path (deterministic generator), so a model with noise never matches between the two (related XBV-023). Found by the WP-16 executor; pinned in src/utils/stateMachine/xbTriParity.test.ts. |
-| XBV-090 | V6 | 7.3 canvas / interpreter parity | SIX_STEP_COMMUTATION: the canvas treats a Hall input as high when > 0.5, the embedded path when non-zero; results differ for inputs in (0, 0.5]. Found by the WP-16 executor; pinned in src/utils/stateMachine/xbTriParity.test.ts. |
 | XBV-106 | V7 | 7.2 state-machine alignment | State-machine variables are scalar only: mapping a vector (3) or matrix (2x2) X-Bridges port to an SM variable is refused (XB_MAPPING_INVALID), so plan 7.2's vector/matrix boundary mappings are not expressible; vector/matrix signals work inside the model. Reported by the WP-18 executor. |
 | XBV-122 | V2 | 4.2 navigation / robot vacuum / DEM-CFD (D5) | ROBOT_VACUUM_DYNAMICS applies a hidden 0.992 slip factor in evaluateDerivatives: a straight run gives x(10) = -1.51792 instead of the kinematic -1.51 (r w t). Found by the WP-10 executor; pinned in xbEquations.robot.test.ts. |
 | XBV-123 | V2 | 4.2 navigation / robot vacuum / DEM-CFD (D5) | ROBOT_VACUUM_DYNAMICS turning in place: theta(2) = 2.4552 instead of 2.475 (same hidden slip factor). Found by the WP-10 executor; pinned in xbEquations.robot.test.ts. |
@@ -137,7 +125,7 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 | XBV-156 | V8 | 6 UI | The properties panel's Switch criterion dropdown (XbridgesPropertiesPanel.tsx ~1077) does not offer the new 'u2 ~= 0' criterion, and blockGuidance still documents SubMatrix indices as zero-based ('defaults 0'). Found by the WP-21 batch D executor. |
 | XBV-169 | V2 | 4.2 routing / matrix | MatrixConcat axis 0 mixes Simulink's Vector and Multidimensional modes: scalars only give a 2x1 matrix, vectors only (or vector plus scalar) give a longer 1-D vector; the block has no mode parameter (Simulink Matrix Concatenate has 'Vector' / 'Multidimensional array'). Found by the WP-21 batch H verifier. |
 
-### S4 - documentation (9)
+### S4 - documentation (8)
 
 | Id | Gate | Plan ref | Summary |
 | --- | --- | --- | --- |
@@ -145,7 +133,6 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 | XBV-012 | V1 | V1 | 174 blocks have no equation text in their factory; ratchet list in tests/fixtures/xbridges/known-gaps.json. |
 | XBV-013 | V1 | V1 | 233 blocks have at least one port without a unit; ratchet list in tests/fixtures/xbridges/known-gaps.json. |
 | XBV-037 | V5 | 5.1 | Stiff-solver options (ode14x extrapolationOrder/newtonIterations, ode23tb relTol/absTol/minStep/maxStep) are not editable on the canvas; STIFF_SOLVER_INVALID_OPTION and STIFF_SOLVER_STEP_TOO_SMALL are reachable only from a batch configuration. Related to decision D3 (user tolerances). |
-| XBV-082 | V2 | 4.2 control / observers | SPEED_CONTROLLER and CURRENT_CONTROLLER_DQ integrate a fake 1e-6 s at their first evaluation (dt = max(1e-6, t - lastTime)), so every output is offset by Ki e 1e-6 (iq_ref(0) = 1.00001 instead of 1). Found by the WP-07 executor; pinned in xbEquations.control.test.ts. |
 | XBV-108 | V7 | 7.2 state-machine alignment | Under the 'retain' memory policy the discrete sample-hit counter freezes while the owning state is inactive (hits at ticks 1, 3, 7, 9 across exit/re-entry); simulator, runtime and C agree, but docs/XBRIDGES_EMBEDDED_CODEGEN.md does not state it. Reported by the WP-18 executor. |
 | XBV-109 | G | WP-11 | docs/powertrain/ledger.json has no per-block gate records ('blocks' is {} and no PT_ type appears), so the powertrain G1-G5 verdicts the plan imports do not exist; the 45 PT_* blocks are covered by 28 powertrain test files (204 tests pass) but their Simulink-golden gate is pending everywhere. |
 | XBV-162 | V7 | documentation | src/utils/stateMachine/xbAccurateMath.ts says glibc sin is correctly rounded; glibc 2.39 differs from the correctly rounded value in 195 of 208k samples (verifier). The interpreter's accurateSin is correctly rounded (0 mismatches) and differs from the canvas Math.sin by 1 ULP in about 1.8 % of cases, absorbed by the parity tolerance. Comment to correct. |
@@ -164,7 +151,9 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 - XBV-018 (closed): 28 stateful blocks are sorted by the engine as non-direct-feedthrough although their output depends on the current input (DERIVATIVE, HIGH_PASS_FILTER, MOVING_AVERAGE, KALMAN_FILTER, EXTENDED_KALMAN_F
 - XBV-019 (closed): 153 numeric parameters are replaced by their default when set to 0 because factories use `params.x \|\| default`; the canvas rebuilds blocks through the factory on Play, so the user's 0 is lost (GAIN.
 - XBV-020 (closed): 16 blocks mutate their state (or inputs/params) in place inside execute; solver stages then see already-updated state. ROBOT_VACUUM_FUSION with x_true = 1: euler 0.99795, rk4 0.9999998, ode45 about 1 
+- XBV-024 (closed): PWM_GENERATOR logs to the console inside execute and uses a golden-ratio phase offset; MPC_CONTROLLER keeps a class instance in state that does not survive a clone (hidden while it throws). Found duri
 - XBV-026 (closed): Canvas ode23tb freezes silently: the canvas and worker call StiffSolver.stepODE23TB once per output step with tolerances 1e-3/1e-6 and ignore { accepted: false }; a rejected step leaves the state unch
+- XBV-027 (closed): AC_MOTOR_PID_CONTROL with defaults settles at omega = w_ref / P = 78.5 rad/s for w_ref = 157 (stator frequency fixed at w_ref, P = 2), so the PID never removes the speed error, its integral winds up a
 - XBV-028 (closed): Canvas (stepLiveSolver) and worker fall back to explicit Euler for any unknown solver name, silently; the batch runner returns UNSUPPORTED_SOLVER. Decision D3: unknown names are refused. Pinned by it.
 - XBV-029 (closed): DIMENSION_MISMATCH and DATA_TYPE_MISMATCH on a connection are warnings and the run continues; decision D1 (Simulink): compile errors that stop the run. Pinned by it.fails in xbDiagnostics.test.ts. Sup
 - XBV-030 (closed): An algebraic loop without a solution (y = 1 + y) emits ALGEBRAIC_LOOP_NOT_CONVERGED but the run continues every step with a meaningless value; Simulink stops. Pinned in xbEngine.test.ts.
@@ -201,12 +190,25 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 - XBV-067 (closed): Engine (canvas fixed-step loop): discontinuous sources change inside a step - the rk4 stage at t + dt already sees a Step's new value, so the plain Integrator of Step(0 -> 1 at 0.5) is off by h/6 per 
 - XBV-068 (closed): MOVING_AVERAGE starts with its window filled with the first sample (3, 6, 9, 12 -> 3, 4, 6, 9); a sliding-window average with zero initial state gives 1, 3, 6, 9. Found by the WP-06 executor; pinned i
 - XBV-069 (closed): INTEGRATOR with an output limit under rk4 arrives below the limit: y(0.3) = 0.29833 instead of 0.3 with limit 0.3, and with limit 0.305 it sags to 0.30333 at t = 0.5 (the saturated derivative is used 
+- XBV-070 (closed): THREE_PHASE_PWM uses a sawtooth carrier (raw phase 0..1) instead of the symmetric triangle of sinusoidal PWM: the average duty is right, but pulses are left-aligned (v_ref 0.5 gives a pulse in the fir
+- XBV-071 (closed): SVPWM_CORE over-modulation is not handled: only t0 is clamped to 0, so t1 + t2 exceeds Ts (\|V\| = 300 at 30 deg, Vdc 400: t1 = t2 = 6.5e-5, sum 1.3e-4 > 1e-4); the standard rule scales t1, t2 to sum 
+- XBV-072 (closed): MTPA_CONTROLLER does not deliver the requested torque: it hard-codes 2 pole pairs and id = -0.2 \|iq\| and ignores Ld, Lq; for te_ref = 1 it returns iq = 3.333, id = -0.667, i.e. Te = 0.533 (p = 1) or
+- XBV-073 (closed): MTPA_CONTROLLER's operating point is not the maximum-torque-per-ampere point: on its constant-torque curve d\|i\|^2/d id is about +0.75 at te_ref = 1 (should be 0). Pinned in xbEquations.motor.test.ts
+- XBV-074 (closed): PWM_GENERATOR with duty 1 turns off at the carrier peak (strict 'duty > carrier'; the carrier reaches exactly 1 at t = 0.01 s at 50 Hz), so a 100 % command produces a glitch every period; a sampled ru
+- XBV-075 (closed): Continuous PID_BASIC ignores enable: its integrator keeps accumulating while enable = 0 (evaluateDerivatives ignores the enable input; execute's nextState is not used for continuous blocks). Enable 0 
+- XBV-076 (closed): Continuous PID_BASIC ignores reset: the integral is neither held at 0 nor cleared while reset = 1. Found by the WP-07 executor; pinned in xbEquations.control.test.ts.
+- XBV-077 (closed): PID_BASIC and PID_CONTROLLER output 0 during reset (all five PID_CONTROLLER outputs 0) instead of the proportional action Kp e. Found by the WP-07 executor; pinned in xbEquations.control.test.ts.
+- XBV-078 (closed): KALMAN_FILTER predicts before its first update (starts from P[-1\|-1] = P0, so the first update uses A P0 A' + Q); the Simulink Kalman Filter starts from x[0\|-1] = x0, P[0\|-1] = P0 and updates first
+- XBV-079 (closed): KALMAN_FILTER applies u(n) in the same sample's prior: the first innovation is y(0) - C B u(0) instead of y(0) - C x0; the input acts one sample early. Found by the WP-07 executor; pinned in xbEquatio
 - XBV-080 (closed): PID_CONTROLLER is sorted as non-direct-feedthrough (stateful, no directFeedthrough flag) although u contains Kp (beta r - y): in a closed loop it reads the plant output one stage late and the result i
+- XBV-081 (closed): MPC_CONTROLLER with Nc > 1 throws on its second call (RangeError: H is Nc x Nc but the warm-start vector has length nu), so the default MPC (Nc 3) cannot run more than one step; with Nc 1 it converges
+- XBV-082 (closed): SPEED_CONTROLLER and CURRENT_CONTROLLER_DQ integrate a fake 1e-6 s at their first evaluation (dt = max(1e-6, t - lastTime)), so every output is offset by Ki e 1e-6 (iq_ref(0) = 1.00001 instead of 1). 
 - XBV-083 (closed): The state-machine X-Bridges interpreter ignores Sum signs and always adds (xbInterpreter.ts ~530, case 'Sum'/'SUM_JUNCTION'/'VectorAdd'): '+-' gives u1 + u2. The canvas subtracts, and the C generator 
 - XBV-084 (closed): Mixed time base inside one embedded tick (interpreter and generated C): Clock, WaveformGen and UNIT_DELAY are evaluated at t_k, while Integrator, INTEGRATOR_CONTINUOUS and RATE_LIMITER publish their p
 - XBV-085 (merged into XBV-084): Embedded Step switches one tick early (evaluates t + dt, xbInterpreter.ts ~994): Step at T = 1 gives 1 at t = 0.95; the canvas gives 0 (Simulink: y = final for t >= T). Found by the WP-16 executor; pi
 - XBV-086 (closed): Out-of-domain inverse trig/hyperbolic and pow (ACOS, ACOSEC, ACOSH, ACOTH, ASEC, ASECH, ASIN, ATANH, VectorPow): the canvas gives NaN with MATH_DOMAIN_ERROR. In the embedded path, under the 'signal-on
 - XBV-087 (closed): Bitwise and shift blocks: canvas works in signed int32 (~0 = -1), the embedded path in uint32 (4294967295). No data-type contract decides which is right; Simulink requires an integer data type on the 
+- XBV-090 (closed): SIX_STEP_COMMUTATION: the canvas treats a Hall input as high when > 0.5, the embedded path when non-zero; results differ for inputs in (0, 0.5]. Found by the WP-16 executor; pinned in src/utils/stateM
 - XBV-091 (closed): LOW_PASS_FILTER / HIGH_PASS_FILTER at fc 10 Hz, dt 0.05 (dt/tau = 3.1): the canvas output grows (\|y\| > 1.3 from step 3, explicit integration beyond its stability limit), the embedded path stays boun
 - XBV-092 (closed): KALMAN_FILTER in the parity harness: canvas x_hat and kg are non-numeric and y_hat differs from the embedded path (shape handling of the default matrices). To be bisected in WP-16b. Found by the WP-16
 - XBV-094 (closed): Parity gap: VectorAdd/VectorSub/VectorMul/VectorDiv are registered with a scalar shape but the embedded validator rejects scalar inputs (XB_SHAPE_MISMATCH). Found by the WP-16 executor; pinned in src/
@@ -252,6 +254,7 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 - XBV-151 (closed): The embedded builder still refuses DELAY delay_length 0 (xbSemanticBuilder.ts ~1146 XB_DELAY_LENGTH_INVALID, diagnosticGuidance.ts) although the canvas now treats it as direct feedthrough (XBV-064, Si
 - XBV-158 (closed): The worker logs the final sample at the summed time (stop time within a few ULP), the main-thread path at exactly the stop time. Found by the WP-21 batch C verifier.
 - XBV-155 (closed): A vector input with a scalar initial condition is not scalar-expanded for the plain Integrator (bare-number state) on any solver, and for INTEGRATOR / INTEGRATOR_CONTINUOUS on the stiff solvers ode14x
+- XBV-170 (closed): AC_INDUCTION_MOTOR and AC_MOTOR_PID_CONTROL stator-current equations divided the resistive and back-EMF terms by sigma once too often (sigma Ls dis/dt = vs - (Rs + kr^2 Rr) is + (kr/tau_r) psir -/+ kr
 
 ## Decisions
 

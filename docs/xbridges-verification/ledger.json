@@ -597,7 +597,7 @@
    "exec": "S / H, verifier opus",
    "deps": [],
    "status": "in_progress",
-   "note": "User go-ahead 2026-11-11 (fix all findings). Plan: docs/xbridges-verification/wp21-fix-plan.md. Round 1 dispatched: A zero parameters, B embedded quick fixes, C workspace UI. Batch B merged (a3daf970): 9 findings closed; new XBV-150 (embedded PID semantics), XBV-151 (embedded DELAY 0), XBV-152 (vacuous PID parity case). LIBM_CONDITIONED bound (8 eps max(1,|y|), 17 keys) added to xbCodeParity, verifier re-measured worst ratio 3.85. Batch A merged (c8facc19): XBV-015, 019, 040, 064 closed; DELAY delay_length is not tunable during a run (live change to/from 0 refused with PARAMETER_OUT_OF_RANGE, Simulink); XBV-137 ratchet shrunk 463 -> 418; new XBV-153. Batch D dispatched (acceptance 624b6a44). Batch F acceptance: pins removed for XBV-084, 086, 087, 091, 093, 094, 101, 102, 103 and the XBV-084 seeds; new tests for XBV-150 (PID with distinct r and y), 151 (DELAY 0), 107 (passes: closed). XBV-088, 090, 092 stay pinned (canvas-side causes, later batches). Batch C committed (13 findings closed, verifier PASS, e2e 36/36); new XBV-157, 158. WP-20 re-check by the verifier: spec gap (no end-time check in solvers/persistence/subsystem/param-edit) fixed by the controller; XBV-149 pin ordering fixed. Batch D merged (22 findings closed; XBV-066 moved to E; new XBV-154, 155, 156). XBV-057: right shift of a negative int32 by >= 32 gives -1 (arithmetic shift, Simulink signed shift). Batch E acceptance (engine core): pins flipped for XBV-016, 026, 028, 030, 031, 032, 033, 035, 036, 066, 067, 069, 080; PINNED_SEVERITY no longer lists DIMENSION_MISMATCH, DATA_TYPE_MISMATCH (D1), ALGEBRAIC_LOOP_NOT_CONVERGED, LOGIC_NAN_INPUT; U10 and U14 lists emptied (XBV-020, XBV-018); XBV-047 clone list emptied; RELAY rk4 parity pin removed (XBV-067); new xbWp21Engine.test.ts for XBV-002, 003, 004, 005, 155; testkit runModel passes relTol/absTol. XBV-107 reopened (controller test error). Batch F merged after 2 reworks and verifier review (11 findings closed, XBV-093 open; decision D12; new XBV-159, 160, 161, 162). RELAY rk4 parity stays failing until batch E2 (XBV-067 minor steps). Batch E1+E2 merged (26 findings closed incl. XBV-092 and XBV-133 fixed as side effects); structural codes MULTIPLE_DRIVERS, DUPLICATE_BLOCK_ID, UNKNOWN_BLOCK_TYPE; new XBV-163, 164, 165, 166. Pre-existing failure unrelated to WP-21: src/help/helpCoverage.test.ts live-UI fingerprint (fails already at cb974bc3). Batch H merged (12 fuzzy findings closed; math blocks out of the universal lists; decision D13; new XBV-169)."
+   "note": "User go-ahead 2026-11-11 (fix all findings). Plan: docs/xbridges-verification/wp21-fix-plan.md. Round 1 dispatched: A zero parameters, B embedded quick fixes, C workspace UI. Batch B merged (a3daf970): 9 findings closed; new XBV-150 (embedded PID semantics), XBV-151 (embedded DELAY 0), XBV-152 (vacuous PID parity case). LIBM_CONDITIONED bound (8 eps max(1,|y|), 17 keys) added to xbCodeParity, verifier re-measured worst ratio 3.85. Batch A merged (c8facc19): XBV-015, 019, 040, 064 closed; DELAY delay_length is not tunable during a run (live change to/from 0 refused with PARAMETER_OUT_OF_RANGE, Simulink); XBV-137 ratchet shrunk 463 -> 418; new XBV-153. Batch D dispatched (acceptance 624b6a44). Batch F acceptance: pins removed for XBV-084, 086, 087, 091, 093, 094, 101, 102, 103 and the XBV-084 seeds; new tests for XBV-150 (PID with distinct r and y), 151 (DELAY 0), 107 (passes: closed). XBV-088, 090, 092 stay pinned (canvas-side causes, later batches). Batch C committed (13 findings closed, verifier PASS, e2e 36/36); new XBV-157, 158. WP-20 re-check by the verifier: spec gap (no end-time check in solvers/persistence/subsystem/param-edit) fixed by the controller; XBV-149 pin ordering fixed. Batch D merged (22 findings closed; XBV-066 moved to E; new XBV-154, 155, 156). XBV-057: right shift of a negative int32 by >= 32 gives -1 (arithmetic shift, Simulink signed shift). Batch E acceptance (engine core): pins flipped for XBV-016, 026, 028, 030, 031, 032, 033, 035, 036, 066, 067, 069, 080; PINNED_SEVERITY no longer lists DIMENSION_MISMATCH, DATA_TYPE_MISMATCH (D1), ALGEBRAIC_LOOP_NOT_CONVERGED, LOGIC_NAN_INPUT; U10 and U14 lists emptied (XBV-020, XBV-018); XBV-047 clone list emptied; RELAY rk4 parity pin removed (XBV-067); new xbWp21Engine.test.ts for XBV-002, 003, 004, 005, 155; testkit runModel passes relTol/absTol. XBV-107 reopened (controller test error). Batch F merged after 2 reworks and verifier review (11 findings closed, XBV-093 open; decision D12; new XBV-159, 160, 161, 162). RELAY rk4 parity stays failing until batch E2 (XBV-067 minor steps). Batch E1+E2 merged (26 findings closed incl. XBV-092 and XBV-133 fixed as side effects); structural codes MULTIPLE_DRIVERS, DUPLICATE_BLOCK_ID, UNKNOWN_BLOCK_TYPE; new XBV-163, 164, 165, 166. Pre-existing failure unrelated to WP-21: src/help/helpCoverage.test.ts live-UI fingerprint (fails already at cb974bc3). Batch H merged (12 fuzzy findings closed; math blocks out of the universal lists; decision D13; new XBV-169). Batch G merged (15 findings closed; AC_MOTOR_PID_CONTROL rewritten as a slip-regulated V/f drive; induction-motor stator equations corrected, XBV-170; new embedded XBV-167, 168)."
   },
   {
    "id": "WP-22",
@@ -855,8 +855,9 @@
    "plan_ref": "review",
    "severity": "S3",
    "gate": "V3",
-   "status": "open",
-   "summary": "PWM_GENERATOR logs to the console inside execute and uses a golden-ratio phase offset; MPC_CONTROLLER keeps a class instance in state that does not survive a clone (hidden while it throws). Found during WP-03 triage. Severity raised from S4 (verifier): the PWM phase offset changes numbers and the MPC state is lost on clone; both are checked against oracles in WP-08 and WP-07."
+   "status": "closed",
+   "summary": "PWM_GENERATOR logs to the console inside execute and uses a golden-ratio phase offset; MPC_CONTROLLER keeps a class instance in state that does not survive a clone (hidden while it throws). Found during WP-03 triage. Severity raised from S4 (verifier): the PWM phase offset changes numbers and the MPC state is lost on clone; both are checked against oracles in WP-08 and WP-07.",
+   "fix": "WP-21 batch G (2 reworks), verifier PASS"
   },
   {
    "id": "XBV-025",
@@ -880,8 +881,9 @@
    "plan_ref": "4.2 motor control",
    "severity": "S1",
    "gate": "V2",
-   "status": "open",
-   "summary": "AC_MOTOR_PID_CONTROL with defaults settles at omega = w_ref / P = 78.5 rad/s for w_ref = 157 (stator frequency fixed at w_ref, P = 2), so the PID never removes the speed error, its integral winds up and last_e is never updated (verifier analysis; rk4, ode45 and euler 1e-5 agree). Replaces the WP-08 note."
+   "status": "closed",
+   "summary": "AC_MOTOR_PID_CONTROL with defaults settles at omega = w_ref / P = 78.5 rad/s for w_ref = 157 (stator frequency fixed at w_ref, P = 2), so the PID never removes the speed error, its integral winds up and last_e is never updated (verifier analysis; rk4, ode45 and euler 1e-5 agree). Replaces the WP-08 note.",
+   "fix": "WP-21 batch G (2 reworks), verifier PASS"
   },
   {
    "id": "XBV-028",
@@ -1260,80 +1262,90 @@
    "plan_ref": "4.2 power electronics / PWM / torque optimisation",
    "severity": "S3",
    "gate": "V2",
-   "status": "open",
-   "summary": "THREE_PHASE_PWM uses a sawtooth carrier (raw phase 0..1) instead of the symmetric triangle of sinusoidal PWM: the average duty is right, but pulses are left-aligned (v_ref 0.5 gives a pulse in the first 75 % of the period), changing the harmonic spectrum and current ripple. Pinned in xbEquations.motor.test.ts."
+   "status": "closed",
+   "summary": "THREE_PHASE_PWM uses a sawtooth carrier (raw phase 0..1) instead of the symmetric triangle of sinusoidal PWM: the average duty is right, but pulses are left-aligned (v_ref 0.5 gives a pulse in the first 75 % of the period), changing the harmonic spectrum and current ripple. Pinned in xbEquations.motor.test.ts.",
+   "fix": "WP-21 batch G (2 reworks), verifier PASS"
   },
   {
    "id": "XBV-071",
    "plan_ref": "4.2 power electronics / PWM / torque optimisation",
    "severity": "S2",
    "gate": "V2",
-   "status": "open",
-   "summary": "SVPWM_CORE over-modulation is not handled: only t0 is clamped to 0, so t1 + t2 exceeds Ts (|V| = 300 at 30 deg, Vdc 400: t1 = t2 = 6.5e-5, sum 1.3e-4 > 1e-4); the standard rule scales t1, t2 to sum Ts and keeps their ratio. Pinned in xbEquations.motor.test.ts."
+   "status": "closed",
+   "summary": "SVPWM_CORE over-modulation is not handled: only t0 is clamped to 0, so t1 + t2 exceeds Ts (|V| = 300 at 30 deg, Vdc 400: t1 = t2 = 6.5e-5, sum 1.3e-4 > 1e-4); the standard rule scales t1, t2 to sum Ts and keeps their ratio. Pinned in xbEquations.motor.test.ts.",
+   "fix": "WP-21 batch G (2 reworks), verifier PASS"
   },
   {
    "id": "XBV-072",
    "plan_ref": "4.2 power electronics / PWM / torque optimisation",
    "severity": "S1",
    "gate": "V2",
-   "status": "open",
-   "summary": "MTPA_CONTROLLER does not deliver the requested torque: it hard-codes 2 pole pairs and id = -0.2 |iq| and ignores Ld, Lq; for te_ref = 1 it returns iq = 3.333, id = -0.667, i.e. Te = 0.533 (p = 1) or 1.067 (p = 2). Pinned in xbEquations.motor.test.ts."
+   "status": "closed",
+   "summary": "MTPA_CONTROLLER does not deliver the requested torque: it hard-codes 2 pole pairs and id = -0.2 |iq| and ignores Ld, Lq; for te_ref = 1 it returns iq = 3.333, id = -0.667, i.e. Te = 0.533 (p = 1) or 1.067 (p = 2). Pinned in xbEquations.motor.test.ts.",
+   "fix": "WP-21 batch G (2 reworks), verifier PASS"
   },
   {
    "id": "XBV-073",
    "plan_ref": "4.2 power electronics / PWM / torque optimisation",
    "severity": "S1",
    "gate": "V2",
-   "status": "open",
-   "summary": "MTPA_CONTROLLER's operating point is not the maximum-torque-per-ampere point: on its constant-torque curve d|i|^2/d id is about +0.75 at te_ref = 1 (should be 0). Pinned in xbEquations.motor.test.ts."
+   "status": "closed",
+   "summary": "MTPA_CONTROLLER's operating point is not the maximum-torque-per-ampere point: on its constant-torque curve d|i|^2/d id is about +0.75 at te_ref = 1 (should be 0). Pinned in xbEquations.motor.test.ts.",
+   "fix": "WP-21 batch G (2 reworks), verifier PASS"
   },
   {
    "id": "XBV-074",
    "plan_ref": "4.2 power electronics / PWM / torque optimisation",
    "severity": "S3",
    "gate": "V2",
-   "status": "open",
-   "summary": "PWM_GENERATOR with duty 1 turns off at the carrier peak (strict 'duty > carrier'; the carrier reaches exactly 1 at t = 0.01 s at 50 Hz), so a 100 % command produces a glitch every period; a sampled run only escapes it when floating-point phase accumulation misses the peak. Pinned in xbEquations.motor.test.ts."
+   "status": "closed",
+   "summary": "PWM_GENERATOR with duty 1 turns off at the carrier peak (strict 'duty > carrier'; the carrier reaches exactly 1 at t = 0.01 s at 50 Hz), so a 100 % command produces a glitch every period; a sampled run only escapes it when floating-point phase accumulation misses the peak. Pinned in xbEquations.motor.test.ts.",
+   "fix": "WP-21 batch G (2 reworks), verifier PASS"
   },
   {
    "id": "XBV-075",
    "plan_ref": "4.2 control / observers",
    "severity": "S2",
    "gate": "V2",
-   "status": "open",
-   "summary": "Continuous PID_BASIC ignores enable: its integrator keeps accumulating while enable = 0 (evaluateDerivatives ignores the enable input; execute's nextState is not used for continuous blocks). Enable 0 -> 1 at 0.5 should give u(1) = 1.5. Found by the WP-07 executor; pinned in xbEquations.control.test.ts."
+   "status": "closed",
+   "summary": "Continuous PID_BASIC ignores enable: its integrator keeps accumulating while enable = 0 (evaluateDerivatives ignores the enable input; execute's nextState is not used for continuous blocks). Enable 0 -> 1 at 0.5 should give u(1) = 1.5. Found by the WP-07 executor; pinned in xbEquations.control.test.ts.",
+   "fix": "WP-21 batch G (2 reworks), verifier PASS"
   },
   {
    "id": "XBV-076",
    "plan_ref": "4.2 control / observers",
    "severity": "S2",
    "gate": "V2",
-   "status": "open",
-   "summary": "Continuous PID_BASIC ignores reset: the integral is neither held at 0 nor cleared while reset = 1. Found by the WP-07 executor; pinned in xbEquations.control.test.ts."
+   "status": "closed",
+   "summary": "Continuous PID_BASIC ignores reset: the integral is neither held at 0 nor cleared while reset = 1. Found by the WP-07 executor; pinned in xbEquations.control.test.ts.",
+   "fix": "WP-21 batch G (2 reworks), verifier PASS"
   },
   {
    "id": "XBV-077",
    "plan_ref": "4.2 control / observers",
    "severity": "S3",
    "gate": "V2",
-   "status": "open",
-   "summary": "PID_BASIC and PID_CONTROLLER output 0 during reset (all five PID_CONTROLLER outputs 0) instead of the proportional action Kp e. Found by the WP-07 executor; pinned in xbEquations.control.test.ts."
+   "status": "closed",
+   "summary": "PID_BASIC and PID_CONTROLLER output 0 during reset (all five PID_CONTROLLER outputs 0) instead of the proportional action Kp e. Found by the WP-07 executor; pinned in xbEquations.control.test.ts.",
+   "fix": "WP-21 batch G (2 reworks), verifier PASS"
   },
   {
    "id": "XBV-078",
    "plan_ref": "4.2 control / observers",
    "severity": "S2",
    "gate": "V2",
-   "status": "open",
-   "summary": "KALMAN_FILTER predicts before its first update (starts from P[-1|-1] = P0, so the first update uses A P0 A' + Q); the Simulink Kalman Filter starts from x[0|-1] = x0, P[0|-1] = P0 and updates first. Found by the WP-07 executor; pinned in xbEquations.control.test.ts. EXTENDED_KALMAN_FILTER matches KALMAN_FILTER to 1e-7 and therefore inherits this."
+   "status": "closed",
+   "summary": "KALMAN_FILTER predicts before its first update (starts from P[-1|-1] = P0, so the first update uses A P0 A' + Q); the Simulink Kalman Filter starts from x[0|-1] = x0, P[0|-1] = P0 and updates first. Found by the WP-07 executor; pinned in xbEquations.control.test.ts. EXTENDED_KALMAN_FILTER matches KALMAN_FILTER to 1e-7 and therefore inherits this.",
+   "fix": "WP-21 batch G (2 reworks), verifier PASS"
   },
   {
    "id": "XBV-079",
    "plan_ref": "4.2 control / observers",
    "severity": "S3",
    "gate": "V2",
-   "status": "open",
-   "summary": "KALMAN_FILTER applies u(n) in the same sample's prior: the first innovation is y(0) - C B u(0) instead of y(0) - C x0; the input acts one sample early. Found by the WP-07 executor; pinned in xbEquations.control.test.ts. EXTENDED_KALMAN_FILTER matches KALMAN_FILTER to 1e-7 and therefore inherits this."
+   "status": "closed",
+   "summary": "KALMAN_FILTER applies u(n) in the same sample's prior: the first innovation is y(0) - C B u(0) instead of y(0) - C x0; the input acts one sample early. Found by the WP-07 executor; pinned in xbEquations.control.test.ts. EXTENDED_KALMAN_FILTER matches KALMAN_FILTER to 1e-7 and therefore inherits this.",
+   "fix": "WP-21 batch G (2 reworks), verifier PASS"
   },
   {
    "id": "XBV-080",
@@ -1349,16 +1361,18 @@
    "plan_ref": "4.2 control / observers",
    "severity": "S2",
    "gate": "V2",
-   "status": "open",
-   "summary": "MPC_CONTROLLER with Nc > 1 throws on its second call (RangeError: H is Nc x Nc but the warm-start vector has length nu), so the default MPC (Nc 3) cannot run more than one step; with Nc 1 it converges and respects u limits. Found by the WP-07 executor; pinned in xbEquations.control.test.ts."
+   "status": "closed",
+   "summary": "MPC_CONTROLLER with Nc > 1 throws on its second call (RangeError: H is Nc x Nc but the warm-start vector has length nu), so the default MPC (Nc 3) cannot run more than one step; with Nc 1 it converges and respects u limits. Found by the WP-07 executor; pinned in xbEquations.control.test.ts.",
+   "fix": "WP-21 batch G (2 reworks), verifier PASS"
   },
   {
    "id": "XBV-082",
    "plan_ref": "4.2 control / observers",
    "severity": "S4",
    "gate": "V2",
-   "status": "open",
-   "summary": "SPEED_CONTROLLER and CURRENT_CONTROLLER_DQ integrate a fake 1e-6 s at their first evaluation (dt = max(1e-6, t - lastTime)), so every output is offset by Ki e 1e-6 (iq_ref(0) = 1.00001 instead of 1). Found by the WP-07 executor; pinned in xbEquations.control.test.ts."
+   "status": "closed",
+   "summary": "SPEED_CONTROLLER and CURRENT_CONTROLLER_DQ integrate a fake 1e-6 s at their first evaluation (dt = max(1e-6, t - lastTime)), so every output is offset by Ki e 1e-6 (iq_ref(0) = 1.00001 instead of 1). Found by the WP-07 executor; pinned in xbEquations.control.test.ts.",
+   "fix": "WP-21 batch G (2 reworks), verifier PASS"
   },
   {
    "id": "XBV-083",
@@ -1417,8 +1431,9 @@
    "plan_ref": "7.3 canvas / interpreter parity",
    "severity": "S3",
    "gate": "V6",
-   "status": "open",
-   "summary": "SIX_STEP_COMMUTATION: the canvas treats a Hall input as high when > 0.5, the embedded path when non-zero; results differ for inputs in (0, 0.5]. Found by the WP-16 executor; pinned in src/utils/stateMachine/xbTriParity.test.ts."
+   "status": "closed",
+   "summary": "SIX_STEP_COMMUTATION: the canvas treats a Hall input as high when > 0.5, the embedded path when non-zero; results differ for inputs in (0, 0.5]. Found by the WP-16 executor; pinned in src/utils/stateMachine/xbTriParity.test.ts.",
+   "fix": "WP-21 batch G (2 reworks), verifier PASS"
   },
   {
    "id": "XBV-091",
@@ -2080,6 +2095,31 @@
    "gate": "V2",
    "status": "open",
    "summary": "MatrixConcat axis 0 mixes Simulink's Vector and Multidimensional modes: scalars only give a 2x1 matrix, vectors only (or vector plus scalar) give a longer 1-D vector; the block has no mode parameter (Simulink Matrix Concatenate has 'Vector' / 'Multidimensional array'). Found by the WP-21 batch H verifier."
+  },
+  {
+   "id": "XBV-167",
+   "plan_ref": "7.3 canvas / interpreter parity",
+   "severity": "S1",
+   "gate": "V6",
+   "status": "open",
+   "summary": "Embedded KALMAN_FILTER still predicts before the first update (P[0|-1] = A P0 A' + Q); the canvas follows the Simulink order (update with x[0|-1] = x0, P0, then predict) since WP-21 batch G (XBV-078/079): x_hat(0) canvas 0.636364 vs embedded 0.636946. Pinned in xbTriParity."
+  },
+  {
+   "id": "XBV-168",
+   "plan_ref": "7.3 canvas / interpreter parity",
+   "severity": "S1",
+   "gate": "V6",
+   "status": "open",
+   "summary": "Embedded PID_BASIC / PID_CONTROLLER output 0 while reset is active; Simulink and the canvas (since XBV-077, WP-21 batch G) keep the proportional action Kp e. Pinned in xbTriParity."
+  },
+  {
+   "id": "XBV-170",
+   "plan_ref": "4.2 motor control",
+   "severity": "S1",
+   "gate": "V2",
+   "status": "closed",
+   "summary": "AC_INDUCTION_MOTOR and AC_MOTOR_PID_CONTROL stator-current equations divided the resistive and back-EMF terms by sigma once too often (sigma Ls dis/dt = vs - (Rs + kr^2 Rr) is + (kr/tau_r) psir -/+ kr P omega psir_perp); a loaded drive stalled. Found by the WP-21 batch G verifier.",
+   "fix": "WP-21 batch G rework 2 (42fc3bd4): open-loop torque equals the equivalent circuit to 1e-7; closed loop holds 157 rad/s at loads up to 5 N m (error <= 0.07 %)."
   }
  ],
  "blocks": {
