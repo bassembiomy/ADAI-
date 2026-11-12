@@ -105,14 +105,15 @@ export function deriveAcceptance(
   // 5. Static / MISRA check:
   for (const gate of ['static-analysis', 'misra-analysis'] as const) {
     const act = activities[gate];
-    if (act) {
-      if (act.status === 'FAIL') {
-        overallStatus = 'FAIL';
-        accepted = false;
-      } else if (act.status === 'NOT_RUN' && act.details !== null) {
-        if (overallStatus !== 'FAIL') overallStatus = 'NOT_RUN';
-        accepted = false;
-      }
+    if (!act) {
+      accepted = false;
+      if (overallStatus !== 'FAIL') overallStatus = 'NOT_RUN';
+    } else if (act.status === 'FAIL') {
+      overallStatus = 'FAIL';
+      accepted = false;
+    } else if (act.status !== 'PASS' && act.status !== 'NOT_APPLICABLE') {
+      accepted = false;
+      if (overallStatus !== 'FAIL') overallStatus = act.status;
     }
   }
 

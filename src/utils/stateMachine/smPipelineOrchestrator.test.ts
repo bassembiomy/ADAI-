@@ -90,14 +90,20 @@ describe('smPipelineOrchestrator gate-order and status truth-table', () => {
 
     try {
       const adapters = createMockAdapters();
+      // Static analysis and MISRA are release gates: the model names the (mock) tools so they run.
       const request: SMVerificationRequest = {
-        ir: ir!,
+        ir: {
+          ...ir!,
+          verification: { ...ir!.verification, staticAnalysisToolId: 'mock_static', misraToolId: 'mock_misra' },
+        },
         outputDirectory: outDir,
         adapters,
       };
 
       const bundle = await runVerificationPipeline(request);
 
+      expect(bundle.activities['static-analysis'].status).toBe('PASS');
+      expect(bundle.activities['misra-analysis'].status).toBe('PASS');
       expect(bundle.overallStatus).toBe('PASS');
       expect(bundle.acceptance).toBe(true);
       expect(bundle.activities['structural'].status).toBe('PASS');
