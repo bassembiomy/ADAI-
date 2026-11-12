@@ -591,7 +591,7 @@
    "exec": "S / H, verifier opus",
    "deps": [],
    "status": "in_progress",
-   "note": "User go-ahead 2026-11-11 (fix all findings). Plan: docs/xbridges-verification/wp21-fix-plan.md. Round 1 dispatched: A zero parameters, B embedded quick fixes, C workspace UI. Batch B merged (a3daf970): 9 findings closed; new XBV-150 (embedded PID semantics), XBV-151 (embedded DELAY 0), XBV-152 (vacuous PID parity case). LIBM_CONDITIONED bound (8 eps max(1,|y|), 17 keys) added to xbCodeParity, verifier re-measured worst ratio 3.85. Batch A merged (c8facc19): XBV-015, 019, 040, 064 closed; DELAY delay_length is not tunable during a run (live change to/from 0 refused with PARAMETER_OUT_OF_RANGE, Simulink); XBV-137 ratchet shrunk 463 -> 418; new XBV-153. Batch D dispatched (acceptance 624b6a44). Batch F acceptance: pins removed for XBV-084, 086, 087, 091, 093, 094, 101, 102, 103 and the XBV-084 seeds; new tests for XBV-150 (PID with distinct r and y), 151 (DELAY 0), 107 (passes: closed). XBV-088, 090, 092 stay pinned (canvas-side causes, later batches). Batch C committed (13 findings closed, verifier PASS, e2e 36/36); new XBV-157, 158. WP-20 re-check by the verifier: spec gap (no end-time check in solvers/persistence/subsystem/param-edit) fixed by the controller; XBV-149 pin ordering fixed. Batch D merged (22 findings closed; XBV-066 moved to E; new XBV-154, 155, 156). XBV-057: right shift of a negative int32 by >= 32 gives -1 (arithmetic shift, Simulink signed shift). Batch E acceptance (engine core): pins flipped for XBV-016, 026, 028, 030, 031, 032, 033, 035, 036, 066, 067, 069, 080; PINNED_SEVERITY no longer lists DIMENSION_MISMATCH, DATA_TYPE_MISMATCH (D1), ALGEBRAIC_LOOP_NOT_CONVERGED, LOGIC_NAN_INPUT; U10 and U14 lists emptied (XBV-020, XBV-018); XBV-047 clone list emptied; RELAY rk4 parity pin removed (XBV-067); new xbWp21Engine.test.ts for XBV-002, 003, 004, 005, 155; testkit runModel passes relTol/absTol. XBV-107 reopened (controller test error). Batch F merged after 2 reworks and verifier review (11 findings closed, XBV-093 open; decision D12; new XBV-159, 160, 161, 162). RELAY rk4 parity stays failing until batch E2 (XBV-067 minor steps)."
+   "note": "User go-ahead 2026-11-11 (fix all findings). Plan: docs/xbridges-verification/wp21-fix-plan.md. Round 1 dispatched: A zero parameters, B embedded quick fixes, C workspace UI. Batch B merged (a3daf970): 9 findings closed; new XBV-150 (embedded PID semantics), XBV-151 (embedded DELAY 0), XBV-152 (vacuous PID parity case). LIBM_CONDITIONED bound (8 eps max(1,|y|), 17 keys) added to xbCodeParity, verifier re-measured worst ratio 3.85. Batch A merged (c8facc19): XBV-015, 019, 040, 064 closed; DELAY delay_length is not tunable during a run (live change to/from 0 refused with PARAMETER_OUT_OF_RANGE, Simulink); XBV-137 ratchet shrunk 463 -> 418; new XBV-153. Batch D dispatched (acceptance 624b6a44). Batch F acceptance: pins removed for XBV-084, 086, 087, 091, 093, 094, 101, 102, 103 and the XBV-084 seeds; new tests for XBV-150 (PID with distinct r and y), 151 (DELAY 0), 107 (passes: closed). XBV-088, 090, 092 stay pinned (canvas-side causes, later batches). Batch C committed (13 findings closed, verifier PASS, e2e 36/36); new XBV-157, 158. WP-20 re-check by the verifier: spec gap (no end-time check in solvers/persistence/subsystem/param-edit) fixed by the controller; XBV-149 pin ordering fixed. Batch D merged (22 findings closed; XBV-066 moved to E; new XBV-154, 155, 156). XBV-057: right shift of a negative int32 by >= 32 gives -1 (arithmetic shift, Simulink signed shift). Batch E acceptance (engine core): pins flipped for XBV-016, 026, 028, 030, 031, 032, 033, 035, 036, 066, 067, 069, 080; PINNED_SEVERITY no longer lists DIMENSION_MISMATCH, DATA_TYPE_MISMATCH (D1), ALGEBRAIC_LOOP_NOT_CONVERGED, LOGIC_NAN_INPUT; U10 and U14 lists emptied (XBV-020, XBV-018); XBV-047 clone list emptied; RELAY rk4 parity pin removed (XBV-067); new xbWp21Engine.test.ts for XBV-002, 003, 004, 005, 155; testkit runModel passes relTol/absTol. XBV-107 reopened (controller test error). Batch F merged after 2 reworks and verifier review (11 findings closed, XBV-093 open; decision D12; new XBV-159, 160, 161, 162). RELAY rk4 parity stays failing until batch E2 (XBV-067 minor steps). Batch E1+E2 merged (26 findings closed incl. XBV-092 and XBV-133 fixed as side effects); structural codes MULTIPLE_DRIVERS, DUPLICATE_BLOCK_ID, UNKNOWN_BLOCK_TYPE; new XBV-163, 164, 165, 166. Pre-existing failure unrelated to WP-21: src/help/helpCoverage.test.ts live-UI fingerprint (fails already at cb974bc3)."
   },
   {
    "id": "WP-22",
@@ -663,32 +663,36 @@
    "plan_ref": "F2",
    "severity": "S3",
    "gate": "V5",
-   "status": "open",
-   "summary": "Solver dispatch is written three times: XbridgesWorkspace.tsx stepLiveSolver, xbridgesWorker.ts, Solvers.runFixedStep; no test that they agree."
+   "status": "closed",
+   "summary": "Solver dispatch is written three times: XbridgesWorkspace.tsx stepLiveSolver, xbridgesWorker.ts, Solvers.runFixedStep; no test that they agree.",
+   "fix": "WP-21 batch E1+E2 (merged after verifier PASS on the integration branch)"
   },
   {
    "id": "XBV-003",
    "plan_ref": "F3",
    "severity": "S1",
    "gate": "V5",
-   "status": "open",
-   "summary": "Canvas ode23/ode45/ode23tb are stepped with the fixed step and hard-coded tolerances; no error control. Decision D3: control error with the user's RelTol/AbsTol."
+   "status": "closed",
+   "summary": "Canvas ode23/ode45/ode23tb are stepped with the fixed step and hard-coded tolerances; no error control. Decision D3: control error with the user's RelTol/AbsTol.",
+   "fix": "WP-21 batch E1+E2 (merged after verifier PASS on the integration branch)"
   },
   {
    "id": "XBV-004",
    "plan_ref": "F4",
    "severity": "S3",
    "gate": "V5",
-   "status": "open",
-   "summary": "SolverOptions.solver admits ode113, ode23s, ode15s that no dispatcher implements. Decision D3: remove them from the type; unknown names keep UNSUPPORTED_SOLVER."
+   "status": "closed",
+   "summary": "SolverOptions.solver admits ode113, ode23s, ode15s that no dispatcher implements. Decision D3: remove them from the type; unknown names keep UNSUPPORTED_SOLVER.",
+   "fix": "WP-21 batch E1+E2 (merged after verifier PASS on the integration branch)"
   },
   {
    "id": "XBV-005",
    "plan_ref": "F5",
    "severity": "S1",
    "gate": "V5",
-   "status": "open",
-   "summary": "Only Step and three PT_ blocks declare zero crossings. Decision D2: add ZeroCrossingFn to SATURATION, DEADZONE, RELAY, SWITCH, Abs and the PWM carrier blocks."
+   "status": "closed",
+   "summary": "Only Step and three PT_ blocks declare zero crossings. Decision D2: add ZeroCrossingFn to SATURATION, DEADZONE, RELAY, SWITCH, Abs and the PWM carrier blocks.",
+   "fix": "WP-21 batch E1+E2 (merged after verifier PASS on the integration branch)"
   },
   {
    "id": "XBV-006",
@@ -776,24 +780,27 @@
    "plan_ref": "5.1/5.2",
    "severity": "S1",
    "gate": "V5",
-   "status": "open",
-   "summary": "Stiff solvers with an algebraic loop: y = 0.5*y + 1 feeding an Integrator, dt 0.1, stop 1 (expected integral 2): ode14x gives 51.588135932457256, ode23tb 1.7999999999948573; every other solver gives about 2. Canvas emulation gives the same. Found by the WP-02 verifier. Root causes (verifier): ode23tb is the XBV-026 mechanism (first step rejected, 9 x 0.2 = 1.8); ode14x is not Newton itself - the loop is warm-started only to algTol 1e-6, so f(t, x) drifts and the finite-difference Jacobian reads 0.5 instead of 0; with algTol 1e-10 it gives 2."
+   "status": "closed",
+   "summary": "Stiff solvers with an algebraic loop: y = 0.5*y + 1 feeding an Integrator, dt 0.1, stop 1 (expected integral 2): ode14x gives 51.588135932457256, ode23tb 1.7999999999948573; every other solver gives about 2. Canvas emulation gives the same. Found by the WP-02 verifier. Root causes (verifier): ode23tb is the XBV-026 mechanism (first step rejected, 9 x 0.2 = 1.8); ode14x is not Newton itself - the loop is warm-started only to algTol 1e-6, so f(t, x) drifts and the finite-difference Jacobian reads 0.5 instead of 0; with algTol 1e-10 it gives 2.",
+   "fix": "WP-21 batch E1+E2 (merged after verifier PASS on the integration branch)"
   },
   {
    "id": "XBV-017",
    "plan_ref": "5.1",
    "severity": "S3",
    "gate": "V5",
-   "status": "open",
-   "summary": "The canvas accumulates time (timeRef += stepNow) instead of t0 + n*dt; the test kit uses multiplication (plan 5.1). Against an accumulating emulation, signals differ at rounding level for 40 block types (verifier measured counts, not size). WP-12 measures the drift and pins the canvas rule."
+   "status": "closed",
+   "summary": "The canvas accumulates time (timeRef += stepNow) instead of t0 + n*dt; the test kit uses multiplication (plan 5.1). Against an accumulating emulation, signals differ at rounding level for 40 block types (verifier measured counts, not size). WP-12 measures the drift and pins the canvas rule.",
+   "fix": "WP-21 batch E1+E2 (merged after verifier PASS on the integration branch)"
   },
   {
    "id": "XBV-018",
    "plan_ref": "U14",
    "severity": "S1",
    "gate": "V4",
-   "status": "open",
-   "summary": "28 stateful blocks are sorted by the engine as non-direct-feedthrough although their output depends on the current input (DERIVATIVE, HIGH_PASS_FILTER, MOVING_AVERAGE, KALMAN_FILTER, EXTENDED_KALMAN_FILTER, LMS, PID/FOC/field-weakening blocks, several ROBOT_VACUUM_* and DEM_DRUM). Result depends on block order: MOVING_AVERAGE window 1 placed before its source gives y = [0,1,0,1,0,1] for u = [1,0,1,0,1,1]. Fix per block: either declare directFeedthrough (true feedthrough in Simulink) or output the pre-update state (plant blocks). List: universal-gaps.json XBV-U14."
+   "status": "closed",
+   "summary": "28 stateful blocks are sorted by the engine as non-direct-feedthrough although their output depends on the current input (DERIVATIVE, HIGH_PASS_FILTER, MOVING_AVERAGE, KALMAN_FILTER, EXTENDED_KALMAN_FILTER, LMS, PID/FOC/field-weakening blocks, several ROBOT_VACUUM_* and DEM_DRUM). Result depends on block order: MOVING_AVERAGE window 1 placed before its source gives y = [0,1,0,1,0,1] for u = [1,0,1,0,1,1]. Fix per block: either declare directFeedthrough (true feedthrough in Simulink) or output the pre-update state (plant blocks). List: universal-gaps.json XBV-U14.",
+   "fix": "WP-21 batch E1+E2 (merged after verifier PASS on the integration branch)"
   },
   {
    "id": "XBV-019",
@@ -809,8 +816,9 @@
    "plan_ref": "U10",
    "severity": "S1",
    "gate": "V5",
-   "status": "open",
-   "summary": "16 blocks mutate their state (or inputs/params) in place inside execute; solver stages then see already-updated state. ROBOT_VACUUM_FUSION with x_true = 1: euler 0.99795, rk4 0.9999998, ode45 about 1 (one update per step: 0.9547). List: XBV-U10."
+   "status": "closed",
+   "summary": "16 blocks mutate their state (or inputs/params) in place inside execute; solver stages then see already-updated state. ROBOT_VACUUM_FUSION with x_true = 1: euler 0.99795, rk4 0.9999998, ode45 about 1 (one update per step: 0.9547). List: XBV-U10.",
+   "fix": "WP-21 batch E1+E2 (merged after verifier PASS on the integration branch)"
   },
   {
    "id": "XBV-021",
@@ -857,8 +865,9 @@
    "plan_ref": "5.1",
    "severity": "S1",
    "gate": "V5",
-   "status": "open",
-   "summary": "Canvas ode23tb freezes silently: the canvas and worker call StiffSolver.stepODE23TB once per output step with tolerances 1e-3/1e-6 and ignore { accepted: false }; a rejected step leaves the state unchanged with no diagnostic. On x' = -1e4 x the state stays at 1 for dt = 0.01, 0.001 and 1e-4. Pinned by it.fails in xbSolvers.test.ts. Not stiff-only: x' = -x at dt 0.5 also freezes (first step rejected). The worker path keeps the state at 1 but publishes a stale trial output (-0.044) - checked again in WP-14."
+   "status": "closed",
+   "summary": "Canvas ode23tb freezes silently: the canvas and worker call StiffSolver.stepODE23TB once per output step with tolerances 1e-3/1e-6 and ignore { accepted: false }; a rejected step leaves the state unchanged with no diagnostic. On x' = -1e4 x the state stays at 1 for dt = 0.01, 0.001 and 1e-4. Pinned by it.fails in xbSolvers.test.ts. Not stiff-only: x' = -x at dt 0.5 also freezes (first step rejected). The worker path keeps the state at 1 but publishes a stale trial output (-0.044) - checked again in WP-14.",
+   "fix": "WP-21 batch E1+E2 (merged after verifier PASS on the integration branch)"
   },
   {
    "id": "XBV-027",
@@ -873,48 +882,54 @@
    "plan_ref": "5.1 / D3",
    "severity": "S3",
    "gate": "V5",
-   "status": "open",
-   "summary": "Canvas (stepLiveSolver) and worker fall back to explicit Euler for any unknown solver name, silently; the batch runner returns UNSUPPORTED_SOLVER. Decision D3: unknown names are refused. Pinned by it.fails in xbSolvers.test.ts."
+   "status": "closed",
+   "summary": "Canvas (stepLiveSolver) and worker fall back to explicit Euler for any unknown solver name, silently; the batch runner returns UNSUPPORTED_SOLVER. Decision D3: unknown names are refused. Pinned by it.fails in xbSolvers.test.ts.",
+   "fix": "WP-21 batch E1+E2 (merged after verifier PASS on the integration branch)"
   },
   {
    "id": "XBV-029",
    "plan_ref": "F8 / D1",
    "severity": "S1",
    "gate": "V3",
-   "status": "open",
-   "summary": "DIMENSION_MISMATCH and DATA_TYPE_MISMATCH on a connection are warnings and the run continues; decision D1 (Simulink): compile errors that stop the run. Pinned by it.fails in xbDiagnostics.test.ts. Supersedes XBV-008."
+   "status": "closed",
+   "summary": "DIMENSION_MISMATCH and DATA_TYPE_MISMATCH on a connection are warnings and the run continues; decision D1 (Simulink): compile errors that stop the run. Pinned by it.fails in xbDiagnostics.test.ts. Supersedes XBV-008.",
+   "fix": "WP-21 batch E1+E2 (merged after verifier PASS on the integration branch)"
   },
   {
    "id": "XBV-030",
    "plan_ref": "5.2",
    "severity": "S2",
    "gate": "V4",
-   "status": "open",
-   "summary": "An algebraic loop without a solution (y = 1 + y) emits ALGEBRAIC_LOOP_NOT_CONVERGED but the run continues every step with a meaningless value; Simulink stops. Pinned in xbEngine.test.ts."
+   "status": "closed",
+   "summary": "An algebraic loop without a solution (y = 1 + y) emits ALGEBRAIC_LOOP_NOT_CONVERGED but the run continues every step with a meaningless value; Simulink stops. Pinned in xbEngine.test.ts.",
+   "fix": "WP-21 batch E1+E2 (merged after verifier PASS on the integration branch)"
   },
   {
    "id": "XBV-031",
    "plan_ref": "5.2 malformed models",
    "severity": "S2",
    "gate": "V4",
-   "status": "open",
-   "summary": "The engine accepts malformed models silently: two drivers on one input port, two blocks with the same id, and an unknown block type (skipped as a no-op) give no compile error. The canvas may prevent some of these, but files, the agent and DOE/TRM build models directly. Pinned in xbEngine.test.ts."
+   "status": "closed",
+   "summary": "The engine accepts malformed models silently: two drivers on one input port, two blocks with the same id, and an unknown block type (skipped as a no-op) give no compile error. The canvas may prevent some of these, but files, the agent and DOE/TRM build models directly. Pinned in xbEngine.test.ts.",
+   "fix": "WP-21 batch E1+E2 (merged after verifier PASS on the integration branch)"
   },
   {
    "id": "XBV-032",
    "plan_ref": "5.2 scale",
    "severity": "S3",
    "gate": "V4",
-   "status": "open",
-   "summary": "Run time is quadratic in the number of blocks (1000/2000/4000-block chains: 188/435/1633 ms for 10 rk4 steps; 10 000 blocks about 22 s); gatherInputs searches the connection list per input. Pinned against a 5 s budget in xbEngine.test.ts."
+   "status": "closed",
+   "summary": "Run time is quadratic in the number of blocks (1000/2000/4000-block chains: 188/435/1633 ms for 10 rk4 steps; 10 000 blocks about 22 s); gatherInputs searches the connection list per input. Pinned against a 5 s budget in xbEngine.test.ts.",
+   "fix": "WP-21 batch E1+E2 (merged after verifier PASS on the integration branch)"
   },
   {
    "id": "XBV-033",
    "plan_ref": "5.2 diagnostics",
    "severity": "S2",
    "gate": "V4",
-   "status": "open",
-   "summary": "Runtime diagnostics of severity error do not stop the run: a block's typed diagnostic (e.g. LOGIC_NAN_INPUT) and a block-returned error (BLOCK_RUNTIME_FAULT via result.error) are recorded but never set the engine's fatal flag (XbridgesEngine.ts ~495-517); only thrown exceptions stop. Simulink halts on errors. Pinned in xbDiagnostics.test.ts. Also: STIFF_SOLVER_* errors stop a batch run but not the canvas run (ode14x/ode23tb keep stepping to the stop time; reportError never sets the fatal flag) - pinned in xbEngine.test.ts."
+   "status": "closed",
+   "summary": "Runtime diagnostics of severity error do not stop the run: a block's typed diagnostic (e.g. LOGIC_NAN_INPUT) and a block-returned error (BLOCK_RUNTIME_FAULT via result.error) are recorded but never set the engine's fatal flag (XbridgesEngine.ts ~495-517); only thrown exceptions stop. Simulink halts on errors. Pinned in xbDiagnostics.test.ts. Also: STIFF_SOLVER_* errors stop a batch run but not the canvas run (ode14x/ode23tb keep stepping to the stop time; reportError never sets the fatal flag) - pinned in xbEngine.test.ts.",
+   "fix": "WP-21 batch E1+E2 (merged after verifier PASS on the integration branch)"
   },
   {
    "id": "XBV-034",
@@ -929,16 +944,18 @@
    "plan_ref": "5.2 / F8",
    "severity": "S1",
    "gate": "V3",
-   "status": "open",
-   "summary": "Dimension checking is inactive: library factories never set port dimensions (only PT_VEHICLE_BODY_1DOF inputs do), so DIMENSION_MISMATCH cannot fire for any canvas-built model; Simulink propagates and checks dimensions. The recipe has to patch dimensions onto ports to provoke the code."
+   "status": "closed",
+   "summary": "Dimension checking is inactive: library factories never set port dimensions (only PT_VEHICLE_BODY_1DOF inputs do), so DIMENSION_MISMATCH cannot fire for any canvas-built model; Simulink propagates and checks dimensions. The recipe has to patch dimensions onto ports to provoke the code.",
+   "fix": "WP-21 batch E1+E2 (merged after verifier PASS on the integration branch)"
   },
   {
    "id": "XBV-036",
    "plan_ref": "5.2 zero crossings",
    "severity": "S2",
    "gate": "V5",
-   "status": "open",
-   "summary": "Batch variable-step runs (Solvers.runFixedStep with ode45 or ode23) hang - no result after 60 s - as soon as they bracket a Step event: Step at 0.3, 0.5 or 0.55 s with default tolerances, or at the stop time with relTol 1e-8. Fixed-step batch rk4 finishes. Used by DOE, TRM and every batch caller. Pinned with a child-process probe and a 15 s limit in xbEngine.test.ts."
+   "status": "closed",
+   "summary": "Batch variable-step runs (Solvers.runFixedStep with ode45 or ode23) hang - no result after 60 s - as soon as they bracket a Step event: Step at 0.3, 0.5 or 0.55 s with default tolerances, or at the stop time with relTol 1e-8. Fixed-step batch rk4 finishes. Used by DOE, TRM and every batch caller. Pinned with a child-process probe and a 15 s limit in xbEngine.test.ts.",
+   "fix": "WP-21 batch E1+E2 (merged after verifier PASS on the integration branch)"
   },
   {
    "id": "XBV-037",
@@ -1031,8 +1048,9 @@
    "plan_ref": "5.2 worker",
    "severity": "S2",
    "gate": "V6",
-   "status": "open",
-   "summary": "The canvas worker client (serializeModelForWorker) strips execute, evaluateDerivatives and ZeroCrossingFn but not updateDiscrete, so postMessage throws DataCloneError for PT_AUTOMATED_MANUAL_TRANSMISSION and PT_DUAL_CLUTCH_TRANSMISSION (worker run impossible for any model containing them). The worker engine also never re-creates updateDiscrete (XbridgesEngine.ts ~88-94), so once cloning is fixed these hybrid blocks would lose their discrete updates; WP-11 checks this with a gear-shift stimulus. Pinned (clone list) in xbWorker.test.ts. Also: after the DataCloneError the client stays inFlight (activePending is set before postMessage throws, xbridgesWorkerClient.ts ~134), so later requests queue forever."
+   "status": "closed",
+   "summary": "The canvas worker client (serializeModelForWorker) strips execute, evaluateDerivatives and ZeroCrossingFn but not updateDiscrete, so postMessage throws DataCloneError for PT_AUTOMATED_MANUAL_TRANSMISSION and PT_DUAL_CLUTCH_TRANSMISSION (worker run impossible for any model containing them). The worker engine also never re-creates updateDiscrete (XbridgesEngine.ts ~88-94), so once cloning is fixed these hybrid blocks would lose their discrete updates; WP-11 checks this with a gear-shift stimulus. Pinned (clone list) in xbWorker.test.ts. Also: after the DataCloneError the client stays inFlight (activePending is set before postMessage throws, xbridgesWorkerClient.ts ~134), so later requests queue forever.",
+   "fix": "WP-21 batch E1+E2 (merged after verifier PASS on the integration branch)"
   },
   {
    "id": "XBV-048",
@@ -1200,16 +1218,18 @@
    "plan_ref": "4.2 continuous / discrete / discontinuities / buses",
    "severity": "S2",
    "gate": "V2",
-   "status": "open",
-   "summary": "A bus through UNIT_DELAY outputs scalar 0 at the first sample (IC not expanded over the bus elements), so a downstream BUS_SELECTOR raises BLOCK_RUNTIME_FAULT 'Input must be a bus signal' at t = 0. Found by the WP-06 executor; pinned in xbEquations.dynamics.test.ts. WP-21: moved to the engine batch E (UNIT_DELAY runs before BUS_CREATOR at t = 0; the block cannot know the bus shape)."
+   "status": "closed",
+   "summary": "A bus through UNIT_DELAY outputs scalar 0 at the first sample (IC not expanded over the bus elements), so a downstream BUS_SELECTOR raises BLOCK_RUNTIME_FAULT 'Input must be a bus signal' at t = 0. Found by the WP-06 executor; pinned in xbEquations.dynamics.test.ts. WP-21: moved to the engine batch E (UNIT_DELAY runs before BUS_CREATOR at t = 0; the block cannot know the bus shape).",
+   "fix": "WP-21 batch E1+E2 (merged after verifier PASS on the integration branch)"
   },
   {
    "id": "XBV-067",
    "plan_ref": "5.2 events / minor steps",
    "severity": "S1",
    "gate": "V5",
-   "status": "open",
-   "summary": "Engine (canvas fixed-step loop): discontinuous sources change inside a step - the rk4 stage at t + dt already sees a Step's new value, so the plain Integrator of Step(0 -> 1 at 0.5) is off by h/6 per unit jump (Step 0 -> 1 at 0.5, rk4 dt 0.1: y(0.5) = 0.016667, y(1) = 0.516667 instead of 0 and 0.5). Simulink updates block modes (Step, limits, switches) at major steps only. The limited INTEGRATOR itself has anti-windup (euler gives y(0.8) = 0 exactly); its 0.001667 = h/6 under rk4 is this engine effect. Pinned in xbEquations.dynamics.test.ts. Related: XBV-005 (zero crossings), D2. The major-step mode rule is from the verifier's memory - confirm in WP-15."
+   "status": "closed",
+   "summary": "Engine (canvas fixed-step loop): discontinuous sources change inside a step - the rk4 stage at t + dt already sees a Step's new value, so the plain Integrator of Step(0 -> 1 at 0.5) is off by h/6 per unit jump (Step 0 -> 1 at 0.5, rk4 dt 0.1: y(0.5) = 0.016667, y(1) = 0.516667 instead of 0 and 0.5). Simulink updates block modes (Step, limits, switches) at major steps only. The limited INTEGRATOR itself has anti-windup (euler gives y(0.8) = 0 exactly); its 0.001667 = h/6 under rk4 is this engine effect. Pinned in xbEquations.dynamics.test.ts. Related: XBV-005 (zero crossings), D2. The major-step mode rule is from the verifier's memory - confirm in WP-15.",
+   "fix": "WP-21 batch E1+E2 (merged after verifier PASS on the integration branch)"
   },
   {
    "id": "XBV-068",
@@ -1225,8 +1245,9 @@
    "plan_ref": "4.2 continuous",
    "severity": "S1",
    "gate": "V2",
-   "status": "open",
-   "summary": "INTEGRATOR with an output limit under rk4 arrives below the limit: y(0.3) = 0.29833 instead of 0.3 with limit 0.3, and with limit 0.305 it sags to 0.30333 at t = 0.5 (the saturated derivative is used in the stages of the step that reaches the limit). Simulink evaluates the limit mode at major steps: y = min(t, limit) at every sample. Found by the WP-06 verifier; pinned in xbEquations.dynamics.test.ts."
+   "status": "closed",
+   "summary": "INTEGRATOR with an output limit under rk4 arrives below the limit: y(0.3) = 0.29833 instead of 0.3 with limit 0.3, and with limit 0.305 it sags to 0.30333 at t = 0.5 (the saturated derivative is used in the stages of the step that reaches the limit). Simulink evaluates the limit mode at major steps: y = min(t, limit) at every sample. Found by the WP-06 verifier; pinned in xbEquations.dynamics.test.ts.",
+   "fix": "WP-21 batch E1+E2 (merged after verifier PASS on the integration branch)"
   },
   {
    "id": "XBV-070",
@@ -1313,8 +1334,9 @@
    "plan_ref": "4.2 control / observers",
    "severity": "S2",
    "gate": "V2",
-   "status": "open",
-   "summary": "PID_CONTROLLER is sorted as non-direct-feedthrough (stateful, no directFeedthrough flag) although u contains Kp (beta r - y): in a closed loop it reads the plant output one stage late and the result is first-order accurate (PI on 1/(s+1), rk4 dt 0.001: error 5.7e-5 at t = 0.5 instead of < 1e-6). Same class as XBV-018 but not caught by the U14 battery (also SPEED_CONTROLLER, CURRENT_CONTROLLER_DQ, MPC). Found by the WP-07 executor; pinned in xbEquations.control.test.ts."
+   "status": "closed",
+   "summary": "PID_CONTROLLER is sorted as non-direct-feedthrough (stateful, no directFeedthrough flag) although u contains Kp (beta r - y): in a closed loop it reads the plant output one stage late and the result is first-order accurate (PI on 1/(s+1), rk4 dt 0.001: error 5.7e-5 at t = 0.5 instead of < 1e-6). Same class as XBV-018 but not caught by the U14 battery (also SPEED_CONTROLLER, CURRENT_CONTROLLER_DQ, MPC). Found by the WP-07 executor; pinned in xbEquations.control.test.ts.",
+   "fix": "WP-21 batch E1+E2 (merged after verifier PASS on the integration branch)"
   },
   {
    "id": "XBV-081",
@@ -1406,8 +1428,9 @@
    "plan_ref": "7.3 canvas / interpreter parity",
    "severity": "S2",
    "gate": "V6",
-   "status": "open",
-   "summary": "KALMAN_FILTER in the parity harness: canvas x_hat and kg are non-numeric and y_hat differs from the embedded path (shape handling of the default matrices). To be bisected in WP-16b. Found by the WP-16 executor; pinned in src/utils/stateMachine/xbTriParity.test.ts."
+   "status": "closed",
+   "summary": "KALMAN_FILTER in the parity harness: canvas x_hat and kg are non-numeric and y_hat differs from the embedded path (shape handling of the default matrices). To be bisected in WP-16b. Found by the WP-16 executor; pinned in src/utils/stateMachine/xbTriParity.test.ts.",
+   "fix": "WP-21 batch E1+E2 (merged after verifier PASS on the integration branch)"
   },
   {
    "id": "XBV-093",
@@ -1747,8 +1770,9 @@
    "plan_ref": "4.2 navigation / robot vacuum / DEM-CFD (D5)",
    "severity": "S2",
    "gate": "V3",
-   "status": "open",
-   "summary": "ROBOT_VACUUM_DIGITAL_TWIN diverges within 2 s at rk4 dt 0.02 (finite only at 0.005). Found by the WP-10 executor; pinned in xbEquations.robot.test.ts."
+   "status": "closed",
+   "summary": "ROBOT_VACUUM_DIGITAL_TWIN diverges within 2 s at rk4 dt 0.02 (finite only at 0.005). Found by the WP-10 executor; pinned in xbEquations.robot.test.ts.",
+   "fix": "WP-21 batch E1+E2 (merged after verifier PASS on the integration branch)"
   },
   {
    "id": "XBV-134",
@@ -1938,8 +1962,9 @@
    "plan_ref": "5.1",
    "severity": "S4",
    "gate": "V8",
-   "status": "open",
-   "summary": "The worker logs the final sample at the summed time (stop time within a few ULP), the main-thread path at exactly the stop time. Found by the WP-21 batch C verifier."
+   "status": "closed",
+   "summary": "The worker logs the final sample at the summed time (stop time within a few ULP), the main-thread path at exactly the stop time. Found by the WP-21 batch C verifier.",
+   "fix": "WP-21 batch E1+E2 (merged after verifier PASS on the integration branch)"
   },
   {
    "id": "XBV-154",
@@ -1954,8 +1979,9 @@
    "plan_ref": "4.2 continuous",
    "severity": "S2",
    "gate": "V2",
-   "status": "open",
-   "summary": "A vector input with a scalar initial condition is not scalar-expanded for the plain Integrator (bare-number state) on any solver, and for INTEGRATOR / INTEGRATOR_CONTINUOUS on the stiff solvers ode14x and ode23tb (StiffSolver.buildLayout reads the scalar state before the first derivative call; getAt ': 0' fallback): the output stays at the IC with no diagnostic. Simulink expands the IC. Also y(0) is scalar when the input is computed after the integrator at t = 0 (XBV-066 class). Engine batch E. Found by the WP-21 batch D executor and verifier."
+   "status": "closed",
+   "summary": "A vector input with a scalar initial condition is not scalar-expanded for the plain Integrator (bare-number state) on any solver, and for INTEGRATOR / INTEGRATOR_CONTINUOUS on the stiff solvers ode14x and ode23tb (StiffSolver.buildLayout reads the scalar state before the first derivative call; getAt ': 0' fallback): the output stays at the IC with no diagnostic. Simulink expands the IC. Also y(0) is scalar when the input is computed after the integrator at t = 0 (XBV-066 class). Engine batch E. Found by the WP-21 batch D executor and verifier.",
+   "fix": "WP-21 batch E1+E2 (merged after verifier PASS on the integration branch)"
   },
   {
    "id": "XBV-156",
@@ -1996,6 +2022,38 @@
    "gate": "V7",
    "status": "open",
    "summary": "src/utils/stateMachine/xbAccurateMath.ts says glibc sin is correctly rounded; glibc 2.39 differs from the correctly rounded value in 195 of 208k samples (verifier). The interpreter's accurateSin is correctly rounded (0 mismatches) and differs from the canvas Math.sin by 1 ULP in about 1.8 % of cases, absorbed by the parity tolerance. Comment to correct."
+  },
+  {
+   "id": "XBV-163",
+   "plan_ref": "7.3 canvas / interpreter parity",
+   "severity": "S1",
+   "gate": "V6",
+   "status": "open",
+   "summary": "Embedded RELAY reads the previous tick's input and switches one sample late: SINE_A u(0.30) = 1.0162 >= switch-on 1, so Simulink (and the canvas, direct feedthrough since WP-21 E2) gives 1 at t = 0.3 while the embedded path gives 0. Pinned in xbTriParity."
+  },
+  {
+   "id": "XBV-164",
+   "plan_ref": "7.3 canvas / interpreter parity",
+   "severity": "S1",
+   "gate": "V6",
+   "status": "open",
+   "summary": "Embedded rk4 evaluates Step at the stage times; the canvas holds discontinuous outputs at their major-step value during minor steps (Simulink, WP-21 E2 / XBV-067), so 6 rk4 corpus seeds differ by h/6 per unit jump (seeds 1 and 28 checked against the closed form y = IC + max(0, t - 1)). Pinned in xbTriParity."
+  },
+  {
+   "id": "XBV-165",
+   "plan_ref": "5.1 / 5.2 diagnostics",
+   "severity": "S2",
+   "gate": "V5",
+   "status": "open",
+   "summary": "A block fault raised in a trial (minor) stage of a variable-step solver stops the run: the om501 lab with ode45 at default tolerance stops at 2.92 s with BLOCK_RUNTIME_FAULT (Intake Manifold P = -4360 at a rejected trial point); Simulink rejects the step and retries smaller. Euler/rk4/ode23/ode23tb and ode45 at RelTol 1e-6 run through. Found by the WP-21 E verifier."
+  },
+  {
+   "id": "XBV-166",
+   "plan_ref": "documentation",
+   "severity": "S4",
+   "gate": "V5",
+   "status": "open",
+   "summary": "src/help/moduleTopics.ts still says the canvas does not adapt its step; since WP-21 E1 the canvas ode45/ode23/ode23tb control the error with RelTol/AbsTol."
   }
  ],
  "blocks": {
