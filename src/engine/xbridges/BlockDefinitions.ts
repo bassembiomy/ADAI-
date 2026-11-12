@@ -330,7 +330,7 @@ const fzDefuzz = (method: string, universe: number[], agg: number[]): { y: numbe
   return { y: agg.reduce((a, v, i) => a + universe[i] * v, 0) / total, zero };
 };
 const fzZeroAggregateWarning = (what: string): { diagnostic: BlockDiagnostic } => ({
-  diagnostic: { code: 'MATH_DOMAIN_ERROR', severity: 'warning', message: `${what}: the aggregated membership is zero everywhere (no rule fired); the output is the mid-range of the output range.` }
+  diagnostic: { code: 'FUZZY_EMPTY_AGGREGATE', severity: 'warning', message: `${what}: the aggregated membership is zero everywhere (no rule fired); the output is the mid-range of the output range.` }
 });
 
 
