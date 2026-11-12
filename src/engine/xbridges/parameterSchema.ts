@@ -171,7 +171,7 @@ export const XB_PARAMETER_SCHEMA: Record<string, Record<string, ParameterKind>> 
   FUZZY_PID_CONTROLLER: { numMFs: int1 },
   FUZZY_DEFUZZIFY: { resolution: { kind: 'integer', min: 2 } },
   FUZZY_SURFACE_VIEWER: { resolution: { kind: 'integer', min: 2 } },
-  RL_Q_LEARNING_CONTROLLER: { numStates: int1, numActions: int1 },
+  RL_Q_LEARNING_CONTROLLER: { numStates: int1, numActions: int1, seed: int0 },
   ROBOT_VACUUM_BATTERY: { capacity_Ah: positive },
   ROBOT_VACUUM_BOUSTROPHEDON_SWEEP: { spacing: positive },
   ROBOT_VACUUM_CONTINUOUS_ENERGY: { energy_per_meter: nonnegative },
