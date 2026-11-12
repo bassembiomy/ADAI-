@@ -176,41 +176,40 @@ describe('algebraic loop under every solver', () => {
 
 describe('the three solver dispatchers agree (plan F2)', () => {
   const root = join(__dirname, '../../../..');
-  /** Extracts "name -> stepper" pairs such as `solverType === 'ode3') Solvers.stepODE3` or `solver === 'ode3') { this.runODE3`. */
-  const mapping = (file: string, variable: string) => {
-    const text = readFileSync(join(root, file), 'utf8');
-    const pairs: Record<string, string> = {};
-    const re = new RegExp(`${variable} === '([A-Za-z0-9]+)'(?: \\|\\| ${variable} === '([A-Za-z0-9]+)')*\\)\\s*\\{?\\s*(?:this|Solvers|AdaptiveSolver|StiffSolver)\\.(?:step|run)([A-Za-z0-9]+)`, 'g');
-    for (const m of text.matchAll(re)) {
-      const names = [...m[0].matchAll(/'([A-Za-z0-9]+)'/g)].map((x) => x[1]);
-      for (const n of names) pairs[n] = m[3].toUpperCase();
+  // WP-21 batch E1 (XBV-002): one dispatch (src/engine/xbridges/liveStep.ts) replaced the three copies; these checks now
+  // assert the single dispatch is used everywhere and maps every name to one method. Numeric agreement of the batch runner
+  // and the canvas loop is checked in xbWp21Engine.test.ts.
+  it('canvas (XbridgesWorkspace.tsx) and worker (xbridgesWorker.ts) step only through liveStep; every canvas solver name and alias resolves to one method', async () => {
+    const { canonicalSolver } = await import('../liveStep');
+    const expected: Record<string, string> = {
+      rk4: 'rk4', ode4: 'rk4', ode2: 'ode2', ode3: 'ode3', ode5: 'ode5', ode23: 'ode23', ode45: 'ode45', ode14x: 'ode14x',
+      ode23tb: 'ode23tb', discrete: 'discrete', euler: 'euler', ode1: 'euler', fixedStep: 'euler',
+    };
+    for (const [n, m] of Object.entries(expected)) expect(canonicalSolver(n), n).toBe(m);
+    for (const n of ['ode113', 'ode23s', 'ode15s', 'bogus', '', undefined]) expect(canonicalSolver(n), String(n)).toBeUndefined();
+    for (const file of ['src/components/xbridges/XbridgesWorkspace.tsx', 'src/engine/xbridges/xbridgesWorker.ts']) {
+      const text = readFileSync(join(root, file), 'utf8');
+      const alias = /import\s*\{\s*liveStep(?:\s+as\s+(\w+))?\s*\}\s*from\s*'[^']*liveStep'/.exec(text);
+      expect(alias, `${file} imports liveStep`).not.toBeNull();
+      expect(text, file).toMatch(new RegExp(`\\b${alias?.[1] ?? 'liveStep'}\\(`));
+      expect(text, `${file} calls a stepper directly`).not.toMatch(/(Solvers|AdaptiveSolver|StiffSolver)\.step[A-Za-z0-9]+\(/);
     }
-    return pairs;
-  };
-  it('canvas (XbridgesWorkspace.tsx), worker (xbridgesWorker.ts) and batch (Solvers.runFixedStep) map each canvas solver to the same method', () => {
-    const canvas = mapping('src/components/xbridges/XbridgesWorkspace.tsx', 'solverType');
-    const worker = mapping('src/engine/xbridges/xbridgesWorker.ts', 'solver');
-    const batch = mapping('src/engine/xbridges/Solvers.ts', 'solver');
-    const names = ['rk4', 'ode2', 'ode3', 'ode5', 'ode23', 'ode45', 'ode14x', 'ode23tb', 'discrete'];
-    for (const n of names) {
-      expect(canvas[n], `canvas ${n}`).toBeDefined();
-      expect(worker[n], `worker ${n}`).toBe(canvas[n]);
-      expect(batch[n], `batch ${n}`).toBe(canvas[n]);
-    }
-    expect(batch.euler).toBe('EULER');
   });
 
-  it('canvas and worker pass the same arguments to every stepper (e.g. ode23tb tolerances)', () => {
+  it('canvas and worker call liveStep with the same arguments (engine, solver, time, step); tolerances are read in liveStep only', () => {
     const calls = (file: string, engineVar: string) => {
       const text = readFileSync(join(root, file), 'utf8');
-      return [...text.matchAll(/(Solvers|AdaptiveSolver|StiffSolver)\.(step[A-Za-z0-9]+)\(([^;]*?)\);/g)]
-        .map((m) => `${m[1]}.${m[2]}(${m[3].replace(new RegExp(`\\b${engineVar}\\b`, 'g'), 'E').replace(/\b(t|currentTime|timeRef\.current)\b/g, 'T').replace(/\b(dt|stepNow)\b/g, 'H').replace(/\s+/g, '')})`);
+      const fn = /import\s*\{\s*liveStep(?:\s+as\s+(\w+))?\s*\}\s*from\s*'[^']*liveStep'/.exec(text)?.[1] ?? 'liveStep';
+      return [...text.matchAll(new RegExp(`\\b${fn}\\(([^;]*?)\\)`, 'g'))].map((m) => m[1].replace(new RegExp(`\\b${engineVar}\\b`, 'g'), 'E').replace(/\s+/g, '').split(',').length);
     };
-    const canvas = new Set(calls('src/components/xbridges/XbridgesWorkspace.tsx', 'engine'));
-    const worker = new Set(calls('src/engine/xbridges/xbridgesWorker.ts', 'workerEngine'));
-    expect(canvas.size, 'canvas stepper calls parsed').toBe(10);
-    expect(worker.size, 'worker stepper calls parsed').toBe(10);
-    for (const c of worker) expect(canvas.has(c), `worker call ${c} has no identical canvas call`).toBe(true);
+    const canvas = calls('src/components/xbridges/XbridgesWorkspace.tsx', 'engine');
+    const worker = calls('src/engine/xbridges/xbridgesWorker.ts', 'workerEngine');
+    expect(canvas.length, 'canvas liveStep calls').toBeGreaterThan(0);
+    expect(worker.length, 'worker liveStep calls').toBeGreaterThan(0);
+    for (const n of [...canvas, ...worker]) expect(n).toBe(4);
+    for (const file of ['src/components/xbridges/XbridgesWorkspace.tsx', 'src/engine/xbridges/xbridgesWorker.ts']) {
+      expect(readFileSync(join(root, file), 'utf8'), file).not.toMatch(/relTol|absTol/);
+    }
   });
 
   it('XBV-028: canvas and worker refuse an unknown solver name instead of silently running Euler (decision D3)', () => {

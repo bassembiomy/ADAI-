@@ -755,7 +755,7 @@
   },
   "flags": {
    "isStateful": true,
-   "directFeedthrough": null,
+   "directFeedthrough": true,
    "allowDynamicInputs": false,
    "allowDynamicOutputs": false,
    "evaluateDerivatives": true,
@@ -1013,7 +1013,7 @@
   },
   "flags": {
    "isStateful": true,
-   "directFeedthrough": null,
+   "directFeedthrough": true,
    "allowDynamicInputs": false,
    "allowDynamicOutputs": false,
    "evaluateDerivatives": false,
@@ -1495,7 +1495,7 @@
    "evaluateDerivatives": false,
    "updateDiscrete": false,
    "discreteStateKeys": null,
-   "zeroCrossing": false
+   "zeroCrossing": true
   }
  },
  "BAND_LIMITED_NOISE": {
@@ -2286,7 +2286,7 @@
   },
   "flags": {
    "isStateful": true,
-   "directFeedthrough": null,
+   "directFeedthrough": true,
    "allowDynamicInputs": false,
    "allowDynamicOutputs": false,
    "evaluateDerivatives": false,
@@ -2453,7 +2453,7 @@
   },
   "flags": {
    "isStateful": true,
-   "directFeedthrough": null,
+   "directFeedthrough": true,
    "allowDynamicInputs": false,
    "allowDynamicOutputs": false,
    "evaluateDerivatives": false,
@@ -3057,7 +3057,7 @@
   },
   "flags": {
    "isStateful": true,
-   "directFeedthrough": null,
+   "directFeedthrough": true,
    "allowDynamicInputs": false,
    "allowDynamicOutputs": false,
    "evaluateDerivatives": false,
@@ -3461,7 +3461,7 @@
    "evaluateDerivatives": false,
    "updateDiscrete": false,
    "discreteStateKeys": null,
-   "zeroCrossing": false
+   "zeroCrossing": true
   }
  },
  "DELAY": {
@@ -3997,7 +3997,7 @@
   },
   "flags": {
    "isStateful": true,
-   "directFeedthrough": null,
+   "directFeedthrough": true,
    "allowDynamicInputs": false,
    "allowDynamicOutputs": false,
    "evaluateDerivatives": false,
@@ -4510,7 +4510,7 @@
   },
   "flags": {
    "isStateful": true,
-   "directFeedthrough": null,
+   "directFeedthrough": true,
    "allowDynamicInputs": false,
    "allowDynamicOutputs": false,
    "evaluateDerivatives": true,
@@ -5363,7 +5363,7 @@
   },
   "flags": {
    "isStateful": true,
-   "directFeedthrough": null,
+   "directFeedthrough": true,
    "allowDynamicInputs": false,
    "allowDynamicOutputs": false,
    "evaluateDerivatives": false,
@@ -5771,7 +5771,7 @@
   },
   "flags": {
    "isStateful": true,
-   "directFeedthrough": null,
+   "directFeedthrough": true,
    "allowDynamicInputs": false,
    "allowDynamicOutputs": false,
    "evaluateDerivatives": false,
@@ -5872,7 +5872,7 @@
   },
   "flags": {
    "isStateful": true,
-   "directFeedthrough": null,
+   "directFeedthrough": true,
    "allowDynamicInputs": false,
    "allowDynamicOutputs": false,
    "evaluateDerivatives": false,
@@ -6854,7 +6854,7 @@
   },
   "flags": {
    "isStateful": true,
-   "directFeedthrough": null,
+   "directFeedthrough": true,
    "allowDynamicInputs": false,
    "allowDynamicOutputs": false,
    "evaluateDerivatives": true,
@@ -7222,7 +7222,7 @@
   },
   "flags": {
    "isStateful": true,
-   "directFeedthrough": null,
+   "directFeedthrough": true,
    "allowDynamicInputs": false,
    "allowDynamicOutputs": false,
    "evaluateDerivatives": true,
@@ -7673,7 +7673,7 @@
   },
   "flags": {
    "isStateful": true,
-   "directFeedthrough": null,
+   "directFeedthrough": true,
    "allowDynamicInputs": false,
    "allowDynamicOutputs": false,
    "evaluateDerivatives": false,
@@ -8900,7 +8900,7 @@
   },
   "flags": {
    "isStateful": true,
-   "directFeedthrough": null,
+   "directFeedthrough": true,
    "allowDynamicInputs": false,
    "allowDynamicOutputs": false,
    "evaluateDerivatives": false,
@@ -9228,7 +9228,7 @@
   },
   "flags": {
    "isStateful": true,
-   "directFeedthrough": null,
+   "directFeedthrough": true,
    "allowDynamicInputs": false,
    "allowDynamicOutputs": false,
    "evaluateDerivatives": false,
@@ -9756,7 +9756,7 @@
   },
   "flags": {
    "isStateful": true,
-   "directFeedthrough": null,
+   "directFeedthrough": true,
    "allowDynamicInputs": false,
    "allowDynamicOutputs": false,
    "evaluateDerivatives": false,
@@ -10908,7 +10908,7 @@
   },
   "flags": {
    "isStateful": true,
-   "directFeedthrough": null,
+   "directFeedthrough": true,
    "allowDynamicInputs": false,
    "allowDynamicOutputs": false,
    "evaluateDerivatives": false,
@@ -11559,7 +11559,7 @@
   },
   "flags": {
    "isStateful": true,
-   "directFeedthrough": null,
+   "directFeedthrough": true,
    "allowDynamicInputs": false,
    "allowDynamicOutputs": false,
    "evaluateDerivatives": true,
@@ -11784,7 +11784,7 @@
   },
   "flags": {
    "isStateful": true,
-   "directFeedthrough": null,
+   "directFeedthrough": true,
    "allowDynamicInputs": false,
    "allowDynamicOutputs": false,
    "evaluateDerivatives": true,
@@ -20431,7 +20431,7 @@
    "evaluateDerivatives": false,
    "updateDiscrete": false,
    "discreteStateKeys": null,
-   "zeroCrossing": false
+   "zeroCrossing": true
   }
  },
  "RATE_LIMITER": {
@@ -20505,7 +20505,7 @@
   },
   "flags": {
    "isStateful": true,
-   "directFeedthrough": null,
+   "directFeedthrough": true,
    "allowDynamicInputs": false,
    "allowDynamicOutputs": false,
    "evaluateDerivatives": false,
@@ -20588,13 +20588,13 @@
   },
   "flags": {
    "isStateful": true,
-   "directFeedthrough": null,
+   "directFeedthrough": true,
    "allowDynamicInputs": false,
    "allowDynamicOutputs": false,
    "evaluateDerivatives": false,
    "updateDiscrete": false,
    "discreteStateKeys": null,
-   "zeroCrossing": false
+   "zeroCrossing": true
   }
  },
  "RL_Q_LEARNING_CONTROLLER": {
@@ -21468,7 +21468,7 @@
   },
   "flags": {
    "isStateful": true,
-   "directFeedthrough": null,
+   "directFeedthrough": true,
    "allowDynamicInputs": false,
    "allowDynamicOutputs": false,
    "evaluateDerivatives": false,
@@ -22665,7 +22665,7 @@
   },
   "flags": {
    "isStateful": true,
-   "directFeedthrough": null,
+   "directFeedthrough": true,
    "allowDynamicInputs": false,
    "allowDynamicOutputs": false,
    "evaluateDerivatives": false,
@@ -23912,7 +23912,7 @@
   },
   "flags": {
    "isStateful": true,
-   "directFeedthrough": null,
+   "directFeedthrough": true,
    "allowDynamicInputs": false,
    "allowDynamicOutputs": false,
    "evaluateDerivatives": true,
@@ -24019,7 +24019,7 @@
   },
   "flags": {
    "isStateful": true,
-   "directFeedthrough": null,
+   "directFeedthrough": true,
    "allowDynamicInputs": false,
    "allowDynamicOutputs": false,
    "evaluateDerivatives": false,
@@ -24366,7 +24366,7 @@
   },
   "flags": {
    "isStateful": true,
-   "directFeedthrough": null,
+   "directFeedthrough": true,
    "allowDynamicInputs": false,
    "allowDynamicOutputs": false,
    "evaluateDerivatives": false,
@@ -24698,7 +24698,7 @@
   },
   "flags": {
    "isStateful": true,
-   "directFeedthrough": null,
+   "directFeedthrough": true,
    "allowDynamicInputs": false,
    "allowDynamicOutputs": false,
    "evaluateDerivatives": false,
@@ -25672,7 +25672,7 @@
   },
   "flags": {
    "isStateful": true,
-   "directFeedthrough": null,
+   "directFeedthrough": true,
    "allowDynamicInputs": false,
    "allowDynamicOutputs": false,
    "evaluateDerivatives": false,
@@ -26362,7 +26362,7 @@
   },
   "flags": {
    "isStateful": true,
-   "directFeedthrough": null,
+   "directFeedthrough": true,
    "allowDynamicInputs": false,
    "allowDynamicOutputs": false,
    "evaluateDerivatives": false,
@@ -26730,7 +26730,7 @@
   },
   "flags": {
    "isStateful": true,
-   "directFeedthrough": null,
+   "directFeedthrough": true,
    "allowDynamicInputs": false,
    "allowDynamicOutputs": false,
    "evaluateDerivatives": false,
@@ -26891,7 +26891,7 @@
   },
   "flags": {
    "isStateful": true,
-   "directFeedthrough": null,
+   "directFeedthrough": true,
    "allowDynamicInputs": false,
    "allowDynamicOutputs": false,
    "evaluateDerivatives": false,
@@ -27022,7 +27022,7 @@
   },
   "flags": {
    "isStateful": true,
-   "directFeedthrough": null,
+   "directFeedthrough": true,
    "allowDynamicInputs": false,
    "allowDynamicOutputs": false,
    "evaluateDerivatives": false,
@@ -27153,7 +27153,7 @@
   },
   "flags": {
    "isStateful": true,
-   "directFeedthrough": null,
+   "directFeedthrough": true,
    "allowDynamicInputs": false,
    "allowDynamicOutputs": false,
    "evaluateDerivatives": false,
@@ -27650,7 +27650,7 @@
   },
   "flags": {
    "isStateful": true,
-   "directFeedthrough": null,
+   "directFeedthrough": true,
    "allowDynamicInputs": false,
    "allowDynamicOutputs": false,
    "evaluateDerivatives": false,
@@ -27962,7 +27962,7 @@
   },
   "flags": {
    "isStateful": true,
-   "directFeedthrough": null,
+   "directFeedthrough": true,
    "allowDynamicInputs": false,
    "allowDynamicOutputs": false,
    "evaluateDerivatives": false,
@@ -28432,7 +28432,7 @@
   },
   "flags": {
    "isStateful": true,
-   "directFeedthrough": null,
+   "directFeedthrough": true,
    "allowDynamicInputs": false,
    "allowDynamicOutputs": false,
    "evaluateDerivatives": false,
@@ -28953,7 +28953,7 @@
   },
   "flags": {
    "isStateful": true,
-   "directFeedthrough": null,
+   "directFeedthrough": true,
    "allowDynamicInputs": false,
    "allowDynamicOutputs": false,
    "evaluateDerivatives": false,
@@ -29094,7 +29094,7 @@
   },
   "flags": {
    "isStateful": true,
-   "directFeedthrough": null,
+   "directFeedthrough": true,
    "allowDynamicInputs": false,
    "allowDynamicOutputs": false,
    "evaluateDerivatives": true,
@@ -29190,7 +29190,10 @@
    "value": {
     "history": [],
     "stepCount": 0,
-    "x": null
+    "x": [
+     0,
+     0
+    ]
    }
   },
   "flags": {
@@ -29382,7 +29385,7 @@
   },
   "flags": {
    "isStateful": true,
-   "directFeedthrough": null,
+   "directFeedthrough": true,
    "allowDynamicInputs": false,
    "allowDynamicOutputs": false,
    "evaluateDerivatives": false,
@@ -29569,7 +29572,7 @@
    "evaluateDerivatives": false,
    "updateDiscrete": false,
    "discreteStateKeys": null,
-   "zeroCrossing": false
+   "zeroCrossing": true
   }
  },
  "SEC": {
@@ -29922,7 +29925,7 @@
   },
   "flags": {
    "isStateful": true,
-   "directFeedthrough": null,
+   "directFeedthrough": true,
    "allowDynamicInputs": false,
    "allowDynamicOutputs": false,
    "evaluateDerivatives": false,
@@ -30405,7 +30408,7 @@
   },
   "flags": {
    "isStateful": true,
-   "directFeedthrough": null,
+   "directFeedthrough": true,
    "allowDynamicInputs": false,
    "allowDynamicOutputs": false,
    "evaluateDerivatives": false,
@@ -30809,13 +30812,13 @@
   },
   "flags": {
    "isStateful": true,
-   "directFeedthrough": null,
+   "directFeedthrough": true,
    "allowDynamicInputs": false,
    "allowDynamicOutputs": false,
    "evaluateDerivatives": false,
    "updateDiscrete": false,
    "discreteStateKeys": null,
-   "zeroCrossing": false
+   "zeroCrossing": true
   }
  },
  "SVPWM_MODULATOR": {
@@ -30928,7 +30931,7 @@
   },
   "flags": {
    "isStateful": true,
-   "directFeedthrough": null,
+   "directFeedthrough": true,
    "allowDynamicInputs": false,
    "allowDynamicOutputs": false,
    "evaluateDerivatives": false,
@@ -31030,7 +31033,7 @@
    "evaluateDerivatives": false,
    "updateDiscrete": false,
    "discreteStateKeys": null,
-   "zeroCrossing": false
+   "zeroCrossing": true
   }
  },
  "SWITCHING_TIME_CALCULATOR": {
@@ -32356,7 +32359,7 @@
    "evaluateDerivatives": false,
    "updateDiscrete": false,
    "discreteStateKeys": null,
-   "zeroCrossing": false
+   "zeroCrossing": true
   }
  },
  "TRANSFER_FUNCTION": {

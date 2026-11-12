@@ -831,7 +831,7 @@ describe('8b. ROBOT_VACUUM_DIGITAL_TWIN (single block), 60 s, seeded', () => {
     r.signals['t.lidar_ranges'].forEach((v) => flat(v).forEach((d) => { expect(d).toBeGreaterThanOrEqual(0); expect(d).toBeLessThanOrEqual(5.5 + 1e-9); }));
     r.signals['t.nav_state'].forEach((v) => expect(Number.isInteger(num(v))).toBe(true));
   }, 170_000);
-  it.fails('XBV-133: DIGITAL_TWIN at the app default step (rk4, 0.02 s) stays finite for 60 s - fix model-side or with an implicit solver, not by changing the default step (factory run diverges within 2 s: motor pole h*lambda = 10)', () => {
+  it('XBV-133: DIGITAL_TWIN at the app default step (rk4, 0.02 s) stays finite for 60 s - fix model-side or with an implicit solver, not by changing the default step (factory run diverges within 2 s: motor pole h*lambda = 10)', () => {
     const { r, probes } = twin('rk4', 0.02);
     for (const p of probes) r.signals[p].forEach((v) => expect(finiteDeep(v)).toBe(true));
   }, 170_000);

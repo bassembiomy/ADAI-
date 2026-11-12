@@ -19,7 +19,7 @@ const collect = (text: string, patterns: RegExp[]) => {
 };
 
 const simulationCodes = (() => {
-  const engine = ['XbridgesEngine', 'modelChecks', 'Solvers', 'simulationConfig', 'StiffSolver', 'AdaptiveSolver', 'parameterEvaluation']
+  const engine = ['XbridgesEngine', 'modelChecks', 'Solvers', 'simulationConfig', 'StiffSolver', 'AdaptiveSolver', 'parameterEvaluation', 'liveStep']
     .map((name) => read(`src/engine/xbridges/${name}.ts`)).join('\n');
   const codes = collect(engine, [
     /code:\s*'([A-Z][A-Z0-9_]+)'/g,
@@ -52,9 +52,11 @@ describe('X-Bridges diagnostic guidance uses the real code vocabulary', () => {
   });
   it('states the severity the implementation uses', () => {
     const severity = (code: string) => (XBRIDGES_SIMULATION_DIAGNOSTIC_GUIDANCE[code] ?? XBRIDGES_EMBEDDED_DIAGNOSTIC_GUIDANCE[code]).split(':')[0];
-    for (const code of ['UNCONNECTED_INPUT_PORT', 'UNCONNECTED_OUTPUT_PORT', 'RATE_TRANSITION_REQUIRED', 'ALGEBRAIC_LOOP', 'DIVIDE_BY_ZERO', 'MATH_DOMAIN_ERROR', 'NUMERICAL_INSTABILITY', 'DATA_TYPE_MISMATCH'])
+    for (const code of ['UNCONNECTED_INPUT_PORT', 'UNCONNECTED_OUTPUT_PORT', 'RATE_TRANSITION_REQUIRED', 'ALGEBRAIC_LOOP', 'DIVIDE_BY_ZERO', 'MATH_DOMAIN_ERROR', 'NUMERICAL_INSTABILITY'])
       expect(severity(code), code).toBe('Warning');
-    for (const code of ['LOGIC_NAN_INPUT', 'TF_IMPROPER', 'TF_DENOMINATOR_LEADING_ZERO', 'LIMITS_INVALID', 'CONTINUOUS_STATES_WITH_DISCRETE_SOLVER', 'STOP_TIME_BEFORE_START', 'STOP_TIME_INFINITE_BATCH', 'INVALID_SAMPLE_TIME', 'SAMPLE_TIME_NOT_MULTIPLE_OF_FIXED_STEP', 'BLOCK_RUNTIME_FAULT', 'XB_DISCRETE_SOLVER_CONTINUOUS_STATE', 'XB_PORT_DANGLING', 'XB_CONSTANT_VALUE_OUT_OF_RANGE'])
+    for (const code of ['LOGIC_NAN_INPUT', 'TF_IMPROPER', 'TF_DENOMINATOR_LEADING_ZERO', 'LIMITS_INVALID', 'CONTINUOUS_STATES_WITH_DISCRETE_SOLVER', 'STOP_TIME_BEFORE_START', 'STOP_TIME_INFINITE_BATCH', 'INVALID_SAMPLE_TIME', 'SAMPLE_TIME_NOT_MULTIPLE_OF_FIXED_STEP', 'BLOCK_RUNTIME_FAULT', 'XB_DISCRETE_SOLVER_CONTINUOUS_STATE', 'XB_PORT_DANGLING', 'XB_CONSTANT_VALUE_OUT_OF_RANGE',
+      // D1 (WP-21 E2): connection data-type and dimension mismatches are compile errors; structural errors have their own codes.
+      'DATA_TYPE_MISMATCH', 'DIMENSION_MISMATCH', 'MULTIPLE_DRIVERS', 'DUPLICATE_BLOCK_ID', 'UNKNOWN_BLOCK_TYPE'])
       expect(severity(code), code).toBe('Error');
   });
 });

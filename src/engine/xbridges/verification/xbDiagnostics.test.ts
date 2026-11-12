@@ -28,6 +28,10 @@ const EXPECTED: Record<string, 'error' | 'warning' | 'info'> = {
   ALGEBRAIC_LOOP: 'warning',
   ALGEBRAIC_LOOP_NOT_CONVERGED: 'error',
   BLOCK_RUNTIME_FAULT: 'error',
+  // WP-21 batch E2 (XBV-031): structural compile errors have their own codes.
+  DUPLICATE_BLOCK_ID: 'error',
+  MULTIPLE_DRIVERS: 'error',
+  UNKNOWN_BLOCK_TYPE: 'error',
   CONTINUOUS_STATES_WITH_DISCRETE_SOLVER: 'error',
   DATA_TYPE_MISMATCH: 'error',
   DIMENSION_MISMATCH: 'error',

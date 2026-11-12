@@ -313,7 +313,7 @@ export const DIAGNOSTIC_RECIPES: Record<string, DiagnosticRecipe> = {
   ),
   UNSUPPORTED_SOLVER: {
     note: "Batch run with solver 'ode113' (declared, not implemented): Solvers.ts:564 (runFixedStep)",
-    provoke: () => batch(integratorChain(), { ...VALID_BATCH, solver: 'ode113' }),
+    provoke: () => batch(integratorChain(), { ...VALID_BATCH, solver: 'ode113' as never }),
     clean: () => batch(integratorChain(), VALID_BATCH),
   },
 
@@ -331,6 +331,22 @@ export const DIAGNOSTIC_RECIPES: Record<string, DiagnosticRecipe> = {
     'Delay length -1 (also PARAMETER_OUT_OF_RANGE; 0 is valid direct feedthrough, XBV-064): modelChecks.ts:337',
     [chain({ id: 'd', type: 'DELAY', params: { delay_length: -1 } })],
     [chain({ id: 'd', type: 'DELAY', params: { delay_length: 1 } })],
+  ),
+  MULTIPLE_DRIVERS: liveRecipe(
+    'Two Constants wired into the one input of a Gain (a file or the AI path can hold it; the canvas refuses the second wire): XbridgesEngine compile',
+    [{ blocks: [konst('k', 1), konst('k2', 2), { id: 'g', type: 'GAIN' }, term('t')], wires: ['k.out -> g.u', 'g.y -> t.u'] },
+      { patch: (m) => { m.connections.push({ sourceBlock: 'k2', sourcePort: 'out', targetBlock: 'g', targetPort: 'u' } as never); } }],
+    [{ blocks: [konst('k', 1), konst('k2', 2), { id: 'g', type: 'GAIN' }, term('t'), term('t2')], wires: ['k.out -> g.u', 'g.y -> t.u', 'k2.out -> t2.u'] }],
+  ),
+  DUPLICATE_BLOCK_ID: liveRecipe(
+    'Two blocks with the id k (a hand-edited or merged file): XbridgesEngine compile',
+    [gainChain({}), { patch: (m) => { m.blocks.push({ ...(m.blocks.find((b) => b.id === 'k') as object) } as never); } }],
+    [gainChain({})],
+  ),
+  UNKNOWN_BLOCK_TYPE: liveRecipe(
+    'A block whose type has no factory (file from a newer ADIA or a typo): XbridgesEngine compile',
+    [gainChain({}), { patch: (m) => { m.blocks.push({ id: 'u', type: 'NO_SUCH_BLOCK', params: {}, inputs: [], outputs: [], state: null } as never); } }],
+    [gainChain({})],
   ),
   LIMITS_INVALID: liveRecipe(
     'Saturation with lower limit 2 above upper limit 1: modelChecks.ts:298',

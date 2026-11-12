@@ -22,6 +22,8 @@ import { XB_CAPABILITIES } from './xbCapabilities';
  * Each cause was settled against an oracle (closed form / Simulink definition) where one exists; 'unresolved' means none.
  */
 const PIN_CAUSE: Record<string, string> = {
+  'XBV-163': 'embedded RELAY uses the previous tick input (switches one sample late); canvas (direct feedthrough since WP-21 E2) matches the Simulink relay; embedded wrong',
+  'XBV-164': 'embedded rk4 evaluates Step at the stage times; the canvas holds discontinuous outputs at their major-step value during minor steps (Simulink, WP-21 E2 XBV-067); embedded wrong',
   'XBV-161': 'embedded ShiftLeft/ShiftRight mask the shift count to 5 bits (& 31); Simulink (and the canvas since XBV-057) gives 0 / sign fill for counts >= 32 and the opposite shift for a negative count; embedded wrong',
   'XBV-154': 'embedded Mean (mean of all elements) and SubMatrix (zero-based indices) follow the pre-WP-21 canvas rules; the canvas now gives MATLAB/Simulink column means and one-based indices (WP-21 batch D), embedded wrong',
   'XBV-018': 'canvas executes stateful blocks whose output depends on the current input before their sources (non-feedthrough default), so they read the previous input; canvas wrong (engine batch E2)',
@@ -43,6 +45,10 @@ const PIN_CAUSE: Record<string, string> = {
   'XBV-091': 'canvas y(0)=0 then explicit-Euler instability (|y| exceeds the closed-form bound amp=1.3 from step 3), embedded stays bounded but one tick ahead; filter discretisation differs, neither exact, unresolved',
 };
 const PINS: Record<string, string> = {
+  // XBV-163: the embedded Relay reads the previous tick's input (one sample late); the canvas switches on at u(0.3) = 1.016 >= 1 (Simulink).
+  'RELAY|euler': 'XBV-163',
+  'RELAY|rk4': 'XBV-163',
+  'RELAY|discrete': 'XBV-163',
   // XBV-161: embedded shifts mask the count to 5 bits; the canvas (WP-21 batch D, XBV-057) shifts every bit out at >= 32 and shifts the other way for a negative count.
   'ShiftLeft|euler': 'XBV-161',
   'ShiftLeft|rk4': 'XBV-161',
@@ -84,9 +90,6 @@ const PINS: Record<string, string> = {
   'DEADZONE|euler': 'XBV-065',
   'DEADZONE|rk4': 'XBV-065',
   'DEADZONE|discrete': 'XBV-065',
-  'KALMAN_FILTER|euler': 'XBV-092',
-  'KALMAN_FILTER|rk4': 'XBV-092',
-  'KALMAN_FILTER|discrete': 'XBV-092',
   'MOVING_AVERAGE|euler': 'XBV-068',
   'MOVING_AVERAGE|rk4': 'XBV-068',
   'MOVING_AVERAGE|discrete': 'XBV-068',
@@ -95,6 +98,12 @@ const PINS: Record<string, string> = {
   'WHITE_NOISE|discrete': 'XBV-088',
 };
 const CORPUS_PINS: Record<string, string> = {
+  'all|rk4|1': 'XBV-164',
+  'all|rk4|5': 'XBV-164',
+  'all|rk4|9': 'XBV-164',
+  'all|rk4|12': 'XBV-164',
+  'all|rk4|28': 'XBV-164',
+  'all|rk4|30': 'XBV-164',
 };
 
 const pinTitle = (pin: string, title: string) => `${pin.split(' ')[0]}: ${title} - ${PIN_CAUSE[pin.split(' ')[0]]}${pin.includes(' ') ? ` ${pin.slice(pin.indexOf(' ') + 1)}` : ''}`;
@@ -338,7 +347,7 @@ describe('WP-21 batch F acceptance: embedded PID, Delay 0, Product divide equal 
       // PID (sample time <= 0, i.e. every variant but 'sample time 0.1') under rk4 is also XBV-159 (embedded integrates i/d with
       // forward Euler whatever the solver).
       const continuousRk4 = solver === 'rk4' && !(typeof params.sampleTime === 'number' && params.sampleTime > 0);
-      it.fails(`${continuousRk4 ? 'XBV-159 / ' : ''}XBV-018 / XBV-150: PID_CONTROLLER ${name}, ${solver}: canvas = embedded on u, error, p_term, i_term, d_term`, () => {
+      (continuousRk4 ? it.fails : it)(`${continuousRk4 ? 'XBV-159: ' : ''}XBV-150: PID_CONTROLLER ${name}, ${solver}: canvas = embedded on u, error, p_term, i_term, d_term`, () => {
         assertOutcome(compareSpec(`PID ${name} ${solver}`, pidSpec(params), solver, PID_PROBES));
       });
     }

@@ -124,12 +124,13 @@ describe('worker = canvas main thread, step by step', () => {
 });
 
 describe('worker protocol', () => {
-  it('a batch of 10 steps equals 10 single steps sent with the canvas time base (accumulated, XBV-017)', () => {
+  it('a batch of 10 steps equals 10 single steps sent with the canvas time base t0 + k dt (XBV-017)', () => {
     const spec = MIXED;
     send({ type: 'compile', model: buildModel(spec), time: 0, dt: 0.05, solverType: 'rk4' });
     let single: XbridgesWorkerResponse | undefined;
     let t = 0;
-    for (let k = 0; k < 10; k++) { single = send({ type: 'step', time: t, dt: 0.05, solverType: 'rk4' }); t += 0.05; }
+    // XBV-017 (WP-21 batch E1): the canvas time base is t0 + k dt (product), not an accumulated sum.
+    for (let k = 0; k < 10; k++) { single = send({ type: 'step', time: k * 0.05, dt: 0.05, solverType: 'rk4' }); t = k * 0.05; }
     send({ type: 'compile', model: buildModel(spec), time: 0, dt: 0.05, solverType: 'rk4' });
     const batch = send({ type: 'batch', time: 0, dt: 0.05, batchSize: 10, solverType: 'rk4' });
     expect(batch.ok).toBe(true);
