@@ -28,6 +28,8 @@ const EXPECTED: Record<string, 'error' | 'warning' | 'info'> = {
   ALGEBRAIC_LOOP: 'warning',
   ALGEBRAIC_LOOP_NOT_CONVERGED: 'error',
   BLOCK_RUNTIME_FAULT: 'error',
+  // WP-21 batch H (XBV-117-119): no rule fired / all-zero aggregate, MATLAB warns and returns the mid-range.
+  FUZZY_EMPTY_AGGREGATE: 'warning',
   // WP-21 batch E2 (XBV-031): structural compile errors have their own codes.
   DUPLICATE_BLOCK_ID: 'error',
   MULTIPLE_DRIVERS: 'error',

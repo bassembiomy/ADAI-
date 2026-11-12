@@ -348,6 +348,11 @@ export const DIAGNOSTIC_RECIPES: Record<string, DiagnosticRecipe> = {
     [gainChain({}), { patch: (m) => { m.blocks.push({ id: 'u', type: 'NO_SUCH_BLOCK', params: {}, inputs: [], outputs: [], state: null } as never); } }],
     [gainChain({})],
   ),
+  FUZZY_EMPTY_AGGREGATE: liveRecipe(
+    'Defuzzify an all-zero aggregate (no rule fired): MATLAB warns and returns the mid-range; BlockDefinitions FUZZY_DEFUZZIFY',
+    [{ blocks: [konst('k', new Array(101).fill(0)), { id: 'd', type: 'FUZZY_DEFUZZIFY' }, term('t')], wires: ['k.out -> d.agg', 'd.y -> t.u'] }],
+    [{ blocks: [konst('k', Array.from({ length: 101 }, (_, i) => (i === 70 ? 1 : 0))), { id: 'd', type: 'FUZZY_DEFUZZIFY' }, term('t')], wires: ['k.out -> d.agg', 'd.y -> t.u'] }],
+  ),
   LIMITS_INVALID: liveRecipe(
     'Saturation with lower limit 2 above upper limit 1: modelChecks.ts:298',
     [chain({ id: 's', type: 'SATURATION', params: { lowerLimit: 2, upperLimit: 1 } })],
