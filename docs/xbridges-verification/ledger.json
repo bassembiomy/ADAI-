@@ -76,6 +76,12 @@
    "date": "2026-11-12",
    "topic": "Rate Limiter initial condition",
    "decision": "ADIA's Rate Limiter has an explicit initialCondition parameter (default 0) that Simulink's block lacks; it is the output before the first sample, y(-1) = IC. Ts > 0: y(0) = clamp(u(0), IC + falling Ts, IC + rising Ts); inherited/continuous sample time: y(0) = IC (no time has elapsed). This is the canvas behaviour, adopted for the embedded path."
+  },
+  {
+   "id": "D13",
+   "date": "2026-11-12",
+   "topic": "new diagnostic codes in WP-21",
+   "decision": "Structural compile errors MULTIPLE_DRIVERS, DUPLICATE_BLOCK_ID, UNKNOWN_BLOCK_TYPE (error) and the fuzzy warning FUZZY_EMPTY_AGGREGATE (MATLAB 'no rules fired': output mid-range) are dedicated codes rather than reuses of BLOCK_RUNTIME_FAULT / MATH_DOMAIN_ERROR; each has a recipe and guidance."
   }
  ],
  "wps": [
@@ -591,7 +597,7 @@
    "exec": "S / H, verifier opus",
    "deps": [],
    "status": "in_progress",
-   "note": "User go-ahead 2026-11-11 (fix all findings). Plan: docs/xbridges-verification/wp21-fix-plan.md. Round 1 dispatched: A zero parameters, B embedded quick fixes, C workspace UI. Batch B merged (a3daf970): 9 findings closed; new XBV-150 (embedded PID semantics), XBV-151 (embedded DELAY 0), XBV-152 (vacuous PID parity case). LIBM_CONDITIONED bound (8 eps max(1,|y|), 17 keys) added to xbCodeParity, verifier re-measured worst ratio 3.85. Batch A merged (c8facc19): XBV-015, 019, 040, 064 closed; DELAY delay_length is not tunable during a run (live change to/from 0 refused with PARAMETER_OUT_OF_RANGE, Simulink); XBV-137 ratchet shrunk 463 -> 418; new XBV-153. Batch D dispatched (acceptance 624b6a44). Batch F acceptance: pins removed for XBV-084, 086, 087, 091, 093, 094, 101, 102, 103 and the XBV-084 seeds; new tests for XBV-150 (PID with distinct r and y), 151 (DELAY 0), 107 (passes: closed). XBV-088, 090, 092 stay pinned (canvas-side causes, later batches). Batch C committed (13 findings closed, verifier PASS, e2e 36/36); new XBV-157, 158. WP-20 re-check by the verifier: spec gap (no end-time check in solvers/persistence/subsystem/param-edit) fixed by the controller; XBV-149 pin ordering fixed. Batch D merged (22 findings closed; XBV-066 moved to E; new XBV-154, 155, 156). XBV-057: right shift of a negative int32 by >= 32 gives -1 (arithmetic shift, Simulink signed shift). Batch E acceptance (engine core): pins flipped for XBV-016, 026, 028, 030, 031, 032, 033, 035, 036, 066, 067, 069, 080; PINNED_SEVERITY no longer lists DIMENSION_MISMATCH, DATA_TYPE_MISMATCH (D1), ALGEBRAIC_LOOP_NOT_CONVERGED, LOGIC_NAN_INPUT; U10 and U14 lists emptied (XBV-020, XBV-018); XBV-047 clone list emptied; RELAY rk4 parity pin removed (XBV-067); new xbWp21Engine.test.ts for XBV-002, 003, 004, 005, 155; testkit runModel passes relTol/absTol. XBV-107 reopened (controller test error). Batch F merged after 2 reworks and verifier review (11 findings closed, XBV-093 open; decision D12; new XBV-159, 160, 161, 162). RELAY rk4 parity stays failing until batch E2 (XBV-067 minor steps). Batch E1+E2 merged (26 findings closed incl. XBV-092 and XBV-133 fixed as side effects); structural codes MULTIPLE_DRIVERS, DUPLICATE_BLOCK_ID, UNKNOWN_BLOCK_TYPE; new XBV-163, 164, 165, 166. Pre-existing failure unrelated to WP-21: src/help/helpCoverage.test.ts live-UI fingerprint (fails already at cb974bc3)."
+   "note": "User go-ahead 2026-11-11 (fix all findings). Plan: docs/xbridges-verification/wp21-fix-plan.md. Round 1 dispatched: A zero parameters, B embedded quick fixes, C workspace UI. Batch B merged (a3daf970): 9 findings closed; new XBV-150 (embedded PID semantics), XBV-151 (embedded DELAY 0), XBV-152 (vacuous PID parity case). LIBM_CONDITIONED bound (8 eps max(1,|y|), 17 keys) added to xbCodeParity, verifier re-measured worst ratio 3.85. Batch A merged (c8facc19): XBV-015, 019, 040, 064 closed; DELAY delay_length is not tunable during a run (live change to/from 0 refused with PARAMETER_OUT_OF_RANGE, Simulink); XBV-137 ratchet shrunk 463 -> 418; new XBV-153. Batch D dispatched (acceptance 624b6a44). Batch F acceptance: pins removed for XBV-084, 086, 087, 091, 093, 094, 101, 102, 103 and the XBV-084 seeds; new tests for XBV-150 (PID with distinct r and y), 151 (DELAY 0), 107 (passes: closed). XBV-088, 090, 092 stay pinned (canvas-side causes, later batches). Batch C committed (13 findings closed, verifier PASS, e2e 36/36); new XBV-157, 158. WP-20 re-check by the verifier: spec gap (no end-time check in solvers/persistence/subsystem/param-edit) fixed by the controller; XBV-149 pin ordering fixed. Batch D merged (22 findings closed; XBV-066 moved to E; new XBV-154, 155, 156). XBV-057: right shift of a negative int32 by >= 32 gives -1 (arithmetic shift, Simulink signed shift). Batch E acceptance (engine core): pins flipped for XBV-016, 026, 028, 030, 031, 032, 033, 035, 036, 066, 067, 069, 080; PINNED_SEVERITY no longer lists DIMENSION_MISMATCH, DATA_TYPE_MISMATCH (D1), ALGEBRAIC_LOOP_NOT_CONVERGED, LOGIC_NAN_INPUT; U10 and U14 lists emptied (XBV-020, XBV-018); XBV-047 clone list emptied; RELAY rk4 parity pin removed (XBV-067); new xbWp21Engine.test.ts for XBV-002, 003, 004, 005, 155; testkit runModel passes relTol/absTol. XBV-107 reopened (controller test error). Batch F merged after 2 reworks and verifier review (11 findings closed, XBV-093 open; decision D12; new XBV-159, 160, 161, 162). RELAY rk4 parity stays failing until batch E2 (XBV-067 minor steps). Batch E1+E2 merged (26 findings closed incl. XBV-092 and XBV-133 fixed as side effects); structural codes MULTIPLE_DRIVERS, DUPLICATE_BLOCK_ID, UNKNOWN_BLOCK_TYPE; new XBV-163, 164, 165, 166. Pre-existing failure unrelated to WP-21: src/help/helpCoverage.test.ts live-UI fingerprint (fails already at cb974bc3). Batch H merged (12 fuzzy findings closed; math blocks out of the universal lists; decision D13; new XBV-169)."
   },
   {
    "id": "WP-22",
@@ -826,7 +832,7 @@
    "severity": "S2",
    "gate": "V3",
    "status": "open",
-   "summary": "Blocks throw inside execute (stopping the run with BLOCK_RUNTIME_FAULT): on default inputs 9 (MPC_CONTROLLER default Q 2x2 vs 1 output; MatrixConcat, MatrixSolve, SubMatrix on scalars; DEM_*; ROBOT_VACUUM_ERODE_MASK, THETA_STAR), on NaN/Inf 9, on a wrong value kind 29. Lists XBV-U1, XBV-U4, XBV-U5."
+   "summary": "Blocks throw inside execute (stopping the run with BLOCK_RUNTIME_FAULT): on default inputs 9 (MPC_CONTROLLER default Q 2x2 vs 1 output; MatrixConcat, MatrixSolve, SubMatrix on scalars; DEM_*; ROBOT_VACUUM_ERODE_MASK, THETA_STAR), on NaN/Inf 9, on a wrong value kind 29. Lists XBV-U1, XBV-U4, XBV-U5. WP-21 batch H: the math blocks (MatrixConcat, Abs, Diag*, GAIN, Max, Mean, Sum*, UnaryNeg, Vector*) left the U1-U5 lists; the remaining entries belong to batches G and I."
   },
   {
    "id": "XBV-022",
@@ -834,7 +840,7 @@
    "severity": "S2",
    "gate": "V3",
    "status": "open",
-   "summary": "Undefined outputs or unreported NaN: 5 blocks alone with unconnected inputs (DEMUX out2 undefined stops a downstream Abs), 11 blocks on finite edge inputs. Lists XBV-U2, XBV-U3. SECTOR_SELECTOR moved to XBV-025."
+   "summary": "Undefined outputs or unreported NaN: 5 blocks alone with unconnected inputs (DEMUX out2 undefined stops a downstream Abs), 11 blocks on finite edge inputs. Lists XBV-U2, XBV-U3. SECTOR_SELECTOR moved to XBV-025. WP-21 batch H: the math blocks (MatrixConcat, Abs, Diag*, GAIN, Max, Mean, Sum*, UnaryNeg, Vector*) left the U1-U5 lists; the remaining entries belong to batches G and I."
   },
   {
    "id": "XBV-023",
@@ -1586,96 +1592,108 @@
    "plan_ref": "4.2 fuzzy",
    "severity": "S1",
    "gate": "V2",
-   "status": "open",
-   "summary": "FUZZY_MF_TRIMF shoulder: with a = b (or b = c) the membership at the shoulder vertex is 0 instead of 1 (x <= a || x >= c returns 0 first); MATLAB trimf gives 1. Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts."
+   "status": "closed",
+   "summary": "FUZZY_MF_TRIMF shoulder: with a = b (or b = c) the membership at the shoulder vertex is 0 instead of 1 (x <= a || x >= c returns 0 first); MATLAB trimf gives 1. Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts.",
+   "fix": "WP-21 batch H (2 reworks), verifier PASS"
   },
   {
    "id": "XBV-111",
    "plan_ref": "4.2 fuzzy",
    "severity": "S1",
    "gate": "V2",
-   "status": "open",
-   "summary": "FUZZY_MF_TRAPMF shoulder: with a = b (or c = d) the membership at the shoulder vertex is 0 instead of 1. Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts."
+   "status": "closed",
+   "summary": "FUZZY_MF_TRAPMF shoulder: with a = b (or c = d) the membership at the shoulder vertex is 0 instead of 1. Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts.",
+   "fix": "WP-21 batch H (2 reworks), verifier PASS"
   },
   {
    "id": "XBV-112",
    "plan_ref": "4.2 fuzzy",
    "severity": "S3",
    "gate": "V2",
-   "status": "open",
-   "summary": "FUZZY_AND clips its inputs to [0, 1] and turns NaN into 0 silently (min(1.5, 2) = 1, product = 1 instead of 1.5 and 3); MATLAB does not clip. Out-of-range memberships are invalid inputs, so clipping is defensible, but it is undiagnosed. Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts."
+   "status": "closed",
+   "summary": "FUZZY_AND clips its inputs to [0, 1] and turns NaN into 0 silently (min(1.5, 2) = 1, product = 1 instead of 1.5 and 3); MATLAB does not clip. Out-of-range memberships are invalid inputs, so clipping is defensible, but it is undiagnosed. Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts.",
+   "fix": "WP-21 batch H (2 reworks), verifier PASS"
   },
   {
    "id": "XBV-113",
    "plan_ref": "4.2 fuzzy",
    "severity": "S3",
    "gate": "V2",
-   "status": "open",
-   "summary": "FUZZY_OR clips its inputs to [0, 1] without a diagnostic (max(1.5, 2) = 1 instead of 2). Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts."
+   "status": "closed",
+   "summary": "FUZZY_OR clips its inputs to [0, 1] without a diagnostic (max(1.5, 2) = 1 instead of 2). Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts.",
+   "fix": "WP-21 batch H (2 reworks), verifier PASS"
   },
   {
    "id": "XBV-114",
    "plan_ref": "4.2 fuzzy",
    "severity": "S3",
    "gate": "V2",
-   "status": "open",
-   "summary": "FUZZY_NOT clips its input to [0, 1] without a diagnostic (1 - 1.5 gives 0 instead of -0.5). Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts."
+   "status": "closed",
+   "summary": "FUZZY_NOT clips its input to [0, 1] without a diagnostic (1 - 1.5 gives 0 instead of -0.5). Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts.",
+   "fix": "WP-21 batch H (2 reworks), verifier PASS"
   },
   {
    "id": "XBV-115",
    "plan_ref": "4.2 fuzzy",
    "severity": "S1",
    "gate": "V2",
-   "status": "open",
-   "summary": "FUZZY_RULE ignores implication 'min' (the default): weighted = strength * cons (the default branch equals the 'prod' branch); strength 0.4, cons 0.5 gives 0.2 instead of 0.4. Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts."
+   "status": "closed",
+   "summary": "FUZZY_RULE ignores implication 'min' (the default): weighted = strength * cons (the default branch equals the 'prod' branch); strength 0.4, cons 0.5 gives 0.2 instead of 0.4. Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts.",
+   "fix": "WP-21 batch H (2 reworks), verifier PASS"
   },
   {
    "id": "XBV-116",
    "plan_ref": "4.2 fuzzy",
    "severity": "S3",
    "gate": "V2",
-   "status": "open",
-   "summary": "FUZZY_RULE clips antecedents to [0, 1] without a diagnostic. Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts."
+   "status": "closed",
+   "summary": "FUZZY_RULE clips antecedents to [0, 1] without a diagnostic. Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts.",
+   "fix": "WP-21 batch H (2 reworks), verifier PASS"
   },
   {
    "id": "XBV-117",
    "plan_ref": "4.2 fuzzy",
    "severity": "S1",
    "gate": "V2",
-   "status": "open",
-   "summary": "FUZZY_DEFUZZIFY returns 0 for an all-zero aggregate with centroid (MATLAB: mid-range with a warning; on [0, 10] = 5) - silent wrong value. Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts. Oracle uncertain (verifier, from memory): MATLAB defuzz may raise an error on zero area for centroid; the mid-range is evalfis's no-rule-fires rule (XBV-119). Confirm in WP-15; a silent 0 is wrong either way."
+   "status": "closed",
+   "summary": "FUZZY_DEFUZZIFY returns 0 for an all-zero aggregate with centroid (MATLAB: mid-range with a warning; on [0, 10] = 5) - silent wrong value. Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts. Oracle uncertain (verifier, from memory): MATLAB defuzz may raise an error on zero area for centroid; the mid-range is evalfis's no-rule-fires rule (XBV-119). Confirm in WP-15; a silent 0 is wrong either way.",
+   "fix": "WP-21 batch H (2 reworks), verifier PASS"
   },
   {
    "id": "XBV-118",
    "plan_ref": "4.2 fuzzy",
    "severity": "S2",
    "gate": "V2",
-   "status": "open",
-   "summary": "FUZZY_DEFUZZIFY returns 0 for an all-zero aggregate with mom (mean of the range expected, 5). Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts."
+   "status": "closed",
+   "summary": "FUZZY_DEFUZZIFY returns 0 for an all-zero aggregate with mom (mean of the range expected, 5). Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts.",
+   "fix": "WP-21 batch H (2 reworks), verifier PASS"
   },
   {
    "id": "XBV-119",
    "plan_ref": "4.2 fuzzy",
    "severity": "S1",
    "gate": "V2",
-   "status": "open",
-   "summary": "FUZZY_INFERENCE_SYSTEM returns 0 when no rule fires (denominator 0) instead of the output mid-range (output range [2, 6]: 4). Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts."
+   "status": "closed",
+   "summary": "FUZZY_INFERENCE_SYSTEM returns 0 when no rule fires (denominator 0) instead of the output mid-range (output range [2, 6]: 4). Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts.",
+   "fix": "WP-21 batch H (2 reworks), verifier PASS"
   },
   {
    "id": "XBV-120",
    "plan_ref": "4.2 fuzzy",
    "severity": "S1",
    "gate": "V2",
-   "status": "open",
-   "summary": "FUZZY_INFERENCE_SYSTEM gives 0 membership at input shoulder vertices (trimf [-3, -3, -1] at -3), so rules on the range edge never fire (same root cause as XBV-110). Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts."
+   "status": "closed",
+   "summary": "FUZZY_INFERENCE_SYSTEM gives 0 membership at input shoulder vertices (trimf [-3, -3, -1] at -3), so rules on the range edge never fire (same root cause as XBV-110). Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts.",
+   "fix": "WP-21 batch H (2 reworks), verifier PASS"
   },
   {
    "id": "XBV-121",
    "plan_ref": "4.2 fuzzy",
    "severity": "S1",
    "gate": "V2",
-   "status": "open",
-   "summary": "FUZZY_INFERENCE_SYSTEM output shoulders (NB [-1, -1, -0.5], PB at the range end) are 0 at the end point, so the defuzzified output is off: at (-0.5, -0.2) y = -0.250623 instead of -0.252217. Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts."
+   "status": "closed",
+   "summary": "FUZZY_INFERENCE_SYSTEM output shoulders (NB [-1, -1, -0.5], PB at the range end) are 0 at the end point, so the defuzzified output is off: at (-0.5, -0.2) y = -0.250623 instead of -0.252217. Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts.",
+   "fix": "WP-21 batch H (2 reworks), verifier PASS"
   },
   {
    "id": "XBV-122",
@@ -2054,6 +2072,14 @@
    "gate": "V5",
    "status": "open",
    "summary": "src/help/moduleTopics.ts still says the canvas does not adapt its step; since WP-21 E1 the canvas ode45/ode23/ode23tb control the error with RelTol/AbsTol."
+  },
+  {
+   "id": "XBV-169",
+   "plan_ref": "4.2 routing / matrix",
+   "severity": "S3",
+   "gate": "V2",
+   "status": "open",
+   "summary": "MatrixConcat axis 0 mixes Simulink's Vector and Multidimensional modes: scalars only give a 2x1 matrix, vectors only (or vector plus scalar) give a longer 1-D vector; the block has no mode parameter (Simulink Matrix Concatenate has 'Vector' / 'Multidimensional array'). Found by the WP-21 batch H verifier."
   }
  ],
  "blocks": {

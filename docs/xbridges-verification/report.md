@@ -5,12 +5,12 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 ## Summary
 
 - Work packages: 20 done of 29; 2 in progress; 7 to do.
-- Findings: 78 open, 87 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
-  - S1 (wrong number in simulation or generated C): 18 open
-  - S2 (crash, stop, freeze or silent no-op): 19 open
-  - S3 (diagnostic, UI or convention deviation): 32 open
+- Findings: 67 open, 99 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
+  - S1 (wrong number in simulation or generated C): 11 open
+  - S2 (crash, stop, freeze or silent no-op): 18 open
+  - S3 (diagnostic, UI or convention deviation): 29 open
   - S4 (documentation): 9 open
-- Decisions recorded: 12; open: 0.
+- Decisions recorded: 13; open: 0.
 
 ## Work packages
 
@@ -64,7 +64,7 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 
 ## Open findings by severity
 
-### S1 - wrong number in simulation or generated C (18)
+### S1 - wrong number in simulation or generated C (11)
 
 | Id | Gate | Plan ref | Summary |
 | --- | --- | --- | --- |
@@ -74,25 +74,18 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 | XBV-065 | V2 | 4.2 continuous / discrete / discontinuities / buses | SATURATION is scalar-only: a vector input or vector limits give NaN (Number(array)); Simulink Saturation is element-wise with scalar or vector limits. Found by the WP-06 executor; pinned in xbEquations.dynamics.test.ts. DEADZONE is scalar-only on the canvas too; the embedded path is element-wise and correct (WP-16). WP-21 batch D: SATURATION element-wise fixed; DEADZONE vector parity pins remain open. |
 | XBV-072 | V2 | 4.2 power electronics / PWM / torque optimisation | MTPA_CONTROLLER does not deliver the requested torque: it hard-codes 2 pole pairs and id = -0.2 \|iq\| and ignores Ld, Lq; for te_ref = 1 it returns iq = 3.333, id = -0.667, i.e. Te = 0.533 (p = 1) or 1.067 (p = 2). Pinned in xbEquations.motor.test.ts. |
 | XBV-073 | V2 | 4.2 power electronics / PWM / torque optimisation | MTPA_CONTROLLER's operating point is not the maximum-torque-per-ampere point: on its constant-torque curve d\|i\|^2/d id is about +0.75 at te_ref = 1 (should be 0). Pinned in xbEquations.motor.test.ts. |
-| XBV-110 | V2 | 4.2 fuzzy | FUZZY_MF_TRIMF shoulder: with a = b (or b = c) the membership at the shoulder vertex is 0 instead of 1 (x <= a \|\| x >= c returns 0 first); MATLAB trimf gives 1. Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts. |
-| XBV-111 | V2 | 4.2 fuzzy | FUZZY_MF_TRAPMF shoulder: with a = b (or c = d) the membership at the shoulder vertex is 0 instead of 1. Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts. |
-| XBV-115 | V2 | 4.2 fuzzy | FUZZY_RULE ignores implication 'min' (the default): weighted = strength * cons (the default branch equals the 'prod' branch); strength 0.4, cons 0.5 gives 0.2 instead of 0.4. Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts. |
-| XBV-117 | V2 | 4.2 fuzzy | FUZZY_DEFUZZIFY returns 0 for an all-zero aggregate with centroid (MATLAB: mid-range with a warning; on [0, 10] = 5) - silent wrong value. Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts. Oracle uncertain (verifier, from memory): MATLAB defuzz may raise an error on zero area for centroid; the mid-range is evalfis's no-rule-fires rule (XBV-119). Confirm in WP-15; a silent 0 is wrong either way. |
-| XBV-119 | V2 | 4.2 fuzzy | FUZZY_INFERENCE_SYSTEM returns 0 when no rule fires (denominator 0) instead of the output mid-range (output range [2, 6]: 4). Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts. |
-| XBV-120 | V2 | 4.2 fuzzy | FUZZY_INFERENCE_SYSTEM gives 0 membership at input shoulder vertices (trimf [-3, -3, -1] at -3), so rules on the range edge never fire (same root cause as XBV-110). Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts. |
-| XBV-121 | V2 | 4.2 fuzzy | FUZZY_INFERENCE_SYSTEM output shoulders (NB [-1, -1, -0.5], PB at the range end) are 0 at the end point, so the defuzzified output is off: at (-0.5, -0.2) y = -0.250623 instead of -0.252217. Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts. |
 | XBV-154 | V6 | 7.3 canvas / interpreter parity | Embedded Mean (mean of all elements) and SubMatrix (zero-based indices) still follow the pre-WP-21 canvas rules; the canvas now gives MATLAB/Simulink column means and one-based indices (WP-21 batch D). Pinned in xbTriParity. |
 | XBV-159 | V6 | 7.3 canvas / interpreter parity | Embedded continuous-form PID_CONTROLLER (sample time <= 0) advances its integrator and derivative-filter states with forward Euler whatever the solver: under rk4 the embedded trace equals the euler trace (d_term grows by \|1 - N h\| per step instead of the RK4 stability factor); Simulink ode4 integrates them with RK4. Found by the WP-21 batch F verifier; the four rk4 continuous PID acceptance cases are pinned to it. |
 | XBV-161 | V6 | 7.3 canvas / interpreter parity | Embedded ShiftLeft/ShiftRight mask the shift count to 5 bits (& 31) in interpreter and C; Simulink and the canvas (since XBV-057, WP-21 batch D) shift every bit out for counts >= 32 (0, or -1 for a negative value under arithmetic right shift) and shift the other way for a negative count. Found when merging WP-21 batches D and F; pinned in xbTriParity. |
 | XBV-163 | V6 | 7.3 canvas / interpreter parity | Embedded RELAY reads the previous tick's input and switches one sample late: SINE_A u(0.30) = 1.0162 >= switch-on 1, so Simulink (and the canvas, direct feedthrough since WP-21 E2) gives 1 at t = 0.3 while the embedded path gives 0. Pinned in xbTriParity. |
 | XBV-164 | V6 | 7.3 canvas / interpreter parity | Embedded rk4 evaluates Step at the stage times; the canvas holds discontinuous outputs at their major-step value during minor steps (Simulink, WP-21 E2 / XBV-067), so 6 rk4 corpus seeds differ by h/6 per unit jump (seeds 1 and 28 checked against the closed form y = IC + max(0, t - 1)). Pinned in xbTriParity. |
 
-### S2 - crash, stop, freeze or silent no-op (19)
+### S2 - crash, stop, freeze or silent no-op (18)
 
 | Id | Gate | Plan ref | Summary |
 | --- | --- | --- | --- |
-| XBV-021 | V3 | U1/U4/U5 | Blocks throw inside execute (stopping the run with BLOCK_RUNTIME_FAULT): on default inputs 9 (MPC_CONTROLLER default Q 2x2 vs 1 output; MatrixConcat, MatrixSolve, SubMatrix on scalars; DEM_*; ROBOT_VACUUM_ERODE_MASK, THETA_STAR), on NaN/Inf 9, on a wrong value kind 29. Lists XBV-U1, XBV-U4, XBV-U5. |
-| XBV-022 | V3 | U2/U3 | Undefined outputs or unreported NaN: 5 blocks alone with unconnected inputs (DEMUX out2 undefined stops a downstream Abs), 11 blocks on finite edge inputs. Lists XBV-U2, XBV-U3. SECTOR_SELECTOR moved to XBV-025. |
+| XBV-021 | V3 | U1/U4/U5 | Blocks throw inside execute (stopping the run with BLOCK_RUNTIME_FAULT): on default inputs 9 (MPC_CONTROLLER default Q 2x2 vs 1 output; MatrixConcat, MatrixSolve, SubMatrix on scalars; DEM_*; ROBOT_VACUUM_ERODE_MASK, THETA_STAR), on NaN/Inf 9, on a wrong value kind 29. Lists XBV-U1, XBV-U4, XBV-U5. WP-21 batch H: the math blocks (MatrixConcat, Abs, Diag*, GAIN, Max, Mean, Sum*, UnaryNeg, Vector*) left the U1-U5 lists; the remaining entries belong to batches G and I. |
+| XBV-022 | V3 | U2/U3 | Undefined outputs or unreported NaN: 5 blocks alone with unconnected inputs (DEMUX out2 undefined stops a downstream Abs), 11 blocks on finite edge inputs. Lists XBV-U2, XBV-U3. SECTOR_SELECTOR moved to XBV-025. WP-21 batch H: the math blocks (MatrixConcat, Abs, Diag*, GAIN, Max, Mean, Sum*, UnaryNeg, Vector*) left the U1-U5 lists; the remaining entries belong to batches G and I. |
 | XBV-039 | V6 | 7.2 boundary mappings | In canvas simulation (main thread and worker) a state-machine variable mapped to a top-level Inport never reaches the X-Bridges model: the canvas writes the value with setSignalValue and params.value, but Inport.execute returns its own unconnected input (default 0), which overwrites it at the next evaluation (BlockDefinitions.ts ~2610). Measured: Inport override 2.5 into an Integrator for 1 s gives 0 instead of 2.5. Pinned in xbWorker.test.ts. The embedded interpreter/C path is checked in WP-16/18. Scope (verifier): this is the canvas run inside the X-Bridges workspace; a state machine running in the app uses App.tsx runAppSimulationTick -> smAppAdapter -> smInterpreter -> xbInterpreter, which WP-16/18 verify. Also: an Inport's own 'value' parameter (2.5, no override) gives 0 on the canvas. Severity lowered to S2. |
 | XBV-071 | V2 | 4.2 power electronics / PWM / torque optimisation | SVPWM_CORE over-modulation is not handled: only t0 is clamped to 0, so t1 + t2 exceeds Ts (\|V\| = 300 at 30 deg, Vdc 400: t1 = t2 = 6.5e-5, sum 1.3e-4 > 1e-4); the standard rule scales t1, t2 to sum Ts and keeps their ratio. Pinned in xbEquations.motor.test.ts. |
 | XBV-075 | V2 | 4.2 control / observers | Continuous PID_BASIC ignores enable: its integrator keeps accumulating while enable = 0 (evaluateDerivatives ignores the enable input; execute's nextState is not used for continuous blocks). Enable 0 -> 1 at 0.5 should give u(1) = 1.5. Found by the WP-07 executor; pinned in xbEquations.control.test.ts. |
@@ -100,7 +93,6 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 | XBV-078 | V2 | 4.2 control / observers | KALMAN_FILTER predicts before its first update (starts from P[-1\|-1] = P0, so the first update uses A P0 A' + Q); the Simulink Kalman Filter starts from x[0\|-1] = x0, P[0\|-1] = P0 and updates first. Found by the WP-07 executor; pinned in xbEquations.control.test.ts. EXTENDED_KALMAN_FILTER matches KALMAN_FILTER to 1e-7 and therefore inherits this. |
 | XBV-081 | V2 | 4.2 control / observers | MPC_CONTROLLER with Nc > 1 throws on its second call (RangeError: H is Nc x Nc but the warm-start vector has length nu), so the default MPC (Nc 3) cannot run more than one step; with Nc 1 it converges and respects u limits. Found by the WP-07 executor; pinned in xbEquations.control.test.ts. |
 | XBV-093 | V6 | 7.3 canvas / interpreter parity | Parity gap: the embedded path refuses STATE_SPACE (continuous representation, XB_DISCRETE_REPRESENTATION_REQUIRED) and DISCRETE_TRANSFER_FUNCTION with the default initial state (XB_STATE_INITIAL_VALUE_INVALID) for models the canvas runs. Found by the WP-16 executor; pinned in src/utils/stateMachine/xbTriParity.test.ts. (Verifier: a diagnosed restriction of the embedded path - a capabilities mismatch rather than a numeric defect.) WP-21 batch F: not fixed (scenario dimensions refused by the embedded builder; continuous STATE_SPACE needs generalised integrator slots in interpreter and C). |
-| XBV-118 | V2 | 4.2 fuzzy | FUZZY_DEFUZZIFY returns 0 for an all-zero aggregate with mom (mean of the range expected, 5). Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts. |
 | XBV-125 | V3 | 4.2 navigation / robot vacuum / DEM-CFD (D5) | ROBOT_VACUUM_GLOBAL_PLANNER ignores the grid and the start pose and returns the goal as the only waypoint (no A* path around a barrier). Found by the WP-10 executor; pinned in xbEquations.robot.test.ts. |
 | XBV-127 | V3 | 4.2 navigation / robot vacuum / DEM-CFD (D5) | The built-in Robot Vacuum Twin lab diverges to Infinity within 3 s at the app's default rk4 step 0.02 s (motor pole about -500/s); it needs dt 0.005 s to stay finite. Found by the WP-10 executor; pinned in xbEquations.robot.test.ts. |
 | XBV-128 | V3 | 4.2 navigation / robot vacuum / DEM-CFD (D5) | Robot Vacuum Twin lab in mode 6 does not reach the commanded goal (1.5, 1.5): the robot stays at (0, 0). Found by the WP-10 executor; pinned in xbEquations.robot.test.ts. |
@@ -111,7 +103,7 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 | XBV-160 | V6 | 7.3 canvas / interpreter parity | Embedded VectorDiv by zero publishes 0 (documented safe-zero fallback kept by batch F) while the canvas gives Inf with DIVIDE_BY_ZERO and PRODUCT divide gives Inf; D11 (NaN/Inf + fault flag) should apply. Mapped state-machine inputs also keep the safe-zero fallback. Found by the WP-21 batch F verifier. |
 | XBV-165 | V5 | 5.1 / 5.2 diagnostics | A block fault raised in a trial (minor) stage of a variable-step solver stops the run: the om501 lab with ode45 at default tolerance stops at 2.92 s with BLOCK_RUNTIME_FAULT (Intake Manifold P = -4360 at a rejected trial point); Simulink rejects the step and retries smaller. Euler/rk4/ode23/ode23tb and ode45 at RelTol 1e-6 run through. Found by the WP-21 E verifier. |
 
-### S3 - diagnostic, UI or convention deviation (32)
+### S3 - diagnostic, UI or convention deviation (29)
 
 | Id | Gate | Plan ref | Summary |
 | --- | --- | --- | --- |
@@ -132,10 +124,6 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 | XBV-088 | V6 | 7.3 canvas / interpreter parity | WHITE_NOISE / BAND_LIMITED_NOISE use different random streams on the canvas (Math.random) and in the embedded path (deterministic generator), so a model with noise never matches between the two (related XBV-023). Found by the WP-16 executor; pinned in src/utils/stateMachine/xbTriParity.test.ts. |
 | XBV-090 | V6 | 7.3 canvas / interpreter parity | SIX_STEP_COMMUTATION: the canvas treats a Hall input as high when > 0.5, the embedded path when non-zero; results differ for inputs in (0, 0.5]. Found by the WP-16 executor; pinned in src/utils/stateMachine/xbTriParity.test.ts. |
 | XBV-106 | V7 | 7.2 state-machine alignment | State-machine variables are scalar only: mapping a vector (3) or matrix (2x2) X-Bridges port to an SM variable is refused (XB_MAPPING_INVALID), so plan 7.2's vector/matrix boundary mappings are not expressible; vector/matrix signals work inside the model. Reported by the WP-18 executor. |
-| XBV-112 | V2 | 4.2 fuzzy | FUZZY_AND clips its inputs to [0, 1] and turns NaN into 0 silently (min(1.5, 2) = 1, product = 1 instead of 1.5 and 3); MATLAB does not clip. Out-of-range memberships are invalid inputs, so clipping is defensible, but it is undiagnosed. Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts. |
-| XBV-113 | V2 | 4.2 fuzzy | FUZZY_OR clips its inputs to [0, 1] without a diagnostic (max(1.5, 2) = 1 instead of 2). Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts. |
-| XBV-114 | V2 | 4.2 fuzzy | FUZZY_NOT clips its input to [0, 1] without a diagnostic (1 - 1.5 gives 0 instead of -0.5). Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts. |
-| XBV-116 | V2 | 4.2 fuzzy | FUZZY_RULE clips antecedents to [0, 1] without a diagnostic. Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts. |
 | XBV-122 | V2 | 4.2 navigation / robot vacuum / DEM-CFD (D5) | ROBOT_VACUUM_DYNAMICS applies a hidden 0.992 slip factor in evaluateDerivatives: a straight run gives x(10) = -1.51792 instead of the kinematic -1.51 (r w t). Found by the WP-10 executor; pinned in xbEquations.robot.test.ts. |
 | XBV-123 | V2 | 4.2 navigation / robot vacuum / DEM-CFD (D5) | ROBOT_VACUUM_DYNAMICS turning in place: theta(2) = 2.4552 instead of 2.475 (same hidden slip factor). Found by the WP-10 executor; pinned in xbEquations.robot.test.ts. |
 | XBV-124 | V2 | 4.2 navigation / robot vacuum / DEM-CFD (D5) | ROBOT_VACUUM_THETA_STAR line-of-sight shortcuts ignore the robot radius on the grid (legs pass 0.025 m from occupied cells, 0.15 m expected); its 'inflation' parameter is unused (0.28 literal). Found by the WP-10 executor; pinned in xbEquations.robot.test.ts. |
@@ -147,6 +135,7 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 | XBV-152 | V6 | 7.3 canvas / interpreter parity (test) | The per-block V6 parity case for PID_CONTROLLER is vacuous: every input port gets the same source, so r = y and e = 0; it passes without exercising the controller. Test-side gap (controller), to be replaced with distinct reference and measurement sources in batch F. Found by the WP-21 batch B verifier. |
 | XBV-157 | V8 | 6 UI | The record of invalid parameter text is cleared when the selection changes: leaving 'abc' in a field and selecting another block lets Run start again with the last valid value and no message. Found by the WP-21 batch C verifier. |
 | XBV-156 | V8 | 6 UI | The properties panel's Switch criterion dropdown (XbridgesPropertiesPanel.tsx ~1077) does not offer the new 'u2 ~= 0' criterion, and blockGuidance still documents SubMatrix indices as zero-based ('defaults 0'). Found by the WP-21 batch D executor. |
+| XBV-169 | V2 | 4.2 routing / matrix | MatrixConcat axis 0 mixes Simulink's Vector and Multidimensional modes: scalars only give a 2x1 matrix, vectors only (or vector plus scalar) give a longer 1-D vector; the block has no mode parameter (Simulink Matrix Concatenate has 'Vector' / 'Multidimensional array'). Found by the WP-21 batch H verifier. |
 
 ### S4 - documentation (9)
 
@@ -233,6 +222,18 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 - XBV-104 (closed): Generated C for an integrator loop fails -Wshadow (gcc and clang): 'xb_value_0_0_i_out' shadows a previous local (sm_core.c:78). Found by the WP-17 executor; pinned in src/utils/stateMachine/xbCodePar
 - XBV-105 (closed): Generated C for discontinuity blocks fails -Wdouble-promotion (gcc sm_core.c:143, clang sm_core.c:100): float promoted to double in a conditional. Found by the WP-17 executor; pinned in src/utils/stat
 - XBV-107 (closed): PRODUCT with operation 'divide' is not available in the embedded (state-machine / C) path although the canvas offers it; divide inside a state requires VectorDiv on vectors. Reported by the WP-18 exec
+- XBV-110 (closed): FUZZY_MF_TRIMF shoulder: with a = b (or b = c) the membership at the shoulder vertex is 0 instead of 1 (x <= a \|\| x >= c returns 0 first); MATLAB trimf gives 1. Found by the WP-09 executor; pinned i
+- XBV-111 (closed): FUZZY_MF_TRAPMF shoulder: with a = b (or c = d) the membership at the shoulder vertex is 0 instead of 1. Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts.
+- XBV-112 (closed): FUZZY_AND clips its inputs to [0, 1] and turns NaN into 0 silently (min(1.5, 2) = 1, product = 1 instead of 1.5 and 3); MATLAB does not clip. Out-of-range memberships are invalid inputs, so clipping i
+- XBV-113 (closed): FUZZY_OR clips its inputs to [0, 1] without a diagnostic (max(1.5, 2) = 1 instead of 2). Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts.
+- XBV-114 (closed): FUZZY_NOT clips its input to [0, 1] without a diagnostic (1 - 1.5 gives 0 instead of -0.5). Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts.
+- XBV-115 (closed): FUZZY_RULE ignores implication 'min' (the default): weighted = strength * cons (the default branch equals the 'prod' branch); strength 0.4, cons 0.5 gives 0.2 instead of 0.4. Found by the WP-09 execut
+- XBV-116 (closed): FUZZY_RULE clips antecedents to [0, 1] without a diagnostic. Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts.
+- XBV-117 (closed): FUZZY_DEFUZZIFY returns 0 for an all-zero aggregate with centroid (MATLAB: mid-range with a warning; on [0, 10] = 5) - silent wrong value. Found by the WP-09 executor; pinned in xbEquations.fuzzy.test
+- XBV-118 (closed): FUZZY_DEFUZZIFY returns 0 for an all-zero aggregate with mom (mean of the range expected, 5). Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts.
+- XBV-119 (closed): FUZZY_INFERENCE_SYSTEM returns 0 when no rule fires (denominator 0) instead of the output mid-range (output range [2, 6]: 4). Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts.
+- XBV-120 (closed): FUZZY_INFERENCE_SYSTEM gives 0 membership at input shoulder vertices (trimf [-3, -3, -1] at -3), so rules on the range edge never fire (same root cause as XBV-110). Found by the WP-09 executor; pinned
+- XBV-121 (closed): FUZZY_INFERENCE_SYSTEM output shoulders (NB [-1, -1, -0.5], PB at the range end) are 0 at the end point, so the defuzzified output is off: at (-0.5, -0.2) y = -0.250623 instead of -0.252217. Found by 
 - XBV-133 (closed): ROBOT_VACUUM_DIGITAL_TWIN diverges within 2 s at rk4 dt 0.02 (finite only at 0.005). Found by the WP-10 executor; pinned in xbEquations.robot.test.ts.
 - XBV-135 (closed): Properties panel renders MatrixConcat.axis, SWITCH_CASE.numCases, Scope.numSignals and Scope.bufferSize as selects, so values such as 0, -2.5 or 0.125 cannot be entered (ratchet in xbV8Ui.test.tsx). F
 - XBV-136 (closed): Properties panel renders LAPLACE_TRANSFORM.mappingType (schema kind option) as free text instead of a select. Found by the WP-19 executor; pinned in src/components/xbridges/xbV8Ui.test.tsx.
@@ -266,6 +267,7 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 - **D10** (2026-11-11, bitwise data type (XBV-087, XBV-101)): Bitwise and shift blocks work on int32 two's complement on every path (canvas, interpreter, C); the generated C performs the bit operations on uint32 casts and converts back, so every operation is defined behaviour. Adopted by the controller under the 'fix all' go-ahead; the canvas and the C already used int32, only the interpreter changes.
 - **D11** (2026-11-11, out-of-domain math in the embedded path (XBV-086)): Out-of-domain inputs (acos(2), atanh(1.5), (-8)^(1/3)) publish NaN and raise the numeric fault on every path, as the canvas (NaN + MATH_DOMAIN_ERROR) and Simulink-generated C (libm returns NaN) do; the documented 'deterministic fallback 0' of the signal-only fault policy is replaced by NaN + fault flag. Adopted by the controller under the 'fix all' go-ahead.
 - **D12** (2026-11-12, Rate Limiter initial condition): ADIA's Rate Limiter has an explicit initialCondition parameter (default 0) that Simulink's block lacks; it is the output before the first sample, y(-1) = IC. Ts > 0: y(0) = clamp(u(0), IC + falling Ts, IC + rising Ts); inherited/continuous sample time: y(0) = IC (no time has elapsed). This is the canvas behaviour, adopted for the embedded path.
+- **D13** (2026-11-12, new diagnostic codes in WP-21): Structural compile errors MULTIPLE_DRIVERS, DUPLICATE_BLOCK_ID, UNKNOWN_BLOCK_TYPE (error) and the fuzzy warning FUZZY_EMPTY_AGGREGATE (MATLAB 'no rules fired': output mid-range) are dedicated codes rather than reuses of BLOCK_RUNTIME_FAULT / MATH_DOMAIN_ERROR; each has a recipe and guidance.
 
 ## Deferred items (notes for follow-up WPs)
 
