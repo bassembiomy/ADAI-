@@ -11701,7 +11701,7 @@ return block;
                                                                                                                                                                                         createPort('y', 'y', 'output', 0, 'right', 'vector')
                                                                                                                                                                                       ],
                                                                                                                                                                                       state: {
-                                                                                                                                                                                        x: null,
+ x: (() => { const order = (simulationType === 'closed_loop' ? Math.max(numerator.length, denominator.length) : denominator.length) - 1; return order > 0 ? new Array(order).fill(0) : null; })(), // zero initial state of the realization
                                                                                                                                                                                         history: [],
                                                                                                                                                                                         stepCount: 0
                                                                                                                                                                                       },
