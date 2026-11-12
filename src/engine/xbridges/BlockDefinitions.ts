@@ -5886,8 +5886,8 @@ execute: (ins, p, state) => {
                                                       const kr = p.Lm / p.Lr;
                                                       const tr = p.Lr / p.Rr;
 
-                                                      const dias = (vAlpha - (p.Rs + kr * kr * p.Rr) / sigma * state.ias + (kr / (sigma * tr)) * state.psiar + (kr * p.P * state.omega / sigma) * state.psibr) / (sigma * p.Ls);
-                                                      const dibs = (vBeta - (p.Rs + kr * kr * p.Rr) / sigma * state.ibs + (kr / (sigma * tr)) * state.psibr - (kr * p.P * state.omega / sigma) * state.psiar) / (sigma * p.Ls);
+                                                      const dias = (vAlpha - (p.Rs + kr * kr * p.Rr) * state.ias + (kr / tr) * state.psiar + (kr * p.P * state.omega) * state.psibr) / (sigma * p.Ls);
+                                                      const dibs = (vBeta - (p.Rs + kr * kr * p.Rr) * state.ibs + (kr / tr) * state.psibr - (kr * p.P * state.omega) * state.psiar) / (sigma * p.Ls);
                                                       const dpsiar = (p.Lm / tr) * state.ias - (1 / tr) * state.psiar - p.P * state.omega * state.psibr;
                                                       const dpsibr = (p.Lm / tr) * state.ibs - (1 / tr) * state.psibr + p.P * state.omega * state.psiar;
 
@@ -6248,7 +6248,7 @@ execute: (ins, p, state) => {
                                                                       state: {
                                                                         ias: 0, ibs: 0, psiar: 0.001, psibr: 0, omega: 0, theta: 0, // Motor states
                                                                         i_state: 0, d_state: 0, // PID states (integral and derivative-filter state)
-    theta_v: 0, lastTime: 0 // stator voltage angle (integral of the electrical reference frequency P w_ref)
+    theta_v: 0, lastTime: 0 // stator voltage angle (integral of the electrical stator frequency P omega + slip)
                                                                       },
                                                                       execute: (ins: any[], p: any, state: any) => {
                                                                         const Te = 1.5 * p.P * (p.Lm / p.Lr) * (state.psiar * state.ibs - state.psibr * state.ias);
@@ -6264,9 +6264,9 @@ execute: (ins, p, state) => {
                                                                         const error = w_ref - w_meas;
 
                                                                         // 1. Speed PID. Its output is the slip frequency command (electrical rad/s) of a V/f drive with slip regulation, limited to
-    // the pull-out slip Rr/Lr of the rotor; the integral stops accumulating while the command is saturated (anti-windup).
+    // the pull-out slip Rr/(sigma Lr) under constant stator flux; the integral stops accumulating while the command is saturated (anti-windup).
     const N = p.N ?? 100;
-    const slipMax = p.Rr / p.Lr;
+    const slipMax = p.Rr / ((1 - (p.Lm * p.Lm) / (p.Ls * p.Lr)) * p.Lr); // pull-out slip under constant stator flux
     const D = p.Kd * N * (error - state.d_state); // filtered derivative
     const uPid = p.Kp * error + state.i_state + D;
     const slip = Math.max(-slipMax, Math.min(slipMax, uPid));
@@ -6290,8 +6290,8 @@ execute: (ins, p, state) => {
                                                                         const kr = p.Lm / p.Lr;
                                                                         const tr = p.Lr / p.Rr;
 
-                                                                        const dias = (vAlpha - (p.Rs + kr * kr * p.Rr) / sigma * state.ias + (kr / (sigma * tr)) * state.psiar + (kr * p.P * state.omega / sigma) * state.psibr) / (sigma * p.Ls);
-                                                                        const dibs = (vBeta - (p.Rs + kr * kr * p.Rr) / sigma * state.ibs + (kr / (sigma * tr)) * state.psibr - (kr * p.P * state.omega / sigma) * state.psiar) / (sigma * p.Ls);
+                                                                        const dias = (vAlpha - (p.Rs + kr * kr * p.Rr) * state.ias + (kr / tr) * state.psiar + (kr * p.P * state.omega) * state.psibr) / (sigma * p.Ls);
+                                                                        const dibs = (vBeta - (p.Rs + kr * kr * p.Rr) * state.ibs + (kr / tr) * state.psibr - (kr * p.P * state.omega) * state.psiar) / (sigma * p.Ls);
                                                                         const dpsiar = (p.Lm / tr) * state.ias - (1 / tr) * state.psiar - p.P * state.omega * state.psibr;
                                                                         const dpsibr = (p.Lm / tr) * state.ibs - (1 / tr) * state.psibr + p.P * state.omega * state.psiar;
 
