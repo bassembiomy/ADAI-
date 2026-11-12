@@ -11,6 +11,7 @@ function serializeModelForWorker(model: XModel): XModel {
       const {
         execute: _execute,
         evaluateDerivatives: _evaluateDerivatives,
+        updateDiscrete: _updateDiscrete,
         ZeroCrossingFn: _zeroCrossingFn,
         ...serializableBlock
       } = block;
@@ -132,7 +133,14 @@ export class XbridgesWorkerClient {
       const item: PendingStep = { request, resolve, reject };
       if (this.activePending === null) {
         this.activePending = item;
-        this.worker!.postMessage(request);
+        try {
+          this.worker!.postMessage(request);
+        } catch (err: any) {
+          // A request that cannot be posted (e.g. DataCloneError) must not leave the client in flight forever.
+          this.activePending = null;
+          reject(new Error(err?.message || 'Failed to dispatch to X-Bridges worker'));
+          this.processQueue();
+        }
       } else {
         this.queue.push(item);
       }
@@ -154,7 +162,14 @@ export class XbridgesWorkerClient {
       const item: PendingStep = { request, resolve, reject };
       if (this.activePending === null) {
         this.activePending = item;
-        this.worker!.postMessage(request);
+        try {
+          this.worker!.postMessage(request);
+        } catch (err: any) {
+          // A request that cannot be posted (e.g. DataCloneError) must not leave the client in flight forever.
+          this.activePending = null;
+          reject(new Error(err?.message || 'Failed to dispatch to X-Bridges worker'));
+          this.processQueue();
+        }
       } else {
         this.queue.push(item);
       }

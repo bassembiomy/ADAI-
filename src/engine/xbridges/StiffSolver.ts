@@ -47,6 +47,9 @@ function setAt(root: any, path: Path, value: number) {
   cur[path[path.length - 1] as any] = value;
 }
 
+/** Output step suggested for the next live output step, per engine. */
+const LIVE_TB_HINT = new WeakMap<object, { h: number }>();
+
 function reportError(engine: XbridgesEngine, code: string, message: string) {
   if (!engine.diagnostics.some(d => d.code === code)) {
     engine.diagnostics.push({ severity: 'error', code, message });
@@ -67,6 +70,16 @@ export class StiffSolver {
       } else collectLeaves(block.id, block.state, [], leaves);
     }
     return { leaves, n: leaves.length };
+  }
+
+  /**
+   * A block may widen its state while its derivatives are first evaluated (a scalar initial condition expands over a
+   * vector input, as in Simulink). One derivative evaluation at (t, x) lets the state take its final shape before the
+   * layout is built; otherwise the scalar state would be flattened as one leaf, the vector derivative would read as 0 at
+   * the missing path and the state would stay frozen (XBV-155).
+   */
+  private static settleStateShapes(engine: XbridgesEngine, t: number) {
+    engine.computeDerivatives(t);
   }
 
   static flattenStates(engine: XbridgesEngine, layout: Layout): Float64Array {
@@ -96,11 +109,31 @@ export class StiffSolver {
     return d;
   }
 
+  /**
+   * Outputs with the algebraic loop solved to a tight tolerance. The finite-difference Jacobian divides f differences by
+   * a perturbation of about 1e-8, so a loop warm-started only to the default algTol (1e-6) makes f drift and the Jacobian
+   * wrong (XBV-016: y = 0.5 y + 1 feeding an integrator gave 51.6 instead of 2). If the tight solve does not converge, the
+   * evaluation is repeated with the user's tolerance, which then reports a genuine failure.
+   */
+  private static computeOutputsTight(engine: XbridgesEngine, t: number, temp: Map<string, any>) {
+    const prev = engine.options;
+    const userTol = prev?.algTol ?? 1e-6;
+    if (!prev || !(userTol > 1e-10)) { engine.computeOutputs(t, temp); return; }
+    const before = engine.diagnostics.length;
+    engine.options = { ...prev, algTol: 1e-10 };
+    try { engine.computeOutputs(t, temp); } finally { engine.options = prev; }
+    const added = engine.diagnostics.slice(before);
+    if (added.some(d => d.code === 'ALGEBRAIC_LOOP_NOT_CONVERGED')) {
+      engine.diagnostics.splice(before, added.length, ...added.filter(d => d.code !== 'ALGEBRAIC_LOOP_NOT_CONVERGED'));
+      engine.computeOutputs(t, temp);
+    }
+  }
+
   /** f(t, x): outputs at the trial state, then derivatives, flattened in layout order. */
   static f(engine: XbridgesEngine, layout: Layout, t: number, x: ArrayLike<number>): Float64Array {
     const temp = StiffSolver.unflatten(engine, layout, x);
     // Single pass: the engine's sorted order now evaluates stateful blocks before their feedthrough consumers.
-    engine.computeOutputs(t, temp);
+    StiffSolver.computeOutputsTight(engine, t, temp);
     const d = StiffSolver.flattenDerivatives(engine.computeDerivatives(t, temp), layout);
     for (let i = 0; i < d.length; i++) {
       if (!Number.isFinite(d[i])) throw new StiffSolverError('STIFF_SOLVER_NONFINITE', 'Stiff solver: non-finite derivative encountered.');
@@ -192,6 +225,7 @@ export class StiffSolver {
     engine.computeOutputs(t);
     engine.updateDiscreteStates(t);
     try {
+      StiffSolver.settleStateShapes(engine, t);
       const layout = StiffSolver.buildLayout(engine);
       const n = layout.n;
       if (n === 0) return true;
@@ -308,13 +342,14 @@ export class StiffSolver {
    * `fg`, `f1` are the stage derivatives at the converged stage values.
    */
   static stepODE23TB(
-    engine: XbridgesEngine, t: number, h: number, relTol: number, absTol: number,
+    engine: XbridgesEngine, t: number, h: number, relTol: number, absTol: number, discrete = true,
   ): { accepted: boolean; err: number; hNext: number; failed?: boolean } {
     const gamma = 2 - Math.SQRT2;
     const d = gamma / 2;
     engine.computeOutputs(t);
-    engine.updateDiscreteStates(t);
+    if (discrete) engine.updateDiscreteStates(t);
     try {
+      StiffSolver.settleStateShapes(engine, t);
       const layout = StiffSolver.buildLayout(engine);
       const n = layout.n;
       if (n === 0) return { accepted: true, err: 0, hNext: h * 5 };
@@ -392,6 +427,51 @@ export class StiffSolver {
       }
       throw e;
     }
+  }
+
+  /**
+   * Live canvas step over the output step [t, t + dt] with error-controlled TR-BDF2 substeps (decision D3, XBV-026).
+   * A rejected substep is retried with the smaller step; the state is never left unchanged without a diagnostic.
+   * Discrete states are updated once, at t. Returns false (error diagnostic on the engine) when the step fails.
+   */
+  static stepLiveODE23TB(engine: XbridgesEngine, t: number, dt: number, relTol: number, absTol: number): boolean {
+    if (!(relTol > 0) || !(absTol > 0) || !(dt > 0)) {
+      reportError(engine, 'STIFF_SOLVER_INVALID_OPTION', 'ode23tb requires relTol, absTol and the step > 0.');
+      return false;
+    }
+    engine.computeOutputs(t);
+    engine.updateDiscreteStates(t);
+    if (engine.hasFatalError()) return false;
+    const tEnd = t + dt;
+    const hMin = Math.max(engine.options?.minStep ?? 0, 16 * Number.EPSILON * Math.max(1, Math.abs(t)));
+    const hMax = engine.options?.maxStep ?? dt;
+    let hints = LIVE_TB_HINT.get(engine);
+    if (hints === undefined) { hints = { h: dt }; LIVE_TB_HINT.set(engine, hints); }
+    let h = Math.min(hints.h, hMax, dt);
+    let tc = t;
+    while (tc < tEnd && !engine.hasFatalError()) {
+      const remaining = tc === t ? dt : tEnd - tc; // the first substep measures the output step itself, not (t + dt) - t
+      let hTry = Math.min(h, hMax);
+      let reaches = false;
+      if (hTry >= remaining - hMin) { hTry = remaining; reaches = true; }
+      const res = StiffSolver.stepODE23TB(engine, tc, hTry, relTol, absTol, false);
+      if (res.failed) return false;
+      if (res.accepted) {
+        tc = reaches ? tEnd : tc + hTry;
+        let hNew = Math.min(hMax, Math.max(res.hNext, hMin));
+        // A step shortened to land on the output time says nothing against the step that was asked for.
+        if (hTry < h) hNew = Math.max(hNew, Math.min(h, hMax));
+        h = hNew;
+      } else {
+        if (hTry <= hMin) {
+          reportError(engine, 'STIFF_SOLVER_STEP_TOO_SMALL', `ode23tb step size fell below the minimum step (${hMin}) at t=${tc}.`);
+          return false;
+        }
+        h = Math.max(hMin, Math.min(res.hNext, hTry * 0.9));
+      }
+    }
+    hints.h = h;
+    return !engine.hasFatalError();
   }
 
   static runODE23TB(engine: XbridgesEngine, options: SolverOptions) {
