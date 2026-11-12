@@ -450,7 +450,7 @@ export class StiffSolver {
     let h = Math.min(hints.h, hMax, dt);
     let tc = t;
     while (tc < tEnd && !engine.hasFatalError()) {
-      const remaining = tEnd - tc;
+      const remaining = tc === t ? dt : tEnd - tc; // the first substep measures the output step itself, not (t + dt) - t
       let hTry = Math.min(h, hMax);
       let reaches = false;
       if (hTry >= remaining - hMin) { hTry = remaining; reaches = true; }

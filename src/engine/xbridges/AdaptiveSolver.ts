@@ -64,6 +64,8 @@ interface IntegrateConfig {
   hMin: number;
   hMax: number;
   h0: number;
+  /** Length of the interval tEnd - t0 as the caller states it (avoids an ulp difference from (t0 + dt) - t0). */
+  span?: number;
   /**
    * Batch semantics (Solvers.runFixedStep): discrete states are updated at every trial, the last stage is reused as the
    * next first stage, and a step at the minimum step is accepted. Live semantics: the caller updated the discrete states
@@ -201,6 +203,8 @@ export class AdaptiveSolver {
     let k1: Map<string, any> = new Map();
     let k1Valid = false;
     let outputsReady = cfg.outputsReady === true;
+    // Major-step evaluation at the current base done (discontinuous blocks decide their mode at major steps only).
+    let majorDone = false;
     let event: { tLow: number; tHigh: number } | null = null;
     let zcBase: Map<string, number[]> | null = null;
     let baseStates: Map<string, any> | null = null;
@@ -208,7 +212,7 @@ export class AdaptiveSolver {
     while (t < tEnd && !engine.hasFatalError()) {
       const target = event === null ? tEnd : (t < event.tLow ? event.tLow : event.tHigh);
       const sliver = event !== null && t >= event.tLow;
-      const remaining = target - t;
+      const remaining = t === t0 && target === tEnd && cfg.span !== undefined ? cfg.span : target - t;
       let hTry = h;
       let reachesTarget = false;
       if (hTry >= remaining - cfg.hMin) { hTry = remaining; reachesTarget = true; }
@@ -222,11 +226,16 @@ export class AdaptiveSolver {
         engine.executionOrder.forEach(b => { if (isDiscrete(b)) prev.set(b.id, JSON.stringify(b.state)); });
         engine.updateDiscreteStates(t);
         engine.executionOrder.forEach(b => {
-          if (isDiscrete(b) && prev.get(b.id) !== JSON.stringify(b.state)) k1Valid = false;
+          if (isDiscrete(b) && prev.get(b.id) !== JSON.stringify(b.state)) { k1Valid = false; majorDone = false; }
         });
       }
-      if (!k1Valid) {
+      // Major step at the base: a reused first stage (FSAL) does not replace it, because the stage evaluations are minor
+      // steps in which Step, Relay, Switch ... hold the mode of the last major step.
+      if (!majorDone || !k1Valid) {
         if (outputsReady) outputsReady = false; else engine.computeOutputs(t);
+        majorDone = true;
+      }
+      if (!k1Valid) {
         k1 = engine.computeDerivatives(t);
         k1Valid = true;
         zcBase = null;
@@ -283,6 +292,7 @@ export class AdaptiveSolver {
       }
       if (sliver && reachesTarget) event = null;
       k1 = tr.stages[lastStage];
+      majorDone = false;
       k1Valid = cfg.batch; // FSAL in batch runs; live steps recompute the first stage at the new base
       zcBase = null;
       baseStates = null;
@@ -304,7 +314,7 @@ export class AdaptiveSolver {
     const hMax = options.maxStep ?? 0.05;
 
     engine.compile(startTime);
-    AdaptiveSolver.integrate(engine, tab, startTime, stopTime, { relTol, absTol, hMin, hMax, h0, batch: true });
+    AdaptiveSolver.integrate(engine, tab, startTime, stopTime, { relTol, absTol, hMin, hMax, h0, batch: true, span: stopTime - startTime });
     engine.computeOutputs(stopTime);
   }
 
@@ -340,6 +350,7 @@ export class AdaptiveSolver {
       hMin: Math.max(engine.options?.minStep ?? 0, 16 * Number.EPSILON * Math.max(1, Math.abs(t))),
       hMax: engine.options?.maxStep ?? Number.POSITIVE_INFINITY,
       h0: Math.min(hint ?? dt, dt),
+      span: dt,
       batch: false,
       outputsReady: true,
     });
