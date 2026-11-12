@@ -22,6 +22,8 @@ import { XB_CAPABILITIES } from './xbCapabilities';
  * Each cause was settled against an oracle (closed form / Simulink definition) where one exists; 'unresolved' means none.
  */
 const PIN_CAUSE: Record<string, string> = {
+  'XBV-167': 'embedded KALMAN_FILTER predicts before the first update (P[0|-1] = A P0 A\' + Q); Simulink and the canvas update first from x0, P0; embedded wrong',
+  'XBV-168': 'embedded PID_BASIC / PID_CONTROLLER output 0 while reset is active; Simulink (and the canvas since XBV-077) keep the proportional action Kp e; embedded wrong',
   'XBV-163': 'embedded RELAY uses the previous tick input (switches one sample late); canvas (direct feedthrough since WP-21 E2) matches the Simulink relay; embedded wrong',
   'XBV-164': 'embedded rk4 evaluates Step at the stage times; the canvas holds discontinuous outputs at their major-step value during minor steps (Simulink, WP-21 E2 XBV-067); embedded wrong',
   'XBV-161': 'embedded ShiftLeft/ShiftRight mask the shift count to 5 bits (& 31); Simulink (and the canvas since XBV-057) gives 0 / sign fill for counts >= 32 and the opposite shift for a negative count; embedded wrong',
@@ -45,6 +47,15 @@ const PIN_CAUSE: Record<string, string> = {
   'XBV-091': 'canvas y(0)=0 then explicit-Euler instability (|y| exceeds the closed-form bound amp=1.3 from step 3), embedded stays bounded but one tick ahead; filter discretisation differs, neither exact, unresolved',
 };
 const PINS: Record<string, string> = {
+  // XBV-167: embedded KALMAN_FILTER still predicts first; the canvas follows the Simulink order (update with x[0|-1] = x0, then predict) since WP-21 batch G.
+  'KALMAN_FILTER|euler': 'XBV-167',
+  'KALMAN_FILTER|rk4': 'XBV-167',
+  'KALMAN_FILTER|discrete': 'XBV-167',
+  // XBV-168: during reset the canvas PID outputs Kp e (XBV-077, WP-21 batch G); the embedded PID outputs 0. The harness drives reset with 0.7.
+  'PID_BASIC|euler': 'XBV-168',
+  'PID_BASIC|rk4': 'XBV-168',
+  'PID_CONTROLLER|euler': 'XBV-168',
+  'PID_CONTROLLER|rk4': 'XBV-168',
   // XBV-163: the embedded Relay reads the previous tick's input (one sample late); the canvas switches on at u(0.3) = 1.016 >= 1 (Simulink).
   'RELAY|euler': 'XBV-163',
   'RELAY|rk4': 'XBV-163',

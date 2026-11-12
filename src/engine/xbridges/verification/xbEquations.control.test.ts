@@ -251,21 +251,6 @@ describe('D. KALMAN_FILTER and EXTENDED_KALMAN_FILTER', () => {
       expect(relTol(xh[0], ref[n].x_hat[0]) && relTol(xh[1], ref[n].x_hat[1]), `n=${n}: x_hat ${xh} vs ${ref[n].x_hat}`).toBe(true);
     });
   });
-  // Characterization of the variant the block implements: predict-then-update from the posterior x[-1|-1] = 0,
-  // P[-1|-1] = P0, i.e. the reference started from P[0|-1] = A P0 A' + Q. Everything after the first sample then agrees.
-  // Characterization of today's behaviour (XBV-078): this test is expected to FAIL once XBV-078 is fixed; the fix
-  // commit removes it together with the it.fails marker of XBV-078.
-  it('characterization (XBV-078, remove on fix): KALMAN_FILTER equals the reference started from P[0|-1] = A P0 A\' + Q (200 steps, 1e-10)', () => {
-    const ref = reference(ys, zeros, add(mul(mul(A, P0), tr(A)), Q));
-    const out = blockRun('KALMAN_FILTER', zeros, ys);
-    out.forEach((o, n) => {
-      const xh = flat(o[0]), kg = flat(o[3]);
-      expect(relTol(xh[0], ref[n].x_hat[0]) && relTol(xh[1], ref[n].x_hat[1]), `n=${n}: x_hat ${xh} vs ${ref[n].x_hat}`).toBe(true);
-      expect(relTol(flat(o[1])[0], ref[n].y_hat), `n=${n}: y_hat`).toBe(true);
-      expect(relTol(flat(o[2])[0], ref[n].innovation), `n=${n}: innovation`).toBe(true);
-      expect(relTol(kg[0], ref[n].kg[0]) && relTol(kg[1], ref[n].kg[1]), `n=${n}: kg ${kg} vs ${ref[n].kg}`).toBe(true);
-    });
-  });
   // Oracle: x[0|-1] = 0, so the first innovation is y(0) - C x[0|-1] = y(0) whatever u(0) is
   // (x[n+1|n] = A x[n|n] + B u(n): u(0) acts on the NEXT sample).
   it('XBV-079: KALMAN_FILTER first innovation = y(0) - C x[0|-1] = y(0) (u(0) = 1 only affects x[1|0])', () => {

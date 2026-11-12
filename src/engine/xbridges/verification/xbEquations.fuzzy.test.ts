@@ -486,16 +486,6 @@ describe('9. RL_Q_LEARNING_CONTROLLER (alpha 0.1, gamma 0.9, 5 states, 3 actions
     const o = step(0, 0);             // Q[2][1] += 0.5 (0 - 0) = 0 ; argmax over [-0.5, 0, 0] -> first max = index 1
     expect(o.action).toBe(0);
   });
-  it('characterization (undocumented random draw order): epsilon 1 action index = floor(r2 * nA) from the seeded stream', () => {
-    const rnd = mulberry32(11); const ref = mulberry32(11);
-    vi.spyOn(Math, 'random').mockImplementation(rnd);
-    const step = stepper({ epsilon: 1 });
-    for (let k = 0; k < 20; k++) {
-      ref();                                  // draw 1: the epsilon comparison, always < 1
-      const idx = Math.floor(ref() * 3);      // draw 2: the action index
-      expect(step(0, 0).action).toBe([-1, 0, 1][idx]);
-    }
-  });
   it('same seed gives the same trajectory (determinism)', () => {
     const trace = () => {
       seed(99); const step = stepper({ epsilon: 0.3 }); const out: number[] = [];

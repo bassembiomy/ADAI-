@@ -250,9 +250,10 @@ describe('X-Bridges Learning Models Block Tests', () => {
     // With refs = [0.8, 0.4, -0.2], Saddle offset is (0.8 + (-0.2))/2 = 0.3.
     // Shifted refs = [0.8 - 0.3, 0.4 - 0.3, -0.2 - 0.3] = [0.5, 0.1, -0.5].
     // Normalized refs (mapped from -1..1 to 0..1) = [(0.5+1)/2, (0.1+1)/2, (-0.5+1)/2] = [0.75, 0.55, 0.25].
-    // At tRel = 0.5 (mid-carrier), Ga and Gb should be 1 (ref > tRel), Gc should be 0.
+    // Symmetric triangle carrier (XBV-070, WP-21 batch G): 0 -> 1 -> 0 over one period, so at tRel = 0.25 the carrier is 0.5;
+    // Ga and Gb are 1 (ref > 0.5), Gc is 0.
     const refs = [0.8, 0.4, -0.2];
-    const time = 0.0001; // tRel = (0.0001 % 0.0002) / 0.0002 = 0.5
+    const time = 0.00005; // tRel = (0.00005 % 0.0002) / 0.0002 = 0.25
     const res = pwmBlock.execute(refs, pwmBlock.params, null, time);
     
     expect(res.outputs).toEqual([1, 1, 0]);
