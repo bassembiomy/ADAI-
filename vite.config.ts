@@ -62,6 +62,6 @@ export default defineConfig({
     allowedHosts: ['.e2b.app'],
   },
   test: {
-    exclude: ['**/node_modules/**', '**/dist/**', '**/.worktrees/**', '**/.agents/**', '**/tests/e2e/**', '**/.kilo/**'],
+    exclude: ['**/node_modules/**', '**/dist/**', '**/.worktrees/**', '**/.agents/**', '**/tests/e2e/**', '**/.kilo/**', '**/.claude/**'],
   },
 });
