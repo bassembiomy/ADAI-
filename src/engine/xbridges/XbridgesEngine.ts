@@ -259,13 +259,13 @@ export class XbridgesEngine {
     for (const b of this.model.blocks) {
       if (seen.has(b.id) && !reported.has(b.id)) {
         reported.add(b.id);
-        this.diagnostics.push({ severity: 'error', code: 'BLOCK_RUNTIME_FAULT', message: `Model is malformed: more than one block has the id '${b.id}'.`, blockIds: [b.id] });
+        this.diagnostics.push({ severity: 'error', code: 'DUPLICATE_BLOCK_ID', message: `Model is malformed: more than one block has the id '${b.id}'.`, blockIds: [b.id] });
       }
       seen.add(b.id);
     }
     for (const b of this.flatBlocks) {
       if (typeof b.execute !== 'function') {
-        this.diagnostics.push({ severity: 'error', code: 'BLOCK_RUNTIME_FAULT', message: `Model is malformed: block '${b.label || b.id}' has the unknown block type '${b.type}'.`, blockIds: [b.id] });
+        this.diagnostics.push({ severity: 'error', code: 'UNKNOWN_BLOCK_TYPE', message: `Model is malformed: block '${b.label || b.id}' has the unknown block type '${b.type}'.`, blockIds: [b.id] });
       }
     }
     const drivers = new Map<string, number>();
@@ -276,7 +276,7 @@ export class XbridgesEngine {
       if (n === 2) {
         const tb = this.blockMap.get(c.targetBlock);
         this.diagnostics.push({
-          severity: 'error', code: 'BLOCK_RUNTIME_FAULT',
+          severity: 'error', code: 'MULTIPLE_DRIVERS',
           message: `Model is malformed: input port '${c.targetPort}' of block '${tb?.label || c.targetBlock}' is driven by more than one signal.`,
           blockIds: [c.targetBlock],
         });
