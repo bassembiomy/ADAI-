@@ -283,6 +283,9 @@ const parseConstantValueShape = (node: XBNodeV1): SemanticShape => {
       if (explicit !== null) {
         portShapes.set(key, explicit);
         explicitPortKeys.add(key);
+      } else if (port.direction === 'output' && ['WaveformGen', 'WAVEFORM_GEN', 'Clock', 'CLOCK'].includes(node.type)) {
+        // Time sources are scalar by definition.
+        portShapes.set(key, SCALAR_SHAPE);
       } else if (node.type === 'Constant' || node.type === 'Step' || node.type === 'Inport' || node.type === 'Outport') {
         if (port.direction === 'output' && node.type !== 'Outport') {
           portShapes.set(key, parseConstantValueShape(node));
@@ -633,16 +636,7 @@ const parseConstantValueShape = (node: XBNodeV1): SemanticShape => {
         continue;
       }
 
-      // Check if any input is scalar (elementCount <= 1)
-      const scalarPort = inputShapes.find((p) => p.shape.kind === 'scalar' || p.shape.elementCount <= 1);
-      if (scalarPort !== undefined) {
-        diagnostics.push(diagnostic(
-          'XB_SHAPE_MISMATCH',
-          `Vector block '${node.id}' input '${scalarPort.id}' is scalar, but vector signal is required.`,
-          node.id,
-        ));
-        continue;
-      }
+      // Scalar operands are valid (registered scalar shape, XBV-094); mixed shapes are rejected below.
 
       // Check operand dimension compatibility
       const firstShape = inputShapes[0]?.shape;

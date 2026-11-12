@@ -420,10 +420,10 @@ describe('XB alignment 3: timing', () => {
     const three = expectAligned(model, idle(7));
     for (const t of [three.sim, three.standalone, three.c]) {
       const stepOn = t.findIndex((f) => f.data.y === 5);
-      // The Step switches in the first tick whose state timer has reached step_time (300 ms): the embedded convention is the
-      // end of the tick (XBV-084 / decision D9 is open on the canvas convention t_k, which would be tick 4).
-      expect(stepOn).toBe(3);
-      expect(t[stepOn].stateTimersMs.A).toBe(300);
+      // D9 (start of tick): frame n follows tick n, whose blocks see t = (n - 1) 100 ms, so the Step (300 ms) is on from
+      // tick 4, when the state timer of A reads 400 ms.
+      expect(stepOn).toBe(4);
+      expect(t[stepOn].stateTimersMs.A).toBe(400);
       // after(5) fires in tick 5, when the timer of A has reached 5 ticks.
       expect(firstActive(t, 'B')).toBe(5);
     }
@@ -621,11 +621,11 @@ describe('XB alignment 6: events - a continuous Integrator crossing a guard', ()
   it.each(['euler', 'rk4'] as const)('guard on the Integrator output fires in the same tick, solver %s', (kind) => {
     const three = expectAligned(crossing(kind), idle(6));
     const ticks = [three.sim, three.standalone, three.c].map((t) => firstActive(t, 'P2'));
-    // Integrator of 1 published after the update (XBV-084, D9 open): y(tick k) = 0.1 k, so y >= 0.35 holds in tick 4 and the
-    // inner transition fires in that same tick. The tick would be 5 under the canvas convention (output at the start of the tick).
+    // D9: two substeps of 0.05 s per tick, output then update per substep, so the published y after tick k is the output of
+    // its last substep, y = 0.1 k - 0.05: y >= 0.35 first holds after tick 4 (0.35) and the inner transition fires in tick 4.
     expect(ticks).toEqual([4, 4, 4]);
-    expect(three.sim[3].data.y).toBeCloseTo(0.3, 6);
-    expect(three.sim[4].data.y).toBeCloseTo(0.4, 6);
+    expect(three.sim[3].data.y).toBeCloseTo(0.25, 6);
+    expect(three.sim[4].data.y).toBeCloseTo(0.35, 6);
   }, T);
 });
 

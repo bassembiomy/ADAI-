@@ -22,7 +22,9 @@ import { XB_CAPABILITIES } from './xbCapabilities';
  * Each cause was settled against an oracle (closed form / Simulink definition) where one exists; 'unresolved' means none.
  */
 const PIN_CAUSE: Record<string, string> = {
+  'XBV-161': 'embedded ShiftLeft/ShiftRight mask the shift count to 5 bits (& 31); Simulink (and the canvas since XBV-057) gives 0 / sign fill for counts >= 32 and the opposite shift for a negative count; embedded wrong',
   'XBV-154': 'embedded Mean (mean of all elements) and SubMatrix (zero-based indices) follow the pre-WP-21 canvas rules; the canvas now gives MATLAB/Simulink column means and one-based indices (WP-21 batch D), embedded wrong',
+  'XBV-018': 'canvas executes stateful blocks whose output depends on the current input before their sources (non-feedthrough default), so they read the previous input; canvas wrong (engine batch E2)',
   'XBV-095': 'parity gap: the canvas factory default mode \'PID\' makes buildXBSemanticModel throw \'Invalid PID mode: PID\' (xbPidContract.ts:18) instead of returning a diagnostic; invalid parameters must yield a diagnostic, embedded builder wrong',
   'XBV-083': 'embedded Sum ignores the signs parameter and always adds (xbInterpreter.ts:530); Simulink Sum +- subtracts, canvas right',
   'XBV-084': 'mixed time base inside one embedded tick: Clock, WaveformGen and UNIT_DELAY are evaluated at t_k while Integrator/RATE_LIMITER outputs are post-update and Step uses t_(k+1) (the generated C and the state-machine timers share this convention); the canvas uses t_k throughout. The convention is an open decision (D9); this test asserts the t_k convention',
@@ -41,6 +43,28 @@ const PIN_CAUSE: Record<string, string> = {
   'XBV-091': 'canvas y(0)=0 then explicit-Euler instability (|y| exceeds the closed-form bound amp=1.3 from step 3), embedded stays bounded but one tick ahead; filter discretisation differs, neither exact, unresolved',
 };
 const PINS: Record<string, string> = {
+  // XBV-161: embedded shifts mask the count to 5 bits; the canvas (WP-21 batch D, XBV-057) shifts every bit out at >= 32 and shifts the other way for a negative count.
+  'ShiftLeft|euler': 'XBV-161',
+  'ShiftLeft|rk4': 'XBV-161',
+  'ShiftLeft|discrete': 'XBV-161',
+  'ShiftRight|euler': 'XBV-161',
+  'ShiftRight|rk4': 'XBV-161',
+  'ShiftRight|discrete': 'XBV-161',
+  // XBV-018: the canvas reads a stale input 0 at t = 0 (ordering); under D12 the first output is clamp(0.7, 0 +/- 0.1) = 0.1.
+  'RATE_LIMITER|discrete': 'XBV-018',
+  'RATE_LIMITER|rk4': 'XBV-018',
+  'RATE_LIMITER|euler': 'XBV-018',
+  // XBV-018: canvas sorts these stateful blocks before their sources (stale input); embedded follows the block equation.
+  'LOW_PASS_FILTER|euler': 'XBV-018',
+  'LOW_PASS_FILTER|rk4': 'XBV-018',
+  'HIGH_PASS_FILTER|euler': 'XBV-018',
+  'HIGH_PASS_FILTER|rk4': 'XBV-018',
+  // XBV-093: scenario dimensions (3-element x for a 1-state system) refused by the embedded builder; continuous STATE_SPACE unsupported.
+  'DISCRETE_TRANSFER_FUNCTION|euler': 'XBV-093',
+  'DISCRETE_TRANSFER_FUNCTION|rk4': 'XBV-093',
+  'DISCRETE_TRANSFER_FUNCTION|discrete': 'XBV-093',
+  'STATE_SPACE|euler': 'XBV-093',
+  'STATE_SPACE|rk4': 'XBV-093',
   'SIX_STEP_COMMUTATION|euler': 'XBV-090',
   'SIX_STEP_COMMUTATION|rk4': 'XBV-090',
   'SIX_STEP_COMMUTATION|discrete': 'XBV-090',
@@ -310,7 +334,11 @@ describe('WP-21 batch F acceptance: embedded PID, Delay 0, Product divide equal 
   ];
   for (const solver of ['euler', 'rk4'] as const) {
     for (const [name, params] of variants) {
-      it(`XBV-150: PID_CONTROLLER ${name}, ${solver}: canvas = embedded on u, error, p_term, i_term, d_term`, () => {
+      // pinned to XBV-018 until the canvas sorts PID_CONTROLLER as direct feedthrough (engine batch E2); the continuous-form
+      // PID (sample time <= 0, i.e. every variant but 'sample time 0.1') under rk4 is also XBV-159 (embedded integrates i/d with
+      // forward Euler whatever the solver).
+      const continuousRk4 = solver === 'rk4' && !(typeof params.sampleTime === 'number' && params.sampleTime > 0);
+      it.fails(`${continuousRk4 ? 'XBV-159 / ' : ''}XBV-018 / XBV-150: PID_CONTROLLER ${name}, ${solver}: canvas = embedded on u, error, p_term, i_term, d_term`, () => {
         assertOutcome(compareSpec(`PID ${name} ${solver}`, pidSpec(params), solver, PID_PROBES));
       });
     }

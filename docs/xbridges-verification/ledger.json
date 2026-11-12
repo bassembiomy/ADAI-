@@ -70,6 +70,12 @@
    "date": "2026-11-11",
    "topic": "out-of-domain math in the embedded path (XBV-086)",
    "decision": "Out-of-domain inputs (acos(2), atanh(1.5), (-8)^(1/3)) publish NaN and raise the numeric fault on every path, as the canvas (NaN + MATH_DOMAIN_ERROR) and Simulink-generated C (libm returns NaN) do; the documented 'deterministic fallback 0' of the signal-only fault policy is replaced by NaN + fault flag. Adopted by the controller under the 'fix all' go-ahead."
+  },
+  {
+   "id": "D12",
+   "date": "2026-11-12",
+   "topic": "Rate Limiter initial condition",
+   "decision": "ADIA's Rate Limiter has an explicit initialCondition parameter (default 0) that Simulink's block lacks; it is the output before the first sample, y(-1) = IC. Ts > 0: y(0) = clamp(u(0), IC + falling Ts, IC + rising Ts); inherited/continuous sample time: y(0) = IC (no time has elapsed). This is the canvas behaviour, adopted for the embedded path."
   }
  ],
  "wps": [
@@ -585,7 +591,7 @@
    "exec": "S / H, verifier opus",
    "deps": [],
    "status": "in_progress",
-   "note": "User go-ahead 2026-11-11 (fix all findings). Plan: docs/xbridges-verification/wp21-fix-plan.md. Round 1 dispatched: A zero parameters, B embedded quick fixes, C workspace UI. Batch B merged (a3daf970): 9 findings closed; new XBV-150 (embedded PID semantics), XBV-151 (embedded DELAY 0), XBV-152 (vacuous PID parity case). LIBM_CONDITIONED bound (8 eps max(1,|y|), 17 keys) added to xbCodeParity, verifier re-measured worst ratio 3.85. Batch A merged (c8facc19): XBV-015, 019, 040, 064 closed; DELAY delay_length is not tunable during a run (live change to/from 0 refused with PARAMETER_OUT_OF_RANGE, Simulink); XBV-137 ratchet shrunk 463 -> 418; new XBV-153. Batch D dispatched (acceptance 624b6a44). Batch F acceptance: pins removed for XBV-084, 086, 087, 091, 093, 094, 101, 102, 103 and the XBV-084 seeds; new tests for XBV-150 (PID with distinct r and y), 151 (DELAY 0), 107 (passes: closed). XBV-088, 090, 092 stay pinned (canvas-side causes, later batches). Batch C committed (13 findings closed, verifier PASS, e2e 36/36); new XBV-157, 158. WP-20 re-check by the verifier: spec gap (no end-time check in solvers/persistence/subsystem/param-edit) fixed by the controller; XBV-149 pin ordering fixed. Batch D merged (22 findings closed; XBV-066 moved to E; new XBV-154, 155, 156). XBV-057: right shift of a negative int32 by >= 32 gives -1 (arithmetic shift, Simulink signed shift). Batch E acceptance (engine core): pins flipped for XBV-016, 026, 028, 030, 031, 032, 033, 035, 036, 066, 067, 069, 080; PINNED_SEVERITY no longer lists DIMENSION_MISMATCH, DATA_TYPE_MISMATCH (D1), ALGEBRAIC_LOOP_NOT_CONVERGED, LOGIC_NAN_INPUT; U10 and U14 lists emptied (XBV-020, XBV-018); XBV-047 clone list emptied; RELAY rk4 parity pin removed (XBV-067); new xbWp21Engine.test.ts for XBV-002, 003, 004, 005, 155; testkit runModel passes relTol/absTol. XBV-107 reopened (controller test error)."
+   "note": "User go-ahead 2026-11-11 (fix all findings). Plan: docs/xbridges-verification/wp21-fix-plan.md. Round 1 dispatched: A zero parameters, B embedded quick fixes, C workspace UI. Batch B merged (a3daf970): 9 findings closed; new XBV-150 (embedded PID semantics), XBV-151 (embedded DELAY 0), XBV-152 (vacuous PID parity case). LIBM_CONDITIONED bound (8 eps max(1,|y|), 17 keys) added to xbCodeParity, verifier re-measured worst ratio 3.85. Batch A merged (c8facc19): XBV-015, 019, 040, 064 closed; DELAY delay_length is not tunable during a run (live change to/from 0 refused with PARAMETER_OUT_OF_RANGE, Simulink); XBV-137 ratchet shrunk 463 -> 418; new XBV-153. Batch D dispatched (acceptance 624b6a44). Batch F acceptance: pins removed for XBV-084, 086, 087, 091, 093, 094, 101, 102, 103 and the XBV-084 seeds; new tests for XBV-150 (PID with distinct r and y), 151 (DELAY 0), 107 (passes: closed). XBV-088, 090, 092 stay pinned (canvas-side causes, later batches). Batch C committed (13 findings closed, verifier PASS, e2e 36/36); new XBV-157, 158. WP-20 re-check by the verifier: spec gap (no end-time check in solvers/persistence/subsystem/param-edit) fixed by the controller; XBV-149 pin ordering fixed. Batch D merged (22 findings closed; XBV-066 moved to E; new XBV-154, 155, 156). XBV-057: right shift of a negative int32 by >= 32 gives -1 (arithmetic shift, Simulink signed shift). Batch E acceptance (engine core): pins flipped for XBV-016, 026, 028, 030, 031, 032, 033, 035, 036, 066, 067, 069, 080; PINNED_SEVERITY no longer lists DIMENSION_MISMATCH, DATA_TYPE_MISMATCH (D1), ALGEBRAIC_LOOP_NOT_CONVERGED, LOGIC_NAN_INPUT; U10 and U14 lists emptied (XBV-020, XBV-018); XBV-047 clone list emptied; RELAY rk4 parity pin removed (XBV-067); new xbWp21Engine.test.ts for XBV-002, 003, 004, 005, 155; testkit runModel passes relTol/absTol. XBV-107 reopened (controller test error). Batch F merged after 2 reworks and verifier review (11 findings closed, XBV-093 open; decision D12; new XBV-159, 160, 161, 162). RELAY rk4 parity stays failing until batch E2 (XBV-067 minor steps)."
   },
   {
    "id": "WP-22",
@@ -1340,8 +1346,9 @@
    "plan_ref": "7.3 canvas / interpreter parity",
    "severity": "S1",
    "gate": "V6",
-   "status": "open",
-   "summary": "Mixed time base inside one embedded tick (interpreter and generated C): Clock, WaveformGen and UNIT_DELAY are evaluated at t_k, while Integrator, INTEGRATOR_CONTINUOUS and RATE_LIMITER publish their post-update state (C writes the post-update value, xbCGenerator.ts ~4094) and Step evaluates t_(k+1) (C uses state timers; smInterpreter advances timers before stepXBState, so a guard in tick k sees time (k+1) dt). The canvas uses t_k for everything. Which convention is right is an open decision (D9): 'outputs at the start of the tick' (Simulink major-step semantics, canvas) or 'outputs at the end of the tick' (what guards see today). Either way all blocks of one tick must use the same time. Merged XBV-085 (Step) into this finding after the WP-16 Opus verifier showed the C and timers share the embedded convention."
+   "status": "closed",
+   "summary": "Mixed time base inside one embedded tick (interpreter and generated C): Clock, WaveformGen and UNIT_DELAY are evaluated at t_k, while Integrator, INTEGRATOR_CONTINUOUS and RATE_LIMITER publish their post-update state (C writes the post-update value, xbCGenerator.ts ~4094) and Step evaluates t_(k+1) (C uses state timers; smInterpreter advances timers before stepXBState, so a guard in tick k sees time (k+1) dt). The canvas uses t_k for everything. Which convention is right is an open decision (D9): 'outputs at the start of the tick' (Simulink major-step semantics, canvas) or 'outputs at the end of the tick' (what guards see today). Either way all blocks of one tick must use the same time. Merged XBV-085 (Step) into this finding after the WP-16 Opus verifier showed the C and timers share the embedded convention.",
+   "fix": "WP-21 batch F (merge after verifier review; reworks 64c1525d, 49bf3dbc, c5ca0ca7)."
   },
   {
    "id": "XBV-085",
@@ -1356,16 +1363,18 @@
    "plan_ref": "7.3 canvas / interpreter parity",
    "severity": "S1",
    "gate": "V6",
-   "status": "open",
-   "summary": "Out-of-domain inverse trig/hyperbolic and pow (ACOS, ACOSEC, ACOSH, ACOTH, ASEC, ASECH, ASIN, ATANH, VectorPow): the canvas gives NaN with MATH_DOMAIN_ERROR. In the embedded path, under the 'signal-only' fault policy the generated C raises the error flag and publishes the documented deterministic fallback 0 (XBRIDGES_EMBEDDED_CODEGEN.md, Numeric faults) while the interpreter publishes NaN and records no fault (xbInterpreter.ts ~307 shouldRecordFault) - the interpreter breaks the contract; under 'escalate' both stop at tick 1 (WP-16's harness ignored the returned fault and saw the rolled-back 0, hence the earlier opposite attribution). Separate convention question: fallback NaN (canvas, Simulink) or 0 (embedded contract)."
+   "status": "closed",
+   "summary": "Out-of-domain inverse trig/hyperbolic and pow (ACOS, ACOSEC, ACOSH, ACOTH, ASEC, ASECH, ASIN, ATANH, VectorPow): the canvas gives NaN with MATH_DOMAIN_ERROR. In the embedded path, under the 'signal-only' fault policy the generated C raises the error flag and publishes the documented deterministic fallback 0 (XBRIDGES_EMBEDDED_CODEGEN.md, Numeric faults) while the interpreter publishes NaN and records no fault (xbInterpreter.ts ~307 shouldRecordFault) - the interpreter breaks the contract; under 'escalate' both stop at tick 1 (WP-16's harness ignored the returned fault and saw the rolled-back 0, hence the earlier opposite attribution). Separate convention question: fallback NaN (canvas, Simulink) or 0 (embedded contract).",
+   "fix": "WP-21 batch F (merge after verifier review; reworks 64c1525d, 49bf3dbc, c5ca0ca7)."
   },
   {
    "id": "XBV-087",
    "plan_ref": "7.3 canvas / interpreter parity",
    "severity": "S3",
    "gate": "V6",
-   "status": "open",
-   "summary": "Bitwise and shift blocks: canvas works in signed int32 (~0 = -1), the embedded path in uint32 (4294967295). No data-type contract decides which is right; Simulink requires an integer data type on the port. Needs a decision (data-type propagation). Found by the WP-16 executor; pinned in src/utils/stateMachine/xbTriParity.test.ts."
+   "status": "closed",
+   "summary": "Bitwise and shift blocks: canvas works in signed int32 (~0 = -1), the embedded path in uint32 (4294967295). No data-type contract decides which is right; Simulink requires an integer data type on the port. Needs a decision (data-type propagation). Found by the WP-16 executor; pinned in src/utils/stateMachine/xbTriParity.test.ts.",
+   "fix": "WP-21 batch F (merge after verifier review; reworks 64c1525d, 49bf3dbc, c5ca0ca7)."
   },
   {
    "id": "XBV-088",
@@ -1388,8 +1397,9 @@
    "plan_ref": "7.3 canvas / interpreter parity",
    "severity": "S3",
    "gate": "V6",
-   "status": "open",
-   "summary": "LOW_PASS_FILTER / HIGH_PASS_FILTER at fc 10 Hz, dt 0.05 (dt/tau = 3.1): the canvas output grows (|y| > 1.3 from step 3, explicit integration beyond its stability limit), the embedded path stays bounded (different discretisation). Unresolved which matches Simulink at this step; both must at least agree on the discretisation rule. Found by the WP-16 executor; pinned in src/utils/stateMachine/xbTriParity.test.ts."
+   "status": "closed",
+   "summary": "LOW_PASS_FILTER / HIGH_PASS_FILTER at fc 10 Hz, dt 0.05 (dt/tau = 3.1): the canvas output grows (|y| > 1.3 from step 3, explicit integration beyond its stability limit), the embedded path stays bounded (different discretisation). Unresolved which matches Simulink at this step; both must at least agree on the discretisation rule. Found by the WP-16 executor; pinned in src/utils/stateMachine/xbTriParity.test.ts.",
+   "fix": "WP-21 batch F (merge after verifier review; reworks 64c1525d, 49bf3dbc, c5ca0ca7). Embedded LPF/HPF integrated by the solver stages; the remaining parity gap is the canvas ordering defect XBV-018."
   },
   {
    "id": "XBV-092",
@@ -1405,15 +1415,16 @@
    "severity": "S2",
    "gate": "V6",
    "status": "open",
-   "summary": "Parity gap: the embedded path refuses STATE_SPACE (continuous representation, XB_DISCRETE_REPRESENTATION_REQUIRED) and DISCRETE_TRANSFER_FUNCTION with the default initial state (XB_STATE_INITIAL_VALUE_INVALID) for models the canvas runs. Found by the WP-16 executor; pinned in src/utils/stateMachine/xbTriParity.test.ts. (Verifier: a diagnosed restriction of the embedded path - a capabilities mismatch rather than a numeric defect.)"
+   "summary": "Parity gap: the embedded path refuses STATE_SPACE (continuous representation, XB_DISCRETE_REPRESENTATION_REQUIRED) and DISCRETE_TRANSFER_FUNCTION with the default initial state (XB_STATE_INITIAL_VALUE_INVALID) for models the canvas runs. Found by the WP-16 executor; pinned in src/utils/stateMachine/xbTriParity.test.ts. (Verifier: a diagnosed restriction of the embedded path - a capabilities mismatch rather than a numeric defect.) WP-21 batch F: not fixed (scenario dimensions refused by the embedded builder; continuous STATE_SPACE needs generalised integrator slots in interpreter and C)."
   },
   {
    "id": "XBV-094",
    "plan_ref": "7.3 canvas / interpreter parity",
    "severity": "S3",
    "gate": "V6",
-   "status": "open",
-   "summary": "Parity gap: VectorAdd/VectorSub/VectorMul/VectorDiv are registered with a scalar shape but the embedded validator rejects scalar inputs (XB_SHAPE_MISMATCH). Found by the WP-16 executor; pinned in src/utils/stateMachine/xbTriParity.test.ts."
+   "status": "closed",
+   "summary": "Parity gap: VectorAdd/VectorSub/VectorMul/VectorDiv are registered with a scalar shape but the embedded validator rejects scalar inputs (XB_SHAPE_MISMATCH). Found by the WP-16 executor; pinned in src/utils/stateMachine/xbTriParity.test.ts.",
+   "fix": "WP-21 batch F (merge after verifier review; reworks 64c1525d, 49bf3dbc, c5ca0ca7)."
   },
   {
    "id": "XBV-095",
@@ -1474,24 +1485,27 @@
    "plan_ref": "7.1 code parity",
    "severity": "S1",
    "gate": "V7",
-   "status": "open",
-   "summary": "Bitwise/Shift: the interpreter works in uint32 (~0 = 4294967295), the generated C in int32 (-1), so state-machine simulation and the generated code disagree; no data-type contract decides (see XBV-087 for canvas vs interpreter). Found by the WP-17 executor; pinned in src/utils/stateMachine/xbCodeParity.test.ts."
+   "status": "closed",
+   "summary": "Bitwise/Shift: the interpreter works in uint32 (~0 = 4294967295), the generated C in int32 (-1), so state-machine simulation and the generated code disagree; no data-type contract decides (see XBV-087 for canvas vs interpreter). Found by the WP-17 executor; pinned in src/utils/stateMachine/xbCodeParity.test.ts.",
+   "fix": "WP-21 batch F (merge after verifier review; reworks 64c1525d, 49bf3dbc, c5ca0ca7)."
   },
   {
    "id": "XBV-102",
    "plan_ref": "7.1 code parity",
    "severity": "S1",
    "gate": "V7",
-   "status": "open",
-   "summary": "KALMAN_FILTER: interpreter (0.35195) and generated C (0.66873) disagree with each other and with the block equation (0.63694, u = y = 0.7, factory parameters). Found by the WP-17 executor; pinned in src/utils/stateMachine/xbCodeParity.test.ts."
+   "status": "closed",
+   "summary": "KALMAN_FILTER: interpreter (0.35195) and generated C (0.66873) disagree with each other and with the block equation (0.63694, u = y = 0.7, factory parameters). Found by the WP-17 executor; pinned in src/utils/stateMachine/xbCodeParity.test.ts.",
+   "fix": "WP-21 batch F (merge after verifier review; reworks 64c1525d, 49bf3dbc, c5ca0ca7)."
   },
   {
    "id": "XBV-103",
    "plan_ref": "7.1 code parity",
    "severity": "S1",
    "gate": "V7",
-   "status": "open",
-   "summary": "BAND_LIMITED_NOISE: interpreter and generated C produce different streams from tick 1 (-1.03300 vs -1.00272); WHITE_NOISE agrees on both sides. Found by the WP-17 executor; pinned in src/utils/stateMachine/xbCodeParity.test.ts."
+   "status": "closed",
+   "summary": "BAND_LIMITED_NOISE: interpreter and generated C produce different streams from tick 1 (-1.03300 vs -1.00272); WHITE_NOISE agrees on both sides. Found by the WP-17 executor; pinned in src/utils/stateMachine/xbCodeParity.test.ts.",
+   "fix": "WP-21 batch F (merge after verifier review; reworks 64c1525d, 49bf3dbc, c5ca0ca7)."
   },
   {
    "id": "XBV-104",
@@ -1524,8 +1538,9 @@
    "plan_ref": "7.2 state-machine alignment",
    "severity": "S3",
    "gate": "V7",
-   "status": "open",
-   "summary": "PRODUCT with operation 'divide' is not available in the embedded (state-machine / C) path although the canvas offers it; divide inside a state requires VectorDiv on vectors. Reported by the WP-18 executor. REOPENED (WP-21): the first acceptance test probed 'b.out' but PRODUCT's output port is 'y', so it compared undefined with undefined; corrected, it shows the embedded path multiplies for operation 'divide' (0.18079 = 0.25826 x 0.7, canvas 0.36896 = 0.25826 / 0.7). Given to batch F."
+   "status": "closed",
+   "summary": "PRODUCT with operation 'divide' is not available in the embedded (state-machine / C) path although the canvas offers it; divide inside a state requires VectorDiv on vectors. Reported by the WP-18 executor. REOPENED (WP-21): the first acceptance test probed 'b.out' but PRODUCT's output port is 'y', so it compared undefined with undefined; corrected, it shows the embedded path multiplies for operation 'divide' (0.18079 = 0.25826 x 0.7, canvas 0.36896 = 0.25826 / 0.7). Given to batch F.",
+   "fix": "WP-21 batch F (merge after verifier review; reworks 64c1525d, 49bf3dbc, c5ca0ca7)."
   },
   {
    "id": "XBV-108",
@@ -1881,16 +1896,18 @@
    "plan_ref": "7.3 canvas / interpreter parity",
    "severity": "S1",
    "gate": "V6",
-   "status": "open",
-   "summary": "Embedded PID_CONTROLLER differs from the canvas PID: the embedded side ignores setpoint weights beta and gamma (unit step, canvas defaults gamma 0: u(0) 1.1667 vs 1.0), always uses the backward-Euler D filter whatever the method, publishes 0 on 'error' (the builder treats any port named error as the fault flag; canvas r - y), runs 'trapezoidal' which the canvas refuses, and refuses sampleTime 0 which the canvas treats as continuous. Mode P/PI/PD/PID is mapped to contract mode 'discrete' (harmless, unread). Found by the WP-21 batch B verifier."
+   "status": "closed",
+   "summary": "Embedded PID_CONTROLLER differs from the canvas PID: the embedded side ignores setpoint weights beta and gamma (unit step, canvas defaults gamma 0: u(0) 1.1667 vs 1.0), always uses the backward-Euler D filter whatever the method, publishes 0 on 'error' (the builder treats any port named error as the fault flag; canvas r - y), runs 'trapezoidal' which the canvas refuses, and refuses sampleTime 0 which the canvas treats as continuous. Mode P/PI/PD/PID is mapped to contract mode 'discrete' (harmless, unread). Found by the WP-21 batch B verifier.",
+   "fix": "WP-21 batch F (merge after verifier review; reworks 64c1525d, 49bf3dbc, c5ca0ca7). Remaining: continuous-form PID under rk4, XBV-159."
   },
   {
    "id": "XBV-151",
    "plan_ref": "7.3 canvas / interpreter parity",
    "severity": "S2",
    "gate": "V6",
-   "status": "open",
-   "summary": "The embedded builder still refuses DELAY delay_length 0 (xbSemanticBuilder.ts ~1146 XB_DELAY_LENGTH_INVALID, diagnosticGuidance.ts) although the canvas now treats it as direct feedthrough (XBV-064, Simulink Delay). Found by the WP-21 batch A executor."
+   "status": "closed",
+   "summary": "The embedded builder still refuses DELAY delay_length 0 (xbSemanticBuilder.ts ~1146 XB_DELAY_LENGTH_INVALID, diagnosticGuidance.ts) although the canvas now treats it as direct feedthrough (XBV-064, Simulink Delay). Found by the WP-21 batch A executor.",
+   "fix": "WP-21 batch F (merge after verifier review; reworks 64c1525d, 49bf3dbc, c5ca0ca7)."
   },
   {
    "id": "XBV-152",
@@ -1947,6 +1964,38 @@
    "gate": "V8",
    "status": "open",
    "summary": "The properties panel's Switch criterion dropdown (XbridgesPropertiesPanel.tsx ~1077) does not offer the new 'u2 ~= 0' criterion, and blockGuidance still documents SubMatrix indices as zero-based ('defaults 0'). Found by the WP-21 batch D executor."
+  },
+  {
+   "id": "XBV-159",
+   "plan_ref": "7.3 canvas / interpreter parity",
+   "severity": "S1",
+   "gate": "V6",
+   "status": "open",
+   "summary": "Embedded continuous-form PID_CONTROLLER (sample time <= 0) advances its integrator and derivative-filter states with forward Euler whatever the solver: under rk4 the embedded trace equals the euler trace (d_term grows by |1 - N h| per step instead of the RK4 stability factor); Simulink ode4 integrates them with RK4. Found by the WP-21 batch F verifier; the four rk4 continuous PID acceptance cases are pinned to it."
+  },
+  {
+   "id": "XBV-160",
+   "plan_ref": "7.3 canvas / interpreter parity",
+   "severity": "S2",
+   "gate": "V6",
+   "status": "open",
+   "summary": "Embedded VectorDiv by zero publishes 0 (documented safe-zero fallback kept by batch F) while the canvas gives Inf with DIVIDE_BY_ZERO and PRODUCT divide gives Inf; D11 (NaN/Inf + fault flag) should apply. Mapped state-machine inputs also keep the safe-zero fallback. Found by the WP-21 batch F verifier."
+  },
+  {
+   "id": "XBV-161",
+   "plan_ref": "7.3 canvas / interpreter parity",
+   "severity": "S1",
+   "gate": "V6",
+   "status": "open",
+   "summary": "Embedded ShiftLeft/ShiftRight mask the shift count to 5 bits (& 31) in interpreter and C; Simulink and the canvas (since XBV-057, WP-21 batch D) shift every bit out for counts >= 32 (0, or -1 for a negative value under arithmetic right shift) and shift the other way for a negative count. Found when merging WP-21 batches D and F; pinned in xbTriParity."
+  },
+  {
+   "id": "XBV-162",
+   "plan_ref": "documentation",
+   "severity": "S4",
+   "gate": "V7",
+   "status": "open",
+   "summary": "src/utils/stateMachine/xbAccurateMath.ts says glibc sin is correctly rounded; glibc 2.39 differs from the correctly rounded value in 195 of 208k samples (verifier). The interpreter's accurateSin is correctly rounded (0 mismatches) and differs from the canvas Math.sin by 1 ULP in about 1.8 % of cases, absorbed by the parity tolerance. Comment to correct."
   }
  ],
  "blocks": {

@@ -277,9 +277,14 @@ describe('X-Bridges interpreter', () => {
     // unlimitedU = 0.5 + 1.0 = 1.5. Clamped to 1.
     // Anti-windup: unlimitedU (1.5) > upper (1) and error (0.5) > 0. nextI reverts to previousI (0)!
     Object.assign(runtime.signals, { 'pid:r': [0.5], 'pid:y': [0], 'pid:enable': [1], 'pid:reset': [0] });
+    // WP-21 batch F (XBV-150): oracle = the canvas PID_CONTROLLER block with the same parameters (BLOCK_LIBRARY execute):
+    // D = Kd N (ed - d) with d' = d + N Ts (ed - d): step 1 d = 0 -> D = 4, d = 2; step 2 ed = 0.5 -> D = 4 (0.5 - 2) = -6,
+    // P = 0.5, I = 0, unlimited -5.5 -> u = -1; I advances to 0 + Ki e Ts = 2 * 0.5 * 0.5 = 0.5 (anti-windup reverts only
+    // when the error pushes further into the saturated side, error 0.5 > 0 at the lower limit: no revert); d = -1.
     stepXBState(runtime, {});
-    expect(runtime.signals['pid:u']).toEqual([1]);
-    expect(runtime.stateSlots['pid:i_state$state']).toEqual([0]); // Anti-windup in action
+    expect(runtime.signals['pid:u']).toEqual([-1]);
+    expect(runtime.stateSlots['pid:i_state$state']).toEqual([0.5]);
+    expect(runtime.stateSlots['pid:d_state$state']).toEqual([-1]);
 
     // Step 3: Disable
     Object.assign(runtime.signals, { 'pid:r': [100], 'pid:y': [0], 'pid:enable': [0], 'pid:reset': [0] });
@@ -723,7 +728,10 @@ describe('X-Bridges interpreter', () => {
         exact,
         kind === 'rk4' ? 6 : 4,
       );
-      expect(data.x).toBeCloseTo(exact, kind === 'rk4' ? 6 : 4);
+      // D9 (output then update per substep): the published x is the output of the last substep, x(24 h), h = 0.002 s;
+      // the state slot above is x(25 h). Euler: 1 - (1 - h)^24, rk4: 1 - exp(-0.048).
+      const published = kind === 'rk4' ? 1 - Math.exp(-0.048) : 1 - (1 - 0.002) ** 24;
+      expect(data.x).toBeCloseTo(published, kind === 'rk4' ? 6 : 8);
       expect(data.twice).toBeCloseTo(2 * data.x, kind === 'rk4' ? 6 : 4);
     },
   );

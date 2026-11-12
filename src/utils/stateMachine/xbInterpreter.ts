@@ -1,3 +1,4 @@
+import { accurateSin } from './xbAccurateMath';
 import { evaluate as mathEvaluate } from 'mathjs';
 import {
   xbConvertScalar,
@@ -19,7 +20,7 @@ import type {
   XBSemanticOperation,
 } from './xbSemanticModel';
 import { synthesizeTransferFunctionStateSpace } from './xbSemanticBuilder';
-import { isDiagBlockType, isMatrixSolveBlockType, xbSumSigns } from './xbCapabilities';
+import { isContinuousFilter, isDiagBlockType, isMatrixSolveBlockType, xbSumSigns } from './xbCapabilities';
 
 type XBScalar = number | boolean;
 
@@ -260,7 +261,7 @@ const operationFaultContract = (
   fallback: operation.stateful ? 'previous-value' : 'zero',
   errorSignalId: operation.outputSignalIds.find((signalId) => {
     const portId = runtime.ir.signals[signalId]?.portId;
-    return portId === 'error' || (
+    return (portId === 'error' && operation.type !== 'PID_CONTROLLER') || (
       portId === 'e'
       && operation.type !== 'DATA_TYPE_CONVERSION'
       && operation.type !== 'NUMERIC_REPRESENTATION'
@@ -293,6 +294,10 @@ const recordOperationFault = (
       continue;
     }
     if (contract.fallback === 'previous-value') continue;
+    // D11: an out-of-domain float result is published as the non-finite value (NaN, like Simulink / libm) and raises the
+    // fault; it is not replaced by a fallback 0.
+    if (fault === 'non-finite' && operation.type !== 'VectorDiv' && (signal.numericType.kind === 'float32' || signal.numericType.kind === 'float64'
+      || signal.numericType.kind === 'float16' || signal.numericType.kind === 'float')) continue;
     runtime.signals[signalId] = Array.from(
       { length: signal.elementCount },
       () => defaultValue(signal.numericType),
@@ -310,10 +315,10 @@ const shouldRecordFault = (
   fault: XBNumericFault,
 ): boolean => {
   if (fault !== 'non-finite') return true;
-  if (['SATURATION', 'Saturation', 'DEADZONE', 'Deadzone', 'RateLimiter', 'RATE_LIMITER', 'POW', 'POWER', 'VectorPow', 'VECTOR_POW'].includes(operation.type)) return false;
+  if (['SATURATION', 'Saturation', 'DEADZONE', 'Deadzone', 'RateLimiter', 'RATE_LIMITER'].includes(operation.type)) return false;
   if (['GAIN', 'Gain'].includes(operation.type)) return true;
-  return operationFaultContract(runtime, operation).errorSignalId !== null
-    || runtime.ir.policy.numericFault === 'escalate';
+  // D11: non-finite results raise the numeric fault on every policy (the value stays NaN).
+  return true;
 };
 
 const hasSolvePivotFailure = (
@@ -499,6 +504,9 @@ const matrixParameter = (
   return fallback;
 };
 
+const filterTau = (operation: XBSemanticOperation): number =>
+  1 / (2 * Math.PI * Number(parameter(operation, ['cutoff_frequency', 'cutoffFrequency', 'fc'], 1)));
+
 const evaluateDirectOperation = (
   runtime: XBRuntime,
   operation: XBSemanticOperation,
@@ -540,6 +548,15 @@ const evaluateDirectOperation = (
     }
     case 'PRODUCT':
     case 'VectorMul': {
+      if (operation.type === 'PRODUCT' && operation.parameters.operation === 'divide') {
+        // Simulink Product '/': y = u1 / u2 / ... (a single input gives 1/u1); IEEE results for x/0 (fault via non-finite).
+        if (inputs.length === 0) return [[1]];
+        if (inputs.length === 1) return [binary([1], inputs[0], (left, right) => left / right)];
+        return [inputs.slice(1).reduce<readonly XBScalar[]>(
+          (quotient, input) => binary(quotient, input, (left, right) => left / right),
+          inputs[0],
+        )];
+      }
       const result = inputs.reduce<readonly XBScalar[]>(
         (product, input) =>
           binary(product, input, (left, right) => left * right),
@@ -734,17 +751,17 @@ const evaluateDirectOperation = (
       return [[activeCount % 2 === 1]];
     }
     case 'BitwiseAND':
-      return [binary(inputs[0] ?? [0], inputs[1] ?? [0], (left, right) => (Number(left) & Number(right)) >>> 0)];
+      return [binary(inputs[0] ?? [0], inputs[1] ?? [0], (left, right) => (Number(left) & Number(right)) | 0)];
     case 'BitwiseOR':
-      return [binary(inputs[0] ?? [0], inputs[1] ?? [0], (left, right) => (Number(left) | Number(right)) >>> 0)];
+      return [binary(inputs[0] ?? [0], inputs[1] ?? [0], (left, right) => (Number(left) | Number(right)) | 0)];
     case 'BitwiseXOR':
-      return [binary(inputs[0] ?? [0], inputs[1] ?? [0], (left, right) => (Number(left) ^ Number(right)) >>> 0)];
+      return [binary(inputs[0] ?? [0], inputs[1] ?? [0], (left, right) => (Number(left) ^ Number(right)) | 0)];
     case 'BitwiseNOT':
-      return [unary(inputs[0] ?? [0], (value) => (~Number(value)) >>> 0)];
+      return [unary(inputs[0] ?? [0], (value) => (~Number(value)) | 0)];
     case 'ShiftLeft':
-      return [binary(inputs[0] ?? [0], inputs[1] ?? [0], (left, right) => (Number(left) << Number(right)) >>> 0)];
+      return [binary(inputs[0] ?? [0], inputs[1] ?? [0], (left, right) => (Number(left) << Number(right)) | 0)];
     case 'ShiftRight':
-      return [binary(inputs[0] ?? [0], inputs[1] ?? [0], (left, right) => (Number(left) >> Number(right)) >>> 0)];
+      return [binary(inputs[0] ?? [0], inputs[1] ?? [0], (left, right) => (Number(left) >> Number(right)) | 0)];
     case 'SWITCH': {
       const getSignal = (kw: string[]) => {
         const idx = operation.inputSignalIds.findIndex((id) => {
@@ -874,7 +891,10 @@ const evaluateDirectOperation = (
         : -Math.abs(Number(parameter(operation, ['fallingLimit'], 1)));
       const rawDt = operation.parameters.sampleTime ?? operation.parameters.dt;
       const parsedDt = typeof rawDt === 'number' ? rawDt : (typeof rawDt === 'string' ? parseFloat(rawDt) : NaN);
-      const dt = Number.isFinite(parsedDt) && parsedDt > 0 ? parsedDt : (runtime.ir.solver?.stepSeconds ?? 0.01);
+      // D12: with an inherited/continuous sample time the first output is the initial condition (no time elapsed).
+    const dt = operation.parameters.sampleTimeInherited === true && (runtime.simTime ?? 0) === 0
+      ? 0
+      : (Number.isFinite(parsedDt) && parsedDt > 0 ? parsedDt : (runtime.ir.solver?.stepSeconds ?? 0.01));
 
       const maxIncrease = rising * dt;
       const maxDecrease = falling * dt;
@@ -893,6 +913,7 @@ const evaluateDirectOperation = (
     case 'LOW_PASS_FILTER': {
       const prevYSlot = stateSlotForRole(operation, 'prev_y');
       const prevY = prevYSlot ? (runtime.stateSlots[prevYSlot.id] ?? prevYSlot.initialValues).map(Number) : [0];
+      if (isContinuousFilter(operation)) return [prevY];
       const u = broadcast(inputs[0] ?? [0], prevY.length, operation.id);
       const fc = Number(parameter(operation, ['cutoff_frequency', 'cutoffFrequency', 'fc'], 1));
       const dt = Number(parameter(operation, ['sample_time', 'sampleTime', 'dt'], runtime.ir.solver.stepSeconds));
@@ -906,6 +927,7 @@ const evaluateDirectOperation = (
       const prevY = prevYSlot ? (runtime.stateSlots[prevYSlot.id] ?? prevYSlot.initialValues).map(Number) : [0];
       const prevU = prevUSlot ? (runtime.stateSlots[prevUSlot.id] ?? prevUSlot.initialValues).map(Number) : [0];
       const u = broadcast(inputs[0] ?? [0], prevY.length, operation.id);
+      if (isContinuousFilter(operation)) return [prevY.map((x, index) => Number(u[index]) - x)];
       const fc = Number(parameter(operation, ['cutoff_frequency', 'cutoffFrequency', 'fc'], 1));
       const dt = Number(parameter(operation, ['sample_time', 'sampleTime', 'dt'], runtime.ir.solver.stepSeconds));
       const tau = 1 / (2 * Math.PI * fc);
@@ -998,7 +1020,7 @@ const evaluateDirectOperation = (
         ?? Number(parameter(operation, ['final_value', 'finalValue', 'final'], 1));
       const t = runtime.simTime ?? 0;
       const beforeThreshold = operation.stepParameters
-        ? Math.round((t + runtime.ir.solver.stepSeconds) * 1000)
+        ? Math.round(t * 1000)
         < operation.stepParameters.threshold.milliseconds
         : t < stepTime;
       return [[beforeThreshold ? initial : final]];
@@ -1053,16 +1075,16 @@ const evaluateDirectOperation = (
       const arg = 2.0 * Math.PI * freq * t + phase;
       let val = bias;
       if (type === 'sine' || type === 'sin') {
-        val += amp * Math.sin(arg);
+        val += amp * accurateSin(arg);
       } else if (type === 'square') {
-        val += amp * (Math.sin(arg) >= 0 ? 1 : -1);
+        val += amp * (accurateSin(arg) >= 0 ? 1 : -1);
       } else if (type === 'triangle') {
-        val += amp * (2.0 / Math.PI) * Math.asin(Math.sin(arg));
+        val += amp * (2.0 / Math.PI) * Math.asin(accurateSin(arg));
       } else if (type === 'sawtooth') {
         const u = freq * t + phase / (2.0 * Math.PI);
         val += amp * (2.0 * (u - Math.floor(u)) - 1);
       } else {
-        val += amp * Math.sin(arg);
+        val += amp * accurateSin(arg);
       }
       return [[val]];
     }
@@ -1120,6 +1142,9 @@ const evaluateDirectOperation = (
       const flatResult = Array.from({ length: N * N }, (_, idx) => Math.floor(idx / N) === idx % N ? 1 : 0);
       return [flatResult];
     }
+    case 'DELAY':
+      // Delay length 0 is a direct-feedthrough pass-through (stateful delays never reach this path).
+      return [inputs[0] ?? [0]];
     case 'Clock':
     case 'CLOCK':
       return [[runtime.simTime ?? 0]];
@@ -1221,6 +1246,8 @@ interface PIDValues {
   readonly pTerm?: number;
   readonly iTerm?: number;
   readonly dTerm?: number;
+  /** PID_CONTROLLER 'error' output: r - y (0 while reset or disabled), a signal, not the fault flag. */
+  readonly error?: number;
 }
 
 const pidPortValue = (
@@ -1229,13 +1256,94 @@ const pidPortValue = (
   values: PIDValues,
 ): number => {
   switch (runtime.ir.signals[signalId]?.portId) {
-    // The 'error' port of a stateful block carries the numeric-fault flag in the semantic model (fault sync), not the PID error.
-    case 'error': return 0;
+    // PID_CONTROLLER 'error' is the control error r - y (canvas); the numeric-fault flag is not routed to a port of this block.
+    case 'error': return values.error ?? 0;
     case 'p_term': return values.pTerm ?? 0;
     case 'i_term': return values.iTerm ?? 0;
     case 'd_term': return values.dTerm ?? 0;
     default: return values.output;
   }
+};
+
+/**
+ * Canvas PID_CONTROLLER on the sampled grid (parallel form with setpoint weights beta, gamma and a filtered derivative):
+ *   e = r - y, ed = gamma r - y, P = Kp (beta r - y); the integral and the derivative filter follow the 'method'
+ *   (forward_euler, backward_euler, tustin); reset and disable give all-zero outputs (disable holds the states).
+ */
+const pidControllerValues = (
+  operation: XBSemanticOperation,
+  r: number,
+  y: number,
+  enabled: number,
+  reset: number,
+  previousI: number,
+  previousD: number,
+  previousE: number,
+): PIDValues => {
+  if (reset > 0.5) {
+    return { output: 0, iState: 0, dState: 0, lastE: 0, pTerm: 0, iTerm: 0, dTerm: 0, error: 0 };
+  }
+  if (enabled < 0.5) {
+    return {
+      output: 0, iState: previousI, dState: previousD, lastE: previousE, pTerm: 0, iTerm: 0, dTerm: 0, error: 0,
+    };
+  }
+  const pidParams = operation.pidParameters as Record<string, unknown> | undefined;
+  const kp = Number(pidParams?.kp ?? parameter(operation, ['Kp', 'kp'], 1));
+  const ki = Number(pidParams?.ki ?? parameter(operation, ['Ki', 'ki'], 0));
+  const kd = Number(pidParams?.kd ?? parameter(operation, ['Kd', 'kd'], 0));
+  const n = Number(pidParams?.filterN ?? parameter(operation, ['N', 'n'], 100));
+  const beta = Number(pidParams?.beta ?? parameter(operation, ['beta', 'b'], 1));
+  const gamma = Number(pidParams?.gamma ?? parameter(operation, ['gamma', 'c'], 0));
+  const dt = Number(pidParams?.sampleTime ?? parameter(operation, ['sampleTime', 'dt'], 1));
+  const lower = Number(pidParams?.minimum ?? parameter(operation, ['min', 'minimum'], -100));
+  const upper = Number(pidParams?.maximum ?? parameter(operation, ['max', 'maximum'], 100));
+  const structure = operation.parameters.mode;
+  const mode = typeof structure === 'string' && ['P', 'PI', 'PD', 'PID'].includes(structure) ? structure : 'PID';
+  const methodKey = String(pidParams?.method ?? operation.parameters.method ?? 'forward_euler')
+    .toLowerCase().replace(/[_\s-]/g, '');
+  // Canvas: a sample time <= 0 (default -1 = inherited, 0 = continuous) selects the continuous form, whose integral and
+  // derivative filter are the forward-Euler update of the ODE states whatever the 'method' says.
+  const rawSampleTime = operation.parameters.sampleTime;
+  const continuousForm = typeof rawSampleTime !== 'number' || !(rawSampleTime > 0);
+  const method = continuousForm || methodKey === 'forwardeuler'
+    ? 'forward'
+    : (methodKey === 'backwardeuler' ? 'backward' : 'tustin');
+  const error = r - y;
+  const ed = gamma * r - y;
+  const pTerm = kp * (beta * r - y);
+  let nextI = previousI;
+  let iOut = previousI;
+  let dOut = 0;
+  let nextD = previousD;
+  if (mode === 'PI' || mode === 'PID') {
+    if (method === 'forward') {
+      iOut = previousI;
+      nextI = iOut + ki * error * dt;
+    } else if (method === 'backward') {
+      nextI = previousI + ki * error * dt;
+      iOut = nextI;
+    } else {
+      nextI = previousI + ki * (error + previousE) / 2 * dt;
+      iOut = nextI;
+    }
+  }
+  if (mode === 'PD' || mode === 'PID') {
+    if (method === 'forward') {
+      dOut = kd * n * (ed - previousD);
+      nextD = previousD + n * (ed - previousD) * dt;
+    } else if (method === 'backward') {
+      dOut = (kd * n * (ed - previousD)) / (1 + n * dt);
+      nextD = (previousD + n * ed * dt) / (1 + n * dt);
+    } else {
+      dOut = (2 * kd * n * (ed - previousD)) / (2 + n * dt);
+      nextD = (previousD * (2 - n * dt) + 2 * n * ed * dt) / (2 + n * dt);
+    }
+  }
+  const unlimited = pTerm + iOut + dOut;
+  const output = Math.max(lower, Math.min(upper, unlimited));
+  if (ki !== 0 && ((unlimited > upper && error > 0) || (unlimited < lower && error < 0))) nextI = previousI;
+  return { output, iState: nextI, dState: nextD, lastE: error, pTerm, iTerm: iOut, dTerm: dOut, error };
 };
 
 const pidValues = (
@@ -1282,6 +1390,12 @@ const pidValues = (
   const previousI = Number((runtime.stateSlots[iSlot.id] ?? iSlot.initialValues)[0] ?? 0);
   const previousD = Number((runtime.stateSlots[dSlot.id] ?? dSlot.initialValues)[0] ?? 0);
   const previousE = Number((runtime.stateSlots[lastESlot.id] ?? lastESlot.initialValues)[0] ?? 0);
+  if (operation.type === 'PID_CONTROLLER' && refId !== undefined && feedbackId !== undefined) {
+    return pidControllerValues(
+      operation, Number(signalValues(runtime, refId)[0] ?? 0), Number(signalValues(runtime, feedbackId)[0] ?? 0),
+      enabled, reset, previousI, previousD, previousE,
+    );
+  }
   if (reset > 0.5) return { output: 0, iState: 0, dState: 0, lastE: 0, pTerm: 0, iTerm: 0, dTerm: 0 };
   if (enabled < 0.5) return {
     output: 0, iState: previousI, dState: previousD, lastE: previousE, pTerm: 0, iTerm: 0, dTerm: 0,
@@ -1375,7 +1489,8 @@ function writeStateOutputs(
         const filterSlot = stateSlotForRole(operation, 'filter_state');
         if (filterSlot) {
           let filterState = Number((runtime.stateSlots[filterSlot.id] ?? filterSlot.initialValues)[0] ?? 0);
-          const dt = Number(parameter(operation, ['sampleTime', 'dt'], 1));
+          const rawDt = Number(parameter(operation, ['sampleTime', 'dt'], runtime.ir.solver.stepSeconds));
+          const dt = rawDt > 0 ? rawDt : runtime.ir.solver.stepSeconds;
           const fc = Number(parameter(operation, ['fc'], 100));
           const alpha = dt / (1 / (2 * Math.PI * fc) + dt);
           filterState += alpha * (y - filterState);
@@ -1449,7 +1564,6 @@ function writeStateOutputs(
       const A = matrixParameter(operation, 'A', [[1]]);
       const B = matrixParameter(operation, 'B', [[0]]);
       const C = matrixParameter(operation, 'C', [[1]]);
-      const D = matrixParameter(operation, 'D', [[0]]);
       const Q = matrixParameter(operation, 'Q', [[0]]);
       const R = matrixParameter(operation, 'R', [[1]]);
       const I: number[][] = [];
@@ -1466,9 +1580,8 @@ function writeStateOutputs(
       // P = APA' + Q
       let pPred = matrixAdd(matrixMultiply(matrixMultiply(A, pPrev, type, faults), matrixTranspose(A), type, faults), Q, type, faults);
 
-      // Update: innovation = y_meas - (C xPred + D u)
-      const yHat = matrixAdd(matrixMultiply(C, xPred, type, faults), matrixMultiply(D, uVec, type, faults), type, faults);
-      const innovation = matrixSubtract(yMeasVec, yHat, type, faults);
+      // Update: innovation = y_meas - C xPred (canvas block equation, no feed-through term)
+      const innovation = matrixSubtract(yMeasVec, matrixMultiply(C, xPred, type, faults), type, faults);
 
       // K = P_pred C' (C P_pred C' + R)^-1
       const cTrans = matrixTranspose(C);
@@ -1493,8 +1606,10 @@ function writeStateOutputs(
         xHat = matrixAdd(xPred, matrixMultiply(K, innovation, type, faults), type, faults);
         const kc = matrixMultiply(K, C, type, faults);
         const ikc = matrixSubtract(I, kc, type, faults);
-        pHat = matrixAdd(matrixMultiply(matrixMultiply(ikc, pPred, type, faults), matrixTranspose(ikc), type, faults), matrixMultiply(matrixMultiply(K, R, type, faults), matrixTranspose(K), type, faults), type, faults);
+        pHat = matrixMultiply(ikc, pPred, type, faults);
       }
+      // y_hat = C x_hat (the canvas block equation)
+      const yHat = matrixMultiply(C, xHat, type, faults);
 
       // Write state outputs
       const xHatFlat = xHat.map(r => r[0]!);
@@ -1649,7 +1764,10 @@ function writeStateOutputs(
         : -Math.abs(Number(parameter(operation, ['fallingLimit'], 1)));
       const rawDt = operation.parameters.sampleTime ?? operation.parameters.dt;
       const parsedDt = typeof rawDt === 'number' ? rawDt : (typeof rawDt === 'string' ? parseFloat(rawDt) : NaN);
-      const dt = Number.isFinite(parsedDt) && parsedDt > 0 ? parsedDt : (runtime.ir.solver?.stepSeconds ?? 0.01);
+      // D12: with an inherited/continuous sample time the first output is the initial condition (no time elapsed).
+    const dt = operation.parameters.sampleTimeInherited === true && (runtime.simTime ?? 0) === 0
+      ? 0
+      : (Number.isFinite(parsedDt) && parsedDt > 0 ? parsedDt : (runtime.ir.solver?.stepSeconds ?? 0.01));
 
       const maxIncrease = rising * dt;
       const maxDecrease = falling * dt;
@@ -1785,7 +1903,10 @@ const statefulUpdate = (
       : -Math.abs(Number(parameter(operation, ['fallingLimit'], 1)));
     const rawDt = operation.parameters.sampleTime ?? operation.parameters.dt;
     const parsedDt = typeof rawDt === 'number' ? rawDt : (typeof rawDt === 'string' ? parseFloat(rawDt) : NaN);
-    const dt = Number.isFinite(parsedDt) && parsedDt > 0 ? parsedDt : (runtime.ir.solver?.stepSeconds ?? 0.01);
+    // D12: with an inherited/continuous sample time the first output is the initial condition (no time elapsed).
+    const dt = operation.parameters.sampleTimeInherited === true && (runtime.simTime ?? 0) === 0
+      ? 0
+      : (Number.isFinite(parsedDt) && parsedDt > 0 ? parsedDt : (runtime.ir.solver?.stepSeconds ?? 0.01));
 
     const maxIncrease = rising * dt;
     const maxDecrease = falling * dt;
@@ -1812,6 +1933,7 @@ const statefulUpdate = (
     const current_on = u >= on || (current_on_prev && u > off);
     return { [onSlot.id]: [current_on] };
   }
+  if (isContinuousFilter(operation)) return {};
   if (operation.type === 'LOW_PASS_FILTER') {
     const prevYSlot = stateSlotForRole(operation, 'prev_y');
     if (prevYSlot === undefined) throw new Error(`X-Bridges LOW_PASS_FILTER '${operation.id}' requires a prev_y state slot`);
@@ -2145,6 +2267,8 @@ const executeDirectOperations = (
     ) continue;
     if (runtime.operationFaults[operation.id]?.active) continue;
     if (!forceEvaluation && !scheduledThisSubstep(runtime, operation)) continue;
+    // The Kalman update advances its state: it is never repeated by forced re-evaluations of the direct pass.
+    if (forceEvaluation && operation.type === 'KALMAN_FILTER') continue;
     if ((operation.type === 'Inport' || operation.type === 'Outport')
       && (operation.inputSignalIds.length === 0
         || operation.outputSignalIds.length === 0)) {
@@ -2183,15 +2307,30 @@ const executeDirectOperations = (
 interface ContinuousSlot {
   readonly operation: XBSemanticOperation;
   readonly slotId: string;
-  readonly signalId: string;
+  /** Signal that publishes the state (integrators); null for the state of a continuous filter. */
+  readonly signalId: string | null;
   readonly numericType: XBNumericType;
   readonly base: readonly XBScalar[];
+  /** Time constant of a continuous filter (dx/dt = (u - x)/tau); undefined for integrators. */
+  readonly tau?: number;
 }
 
 const continuousSlots = (runtime: XBRuntime): ContinuousSlot[] => {
   const slots: ContinuousSlot[] = [];
   for (const operationId of runtime.ir.executionOrder) {
     const operation = runtime.ir.operations[operationId];
+    if (operation !== undefined && isContinuousFilter(operation)) {
+      const slot = (operation.state?.slots ?? []).find((candidate) => candidate.role === 'prev_y')!;
+      slots.push({
+        operation,
+        slotId: slot.id,
+        signalId: null,
+        numericType: slot.numericType,
+        base: runtime.stateSlots[slot.id] ?? slot.initialValues,
+        tau: filterTau(operation),
+      });
+      continue;
+    }
     if (
       operation?.type !== 'INTEGRATOR_CONTINUOUS'
       && operation?.type !== 'Integrator'
@@ -2215,11 +2354,13 @@ const continuousSlots = (runtime: XBRuntime): ContinuousSlot[] => {
 const continuousDerivatives = (
   runtime: XBRuntime,
   slots: readonly ContinuousSlot[],
-): XBScalar[][] => slots.map(({ operation, base }) => broadcast(
-  signalValues(runtime, operation.inputSignalIds[0]),
-  base.length,
-  operation.id,
-).map(Number));
+): XBScalar[][] => slots.map(({ operation, base, slotId, tau }) => {
+  const u = broadcast(signalValues(runtime, operation.inputSignalIds[0]), base.length, operation.id).map(Number);
+  if (tau === undefined) return u;
+  // Continuous filter: dx/dt = (u - x)/tau with x the current (stage) state.
+  const x = runtime.stateSlots[slotId] ?? base;
+  return u.map((value, index) => (value - Number(x[index])) / tau);
+});
 
 const writeContinuousStage = (
   runtime: XBRuntime,
@@ -2233,6 +2374,11 @@ const writeContinuousStage = (
     if (runtime.operationFaults[slot.operation.id]?.active) return;
     const values = slot.base.map((value, valueIndex) =>
       Number(value) + scale * Number(derivatives[index][valueIndex]));
+    if (slot.signalId === null) {
+      // Minor stage of a continuous filter: the stage state is read by the output pass and the derivative.
+      runtime.stateSlots[slot.slotId] = values;
+      return;
+    }
     const faultStart = faults.length;
     writeSignal(runtime, slot.signalId, values, faults, slot.operation);
     const fault = faults[faultStart];
@@ -2258,22 +2404,38 @@ const updateContinuousState = (
   }
   const step = runtime.ir.solver.stepSeconds;
   const k1 = continuousDerivatives(runtime, slots);
+  // States advanced to t_(k+1) by continuous filters; committed after the outputs at t_k are republished.
+  const pendingFilter = new Map<string, XBScalar[]>();
   if (runtime.ir.solver.kind === 'euler') {
-    writeContinuousStage(runtime, slots, k1, step, faults, snapshots);
+    writeContinuousStage(runtime, slots.filter((slot) => slot.signalId !== null), k1.filter((_, i) => slots[i].signalId !== null), step, faults, snapshots);
+    slots.forEach((slot, index) => {
+      if (slot.signalId !== null || runtime.operationFaults[slot.operation.id]?.active) return;
+      const faultStart = faults.length;
+      pendingFilter.set(slot.slotId, slot.base.map((value, valueIndex) => convertValue(
+        Number(value) + step * Number(k1[index][valueIndex]), slot.numericType, faults, slot.operation,
+      )));
+      const fault = faults[faultStart];
+      if (fault !== undefined) recordOperationFault(runtime, slot.operation, fault, snapshots.get(slot.operation.id));
+    });
   } else {
+    // Minor stages see the stage time (t + h/2, t + h/2, t + h) like the canvas solver; t_k is restored afterwards.
+    const tK = runtime.simTime ?? 0;
     writeContinuousStage(runtime, slots, k1, step / 2, faults, snapshots);
+    runtime.simTime = tK + step / 2;
     executeDirectOperations(runtime, faults, true);
     const k2 = continuousDerivatives(runtime, slots);
     writeContinuousStage(runtime, slots, k2, step / 2, faults, snapshots);
     executeDirectOperations(runtime, faults, true);
     const k3 = continuousDerivatives(runtime, slots);
     writeContinuousStage(runtime, slots, k3, step, faults, snapshots);
+    runtime.simTime = tK + step;
     executeDirectOperations(runtime, faults, true);
     const k4 = continuousDerivatives(runtime, slots);
+    runtime.simTime = tK;
     slots.forEach((slot, index) => {
       if (runtime.operationFaults[slot.operation.id]?.active) return;
       const faultStart = faults.length;
-      runtime.stateSlots[slot.slotId] = slot.base.map((value, valueIndex) =>
+      const advanced = slot.base.map((value, valueIndex) =>
         convertValue(
           Number(value) + step * (
             Number(k1[index][valueIndex])
@@ -2284,6 +2446,12 @@ const updateContinuousState = (
           slot.numericType,
           faults, slot.operation,
         ));
+      if (slot.signalId === null) {
+        pendingFilter.set(slot.slotId, advanced);
+        runtime.stateSlots[slot.slotId] = [...slot.base];
+      } else {
+        runtime.stateSlots[slot.slotId] = advanced;
+      }
       const fault = faults[faultStart];
       if (fault !== undefined) recordOperationFault(
         runtime, slot.operation, fault, snapshots.get(slot.operation.id),
@@ -2292,6 +2460,7 @@ const updateContinuousState = (
   }
   if (runtime.ir.solver.kind === 'euler') {
     slots.forEach((slot) => {
+      if (slot.signalId === null) return;
       if (runtime.operationFaults[slot.operation.id]?.active) return;
       const faultStart = faults.length;
       runtime.stateSlots[slot.slotId] = signalValues(runtime, slot.signalId)
@@ -2303,10 +2472,13 @@ const updateContinuousState = (
     });
   }
   for (const slot of slots) {
+    if (slot.signalId === null) continue;
     if (runtime.operationFaults[slot.operation.id]?.active) continue;
-    writeSignal(runtime, slot.signalId, runtime.stateSlots[slot.slotId], faults, slot.operation);
+    // Output-then-update (D9): the tick publishes the state at t_k; the state advanced to t_(k+1) is read next tick.
+    writeSignal(runtime, slot.signalId, slot.base, faults, slot.operation);
   }
   executeDirectOperations(runtime, faults, true);
+  for (const [slotId, values] of pendingFilter) runtime.stateSlots[slotId] = values;
 };
 
 const executeSolverSubstep = (
@@ -2322,6 +2494,11 @@ const executeSolverSubstep = (
     if (!operation.stateful) continue;
 
     if (runtime.operationFaults[operation.id]?.active) {
+      statefulOperations.push(operation);
+      continue;
+    }
+    // KALMAN_FILTER is feed-through: it runs once per scheduled substep in the direct pass, when its inputs are known.
+    if (operation.type === 'KALMAN_FILTER' && operation.directFeedthrough) {
       statefulOperations.push(operation);
       continue;
     }

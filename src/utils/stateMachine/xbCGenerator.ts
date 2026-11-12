@@ -1,7 +1,7 @@
 import { toCIdentifier } from './smExpressions';
 import type { SemanticModel, SemanticState } from './smSemanticModel';
 import { STATE_MACHINE_XB_TARGET_CAPABILITIES } from './smSemanticValidator';
-import { xbSumSigns } from './xbCapabilities';
+import { isContinuousFilter, xbSumSigns } from './xbCapabilities';
 import type {
   XBSemanticMapping,
   XBSemanticModel,
@@ -70,7 +70,7 @@ const numericFaultContract = (
   fallback: operation.stateful ? 'previous-value' as const : 'zero' as const,
   errorSignalId: operation.outputSignalIds.find((signalId) => {
     const portId = state.xBridges!.signals[signalId]?.portId;
-    return portId === 'error' || (
+    return (portId === 'error' && operation.type !== 'PID_CONTROLLER') || (
       portId === 'e'
       && operation.type !== 'DATA_TYPE_CONVERSION'
       && operation.type !== 'NUMERIC_REPRESENTATION'
@@ -592,6 +592,8 @@ const renderSignalElementWrite = (
   const valueName = index === '0U'
     ? `xb_value_${operationIndex}_${outputIndex}`
     : `xb_value_${operationIndex}_${outputIndex}_${toCIdentifier(signalId)}_${toCIdentifier(index)}`;
+  // Mapped state-machine inputs and the division-by-zero fault of VectorDiv keep the documented safe-zero fallback; the other block outputs publish non-finite values (D11).
+  const boundaryInput = operation.id.startsWith('mapping_in_') || operation.type === 'VectorDiv';
   const errorField = layout.errorFields.get(operation.id);
   const faultLines = [
     ...(errorField === undefined ? [] : [`            instance->${member}.${errorField} = true;`]),
@@ -606,14 +608,14 @@ const renderSignalElementWrite = (
   const precision = signal.numericType.kind === 'float' ? signal.numericType.precision : signal.numericType.kind;
   if (precision === 'float32') return [
     `        const double ${valueName} = (double)(${expression});`,
-    `        if (!isfinite(${valueName})) {`, `            ${destination} = 0.0F;`,
+    `        if (!isfinite(${valueName})) {`, `            ${destination} = ${boundaryInput ? '0.0F' : `(float)${valueName}`};`,
     ...faultLines, `        } else if (fabs(${valueName}) > (double)FLT_MAX) {`,
-    `            ${destination} = 0.0F;`, ...faultLines,
+    `            ${destination} = ${boundaryInput ? '0.0F' : `((${valueName} < 0.0) ? -INFINITY : INFINITY)`};`, ...faultLines,
     '        } else {', `            ${destination} = (float)${valueName};`, '        }',
   ];
   if (precision === 'float64') return [
     `        const double ${valueName} = (double)(${expression});`,
-    `        if (!isfinite(${valueName})) {`, `            ${destination} = 0.0;`, ...faultLines,
+    `        if (!isfinite(${valueName})) {`, `            ${destination} = ${boundaryInput ? '0.0' : valueName};`, ...faultLines,
     `        } else {`, `            ${destination} = ${valueName};`, '        }',
   ];
   if (signal.numericType.kind === 'fixed') {
@@ -747,6 +749,8 @@ const renderSignalWrite = (
   }
   const resultName = `xb_result_${operationIndex}_${outputIndex}_${toCIdentifier(signalId)}`;
   const valueName = `xb_value_${operationIndex}_${outputIndex}_${toCIdentifier(signalId)}`;
+  // Mapped state-machine inputs and the division-by-zero fault of VectorDiv keep the documented safe-zero fallback; the other block outputs publish non-finite values (D11).
+  const boundaryInput = operation.id.startsWith('mapping_in_') || operation.type === 'VectorDiv';
   const errorField = layout.errorFields.get(operation.id);
   const faultLines = [
     ...(errorField === undefined ? [] : [`        instance->${member}.${errorField} = true;`]),
@@ -768,10 +772,10 @@ const renderSignalWrite = (
     return [
       `    const double ${valueName} = (double)(${expression});`,
       `    if (!isfinite(${valueName})) {`,
-      `        instance->${member}.${field} = 0.0F;`,
+      `        instance->${member}.${field} = ${boundaryInput ? '0.0F' : `(float)${valueName}`};`,
       ...faultLines,
       `    } else if (fabs(${valueName}) > (double)FLT_MAX) {`,
-      `        instance->${member}.${field} = 0.0F;`,
+      `        instance->${member}.${field} = ${boundaryInput ? '0.0F' : `((${valueName} < 0.0) ? -INFINITY : INFINITY)`};`,
       ...faultLines,
       '    } else {',
       `        instance->${member}.${field} = (float)${valueName};`,
@@ -782,7 +786,7 @@ const renderSignalWrite = (
     return [
       `    const double ${valueName} = (double)(${expression});`,
       `    if (!isfinite(${valueName})) {`,
-      `        instance->${member}.${field} = 0.0;`,
+      `        instance->${member}.${field} = ${boundaryInput ? '0.0' : valueName};`,
       ...faultLines,
       `    } else {`, `        instance->${member}.${field} = ${valueName};`, '    }',
     ];
@@ -929,7 +933,7 @@ const emitStep: OperationEmitter = (state, operation, operationIndex, layout, me
     const timerIndexSymbol = timerSource.stateIndexSymbol;
     const expr = threshold.milliseconds <= 0
       ? finalFmt
-      : `(instance->state_timers[${timerIndexSymbol}] < ${threshold.milliseconds}U ? ${initialFmt} : ${finalFmt})`;
+      : `(((instance->state_timers[${timerIndexSymbol}] < ${threshold.milliseconds}U) || ((instance->state_timers[${timerIndexSymbol}] - ${threshold.milliseconds}U) < SM_TICK_MS)) ? ${initialFmt} : ${finalFmt})`;
     return renderSignalWrite(
       state,
       operation,
@@ -966,7 +970,7 @@ const emitStep: OperationEmitter = (state, operation, operationIndex, layout, me
   }
   const expr = thresholdMs === 0
     ? final.toFixed(1)
-    : `(instance->state_timers[${ownerIndexSymbol}] < UINT32_C(${thresholdMs}) ? ${initial.toFixed(1)} : ${final.toFixed(1)})`;
+    : `(((instance->state_timers[${ownerIndexSymbol}] < UINT32_C(${thresholdMs})) || ((instance->state_timers[${ownerIndexSymbol}] - UINT32_C(${thresholdMs})) < SM_TICK_MS)) ? ${initial.toFixed(1)} : ${final.toFixed(1)})`;
   return renderSignalWrite(
     state,
     operation,
@@ -979,7 +983,7 @@ const emitStep: OperationEmitter = (state, operation, operationIndex, layout, me
   );
 };
 
-const SIM_TIME_BLOCK_TYPES: ReadonlySet<string> = new Set(['Clock', 'CLOCK', 'WaveformGen', 'WAVEFORM_GEN']);
+const SIM_TIME_BLOCK_TYPES: ReadonlySet<string> = new Set(['Clock', 'CLOCK', 'WaveformGen', 'WAVEFORM_GEN', 'RATE_LIMITER']);
 
 /** True when any block reads the simulation time (sim_time member, advanced once per solver substep). */
 const usesSimTime = (xb: XBSemanticModel): boolean =>
@@ -1054,8 +1058,11 @@ const emitSum = emitSingleOutput((inputs, operation) => {
 });
 const emitSumJunction: OperationEmitter = (...args) => emitSum(...args);
 const emitVectorAdd: OperationEmitter = (...args) => emitSum(...args);
-const emitProduct = emitSingleOutput((inputs) =>
-  reduceExpression(inputs, '*', '1.0'));
+const emitProduct = emitSingleOutput((inputs, operation) => operation.type === 'PRODUCT' && operation.parameters.operation === 'divide'
+  ? (inputs.length === 0 ? '1.0' : inputs.length === 1
+    ? `(1.0 / (${inputs[0]}))`
+    : `(${inputs.map((input) => `(${input})`).join(' / ')})`)
+  : reduceExpression(inputs, '*', '1.0'));
 const emitVectorMultiply: OperationEmitter = (...args) =>
   emitProduct(...args);
 const emitSubtract = emitSingleOutput((inputs) =>
@@ -1841,7 +1848,8 @@ const emitDataTypeConversion: OperationEmitter = (...args) =>
   emitConversion(...args);
 const emitNumericRepresentation: OperationEmitter = (...args) =>
   emitConversion(...args);
-const emitDelayLifecycleStub: OperationEmitter = () => [];
+const emitDelayLifecycleStub: OperationEmitter = (state, operation, operationIndex, layout, member) =>
+  operation.stateful ? [] : emitSingleOutput((inputs) => inputs[0] ?? '0.0')(state, operation, operationIndex, layout, member);
 const emitUnitDelayLifecycleStub: OperationEmitter = () => [];
 const emitMemoryLifecycleStub: OperationEmitter = () => [];
 const emitDiscreteIntegratorLifecycleStub: OperationEmitter = () => [];
@@ -2327,6 +2335,80 @@ const renderPIDComputation = (
   const method = methodKey === 'forwardeuler'
     ? 'forward_euler'
     : (methodKey === 'backwardeuler' ? 'backward_euler' : operation.parameters.method);
+  if (isController) {
+    // Canvas PID_CONTROLLER (setpoint weights beta, gamma; filtered derivative per method; same as the interpreter).
+    const r = signalRealExpression(state, errorId, layout, member);
+    const yFeedback = signalRealExpression(state, feedbackId!, layout, member);
+    const beta = cNumber(operation.pidParameters?.beta ?? scalarParameter(operation, ['beta', 'b'], 1));
+    const gamma = cNumber(operation.pidParameters?.gamma ?? scalarParameter(operation, ['gamma', 'c'], 0));
+    const structure = typeof mode === 'string' && ['P', 'PI', 'PD', 'PID'].includes(mode) ? mode : 'PID';
+    // Sample time <= 0 (canvas continuous form): forward-Euler update of the ODE states whatever the method (as the interpreter).
+    const rawSampleTime = operation.parameters.sampleTime;
+    const continuousForm = typeof rawSampleTime !== 'number' || !(rawSampleTime > 0);
+    const kind = continuousForm || methodKey === 'forwardeuler'
+      ? 'forward'
+      : (methodKey === 'backwardeuler' ? 'backward' : 'tustin');
+    const ed = `xb_pid_${identifier}_ed`;
+    const iOut = `xb_pid_${identifier}_i_out`;
+    const errorOut = `xb_pid_${identifier}_error`;
+    const prevI = stateSlotRealExpression(iSlot, layout, member);
+    const hasI = structure === 'PI' || structure === 'PID';
+    const hasD = structure === 'PD' || structure === 'PID';
+    const integralStep = !hasI ? []
+      : kind === 'forward' ? [`            ${i} = ${iOut} + (${ki}) * ${e} * (${dt});`]
+        : kind === 'backward' ? [`            ${i} = ${i} + (${ki}) * ${e} * (${dt});`, `            ${iOut} = ${i};`]
+          : [`            ${i} = ${i} + (${ki}) * (${e} + ${lastE}) / 2.0 * (${dt});`, `            ${iOut} = ${i};`];
+    const derivativeStep = !hasD ? []
+      : kind === 'forward' ? [
+        `            ${derivative} = (${kd}) * (${n}) * (${ed} - ${d});`,
+        `            ${d} = ${d} + (${n}) * (${ed} - ${d}) * (${dt});`,
+      ] : kind === 'backward' ? [
+        `            ${derivative} = ((${kd}) * (${n}) * (${ed} - ${d})) / (1.0 + (${n}) * (${dt}));`,
+        `            ${d} = (${d} + (${n}) * ${ed} * (${dt})) / (1.0 + (${n}) * (${dt}));`,
+      ] : [
+        `            ${derivative} = (2.0 * (${kd}) * (${n}) * (${ed} - ${d})) / (2.0 + (${n}) * (${dt}));`,
+        `            ${d} = (${d} * (2.0 - (${n}) * (${dt})) + 2.0 * (${n}) * ${ed} * (${dt})) / (2.0 + (${n}) * (${dt}));`,
+      ];
+    return [
+      `        const double ${e} = (${r}) - (${yFeedback});`,
+      `        const double ${ed} = (${gamma}) * (${r}) - (${yFeedback});`,
+      `        const double ${enabled} = ${signalRealExpression(state, enableId, layout, member)};`,
+      `        const double ${reset} = ${signalRealExpression(state, resetId, layout, member)};`,
+      `        double ${i} = ${prevI};`,
+      `        double ${d} = ${stateSlotRealExpression(dSlot, layout, member)};`,
+      `        double ${lastE} = ${stateSlotRealExpression(lastESlot, layout, member)};`,
+      `        double ${iOut} = ${i};`,
+      `        double ${derivative} = 0.0;`,
+      `        double ${unlimited} = 0.0;`,
+      `        double ${output} = 0.0;`,
+      `        double ${pTerm} = 0.0;`,
+      `        double ${iTerm} = 0.0;`,
+      `        double ${dTerm} = 0.0;`,
+      `        double ${errorOut} = 0.0;`,
+      `        if (${reset} > 0.5) { ${i} = 0.0; ${d} = 0.0; ${lastE} = 0.0; }`,
+      `        else if (${enabled} < 0.5) { ${output} = 0.0; }`,
+      '        else {',
+      ...integralStep,
+      ...derivativeStep,
+      `            ${pTerm} = (${kp}) * ((${beta}) * (${r}) - (${yFeedback}));`,
+      `            ${unlimited} = ${pTerm} + ${iOut} + ${derivative};`,
+      `            ${output} = fmax(${minimum}, fmin(${maximum}, ${unlimited}));`,
+      `            ${iTerm} = ${iOut};`,
+      `            ${dTerm} = ${derivative};`,
+      `            ${errorOut} = ${e};`,
+      `            if (((${ki}) != 0.0) && (((${unlimited} > ${maximum}) && (${e} > 0.0)) || ((${unlimited} < ${minimum}) && (${e} < 0.0)))) ${i} = ${prevI};`,
+      `            ${lastE} = ${e};`,
+      '        }',
+      `        (void)${output};`,
+      `        (void)${pTerm};`,
+      `        (void)${iTerm};`,
+      `        (void)${dTerm};`,
+      `        (void)${errorOut};`,
+      `        (void)${ed};`,
+      `        (void)${lastE};`,
+      `        (void)${iOut};`,
+    ];
+  }
   const integralLines = mode === 'PD' || mode === 'P' ? [] : method === 'forward_euler'
     ? [`            ${i} += (${ki}) * ${lastE} * (${dt});`]
     : method === 'backward_euler'
@@ -2450,6 +2532,7 @@ const renderStateOutputs = (
       p_term: `xb_pid_${identifier}_p_term`,
       i_term: `xb_pid_${identifier}_i_term`,
       d_term: `xb_pid_${identifier}_d_term`,
+      error: `xb_pid_${identifier}_error`,
     };
     const writtenSignalIds = operation.type === 'PID_CONTROLLER'
       ? operation.outputSignalIds.filter((signalId) => termNames[state.xBridges!.signals[signalId]?.portId ?? ''] !== undefined)
@@ -2507,7 +2590,11 @@ const renderStateOutputs = (
         : `(-fabs(${cNumber(scalarParameter(operation, ['fallingLimit'], 1))}))`;
       const rawDt = operation.parameters.sampleTime ?? operation.parameters.dt;
       const parsedDt = typeof rawDt === 'number' ? rawDt : (typeof rawDt === 'string' ? parseFloat(rawDt) : NaN);
-      const dt = cNumber(Number.isFinite(parsedDt) && parsedDt > 0 ? parsedDt : (state.xBridges?.solver?.stepSeconds ?? 0.01));
+      const dtValue = cNumber(Number.isFinite(parsedDt) && parsedDt > 0 ? parsedDt : (state.xBridges?.solver?.stepSeconds ?? 0.01));
+        // D12: with an inherited/continuous sample time the first output is the initial condition (no time elapsed).
+        const dt = operation.parameters.sampleTimeInherited === true
+          ? `((instance->${member}.sim_time == 0.0) ? 0.0 : ${dtValue})`
+          : dtValue;
 
       const count = outputSignal.elementCount;
       const sanitizedId = toCIdentifier(operation.id);
@@ -2587,8 +2674,9 @@ const renderStateOutputs = (
         const filterSlot = operation.state?.slots.find((s) => s.role === 'filter_state');
         if (filterSlot !== undefined) {
           const prevFilter = stateSlotElementRealExpression(filterSlot, layout, member, '0U');
-          const fc = cNumber(scalarParameter(operation, ['fc'], 1));
-          const dt = cNumber(scalarParameter(operation, ['sampleTime', 'dt'], state.xBridges!.solver.stepSeconds));
+          const fc = cNumber(scalarParameter(operation, ['fc'], 100));
+          const noiseDt = Number(scalarParameter(operation, ['sampleTime', 'dt'], state.xBridges!.solver.stepSeconds));
+          const dt = cNumber(noiseDt > 0 ? noiseDt : state.xBridges!.solver.stepSeconds);
           lines.push(`    double ${prefix}_fcCoeff = (${dt}) / ((1.0 / (2.0 * 3.14159265358979323846 * (${fc}))) + (${dt}));`);
           lines.push(`    double ${prefix}_out = ${prevFilter} + ${prefix}_fcCoeff * (${prefix}_white - ${prevFilter});`);
           lines.push(...renderSignalWrite(state, operation, operationIndex, 0, outputSignalId, `${prefix}_out`, layout, member));
@@ -2657,6 +2745,11 @@ const renderStateOutputs = (
     const prevYSlot = stateSlotForRole(operation, 'prev_y');
     const outputSignalId = operation.outputSignalIds[0];
     const inputSignalId = operation.inputSignalIds[0];
+    if (isContinuousFilter(operation) && prevYSlot !== undefined && outputSignalId !== undefined) {
+      // Continuous 1/(tau s + 1): no feedthrough, y = x; the solver stages integrate x.
+      return [...renderSignalWrite(state, operation, operationIndex, 0, outputSignalId,
+        stateSlotRealExpression(prevYSlot, layout, member), layout, member)];
+    }
     if (prevYSlot !== undefined && outputSignalId !== undefined && inputSignalId !== undefined) {
       const u = signalElementRealExpression(state, inputSignalId, layout, member, '0U');
       const prev_y = stateSlotElementRealExpression(prevYSlot, layout, member, '0U');
@@ -2695,6 +2788,12 @@ const renderStateOutputs = (
     const prevUSlot = stateSlotForRole(operation, 'prev_u');
     const outputSignalId = operation.outputSignalIds[0];
     const inputSignalId = operation.inputSignalIds[0];
+    if (isContinuousFilter(operation) && prevYSlot !== undefined && outputSignalId !== undefined && inputSignalId !== undefined) {
+      // Continuous s/(tau s + 1) = 1 - 1/(tau s + 1): direct feedthrough, y = u - x.
+      return [...renderSignalWrite(state, operation, operationIndex, 0, outputSignalId,
+        `(${signalRealExpression(state, inputSignalId, layout, member)}) - (${stateSlotRealExpression(prevYSlot, layout, member)})`,
+        layout, member)];
+    }
     if (prevYSlot !== undefined && prevUSlot !== undefined && outputSignalId !== undefined && inputSignalId !== undefined) {
       const u = signalElementRealExpression(state, inputSignalId, layout, member, '0U');
       const prev_y = stateSlotElementRealExpression(prevYSlot, layout, member, '0U');
@@ -2824,28 +2923,33 @@ const renderStateOutputs = (
       lines.push(`    double ${prefix}_A[${xLength}][${xLength}] = ${formatC2DArray(operation, 'A', xLength, xLength)};`);
       lines.push(`    double ${prefix}_B[${xLength}][${uLength}] = ${formatC2DArray(operation, 'B', xLength, uLength)};`);
       lines.push(`    double ${prefix}_C[${yMeasLength}][${xLength}] = ${formatC2DArray(operation, 'C', yMeasLength, xLength)};`);
-      lines.push(`    double ${prefix}_D[${yMeasLength}][${uLength}] = ${formatC2DArray(operation, 'D', yMeasLength, uLength)};`);
       lines.push(`    double ${prefix}_Q[${xLength}][${xLength}] = ${formatC2DArray(operation, 'Q', xLength, xLength)};`);
       lines.push(`    double ${prefix}_R[${yMeasLength}][${yMeasLength}] = ${formatC2DArray(operation, 'R', yMeasLength, yMeasLength)};`);
 
+      // Operation order mirrors the interpreter (matrix products accumulate first, then add), so both agree to the bit.
       lines.push(`    double ${prefix}_xPred[${xLength}];`);
       lines.push(`    for (uint32_t r = 0U; r < ${xLength}U; ++r) {`);
-      lines.push(`        double sum = 0.0;`);
-      lines.push(`        for (uint32_t k = 0U; k < ${xLength}U; ++k) sum += ${prefix}_A[r][k] * ${prefix}_xPrev[k];`);
-      lines.push(`        for (uint32_t k = 0U; k < ${uLength}U; ++k) sum += ${prefix}_B[r][k] * ${prefix}_u[k];`);
-      lines.push(`        ${prefix}_xPred[r] = sum;`);
+      lines.push(`        double ax = 0.0;`);
+      lines.push(`        double bu = 0.0;`);
+      lines.push(`        for (uint32_t k = 0U; k < ${xLength}U; ++k) ax += ${prefix}_A[r][k] * ${prefix}_xPrev[k];`);
+      lines.push(`        for (uint32_t k = 0U; k < ${uLength}U; ++k) bu += ${prefix}_B[r][k] * ${prefix}_u[k];`);
+      lines.push(`        ${prefix}_xPred[r] = ax + bu;`);
       lines.push(`    }`);
 
       lines.push(`    double ${prefix}_pPred[${xLength}][${xLength}];`);
+      lines.push(`    double ${prefix}_AP[${xLength}][${xLength}];`);
+      lines.push(`    for (uint32_t r = 0U; r < ${xLength}U; ++r) {`);
+      lines.push(`        for (uint32_t m = 0U; m < ${xLength}U; ++m) {`);
+      lines.push(`            double sum = 0.0;`);
+      lines.push(`            for (uint32_t k = 0U; k < ${xLength}U; ++k) sum += ${prefix}_A[r][k] * ${prefix}_pPrev[k][m];`);
+      lines.push(`            ${prefix}_AP[r][m] = sum;`);
+      lines.push(`        }`);
+      lines.push(`    }`);
       lines.push(`    for (uint32_t r = 0U; r < ${xLength}U; ++r) {`);
       lines.push(`        for (uint32_t c = 0U; c < ${xLength}U; ++c) {`);
-      lines.push(`            double sum = ${prefix}_Q[r][c];`);
-      lines.push(`            for (uint32_t k = 0U; k < ${xLength}U; ++k) {`);
-      lines.push(`                for (uint32_t m = 0U; m < ${xLength}U; ++m) {`);
-      lines.push(`                    sum += ${prefix}_A[r][k] * ${prefix}_pPrev[k][m] * ${prefix}_A[c][m];`);
-      lines.push(`                }`);
-      lines.push(`            }`);
-      lines.push(`            ${prefix}_pPred[r][c] = sum;`);
+      lines.push(`            double sum = 0.0;`);
+      lines.push(`            for (uint32_t m = 0U; m < ${xLength}U; ++m) sum += ${prefix}_AP[r][m] * ${prefix}_A[c][m];`);
+      lines.push(`            ${prefix}_pPred[r][c] = sum + ${prefix}_Q[r][c];`);
       lines.push(`        }`);
       lines.push(`    }`);
 
@@ -2854,21 +2958,23 @@ const renderStateOutputs = (
       lines.push(`    for (uint32_t r = 0U; r < ${yMeasLength}U; ++r) {`);
       lines.push(`        double sum = 0.0;`);
       lines.push(`        for (uint32_t k = 0U; k < ${xLength}U; ++k) sum += ${prefix}_C[r][k] * ${prefix}_xPred[k];`);
-      lines.push(`        for (uint32_t k = 0U; k < ${uLength}U; ++k) sum += ${prefix}_D[r][k] * ${prefix}_u[k];`);
-      lines.push(`        ${prefix}_yHat[r] = sum;`);
       lines.push(`        ${prefix}_inn[r] = ${prefix}_yMeas[r] - sum;`);
       lines.push(`    }`);
 
       lines.push(`    double ${prefix}_S[${yMeasLength}][${yMeasLength}];`);
+      lines.push(`    double ${prefix}_CP[${yMeasLength}][${xLength}];`);
+      lines.push(`    for (uint32_t r = 0U; r < ${yMeasLength}U; ++r) {`);
+      lines.push(`        for (uint32_t m = 0U; m < ${xLength}U; ++m) {`);
+      lines.push(`            double sum = 0.0;`);
+      lines.push(`            for (uint32_t k = 0U; k < ${xLength}U; ++k) sum += ${prefix}_C[r][k] * ${prefix}_pPred[k][m];`);
+      lines.push(`            ${prefix}_CP[r][m] = sum;`);
+      lines.push(`        }`);
+      lines.push(`    }`);
       lines.push(`    for (uint32_t r = 0U; r < ${yMeasLength}U; ++r) {`);
       lines.push(`        for (uint32_t c = 0U; c < ${yMeasLength}U; ++c) {`);
-      lines.push(`            double sum = ${prefix}_R[r][c];`);
-      lines.push(`            for (uint32_t k = 0U; k < ${xLength}U; ++k) {`);
-      lines.push(`                for (uint32_t m = 0U; m < ${xLength}U; ++m) {`);
-      lines.push(`                    sum += ${prefix}_C[r][k] * ${prefix}_pPred[k][m] * ${prefix}_C[c][m];`);
-      lines.push(`                }`);
-      lines.push(`            }`);
-      lines.push(`            ${prefix}_S[r][c] = sum;`);
+      lines.push(`            double sum = 0.0;`);
+      lines.push(`            for (uint32_t m = 0U; m < ${xLength}U; ++m) sum += ${prefix}_CP[r][m] * ${prefix}_C[c][m];`);
+      lines.push(`            ${prefix}_S[r][c] = sum + ${prefix}_R[r][c];`);
       lines.push(`        }`);
       lines.push(`    }`);
 
@@ -2885,44 +2991,48 @@ const renderStateOutputs = (
       lines.push(`            for (uint32_t c = 0U; c < ${xLength}U; ++c) ${prefix}_pHat[r][c] = ${prefix}_pPrev[r][c];`);
       lines.push(`        }`);
       lines.push(`    } else {`);
+      lines.push(`        double pc[${xLength}][${yMeasLength}];`);
+      lines.push(`        for (uint32_t r = 0U; r < ${xLength}U; ++r) {`);
+      lines.push(`            for (uint32_t m = 0U; m < ${yMeasLength}U; ++m) {`);
+      lines.push(`                double sum = 0.0;`);
+      lines.push(`                for (uint32_t k = 0U; k < ${xLength}U; ++k) sum += ${prefix}_pPred[r][k] * ${prefix}_C[m][k];`);
+      lines.push(`                pc[r][m] = sum;`);
+      lines.push(`            }`);
+      lines.push(`        }`);
       lines.push(`        for (uint32_t r = 0U; r < ${xLength}U; ++r) {`);
       lines.push(`            for (uint32_t c = 0U; c < ${yMeasLength}U; ++c) {`);
       lines.push(`                double sum = 0.0;`);
-      lines.push(`                for (uint32_t k = 0U; k < ${xLength}U; ++k) {`);
-      lines.push(`                    for (uint32_t m = 0U; m < ${yMeasLength}U; ++m) {`);
-      lines.push(`                        sum += ${prefix}_pPred[r][k] * ${prefix}_C[m][k] * ${prefix}_Sinv[m][c];`);
-      lines.push(`                    }`);
-      lines.push(`                }`);
+      lines.push(`                for (uint32_t m = 0U; m < ${yMeasLength}U; ++m) sum += pc[r][m] * ${prefix}_Sinv[m][c];`);
       lines.push(`                ${prefix}_K[r][c] = sum;`);
       lines.push(`            }`);
       lines.push(`        }`);
       lines.push(`        for (uint32_t r = 0U; r < ${xLength}U; ++r) {`);
-      lines.push(`            double sum = ${prefix}_xPred[r];`);
+      lines.push(`            double sum = 0.0;`);
       lines.push(`            for (uint32_t k = 0U; k < ${yMeasLength}U; ++k) sum += ${prefix}_K[r][k] * ${prefix}_inn[k];`);
-      lines.push(`            ${prefix}_xHat[r] = sum;`);
+      lines.push(`            ${prefix}_xHat[r] = ${prefix}_xPred[r] + sum;`);
+      lines.push(`        }`);
+      lines.push(`        double ikc[${xLength}][${xLength}];`);
+      lines.push(`        for (uint32_t r = 0U; r < ${xLength}U; ++r) {`);
+      lines.push(`            for (uint32_t k = 0U; k < ${xLength}U; ++k) {`);
+      lines.push(`                double kc = 0.0;`);
+      lines.push(`                for (uint32_t m = 0U; m < ${yMeasLength}U; ++m) kc += ${prefix}_K[r][m] * ${prefix}_C[m][k];`);
+      lines.push(`                ikc[r][k] = (r == k ? 1.0 : 0.0) - kc;`);
+      lines.push(`            }`);
       lines.push(`        }`);
       lines.push(`        for (uint32_t r = 0U; r < ${xLength}U; ++r) {`);
       lines.push(`            for (uint32_t c = 0U; c < ${xLength}U; ++c) {`);
       lines.push(`                double sum = 0.0;`);
-      lines.push(`                for (uint32_t k = 0U; k < ${xLength}U; ++k) {`);
-      lines.push(`                    double ikc_rk = (r == k ? 1.0 : 0.0);`);
-      lines.push(`                    for (uint32_t m = 0U; m < ${yMeasLength}U; ++m) ikc_rk -= ${prefix}_K[r][m] * ${prefix}_C[m][k];`);
-      lines.push(`                    for (uint32_t n_idx = 0U; n_idx < ${xLength}U; ++n_idx) {`);
-      lines.push(`                        double ikc_cn = (c == n_idx ? 1.0 : 0.0);`);
-      lines.push(`                        for (uint32_t m = 0U; m < ${yMeasLength}U; ++m) ikc_cn -= ${prefix}_K[c][m] * ${prefix}_C[m][n_idx];`);
-      lines.push(`                        sum += ikc_rk * ${prefix}_pPred[k][n_idx] * ikc_cn;`);
-      lines.push(`                    }`);
-      lines.push(`                }`);
-      lines.push(`                for (uint32_t k = 0U; k < ${yMeasLength}U; ++k) {`);
-      lines.push(`                    for (uint32_t m = 0U; m < ${yMeasLength}U; ++m) {`);
-      lines.push(`                        sum += ${prefix}_K[r][k] * ${prefix}_R[k][m] * ${prefix}_K[c][m];`);
-      lines.push(`                    }`);
-      lines.push(`                }`);
+      lines.push(`                for (uint32_t k = 0U; k < ${xLength}U; ++k) sum += ikc[r][k] * ${prefix}_pPred[k][c];`);
       lines.push(`                ${prefix}_pHat[r][c] = sum;`);
       lines.push(`            }`);
       lines.push(`        }`);
       lines.push(`    }`);
-
+      // y_hat = C x_hat (the canvas block equation)
+      lines.push(`    for (uint32_t r = 0U; r < ${yMeasLength}U; ++r) {`);
+      lines.push(`        double sum = 0.0;`);
+      lines.push(`        for (uint32_t k = 0U; k < ${xLength}U; ++k) sum += ${prefix}_C[r][k] * ${prefix}_xHat[k];`);
+      lines.push(`        ${prefix}_yHat[r] = sum;`);
+      lines.push(`    }`);
       // Write outputs
       if (xHatId !== undefined) {
         for (let i = 0; i < xLength; i++) {
@@ -3618,8 +3728,9 @@ const renderDiscreteStateUpdates = (
     
     if (operation.type === 'BAND_LIMITED_NOISE' && filterSlot !== undefined) {
       const prevFilter = stateSlotRealExpression(filterSlot, layout, member);
-      const fc = cNumber(scalarParameter(operation, ['fc'], 1));
-      const dt = cNumber(scalarParameter(operation, ['sampleTime', 'dt'], state.xBridges!.solver.stepSeconds));
+      const fc = cNumber(scalarParameter(operation, ['fc'], 100));
+      const noiseDt = Number(scalarParameter(operation, ['sampleTime', 'dt'], state.xBridges!.solver.stepSeconds));
+          const dt = cNumber(noiseDt > 0 ? noiseDt : state.xBridges!.solver.stepSeconds);
       lines.push(`double ${prefix}_fcCoeff = (${dt}) / ((1.0 / (2.0 * 3.14159265358979323846 * (${fc}))) + (${dt}));`);
       lines.push(`double ${prefix}_nextFilter = ${prevFilter} + ${prefix}_fcCoeff * (${prefix}_white - ${prevFilter});`);
       noiseUpdates.push(...renderStateSlotAssignment(state, filterSlot, `${prefix}_nextFilter`, layout, member, `${opCId}_filter_state_update`, layout.errorFields.get(operation.id), operation));
@@ -3951,7 +4062,11 @@ const renderDiscreteStateUpdates = (
           : `(-fabs(${cNumber(scalarParameter(operation, ['fallingLimit'], 1))}))`;
         const rawDt = operation.parameters.sampleTime ?? operation.parameters.dt;
         const parsedDt = typeof rawDt === 'number' ? rawDt : (typeof rawDt === 'string' ? parseFloat(rawDt) : NaN);
-        const dt = cNumber(Number.isFinite(parsedDt) && parsedDt > 0 ? parsedDt : (state.xBridges?.solver?.stepSeconds ?? 0.01));
+        const dtValue = cNumber(Number.isFinite(parsedDt) && parsedDt > 0 ? parsedDt : (state.xBridges?.solver?.stepSeconds ?? 0.01));
+        // D12: with an inherited/continuous sample time the first output is the initial condition (no time elapsed).
+        const dt = operation.parameters.sampleTimeInherited === true
+          ? `((instance->${member}.sim_time == 0.0) ? 0.0 : ${dtValue})`
+          : dtValue;
         const inputId = operation.inputSignalIds[0];
         const inputSignal = inputId === undefined ? undefined : requireSignal(state, inputId);
         if (inputSignal?.shape.kind !== 'scalar' || slot.shape.kind !== 'scalar') {
@@ -4051,6 +4166,10 @@ const continuousOperationSlots = (
   xb: XBSemanticModel,
 ): ContinuousOperationSlot[] => xb.executionOrder.flatMap((operationId, operationIndex) => {
   const operation = xb.operations[operationId];
+  if (operation !== undefined && isContinuousFilter(operation)) {
+    const slotIndex = (operation.state?.slots ?? []).findIndex((slot) => slot.role === 'prev_y');
+    return [{ operation, operationIndex, slot: operation.state!.slots[slotIndex], slotIndex }];
+  }
   if (
     operation === undefined
     || (operation.type !== 'INTEGRATOR_CONTINUOUS' && operation.type !== 'Integrator')
@@ -4113,12 +4232,38 @@ const renderContinuousStateUpdates = (
   const step = cNumber(xb.solver.stepSeconds);
   const baseLines = slots.map((entry) =>
     `    const double ${rkName('xb_rk_base', entry)} = ${stateSlotRealExpression(entry.slot, layout, member)};`);
+  const isFilter = (entry: ContinuousOperationSlot): boolean => entry.slot.role === 'prev_y';
   const derivative = (entry: ContinuousOperationSlot): string => {
     const input = entry.operation.inputSignalIds[0];
+    if (isFilter(entry)) {
+      // dx/dt = (u - x)/tau with x the current (stage) state, tau = 1/(2 pi fc) as in the interpreter.
+      const fc = cNumber(scalarParameter(entry.operation, ['cutoff_frequency', 'cutoffFrequency', 'fc'], 1));
+      const u = input === undefined ? '0.0' : signalRealExpression(state, input, layout, member);
+      return `(((${u}) - (${stateSlotRealExpression(entry.slot, layout, member)})) / (1.0 / (2.0 * 3.14159265358979323846 * (${fc}))))`;
+    }
     return input === undefined
       ? '0.0'
       : signalRealExpression(state, input, layout, member);
   };
+  const filterField = (entry: ContinuousOperationSlot): string =>
+    `instance->${member}.${stateSlotField(entry.slot, layout)}`;
+  const filterOutputs = (only?: string): string[] => slots
+    .filter((entry) => isFilter(entry) && (only === undefined || entry.operation.type === only))
+    .flatMap((entry) => renderTransactionalStateOutputs(
+      state, entry.operation,
+      renderStateOutputs(state, entry.operation, entry.operationIndex, layout, member, null),
+      layout, member,
+    ).map((line) => `    ${line}`));
+  const hasHighPass = slots.some((entry) => isFilter(entry) && entry.operation.type === 'HIGH_PASS_FILTER');
+  const evaluateStage = (): string[] => [
+    ...filterOutputs(),
+    ...renderDirectEvaluation(state, xb, layout, member, true).map((line) => `    ${line}`),
+    // A high-pass output depends on the input of this stage: publish it after the direct pass and propagate once.
+    ...(hasHighPass
+      ? [...filterOutputs('HIGH_PASS_FILTER'),
+        ...renderDirectEvaluation(state, xb, layout, member, true).map((line) => `    ${line}`)]
+      : []),
+  ];
   if (xb.solver.kind === 'euler') {
     const nextLines = slots.map((entry) =>
       `    const double ${rkName('xb_euler_next', entry)} = ${rkName('xb_rk_base', entry)} + ${step} * (${derivative(entry)});`);
@@ -4130,27 +4275,26 @@ const renderContinuousStateUpdates = (
     return [
       ...baseLines,
       ...nextLines,
+      // Output-then-update (D9): the tick publishes the state at t_k, so no post-update output refresh here.
       ...assignLines,
-      ...slots.flatMap((entry) => renderTransactionalStateOutputs(
-        state,
-        entry.operation,
-        renderStateOutputs(
-          state, entry.operation, entry.operationIndex, layout, member, null,
-        ),
-        layout,
-        member,
-      ).map((line) => `    ${line}`)),
-      ...renderDirectEvaluation(state, xb, layout, member, true)
-        .map((line) => `    ${line}`),
     ];
   }
+  const timed = usesSimTime(xb);
+  const timeMember = `instance->${member}.sim_time`;
+  const setStageTime = (offset: string | null): string[] => timed
+    ? [`    ${timeMember} = xb_rk_t0${offset === null ? '' : ` + ${offset}`};`]
+    : [];
   const stage = (
     label: 'k2' | 'k3' | 'k4',
     previous: 'k1' | 'k2' | 'k3',
     scale: string,
+    stageTime: string,
   ): string[] => [
     '    {',
-    ...slots.flatMap((entry) => renderTransactionalStateOutputs(
+    ...setStageTime(stageTime),
+    ...slots.filter((entry) => isFilter(entry)).map((entry) =>
+      `    ${filterField(entry)} = (${numericCType(entry.slot.numericType)})(${rkName('xb_rk_base', entry)} + ${scale} * ${rkName(`xb_rk_${previous}`, entry)});`),
+    ...slots.filter((entry) => !isFilter(entry)).flatMap((entry) => renderTransactionalStateOutputs(
       state,
       entry.operation,
       renderStateOutputs(
@@ -4164,8 +4308,7 @@ const renderContinuousStateUpdates = (
       layout,
       member,
     ).map((line) => `    ${line}`)),
-    ...renderDirectEvaluation(state, xb, layout, member, true)
-      .map((line) => `    ${line}`),
+    ...evaluateStage(),
     ...slots.map((entry) =>
       `    ${rkName(`xb_rk_${label}`, entry)} = ${derivative(entry)};`),
     '    }',
@@ -4182,7 +4325,10 @@ const renderContinuousStateUpdates = (
   const final = transactionalAssignments(slots, finalExpression, 'rk4');
   const refresh = [
     '    {',
-    ...slots.flatMap((entry) => renderTransactionalStateOutputs(
+    // The minor stages moved the filter states; restore the state at t_k before republishing the outputs.
+    ...slots.filter((entry) => isFilter(entry)).map((entry) =>
+      `    ${filterField(entry)} = (${numericCType(entry.slot.numericType)})${rkName('xb_rk_base', entry)};`),
+    ...slots.filter((entry) => !isFilter(entry)).flatMap((entry) => renderTransactionalStateOutputs(
       state,
       entry.operation,
       renderStateOutputs(
@@ -4191,19 +4337,21 @@ const renderContinuousStateUpdates = (
       layout,
       member,
     ).map((line) => `    ${line}`)),
-    ...renderDirectEvaluation(state, xb, layout, member, true)
-      .map((line) => `    ${line}`),
+    ...evaluateStage(),
     '    }',
   ];
   return [
     ...baseLines,
     ...k1,
     ...laterStages,
-    ...stage('k2', 'k1', `${step} * 0.5`),
-    ...stage('k3', 'k2', `${step} * 0.5`),
-    ...stage('k4', 'k3', step),
-    ...final,
+    ...(timed ? [`    const double xb_rk_t0 = ${timeMember};`] : []),
+    ...stage('k2', 'k1', `${step} * 0.5`, `${step} * 0.5`),
+    ...stage('k3', 'k2', `${step} * 0.5`, `${step} * 0.5`),
+    ...stage('k4', 'k3', step, step),
+    ...(timed ? [`    ${timeMember} = xb_rk_t0;`] : []),
+    // Republish the state at t_k (output-then-update, D9), then advance the state to t_(k+1).
     ...refresh,
+    ...final,
   ];
 };
 
@@ -4290,12 +4438,8 @@ const renderSolverSubstep = (
         member,
       )
         .map((line) => `    ${line}`);
-      // Kalman state is advanced at the direct-filter sample cadence. The
-      // generated solver performs two internal filter updates per emitted
-      // trace substep, matching the interpreter's sample schedule.
-      const effectiveOutputs = operation.type === 'KALMAN_FILTER'
-        ? [...outputs, ...outputs]
-        : outputs;
+      // Kalman state is advanced once per scheduled substep, after the inputs of the tick are known.
+      const effectiveOutputs = outputs;
       if (operation.schedule.hold === 'none' || operation.schedule.periodSubsteps <= 1) {
         return effectiveOutputs;
       }

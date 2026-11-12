@@ -126,7 +126,7 @@ export const XBRIDGES_EMBEDDED_DIAGNOSTIC_GUIDANCE: Record<string, string> = {
   XB_CONSTANT_VALUE_OUT_OF_RANGE: 'Error: A Constant value lies outside the range of its integer Output data type (for example uint8 holds 0 to 255). The simulation saturates; generated C refuses it. Enter a value in range or choose a wider type.',
   XB_CONVERSION_DESTINATION_INVALID: 'Error: A data type conversion block has no supported explicit destination type. Select a supported destination data type.',
   XB_CONVERSION_POLICY_INVALID: 'Error: A conversion block has an unsupported rounding or overflow policy. Select one of the offered rounding and overflow methods explicitly.',
-  XB_DELAY_LENGTH_INVALID: 'Error: The Delay delay_length must be a positive integer. Enter an integer of at least 1.',
+  XB_DELAY_LENGTH_INVALID: 'Error: The Delay delay_length must be a non-negative integer (0 passes the input straight through). Enter an integer of at least 0.',
   XB_DELAY_LENGTH_MISSING: 'Error: A Delay block has no delay_length parameter. Enter the number of sample periods to delay.',
   XB_DELAY_STORAGE_LIMIT_EXCEEDED: 'Error: The Delay length exceeds the supported storage limit of 65536 samples. Reduce delay_length.',
   XB_DIMENSION_DYNAMIC: 'Error: A port has no fixed positive integer dimensions, so its storage cannot be sized. Give every port fixed positive dimensions that match its declared shape.',

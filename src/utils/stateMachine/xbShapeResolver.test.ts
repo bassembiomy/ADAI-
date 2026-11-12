@@ -113,7 +113,8 @@ describe('xbShapeResolver', () => {
     expect(result.portShapes.get('demux:out2')).toEqual<SemanticShape>({ kind: 'scalar', dimensions: [], elementCount: 1 });
   });
 
-  it('GEN-XB-VECTOR-001: rejects true scalar source connected directly to VectorAdd', () => {
+  // WP-21 batch F (XBV-094): VectorAdd is registered with a scalar shape, so two scalar operands are valid (the canvas adds them).
+  it('GEN-XB-VECTOR-001: accepts true scalar sources connected directly to VectorAdd (XBV-094)', () => {
     const model: XBPersistedModelV1 = {
       ...createBaseModel(),
       nodes: [
@@ -128,7 +129,7 @@ describe('xbShapeResolver', () => {
     };
 
     const result = resolveGraphShapes(model);
-    expect(result.diagnostics.some((d) => d.code === 'XB_SHAPE_MISMATCH')).toBe(true);
+    expect(result.diagnostics.some((d) => d.code === 'XB_SHAPE_MISMATCH')).toBe(false);
   });
 
   it('GEN-XB-SHAPE-008: rejects incompatible operand dimensions (Vector[2] + Vector[3])', () => {
