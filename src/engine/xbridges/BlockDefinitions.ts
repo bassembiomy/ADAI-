@@ -1,5 +1,5 @@
 // src/engine/xbridges/BlockDefinitions.ts
-import { XBlock, XPort } from './types';
+import { XBlock, XPort, BlockEvalContext } from './types';
 import { VectorUtils } from './VectorUtils';
 import { LOOKUP_FACTORIES, LOOKUP_CATEGORY } from './lookup/lookupBlocks';
 import { BUS_FACTORIES, BUS_CATEGORY } from './bus/busBlocks';
@@ -309,6 +309,115 @@ const ewResult = (ins: any[], f: (vals: any[]) => any, extra?: { diagnostic?: Bl
     throw e;
   }
 };
+/**
+ * Mode of a discontinuous block (Step time reached, saturation region, relay state, switch side, sign ...): decided at
+ * major steps and kept during the minor steps (solver stages) of the following step (Simulink block modes).
+ */
+const heldMode = (ctx: BlockEvalContext | undefined, compute: () => any): any => {
+  if (ctx?.minor && ctx.mode !== undefined) return ctx.mode;
+  const m = compute();
+  ctx?.setMode(m);
+  return m;
+};
+/** Element-wise block whose region (mode) is held in minor steps: `modeOf(vals)` per element, `outOf([...vals, mode])`. */
+const ewHeldResult = (ctx: BlockEvalContext | undefined, ins: any[], modeOf: (vals: any[]) => any, outOf: (vals: any[]) => any): any => {
+  try {
+    const mode = heldMode(ctx, () => ewMap(ins, modeOf));
+    return { outputs: [ewMap([...ins, mode], outOf)] };
+  } catch (e) {
+    if (e instanceof ElementWiseError) return { outputs: [NaN], error: e.message };
+    throw e;
+  }
+};
+/** Zero-crossing values of an element-wise block: `f` returns the signals that change sign at a mode change. */
+const ewCrossings = (ins: any[], f: (vals: any[]) => number[]): number[] => {
+  try {
+    const out: number[] = [];
+    ewMap(ins, (v) => { out.push(...f(v)); return 0; });
+    return out.map((x) => (Number.isFinite(x) ? x : 0));
+  } catch { return []; }
+};
+
+/** SVPWM gate generator: symmetric triangle carrier t in [0, Ts/2] and the per-phase thresholds of the sector. */
+const svpwmGateCompare = (ins: any[], p: any, time: number): { t: number; da: number; db: number; dc: number } => {
+  const Ts = Number(p.Ts);
+  const sector = Number(ins[0]);
+  const T1 = Number(ins[1]);
+  const T2 = Number(ins[2]);
+  const T0 = Number(ins[3]);
+  const tRel = time % Ts;
+  const t = tRel > Ts / 2 ? Ts - tRel : tRel;
+  let da = 0, db = 0, dc = 0;
+  const t0_4 = T0 / 4;
+  const t1_2 = T1 / 2;
+  const t2_2 = T2 / 2;
+  switch (sector) {
+    case 1: da = t0_4; db = t0_4 + t1_2; dc = t0_4 + t1_2 + t2_2; break;
+    case 2: da = t0_4 + t2_2; db = t0_4; dc = t0_4 + t1_2 + t2_2; break;
+    case 3: da = t0_4 + t1_2 + t2_2; db = t0_4; dc = t0_4 + t1_2; break;
+    case 4: da = t0_4 + t1_2 + t2_2; db = t0_4 + t2_2; dc = t0_4; break;
+    case 5: da = t0_4 + t1_2; db = t0_4 + t1_2 + t2_2; dc = t0_4; break;
+    case 6: da = t0_4; db = t0_4 + t1_2 + t2_2; dc = t0_4 + t2_2; break;
+  }
+  return { t, da, db, dc };
+};
+
+/** PWM Generator: carrier phase accumulated from the committed state (pure; the caller commits the returned phase). */
+const pwmEvaluate = (ins: any[], p: any, state: any, time: number): { duty: number; carrier: number; phase: number } => {
+  const freq = Number(p.frequency) || 50;
+  const duty = Math.max(0, Math.min(1, Number(ins[0])));
+  let phase = (state && state.phase !== undefined) ? Number(state.phase) : 0;
+  // Only advance the phase when time moved on from the committed state (stage evaluations of one step do not stack).
+  const isNewStep = !state || state.lastTime < 0 || time > state.lastTime + 1e-12;
+  if (isNewStep) {
+    if (state && state.lastTime >= 0) {
+      const dt = time - state.lastTime;
+      const fracCycles = (dt * freq) % 1;
+      if (fracCycles > 1e-12) {
+        phase = (phase + fracCycles) % 1;
+      } else {
+        // dt is an exact integer multiple of the period: golden-ratio step so consecutive samples land at different phases
+        const PHI = 0.6180339887498949; // (sqrt(5)-1)/2
+        phase = (phase + PHI) % 1;
+      }
+    } else {
+      phase = (time * freq) % 1; // very first call: seed the phase from absolute time
+    }
+  }
+  let carrier: number;
+  switch (p.carrierType) {
+    case 'sawtooth': carrier = phase; break;
+    case 'inv_sawtooth': carrier = 1 - phase; break;
+    case 'sine': carrier = (Math.sin(2 * Math.PI * phase) + 1) / 2; break;
+    case 'square': carrier = phase < 0.5 ? 0.25 : 0.75; break;
+    case 'triangle':
+    default: carrier = phase < 0.5 ? 2 * phase : 2 * (1 - phase); break;
+  }
+  return { duty, carrier, phase };
+};
+/** Three-phase PWM: normalized references and the carrier phase from the committed state (pure). */
+const threePhasePwmEvaluate = (ins: any[], p: any, state: any, time: number): { refs: number[]; phase: number } => {
+  const freq = Number(p.frequency);
+  let phase: number;
+  if (state && state.lastTime >= 0) {
+    phase = ((state.phase + (time - state.lastTime) * freq) % 1 + 1) % 1;
+  } else {
+    phase = (time * freq) % 1;
+  }
+  let refs = ins.map(Number);
+  if (p.method === 'Saddle' || p.method === 'SVPWM') {
+    const vOffset = (Math.max(...refs) + Math.min(...refs)) / 2;
+    refs = refs.map(v => v - vOffset);
+  }
+  return { refs: refs.map(v => Math.max(0, Math.min(1, (v + 1) / 2))), phase }; // map -1..1 to 0..1
+};
+
+/** Deep copy of a block state so that execute works on its own copy (never mutates the committed state). */
+const cloneState = (s: any): any => {
+  if (s === null || typeof s !== 'object') return s;
+  try { return structuredClone(s); } catch { return JSON.parse(JSON.stringify(s)); }
+};
+
 /** Expands a scalar initial condition over the structure (vector, matrix or bus) of `like`. */
 const expandLike = (ic: any, like: any): any => {
   if (Array.isArray(like)) return like.map((x) => expandLike(ic, x));
@@ -1034,7 +1143,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
   }),
 
   'ROBOT_VACUUM_ODOMETRY_SENSOR': (id, params) => ({
-    id, type: 'ROBOT_VACUUM_ODOMETRY_SENSOR', params: { wheel_radius: params.wheel_radius ?? 0.033, wheel_separation: params.wheel_separation ?? 0.16, encoder_cpr: params.encoder_cpr ?? 360 },
+    id, type: 'ROBOT_VACUUM_ODOMETRY_SENSOR', directFeedthrough: true, params: { wheel_radius: params.wheel_radius ?? 0.033, wheel_separation: params.wheel_separation ?? 0.16, encoder_cpr: params.encoder_cpr ?? 360 },
     inputs: [createPort('enc_L', 'Enc L', 'input'), createPort('enc_R', 'Enc R', 'input')],
     outputs: [createPort('x_odom', 'X_odom', 'output'), createPort('y_odom', 'Y_odom', 'output'), createPort('theta_odom', 'θ_odom', 'output')],
     icon: 'graduation-cap',
@@ -1082,7 +1191,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
   }),
 
   'ROBOT_VACUUM_DUSTBIN_SENSOR': (id, params) => ({
-    id, type: 'ROBOT_VACUUM_DUSTBIN_SENSOR', params: {},
+    id, type: 'ROBOT_VACUUM_DUSTBIN_SENSOR',  params: {},
     isStateful: true,
     state: { dustPct: 0 },
     // Accepts either a grid OR runs standalone with time-based sim
@@ -1090,6 +1199,8 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     outputs: [createPort('dust_level', 'Dust %', 'output')],
     icon: 'graduation-cap',
     execute: (ins, p, state, time) => {
+      state = cloneState(state); // execute never mutates the committed state
+
       const grid = ins[0] as any;
       // If we get an actual 2D grid, compute fill %; otherwise simulate dust accumulation
       if (grid && Array.isArray(grid) && Array.isArray(grid[0])) {
@@ -1126,7 +1237,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
   }),
 
   'ROBOT_VACUUM_SENSOR_FUSION_EKF': (id, params) => ({
-    id, type: 'ROBOT_VACUUM_SENSOR_FUSION_EKF', params: { filter_gain: params.filter_gain ?? 0.06 },
+    id, type: 'ROBOT_VACUUM_SENSOR_FUSION_EKF', directFeedthrough: true, params: { filter_gain: params.filter_gain ?? 0.06 },
     inputs: [
       createPort('x_true', 'X_true', 'input'),
       createPort('y_true', 'Y_true', 'input'),
@@ -1152,6 +1263,8 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       prev_theta_odom: null as number | null
     },
     execute: (ins, p, state) => {
+      state = cloneState(state); // execute never mutates the committed state
+
       let xt: number, yt: number, tt: number;
       const poseInput = ins[0];
       if (Array.isArray(poseInput)) {
@@ -1374,7 +1487,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
   }),
 
   'ROBOT_VACUUM_WAYPOINT_GEN': (id, params) => ({
-    id, type: 'ROBOT_VACUUM_WAYPOINT_GEN', params: {},
+    id, type: 'ROBOT_VACUUM_WAYPOINT_GEN', directFeedthrough: true, params: {},
     isStateful: true,
     state: {
       phase: 'INIT', // INIT, MAPPING, CLEANING, EXITING, DOCKING
@@ -2246,13 +2359,14 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     outputs: [createPort('out', 'Out', 'output', params.initialValue !== undefined ? params.initialValue : 0)],
     equation: 'y = (t < stepTime) ? initialValue : finalValue',
     description: 'Output transitions from initialValue to finalValue at stepTime.',
-    execute: (ins, p, state, time) => {
+    execute: (ins, p, state, time, ctx) => {
       const stepTime = Number(p.stepTime ?? 1);
       const initVal = VectorUtils.parseMatlabArray(p.initialValue !== undefined ? p.initialValue : 0);
       const finVal = VectorUtils.parseMatlabArray(p.finalValue !== undefined ? p.finalValue : 1);
 
-      const val = (time < stepTime) ? initVal : finVal;
-      return { outputs: [val] };
+      // Simulink: the Step mode is decided at major steps; minor steps keep the major step's output.
+      const after = heldMode(ctx, () => !(time < stepTime));
+      return { outputs: [after ? finVal : initVal] };
     },
     ZeroCrossingFn: (ins, p, state, time) => {
       const stepTime = Number(p.stepTime ?? 1);
@@ -2394,7 +2508,8 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     id, type: 'Abs', params: {},
     inputs: [createPort('in', 'In', 'input')],
     outputs: [createPort('out', 'Out', 'output')],
-    execute: (ins) => ({ outputs: [VectorUtils.applyUnaryElementWise(ins[0], 'abs')] })
+    execute: (ins) => ({ outputs: [VectorUtils.applyUnaryElementWise(ins[0], 'abs')] }),
+    ZeroCrossingFn: (ins) => ewCrossings([ins[0]], (v) => [Number(v[0])])
   }),
 
   // --- Reductions ---
@@ -2606,11 +2721,11 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     icon: 'layers',
     equation: 'y(t) = ∫ u(τ) dτ + y(0)',
     execute: (ins, p, state, time) => {
-      // Output is simply the current state
-      return { outputs: [state] };
+      // Output is the current state; a scalar initial condition is expanded over a vector input (Simulink)
+      return { outputs: [typeof state === 'number' && Array.isArray(ins[0]) ? expandLike(state, ins[0]) : state] };
     },
     evaluateDerivatives: (ins) => {
-      // The derivative of an integrator is exactly its input
+      // The derivative of an integrator is exactly its input (the engine expands a scalar state to its shape)
       return ins[0];
     }
   }),
@@ -2768,69 +2883,13 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     outputs: [createPort('pwm', 'PWM', 'output', 0, 'right', 'logical')],
     state: { phase: 0.0, lastTime: -1.0 },
     execute: (ins, p, state, time) => {
-      const freq = Number(p.frequency) || 50;
-      const duty = Math.max(0, Math.min(1, Number(ins[0])));
-
-      console.log(`[PWM execute] ID: ${id}, carrierType: ${p.carrierType}, freq: ${freq}, time: ${time.toFixed(4)}, duty: ${duty}`);
-
-      let phase = (state && state.phase !== undefined) ? Number(state.phase) : 0;
-
-      // IDEMPOTENCY: only advance phase when this is a new time step.
-      // RK4 calls execute multiple times per step (at t, t+dt/2, t+dt).
-      // We only want to advance phase once per actual solver step (when time > lastTime).
-      const isNewStep = !state || state.lastTime < 0 || time > state.lastTime + 1e-12;
-
-      if (isNewStep) {
-        if (state && state.lastTime >= 0) {
-          const dt = time - state.lastTime;
-          const cycles = dt * freq;
-          const fracCycles = cycles % 1;
-
-          if (fracCycles > 1e-12) {
-            // Normal: advance by fractional part of elapsed cycles
-            phase = (phase + fracCycles) % 1;
-          } else {
-            // dt is an exact integer multiple of the period — use golden ratio step
-            // so consecutive samples land at different phases in [0,1)
-            const PHI = 0.6180339887498949; // (√5−1)/2
-            phase = (phase + PHI) % 1;
-          }
-        } else {
-          // Very first call: seed phase from absolute time
-          phase = (time * freq) % 1;
-        }
-
-        if (state) { state.phase = phase; state.lastTime = time; }
-      }
-      // For repeated calls at same time (RK4 sub-stages): reuse current phase
-
-      // Compute carrier from phase — 5 types matching Simulink PWM Generator
-      let carrier: number;
-      switch (p.carrierType) {
-        case 'sawtooth':
-          // Leading edge: ramps 0→1 over the period
-          carrier = phase;
-          break;
-        case 'inv_sawtooth':
-          // Trailing edge: ramps 1→0 over the period
-          carrier = 1 - phase;
-          break;
-        case 'sine':
-          // Sine wave carrier: sin mapped from [-1,1] to [0,1]
-          carrier = (Math.sin(2 * Math.PI * phase) + 1) / 2;
-          break;
-        case 'square':
-          // Square wave carrier: 50% duty square, creates bang-bang switching
-          carrier = phase < 0.5 ? 0.25 : 0.75;
-          break;
-        case 'triangle':
-        default:
-          // Symmetric triangle: 0→1 (first half), 1→0 (second half)
-          carrier = phase < 0.5 ? 2 * phase : 2 * (1 - phase);
-          break;
-      }
-
-      return { outputs: [duty > carrier ? 1 : 0] };
+      const { duty, carrier, phase } = pwmEvaluate(ins, p, state, time);
+      // The phase advances in nextState (applied once per major step); execute never changes its state.
+      return { outputs: [duty > carrier ? 1 : 0], nextState: { phase, lastTime: time } };
+    },
+    ZeroCrossingFn: (ins, p, state, time) => {
+      const { duty, carrier } = pwmEvaluate(ins, p, state, time);
+      return [duty - carrier];
     },
     icon: 'zap',
     equation: 'PWM = Duty > Carrier(phase)'
@@ -2852,26 +2911,12 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     ],
     state: { phase: 0, lastTime: -1 },
     execute: (ins, p, state, time) => {
-      const freq = Number(p.frequency);
-
-      // Accumulate phase to avoid step-size aliasing (same fix as PWM_GENERATOR)
-      let phase: number;
-      if (state && state.lastTime >= 0) {
-        const dt = time - state.lastTime;
-        phase = ((state.phase + dt * freq) % 1 + 1) % 1;
-      } else {
-        phase = (time * freq) % 1;
-      }
-      if (state) { state.phase = phase; state.lastTime = time; }
-
-      let refs = ins.map(Number);
-      if (p.method === 'Saddle' || p.method === 'SVPWM') {
-        const vOffset = (Math.max(...refs) + Math.min(...refs)) / 2;
-        refs = refs.map(v => v - vOffset);
-      }
-
-      const normalizedRefs = refs.map(v => Math.max(0, Math.min(1, (v + 1) / 2))); // Map -1..1 to 0..1
-      return { outputs: normalizedRefs.map(ref => (ref > phase ? 1 : 0)) };
+      const { refs, phase } = threePhasePwmEvaluate(ins, p, state, time);
+      return { outputs: refs.map(ref => (ref > phase ? 1 : 0)), nextState: { phase, lastTime: time } };
+    },
+    ZeroCrossingFn: (ins, p, state, time) => {
+      const { refs, phase } = threePhasePwmEvaluate(ins, p, state, time);
+      return refs.map(r => r - phase);
     }
   }),
 
@@ -2912,7 +2957,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
   }),
 
   'SENSORLESS_SIX_STEP': (id, params) => ({
-    id, type: 'SENSORLESS_SIX_STEP',
+    id, type: 'SENSORLESS_SIX_STEP', directFeedthrough: true,
     params: { threshold: params.threshold ?? 0.1 },
     isStateful: true,
     inputs: [
@@ -3109,7 +3154,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
   }),
 
   'FIELD_ORIENTED_CONTROL': (id, params) => ({
-    id, type: 'FIELD_ORIENTED_CONTROL',
+    id, type: 'FIELD_ORIENTED_CONTROL', directFeedthrough: true,
     params: {
       Kp: params?.Kp !== undefined ? Number(params.Kp) : 1,
       Ki: params?.Ki !== undefined ? Number(params.Ki) : 10
@@ -3290,7 +3335,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     const iMax = params.iMax !== undefined ? Number(params.iMax) : 100;
 
     return {
-      id, type: 'CURRENT_CONTROLLER_DQ',
+      id, type: 'CURRENT_CONTROLLER_DQ', directFeedthrough: true,
       params: { Kp_d, Ki_d, Kp_q, Ki_q, iMax },
       isStateful: true,
       inputs: [
@@ -3475,7 +3520,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
   },
 
   'SPEED_CONTROLLER': (id, params) => ({
-    id, type: 'SPEED_CONTROLLER',
+    id, type: 'SPEED_CONTROLLER', directFeedthrough: true,
     params: { Kp: params.Kp ?? 0.5, Ki: params.Ki ?? 5, maxIq: params.maxIq ?? 10 },
     isStateful: true,
     inputs: [
@@ -3512,7 +3557,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
   }),
 
   'ROTOR_POSITION_ESTIMATOR': (id, params) => ({
-    id, type: 'ROTOR_POSITION_ESTIMATOR',
+    id, type: 'ROTOR_POSITION_ESTIMATOR', directFeedthrough: true,
     params: {
       method: params.method || 'Sensorless_SMO',
       Rs: params.Rs ?? 0.5,
@@ -3691,7 +3736,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
   }),
 
   'SVPWM_GATE_GENERATOR': (id, params) => ({
-    id, type: 'SVPWM_GATE_GENERATOR',
+    id, type: 'SVPWM_GATE_GENERATOR', directFeedthrough: true,
     params: { Ts: params.Ts ?? 0.0001 },
     isStateful: true,
     inputs: [
@@ -3707,47 +3752,13 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     ],
     state: { lastTime: 0 },
     execute: (ins, p, state, time) => {
-      const Ts = Number(p.Ts);
-      const sector = Number(ins[0]);
-      const T1 = Number(ins[1]);
-      const T2 = Number(ins[2]);
-      const T0 = Number(ins[3]);
-
-      const tRel = time % Ts;
-      const tHalf = Ts / 2;
-
-      // Symmetrical PWM: 0 -> Ts/2 -> Ts
-      // For first half: 0 -> Ts/2
-      const t = tRel > tHalf ? Ts - tRel : tRel;
-
-      // Pulse widths for each phase (normalized to 0..Ts/2)
-      let da = 0, db = 0, dc = 0;
-
-      // Timing calculation based on sector (Standard Symmetrical pattern)
-      const t0_4 = T0 / 4;
-      const t1_2 = T1 / 2;
-      const t2_2 = T2 / 2;
-
-      switch (sector) {
-        case 1: da = t0_4; db = t0_4 + t1_2; dc = t0_4 + t1_2 + t2_2; break;
-        case 2: da = t0_4 + t2_2; db = t0_4; dc = t0_4 + t1_2 + t2_2; break;
-        case 3: da = t0_4 + t1_2 + t2_2; db = t0_4; dc = t0_4 + t1_2; break;
-        case 4: da = t0_4 + t1_2 + t2_2; db = t0_4 + t2_2; dc = t0_4; break;
-        case 5: da = t0_4 + t1_2; db = t0_4 + t1_2 + t2_2; dc = t0_4; break;
-        case 6: da = t0_4; db = t0_4 + t1_2 + t2_2; dc = t0_4 + t2_2; break;
-      }
-
-      // Gate = 1 if t > threshold (comparing with triangle carrier)
-      // Actually, standard SVPWM centers the pulses.
-      // High pulse is between threshold and tHalf.
-      return {
-        outputs: [
-          t > da ? 1 : 0,
-          t > db ? 1 : 0,
-          t > dc ? 1 : 0
-        ],
-        nextState: { lastTime: time }
-      };
+      const { t, da, db, dc } = svpwmGateCompare(ins, p, time);
+      // Gate = 1 if the triangle carrier t is above the phase threshold (centered pulses).
+      return { outputs: [t > da ? 1 : 0, t > db ? 1 : 0, t > dc ? 1 : 0], nextState: { lastTime: time } };
+    },
+    ZeroCrossingFn: (ins, p, state, time) => {
+      const { t, da, db, dc } = svpwmGateCompare(ins, p, time);
+      return [t - da, t - db, t - dc];
     }
   }),
 
@@ -3771,7 +3782,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
   }),
 
   'SVPWM_MODULATOR': (id, params) => ({
-    id, type: 'SVPWM_MODULATOR',
+    id, type: 'SVPWM_MODULATOR', directFeedthrough: true,
     params: { Ts: params.Ts ?? 0.0001, Vdc: params.Vdc ?? 400 },
     isStateful: true,
     inputs: [
@@ -3841,8 +3852,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     // A vector input integrates element-wise into a vector state: the derivative is keyed by the state field.
     evaluateDerivatives: (ins, p, state) => {
       if (!Array.isArray(ins[0])) return [Number(ins[0])];
-      // The state is still the scalar IC: expand it once over the input before the solver integrates it.
-      if (typeof state?.y === 'number') state.y = expandLike(state.y, ins[0]);
+      // The state is still the scalar IC: the engine expands it over the derivative's shape (no in-place change here).
       return { y: ins[0] };
     }
   }),
@@ -3974,22 +3984,30 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     icon: 'activity',
     equation: 'y = (ctrl >= th) ? u1 : u2',
     description: 'Passes either the first or second input based on whether a control signal meets a threshold criteria.',
-    execute: (ins, p) => {
+    execute: (ins, p, _s, _t, ctx) => {
       const u1 = ins[0];
       const u2 = ins[1];
       const ctrl = Number(ins[2]);
       const th = Number(p.threshold);
-      let pass = false;
-      switch (p.criteria) {
-        case '>': pass = ctrl > th; break;
-        case '<': pass = ctrl < th; break;
-        case '>=': pass = ctrl >= th; break;
-        case '<=': pass = ctrl <= th; break;
-        case '~=0': pass = ctrl !== 0; break; // Simulink "u2 ~= 0" (NaN ~= 0 is true as in MATLAB)
-        default:
-          return { outputs: [NaN], error: `Switch criterion '${String(p.criteria)}' is not supported.` };
+      if (!['>', '<', '>=', '<=', '~=0'].includes(p.criteria)) {
+        return { outputs: [NaN], error: `Switch criterion '${String(p.criteria)}' is not supported.` };
       }
+      // The control decision is made at major steps and held in minor steps (Simulink Switch mode); data passes through.
+      const pass = heldMode(ctx, () => {
+        switch (p.criteria) {
+          case '>': return ctrl > th;
+          case '<': return ctrl < th;
+          case '>=': return ctrl >= th;
+          case '<=': return ctrl <= th;
+          default: return ctrl !== 0; // Simulink "u2 ~= 0" (NaN ~= 0 is true as in MATLAB)
+        }
+      });
       return { outputs: [pass ? u1 : u2] };
+    },
+    ZeroCrossingFn: (ins, p) => {
+      const ctrl = Number(ins[2]);
+      if (!Number.isFinite(ctrl)) return [];
+      return [p.criteria === '~=0' ? ctrl : ctrl - Number(p.threshold)];
     }
   }),
 
@@ -4426,7 +4444,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     ];
 
     const block: XBlock = {
-      id, type: 'PID_CONTROLLER',
+      id, type: 'PID_CONTROLLER', directFeedthrough: true,
       params: { mode, Kp, Ki, Kd, N, beta, gamma, min: minVal, max: maxVal, method, sampleTime },
       isStateful: true,
       inputs,
@@ -4596,23 +4614,23 @@ return block;
         nextState: { x, prevReset }
       };
     },
-    evaluateDerivatives: (ins, p, state) => {
+    // Limited integrator: the state is projected onto [lower, upper] at every major step (execute's nextState).
+    projectsState: limit,
+    evaluateDerivatives: (ins, p, state, _time, ctx) => {
       // Scalars, vectors and matrices integrate element-wise (state, input and limits).
       // An unconnected input is 0; a NaN element propagates into the derivative and the state (never zeroed).
+      // A scalar IC over a vector input is expanded by the engine (the state is never modified here).
       const asInput = (e: any): any => (Array.isArray(e) ? e.map(asInput) : (e === undefined || e === null ? 0 : Number(e)));
-      if (typeof state.x === 'number' && Array.isArray(ins[0])) state.x = expandLike(state.x, ins[0]); // scalar IC over a vector input
-      const xs = Array.isArray(state.x) ? state.x : Number(state.x ?? 0);
       const us = asInput(ins[0]);
-      return {
-        x: ewMap([us, xs, p.lowerLimit, p.upperLimit], (v) => {
-          const [u, x, lo, hi] = v;
-          if (p.limitOutput) {
-            if (x >= hi && u > 0) return 0;
-            if (x <= lo && u < 0) return 0;
-          }
-          return u;
-        })
-      };
+      const xs = Array.isArray(state.x) ? state.x : (typeof state.x === 'number' && Array.isArray(us) ? expandLike(state.x, us) : Number(state.x ?? 0));
+      if (!p.limitOutput) return { x: ewMap([us, xs, p.lowerLimit, p.upperLimit], (v) => v[0]) };
+      // Saturation mode (-1 lower, 0 free, +1 upper) is decided at major steps and held in minor steps: while saturated
+      // the derivative is zero (Simulink limited integrator).
+      const mode = heldMode(ctx, () => ewMap([us, xs, p.lowerLimit, p.upperLimit], (v) => {
+        const [u, x, lo, hi] = v;
+        return x >= hi && u > 0 ? 1 : (x <= lo && u < 0 ? -1 : 0);
+      }));
+      return { x: ewMap([us, mode], (v) => (v[1] !== 0 ? 0 : v[0])) };
     }
   };
 },
@@ -4670,13 +4688,18 @@ return block;
           params: { lowerLimit, upperLimit },
           inputs: [createPort('u', 'u', 'input')],
           outputs: [createPort('y', 'y', 'output')],
-          execute: (ins: any[], p: any) => {
-            // Element-wise for vector or matrix inputs, with scalar or vector limits.
-            return ewResult([ins[0], p.lowerLimit, p.upperLimit], (v) => {
-              const u = Number(v[0]);
-              return Number.isNaN(u) ? NaN : Math.max(Number(v[1]), Math.min(Number(v[2]), u));
-            });
-          }
+          execute: (ins: any[], p: any, _s: any, _t: any, ctx?: BlockEvalContext) => {
+            // Element-wise for vector or matrix inputs, with scalar or vector limits. The region (upper limit, linear,
+            // lower limit) is decided at major steps and held during minor steps (Simulink Saturation block modes).
+            return ewHeldResult(ctx, [ins[0], p.lowerLimit, p.upperLimit],
+              (v) => { const u = Number(v[0]); return u >= Number(v[2]) ? 1 : (u <= Number(v[1]) ? -1 : 0); },
+              (v) => {
+                const u = Number(v[0]);
+                if (Number.isNaN(u)) return NaN;
+                return v[3] > 0 ? Number(v[2]) : (v[3] < 0 ? Number(v[1]) : u);
+              });
+          },
+          ZeroCrossingFn: (ins: any[], p: any) => ewCrossings([ins[0], p.lowerLimit, p.upperLimit], (v) => [Number(v[0]) - Number(v[2]), Number(v[0]) - Number(v[1])])
         };
       },
 
@@ -4688,11 +4711,17 @@ return block;
           params: { lowerLimit, upperLimit },
           inputs: [createPort('u', 'u', 'input')],
           outputs: [createPort('y', 'y', 'output')],
-          execute: (ins: any[], p: any) => {
+          execute: (ins: any[], p: any, _s: any, _t: any, ctx?: BlockEvalContext) => {
             const u = Number(ins[0]);
             if (Number.isNaN(u)) return { outputs: [NaN] };
-            const y = u > p.upperLimit ? (u - p.upperLimit) : (u < p.lowerLimit ? (u - p.lowerLimit) : 0);
+            // Region (above, inside, below the dead zone) is decided at major steps and held in minor steps.
+            const region = heldMode(ctx, () => (u > p.upperLimit ? 1 : (u < p.lowerLimit ? -1 : 0)));
+            const y = region > 0 ? (u - p.upperLimit) : (region < 0 ? (u - p.lowerLimit) : 0);
             return { outputs: [y] };
+          },
+          ZeroCrossingFn: (ins: any[], p: any) => {
+            const u = Number(ins[0]);
+            return Number.isFinite(u) ? [u - Number(p.upperLimit), u - Number(p.lowerLimit)] : [];
           }
         };
       },
@@ -4705,6 +4734,7 @@ return block;
         return {
           id, type: 'RATE_LIMITER',
           isStateful: true,
+          directFeedthrough: true, // y depends on the current u
           params: { risingSlewRate, fallingSlewRate, initialCondition, sampleTime },
           inputs: [createPort('u', 'u', 'input')],
           outputs: [createPort('y', 'y', 'output')],
@@ -4731,6 +4761,7 @@ return block;
                   'RELAY': (id, params) => ({
               id, type: 'RELAY',
               isStateful: true,
+              directFeedthrough: true, // y depends on the current u (hysteresis state only decides between the thresholds)
               params: {
                 switchOn: params.switchOn ?? 1,
                 switchOff: params.switchOff ?? 0,
@@ -4741,17 +4772,22 @@ return block;
               inputs: [createPort('u', 'u', 'input')],
               outputs: [createPort('y', 'y', 'output')],
               state: { current_on: Boolean(params.initialState) },
-              execute: (ins: any[], p: any, state: any) => {
+              execute: (ins: any[], p: any, state: any, _t: any, ctx?: BlockEvalContext) => {
                 const u = Number(ins[0]);
-                const current_on = u >= p.switchOn || (state.current_on && u > p.switchOff);
+                // The relay state is decided at major steps and held in minor steps.
+                const current_on = heldMode(ctx, () => u >= p.switchOn || (Boolean(state.current_on) && u > p.switchOff));
                 return { outputs: [current_on ? Number(p.onValue) : Number(p.offValue)], nextState: { current_on } };
+              },
+              ZeroCrossingFn: (ins: any[], p: any, state: any) => {
+                const u = Number(ins[0]);
+                return Number.isFinite(u) ? [u - Number(p.switchOn), u - Number(p.switchOff)] : [];
               }
             }),
 
               'DERIVATIVE': (id, params) => {
                 const tau = numParam(params.tau, 0.01);
                 return {
-                  id, type: 'DERIVATIVE',
+                  id, type: 'DERIVATIVE', directFeedthrough: true,
                   params: { tau },
                   isStateful: true,
                   inputs: [createPort('u', 'u', 'input')],
@@ -5066,7 +5102,7 @@ return block;
                             ];
 
                             const block: XBlock = {
-                              id, type: 'PID_BASIC',
+                              id, type: 'PID_BASIC', directFeedthrough: true,
                               params: { mode, Kp, Ki, Kd, N, min: minVal, max: maxVal, method, sampleTime },
                               icon: 'settings-2',
                               equation: 'u = PI + D',
@@ -5262,7 +5298,7 @@ return block;
                                       const fc = Number(params.fc) || 10;
                                       const sampleTime = params.sampleTime !== undefined ? Number(params.sampleTime) : -1;
                                       const block: XBlock = {
-                                        id, type: 'HIGH_PASS_FILTER',
+                                        id, type: 'HIGH_PASS_FILTER', directFeedthrough: true,
                                         params: { fc, sampleTime },
                                         isStateful: true,
                                         inputs: [createPort('u', 'u', 'input')],
@@ -5296,7 +5332,7 @@ return block;
                                     },
 
                                       'MOVING_AVERAGE': (id, params) => ({
-                                        id, type: 'MOVING_AVERAGE',
+                                        id, type: 'MOVING_AVERAGE', directFeedthrough: true,
                                         params: { window_size: params.window_size || 10 },
                                         icon: 'database',
                                         equation: 'y(k) = (1/N) * Σ u(k-i)',
@@ -5317,7 +5353,7 @@ return block;
                                       }),
 
                                         'KALMAN_FILTER': (id, params) => ({
-                                          id, type: 'KALMAN_FILTER',
+                                          id, type: 'KALMAN_FILTER', directFeedthrough: true,
                                           params: {
                                             A: params.A || [[1, 0.01], [0, 1]],
                                             B: params.B || [[0.00005], [0.01]],
@@ -5442,7 +5478,7 @@ return block;
                                             };
 
                                             return {
-                                              id, type: 'EXTENDED_KALMAN_FILTER',
+                                              id, type: 'EXTENDED_KALMAN_FILTER', directFeedthrough: true,
                                               params: {
                                                 f: params.f || ["x1 + 0.01 * x2 + 0.00005 * u1", "x2 + 0.01 * u1"],
                                                 h: params.h || ["x1"],
@@ -5837,7 +5873,7 @@ return block;
                                                     }),
 
                                                       'IM_FOC_CONTROL': (id: string, params: any) => ({
-                                                        id, type: 'IM_FOC_CONTROL',
+                                                        id, type: 'IM_FOC_CONTROL', directFeedthrough: true,
                                                         params: {
                                                           Kp_speed: params.Kp_speed !== undefined ? Number(params.Kp_speed) : 2,
                                                           Ki_speed: params.Ki_speed !== undefined ? Number(params.Ki_speed) : 20,
@@ -5962,7 +5998,7 @@ return block;
                                                           }),
 
                                                             'FIELD_WEAKENING': (id: string, params: any) => ({
-                                                              id, type: 'FIELD_WEAKENING',
+                                                              id, type: 'FIELD_WEAKENING', directFeedthrough: true,
                                                               params: {
                                                                 v_max: params.v_max ?? 300,
                                                                 Kp: params.Kp ?? 0.1,
@@ -6114,7 +6150,7 @@ return block;
                                                                     const pid = BLOCK_LIBRARY['PID_CONTROLLER'](id + '_p', params);
 
                                                                     return {
-                                                                      id, type: 'AC_MOTOR_PID_CONTROL',
+                                                                      id, type: 'AC_MOTOR_PID_CONTROL', directFeedthrough: true,
                                                                       params: {
                                                                         Kp: params.Kp ?? 2.5, Ki: params.Ki ?? 1.2, Kd: params.Kd ?? 0.1,
                                                                         w_ref: params.w_ref ?? 157,
@@ -6194,7 +6230,7 @@ return block;
                                                                   },
 
                                                                     'LMS_ADAPTIVE_FILTER': (id: string, params: any) => ({
-                                                                      id, type: 'LMS_ADAPTIVE_FILTER',
+                                                                      id, type: 'LMS_ADAPTIVE_FILTER', directFeedthrough: true,
                                                                       params: { lr: params.lr ?? 0.05 },
                                                                       isStateful: true,
                                                                       inputs: [
@@ -6235,7 +6271,7 @@ return block;
                                                                     }),
 
                                                                       'NEURAL_NEURON_LEARNING': (id: string, params: any) => ({
-                                                                        id, type: 'NEURAL_NEURON_LEARNING',
+                                                                        id, type: 'NEURAL_NEURON_LEARNING', directFeedthrough: true,
                                                                         params: { lr: params.lr ?? 0.1, initW1: params.initW1 ?? 0.5, initW2: params.initW2 ?? -0.5, initBias: params.initBias || 0.0 },
                                                                         isStateful: true,
                                                                         inputs: [
@@ -6424,7 +6460,7 @@ return block;
                                                                             const sampleTime = params.sampleTime !== undefined ? Number(params.sampleTime) : 0.1;
 
                                                                             return {
-                                                                              id, type: 'AIR_FRYER_LEARNING_MODEL',
+                                                                              id, type: 'AIR_FRYER_LEARNING_MODEL', directFeedthrough: true,
                                                                               params: {
                                                                                 K_h, tau_h, K_f, tau_f, K_c, tau_c, theta, tau_s,
                                                                                 K_evap, K_loss, T_ambient, learning_rate, sampleTime
@@ -6701,6 +6737,8 @@ return block;
                                                                                 icon: 'graduation-cap',
                                                                                 description: 'Simulates CAN/UART message passing with protocol latency and random packet drop rate.',
                                                                                 execute: (ins: any[], p: any, state: any, time: number) => {
+      state = cloneState(state); // execute never mutates the committed state
+
                                                                                   const latency_ms = Number(p.latency_ms ?? 50.0);
                                                                                   const packet_loss_rate = Number(p.packet_loss_rate ?? 0.05);
 
@@ -6749,7 +6787,7 @@ return block;
                                                                               }),
 
                                                                                 'ROBOT_VACUUM_BOUSTROPHEDON_SWEEP': (id: string, params: any) => ({
-                                                                                  id, type: 'ROBOT_VACUUM_BOUSTROPHEDON_SWEEP',
+                                                                                  id, type: 'ROBOT_VACUUM_BOUSTROPHEDON_SWEEP', directFeedthrough: true,
                                                                                   params: {
                                                                                     spacing: params.spacing ?? 0.54
                                                                                   },
@@ -6773,6 +6811,8 @@ return block;
                                                                                   icon: 'navigation',
                                                                                   description: 'Generates boustrophedon sweep waypoints inside the selected room zone and tracks execution.',
                                                                                   execute: (ins: any[], p: any, state: any, time: number) => {
+      state = cloneState(state); // execute never mutates the committed state
+
                                                                                     const room_id = Number(ins[0] ?? 0);
                                                                                     const pose = ins[2] as number[] || [0, 0, 0];
                                                                                     const rx = pose[0] ?? 0;
@@ -6910,6 +6950,8 @@ return block;
                                                                                       icon: 'log-in',
                                                                                       description: 'Tracks which door/exit the robot used to enter the current room for return path planning.',
                                                                                       execute: (ins: any[], p: any, state: any, time: number) => {
+      state = cloneState(state); // execute never mutates the committed state
+
                                                                                         const pose = ins[0] as number[] || [0, 0, 0];
                                                                                         const rx = pose[0] ?? 0;
                                                                                         const ry = pose[1] ?? 0;
@@ -7022,7 +7064,7 @@ return block;
                                                                                         }),
 
                                                                                           'ROBOT_VACUUM_TOPOLOGY_RETURN': (id: string, params: any) => ({
-                                                                                            id, type: 'ROBOT_VACUUM_TOPOLOGY_RETURN',
+                                                                                            id, type: 'ROBOT_VACUUM_TOPOLOGY_RETURN', directFeedthrough: true,
                                                                                             params: {},
                                                                                             isStateful: true,
                                                                                             inputs: [
@@ -7149,7 +7191,7 @@ return block;
                                                                                             }),
 
                                                                                               'ROBOT_VACUUM_DIGITAL_TWIN': (id: string, params: any) => ({
-                                                                                                id, type: 'ROBOT_VACUUM_DIGITAL_TWIN',
+                                                                                                id, type: 'ROBOT_VACUUM_DIGITAL_TWIN', 
                                                                                                 params: {
                                                                                                   wheel_radius: params.wheel_radius ?? 0.033,
                                                                                                   wheel_separation: params.wheel_separation ?? 0.16,
@@ -7254,6 +7296,8 @@ return block;
                                                                                                 icon: 'graduation-cap',
                                                                                                 description: 'MATLAB Autonomous Vacuum cleaner Plant/Control/Perception/Planning Closed Loop Co-simulation Block.',
                                                                                                 execute: (ins: any[], p: any, state: any, time: number) => {
+      state = cloneState(state); // execute never mutates the committed state
+
                                                                                                   if (time === 0 || time === 0.0) {
                                                                                                     g_isMatlabActive = false;
                                                                                                   }
@@ -8163,7 +8207,7 @@ return block;
                                                                                               }),
 
                                                                                                 'ROBOT_VACUUM_MOTOR': (id: string, params: any) => ({
-                                                                                                  id, type: 'ROBOT_VACUUM_MOTOR',
+                                                                                                  id, type: 'ROBOT_VACUUM_MOTOR', 
                                                                                                   params: {
                                                                                                     motor_R: params.motor_R ?? 2.5,
                                                                                                     motor_L: params.motor_L ?? 0.005,
@@ -8225,7 +8269,7 @@ return block;
                                                                                                 }),
 
                                                                                                   'ROBOT_VACUUM_DYNAMICS': (id: string, params: any) => ({
-                                                                                                    id, type: 'ROBOT_VACUUM_DYNAMICS',
+                                                                                                    id, type: 'ROBOT_VACUUM_DYNAMICS', directFeedthrough: true,
                                                                                                     params: {
                                                                                                       wheel_radius: params.wheel_radius ?? 0.033,
                                                                                                       wheel_separation: params.wheel_separation ?? 0.16,
@@ -8300,7 +8344,7 @@ return block;
                                                                                                   }),
 
                                                                                                     'ROBOT_VACUUM_ENVIRONMENT': (id: string, params: any) => ({
-                                                                                                      id, type: 'ROBOT_VACUUM_ENVIRONMENT',
+                                                                                                      id, type: 'ROBOT_VACUUM_ENVIRONMENT', directFeedthrough: true, feedthroughInputs: ['x', 'y', 'theta'],
                                                                                                       params: {
                                                                                                         lidar_max_range: params.lidar_max_range ?? 4.0,
                                                                                                         lidar_noise_std: params.lidar_noise_std ?? 0.02
@@ -8351,6 +8395,8 @@ return block;
                                                                                                       icon: 'graduation-cap',
                                                                                                       description: 'Models the physical room map, obstacle collision physics (15cm clearance check), and raycasts LiDAR scan vectors. Displays the live 2D virtual twin.',
                                                                                                       execute: (ins: any[], p: any, state: any, time: number) => {
+      state = cloneState(state); // execute never mutates the committed state
+
                                                                                                         const rx = Number(ins[0] ?? 0);
                                                                                                         const ry = Number(ins[1] ?? 0);
                                                                                                         const rtheta = Number(ins[2] ?? 0);
@@ -8457,7 +8503,7 @@ return block;
                                                                                                     }),
 
                                                                                                       'ROBOT_VACUUM_ODOMETRY': (id: string, params: any) => ({
-                                                                                                        id, type: 'ROBOT_VACUUM_ODOMETRY',
+                                                                                                        id, type: 'ROBOT_VACUUM_ODOMETRY', directFeedthrough: true,
                                                                                                         params: {
                                                                                                           wheel_radius: params.wheel_radius ?? 0.033,
                                                                                                           wheel_separation: params.wheel_separation ?? 0.16,
@@ -8483,6 +8529,8 @@ return block;
                                                                                                         icon: 'graduation-cap',
                                                                                                         description: 'Calculates dead-reckoning pose from incremental encoder count inputs. Kinematics: dS_L/R = delta_enc * (2*pi/cpr) * r_wheel; dS = (dS_R * slipR + dS_L * slipL)/2; dTheta = (dS_R * slipR - dS_L * slipL)/L_sep. Updates x, y, theta states discretely.',
                                                                                                         execute: (ins: any[], p: any, state: any, time: number) => {
+      state = cloneState(state); // execute never mutates the committed state
+
                                                                                                           const enc_L = Number(ins[0] ?? 0);
                                                                                                           const enc_R = Number(ins[1] ?? 0);
 
@@ -8518,7 +8566,7 @@ return block;
                                                                                                       }),
 
                                                                                                         'ROBOT_VACUUM_FUSION': (id: string, params: any) => ({
-                                                                                                          id, type: 'ROBOT_VACUUM_FUSION',
+                                                                                                          id, type: 'ROBOT_VACUUM_FUSION', directFeedthrough: true,
                                                                                                           params: {
                                                                                                             filter_gain: params.filter_gain ?? 0.06
                                                                                                           },
@@ -8551,6 +8599,8 @@ return block;
                                                                                                           icon: 'graduation-cap',
                                                                                                           description: 'Fuses dead-reckoning odometry increments, virtual IMU gyro rate, and global references using a complementary filter to yield the corrected pose and localization confidence.',
                                                                                                           execute: (ins: any[], p: any, state: any, time: number) => {
+      state = cloneState(state); // execute never mutates the committed state
+
                                                                                                             const x_odom = Number(ins[0] ?? 0);
                                                                                                             const y_odom = Number(ins[1] ?? 0);
                                                                                                             const theta_odom = Number(ins[2] ?? 0);
@@ -8608,7 +8658,7 @@ return block;
                                                                                                         }),
 
                                                                                                           'ROBOT_VACUUM_SLAM': (id: string, params: any) => ({
-                                                                                                            id, type: 'ROBOT_VACUUM_SLAM',
+                                                                                                            id, type: 'ROBOT_VACUUM_SLAM', directFeedthrough: true,
                                                                                                             params: {
                                                                                                               lidar_max_range: params.lidar_max_range ?? 4.0
                                                                                                             },
@@ -8718,7 +8768,7 @@ return block;
                                                                                                           }),
 
                                                                                                             'ROBOT_VACUUM_NAV': (id: string, params: any) => ({
-                                                                                                              id, type: 'ROBOT_VACUUM_NAV',
+                                                                                                              id, type: 'ROBOT_VACUUM_NAV', directFeedthrough: true,
                                                                                                               params: {},
                                                                                                               isStateful: true,
                                                                                                               inputs: [
@@ -8760,6 +8810,8 @@ return block;
                                                                                                               icon: 'graduation-cap',
                                                                                                               description: 'A 12-state Mission State Machine controller. Manages cleaning sweeps, return-to-dock maneuvers on low battery, charging, obstacle avoidance, and cleaning statistics (coverage, efficiency).',
                                                                                                               execute: (ins: any[], p: any, state: any, time: number) => {
+      state = cloneState(state); // execute never mutates the committed state
+
                                                                                                                 const x_est = Number(ins[0] ?? 0);
                                                                                                                 const y_est = Number(ins[1] ?? 0);
                                                                                                                 const theta_est = Number(ins[2] ?? 0);
@@ -8998,7 +9050,7 @@ return block;
                                                                                                               }),
 
                                                                                                                 'ROBOT_VACUUM_WHEEL_CONTROL': (id: string, params: any) => ({
-                                                                                                                  id, type: 'ROBOT_VACUUM_WHEEL_CONTROL',
+                                                                                                                  id, type: 'ROBOT_VACUUM_WHEEL_CONTROL', directFeedthrough: true,
                                                                                                                   params: {
                                                                                                                     Kp_wheel: params.Kp_wheel ?? 12.0,
                                                                                                                     Ki_wheel: params.Ki_wheel ?? 45.0,
@@ -9076,7 +9128,7 @@ return block;
                                                                                                                 }),
 
                                                                                                                   'ROBOT_VACUUM_ENCODER': (id: string, params: any) => ({
-                                                                                                                    id, type: 'ROBOT_VACUUM_ENCODER',
+                                                                                                                    id, type: 'ROBOT_VACUUM_ENCODER', directFeedthrough: true,
                                                                                                                     params: {
                                                                                                                       encoder_cpr: params.encoder_cpr ?? 360,
                                                                                                                       noise_std: params.noise_std ?? 0.1
@@ -9166,7 +9218,7 @@ return block;
                                                                                                                     }),
 
                                                                                                                       'ROBOT_VACUUM_LOCALIZATION': (id: string, params: any) => ({
-                                                                                                                        id, type: 'ROBOT_VACUUM_LOCALIZATION',
+                                                                                                                        id, type: 'ROBOT_VACUUM_LOCALIZATION', directFeedthrough: true,
                                                                                                                         params: {
                                                                                                                           filter_gain: params.filter_gain ?? 0.06,
                                                                                                                           algorithm: params.algorithm || 'EKF'
@@ -9200,6 +9252,8 @@ return block;
                                                                                                                         icon: 'graduation-cap',
                                                                                                                         description: 'Fused EKF localization filter using dead-reckoning odometry increments and true references to correct pose and output covariance.',
                                                                                                                         execute: (ins: any[], p: any, state: any, time: number) => {
+      state = cloneState(state); // execute never mutates the committed state
+
                                                                                                                           const x_odom = Number(ins[0] ?? 0);
                                                                                                                           const y_odom = Number(ins[1] ?? 0);
                                                                                                                           const theta_odom = Number(ins[2] ?? 0);
@@ -9327,7 +9381,7 @@ return block;
                                                                                                                         }),
 
                                                                                                                           'ROBOT_VACUUM_COVERAGE': (id: string, params: any) => ({
-                                                                                                                            id, type: 'ROBOT_VACUUM_COVERAGE',
+                                                                                                                            id, type: 'ROBOT_VACUUM_COVERAGE', directFeedthrough: true,
                                                                                                                             params: {
                                                                                                                               strategy: params.strategy || 'Boustrophedon'
                                                                                                                             },
@@ -9353,6 +9407,8 @@ return block;
                                                                                                                             icon: 'graduation-cap',
                                                                                                                             description: 'Generates coverage waypoints and tracks coverage status based on lawnmower/boustrophedon sweep.',
                                                                                                                             execute: (ins: any[], p: any, state: any, time: number) => {
+      state = cloneState(state); // execute never mutates the committed state
+
                                                                                                                               const x_est = Number(ins[1] ?? 0);
                                                                                                                               const y_est = Number(ins[2] ?? 0);
 
@@ -9440,7 +9496,7 @@ return block;
                                                                                                                             }),
 
                                                                                                                               'ROBOT_VACUUM_OBSTACLE_AVOIDANCE': (id: string, params: any) => ({
-                                                                                                                                id, type: 'ROBOT_VACUUM_OBSTACLE_AVOIDANCE',
+                                                                                                                                id, type: 'ROBOT_VACUUM_OBSTACLE_AVOIDANCE', directFeedthrough: true,
                                                                                                                                 params: {
                                                                                                                                   algorithm: params.algorithm || 'VFH'
                                                                                                                                 },
@@ -9553,7 +9609,7 @@ return block;
                                                                                                                                 }),
 
                                                                                                                                   'ROBOT_VACUUM_MOTOR_COMMAND': (id: string, params: any) => ({
-                                                                                                                                    id, type: 'ROBOT_VACUUM_MOTOR_COMMAND',
+                                                                                                                                    id, type: 'ROBOT_VACUUM_MOTOR_COMMAND', directFeedthrough: true,
                                                                                                                                     params: {
                                                                                                                                       wheel_radius: params.wheel_radius ?? 0.033,
                                                                                                                                       wheel_separation: params.wheel_separation ?? 0.16,
@@ -9662,6 +9718,8 @@ return block;
                                                                                                                                       icon: 'graduation-cap',
                                                                                                                                       description: 'Visualizer representing coverage grid trails, true robot, EKF estimated chevrons, and LiDAR scans.',
                                                                                                                                       execute: (ins: any[], p: any, state: any, time: number) => {
+      state = cloneState(state); // execute never mutates the committed state
+
                                                                                                                                         const rx = Number(ins[0] ?? 0);
                                                                                                                                         const ry = Number(ins[1] ?? 0);
                                                                                                                                         const rtheta = Number(ins[2] ?? 0);
@@ -10281,7 +10339,7 @@ return block;
                                                                                                                                                             }
 
                                                                                                                                                             return {
-                                                                                                                                                              id, type: 'FUZZY_PID_CONTROLLER',
+                                                                                                                                                              id, type: 'FUZZY_PID_CONTROLLER', directFeedthrough: true,
                                                                                                                                                               params: {
                                                                                                                                                                 Kp_base: params.Kp_base ?? 1,
                                                                                                                                                                 Ki_base: params.Ki_base ?? 0.5,
@@ -10481,7 +10539,7 @@ return block;
                                                                                                                                                                   const pulsator_mode = params.pulsator_mode !== undefined ? !!params.pulsator_mode : false;
                                                                                                                                                                   const pulsator_speed_ratio = params.pulsator_speed_ratio !== undefined ? Number(params.pulsator_speed_ratio) : 3.0;
                                                                                                                                                                   return {
-                                                                                                                                                                    id, type: 'DEM_DRUM', isStateful: true, params: { drum_radius, pulsator_mode, pulsator_speed_ratio },
+                                                                                                                                                                    id, type: 'DEM_DRUM', directFeedthrough: true, isStateful: true, params: { drum_radius, pulsator_mode, pulsator_speed_ratio },
                                                                                                                                                                     inputs: [createPort('rpm', 'rpm', 'input')],
                                                                                                                                                                     outputs: [
                                                                                                                                                                       createPort('angle', 'angle', 'output'),
@@ -10520,7 +10578,7 @@ return block;
                                                                                                                                                                   'DEM_PARTICLE_SYSTEM': (id, params) => {
                                                                                                                                                                     const particle_radius = params.particle_radius !== undefined ? Number(params.particle_radius) : 0.05;
                                                                                                                                                                     return {
-                                                                                                                                                                      id, type: 'DEM_PARTICLE_SYSTEM', isStateful: true, params: { particle_radius },
+                                                                                                                                                                      id, type: 'DEM_PARTICLE_SYSTEM',  isStateful: true, params: { particle_radius },
                                                                                                                                                                       inputs: [
                                                                                                                                                                         createPort('contact_forces', 'contact_forces', 'input'),
                                                                                                                                                                         createPort('bond_forces', 'bond_forces', 'input'),
@@ -11069,7 +11127,7 @@ return block;
                                                                                                                                                                             const sph_stiffness = params.sph_stiffness !== undefined ? Number(params.sph_stiffness) : 25;
 
                                                                                                                                                                             return {
-                                                                                                                                                                              id, type: 'CFD_SPH_WATER_SOLVER', isStateful: true,
+                                                                                                                                                                              id, type: 'CFD_SPH_WATER_SOLVER', directFeedthrough: true, isStateful: true,
                                                                                                                                                                               params: { num_fluid_particles, fluid_density, fluid_viscosity, sph_smoothing_length, sph_stiffness },
                                                                                                                                                                               inputs: [
                                                                                                                                                                                 createPort('fill_level', 'fill_level', 'input'),
@@ -11504,7 +11562,7 @@ return block;
                                                                                                                                                                                   const mode = params.mode || 'training';
 
                                                                                                                                                                                   return {
-                                                                                                                                                                                    id, type: 'CFD_DEM_SURROGATE_LEARNER', isStateful: true, params: { learning_rate, mode },
+                                                                                                                                                                                    id, type: 'CFD_DEM_SURROGATE_LEARNER', directFeedthrough: true, isStateful: true, params: { learning_rate, mode },
                                                                                                                                                                                     inputs: [
                                                                                                                                                                                       createPort('rpm', 'rpm', 'input'),
                                                                                                                                                                                       createPort('fill', 'fill', 'input'),
@@ -11643,11 +11701,13 @@ return block;
                                                                                                                                                                                         createPort('y', 'y', 'output', 0, 'right', 'vector')
                                                                                                                                                                                       ],
                                                                                                                                                                                       state: {
-                                                                                                                                                                                        x: null,
+ x: (() => { const order = (simulationType === 'closed_loop' ? Math.max(numerator.length, denominator.length) : denominator.length) - 1; return order > 0 ? new Array(order).fill(0) : null; })(), // zero initial state of the realization
                                                                                                                                                                                         history: [],
                                                                                                                                                                                         stepCount: 0
                                                                                                                                                                                       },
                                                                                                                                                                                       execute: (ins, p, state, time) => {
+      state = cloneState(state); // execute never mutates the committed state
+
                                                                                                                                                                                         const num = p.numerator || [1];
                                                                                                                                                                                         const den = p.denominator || [1, 1];
                                                                                                                                                                                         const K = p.gain !== undefined ? Number(p.gain) : 1;

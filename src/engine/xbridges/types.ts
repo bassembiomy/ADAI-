@@ -27,6 +27,18 @@ export interface XPort {
   frame?: string;
 }
 
+/**
+ * Evaluation context the engine passes as the 5th argument of execute / evaluateDerivatives (Simulink: major versus
+ * minor time step). `minor` is true for the stage evaluations of a solver step. Discontinuous blocks (Step, Relay,
+ * Switch, Saturation, limited Integrator ...) decide their mode at major steps and keep it during minor steps:
+ * `setMode(m)` stores the mode computed at a major step, `mode` returns the stored one.
+ */
+export interface BlockEvalContext {
+  minor: boolean;
+  mode: any;
+  setMode: (mode: any) => void;
+}
+
 export interface XBlock {
   id: string;
   type: string;
@@ -38,6 +50,8 @@ export interface XBlock {
   state?: any; // For blocks with memory (integrators, unit delays, flip-flops)
   /** True when some output depends on the current value of an input. Default: !isStateful (backward compatible). */
   directFeedthrough?: boolean;
+  /** Input port ids that have direct feedthrough (Simulink per-port feedthrough). Absent: every input of a feedthrough block. */
+  feedthroughInputs?: string[];
   isStateful?: boolean; // NEW: Indicates if the block breaks algebraic loops
   allowDynamicInputs?: boolean; // Can the user add more inputs? (e.g. Sum, Mul, Concat)
   allowDynamicOutputs?: boolean; // Can the user add more outputs? (e.g. Demux)
@@ -46,7 +60,7 @@ export interface XBlock {
   description?: string; // For Help Center documentation
   nextTick?: number; // Scheduled sample-time tick for discrete blocks
   
-  execute: (inputs: XValue[], params: Record<string, any>, state: any, time: number) => { 
+  execute: (inputs: XValue[], params: Record<string, any>, state: any, time: number, ctx?: BlockEvalContext) => { 
     outputs: XValue[]; 
     nextState?: any; 
     error?: string; // Runtime error propagation
@@ -56,7 +70,9 @@ export interface XBlock {
 
   // Optional: For continuous-time blocks (like Integrators), this returns the state derivative (dx/dt)
   // This is required for solvers like ODE1 and ODE4.
-  evaluateDerivatives?: (inputs: XValue[], params: Record<string, any>, state: any, time: number) => any;
+  evaluateDerivatives?: (inputs: XValue[], params: Record<string, any>, state: any, time: number, ctx?: BlockEvalContext) => any;
+  /** Continuous block whose state is projected (e.g. a limited integrator is clamped): the engine applies execute's nextState at each major step. */
+  projectsState?: boolean;
   /** Hybrid blocks (with evaluateDerivatives): pure discrete update (Simulink mdlUpdate) returning the new state. Called once per major step. */
   updateDiscrete?: (inputs: XValue[], params: Record<string, any>, state: any, time: number) => any;
   /** Hybrid blocks: top-level keys of the state object that are discrete states (never integrated by a solver). */
