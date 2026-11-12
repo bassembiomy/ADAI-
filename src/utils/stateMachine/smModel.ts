@@ -76,6 +76,8 @@ export interface StateMachineModelV5 {
   hilConfig?: HILConfig;
   verification: SMVerificationConfig;
   diagrams?: StateMachineDiagramData[];
+  /** Stateflow "Execute (enter) chart at initialization". Undefined means true (ADIA default). */
+  executeAtInitialization?: boolean;
 }
 
 export type StateMachineModel = StateMachineModelV5;
@@ -93,6 +95,7 @@ export interface LegacyStateMachineModel {
   hilConfig?: HILConfig;
   verification?: Partial<SMVerificationConfig>;
   diagrams?: StateMachineDiagramData[];
+  executeAtInitialization?: boolean;
 }
 
 export interface ModelDiagnostic {

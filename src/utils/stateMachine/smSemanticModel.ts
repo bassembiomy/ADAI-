@@ -169,6 +169,8 @@ export interface SemanticModel {
   traceableElements: TraceableElement[];
   modelHash?: string;
   verification: ResolvedSMVerificationConfig;
+  /** Undefined means true. When false, the chart is entered on the first step, not at init. */
+  executeAtInitialization?: boolean;
 }
 
 export interface SemanticBuildResult {

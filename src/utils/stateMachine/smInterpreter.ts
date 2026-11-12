@@ -50,6 +50,8 @@ export interface SemanticRuntime {
   xBridgesByStateId: Record<string, XBRuntime>;
   error: SemanticRuntimeError | null;
   traceSequence: number;
+  /** Set by init/reset when the chart does not execute at initialization: the next step enters it. */
+  entryPending: boolean;
 }
 
 interface StepContext {
@@ -171,6 +173,9 @@ const restoreDataDefaults = (runtime: SemanticRuntime): void => {
   }
   runtime.data = defaults;
 };
+
+const executesAtInitialization = (ir: SemanticModel): boolean =>
+  ir.executeAtInitialization !== false;
 
 const clearConfiguration = (runtime: SemanticRuntime): void => {
   runtime.activeSlots.fill(null);
@@ -945,6 +950,7 @@ export const createRuntime = (ir: SemanticModel): SemanticRuntime => {
     ),
     error: null,
     traceSequence: 0,
+    entryPending: false,
   };
   restoreDataDefaults(runtime);
   return runtime;
@@ -963,6 +969,8 @@ export const initializeRuntime = (
   runtime.error = null;
   runtime.traceSequence = 0;
   const context: StepContext = { runtime, actions: [] };
+  runtime.entryPending = !executesAtInitialization(runtime.ir);
+  if (runtime.entryPending) return createTraceFrame(context, 0);
   try {
     enterLayerDefault(context, runtime.ir.rootLayerId);
     if ((runtime.error as SemanticRuntimeError | null)?.code === 'ARITHMETIC') {
@@ -998,8 +1006,14 @@ export const stepRuntime = (
   }
 
   try {
-    incrementActiveTimers(runtime, timing.logicalMs);
-    executeLayer(context, runtime.ir.rootLayerId);
+    if (runtime.entryPending) {
+      // First step of a chart that does not execute at initialization: default entry only.
+      runtime.entryPending = false;
+      enterLayerDefault(context, runtime.ir.rootLayerId);
+    } else {
+      incrementActiveTimers(runtime, timing.logicalMs);
+      executeLayer(context, runtime.ir.rootLayerId);
+    }
     const latched = (runtime.error as SemanticRuntimeError | null)?.code;
     if (latched === 'XBRIDGES_NUMERIC' || latched === 'ARITHMETIC') {
       enterFaultConfiguration(context);
@@ -1037,6 +1051,8 @@ export const resetRuntime = (
     resetXBState(xBridges);
   }
   runtime.error = null;
+  runtime.entryPending = !executesAtInitialization(runtime.ir);
+  if (runtime.entryPending) return createTraceFrame(context, 0);
   try {
     enterLayerDefault(context, runtime.ir.rootLayerId);
     if ((runtime.error as SemanticRuntimeError | null)?.code === 'ARITHMETIC') {

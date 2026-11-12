@@ -826,6 +826,9 @@ export const buildSemanticModel = (
       traceableElements,
       modelHash: "0000000000000000",
       verification: resolveVerificationConfig((model as Partial<StateMachineModelV5>).verification),
+      ...(((model as Partial<StateMachineModelV5>).executeAtInitialization) !== undefined
+        ? { executeAtInitialization: (model as Partial<StateMachineModelV5>).executeAtInitialization }
+        : {}),
     }),
   };
 };

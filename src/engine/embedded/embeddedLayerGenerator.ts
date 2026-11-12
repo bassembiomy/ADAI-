@@ -317,6 +317,121 @@ SM_Error_t ADIA_Component_OneStep(ADIA_Instance_t *instance, ADIA_Scheduler_t *s
 `;
 }
 
+function renderIntegrationGuide(): string {
+  return `# Stateflow to ADIA integration guide
+
+This guide is for the embedded engineer who integrates the generated ADIA state machine into the target firmware. The chart behaves like the Stateflow chart it replaces, but it runs at one fixed rate, is called through the component API below, and talks to the hardware only through the MCAL layer.
+
+## 1. Mapping from Stateflow / Embedded Coder
+
+| Stateflow / Embedded Coder | ADIA (this project) |
+| --- | --- |
+| \`model_initialize()\` | \`ADIA_Component_Init(&sm)\`: \`SM_Init()\` initializes the data and, unless the chart is set to not execute at initialization, enters the default configuration; then the initial outputs are written. |
+| \`model_step()\` called from \`rt_OneStep\` at the base rate | \`ADIA_Component_OneStep(&sm, &sched, now_ms)\` from a periodic timer interrupt or RTOS task with period \`SM_TICK_MS\`; or, in a super-loop, \`ADIA_Scheduler_Poll(&sched, now_ms, &delta)\` followed by \`ADIA_Component_Cyclic(&sm, delta)\` when it returns true. |
+| Root inports and outports (\`rtU\`, \`rtY\`) | Generated \`SM_ReadInputs()\` and \`SM_WriteOutputs()\` call the MCAL functions in \`src/mcal/adia_mcal.c\`. The engineer implements the MCAL drivers on top of the vendor HAL. |
+| Input events (event ports, function-call inputs) | \`SM_PostEvent()\`, safe to call from an ISR. Map \`SM_ENTER_CRITICAL()\` and \`SM_EXIT_CRITICAL()\` to interrupt masking on the target. Available when the model declares input events. |
+| Step overrun, late or early tick | \`ADIA_Scheduler_GetOverruns()\` counts missed releases. \`SM_Step()\` returns \`SM_ERR_TIMING\` when the observed delta is outside \`SM_TICK_MIN_MS..SM_TICK_MAX_MS\`, and \`ADIA_Component_OneStep()\` returns it when a step is re-entered. |
+| "Execute (enter) chart at initialization" | Model option \`executeAtInitialization\`. Stateflow's default is off; ADIA's default is on. When it is off, the generated \`sm_config.h\` defines \`SM_EXECUTE_AT_INIT 0U\`, and the first step only enters the default configuration. |
+
+## 2. Integration steps
+
+1. Implement the MCAL drivers for every channel in \`src/mcal/adia_mcal.c\`. Read and write functions must not block.
+2. Init order: clocks, then the peripherals used by MCAL, then \`ADIA_Component_Init(&sm)\`, then \`ADIA_Scheduler_Init(&sched, now_ms)\`, and only then enable the periodic timer or the super-loop. Interrupts that call \`ADIA_Component_OneStep()\` or \`SM_PostEvent()\` must not be enabled before \`ADIA_Component_Init()\` has returned.
+3. Periodic task: run it with period \`SM_TICK_MS\` (the model tick). Measure the real period on the target. Every observed delta must lie inside the jitter window \`SM_TICK_MIN_MS..SM_TICK_MAX_MS\` (tolerance \`SM_TICK_TOLERANCE_MS\`); an out-of-window delta faults the chart with \`SM_ERR_TIMING\`.
+4. Watchdog: the generated \`SM_WriteOutputs()\` calls \`MCAL_Watchdog_Kick()\` after a successful output write, when the model has I/O mappings. Implement the kick as the MCU watchdog refresh and do not kick it anywhere else, so a faulted or stalled component lets the watchdog expire.
+5. Fault latch and reset: once a step reports an error, the instance latches the fault, the outputs go to their safe values, and later calls return the same error. Read the cause with \`SM_GetError(&sm)\`. Call \`SM_Reset()\` only when the application has established that restarting is safe; the verification reset policy in the model states the conditions.
+6. Concurrency: one task or interrupt owns the instance and performs \`ADIA_Component_Init()\`, \`ADIA_Component_Cyclic()\` or \`ADIA_Component_OneStep()\`, and \`SM_Reset()\`. The only call that other contexts may make is \`SM_PostEvent()\`. Do not call the state machine from two contexts at once.
+
+## 3. Example code
+
+### STM32 HAL, timer interrupt
+
+The timer period must equal \`SM_TICK_MS\`. For example, an 84 MHz timer clock with prescaler 84 - 1 runs at 1 MHz, and the period register is then \`SM_TICK_MS * 1000 - 1\`.
+
+\`\`\`c
+#include "adia_component.h"
+#include "stm32f4xx_hal.h"
+
+extern TIM_HandleTypeDef htim6;   /* period = SM_TICK_MS */
+
+static ADIA_Instance_t g_sm;
+static ADIA_Scheduler_t g_sched;
+
+void App_Init(void)
+{
+    if (ADIA_Component_Init(&g_sm) != SM_ERR_NONE) {
+        /* Outputs are already in their safe state; log SM_GetError(&g_sm). */
+    }
+    ADIA_Scheduler_Init(&g_sched, HAL_GetTick());
+}
+
+int main(void)
+{
+    HAL_Init();
+    SystemClock_Config();
+    MX_GPIO_Init();
+    MX_TIM6_Init();
+    App_Init();
+    (void)HAL_TIM_Base_Start_IT(&htim6);
+    for (;;) {
+        /* Background work only; the state machine runs in the interrupt. */
+    }
+}
+
+/* HAL calls this on every TIM6 update. */
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+    if (htim->Instance == TIM6) {
+        (void)ADIA_Component_OneStep(&g_sm, &g_sched, HAL_GetTick());
+    }
+}
+\`\`\`
+
+### Super-loop
+
+\`\`\`c
+int main(void)
+{
+    HAL_Init();
+    SystemClock_Config();
+    MX_GPIO_Init();
+    App_Init();
+    for (;;) {
+        uint32_t delta_ms = 0U;
+        if (ADIA_Scheduler_Poll(&g_sched, HAL_GetTick(), &delta_ms)) {
+            if (ADIA_Component_Cyclic(&g_sm, delta_ms) != SM_ERR_NONE) {
+                /* Fault latched; outputs are safe. Log SM_GetError(&g_sm). */
+            }
+        }
+        if (ADIA_Scheduler_GetOverruns(&g_sched) > 0U) {
+            /* Missed releases occurred; report them. */
+        }
+    }
+}
+\`\`\`
+
+## 4. Back-to-back test checklist
+
+Run the same model in Stateflow on the host and on the target, then compare:
+
+- Align the first tick. Both runs start at the same sample time (\`SM_TICK_MS\` equals the Stateflow sample time), and the first step is step 1 in both.
+- Set \`executeAtInitialization\` in the model to the same value as the Stateflow chart's "Execute (enter) chart at initialization" setting.
+- Drive identical input sequences, one value set per step, from the same test vectors.
+- After every step, compare the outputs and the active state configuration (\`SM_IsStateActive()\`, \`SM_GetActive()\`).
+- Include a case with a jittered tick inside the window and a case outside it (expect \`SM_ERR_TIMING\`).
+- Include a reset and a fault recovery.
+- For any mismatch, check the known differences in section 5 first. Otherwise record the first differing step, its inputs and the model element involved.
+
+## 5. Known differences
+
+- Single rate per chart: all states run at \`SM_TICK_MS\`. A multirate Stateflow chart must be split into charts, one per rate.
+- Local events use the run-to-completion queue of UML/SysML, not Stateflow's immediate nested broadcast. The order in which events are processed can differ from Stateflow.
+- Integer arithmetic saturates on overflow. Stateflow wraps some integer types.
+- No fixed-point data types.
+- Actions cannot call hand-written C functions.
+`;
+}
+
 export function generateEmbeddedProject(
   config: HILConfig,
   pack: TargetPackManifest,
@@ -336,6 +451,7 @@ export function generateEmbeddedProject(
   // Component files
   const componentHeader = renderComponentHeader();
   const componentSource = renderComponentSource();
+  const integrationGuide = renderIntegrationGuide();
 
   const files: EmbeddedProjectFile[] = [
     { path: 'src/mcal/adia_mcal.h', layer: 'mcal', sha256: contentHash(mcalHeaderContent), content: mcalHeaderContent },
@@ -344,6 +460,7 @@ export function generateEmbeddedProject(
     { path: 'src/component/adia_component.c', layer: 'component', sha256: contentHash(componentSource), content: componentSource },
     ...driverResult.files.map(f => ({ path: f.path, layer: 'driver' as const, sha256: f.sha256, content: f.content })),
     ...platformResult.files.map(f => ({ path: f.path, layer: f.layer, sha256: f.sha256, content: f.content })),
+    { path: 'docs/INTEGRATION.md', layer: 'build', sha256: contentHash(integrationGuide), content: integrationGuide },
   ];
 
   const contentHashes: Record<string, string> = {};
