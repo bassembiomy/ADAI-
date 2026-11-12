@@ -3,16 +3,18 @@
  * with the app's own Save, so the delivered file is exactly what ADIA writes for this model.
  *
  *   npx vite --port 3000                                    # the app
- *   node scripts/save_truck_in_app.mjs [url] [screenshots]  # rewrites TRUCK.adia
+ *   node scripts/save_truck_in_app.mjs [url] [screenshots] [file] [tab]  # rewrites TRUCK.adia (or [file]),
+ *                                                                     # saved with [tab] (default BDD) active
  */
 import { chromium } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const FILE = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'TRUCK.adia');
+const FILE = resolve(dirname(fileURLToPath(import.meta.url)), '..', process.argv[4] || 'TRUCK.adia');
+const SAVE_TAB = new RegExp(`^\\s*${process.argv[5] || 'BDD'}`);
 const url = process.argv[2] ?? 'http://127.0.0.1:3000/?projectName=adia';
-const shots = process.argv[3];
+const shots = process.argv[3] || '';
 if (shots) mkdirSync(shots, { recursive: true });
 
 const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
@@ -52,7 +54,7 @@ const log = await page.getByText('STRUCTURAL-CHECK').first().innerText().catch((
 if (!log.includes('Passed generator structural validation')) throw new Error('Generate C/H did not pass the structural check');
 await page.getByRole('button', { name: /^Close$/ }).first().click();
 // the project opens on the user's BDD
-await tabs.filter({ hasText: /^\s*BDD/ }).first().click();
+await tabs.filter({ hasText: SAVE_TAB }).first().click();
 await page.waitForTimeout(1500);
 const download = page.waitForEvent('download', { timeout: 120000 });
 await page.getByRole('button', { name: /^Save$/ }).first().click();
