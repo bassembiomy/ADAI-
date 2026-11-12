@@ -1,5 +1,5 @@
 // src/engine/xbridges/XbridgesEngine.ts
-import { XModel, XBlock, ModelDiagnostic, SolverOptions } from './types';
+import { XModel, XBlock, ModelDiagnostic, SolverOptions, BlockEvalContext } from './types';
 import { BLOCK_LIBRARY, getPolynomialCoefficients, trimLeadingZeros } from './BlockDefinitions';
 import { VectorUtils } from './VectorUtils';
 import { runModelChecks, getBlockSampleTime, evaluateBlockParameters, parameterKindsOf, describeParameterProblem } from './modelChecks';
@@ -16,7 +16,32 @@ export class XbridgesEngine {
   public options: SolverOptions | null = null;
   /** Set when a block threw an exception; solver run loops and the live loop stop (Simulink stops on a runtime error). */
   private fatal = false;
-  public hasFatalError(): boolean { return this.fatal; }
+  public hasFatalError(): boolean {
+    if (this.fatal) return true;
+    // Stiff solver failures are pushed straight into `diagnostics` by StiffSolver; Simulink stops on a solver error.
+    return this.diagnostics.some(d => d.severity === 'error' && d.code.startsWith('STIFF_SOLVER_'));
+  }
+
+  /** Mode of discontinuous blocks decided at the last major step (kept during minor steps). */
+  private heldModes = new Map<string, any>();
+  /** True while bracketZeroCrossing probes: those evaluations are treated as major steps. */
+  private bracketing = false;
+  private contextOf(block: XBlock, minor: boolean): BlockEvalContext {
+    return {
+      minor,
+      mode: this.heldModes.get(block.id),
+      setMode: (m: any) => { if (!minor) this.heldModes.set(block.id, m); },
+    };
+  }
+  /** Connection feeding each input port: key `${block}\u0000${port}`. */
+  private inputIndex = new Map<string, { sourceBlock: string; sourcePort: string }>();
+  private buildInputIndex() {
+    this.inputIndex.clear();
+    for (const c of this.flatConnections) {
+      const key = `${c.targetBlock}\u0000${c.targetPort}`;
+      if (!this.inputIndex.has(key)) this.inputIndex.set(key, c);
+    }
+  }
 
   /** Records an exception raised inside a block as a BLOCK_RUNTIME_FAULT error (once per block) and stops the run. */
   private reportBlockException(block: XBlock, where: string, err: unknown) {
@@ -194,7 +219,7 @@ export class XbridgesEngine {
       // Data type consistency validation
       if (outPort.dataType && inPort.dataType && outPort.dataType !== inPort.dataType) {
         this.diagnostics.push({
-          severity: 'warning',
+          severity: 'error',
           code: 'DATA_TYPE_MISMATCH',
           message: `Data type mismatch: Port '${outPort.name}' on block '${sourceBlock.label || sourceBlock.type}' of data type '${outPort.dataType}' connected to port '${inPort.name}' on block '${targetBlock.label || targetBlock.type}' of data type '${inPort.dataType}'.`,
           blockIds: [sourceBlock.id, targetBlock.id]
@@ -217,7 +242,7 @@ export class XbridgesEngine {
         const dim2 = inPort.dimensions.join('x');
         if (dim1 !== dim2) {
           this.diagnostics.push({
-            severity: 'warning',
+            severity: 'error',
             code: 'DIMENSION_MISMATCH',
             message: `Dimension mismatch: Port '${outPort.name}' on block '${sourceBlock.label || sourceBlock.type}' with dimensions [${dim1}] connected to port '${inPort.name}' on block '${targetBlock.label || targetBlock.type}' expecting [${dim2}].`,
             blockIds: [sourceBlock.id, targetBlock.id]
@@ -225,6 +250,94 @@ export class XbridgesEngine {
         }
       }
     });
+  }
+
+  /** Malformed models (files, agent, DOE/TRM build models directly): duplicate ids, unknown types, two drivers on one input. */
+  private validateStructure() {
+    const seen = new Set<string>();
+    const reported = new Set<string>();
+    for (const b of this.model.blocks) {
+      if (seen.has(b.id) && !reported.has(b.id)) {
+        reported.add(b.id);
+        this.diagnostics.push({ severity: 'error', code: 'BLOCK_RUNTIME_FAULT', message: `Model is malformed: more than one block has the id '${b.id}'.`, blockIds: [b.id] });
+      }
+      seen.add(b.id);
+    }
+    for (const b of this.flatBlocks) {
+      if (typeof b.execute !== 'function') {
+        this.diagnostics.push({ severity: 'error', code: 'BLOCK_RUNTIME_FAULT', message: `Model is malformed: block '${b.label || b.id}' has the unknown block type '${b.type}'.`, blockIds: [b.id] });
+      }
+    }
+    const drivers = new Map<string, number>();
+    for (const c of this.flatConnections) {
+      const key = `${c.targetBlock}\u0000${c.targetPort}`;
+      const n = (drivers.get(key) ?? 0) + 1;
+      drivers.set(key, n);
+      if (n === 2) {
+        const tb = this.blockMap.get(c.targetBlock);
+        this.diagnostics.push({
+          severity: 'error', code: 'BLOCK_RUNTIME_FAULT',
+          message: `Model is malformed: input port '${c.targetPort}' of block '${tb?.label || c.targetBlock}' is driven by more than one signal.`,
+          blockIds: [c.targetBlock],
+        });
+      }
+    }
+  }
+
+  /** Shape of a value as dimensions: undefined for a scalar, [n] for a vector, [r, c] for a matrix. */
+  private shapeOfValue(v: any): number[] | undefined {
+    if (!Array.isArray(v)) return undefined;
+    if (v.length > 0 && Array.isArray(v[0])) return [v.length, (v[0] as any[]).length];
+    return [v.length];
+  }
+
+  /**
+   * Dimension propagation (Simulink: signal dimensions are propagated and checked at compile). Seeds are declared
+   * output-port dimensions and Constant values; element-wise blocks (Sum, Vector Add/Sub/Mul/Div) accept scalars or
+   * equally dimensioned signals and propagate the common dimension. Unknown dimensions are never flagged.
+   */
+  private propagateDimensions() {
+    const ELEMENTWISE = new Set(['Sum', 'VectorAdd', 'VectorSub', 'VectorMul', 'VectorDiv']);
+    const dims = new Map<string, number[] | undefined>();
+    const key = (b: string, p: string) => `${b}\u0000${p}`;
+    for (const b of this.flatBlocks) {
+      for (const o of b.outputs) {
+        let d: number[] | undefined = o.dimensions && o.dimensions.length > 0 ? o.dimensions : undefined;
+        if (!d && b.type === 'Constant') {
+          let v: any = b.params?.value;
+          if (typeof v === 'string') { try { v = VectorUtils.parseMatlabArray(v); } catch { v = undefined; } }
+          d = this.shapeOfValue(v);
+        }
+        dims.set(key(b.id, o.id), d);
+      }
+    }
+    const dimsOf = (c: { sourceBlock: string; sourcePort: string }) => dims.get(key(c.sourceBlock, c.sourcePort));
+    for (const b of this.executionOrder) {
+      if (!ELEMENTWISE.has(b.type)) continue;
+      const known: { name: string; dim: number[]; blockId: string }[] = [];
+      for (const inp of b.inputs) {
+        const c = this.inputIndex.get(key(b.id, inp.id));
+        if (!c) continue;
+        const d = dimsOf(c);
+        if (d) known.push({ name: inp.name, dim: d, blockId: c.sourceBlock });
+      }
+      const nonScalar = known.filter(k => !(k.dim.length === 1 && k.dim[0] === 1));
+      let common: number[] | undefined = nonScalar[0]?.dim;
+      for (const k of nonScalar) {
+        if (common && k.dim.join('x') !== common.join('x')) {
+          this.diagnostics.push({
+            severity: 'error',
+            code: 'DIMENSION_MISMATCH',
+            message: `Dimension mismatch: inputs of block '${b.label || b.type}' have incompatible dimensions [${common.join('x')}] and [${k.dim.join('x')}].`,
+            blockIds: [b.id, k.blockId],
+          });
+          common = undefined;
+          break;
+        }
+      }
+      const out = b.outputs[0];
+      if (out) dims.set(key(b.id, out.id), common);
+    }
   }
 
   /**
@@ -305,6 +418,9 @@ export class XbridgesEngine {
     this.fatal = false;
     this.flatten();
     this.resolveParameters();
+    this.buildInputIndex();
+    this.heldModes.clear();
+    this.validateStructure();
     this.validateConnections();
     
     // Validate parameters of Fuzzy Surface Viewer blocks
@@ -320,49 +436,78 @@ export class XbridgesEngine {
     });
     
     // 1. Build adjacency list for Topological Sort.
-    // An edge s->t is a sorting dependency iff t has direct feedthrough.
+    // Hard sorting dependency: an edge s->t where t has direct feedthrough. Phase 1 orders by ALL edges (so a
+    // non-feedthrough block such as a Unit Delay is evaluated after its source whenever there is no loop); what is left
+    // (blocks on or behind a loop) is ordered in phase 2 by feedthrough edges only.
     const isFeedthrough = (b: XBlock): boolean => b.directFeedthrough ?? !b.isStateful;
-    const adjList = new Map<string, string[]>();
+    // Per-port feedthrough (Simulink: direct feedthrough is a property of each input port): a block may list the input
+    // ports its outputs depend on in `feedthroughInputs`; without the list every input of a feedthrough block counts.
+    const edgeFt = (b: XBlock, port: string): boolean => isFeedthrough(b) && (!b.feedthroughInputs || b.feedthroughInputs.includes(port));
+    const adjList = new Map<string, { to: string; ft: boolean }[]>();
+    const inDegreeAll = new Map<string, number>();
     const inDegree = new Map<string, number>();
 
     this.flatBlocks.forEach(b => {
       adjList.set(b.id, []);
       inDegree.set(b.id, 0);
+      inDegreeAll.set(b.id, 0);
     });
 
     this.flatConnections.forEach(conn => {
       const sourceBlock = this.blockMap.get(conn.sourceBlock);
       const targetBlock = this.blockMap.get(conn.targetBlock);
-      
       if (sourceBlock && targetBlock && adjList.has(conn.sourceBlock) && adjList.has(conn.targetBlock)) {
-        adjList.get(conn.sourceBlock)!.push(conn.targetBlock);
-        if (isFeedthrough(targetBlock)) {
+        const ft = edgeFt(targetBlock, conn.targetPort);
+        adjList.get(conn.sourceBlock)!.push({ to: conn.targetBlock, ft });
+        inDegreeAll.set(conn.targetBlock, inDegreeAll.get(conn.targetBlock)! + 1);
+        if (ft) {
           inDegree.set(conn.targetBlock, inDegree.get(conn.targetBlock)! + 1);
         }
       }
     });
 
-    // 2. Kahn's Algorithm
-    const queue: string[] = [];
-    inDegree.forEach((degree, blockId) => {
-      if (degree === 0) queue.push(blockId);
-    });
-
+    // 2. Kahn's algorithm, phase 1 (all edges) then phase 2 (feedthrough edges, among the remaining blocks).
     const sortedBlocks: XBlock[] = [];
-    while (queue.length > 0) {
-      const u = queue.shift()!;
-      const block = this.blockMap.get(u)!;
-      sortedBlocks.push(block);
-
-      adjList.get(u)!.forEach(v => {
-        if (isFeedthrough(this.blockMap.get(v)!)) {
-          inDegree.set(v, inDegree.get(v)! - 1);
-          if (inDegree.get(v) === 0) queue.push(v);
+    const placed = new Set<string>();
+    {
+      const queue: string[] = [];
+      inDegreeAll.forEach((degree, blockId) => { if (degree === 0) queue.push(blockId); });
+      for (let qi = 0; qi < queue.length; qi++) {
+        const u = queue[qi];
+        sortedBlocks.push(this.blockMap.get(u)!);
+        placed.add(u);
+        adjList.get(u)!.forEach(({ to: v }) => {
+          inDegreeAll.set(v, inDegreeAll.get(v)! - 1);
+          if (inDegreeAll.get(v) === 0) queue.push(v);
+        });
+      }
+    }
+    if (placed.size < this.flatBlocks.length) {
+      // Edges coming from phase-1 blocks are satisfied already.
+      const remaining = new Map<string, number>();
+      this.flatBlocks.forEach(b => { if (!placed.has(b.id)) remaining.set(b.id, 0); });
+      this.flatConnections.forEach(conn => {
+        const tb = this.blockMap.get(conn.targetBlock);
+        if (tb && remaining.has(conn.targetBlock) && remaining.has(conn.sourceBlock) && edgeFt(tb, conn.targetPort)) {
+          remaining.set(conn.targetBlock, remaining.get(conn.targetBlock)! + 1);
         }
       });
+      const queue: string[] = [];
+      // keep model order for the start of phase 2
+      this.flatBlocks.forEach(b => { if (remaining.get(b.id) === 0) queue.push(b.id); });
+      for (let qi = 0; qi < queue.length; qi++) {
+        const u = queue[qi];
+        sortedBlocks.push(this.blockMap.get(u)!);
+        placed.add(u);
+        adjList.get(u)!.forEach(({ to: v, ft }) => {
+          if (!remaining.has(v) || !ft) return;
+          remaining.set(v, remaining.get(v)! - 1);
+          if (remaining.get(v) === 0) queue.push(v);
+        });
+      }
     }
 
-    const missing = this.flatBlocks.filter(b => !sortedBlocks.includes(b));
+    const missing = this.flatBlocks.filter(b => !placed.has(b.id));
     const cycleBlocks: XBlock[] = [];
     const downstreamBlocks: XBlock[] = [];
 
@@ -377,11 +522,7 @@ export class XbridgesEngine {
           if (visited.has(curr)) continue;
           visited.add(curr);
           
-          const outputs = this.flatConnections.filter(c => c.sourceBlock === curr);
-          outputs.forEach(c => {
-            const tb = this.blockMap.get(c.targetBlock);
-            if (tb && isFeedthrough(tb)) q.push(c.targetBlock);
-          });
+          (adjList.get(curr) ?? []).forEach(({ to, ft }) => { if (ft) q.push(to); });
         }
         return false;
       };
@@ -412,6 +553,7 @@ export class XbridgesEngine {
     this.cycleBlocks = cycleBlocks;
     this.downstreamBlocks = downstreamBlocks;
     this.executionOrder = [...sortedBlocks, ...cycleBlocks, ...downstreamBlocks];
+    this.propagateDimensions();
 
     // 3. Initialize signal map, sample times, and ZOH caches
     this.nextSampleTime.clear();
@@ -436,7 +578,7 @@ export class XbridgesEngine {
 
   public gatherInputs(block: XBlock): any[] {
     return block.inputs.map(inPort => {
-      const conn = this.flatConnections.find(c => c.targetBlock === block.id && c.targetPort === inPort.id);
+      const conn = this.inputIndex.get(`${block.id}\u0000${inPort.id}`);
       if (conn) {
         return this.signalValues.get(`${conn.sourceBlock}.${conn.sourcePort}`);
       }
@@ -498,13 +640,14 @@ export class XbridgesEngine {
     const currentState = tempStates?.has(block.id) ? tempStates.get(block.id) : block.state;
     
     try {
-      const result = block.execute(inputValues, block.params, currentState, time);
+      const result = block.execute(inputValues, block.params, currentState, time, this.contextOf(block, tempStates !== undefined && !this.bracketing));
       result.outputs.forEach((val, i) => {
         this.checkNumericalStability(block, val, `Output[${i}]`);
       });
 
       const runtimeError = (result as any).error;
       if (runtimeError) {
+        this.fatal = true; // Simulink stops on a block error
         const faultCode = (result as any).nextState?.lastFault?.code;
         // One diagnostic per block per run (this.diagnostics is reset at the start of each run).
         if (!this.diagnostics.some(d => d.code === 'BLOCK_RUNTIME_FAULT' && d.blockIds?.includes(block.id))) {
@@ -518,6 +661,7 @@ export class XbridgesEngine {
       }
 
       const typed = result.diagnostic;
+      if (typed && typed.severity === 'error') this.fatal = true;
       if (typed && !this.diagnostics.some(d => d.code === typed.code && d.blockIds?.includes(block.id))) {
         this.diagnostics.push({
           severity: typed.severity,
@@ -540,6 +684,15 @@ export class XbridgesEngine {
   }
 
   private solveAlgebraicLoop(time: number, tempStates?: Map<string, any>, algTol = 1e-6, maxIter = 100) {
+    this.solveAlgebraicLoopCore(time, tempStates, algTol, maxIter);
+    // Modes of discontinuous blocks inside the loop must reflect the solution, not an intermediate iterate: one more
+    // pass at the solution fixes them (major steps) before minor steps hold them.
+    if (!this.fatal && !(tempStates !== undefined && !this.bracketing)) {
+      this.cycleBlocks.forEach(b => this.executeBlockOrCache(b, time, tempStates));
+    }
+  }
+
+  private solveAlgebraicLoopCore(time: number, tempStates?: Map<string, any>, algTol = 1e-6, maxIter = 100) {
     const loopKeys: { blockId: string; portId: string; block: XBlock; portIndex: number }[] = [];
     this.cycleBlocks.forEach(b => {
       b.outputs.forEach((out, idx) => {
@@ -588,6 +741,7 @@ export class XbridgesEngine {
     if (n === 0) return;
 
     const reportNotConverged = () => {
+      this.fatal = true; // Simulink stops when an algebraic loop cannot be solved
       if (this.diagnostics.some(d => d.code === 'ALGEBRAIC_LOOP_NOT_CONVERGED')) return;
       this.diagnostics.push({
         severity: 'error',
@@ -619,7 +773,7 @@ export class XbridgesEngine {
         const inputValues = this.gatherInputs(block);
         const currentState = tempStates?.has(block.id) ? tempStates.get(block.id) : block.state;
         try {
-          const result = block.execute(inputValues, block.params, currentState, time);
+          const result = block.execute(inputValues, block.params, currentState, time, this.contextOf(block, tempStates !== undefined && !this.bracketing));
           block.outputs.forEach((outPort, i) => {
             this.signalValues.set(`${block.id}.${outPort.id}`, result.outputs[i]);
           });
@@ -710,8 +864,13 @@ export class XbridgesEngine {
         const inputValues = this.gatherInputs(block);
         const currentState = tempStates?.has(block.id) ? tempStates.get(block.id) : block.state;
         try {
-          const dx = block.evaluateDerivatives(inputValues, block.params, currentState, time);
+          const dx = block.evaluateDerivatives(inputValues, block.params, currentState, time, this.contextOf(block, tempStates !== undefined && !this.bracketing));
           this.checkNumericalStability(block, dx, 'Derivative');
+          // A scalar initial condition on a vector input is expanded over the derivative's shape (Simulink).
+          if (!tempStates) {
+            const conformed = XbridgesEngine.conformState(block.state, dx);
+            if (conformed !== block.state) block.state = conformed;
+          }
           derivatives.set(block.id, dx);
         } catch (err: any) {
           this.reportBlockException(block, 'computing its derivatives', err);
@@ -719,6 +878,24 @@ export class XbridgesEngine {
       }
     }
     return derivatives;
+  }
+
+  /** Returns `state` with scalar leaves expanded to the shape of the matching derivative leaves (same object when nothing changes). */
+  private static conformState(state: any, dx: any): any {
+    if (typeof state === 'number' && Array.isArray(dx)) {
+      const expand = (d: any): any => (Array.isArray(d) ? d.map(expand) : state);
+      return expand(dx);
+    }
+    if (state !== null && typeof state === 'object' && !Array.isArray(state) && dx !== null && typeof dx === 'object' && !Array.isArray(dx)) {
+      let out: any = state;
+      for (const k of Object.keys(dx)) {
+        if (!(k in state)) continue;
+        const c = XbridgesEngine.conformState(state[k], dx[k]);
+        if (c !== state[k]) { if (out === state) out = { ...state }; out[k] = c; }
+      }
+      return out;
+    }
+    return state;
   }
 
   private hybridUpdates = new Map<string, { time: number; state: any }>();
@@ -736,6 +913,13 @@ export class XbridgesEngine {
           if (next !== undefined) block.state = next;
         } catch (err: any) { this.reportBlockException(block, 'updating its discrete states', err); }
         this.hybridUpdates.set(block.id, { time, state: block.state });
+        continue;
+      }
+      if (block.evaluateDerivatives && block.projectsState) {
+        try {
+          const r = block.execute(this.gatherInputs(block), block.params, block.state, time);
+          if (r.nextState !== undefined) block.state = r.nextState;
+        } catch (err: any) { this.reportBlockException(block, 'projecting its state', err); }
         continue;
       }
       if (!block.evaluateDerivatives) {
@@ -821,6 +1005,8 @@ export class XbridgesEngine {
 
     const zcPrev = this.getZeroCrossings(tPrev, statesPrev);
 
+    this.bracketing = true;
+    try {
     for (let iter = 0; iter < 30; iter++) {
       if (tHigh - tLow < zeroTol) {
         break;
@@ -838,6 +1024,7 @@ export class XbridgesEngine {
         tLow = tMid;
       }
     }
+    } finally { this.bracketing = false; }
 
     return tHigh;
   }
@@ -861,7 +1048,7 @@ export class XbridgesEngine {
       return this.signalValues.get(key);
     }
     // If it's an input port, try to find what's connected to it
-    const conn = this.flatConnections.find(c => c.targetBlock === blockId && c.targetPort === portId);
+    const conn = this.inputIndex.get(`${blockId}\u0000${portId}`);
     if (conn) {
       return this.signalValues.get(`${conn.sourceBlock}.${conn.sourcePort}`);
     }
