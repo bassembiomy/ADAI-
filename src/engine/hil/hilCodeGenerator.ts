@@ -536,77 +536,94 @@ ${telemetryCompositions || '    len += snprintf(buf + len, sizeof(buf) - (size_t
 `;
 
   // 6. main_hil.c
-  const mainHilC = `${disclaimer}#ifdef __cplusplus
+  const isArduinoMain = target.startsWith('Arduino') || target === 'ESP32';
+  const genericHelper = target === 'Generic'
+    ? `#ifdef _WIN32
+#include <windows.h>
+#else
+#include <time.h>
+#endif
+
+/* Monotonic millisecond clock (wraps at 2^32, handled by the scheduler). */
+static uint32_t HIL_NowMs(void) {
+#ifdef _WIN32
+    LARGE_INTEGER freq;
+    LARGE_INTEGER count;
+    (void)QueryPerformanceFrequency(&freq);
+    (void)QueryPerformanceCounter(&count);
+    return (uint32_t)((uint64_t)(count.QuadPart * 1000LL) / (uint64_t)freq.QuadPart);
+#else
+    struct timespec ts;
+    (void)clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint32_t)(((uint64_t)ts.tv_sec * 1000U) + ((uint64_t)ts.tv_nsec / 1000000U));
+#endif
+}
+
+`
+    : '';
+  const tickBody = (ind: string): string => [
+    '/* Check for override inputs from dashboard */',
+    'HIL_Receive_Poll();',
+    '',
+    '/* Fixed-rate release on a monotonic clock (no work + delay drift) */',
+    `if (ADIA_Scheduler_Poll(&hil_scheduler, ${mcu.nowMs}, &delta_ms)) {`,
+    '    /* Read explicitly mapped hardware inputs into the State Machine */',
+    '    (void)SM_ReadInputs(&sm_instance);',
+    '    HIL_ApplyOverrides(&sm_instance);',
+    '',
+    '    /* Tick the State Machine with the observed delta */',
+    '    (void)SM_Step(&sm_instance, delta_ms);',
+    '',
+    '    /* Commit explicitly mapped State Machine outputs */',
+    '    (void)SM_WriteOutputs(&sm_instance);',
+    '',
+    '    /* Send back telemetry */',
+    '    HIL_SendTelemetry(&sm_instance);',
+    '} else {',
+    ...(mcu.idle ? ['    /* Wait for the next release */', ...mcu.idle.split('\n').map(l => (l.startsWith('#') ? l : `    ${l}`))] : ['    /* Nothing to do until the next release */']),
+    '}',
+  ].map(l => (l === '' || l.startsWith('#') ? l : ind + l)).join('\n');
+  const initBody = (ind: string): string => [
+    '/* Initialize peripherals and UART */',
+    'HAL_Drivers_Init();',
+    '',
+    '/* Initialize State Machine and drive initial/safe outputs before the first tick */',
+    'SM_Init(&sm_instance);',
+    '(void)SM_WriteOutputs(&sm_instance);',
+    `ADIA_Scheduler_Init(&hil_scheduler, ${mcu.nowMs});`,
+  ].map(l => (l === '' ? l : ind + l)).join('\n');
+
+  const mainHilC = `${disclaimer}${mcu.mainPrelude ?? ''}#ifdef __cplusplus
 extern "C" {
 #endif
 #include "sm_core.h"
+#include "adia_component.h"
 #include "hal_drivers.h"
 #include "hil_interface.h"
 #ifdef __cplusplus
 }
 #endif
-${target.startsWith('Arduino') || target === 'ESP32' ? '#include "Arduino.h"\n' : ''}
+${isArduinoMain ? '#include "Arduino.h"\n' : ''}
 ${target.startsWith('STM32') ? `#include "${target === 'STM32F4' ? 'stm32f4xx_hal.h' : 'stm32f1xx_hal.h'}"\n` : ''}
-${target === 'Generic' ? '#ifdef _WIN32\n#include <windows.h>\n#else\n#include <unistd.h>\n#endif\n' : ''}
-ADIA_Instance_t sm_instance;
+${genericHelper}ADIA_Instance_t sm_instance;
+static ADIA_Scheduler_t hil_scheduler;
+static uint32_t delta_ms;
 
-${target.startsWith('Arduino') || target === 'ESP32'
+${isArduinoMain
   ? `void setup(void) {
-    /* Initialize peripherals and UART */
-    HAL_Drivers_Init();
-
-    /* Initialize State Machine */
-    SM_Init(&sm_instance);
+${initBody('    ')}
 }
 
 void loop(void) {
-    /* Check for override inputs from dashboard */
-    HIL_Receive_Poll();
-
-    /* Read explicitly mapped hardware inputs into the State Machine */
-    (void)SM_ReadInputs(&sm_instance);
-    HIL_ApplyOverrides(&sm_instance);
-
-    /* Tick the State Machine */
-    (void)SM_Step(&sm_instance, SM_TICK_MS);
-
-    /* Commit explicitly mapped State Machine outputs */
-    (void)SM_WriteOutputs(&sm_instance);
-
-    /* Send back telemetry */
-    HIL_SendTelemetry(&sm_instance);
-
-    /* Sleep/Delay */
-    ${mcu.tickDelay}
+${tickBody('    ')}
 }
 `
   : `int main(void) {
-    /* Initialize peripherals and UART */
-    HAL_Drivers_Init();
-
-    /* Initialize State Machine */
-    SM_Init(&sm_instance);
+${initBody('    ')}
 
     /* Main Execution Loop */
     while (1) {
-        /* Check for override inputs from dashboard */
-        HIL_Receive_Poll();
-
-        /* Read explicitly mapped hardware inputs into the State Machine */
-        (void)SM_ReadInputs(&sm_instance);
-    HIL_ApplyOverrides(&sm_instance);
-
-        /* Tick the State Machine */
-        (void)SM_Step(&sm_instance, SM_TICK_MS);
-
-        /* Commit explicitly mapped State Machine outputs */
-        (void)SM_WriteOutputs(&sm_instance);
-
-        /* Send back telemetry */
-        HIL_SendTelemetry(&sm_instance);
-
-        /* Sleep/Delay */
-        ${mcu.tickDelay}
+${tickBody('        ')}
     }
 }
 `}

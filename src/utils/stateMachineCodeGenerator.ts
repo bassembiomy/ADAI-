@@ -2337,6 +2337,14 @@ inline void delay(uint32_t ms) {
     }
 }
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+unsigned long millis(void);
+#ifdef __cplusplus
+}
+#endif
+
 inline void init() {
     sei();
 }
@@ -2522,7 +2530,7 @@ extern SerialImpl Serial3;
 #endif
 
 #endif`;
-      const arduinoCpp = `#include "Arduino.h"\n#if !defined(__AVR__) || !__has_include(<avr/io.h>)\nuint8_t DDRA = 0, PORTA = 0, PINA = 0;\nuint8_t DDRB = 0, PORTB = 0, PINB = 0;\nuint8_t DDRC = 0, PORTC = 0, PINC = 0;\nuint8_t DDRD = 0, PORTD = 0, PIND = 0;\nuint8_t UBRR0H = 0, UBRR0L = 0, UCSR0B = 0, UCSR0C = 0, UCSR0A = 0, UDR0 = 0;\n#endif\nSerialImpl Serial;\nSerialImpl Serial1;\nSerialImpl Serial2;\nSerialImpl Serial3;\n\n#include "SPI.h"\nSPIImpl SPI;\n\n#include "Wire.h"\nTwoWire Wire;\n\n/* Bare-metal compile helper: define ADIA_BARE_ARDUINO_MAIN when building\n * without the Arduino core (e.g. host/CI verification). On real Arduino\n * builds the core provides its own main(). */\n#ifdef ADIA_BARE_ARDUINO_MAIN\nextern void setup(void);\nextern void loop(void);\nint main(void) {\n    setup();\n    while (1) { loop(); }\n    return 0;\n}\n#endif\n`;
+      const arduinoCpp = `#include "Arduino.h"\n#if !defined(__AVR__) || !__has_include(<avr/io.h>)\nuint8_t DDRA = 0, PORTA = 0, PINA = 0;\nuint8_t DDRB = 0, PORTB = 0, PINB = 0;\nuint8_t DDRC = 0, PORTC = 0, PINC = 0;\nuint8_t DDRD = 0, PORTD = 0, PIND = 0;\nuint8_t UBRR0H = 0, UBRR0L = 0, UCSR0B = 0, UCSR0C = 0, UCSR0A = 0, UDR0 = 0;\n#endif\nSerialImpl Serial;\nSerialImpl Serial1;\nSerialImpl Serial2;\nSerialImpl Serial3;\n\n#include "SPI.h"\nSPIImpl SPI;\n\n#include "Wire.h"\nTwoWire Wire;\n\n/* Monotonic 1 kHz millisecond clock, as in the Arduino core: Timer0 CTC\n * compare-match interrupt on AVR, steady_clock on the host shim. */\n#if defined(__AVR__) && __has_include(<avr/io.h>)\n#include <avr/io.h>\n#include <avr/interrupt.h>\nstatic volatile unsigned long adia_millis_count = 0UL;\nISR(TIMER0_COMPA_vect) { adia_millis_count++; }\nvoid adia_timer0_init(void) {\n    TCCR0A = (1<<WGM01);\n    OCR0A = (uint8_t)((F_CPU / 64UL / 1000UL) - 1UL);\n    TCCR0B = (1<<CS01)|(1<<CS00);\n    TIMSK0 |= (1<<OCIE0A);\n}\nunsigned long millis(void) {\n    unsigned long m;\n    uint8_t sreg = SREG;\n    cli();\n    m = adia_millis_count;\n    SREG = sreg;\n    return m;\n}\n#else\n#include <chrono>\nvoid adia_timer0_init(void) {}\nunsigned long millis(void) {\n    return (unsigned long)std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();\n}\n#endif\n\n/* Bare-metal compile helper: define ADIA_BARE_ARDUINO_MAIN when building\n * without the Arduino core (e.g. host/CI verification). On real Arduino\n * builds the core provides its own main(). */\n#ifdef ADIA_BARE_ARDUINO_MAIN\nextern void setup(void);\nextern void loop(void);\nint main(void) {\n    adia_timer0_init();\n    sei();\n    setup();\n    while (1) { loop(); }\n    return 0;\n}\n#endif\n`;
       pushTestShim('Arduino.h', arduinoH);
       pushTestShim('Arduino.cpp', arduinoCpp);
       pushTestShim('SPI.h', `#ifndef SPI_H\n#define SPI_H\n#include <stdint.h>\nclass SPIImpl {\npublic:\n    void begin() {}\n    uint8_t transfer(uint8_t val) { return val; }\n};\nextern SPIImpl SPI;\n#endif\n`);

@@ -28,7 +28,12 @@ export interface MCUTemplate {
   serialInit: (baudRate: number) => string;
   serialReceive: string;
   serialTransmit: string;
-  tickDelay: string;
+  /** C expression returning a monotonic uint32_t millisecond count. */
+  nowMs: string;
+  /** Statement executed while waiting for the next release (may be empty). */
+  idle: string;
+  /** Text emitted at the very top of main_hil, before any #include. */
+  mainPrelude?: string;
   peripherals: Record<PeripheralType, {
     init: (pin: string, channelName: string, direction: 'In' | 'Out') => string;
     read: (pin: string, channelName: string) => string;
@@ -268,7 +273,8 @@ void HIL_SendString(const char* str) {
     HAL_UART_Transmit(&huart2, (uint8_t*)str, strlen(str), 100);
 }
 `,
-    tickDelay: `HAL_Delay(10); /* 10ms default task cycle */`,
+    nowMs: `(uint32_t)HAL_GetTick()`,
+    idle: ``,
     peripherals: {
       GPIO: {
         init: (pin, name, dir) => {
@@ -649,7 +655,8 @@ void HIL_SendString(const char* str) {
     HAL_UART_Transmit(&huart1, (uint8_t*)str, strlen(str), 100);
 }
 `,
-    tickDelay: `HAL_Delay(10);`,
+    nowMs: `(uint32_t)HAL_GetTick()`,
+    idle: ``,
     peripherals: {
       GPIO: {
         init: (pin, name, dir) => {
@@ -929,7 +936,8 @@ void HIL_SendString(const char* str) {
     Serial.print(str);
 }
 `,
-    tickDelay: `delay(10);`,
+    nowMs: `(uint32_t)millis()`,
+    idle: ``,
     peripherals: {
       GPIO: {
         init: (pin, name, dir) => `  pinMode(${formatArduinoPinExpr(pin)}, ${dir === 'In' ? 'INPUT' : 'OUTPUT'});`,
@@ -1039,7 +1047,8 @@ void HIL_SendString(const char* str) {
     Serial.print(str);
 }
 `,
-    tickDelay: `delay(10);`,
+    nowMs: `(uint32_t)millis()`,
+    idle: ``,
     peripherals: {
       GPIO: {
         init: (pin, name, dir) => `  pinMode(${formatArduinoPinExpr(pin)}, ${dir === 'In' ? 'INPUT' : 'OUTPUT'});`,
@@ -1170,7 +1179,8 @@ void HIL_SendString(const char* str) {
     Serial.print(str);
 }
 `,
-    tickDelay: `delay(10);`,
+    nowMs: `(uint32_t)millis()`,
+    idle: ``,
     peripherals: {
       GPIO: {
         init: (pin, name, dir) => `  pinMode(${formatArduinoPinExpr(pin)}, ${dir === 'In' ? 'INPUT' : 'OUTPUT'});`,
@@ -1275,7 +1285,9 @@ void HIL_SendString(const char* str) {
     fflush(stdout);
 }
 `,
-    tickDelay: `/* Sleep for 10ms simulation tick */\n#ifdef _WIN32\n    Sleep(10);\n#else\n    usleep(10000);\n#endif`,
+    nowMs: `HIL_NowMs()`,
+    idle: `#ifdef _WIN32\n        Sleep(0);\n#else\n        { struct timespec idle_ts = {0, 1000000L}; (void)nanosleep(&idle_ts, NULL); }\n#endif`,
+    mainPrelude: `#if !defined(_WIN32)\n#define _POSIX_C_SOURCE 200809L\n#endif\n`,
     peripherals: {
       GPIO: {
         init: (pin, name, dir) => `  printf("HIL: GPIO %s on Pin %s configured as %s\\n", "${name}", "${pin}", "${dir}");`,

@@ -188,20 +188,60 @@ function renderComponentHeader(): string {
 
 #include "sm_core.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/*
+ * Integration of the generated state machine (fixed-step execution).
+ *
+ * Style 1 - timer ISR / RTOS task (Embedded Coder rt_OneStep): call
+ *   ADIA_Component_OneStep() every SM_TICK_MS from a periodic timer ISR or task.
+ *   A re-entrant call while a step is running is rejected (SM_ERR_TIMING, counted).
+ *
+ * Style 2 - cooperative super-loop: call ADIA_Scheduler_Poll() with a monotonic
+ *   millisecond clock; when it returns true call ADIA_Component_Cyclic(instance, delta).
+ *   Releases sit on a fixed SM_TICK_MS grid; missed releases are counted, not burst.
+ */
+
+typedef struct {
+    uint32_t next_release_ms;
+    uint32_t last_release_ms;
+    uint32_t overrun_count;
+    bool started;
+    volatile bool step_active;
+} ADIA_Scheduler_t;
+
+/* Initializes the instance and drives the initial/safe outputs before the first tick. */
 SM_Error_t ADIA_Component_Init(ADIA_Instance_t *instance);
+/* One Read -> Step -> Write cycle with the observed delta. */
 SM_Error_t ADIA_Component_Cyclic(ADIA_Instance_t *instance, uint32_t observed_delta_ms);
+
+void ADIA_Scheduler_Init(ADIA_Scheduler_t *scheduler, uint32_t now_ms);
+bool ADIA_Scheduler_Poll(ADIA_Scheduler_t *scheduler, uint32_t now_ms, uint32_t *delta_ms);
+uint32_t ADIA_Scheduler_GetOverruns(const ADIA_Scheduler_t *scheduler);
+SM_Error_t ADIA_Component_OneStep(ADIA_Instance_t *instance, ADIA_Scheduler_t *scheduler, uint32_t now_ms);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* ADIA_COMPONENT_H */
 `;
 }
 
 function renderComponentSource(): string {
-  return `#include "adia_component.h"
+  return `#include <stddef.h>
+#include "adia_component.h"
 #include "adia_mcal.h"
 
 SM_Error_t ADIA_Component_Init(ADIA_Instance_t *instance)
 {
-    return SM_Init(instance);
+    SM_Error_t error = SM_Init(instance);
+    if (error == SM_ERR_NONE) {
+        error = SM_WriteOutputs(instance);
+    }
+    return error;
 }
 
 SM_Error_t ADIA_Component_Cyclic(ADIA_Instance_t *instance, uint32_t observed_delta_ms)
@@ -212,6 +252,65 @@ SM_Error_t ADIA_Component_Cyclic(ADIA_Instance_t *instance, uint32_t observed_de
     }
     if (error == SM_ERR_NONE) {
         error = SM_WriteOutputs(instance);
+    }
+    return error;
+}
+
+void ADIA_Scheduler_Init(ADIA_Scheduler_t *scheduler, uint32_t now_ms)
+{
+    if (scheduler != NULL) {
+        scheduler->next_release_ms = now_ms;
+        scheduler->last_release_ms = now_ms;
+        scheduler->overrun_count = 0U;
+        scheduler->started = false;
+        scheduler->step_active = false;
+    }
+}
+
+bool ADIA_Scheduler_Poll(ADIA_Scheduler_t *scheduler, uint32_t now_ms, uint32_t *delta_ms)
+{
+    bool due = false;
+    if ((scheduler != NULL) && (delta_ms != NULL)) {
+        const uint32_t late_ms = now_ms - scheduler->next_release_ms;
+        /* Wrap-safe signed difference: negative means the release is not yet due. */
+        if ((int32_t)late_ms >= 0) {
+            *delta_ms = scheduler->started ? (now_ms - scheduler->last_release_ms) : (uint32_t)SM_TICK_MS;
+            scheduler->started = true;
+            scheduler->last_release_ms = now_ms;
+            if (late_ms >= (uint32_t)SM_TICK_MS) {
+                /* Missed releases are counted and skipped, never executed in a burst. */
+                scheduler->overrun_count += late_ms / (uint32_t)SM_TICK_MS;
+                scheduler->next_release_ms = now_ms + (uint32_t)SM_TICK_MS;
+            } else {
+                scheduler->next_release_ms += (uint32_t)SM_TICK_MS;
+            }
+            due = true;
+        }
+    }
+    return due;
+}
+
+uint32_t ADIA_Scheduler_GetOverruns(const ADIA_Scheduler_t *scheduler)
+{
+    return (scheduler != NULL) ? scheduler->overrun_count : 0U;
+}
+
+SM_Error_t ADIA_Component_OneStep(ADIA_Instance_t *instance, ADIA_Scheduler_t *scheduler, uint32_t now_ms)
+{
+    SM_Error_t error;
+    if ((instance == NULL) || (scheduler == NULL)) {
+        error = SM_ERR_NULL_INSTANCE;
+    } else if (scheduler->step_active) {
+        /* Tick fired again while the previous step is still running. */
+        scheduler->overrun_count++;
+        error = SM_ERR_TIMING;
+    } else {
+        const uint32_t delta_ms = scheduler->started ? (now_ms - scheduler->last_release_ms) : (uint32_t)SM_TICK_MS;
+        scheduler->step_active = true;
+        scheduler->started = true;
+        scheduler->last_release_ms = now_ms;
+        error = ADIA_Component_Cyclic(instance, delta_ms);
+        scheduler->step_active = false;
     }
     return error;
 }
