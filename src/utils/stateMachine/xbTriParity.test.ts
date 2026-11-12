@@ -322,8 +322,11 @@ describe('WP-21 batch F acceptance: embedded PID, Delay 0, Product divide equal 
   ];
   for (const solver of ['euler', 'rk4'] as const) {
     for (const [name, params] of variants) {
-      // pinned to XBV-018 until the canvas sorts PID_CONTROLLER as direct feedthrough (engine batch E2)
-      it.fails(`XBV-018 / XBV-150: PID_CONTROLLER ${name}, ${solver}: canvas = embedded on u, error, p_term, i_term, d_term`, () => {
+      // pinned to XBV-018 until the canvas sorts PID_CONTROLLER as direct feedthrough (engine batch E2); the continuous-form
+      // PID (sample time <= 0, i.e. every variant but 'sample time 0.1') under rk4 is also XBV-159 (embedded integrates i/d with
+      // forward Euler whatever the solver).
+      const continuousRk4 = solver === 'rk4' && !(typeof params.sampleTime === 'number' && params.sampleTime > 0);
+      it.fails(`${continuousRk4 ? 'XBV-159 / ' : ''}XBV-018 / XBV-150: PID_CONTROLLER ${name}, ${solver}: canvas = embedded on u, error, p_term, i_term, d_term`, () => {
         assertOutcome(compareSpec(`PID ${name} ${solver}`, pidSpec(params), solver, PID_PROBES));
       });
     }
