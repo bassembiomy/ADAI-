@@ -731,11 +731,11 @@
     "ias",
     "ibs",
     "lastTime",
-    "last_e",
     "omega",
     "psiar",
     "psibr",
-    "theta"
+    "theta",
+    "theta_v"
    ]
   },
   "initialState": {
@@ -746,11 +746,11 @@
     "ias": 0,
     "ibs": 0,
     "lastTime": 0,
-    "last_e": 0,
     "omega": 0,
     "psiar": 0.001,
     "psibr": 0,
-    "theta": 0
+    "theta": 0,
+    "theta_v": 0
    }
   },
   "flags": {
@@ -9894,11 +9894,6 @@
     "kind": "array",
     "value": [
      [
-      10,
-      0
-     ],
-     [
-      0,
       10
      ]
     ]
@@ -9923,14 +9918,12 @@
   "state": {
    "kind": "object",
    "keys": [
-    "solver",
     "u_seq"
    ]
   },
   "initialState": {
    "kind": "object",
    "value": {
-    "solver": null,
     "u_seq": null
    }
   },
@@ -10007,6 +10000,10 @@
    "Lq": {
     "kind": "number",
     "value": 0.02
+   },
+   "P": {
+    "kind": "number",
+    "value": 2
    },
    "psi_m": {
     "kind": "number",
@@ -20703,6 +20700,10 @@
    "numStates": {
     "kind": "number",
     "value": 5
+   },
+   "seed": {
+    "kind": "number",
+    "value": 1
    }
   },
   "state": {
@@ -20711,7 +20712,8 @@
     "hasPrev",
     "lastActionIdx",
     "lastStateIdx",
-    "qTable"
+    "qTable",
+    "rng"
    ]
   },
   "initialState": {
@@ -20746,7 +20748,8 @@
       0,
       0
      ]
-    ]
+    ],
+    "rng": 1
    }
   },
   "flags": {
