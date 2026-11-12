@@ -24,6 +24,18 @@ describe('XBV-027: AC_MOTOR_PID_CONTROL tracks its reference', () => {
     expect(Math.abs(omega - 157)).toBeLessThanOrEqual(1.57);
     expect(Math.abs(err)).toBeLessThanOrEqual(1.57);
   }, 120_000);
+  // Same oracle with a constant load (the final value theorem holds for a constant load too); 2 N m is a load the
+  // pre-WP-21 block carried. Found by the WP-21 batch G verifier: the rewritten plant stalled at 0.5 N m.
+  for (const load of [0.5, 2]) {
+    it(`constant load ${load} N m: |omega(10 s) - 157| <= 1.57`, () => {
+      const r = runModel(buildModel({
+        blocks: [{ id: 'w', type: 'Constant', params: { value: 157 } }, { id: 'l', type: 'Constant', params: { value: load } }, { id: 'm', type: 'AC_MOTOR_PID_CONTROL' }],
+        wires: ['w.out -> m.w_ref', 'l.out -> m.tl'],
+      }), { solver: 'rk4', dt: 1e-4, stopTime: 10, probes: ['m.omega'] });
+      expect(r.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
+      expect(Math.abs(num(r.signals['m.omega'][r.t.length - 1]) - 157)).toBeLessThanOrEqual(1.57);
+    }, 240_000);
+  }
 });
 
 describe('XBV-024: no side effects or hidden state', () => {
