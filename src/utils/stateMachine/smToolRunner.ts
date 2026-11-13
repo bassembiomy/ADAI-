@@ -3,7 +3,7 @@ import {
   computeFileSha256,
 } from './smVerificationEvidence';
 
-const getNodeBuiltin = (name: string): any => {
+export const getNodeBuiltin = (name: string): any => {
   if (typeof process !== 'undefined' && process.versions?.node) {
     if (typeof (process as any).getBuiltinModule === 'function') {
       try {

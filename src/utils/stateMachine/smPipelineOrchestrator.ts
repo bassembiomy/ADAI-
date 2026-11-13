@@ -19,7 +19,7 @@ import {
   compareCycleObservations,
   type SMCycleObservation,
 } from './smDifferentialEngine';
-import type { AnalysisEvidenceDetails, SMAnalysisAdapter } from './smAnalysisRunner';
+import { createDefaultAnalysisAdapter, type AnalysisEvidenceDetails, type SMAnalysisAdapter } from './smAnalysisRunner';
 import type { SMTargetCompileAdapter, TargetCompileDetails } from './smTargetCompileRunner';
 import { createTargetCompileAdapter } from './smTargetCompileRunner';
 import { compileHostPackage, runHostTests, runSanitizers } from './smCHarness';
@@ -62,8 +62,8 @@ export function createDefaultAdapters(): SMVerificationAdapters {
       runSanitizers: async (req) => runSanitizers(req),
     },
     coverage: createDefaultCoverageAdapter(),
-    staticAnalysis: null,
-    misra: null,
+    staticAnalysis: createDefaultAnalysisAdapter(),
+    misra: createDefaultAnalysisAdapter(),
     target: createTargetCompileAdapter(),
   };
 }
