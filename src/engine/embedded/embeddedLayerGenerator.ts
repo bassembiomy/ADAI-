@@ -7,6 +7,7 @@ import { generateDriverProviders, type DriverProviderResolution } from './driver
 import { generatePlatformProject } from './platformProjectGenerator.js';
 import { createIntegrationManifest, type IntegrationManifest } from './integrationManifest.js';
 import { contentHash } from './contentHash.js';
+import { applyCodePrefix } from '../../utils/stateMachine/smCodePrefix.js';
 
 export interface EmbeddedProjectFile {
   path: string;
@@ -422,7 +423,19 @@ Run the same model in Stateflow on the host and on the target, then compare:
 - Include a reset and a fault recovery.
 - For any mismatch, check the known differences in section 5 first. Otherwise record the first differing step, its inputs and the model element involved.
 
-## 5. Known differences
+## 5. Several charts and rates
+
+A firmware with several charts (or one chart per rate, the replacement for a multirate Stateflow chart) uses one generated package per chart in one build.
+
+- Prefixes: give every chart its own model option \`codePrefix\` (upper case, for example \`PUMP\` or \`MOTOR\`; invalid or reserved values such as \`MCAL\`, \`ADIA\`, \`HAL\` and \`HIL\` are rejected by model validation). Every external function, type, macro, include guard and file name of the chart then carries it: \`PUMP_Init()\`, \`PUMP_TICK_MS\`, \`PUMP_Instance_t\`, \`pump_core.c\`, \`pump_mcal_dio.h\`, \`PUMP_MCAL_CH_*\`, and in this component layer \`PUMP_Component_OneStep()\` and \`PUMP_Scheduler_t\`. Two charts never collide at link time. The default prefix keeps the unprefixed names.
+- Shared MCAL: the MCAL driver functions (\`MCAL_Dio_ReadChannel\`, \`MCAL_Dio_WriteChannel\`, \`MCAL_ReadChannelValue\`, \`MCAL_WriteChannelValue\`, \`MCAL_ApplySafeOutputs\`, \`MCAL_Watchdog_Kick\`) are never prefixed and have identical prototypes in every chart's MCAL header, so one driver implementation serves all charts. Channel numbers are the generated per-chart \`<PREFIX>_MCAL_CH_*\` macros; keep them disjoint between charts that write the same physical channel, or arbitrate in the driver.
+- Base tick: run one periodic timer or RTOS tick at the greatest common divisor of all chart ticks (10 ms and 50 ms: base 10 ms; 20 ms and 30 ms: base 10 ms). Each chart is released every \`chart_tick / base_tick\` base ticks, with a counter per chart. Each chart must still receive its own tick as the step delta, so \`PUMP_Step(&pump, PUMP_TICK_MS)\` is called with the chart's period, never the base period.
+- One scheduler per chart: either one \`<PREFIX>_Scheduler_t\` per chart polled with the same monotonic clock (\`<PREFIX>_Scheduler_Poll()\` then \`<PREFIX>_Component_Cyclic()\`), which gives each chart its own release grid and its own overrun count, or a single base-tick dispatcher that calls \`<PREFIX>_Component_OneStep()\` of each due chart.
+- Priority by rate (rate-monotonic): the shortest period gets the highest priority. In an RTOS give each chart its own task with that priority; in a super-loop or from one timer ISR call the due charts from the fastest to the slowest. A slow chart must not delay a fast chart beyond one base tick.
+- Overrun handling: a chart that is still running when its next release arrives is not re-entered (the component returns a timing error and counts it). Read the per-chart overrun counter, and decide per chart whether to drop the release (default), degrade, or go to the safe state. Missed releases are never burst. Keep the sum of worst-case execution times of all charts released in the same base tick below the base tick.
+- Data between charts: exchange values through the MCAL or through plain variables written by one chart and read by the other at the slower chart's release; never share an instance between two charts.
+
+## 6. Known differences
 
 - Single rate per chart: all states run at \`SM_TICK_MS\`. A multirate Stateflow chart must be split into charts, one per rate.
 - Local events use the run-to-completion queue of UML/SysML, not Stateflow's immediate nested broadcast. The order in which events are processed can differ from Stateflow.
@@ -435,6 +448,7 @@ Run the same model in Stateflow on the host and on the target, then compare:
 export function generateEmbeddedProject(
   config: HILConfig,
   pack: TargetPackManifest,
+  codePrefix?: string,
 ): EmbeddedProjectResult {
   const selection = resolveTargetSelection(config);
   if (!selection) throw new Error('An exact target selection is required');
@@ -449,15 +463,21 @@ export function generateEmbeddedProject(
   const platformResult = generatePlatformProject(config, pack);
 
   // Component files
-  const componentHeader = renderComponentHeader();
-  const componentSource = renderComponentSource();
-  const integrationGuide = renderIntegrationGuide();
+  const [componentHeaderFile, componentSourceFile, integrationGuideFile] = applyCodePrefix([
+    { name: 'adia_component.h', content: renderComponentHeader() },
+    { name: 'adia_component.c', content: renderComponentSource() },
+    { name: 'integration_guide.md', content: renderIntegrationGuide() },
+  ], codePrefix);
+  const componentHeader = componentHeaderFile.content;
+  const componentSource = componentSourceFile.content;
+  const integrationGuide = integrationGuideFile.content;
+  const componentStem = componentHeaderFile.name.replace(/\.h$/, '');
 
   const files: EmbeddedProjectFile[] = [
     { path: 'src/mcal/adia_mcal.h', layer: 'mcal', sha256: contentHash(mcalHeaderContent), content: mcalHeaderContent },
     { path: 'src/mcal/adia_mcal.c', layer: 'mcal', sha256: contentHash(renderMcalImplementation(config, channels)), content: renderMcalImplementation(config, channels) },
-    { path: 'src/component/adia_component.h', layer: 'component', sha256: contentHash(componentHeader), content: componentHeader },
-    { path: 'src/component/adia_component.c', layer: 'component', sha256: contentHash(componentSource), content: componentSource },
+    { path: `src/component/${componentStem}.h`, layer: 'component', sha256: contentHash(componentHeader), content: componentHeader },
+    { path: `src/component/${componentStem}.c`, layer: 'component', sha256: contentHash(componentSource), content: componentSource },
     ...driverResult.files.map(f => ({ path: f.path, layer: 'driver' as const, sha256: f.sha256, content: f.content })),
     ...platformResult.files.map(f => ({ path: f.path, layer: f.layer, sha256: f.sha256, content: f.content })),
     { path: 'docs/INTEGRATION.md', layer: 'build', sha256: contentHash(integrationGuide), content: integrationGuide },
@@ -510,7 +530,7 @@ export interface EmbeddedLayerResult {
   manifest: EmbeddedIntegrationManifest;
 }
 
-export function generateEmbeddedLayers(config: HILConfig): EmbeddedLayerResult {
+export function generateEmbeddedLayers(config: HILConfig, codePrefix?: string): EmbeddedLayerResult {
   const targetSelection = resolveTargetSelection(config);
   if (!targetSelection) throw new Error('An exact target selection is required for embedded layers');
   const channels = channelModel(config);
@@ -528,15 +548,17 @@ export function generateEmbeddedLayers(config: HILConfig): EmbeddedLayerResult {
 
   const header = generateMcalHeader({ packTargetId: targetSelection.targetId, channels });
   const mcalImpl = renderMcalImplementation(config, channels);
-  const compHeader = renderComponentHeader();
-  const compSource = renderComponentSource();
+  const [compHeaderFile, compSourceFile] = applyCodePrefix([
+    { name: 'adia_component.h', content: renderComponentHeader() },
+    { name: 'adia_component.c', content: renderComponentSource() },
+  ], codePrefix);
 
   return {
     files: [
       { name: 'adia_mcal.h', content: header },
       { name: 'adia_mcal.c', content: mcalImpl },
-      { name: 'adia_component.h', content: compHeader },
-      { name: 'adia_component.c', content: compSource },
+      compHeaderFile,
+      compSourceFile,
       { name: 'integration_manifest.json', content: `${JSON.stringify(manifest, null, 2)}\n` },
     ],
     manifest,

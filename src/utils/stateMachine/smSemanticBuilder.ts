@@ -1,4 +1,5 @@
 import type { StateData } from '../../types/sm_types';
+import { codePrefixProblem } from './smCodePrefix';
 import {
   parseActions as parseActionsRaw,
   type ActionNode,
@@ -370,6 +371,12 @@ export const buildSemanticModel = (
 ): SemanticBuildResult => {
   const diagnostics = validateModelStructure(model as StateMachineModelV4);
   diagnostics.push(...validateVerificationConfig(model));
+  if (model.codePrefix !== undefined) {
+    const problem = codePrefixProblem(model.codePrefix);
+    if (problem !== null) {
+      diagnostics.push({ code: 'SM_INVALID_CODE_PREFIX', message: problem, severity: 'error' });
+    }
+  }
   if (diagnostics.some((item) => item.severity === 'error')) {
     return { diagnostics };
   }
@@ -837,6 +844,9 @@ export const buildSemanticModel = (
     stateSymbols,
     ir: freezeSemanticModel({
       tickMs: model.tickMs,
+      ...(model.codePrefix !== undefined && codePrefixProblem(model.codePrefix) === null
+        ? { codePrefix: model.codePrefix }
+        : {}),
       safetyMode: model.safetyMode,
       safeStateId: model.states.find((state) => state.isSafeState === true)?.id
         ?? null,

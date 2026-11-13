@@ -1,4 +1,5 @@
 import { execFileSync } from 'child_process';
+import { applyCodePrefixToSource, DEFAULT_CODE_PREFIX, prefixedFileName } from './smCodePrefix';
 import { existsSync, readdirSync, statSync, writeFileSync } from 'fs';
 import { join, relative, resolve } from 'path';
 import type { SMCStandard } from './smModel';
@@ -48,6 +49,8 @@ export interface CProgramOptions {
   defines?: readonly string[];
   allowMissingCompiler?: boolean;
   executableName?: string;
+  /** Code prefix of the chart's generated files (default 'SM'). */
+  codePrefix?: string;
 }
 
 export const compileAndRunCProgram = (
@@ -78,12 +81,10 @@ export const compileAndRunCProgram = (
     '-Werror',
     ...(options.defines ?? []).map((define) => `-D${define}`),
     '-I.',
-    'sm_mapping.c',
-    'sm_core.c',
-    'sm_safety.c',
-    'sm_user_logic.c',
-    ...(existsSync(join(options.directory, 'sm_xbridges.c'))
-      ? ['sm_xbridges.c']
+    ...['sm_mapping.c', 'sm_core.c', 'sm_safety.c', 'sm_user_logic.c']
+      .map((name) => prefixedFileName(name, options.codePrefix ?? DEFAULT_CODE_PREFIX)),
+    ...(existsSync(join(options.directory, prefixedFileName('sm_xbridges.c', options.codePrefix ?? DEFAULT_CODE_PREFIX)))
+      ? [prefixedFileName('sm_xbridges.c', options.codePrefix ?? DEFAULT_CODE_PREFIX)]
       : []),
     ...(options.additionalSources ?? []),
     harnessName,
@@ -859,6 +860,14 @@ const renderFramePrinter = (ir: SemanticModel): string => {
 export const renderDifferentialHarness = (
   ir: SemanticModel,
   steps: readonly DifferentialScenarioStep[],
+): string => applyCodePrefixToSource(
+  renderDifferentialHarnessDefaultPrefix(ir, steps),
+  ir.codePrefix ?? DEFAULT_CODE_PREFIX,
+);
+
+const renderDifferentialHarnessDefaultPrefix = (
+  ir: SemanticModel,
+  steps: readonly DifferentialScenarioStep[],
 ): string => {
   const states = orderedStates(ir);
   // A tick with events runs up to SM_MAX_EXECUTIONS_PER_STEP chart executions, each tracing its actions.
@@ -1092,7 +1101,8 @@ export const compileAndRunCTrace = (
     const output = compileAndRunCProgram({
       directory: workspace.directory,
       harnessSource: renderDifferentialHarness(ir, fixture.steps),
-      defines: ['SM_TRACE_ENABLED'],
+      defines: [`${ir.codePrefix ?? DEFAULT_CODE_PREFIX}_TRACE_ENABLED`],
+      codePrefix: ir.codePrefix,
     });
     if (output === null) throw new Error('host gcc is required');
     return output.trim().split(/\r?\n/).filter(Boolean).map(parseFrame);

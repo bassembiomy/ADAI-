@@ -41,6 +41,7 @@ import {
 import { renderHostSmokeHarness } from './smHostHarness';
 import { buildSMTestManifest } from './smTestPlanBuilder';
 import { renderSMCTestPackage } from './smCTestSuiteRenderer';
+import { applyCodePrefix, DEFAULT_CODE_PREFIX } from './smCodePrefix';
 
 export interface CGeneratorOptions {
   includeTestShims?: boolean;
@@ -2108,7 +2109,7 @@ export const renderTestingReport = (
 ): string =>
   renderSemanticTestingReport(analyzeSemanticModel(ir), evidence, ir);
 
-export const generateCArtifacts = (
+const generateCArtifactsDefaultPrefix = (
   ir: SemanticModel,
   options: CGeneratorOptions = {},
 ): CGeneratorResult => {
@@ -2211,6 +2212,16 @@ export const generateCArtifacts = (
     errors,
     warnings: [],
   };
+};
+
+/** Generates the chart's C files; a model `codePrefix` is applied by the isolated rename pass (smCodePrefix.ts). */
+export const generateCArtifacts = (
+  ir: SemanticModel,
+  options: CGeneratorOptions = {},
+): CGeneratorResult => {
+  const generated = generateCArtifactsDefaultPrefix(ir, options);
+  if (ir.codePrefix === undefined || ir.codePrefix === DEFAULT_CODE_PREFIX) return generated;
+  return { ...generated, files: applyCodePrefix(generated.files, ir.codePrefix) };
 };
 
 export interface StructureVerificationResult {

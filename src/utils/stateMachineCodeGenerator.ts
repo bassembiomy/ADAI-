@@ -5,6 +5,7 @@ import {
 import { analyzeStateMachine } from './smAnalysisEngine';
 import { generateHALCode } from '../engine/hil/hilCodeGenerator';
 import { generateCArtifacts } from './stateMachine/smCGenerator';
+import { applyCodePrefixToSource, DEFAULT_CODE_PREFIX, prefixedFileName } from './stateMachine/smCodePrefix';
 import { migrateStateMachineModel } from './stateMachine/smModelMigration';
 import { buildSemanticModel } from './stateMachine/smSemanticBuilder';
 import {
@@ -2981,7 +2982,7 @@ export const generateMISRACCode = (
   const hilWarnings: string[] = [];
   const hilErrors: string[] = [];
   const hilFiles = chart.hilConfig?.enabled === true
-    ? generateHALCode(chart.hilConfig, chart.variables, hilWarnings, options.includeTestShims === true ? undefined : hilErrors)
+    ? generateHALCode(chart.hilConfig, chart.variables, hilWarnings, options.includeTestShims === true ? undefined : hilErrors, built.ir.codePrefix)
     : [];
   if (hilErrors.length > 0) {
     return { files: [], errors: hilErrors.map(message => ({ id: uuidv4(), type: 'error' as const, message, timestamp: new Date(), source: 'HIL Production Validator' })), warnings: [...warnings, ...hilWarnings] };
@@ -3005,8 +3006,9 @@ export const generateMISRACCode = (
     verificationEvidence: options.verificationEvidence,
     includeVerificationPackage,
   });
+  const codePrefix = built.ir.codePrefix ?? DEFAULT_CODE_PREFIX;
   const files = rendered.files.map((file) => {
-    if (!file.name.endsWith('sm_testing_report.md') || chart.hilConfig?.enabled !== true) {
+    if (!file.name.endsWith(prefixedFileName('sm_testing_report.md', codePrefix)) || chart.hilConfig?.enabled !== true) {
       return file;
     }
     return {
@@ -3036,8 +3038,9 @@ export const generateMISRACCode = (
         const manifest = JSON.parse(file.content);
         return { ...file, content: JSON.stringify({ ...manifest, flashBlocked: true, blockReasons: [...new Set([...(manifest.blockReasons ?? []), 'SIMULATION_TEST_SHIMS'])] }, null, 2) + '\n' };
       }
-      if (chart.hilConfig?.enabled !== true || !file.name.endsWith('sm_core.h')) return file;
-      return { ...file, content: file.content.replace('#include "sm_config.h"', '#include "sm_config.h"\n#ifdef __cplusplus\nextern "C" {\n#endif').replace('#endif /* SM_CORE_H */', '#ifdef __cplusplus\n}\n#endif\n#endif /* SM_CORE_H */') };
+      if (chart.hilConfig?.enabled !== true || !file.name.endsWith(prefixedFileName('sm_core.h', codePrefix))) return file;
+      const prefixed = (text: string) => applyCodePrefixToSource(text, codePrefix);
+      return { ...file, content: file.content.replace(prefixed('#include "sm_config.h"'), prefixed('#include "sm_config.h"\n#ifdef __cplusplus\nextern "C" {\n#endif')).replace(prefixed('#endif /* SM_CORE_H */'), prefixed('#ifdef __cplusplus\n}\n#endif\n#endif /* SM_CORE_H */')) };
     }),
     errors: [...errors, ...rendered.errors],
     warnings: [...warnings, ...rendered.warnings, ...hilWarnings],

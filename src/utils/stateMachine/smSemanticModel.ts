@@ -180,6 +180,8 @@ export interface ResolvedSMVerificationConfig {
 
 export interface SemanticModel {
   tickMs: number;
+  /** Prefix of every external name and file of the generated C (default 'SM'). */
+  codePrefix?: string;
   safetyMode: boolean;
   safeStateId: string | null;
   rootLayerId: string;

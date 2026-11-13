@@ -64,6 +64,7 @@ export interface StateMachineModelV4 {
   safetyMode: boolean;
   hilConfig?: HILConfig;
   events?: EventDef[];
+  codePrefix?: string;
 }
 
 export interface StateMachineModelV5 {
@@ -78,6 +79,8 @@ export interface StateMachineModelV5 {
   hilConfig?: HILConfig;
   verification: SMVerificationConfig;
   diagrams?: StateMachineDiagramData[];
+  /** Prefix of every external name and file of the generated C, for several charts in one firmware. Default 'SM'. */
+  codePrefix?: string;
   /** Stateflow "Execute (enter) chart at initialization". Undefined means true (ADIA default). */
   executeAtInitialization?: boolean;
   /** Declared events in declaration order (input events fire in this order). Optional: absent means no events. */
@@ -98,6 +101,8 @@ export interface LegacyStateMachineModel {
   safetyMode?: boolean;
   hilConfig?: HILConfig;
   verification?: Partial<SMVerificationConfig>;
+  /** See StateMachineModelV5.codePrefix. */
+  codePrefix?: string;
   diagrams?: StateMachineDiagramData[];
   executeAtInitialization?: boolean;
   events?: EventDef[];

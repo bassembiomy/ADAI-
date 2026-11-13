@@ -2,6 +2,7 @@ import { HILConfig } from './hilTypes';
 import { hilDriverTemplates } from './hilDriverTemplates';
 import { resolveTargetSelection } from './hilTypes';
 import { generateEmbeddedLayers } from '../embedded/embeddedLayerGenerator';
+import { applyCodePrefix } from '../../utils/stateMachine/smCodePrefix';
 import { validatePinAssignments } from './pinValidator';
 import { defaultTargetPackFor } from '../targetPacks/defaultTargetPacks';
 
@@ -11,7 +12,8 @@ export function generateHALCode(
   config: HILConfig,
   smVariables: Array<{ name: string; type: string }>,
   warnings?: string[],
-  errors?: string[]
+  errors?: string[],
+  codePrefix?: string,
 ): Array<{ name: string; content: string }> {
   if (!config || !config.enabled) {
     return [];
@@ -782,9 +784,9 @@ This project is configured for PlatformIO (see \`platformio.ini\`). Open the fol
       boardRevision: 'host',
     },
   };
-  const embeddedFiles = generateEmbeddedLayers(embeddedConfig).files;
+  const embeddedFiles = generateEmbeddedLayers(embeddedConfig, codePrefix).files;
 
-  return [
+  return applyCodePrefix([
     ...embeddedFiles,
     ...(arduino ? [{ name: 'adia_cpp.py', content: cppScript }] : []),
     ...(target.startsWith('STM32') ? [{ name: 'stm32_runtime.c', content: stm32Runtime }] : []),
@@ -797,5 +799,5 @@ This project is configured for PlatformIO (see \`platformio.ini\`). Open the fol
     { name: mainFileName, content: mainHilC },
     { name: 'platformio.ini', content: platformioIni },
     { name: 'README_HIL.md', content: readmeHil },
-  ];
+  ], codePrefix);
 }
