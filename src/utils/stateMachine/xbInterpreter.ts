@@ -32,6 +32,12 @@ export interface XBRuntime {
   operationFaults: Record<string, { active: boolean; fault: XBNumericFault | null }>;
   numericFaults: Array<{ operationId: string; fault: XBNumericFault }>;
   simTime?: number;
+  /**
+   * Elapsed time of the owning state in milliseconds, as seen by the current step. A Step block with
+   * state-elapsed-time semantics (stepParameters) compares this tick-granular timer, exactly as the
+   * generated C compares state_timers[], instead of the solver-substep time.
+   */
+  stateElapsedMs?: number;
 }
 
 interface XBSnapshot {
@@ -530,8 +536,15 @@ const evaluateDirectOperation = (
     case 'Sum':
     case 'SUM_JUNCTION':
     case 'VectorAdd': {
+      // Per-port signs ('+-' ...) as in BlockDefinitions and the generated C (emitSum).
+      const configuredSigns = operation.parameters.signs;
+      const signs = typeof configuredSigns === 'string' ? configuredSigns : '';
       const result = inputs.reduce<readonly XBScalar[]>(
-        (sum, input) => binary(sum, input, (left, right) => left + right),
+        (sum, input, index) => binary(
+          sum,
+          signs[index] === '-' ? unary(input, (value) => -value) : input,
+          (left, right) => left + right,
+        ),
         [0],
       );
       return [result];
@@ -970,7 +983,9 @@ const evaluateDirectOperation = (
         ?? Number(parameter(operation, ['final_value', 'finalValue', 'final'], 1));
       const t = runtime.simTime ?? 0;
       const beforeThreshold = operation.stepParameters
-        ? Math.round((t + runtime.ir.solver.stepSeconds) * 1000)
+        ? (runtime.stateElapsedMs !== undefined
+          ? runtime.stateElapsedMs
+          : Math.round((t + runtime.ir.solver.stepSeconds) * 1000))
         < operation.stepParameters.threshold.milliseconds
         : t < stepTime;
       return [[beforeThreshold ? initial : final]];
@@ -2285,8 +2300,10 @@ const executeSolverSubstep = (
 export const stepXBState = (
   runtime: XBRuntime,
   data: Record<string, number | boolean>,
+  stateElapsedMs?: number,
 ): XBNumericFault[] => {
   const faults: XBNumericFault[] = [];
+  runtime.stateElapsedMs = stateElapsedMs;
   runtime.numericFaults = [];
   for (const operationId of runtime.ir.executionOrder) {
     runtime.operationFaults[operationId] = { active: false, fault: null };

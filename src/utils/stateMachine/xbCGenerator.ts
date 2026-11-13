@@ -3176,6 +3176,9 @@ const renderDirectEvaluation = (
   layout: XBStateLayout,
   member: string,
   forceEvaluation = false,
+  /* Lines of a stateful operation, emitted in place so that blocks downstream of a direct-feedthrough
+   * stateful block (filters, ...) read its output of the same substep, as the simulation does. */
+  renderStateful?: (operation: XBSemanticOperation, operationIndex: number) => string[],
 ): string[] => xb.executionOrder.flatMap((operationId, operationIndex) => {
   const operation = xb.operations[operationId];
   if (operation === undefined) {
@@ -3183,7 +3186,7 @@ const renderDirectEvaluation = (
       `X-Bridges execution order references missing operation '${operationId}'`,
     );
   }
-  if (operation.stateful) return [];
+  if (operation.stateful) return renderStateful?.(operation, operationIndex) ?? [];
   const errorField = layout.errorFields.get(operation.id);
   const emitted = [
     ...operationEmitter(operation)(
@@ -4092,10 +4095,8 @@ const renderSolverSubstep = (
         '    }',
       ];
     }),
-    ...renderDirectEvaluation(state, xb, layout, member).map((line) => `    ${line}`),
-    ...xb.executionOrder.flatMap((operationId, operationIndex) => {
-      const operation = xb.operations[operationId];
-      if (!operation?.stateful || !operation.directFeedthrough) return [];
+    ...renderDirectEvaluation(state, xb, layout, member, false, (operation, operationIndex) => {
+      if (!operation.directFeedthrough) return [];
       const outputs = renderTransactionalStateAndOutputs(
         state,
         operation,
@@ -4122,7 +4123,7 @@ const renderSolverSubstep = (
         ...effectiveOutputs.map((line) => `    ${line}`),
         '    }',
       ];
-    }),
+    }).map((line) => `    ${line}`),
     ...renderDiscreteStateUpdates(state, xb, layout, member).map((line) => `    ${line}`),
     ...renderContinuousStateUpdates(state, xb, layout, member).map((line) => `    ${line}`),
     ...renderScheduleAdvances(xb, layout, member).map((line) => `    ${line}`),
@@ -4453,8 +4454,8 @@ SM_XB_NumericResult_t SM_XB_ConvertFloat32(double value)
         return result;
     }
     if (fabs(value) > (double)FLT_MAX) {
-        result.real_value = value < 0.0 ? -HUGE_VAL : HUGE_VAL;
-        result.quantization_error = HUGE_VAL;
+        result.real_value = value < 0.0 ? -INFINITY : INFINITY;
+        result.quantization_error = INFINITY;
         result.fault = SM_XB_FAULT_NON_FINITE;
         return result;
     }

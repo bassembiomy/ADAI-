@@ -12,7 +12,9 @@ import { buildRandomChart, RANDOM_INPUT_EVENTS, randomStimulus, type RandomChart
  * temporal and combined guards, cross-level, inner and self transitions, and typed
  * arithmetic that saturates; the 'with-fixed-point' group adds fixdt variables (all word lengths, signed
  * and unsigned, both rounding modes); the 'with-events' group adds input and local events
- * (event-triggered transitions, send() actions, event queue overflow).
+ * (event-triggered transitions, send() actions, event queue overflow); the 'with-xbridges' group turns
+ * leaf states into X-Bridges states (random memory and fault policies, inputs read from and outputs
+ * written to chart variables that guards read), compared exactly like the other groups.
  *
  * Deterministic: each chart is built from a seed. A failure message names the group and
  * seed so the chart can be rebuilt with `buildRandomChart(seed, features)`.
@@ -30,6 +32,7 @@ const groups: Array<[string, RandomChartFeatures, number]> = [
   ['everything', { innerTransitions: true, arithmetic: true }, 4_000],
   ['with-events', { innerTransitions: true, arithmetic: true, events: true }, 5_000],
   ['with-fixed-point', { innerTransitions: true, arithmetic: true, fixedPoint: true }, 6_000],
+  ['with-xbridges', { innerTransitions: true, arithmetic: true, events: true, xBridges: true }, 6_000],
 ];
 
 describe('random charts: generated C equals the simulation on every tick', () => {
@@ -50,7 +53,11 @@ describe('random charts: generated C equals the simulation on every tick', () =>
         try {
           const difference = compareSemanticTraces(runInterpreterTrace(fixture), compileAndRunCTrace(fixture));
           if (difference !== null) {
-            failures.push(`${group} seed=${seed}: first divergence at frame ${difference.index}: `
+            const expectedFrame = difference.expected as unknown as Record<string, unknown> | null;
+            const actualFrame = difference.actual as unknown as Record<string, unknown> | null;
+            const differing = Object.keys(expectedFrame ?? {})
+              .filter((key) => JSON.stringify(expectedFrame?.[key]) !== JSON.stringify(actualFrame?.[key]));
+            failures.push(`${group} seed=${seed}: first divergence at frame ${difference.index} (${differing.join(',')}): `
               + `sim=${JSON.stringify(difference.expected?.activeStateIds)} ${difference.expected?.error ?? ''} `
               + `c=${JSON.stringify(difference.actual?.activeStateIds)} ${difference.actual?.error ?? ''}`);
           }

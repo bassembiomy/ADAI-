@@ -792,6 +792,7 @@ const executeState = (
     const faults = stepXBState(
       xBridges,
       context.runtime.data,
+      context.runtime.stateTimersMs[state.activityIndex],
     );
     if (
       faults.length > 0

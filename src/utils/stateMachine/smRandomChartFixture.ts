@@ -1,6 +1,8 @@
+import { BLOCK_LIBRARY } from '../../engine/xbridges/BlockDefinitions';
 import type { JunctionData, StateData, TransitionData, VariableDef } from '../../types/sm_types';
 import { flatOrFixture, type DifferentialScenarioStep } from './smFixtures';
 import type { StateMachineLayerV4, StateMachineModelV5 } from './smModel';
+import type { XBEdgeV1, XBMappingV1, XBNodeV1, XBPersistedModelV1 } from './xbModel';
 
 /*
  * Seeded random state charts for differential testing (test support, not used by the app):
@@ -15,7 +17,120 @@ export interface RandomChartFeatures {
   events?: boolean;
   /** Declares fixed-point (fixdt) variables of several word and fraction lengths, used in actions and guards; the chart rounding mode is random. */
   fixedPoint?: boolean;
+  /**
+   * Turns some leaf states into X-Bridges states: small valid block diagrams (gain, sum, saturation,
+   * dead zone, unit delay, discrete integrator, delay, filters, rate limiter, step sources) with a random
+   * memory ('reset' / 'retain') and numeric-fault ('signal-only' / 'escalate') policy, an Inport fed by a
+   * chart variable and an Outport writing a chart variable (xo0, xo1, ...) that guards of the chart read.
+   */
+  xBridges?: boolean;
 }
+
+/* ---- X-Bridges state generation (test support) ---- */
+
+/* The default target has no float64 support for X-Bridges ports; mapped variables are 'float' (f0, xo*). */
+type XBDataType = 'float32';
+
+const xbPortDef = (p: any, dataType: XBDataType) => ({
+  id: p.id,
+  direction: p.direction,
+  shape: p.shape ?? 'scalar',
+  dimensions: p.dimensions ?? [],
+  dataType,
+});
+
+const xbNode = (dataType: XBDataType, id: string, type: string, params: Record<string, unknown> = {}): XBNodeV1 => {
+  const block = BLOCK_LIBRARY[type](id, params);
+  return {
+    id,
+    type,
+    label: id,
+    parameters: {
+      ...(block.inputs ? { inputs: block.inputs.map((p: any) => xbPortDef(p, dataType)) } : {}),
+      ...(block.outputs ? { outputs: block.outputs.map((p: any) => xbPortDef(p, dataType)) } : {}),
+      ...params,
+    } as XBNodeV1['parameters'],
+  };
+};
+
+interface XBTemplate { nodes: XBNodeV1[]; edges: XBEdgeV1[]; mappings: XBMappingV1[]; }
+
+const buildXBTemplate = (
+  rnd: () => number,
+  prefix: string,
+  dataType: XBDataType,
+  inputVar: string,
+  outputVar: string,
+): XBTemplate => {
+  const pick = <T,>(items: readonly T[]): T => items[Math.floor(rnd() * items.length)];
+  const chance = (p: number) => rnd() < p;
+  const nodes: XBNodeV1[] = [];
+  const edges: XBEdgeV1[] = [];
+  const mappings: XBMappingV1[] = [];
+  const hasInput = chance(0.85);
+  const outport = `${prefix}_out`;
+  nodes.push(xbNode(dataType, outport, 'Outport', { smVarId: outputVar }));
+  mappings.push({ smVarId: outputVar, blockId: outport, portId: 'out', direction: 'out' });
+  let cursor: { id: string; port: string };
+  if (hasInput) {
+    const inport = `${prefix}_in`;
+    nodes.push(xbNode(dataType, inport, 'Inport', { smVarId: inputVar }));
+    mappings.push({ smVarId: inputVar, blockId: inport, portId: 'in', direction: 'in' });
+    cursor = { id: inport, port: 'out' };
+  } else if (chance(0.5)) {
+    const id = `${prefix}_step`;
+    nodes.push(xbNode(dataType, id, 'Step', { stepTime: pick([0.02, 0.05, 0.1]), initialValue: pick([0, 1, -2]), finalValue: pick([3, 5.5, -4]) }));
+    cursor = { id, port: 'out' };
+  } else {
+    const id = `${prefix}_const`;
+    nodes.push(xbNode(dataType, id, 'Constant', { value: pick([1, 2.5, -3]) }));
+    cursor = { id, port: 'out' };
+  }
+  const connect = (from: { id: string; port: string }, toId: string, toPort: string) => {
+    edges.push({ id: `${prefix}_e${edges.length}`, sourceNodeId: from.id, sourcePortId: from.port, targetNodeId: toId, targetPortId: toPort });
+  };
+  const stages = 1 + Math.floor(rnd() * 3);
+  for (let stage = 0; stage < stages; stage += 1) {
+    const id = `${prefix}_b${stage}`;
+    switch (pick(['gain', 'sum', 'sat', 'deadzone', 'unitdelay', 'integrator', 'delay', 'lpf', 'ma', 'rate'] as const)) {
+      case 'gain':
+        nodes.push(xbNode(dataType, id, 'GAIN', { gain: pick([2, -0.5, 3.25, 0.125]) }));
+        connect(cursor, id, 'u'); cursor = { id, port: 'y' }; break;
+      case 'sum': {
+        const k = `${id}_k`;
+        nodes.push(xbNode(dataType, k, 'Constant', { value: pick([1, -2.5, 10]) }));
+        nodes.push(xbNode(dataType, id, 'Sum', { signs: pick(['++', '+-']), numInputs: 2 }));
+        connect(cursor, id, 'in1'); connect({ id: k, port: 'out' }, id, 'in2'); cursor = { id, port: 'out' }; break;
+      }
+      case 'sat':
+        nodes.push(xbNode(dataType, id, 'SATURATION', { lowerLimit: pick([-1, -5, 0]), upperLimit: pick([1, 4, 20]) }));
+        connect(cursor, id, 'u'); cursor = { id, port: 'y' }; break;
+      case 'deadzone':
+        nodes.push(xbNode(dataType, id, 'DEADZONE', { lowerLimit: pick([-0.5, -2]), upperLimit: pick([0.5, 3]) }));
+        connect(cursor, id, 'u'); cursor = { id, port: 'y' }; break;
+      case 'unitdelay':
+        nodes.push(xbNode(dataType, id, 'UNIT_DELAY', { initialCondition: pick([0, 1, -3]) }));
+        connect(cursor, id, 'u'); cursor = { id, port: 'y' }; break;
+      case 'integrator':
+        nodes.push(xbNode(dataType, id, 'INTEGRATOR_DISCRETE', { initial_condition: pick([0, 1]), sample_time: 0.01, method: 'forward_euler' }));
+        connect(cursor, id, 'u'); cursor = { id, port: 'y' }; break;
+      case 'delay':
+        nodes.push(xbNode(dataType, id, 'DELAY', { delay_length: pick([1, 2, 3]), initial_condition: pick([-1, 0, 4]) }));
+        connect(cursor, id, 'u'); cursor = { id, port: 'y' }; break;
+      case 'lpf':
+        nodes.push(xbNode(dataType, id, 'LOW_PASS_FILTER', { cutoff_frequency: 1, sample_time: 0.1, initial_condition: 0 }));
+        connect(cursor, id, 'u'); cursor = { id, port: 'y' }; break;
+      case 'ma':
+        nodes.push(xbNode(dataType, id, 'MOVING_AVERAGE', { window_size: pick([2, 4]), sample_time: 0.1, initial_condition: 0 }));
+        connect(cursor, id, 'u'); cursor = { id, port: 'y' }; break;
+      case 'rate':
+        nodes.push(xbNode(dataType, id, 'RATE_LIMITER', { risingSlewRate: pick([2, 20]), fallingSlewRate: pick([-2, -20]), initialCondition: 0, sampleTime: 0.1 }));
+        connect(cursor, id, 'u'); cursor = { id, port: 'y' }; break;
+    }
+  }
+  connect(cursor, outport, 'in');
+  return { nodes, edges, mappings };
+};
 
 export const RANDOM_INPUT_EVENTS = ['IN_A', 'IN_B'] as const;
 const EVENT_IDS = ['ev_in_a', 'ev_in_b', 'ev_local'] as const;
@@ -93,9 +208,15 @@ export const buildRandomChart = (seed: number, features: RandomChartFeatures): S
   let transitionCount = 0;
   const maxStates = 20 + Math.floor(rnd() * 60);
   const maxDepth = 3 + Math.floor(rnd() * 3);
+  const xbOutputs: Array<{ name: string; type: 'float' | 'double' }> = [];
+  if (features.xBridges) {
+    const count = 2 + Math.floor(rnd() * 3);
+    for (let index = 0; index < count; index += 1) xbOutputs.push({ name: `xo${index}`, type: 'float' });
+  }
 
   const action = (): string => {
     if (features.fixedPoint && chance(0.4)) return pick(FIXED_ACTIONS);
+    if (features.xBridges && chance(0.25)) return pick(['f0 = f0 * 0.5 + 1.5;', 'f0 = f0 - 2.25;', 'f0 = f0 + 0.75;', 'f0 = xo0 + 1.0;']);
     if (!features.arithmetic) return chance(0.5) ? '' : pick(['c0 = c0 + 1;', 'd0 = d0 + 0.5;']);
     return chance(0.45) ? '' : pick([
       'c0 = c0 + 1;',
@@ -119,6 +240,7 @@ export const buildRandomChart = (seed: number, features: RandomChartFeatures): S
       ? [...INPUTS, ...INPUTS.map((name) => `!${name}`), 'c0 > 3', 'c1 % 2 == 0', 'u8 < 100', 'd0 > 4.5']
       : [...INPUTS, ...INPUTS.map((name) => `!${name}`), 'c0 > 3'];
     if (features.fixedPoint && chance(0.3)) atoms.push(...FIXED_ATOMS);
+    for (const output of xbOutputs) atoms.push(pick([`${output.name} > 1.5`, `${output.name} < 3.0`, `${output.name} >= 0.0`]));
     return chance(0.3) ? `${pick(atoms)} && ${pick(atoms)}` : pick(atoms);
   };
 
@@ -238,12 +360,38 @@ export const buildRandomChart = (seed: number, features: RandomChartFeatures): S
     addTransition(root, junctionId, second, { type: 'condition', afterTicks: null, condition: 'true', order: 2 });
   }
 
+  if (features.xBridges) {
+    const leaves = states.filter((state) => !childLayerOf.has(state.id));
+    const pool = [...leaves];
+    for (const output of xbOutputs) {
+      if (pool.length === 0) break;
+      const leaf = pool.splice(Math.floor(rnd() * pool.length), 1)[0];
+      const dataType: XBDataType = 'float32';
+      const template = buildXBTemplate(rnd, `xb_${leaf.id}`, dataType, 'f0', output.name);
+      const persisted: XBPersistedModelV1 = {
+        schemaVersion: 1,
+        nodes: template.nodes,
+        edges: template.edges,
+        mappings: template.mappings,
+        solver: { kind: 'euler', stepSeconds: pick([0.002, 0.005, 0.01]) },
+        policy: { memory: pick(['reset', 'retain'] as const), numericFault: pick(['signal-only', 'escalate'] as const) },
+      };
+      leaf.isXBridges = true;
+      leaf.xBridgesModel = persisted as unknown as StateData['xBridgesModel'];
+    }
+  }
+
   const model = flatOrFixture();
   model.states = states;
   model.junctions = junctions;
   model.transitions = transitions;
   model.layers = layers;
-  model.variables = features.fixedPoint ? [...baseVariables(), ...fixedVariables()] : baseVariables();
+  model.variables = [
+    ...baseVariables(),
+    ...(features.fixedPoint ? fixedVariables() : []),
+    ...(features.xBridges ? [{ id: 'f0', name: 'f0', type: 'float' as const, initialValue: '0', currentValue: 0, visibleInScope: true }] : []),
+    ...xbOutputs.map((output) => ({ id: output.name, name: output.name, type: output.type, initialValue: '0', currentValue: 0, visibleInScope: true })),
+  ];
   if (features.fixedPoint && chance(0.5)) model.fixedPointRounding = 'nearest';
   if (features.events) {
     model.events = [
