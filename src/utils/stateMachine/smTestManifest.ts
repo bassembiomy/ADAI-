@@ -42,6 +42,8 @@ export type SMTestOperation =
   | { kind: 'step'; deltaMs?: number }
   /** Posts an input event (SemanticEvent id) for the next step. */
   | { kind: 'post-event'; eventId: string }
+  /** Queues a local event as send() does, through the ADIA_TESTING hook (SM_Test_QueueLocalEvent). */
+  | { kind: 'queue-local-event'; eventId: string }
   | { kind: 'set-variable'; variableId: string; value: unknown }
   | { kind: 'set-input'; mappingId: string; rawValue: unknown }
   | {

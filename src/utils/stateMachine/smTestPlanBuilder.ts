@@ -13,13 +13,19 @@ import type {
 import {
   configurationContaining,
   defaultConfiguration,
-  defaultDescendants,
-  duringAssignedVariables,
-  effectSendsLocalEvent,
-  findTransitionStimulus,
-  predictFiredEffect,
+  rankStimulusCandidates,
   type ForcedConfiguration,
+  type StimulusCandidate,
 } from './smTestScenarioPlanner';
+import {
+  expectationsFromResult,
+  isObservableVariable,
+  sameResult,
+  simulateOperations,
+  timerAsC,
+  withoutTransition,
+  type OracleResult,
+} from './smTestOracle';
 import {
   sortSMTestCases,
   type SMApplicability,
@@ -68,30 +74,130 @@ type TraceabilityFactory = (
   generatedFunctions: readonly string[],
 ) => SMTestTraceability;
 
+interface OracleAttempt {
+  readonly operations: SMTestOperation[];
+  readonly result: OracleResult;
+  readonly forcedActive: ReadonlySet<string>;
+}
+
 /**
- * TRUE and FALSE cases for a transition between two plain states. Both start from a forced
- * configuration in which the source (with its ancestors, default descendants and parallel regions)
- * is active, supply the guard variables and the source timer, and then step once.
+ * Transition cases (TRUE and FALSE) with the simulation as oracle. For each case the search tries
+ * stimuli (guard variable values, source timer, the transition's event posted or queued) in order of
+ * preference; a stimulus is taken only when the simulation shows what the case claims:
+ *  - TRUE: the transition fires (the result differs from the result with the transition switched off),
+ *    the destination is active and, for a transition between unrelated states, the source inactive;
+ *  - FALSE: the transition does not fire, the source stays active and the destination stays as forced.
+ * The first pass also requires that nothing else fires from the forced configuration (full isolation);
+ * the second only that the other transitions do not move the source or the destination.
+ * The expected values are those of the simulation result; a case with no such stimulus is
+ * not-applicable with the reason.
  */
-const buildScenarioTransitionCases = (
+const buildOracleTransitionCases = (
   ir: SemanticModel,
   t: SemanticTransition,
-  src: SemanticState,
-  dst: SemanticState,
-  srcName: string,
-  dstName: string,
-  configuration: ForcedConfiguration,
+  src: SemanticState | undefined,
+  dst: SemanticState | undefined,
+  configuration: ForcedConfiguration | null,
+  idBase: string,
   makeTraceability: TraceabilityFactory,
 ): SMTestCase[] => {
   const result: SMTestCase[] = [];
-  const active = new Set(configuration.activeStateIds);
-  const outer = t.kind === 'outer' && src.id !== dst.id;
+  const events = ir.events ?? [];
+  const eventDef = t.eventId == null ? undefined : events.find((event) => event.id === t.eventId);
+  const switchedOff = withoutTransition(ir, t);
+  const initialActive: ReadonlySet<string> | null = (() => {
+    const initial = simulateOperations(ir, [{ kind: 'init' }]);
+    return initial === null ? null : initial.activeStateIds;
+  })();
+  const forcedActive: ReadonlySet<string> = configuration
+    ? new Set(configuration.activeStateIds)
+    : initialActive ?? new Set<string>();
+  const related = src !== undefined && dst !== undefined
+    && (src.id === dst.id || dst.ancestorStateIds.includes(src.id) || src.ancestorStateIds.includes(dst.id));
+  const srcName = src?.name ?? t.sourceStateId;
+  const dstName = dst?.name ?? t.destinationStateId;
+
+  const attemptFor = (
+    want: boolean,
+    candidate: StimulusCandidate,
+    eventMode: 'none' | 'post' | 'queue',
+  ): SMTestOperation[] => {
+    const operations: SMTestOperation[] = [{ kind: 'init' }];
+    if (configuration) {
+      operations.push({
+        kind: 'force-configuration',
+        activeStateIds: configuration.activeStateIds,
+        slots: configuration.slots,
+      });
+    }
+    if (candidate.sourceTimerMs > 0 && src !== undefined && forcedActive.has(src.id)) {
+      operations.push({ kind: 'set-timer', stateId: src.id, valueMs: candidate.sourceTimerMs });
+    }
+    for (const [variableId, value] of Object.entries(candidate.variables)) {
+      if (ir.variables[variableId]?.type === 'fixdt') continue;
+      operations.push({ kind: 'set-variable', variableId, value });
+    }
+    if (want && eventDef !== undefined && eventMode === 'post') operations.push({ kind: 'post-event', eventId: eventDef.id });
+    if (want && eventDef !== undefined && eventMode === 'queue') operations.push({ kind: 'queue-local-event', eventId: eventDef.id });
+    operations.push({ kind: 'step', deltaMs: ir.tickMs });
+    return operations;
+  };
+
+  const sameSet = (a: ReadonlySet<string>, b: ReadonlySet<string>): boolean =>
+    a.size === b.size && [...a].every((id) => b.has(id));
+
+  /** Whether the simulation shows the case (see buildOracleTransitionCases) for these operations. */
+  const check = (want: boolean, operations: SMTestOperation[], strict: boolean): OracleAttempt | null => {
+    const run = simulateOperations(ir, operations);
+    if (run === null || run.error !== null) return null;
+    const off = simulateOperations(switchedOff, operations);
+    if (off === null || off.error !== null) return null;
+    const fired = !sameResult(run, off);
+    if (fired !== want) return null;
+    // The other transitions: they must not move the source (or enter the destination) in the run
+    // without the tested transition; strictly, they must not fire at all.
+    if (strict && !sameSet(off.activeStateIds, forcedActive)) return null;
+    if (src !== undefined && forcedActive.has(src.id) && !off.activeStateIds.has(src.id)) return null;
+    if (dst !== undefined && !forcedActive.has(dst.id) && off.activeStateIds.has(dst.id)) return null;
+    if (want) {
+      if (dst !== undefined && !run.activeStateIds.has(dst.id)) return null;
+      if (src !== undefined && dst !== undefined && !related && run.activeStateIds.has(src.id)) return null;
+    } else if (src !== undefined && forcedActive.has(src.id) && !run.activeStateIds.has(src.id)) {
+      return null;
+    }
+    return { operations, result: run, forcedActive };
+  };
+
+  const ranked = new Map<string, StimulusCandidate[]>();
+  const search = (want: boolean): OracleAttempt | null => {
+    const eventModes: ('none' | 'post' | 'queue')[] = !want || eventDef === undefined
+      ? ['none']
+      : eventDef.scope === 'input' ? ['post'] : ['queue', 'none'];
+    for (const strict of [true, false]) {
+      for (const eventMode of eventModes) {
+        const currentEvent = want && eventDef !== undefined && eventMode !== 'none' ? eventDef.id : null;
+        for (const analytic of [true, false]) {
+          const key = `${want}|${currentEvent}|${analytic}`;
+          let candidates = ranked.get(key);
+          if (candidates === undefined) {
+            candidates = rankStimulusCandidates(ir, t, configuration, want, currentEvent, analytic, analytic ? 160 : 80);
+            ranked.set(key, candidates);
+          }
+          for (const candidate of candidates) {
+            const attempt = check(want, attemptFor(want, candidate, eventMode), strict);
+            if (attempt !== null) return attempt;
+          }
+        }
+      }
+    }
+    return null;
+  };
 
   for (const want of [true, false]) {
-    const id = `SM-TC-TRANS-${srcName}-${dstName}-${want ? 'TRUE' : 'FALSE'}`;
+    const id = `${idBase}-${want ? 'TRUE' : 'FALSE'}`;
     const name = want
-      ? `Transition from ${src.name} to ${dst.name} fires when condition is met`
-      : `Transition from ${src.name} to ${dst.name} blocked when condition is false`;
+      ? `Transition from ${srcName} to ${dstName} fires when condition is met`
+      : `Transition from ${srcName} to ${dstName} blocked when condition is false`;
     const traceability = makeTraceability(
       id,
       [t.sourceStateId, t.destinationStateId],
@@ -99,22 +205,17 @@ const buildScenarioTransitionCases = (
       want ? ['TEST-TRANS-001', 'TEST-TRANS-002'] : ['TEST-TRANS-003'],
       ['SM_Step'],
     );
-    const sendsLocalEvent = effectSendsLocalEvent(ir, t, configuration);
-    const stimulus = sendsLocalEvent ? null : findTransitionStimulus(ir, t, configuration, want);
-    if (!stimulus) {
+    const found = search(want);
+    if (found === null) {
       result.push({
         id,
         suite: 'transitions',
         name,
         applicability: {
           status: 'not-applicable',
-          reason: sendsLocalEvent
-            ? 'The step sends a local event; the executions it triggers are not predicted by the generated test.'
-            : want
-            ? (ir.events ?? []).length > 0
-              ? 'No variable, timer and input-event stimulus enables the transition without another transition preempting it.'
-              : 'No variable and timer assignment enables the transition without another transition preempting it.'
-            : 'No variable and timer assignment keeps the transition disabled after one step (for example after(1) always fires on the first tick).',
+          reason: want
+            ? 'No stimulus (guard variables, source timer, trigger event) makes the simulation fire the transition without another transition preempting it.'
+            : 'No stimulus keeps the transition from firing in the simulation (for example after(1) always fires on the first tick).',
         },
         operations: [],
         expectations: [],
@@ -122,70 +223,14 @@ const buildScenarioTransitionCases = (
       });
       continue;
     }
-
-    const operations: SMTestOperation[] = [
-      { kind: 'init' },
-      {
-        kind: 'force-configuration',
-        activeStateIds: configuration.activeStateIds,
-        slots: configuration.slots,
-      },
-    ];
-    if (stimulus.sourceTimerMs > 0) {
-      operations.push({ kind: 'set-timer', stateId: src.id, valueMs: stimulus.sourceTimerMs });
-    }
-    for (const [variableId, value] of Object.entries(stimulus.variables)) {
-      operations.push({ kind: 'set-variable', variableId, value });
-    }
-    for (const eventId of stimulus.events) {
-      operations.push({ kind: 'post-event', eventId });
-    }
-    operations.push({ kind: 'step', deltaMs: ir.tickMs });
-
-    const fired = predictFiredEffect(ir, t, configuration, stimulus.environment);
-    const enteredSet = new Set(fired.entered);
-    const duringAssigned = duringAssignedVariables(ir, {
-      activeStateIds: configuration.activeStateIds.filter((sid) => !fired.exited.includes(sid)),
-      slots: [],
-    });
-    const expectations: SMTestExpectation[] = [];
-
-    if (want) {
-      expectations.push({ kind: 'active-state', layerId: dst.layerId, stateId: dst.id });
-      for (const sid of defaultDescendants(ir, dst.id)) {
-        expectations.push({ kind: 'active-state', layerId: ir.states[sid].layerId, stateId: sid });
-      }
-      for (const variableId of fired.assigned) {
-        if (fired.unknown.has(variableId) || duringAssigned.has(variableId)) continue;
-        expectations.push({ kind: 'variable', variableId, value: fired.known[variableId] });
-      }
-      if (outer) {
-        const leaving = [
-          src.id,
-          ...configuration.activeStateIds.filter((sid) => ir.states[sid]?.ancestorStateIds.includes(src.id)),
-        ];
-        for (const sid of leaving) {
-          if (sid !== dst.id && !enteredSet.has(sid)) expectations.push({ kind: 'inactive-state', stateId: sid });
-        }
-      }
-      expectations.push({ kind: 'transition-fired', transitionId: t.id });
-    } else {
-      expectations.push({ kind: 'active-state', layerId: src.layerId, stateId: src.id });
-      if (!active.has(dst.id)) expectations.push({ kind: 'inactive-state', stateId: dst.id });
-      // A variable the transition would have changed keeps the value the stimulus gave it.
-      for (const variableId of fired.assigned) {
-        if (fired.unknown.has(variableId) || duringAssigned.has(variableId)) continue;
-        if (fired.known[variableId] === stimulus.environment[variableId]) continue;
-        expectations.push({ kind: 'variable', variableId, value: stimulus.environment[variableId] });
-      }
-    }
-
+    const expectations = expectationsFromResult(ir, found.result);
+    if (want) expectations.push({ kind: 'transition-fired', transitionId: t.id });
     result.push({
       id,
       suite: 'transitions',
       name,
       applicability: { status: 'applicable' },
-      operations,
+      operations: found.operations,
       expectations,
       traceability,
     });
@@ -198,6 +243,20 @@ export const buildSMTestManifest = (ir: SemanticModel): SMTestManifest => {
   const modelHash = ir.modelHash ?? '0000000000000000';
 
   const cases: SMTestCase[] = [];
+
+  // The error code the simulation latches over the operations (a chart can fault by arithmetic or event overflow).
+  const errorCodes: Record<string, string> = {
+    ARITHMETIC: 'SM_ERR_ARITHMETIC',
+    EVENT_OVERFLOW: 'SM_ERR_EVENT_OVERFLOW',
+    XBRIDGES_NUMERIC: 'SM_ERR_XBRIDGES_NUMERIC',
+    TIMING: 'SM_ERR_TIMING',
+    SAFETY_VIOLATION: 'SM_ERR_SAFETY_VIOLATION',
+  };
+  const oracleError = (operations: readonly SMTestOperation[]): SMTestExpectation => {
+    const outcome = simulateOperations(ir, operations);
+    const code = outcome?.error == null ? null : errorCodes[outcome.error.split(':')[0]] ?? null;
+    return { kind: 'error', code };
+  };
 
   const linkedRequirements = new Map<string, readonly string[]>();
   for (const el of ir.traceableElements ?? []) {
@@ -252,29 +311,11 @@ export const buildSMTestManifest = (ir: SemanticModel): SMTestManifest => {
     ),
   });
 
-  // SM-TC-INIT-DEFAULT
-  const defaultExpectations: SMTestExpectation[] = [];
-  // A nested layer is entered by default only when its parent state is part of the default configuration.
-  const initConfiguration = defaultConfiguration(ir);
-  const initActive = initConfiguration ? new Set(initConfiguration.activeStateIds) : null;
-  for (const layer of Object.values(ir.layers)) {
-    const entered = layer.parentStateId === null || initActive === null || initActive.has(layer.parentStateId);
-    if (entered && layer.decomposition === 'OR' && layer.defaultEntryId) {
-      defaultExpectations.push({
-        kind: 'active-state',
-        layerId: layer.id,
-        stateId: layer.defaultEntryId,
-      });
-    }
-  }
-  for (const v of Object.values(ir.variables)) {
-    defaultExpectations.push({
-      kind: 'variable',
-      variableId: v.id,
-      value: v.initialValue,
-    });
-  }
-  defaultExpectations.push({ kind: 'error', code: null });
+  // SM-TC-INIT-DEFAULT: the configuration and data the simulation has after initialization.
+  const initResult = simulateOperations(ir, [{ kind: 'init' }]);
+  const defaultExpectations: SMTestExpectation[] = initResult !== null
+    ? expectationsFromResult(ir, initResult)
+    : [];
   defaultExpectations.push({ kind: 'fault-latched', latched: false });
 
   cases.push({
@@ -319,145 +360,65 @@ export const buildSMTestManifest = (ir: SemanticModel): SMTestManifest => {
     return a.id.localeCompare(b.id);
   });
 
-  const findTriggerVar = (t?: SemanticTransition): string | undefined => {
-    if (!ir.variables) return undefined;
-    if (t?.guardSource && ir.variables[t.guardSource]) return t.guardSource;
-    if (ir.variables['x']) return 'x';
-    const boolVar = Object.values(ir.variables).find((v) => v.type === 'bool');
-    if (boolVar) return boolVar.id;
-    return Object.keys(ir.variables)[0];
-  };
-
+  const usedTransitionIds = new Set<string>();
   for (const t of sortedTransitions) {
     const src = ir.states[t.sourceStateId];
     const dst = ir.states[t.destinationStateId];
     const srcName = toCIdentifier(src ? src.id : t.sourceStateId).toUpperCase();
     const dstName = toCIdentifier(dst ? dst.id : t.destinationStateId).toUpperCase();
-    const triggerVar = findTriggerVar(t);
-
-    const plain = src !== undefined && dst !== undefined
-      && t.sourceKind === 'state' && t.destinationKind === 'state';
-    const configuration = plain ? configurationContaining(ir, src.id) : null;
-    if (plain && configuration) {
-      cases.push(...buildScenarioTransitionCases(ir, t, src, dst, srcName, dstName, configuration, makeTraceability));
-      continue;
-    }
-
-    // TRUE case: Transition fires
-    const trueExpectations: SMTestExpectation[] = [];
-    if (dst) {
-      trueExpectations.push({
-        kind: 'active-state',
-        layerId: dst.layerId,
-        stateId: dst.id,
-      });
-      // Extract entry actions from target state
-      trueExpectations.push(...extractVariableExpectationsFromActions(dst.entryActions));
-    }
-    if (src) {
-      trueExpectations.push({
-        kind: 'inactive-state',
-        stateId: src.id,
-      });
-    }
-    trueExpectations.push({ kind: 'transition-fired', transitionId: t.id });
-    trueExpectations.push(...extractVariableExpectationsFromActions(t.actions));
-
-    const trueOps: SMTestOperation[] = [{ kind: 'init' }];
-    if (triggerVar) {
-      trueOps.push({ kind: 'set-variable', variableId: triggerVar, value: true });
-    }
-    // An event-triggered transition fires only in an execution with its event current: post it.
-    const triggerEvent = t.eventId == null
-      ? undefined
-      : (ir.events ?? []).find((event) => event.id === t.eventId);
-    const needsLocalEvent = triggerEvent !== undefined && triggerEvent.scope === 'local';
-    if (triggerEvent !== undefined && !needsLocalEvent) {
-      trueOps.push({ kind: 'post-event', eventId: triggerEvent.id });
-    }
-    trueOps.push({ kind: 'step', deltaMs: ir.tickMs });
-
-    cases.push({
-      id: `SM-TC-TRANS-${srcName}-${dstName}-TRUE`,
-      suite: 'transitions',
-      name: `Transition from ${src ? src.name : srcName} to ${dst ? dst.name : dstName} fires when condition is met`,
-      applicability: needsLocalEvent
-        ? { status: 'not-applicable', reason: 'The transition is triggered by a local event, which only a send() action can make current.' }
-        : { status: 'applicable' },
-      operations: needsLocalEvent ? [] : trueOps,
-      expectations: needsLocalEvent ? [] : trueExpectations,
-      traceability: makeTraceability(
-        `SM-TC-TRANS-${srcName}-${dstName}-TRUE`,
-        [t.sourceStateId, t.destinationStateId],
-        [t.id],
-        ['TEST-TRANS-001', 'TEST-TRANS-002'],
-        ['SM_Step'],
-      ),
-    });
-
-    // FALSE case: Transition blocked
-    const falseExpectations: SMTestExpectation[] = [];
-    if (src) {
-      falseExpectations.push({
-        kind: 'active-state',
-        layerId: src.layerId,
-        stateId: src.id,
-      });
-    }
-    if (dst) {
-      falseExpectations.push({
-        kind: 'inactive-state',
-        stateId: dst.id,
-      });
-    }
-
-    const falseOps: SMTestOperation[] = [{ kind: 'init' }];
-    if (triggerVar) {
-      falseOps.push({ kind: 'set-variable', variableId: triggerVar, value: false });
-    }
-    falseOps.push({ kind: 'step', deltaMs: ir.tickMs });
-
-    cases.push({
-      id: `SM-TC-TRANS-${srcName}-${dstName}-FALSE`,
-      suite: 'transitions',
-      name: `Transition from ${src ? src.name : srcName} to ${dst ? dst.name : dstName} blocked when condition is false`,
-      applicability: { status: 'applicable' },
-      operations: falseOps,
-      expectations: falseExpectations,
-      traceability: makeTraceability(
-        `SM-TC-TRANS-${srcName}-${dstName}-FALSE`,
-        [t.sourceStateId, t.destinationStateId],
-        [t.id],
-        ['TEST-TRANS-003'],
-        ['SM_Step'],
-      ),
-    });
+    // Transitions between the same two states get the transition id in their case ids.
+    let idBase = `SM-TC-TRANS-${srcName}-${dstName}`;
+    if (usedTransitionIds.has(idBase)) idBase = `${idBase}-${toCIdentifier(t.id).toUpperCase()}`;
+    usedTransitionIds.add(idBase);
+    const sourceIsState = src !== undefined && t.sourceKind === 'state';
+    const configuration = sourceIsState ? configurationContaining(ir, src.id) : null;
+    cases.push(...buildOracleTransitionCases(
+      ir, t, sourceIsState ? src : undefined, t.destinationKind === 'state' ? dst : undefined,
+      configuration, idBase, makeTraceability,
+    ));
   }
 
   // 3. Actions Suite
+  // A state's entry (exit) actions are observed through a transition case that enters (leaves) it, so
+  // the actions run for real; during actions through a step from a configuration containing the state.
+  // The expected variable values are the simulation's for the operations of the case.
+  const assignedVariables = (actions: readonly ActionNode[]): string[] =>
+    [...new Set(actions.filter((action) => action.kind === 'assign').map((action) => (action as { target: string }).target))]
+      .filter((id) => ir.variables[id] !== undefined);
+  const transitionCases = cases.filter((c) => c.suite === 'transitions' && c.applicability.status === 'applicable'
+    && c.id.endsWith('-TRUE'));
+  const transitionOf = (c: SMTestCase): SemanticTransition | undefined => ir.transitions[c.traceability.transitionIds[0]];
+  const actionExpectations = (
+    operations: readonly SMTestOperation[],
+    variableIds: readonly string[],
+    stateId: string | null,
+  ): { operations: readonly SMTestOperation[]; expectations: SMTestExpectation[] } => {
+    const outcome = simulateOperations(ir, operations);
+    const expectations: SMTestExpectation[] = outcome === null
+      ? []
+      : expectationsFromResult(ir, outcome, { variableIds, states: false, errors: false });
+    if (outcome !== null && stateId !== null && outcome.activeStateIds.has(stateId)) {
+      expectations.unshift({ kind: 'active-state', layerId: ir.states[stateId].layerId, stateId });
+    }
+    return { operations, expectations };
+  };
+  const initOnly: readonly SMTestOperation[] = [{ kind: 'init' }];
   for (const s of states) {
     const sName = toCIdentifier(s.id).toUpperCase();
     if (s.entryActions.length > 0) {
-      const incoming = sortedTransitions.find((t) => t.destinationStateId === s.id);
-      const incomingTrigger = incoming ? findTriggerVar(incoming) : undefined;
-      const ops: SMTestOperation[] = [{ kind: 'init' }];
-      if (incomingTrigger) {
-        ops.push({ kind: 'set-variable', variableId: incomingTrigger, value: true });
-      }
-      const incomingEvent = incoming?.eventId == null
-        ? undefined
-        : (ir.events ?? []).find((event) => event.id === incoming.eventId);
-      if (incomingEvent !== undefined && incomingEvent.scope === 'input') {
-        ops.push({ kind: 'post-event', eventId: incomingEvent.id });
-      }
-      ops.push({ kind: 'step' });
+      const entering = transitionCases.find((c) => transitionOf(c)?.destinationStateId === s.id);
+      const initial = simulateOperations(ir, initOnly);
+      const ops: readonly SMTestOperation[] = entering
+        ? entering.operations
+        : initial !== null && initial.activeStateIds.has(s.id) ? initOnly : [{ kind: 'init' }, { kind: 'step' }];
+      const { operations, expectations } = actionExpectations(ops, assignedVariables(s.entryActions), s.id);
       cases.push({
         id: `SM-TC-ACT-${sName}-ENTRY`,
         suite: 'actions',
         name: `Entry action execution on state ${s.name}`,
         applicability: { status: 'applicable' },
-        operations: ops,
-        expectations: extractVariableExpectationsFromActions(s.entryActions),
+        operations,
+        expectations,
         traceability: makeTraceability(
           `SM-TC-ACT-${sName}-ENTRY`,
           [s.id],
@@ -468,13 +429,20 @@ export const buildSMTestManifest = (ir: SemanticModel): SMTestManifest => {
       });
     }
     if (s.exitActions.length > 0) {
+      const leaving = transitionCases.find((c) => transitionOf(c)?.sourceStateId === s.id
+        && !(simulateOperations(ir, c.operations)?.activeStateIds.has(s.id) ?? true));
+      const { operations, expectations } = actionExpectations(
+        leaving ? leaving.operations : [{ kind: 'init' }, { kind: 'step' }],
+        assignedVariables(s.exitActions),
+        null,
+      );
       cases.push({
         id: `SM-TC-ACT-${sName}-EXIT`,
         suite: 'actions',
         name: `Exit action execution on state ${s.name}`,
         applicability: { status: 'applicable' },
-        operations: [{ kind: 'init' }, { kind: 'step' }],
-        expectations: extractVariableExpectationsFromActions(s.exitActions),
+        operations,
+        expectations,
         traceability: makeTraceability(
           `SM-TC-ACT-${sName}-EXIT`,
           [s.id],
@@ -485,13 +453,27 @@ export const buildSMTestManifest = (ir: SemanticModel): SMTestManifest => {
       });
     }
     if (s.duringActions.length > 0) {
+      const configuration = configurationContaining(ir, s.id);
+      const forced: readonly SMTestOperation[] | null = configuration
+        ? [
+          { kind: 'init' },
+          { kind: 'force-configuration', activeStateIds: configuration.activeStateIds, slots: configuration.slots },
+          { kind: 'step' },
+        ]
+        : null;
+      const stays = forced !== null && (simulateOperations(ir, forced)?.activeStateIds.has(s.id) ?? false);
+      const { operations, expectations } = actionExpectations(
+        stays && forced !== null ? forced : [{ kind: 'init' }, { kind: 'step' }],
+        assignedVariables(s.duringActions),
+        null,
+      );
       cases.push({
         id: `SM-TC-ACT-${sName}-DURING`,
         suite: 'actions',
         name: `During action execution on state ${s.name}`,
         applicability: { status: 'applicable' },
-        operations: [{ kind: 'init' }, { kind: 'step' }],
-        expectations: extractVariableExpectationsFromActions(s.duringActions),
+        operations,
+        expectations,
         traceability: makeTraceability(
           `SM-TC-ACT-${sName}-DURING`,
           [s.id],
@@ -517,7 +499,7 @@ export const buildSMTestManifest = (ir: SemanticModel): SMTestManifest => {
     name: `Nominal step with configured tick interval of ${tickMs}ms`,
     applicability: { status: 'applicable' },
     operations: [{ kind: 'init' }, { kind: 'step', deltaMs: tickMs }],
-    expectations: [{ kind: 'error', code: null }],
+    expectations: [oracleError([{ kind: 'init' }, { kind: 'step', deltaMs: tickMs }])],
     traceability: makeTraceability(
       `SM-TC-TIME-NOMINAL-${tickMs}MS`,
       defaultState ? [defaultState.id] : [],
@@ -533,7 +515,7 @@ export const buildSMTestManifest = (ir: SemanticModel): SMTestManifest => {
     name: `Lower timing boundary of ${minValid}ms is accepted`,
     applicability: { status: 'applicable' },
     operations: [{ kind: 'init' }, { kind: 'step', deltaMs: minValid }],
-    expectations: [{ kind: 'error', code: null }],
+    expectations: [oracleError([{ kind: 'init' }, { kind: 'step', deltaMs: minValid }])],
     traceability: makeTraceability(
       `SM-TC-TIME-LOWER-${minValid}MS`,
       defaultState ? [defaultState.id] : [],
@@ -549,7 +531,7 @@ export const buildSMTestManifest = (ir: SemanticModel): SMTestManifest => {
     name: `Upper timing boundary of ${maxValid}ms is accepted`,
     applicability: { status: 'applicable' },
     operations: [{ kind: 'init' }, { kind: 'step', deltaMs: maxValid }],
-    expectations: [{ kind: 'error', code: null }],
+    expectations: [oracleError([{ kind: 'init' }, { kind: 'step', deltaMs: maxValid }])],
     traceability: makeTraceability(
       `SM-TC-TIME-UPPER-${maxValid}MS`,
       defaultState ? [defaultState.id] : [],
@@ -593,26 +575,46 @@ export const buildSMTestManifest = (ir: SemanticModel): SMTestManifest => {
     ),
   });
 
+  // The timer of a state that stays active over the step, found with the simulation: from the initial
+  // configuration when a state of it stays active, else from a forced configuration.
+  const saturationScenario = (): { operations: SMTestOperation[]; stateId: string } | null => {
+    const initial = simulateOperations(ir, [{ kind: 'init' }]);
+    const orderedStates = [...states].sort((a, b) =>
+      Number(initial?.activeStateIds.has(b.id) ?? false) - Number(initial?.activeStateIds.has(a.id) ?? false));
+    for (const forceConfiguration of [false, true]) {
+      for (const state of orderedStates) {
+        const configuration = forceConfiguration ? configurationContaining(ir, state.id) : null;
+        if (forceConfiguration && configuration === null) continue;
+        const operations: SMTestOperation[] = [{ kind: 'init' }];
+        if (configuration) {
+          operations.push({ kind: 'force-configuration', activeStateIds: configuration.activeStateIds, slots: configuration.slots });
+        }
+        operations.push(
+          { kind: 'set-timer', stateId: state.id, valueMs: 0xffffffff - 1 },
+          { kind: 'step', deltaMs: tickMs },
+        );
+        const outcome = simulateOperations(ir, operations);
+        if (outcome !== null && outcome.error === null && outcome.activeStateIds.has(state.id)
+          && timerAsC(outcome.timersMs[state.id]) === 0xffffffff) {
+          return { operations, stateId: state.id };
+        }
+      }
+    }
+    return null;
+  };
+  const saturation = saturationScenario();
   cases.push({
     id: 'SM-TC-TIME-SATURATION',
     suite: 'timing',
     name: 'State timers saturate at UINT32_MAX without rollover',
-    applicability: { status: 'applicable' },
-    operations: [
-      { kind: 'init' },
-      { kind: 'set-timer', stateId: defaultState ? defaultState.id : 'root', valueMs: 0xffffffff - 1 },
-      { kind: 'step', deltaMs: tickMs },
-    ],
-    expectations: [
-      {
-        kind: 'timer',
-        stateId: defaultState ? defaultState.id : 'root',
-        expectedMs: 0xffffffff,
-      },
-    ],
+    applicability: saturation
+      ? { status: 'applicable' }
+      : { status: 'not-applicable', reason: 'No state stays active over a step from a timer at its limit (every state is left by a transition on the first tick).' },
+    operations: saturation ? saturation.operations : [],
+    expectations: saturation ? [{ kind: 'timer', stateId: saturation.stateId, expectedMs: 0xffffffff }] : [],
     traceability: makeTraceability(
       'SM-TC-TIME-SATURATION',
-      defaultState ? [defaultState.id] : [],
+      saturation ? [saturation.stateId] : defaultState ? [defaultState.id] : [],
       [],
       ['TEST-TIME-006'],
       ['SM_Step'],
@@ -872,16 +874,17 @@ export const buildSMTestManifest = (ir: SemanticModel): SMTestManifest => {
     ),
   });
 
+  const repeatedOperations: SMTestOperation[] = [
+    { kind: 'init' },
+    { kind: 'repeat-step', cycles: ir.verification.repeatedExecutionCycles, deltaMs: tickMs },
+  ];
   cases.push({
     id: 'SM-TC-ROB-REPEATED-CYCLES',
     suite: 'robustness',
     name: `Repeated step execution across ${ir.verification.repeatedExecutionCycles} cycles for stability`,
     applicability: { status: 'applicable' },
-    operations: [
-      { kind: 'init' },
-      { kind: 'repeat-step', cycles: ir.verification.repeatedExecutionCycles, deltaMs: tickMs },
-    ],
-    expectations: [{ kind: 'error', code: null }],
+    operations: repeatedOperations,
+    expectations: [oracleError(repeatedOperations)],
     traceability: makeTraceability(
       'SM-TC-ROB-REPEATED-CYCLES',
       defaultState ? [defaultState.id] : [],
@@ -967,7 +970,7 @@ export const buildSMTestManifest = (ir: SemanticModel): SMTestManifest => {
         name: 'Shallow history restoration on containing state reentry',
         applicability: { status: 'applicable' },
         operations: [{ kind: 'init' }, { kind: 'step', deltaMs: tickMs }],
-        expectations: [{ kind: 'error', code: null }],
+        expectations: [oracleError([{ kind: 'init' }, { kind: 'step', deltaMs: tickMs }])],
         traceability: makeTraceability(
           'SM-TC-HIER-SHALLOW-HISTORY',
           [],
@@ -985,7 +988,7 @@ export const buildSMTestManifest = (ir: SemanticModel): SMTestManifest => {
         name: 'Deep history restoration across nested composite levels',
         applicability: { status: 'applicable' },
         operations: [{ kind: 'init' }, { kind: 'step', deltaMs: tickMs }],
-        expectations: [{ kind: 'error', code: null }],
+        expectations: [oracleError([{ kind: 'init' }, { kind: 'step', deltaMs: tickMs }])],
         traceability: makeTraceability(
           'SM-TC-HIER-DEEP-HISTORY',
           [],
@@ -1003,7 +1006,7 @@ export const buildSMTestManifest = (ir: SemanticModel): SMTestManifest => {
         name: 'Simultaneous activation and synchronization of parallel AND regions',
         applicability: { status: 'applicable' },
         operations: [{ kind: 'init' }, { kind: 'step', deltaMs: tickMs }],
-        expectations: [{ kind: 'error', code: null }],
+        expectations: [oracleError([{ kind: 'init' }, { kind: 'step', deltaMs: tickMs }])],
         traceability: makeTraceability(
           'SM-TC-HIER-PARALLEL-REGIONS',
           [],

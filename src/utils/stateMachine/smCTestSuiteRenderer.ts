@@ -100,6 +100,11 @@ const renderOperation = (
         '        }',
         '    }',
       ];
+      if (ir.executeAtInitialization === false) {
+        // A chart that does not execute at initialization is entered by its first step; forcing a
+        // configuration means the chart has been entered.
+        lines.push('    instance.chart_entered = true;');
+      }
       for (const stateId of op.activeStateIds) {
         lines.push(`    instance.state_active[(uint32_t)${resolveStateEnum(ir, stateId)}] = true;`);
       }
@@ -113,6 +118,12 @@ const renderOperation = (
         candidate.id === op.eventId || candidate.name === op.eventId);
       if (event === undefined) throw new Error(`post-event: unknown event '${op.eventId}'`);
       return `    (void)SM_PostEvent(&instance, SM_EVENT_${event.cName});`;
+    }
+    case 'queue-local-event': {
+      const event = (ir.events ?? []).find((candidate) =>
+        candidate.id === op.eventId || candidate.name === op.eventId);
+      if (event === undefined) throw new Error(`queue-local-event: unknown event '${op.eventId}'`);
+      return `    (void)SM_Test_QueueLocalEvent(&instance, SM_EVENT_${event.cName});`;
     }
     case 'set-timer': {
       const idx = resolveStateIndex(ir, op.stateId);
@@ -146,14 +157,18 @@ const renderExpectation = (
     }
     case 'variable': {
       const varId = toCIdentifier(exp.variableId);
+      const type = ir.variables[exp.variableId]?.type;
       if (typeof exp.value === 'boolean') {
         return `    ADIA_AssertBool(${exp.value ? 'true' : 'false'}, instance.data.${varId}, "${exp.variableId} value", __FILE__, (unsigned long)__LINE__);`;
       }
       if (typeof exp.value === 'number') {
-        if (Number.isInteger(exp.value)) {
+        const floating = type === 'float' || type === 'single' || type === 'double';
+        if (Number.isInteger(exp.value) && !floating && exp.value >= -2147483648 && exp.value <= 4294967295) {
           return `    ADIA_AssertU32((uint32_t)${exp.value}, (uint32_t)instance.data.${varId}, "${exp.variableId} value", __FILE__, (unsigned long)__LINE__);`;
         }
-        return `    ADIA_AssertDouble(${exp.value}, (double)instance.data.${varId}, 0.001, "${exp.variableId} value", __FILE__, (unsigned long)__LINE__);`;
+        // Floating variables (single precision rounds) and 64 bit integers: relative tolerance.
+        const tolerance = Math.max(floating ? 0.001 : 0.5, Math.abs(exp.value) * (floating ? 1e-5 : 1e-12));
+        return `    ADIA_AssertDouble(${exp.value}, (double)instance.data.${varId}, ${tolerance}, "${exp.variableId} value", __FILE__, (unsigned long)__LINE__);`;
       }
       return `    /* variable expectation ${exp.variableId} */`;
     }

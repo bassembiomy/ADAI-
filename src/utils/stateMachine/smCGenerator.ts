@@ -188,7 +188,7 @@ const renderActions = (
   indent = '    ',
 ): string => lines(
   actions.map((action) => action.kind === 'send'
-    ? `${indent}SM_SendEvent(instance, SM_EVENT_${eventCName(ir, action.event)});`
+    ? `${indent}SM_Raise_Local_Event(instance, SM_EVENT_${eventCName(ir, action.event)});`
     : renderCAction(action, ir.variables, ir.verification.cStandard, indent, ir.fixedPointRounding)).join('\n'),
   actions.length === 0
     ? null
@@ -1212,17 +1212,7 @@ export const renderCoreHeader = (cStandard?: string, ir?: SemanticModel): string
     : []),
   ...(ir !== undefined && eventUsage(ir).local ? [
     '/* send(NAME): queues a local event; called by the generated actions only, not from interrupts. */',
-    'SM_ARITH_INLINE void SM_SendEvent(ADIA_Instance_t *instance, SM_Event_t event)',
-    '{',
-    '    if (instance->event_count >= SM_EVENT_QUEUE_LEN) {',
-    '        if (instance->error_status == SM_ERR_NONE) {',
-    '            instance->error_status = SM_ERR_EVENT_OVERFLOW;',
-    '        }',
-    '        return;',
-    '    }',
-    '    instance->event_queue[(instance->event_head + instance->event_count) % SM_EVENT_QUEUE_LEN] = event;',
-    '    instance->event_count = instance->event_count + 1U;',
-    '}',
+    'void SM_Raise_Local_Event(ADIA_Instance_t *instance, SM_Event_t event);',
     '',
   ] : []),
   'SM_Error_t SM_Init(ADIA_Instance_t *instance);',
@@ -1259,6 +1249,10 @@ export const renderCoreHeader = (cStandard?: string, ir?: SemanticModel): string
   'SM_Error_t SM_Test_SetStateTimer(ADIA_Instance_t *instance, SM_Node_t state, uint32_t timer_ms);',
   'SM_Error_t SM_Test_SetHistoryState(ADIA_Instance_t *instance, uint32_t slot, SM_Node_t state);',
   'SM_Error_t SM_Test_SetDeepHistory(ADIA_Instance_t *instance, uint32_t layer, SM_Node_t state, bool active);',
+  ...(ir !== undefined && eventUsage(ir).local ? [
+    '/* Queues a local event as send() does, so that a test can drive a local-event-triggered transition. */',
+    'SM_Error_t SM_Test_QueueLocalEvent(ADIA_Instance_t *instance, SM_Event_t event);',
+  ] : []),
   '#endif',
   '',
   '#endif /* SM_CORE_H */',
@@ -2046,6 +2040,22 @@ const renderCoreSourceBody = (ir: SemanticModel): string => {
       '}',
       '',
     ] : []),
+    ...(eventUsage(ir).local ? [
+      'void SM_Raise_Local_Event(ADIA_Instance_t *instance, SM_Event_t event)',
+      '{',
+      '    uint32_t local_queue_count;',
+      '    if (instance->event_count >= SM_EVENT_QUEUE_LEN) {',
+      '        if (instance->error_status == SM_ERR_NONE) {',
+      '            instance->error_status = SM_ERR_EVENT_OVERFLOW;',
+      '        }',
+      '        return;',
+      '    }',
+      '    local_queue_count = instance->event_count + 1U;',
+      '    instance->event_queue[(instance->event_head + instance->event_count) % SM_EVENT_QUEUE_LEN] = event;',
+      '    instance->event_count = local_queue_count;',
+      '}',
+      '',
+    ] : []),
     'SM_Error_t SM_WriteOutputs(ADIA_Instance_t *instance)',
     '{',
     '    if (instance == NULL) {',
@@ -2193,6 +2203,20 @@ const renderCoreSourceBody = (ir: SemanticModel): string => {
       ]
       : ['    (void)active;', '    return SM_ERR_INVALID_ARGUMENT;']),
     '}',
+    ...(eventUsage(ir).local ? [
+      '',
+      'SM_Error_t SM_Test_QueueLocalEvent(ADIA_Instance_t *instance, SM_Event_t event)',
+      '{',
+      '    if (instance == NULL) {',
+      '        return SM_ERR_NULL_INSTANCE;',
+      '    }',
+      `    if (!(${semanticEvents(ir).filter((candidate) => candidate.scope === 'local').map((candidate) => `(event == SM_EVENT_${candidate.cName})`).join(' || ')})) {`,
+      '        return SM_ERR_INVALID_ARGUMENT;',
+      '    }',
+      '    SM_Raise_Local_Event(instance, event);',
+      '    return instance->error_status;',
+      '}',
+    ] : []),
     '#endif',
   );
 };

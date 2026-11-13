@@ -81,7 +81,7 @@ int ADIA_TestRun(const ADIA_TestCase *cases, size_t count);
 };
 
 export const renderCTestSupportSource = (standard: SMCStandard): string => {
-  return `/*
+  const source = `/*
  * ADIA Generated Test Support Implementation
  * Standard: ${standard}
  */
@@ -181,6 +181,13 @@ int ADIA_TestRun(const ADIA_TestCase *cases, size_t count)
     return (s_total_failed == 0) ? 0 : 1;
 }
 `;
+  if (standard !== 'c90') return source;
+  // ISO C90 has no snprintf: format into the buffer with sprintf, the expression text truncated and
+  // doubles in %e form so that the result always fits the 256 byte buffer.
+  return source
+    .split('(void)snprintf(buf, sizeof(buf), ').join('(void)sprintf(buf, ')
+    .split('Expected %s ').join('Expected %.100s ')
+    .split('%f').join('%e');
 };
 
 export const renderMCALTestStubHeader = (standard: SMCStandard): string => {

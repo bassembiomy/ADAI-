@@ -1,5 +1,6 @@
 import type { ActionNode, ExpressionNode } from './smExpressions';
 import type { SemanticModel, SemanticTransition, SemanticVariable } from './smSemanticModel';
+import { coerceSemanticValue } from './smInterpreter';
 
 /*
  * Scenario planning for the generated transition tests.
@@ -95,7 +96,8 @@ export const configurationContaining = (
 ): ForcedConfiguration | null => {
   const state = ir.states[stateId];
   if (!state) return null;
-  return buildConfiguration(ir, [...state.ancestorStateIds, stateId]);
+  // ancestorStateIds lists the innermost ancestor first; a path is entered outermost first.
+  return buildConfiguration(ir, [...[...state.ancestorStateIds].reverse(), stateId]);
 };
 
 /** Default descendants entered below `stateId` when it is entered as a transition target. */
@@ -266,7 +268,20 @@ export interface TransitionStimulus {
   readonly events: readonly string[];
 }
 
+/** Whether a test can assign `value` to the variable in C and the simulation alike (no conversion needed). */
+const holdsExactly = (variable: SemanticVariable, value: ScenarioValue): boolean => {
+  if (variable.type === 'fixdt') return false;
+  if (variable.type === 'bool') return typeof value === 'boolean';
+  if (typeof value !== 'number' || !Number.isFinite(value)) return false;
+  try {
+    return coerceSemanticValue(value, variable.type, 'error') === value;
+  } catch {
+    return false;
+  }
+};
+
 const candidateValues = (variable: SemanticVariable, literals: readonly number[]): ScenarioValue[] => {
+  if (variable.type === 'fixdt') return [variable.initialValue];
   if (variable.type === 'bool') {
     return [variable.initialValue as boolean, !(variable.initialValue as boolean)];
   }
@@ -278,9 +293,9 @@ const candidateValues = (variable: SemanticVariable, literals: readonly number[]
   }
   const unique: number[] = [];
   for (const value of values) {
-    if (!unique.includes(value) && Number.isFinite(value)) unique.push(value);
+    if (!unique.includes(value) && Number.isFinite(value) && holdsExactly(variable, value)) unique.push(value);
   }
-  return unique.slice(0, 14);
+  return unique.length > 0 ? unique.slice(0, 14) : [variable.initialValue];
 };
 
 /**
@@ -506,4 +521,92 @@ export const effectSendsLocalEvent = (
     if (state) actions.push(...state.entryActions, ...state.duringActions, ...state.exitActions);
   }
   return actions.some((action) => action.kind === 'send');
+};
+
+export interface StimulusCandidate {
+  readonly variables: ScenarioEnvironment;
+  readonly sourceTimerMs: number;
+  readonly environment: ScenarioEnvironment;
+  readonly score: readonly number[];
+}
+
+/**
+ * Candidate stimuli (guard variable values and source timer) for the oracle search, best first.
+ * With `analytic` the candidates are those a hand evaluation of the guard says enable (or disable)
+ * the transition, preferring ones that isolate the part under test; without it every combination is
+ * listed, for guards the hand evaluation cannot decide (typed arithmetic, saturation). The oracle
+ * (the simulation) decides which candidate is used; this only orders them.
+ */
+export const rankStimulusCandidates = (
+  ir: SemanticModel,
+  transition: SemanticTransition,
+  configuration: ForcedConfiguration | null,
+  want: boolean,
+  currentEvent: string | null,
+  analytic: boolean,
+  limit = 240,
+): StimulusCandidate[] => {
+  const tick = ir.tickMs;
+  const sourceId = transition.sourceStateId;
+  const active = new Set(configuration?.activeStateIds ?? []);
+  const variableIds = new Set<string>();
+  const literals = new Set<number>();
+  collectExpression(transition.guard, variableIds, literals, ir);
+  const others = Object.values(ir.transitions).filter((t) =>
+    t.id !== transition.id && t.sourceKind === 'state' && active.has(t.sourceStateId));
+  for (const other of others) collectExpression(other.guard, new Set<string>(), literals, ir);
+  const guardVariables = [...variableIds].filter((id) => ir.variables[id]).slice(0, 4);
+  const literalList = [...literals].slice(0, 4);
+  const candidateLists = guardVariables.map((id) => candidateValues(ir.variables[id], literalList));
+  const ms = transition.temporalThresholdMs;
+  const timerCandidates: number[] = [0];
+  if (ms !== null) {
+    for (const t of [ms - 2 * tick, ms - tick, ms, ms + tick]) {
+      if (t >= 0 && !timerCandidates.includes(t)) timerCandidates.push(t);
+    }
+  }
+  const timerAfterStep = (stateId: string, sourceTimer: number): number =>
+    (stateId === sourceId ? sourceTimer : 0) + tick;
+  const base = initialEnvironment(ir);
+  const found: StimulusCandidate[] = [];
+  const indices = guardVariables.map(() => 0);
+  let evaluations = 0;
+  const advance = (): boolean => {
+    for (let i = indices.length - 1; i >= 0; i--) {
+      indices[i] += 1;
+      if (indices[i] < candidateLists[i].length) return true;
+      indices[i] = 0;
+    }
+    return false;
+  };
+  do {
+    const env: ScenarioEnvironment = { ...base };
+    let changed = 0;
+    guardVariables.forEach((id, i) => {
+      const value = candidateLists[i][indices[i]];
+      env[id] = value;
+      if (value !== base[id]) changed += 1;
+    });
+    for (const timer of timerCandidates) {
+      evaluations += 1;
+      let partsRank = 0;
+      let othersRank = 0;
+      if (analytic) {
+        const result = isEnabled(ir, transition, env, timerAfterStep(sourceId, timer), currentEvent);
+        if (!result || result.enabled !== want) continue;
+        if (transition.triggerMode === 'or' && want) partsRank = result.guard && !result.temporal ? 0 : 1;
+        if (transition.triggerMode === 'and' && !want) partsRank = !result.guard && result.temporal ? 0 : 1;
+        othersRank = others.every((other) => {
+          const r = isEnabled(ir, other, env, timerAfterStep(other.sourceStateId, timer), currentEvent);
+          return r !== undefined && !r.enabled;
+        }) ? 0 : 1;
+      }
+      const boundary = ms === null ? 0 : (want ? Math.abs(timer - (ms - tick)) : Math.abs(timer - (ms - 2 * tick)));
+      const variables: ScenarioEnvironment = {};
+      for (const id of guardVariables) variables[id] = env[id];
+      found.push({ variables, sourceTimerMs: timer, environment: env, score: [partsRank, othersRank, changed, boundary, timer] });
+    }
+  } while (evaluations < 40000 && advance());
+  found.sort((a, b) => (lexicographicallyLess(a.score, b.score) ? -1 : lexicographicallyLess(b.score, a.score) ? 1 : 0));
+  return found.slice(0, limit);
 };

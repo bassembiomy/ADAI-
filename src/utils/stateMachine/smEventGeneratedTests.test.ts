@@ -12,8 +12,10 @@ import type { StateMachineModelV5 } from './smModel';
 /*
  * Generated verification tests for event-triggered transitions: the TRUE case posts the
  * transition's input event before the step, the FALSE case does not post it. A transition
- * triggered by a local event, or whose step sends one, cannot be driven by one stimulus and
- * is reported as not applicable. On a correct model every generated test passes.
+ * triggered by a local event is driven through the ADIA_TESTING hook that queues it, and one whose
+ * step sends a local event is tested with the follow-up executions the simulation (the oracle)
+ * computes, so both are applicable (see smOracleGeneratedTests.test.ts). On a correct model every
+ * generated test passes.
  */
 
 const eventChart = (): StateMachineModelV5 => {
@@ -56,9 +58,12 @@ describe('generated tests for event-triggered transitions', () => {
     expect(whenFalse.operations.some((operation) => operation.kind === 'post-event')).toBe(false);
   });
 
-  it('reports local-event and send-driven transitions as not applicable', () => {
-    expect(find('SM-TC-TRANS-STATE_2-STATE_3-TRUE').applicability.status).toBe('not-applicable');
-    expect(find('SM-TC-TRANS-STATE_3-STATE_1-TRUE').applicability.status).toBe('not-applicable');
+  it('tests local-event and send-driven transitions', () => {
+    const local = find('SM-TC-TRANS-STATE_2-STATE_3-TRUE');
+    expect(local.applicability.status).toBe('applicable');
+    expect(local.operations).toContainEqual({ kind: 'queue-local-event', eventId: 'ev_ping' });
+    expect(find('SM-TC-TRANS-STATE_2-STATE_3-FALSE').applicability.status).toBe('applicable');
+    expect(find('SM-TC-TRANS-STATE_3-STATE_1-TRUE').applicability.status).toBe('applicable');
   });
 
   it('every generated test passes on the correct model', async () => {
