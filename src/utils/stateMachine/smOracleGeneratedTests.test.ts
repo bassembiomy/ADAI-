@@ -69,7 +69,7 @@ const runSuite = async (ir: SemanticModel, label: string, mutate?: (directory: s
   }
   const compiled = await adapters.host.compile({ packageDirectory: workspace.directory, standard: ir.verification.cStandard });
   expect(compiled.status).toBe('PASS');
-  const runtime = await adapters.host.runTests({ packageDirectory: workspace.directory, standard: ir.verification.cStandard });
+  const runtime = await adapters.host.runTests({ packageDirectory: workspace.directory });
   return { activities: { 'host-runtime': runtime } } as Awaited<ReturnType<typeof runVerificationPipeline>>;
 };
 
