@@ -653,6 +653,8 @@ export interface DifferentialFixture {
   name: DifferentialFixtureName;
   model: AnyStateMachineModel;
   steps: readonly DifferentialScenarioStep[];
+  /** Hand-written C files (e.g. the implementation of the model's external functions) written next to the generated files; the .c ones are compiled in. */
+  extraSources?: readonly { name: string; content: string }[];
 }
 
 const historySteps = (): DifferentialScenarioStep[] => [

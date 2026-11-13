@@ -1,5 +1,5 @@
 import { execFileSync } from 'child_process';
-import { applyCodePrefixToSource, DEFAULT_CODE_PREFIX, prefixedFileName } from './smCodePrefix';
+import { applyCodePrefixToSource, DEFAULT_CODE_PREFIX, prefixedFileName, preservedNamesOf } from './smCodePrefix';
 import { existsSync, readdirSync, statSync, writeFileSync } from 'fs';
 import { join, relative, resolve } from 'path';
 import type { SMCStandard } from './smModel';
@@ -870,6 +870,7 @@ export const renderDifferentialHarness = (
 ): string => applyCodePrefixToSource(
   renderDifferentialHarnessDefaultPrefix(ir, steps),
   ir.codePrefix ?? DEFAULT_CODE_PREFIX,
+  preservedNamesOf(ir),
 );
 
 const renderDifferentialHarnessDefaultPrefix = (
@@ -1105,8 +1106,16 @@ export const compileAndRunCTrace = (
         writeFileSync(join(workspace.directory, file.name), file.content);
       }
     }
+    const extraSources = fixture.extraSources ?? [];
+    for (const source of extraSources) {
+      if (!/^[A-Za-z0-9_][A-Za-z0-9_.-]*$/.test(source.name) || source.name.includes('..')) {
+        throw new Error(`extra source name '${source.name}' must be a plain file name`);
+      }
+      writeFileSync(join(workspace.directory, source.name), source.content);
+    }
     const output = compileAndRunCProgram({
       directory: workspace.directory,
+      additionalSources: extraSources.filter((source) => source.name.endsWith('.c')).map((source) => source.name),
       harnessSource: renderDifferentialHarness(ir, fixture.steps),
       defines: [`${ir.codePrefix ?? DEFAULT_CODE_PREFIX}_TRACE_ENABLED`],
       codePrefix: ir.codePrefix,

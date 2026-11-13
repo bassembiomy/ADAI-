@@ -123,6 +123,7 @@ const evaluateTyped = (
       faulted = true;
       latchArithmeticError(runtime);
     },
+    externalFunction: (name) => runtime.ir.externalFunctions?.find((def) => def.name === name),
   };
   const value = evaluateArithmetic(expression, env);
   return { value, faulted, env };

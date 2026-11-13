@@ -1,5 +1,5 @@
 import { BLOCK_LIBRARY } from '../../engine/xbridges/BlockDefinitions';
-import type { JunctionData, StateData, TransitionData, VariableDef } from '../../types/sm_types';
+import type { ExternalFunctionDef, JunctionData, StateData, TransitionData, VariableDef } from '../../types/sm_types';
 import { flatOrFixture, type DifferentialScenarioStep } from './smFixtures';
 import type { StateMachineLayerV4, StateMachineModelV5 } from './smModel';
 import type { XBEdgeV1, XBMappingV1, XBNodeV1, XBPersistedModelV1 } from './xbModel';
@@ -24,7 +24,52 @@ export interface RandomChartFeatures {
    * chart variable and an Outport writing a chart variable (xo0, xo1, ...) that guards of the chart read.
    */
   xBridges?: boolean;
+  /**
+   * Declares two external C functions (ext_mix over int32, ext_blend over double and int32) called from
+   * actions and guards. Their C implementation comes from randomChartExtraSources, passed to the
+   * differential harness as DifferentialFixture.extraSources.
+   */
+  externalFunctions?: boolean;
 }
+
+const EXTERNAL_FUNCTIONS: ExternalFunctionDef[] = [
+  {
+    id: 'f_ext_mix', name: 'ext_mix', header: 'ext_api.h', returnType: 'int32',
+    params: [{ name: 'a', type: 'int32' }, { name: 'b', type: 'int32' }],
+    simulation: '(a % 7) * 3 - b / 2',
+  },
+  {
+    id: 'f_ext_blend', name: 'ext_blend', header: 'ext_api.h', returnType: 'double',
+    params: [{ name: 'x', type: 'double' }, { name: 'n', type: 'int32' }],
+    simulation: 'x * 0.5 + n % 5',
+  },
+];
+
+/** C header and implementation of the random charts' external functions (empty without the feature). */
+export const randomChartExtraSources = (
+  _seed: number,
+  features: RandomChartFeatures,
+): { name: string; content: string }[] => features.externalFunctions
+  ? [
+    {
+      name: 'ext_api.h',
+      content: [
+        '#ifndef EXT_API_H', '#define EXT_API_H', '#include <stdint.h>',
+        'int32_t ext_mix(int32_t a, int32_t b);',
+        'double ext_blend(double x, int32_t n);',
+        '#endif', '',
+      ].join('\n'),
+    },
+    {
+      name: 'ext_api.c',
+      content: [
+        '#include "ext_api.h"',
+        'int32_t ext_mix(int32_t a, int32_t b) { return ((a % 7) * 3) - (b / 2); }',
+        'double ext_blend(double x, int32_t n) { return (x * 0.5) + (double)(n % 5); }', '',
+      ].join('\n'),
+    },
+  ]
+  : [];
 
 /* ---- X-Bridges state generation (test support) ---- */
 
@@ -215,6 +260,9 @@ export const buildRandomChart = (seed: number, features: RandomChartFeatures): S
   }
 
   const action = (): string => {
+    if (features.externalFunctions && chance(0.35)) {
+      return pick(['c0 = ext_mix(c0, c1);', 'd0 = ext_blend(d0, c0);', 'c1 = ext_mix(c1 + 1, u8);', 'c0 = c0 + ext_mix(u8, 5);']);
+    }
     if (features.fixedPoint && chance(0.4)) return pick(FIXED_ACTIONS);
     if (features.xBridges && chance(0.25)) return pick(['f0 = f0 * 0.5 + 1.5;', 'f0 = f0 - 2.25;', 'f0 = f0 + 0.75;', 'f0 = xo0 + 1.0;']);
     if (!features.arithmetic) return chance(0.5) ? '' : pick(['c0 = c0 + 1;', 'd0 = d0 + 0.5;']);
@@ -240,6 +288,7 @@ export const buildRandomChart = (seed: number, features: RandomChartFeatures): S
       ? [...INPUTS, ...INPUTS.map((name) => `!${name}`), 'c0 > 3', 'c1 % 2 == 0', 'u8 < 100', 'd0 > 4.5']
       : [...INPUTS, ...INPUTS.map((name) => `!${name}`), 'c0 > 3'];
     if (features.fixedPoint && chance(0.3)) atoms.push(...FIXED_ATOMS);
+    if (features.externalFunctions) atoms.push(pick(['ext_blend(d0, c0) > 3.5', 'ext_mix(c0, c1) > 0', 'ext_blend(0.5, c1) < 2.0']));
     for (const output of xbOutputs) atoms.push(pick([`${output.name} > 1.5`, `${output.name} < 3.0`, `${output.name} >= 0.0`]));
     return chance(0.3) ? `${pick(atoms)} && ${pick(atoms)}` : pick(atoms);
   };
@@ -393,6 +442,7 @@ export const buildRandomChart = (seed: number, features: RandomChartFeatures): S
     ...xbOutputs.map((output) => ({ id: output.name, name: output.name, type: output.type, initialValue: '0', currentValue: 0, visibleInScope: true })),
   ];
   if (features.fixedPoint && chance(0.5)) model.fixedPointRounding = 'nearest';
+  if (features.externalFunctions) model.externalFunctions = EXTERNAL_FUNCTIONS.map((def) => ({ ...def, params: def.params.map((param) => ({ ...param })) }));
   if (features.events) {
     model.events = [
       { id: 'ev_in_a', name: 'IN_A', scope: 'input' },

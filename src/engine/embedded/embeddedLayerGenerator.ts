@@ -441,7 +441,16 @@ A firmware with several charts (or one chart per rate, the replacement for a mul
 - Local events use the run-to-completion queue of UML/SysML, not Stateflow's immediate nested broadcast. The order in which events are processed can differ from Stateflow.
 - Integer arithmetic saturates on overflow. Stateflow wraps some integer types.
 - No fixed-point data types.
-- Actions cannot call hand-written C functions.
+- Hand-written C functions are called directly by the generated code (section 7); the chart's simulation uses the declared simulation expression instead, so the two must agree.
+
+## 7. Custom code (external C functions)
+
+When the chart declares external functions, the generated \`sm_core.c\` and \`sm_user_logic.c\` include the declared headers (\`#include "<header>"\`) and call the functions as \`name((T1)(arg1), (T2)(arg2))\`, with the arguments converted (saturating) to the declared parameter types.
+
+- Provide every declared header and its implementation in the firmware build, and add the directory of the headers to the include path. The headers and function names are yours: the \`codePrefix\` option never renames them.
+- Keep each implementation consistent with the simulation expression declared in the chart (same results for the same arguments, same return type); the simulation and the back-to-back tests only model the function through that expression.
+- The functions run in the context of the chart task, once per call site evaluation, inside the tick. They must be reentrant with respect to the chart (no hidden state shared with other contexts without protection), non-blocking, with a bounded execution time that fits in the tick period \`SM_TICK_MS\`, and free of side effects the chart does not expect: a guard may be evaluated several times per tick and in any order.
+- A floating-point result that is not finite raises the chart's arithmetic error (\`SM_ERR_ARITHMETIC\`).
 `;
 }
 

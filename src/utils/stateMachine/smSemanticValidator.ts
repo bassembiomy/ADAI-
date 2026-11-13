@@ -18,6 +18,12 @@ import type {
 } from './smModel';
 
 type StateMachineModelV4 = AnyStateMachineModel;
+import {
+  resolveExternalCalls,
+  resolveExternalCallsInActions,
+  validateExternalFunctionDefs,
+  type ExternalCallIssue,
+} from './smExternalFunctions';
 import { SM_MAX_INPUT_EVENTS, type SemanticVariable } from './smSemanticModel';
 import { isValidFixedPoint } from './smFixedPoint';
 import { DEFAULT_XB_EMBEDDED_LIMITS } from './xbEmbeddedProfile';
@@ -111,6 +117,10 @@ const inferExpressionType = (
       return operand === 'boolean' ? 'boolean' : null;
     }
     return operand === 'number' ? 'number' : null;
+  }
+  if (expression.kind === 'extcall') {
+    if (expression.returnType === undefined) return null;
+    return expression.returnType === 'bool' ? 'boolean' : 'number';
   }
   if (expression.kind === 'call') {
     const arg = inferExpressionType(expression.argument, symbolTypes);
@@ -909,6 +919,12 @@ const validateExpressions = (
     symbolTypes.set(variable.name, type);
   }
 
+  const externalFunctions = model.externalFunctions;
+  const reportCalls = (issues: ExternalCallIssue[], elementId: string): void => {
+    for (const issue of issues) {
+      diagnostics.push(diagnostic(issue.code, `On '${elementId}': ${issue.message}.`, elementId));
+    }
+  };
   const eventByName = new Map((model.events ?? []).map((event) => [event.name, event]));
   const checkSends = (actions: readonly ActionNode[], elementId: string): void => {
     for (const action of actions) {
@@ -941,6 +957,7 @@ const validateExpressions = (
   const validateAction = (source: string, elementId: string): void => {
     try {
       const actions = parseActions(source, symbols);
+      reportCalls(resolveExternalCallsInActions(actions, externalFunctions), elementId);
       checkSends(actions, elementId);
       if (!actionsHaveValidTypes(actions)) {
         diagnostics.push(diagnostic(
@@ -964,7 +981,11 @@ const validateExpressions = (
     validateAction(state.exit, state.id);
     try {
       const parsed = parseInternalTransitions(state.internalTransitions ?? '', symbols);
-      for (const transition of parsed) checkSends(transition.actions, state.id);
+      for (const transition of parsed) {
+        checkSends(transition.actions, state.id);
+        reportCalls(resolveExternalCalls(transition.guard, externalFunctions), state.id);
+        reportCalls(resolveExternalCallsInActions(transition.actions, externalFunctions), state.id);
+      }
       if (
         parsed.some((transition) =>
           inferExpressionType(transition.guard, symbolTypes) !== 'boolean'
@@ -1016,6 +1037,7 @@ const validateExpressions = (
     }
     try {
       const guard = parseCondition(transition.condition, symbols);
+      reportCalls(resolveExternalCalls(guard, externalFunctions), transition.id);
       if (inferExpressionType(guard, symbolTypes) !== 'boolean') {
         diagnostics.push(diagnostic(
           'GUARD_TYPE_INVALID',
@@ -1235,6 +1257,19 @@ const validateParallelRegionTransitions = (
   return diagnostics;
 };
 
+const validateExternalFunctions = (
+  model: StateMachineModelV4,
+): ModelDiagnostic[] => {
+  const reserved = new Set<string>();
+  for (const variable of model.variables) {
+    reserved.add(variable.name);
+    reserved.add(variable.id);
+  }
+  for (const event of model.events ?? []) reserved.add(event.name);
+  return validateExternalFunctionDefs(model.externalFunctions, reserved)
+    .map((item) => diagnostic(item.code, item.message, item.elementId));
+};
+
 export const validateModelStructure = (
   model: StateMachineModelV4,
 ): ModelDiagnostic[] => {
@@ -1258,6 +1293,7 @@ export const validateModelStructure = (
     ...validateMappings(model),
     ...validateExpressions(model),
     ...validateEvents(model),
+    ...validateExternalFunctions(model),
     ...validateInitialValues(model),
     ...validateFixedPoint(model),
     ...validateXBridges(model),

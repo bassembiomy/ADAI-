@@ -153,6 +153,9 @@ export const evaluateExpression = (
         default: return undefined;
       }
     }
+    case 'extcall':
+      // The value of a hand-written C function is not known to the planner.
+      return undefined;
     case 'binary': {
       const left = evaluateExpression(ir, expr.left, env);
       const right = evaluateExpression(ir, expr.right, env);
@@ -216,6 +219,9 @@ const collectExpression = (
       return;
     case 'call':
       collectExpression(expr.argument, variables, literals, ir);
+      return;
+    case 'extcall':
+      expr.args.forEach((arg) => collectExpression(arg, variables, literals, ir));
       return;
     case 'binary':
       collectExpression(expr.left, variables, literals, ir);

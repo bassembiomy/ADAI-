@@ -18,6 +18,9 @@ const enforcePolicy = (node: ExpressionNode): void => {
     enforcePolicy(node.argument);
     return;
   }
+  if (node.kind === 'extcall') {
+    throw new Error(`Forbidden function call: ${node.functionName}`);
+  }
   if (node.kind === 'binary') {
     if (!['+', '-', '*', '/', '%'].includes(node.operator)) {
       throw new Error(`Forbidden operator: ${node.operator}`);
@@ -33,6 +36,7 @@ const countNodes = (node: ExpressionNode): number => {
   if (node.kind === 'literal' || node.kind === 'variable') return 1;
   if (node.kind === 'unary') return 1 + countNodes(node.operand);
   if (node.kind === 'call') return 1 + countNodes(node.argument);
+  if (node.kind === 'extcall') return 1 + node.args.reduce((sum, arg) => sum + countNodes(arg), 0);
   return 1 + countNodes(node.left) + countNodes(node.right);
 };
 

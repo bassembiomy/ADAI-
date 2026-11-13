@@ -1,4 +1,5 @@
 import { renderArithSection } from './smCArith';
+import { renderExternalArithSection } from './smCExternalHelpers';
 import type { ErrorItem } from '../../types/sm_types';
 import type { ModelDiagnostic } from './smModel';
 import { analyzeSemanticModel } from '../smAnalysisEngine';
@@ -41,7 +42,7 @@ import {
 import { renderHostSmokeHarness } from './smHostHarness';
 import { buildSMTestManifest } from './smTestPlanBuilder';
 import { renderSMCTestPackage } from './smCTestSuiteRenderer';
-import { applyCodePrefix, DEFAULT_CODE_PREFIX } from './smCodePrefix';
+import { applyCodePrefix, DEFAULT_CODE_PREFIX, preservedNamesOf } from './smCodePrefix';
 
 export interface CGeneratorOptions {
   includeTestShims?: boolean;
@@ -1206,6 +1207,9 @@ export const renderCoreHeader = (cStandard?: string, ir?: SemanticModel): string
   '',
   renderArithSection(cStandard, ir !== undefined && Object.values(ir.variables).some((variable) => variable.type === 'fixdt')),
   '',
+  ...(ir?.externalFunctions !== undefined && ir.externalFunctions.length > 0
+    ? [renderExternalArithSection(cStandard), '']
+    : []),
   ...(ir !== undefined && eventUsage(ir).local ? [
     '/* send(NAME): queues a local event; called by the generated actions only, not from interrupts. */',
     'SM_ARITH_INLINE void SM_SendEvent(ADIA_Instance_t *instance, SM_Event_t event)',
@@ -1260,6 +1264,26 @@ export const renderCoreHeader = (cStandard?: string, ir?: SemanticModel): string
   '#endif /* SM_CORE_H */',
 );
 
+/**
+ * Adds `#include "<header>"` (deduplicated, in declaration order) for the external C functions
+ * the generated source calls, right after the project's own includes.
+ */
+const withExternalIncludes = (ir: SemanticModel, source: string): string => {
+  const headers: string[] = [];
+  for (const def of ir.externalFunctions ?? []) {
+    if (new RegExp(`\\b${def.name}\\s*\\(`).test(source) && !headers.includes(def.header)) headers.push(def.header);
+  }
+  if (headers.length === 0) return source;
+  const anchor = '#include "sm_user_logic.h"';
+  return source.replace(anchor, [anchor, ...headers.map((header) => `#include "${header}"`)].join('\n'));
+};
+
+export const renderUserLogicSource = (ir: SemanticModel): string =>
+  withExternalIncludes(ir, renderUserLogicSourceBody(ir));
+
+export const renderCoreSource = (ir: SemanticModel): string =>
+  withExternalIncludes(ir, renderCoreSourceBody(ir));
+
 export const renderUserLogicHeader = (ir: SemanticModel): string => lines(
   '#ifndef SM_USER_LOGIC_H',
   '#define SM_USER_LOGIC_H',
@@ -1276,7 +1300,7 @@ export const renderUserLogicHeader = (ir: SemanticModel): string => lines(
   '#endif /* SM_USER_LOGIC_H */',
 );
 
-export const renderUserLogicSource = (ir: SemanticModel): string => lines(
+const renderUserLogicSourceBody = (ir: SemanticModel): string => lines(
   '#include <math.h>',
   '#include "sm_core.h"',
   '#include "sm_user_logic.h"',
@@ -1677,7 +1701,7 @@ export const renderMcalTestStubs = (): string => lines(
   '}',
 );
 
-export const renderCoreSource = (ir: SemanticModel): string => {
+const renderCoreSourceBody = (ir: SemanticModel): string => {
   const index = buildIndex(ir);
   const states = orderedStates(ir);
   const rootLayer = ir.layers[ir.rootLayerId];
@@ -2293,7 +2317,7 @@ export const generateCArtifacts = (
 ): CGeneratorResult => {
   const generated = generateCArtifactsDefaultPrefix(ir, options);
   if (ir.codePrefix === undefined || ir.codePrefix === DEFAULT_CODE_PREFIX) return generated;
-  return { ...generated, files: applyCodePrefix(generated.files, ir.codePrefix) };
+  return { ...generated, files: applyCodePrefix(generated.files, ir.codePrefix, preservedNamesOf(ir)) };
 };
 
 export const renderMisraDeviations = (ir: SemanticModel): string => [

@@ -116,6 +116,23 @@ export interface EventDef {
   scope: 'input' | 'local';
 }
 
+/**
+ * A hand-written C function the chart may call from guards and actions (Stateflow custom code).
+ * The simulation evaluates `simulation` (an action-language expression over the parameters)
+ * in place of the C code; the generated C includes `header` and calls `name` directly.
+ */
+export interface ExternalFunctionDef {
+  id: string;
+  /** C identifier of the function. */
+  name: string;
+  /** Plain relative header file name, e.g. "motor_api.h". */
+  header: string;
+  returnType: VariableType;
+  params: { name: string; type: VariableType }[];
+  /** Expression over the parameters that models the function in the simulation. */
+  simulation: string;
+}
+
 export interface TransitionData {
   id: string;
   sourceId: string;

@@ -79,6 +79,8 @@ export const inferKind = (
       if (node.functionName !== 'abs') return 'float';
       return inferKind(node.argument, typeOfVariable) === 'float' ? 'float' : 'int';
     }
+    case 'extcall':
+      return kindOfType(node.returnType);
     case 'binary': {
       switch (node.operator) {
         case '||': case '&&': case '==': case '!=': case '<': case '<=': case '>': case '>=':
@@ -104,6 +106,8 @@ export const mayFault = (
     case 'call': return node.functionName !== 'abs'
       || mayFault(node.argument, typeOfVariable)
       || inferKind(node.argument, typeOfVariable) === 'float';
+    case 'extcall':
+      return node.args.some((arg) => mayFault(arg, typeOfVariable)) || kindOfType(node.returnType) === 'float';
     case 'binary': {
       if (mayFault(node.left, typeOfVariable) || mayFault(node.right, typeOfVariable)) return true;
       if (node.operator === '/' || node.operator === '%') return true;
@@ -127,6 +131,14 @@ export interface ArithmeticEnv {
   rounding?: FixedPointRounding;
   variable(name: string): { value: number | boolean; type: VariableType; fixedPoint?: FixedPointFormat };
   fault(): void;
+  /** Declared external C functions (the simulation evaluates their `simulationExpression`). */
+  externalFunction?(name: string): ExternalFunctionModel | undefined;
+}
+
+export interface ExternalFunctionModel {
+  returnType: VariableType;
+  params: { name: string; type: VariableType }[];
+  simulationExpression: ExpressionNode;
 }
 
 const sat64 = (value: bigint): bigint => (value < I64_MIN ? I64_MIN : value > I64_MAX ? I64_MAX : value);
@@ -233,6 +245,7 @@ export const evaluateArithmetic = (
         default: throw new Error(`unsupported function '${node.functionName}'`);
       }
     }
+    case 'extcall': return evaluateExternalCall(node, env);
     case 'binary': {
       if (node.operator === '&&') {
         return { k: 'b', v: arithmeticTruth(evaluateArithmetic(node.left, env))
@@ -312,6 +325,52 @@ export const evaluateArithmetic = (
       }
     }
   }
+};
+
+/**
+ * Simulation of a call of an external C function: the arguments are converted to the parameter
+ * types and the simulation expression is evaluated over them (the parameters shadow the chart
+ * variables); the result is converted to the return type. Conversions saturate; a non-finite
+ * value is an arithmetic error (the call then yields 0).
+ */
+const evaluateExternalCall = (
+  node: Extract<ExpressionNode, { kind: 'extcall' }>,
+  env: ArithmeticEnv,
+): ArithmeticValue => {
+  const def = env.externalFunction?.(node.functionName);
+  if (def === undefined) throw new Error(`call to undeclared function '${node.functionName}'`);
+  const toValue = (value: number | boolean, type: VariableType): ArithmeticValue => {
+    if (type === 'bool') return { k: 'b', v: Boolean(value) };
+    if (isFloatType(type)) return { k: 'f', v: Number(value) };
+    return intValue(env, env.mode === 'int64' ? BigInt(value as number) : Number(value));
+  };
+  const bound = new Map<string, { value: number | boolean; type: VariableType }>();
+  node.args.forEach((arg, index) => {
+    const param = def.params[index];
+    const converted = convertForAssignment(evaluateArithmetic(arg, env), param.type, 'saturate', env);
+    if (!converted.ok) {
+      env.fault();
+      bound.set(param.name, { value: param.type === 'bool' ? false : 0, type: param.type });
+    } else {
+      bound.set(param.name, { value: converted.value, type: param.type });
+    }
+  });
+  const inner: ArithmeticEnv = {
+    ...env,
+    externalFunction: undefined,
+    variable: (name) => {
+      const entry = bound.get(name);
+      if (entry === undefined) throw new Error(`'${name}' is not a parameter of '${node.functionName}'`);
+      return entry;
+    },
+  };
+  const result = evaluateArithmetic(def.simulationExpression, inner);
+  const converted = convertForAssignment(result, def.returnType, 'saturate', env);
+  if (!converted.ok) {
+    env.fault();
+    return toValue(def.returnType === 'bool' ? false : 0, def.returnType);
+  }
+  return toValue(converted.value, def.returnType);
 };
 
 const evaluateFixed = (

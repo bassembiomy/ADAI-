@@ -99,6 +99,8 @@ const renderNode = (
         variableType(node.argument, variables) ?? expectedType,
         resolveVariable,
       )})`;
+    case 'extcall':
+      throw new Error(`external function '${node.functionName}' cannot be called from an I/O conversion`);
   }
 };
 
@@ -229,6 +231,44 @@ const renderFixedBinary = (operator: string, left: Rendered, right: Rendered, ct
   }
 };
 
+/** Converts a rendered argument to the parameter type of an external function (saturating, like an assignment). */
+const renderParameterArgument = (value: Rendered, type: VariableType, ctx: RenderContext): string => {
+  if (type === 'bool') return asBool(value, ctx);
+  if (type === 'double') return `((double)(${asDouble(value)}))`;
+  if (isFloatType(type)) return `SM_ArgFloat(${asDouble(value)})`;
+  const bounds = typeBounds(type, ctx);
+  let converted: string;
+  if (ctx.mode === 'double') {
+    converted = `SM_ArgIntD(${asDouble(value)}, ${bounds.min}, ${bounds.max})`;
+  } else if (value.frac !== undefined) {
+    converted = `SM_ArgI64(SM_FxRescale(${value.code}, ${value.frac}U, ${ctx.nearest ? 'true' : 'false'}), ${bounds.min}, ${bounds.max})`;
+  } else if (value.kind === 'float') {
+    converted = `SM_ArgDoubleToI64(${value.code}, ${bounds.min}, ${bounds.max})`;
+  } else {
+    converted = `SM_ArgI64(${asInt(value, ctx)}, ${bounds.min}, ${bounds.max})`;
+  }
+  return `((${cType(type)})(${converted}))`;
+};
+
+/** Direct call of a hand-written C function: `name((T1)(arg1), (T2)(arg2))`, the result typed as its return type. */
+const renderExternalCall = (
+  node: Extract<ExpressionNode, { kind: 'extcall' }>,
+  ctx: RenderContext,
+): Rendered => {
+  const returnType = node.returnType;
+  const paramTypes = node.paramTypes;
+  if (returnType === undefined || paramTypes === undefined) {
+    throw new Error(`call to unresolved external function '${node.functionName}'`);
+  }
+  const args = node.args.map((arg, index) => renderParameterArgument(renderTyped(arg, ctx), paramTypes[index], ctx));
+  const call = `${node.functionName}(${args.join(', ')})`;
+  const kind = kindOfType(returnType);
+  if (kind === 'bool') return { code: call, kind };
+  if (kind === 'float') return { code: `SM_ChkD(instance, ((double)${call}))`, kind };
+  if (ctx.mode === 'double') return { code: `((double)${call})`, kind };
+  return { code: returnType === 'uint64' ? `SM_U64ToI64(${call})` : `((int64_t)${call})`, kind };
+};
+
 const renderTyped = (node: ExpressionNode, ctx: RenderContext): Rendered => {
   switch (node.kind) {
     case 'literal':
@@ -275,6 +315,7 @@ const renderTyped = (node: ExpressionNode, ctx: RenderContext): Rendered => {
       const fn = node.functionName === 'abs' ? 'fabs' : node.functionName;
       return { code: `SM_ChkD(instance, ${fn}(${asDouble(argument)}))`, kind: 'float' };
     }
+    case 'extcall': return renderExternalCall(node, ctx);
     case 'binary': {
       const left = renderTyped(node.left, ctx);
       const right = renderTyped(node.right, ctx);

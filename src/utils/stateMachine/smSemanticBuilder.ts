@@ -1,8 +1,10 @@
 import type { StateData } from '../../types/sm_types';
+import { parseSimulationExpression, resolveExternalCalls, resolveExternalCallsInActions } from './smExternalFunctions';
 import { codePrefixProblem } from './smCodePrefix';
 import {
   parseActions as parseActionsRaw,
   type ActionNode,
+  type ExpressionNode,
   parseCondition,
   parseInternalTransitions,
   toCIdentifier,
@@ -407,11 +409,20 @@ export const buildSemanticModel = (
     index: event.scope === 'input' ? nextInputIndex++ : nextLocalIndex++,
   }));
   const eventIdByName = new Map(events.map((event) => [event.name, event.id]));
+  const externalFunctions = (model as Partial<StateMachineModelV5>).externalFunctions;
+  const resolveCallsInActions = (actions: ActionNode[]): ActionNode[] => {
+    resolveExternalCallsInActions(actions, externalFunctions);
+    return actions;
+  };
+  const resolveCalls = <T extends ExpressionNode>(expression: T): T => {
+    resolveExternalCalls(expression, externalFunctions);
+    return expression;
+  };
   /** Parses an action list; `send(NAME)` is resolved to the event id (the validator has checked it). */
   const parseActions = (
     source: string,
     declared?: Parameters<typeof parseActionsRaw>[1],
-  ): ActionNode[] => parseActionsRaw(source, declared).map((action) => {
+  ): ActionNode[] => resolveCallsInActions(parseActionsRaw(source, declared)).map((action) => {
     if (action.kind !== 'send') return action;
     const eventId = eventIdByName.get(action.event);
     if (eventId === undefined) {
@@ -571,7 +582,7 @@ export const buildSemanticModel = (
       eventId: transition.event ?? null,
       sourceKind: sourceIsState ? 'state' : 'junction',
       destinationKind: destinationIsState ? 'state' : 'junction',
-      guard: parseCondition(transition.condition, symbols),
+      guard: resolveCalls(parseCondition(transition.condition, symbols)),
       actions: parseActions(transition.action, symbols),
       ...paths,
       routes: [],
@@ -585,6 +596,8 @@ export const buildSemanticModel = (
       symbols,
     );
     internalTransitions.forEach((internal, index) => {
+      resolveCalls(internal.guard);
+      resolveCallsInActions(internal.actions);
       const id = `$internal_${state.id}_${index}`;
       transitions[id] = {
         id,
@@ -877,6 +890,19 @@ export const buildSemanticModel = (
       ).length,
       traceableElements,
       events,
+      ...(externalFunctions !== undefined && externalFunctions.length > 0
+        ? {
+          externalFunctions: externalFunctions.map((def) => ({
+            id: def.id,
+            name: def.name,
+            header: def.header,
+            returnType: def.returnType,
+            params: def.params.map((param) => ({ name: param.name, type: param.type })),
+            simulation: def.simulation,
+            simulationExpression: parseSimulationExpression(def),
+          })),
+        }
+        : {}),
       modelHash: "0000000000000000",
       verification: resolveVerificationConfig((model as Partial<StateMachineModelV5>).verification),
       ...((model as Partial<StateMachineModelV5>).fixedPointRounding === 'nearest'

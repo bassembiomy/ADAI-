@@ -1,3 +1,5 @@
+import type { VariableType } from '../../types/sm_types';
+
 export type BinaryOperator =
   | '||'
   | '&&'
@@ -26,7 +28,19 @@ export type ExpressionNode =
     right: ExpressionNode;
   }
   | { kind: 'unary'; operator: UnaryOperator; operand: ExpressionNode }
-  | { kind: 'call'; functionName: string; argument: ExpressionNode };
+  | { kind: 'call'; functionName: string; argument: ExpressionNode }
+  /**
+   * Call of a declared external C function (ExternalFunctionDef). The parser leaves `returnType`
+   * and `paramTypes` unset; resolveExternalCalls (smExternalFunctions.ts) fills them in once the
+   * declarations are known.
+   */
+  | {
+    kind: 'extcall';
+    functionName: string;
+    args: ExpressionNode[];
+    returnType?: VariableType;
+    paramTypes?: VariableType[];
+  };
 
 export type ActionNode =
   | {
@@ -158,7 +172,7 @@ const tokenize = (source: string): Token[] => {
       continue;
     }
 
-    if (rest[0] === '(' || rest[0] === ')' || rest[0] === ';') {
+    if (rest[0] === '(' || rest[0] === ')' || rest[0] === ';' || rest[0] === ',') {
       tokens.push({ kind: 'punctuation', value: rest[0], offset });
       offset += 1;
       continue;
@@ -321,6 +335,21 @@ class Parser {
         const expression = this.parseExpression();
         this.consumeValue(')');
         return { kind: 'call', functionName: token.value, argument: expression };
+      }
+      if (this.peek()?.value === '(') {
+        // Any other name followed by '(' is a call of an external function; the semantic
+        // builder and validator resolve it (SM_UNKNOWN_FUNCTION, SM_FUNCTION_ARITY).
+        this.index += 1;
+        const args: ExpressionNode[] = [];
+        if (this.peek().value !== ')') {
+          args.push(this.parseExpression());
+          while (this.peek().value === ',') {
+            this.index += 1;
+            args.push(this.parseExpression());
+          }
+        }
+        this.consumeValue(')');
+        return { kind: 'extcall', functionName: token.value, args };
       }
       this.assertDeclared(token.value);
       return this.variable(token.value);

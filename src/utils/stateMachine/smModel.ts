@@ -2,6 +2,7 @@ import type { HILConfig } from '../../engine/hil/hilTypes';
 export type { XBPersistedModelV1 } from './xbModel';
 import type {
   EventDef,
+  ExternalFunctionDef,
   FixedPointRounding,
   JunctionData,
   Layer,
@@ -65,6 +66,7 @@ export interface StateMachineModelV4 {
   safetyMode: boolean;
   hilConfig?: HILConfig;
   events?: EventDef[];
+  externalFunctions?: ExternalFunctionDef[];
   codePrefix?: string;
 }
 
@@ -88,6 +90,8 @@ export interface StateMachineModelV5 {
   fixedPointRounding?: FixedPointRounding;
   /** Declared events in declaration order (input events fire in this order). Optional: absent means no events. */
   events?: EventDef[];
+  /** Hand-written C functions callable from guards and actions. Optional: absent means none. */
+  externalFunctions?: ExternalFunctionDef[];
 }
 
 export type StateMachineModel = StateMachineModelV5;
@@ -110,6 +114,7 @@ export interface LegacyStateMachineModel {
   executeAtInitialization?: boolean;
   fixedPointRounding?: FixedPointRounding;
   events?: EventDef[];
+  externalFunctions?: ExternalFunctionDef[];
 }
 
 export interface ModelDiagnostic {

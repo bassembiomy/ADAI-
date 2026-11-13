@@ -180,6 +180,17 @@ export interface ResolvedSMVerificationConfig {
   readonly invalidInputPolicies: Readonly<Record<string, SMInvalidInputPolicy>>;
 }
 
+/** A declared external C function with its parsed simulation expression (over the parameter names). */
+export interface SemanticExternalFunction {
+  id: string;
+  name: string;
+  header: string;
+  returnType: VariableType;
+  params: { name: string; type: VariableType }[];
+  simulation: string;
+  simulationExpression: ExpressionNode;
+}
+
 export interface SemanticModel {
   tickMs: number;
   /** Prefix of every external name and file of the generated C (default 'SM'). */
@@ -198,6 +209,8 @@ export interface SemanticModel {
   traceableElements: TraceableElement[];
   /** Declared events in declaration order; absent or empty when the chart uses none (read with semanticEvents). */
   events?: SemanticEvent[];
+  /** Hand-written C functions callable from guards and actions; absent when the chart declares none. */
+  externalFunctions?: SemanticExternalFunction[];
   modelHash?: string;
   verification: ResolvedSMVerificationConfig;
   /** Undefined means true. When false, the chart is entered on the first step, not at init. */
