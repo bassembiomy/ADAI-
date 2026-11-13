@@ -49,7 +49,7 @@ export const validateInitialValue = (v: { type: VariableType; initialValue?: str
     return null;
   }
   const isUnsigned = ['uint', 'uint8', 'uint16', 'uint32', 'uint64'].includes(v.type);
-  const isFloat = ['float', 'single', 'double'].includes(v.type);
+  const isFloat = ['float', 'single', 'double', 'fixdt'].includes(v.type);
   if (isFloat) {
     const floatRaw = raw.replace(/[fF]$/, '');
     if (!/^-?(\d+(\.\d+)?|\.\d+)([eE][+-]?\d+)?$/.test(floatRaw)) return null;

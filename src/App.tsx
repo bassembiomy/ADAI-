@@ -271,7 +271,18 @@ import {
 } from './services/sysmlDiagramWorkspace';
 import { ensureRootStateMachineDiagram } from './features/modelExplorer/adapters/stateMachineExplorerAdapter';
 import { resolveCanvasSymbolDiagramTargets, resolveExactDiagramCanvasContext, resolveTreeOpenTarget } from './features/modelExplorer/diagramTreeContext';
-import type { StateMachineDiagramData, EventDef } from './types/sm_types';
+import type { StateMachineDiagramData, EventDef, ExternalFunctionDef, FixedPointFormat, FixedPointRounding } from './types/sm_types';
+import { ChartSettingsEditor } from './components/statemachine/ChartSettingsEditor';
+import { ChartExternalFunctionsEditor } from './components/statemachine/ChartExternalFunctionsEditor';
+import { FixedPointFormatEditor } from './components/statemachine/FixedPointFormatEditor';
+import { isValidFixedPoint } from './utils/stateMachine/smFixedPoint';
+import {
+  DEFAULT_FIXED_POINT,
+  externalFunctionCallSites,
+  externalFunctionReservedNames,
+  newExternalFunction,
+  withVariableType,
+} from './utils/stateMachine/smChartSettingsEditing';
 import {
   addEvent as addEventDef,
   deleteEvent as deleteEventDef,
@@ -386,7 +397,8 @@ interface ManagedWindowState {
 // =============================================================================
 // CONSTANTS
 // =============================================================================
-const ALLOWED_TYPES: VariableType[] = ['bool', 'int', 'uint', 'int8', 'uint8', 'int16', 'uint16', 'int32', 'uint32', 'int64', 'uint64', 'float', 'single', 'double'];
+const ALLOWED_TYPES: VariableType[] = ['bool', 'int', 'uint', 'int8', 'uint8', 'int16', 'uint16', 'int32', 'uint32', 'int64', 'uint64', 'float', 'single', 'double', 'fixdt'];
+const variableTypeLabel = (type: VariableType): string => (type === 'fixdt' ? 'fixdt (fixed-point)' : type);
 const DEFAULT_STATE_WIDTH = 160;
 const DEFAULT_STATE_HEIGHT = 100;
 const MIN_SCALE = 0.1;
@@ -4923,6 +4935,12 @@ const ADIA = () => {
   const [events, setEvents] = useState<EventDef[]>([]);
   // Stateflow 'Execute (enter) chart at initialization': undefined/true = enter at init, false = enter on the first step.
   const [executeAtInitialization, setExecuteAtInitialization] = useState<boolean | undefined>(undefined);
+  // Fixed-point rounding (Floor default), hand-written C functions callable from actions and guards, per-chart code prefix (default SM).
+  // undefined = not set, so old projects save byte-identical.
+  const [fixedPointRounding, setFixedPointRounding] = useState<FixedPointRounding | undefined>(undefined);
+  const [externalFunctions, setExternalFunctions] = useState<ExternalFunctionDef[] | undefined>(undefined);
+  const [codePrefix, setCodePrefix] = useState<string | undefined>(undefined);
+  const [newVarFixedPoint, setNewVarFixedPoint] = useState<FixedPointFormat>(DEFAULT_FIXED_POINT);
   const [showHelpModal, setShowHelpModal] = useState(false);
 
   // BDD STATE (SysML)
@@ -5595,7 +5613,7 @@ const ADIA = () => {
         return {
           ...createPersistedAppSimulationModel({
             tickMs, states, junctions, transitions, variables, layers,
-            safetyMode, hilConfig, events, executeAtInitialization,
+            safetyMode, hilConfig, events, executeAtInitialization, fixedPointRounding, externalFunctions, codePrefix,
           }),
           view,
         };
@@ -5624,7 +5642,7 @@ const ADIA = () => {
         return null;
     }
   }, [
-    states, junctions, transitions, layers, variables, view, tickMs, safetyMode, events, executeAtInitialization,
+    states, junctions, transitions, layers, variables, view, tickMs, safetyMode, events, executeAtInitialization, fixedPointRounding, externalFunctions, codePrefix,
     blocks, relationships, customStereotypes, parts, connectors, interfaceRealizations,
     globalXBridgesNodes, globalXBridgesEdges, vlabNodes, vlabEdges, hilConfig,
     entropyNodes, entropyEdges, opmSimulationConfig, hmiComponents, headers, data, activeModel, taguchiConfig, results,
@@ -5651,6 +5669,9 @@ const ADIA = () => {
       setVariables(restored.variables);
       setEvents(restored.events ?? []);
       setExecuteAtInitialization(restored.executeAtInitialization);
+      setFixedPointRounding(restored.fixedPointRounding);
+      setExternalFunctions(restored.externalFunctions);
+      setCodePrefix(restored.codePrefix);
       setTickMs(restored.tickMs);
       setSafetyMode(restored.safetyMode);
       setHilConfig(restored.hilConfig ?? {
@@ -5670,7 +5691,7 @@ const ADIA = () => {
     if (!file.data) {
       switch (file.type) {
         case 'statemachine':
-          setStates([]); setJunctions([]); setTransitions([]); setLayers([]); setVariables([]); setEvents([]); setExecuteAtInitialization(undefined);
+          setStates([]); setJunctions([]); setTransitions([]); setLayers([]); setVariables([]); setEvents([]); setExecuteAtInitialization(undefined); setFixedPointRounding(undefined); setExternalFunctions(undefined); setCodePrefix(undefined);
           break;
         case 'bdd':
         case 'requirements':
@@ -6260,7 +6281,7 @@ const ADIA = () => {
     const projectPayload = {
       ...createPersistedAppSimulationModel({
         tickMs, states, junctions, transitions, layers, variables,
-        safetyMode, hilConfig, events, executeAtInitialization,
+        safetyMode, hilConfig, events, executeAtInitialization, fixedPointRounding, externalFunctions, codePrefix,
       }),
       blocks, relationships, parts, connectors, interfaceRealizations,
     };
@@ -6296,7 +6317,7 @@ const ADIA = () => {
         available: vlabNodes && vlabNodes.length > 0,
       },
     ] as AdiaExportItem[];
-  }, [states, junctions, transitions, layers, variables, tickMs, safetyMode, hilConfig, events, executeAtInitialization, blocks, relationships, parts, connectors, interfaceRealizations, globalXBridgesNodes, globalXBridgesEdges, vlabNodes, vlabEdges]);
+  }, [states, junctions, transitions, layers, variables, tickMs, safetyMode, hilConfig, events, executeAtInitialization, fixedPointRounding, externalFunctions, codePrefix, blocks, relationships, parts, connectors, interfaceRealizations, globalXBridgesNodes, globalXBridgesEdges, vlabNodes, vlabEdges]);
 
 
 
@@ -6377,9 +6398,9 @@ const ADIA = () => {
   // TRM simulation verification: the panel edits a repository copy; changes reach the model only as gateway commands.
   const [simVerificationRequirementId, setSimVerificationRequirementId] = useState<string | null>(null);
   const simVerificationProject = useMemo(() => ({
-    states, junctions, transitions, variables, layers, tickMs, hilConfig, safetyMode, events, executeAtInitialization,
+    states, junctions, transitions, variables, layers, tickMs, hilConfig, safetyMode, events, executeAtInitialization, fixedPointRounding, externalFunctions, codePrefix,
     globalXBridgesNodes, globalXBridgesEdges, vlabNodes, vlabEdges,
-  }), [states, junctions, transitions, variables, layers, tickMs, hilConfig, safetyMode, events, executeAtInitialization, globalXBridgesNodes, globalXBridgesEdges, vlabNodes, vlabEdges]);
+  }), [states, junctions, transitions, variables, layers, tickMs, hilConfig, safetyMode, events, executeAtInitialization, fixedPointRounding, externalFunctions, codePrefix, globalXBridgesNodes, globalXBridgesEdges, vlabNodes, vlabEdges]);
   // Stable XbridgesWorkspace inputs: a fresh array per render re-imports the stored model over unsaved edits.
   const xBridgesWorkspaceInputs = useXBridgesWorkspaceInputs(states, xBridgesStateId, globalXBridgesNodes, globalXBridgesEdges);
   const simEvidenceCurrency = useCallback((evidence: { id: string; simulation?: unknown }): 'current' | 'stale' =>
@@ -6769,7 +6790,7 @@ const ADIA = () => {
     const projectFiles: Record<string, any> = {};
     const persistedStateMachine = createPersistedAppSimulationModel({
       tickMs, states, junctions, transitions, layers, variables,
-      safetyMode, hilConfig, events, executeAtInitialization,
+      safetyMode, hilConfig, events, executeAtInitialization, fixedPointRounding, externalFunctions, codePrefix,
     });
 
     if (selectedKeys.includes('statemachine')) {
@@ -6866,7 +6887,7 @@ const ADIA = () => {
     }
     addError('info', 'Selected project modules exported as files.');
   }, [
-    states, junctions, transitions, layers, variables, view, tickMs, safetyMode, events, executeAtInitialization,
+    states, junctions, transitions, layers, variables, view, tickMs, safetyMode, events, executeAtInitialization, fixedPointRounding, externalFunctions, codePrefix,
     blocks, relationships, parts, connectors, interfaceRealizations, customStereotypes,
     hmiComponents, vlabNodes, vlabEdges, globalXBridgesNodes, globalXBridgesEdges,
     hilConfig,
@@ -6948,6 +6969,9 @@ const ADIA = () => {
       // Absent means no events / default initialization: never keep the previous project's values.
       setEvents(Array.isArray(importedData.events) ? importedData.events : []);
       setExecuteAtInitialization(typeof importedData.executeAtInitialization === 'boolean' ? importedData.executeAtInitialization : undefined);
+      setFixedPointRounding(importedData.fixedPointRounding === 'nearest' || importedData.fixedPointRounding === 'floor' ? importedData.fixedPointRounding : undefined);
+      setExternalFunctions(Array.isArray(importedData.externalFunctions) ? importedData.externalFunctions : undefined);
+      setCodePrefix(typeof importedData.codePrefix === 'string' ? importedData.codePrefix : undefined);
       if (importedData.view) {
         const v = importedData.view;
         const scale = typeof v.scale === 'number' && Number.isFinite(v.scale) && v.scale > 0 ? v.scale : (typeof v.zoom === 'number' && Number.isFinite(v.zoom) && v.zoom > 0 ? v.zoom : 1);
@@ -7242,6 +7266,9 @@ const ADIA = () => {
       variables,
       events,
       executeAtInitialization,
+      fixedPointRounding,
+      externalFunctions,
+      codePrefix,
       safetyMode,
       hilConfig,
       blocks,
@@ -7288,6 +7315,9 @@ const ADIA = () => {
     variables,
     events,
     executeAtInitialization,
+    fixedPointRounding,
+    externalFunctions,
+    codePrefix,
     safetyMode,
     hilConfig,
     blocks,
@@ -7674,11 +7704,16 @@ const ADIA = () => {
       addError('error', `Invalid initial value '${newVarValue}' for ${newVarType} variable '${newVarName}'.`, 'Workspace');
       return;
     }
+    if (newVarType === 'fixdt' && !isValidFixedPoint(newVarFixedPoint)) {
+      addError('error', `Fixed-point variable '${newVarName}' needs a word length of 8, 16 or 32 and a fraction length from 0 to the word length.`, 'Workspace');
+      return;
+    }
     setVariables(prev => [...prev, {
       id: uuidv4(),
       name: newVarName,
       type: newVarType,
       overflowPolicy: 'saturate',
+      ...(newVarType === 'fixdt' ? { fixedPoint: { ...newVarFixedPoint } } : {}),
       initialValue: newVarValue,
       currentValue: parseValue(newVarType, newVarValue),
       visibleInScope: true
@@ -7686,7 +7721,7 @@ const ADIA = () => {
     setNewVarName('');
     setNewVarValue(getDefaultValue(newVarType));
     addError('info', `Added variable: ${newVarName}`);
-  }, [newVarName, newVarType, newVarValue, variables, addError]);
+  }, [newVarName, newVarType, newVarValue, newVarFixedPoint, variables, addError]);
 
   const removeVariable = useCallback((id: string) => {
     const varName = variables.find(v => v.id === id)?.name;
@@ -7731,9 +7766,54 @@ const ADIA = () => {
         addError('error', `Cannot change '${v.name}' to ${type}: initial value is invalid.`, 'Variable Type');
         return v;
       }
-      return { ...v, type, initialValue: initial, currentValue: parseValue(type, initial) };
+      return { ...withVariableType(v, type), initialValue: initial, currentValue: parseValue(type, initial) };
     }));
   }, [addError]);
+
+  /** Edits the signed / word length / fraction length of a fixdt variable. */
+  const updateVariableFixedPoint = useCallback((id: string, fixedPoint: FixedPointFormat) => {
+    setVariables(prev => prev.map(v => (v.id === id && v.type === 'fixdt' ? { ...v, fixedPoint } : v)));
+  }, []);
+
+  // CHART SETTINGS: fixed-point rounding, code prefix (stored only when not the default, so old projects save unchanged).
+  const changeFixedPointRounding = useCallback((rounding: FixedPointRounding | undefined) => setFixedPointRounding(rounding), []);
+  const changeCodePrefix = useCallback((prefix: string | undefined) => setCodePrefix(prefix), []);
+
+  // EXTERNAL FUNCTIONS: hand-written C functions the chart may call from actions and guards.
+  const externalFunctionReserved = useMemo(() => externalFunctionReservedNames(variables, events), [variables, events]);
+  const externalFunctionCallCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const def of externalFunctions ?? []) counts[def.name] = externalFunctionCallSites(def.name, states, transitions).length;
+    return counts;
+  }, [externalFunctions, states, transitions]);
+
+  const addExternalFunctionDef = useCallback(() => {
+    const def = newExternalFunction(externalFunctions ?? [], uuidv4(), externalFunctionReserved);
+    setExternalFunctions([...(externalFunctions ?? []), def]);
+    addError('info', `Added external function: ${def.name}`);
+  }, [externalFunctions, externalFunctionReserved, addError]);
+
+  /** The editor passes only complete, valid declarations. */
+  const updateExternalFunctionDef = useCallback((def: ExternalFunctionDef) => {
+    setExternalFunctions(prev => (prev ?? []).map(item => (item.id === def.id ? def : item)));
+  }, []);
+
+  const removeExternalFunctionDef = useCallback((id: string) => {
+    const def = (externalFunctions ?? []).find(item => item.id === id);
+    if (!def) return;
+    const sites = externalFunctionCallSites(def.name, states, transitions);
+    if (sites.length > 0) {
+      const ok = window.confirm?.(
+        `External function '${def.name}' is called in ${sites.length} place(s): ${sites.slice(0, 5).join(', ')}${sites.length > 5 ? ', ...' : ''}.\n\nDeleting it leaves those calls undeclared and Validate will report them. Delete anyway?`
+      );
+      if (!ok) return;
+    }
+    const remaining = (externalFunctions ?? []).filter(item => item.id !== id);
+    setExternalFunctions(remaining.length > 0 ? remaining : undefined);
+    addError('info', sites.length > 0
+      ? `Removed external function: ${def.name}. ${sites.length} call(s) now refer to an undeclared function.`
+      : `Removed external function: ${def.name}`);
+  }, [externalFunctions, states, transitions, addError]);
 
   const updateVariableOverflowPolicy = useCallback((id: string, overflowPolicy: VariableOverflowPolicy) => {
     setVariables(prev => prev.map(v => v.id === id ? { ...v, overflowPolicy } : v));
@@ -7839,7 +7919,7 @@ const ADIA = () => {
     const snapshot = JSON.stringify({
       ...createPersistedAppSimulationModel({
         tickMs, states, junctions, transitions, layers, variables,
-        safetyMode, hilConfig, events, executeAtInitialization,
+        safetyMode, hilConfig, events, executeAtInitialization, fixedPointRounding, externalFunctions, codePrefix,
       }),
       // SysML history is owned by the canonical gateway patch history.
     });
@@ -7850,7 +7930,7 @@ const ADIA = () => {
       return newHistory;
     });
     setHistoryIndex(prev => Math.min(prev + 1, 49));
-  }, [states, junctions, transitions, layers, variables, tickMs, safetyMode, hilConfig, events, executeAtInitialization, historyIndex]);
+  }, [states, junctions, transitions, layers, variables, tickMs, safetyMode, hilConfig, events, executeAtInitialization, fixedPointRounding, externalFunctions, codePrefix, historyIndex]);
 
   const undo = useCallback(() => {
     if ((sysmlGatewayStateRef.current.patchHistory?.past.length ?? 0) > 0) {
@@ -7897,7 +7977,8 @@ const ADIA = () => {
   // VALIDATION
   const performValidation = useCallback(() => {
     const newErrors: ErrorItem[] = [];
-    const declaredVarNames = new Set(variables.map(v => v.name));
+    // Declared external C functions are callable names, like variables.
+    const declaredVarNames = new Set([...variables.map(v => v.name), ...(externalFunctions ?? []).map(f => f.name)]);
     const jsKeywords = new Set([
       'Math', 'console', 'true', 'false', 'null', 'undefined', 'NaN', 'Infinity',
       'if', 'else', 'for', 'while', 'do', 'switch', 'case', 'default', 'break', 'continue', 'return',
@@ -8310,6 +8391,9 @@ const ADIA = () => {
       safetyMode,
       events,
       executeAtInitialization,
+      fixedPointRounding,
+      externalFunctions,
+      codePrefix,
       hilConfig: { ...hilConfig, enabled: false }
     });
     if (genRes.errors && genRes.errors.length > 0) {
@@ -8322,7 +8406,7 @@ const ADIA = () => {
     });
 
     return newErrors;
-  }, [states, transitions, junctions, variables, layers, hilConfig, tickMs, safetyMode, events, executeAtInitialization]);
+  }, [states, transitions, junctions, variables, layers, hilConfig, tickMs, safetyMode, events, executeAtInitialization, fixedPointRounding, externalFunctions, codePrefix]);
 
   const validateModel = useCallback(() => {
     const newErrors = performValidation();
@@ -8383,10 +8467,13 @@ const ADIA = () => {
     safetyMode,
     events,
     executeAtInitialization,
+    fixedPointRounding,
+    externalFunctions,
+    codePrefix,
     hilConfig
   }, simulationIOMappings), [
     tickMs, states, junctions, transitions, variables, layers,
-    safetyMode, hilConfig, events, executeAtInitialization, simulationIOMappings
+    safetyMode, hilConfig, events, executeAtInitialization, fixedPointRounding, externalFunctions, codePrefix, simulationIOMappings
   ]);
   const previousSimulationModelKeyRef = useRef(simulationModelKey);
   useEffect(() => {
@@ -8420,11 +8507,14 @@ const ADIA = () => {
       safetyMode,
       events,
       executeAtInitialization,
+      fixedPointRounding,
+      externalFunctions,
+      codePrefix,
       hilConfig
     }, simulationIOMappings)
   ), [
     tickMs, states, junctions, transitions, variables, layers,
-    safetyMode, hilConfig, events, executeAtInitialization, simulationIOMappings
+    safetyMode, hilConfig, events, executeAtInitialization, fixedPointRounding, externalFunctions, codePrefix, simulationIOMappings
   ]);
 
   const readFactoryInputs = useCallback(async (): Promise<Record<string, AppSimulationValue>> => {
@@ -13007,7 +13097,7 @@ const ADIA = () => {
     await validateWithAI();
 
     try {
-      const chart = { tickMs, states, junctions, transitions, variables, layers, safetyMode, events, executeAtInitialization, hilConfig };
+      const chart = { tickMs, states, junctions, transitions, variables, layers, safetyMode, events, executeAtInitialization, fixedPointRounding, externalFunctions, codePrefix, hilConfig };
       // REQ-ENGINE-003: TS template literals ensure safe string concatenation
       let { files, errors: validationErrors, warnings } = generateMISRACCode(chart);
 
@@ -13097,7 +13187,7 @@ const ADIA = () => {
     } finally {
       setIsGenerating(false);
     }
-  }, [tickMs, states, junctions, transitions, variables, layers, safetyMode, hilConfig, events, executeAtInitialization, addError, validateModel, calculateChecksum, validateWithAI]);
+  }, [tickMs, states, junctions, transitions, variables, layers, safetyMode, hilConfig, events, executeAtInitialization, fixedPointRounding, externalFunctions, codePrefix, addError, validateModel, calculateChecksum, validateWithAI]);
 
   const renderStates = useCallback((): React.ReactNode => {
     return currentStates.map(state => {
@@ -15634,9 +15724,14 @@ const ADIA = () => {
                           }}
                           className="h-7 w-24 bg-[#0d0d0d] border border-[#333] rounded text-[10px] px-1 text-[#e0e0e0] outline-none"
                         >
-                          {ALLOWED_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                          {ALLOWED_TYPES.map(t => <option key={t} value={t}>{variableTypeLabel(t)}</option>)}
                         </select>
                       </div>
+                      {newVarType === 'fixdt' && (
+                        <div className="mb-1.5">
+                          <FixedPointFormatEditor label="new variable" value={newVarFixedPoint} onChange={setNewVarFixedPoint} />
+                        </div>
+                      )}
                       <div className="flex gap-1.5">
                         <Input data-help-feature="app-variable-new-initial" data-help-source="src/App.tsx"
                           placeholder="Init Value"
@@ -15689,7 +15784,7 @@ const ADIA = () => {
                                 onChange={(e) => updateVariableType(variable.id, e.target.value as VariableType)}
                                 className="h-6 text-[10px] font-mono bg-[#0d0d0d] border border-[#222] rounded px-1"
                               >
-                                {ALLOWED_TYPES.map(type => <option key={type} value={type}>{type}</option>)}
+                                {ALLOWED_TYPES.map(type => <option key={type} value={type}>{variableTypeLabel(type)}</option>)}
                               </select>
                               <select data-help-feature="app-variable-overflow" data-help-source="src/App.tsx"
                                 value={variable.overflowPolicy ?? 'saturate'}
@@ -15699,6 +15794,14 @@ const ADIA = () => {
                                 <option value="saturate">saturate</option>
                                 <option value="error">error</option>
                               </select>
+                              {variable.type === 'fixdt' && variable.fixedPoint && (
+                                <FixedPointFormatEditor
+                                  label={variable.name}
+                                  value={variable.fixedPoint}
+                                  disabled={isRunning}
+                                  onChange={(format) => updateVariableFixedPoint(variable.id, format)}
+                                />
+                              )}
                               <div className="space-y-0.5">
                                 <span className="text-[8px] font-bold text-[#444] uppercase tracking-tighter">Initial</span>
                                 <Input data-help-feature="app-variable-initial" data-help-source="src/App.tsx"
@@ -15728,12 +15831,30 @@ const ADIA = () => {
                       )}
                     </div>
 
+                    <ChartSettingsEditor
+                      fixedPointRounding={fixedPointRounding}
+                      onFixedPointRoundingChange={changeFixedPointRounding}
+                      codePrefix={codePrefix}
+                      onCodePrefixChange={changeCodePrefix}
+                      enterAtFirstStep={executeAtInitialization === false}
+                      onEnterAtFirstStepChange={(enabled) => setExecuteAtInitialization(enabled ? false : undefined)}
+                    />
+
                     <ChartEventsEditor data-help-feature="app-event-add" data-help-source="src/App.tsx"
                       events={events}
                       onAdd={addChartEvent}
                       onRename={renameChartEvent}
                       onScopeChange={setChartEventScope}
                       onDelete={removeChartEvent}
+                    />
+
+                    <ChartExternalFunctionsEditor
+                      functions={externalFunctions ?? []}
+                      reservedNames={externalFunctionReserved}
+                      callCounts={externalFunctionCallCounts}
+                      onAdd={addExternalFunctionDef}
+                      onChange={updateExternalFunctionDef}
+                      onDelete={removeExternalFunctionDef}
                     />
                   </div>
                 </div>
@@ -15928,6 +16049,9 @@ const ADIA = () => {
                   safetyMode={safetyMode}
                   events={events}
                   executeAtInitialization={executeAtInitialization}
+                  fixedPointRounding={fixedPointRounding}
+                  externalFunctions={externalFunctions}
+                  codePrefix={codePrefix}
                   tickMs={tickMs}
                   onBack={() => setDiagramMode('statemachine')}
                 />
@@ -18322,9 +18446,12 @@ const ADIA = () => {
                     className="h-10 bg-[#0a0a0a] border border-[#333] text-sm rounded w-full px-3 mt-1"
                   >
                     {ALLOWED_TYPES.map(type => (
-                      <option key={type} value={type}>{type}</option>
+                      <option key={type} value={type}>{variableTypeLabel(type)}</option>
                     ))}
                   </select>
+                  {newVarType === 'fixdt' && (
+                    <FixedPointFormatEditor label="new variable" value={newVarFixedPoint} onChange={setNewVarFixedPoint} />
+                  )}
                   <Input data-help-feature="app-variable-new-initial" data-help-source="src/App.tsx"
                     placeholder="Initial value"
                     value={newVarValue}

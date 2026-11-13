@@ -19,7 +19,7 @@ import {
 import { generateHALCode } from '../../engine/hil/hilCodeGenerator';
 import { generateMISRACCode } from '../../utils/stateMachineCodeGenerator';
 import { handleHorizontalToolbarWheel } from '../../utils/toolbarScroll';
-import { StateData, JunctionData, TransitionData, Layer, VariableDef, EventDef } from '../../types/sm_types';
+import { StateData, JunctionData, TransitionData, Layer, VariableDef, EventDef, ExternalFunctionDef, FixedPointRounding } from '../../types/sm_types';
 
 interface HILWorkspaceProps {
   config: HILConfig;
@@ -34,6 +34,9 @@ interface HILWorkspaceProps {
   safetyMode: boolean;
   events?: EventDef[];
   executeAtInitialization?: boolean;
+  fixedPointRounding?: FixedPointRounding;
+  externalFunctions?: ExternalFunctionDef[];
+  codePrefix?: string;
   tickMs: number;
   onBack: () => void;
 }
@@ -53,6 +56,9 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
   safetyMode,
   events,
   executeAtInitialization,
+  fixedPointRounding,
+  externalFunctions,
+  codePrefix,
   tickMs,
   onBack
 }) => {
@@ -170,10 +176,13 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
       safetyMode,
       events,
       executeAtInitialization,
+      fixedPointRounding,
+      externalFunctions,
+      codePrefix,
       hilConfig: { ...config, enabled: true }
     }, { includeTestShims: false });
     return res.files || [];
-  }, [config, variables, states, transitions, junctions, layers, safetyMode, events, executeAtInitialization, tickMs]);
+  }, [config, variables, states, transitions, junctions, layers, safetyMode, events, executeAtInitialization, fixedPointRounding, externalFunctions, codePrefix, tickMs]);
 
   const activeFileContent = useMemo(() => {
     const file = generatedFiles.find(f => f.name === activeFileTab);
@@ -263,6 +272,9 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
       safetyMode,
       events,
       executeAtInitialization,
+      fixedPointRounding,
+      externalFunctions,
+      codePrefix,
       hilConfig: { ...config, enabled: true }
     }, { includeTestShims: false });
 
