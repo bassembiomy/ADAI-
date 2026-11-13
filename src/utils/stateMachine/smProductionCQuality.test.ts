@@ -48,6 +48,8 @@ const charts: Array<[string, () => StateMachineModelV5]> = [
   ['random-everything', () => buildRandomChart(5003, { innerTransitions: true, arithmetic: true, events: true } as never)],
   ['random-no-history-77-states', () => buildRandomChart(67, { innerTransitions: false, arithmetic: false })],
   ['x-bridges', () => hybridXBridgesFixture()],
+  ['random-fixed-point', () => buildRandomChart(6003, { innerTransitions: true, arithmetic: true, fixedPoint: true } as never)],
+  ['random-x-bridges', () => buildRandomChart(6004, { innerTransitions: true, arithmetic: true, events: true, xBridges: true } as never)],
 ];
 
 const writeChart = (model: StateMachineModelV5, dir: string) => {

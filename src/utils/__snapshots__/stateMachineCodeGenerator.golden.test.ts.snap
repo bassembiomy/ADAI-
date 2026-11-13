@@ -814,13 +814,6 @@ void SM_XB_CONTROLLER_Step(ADIA_Instance_t *instance);
 #include <float.h>
 #include <math.h>
 
-/* avr-libc declares INFINITY but not HUGE_VAL. */
-#if defined(HUGE_VAL)
-#define SM_XB_HUGE HUGE_VAL
-#else
-#define SM_XB_HUGE ((double)INFINITY)
-#endif
-
 #define SM_XB_MAX_SAFE_INTEGER 9007199254740991.0
 
 bool SM_XB_Truth(double value)
@@ -1005,8 +998,8 @@ SM_XB_NumericResult_t SM_XB_ConvertFloat32(double value)
         return result;
     }
     if (fabs(value) > (double)FLT_MAX) {
-        result.real_value = (value < 0.0) ? -SM_XB_HUGE : SM_XB_HUGE;
-        result.quantization_error = SM_XB_HUGE;
+        result.real_value = (value < 0.0) ? -INFINITY : INFINITY;
+        result.quantization_error = INFINITY;
         result.fault = SM_XB_FAULT_NON_FINITE;
         return result;
     }
