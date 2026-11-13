@@ -163,7 +163,8 @@ const evaluateConversion = (
 const coerceVariableValue = (
   variable: SemanticVariable,
   value: AppSimulationValue,
-): AppSimulationValue => coerceSemanticValue(value, variable.type);
+  rounding?: SemanticModel['fixedPointRounding'],
+): AppSimulationValue => coerceSemanticValue(value, variable.type, 'saturate', variable.fixedPoint, rounding);
 
 const semanticMappings = (ir: SemanticModel): AppIOMapping[] =>
   ir.ioMappings.map((mapping: SemanticIOMapping) => ({
@@ -437,7 +438,7 @@ export const setSessionVariableValue = (
   const variable = session.ir.variables[variableIdOrName]
     ?? Object.values(session.ir.variables).find((v) => v.name === variableIdOrName);
   if (!variable) return;
-  session.runtime.data[variable.id] = coerceVariableValue(variable, value);
+  session.runtime.data[variable.id] = coerceVariableValue(variable, value, session.ir.fixedPointRounding);
 };
 
 export const applyMappedInputs = (
@@ -459,6 +460,7 @@ export const applyMappedInputs = (
     session.runtime.data[mapping.variableId] = coerceVariableValue(
       variable,
       converted,
+      session.ir.fixedPointRounding,
     );
   }
 };

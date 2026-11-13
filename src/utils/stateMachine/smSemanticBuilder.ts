@@ -32,6 +32,7 @@ import type {
   TraceableElement,
   XBOwnerState,
 } from './smSemanticModel';
+import { fxStoreDouble, fxToDouble, isValidFixedPoint } from './smFixedPoint';
 import { adaptXBModel } from './xbModelAdapter';
 import { buildXBSemanticModel } from './xbSemanticBuilder';
 import {
@@ -737,17 +738,30 @@ export const buildSemanticModel = (
       variableSymbols.set(variable.name, varSymbol);
     }
 
+    const parsedInitial = parseInitialValue(
+      variable.type,
+      variable.initialValue,
+      variable.currentValue,
+    );
+    const fixedFormat = variable.type === 'fixdt' && isValidFixedPoint(variable.fixedPoint)
+      ? variable.fixedPoint
+      : undefined;
+    // A fixed-point initial value converts with the chart rounding mode and saturates.
+    const initialValue = fixedFormat !== undefined && typeof parsedInitial === 'number'
+      ? (() => {
+        const stored = fxStoreDouble(parsedInitial, fixedFormat, (model as Partial<StateMachineModelV5>).fixedPointRounding ?? 'floor', false);
+        return stored.ok ? fxToDouble(stored.stored, fixedFormat.fractionLength) : 0;
+      })()
+      : parsedInitial;
+
     variables[variable.id] = {
       id: variable.id,
       name: variable.name,
       cName: cIdentifier,
       type: variable.type,
       overflowPolicy: variable.overflowPolicy ?? 'saturate',
-      initialValue: parseInitialValue(
-        variable.type,
-        variable.initialValue,
-        variable.currentValue,
-      ),
+      ...(fixedFormat !== undefined ? { fixedPoint: { ...fixedFormat } } : {}),
+      initialValue,
     };
   }
 
@@ -865,6 +879,9 @@ export const buildSemanticModel = (
       events,
       modelHash: "0000000000000000",
       verification: resolveVerificationConfig((model as Partial<StateMachineModelV5>).verification),
+      ...((model as Partial<StateMachineModelV5>).fixedPointRounding === 'nearest'
+        ? { fixedPointRounding: 'nearest' as const }
+        : {}),
       ...(((model as Partial<StateMachineModelV5>).executeAtInitialization) !== undefined
         ? { executeAtInitialization: (model as Partial<StateMachineModelV5>).executeAtInitialization }
         : {}),

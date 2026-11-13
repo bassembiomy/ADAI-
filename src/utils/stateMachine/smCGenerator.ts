@@ -188,7 +188,7 @@ const renderActions = (
 ): string => lines(
   actions.map((action) => action.kind === 'send'
     ? `${indent}SM_SendEvent(instance, SM_EVENT_${eventCName(ir, action.event)});`
-    : renderCAction(action, ir.variables, ir.verification.cStandard, indent)).join('\n'),
+    : renderCAction(action, ir.variables, ir.verification.cStandard, indent, ir.fixedPointRounding)).join('\n'),
   actions.length === 0
     ? null
     : `${indent}SM_TraceAction(instance, ${renderCStringLiteral(traceLabel)});`,
@@ -202,7 +202,7 @@ const renderTransitionEnabled = (
   transition: SemanticTransition,
   timerStateId: string,
 ): string => {
-  const guard = renderCGuard(transition.guard, ir.variables, ir.verification.cStandard);
+  const guard = renderCGuard(transition.guard, ir.variables, ir.verification.cStandard, ir.fixedPointRounding);
   const temporal = transition.temporalThresholdMs === null
     ? 'false'
     : `(instance->state_timers[${stateIndex(ir, timerStateId)}] >= ${transition.temporalThresholdMs}U)`;
@@ -1105,7 +1105,7 @@ export const renderConfigHeader = (ir: SemanticModel): string => {
     variables.length === 0
       ? '    uint8_t reserved;'
       : variables.map((variable) =>
-        `    ${renderCType(variable.type)} ${variable.cName};`).join('\n'),
+        `    ${renderCType(variable.type, variable.fixedPoint)} ${variable.cName};`).join('\n'),
     '} SM_Data_t;',
     '',
     'struct ADIA_Instance {',
@@ -1150,7 +1150,7 @@ export const renderCoreHeader = (cStandard?: string, ir?: SemanticModel): string
   '',
   '#include "sm_config.h"',
   '',
-  renderArithSection(cStandard),
+  renderArithSection(cStandard, ir !== undefined && Object.values(ir.variables).some((variable) => variable.type === 'fixdt')),
   '',
   ...(ir !== undefined && eventUsage(ir).local ? [
     '/* send(NAME): queues a local event; called by the generated actions only, not from interrupts. */',
@@ -1778,7 +1778,7 @@ export const renderCoreSource = (ir: SemanticModel): string => {
     ...Object.values(ir.variables)
       .sort((left, right) => left.id.localeCompare(right.id))
       .map((variable) =>
-        `    instance->data.${variable.cName} = (${renderCType(variable.type)})(${renderCInitialValue(variable)});`),
+        `    instance->data.${variable.cName} = (${renderCType(variable.type, variable.fixedPoint)})(${renderCInitialValue(variable)});`),
     ir.activeSlotCount > 0
       ? lines(
         '    for (slot_index = 0U; slot_index < SM_NUM_ACTIVE_SLOTS; ++slot_index) {',
@@ -1834,7 +1834,7 @@ export const renderCoreSource = (ir: SemanticModel): string => {
     ...Object.values(ir.variables)
       .sort((left, right) => left.id.localeCompare(right.id))
       .map((variable) =>
-        `    instance->data.${variable.cName} = (${renderCType(variable.type)})(${renderCInitialValue(variable)});`),
+        `    instance->data.${variable.cName} = (${renderCType(variable.type, variable.fixedPoint)})(${renderCInitialValue(variable)});`),
     ir.activeSlotCount > 0
       ? lines(
         '    for (slot_index = 0U; slot_index < SM_NUM_ACTIVE_SLOTS; ++slot_index) {',

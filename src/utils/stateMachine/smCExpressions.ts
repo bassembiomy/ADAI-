@@ -1,4 +1,4 @@
-import type { VariableType } from '../../types/sm_types';
+import type { FixedPointFormat, FixedPointRounding, VariableType } from '../../types/sm_types';
 import type { ActionNode, ExpressionNode } from './smExpressions';
 import {
   I64_MAX,
@@ -11,6 +11,7 @@ import {
   type ArithmeticMode,
   type NumericKind,
 } from './smArithmetic';
+import { fixedRange, fxFromDouble, sat64 } from './smFixedPoint';
 import type { SemanticVariable } from './smSemanticModel';
 
 const UNSIGNED_TYPES = new Set<VariableType>([
@@ -110,8 +111,12 @@ export const renderCExpression = (
   ) => string | undefined,
 ): string => renderNode(node, variables, expectedType, resolveVariable);
 
-const cType = (type: VariableType): string => {
+const cType = (type: VariableType, fixedPoint?: FixedPointFormat): string => {
   switch (type) {
+    case 'fixdt':
+      return fixedPoint === undefined
+        ? 'int32_t'
+        : `${fixedPoint.signed ? 'int' : 'uint'}${fixedPoint.wordLength}_t`;
     case 'bool': return 'bool';
     case 'int':
     case 'int32': return 'int32_t';
@@ -135,11 +140,18 @@ const cType = (type: VariableType): string => {
  * double. Floating expressions are double in both. Arithmetic errors set a pending flag on the
  * instance; a guard consumes it (false) and an assignment consumes it (skipped).
  */
-interface Rendered { code: string; kind: NumericKind; literal?: number }
+interface Rendered {
+  code: string;
+  kind: NumericKind;
+  literal?: number;
+  /** Fraction length of a fixed-point expression (kind 'int', int64_t stored value); undefined otherwise. */
+  frac?: number;
+}
 
 interface RenderContext {
   variables: Readonly<Record<string, SemanticVariable>>;
   mode: ArithmeticMode;
+  nearest: boolean;
 }
 
 type VariableNode = Extract<ExpressionNode, { kind: 'variable' }>;
@@ -173,8 +185,48 @@ const asInt = (value: Rendered, ctx: RenderContext): string =>
 
 const asDouble = (value: Rendered): string => {
   if (value.kind === 'float') return value.code;
+  if (value.frac !== undefined) return `((double)(${value.code}) * ${renderDoubleLiteral(2 ** -value.frac)})`;
   if (value.literal !== undefined) return renderDoubleLiteral(value.literal);
   return `((double)(${value.code}))`;
+};
+
+const FIXED_HELPER: Record<string, string> = { '+': 'SM_AddI64', '-': 'SM_SubI64' };
+
+/** Aligns a fixed-point operand to a larger fraction length (saturating left shift). */
+const align = (value: Rendered, common: number, ctx: RenderContext): string => {
+  const shift = common - (value.frac ?? 0);
+  return shift === 0 ? asInt(value, ctx) : `SM_FxAlign(${asInt(value, ctx)}, ${shift})`;
+};
+
+/** Fixed-point operator: exact integer math on int64_t stored values, no floating point. */
+const renderFixedBinary = (operator: string, left: Rendered, right: Rendered, ctx: RenderContext): Rendered => {
+  const fa = left.frac ?? 0;
+  const fb = right.frac ?? 0;
+  const common = Math.max(fa, fb);
+  const nearest = ctx.nearest ? 'true' : 'false';
+  switch (operator) {
+    case '==': case '!=': case '<': case '<=': case '>': case '>=':
+      return { code: `(${align(left, common, ctx)} ${operator} ${align(right, common, ctx)})`, kind: 'bool' };
+    case '+': case '-':
+      return {
+        code: `${FIXED_HELPER[operator]}(${align(left, common, ctx)}, ${align(right, common, ctx)})`,
+        kind: 'int',
+        frac: common,
+      };
+    case '*':
+      return { code: `SM_MulI64(${asInt(left, ctx)}, ${asInt(right, ctx)})`, kind: 'int', frac: fa + fb };
+    case '/': {
+      const shift = common - fa + fb;
+      const numerator = shift === 0 ? asInt(left, ctx) : `SM_FxAlign(${asInt(left, ctx)}, ${shift})`;
+      return { code: `SM_FxDiv(instance, ${numerator}, ${asInt(right, ctx)}, ${nearest})`, kind: 'int', frac: common };
+    }
+    default:
+      return {
+        code: `SM_RemI64(instance, ${align(left, common, ctx)}, ${align(right, common, ctx)})`,
+        kind: 'int',
+        frac: common,
+      };
+  }
 };
 
 const renderTyped = (node: ExpressionNode, ctx: RenderContext): Rendered => {
@@ -191,6 +243,9 @@ const renderTyped = (node: ExpressionNode, ctx: RenderContext): Rendered => {
       const access = `instance->data.${variable?.cName ?? node.cName}`;
       const kind = kindOfType(variable?.type);
       if (kind === 'bool') return { code: access, kind };
+      if (variable?.type === 'fixdt' && variable.fixedPoint !== undefined) {
+        return { code: `((int64_t)${access})`, kind, frac: variable.fixedPoint.fractionLength };
+      }
       if (kind === 'float') return { code: `((double)${access})`, kind };
       if (ctx.mode === 'double') return { code: `((double)${access})`, kind };
       return variable?.type === 'uint64'
@@ -204,17 +259,18 @@ const renderTyped = (node: ExpressionNode, ctx: RenderContext): Rendered => {
         return { code: `(${node.operator}${operand.code})`, kind: 'float' };
       }
       const value = asInt(operand, ctx);
-      if (node.operator === '+') return { code: value, kind: 'int' };
+      if (node.operator === '+') return { code: value, kind: 'int', frac: operand.frac };
       return {
         code: ctx.mode === 'int64' ? `SM_NegI64(${value})` : `(0.0 - ${value})`,
         kind: 'int',
+        frac: operand.frac,
       };
     }
     case 'call': {
       const argument = renderTyped(node.argument, ctx);
       if (node.functionName === 'abs' && argument.kind !== 'float') {
         const value = asInt(argument, ctx);
-        return { code: ctx.mode === 'int64' ? `SM_AbsI64(${value})` : `fabs(${value})`, kind: 'int' };
+        return { code: ctx.mode === 'int64' ? `SM_AbsI64(${value})` : `fabs(${value})`, kind: 'int', frac: argument.frac };
       }
       const fn = node.functionName === 'abs' ? 'fabs' : node.functionName;
       return { code: `SM_ChkD(instance, ${fn}(${asDouble(argument)}))`, kind: 'float' };
@@ -229,6 +285,9 @@ const renderTyped = (node: ExpressionNode, ctx: RenderContext): Rendered => {
         };
       }
       const floating = left.kind === 'float' || right.kind === 'float';
+      if (!floating && (left.frac !== undefined || right.frac !== undefined)) {
+        return renderFixedBinary(node.operator, left, right, ctx);
+      }
       switch (node.operator) {
         case '==': case '!=': case '<': case '<=': case '>': case '>=': {
           const a = floating ? asDouble(left) : asInt(left, ctx);
@@ -270,18 +329,36 @@ const renderTyped = (node: ExpressionNode, ctx: RenderContext): Rendered => {
 const typedContext = (
   variables: Readonly<Record<string, SemanticVariable>>,
   cStandard?: string,
-): RenderContext => ({ variables, mode: arithmeticModeFor(cStandard) });
+  rounding?: FixedPointRounding,
+): RenderContext => ({ variables, mode: arithmeticModeFor(cStandard), nearest: rounding === 'nearest' });
 
 /** C boolean expression for a guard; an arithmetic error makes the guard false. */
 export const renderCGuard = (
   node: ExpressionNode,
   variables: Readonly<Record<string, SemanticVariable>>,
   cStandard?: string,
+  rounding?: FixedPointRounding,
 ): string => {
-  const ctx = typedContext(variables, cStandard);
+  const ctx = typedContext(variables, cStandard, rounding);
   const rendered = asBool(renderTyped(node, ctx), ctx);
   const faults = mayFault(node, (variable) => findVariable(variable, variables)?.type);
   return faults ? `SM_GuardOk(instance, ${rendered})` : rendered;
+};
+
+const int64Literal = (value: bigint): string => {
+  if (value === -(1n << 63n)) return 'INT64_MIN';
+  const abs = value < 0n ? -value : value;
+  return `${value < 0n ? '-' : ''}${abs}${abs >= 2147483648n ? 'LL' : ''}`;
+};
+
+/** Value of a floating literal (optionally negated), else null. */
+const floatConstant = (node: ExpressionNode): number | null => {
+  if (node.kind === 'literal' && typeof node.value === 'number' && node.floating === true) return node.value;
+  if (node.kind === 'unary' && (node.operator === '-' || node.operator === '+')) {
+    const inner = floatConstant(node.operand);
+    return inner === null ? null : (node.operator === '-' ? -inner : inner);
+  }
+  return null;
 };
 
 const typeBounds = (type: VariableType, ctx: RenderContext): { min: string; max: string } => {
@@ -304,12 +381,13 @@ export const renderCAction = (
   variables: Readonly<Record<string, SemanticVariable>>,
   cStandard?: string,
   indent = '',
+  rounding?: FixedPointRounding,
 ): string => {
   const target = variables[action.target];
   if (target === undefined) {
     throw new Error(`action target '${action.target}' is absent from semantic IR`);
   }
-  const ctx = typedContext(variables, cStandard);
+  const ctx = typedContext(variables, cStandard, rounding);
   const value = renderTyped(action.value, ctx);
   const destination = `instance->data.${target.cName}`;
   const errorOnOverflow = target.overflowPolicy === 'error' ? 'true' : 'false';
@@ -328,6 +406,23 @@ export const renderCAction = (
     tmpType = 'float';
     call = `SM_StoreFloat(instance, ${asDouble(value)}, ${errorOnOverflow}, &sm_tmp)`;
     cast = 'sm_tmp';
+  } else if (target.type === 'fixdt' && target.fixedPoint !== undefined) {
+    const format = target.fixedPoint;
+    const range = fixedRange(format);
+    const bounds = { min: int64Literal(range.min), max: int64Literal(range.max) };
+    const nearest = ctx.nearest ? 'true' : 'false';
+    const folded = floatConstant(action.value);
+    tmpType = 'int64_t';
+    if (folded !== null) {
+      // A floating literal converts at generation time, so the target code has no floating point.
+      const stored = fxFromDouble(folded, format.fractionLength, ctx.nearest ? 'nearest' : 'floor');
+      call = `SM_FxStore(instance, ${int64Literal(sat64(stored ?? 0n))}, 0, 0, ${nearest}, ${bounds.min}, ${bounds.max}, ${errorOnOverflow}, &sm_tmp)`;
+    } else if (value.kind === 'float') {
+      call = `SM_FxStoreDouble(instance, ${value.code}, ${renderDoubleLiteral(2 ** format.fractionLength)}, ${nearest}, ${bounds.min}, ${bounds.max}, ${errorOnOverflow}, &sm_tmp)`;
+    } else {
+      call = `SM_FxStore(instance, ${asInt(value, ctx)}, ${value.frac ?? 0}, ${format.fractionLength}, ${nearest}, ${bounds.min}, ${bounds.max}, ${errorOnOverflow}, &sm_tmp)`;
+    }
+    cast = `(${cType(target.type, format)})sm_tmp`;
   } else {
     const bounds = typeBounds(target.type, ctx);
     if (ctx.mode === 'double') {
@@ -335,7 +430,9 @@ export const renderCAction = (
       call = `SM_StoreIntD(instance, ${asDouble(value)}, ${bounds.min}, ${bounds.max}, ${errorOnOverflow}, &sm_tmp)`;
     } else {
       tmpType = 'int64_t';
-      call = value.kind === 'float'
+      call = value.frac !== undefined
+        ? `SM_FxStore(instance, ${value.code}, ${value.frac}, 0, ${ctx.nearest ? 'true' : 'false'}, ${bounds.min}, ${bounds.max}, ${errorOnOverflow}, &sm_tmp)`
+        : value.kind === 'float'
         ? `SM_StoreDoubleToI64(instance, ${value.code}, ${bounds.min}, ${bounds.max}, ${errorOnOverflow}, &sm_tmp)`
         : `SM_StoreI64(instance, ${asInt(value, ctx)}, ${bounds.min}, ${bounds.max}, ${errorOnOverflow}, &sm_tmp)`;
     }
@@ -355,7 +452,14 @@ export const renderCType = cType;
 
 export const renderCInitialValue = (
   variable: SemanticVariable,
-): string => renderLiteral(variable.initialValue, variable.type);
+): string => {
+  if (variable.type === 'fixdt' && variable.fixedPoint !== undefined && typeof variable.initialValue === 'number') {
+    // initialValue is already exact (stored * 2^-F); emit the stored integer.
+    const stored = Math.round(variable.initialValue * 2 ** variable.fixedPoint.fractionLength);
+    return stored < 0 ? String(stored) : `${stored}U`;
+  }
+  return renderLiteral(variable.initialValue, variable.type);
+};
 
 export function outerParenthesesWrapWholeExpression(expression: string): boolean {
   const trimmed = expression.trim();

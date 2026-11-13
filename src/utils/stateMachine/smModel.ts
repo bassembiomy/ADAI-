@@ -2,6 +2,7 @@ import type { HILConfig } from '../../engine/hil/hilTypes';
 export type { XBPersistedModelV1 } from './xbModel';
 import type {
   EventDef,
+  FixedPointRounding,
   JunctionData,
   Layer,
   StateData,
@@ -83,6 +84,8 @@ export interface StateMachineModelV5 {
   codePrefix?: string;
   /** Stateflow "Execute (enter) chart at initialization". Undefined means true (ADIA default). */
   executeAtInitialization?: boolean;
+  /** Fixed-point rounding. Undefined means 'floor'. */
+  fixedPointRounding?: FixedPointRounding;
   /** Declared events in declaration order (input events fire in this order). Optional: absent means no events. */
   events?: EventDef[];
 }
@@ -105,6 +108,7 @@ export interface LegacyStateMachineModel {
   codePrefix?: string;
   diagrams?: StateMachineDiagramData[];
   executeAtInitialization?: boolean;
+  fixedPointRounding?: FixedPointRounding;
   events?: EventDef[];
 }
 

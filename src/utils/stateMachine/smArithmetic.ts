@@ -1,5 +1,13 @@
-import type { VariableOverflowPolicy, VariableType } from '../../types/sm_types';
+import type { FixedPointFormat, FixedPointRounding, VariableOverflowPolicy, VariableType } from '../../types/sm_types';
 import type { ExpressionNode } from './smExpressions';
+import {
+  fxAlign,
+  fxDiv,
+  fxRescaleDown,
+  fxStoreDouble,
+  fxToDouble,
+  fxStore,
+} from './smFixedPoint';
 import { FLT_MAX } from './smTypedValue';
 
 /*
@@ -19,6 +27,14 @@ import { FLT_MAX } from './smTypedValue';
  * C90 has no 64-bit type, so with cStandard 'c90' ('double' mode) integer expressions are
  * evaluated in double: '/' truncates toward zero afterwards, '%' is fmod, nothing saturates
  * (results are exact up to 2^53).
+ *
+ * Fixed-point (type 'fixdt', see smFixedPoint.ts and smFixedPointSemantics.test.ts): a value is a
+ * stored integer and a fraction length (integers and bool have fraction length 0). An expression
+ * with a fixed-point operand and no floating operand stays fixed-point and is evaluated exactly
+ * on the stored integers in the saturating 64-bit intermediate: + - align to the larger fraction
+ * length, * adds fraction lengths, / yields the larger fraction length rounded with the chart
+ * rounding mode, % aligns like +. Comparisons align and compare exactly. A floating operand
+ * makes the expression floating (the fixed-point operand is converted to double).
  *
  * An arithmetic error (zero divisor, non-finite floating result, overflow under policy 'error')
  * calls env.fault(); the surrounding assignment is skipped and the surrounding guard is false.
@@ -102,11 +118,14 @@ export const mayFault = (
 export type ArithmeticValue =
   | { k: 'b'; v: boolean }
   | { k: 'i'; v: bigint | number }
-  | { k: 'f'; v: number };
+  | { k: 'f'; v: number }
+  | { k: 'x'; v: bigint; f: number };
 
 export interface ArithmeticEnv {
   mode: ArithmeticMode;
-  variable(name: string): { value: number | boolean; type: VariableType };
+  /** Chart rounding mode for fixed-point conversions and divisions (default 'floor'). */
+  rounding?: FixedPointRounding;
+  variable(name: string): { value: number | boolean; type: VariableType; fixedPoint?: FixedPointFormat };
   fault(): void;
 }
 
@@ -126,7 +145,19 @@ const checkedDouble = (env: ArithmeticEnv, value: number): ArithmeticValue => {
 };
 
 const asNumber = (value: ArithmeticValue): number =>
-  value.k === 'b' ? (value.v ? 1 : 0) : Number(value.v);
+  value.k === 'b' ? (value.v ? 1 : 0)
+    : value.k === 'x' ? fxToDouble(value.v, value.f)
+      : Number(value.v);
+
+const roundingOf = (env: ArithmeticEnv): FixedPointRounding => env.rounding ?? 'floor';
+
+/** Stored integer and fraction length of a non-floating operand (bool and integers have fraction 0). */
+const asFixed = (env: ArithmeticEnv, value: ArithmeticValue): { v: bigint; f: number } => {
+  if (value.k === 'x') return { v: value.v, f: value.f };
+  if (value.k === 'b') return { v: value.v ? 1n : 0n, f: 0 };
+  if (value.k === 'i') return { v: BigInt(value.v), f: 0 };
+  throw new Error('floating operand in fixed-point arithmetic');
+};
 
 /** Integer operand: bool becomes 0/1. */
 const asInt = (env: ArithmeticEnv, value: ArithmeticValue): bigint | number => {
@@ -137,13 +168,17 @@ const asInt = (env: ArithmeticEnv, value: ArithmeticValue): bigint | number => {
 export const arithmeticTruth = (value: ArithmeticValue): boolean => {
   if (value.k === 'b') return value.v;
   if (value.k === 'f') return value.v !== 0;
+  if (value.k === 'x') return value.v !== 0n;
   return value.v !== 0n && value.v !== 0;
 };
 
 const readVariable = (env: ArithmeticEnv, name: string): ArithmeticValue => {
-  const { value, type } = env.variable(name);
+  const { value, type, fixedPoint } = env.variable(name);
   if (type === 'bool') return { k: 'b', v: Boolean(value) };
   const numeric = Number(value);
+  if (type === 'fixdt' && fixedPoint !== undefined) {
+    return { k: 'x', v: BigInt(Math.round(numeric * 2 ** fixedPoint.fractionLength)), f: fixedPoint.fractionLength };
+  }
   if (isFloatType(type)) return { k: 'f', v: numeric };
   if (env.mode === 'int64') {
     return { k: 'i', v: Number.isFinite(numeric) ? sat64(BigInt(Math.trunc(numeric))) : 0n };
@@ -166,6 +201,9 @@ export const evaluateArithmetic = (
       const operand = evaluateArithmetic(node.operand, env);
       if (node.operator === '!') return { k: 'b', v: !arithmeticTruth(operand) };
       if (operand.k === 'f') return { k: 'f', v: node.operator === '-' ? -operand.v : operand.v };
+      if (operand.k === 'x') {
+        return node.operator === '-' ? { k: 'x', v: sat64(-operand.v), f: operand.f } : operand;
+      }
       const value = asInt(env, operand);
       if (node.operator === '+') return { k: 'i', v: value };
       return env.mode === 'int64'
@@ -174,6 +212,9 @@ export const evaluateArithmetic = (
     }
     case 'call': {
       const argument = evaluateArithmetic(node.argument, env);
+      if (node.functionName === 'abs' && argument.k === 'x') {
+        return { k: 'x', v: argument.v < 0n ? sat64(-argument.v) : argument.v, f: argument.f };
+      }
       if (node.functionName === 'abs' && argument.k !== 'f') {
         const value = asInt(env, argument);
         if (env.mode === 'int64') {
@@ -204,6 +245,8 @@ export const evaluateArithmetic = (
       const left = evaluateArithmetic(node.left, env);
       const right = evaluateArithmetic(node.right, env);
       const floating = left.k === 'f' || right.k === 'f';
+      const fixed = !floating && (left.k === 'x' || right.k === 'x');
+      if (fixed) return evaluateFixed(node.operator, asFixed(env, left), asFixed(env, right), env);
       switch (node.operator) {
         case '==': case '!=': case '<': case '<=': case '>': case '>=': {
           const a = floating ? asNumber(left) : asInt(env, left);
@@ -271,6 +314,36 @@ export const evaluateArithmetic = (
   }
 };
 
+const evaluateFixed = (
+  operator: string,
+  left: { v: bigint; f: number },
+  right: { v: bigint; f: number },
+  env: ArithmeticEnv,
+): ArithmeticValue => {
+  const common = Math.max(left.f, right.f);
+  const a = fxAlign(left.v, common - left.f);
+  const b = fxAlign(right.v, common - right.f);
+  switch (operator) {
+    case '==': return { k: 'b', v: a === b };
+    case '!=': return { k: 'b', v: a !== b };
+    case '<': return { k: 'b', v: a < b };
+    case '<=': return { k: 'b', v: a <= b };
+    case '>': return { k: 'b', v: a > b };
+    case '>=': return { k: 'b', v: a >= b };
+    case '+': return { k: 'x', v: sat64(a + b), f: common };
+    case '-': return { k: 'x', v: sat64(a - b), f: common };
+    case '*': return { k: 'x', v: sat64(left.v * right.v), f: left.f + right.f };
+    case '/': {
+      const quotient = fxDiv(fxAlign(left.v, common - left.f + right.f), right.v, roundingOf(env));
+      if (quotient === null) { env.fault(); return { k: 'x', v: 0n, f: common }; }
+      return { k: 'x', v: sat64(quotient), f: common };
+    }
+    default:
+      if (b === 0n) { env.fault(); return { k: 'x', v: 0n, f: common }; }
+      return { k: 'x', v: b === -1n ? 0n : a % b, f: common };
+  }
+};
+
 const checkedInt = (env: ArithmeticEnv, value: number): ArithmeticValue => {
   if (!Number.isFinite(value)) {
     env.fault();
@@ -311,8 +384,19 @@ export const convertForAssignment = (
   type: VariableType,
   policy: VariableOverflowPolicy,
   env: ArithmeticEnv,
+  fixedPoint?: FixedPointFormat,
 ): AssignmentConversion => {
   if (type === 'bool') return { ok: true, value: arithmeticTruth(value) };
+  if (type === 'fixdt' && fixedPoint !== undefined) {
+    const errorOnOverflow = policy === 'error';
+    const result = value.k === 'f'
+      ? fxStoreDouble(value.v, fixedPoint, roundingOf(env), errorOnOverflow)
+      : (() => {
+        const operand = asFixed(env, value);
+        return fxStore(operand.v, operand.f, fixedPoint, roundingOf(env), errorOnOverflow);
+      })();
+    return result.ok ? { ok: true, value: fxToDouble(result.stored, fixedPoint.fractionLength) } : { ok: false };
+  }
   if (isFloatType(type)) {
     const numeric = asNumber(value);
     if (!Number.isFinite(numeric)) return { ok: false };
@@ -325,6 +409,12 @@ export const convertForAssignment = (
   }
   const range = integerRangeOf(type);
   if (range === null) return { ok: true, value: asNumber(value) };
+  if (value.k === 'x') {
+    const rounded = fxRescaleDown(value.v, value.f, roundingOf(env));
+    if (rounded >= range.min && rounded <= range.max) return { ok: true, value: Number(rounded) };
+    if (policy === 'error') return { ok: false };
+    return { ok: true, value: Number(rounded < range.min ? range.min : range.max) };
+  }
   if (env.mode === 'double') {
     const numeric = Math.trunc(asNumber(value));
     if (!Number.isFinite(numeric)) return { ok: false };

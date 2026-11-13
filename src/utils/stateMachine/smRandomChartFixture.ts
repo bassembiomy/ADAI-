@@ -13,6 +13,8 @@ export interface RandomChartFeatures {
   arithmetic: boolean;
   /** Declares two input events and one local event; ~30% of the transitions are event-triggered and some actions send the local event. */
   events?: boolean;
+  /** Declares fixed-point (fixdt) variables of several word and fraction lengths, used in actions and guards; the chart rounding mode is random. */
+  fixedPoint?: boolean;
 }
 
 export const RANDOM_INPUT_EVENTS = ['IN_A', 'IN_B'] as const;
@@ -35,6 +37,46 @@ const baseVariables = (): VariableDef[] => [
   { id: 'd0', name: 'd0', type: 'double', initialValue: '0', currentValue: 0, visibleInScope: true },
 ];
 
+const fixedVariable = (
+  name: string, signed: boolean, wordLength: 8 | 16 | 32, fractionLength: number, initialValue: string, overflowPolicy?: 'saturate' | 'error',
+): VariableDef => ({
+  id: name, name, type: 'fixdt', initialValue, currentValue: Number(initialValue), visibleInScope: true,
+  fixedPoint: { signed, wordLength, fractionLength },
+  ...(overflowPolicy ? { overflowPolicy } : {}),
+});
+
+const fixedVariables = (): VariableDef[] => [
+  fixedVariable('fa', true, 16, 8, '1.5'),
+  fixedVariable('fb', false, 8, 4, '2.25'),
+  fixedVariable('fc', true, 32, 16, '-3.1'),
+  fixedVariable('fd', false, 16, 16, '0.3'),
+  fixedVariable('fe', true, 8, 7, '-0.5'),
+  fixedVariable('ff', true, 8, 3, '0', 'error'),
+];
+
+const FIXED_ACTIONS = [
+  'fa = fa + fb;',
+  'fb = fb * fa;',
+  'fc = fa * fc + c1;',
+  'fa = fa / (fb + 1);',
+  'fe = fe / fd;',
+  'fd = fd + 0.25;',
+  'fb = fa;',
+  'fe = 0 - fe;',
+  'c0 = fa * 2 + c0;',
+  'fa = fa + d0;',
+  'fc = abs(fc - fa);',
+  'fd = (fd * fb) % 3;',
+  'fe = fe + 1;',
+  'fc = fc * fc;',
+  'fb = fb - fd;',
+  'ff = ff + 1;',
+  'd0 = fa * fb;',
+  'fa = c1 * 40;',
+];
+
+const FIXED_ATOMS = ['fa > 1.5', 'fb < fa', 'fc >= fd', 'fe == 0', 'fa * fb > c0', 'fd <= fb', 'fc < 0'];
+
 export const buildRandomChart = (seed: number, features: RandomChartFeatures): StateMachineModelV5 => {
   const rnd = mulberry32(seed);
   const pick = <T,>(items: readonly T[]): T => items[Math.floor(rnd() * items.length)];
@@ -53,6 +95,7 @@ export const buildRandomChart = (seed: number, features: RandomChartFeatures): S
   const maxDepth = 3 + Math.floor(rnd() * 3);
 
   const action = (): string => {
+    if (features.fixedPoint && chance(0.4)) return pick(FIXED_ACTIONS);
     if (!features.arithmetic) return chance(0.5) ? '' : pick(['c0 = c0 + 1;', 'd0 = d0 + 0.5;']);
     return chance(0.45) ? '' : pick([
       'c0 = c0 + 1;',
@@ -75,6 +118,7 @@ export const buildRandomChart = (seed: number, features: RandomChartFeatures): S
     const atoms = features.arithmetic
       ? [...INPUTS, ...INPUTS.map((name) => `!${name}`), 'c0 > 3', 'c1 % 2 == 0', 'u8 < 100', 'd0 > 4.5']
       : [...INPUTS, ...INPUTS.map((name) => `!${name}`), 'c0 > 3'];
+    if (features.fixedPoint && chance(0.3)) atoms.push(...FIXED_ATOMS);
     return chance(0.3) ? `${pick(atoms)} && ${pick(atoms)}` : pick(atoms);
   };
 
@@ -199,7 +243,8 @@ export const buildRandomChart = (seed: number, features: RandomChartFeatures): S
   model.junctions = junctions;
   model.transitions = transitions;
   model.layers = layers;
-  model.variables = baseVariables();
+  model.variables = features.fixedPoint ? [...baseVariables(), ...fixedVariables()] : baseVariables();
+  if (features.fixedPoint && chance(0.5)) model.fixedPointRounding = 'nearest';
   if (features.events) {
     model.events = [
       { id: 'ev_in_a', name: 'IN_A', scope: 'input' },

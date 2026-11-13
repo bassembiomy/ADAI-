@@ -3,14 +3,26 @@ import type {
   XBPersistedModelV1,
 } from '../utils/stateMachine/xbModel';
 
-export type VariableType = 'bool' | 'int' | 'uint' | 'int8' | 'uint8' | 'int16' | 'uint16' | 'int32' | 'uint32' | 'int64' | 'uint64' | 'float' | 'single' | 'double';
+export type VariableType = 'bool' | 'int' | 'uint' | 'int8' | 'uint8' | 'int16' | 'uint16' | 'int32' | 'uint32' | 'int64' | 'uint64' | 'float' | 'single' | 'double' | 'fixdt';
 export type VariableOverflowPolicy = 'saturate' | 'error';
+
+/** Fixed-point format of a 'fixdt' variable: real-world value = stored integer * 2^-fractionLength. */
+export interface FixedPointFormat {
+  signed: boolean;
+  wordLength: 8 | 16 | 32;
+  fractionLength: number;
+}
+
+/** Chart option: how fixed-point conversions and divisions round (Simulink Floor / Nearest). */
+export type FixedPointRounding = 'floor' | 'nearest';
 
 export interface VariableDef {
   id: string;
   name: string;
   type: VariableType;
   overflowPolicy?: VariableOverflowPolicy;
+  /** Required when type is 'fixdt'. */
+  fixedPoint?: FixedPointFormat;
   initialValue: string;
   currentValue: number | boolean;
   visibleInScope: boolean;

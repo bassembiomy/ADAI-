@@ -23,7 +23,7 @@ export const applyInputs = (
         (candidate) => candidate.name === reference,
       );
     if (!variable) continue;
-    runtime.data[variable.id] = coerceSemanticValue(input, variable.type);
+    runtime.data[variable.id] = coerceSemanticValue(input, variable.type, 'saturate', variable.fixedPoint, runtime.ir.fixedPointRounding);
   }
 };
 

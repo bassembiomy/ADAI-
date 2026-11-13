@@ -10,7 +10,8 @@ import { buildRandomChart, RANDOM_INPUT_EVENTS, randomStimulus, type RandomChart
  * tick (active states, variables, action order, timers, history, errors) for randomly
  * generated charts with nested OR/AND states, shallow and deep history, junctions,
  * temporal and combined guards, cross-level, inner and self transitions, and typed
- * arithmetic that saturates; the 'with-events' group adds input and local events
+ * arithmetic that saturates; the 'with-fixed-point' group adds fixdt variables (all word lengths, signed
+ * and unsigned, both rounding modes); the 'with-events' group adds input and local events
  * (event-triggered transitions, send() actions, event queue overflow).
  *
  * Deterministic: each chart is built from a seed. A failure message names the group and
@@ -28,6 +29,7 @@ const groups: Array<[string, RandomChartFeatures, number]> = [
   ['with-typed-arithmetic', { innerTransitions: false, arithmetic: true }, 3_000],
   ['everything', { innerTransitions: true, arithmetic: true }, 4_000],
   ['with-events', { innerTransitions: true, arithmetic: true, events: true }, 5_000],
+  ['with-fixed-point', { innerTransitions: true, arithmetic: true, fixedPoint: true }, 6_000],
 ];
 
 describe('random charts: generated C equals the simulation on every tick', () => {

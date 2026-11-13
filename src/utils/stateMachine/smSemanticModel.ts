@@ -1,4 +1,4 @@
-import type { VariableOverflowPolicy, VariableType } from '../../types/sm_types';
+import type { FixedPointFormat, FixedPointRounding, VariableOverflowPolicy, VariableType } from '../../types/sm_types';
 import type { ActionNode, ExpressionNode } from './smExpressions';
 import type {
   ModelDiagnostic,
@@ -134,6 +134,8 @@ export interface SemanticVariable {
   cName: string;
   type: VariableType;
   overflowPolicy?: VariableOverflowPolicy;
+  /** Present when type is 'fixdt'. initialValue is already converted to the format (exact stored * 2^-F). */
+  fixedPoint?: FixedPointFormat;
   initialValue: number | boolean;
 }
 
@@ -200,6 +202,8 @@ export interface SemanticModel {
   verification: ResolvedSMVerificationConfig;
   /** Undefined means true. When false, the chart is entered on the first step, not at init. */
   executeAtInitialization?: boolean;
+  /** Undefined means 'floor'. */
+  fixedPointRounding?: FixedPointRounding;
 }
 
 export interface SemanticBuildResult {

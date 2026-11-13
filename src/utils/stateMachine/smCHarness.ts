@@ -18,7 +18,7 @@ import {
 } from './smInterpreter';
 import { applyInputs } from './smStandaloneRuntime';
 import { generateCArtifacts } from './smCGenerator';
-import { renderCType } from './smCExpressions';
+import { renderCType, renderDoubleLiteral } from './smCExpressions';
 import type {
   DifferentialFixture,
   DifferentialScenarioStep,
@@ -537,7 +537,7 @@ const renderInputAssignments = (
   if (!variable) {
     throw new Error(`scenario input '${reference}' is not a semantic variable`);
   }
-  const coerced = coerceSemanticValue(value, variable.type);
+  const coerced = coerceSemanticValue(value, variable.type, 'saturate', variable.fixedPoint, ir.fixedPointRounding);
   const literal = typeof coerced === 'boolean'
     ? coerced ? 'true' : 'false'
     : Number.isFinite(coerced)
@@ -547,7 +547,11 @@ const renderInputAssignments = (
             `scenario input '${reference}' must be finite; received ${coerced}`,
           );
         })();
-  return `    instance.data.${variable.cName} = (${renderCType(variable.type)})(${literal});`;
+  if (variable.type === 'fixdt' && variable.fixedPoint !== undefined && typeof coerced === 'number') {
+    const stored = Math.round(coerced * 2 ** variable.fixedPoint.fractionLength);
+    return `    instance.data.${variable.cName} = (${renderCType(variable.type, variable.fixedPoint)})(${stored});`;
+  }
+  return `    instance.data.${variable.cName} = (${renderCType(variable.type, variable.fixedPoint)})(${literal});`;
 });
 
 const renderEventPosts = (
@@ -733,7 +737,10 @@ const renderFramePrinter = (ir: SemanticModel): string => {
       : [
           ...(prefix === '' ? [] : [`    printf(${cString(prefix)});`]),
           `    print_token(${cString(variable.id)});`,
-          `    printf(":n:%.17g", (double)instance->data.${variable.cName});`,
+          // Fixed-point: the real-world value stored * 2^-F, exact in a double for words up to 32 bits.
+          variable.type === 'fixdt' && variable.fixedPoint !== undefined
+            ? `    printf(":n:%.17g", (double)instance->data.${variable.cName} * ${renderDoubleLiteral(2 ** -variable.fixedPoint.fractionLength)});`
+            : `    printf(":n:%.17g", (double)instance->data.${variable.cName});`,
         ];
   });
   const timerPrints = states.flatMap((state, index) => [

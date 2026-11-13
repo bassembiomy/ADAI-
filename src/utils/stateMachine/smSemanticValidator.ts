@@ -19,6 +19,7 @@ import type {
 
 type StateMachineModelV4 = AnyStateMachineModel;
 import { SM_MAX_INPUT_EVENTS, type SemanticVariable } from './smSemanticModel';
+import { isValidFixedPoint } from './smFixedPoint';
 import { DEFAULT_XB_EMBEDDED_LIMITS } from './xbEmbeddedProfile';
 import type { XBTargetCapabilities } from './xbModel';
 import { adaptXBModel } from './xbModelAdapter';
@@ -1110,6 +1111,50 @@ const validateInitialValues = (
   return diagnostics;
 };
 
+const validateFixedPoint = (
+  model: StateMachineModelV4,
+): ModelDiagnostic[] => {
+  const diagnostics: ModelDiagnostic[] = [];
+  const fixedVariables = model.variables.filter((variable) => (variable.type as string) === 'fixdt');
+  for (const variable of fixedVariables) {
+    if (!isValidFixedPoint(variable.fixedPoint)) {
+      diagnostics.push(diagnostic(
+        'SM_INVALID_FIXED_POINT',
+        `Fixed-point variable '${variable.id}' needs fixedPoint { signed, wordLength 8|16|32, fractionLength 0..wordLength }.`,
+        variable.id,
+      ));
+    }
+  }
+  const fixedIds = new Set(fixedVariables.map((variable) => variable.id));
+  const fixedNames = new Map(fixedVariables.map((variable) => [variable.name, variable.id]));
+  for (const mapping of model.hilConfig?.mappings ?? []) {
+    const id = fixedIds.has(mapping.adiaVarId) ? mapping.adiaVarId : fixedNames.get(mapping.adiaVarId);
+    if (id !== undefined) {
+      diagnostics.push(diagnostic(
+        'SM_FIXED_POINT_IO_UNSUPPORTED',
+        `Fixed-point variable '${id}' cannot be mapped to an I/O channel; map a floating or integer variable and assign it.`,
+        mapping.id,
+      ));
+    }
+  }
+  const cStandard = (model as Partial<{ verification: { cStandard?: string } }>).verification?.cStandard;
+  if (fixedVariables.length > 0 && cStandard === 'c90') {
+    diagnostics.push(diagnostic(
+      'SM_FIXED_POINT_REQUIRES_C99',
+      'Fixed-point variables need 64-bit intermediates (int64_t), which C90 does not provide; select C99 or later.',
+      fixedVariables[0].id,
+    ));
+  }
+  const rounding = (model as { fixedPointRounding?: string }).fixedPointRounding;
+  if (rounding !== undefined && rounding !== 'floor' && rounding !== 'nearest') {
+    diagnostics.push(diagnostic(
+      'SM_INVALID_FIXED_POINT',
+      `Fixed-point rounding '${rounding}' must be 'floor' or 'nearest'.`,
+    ));
+  }
+  return diagnostics;
+};
+
 const validateTickPeriod = (
   model: StateMachineModelV4,
 ): ModelDiagnostic[] => {
@@ -1214,6 +1259,7 @@ export const validateModelStructure = (
     ...validateExpressions(model),
     ...validateEvents(model),
     ...validateInitialValues(model),
+    ...validateFixedPoint(model),
     ...validateXBridges(model),
   );
   return diagnostics;

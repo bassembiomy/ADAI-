@@ -1,5 +1,6 @@
 import type { ActionNode, ExpressionNode } from './smExpressions';
-import type { VariableType } from '../../types/sm_types';
+import type { FixedPointFormat, FixedPointRounding, VariableType } from '../../types/sm_types';
+import { fxStoreDouble, fxToDouble } from './smFixedPoint';
 import type {
   SemanticLayer,
   SemanticModel,
@@ -110,12 +111,13 @@ const evaluateTyped = (
   let faulted = false;
   const env: ArithmeticEnv = {
     mode: arithmeticModeFor(runtime.ir.verification?.cStandard),
+    rounding: runtime.ir.fixedPointRounding ?? 'floor',
     variable: (name) => {
       if (!Object.prototype.hasOwnProperty.call(runtime.data, name)) {
         throw new Error(`variable '${name}' is not present in runtime data`);
       }
       const variable = runtime.ir.variables[name];
-      return { value: runtime.data[name], type: variable?.type ?? 'double' };
+      return { value: runtime.data[name], type: variable?.type ?? 'double', fixedPoint: variable?.fixedPoint };
     },
     fault: () => {
       faulted = true;
@@ -139,7 +141,14 @@ export const coerceSemanticValue = (
   value: number | boolean,
   type: VariableType,
   policy: 'saturate' | 'error' = 'saturate',
+  fixedPoint?: FixedPointFormat,
+  rounding: FixedPointRounding = 'floor',
 ): number | boolean => {
+  if (type === 'fixdt' && fixedPoint !== undefined && typeof value === 'number') {
+    const stored = fxStoreDouble(value, fixedPoint, rounding, policy === 'error');
+    if (!stored.ok) throw new Error(`Value '${String(value)}' overflows variable type 'fixdt'.`);
+    return fxToDouble(stored.stored, fixedPoint.fractionLength);
+  }
   const result = coerceTypedValue(value, type, policy);
   if (result.error !== undefined) throw new Error(result.error);
   return result.value;
@@ -200,6 +209,7 @@ const runActions = (
       target.type,
       target.overflowPolicy ?? 'saturate',
       env,
+      target.fixedPoint,
     );
     if (!converted.ok) {
       latchArithmeticError(context.runtime);
