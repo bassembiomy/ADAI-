@@ -134,7 +134,7 @@ describe('HIL main loop timing', () => {
     }
   })();
 
-  it.skipIf(!hostGcc)('Generic host build compiles warning-free and steps at SM_TICK_MS in real time', { retry: 1 }, () => {
+  it.skipIf(!hostGcc)('Generic host build compiles warning-free and steps at SM_TICK_MS in real time', { retry: 1, timeout: 60_000 }, () => {
     const result = generate('Generic');
     const dir = mkdtempSync(join(tmpdir(), 'adia-hil-timing-'));
     try {
@@ -155,5 +155,5 @@ describe('HIL main loop timing', () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
-  }, 60_000);
+  });
 });

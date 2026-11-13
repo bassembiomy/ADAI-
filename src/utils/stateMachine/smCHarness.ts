@@ -1210,6 +1210,8 @@ export const compileHostPackage = async (
     ...(request.defines ? request.defines.map((d) => `-D${d}`) : []),
     ...(request.extraFlags ?? []),
     ...sources,
+    // <math.h> symbols (floor, fmod, ...) are resolved by the math library, which must follow the sources.
+    '-lm',
     '-o',
     targetExe,
   ];
