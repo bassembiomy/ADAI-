@@ -1342,6 +1342,10 @@ const slotInitializer = (slot: number | null): string =>
   slot === null || slot < 0 ? 'SM_ROM_INDEX_NONE' : `${slot}U`;
 
 export const renderMappingSource = (ir: SemanticModel): string => {
+  /* With no active slots the range test would compare an unsigned value with 0 (-Wtype-limits). */
+  const slotCheck = ir.activeSlotCount === 0
+    ? '        if (slot != SM_ROM_INDEX_NONE) {'
+    : '        if ((slot != SM_ROM_INDEX_NONE) && (slot >= SM_NUM_ACTIVE_SLOTS)) {';
   const states = orderedStates(ir);
   const layers = orderedLayers(ir);
   const mappingRows = layers.map((layer) => {
@@ -1393,7 +1397,7 @@ export const renderMappingSource = (ir: SemanticModel): string => {
     '    for (layer_index = 0U; layer_index < SM_NUM_LAYERS; ++layer_index) {',
     '        uint32_t parent_state;',
     '        slot = (uint32_t)SM_ROM_READ_INDEX(SM_Layer_Active_Slot_Map[layer_index]);',
-    '        if ((slot != SM_ROM_INDEX_NONE) && (slot >= SM_NUM_ACTIVE_SLOTS)) {',
+    slotCheck,
     '            return SM_ERR_CONFIGURATION;',
     '        }',
     '        parent_state = (uint32_t)SM_ROM_READ_INDEX(SM_Layer_Parent_State_Map[layer_index]);',
@@ -1409,7 +1413,7 @@ export const renderMappingSource = (ir: SemanticModel): string => {
     '            return SM_ERR_CONFIGURATION;',
     '        }',
     '        slot = (uint32_t)SM_ROM_READ_INDEX(SM_State_Active_Slot_Map[state_index]);',
-    '        if ((slot != SM_ROM_INDEX_NONE) && (slot >= SM_NUM_ACTIVE_SLOTS)) {',
+    slotCheck,
     '            return SM_ERR_CONFIGURATION;',
     '        }',
     '        layer_slot = (uint32_t)SM_ROM_READ_INDEX(SM_Layer_Active_Slot_Map[parent_layer]);',

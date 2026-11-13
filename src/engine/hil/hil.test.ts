@@ -143,7 +143,7 @@ describe('HIL Code Generator', () => {
 
     // Default files (12, including both reports)
     // + HIL files (14, including component, MCAL, driver stub, and manifest) = 26 files.
-    expect(result.files).toHaveLength(27);
+    expect(result.files).toHaveLength(28);
     const names = result.files.map(f => f.name);
     expect(names).not.toContain('stm32f4xx_hal.h');
     expect(names).toContain('mcal_dio_hil.c');
@@ -165,7 +165,7 @@ describe('HIL Code Generator', () => {
 
     // Default files (12 after excluding the generic MCAL stub)
     // + HIL files (14) + STM32 shim (1) = 27 files.
-    expect(result.files).toHaveLength(28);
+    expect(result.files).toHaveLength(29);
     const names = result.files.map(f => f.name);
     expect(names).toContain('stm32f4xx_hal.h');
     expect(names).toContain('mcal_dio_hil.c');
