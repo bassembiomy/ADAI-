@@ -1956,7 +1956,7 @@ describe('X-Bridges scalar combinational execution', { timeout: 60_000 }, () => 
           writeFileSync(join(workspace.directory, file.name), file.content);
         }
       }
-      expect(core).toContain('UINT32_C(4294967295)');
+      expect(core).toContain('4294967295U');
       execFileSync('gcc', [
         '-std=c99',
         '-pedantic-errors',
@@ -3197,10 +3197,10 @@ describe('X-Bridges generated numeric helpers', { timeout: 60_000 }, () => {
     expect(cCode).toContain('state_delay1_buffer_state[2];');
     expect(cCode).toContain('uint32_t state_delay1_index_state;');
     expect(cCode).toContain('% 2U;');
-    expect(cCode).toContain('state_delay1_buffer_state[(uint32_t)instance->');
+    expect(cCode).toContain('state_delay1_buffer_state[((uint32_t)instance->');
     expect(cCode).not.toContain('(double)(instance->xb_controller.state_delay1_buffer_state)');
-    expect(cCode).toContain('state_delay1_buffer_state[(uint32_t)instance->xb_controller.state_delay1_index_state * 1U + 0U]');
-    expect(cCode).toContain('if (instance->xb_controller.schedule_delay1 == UINT32_C(0))');
+    expect(cCode).toContain('state_delay1_buffer_state[((uint32_t)instance->xb_controller.state_delay1_index_state * 1U) + 0U]');
+    expect(cCode).toContain('if (instance->xb_controller.schedule_delay1 == 0U)');
     expect(cCode).toContain('instance->xb_controller.schedule_delay1 += 1U;');
     expect(cCode).toContain('if (instance->xb_controller.schedule_delay1 >= 10U)');
   });
@@ -3259,11 +3259,11 @@ describe('X-Bridges generated numeric helpers', { timeout: 60_000 }, () => {
 
     // REQ-DELAY-001 & REQ-DELAY-006: DELAY output assigned to XB8_Delay_y from buffer before input buffer update
     expect(cCode).toContain('instance->xb_controller.XB8_Delay_y =');
-    expect(cCode).toContain('state_XB8_Delay_buffer_state[(uint32_t)instance->xb_controller.state_XB8_Delay_index_state');
+    expect(cCode).toContain('state_XB8_Delay_buffer_state[((uint32_t)instance->xb_controller.state_XB8_Delay_index_state');
 
     // Check read-before-write order in generated C source
     const delayReadIdx = cCode.indexOf('instance->xb_controller.XB8_Delay_y =');
-    const delayWriteIdx = cCode.indexOf('state_XB8_Delay_buffer_state[xb_delay_idx');
+    const delayWriteIdx = cCode.indexOf('state_XB8_Delay_buffer_state[(xb_delay_idx');
     expect(delayReadIdx).toBeGreaterThan(-1);
     expect(delayWriteIdx).toBeGreaterThan(-1);
     expect(delayReadIdx).toBeLessThan(delayWriteIdx);
@@ -3327,8 +3327,8 @@ describe('X-Bridges generated numeric helpers', { timeout: 60_000 }, () => {
     const cCode = artifacts.files.map((f) => f.content).join('\n');
 
     // Should contain non-zero coefficient 0.5 and 1.0 in update and output equations
-    expect(cCode).toContain('(xb_row == 0U ? 0.5 : 0.0)');
-    expect(cCode).toContain('(xb_row == 0U ? 1.0 : 0.0)');
+    expect(cCode).toContain('((xb_row == 0U) ? 0.5 : 0.0)');
+    expect(cCode).toContain('((xb_row == 0U) ? 1.0 : 0.0)');
     expect(cCode).toContain('(1.0) * (double)(instance->xb_controller.state_dtf_1_x_state)');
     expect(cCode).not.toContain('(xb_row == 0U ? 0.0 : 0.0)');
   });
@@ -3377,8 +3377,8 @@ describe('X-Bridges generated numeric helpers', { timeout: 60_000 }, () => {
     const cCode = artifacts.files.map((f) => f.content).join('\n');
 
     // Check state update contains both inputs u[0] and u[1] with coefficients 1 and 2
-    expect(cCode).toContain('(xb_row == 0U ? 1.0 : 0.0)');
-    expect(cCode).toContain('(xb_row == 0U ? 2.0 : 0.0)');
+    expect(cCode).toContain('((xb_row == 0U) ? 1.0 : 0.0)');
+    expect(cCode).toContain('((xb_row == 0U) ? 2.0 : 0.0)');
     expect(cCode).toContain('instance->xb_controller.ss_1_u[0U]');
     expect(cCode).toContain('instance->xb_controller.ss_1_u[1U]');
 
@@ -3487,7 +3487,7 @@ describe('X-Bridges generated numeric helpers', { timeout: 60_000 }, () => {
     expect(code).toContain('instance->xb_controller.sim_time');
 
     // Verify WaveformGen includes phase offset (0.25) and frequency (1)
-    expect(code).toContain('2.0 * 3.14159265358979323846 * (1.0) * wave_1_t + (0.25)');
+    expect(code).toContain('(2.0 * 3.14159265358979323846 * (1.0) * wave_1_t) + (0.25)');
   });
 
   it('generates valid C99 code for VectorPow, SumElements, Mean, Max, and IdentityMatrix', () => {
@@ -3589,7 +3589,7 @@ describe('X-Bridges generated numeric helpers', { timeout: 60_000 }, () => {
     expect(code).toContain('powf(');
     expect(code).toContain('xb_sum +=');
     expect(code).toContain('signbit(');
-    expect(code).toContain('xb_row == xb_column ? 1.0 : 0.0');
+    expect(code).toContain('((xb_row == xb_column) ? 1.0 : 0.0)');
 
     compileGeneratedCSyntax(artifacts);
   });
@@ -3664,7 +3664,7 @@ describe('X-Bridges generated numeric helpers', { timeout: 60_000 }, () => {
     const artifacts = generateCArtifacts(ir);
     const code = artifacts.files.map((f) => f.content).join('\n');
 
-    expect(code).toContain('UINT32_C(0xFF)');
+    expect(code).toContain('0xFFU');
     expect(code).toContain('isfinite(');
     expect(code).toContain('(uint32_t)(int32_t)');
 

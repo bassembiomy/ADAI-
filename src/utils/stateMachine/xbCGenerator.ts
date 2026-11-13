@@ -928,7 +928,7 @@ const emitStep: OperationEmitter = (state, operation, operationIndex, layout, me
     const timerIndexSymbol = timerSource.stateIndexSymbol;
     const expr = threshold.milliseconds <= 0
       ? finalFmt
-      : `(instance->state_timers[${timerIndexSymbol}] < ${threshold.milliseconds}U ? ${initialFmt} : ${finalFmt})`;
+      : `((instance->state_timers[${timerIndexSymbol}] < ${threshold.milliseconds}U) ? ${initialFmt} : ${finalFmt})`;
     return renderSignalWrite(
       state,
       operation,
@@ -965,7 +965,7 @@ const emitStep: OperationEmitter = (state, operation, operationIndex, layout, me
   }
   const expr = thresholdMs === 0
     ? final.toFixed(1)
-    : `(instance->state_timers[${ownerIndexSymbol}] < UINT32_C(${thresholdMs}) ? ${initial.toFixed(1)} : ${final.toFixed(1)})`;
+    : `((instance->state_timers[${ownerIndexSymbol}] < ${thresholdMs}U) ? ${initial.toFixed(1)} : ${final.toFixed(1)})`;
   return renderSignalWrite(
     state,
     operation,
@@ -999,18 +999,18 @@ const emitWaveformGen: OperationEmitter = (state, operation, operationIndex, lay
   const prefix = `wave_${operationIndex}`;
   const lines = [
     `    double ${prefix}_t = instance->${member}.sim_time - (${cNumber(state.xBridges!.solver.stepSeconds)});`,
-    `    double ${prefix}_arg = 2.0 * 3.14159265358979323846 * (${freq}) * ${prefix}_t + (${phase});`,
+    `    double ${prefix}_arg = (2.0 * 3.14159265358979323846 * (${freq}) * ${prefix}_t) + (${phase});`,
     `    double ${prefix}_val = (${bias});`,
   ];
   if (waveform === 'sine') {
     lines.push(`    ${prefix}_val += (${amp}) * sin(${prefix}_arg);`);
   } else if (waveform === 'square') {
-    lines.push(`    ${prefix}_val += (${amp}) * (sin(${prefix}_arg) >= 0.0 ? 1.0 : -1.0);`);
+    lines.push(`    ${prefix}_val += (${amp}) * ((sin(${prefix}_arg) >= 0.0) ? 1.0 : -1.0);`);
   } else if (waveform === 'triangle') {
-    lines.push(`    ${prefix}_val += (${amp}) * (2.0 / 3.14159265358979323846) * asin(sin(${prefix}_arg));`);
+    lines.push(`    ${prefix}_val += (${amp}) * ((2.0 / 3.14159265358979323846) * asin(sin(${prefix}_arg)));`);
   } else if (waveform === 'sawtooth') {
-    lines.push(`    double ${prefix}_u = (${freq}) * ${prefix}_t + (${phase}) / (2.0 * 3.14159265358979323846);`);
-    lines.push(`    ${prefix}_val += (${amp}) * (2.0 * (${prefix}_u - floor(${prefix}_u)) - 1.0);`);
+    lines.push(`    double ${prefix}_u = ((${freq}) * ${prefix}_t) + ((${phase}) / (2.0 * 3.14159265358979323846));`);
+    lines.push(`    ${prefix}_val += (${amp}) * ((2.0 * (${prefix}_u - floor(${prefix}_u))) - 1.0);`);
   } else {
     lines.push(`    ${prefix}_val += (${amp}) * sin(${prefix}_arg);`);
   }
@@ -1233,7 +1233,7 @@ const emitMax: OperationEmitter = (state, operation, operationIndex, layout, mem
     `        ${cType} xb_max_val = ((${cType})(${initExpr}));`,
     `        for (uint32_t xb_i = 1U; xb_i < ${count}U; ++xb_i) {`,
     `            const ${cType} xb_val = ((${cType})(${loopExpr}));`,
-    `            if (isnan(xb_val) || xb_val > xb_max_val || (xb_val == ${zeroConst} && xb_max_val == ${zeroConst} && !signbit(xb_val) && signbit(xb_max_val))) {`,
+    `            if (isnan(xb_val) || (xb_val > xb_max_val) || ((xb_val == ${zeroConst}) && (xb_max_val == ${zeroConst}) && (!signbit(xb_val)) && signbit(xb_max_val))) {`,
     '                xb_max_val = xb_val;',
     '            }',
     '        }',
@@ -1260,8 +1260,8 @@ const emitIdentityMatrix: OperationEmitter = (state, operation, operationIndex, 
       operationIndex,
       0,
       outputId,
-      `xb_row * ${N}U + xb_column`,
-      '(xb_row == xb_column ? 1.0 : 0.0)',
+      `(xb_row * ${N}U) + xb_column`,
+      '((xb_row == xb_column) ? 1.0 : 0.0)',
       layout,
       member,
     ).map((line) => `    ${line}`),
@@ -1290,8 +1290,8 @@ const emitMatrixMultiply: OperationEmitter = (state, operation, operationIndex, 
   if (left.columns !== right.rows || output.rows !== left.rows || output.columns !== right.columns) {
     throw new Error(`X-Bridges MatrixMul '${operation.id}' has incompatible static shapes`);
   }
-  const leftValue = signalElementRealExpression(state, leftId, layout, member, `xb_row * ${left.columns}U + xb_k`);
-  const rightValue = signalElementRealExpression(state, rightId, layout, member, `xb_k * ${right.columns}U + xb_column`);
+  const leftValue = signalElementRealExpression(state, leftId, layout, member, `(xb_row * ${left.columns}U) + xb_k`);
+  const rightValue = signalElementRealExpression(state, rightId, layout, member, `(xb_k * ${right.columns}U) + xb_column`);
   return [
     '    {', `        for (uint32_t xb_row = 0U; xb_row < ${left.rows}U; ++xb_row) {`,
     `            for (uint32_t xb_column = 0U; xb_column < ${right.columns}U; ++xb_column) {`,
@@ -1299,7 +1299,7 @@ const emitMatrixMultiply: OperationEmitter = (state, operation, operationIndex, 
     `                for (uint32_t xb_k = 0U; xb_k < ${left.columns}U; ++xb_k) {`,
     `                    xb_total += (${leftValue}) * (${rightValue});`, '                }',
     ...renderSignalElementWrite(state, operation, operationIndex, 0, outputId,
-      `xb_row * ${right.columns}U + xb_column`, 'xb_total', layout, member).map((line) => `    ${line}`),
+      `(xb_row * ${right.columns}U) + xb_column`, 'xb_total', layout, member).map((line) => `    ${line}`),
     '            }', '        }', '    }',
   ];
 };
@@ -1312,7 +1312,7 @@ const emitTranspose: OperationEmitter = (state, operation, operationIndex, layou
   return ['    {', `        for (uint32_t xb_row = 0U; xb_row < ${input.rows}U; ++xb_row) {`,
     `            for (uint32_t xb_column = 0U; xb_column < ${input.columns}U; ++xb_column) {`,
     ...renderSignalElementWrite(state, operation, operationIndex, 0, outputId,
-      `xb_column * ${output.columns}U + xb_row`, signalElementRealExpression(state, inputId, layout, member, `xb_row * ${input.columns}U + xb_column`), layout, member).map((line) => `    ${line}`),
+      `(xb_column * ${output.columns}U) + xb_row`, signalElementRealExpression(state, inputId, layout, member, `(xb_row * ${input.columns}U) + xb_column`), layout, member).map((line) => `    ${line}`),
     '            }', '        }', '    }'];
 };
 
@@ -1327,7 +1327,7 @@ const emitMatrixDiag: OperationEmitter = (state, operation, operationIndex, layo
     return ['    {', `        for (uint32_t xb_i = 0U; xb_i < ${minDim}U; ++xb_i) {`,
       ...renderSignalElementWrite(state, operation, operationIndex, 0, outputId,
         'xb_i',
-        signalElementRealExpression(state, inputId, layout, member, `xb_i * ${cols}U + xb_i`), layout, member).map((line) => `    ${line}`),
+        signalElementRealExpression(state, inputId, layout, member, `(xb_i * ${cols}U) + xb_i`), layout, member).map((line) => `    ${line}`),
       '        }', '    }'];
   }
   const output = matrixSignal(state, outputId);
@@ -1335,8 +1335,8 @@ const emitMatrixDiag: OperationEmitter = (state, operation, operationIndex, layo
   return ['    {', `        for (uint32_t xb_row = 0U; xb_row < ${output.rows}U; ++xb_row) {`,
     `            for (uint32_t xb_column = 0U; xb_column < ${output.columns}U; ++xb_column) {`,
     ...renderSignalElementWrite(state, operation, operationIndex, 0, outputId,
-      `xb_row * ${output.columns}U + xb_column`,
-      `(xb_row == xb_column ? ${signalElementRealExpression(state, inputId, layout, member, 'xb_row')} : 0.0)`, layout, member).map((line) => `    ${line}`),
+      `(xb_row * ${output.columns}U) + xb_column`,
+      `((xb_row == xb_column) ? ${signalElementRealExpression(state, inputId, layout, member, 'xb_row')} : 0.0)`, layout, member).map((line) => `    ${line}`),
     '            }', '        }', '    }'];
 };
 
@@ -1352,7 +1352,7 @@ const emitSubMatrix: OperationEmitter = (state, operation, operationIndex, layou
   return ['    {', `        for (uint32_t xb_row = 0U; xb_row < ${output.rows}U; ++xb_row) {`,
     `            for (uint32_t xb_column = 0U; xb_column < ${output.columns}U; ++xb_column) {`,
     ...renderSignalElementWrite(state, operation, operationIndex, 0, outputId,
-      `xb_row * ${output.columns}U + xb_column`, signalElementRealExpression(state, inputId, layout, member, `(${rowStart}U + xb_row) * ${input.columns}U + ${colStart}U + xb_column`), layout, member).map((line) => `    ${line}`),
+      `(xb_row * ${output.columns}U) + xb_column`, signalElementRealExpression(state, inputId, layout, member, `((${rowStart}U + xb_row) * ${input.columns}U) + ${colStart}U + xb_column`), layout, member).map((line) => `    ${line}`),
     '            }', '        }', '    }'];
 };
 
@@ -1371,7 +1371,7 @@ const emitMatrixConcat: OperationEmitter = (state, operation, operationIndex, la
     for (const { id, shape } of inputs) {
       pieces.push(`            for (uint32_t xb_column = 0U; xb_column < ${shape.columns}U; ++xb_column) {`,
         ...renderSignalElementWrite(state, operation, operationIndex, 0, outputId,
-          `xb_row * ${output.columns}U + ${offset}U + xb_column`, signalElementRealExpression(state, id, layout, member, `xb_row * ${shape.columns}U + xb_column`), layout, member).map((line) => `    ${line}`),
+          `((xb_row * ${output.columns}U) + ${offset}U) + xb_column`, signalElementRealExpression(state, id, layout, member, `(xb_row * ${shape.columns}U) + xb_column`), layout, member).map((line) => `    ${line}`),
         '            }');
       offset += shape.columns;
     }
@@ -1384,7 +1384,7 @@ const emitMatrixConcat: OperationEmitter = (state, operation, operationIndex, la
       pieces.push(`        for (uint32_t xb_row = 0U; xb_row < ${shape.rows}U; ++xb_row) {`,
         `            for (uint32_t xb_column = 0U; xb_column < ${output.columns}U; ++xb_column) {`,
         ...renderSignalElementWrite(state, operation, operationIndex, 0, outputId,
-          `(${offset}U + xb_row) * ${output.columns}U + xb_column`, signalElementRealExpression(state, id, layout, member, `xb_row * ${output.columns}U + xb_column`), layout, member).map((line) => `    ${line}`),
+          `((${offset}U + xb_row) * ${output.columns}U) + xb_column`, signalElementRealExpression(state, id, layout, member, `(xb_row * ${output.columns}U) + xb_column`), layout, member).map((line) => `    ${line}`),
         '            }', '        }');
       offset += shape.rows;
     }
@@ -1404,9 +1404,9 @@ const emitMatrixSolve: OperationEmitter = (state, operation, operationIndex, lay
   const output = outputSig.shape.kind === 'matrix' ? outputSig.shape : { rows: outputSig.elementCount, columns: 1 };
   const configuredMaximum = Number(scalarParameter(operation, ['maxDimension', 'maximumDimension'], 8));
   if (!Number.isSafeInteger(configuredMaximum) || configuredMaximum < 1 || configuredMaximum > 8 || matrix.rows !== matrix.columns || right.rows !== matrix.rows || output.rows !== matrix.rows || output.columns !== right.columns || matrix.rows > configuredMaximum || right.columns > configuredMaximum) throw new Error(`X-Bridges MatrixSolve '${operation.id}' exceeds static solve bounds`);
-  const matrixValue = signalElementRealExpression(state, matrixId, layout, member, `xb_row * ${matrix.columns}U + xb_column`);
-  const rightValue = signalElementRealExpression(state, rightId, layout, member, `xb_row * ${right.columns}U + xb_column`);
-  const outputValue = signalElementRealExpression(state, outputId, layout, member, `xb_row * ${output.columns}U + xb_column`);
+  const matrixValue = signalElementRealExpression(state, matrixId, layout, member, `(xb_row * ${matrix.columns}U) + xb_column`);
+  const rightValue = signalElementRealExpression(state, rightId, layout, member, `(xb_row * ${right.columns}U) + xb_column`);
+  const outputValue = signalElementRealExpression(state, outputId, layout, member, `(xb_row * ${output.columns}U) + xb_column`);
   const errorField = layout.errorFields.get(operation.id);
   const pivotFault = [
     ...(errorField === undefined ? [] : [`            instance->${member}.${errorField} = true;`]),
@@ -1416,21 +1416,21 @@ const emitMatrixSolve: OperationEmitter = (state, operation, operationIndex, lay
   ];
   return ['    {', '        double xb_solve_a[SM_XB_MAX_SOLVE_DIMENSION * SM_XB_MAX_SOLVE_DIMENSION];', '        double xb_solve_b[SM_XB_MAX_SOLVE_DIMENSION * SM_XB_MAX_SOLVE_DIMENSION];', '        bool xb_pivot_failed = false;',
     `        for (uint32_t xb_row = 0U; xb_row < ${matrix.rows}U; ++xb_row) {`,
-    `            for (uint32_t xb_column = 0U; xb_column < ${matrix.columns}U; ++xb_column) xb_solve_a[xb_row * SM_XB_MAX_SOLVE_DIMENSION + xb_column] = ${matrixValue};`,
-    `            for (uint32_t xb_column = 0U; xb_column < ${right.columns}U; ++xb_column) xb_solve_b[xb_row * SM_XB_MAX_SOLVE_DIMENSION + xb_column] = ${rightValue};`, '        }',
+    `            for (uint32_t xb_column = 0U; xb_column < ${matrix.columns}U; ++xb_column) { xb_solve_a[(xb_row * SM_XB_MAX_SOLVE_DIMENSION) + xb_column] = ${matrixValue}; }`,
+    `            for (uint32_t xb_column = 0U; xb_column < ${right.columns}U; ++xb_column) { xb_solve_b[(xb_row * SM_XB_MAX_SOLVE_DIMENSION) + xb_column] = ${rightValue}; }`, '        }',
     `        for (uint32_t xb_pivot = 0U; xb_pivot < ${matrix.rows}U; ++xb_pivot) {`, '            uint32_t xb_selected = xb_pivot;',
-    `            for (uint32_t xb_row = xb_pivot + 1U; xb_row < ${matrix.rows}U; ++xb_row) if (fabs(xb_solve_a[xb_row * SM_XB_MAX_SOLVE_DIMENSION + xb_pivot]) > fabs(xb_solve_a[xb_selected * SM_XB_MAX_SOLVE_DIMENSION + xb_pivot])) xb_selected = xb_row;`,
-    '            if (fabs(xb_solve_a[xb_selected * SM_XB_MAX_SOLVE_DIMENSION + xb_pivot]) <= 1.0e-12) { xb_pivot_failed = true; break; }',
+    `            for (uint32_t xb_row = xb_pivot + 1U; xb_row < ${matrix.rows}U; ++xb_row) if (fabs(xb_solve_a[(xb_row * SM_XB_MAX_SOLVE_DIMENSION) + xb_pivot]) > fabs(xb_solve_a[(xb_selected * SM_XB_MAX_SOLVE_DIMENSION) + xb_pivot])) xb_selected = xb_row;`,
+    '            if (fabs(xb_solve_a[(xb_selected * SM_XB_MAX_SOLVE_DIMENSION) + xb_pivot]) <= 1.0e-12) { xb_pivot_failed = true; break; }',
     '            if (xb_selected != xb_pivot) {',
-    `                for (uint32_t xb_column = 0U; xb_column < ${matrix.columns}U; ++xb_column) { double xb_swap = xb_solve_a[xb_pivot * SM_XB_MAX_SOLVE_DIMENSION + xb_column]; xb_solve_a[xb_pivot * SM_XB_MAX_SOLVE_DIMENSION + xb_column] = xb_solve_a[xb_selected * SM_XB_MAX_SOLVE_DIMENSION + xb_column]; xb_solve_a[xb_selected * SM_XB_MAX_SOLVE_DIMENSION + xb_column] = xb_swap; }`,
-    `                for (uint32_t xb_column = 0U; xb_column < ${right.columns}U; ++xb_column) { double xb_swap = xb_solve_b[xb_pivot * SM_XB_MAX_SOLVE_DIMENSION + xb_column]; xb_solve_b[xb_pivot * SM_XB_MAX_SOLVE_DIMENSION + xb_column] = xb_solve_b[xb_selected * SM_XB_MAX_SOLVE_DIMENSION + xb_column]; xb_solve_b[xb_selected * SM_XB_MAX_SOLVE_DIMENSION + xb_column] = xb_swap; }`, '            }',
-    `            for (uint32_t xb_row = xb_pivot + 1U; xb_row < ${matrix.rows}U; ++xb_row) {`, '                const double xb_factor = xb_solve_a[xb_row * SM_XB_MAX_SOLVE_DIMENSION + xb_pivot] / xb_solve_a[xb_pivot * SM_XB_MAX_SOLVE_DIMENSION + xb_pivot];', '                xb_solve_a[xb_row * SM_XB_MAX_SOLVE_DIMENSION + xb_pivot] = 0.0;',
-    `                for (uint32_t xb_column = xb_pivot + 1U; xb_column < ${matrix.columns}U; ++xb_column) xb_solve_a[xb_row * SM_XB_MAX_SOLVE_DIMENSION + xb_column] -= xb_factor * xb_solve_a[xb_pivot * SM_XB_MAX_SOLVE_DIMENSION + xb_column];`,
-    `                for (uint32_t xb_column = 0U; xb_column < ${right.columns}U; ++xb_column) xb_solve_b[xb_row * SM_XB_MAX_SOLVE_DIMENSION + xb_column] -= xb_factor * xb_solve_b[xb_pivot * SM_XB_MAX_SOLVE_DIMENSION + xb_column];`, '            }', '        }',
+    `                for (uint32_t xb_column = 0U; xb_column < ${matrix.columns}U; ++xb_column) { double xb_swap = xb_solve_a[(xb_pivot * SM_XB_MAX_SOLVE_DIMENSION) + xb_column]; xb_solve_a[(xb_pivot * SM_XB_MAX_SOLVE_DIMENSION) + xb_column] = xb_solve_a[(xb_selected * SM_XB_MAX_SOLVE_DIMENSION) + xb_column]; xb_solve_a[(xb_selected * SM_XB_MAX_SOLVE_DIMENSION) + xb_column] = xb_swap; }`,
+    `                for (uint32_t xb_column = 0U; xb_column < ${right.columns}U; ++xb_column) { double xb_swap = xb_solve_b[(xb_pivot * SM_XB_MAX_SOLVE_DIMENSION) + xb_column]; xb_solve_b[(xb_pivot * SM_XB_MAX_SOLVE_DIMENSION) + xb_column] = xb_solve_b[(xb_selected * SM_XB_MAX_SOLVE_DIMENSION) + xb_column]; xb_solve_b[(xb_selected * SM_XB_MAX_SOLVE_DIMENSION) + xb_column] = xb_swap; }`, '            }',
+    `            for (uint32_t xb_row = xb_pivot + 1U; xb_row < ${matrix.rows}U; ++xb_row) {`, '                const double xb_factor = xb_solve_a[(xb_row * SM_XB_MAX_SOLVE_DIMENSION) + xb_pivot] / xb_solve_a[(xb_pivot * SM_XB_MAX_SOLVE_DIMENSION) + xb_pivot];', '                xb_solve_a[(xb_row * SM_XB_MAX_SOLVE_DIMENSION) + xb_pivot] = 0.0;',
+    `                for (uint32_t xb_column = xb_pivot + 1U; xb_column < ${matrix.columns}U; ++xb_column) xb_solve_a[(xb_row * SM_XB_MAX_SOLVE_DIMENSION) + xb_column] -= xb_factor * xb_solve_a[(xb_pivot * SM_XB_MAX_SOLVE_DIMENSION) + xb_column];`,
+    `                for (uint32_t xb_column = 0U; xb_column < ${right.columns}U; ++xb_column) { xb_solve_b[(xb_row * SM_XB_MAX_SOLVE_DIMENSION) + xb_column] -= xb_factor * xb_solve_b[(xb_pivot * SM_XB_MAX_SOLVE_DIMENSION) + xb_column]; }`, '            }', '        }',
     '        if (xb_pivot_failed) {', ...pivotFault, '        } else {',
-    `            for (int32_t xb_row = ${matrix.rows - 1}; xb_row >= 0; --xb_row) for (uint32_t xb_column = 0U; xb_column < ${right.columns}U; ++xb_column) { double xb_value = xb_solve_b[(uint32_t)xb_row * SM_XB_MAX_SOLVE_DIMENSION + xb_column]; for (uint32_t xb_k = (uint32_t)xb_row + 1U; xb_k < ${matrix.rows}U; ++xb_k) xb_value -= xb_solve_a[(uint32_t)xb_row * SM_XB_MAX_SOLVE_DIMENSION + xb_k] * xb_solve_b[xb_k * SM_XB_MAX_SOLVE_DIMENSION + xb_column]; xb_solve_b[(uint32_t)xb_row * SM_XB_MAX_SOLVE_DIMENSION + xb_column] = xb_value / xb_solve_a[(uint32_t)xb_row * SM_XB_MAX_SOLVE_DIMENSION + (uint32_t)xb_row]; }`, '        }',
+    `            for (int32_t xb_row = ${matrix.rows - 1}; xb_row >= 0; --xb_row) for (uint32_t xb_column = 0U; xb_column < ${right.columns}U; ++xb_column) { double xb_value = xb_solve_b[((uint32_t)xb_row * SM_XB_MAX_SOLVE_DIMENSION) + xb_column]; for (uint32_t xb_k = (uint32_t)xb_row + 1U; xb_k < ${matrix.rows}U; ++xb_k) xb_value -= xb_solve_a[((uint32_t)xb_row * SM_XB_MAX_SOLVE_DIMENSION) + xb_k] * xb_solve_b[(xb_k * SM_XB_MAX_SOLVE_DIMENSION) + xb_column]; xb_solve_b[((uint32_t)xb_row * SM_XB_MAX_SOLVE_DIMENSION) + xb_column] = xb_value / xb_solve_a[((uint32_t)xb_row * SM_XB_MAX_SOLVE_DIMENSION) + (uint32_t)xb_row]; }`, '        }',
     `        for (uint32_t xb_row = 0U; xb_row < ${output.rows}U; ++xb_row) for (uint32_t xb_column = 0U; xb_column < ${output.columns}U; ++xb_column) {`,
-    ...renderSignalElementWrite(state, operation, operationIndex, 0, outputId, `xb_row * ${output.columns}U + xb_column`, `(xb_pivot_failed ? 0.0 : xb_solve_b[xb_row * SM_XB_MAX_SOLVE_DIMENSION + xb_column])`, layout, member).map((line) => `    ${line}`), '        }', '    }'];
+    ...renderSignalElementWrite(state, operation, operationIndex, 0, outputId, `(xb_row * ${output.columns}U) + xb_column`, `(xb_pivot_failed ? 0.0 : xb_solve_b[(xb_row * SM_XB_MAX_SOLVE_DIMENSION) + xb_column])`, layout, member).map((line) => `    ${line}`), '        }', '    }'];
 };
 
 const resolveInputExpression = (
@@ -1455,7 +1455,7 @@ const emitClarke: OperationEmitter = (state, operation, operationIndex, layout, 
   const ic = resolveInputExpression(state, operation, ['ic', 'c', 'u3', 'i_c'], 2, layout, member);
   const powerInvariant = operation.parameters.mode === 'power_invariant';
   const alpha = powerInvariant ? `(sqrt(2.0 / 3.0) * ((${ia}) - 0.5 * (${ib}) - 0.5 * (${ic})))` : ia;
-  const beta = powerInvariant ? `(sqrt(2.0 / 3.0) * sqrt(3.0) * ((${ib}) - (${ic})) / 2.0)` : `(((${ia}) + 2.0 * (${ib})) / sqrt(3.0))`;
+  const beta = powerInvariant ? `(sqrt(2.0 / 3.0) * sqrt(3.0) * ((${ib}) - (${ic})) / 2.0)` : `((((${ia}) + (2.0 * (${ib}))) / sqrt(3.0)))`;
   return operation.outputSignalIds.flatMap((id, index) => renderSignalWrite(state, operation, operationIndex, index, id, index === 0 ? alpha : beta, layout, member));
 };
 const emitPark: OperationEmitter = (state, operation, operationIndex, layout, member) => {
@@ -1512,14 +1512,23 @@ const emitSixStepCommutation: OperationEmitter = (
   const clId = resolveOutputSignalId(state, operation, 'cl', 5);
 
   const lines: string[] = [
-    `    uint32_t ${prefix}_hall = ((${h1} != 0.0) ? 4U : 0U) | ((${h2} != 0.0) ? 2U : 0U) | ((${h3} != 0.0) ? 1U : 0U);`,
-    `    double ${prefix}_ah = 0.0, ${prefix}_al = 0.0, ${prefix}_bh = 0.0, ${prefix}_bl = 0.0, ${prefix}_ch = 0.0, ${prefix}_cl = 0.0;`,
+    `    uint32_t ${prefix}_hall = 0U;`,
+    `    ${prefix}_hall |= ((${h1} != 0.0) ? 4U : 0U);`,
+    `    ${prefix}_hall |= ((${h2} != 0.0) ? 2U : 0U);`,
+    `    ${prefix}_hall |= ((${h3} != 0.0) ? 1U : 0U);`,
+    `    double ${prefix}_ah = 0.0;`,
+    `    double ${prefix}_al = 0.0;`,
+    `    double ${prefix}_bh = 0.0;`,
+    `    double ${prefix}_bl = 0.0;`,
+    `    double ${prefix}_ch = 0.0;`,
+    `    double ${prefix}_cl = 0.0;`,
     `    if (${prefix}_hall == 5U) { ${prefix}_ah = 1.0; ${prefix}_bl = 1.0; }`,
     `    else if (${prefix}_hall == 1U) { ${prefix}_ah = 1.0; ${prefix}_cl = 1.0; }`,
     `    else if (${prefix}_hall == 3U) { ${prefix}_bh = 1.0; ${prefix}_cl = 1.0; }`,
     `    else if (${prefix}_hall == 2U) { ${prefix}_bh = 1.0; ${prefix}_al = 1.0; }`,
     `    else if (${prefix}_hall == 6U) { ${prefix}_ch = 1.0; ${prefix}_al = 1.0; }`,
     `    else if (${prefix}_hall == 4U) { ${prefix}_ch = 1.0; ${prefix}_bl = 1.0; }`,
+    '    else { /* no valid commutation state: all phases off */ }',
   ];
 
   if (ahId !== undefined) lines.push(...renderSignalWrite(state, operation, operationIndex, 0, ahId, `${prefix}_ah`, layout, member));
@@ -1567,17 +1576,17 @@ const emitOr: OperationEmitter = (state, operation, operationIndex, layout, memb
 const emitNot: OperationEmitter = (state, operation, operationIndex, layout, member) => {
   const inputs = inputBooleanExpressions(state, operation, layout, member);
   const first = inputs[0] ?? 'false';
-  return emitSingleOutput(() => `(!${first})`)(state, operation, operationIndex, layout, member);
+  return emitSingleOutput(() => `((!${first}) ? 1.0 : 0.0)`)(state, operation, operationIndex, layout, member);
 };
 
 const emitNand: OperationEmitter = (state, operation, operationIndex, layout, member) => {
   const inputs = inputBooleanExpressions(state, operation, layout, member);
-  return emitSingleOutput(() => `(!${reduceExpression(inputs, '&&', 'true')})`)(state, operation, operationIndex, layout, member);
+  return emitSingleOutput(() => `((!${reduceExpression(inputs, '&&', 'true')}) ? 1.0 : 0.0)`)(state, operation, operationIndex, layout, member);
 };
 
 const emitNor: OperationEmitter = (state, operation, operationIndex, layout, member) => {
   const inputs = inputBooleanExpressions(state, operation, layout, member);
-  return emitSingleOutput(() => `(!${reduceExpression(inputs, '||', 'false')})`)(state, operation, operationIndex, layout, member);
+  return emitSingleOutput(() => `((!${reduceExpression(inputs, '||', 'false')}) ? 1.0 : 0.0)`)(state, operation, operationIndex, layout, member);
 };
 
 const emitXor: OperationEmitter = (state, operation, operationIndex, layout, member) => {
@@ -1631,7 +1640,7 @@ const emitSwitch = emitSingleOutput((inputs, operation) => {
     || criteriaValue === '<='
     ? criteriaValue
     : '>';
-  return `((${control}) ${criteria} ${threshold} ? (${inputs[0] ?? '0.0'}) : (${inputs[2] ?? '0.0'}))`;
+  return `((((${control}) ${criteria} ${threshold})) ? (${inputs[0] ?? '0.0'}) : (${inputs[2] ?? '0.0'}))`;
 });
 
 const emitIfElse = emitSingleOutput((inputs, operation) => {
@@ -1641,7 +1650,7 @@ const emitIfElse = emitSingleOutput((inputs, operation) => {
   const thresholdParam = operation.parameters.threshold ?? operation.parameters.Threshold;
   if (thresholdParam !== undefined && thresholdParam !== null) {
     const threshold = cNumber(Number(thresholdParam));
-    return `((SM_XB_Truth(${cond}) && (${cond}) >= ${threshold}) ? (${trueVal}) : (${falseVal}))`;
+    return `((SM_XB_Truth(${cond}) && ((${cond}) >= ${threshold})) ? (${trueVal}) : (${falseVal}))`;
   }
   return `(SM_XB_Truth(${cond}) ? (${trueVal}) : (${falseVal}))`;
 });
@@ -2053,7 +2062,7 @@ static int32_t SM_XB_ToInt32(double value)
     double residue;
     uint32_t bits;
     if (!isfinite(value) || (value == 0.0)) {
-        return INT32_C(0);
+        return 0;
     }
     residue = fmod(trunc(value), 4294967296.0);
     if (residue < 0.0) {
@@ -2066,7 +2075,7 @@ static int32_t SM_XB_ToInt32(double value)
 static int32_t SM_XB_ShiftLeft32(double value, double amount)
 {
     const uint32_t shift = SM_XB_BitcastI32ToU32(
-        SM_XB_ToInt32(amount)) & UINT32_C(31);
+        SM_XB_ToInt32(amount)) & 31U;
     const uint32_t bits = SM_XB_BitcastI32ToU32(SM_XB_ToInt32(value));
     return SM_XB_BitcastU32ToI32(bits << shift);
 }
@@ -2074,15 +2083,15 @@ static int32_t SM_XB_ShiftLeft32(double value, double amount)
 static int32_t SM_XB_ShiftRight32(double value, double amount)
 {
     const uint32_t shift = SM_XB_BitcastI32ToU32(
-        SM_XB_ToInt32(amount)) & UINT32_C(31);
+        SM_XB_ToInt32(amount)) & 31U;
     const uint32_t bits = SM_XB_BitcastI32ToU32(SM_XB_ToInt32(value));
     uint32_t shifted;
-    if (shift == UINT32_C(0)) {
+    if (shift == 0U) {
         return SM_XB_BitcastU32ToI32(bits);
     }
     shifted = bits >> shift;
-    if ((bits & UINT32_C(0x80000000)) != UINT32_C(0)) {
-        shifted |= UINT32_MAX << (UINT32_C(32) - shift);
+    if ((bits & 0x80000000U) != 0U) {
+        shifted |= UINT32_MAX << (32U - shift);
     }
     return SM_XB_BitcastU32ToI32(shifted);
 }`;
@@ -2187,7 +2196,7 @@ const renderStateSlotAssignment = (
   if (slot.numericType.kind === 'boolean') {
     const value = `xb_state_${toCIdentifier(name)}_value`;
     return [
-      `    const bool ${value} = (${expression});`,
+      `    const bool ${value} = ((${expression}) != 0.0);`,
       `    ${field} = ${value};`,
     ];
   }
@@ -2256,10 +2265,10 @@ const renderPIDComputation = (
       `            ${d} += (${n}) * (${e} - ${d}) * (${dt});`,
     ] : method === 'backward_euler'
       ? [
-        `            ${derivative} = (${kd}) * (${n}) * (${e} - ${d}) / (1.0 + (${n}) * (${dt}));`,
-        `            ${d} = (${d} + (${n}) * ${e} * (${dt})) / (1.0 + (${n}) * (${dt}));`,
+        `            ${derivative} = (${kd}) * (${n}) * (${e} - ${d}) / (1.0 + ((${n}) * (${dt})));`,
+        `            ${d} = (${d} + ((${n}) * ${e} * (${dt}))) / (1.0 + ((${n}) * (${dt})));`,
       ] : [
-      `            ${derivative} = 2.0 * (${kd}) * (${n}) * (${e} - ${d}) / (2.0 + (${n}) * (${dt}));`,
+      `            ${derivative} = 2.0 * (${kd}) * (${n}) * (${e} - ${d}) / (2.0 + ((${n}) * (${dt})));`,
       `            ${d} = ${e};`,
       ];
   return [
@@ -2277,9 +2286,9 @@ const renderPIDComputation = (
     '        else {',
     ...integralLines,
     ...derivativeLines,
-    `            ${unlimited} = (${kp}) * ${e} + ${i} + ${derivative};`,
+    `            ${unlimited} = ((${kp}) * ${e}) + ${i} + ${derivative};`,
     `            ${output} = fmax(${minimum}, fmin(${maximum}, ${unlimited}));`,
-    `            if (((${ki}) != 0.0) && (((${unlimited} > ${maximum}) && (${e} > 0.0)) || ((${unlimited} < ${minimum}) && (${e} < 0.0)))) ${i} = ${stateSlotRealExpression(iSlot, layout, member)};`,
+    `            if ((((${ki}) != 0.0) && (((${unlimited} > ${maximum}) && (${e} > 0.0)) || ((${unlimited} < ${minimum}) && (${e} < 0.0))))) { ${i} = ${stateSlotRealExpression(iSlot, layout, member)}; }`,
     `            ${lastE} = ${e};`,
     '        }',
     `        (void)${output};`,
@@ -2306,7 +2315,7 @@ const renderStateOutputs = (
         const elementCount = signal.elementCount;
         const lines: string[] = [];
         for (let m = 0; m < elementCount; m++) {
-          const indexedExpr = `instance->${member}.${bufferField}[(uint32_t)instance->${member}.${indexField} * ${elementCount}U + ${m}U]`;
+          const indexedExpr = `instance->${member}.${bufferField}[((uint32_t)instance->${member}.${indexField} * ${elementCount}U) + ${m}U]`;
           lines.push(
             ...renderSignalElementWrite(
               state,
@@ -2350,10 +2359,10 @@ const renderStateOutputs = (
       const d = (row: number, column: number) => cNumber(matrixParameterValue(effectiveOp, 'D', row, column, 0));
       const terms = Array.from({ length: y.elementCount }, (_, row) => {
         const stateTerms = Array.from({ length: xSlot.initialValues.length }, (_, column) =>
-          `(${c(row, column)}) * ${stateSlotElementRealExpression(xSlot, layout, member, `${column}U`)}`);
+          `((${c(row, column)}) * ${stateSlotElementRealExpression(xSlot, layout, member, `${column}U`)})`);
         const inputSignal = inputId === undefined ? null : requireSignal(state, inputId);
         const inputTerms = inputSignal === null ? [] : Array.from({ length: inputSignal.elementCount }, (_, column) =>
-          `(${d(row, column)}) * ${signalElementRealExpression(state, inputId!, layout, member, `${column}U`)}`);
+          `((${d(row, column)}) * ${signalElementRealExpression(state, inputId!, layout, member, `${column}U`)})`);
         return renderSignalElementWrite(state, operation, operationIndex, row, ySignalId, `${row}U`,
           [...stateTerms, ...inputTerms].join(' + ') || '0.0', layout, member);
       }).flat();
@@ -2398,10 +2407,12 @@ const renderStateOutputs = (
           `        double ${sanitizedId}_y = ${sanitizedId}_u;`,
           `        if (${isnanFn}(${sanitizedId}_u) || ${isnanFn}(${sanitizedId}_prev)) {`,
           `            ${sanitizedId}_y = ${nanVal};`,
-          `        } else if (${sanitizedId}_u - ${sanitizedId}_prev > ${sanitizedId}_max_inc) {`,
+          `        } else if ((${sanitizedId}_u - ${sanitizedId}_prev) > ${sanitizedId}_max_inc) {`,
           `            ${sanitizedId}_y = ${sanitizedId}_prev + ${sanitizedId}_max_inc;`,
-          `        } else if (${sanitizedId}_u - ${sanitizedId}_prev < ${sanitizedId}_max_dec) {`,
+          `        } else if ((${sanitizedId}_u - ${sanitizedId}_prev) < ${sanitizedId}_max_dec) {`,
           `            ${sanitizedId}_y = ${sanitizedId}_prev + ${sanitizedId}_max_dec;`,
+          '        } else {',
+          '            /* within the rate limits: output is the input */',
           '        }',
           ...renderSignalElementWrite(state, operation, operationIndex, 0, outputSignalId, '0U', `${sanitizedId}_y`, layout, member),
         );
@@ -2413,10 +2424,12 @@ const renderStateOutputs = (
           `            double ${sanitizedId}_y = ${sanitizedId}_u;`,
           `            if (${isnanFn}(${sanitizedId}_u) || ${isnanFn}(${sanitizedId}_prev)) {`,
           `                ${sanitizedId}_y = ${nanVal};`,
-          `            } else if (${sanitizedId}_u - ${sanitizedId}_prev > ${sanitizedId}_max_inc) {`,
+          `            } else if ((${sanitizedId}_u - ${sanitizedId}_prev) > ${sanitizedId}_max_inc) {`,
           `                ${sanitizedId}_y = ${sanitizedId}_prev + ${sanitizedId}_max_inc;`,
-          `            } else if (${sanitizedId}_u - ${sanitizedId}_prev < ${sanitizedId}_max_dec) {`,
+          `            } else if ((${sanitizedId}_u - ${sanitizedId}_prev) < ${sanitizedId}_max_dec) {`,
           `                ${sanitizedId}_y = ${sanitizedId}_prev + ${sanitizedId}_max_dec;`,
+          '            } else {',
+          '                /* within the rate limits: output is the input */',
           '            }',
           ...renderSignalElementWrite(state, operation, operationIndex, 0, outputSignalId, 'xb_i', `${sanitizedId}_y`, layout, member),
           '        }',
@@ -2446,11 +2459,11 @@ const renderStateOutputs = (
         `      ${prefix}_normal = ${spare};`,
         `    } else {`,
         `      uint32_t s = (uint32_t)(${rng});`,
-        `      if (s == 0) s = 0x6d2b79f5;`,
+        `      if (s == 0U) { s = 0x6d2b79f5U; }`,
         `      s ^= s << 13; s ^= s >> 17; s ^= s << 5;`,
-        `      double u1 = (s + 0.5) / 4294967296.0;`,
+        `      double u1 = (((double)s) + 0.5) / 4294967296.0;`,
         `      s ^= s << 13; s ^= s >> 17; s ^= s << 5;`,
-        `      double u2 = (s + 0.5) / 4294967296.0;`,
+        `      double u2 = (((double)s) + 0.5) / 4294967296.0;`,
         `      ${prefix}_normal = sqrt(-2.0 * log(u1)) * sin(2.0 * 3.14159265358979323846 * u2);`,
         `    }`,
         `    double ${prefix}_white = ${mean} + sqrt(fmax(0.0, ${variance})) * ${prefix}_normal;`,
@@ -2463,7 +2476,7 @@ const renderStateOutputs = (
           const fc = cNumber(scalarParameter(operation, ['fc'], 1));
           const dt = cNumber(scalarParameter(operation, ['sampleTime', 'dt'], state.xBridges!.solver.stepSeconds));
           lines.push(`    double ${prefix}_fcCoeff = (${dt}) / ((1.0 / (2.0 * 3.14159265358979323846 * (${fc}))) + (${dt}));`);
-          lines.push(`    double ${prefix}_out = ${prevFilter} + ${prefix}_fcCoeff * (${prefix}_white - ${prevFilter});`);
+          lines.push(`    double ${prefix}_out = ${prevFilter} + (${prefix}_fcCoeff * (${prefix}_white - ${prevFilter}));`);
           lines.push(...renderSignalWrite(state, operation, operationIndex, 0, outputSignalId, `${prefix}_out`, layout, member));
         }
       } else {
@@ -2496,18 +2509,18 @@ const renderStateOutputs = (
         // operations run. The interpreter evaluates WaveformGen at the
         // beginning of the substep, so compensate for that advance here.
         `    double ${prefix}_t = instance->${member}.sim_time - (${cNumber(state.xBridges!.solver.stepSeconds)});`,
-        `    double ${prefix}_arg = 2.0 * 3.14159265358979323846 * (${freq}) * ${prefix}_t + (${phase});`,
+        `    double ${prefix}_arg = (2.0 * 3.14159265358979323846 * (${freq}) * ${prefix}_t) + (${phase});`,
         `    double ${prefix}_val = (${bias});`,
       ];
       if (waveform === 'sine') {
         lines.push(`    ${prefix}_val += (${amp}) * sin(${prefix}_arg);`);
       } else if (waveform === 'square') {
-        lines.push(`    ${prefix}_val += (${amp}) * (sin(${prefix}_arg) >= 0.0 ? 1.0 : -1.0);`);
+        lines.push(`    ${prefix}_val += (${amp}) * ((sin(${prefix}_arg) >= 0.0) ? 1.0 : -1.0);`);
       } else if (waveform === 'triangle') {
-        lines.push(`    ${prefix}_val += (${amp}) * (2.0 / 3.14159265358979323846) * asin(sin(${prefix}_arg));`);
+        lines.push(`    ${prefix}_val += (${amp}) * ((2.0 / 3.14159265358979323846) * asin(sin(${prefix}_arg)));`);
       } else if (waveform === 'sawtooth') {
-        lines.push(`    double ${prefix}_u = (${freq}) * ${prefix}_t + (${phase}) / (2.0 * 3.14159265358979323846);`);
-        lines.push(`    ${prefix}_val += (${amp}) * (2.0 * (${prefix}_u - floor(${prefix}_u)) - 1.0);`);
+        lines.push(`    double ${prefix}_u = ((${freq}) * ${prefix}_t) + ((${phase}) / (2.0 * 3.14159265358979323846));`);
+        lines.push(`    ${prefix}_val += (${amp}) * ((2.0 * (${prefix}_u - floor(${prefix}_u))) - 1.0);`);
       } else {
         lines.push(`    ${prefix}_val += (${amp}) * sin(${prefix}_arg);`);
       }
@@ -2526,7 +2539,7 @@ const renderStateOutputs = (
       const switchOff = cNumber(scalarParameter(operation, ['switchOff'], 0));
       // In C, boolean is typically 1 or 0, but it might be bool if stdbool.h is included.
       // We'll write an expression that evaluates to 1.0 or 0.0 based on the numeric type.
-      const current_on = `(${u} >= ${switchOn} || (${prev_on} != 0.0 && ${u} > ${switchOff})) ? 1.0 : 0.0`;
+      const current_on = `((((${u}) >= ${switchOn}) || ((${prev_on} != 0.0) && ((${u}) > ${switchOff})))) ? 1.0 : 0.0`;
       return [...renderSignalWrite(state, operation, operationIndex, 0, outputSignalId, current_on, layout, member)];
     }
   }
@@ -2545,7 +2558,7 @@ const renderStateOutputs = (
         `    const double ${prefix}_dt = (${dt});`,
         `    const double ${prefix}_tau = 1.0 / (2.0 * 3.14159265358979323846 * ${prefix}_fc);`,
         `    const double ${prefix}_alpha = ${prefix}_dt / (${prefix}_tau + ${prefix}_dt);`,
-        `    const double ${prefix}_y = (1.0 - ${prefix}_alpha) * (${prev_y}) + ${prefix}_alpha * (${u});`,
+        `    const double ${prefix}_y = ((1.0 - ${prefix}_alpha) * (${prev_y})) + (${prefix}_alpha * (${u}));`,
         ...renderSignalWrite(state, operation, operationIndex, 0, outputSignalId, `${prefix}_y`, layout, member),
         ...renderStateSlotElementAssignment(state, prevYSlot, '0U', `${prefix}_y`, layout, member, `${operation.id}_prev_y_update`, layout.errorFields.get(operation.id), operation),
       ];
@@ -2597,7 +2610,8 @@ const renderStateOutputs = (
         `    }`,
         `    const double ${prefix}_y = ${prefix}_sum / ${windowSize}.0;`,
         ...renderSignalWrite(state, operation, operationIndex, 0, outputSignalId, `${prefix}_y`, layout, member),
-        `    const double ${prefix}_nextIdx = (double)((${prefix}_idx + 1U) % ${windowSize}U);`,
+        `    const uint32_t ${prefix}_nextIdxU = ((${prefix}_idx + 1U) % ${windowSize}U);`,
+        `    const double ${prefix}_nextIdx = (double)${prefix}_nextIdxU;`,
         ...renderStateSlotElementAssignment(state, indexSlot, '0U', `${prefix}_nextIdx`, layout, member, `${operation.id}_idx_update`, layout.errorFields.get(operation.id), operation),
       ];
       return lines;
@@ -2657,8 +2671,8 @@ const renderStateOutputs = (
       lines.push(`    double ${prefix}_xPred[${xLength}];`);
       lines.push(`    for (uint32_t r = 0U; r < ${xLength}U; ++r) {`);
       lines.push(`        double sum = 0.0;`);
-      lines.push(`        for (uint32_t k = 0U; k < ${xLength}U; ++k) sum += ${prefix}_A[r][k] * ${prefix}_xPrev[k];`);
-      lines.push(`        for (uint32_t k = 0U; k < ${uLength}U; ++k) sum += ${prefix}_B[r][k] * ${prefix}_u[k];`);
+      lines.push(`        for (uint32_t k = 0U; k < ${xLength}U; ++k) { sum += ${prefix}_A[r][k] * ${prefix}_xPrev[k]; }`);
+      lines.push(`        for (uint32_t k = 0U; k < ${uLength}U; ++k) { sum += ${prefix}_B[r][k] * ${prefix}_u[k]; }`);
       lines.push(`        ${prefix}_xPred[r] = sum;`);
       lines.push(`    }`);
 
@@ -2679,8 +2693,8 @@ const renderStateOutputs = (
       lines.push(`    double ${prefix}_inn[${yMeasLength}];`);
       lines.push(`    for (uint32_t r = 0U; r < ${yMeasLength}U; ++r) {`);
       lines.push(`        double sum = 0.0;`);
-      lines.push(`        for (uint32_t k = 0U; k < ${xLength}U; ++k) sum += ${prefix}_C[r][k] * ${prefix}_xPred[k];`);
-      lines.push(`        for (uint32_t k = 0U; k < ${uLength}U; ++k) sum += ${prefix}_D[r][k] * ${prefix}_u[k];`);
+      lines.push(`        for (uint32_t k = 0U; k < ${xLength}U; ++k) { sum += ${prefix}_C[r][k] * ${prefix}_xPred[k]; }`);
+      lines.push(`        for (uint32_t k = 0U; k < ${uLength}U; ++k) { sum += ${prefix}_D[r][k] * ${prefix}_u[k]; }`);
       lines.push(`        ${prefix}_yHat[r] = sum;`);
       lines.push(`        ${prefix}_inn[r] = ${prefix}_yMeas[r] - sum;`);
       lines.push(`    }`);
@@ -2707,8 +2721,8 @@ const renderStateOutputs = (
       lines.push(`    if (${prefix}_invFailed) {`);
       lines.push(`        for (uint32_t r = 0U; r < ${xLength}U; ++r) {`);
       lines.push(`            ${prefix}_xHat[r] = ${prefix}_xPrev[r];`);
-      lines.push(`            for (uint32_t c = 0U; c < ${yMeasLength}U; ++c) ${prefix}_K[r][c] = 0.0;`);
-      lines.push(`            for (uint32_t c = 0U; c < ${xLength}U; ++c) ${prefix}_pHat[r][c] = ${prefix}_pPrev[r][c];`);
+      lines.push(`            for (uint32_t c = 0U; c < ${yMeasLength}U; ++c) { ${prefix}_K[r][c] = 0.0; }`);
+      lines.push(`            for (uint32_t c = 0U; c < ${xLength}U; ++c) { ${prefix}_pHat[r][c] = ${prefix}_pPrev[r][c]; }`);
       lines.push(`        }`);
       lines.push(`    } else {`);
       lines.push(`        for (uint32_t r = 0U; r < ${xLength}U; ++r) {`);
@@ -2724,18 +2738,18 @@ const renderStateOutputs = (
       lines.push(`        }`);
       lines.push(`        for (uint32_t r = 0U; r < ${xLength}U; ++r) {`);
       lines.push(`            double sum = ${prefix}_xPred[r];`);
-      lines.push(`            for (uint32_t k = 0U; k < ${yMeasLength}U; ++k) sum += ${prefix}_K[r][k] * ${prefix}_inn[k];`);
+      lines.push(`            for (uint32_t k = 0U; k < ${yMeasLength}U; ++k) { sum += ${prefix}_K[r][k] * ${prefix}_inn[k]; }`);
       lines.push(`            ${prefix}_xHat[r] = sum;`);
       lines.push(`        }`);
       lines.push(`        for (uint32_t r = 0U; r < ${xLength}U; ++r) {`);
       lines.push(`            for (uint32_t c = 0U; c < ${xLength}U; ++c) {`);
       lines.push(`                double sum = 0.0;`);
       lines.push(`                for (uint32_t k = 0U; k < ${xLength}U; ++k) {`);
-      lines.push(`                    double ikc_rk = (r == k ? 1.0 : 0.0);`);
-      lines.push(`                    for (uint32_t m = 0U; m < ${yMeasLength}U; ++m) ikc_rk -= ${prefix}_K[r][m] * ${prefix}_C[m][k];`);
+      lines.push(`                    double ikc_rk = ((r == k) ? 1.0 : 0.0);`);
+      lines.push(`                    for (uint32_t m = 0U; m < ${yMeasLength}U; ++m) { ikc_rk -= ${prefix}_K[r][m] * ${prefix}_C[m][k]; }`);
       lines.push(`                    for (uint32_t n_idx = 0U; n_idx < ${xLength}U; ++n_idx) {`);
-      lines.push(`                        double ikc_cn = (c == n_idx ? 1.0 : 0.0);`);
-      lines.push(`                        for (uint32_t m = 0U; m < ${yMeasLength}U; ++m) ikc_cn -= ${prefix}_K[c][m] * ${prefix}_C[m][n_idx];`);
+      lines.push(`                        double ikc_cn = ((c == n_idx) ? 1.0 : 0.0);`);
+      lines.push(`                        for (uint32_t m = 0U; m < ${yMeasLength}U; ++m) { ikc_cn -= ${prefix}_K[c][m] * ${prefix}_C[m][n_idx]; }`);
       lines.push(`                        sum += ikc_rk * ${prefix}_pPred[k][n_idx] * ikc_cn;`);
       lines.push(`                    }`);
       lines.push(`                }`);
@@ -2916,8 +2930,8 @@ const renderStateOutputs = (
       lines.push(`    if (${prefix}_invFailed) {`);
       lines.push(`        for (uint32_t r = 0U; r < ${xLength}U; ++r) {`);
       lines.push(`            ${prefix}_xHat[r] = ${prefix}_xPrev[r];`);
-      lines.push(`            for (uint32_t c = 0U; c < ${yMeasLength}U; ++c) ${prefix}_K[r][c] = 0.0;`);
-      lines.push(`            for (uint32_t c = 0U; c < ${xLength}U; ++c) ${prefix}_pHat[r][c] = ${prefix}_pPrev[r][c];`);
+      lines.push(`            for (uint32_t c = 0U; c < ${yMeasLength}U; ++c) { ${prefix}_K[r][c] = 0.0; }`);
+      lines.push(`            for (uint32_t c = 0U; c < ${xLength}U; ++c) { ${prefix}_pHat[r][c] = ${prefix}_pPrev[r][c]; }`);
       lines.push(`        }`);
       lines.push(`    } else {`);
       lines.push(`        for (uint32_t r = 0U; r < ${xLength}U; ++r) {`);
@@ -2933,18 +2947,18 @@ const renderStateOutputs = (
       lines.push(`        }`);
       lines.push(`        for (uint32_t r = 0U; r < ${xLength}U; ++r) {`);
       lines.push(`            double sum = ${prefix}_xPred[r];`);
-      lines.push(`            for (uint32_t k = 0U; k < ${yMeasLength}U; ++k) sum += ${prefix}_K[r][k] * ${prefix}_inn[k];`);
+      lines.push(`            for (uint32_t k = 0U; k < ${yMeasLength}U; ++k) { sum += ${prefix}_K[r][k] * ${prefix}_inn[k]; }`);
       lines.push(`            ${prefix}_xHat[r] = sum;`);
       lines.push(`        }`);
       lines.push(`        for (uint32_t r = 0U; r < ${xLength}U; ++r) {`);
       lines.push(`            for (uint32_t c = 0U; c < ${xLength}U; ++c) {`);
       lines.push(`                double sum = 0.0;`);
       lines.push(`                for (uint32_t k = 0U; k < ${xLength}U; ++k) {`);
-      lines.push(`                    double ikh_rk = (r == k ? 1.0 : 0.0);`);
-      lines.push(`                    for (uint32_t m = 0U; m < ${yMeasLength}U; ++m) ikh_rk -= ${prefix}_K[r][m] * ${prefix}_H[m][k];`);
+      lines.push(`                    double ikh_rk = ((r == k) ? 1.0 : 0.0);`);
+      lines.push(`                    for (uint32_t m = 0U; m < ${yMeasLength}U; ++m) { ikh_rk -= ${prefix}_K[r][m] * ${prefix}_H[m][k]; }`);
       lines.push(`                    for (uint32_t n_idx = 0U; n_idx < ${xLength}U; ++n_idx) {`);
-      lines.push(`                        double ikh_cn = (c == n_idx ? 1.0 : 0.0);`);
-      lines.push(`                        for (uint32_t m = 0U; m < ${yMeasLength}U; ++m) ikh_cn -= ${prefix}_K[c][m] * ${prefix}_H[m][n_idx];`);
+      lines.push(`                        double ikh_cn = ((c == n_idx) ? 1.0 : 0.0);`);
+      lines.push(`                        for (uint32_t m = 0U; m < ${yMeasLength}U; ++m) { ikh_cn -= ${prefix}_K[c][m] * ${prefix}_H[m][n_idx]; }`);
       lines.push(`                        sum += ikh_rk * ${prefix}_pPred[k][n_idx] * ikh_cn;`);
       lines.push(`                    }`);
       lines.push(`                }`);
@@ -3218,7 +3232,7 @@ const renderDirectEvaluation = (
     throw new Error(`X-Bridges operation '${operation.id}' lacks a schedule counter`);
   }
   return [
-    `    if (instance->${member}.${counter} == UINT32_C(0)) {`,
+    `    if (instance->${member}.${counter} == 0U) {`,
     ...guarded.map((line) => `    ${line}`),
     '    }',
     ...renderOperationFaultSignalSyncForOperation(
@@ -3352,7 +3366,7 @@ const renderDiscreteStateUpdates = (
     }
     const coefficientByRow = (name: string, column: number): string =>
       Array.from({ length: dimension }, (_, row) =>
-        `(xb_row == ${row}U ? ${cNumber(matrixParameterValue(effectiveOp, name, row, column, 0))}`)
+        `((xb_row == ${row}U) ? ${cNumber(matrixParameterValue(effectiveOp, name, row, column, 0))}`)
         .join(' : ') + ' : 0.0' + ')'.repeat(dimension);
     // Matrix coefficients are emitted directly from validated, finite parameters;
     // loop bounds remain literal dimensions from the semantic IR.
@@ -3374,7 +3388,7 @@ const renderDiscreteStateUpdates = (
       '        }', '    }');
     const transactional = renderTransactionalStateUpdates(operation, updateLines, layout, member);
     if (operation.schedule.hold === 'none' || operation.schedule.periodSubsteps <= 1) return withFaultSync(transactional);
-    return withFaultSync([`    if (instance->${member}.${counter} == UINT32_C(0)) {`, ...transactional.map((line) => `    ${line}`), '    }']);
+    return withFaultSync([`    if (instance->${member}.${counter} == 0U) {`, ...transactional.map((line) => `    ${line}`), '    }']);
   }
   if (operation.type === 'PID_BASIC') {
     const iSlot = stateSlotForRole(operation, 'i_state');
@@ -3392,7 +3406,7 @@ const renderDiscreteStateUpdates = (
     const block = ['    {', ...renderPIDComputation(state, operation, layout, member),
       ...renderTransactionalStateUpdates(operation, updates, layout, member).map((line) => `    ${line}`), '    }'];
     if (operation.schedule.hold === 'none' || operation.schedule.periodSubsteps <= 1) return withFaultSync(block);
-    return withFaultSync([`    if (instance->${member}.${counter} == UINT32_C(0)) {`, ...block.map((line) => `    ${line}`), '    }']);
+    return withFaultSync([`    if (instance->${member}.${counter} == 0U) {`, ...block.map((line) => `    ${line}`), '    }']);
   }
   if (operation.type === 'WHITE_NOISE' || operation.type === 'BAND_LIMITED_NOISE') {
     const rngSlot = stateSlotForRole(operation, 'rng_state');
@@ -3422,11 +3436,11 @@ const renderDiscreteStateUpdates = (
       `  ${prefix}_white = ${mean} + sqrt(fmax(0.0, ${variance})) * ${spare};`,
       `} else {`,
       `  uint32_t s = (uint32_t)(${rng});`,
-      `  if (s == 0) s = 0x6d2b79f5;`,
+      `  if (s == 0U) { s = 0x6d2b79f5U; }`,
       `  s ^= s << 13; s ^= s >> 17; s ^= s << 5;`,
-      `  double u1 = (s + 0.5) / 4294967296.0;`,
+      `  double u1 = (((double)s) + 0.5) / 4294967296.0;`,
       `  s ^= s << 13; s ^= s >> 17; s ^= s << 5;`,
-      `  double u2 = (s + 0.5) / 4294967296.0;`,
+      `  double u2 = (((double)s) + 0.5) / 4294967296.0;`,
       `  ${prefix}_nextRng = (double)s;`,
       `  double normal = sqrt(-2.0 * log(u1)) * sin(2.0 * 3.14159265358979323846 * u2);`,
       `  ${prefix}_nextSpare = sqrt(-2.0 * log(u1)) * cos(2.0 * 3.14159265358979323846 * u2);`,
@@ -3447,14 +3461,14 @@ const renderDiscreteStateUpdates = (
       const fc = cNumber(scalarParameter(operation, ['fc'], 1));
       const dt = cNumber(scalarParameter(operation, ['sampleTime', 'dt'], state.xBridges!.solver.stepSeconds));
       lines.push(`double ${prefix}_fcCoeff = (${dt}) / ((1.0 / (2.0 * 3.14159265358979323846 * (${fc}))) + (${dt}));`);
-      lines.push(`double ${prefix}_nextFilter = ${prevFilter} + ${prefix}_fcCoeff * (${prefix}_white - ${prevFilter});`);
+      lines.push(`double ${prefix}_nextFilter = ${prevFilter} + (${prefix}_fcCoeff * (${prefix}_white - ${prevFilter}));`);
       noiseUpdates.push(...renderStateSlotAssignment(state, filterSlot, `${prefix}_nextFilter`, layout, member, `${opCId}_filter_state_update`, layout.errorFields.get(operation.id), operation));
     }
     
     const block = ['    {', ...lines.map((line) => `      ${line}`), ...renderTransactionalStateUpdates(operation, noiseUpdates, layout, member).map((line) => `    ${line}`), '    }'];
     const effectiveSubsteps = operation.schedule.periodSubsteps;
     if (operation.schedule.hold === 'none' && effectiveSubsteps <= 1) return withFaultSync(block);
-    return withFaultSync([`    if (instance->${member}.${counter} == UINT32_C(0)) {`, ...block.map((line: string) => `    ${line}`), '    }']);
+    return withFaultSync([`    if (instance->${member}.${counter} == 0U) {`, ...block.map((line: string) => `    ${line}`), '    }']);
   }
   if (operation.type === 'KALMAN_FILTER') {
     return [];
@@ -3490,6 +3504,8 @@ const renderDiscreteStateUpdates = (
         `            ${prefix}_next_q = 0.0;`,
         `        } else if (${prefix}_rising) {`,
         `            ${prefix}_next_q = (${prefix}_d != 0.0) ? 1.0 : 0.0;`,
+        `        } else {`,
+        `            /* no active clock edge: hold */`,
         `        }`,
         `        const double ${prefix}_next_last_clk = (${prefix}_clk != 0.0) ? 1.0 : 0.0;`,
         `        const double ${prefix}_next_qbar = (${prefix}_next_q != 0.0) ? 0.0 : 1.0;`,
@@ -3507,7 +3523,7 @@ const renderDiscreteStateUpdates = (
       const transactional = renderTransactionalStateUpdates(operation, lines, layout, member);
       const effectiveSubsteps = operation.schedule.periodSubsteps;
       if (operation.schedule.hold === 'none' && effectiveSubsteps <= 1) return withFaultSync(transactional);
-      return withFaultSync([`    if (instance->${member}.${counter} == UINT32_C(0)) {`, ...transactional.map((l) => `    ${l}`), '    }']);
+      return withFaultSync([`    if (instance->${member}.${counter} == 0U) {`, ...transactional.map((l) => `    ${l}`), '    }']);
     }
   }
 
@@ -3552,7 +3568,11 @@ const renderDiscreteStateUpdates = (
         `                ${prefix}_next_q = 1.0;`,
         `            } else if (${prefix}_k_high) {`,
         `                ${prefix}_next_q = 0.0;`,
+        `            } else {`,
+        `                /* J and K both low: hold */`,
         `            }`,
+        `        } else {`,
+        `            /* no active clock edge: hold */`,
         `        }`,
         `        const double ${prefix}_next_last_clk = (${prefix}_clk != 0.0) ? 1.0 : 0.0;`,
         `        const double ${prefix}_next_qbar = (${prefix}_next_q != 0.0) ? 0.0 : 1.0;`,
@@ -3570,7 +3590,7 @@ const renderDiscreteStateUpdates = (
       const transactional = renderTransactionalStateUpdates(operation, lines, layout, member);
       const effectiveSubsteps = operation.schedule.periodSubsteps;
       if (operation.schedule.hold === 'none' && effectiveSubsteps <= 1) return withFaultSync(transactional);
-      return withFaultSync([`    if (instance->${member}.${counter} == UINT32_C(0)) {`, ...transactional.map((l) => `    ${l}`), '    }']);
+      return withFaultSync([`    if (instance->${member}.${counter} == 0U) {`, ...transactional.map((l) => `    ${l}`), '    }']);
     }
   }
 
@@ -3592,7 +3612,7 @@ const renderDiscreteStateUpdates = (
       const lastClkPrev = stateSlotRealExpression(lastClkSlot, layout, member);
 
       const bitWidth = Number(scalarParameter(operation, ['bitWidth'], 8));
-      const maskHex = bitWidth >= 32 ? 'UINT32_C(0xFFFFFFFF)' : `UINT32_C(0x${((1 << bitWidth) - 1).toString(16).toUpperCase()})`;
+      const maskHex = bitWidth >= 32 ? '0xFFFFFFFFU' : `0x${((1 << bitWidth) - 1).toString(16).toUpperCase()}U`;
 
       const prefix = `${toCIdentifier(operation.id)}_reg`;
 
@@ -3610,7 +3630,10 @@ const renderDiscreteStateUpdates = (
         `            ${prefix}_next_val = 0.0;`,
         `        } else if (${prefix}_rising && (${prefix}_en != 0.0)) {`,
         `            const uint32_t ${prefix}_raw = isfinite(${prefix}_data) ? (uint32_t)(int32_t)${prefix}_data : 0U;`,
-        `            ${prefix}_next_val = (double)(${prefix}_raw & ${maskHex});`,
+        `            const uint32_t ${prefix}_masked = ${prefix}_raw & ${maskHex};`,
+        `            ${prefix}_next_val = (double)${prefix}_masked;`,
+        `        } else {`,
+        `            /* no active clock edge: hold */`,
         `        }`,
         `        const double ${prefix}_next_last_clk = (${prefix}_clk != 0.0) ? 1.0 : 0.0;`,
       ];
@@ -3624,7 +3647,7 @@ const renderDiscreteStateUpdates = (
       const transactional = renderTransactionalStateUpdates(operation, lines, layout, member);
       const effectiveSubsteps = operation.schedule.periodSubsteps;
       if (operation.schedule.hold === 'none' && effectiveSubsteps <= 1) return withFaultSync(transactional);
-      return withFaultSync([`    if (instance->${member}.${counter} == UINT32_C(0)) {`, ...transactional.map((l) => `    ${l}`), '    }']);
+      return withFaultSync([`    if (instance->${member}.${counter} == 0U) {`, ...transactional.map((l) => `    ${l}`), '    }']);
     }
   }
 
@@ -3665,6 +3688,8 @@ const renderDiscreteStateUpdates = (
         `            if (${prefix}_next_count > (${maxValue})) {`,
         `                ${prefix}_next_count = ${initialVal};`,
         `            }`,
+        `        } else {`,
+        `            /* no active clock edge: hold */`,
         '        }',
         `        const double ${prefix}_next_last_clk = (${prefix}_clk != 0.0) ? 1.0 : 0.0;`,
       ];
@@ -3678,7 +3703,7 @@ const renderDiscreteStateUpdates = (
       const transactional = renderTransactionalStateUpdates(operation, lines, layout, member);
       const effectiveSubsteps = operation.schedule.periodSubsteps;
       if (operation.schedule.hold === 'none' && effectiveSubsteps <= 1) return withFaultSync(transactional);
-      return withFaultSync([`    if (instance->${member}.${counter} == UINT32_C(0)) {`, ...transactional.map((l) => `    ${l}`), '    }']);
+      return withFaultSync([`    if (instance->${member}.${counter} == 0U) {`, ...transactional.map((l) => `    ${l}`), '    }']);
     }
   }
 
@@ -3698,13 +3723,13 @@ const renderDiscreteStateUpdates = (
         updateLines.push(`        uint32_t xb_delay_idx = instance->${member}.${indexField};`);
         for (let m = 0; m < elementCount; m++) {
           const inputElemExpr = signalElementRealExpression(state, inputSignalId, layout, member, `${m}U`);
-          updateLines.push(`        instance->${member}.${bufferField}[xb_delay_idx * ${elementCount}U + ${m}U] = (${numericCType(bufferSlot.numericType)})(${inputElemExpr});`);
+          updateLines.push(`        instance->${member}.${bufferField}[(xb_delay_idx * ${elementCount}U) + ${m}U] = (${numericCType(bufferSlot.numericType)})(${inputElemExpr});`);
         }
         updateLines.push(`        instance->${member}.${indexField} = (xb_delay_idx + 1U) % ${delayLength}U;`, '    }');
 
         const transactional = renderTransactionalStateUpdates(operation, updateLines, layout, member);
         if (operation.schedule.hold === 'zero-order' || operation.schedule.periodSubsteps > 1) {
-          return withFaultSync([`    if (instance->${member}.${counter} == UINT32_C(0)) {`, ...transactional.map((line) => `    ${line}`), '    }']);
+          return withFaultSync([`    if (instance->${member}.${counter} == 0U) {`, ...transactional.map((line) => `    ${line}`), '    }']);
         }
         return withFaultSync(transactional);
       }
@@ -3785,7 +3810,7 @@ const renderDiscreteStateUpdates = (
             const indexText = `${index}U`;
             const current = signalElementRealExpression(state, inputId, layout, member, indexText);
             const previous = stateSlotElementRealExpression(slot, layout, member, indexText);
-            const expr = `(${isnanFn}(${current}) || ${isnanFn}(${previous})) ? ${nanVal} : (((${current}) - (${previous}) > (${rising}) * (${dt})) ? (${previous}) + (${rising}) * (${dt}) : (((${current}) - (${previous}) < (${falling}) * (${dt})) ? (${previous}) + (${falling}) * (${dt}) : (${current})))`;
+            const expr = `(((${isnanFn}(${current})) || (${isnanFn}(${previous}))) ? ${nanVal} : ((((${current}) - (${previous})) > ((${rising}) * (${dt}))) ? ((${previous}) + ((${rising}) * (${dt}))) : ((((${current}) - (${previous})) < ((${falling}) * (${dt}))) ? ((${previous}) + ((${falling}) * (${dt}))) : (${current}))))`;
             return renderStateSlotElementAssignment(
               state, slot, indexText, expr, layout,
               member,
@@ -3796,7 +3821,7 @@ const renderDiscreteStateUpdates = (
         }
         const prev_y = stateSlotRealExpression(slot, layout, member);
 
-        const expr = `(${isnanFn}(${input}) || ${isnanFn}(${prev_y})) ? ${nanVal} : (((${input}) - (${prev_y}) > (${rising}) * (${dt})) ? (${prev_y}) + (${rising}) * (${dt}) : (((${input}) - (${prev_y}) < (${falling}) * (${dt})) ? (${prev_y}) + (${falling}) * (${dt}) : (${input})))`;
+        const expr = `(((${isnanFn}(${input})) || (${isnanFn}(${prev_y}))) ? ${nanVal} : ((((${input}) - (${prev_y})) > ((${rising}) * (${dt}))) ? ((${prev_y}) + ((${rising}) * (${dt}))) : ((((${input}) - (${prev_y})) < ((${falling}) * (${dt}))) ? ((${prev_y}) + ((${falling}) * (${dt}))) : (${input}))))`;
 
         return renderStateSlotAssignment(
           state, slot,
@@ -3810,7 +3835,7 @@ const renderDiscreteStateUpdates = (
         const prev_on = stateSlotRealExpression(slot, layout, member);
         return renderStateSlotAssignment(
           state, slot,
-          `(${input} >= ${switchOn} || (${prev_on} != 0.0 && ${input} > ${switchOff})) ? 1.0 : 0.0`,
+          `((((${input}) >= ${switchOn}) || ((${prev_on} != 0.0) && ((${input}) > ${switchOff})))) ? 1.0 : 0.0`,
           layout, member, `${operation.id}_${slotIndex}_update`, layout.errorFields.get(operation.id), operation,
         );
       }
@@ -3858,7 +3883,7 @@ const renderDiscreteStateUpdates = (
     return withFaultSync(transactional);
   }
   return withFaultSync([
-    `    if (instance->${member}.${counter} == UINT32_C(0)) {`,
+    `    if (instance->${member}.${counter} == 0U) {`,
     ...transactional.map((line) => `    ${line}`),
     '    }',
   ]);
@@ -4039,7 +4064,7 @@ const renderScheduleAdvances = (
   const counter = layout.counterFields.get(operation.id);
   const effectiveSubsteps = operation.schedule.periodSubsteps;
   if (counter === undefined || effectiveSubsteps <= 1) {
-    return counter === undefined ? [] : [`    instance->${member}.${counter} = UINT32_C(0);`];
+    return counter === undefined ? [] : [`    instance->${member}.${counter} = 0U;`];
   }
   return [
     `    instance->${member}.${counter} += ${operation.schedule.counterIncrement}U;`,
@@ -4090,7 +4115,7 @@ const renderSolverSubstep = (
         throw new Error(`X-Bridges operation '${operation.id}' lacks a schedule counter`);
       }
       return [
-        `    if (instance->${member}.${counter} == UINT32_C(0)) {`,
+        `    if (instance->${member}.${counter} == 0U) {`,
         ...outputs.map((line) => `    ${line}`),
         '    }',
       ];
@@ -4119,7 +4144,7 @@ const renderSolverSubstep = (
         throw new Error(`X-Bridges operation '${operation.id}' lacks a schedule counter`);
       }
       return [
-        `    if (instance->${member}.${counter} == UINT32_C(0)) {`,
+        `    if (instance->${member}.${counter} == 0U) {`,
         ...effectiveOutputs.map((line) => `    ${line}`),
         '    }',
       ];
@@ -4166,17 +4191,24 @@ const renderStateLifecycle = (
       );
     }
     for (const slot of operation.state?.slots ?? []) {
+      // Each initial value is a self-contained block: its local names are not in the same scope (MISRA 5.2).
       if (slot.shape.kind === 'scalar') {
-        initLines.push(...renderStateSlotAssignment(
-          state, slot, cNumber(slot.initialValues[0]), layout, member,
-          `initial_${operationIndex}_${operation.id}_${slot.id}`,
-        ));
+        initLines.push(
+          '    {',
+          ...renderStateSlotAssignment(
+            state, slot, cNumber(slot.initialValues[0]), layout, member,
+            `initial_${operationIndex}_${operation.id}_${slot.id}`,
+          ).map((line) => `    ${line}`),
+          '    }',
+        );
       } else {
         slot.initialValues.forEach((value, index) => initLines.push(
+          '    {',
           ...renderStateSlotElementAssignment(
             state, slot, `${index}U`, cNumber(value), layout, member,
             `initial_${operationIndex}_${operation.id}_${slot.id}_${index}`,
-          ),
+          ).map((line) => `    ${line}`),
+          '    }',
         ));
       }
     }

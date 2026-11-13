@@ -387,7 +387,7 @@ export const renderCGuard = (
 };
 
 const int64Literal = (value: bigint): string => {
-  if (value === -(1n << 63n)) return 'INT64_MIN';
+  if (value === -(1n << 63n)) return 'SM_I64_MIN';
   const abs = value < 0n ? -value : value;
   return `${value < 0n ? '-' : ''}${abs}${abs >= 2147483648n ? 'LL' : ''}`;
 };
@@ -409,7 +409,7 @@ const typeBounds = (type: VariableType, ctx: RenderContext): { min: string; max:
     return { min: renderDoubleLiteral(Number(range.min)), max: renderDoubleLiteral(Number(range.max)) };
   }
   const render = (value: bigint): string => {
-    if (value === I64_MIN) return 'INT64_MIN';
+    if (value === I64_MIN) return 'SM_I64_MIN';
     if (value === I64_MAX) return 'INT64_MAX';
     const abs = value < 0n ? -value : value;
     return `${value < 0n ? '-' : ''}${abs}${abs >= 2147483648n ? 'LL' : ''}`;
