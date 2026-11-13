@@ -352,11 +352,16 @@ const renderRestoreStateBody = (
         `SM_DH_GET(instance, snapshot_layer, ${stateIndex(ir, childId)})`)
       .join(' || ') || 'false';
     if (layer.decomposition === 'OR') {
+      /* The last choice needs no test: one saved child exists inside this branch (MISRA 15.7). */
       const choices = layer.children.map((childId, childIndex) => lines(
-        `        ${childIndex === 0 ? 'if' : 'else if'} (SM_DH_GET(instance, snapshot_layer, ${stateIndex(ir, childId)})) {`,
+        childIndex === 0
+          ? `        if (SM_DH_GET(instance, snapshot_layer, ${stateIndex(ir, childId)})) {`
+          : (childIndex === layer.children.length - 1
+            ? '        else {'
+            : `        else if (SM_DH_GET(instance, snapshot_layer, ${stateIndex(ir, childId)})) {`),
         `            ${stateFunction(index, 'SM_Restore_State', childId)}(instance, snapshot_layer);`,
         '        }',
-      ).trimEnd()).join(' ');
+      ).trimEnd()).join('\n');
       return lines(
         `    if (${saved}) {`,
         choices,
@@ -478,6 +483,31 @@ const renderEnterFunctions = (
   return `${layerFunctions}\n${stateFunctions}`;
 };
 
+/* The statements that exit the children of a layer without recording history. */
+const renderLayerChildExits = (
+  ir: SemanticModel,
+  index: RenderIndex,
+  layer: SemanticLayer,
+  indent: string,
+): string => (layer.decomposition === 'OR' && layer.activeSlot !== null
+  ? `${indent}${layerFunction(index, 'SM_Exit_Active', layer.id)}(instance);`
+  : [...layer.children].reverse().map((childId) =>
+    `${indent}${stateFunction(index, 'SM_Exit_State', childId)}(instance);`)
+    .join('\n'));
+
+/* Exit of a state followed by the history record of its containing layer, as a transition does. */
+const renderRecordingStateExit = (
+  ir: SemanticModel,
+  index: RenderIndex,
+  stateId: string,
+  indent: string,
+): string => lines(
+  historyStorageUsage(ir).shallow
+    ? `${indent}SM_Record_Layer_History(instance, ${layerMacro(ir.layers[ir.states[stateId].layerId])});`
+    : null,
+  `${indent}${stateFunction(index, 'SM_Exit_State', stateId)}(instance);`,
+).trimEnd();
+
 const renderExitFunctions = (
   ir: SemanticModel,
   index: RenderIndex,
@@ -493,41 +523,51 @@ const renderExitFunctions = (
     '            break;',
   ).trimEnd()).join('\n');
 
-  const exitLayerCases = orderedLayers(ir).map((layer) => {
-    const exitChildren = layer.decomposition === 'OR' && layer.activeSlot !== null
-      ? lines(
-        `            if (instance->active_states[${layer.activeSlot}U] != SM_NODE_INVALID) {`,
-        `                SM_Exit_State(instance, instance->active_states[${layer.activeSlot}U], false);`,
-        '            }',
-      ).trimEnd()
-      : [...layer.children].reverse().map((childId) =>
-        `            SM_Exit_State(instance, ${stateNode(ir, childId)}, false);`)
-        .join('\n');
-    return lines(
-      `        case ${layerMacro(layer)}:`,
-      storage.shallow ? `            SM_Record_Layer_History(instance, ${layerMacro(layer)});` : null,
-      exitChildren,
+  /* One function per layer and per state: the state hierarchy is a tree, so the call graph is acyclic. */
+  const activeDispatchers = orderedLayers(ir)
+    .filter((layer) => layer.decomposition === 'OR' && layer.activeSlot !== null)
+    .map((layer) => lines(
+      `static void ${layerFunction(index, 'SM_Exit_Active', layer.id)}(ADIA_Instance_t *instance)`,
+      '{',
+      `    switch (instance->active_states[${layer.activeSlot}U]) {`,
+      ...layer.children.map((childId) => lines(
+        `        case ${stateNode(ir, childId)}:`,
+        `            ${stateFunction(index, 'SM_Exit_State', childId)}(instance);`,
+        '            break;',
+      ).trimEnd()),
+      '        default:',
       '            break;',
-    ).trimEnd();
-  }).join('\n');
+      '    }',
+      '}',
+    ).trimEnd()).join('\n\n');
 
-  const exitStateCases = orderedStates(ir).map((state) => lines(
-    `        case ${stateNode(ir, state.id)}:`,
-    `            if (!instance->state_active[${stateIndex(ir, state.id)}]) { break; }`,
+  const layerExits = orderedLayers(ir).map((layer) => lines(
+    `static void ${layerFunction(index, 'SM_Exit_Layer', layer.id)}(ADIA_Instance_t *instance)`,
+    '{',
+    storage.shallow ? `    SM_Record_Layer_History(instance, ${layerMacro(layer)});` : null,
+    layer.children.length === 0 && !storage.shallow ? '    (void)instance;' : renderLayerChildExits(ir, index, layer, '    '),
+    '}',
+  ).trimEnd()).join('\n\n');
+
+  const stateExits = orderedStates(ir).map((state) => lines(
+    `static void ${stateFunction(index, 'SM_Exit_State', state.id)}(ADIA_Instance_t *instance)`,
+    '{',
+    `    if (instance->state_active[${stateIndex(ir, state.id)}]) {`,
     ...[...state.childLayerIds].reverse().map((layerId) =>
-      `            SM_Exit_Layer(instance, ${layerMacro(ir.layers[layerId])});`),
-    `            ${stateNode(ir, state.id)}_Exit(instance);`,
-    `            instance->state_active[${stateIndex(ir, state.id)}] = false;`,
-    `            instance->state_timers[${stateIndex(ir, state.id)}] = 0U;`,
+      `        ${layerFunction(index, 'SM_Exit_Layer', layerId)}(instance);`),
+    `        ${stateNode(ir, state.id)}_Exit(instance);`,
+    `        instance->state_active[${stateIndex(ir, state.id)}] = false;`,
+    `        instance->state_timers[${stateIndex(ir, state.id)}] = 0U;`,
     state.activeSlot >= 0
       ? lines(
-        `            if (instance->active_states[${state.activeSlot}U] == ${stateNode(ir, state.id)}) {`,
-        `                instance->active_states[${state.activeSlot}U] = SM_NODE_INVALID;`,
-        '            }',
+        `        if (instance->active_states[${state.activeSlot}U] == ${stateNode(ir, state.id)}) {`,
+        `            instance->active_states[${state.activeSlot}U] = SM_NODE_INVALID;`,
+        '        }',
       ).trimEnd()
       : null,
-    '            break;',
-  ).trimEnd()).join('\n');
+    '    }',
+    '}',
+  ).trimEnd()).join('\n\n');
 
   return lines(
     ...(storage.shallow ? [
@@ -539,35 +579,17 @@ const renderExitFunctions = (
       storage.deep ? '    }' : null,
       '    switch (layer) {',
       recordCases,
-      '        default: break;',
+      '        default:',
+      '            break;',
       '    }',
       '}',
       '',
     ] : []),
-    'static void SM_Exit_Layer(ADIA_Instance_t *instance, uint32_t layer)',
-    '{',
-    '    switch (layer) {',
-    exitLayerCases,
-    '        default: break;',
-    '    }',
-    '}',
+    activeDispatchers,
+    activeDispatchers ? '' : null,
+    layerExits,
     '',
-    'static void SM_Exit_State(ADIA_Instance_t *instance, SM_Node_t state, bool record_containing_layer)',
-    '{',
-    ...(storage.shallow ? [
-      '    if (record_containing_layer) {',
-      '        switch (state) {',
-      ...orderedStates(ir).map((state) =>
-        `            case ${stateNode(ir, state.id)}: SM_Record_Layer_History(instance, ${layerMacro(ir.layers[state.layerId])}); break;`),
-      '            default: break;',
-      '        }',
-      '    }',
-    ] : ['    (void)record_containing_layer;']),
-    '    switch (state) {',
-    exitStateCases,
-    '        default: break;',
-    '    }',
-    '}',
+    stateExits,
   );
 };
 
@@ -628,9 +650,7 @@ const renderCommitRoute = (
   if (transition.kind !== 'internal-action') {
     const exitedActiveSlots = new Set<number>();
     for (const stateId of topmostExitStateIds(ir, routeExitStateIds(ir, transition, route))) {
-      statements.push(
-        `${indent}SM_Exit_State(instance, ${stateNode(ir, stateId)}, true);`,
-      );
+      statements.push(renderRecordingStateExit(ir, index, stateId, indent));
       const exitedState = ir.states[stateId];
       // An inner route lists the destination child even when it is inactive, so the
       // slot's active state may be a sibling that still needs the runtime check below.
@@ -652,7 +672,10 @@ const renderCommitRoute = (
       statements.push(lines(
         `${indent}if ((instance->active_states[${state.activeSlot}U] != SM_NODE_INVALID) &&`,
         `${indent}    (instance->active_states[${state.activeSlot}U] != ${stateNode(ir, stateId)})) {`,
-        `${indent}    SM_Exit_State(instance, instance->active_states[${state.activeSlot}U], true);`,
+        historyStorageUsage(ir).shallow
+          ? `${indent}    SM_Record_Layer_History(instance, ${layerMacro(ir.layers[state.layerId])});`
+          : null,
+        `${indent}    ${layerFunction(index, 'SM_Exit_Active', state.layerId)}(instance);`,
         `${indent}}`,
       ).trimEnd());
     }
@@ -863,23 +886,12 @@ const renderExecuteFunctions = (
 const renderNoHistoryExitWrappers = (
   ir: SemanticModel,
   index: RenderIndex,
-): string => orderedLayers(ir).map((layer) => {
-  const exits = layer.decomposition === 'OR' && layer.activeSlot !== null
-    ? lines(
-      `    if (instance->active_states[${layer.activeSlot}U] != SM_NODE_INVALID) {`,
-      `        SM_Exit_State(instance, instance->active_states[${layer.activeSlot}U], false);`,
-      '    }',
-    ).trimEnd()
-    : [...layer.children].reverse().map((childId) =>
-      `    SM_Exit_State(instance, ${stateNode(ir, childId)}, false);`)
-      .join('\n');
-  return lines(
-    `static void ${layerFunction(index, 'SM_Exit_Layer_No_History', layer.id)}(ADIA_Instance_t *instance)`,
-    '{',
-    exits || '    (void)instance;',
-    '}',
-  );
-}).join('\n');
+): string => orderedLayers(ir).map((layer) => lines(
+  `static void ${layerFunction(index, 'SM_Exit_Layer_No_History', layer.id)}(ADIA_Instance_t *instance)`,
+  '{',
+  layer.children.length === 0 ? '    (void)instance;' : renderLayerChildExits(ir, index, layer, '    '),
+  '}',
+).trimEnd()).join('\n\n');
 
 const cCommentText = (value: string): string => value
   .replaceAll('*/', '* /')
@@ -998,6 +1010,46 @@ const renderEventConfig = (ir: SemanticModel): string[] => {
   ];
 };
 
+/* Width in bits of the smallest unsigned type holding every table index plus the "none" sentinel. */
+const romIndexWidth = (ir: SemanticModel): 8 | 16 | 32 => {
+  const largest = Math.max(
+    Object.keys(ir.states).length,
+    Object.keys(ir.layers).length,
+    ir.activeSlotCount,
+  );
+  if (largest < 0xFF) return 8;
+  return largest < 0xFFFF ? 16 : 32;
+};
+
+const romIndexType = (ir: SemanticModel): string => `uint${romIndexWidth(ir)}_t`;
+
+/*
+ * Constant tables are placed in flash on AVR (PROGMEM, read with pgm_read_*) and are plain const
+ * data on every other target.
+ */
+const renderRomSection = (ir: SemanticModel): string[] => {
+  const width = romIndexWidth(ir);
+  const none = width === 8 ? '0xFFU' : width === 16 ? '0xFFFFU' : '0xFFFFFFFFU';
+  return [
+    '/* Constant tables: flash on AVR, ordinary const data elsewhere. */',
+    '#if defined(__AVR__)',
+    '#include <avr/pgmspace.h>',
+    '#define SM_ROM const PROGMEM',
+    '#define SM_ROM_READ_U8(item) pgm_read_byte(&(item))',
+    '#define SM_ROM_READ_U16(item) pgm_read_word(&(item))',
+    '#define SM_ROM_READ_U32(item) pgm_read_dword(&(item))',
+    '#else',
+    '#define SM_ROM const',
+    '#define SM_ROM_READ_U8(item) (item)',
+    '#define SM_ROM_READ_U16(item) (item)',
+    '#define SM_ROM_READ_U32(item) (item)',
+    '#endif',
+    `typedef uint${width}_t SM_Rom_Index_t;`,
+    `#define SM_ROM_INDEX_NONE ${none}`,
+    `#define SM_ROM_READ_INDEX(item) SM_ROM_READ_U${width}(item)`,
+  ];
+};
+
 export const renderConfigHeader = (ir: SemanticModel): string => {
   const index = buildIndex(ir);
   const states = orderedStates(ir);
@@ -1041,6 +1093,8 @@ export const renderConfigHeader = (ir: SemanticModel): string => {
     orderedStates(ir).some((state) => state.xBridges !== null)
       ? '#include "sm_xbridges.h"'
       : false,
+    '',
+    ...renderRomSection(ir),
     '',
     `#define SM_TICK_MS ${ir.tickMs}U`,
     `#define SM_TICK_TOLERANCE_MS ${ir.verification.tickToleranceMs > 0 ? ir.verification.tickToleranceMs : Math.max(1, Math.floor(ir.tickMs / 10))}U`,
@@ -1187,7 +1241,12 @@ export const renderCoreHeader = (cStandard?: string, ir?: SemanticModel): string
   'void SM_SetTraceSink(ADIA_Instance_t *instance, SM_TraceSink_t sink);',
   'void SM_TraceAction(ADIA_Instance_t *instance, const char *action);',
   '#else',
-  '#define SM_TraceAction(instance, action) ((void)0)',
+  '/* No trace sink compiled in: an empty inline function, not a macro of the same name (MISRA 5.5). */',
+  'SM_ARITH_INLINE void SM_TraceAction(ADIA_Instance_t *instance, const char *action)',
+  '{',
+  '    (void)instance;',
+  '    (void)action;',
+  '}',
   '#endif',
   '',
   '#ifdef ADIA_TESTING',
@@ -1269,15 +1328,18 @@ export const renderMappingHeader = (): string => lines(
   '',
   '#include "sm_config.h"',
   '',
-  'extern const uint32_t SM_State_Parent_Layer_Map[SM_NUM_STATES + 1U];',
-  'extern const int32_t SM_State_Active_Slot_Map[SM_NUM_STATES + 1U];',
-  'extern const SM_Node_t SM_Layer_Parent_State_Map[SM_NUM_LAYERS];',
-  'extern const int32_t SM_Layer_Active_Slot_Map[SM_NUM_LAYERS];',
+  'extern SM_ROM SM_Rom_Index_t SM_State_Parent_Layer_Map[SM_NUM_STATES + 1U];',
+  'extern SM_ROM SM_Rom_Index_t SM_State_Active_Slot_Map[SM_NUM_STATES + 1U];',
+  'extern SM_ROM SM_Rom_Index_t SM_Layer_Parent_State_Map[SM_NUM_LAYERS];',
+  'extern SM_ROM SM_Rom_Index_t SM_Layer_Active_Slot_Map[SM_NUM_LAYERS];',
   '',
   'SM_Error_t SM_Validate_Mapping_Configuration(void);',
   '',
   '#endif /* SM_MAPPING_H */',
 );
+
+const slotInitializer = (slot: number | null): string =>
+  slot === null || slot < 0 ? 'SM_ROM_INDEX_NONE' : `${slot}U`;
 
 export const renderMappingSource = (ir: SemanticModel): string => {
   const states = orderedStates(ir);
@@ -1299,28 +1361,28 @@ export const renderMappingSource = (ir: SemanticModel): string => {
     ' * Parallel child states are tracked using state_active[].',
     ' * Layer IDs, active-slot IDs, and state IDs are distinct.',
     ' */',
-    'const uint32_t SM_State_Parent_Layer_Map[SM_NUM_STATES + 1U] = {',
+    'SM_ROM SM_Rom_Index_t SM_State_Parent_Layer_Map[SM_NUM_STATES + 1U] = {',
     ...(ir.verification.cStandard === 'c90'
       ? ['    0U,', ...states.map((state) => `    ${layerMacro(ir.layers[state.layerId])},`)]
       : ['    [0] = 0U,', ...states.map((state) => `    [${stateIndex(ir, state.id)}] = ${layerMacro(ir.layers[state.layerId])},`)]),
     '};',
     '',
-    'const int32_t SM_State_Active_Slot_Map[SM_NUM_STATES + 1U] = {',
+    'SM_ROM SM_Rom_Index_t SM_State_Active_Slot_Map[SM_NUM_STATES + 1U] = {',
     ...(ir.verification.cStandard === 'c90'
-      ? ['    -1,', ...states.map((state) => `    ${state.activeSlot},`)]
-      : ['    [0] = -1,', ...states.map((state) => `    [${stateIndex(ir, state.id)}] = ${state.activeSlot},`)]),
+      ? ['    SM_ROM_INDEX_NONE,', ...states.map((state) => `    ${slotInitializer(state.activeSlot)},`)]
+      : ['    [0] = SM_ROM_INDEX_NONE,', ...states.map((state) => `    [${stateIndex(ir, state.id)}] = ${slotInitializer(state.activeSlot)},`)]),
     '};',
     '',
-    'const SM_Node_t SM_Layer_Parent_State_Map[SM_NUM_LAYERS] = {',
+    'SM_ROM SM_Rom_Index_t SM_Layer_Parent_State_Map[SM_NUM_LAYERS] = {',
     ...(ir.verification.cStandard === 'c90'
-      ? layers.map((layer) => `    ${layer.parentStateId === null ? 'SM_NODE_INVALID' : stateNode(ir, layer.parentStateId)},`)
-      : layers.map((layer) => `    [${layerMacro(layer)}] = ${layer.parentStateId === null ? 'SM_NODE_INVALID' : stateNode(ir, layer.parentStateId)},`)),
+      ? layers.map((layer) => `    ${layer.parentStateId === null ? '0U' : stateIndex(ir, layer.parentStateId)},`)
+      : layers.map((layer) => `    [${layerMacro(layer)}] = ${layer.parentStateId === null ? '0U' : stateIndex(ir, layer.parentStateId)},`)),
     '};',
     '',
-    'const int32_t SM_Layer_Active_Slot_Map[SM_NUM_LAYERS] = {',
+    'SM_ROM SM_Rom_Index_t SM_Layer_Active_Slot_Map[SM_NUM_LAYERS] = {',
     ...(ir.verification.cStandard === 'c90'
-      ? layers.map((layer) => `    ${layer.activeSlot ?? -1},`)
-      : layers.map((layer) => `    [${layerMacro(layer)}] = ${layer.activeSlot ?? -1},`)),
+      ? layers.map((layer) => `    ${slotInitializer(layer.activeSlot)},`)
+      : layers.map((layer) => `    [${layerMacro(layer)}] = ${slotInitializer(layer.activeSlot)},`)),
     '};',
     '',
     'SM_Error_t SM_Validate_Mapping_Configuration(void)',
@@ -1328,28 +1390,30 @@ export const renderMappingSource = (ir: SemanticModel): string => {
     '    uint32_t layer_index;',
     '    uint32_t state_index;',
     '    uint32_t parent_layer;',
-    '    int32_t slot;',
-    '    SM_Node_t parent_state;',
+    '    uint32_t parent_state;',
+    '    uint32_t layer_slot;',
+    '    uint32_t slot;',
     '    for (layer_index = 0U; layer_index < SM_NUM_LAYERS; ++layer_index) {',
-    '        slot = SM_Layer_Active_Slot_Map[layer_index];',
-    '        if ((slot < -1) || (slot >= (int32_t)SM_NUM_ACTIVE_SLOTS)) {',
+    '        slot = (uint32_t)SM_ROM_READ_INDEX(SM_Layer_Active_Slot_Map[layer_index]);',
+    '        if ((slot != SM_ROM_INDEX_NONE) && (slot >= SM_NUM_ACTIVE_SLOTS)) {',
     '            return SM_ERR_CONFIGURATION;',
     '        }',
-    '        parent_state = SM_Layer_Parent_State_Map[layer_index];',
-    '        if ((uint32_t)parent_state > SM_NUM_STATES) {',
+    '        parent_state = (uint32_t)SM_ROM_READ_INDEX(SM_Layer_Parent_State_Map[layer_index]);',
+    '        if (parent_state > SM_NUM_STATES) {',
     '            return SM_ERR_CONFIGURATION;',
     '        }',
     '    }',
     '    for (state_index = 1U; state_index <= SM_NUM_STATES; ++state_index) {',
-    '        parent_layer = SM_State_Parent_Layer_Map[state_index];',
+    '        parent_layer = (uint32_t)SM_ROM_READ_INDEX(SM_State_Parent_Layer_Map[state_index]);',
     '        if (parent_layer >= SM_NUM_LAYERS) {',
     '            return SM_ERR_CONFIGURATION;',
     '        }',
-    '        slot = SM_State_Active_Slot_Map[state_index];',
-    '        if ((slot < -1) || (slot >= (int32_t)SM_NUM_ACTIVE_SLOTS)) {',
+    '        slot = (uint32_t)SM_ROM_READ_INDEX(SM_State_Active_Slot_Map[state_index]);',
+    '        if ((slot != SM_ROM_INDEX_NONE) && (slot >= SM_NUM_ACTIVE_SLOTS)) {',
     '            return SM_ERR_CONFIGURATION;',
     '        }',
-    '        if (slot != SM_Layer_Active_Slot_Map[parent_layer]) {',
+    '        layer_slot = (uint32_t)SM_ROM_READ_INDEX(SM_Layer_Active_Slot_Map[parent_layer]);',
+    '        if (slot != layer_slot) {',
     '            return SM_ERR_CONFIGURATION;',
     '        }',
     '    }',
@@ -1376,22 +1440,18 @@ export const renderSafetySource = (ir: SemanticModel): string => {
   const mappedOutputs = ir.ioMappings.filter(
     (mapping) => mapping.direction === 'write',
   );
-  const directChildCases = layers.map((layer) => lines(
-    `        case ${layerMacro(layer)}:`,
-    '            switch (state) {',
-    ...layer.children.map((stateId) =>
-      `                case ${stateNode(ir, stateId)}: return true;`),
-    '                default: return false;',
-    '            }',
-  ).trimEnd());
-  const descendantCases = layers.map((layer) => lines(
-    `        case ${layerMacro(layer)}:`,
-    '            switch (state) {',
-    ...descendantsOfLayer(ir, layer.id).map((state) =>
-      `                case ${stateNode(ir, state.id)}: return true;`),
-    '                default: return false;',
-    '            }',
-  ).trimEnd());
+  const membershipCases = (membersOf: (layer: SemanticLayer) => string[]): string[] => layers
+    .map((layer) => ({ layer, members: membersOf(layer) }))
+    .filter((entry) => entry.members.length > 0)
+    .map((entry) => lines(
+      `        case ${layerMacro(entry.layer)}:`,
+      `            result = ${entry.members.map((member) => `(state == ${member})`).join(' || ')};`,
+      '            break;',
+    ).trimEnd());
+  const directChildCases = membershipCases((layer) =>
+    layer.children.map((stateId) => stateNode(ir, stateId)));
+  const descendantCases = membershipCases((layer) =>
+    descendantsOfLayer(ir, layer.id).map((state) => stateNode(ir, state.id)));
   return lines(
     '#include <stddef.h>',
     '#include "sm_safety.h"',
@@ -1400,45 +1460,45 @@ export const renderSafetySource = (ir: SemanticModel): string => {
       ? '#include "mcal_dio.h"'
       : null,
     '',
-    'static const SM_Node_t SM_State_Parent_Map[SM_NUM_STATES + 1U] = {',
-    ...(ir.verification.cStandard === 'c90'
-      ? ['    SM_NODE_INVALID,', ...states.map((state) => `    ${state.parentStateId === null ? 'SM_NODE_INVALID' : stateNode(ir, state.parentStateId)},`)]
-      : ['    [0] = SM_NODE_INVALID,', ...states.map((state) => `    [${stateIndex(ir, state.id)}] = ${state.parentStateId === null ? 'SM_NODE_INVALID' : stateNode(ir, state.parentStateId)},`)]),
-    '};',
-    '',
-    'static const bool SM_Layer_Has_Children_Map[SM_NUM_LAYERS] = {',
-    ...(ir.verification.cStandard === 'c90'
-      ? layers.map((layer) => `    ${layer.children.length > 0 ? 'true' : 'false'},`)
-      : layers.map((layer) => `    [${layerMacro(layer)}] = ${layer.children.length > 0 ? 'true' : 'false'},`)),
-    '};',
-    '',
     'static bool SM_Is_Direct_Layer_Child(uint32_t layer_index, SM_Node_t state)',
     '{',
+    '    bool result = false;',
     '    switch (layer_index) {',
     ...directChildCases,
-    '        default: return false;',
+    '        default:',
+    '            break;',
     '    }',
+    '    return result;',
     '}',
     '',
     ...(historyStorageUsage(ir).deep ? [
       'static bool SM_Is_Layer_Descendant(uint32_t layer_index, SM_Node_t state)',
       '{',
+      '    bool result = false;',
       '    switch (layer_index) {',
       ...descendantCases,
-      '        default: return false;',
+      '        default:',
+      '            break;',
       '    }',
+      '    return result;',
       '}',
       '',
     ] : []),
     'SM_Error_t SM_Validate_State_Consistency(const ADIA_Instance_t *instance)',
     '{',
+    /* Parent state numbers (0 = none), kept in flash; read only by this function. */
+    '    static SM_ROM SM_Rom_Index_t SM_State_Parent_Map[SM_NUM_STATES + 1U] = {',
+    ...(ir.verification.cStandard === 'c90'
+      ? ['        0U,', ...states.map((state) => `        ${state.parentStateId === null ? '0U' : stateIndex(ir, state.parentStateId)},`)]
+      : ['        [0] = 0U,', ...states.map((state) => `        [${stateIndex(ir, state.id)}] = ${state.parentStateId === null ? '0U' : stateIndex(ir, state.parentStateId)},`)]),
+    '    };',
     '    uint32_t layer_index;',
     '    uint32_t state_index;',
     ir.activeSlotCount > 0 ? '    uint32_t slot_index;' : null,
     '    SM_Node_t active_node;',
     historyStorageUsage(ir).shallow ? '    SM_Node_t history_node;' : null,
-    '    int32_t active_slot;',
-    '    SM_Node_t parent;',
+    '    uint32_t active_slot;',
+    '    uint32_t parent;',
     '    bool container_active;',
     '    if (instance == NULL) {',
     '        return SM_ERR_NULL_INSTANCE;',
@@ -1455,34 +1515,31 @@ export const renderSafetySource = (ir: SemanticModel): string => {
     ] : []),
     '    for (state_index = 1U; state_index <= SM_NUM_STATES; ++state_index) {',
     '        if (instance->state_active[state_index]) {',
-    '            parent = SM_State_Parent_Map[state_index];',
-    '            if ((parent != SM_NODE_INVALID)',
-    '                && (!instance->state_active[(uint32_t)parent])) {',
+    '            parent = (uint32_t)SM_ROM_READ_INDEX(SM_State_Parent_Map[state_index]);',
+    '            if ((parent != 0U) && (!instance->state_active[parent])) {',
     '                return SM_ERR_CONFIGURATION;',
     '            }',
-    '            active_slot = SM_State_Active_Slot_Map[state_index];',
-    '            if ((active_slot >= 0)',
-    '                && (instance->active_states[(uint32_t)active_slot]',
-    '                    != (SM_Node_t)state_index)) {',
+    '            active_slot = (uint32_t)SM_ROM_READ_INDEX(SM_State_Active_Slot_Map[state_index]);',
+    '            if ((active_slot != SM_ROM_INDEX_NONE)',
+    '                && (instance->active_states[active_slot] != (SM_Node_t)state_index)) {',
     '                return SM_ERR_CONFIGURATION;',
     '            }',
     '        }',
     '    }',
     '    for (layer_index = 0U; layer_index < SM_NUM_LAYERS; ++layer_index) {',
-    '        parent = SM_Layer_Parent_State_Map[layer_index];',
-    '        container_active = (parent == SM_NODE_INVALID)',
-    '            || instance->state_active[(uint32_t)parent];',
-    '        active_slot = SM_Layer_Active_Slot_Map[layer_index];',
+    '        parent = (uint32_t)SM_ROM_READ_INDEX(SM_Layer_Parent_State_Map[layer_index]);',
+    '        container_active = (parent == 0U) || instance->state_active[parent];',
+    '        active_slot = (uint32_t)SM_ROM_READ_INDEX(SM_Layer_Active_Slot_Map[layer_index]);',
     '        if (container_active) {',
-    '            if (active_slot >= 0) {',
-    '                active_node = instance->active_states[(uint32_t)active_slot];',
+    '            if (active_slot != SM_ROM_INDEX_NONE) {',
+    '                active_node = instance->active_states[active_slot];',
     '                if ((active_node == SM_NODE_INVALID)',
     '                    || ((uint32_t)active_node > SM_NUM_STATES)',
     '                    || (!SM_Is_Direct_Layer_Child(layer_index, active_node))',
     '                    || (!instance->state_active[(uint32_t)active_node])) {',
     '                    return SM_ERR_CONFIGURATION;',
     '                }',
-    '            } else if (SM_Layer_Has_Children_Map[layer_index]) {',
+    '            } else {',
     '                for (state_index = 1U; state_index <= SM_NUM_STATES; ++state_index) {',
     '                    if (SM_Is_Direct_Layer_Child(layer_index, (SM_Node_t)state_index)',
     '                        && (!instance->state_active[state_index])) {',
@@ -1490,13 +1547,15 @@ export const renderSafetySource = (ir: SemanticModel): string => {
     '                    }',
     '                }',
     '            }',
-    '        } else if ((active_slot >= 0)',
-    '            && (instance->active_states[(uint32_t)active_slot] != SM_NODE_INVALID)) {',
+    '        } else if ((active_slot != SM_ROM_INDEX_NONE)',
+    '            && (instance->active_states[active_slot] != SM_NODE_INVALID)) {',
     '            return SM_ERR_CONFIGURATION;',
+    '        } else {',
+    '            /* Inactive container without a live slot: nothing to check. */',
     '        }',
     ...(historyStorageUsage(ir).shallow ? [
-      '        if (active_slot >= 0) {',
-      '            history_node = instance->history_states[(uint32_t)active_slot];',
+      '        if (active_slot != SM_ROM_INDEX_NONE) {',
+      '            history_node = instance->history_states[active_slot];',
       '            if ((history_node != SM_NODE_INVALID)',
       '                && (((uint32_t)history_node > SM_NUM_STATES)',
       '                    || (!SM_Is_Direct_Layer_Child(layer_index, history_node)))) {',
@@ -1519,9 +1578,11 @@ export const renderSafetySource = (ir: SemanticModel): string => {
         '        active_node = instance->active_states[slot_index];',
         '        if (active_node != SM_NODE_INVALID) {',
         '            if (((uint32_t)active_node > SM_NUM_STATES)',
-        '                || (!instance->state_active[(uint32_t)active_node])',
-        '                || (SM_State_Active_Slot_Map[(uint32_t)active_node]',
-        '                    != (int32_t)slot_index)) {',
+        '                || (!instance->state_active[(uint32_t)active_node])) {',
+        '                return SM_ERR_CONFIGURATION;',
+        '            }',
+        '            active_slot = (uint32_t)SM_ROM_READ_INDEX(SM_State_Active_Slot_Map[(uint32_t)active_node]);',
+        '            if (active_slot != slot_index) {',
         '                return SM_ERR_CONFIGURATION;',
         '            }',
         '        }',
@@ -1620,10 +1681,15 @@ export const renderCoreSource = (ir: SemanticModel): string => {
     ...orderedLayers(ir).flatMap((layer) => [
       `static void ${layerFunction(index, 'SM_Enter_Layer_Default', layer.id)}(ADIA_Instance_t *instance);`,
       `static void ${layerFunction(index, 'SM_Exit_Layer_No_History', layer.id)}(ADIA_Instance_t *instance);`,
+      `static void ${layerFunction(index, 'SM_Exit_Layer', layer.id)}(ADIA_Instance_t *instance);`,
+      ...(layer.decomposition === 'OR' && layer.activeSlot !== null
+        ? [`static void ${layerFunction(index, 'SM_Exit_Active', layer.id)}(ADIA_Instance_t *instance);`]
+        : []),
       `static bool ${layerFunction(index, 'SM_Execute_Layer', layer.id)}(ADIA_Instance_t *instance);`,
     ]),
     ...states.flatMap((state) => [
       `static void ${stateFunction(index, 'SM_Enter_Deep', state.id)}(ADIA_Instance_t *instance);`,
+      `static void ${stateFunction(index, 'SM_Exit_State', state.id)}(ADIA_Instance_t *instance);`,
       ...(historyStorageUsage(ir).deep
         ? [`static void ${stateFunction(index, 'SM_Restore_State', state.id)}(ADIA_Instance_t *instance, uint32_t snapshot_layer);`]
         : []),
@@ -1632,8 +1698,6 @@ export const renderCoreSource = (ir: SemanticModel): string => {
     historyStorageUsage(ir).shallow
       ? 'static void SM_Record_Layer_History(ADIA_Instance_t *instance, uint32_t layer);'
       : null,
-    'static void SM_Exit_Layer(ADIA_Instance_t *instance, uint32_t layer);',
-    'static void SM_Exit_State(ADIA_Instance_t *instance, SM_Node_t state, bool record_containing_layer);',
     'static void SM_Exit_All(ADIA_Instance_t *instance);',
     'static void SM_Enter_Safe_State(ADIA_Instance_t *instance);',
     'static void SM_Enter_Fault(ADIA_Instance_t *instance);',
@@ -1690,7 +1754,7 @@ export const renderCoreSource = (ir: SemanticModel): string => {
   const faultHelpers = lines(
     'static void SM_Exit_All(ADIA_Instance_t *instance)',
     '{',
-    `    SM_Exit_Layer(instance, ${layerMacro(rootLayer)});`,
+    `    ${layerFunction(index, 'SM_Exit_Layer', rootLayer.id)}(instance);`,
     '}',
     '',
     'static void SM_Enter_Safe_State(ADIA_Instance_t *instance)',
@@ -1827,7 +1891,7 @@ export const renderCoreSource = (ir: SemanticModel): string => {
     '    if (instance == NULL) {',
     '        return SM_ERR_NULL_INSTANCE;',
     '    }',
-    `    SM_Exit_Layer(instance, ${layerMacro(rootLayer)});`,
+    `    ${layerFunction(index, 'SM_Exit_Layer', rootLayer.id)}(instance);`,
     ...states
       .filter((state) => state.xBridges !== null)
       .map((state) => `    ${xbStateFunction(state, 'Init')}(instance);`),
@@ -1889,7 +1953,7 @@ export const renderCoreSource = (ir: SemanticModel): string => {
     '    }',
     '    if (instance->fault_latched || (instance->error_status != SM_ERR_NONE)) {',
     '        SM_Enter_Fault(instance);',
-    '        return instance->error_status != SM_ERR_NONE ? instance->error_status : SM_ERR_SAFETY_VIOLATION;',
+    '        return (instance->error_status != SM_ERR_NONE) ? instance->error_status : SM_ERR_SAFETY_VIOLATION;',
     '    }',
     '    if ((delta_ms < SM_TICK_MIN_MS) || (delta_ms > SM_TICK_MAX_MS)) {',
     '        instance->error_status = SM_ERR_TIMING;',
@@ -1961,7 +2025,7 @@ export const renderCoreSource = (ir: SemanticModel): string => {
     '    }',
     '    if (instance->fault_latched || (instance->error_status != SM_ERR_NONE)) {',
     '        SM_Enter_Fault(instance);',
-    '        return instance->error_status != SM_ERR_NONE ? instance->error_status : SM_ERR_SAFETY_VIOLATION;',
+    '        return (instance->error_status != SM_ERR_NONE) ? instance->error_status : SM_ERR_SAFETY_VIOLATION;',
     '    }',
     '    instance->error_status = SM_Validate_State_Consistency(instance);',
     '    if (instance->error_status != SM_ERR_NONE) {',
@@ -1999,12 +2063,12 @@ export const renderCoreSource = (ir: SemanticModel): string => {
     '',
     'SM_Node_t SM_GetLayerActive(const ADIA_Instance_t *instance, uint32_t layer)',
     '{',
-    '    int32_t slot;',
+    '    uint32_t slot;',
     '    if ((instance == NULL) || (layer >= SM_NUM_LAYERS)) {',
     '        return SM_NODE_INVALID;',
     '    }',
-    '    slot = SM_Layer_Active_Slot_Map[layer];',
-    '    if (slot < 0) {',
+    '    slot = (uint32_t)SM_ROM_READ_INDEX(SM_Layer_Active_Slot_Map[layer]);',
+    '    if (slot == SM_ROM_INDEX_NONE) {',
     '        return SM_NODE_INVALID;',
     '    }',
     '    return SM_GetActiveSlot(instance, (uint32_t)slot);',
@@ -2027,7 +2091,7 @@ export const renderCoreSource = (ir: SemanticModel): string => {
     '',
     'SM_Error_t SM_GetError(const ADIA_Instance_t *instance)',
     '{',
-    '    return instance == NULL ? SM_ERR_NULL_INSTANCE : instance->error_status;',
+    '    return (instance == NULL) ? SM_ERR_NULL_INSTANCE : instance->error_status;',
     '}',
     '',
     '#ifdef ADIA_TESTING',
@@ -2172,6 +2236,7 @@ const generateCArtifactsDefaultPrefix = (
 
     const packageFiles: GeneratedCFile[] = [
       ...productionFiles,
+      { name: 'production/MISRA_DEVIATIONS.md', content: renderMisraDeviations(ir) },
       ...testPackage,
       ...reportFiles,
     ];
@@ -2197,6 +2262,7 @@ const generateCArtifactsDefaultPrefix = (
       name: 'static_metrics_report.md',
       content: renderStaticMetricsReport(analysis, measuredSourceFiles, ir),
     },
+    { name: 'MISRA_DEVIATIONS.md', content: renderMisraDeviations(ir) },
   ];
 
   const structCheck = verifyGeneratedCStructure(allFiles);
@@ -2223,6 +2289,33 @@ export const generateCArtifacts = (
   if (ir.codePrefix === undefined || ir.codePrefix === DEFAULT_CODE_PREFIX) return generated;
   return { ...generated, files: applyCodePrefix(generated.files, ir.codePrefix) };
 };
+
+export const renderMisraDeviations = (ir: SemanticModel): string => [
+  '# MISRA C:2012 deviations',
+  '',
+  `Generated production code (C standard: ${ir.verification.cStandard ?? 'c99'}).`,
+  '',
+  'The generated sm_*.c / sm_*.h files (including the inline helpers of sm_core.h, sm_xbridges.* and',
+  'mcal_dio.h) are checked with the cppcheck MISRA C:2012 addon. Every required and mandatory rule it',
+  'detects passes. The only accepted deviation is the advisory rule below.',
+  '',
+  '## Rule 15.5 (advisory): a function should have a single point of exit',
+  '',
+  '- Scope: all generated functions that return early.',
+  '- Rationale: guard clauses (NULL instance, argument and range checks), fault handling and the',
+  '  "stop at the first violation" validators return as soon as the condition is known. A single exit',
+  '  would need nested conditions or status flags that obscure the control flow and add paths to test.',
+  '- Safeguards: every early return is a plain `return` at the function top level or inside one level of',
+  '  `if`; functions contain no `goto`, no recursion (the call graph is acyclic, rule 17.2) and loops are',
+  '  bounded by compile-time constants. The returns are covered by the generated test vectors.',
+  '- Decision: bounded and reviewed; accepted for this code base.',
+  '',
+  '## Other rules',
+  '',
+  'No other deviation is recorded. Rules that the addon cannot evaluate (for example directive 4.x',
+  'documentation rules and rules needing whole-program information) remain subject to manual review.',
+  '',
+].join('\n');
 
 export interface StructureVerificationResult {
   valid: boolean;

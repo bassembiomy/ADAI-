@@ -1716,7 +1716,7 @@ const emitConversion: OperationEmitter = (
         `        ${resultName} = ${call};`,
         '    } else {',
         `        ${resultName}.real_value = ${reinterpretationSidecars.real};`,
-        `        ${resultName}.stored_integer = INT64_C(0);`,
+        `        ${resultName}.stored_integer = ((int64_t)0);`,
         `        ${resultName}.quantization_error = 0.0;`,
         `        ${resultName}.fault = isfinite(${reinterpretationSidecars.real})`,
         '            ? SM_XB_FAULT_OVERFLOW',
@@ -4285,7 +4285,7 @@ static SM_XB_NumericResult_t SM_XB_DefaultResult(double value)
 {
     SM_XB_NumericResult_t result;
     result.real_value = value;
-    result.stored_integer = INT64_C(0);
+    result.stored_integer = ((int64_t)0);
     result.quantization_error = 0.0;
     result.fault = SM_XB_FAULT_NONE;
     result.has_stored_integer = false;
@@ -4304,15 +4304,19 @@ static double SM_XB_RoundStored(double value, SM_XB_Rounding_t rounding)
         case SM_XB_ROUND_ZERO:
             return trunc(value);
         case SM_XB_ROUND_NEAREST:
-            return fraction < 0.5 ? lower : lower + 1.0;
+            return (fraction < 0.5) ? lower : (lower + 1.0);
         case SM_XB_ROUND_AWAY:
-            return value < 0.0
+            return (value < 0.0)
                 ? -floor(fabs(value) + 0.5)
                 : floor(value + 0.5);
         case SM_XB_ROUND_CONVERGENT:
-            if (fraction < 0.5) return lower;
-            if (fraction > 0.5) return lower + 1.0;
-            return fmod(fabs(lower), 2.0) == 0.0 ? lower : lower + 1.0;
+            if (fraction < 0.5) {
+                return lower;
+            }
+            if (fraction > 0.5) {
+                return lower + 1.0;
+            }
+            return (fmod(fabs(lower), 2.0) == 0.0) ? lower : (lower + 1.0);
         default:
             return lower;
     }
@@ -4322,13 +4326,13 @@ static uint64_t SM_XB_PositiveResidue(int64_t value, uint64_t modulus)
 {
     uint64_t magnitude;
     uint64_t remainder;
-    if (value >= INT64_C(0)) {
+    if (value >= ((int64_t)0)) {
         return ((uint64_t)value) % modulus;
     }
-    magnitude = (uint64_t)(-(value + INT64_C(1)));
-    magnitude += UINT64_C(1);
+    magnitude = (uint64_t)(-(value + ((int64_t)1)));
+    magnitude += ((uint64_t)1U);
     remainder = magnitude % modulus;
-    return remainder == UINT64_C(0) ? UINT64_C(0) : modulus - remainder;
+    return (remainder == ((uint64_t)0U)) ? ((uint64_t)0U) : (modulus - remainder);
 }
 
 SM_XB_NumericResult_t SM_XB_ConvertFixed(
@@ -4347,6 +4351,7 @@ SM_XB_NumericResult_t SM_XB_ConvertFixed(
     double maximum;
     uint64_t modulus;
     uint64_t half_modulus;
+    uint64_t top_value;
     int64_t rounded_integer;
     int64_t stored_integer;
     bool overflowed;
@@ -4365,16 +4370,15 @@ SM_XB_NumericResult_t SM_XB_ConvertFixed(
         return result;
     }
 
-    modulus = UINT64_C(1) << word_length;
+    modulus = ((uint64_t)1U) << word_length;
     half_modulus = modulus >> 1U;
     minimum = is_signed ? -(double)half_modulus : 0.0;
-    maximum = is_signed
-        ? (double)(half_modulus - UINT64_C(1))
-        : (double)(modulus - UINT64_C(1));
+    top_value = is_signed ? (half_modulus - ((uint64_t)1U)) : (modulus - ((uint64_t)1U));
+    maximum = (double)top_value;
     scaled = value * scale;
 
     if (!isfinite(scaled) || (fabs(scaled) > SM_XB_MAX_SAFE_INTEGER)) {
-        stored_integer = scaled < 0.0
+        stored_integer = (scaled < 0.0)
             ? (int64_t)minimum
             : (int64_t)maximum;
         result.stored_integer = stored_integer;
@@ -4388,7 +4392,7 @@ SM_XB_NumericResult_t SM_XB_ConvertFixed(
     rounded = SM_XB_RoundStored(scaled, rounding);
     overflowed = (rounded < minimum) || (rounded > maximum);
     if (overflowed && (overflow != SM_XB_OVERFLOW_WRAP)) {
-        const double bounded = rounded < minimum ? minimum : maximum;
+        const double bounded = (rounded < minimum) ? minimum : maximum;
         stored_integer = (int64_t)bounded;
         if (overflow == SM_XB_OVERFLOW_ERROR) {
             result.fault = SM_XB_FAULT_OVERFLOW;
@@ -4424,7 +4428,7 @@ SM_XB_NumericResult_t SM_XB_ConvertBoolean(double value)
         result.fault = SM_XB_FAULT_NON_FINITE;
         return result;
     }
-    result.stored_integer = SM_XB_Truth(value) ? INT64_C(1) : INT64_C(0);
+    result.stored_integer = SM_XB_Truth(value) ? ((int64_t)1) : ((int64_t)0);
     result.real_value = (double)result.stored_integer;
     result.quantization_error = fabs(value - result.real_value);
     result.has_stored_integer = true;
@@ -4454,7 +4458,7 @@ SM_XB_NumericResult_t SM_XB_ConvertFloat32(double value)
         return result;
     }
     if (fabs(value) > (double)FLT_MAX) {
-        result.real_value = value < 0.0 ? -INFINITY : INFINITY;
+        result.real_value = (value < 0.0) ? -INFINITY : INFINITY;
         result.quantization_error = INFINITY;
         result.fault = SM_XB_FAULT_NON_FINITE;
         return result;
