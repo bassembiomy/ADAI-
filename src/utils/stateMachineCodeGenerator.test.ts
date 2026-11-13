@@ -42,6 +42,7 @@ describe('StateMachineCodeGenerator compatibility facade', () => {
       'mcal_dio.h',
       'sm_testing_report.md',
       'static_metrics_report.md',
+      'MISRA_DEVIATIONS.md',
     ]);
   });
 

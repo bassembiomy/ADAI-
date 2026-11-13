@@ -99,6 +99,7 @@ SM_ARITH_INLINE bool SM_StoreDouble(ADIA_Instance_t *instance, double value, dou
 /* float/single saturate to +-FLT_MAX (or fail under overflow policy error). */
 SM_ARITH_INLINE bool SM_StoreFloat(ADIA_Instance_t *instance, double value, bool error_on_overflow, float *out)
 {
+    double stored = value;
     if (!SM_ArithTake(instance)) {
         return false;
     }
@@ -111,11 +112,14 @@ SM_ARITH_INLINE bool SM_StoreFloat(ADIA_Instance_t *instance, double value, bool
             SM_ArithLatch(instance);
             return false;
         }
-        value = (value < 0.0) ? -(double)FLT_MAX : (double)FLT_MAX;
+        stored = (value < 0.0) ? -(double)FLT_MAX : (double)FLT_MAX;
     }
-    *out = (float)value;
+    *out = (float)stored;
     return true;
 }
+
+/* INT64_MIN spelled without a constant that MISRA 7.2/10.4 tools misread. */
+#define SM_I64_MIN ((int64_t)(-INT64_MAX - (int64_t)1))
 
 /* Integer expressions: signed 64-bit intermediates that saturate and never wrap. */
 SM_ARITH_INLINE int64_t SM_AddI64(int64_t a, int64_t b)
@@ -123,8 +127,8 @@ SM_ARITH_INLINE int64_t SM_AddI64(int64_t a, int64_t b)
     if ((b > 0) && (a > (INT64_MAX - b))) {
         return INT64_MAX;
     }
-    if ((b < 0) && (a < (INT64_MIN - b))) {
-        return INT64_MIN;
+    if ((b < 0) && (a < (SM_I64_MIN - b))) {
+        return SM_I64_MIN;
     }
     return a + b;
 }
@@ -134,31 +138,34 @@ SM_ARITH_INLINE int64_t SM_SubI64(int64_t a, int64_t b)
     if ((b < 0) && (a > (INT64_MAX + b))) {
         return INT64_MAX;
     }
-    if ((b > 0) && (a < (INT64_MIN + b))) {
-        return INT64_MIN;
+    if ((b > 0) && (a < (SM_I64_MIN + b))) {
+        return SM_I64_MIN;
     }
     return a - b;
 }
 
 SM_ARITH_INLINE int64_t SM_MulI64(int64_t a, int64_t b)
 {
+    bool overflow_high = false;
+    bool overflow_low = false;
     if ((a == 0) || (b == 0)) {
-        return 0;
-    }
-    if (a > 0) {
+        /* The product is zero. */
+    } else if (a > 0) {
         if (b > 0) {
-            if (a > (INT64_MAX / b)) {
-                return INT64_MAX;
-            }
-        } else if (b < (INT64_MIN / a)) {
-            return INT64_MIN;
+            overflow_high = (a > (INT64_MAX / b));
+        } else {
+            overflow_low = (b < (SM_I64_MIN / a));
         }
     } else if (b > 0) {
-        if (a < (INT64_MIN / b)) {
-            return INT64_MIN;
-        }
-    } else if (a < (INT64_MAX / b)) {
+        overflow_low = (a < (SM_I64_MIN / b));
+    } else {
+        overflow_high = (a < (INT64_MAX / b));
+    }
+    if (overflow_high) {
         return INT64_MAX;
+    }
+    if (overflow_low) {
+        return SM_I64_MIN;
     }
     return a * b;
 }
@@ -179,7 +186,7 @@ SM_ARITH_INLINE int64_t SM_DivI64(ADIA_Instance_t *instance, int64_t a, int64_t 
         SM_ArithFault(instance);
         return 0;
     }
-    if ((a == INT64_MIN) && (b == -1)) {
+    if ((a == SM_I64_MIN) && (b == -1)) {
         return INT64_MAX;
     }
     return a / b;
@@ -206,6 +213,7 @@ SM_ARITH_INLINE int64_t SM_U64ToI64(uint64_t value)
 /* Converts to the target range: saturates, or fails under overflow policy error. */
 SM_ARITH_INLINE bool SM_StoreI64(ADIA_Instance_t *instance, int64_t value, int64_t lo, int64_t hi, bool error_on_overflow, int64_t *out)
 {
+    int64_t stored = value;
     if (!SM_ArithTake(instance)) {
         return false;
     }
@@ -214,9 +222,9 @@ SM_ARITH_INLINE bool SM_StoreI64(ADIA_Instance_t *instance, int64_t value, int64
             SM_ArithLatch(instance);
             return false;
         }
-        value = (value < lo) ? lo : hi;
+        stored = (value < lo) ? lo : hi;
     }
-    *out = value;
+    *out = stored;
     return true;
 }
 
@@ -236,7 +244,7 @@ SM_ARITH_INLINE bool SM_StoreDoubleToI64(ADIA_Instance_t *instance, double value
         wide = INT64_MAX;
         beyond = true;
     } else if (value < -9223372036854775808.0) {
-        wide = INT64_MIN;
+        wide = SM_I64_MIN;
         beyond = true;
     } else {
         wide = (int64_t)value;
@@ -269,7 +277,12 @@ SM_Error_t SM_GetError(const ADIA_Instance_t *instance);
 void SM_SetTraceSink(ADIA_Instance_t *instance, SM_TraceSink_t sink);
 void SM_TraceAction(ADIA_Instance_t *instance, const char *action);
 #else
-#define SM_TraceAction(instance, action) ((void)0)
+/* No trace sink compiled in: an empty inline function, not a macro of the same name (MISRA 5.5). */
+SM_ARITH_INLINE void SM_TraceAction(ADIA_Instance_t *instance, const char *action)
+{
+    (void)instance;
+    (void)action;
+}
 #endif
 
 #ifdef ADIA_TESTING
@@ -339,60 +352,65 @@ void SM_XB_CONTROLLER_Step(ADIA_Instance_t *instance)
 
 static void SM_Enter_Layer_Default_0(ADIA_Instance_t *instance);
 static void SM_Exit_Layer_No_History_0(ADIA_Instance_t *instance);
+static void SM_Exit_Layer_0(ADIA_Instance_t *instance);
+static void SM_Exit_Active_0(ADIA_Instance_t *instance);
 static bool SM_Execute_Layer_0(ADIA_Instance_t *instance);
 static void SM_Enter_Deep_1(ADIA_Instance_t *instance);
+static void SM_Exit_State_1(ADIA_Instance_t *instance);
 static bool SM_Execute_State_1(ADIA_Instance_t *instance);
 static void SM_Enter_Deep_2(ADIA_Instance_t *instance);
+static void SM_Exit_State_2(ADIA_Instance_t *instance);
 static bool SM_Execute_State_2(ADIA_Instance_t *instance);
-static void SM_Exit_Layer(ADIA_Instance_t *instance, uint32_t layer);
-static void SM_Exit_State(ADIA_Instance_t *instance, SM_Node_t state, bool record_containing_layer);
 static void SM_Exit_All(ADIA_Instance_t *instance);
 static void SM_Enter_Safe_State(ADIA_Instance_t *instance);
 static void SM_Enter_Fault(ADIA_Instance_t *instance);
 
-static void SM_Exit_Layer(ADIA_Instance_t *instance, uint32_t layer)
+static void SM_Exit_Active_0(ADIA_Instance_t *instance)
 {
-    switch (layer) {
-        case SM_LYR_ROOT_IDX:
-            if (instance->active_states[0U] != SM_NODE_INVALID) {
-                SM_Exit_State(instance, instance->active_states[0U], false);
-            }
+    switch (instance->active_states[0U]) {
+        case SM_ST_ORDINARY:
+            SM_Exit_State_1(instance);
             break;
-        default: break;
+        case SM_ST_CONTROLLER:
+            SM_Exit_State_2(instance);
+            break;
+        default:
+            break;
     }
 }
 
-static void SM_Exit_State(ADIA_Instance_t *instance, SM_Node_t state, bool record_containing_layer)
+static void SM_Exit_Layer_0(ADIA_Instance_t *instance)
 {
-    (void)record_containing_layer;
-    switch (state) {
-        case SM_ST_ORDINARY:
-            if (!instance->state_active[SM_ST_ORDINARY_IDX]) { break; }
-            SM_ST_ORDINARY_Exit(instance);
-            instance->state_active[SM_ST_ORDINARY_IDX] = false;
-            instance->state_timers[SM_ST_ORDINARY_IDX] = 0U;
-            if (instance->active_states[0U] == SM_ST_ORDINARY) {
-                instance->active_states[0U] = SM_NODE_INVALID;
-            }
-            break;
-        case SM_ST_CONTROLLER:
-            if (!instance->state_active[SM_ST_CONTROLLER_IDX]) { break; }
-            SM_ST_CONTROLLER_Exit(instance);
-            instance->state_active[SM_ST_CONTROLLER_IDX] = false;
-            instance->state_timers[SM_ST_CONTROLLER_IDX] = 0U;
-            if (instance->active_states[0U] == SM_ST_CONTROLLER) {
-                instance->active_states[0U] = SM_NODE_INVALID;
-            }
-            break;
-        default: break;
+    SM_Exit_Active_0(instance);
+}
+
+static void SM_Exit_State_1(ADIA_Instance_t *instance)
+{
+    if (instance->state_active[SM_ST_ORDINARY_IDX]) {
+        SM_ST_ORDINARY_Exit(instance);
+        instance->state_active[SM_ST_ORDINARY_IDX] = false;
+        instance->state_timers[SM_ST_ORDINARY_IDX] = 0U;
+        if (instance->active_states[0U] == SM_ST_ORDINARY) {
+            instance->active_states[0U] = SM_NODE_INVALID;
+        }
+    }
+}
+
+static void SM_Exit_State_2(ADIA_Instance_t *instance)
+{
+    if (instance->state_active[SM_ST_CONTROLLER_IDX]) {
+        SM_ST_CONTROLLER_Exit(instance);
+        instance->state_active[SM_ST_CONTROLLER_IDX] = false;
+        instance->state_timers[SM_ST_CONTROLLER_IDX] = 0U;
+        if (instance->active_states[0U] == SM_ST_CONTROLLER) {
+            instance->active_states[0U] = SM_NODE_INVALID;
+        }
     }
 }
 
 static void SM_Exit_Layer_No_History_0(ADIA_Instance_t *instance)
 {
-    if (instance->active_states[0U] != SM_NODE_INVALID) {
-        SM_Exit_State(instance, instance->active_states[0U], false);
-    }
+    SM_Exit_Active_0(instance);
 }
 
 static void SM_Enter_Layer_Default_0(ADIA_Instance_t *instance)
@@ -451,7 +469,7 @@ static bool SM_Execute_State_2(ADIA_Instance_t *instance)
 
 static void SM_Exit_All(ADIA_Instance_t *instance)
 {
-    SM_Exit_Layer(instance, SM_LYR_ROOT_IDX);
+    SM_Exit_Layer_0(instance);
 }
 
 static void SM_Enter_Safe_State(ADIA_Instance_t *instance)
@@ -516,7 +534,7 @@ SM_Error_t SM_Reset(ADIA_Instance_t *instance)
     if (instance == NULL) {
         return SM_ERR_NULL_INSTANCE;
     }
-    SM_Exit_Layer(instance, SM_LYR_ROOT_IDX);
+    SM_Exit_Layer_0(instance);
     SM_XB_CONTROLLER_Init(instance);
     instance->data.count = (double)(1.0);
     instance->data.go = (bool)(false);
@@ -556,7 +574,7 @@ SM_Error_t SM_Step(ADIA_Instance_t *instance, uint32_t delta_ms)
     }
     if (instance->fault_latched || (instance->error_status != SM_ERR_NONE)) {
         SM_Enter_Fault(instance);
-        return instance->error_status != SM_ERR_NONE ? instance->error_status : SM_ERR_SAFETY_VIOLATION;
+        return (instance->error_status != SM_ERR_NONE) ? instance->error_status : SM_ERR_SAFETY_VIOLATION;
     }
     if ((delta_ms < SM_TICK_MIN_MS) || (delta_ms > SM_TICK_MAX_MS)) {
         instance->error_status = SM_ERR_TIMING;
@@ -592,7 +610,7 @@ SM_Error_t SM_WriteOutputs(ADIA_Instance_t *instance)
     }
     if (instance->fault_latched || (instance->error_status != SM_ERR_NONE)) {
         SM_Enter_Fault(instance);
-        return instance->error_status != SM_ERR_NONE ? instance->error_status : SM_ERR_SAFETY_VIOLATION;
+        return (instance->error_status != SM_ERR_NONE) ? instance->error_status : SM_ERR_SAFETY_VIOLATION;
     }
     instance->error_status = SM_Validate_State_Consistency(instance);
     if (instance->error_status != SM_ERR_NONE) {
@@ -622,12 +640,12 @@ SM_Node_t SM_GetActiveSlot(const ADIA_Instance_t *instance, uint32_t slot)
 
 SM_Node_t SM_GetLayerActive(const ADIA_Instance_t *instance, uint32_t layer)
 {
-    int32_t slot;
+    uint32_t slot;
     if ((instance == NULL) || (layer >= SM_NUM_LAYERS)) {
         return SM_NODE_INVALID;
     }
-    slot = SM_Layer_Active_Slot_Map[layer];
-    if (slot < 0) {
+    slot = (uint32_t)SM_ROM_READ_INDEX(SM_Layer_Active_Slot_Map[layer]);
+    if (slot == SM_ROM_INDEX_NONE) {
         return SM_NODE_INVALID;
     }
     return SM_GetActiveSlot(instance, (uint32_t)slot);
@@ -650,7 +668,7 @@ SM_Node_t SM_GetActive(const ADIA_Instance_t *instance, SM_Group_t slot)
 
 SM_Error_t SM_GetError(const ADIA_Instance_t *instance)
 {
-    return instance == NULL ? SM_ERR_NULL_INSTANCE : instance->error_status;
+    return (instance == NULL) ? SM_ERR_NULL_INSTANCE : instance->error_status;
 }
 
 #ifdef ADIA_TESTING
@@ -690,6 +708,7 @@ SM_Error_t SM_Test_SetStateTimer(ADIA_Instance_t *instance, SM_Node_t state, uin
     return SM_ERR_NONE;
 }
 
+/* cppcheck-suppress constParameterPointer */
 SM_Error_t SM_Test_SetHistoryState(ADIA_Instance_t *instance, uint32_t slot, SM_Node_t state)
 {
     if (instance == NULL) {
@@ -701,6 +720,7 @@ SM_Error_t SM_Test_SetHistoryState(ADIA_Instance_t *instance, uint32_t slot, SM_
     return SM_ERR_INVALID_ARGUMENT;
 }
 
+/* cppcheck-suppress constParameterPointer */
 SM_Error_t SM_Test_SetDeepHistory(ADIA_Instance_t *instance, uint32_t layer, SM_Node_t state, bool active)
 {
     if (instance == NULL) {
@@ -805,7 +825,7 @@ static SM_XB_NumericResult_t SM_XB_DefaultResult(double value)
 {
     SM_XB_NumericResult_t result;
     result.real_value = value;
-    result.stored_integer = INT64_C(0);
+    result.stored_integer = ((int64_t)0);
     result.quantization_error = 0.0;
     result.fault = SM_XB_FAULT_NONE;
     result.has_stored_integer = false;
@@ -824,15 +844,19 @@ static double SM_XB_RoundStored(double value, SM_XB_Rounding_t rounding)
         case SM_XB_ROUND_ZERO:
             return trunc(value);
         case SM_XB_ROUND_NEAREST:
-            return fraction < 0.5 ? lower : lower + 1.0;
+            return (fraction < 0.5) ? lower : (lower + 1.0);
         case SM_XB_ROUND_AWAY:
-            return value < 0.0
+            return (value < 0.0)
                 ? -floor(fabs(value) + 0.5)
                 : floor(value + 0.5);
         case SM_XB_ROUND_CONVERGENT:
-            if (fraction < 0.5) return lower;
-            if (fraction > 0.5) return lower + 1.0;
-            return fmod(fabs(lower), 2.0) == 0.0 ? lower : lower + 1.0;
+            if (fraction < 0.5) {
+                return lower;
+            }
+            if (fraction > 0.5) {
+                return lower + 1.0;
+            }
+            return (fmod(fabs(lower), 2.0) == 0.0) ? lower : (lower + 1.0);
         default:
             return lower;
     }
@@ -842,13 +866,13 @@ static uint64_t SM_XB_PositiveResidue(int64_t value, uint64_t modulus)
 {
     uint64_t magnitude;
     uint64_t remainder;
-    if (value >= INT64_C(0)) {
+    if (value >= ((int64_t)0)) {
         return ((uint64_t)value) % modulus;
     }
-    magnitude = (uint64_t)(-(value + INT64_C(1)));
-    magnitude += UINT64_C(1);
+    magnitude = (uint64_t)(-(value + ((int64_t)1)));
+    magnitude += ((uint64_t)1U);
     remainder = magnitude % modulus;
-    return remainder == UINT64_C(0) ? UINT64_C(0) : modulus - remainder;
+    return (remainder == ((uint64_t)0U)) ? ((uint64_t)0U) : (modulus - remainder);
 }
 
 SM_XB_NumericResult_t SM_XB_ConvertFixed(
@@ -867,6 +891,7 @@ SM_XB_NumericResult_t SM_XB_ConvertFixed(
     double maximum;
     uint64_t modulus;
     uint64_t half_modulus;
+    uint64_t top_value;
     int64_t rounded_integer;
     int64_t stored_integer;
     bool overflowed;
@@ -885,16 +910,15 @@ SM_XB_NumericResult_t SM_XB_ConvertFixed(
         return result;
     }
 
-    modulus = UINT64_C(1) << word_length;
+    modulus = ((uint64_t)1U) << word_length;
     half_modulus = modulus >> 1U;
     minimum = is_signed ? -(double)half_modulus : 0.0;
-    maximum = is_signed
-        ? (double)(half_modulus - UINT64_C(1))
-        : (double)(modulus - UINT64_C(1));
+    top_value = is_signed ? (half_modulus - ((uint64_t)1U)) : (modulus - ((uint64_t)1U));
+    maximum = (double)top_value;
     scaled = value * scale;
 
     if (!isfinite(scaled) || (fabs(scaled) > SM_XB_MAX_SAFE_INTEGER)) {
-        stored_integer = scaled < 0.0
+        stored_integer = (scaled < 0.0)
             ? (int64_t)minimum
             : (int64_t)maximum;
         result.stored_integer = stored_integer;
@@ -908,7 +932,7 @@ SM_XB_NumericResult_t SM_XB_ConvertFixed(
     rounded = SM_XB_RoundStored(scaled, rounding);
     overflowed = (rounded < minimum) || (rounded > maximum);
     if (overflowed && (overflow != SM_XB_OVERFLOW_WRAP)) {
-        const double bounded = rounded < minimum ? minimum : maximum;
+        const double bounded = (rounded < minimum) ? minimum : maximum;
         stored_integer = (int64_t)bounded;
         if (overflow == SM_XB_OVERFLOW_ERROR) {
             result.fault = SM_XB_FAULT_OVERFLOW;
@@ -944,7 +968,7 @@ SM_XB_NumericResult_t SM_XB_ConvertBoolean(double value)
         result.fault = SM_XB_FAULT_NON_FINITE;
         return result;
     }
-    result.stored_integer = SM_XB_Truth(value) ? INT64_C(1) : INT64_C(0);
+    result.stored_integer = SM_XB_Truth(value) ? ((int64_t)1) : ((int64_t)0);
     result.real_value = (double)result.stored_integer;
     result.quantization_error = fabs(value - result.real_value);
     result.has_stored_integer = true;
@@ -974,7 +998,7 @@ SM_XB_NumericResult_t SM_XB_ConvertFloat32(double value)
         return result;
     }
     if (fabs(value) > (double)FLT_MAX) {
-        result.real_value = value < 0.0 ? -HUGE_VAL : HUGE_VAL;
+        result.real_value = (value < 0.0) ? -HUGE_VAL : HUGE_VAL;
         result.quantization_error = HUGE_VAL;
         result.fault = SM_XB_FAULT_NON_FINITE;
         return result;
@@ -1023,6 +1047,23 @@ exports[`Golden-file & behavior trace regression tests > should match golden tem
 #define SM_ADIA_INSTANCE_FWD
 typedef struct ADIA_Instance ADIA_Instance_t;
 #endif
+
+/* Constant tables: flash on AVR, ordinary const data elsewhere. */
+#if defined(__AVR__)
+#include <avr/pgmspace.h>
+#define SM_ROM const PROGMEM
+#define SM_ROM_READ_U8(item) pgm_read_byte(&(item))
+#define SM_ROM_READ_U16(item) pgm_read_word(&(item))
+#define SM_ROM_READ_U32(item) pgm_read_dword(&(item))
+#else
+#define SM_ROM const
+#define SM_ROM_READ_U8(item) (item)
+#define SM_ROM_READ_U16(item) (item)
+#define SM_ROM_READ_U32(item) (item)
+#endif
+typedef uint8_t SM_Rom_Index_t;
+#define SM_ROM_INDEX_NONE 0xFFU
+#define SM_ROM_READ_INDEX(item) SM_ROM_READ_U8(item)
 
 #define SM_TICK_MS 10U
 #define SM_TICK_TOLERANCE_MS 1U
@@ -1093,10 +1134,10 @@ struct ADIA_Instance {
 
 #include "sm_config.h"
 
-extern const uint32_t SM_State_Parent_Layer_Map[SM_NUM_STATES + 1U];
-extern const int32_t SM_State_Active_Slot_Map[SM_NUM_STATES + 1U];
-extern const SM_Node_t SM_Layer_Parent_State_Map[SM_NUM_LAYERS];
-extern const int32_t SM_Layer_Active_Slot_Map[SM_NUM_LAYERS];
+extern SM_ROM SM_Rom_Index_t SM_State_Parent_Layer_Map[SM_NUM_STATES + 1U];
+extern SM_ROM SM_Rom_Index_t SM_State_Active_Slot_Map[SM_NUM_STATES + 1U];
+extern SM_ROM SM_Rom_Index_t SM_Layer_Parent_State_Map[SM_NUM_LAYERS];
+extern SM_ROM SM_Rom_Index_t SM_Layer_Active_Slot_Map[SM_NUM_LAYERS];
 
 SM_Error_t SM_Validate_Mapping_Configuration(void);
 
@@ -1117,53 +1158,55 @@ SM_Error_t SM_Validate_Mapping_Configuration(void);
  * Parallel child states are tracked using state_active[].
  * Layer IDs, active-slot IDs, and state IDs are distinct.
  */
-const uint32_t SM_State_Parent_Layer_Map[SM_NUM_STATES + 1U] = {
+SM_ROM SM_Rom_Index_t SM_State_Parent_Layer_Map[SM_NUM_STATES + 1U] = {
     [0] = 0U,
     [SM_ST_S1_IDX] = SM_LYR_ROOT_IDX,
     [SM_ST_S2_IDX] = SM_LYR_ROOT_IDX,
 };
 
-const int32_t SM_State_Active_Slot_Map[SM_NUM_STATES + 1U] = {
-    [0] = -1,
-    [SM_ST_S1_IDX] = 0,
-    [SM_ST_S2_IDX] = 0,
+SM_ROM SM_Rom_Index_t SM_State_Active_Slot_Map[SM_NUM_STATES + 1U] = {
+    [0] = SM_ROM_INDEX_NONE,
+    [SM_ST_S1_IDX] = 0U,
+    [SM_ST_S2_IDX] = 0U,
 };
 
-const SM_Node_t SM_Layer_Parent_State_Map[SM_NUM_LAYERS] = {
-    [SM_LYR_ROOT_IDX] = SM_NODE_INVALID,
+SM_ROM SM_Rom_Index_t SM_Layer_Parent_State_Map[SM_NUM_LAYERS] = {
+    [SM_LYR_ROOT_IDX] = 0U,
 };
 
-const int32_t SM_Layer_Active_Slot_Map[SM_NUM_LAYERS] = {
-    [SM_LYR_ROOT_IDX] = 0,
+SM_ROM SM_Rom_Index_t SM_Layer_Active_Slot_Map[SM_NUM_LAYERS] = {
+    [SM_LYR_ROOT_IDX] = 0U,
 };
 
 SM_Error_t SM_Validate_Mapping_Configuration(void)
 {
     uint32_t layer_index;
     uint32_t state_index;
-    uint32_t parent_layer;
-    int32_t slot;
-    SM_Node_t parent_state;
+    uint32_t slot;
     for (layer_index = 0U; layer_index < SM_NUM_LAYERS; ++layer_index) {
-        slot = SM_Layer_Active_Slot_Map[layer_index];
-        if ((slot < -1) || (slot >= (int32_t)SM_NUM_ACTIVE_SLOTS)) {
+        uint32_t parent_state;
+        slot = (uint32_t)SM_ROM_READ_INDEX(SM_Layer_Active_Slot_Map[layer_index]);
+        if ((slot != SM_ROM_INDEX_NONE) && (slot >= SM_NUM_ACTIVE_SLOTS)) {
             return SM_ERR_CONFIGURATION;
         }
-        parent_state = SM_Layer_Parent_State_Map[layer_index];
-        if ((uint32_t)parent_state > SM_NUM_STATES) {
+        parent_state = (uint32_t)SM_ROM_READ_INDEX(SM_Layer_Parent_State_Map[layer_index]);
+        if (parent_state > SM_NUM_STATES) {
             return SM_ERR_CONFIGURATION;
         }
     }
     for (state_index = 1U; state_index <= SM_NUM_STATES; ++state_index) {
-        parent_layer = SM_State_Parent_Layer_Map[state_index];
+        uint32_t parent_layer;
+        uint32_t layer_slot;
+        parent_layer = (uint32_t)SM_ROM_READ_INDEX(SM_State_Parent_Layer_Map[state_index]);
         if (parent_layer >= SM_NUM_LAYERS) {
             return SM_ERR_CONFIGURATION;
         }
-        slot = SM_State_Active_Slot_Map[state_index];
-        if ((slot < -1) || (slot >= (int32_t)SM_NUM_ACTIVE_SLOTS)) {
+        slot = (uint32_t)SM_ROM_READ_INDEX(SM_State_Active_Slot_Map[state_index]);
+        if ((slot != SM_ROM_INDEX_NONE) && (slot >= SM_NUM_ACTIVE_SLOTS)) {
             return SM_ERR_CONFIGURATION;
         }
-        if (slot != SM_Layer_Active_Slot_Map[parent_layer]) {
+        layer_slot = (uint32_t)SM_ROM_READ_INDEX(SM_Layer_Active_Slot_Map[parent_layer]);
+        if (slot != layer_slot) {
             return SM_ERR_CONFIGURATION;
         }
     }
@@ -1269,6 +1312,7 @@ SM_ARITH_INLINE bool SM_StoreDouble(ADIA_Instance_t *instance, double value, dou
 /* float/single saturate to +-FLT_MAX (or fail under overflow policy error). */
 SM_ARITH_INLINE bool SM_StoreFloat(ADIA_Instance_t *instance, double value, bool error_on_overflow, float *out)
 {
+    double stored = value;
     if (!SM_ArithTake(instance)) {
         return false;
     }
@@ -1281,11 +1325,14 @@ SM_ARITH_INLINE bool SM_StoreFloat(ADIA_Instance_t *instance, double value, bool
             SM_ArithLatch(instance);
             return false;
         }
-        value = (value < 0.0) ? -(double)FLT_MAX : (double)FLT_MAX;
+        stored = (value < 0.0) ? -(double)FLT_MAX : (double)FLT_MAX;
     }
-    *out = (float)value;
+    *out = (float)stored;
     return true;
 }
+
+/* INT64_MIN spelled without a constant that MISRA 7.2/10.4 tools misread. */
+#define SM_I64_MIN ((int64_t)(-INT64_MAX - (int64_t)1))
 
 /* Integer expressions: signed 64-bit intermediates that saturate and never wrap. */
 SM_ARITH_INLINE int64_t SM_AddI64(int64_t a, int64_t b)
@@ -1293,8 +1340,8 @@ SM_ARITH_INLINE int64_t SM_AddI64(int64_t a, int64_t b)
     if ((b > 0) && (a > (INT64_MAX - b))) {
         return INT64_MAX;
     }
-    if ((b < 0) && (a < (INT64_MIN - b))) {
-        return INT64_MIN;
+    if ((b < 0) && (a < (SM_I64_MIN - b))) {
+        return SM_I64_MIN;
     }
     return a + b;
 }
@@ -1304,31 +1351,34 @@ SM_ARITH_INLINE int64_t SM_SubI64(int64_t a, int64_t b)
     if ((b < 0) && (a > (INT64_MAX + b))) {
         return INT64_MAX;
     }
-    if ((b > 0) && (a < (INT64_MIN + b))) {
-        return INT64_MIN;
+    if ((b > 0) && (a < (SM_I64_MIN + b))) {
+        return SM_I64_MIN;
     }
     return a - b;
 }
 
 SM_ARITH_INLINE int64_t SM_MulI64(int64_t a, int64_t b)
 {
+    bool overflow_high = false;
+    bool overflow_low = false;
     if ((a == 0) || (b == 0)) {
-        return 0;
-    }
-    if (a > 0) {
+        /* The product is zero. */
+    } else if (a > 0) {
         if (b > 0) {
-            if (a > (INT64_MAX / b)) {
-                return INT64_MAX;
-            }
-        } else if (b < (INT64_MIN / a)) {
-            return INT64_MIN;
+            overflow_high = (a > (INT64_MAX / b));
+        } else {
+            overflow_low = (b < (SM_I64_MIN / a));
         }
     } else if (b > 0) {
-        if (a < (INT64_MIN / b)) {
-            return INT64_MIN;
-        }
-    } else if (a < (INT64_MAX / b)) {
+        overflow_low = (a < (SM_I64_MIN / b));
+    } else {
+        overflow_high = (a < (INT64_MAX / b));
+    }
+    if (overflow_high) {
         return INT64_MAX;
+    }
+    if (overflow_low) {
+        return SM_I64_MIN;
     }
     return a * b;
 }
@@ -1349,7 +1399,7 @@ SM_ARITH_INLINE int64_t SM_DivI64(ADIA_Instance_t *instance, int64_t a, int64_t 
         SM_ArithFault(instance);
         return 0;
     }
-    if ((a == INT64_MIN) && (b == -1)) {
+    if ((a == SM_I64_MIN) && (b == -1)) {
         return INT64_MAX;
     }
     return a / b;
@@ -1376,6 +1426,7 @@ SM_ARITH_INLINE int64_t SM_U64ToI64(uint64_t value)
 /* Converts to the target range: saturates, or fails under overflow policy error. */
 SM_ARITH_INLINE bool SM_StoreI64(ADIA_Instance_t *instance, int64_t value, int64_t lo, int64_t hi, bool error_on_overflow, int64_t *out)
 {
+    int64_t stored = value;
     if (!SM_ArithTake(instance)) {
         return false;
     }
@@ -1384,9 +1435,9 @@ SM_ARITH_INLINE bool SM_StoreI64(ADIA_Instance_t *instance, int64_t value, int64
             SM_ArithLatch(instance);
             return false;
         }
-        value = (value < lo) ? lo : hi;
+        stored = (value < lo) ? lo : hi;
     }
-    *out = value;
+    *out = stored;
     return true;
 }
 
@@ -1406,7 +1457,7 @@ SM_ARITH_INLINE bool SM_StoreDoubleToI64(ADIA_Instance_t *instance, double value
         wide = INT64_MAX;
         beyond = true;
     } else if (value < -9223372036854775808.0) {
-        wide = INT64_MIN;
+        wide = SM_I64_MIN;
         beyond = true;
     } else {
         wide = (int64_t)value;
@@ -1439,7 +1490,12 @@ SM_Error_t SM_GetError(const ADIA_Instance_t *instance);
 void SM_SetTraceSink(ADIA_Instance_t *instance, SM_TraceSink_t sink);
 void SM_TraceAction(ADIA_Instance_t *instance, const char *action);
 #else
-#define SM_TraceAction(instance, action) ((void)0)
+/* No trace sink compiled in: an empty inline function, not a macro of the same name (MISRA 5.5). */
+SM_ARITH_INLINE void SM_TraceAction(ADIA_Instance_t *instance, const char *action)
+{
+    (void)instance;
+    (void)action;
+}
 #endif
 
 #ifdef ADIA_TESTING
@@ -1485,60 +1541,65 @@ void SM_TraceAction(ADIA_Instance_t *instance, const char *action)
 
 static void SM_Enter_Layer_Default_0(ADIA_Instance_t *instance);
 static void SM_Exit_Layer_No_History_0(ADIA_Instance_t *instance);
+static void SM_Exit_Layer_0(ADIA_Instance_t *instance);
+static void SM_Exit_Active_0(ADIA_Instance_t *instance);
 static bool SM_Execute_Layer_0(ADIA_Instance_t *instance);
 static void SM_Enter_Deep_1(ADIA_Instance_t *instance);
+static void SM_Exit_State_1(ADIA_Instance_t *instance);
 static bool SM_Execute_State_1(ADIA_Instance_t *instance);
 static void SM_Enter_Deep_2(ADIA_Instance_t *instance);
+static void SM_Exit_State_2(ADIA_Instance_t *instance);
 static bool SM_Execute_State_2(ADIA_Instance_t *instance);
-static void SM_Exit_Layer(ADIA_Instance_t *instance, uint32_t layer);
-static void SM_Exit_State(ADIA_Instance_t *instance, SM_Node_t state, bool record_containing_layer);
 static void SM_Exit_All(ADIA_Instance_t *instance);
 static void SM_Enter_Safe_State(ADIA_Instance_t *instance);
 static void SM_Enter_Fault(ADIA_Instance_t *instance);
 
-static void SM_Exit_Layer(ADIA_Instance_t *instance, uint32_t layer)
+static void SM_Exit_Active_0(ADIA_Instance_t *instance)
 {
-    switch (layer) {
-        case SM_LYR_ROOT_IDX:
-            if (instance->active_states[0U] != SM_NODE_INVALID) {
-                SM_Exit_State(instance, instance->active_states[0U], false);
-            }
+    switch (instance->active_states[0U]) {
+        case SM_ST_S1:
+            SM_Exit_State_1(instance);
             break;
-        default: break;
+        case SM_ST_S2:
+            SM_Exit_State_2(instance);
+            break;
+        default:
+            break;
     }
 }
 
-static void SM_Exit_State(ADIA_Instance_t *instance, SM_Node_t state, bool record_containing_layer)
+static void SM_Exit_Layer_0(ADIA_Instance_t *instance)
 {
-    (void)record_containing_layer;
-    switch (state) {
-        case SM_ST_S1:
-            if (!instance->state_active[SM_ST_S1_IDX]) { break; }
-            SM_ST_S1_Exit(instance);
-            instance->state_active[SM_ST_S1_IDX] = false;
-            instance->state_timers[SM_ST_S1_IDX] = 0U;
-            if (instance->active_states[0U] == SM_ST_S1) {
-                instance->active_states[0U] = SM_NODE_INVALID;
-            }
-            break;
-        case SM_ST_S2:
-            if (!instance->state_active[SM_ST_S2_IDX]) { break; }
-            SM_ST_S2_Exit(instance);
-            instance->state_active[SM_ST_S2_IDX] = false;
-            instance->state_timers[SM_ST_S2_IDX] = 0U;
-            if (instance->active_states[0U] == SM_ST_S2) {
-                instance->active_states[0U] = SM_NODE_INVALID;
-            }
-            break;
-        default: break;
+    SM_Exit_Active_0(instance);
+}
+
+static void SM_Exit_State_1(ADIA_Instance_t *instance)
+{
+    if (instance->state_active[SM_ST_S1_IDX]) {
+        SM_ST_S1_Exit(instance);
+        instance->state_active[SM_ST_S1_IDX] = false;
+        instance->state_timers[SM_ST_S1_IDX] = 0U;
+        if (instance->active_states[0U] == SM_ST_S1) {
+            instance->active_states[0U] = SM_NODE_INVALID;
+        }
+    }
+}
+
+static void SM_Exit_State_2(ADIA_Instance_t *instance)
+{
+    if (instance->state_active[SM_ST_S2_IDX]) {
+        SM_ST_S2_Exit(instance);
+        instance->state_active[SM_ST_S2_IDX] = false;
+        instance->state_timers[SM_ST_S2_IDX] = 0U;
+        if (instance->active_states[0U] == SM_ST_S2) {
+            instance->active_states[0U] = SM_NODE_INVALID;
+        }
     }
 }
 
 static void SM_Exit_Layer_No_History_0(ADIA_Instance_t *instance)
 {
-    if (instance->active_states[0U] != SM_NODE_INVALID) {
-        SM_Exit_State(instance, instance->active_states[0U], false);
-    }
+    SM_Exit_Active_0(instance);
 }
 
 static void SM_Enter_Layer_Default_0(ADIA_Instance_t *instance)
@@ -1578,7 +1639,7 @@ static bool SM_Execute_State_1(ADIA_Instance_t *instance)
 {
     /* TRACE-BEGIN: traceId=TRACE-TRANS-T1 symbol=sm_trans_t1 */
     if (instance->state_timers[SM_ST_S1_IDX] >= 20U) {
-        SM_Exit_State(instance, SM_ST_S1, true);
+        SM_Exit_State_1(instance);
         instance->state_active[SM_ST_S2_IDX] = true;
         instance->state_timers[SM_ST_S2_IDX] = 0U;
         instance->active_states[0U] = SM_ST_S2;
@@ -1601,7 +1662,7 @@ static bool SM_Execute_State_2(ADIA_Instance_t *instance)
 
 static void SM_Exit_All(ADIA_Instance_t *instance)
 {
-    SM_Exit_Layer(instance, SM_LYR_ROOT_IDX);
+    SM_Exit_Layer_0(instance);
 }
 
 static void SM_Enter_Safe_State(ADIA_Instance_t *instance)
@@ -1664,7 +1725,7 @@ SM_Error_t SM_Reset(ADIA_Instance_t *instance)
     if (instance == NULL) {
         return SM_ERR_NULL_INSTANCE;
     }
-    SM_Exit_Layer(instance, SM_LYR_ROOT_IDX);
+    SM_Exit_Layer_0(instance);
     instance->data.log = (uint32_t)(0U);
     instance->data.t1 = (bool)(false);
     instance->data.t2 = (bool)(false);
@@ -1702,7 +1763,7 @@ SM_Error_t SM_Step(ADIA_Instance_t *instance, uint32_t delta_ms)
     }
     if (instance->fault_latched || (instance->error_status != SM_ERR_NONE)) {
         SM_Enter_Fault(instance);
-        return instance->error_status != SM_ERR_NONE ? instance->error_status : SM_ERR_SAFETY_VIOLATION;
+        return (instance->error_status != SM_ERR_NONE) ? instance->error_status : SM_ERR_SAFETY_VIOLATION;
     }
     if ((delta_ms < SM_TICK_MIN_MS) || (delta_ms > SM_TICK_MAX_MS)) {
         instance->error_status = SM_ERR_TIMING;
@@ -1738,7 +1799,7 @@ SM_Error_t SM_WriteOutputs(ADIA_Instance_t *instance)
     }
     if (instance->fault_latched || (instance->error_status != SM_ERR_NONE)) {
         SM_Enter_Fault(instance);
-        return instance->error_status != SM_ERR_NONE ? instance->error_status : SM_ERR_SAFETY_VIOLATION;
+        return (instance->error_status != SM_ERR_NONE) ? instance->error_status : SM_ERR_SAFETY_VIOLATION;
     }
     instance->error_status = SM_Validate_State_Consistency(instance);
     if (instance->error_status != SM_ERR_NONE) {
@@ -1768,12 +1829,12 @@ SM_Node_t SM_GetActiveSlot(const ADIA_Instance_t *instance, uint32_t slot)
 
 SM_Node_t SM_GetLayerActive(const ADIA_Instance_t *instance, uint32_t layer)
 {
-    int32_t slot;
+    uint32_t slot;
     if ((instance == NULL) || (layer >= SM_NUM_LAYERS)) {
         return SM_NODE_INVALID;
     }
-    slot = SM_Layer_Active_Slot_Map[layer];
-    if (slot < 0) {
+    slot = (uint32_t)SM_ROM_READ_INDEX(SM_Layer_Active_Slot_Map[layer]);
+    if (slot == SM_ROM_INDEX_NONE) {
         return SM_NODE_INVALID;
     }
     return SM_GetActiveSlot(instance, (uint32_t)slot);
@@ -1796,7 +1857,7 @@ SM_Node_t SM_GetActive(const ADIA_Instance_t *instance, SM_Group_t slot)
 
 SM_Error_t SM_GetError(const ADIA_Instance_t *instance)
 {
-    return instance == NULL ? SM_ERR_NULL_INSTANCE : instance->error_status;
+    return (instance == NULL) ? SM_ERR_NULL_INSTANCE : instance->error_status;
 }
 
 #ifdef ADIA_TESTING
@@ -1836,6 +1897,7 @@ SM_Error_t SM_Test_SetStateTimer(ADIA_Instance_t *instance, SM_Node_t state, uin
     return SM_ERR_NONE;
 }
 
+/* cppcheck-suppress constParameterPointer */
 SM_Error_t SM_Test_SetHistoryState(ADIA_Instance_t *instance, uint32_t slot, SM_Node_t state)
 {
     if (instance == NULL) {
@@ -1847,6 +1909,7 @@ SM_Error_t SM_Test_SetHistoryState(ADIA_Instance_t *instance, uint32_t slot, SM_
     return SM_ERR_INVALID_ARGUMENT;
 }
 
+/* cppcheck-suppress constParameterPointer */
 SM_Error_t SM_Test_SetDeepHistory(ADIA_Instance_t *instance, uint32_t layer, SM_Node_t state, bool active)
 {
     if (instance == NULL) {
@@ -1880,71 +1943,63 @@ void SM_ApplySafeOutputs(ADIA_Instance_t *instance);
 #include "sm_safety.h"
 #include "sm_mapping.h"
 
-static const SM_Node_t SM_State_Parent_Map[SM_NUM_STATES + 1U] = {
-    [0] = SM_NODE_INVALID,
-    [SM_ST_S1_IDX] = SM_NODE_INVALID,
-    [SM_ST_S2_IDX] = SM_NODE_INVALID,
-};
-
-static const bool SM_Layer_Has_Children_Map[SM_NUM_LAYERS] = {
-    [SM_LYR_ROOT_IDX] = true,
-};
-
 static bool SM_Is_Direct_Layer_Child(uint32_t layer_index, SM_Node_t state)
 {
+    bool result = false;
     switch (layer_index) {
         case SM_LYR_ROOT_IDX:
-            switch (state) {
-                case SM_ST_S1: return true;
-                case SM_ST_S2: return true;
-                default: return false;
-            }
-        default: return false;
+            result = (state == SM_ST_S1) || (state == SM_ST_S2);
+            break;
+        default:
+            break;
     }
+    return result;
 }
 
 SM_Error_t SM_Validate_State_Consistency(const ADIA_Instance_t *instance)
 {
+    static SM_ROM SM_Rom_Index_t SM_State_Parent_Map[SM_NUM_STATES + 1U] = {
+        [0] = 0U,
+        [SM_ST_S1_IDX] = 0U,
+        [SM_ST_S2_IDX] = 0U,
+    };
     uint32_t layer_index;
     uint32_t state_index;
     uint32_t slot_index;
     SM_Node_t active_node;
-    int32_t active_slot;
-    SM_Node_t parent;
-    bool container_active;
+    uint32_t active_slot;
+    uint32_t parent;
     if (instance == NULL) {
         return SM_ERR_NULL_INSTANCE;
     }
     for (state_index = 1U; state_index <= SM_NUM_STATES; ++state_index) {
         if (instance->state_active[state_index]) {
-            parent = SM_State_Parent_Map[state_index];
-            if ((parent != SM_NODE_INVALID)
-                && (!instance->state_active[(uint32_t)parent])) {
+            parent = (uint32_t)SM_ROM_READ_INDEX(SM_State_Parent_Map[state_index]);
+            if ((parent != 0U) && (!instance->state_active[parent])) {
                 return SM_ERR_CONFIGURATION;
             }
-            active_slot = SM_State_Active_Slot_Map[state_index];
-            if ((active_slot >= 0)
-                && (instance->active_states[(uint32_t)active_slot]
-                    != (SM_Node_t)state_index)) {
+            active_slot = (uint32_t)SM_ROM_READ_INDEX(SM_State_Active_Slot_Map[state_index]);
+            if ((active_slot != SM_ROM_INDEX_NONE)
+                && (instance->active_states[active_slot] != (SM_Node_t)state_index)) {
                 return SM_ERR_CONFIGURATION;
             }
         }
     }
     for (layer_index = 0U; layer_index < SM_NUM_LAYERS; ++layer_index) {
-        parent = SM_Layer_Parent_State_Map[layer_index];
-        container_active = (parent == SM_NODE_INVALID)
-            || instance->state_active[(uint32_t)parent];
-        active_slot = SM_Layer_Active_Slot_Map[layer_index];
+        bool container_active;
+        parent = (uint32_t)SM_ROM_READ_INDEX(SM_Layer_Parent_State_Map[layer_index]);
+        container_active = (parent == 0U) || instance->state_active[parent];
+        active_slot = (uint32_t)SM_ROM_READ_INDEX(SM_Layer_Active_Slot_Map[layer_index]);
         if (container_active) {
-            if (active_slot >= 0) {
-                active_node = instance->active_states[(uint32_t)active_slot];
+            if (active_slot != SM_ROM_INDEX_NONE) {
+                active_node = instance->active_states[active_slot];
                 if ((active_node == SM_NODE_INVALID)
                     || ((uint32_t)active_node > SM_NUM_STATES)
                     || (!SM_Is_Direct_Layer_Child(layer_index, active_node))
                     || (!instance->state_active[(uint32_t)active_node])) {
                     return SM_ERR_CONFIGURATION;
                 }
-            } else if (SM_Layer_Has_Children_Map[layer_index]) {
+            } else {
                 for (state_index = 1U; state_index <= SM_NUM_STATES; ++state_index) {
                     if (SM_Is_Direct_Layer_Child(layer_index, (SM_Node_t)state_index)
                         && (!instance->state_active[state_index])) {
@@ -1952,18 +2007,22 @@ SM_Error_t SM_Validate_State_Consistency(const ADIA_Instance_t *instance)
                     }
                 }
             }
-        } else if ((active_slot >= 0)
-            && (instance->active_states[(uint32_t)active_slot] != SM_NODE_INVALID)) {
+        } else if ((active_slot != SM_ROM_INDEX_NONE)
+            && (instance->active_states[active_slot] != SM_NODE_INVALID)) {
             return SM_ERR_CONFIGURATION;
+        } else {
+            /* Inactive container without a live slot: nothing to check. */
         }
     }
     for (slot_index = 0U; slot_index < SM_NUM_ACTIVE_SLOTS; ++slot_index) {
         active_node = instance->active_states[slot_index];
         if (active_node != SM_NODE_INVALID) {
             if (((uint32_t)active_node > SM_NUM_STATES)
-                || (!instance->state_active[(uint32_t)active_node])
-                || (SM_State_Active_Slot_Map[(uint32_t)active_node]
-                    != (int32_t)slot_index)) {
+                || (!instance->state_active[(uint32_t)active_node])) {
+                return SM_ERR_CONFIGURATION;
+            }
+            active_slot = (uint32_t)SM_ROM_READ_INDEX(SM_State_Active_Slot_Map[(uint32_t)active_node]);
+            if (active_slot != slot_index) {
                 return SM_ERR_CONFIGURATION;
             }
         }
@@ -2182,9 +2241,9 @@ Evidence labels describe only the checks actually recorded for this generated pa
 | Metric | Value |
 |---|---:|
 | Files measured | 10 |
-| Total lines | 1043 |
-| Functional lines | 897 |
-| Comment/blank density | 14.0% |
+| Total lines | 1078 |
+| Functional lines | 923 |
+| Comment/blank density | 14.4% |
 
 ## X-Bridges static code-generation metrics
 
@@ -2200,6 +2259,33 @@ Evidence labels describe only the checks actually recorded for this generated pa
 These are structural metrics derived from the same validated semantic analysis used by the testing report. They are not formal MISRA, safety-certification, embedded-timing, or target-hardware evidence.
 ",
     "name": "static_metrics_report.md",
+  },
+  {
+    "content": "# MISRA C:2012 deviations
+
+Generated production code (C standard: c11).
+
+The generated sm_*.c / sm_*.h files (including the inline helpers of sm_core.h, sm_xbridges.* and
+mcal_dio.h) are checked with the cppcheck MISRA C:2012 addon. Every required and mandatory rule it
+detects passes. The only accepted deviation is the advisory rule below.
+
+## Rule 15.5 (advisory): a function should have a single point of exit
+
+- Scope: all generated functions that return early.
+- Rationale: guard clauses (NULL instance, argument and range checks), fault handling and the
+  "stop at the first violation" validators return as soon as the condition is known. A single exit
+  would need nested conditions or status flags that obscure the control flow and add paths to test.
+- Safeguards: every early return is a plain \`return\` at the function top level or inside one level of
+  \`if\`; functions contain no \`goto\`, no recursion (the call graph is acyclic, rule 17.2) and loops are
+  bounded by compile-time constants. The returns are covered by the generated test vectors.
+- Decision: bounded and reviewed; accepted for this code base.
+
+## Other rules
+
+No other deviation is recorded. Rules that the addon cannot evaluate (for example directive 4.x
+documentation rules and rules needing whole-program information) remain subject to manual review.
+",
+    "name": "MISRA_DEVIATIONS.md",
   },
 ]
 `;

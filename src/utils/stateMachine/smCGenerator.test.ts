@@ -142,19 +142,19 @@ describe('structured C99 renderer', { timeout: 60_000 }, () => {
     const mapping = generatedFile(build(nestedAndFixture()), 'sm_mapping.c');
 
     expect(safety).toContain(
-      'static const SM_Node_t SM_State_Parent_Map[SM_NUM_STATES + 1U]',
+      'static SM_ROM SM_Rom_Index_t SM_State_Parent_Map[SM_NUM_STATES + 1U]',
     );
     expect(safety).toContain(
-      '[SM_ST_REGION_A_IDX] = SM_ST_PARALLEL',
+      '[SM_ST_REGION_A_IDX] = SM_ST_PARALLEL_IDX',
     );
     expect(safety).toContain(
-      '[SM_ST_REGION_B_IDX] = SM_ST_PARALLEL',
+      '[SM_ST_REGION_B_IDX] = SM_ST_PARALLEL_IDX',
     );
     expect(mapping).toContain(
       '[SM_ST_PARALLEL_IDX] = 0',
     );
     expect(mapping).toContain(
-      '[SM_ST_REGION_A_IDX] = -1',
+      '[SM_ST_REGION_A_IDX] = SM_ROM_INDEX_NONE',
     );
     expect(safety).toContain(
       'return SM_ERR_CONFIGURATION;',
@@ -167,7 +167,7 @@ describe('structured C99 renderer', { timeout: 60_000 }, () => {
     const source = generatedFile(ir, 'sm_mapping.c');
 
     expect(header).toContain(
-      'extern const uint32_t SM_State_Parent_Layer_Map[SM_NUM_STATES + 1U];',
+      'extern SM_ROM SM_Rom_Index_t SM_State_Parent_Layer_Map[SM_NUM_STATES + 1U];',
     );
     expect(header).toContain(
       'SM_Error_t SM_Validate_Mapping_Configuration(void);',
@@ -175,8 +175,8 @@ describe('structured C99 renderer', { timeout: 60_000 }, () => {
     expect(source).toContain(
       '[SM_ST_REGION_A_IDX] = SM_LYR_PARALLEL_IDX',
     );
-    expect(source).toContain('[SM_ST_REGION_A_IDX] = -1');
-    expect(source).toContain('[SM_ST_REGION_B_IDX] = -1');
+    expect(source).toContain('[SM_ST_REGION_A_IDX] = SM_ROM_INDEX_NONE');
+    expect(source).toContain('[SM_ST_REGION_B_IDX] = SM_ROM_INDEX_NONE');
     expect(source).toContain('Active State Mapping');
     expect(source).toContain(
       'Parallel child states are tracked using state_active[].',
@@ -232,7 +232,7 @@ int main(void) {
     expect(header).toContain('SM_Node_t SM_GetLayerActive(');
     expect(header).toContain('bool SM_IsStateActive(');
     expect(header).toContain('Deprecated: use SM_GetActiveSlot()');
-    expect(core).toContain('slot = SM_Layer_Active_Slot_Map[layer];');
+    expect(core).toContain('slot = (uint32_t)SM_ROM_READ_INDEX(SM_Layer_Active_Slot_Map[layer]);');
     expect(core).not.toContain('active_states[layer]');
     expect(core).toContain(
       'return SM_GetActiveSlot(instance, (uint32_t)slot);',
@@ -393,6 +393,7 @@ int main(void) {
       'mcal_dio.h',
       'sm_testing_report.md',
       'static_metrics_report.md',
+      'MISRA_DEVIATIONS.md',
     ]);
     expect(JSON.stringify(ir)).toBe(before);
   });
@@ -419,6 +420,7 @@ int main(void) {
       'sm_xbridges.c',
       'sm_testing_report.md',
       'static_metrics_report.md',
+      'MISRA_DEVIATIONS.md',
     ]);
     expect(renderConfigHeader(hybrid)).toContain('#include "sm_xbridges.h"');
     expect(renderConfigHeader(hybrid)).toContain(

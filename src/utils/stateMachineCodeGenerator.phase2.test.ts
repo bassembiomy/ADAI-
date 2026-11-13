@@ -39,7 +39,7 @@ describe('StateMachineCodeGenerator structured backend remediation', () => {
 
   it('distinguishes external self-transition and internal action-only code', () => {
     const external = generated(interpreterFixture('external-self'), 'sm_core.c');
-    expect(external).toContain('SM_Exit_State(instance, SM_ST_A, true);');
+    expect(external).toMatch(/SM_Exit_State_\d+\(instance\);\n[\s\S]*?instance->state_active\[SM_ST_A_IDX\] = true;/);
     expect(external).toContain('SM_ST_A_Entry(instance);');
 
     const internal = generated(interpreterFixture('internal-action'), 'sm_core.c');
@@ -47,8 +47,8 @@ describe('StateMachineCodeGenerator structured backend remediation', () => {
       'SM_StoreDouble(instance, SM_ChkD(instance, (((double)instance->data.counter) + 1.0)), &sm_tmp)',
     );
     const action = internal.indexOf('instance->data.counter =');
-    expect(internal.slice(Math.max(0, action - 300), action)).not.toContain(
-      'SM_Exit_State(instance, SM_ST_A',
+    expect(internal.slice(Math.max(0, action - 300), action)).not.toMatch(
+      /SM_Exit_State_\d+\(instance\)/,
     );
   });
 
@@ -72,10 +72,17 @@ describe('StateMachineCodeGenerator structured backend remediation', () => {
     expect(enterR1).toBeLessThan(enterR2);
     expect(enterR2).toBeLessThan(enterR3);
 
-    const exitLayer = core.indexOf('case SM_LYR_PARALLEL_REGIONS_IDX:');
-    const exitR3 = core.indexOf('SM_Exit_State(instance, SM_ST_R3, false);', exitLayer);
-    const exitR2 = core.indexOf('SM_Exit_State(instance, SM_ST_R2, false);', exitLayer);
-    const exitR1 = core.indexOf('SM_Exit_State(instance, SM_ST_R1, false);', exitLayer);
+    /* Exits are per-state functions (no recursion): find the layer exit and the state functions it calls. */
+    const exitLayerBody = core.match(/static void (SM_Exit_Layer_\d+)\(ADIA_Instance_t \*instance\)\n\{\n([\s\S]*?)\n\}/g)!
+      .find((body) => (body.match(/SM_Exit_State_\d+\(instance\);/g) ?? []).length === 3)!;
+    const calls = exitLayerBody.match(/SM_Exit_State_\d+\(instance\);/g)!;
+    const stateNumber = (state: string) => {
+      const header = core.match(new RegExp(`static void (SM_Exit_State_\\d+)\\(ADIA_Instance_t \\*instance\\)\\n\\{\\n    if \\(instance->state_active\\[SM_ST_${state}_IDX\\]\\)`));
+      return header![1];
+    };
+    const exitR3 = calls.indexOf(`${stateNumber('R3')}(instance);`);
+    const exitR2 = calls.indexOf(`${stateNumber('R2')}(instance);`);
+    const exitR1 = calls.indexOf(`${stateNumber('R1')}(instance);`);
     expect(exitR3).toBeLessThan(exitR2);
     expect(exitR2).toBeLessThan(exitR1);
   });
