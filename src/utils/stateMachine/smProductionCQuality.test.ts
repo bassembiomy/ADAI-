@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -36,6 +36,14 @@ const hasCppcheck = has('cppcheck') && MISRA_PY !== undefined;
 const ADVISORY = new Set(['1.2', '2.3', '2.4', '2.5', '2.6', '2.7', '4.2', '5.9', '8.7', '8.9', '8.11', '8.13', '10.5', '11.4', '11.5', '12.1', '12.3', '12.4', '13.3', '13.4', '15.1', '15.4', '15.5', '17.5', '17.8', '18.4', '18.5', '19.2', '20.1', '20.5', '20.10', '21.12']);
 const ACCEPTED_DEVIATIONS = new Set(['15.5']);
 
+/* Runs cppcheck's MISRA addon; it prints violations to stderr as "[file:line] (style) ... [misra-c2012-X.Y]". */
+const misraViolations = (dir: string, dumps: string[]) => {
+  const run = spawnSync('python3', [MISRA_PY!, ...dumps], { cwd: dir, encoding: 'utf8' });
+  const report = `${run.stdout ?? ''}\n${run.stderr ?? ''}`;
+  return [...report.matchAll(/^\[([^\]]+?):(\d+)\][^\n]*\[misra-c2012-(\d+\.\d+)\]/gm)]
+    .map((match) => ({ file: match[1], line: Number(match[2]), rule: match[3] }));
+};
+
 const charts: Array<[string, () => StateMachineModelV5]> = [
   ['random-everything', () => buildRandomChart(5003, { innerTransitions: true, arithmetic: true, events: true } as never)],
   ['random-no-history-77-states', () => buildRandomChart(67, { innerTransitions: false, arithmetic: false })],
@@ -57,6 +65,17 @@ const writeChart = (model: StateMachineModelV5, dir: string) => {
 const productionSources = (dir: string) => readdirSync(dir).filter((name) => name.endsWith('.c') && !/stub|test|harness/.test(name));
 
 describe('generated C is production quality', () => {
+  it.skipIf(!hasCppcheck)('the MISRA check detects violations (guards against a vacuous pass)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'adia-misra-self-'));
+    try {
+      writeFileSync(join(dir, 'bad.c'), 'int f(int x) { if (x) goto L; L: return x; }\n');
+      execFileSync('cppcheck', ['--dump', '--std=c99', '--quiet', 'bad.c'], { cwd: dir, stdio: 'pipe' });
+      expect(misraViolations(dir, ['bad.c.dump']).map((violation) => violation.rule)).toContain('15.1');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 120_000);
+
   for (const [label, make] of charts) {
     it.skipIf(!hasCppcheck)(`${label}: no MISRA required/mandatory violations detected by cppcheck`, () => {
       const dir = mkdtempSync(join(tmpdir(), 'adia-misra-'));
@@ -68,14 +87,7 @@ describe('generated C is production quality', () => {
           execFileSync('cppcheck', ['--dump', '--std=c99', '--quiet', '-I.', source], { cwd: dir, stdio: 'pipe' });
           dumps.push(`${source}.dump`);
         }
-        let report = '';
-        try {
-          report = execFileSync('python3', [MISRA_PY!, ...dumps], { cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
-        } catch (error) {
-          report = `${(error as { stdout?: string }).stdout ?? ''}${(error as { stderr?: string }).stderr ?? ''}`;
-        }
-        const violations = [...report.matchAll(/^(\S+):(\d+):\d+: \w+: .*\[misra-c2012-(\d+\.\d+)\]/gm)]
-          .map((match) => ({ file: match[1], line: Number(match[2]), rule: match[3] }))
+        const violations = misraViolations(dir, dumps)
           .filter((violation) => !ACCEPTED_DEVIATIONS.has(violation.rule));
         const required = violations.filter((violation) => !ADVISORY.has(violation.rule));
         expect(required.map((violation) => `${violation.rule} ${violation.file}:${violation.line}`)).toEqual([]);
