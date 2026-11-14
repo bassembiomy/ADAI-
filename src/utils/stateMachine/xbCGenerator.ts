@@ -7,6 +7,8 @@ import {
   xbControlKernelSamplePeriod,
 } from './xbControlKernels';
 import { toCIdentifier } from './smExpressions';
+import { renderCType } from './smCExpressions';
+import { separateTaskStates } from './xbTaskSchedule';
 import type { SemanticModel, SemanticState } from './smSemanticModel';
 import { STATE_MACHINE_XB_TARGET_CAPABILITIES } from './smSemanticValidator';
 import type {
@@ -4266,6 +4268,114 @@ const renderSolverSubstepFunction = (
   '}',
 );
 
+const isSeparateTask = (state: SemanticState): boolean =>
+  state.xBridges?.solver.execution === 'separate-task';
+
+const taskMember = (member: string): string => `${member}_task`;
+
+const mappingCName = (
+  ir: SemanticModel,
+  mapping: XBSemanticMapping,
+): string =>
+  ir.variables[mapping.variableId]?.cName
+  ?? mapping.variable?.cIdentifier
+  ?? toCIdentifier(mapping.variableId);
+
+/** Distinct chart variables written by the output mappings of a state (one sampled-output field each). */
+const taskOutputVariables = (
+  ir: SemanticModel,
+  state: SemanticState,
+): Array<{ cName: string; cType: string }> => {
+  const seen = new Set<string>();
+  const result: Array<{ cName: string; cType: string }> = [];
+  for (const mapping of state.xBridges!.mappings) {
+    if (mapping.direction !== 'out') continue;
+    const cName = mappingCName(ir, mapping);
+    if (seen.has(cName)) continue;
+    seen.add(cName);
+    const variable = ir.variables[mapping.variableId];
+    result.push({
+      cName,
+      cType: variable === undefined
+        ? 'double'
+        : renderCType(variable.type, variable.fixedPoint),
+    });
+  }
+  return result;
+};
+
+const taskInputMappings = (state: SemanticState): XBSemanticMapping[] =>
+  state.xBridges!.mappings.filter((mapping) => mapping.direction === 'in');
+
+const renderInputMappingWrites = (
+  state: SemanticState,
+  layout: XBStateLayout,
+  member: string,
+  expressionFor: (mapping: XBSemanticMapping, index: number) => string,
+): string[] => {
+  const xb = state.xBridges!;
+  const result: string[] = [];
+  let inputMappingIndex = 0;
+  for (const mapping of xb.mappings) {
+    if (mapping.direction !== 'in') continue;
+    result.push(...renderSignalWrite(
+      state,
+      {
+        id: `mapping_in_${mapping.blockId}_${mapping.portId}`,
+        type: 'Inport',
+        inputSignalIds: [],
+        outputSignalIds: [mapping.signalId],
+        parameters: {},
+        directFeedthrough: true,
+        stateful: false,
+        conversion: null,
+        state: null,
+        schedule: {
+          periodSubsteps: 1,
+          offsetSubsteps: 0,
+          initialCounter: 0,
+          counterIncrement: 1,
+          hold: 'none',
+        },
+      },
+      100000 + inputMappingIndex,
+      0,
+      mapping.signalId,
+      expressionFor(mapping, inputMappingIndex),
+      layout,
+      member,
+    ));
+    inputMappingIndex += 1;
+  }
+  return result;
+};
+
+const mappedOutputTarget = (
+  state: SemanticState,
+  mapping: XBSemanticMapping,
+): string => {
+  const op = state.xBridges!.operations[mapping.blockId];
+  return (op?.type === 'Outport' && op.outputSignalIds[0])
+    ? op.outputSignalIds[0]
+    : mapping.signalId;
+};
+
+/**
+ * The solver substep of a separate-task state runs in the fast task, not in the chart task: a numeric
+ * fault that would escalate latches a flag instead of the chart's error_status (the chart task owns
+ * that field), and the elapsed-time Step block reads the timer latched with the inputs.
+ */
+const separateTaskSubstepText = (text: string, member: string): string =>
+  text
+    .replaceAll(
+      'instance->error_status = SM_ERR_XBRIDGES_NUMERIC;',
+      'instance->xb_task_fault = true;',
+    )
+    .replace(
+      /instance->state_timers\[[^\]]+\]/g,
+      `instance->${taskMember(member)}.live.timer_ms`,
+    );
+
 const renderStateLifecycle = (
   ir: SemanticModel,
   state: SemanticState,
@@ -4273,6 +4383,7 @@ const renderStateLifecycle = (
 ): string => {
   const xb = state.xBridges!;
   const layout = stateLayout(state);
+  const separate = isSeparateTask(state);
   const initLines: string[] = [
     `    (void)memset(&instance->${member}, 0, sizeof(instance->${member}));`,
   ];
@@ -4312,80 +4423,232 @@ const renderStateLifecycle = (
       }
     }
   }
-  const stepLines: string[] = [];
-  stepLines.push(...renderOperationFaultReset(xb, layout, member));
-  stepLines.push(...renderOperationFaultSignalSync(state, xb, layout, member));
-  let inputMappingIndex = 0;
-  for (const mapping of xb.mappings) {
-    if (mapping.direction !== 'in') continue;
-    const varCId = ir.variables[mapping.variableId]?.cName ?? mapping.variable?.cIdentifier ?? toCIdentifier(mapping.variableId);
-    stepLines.push(...renderSignalWrite(
-      state,
-      {
-        id: `mapping_in_${mapping.blockId}_${mapping.portId}`,
-        type: 'Inport',
-        inputSignalIds: [],
-        outputSignalIds: [mapping.signalId],
-        parameters: {},
-        directFeedthrough: true,
-        stateful: false,
-        conversion: null,
-        state: null,
-        schedule: {
-          periodSubsteps: 1,
-          offsetSubsteps: 0,
-          initialCounter: 0,
-          counterIncrement: 1,
-          hold: 'none',
-        },
-      },
-      100000 + inputMappingIndex++,
-      0,
-      mapping.signalId,
-      `(double)(instance->data.${varCId})`,
-      layout,
-      member,
+  const substepFunction = renderSolverSubstepFunction(state, xb, layout, member);
+  if (!separate) {
+    const stepLines: string[] = [];
+    stepLines.push(...renderOperationFaultReset(xb, layout, member));
+    stepLines.push(...renderOperationFaultSignalSync(state, xb, layout, member));
+    stepLines.push(...renderInputMappingWrites(
+      state, layout, member,
+      (mapping) => `(double)(instance->data.${mappingCName(ir, mapping)})`,
     ));
-  }
-  stepLines.push(
-    '    uint32_t xb_substep;',
-    `    for (xb_substep = 0U; xb_substep < SM_XB_${stateSuffix(state)}_SUBSTEPS_PER_TICK; ++xb_substep) {`,
-    `        SM_XB_${stateSuffix(state)}_SolverSubstep(instance);`,
-    '    }',
-  );
-  stepLines.push(...renderOperationFaultSignalSync(state, xb, layout, member));
-  for (const mapping of xb.mappings) {
-    if (mapping.direction !== 'out') continue;
-    const varCId = ir.variables[mapping.variableId]?.cName ?? mapping.variable?.cIdentifier ?? toCIdentifier(mapping.variableId);
-    const op = xb.operations[mapping.blockId];
-    const targetSignalId = (op?.type === 'Outport' && op.outputSignalIds[0])
-      ? op.outputSignalIds[0]
-      : mapping.signalId;
     stepLines.push(
-      `    instance->data.${varCId} = ${renderMappedOutputExpression(state, mapping, targetSignalId, layout, member)};`,
+      '    uint32_t xb_substep;',
+      `    for (xb_substep = 0U; xb_substep < SM_XB_${stateSuffix(state)}_SUBSTEPS_PER_TICK; ++xb_substep) {`,
+      `        SM_XB_${stateSuffix(state)}_SolverSubstep(instance);`,
+      '    }',
     );
+    stepLines.push(...renderOperationFaultSignalSync(state, xb, layout, member));
+    for (const mapping of xb.mappings) {
+      if (mapping.direction !== 'out') continue;
+      stepLines.push(
+        `    instance->data.${mappingCName(ir, mapping)} = ${renderMappedOutputExpression(state, mapping, mappedOutputTarget(state, mapping), layout, member)};`,
+      );
+    }
+    return lines(
+      substepFunction,
+      '',
+      `void SM_XB_${stateSuffix(state)}_Init(ADIA_Instance_t *instance)`,
+      '{',
+      ...initLines,
+      '}',
+      '',
+      `void SM_XB_${stateSuffix(state)}_Enter(ADIA_Instance_t *instance)`,
+      '{',
+      xb.policy.memory === 'reset'
+        ? `    SM_XB_${stateSuffix(state)}_Init(instance);`
+        : '    (void)instance;',
+      '}',
+      '',
+      `void SM_XB_${stateSuffix(state)}_Step(ADIA_Instance_t *instance)`,
+      '{',
+      ...(stepLines.length === 0 ? ['    (void)instance;'] : stepLines),
+      '}',
+    ).trimEnd();
   }
 
+  const task = taskMember(member);
+  const outputs = taskOutputVariables(ir, state);
+  // Fast task: ONE solver step with the inputs latched for this chart period; the outputs are
+  // sampled into the task buffer only by the first fast step of the period (the chart's hit).
+  const taskStepLines: string[] = [
+    ...renderOperationFaultReset(xb, layout, member),
+    ...renderOperationFaultSignalSync(state, xb, layout, member),
+    ...renderInputMappingWrites(
+      state, layout, member,
+      (_mapping, index) => `instance->${task}.live.in[${index}U]`,
+    ),
+    `    SM_XB_${stateSuffix(state)}_SolverSubstep(instance);`,
+    ...renderOperationFaultSignalSync(state, xb, layout, member),
+    '    if (xb_sample) {',
+    ...xb.mappings.filter((mapping) => mapping.direction === 'out').map((mapping) =>
+      `        instance->${task}.out_${mappingCName(ir, mapping)} = ${renderMappedOutputExpression(state, mapping, mappedOutputTarget(state, mapping), layout, member)};`),
+    '    }',
+  ];
   return lines(
-    renderSolverSubstepFunction(state, xb, layout, member),
+    separateTaskSubstepText(substepFunction, member),
+    '',
+    `static void SM_XB_${stateSuffix(state)}_TaskStep(ADIA_Instance_t *instance, bool xb_sample)`,
+    '{',
+    ...taskStepLines,
+    '}',
     '',
     `void SM_XB_${stateSuffix(state)}_Init(ADIA_Instance_t *instance)`,
     '{',
     ...initLines,
     '}',
     '',
+    '/* Separate-task state: the chart task only counts the activation; the fast task applies the memory reset at its first step. */',
     `void SM_XB_${stateSuffix(state)}_Enter(ADIA_Instance_t *instance)`,
     '{',
-    xb.policy.memory === 'reset'
-      ? `    SM_XB_${stateSuffix(state)}_Init(instance);`
-      : '    (void)instance;',
+    `    instance->${task}.entry_gen = instance->${task}.entry_gen + 1U;`,
     '}',
     '',
+    '/* Chart step of a separate-task state: take the outputs sampled by the fast step of this hit. */',
     `void SM_XB_${stateSuffix(state)}_Step(ADIA_Instance_t *instance)`,
     '{',
-    ...(stepLines.length === 0 ? ['    (void)instance;'] : stepLines),
+    '    SM_ENTER_CRITICAL();',
+    ...outputs.map((output) =>
+      `    instance->data.${output.cName} = instance->${task}.out_${output.cName};`),
+    '    SM_EXIT_CRITICAL();',
     '}',
   ).trimEnd();
+};
+
+/** Types of the fast-task buffers (sm_config.h); empty without separate-task states. */
+export const renderXBTaskTypes = (ir: SemanticModel): string[] =>
+  separateTaskStates(ir).flatMap((state) => {
+    const suffix = stateSuffix(state);
+    const inputs = taskInputMappings(state);
+    return [
+      '/* Inputs of a separate-task X-Bridges state latched by the chart task for the fast task. */',
+      'typedef struct {',
+      `    double in[${Math.max(1, inputs.length)}U];`,
+      '    uint32_t timer_ms;',
+      '    uint32_t gen;',
+      '    bool enabled;',
+      `} SM_XB_${suffix}_Latch_t;`,
+      '',
+      'typedef struct {',
+      `    SM_XB_${suffix}_Latch_t pending; /* written by the chart task at the end of a chart step */`,
+      `    SM_XB_${suffix}_Latch_t live; /* used by the fast task for the whole chart period */`,
+      ...taskOutputVariables(ir, state).map((output) =>
+        `    ${output.cType} out_${output.cName}; /* output sampled by the first fast step of a period */`),
+      '    uint32_t entry_gen;',
+      '    uint32_t applied_gen;',
+      '    bool running;',
+      `} SM_XB_${suffix}_Task_t;`,
+      '',
+    ];
+  });
+
+export const renderXBTaskInstanceMembers = (ir: SemanticModel): string[] => {
+  const states = separateTaskStates(ir);
+  if (states.length === 0) return [];
+  const members = new Map(stateMemberEntries(ir).map((entry) => [entry.state.id, entry.member]));
+  return [
+    '    uint32_t xb_task_phase; /* fast step within the chart period, 0 .. SM_XB_TASK_STEPS_PER_TICK - 1 */',
+    '    volatile bool xb_task_fault; /* escalating numeric fault raised in the fast task, taken by the next SM_Step */',
+    ...states.map((state) =>
+      `    SM_XB_${stateSuffix(state)}_Task_t ${taskMember(members.get(state.id)!)};`),
+  ];
+};
+
+/** SM_XB_Task() and its chart-side helpers (sm_core.c); empty without separate-task states. */
+const renderXBTaskSource = (ir: SemanticModel): string => {
+  const entries = stateMemberEntries(ir).filter(({ state }) => isSeparateTask(state));
+  if (entries.length === 0) return '';
+  const reset = lines(
+    '/* Clears the fast-task buffers; the fast task must not run while SM_Init() or SM_Reset() executes. */',
+    'static void SM_XB_Task_Reset(ADIA_Instance_t *instance)',
+    '{',
+    '    instance->xb_task_phase = 0U;',
+    '    instance->xb_task_fault = false;',
+    ...entries.map(({ member }) =>
+      `    (void)memset(&instance->${taskMember(member)}, 0, sizeof(instance->${taskMember(member)}));`),
+    '}',
+  );
+  const latch = lines(
+    '/*',
+    ' * End of a chart step: latch the inputs written by the chart and the activity of every separate-task',
+    ' * state for the fast steps of the NEXT chart period (slow-to-fast rate transition, one period delay).',
+    ' * The fast task takes the latch at the first fast step of a period, so a preempting fast step never',
+    ' * observes a half-written latch; the update is bracketed by SM_ENTER_CRITICAL()/SM_EXIT_CRITICAL().',
+    ' */',
+    'static void SM_XB_Task_Latch(ADIA_Instance_t *instance)',
+    '{',
+    '    SM_ENTER_CRITICAL();',
+    ...entries.flatMap(({ state, member }) => [
+      ...taskInputMappings(state).map((mapping, index) =>
+        `    instance->${taskMember(member)}.pending.in[${index}U] = (double)(instance->data.${mappingCName(ir, mapping)});`),
+      `    instance->${taskMember(member)}.pending.timer_ms = instance->state_timers[${state.enumName}_IDX];`,
+      `    instance->${taskMember(member)}.pending.gen = instance->${taskMember(member)}.entry_gen;`,
+      `    instance->${taskMember(member)}.pending.enabled = instance->state_active[${state.enumName}_IDX];`,
+    ]),
+    '    SM_EXIT_CRITICAL();',
+    '}',
+  );
+  const takeFault = lines(
+    '/* A numeric fault escalated by the fast task becomes the chart error at the start of the next chart step. */',
+    'static void SM_XB_Task_TakeFault(ADIA_Instance_t *instance)',
+    '{',
+    '    SM_ENTER_CRITICAL();',
+    '    if (instance->xb_task_fault) {',
+    '        instance->xb_task_fault = false;',
+    '        if (instance->error_status == SM_ERR_NONE) {',
+    '            instance->error_status = SM_ERR_XBRIDGES_NUMERIC;',
+    '        }',
+    '    }',
+    '    SM_EXIT_CRITICAL();',
+    '}',
+  );
+  const task = lines(
+    '/*',
+    ' * Fast task: ONE solver step of every enabled separate-task X-Bridges state. Call it every',
+    ' * SM_XB_TASK_PERIOD_US microseconds from an interrupt with higher priority than the chart task.',
+    ' * The first step of each chart period (SM_XB_TASK_STEPS_PER_TICK steps) takes the inputs latched at the',
+    ' * end of the previous chart step and samples the outputs the chart reads; it must run before SM_Step().',
+    ' * The task holds (does nothing) while the chart is in an error or fault state.',
+    ' */',
+    'SM_Error_t SM_XB_Task(ADIA_Instance_t *instance)',
+    '{',
+    '    bool xb_sample;',
+    '    if (instance == NULL) {',
+    '        return SM_ERR_NULL_INSTANCE;',
+    '    }',
+    '    if (instance->fault_latched || (instance->error_status != SM_ERR_NONE)) {',
+    '        return (instance->error_status != SM_ERR_NONE) ? instance->error_status : SM_ERR_SAFETY_VIOLATION;',
+    '    }',
+    '    xb_sample = (instance->xb_task_phase == 0U);',
+    '    if (xb_sample) {',
+    ...entries.map(({ member }) =>
+      `        instance->${taskMember(member)}.live = instance->${taskMember(member)}.pending;`),
+    '    }',
+    ...entries.flatMap(({ state, member }) => {
+      const t = `instance->${taskMember(member)}`;
+      return [
+        `    if (${t}.live.enabled) {`,
+        `        if ((!${t}.running) || (${t}.live.gen != ${t}.applied_gen)) {`,
+        ...(state.xBridges!.policy.memory === 'reset'
+          ? [`            SM_XB_${stateSuffix(state)}_Init(instance);`]
+          : []),
+        `            ${t}.applied_gen = ${t}.live.gen;`,
+        `            ${t}.running = true;`,
+        '        }',
+        `        SM_XB_${stateSuffix(state)}_TaskStep(instance, xb_sample);`,
+        '    } else {',
+        `        ${t}.running = false;`,
+        '    }',
+      ];
+    }),
+    '    instance->xb_task_phase = instance->xb_task_phase + 1U;',
+    '    if (instance->xb_task_phase >= SM_XB_TASK_STEPS_PER_TICK) {',
+    '        instance->xb_task_phase = 0U;',
+    '    }',
+    '    return SM_ERR_NONE;',
+    '}',
+  );
+  return [reset, latch, takeFault, task].map((part) => part.trimEnd()).join('\n\n');
 };
 
 export const renderXBLifecycleSource = (ir: SemanticModel): string =>
@@ -4403,6 +4666,7 @@ export const renderXBLifecycleSource = (ir: SemanticModel): string =>
       : null,
     ...stateMemberEntries(ir)
       .map(({ state, member }) => renderStateLifecycle(ir, state, member)),
+    renderXBTaskSource(ir) || null,
   ).trimEnd();
 
 const NUMERIC_HELPERS = `#define SM_XB_MAX_SAFE_INTEGER 9007199254740991.0

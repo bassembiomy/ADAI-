@@ -5,6 +5,7 @@ import type { ModelDiagnostic } from './smModel';
 import { analyzeSemanticModel } from '../smAnalysisEngine';
 
 import { toCIdentifier } from './smExpressions';
+import { separateTaskStates, separateTaskTiming } from './xbTaskSchedule';
 import {
   renderCAction,
   renderCGuard,
@@ -32,6 +33,8 @@ import {
   renderXBInstanceMembers,
   renderXBLifecycleSource,
   renderXBSource,
+  renderXBTaskInstanceMembers,
+  renderXBTaskTypes,
 } from './xbCGenerator';
 import {
   DEFAULT_VERIFICATION_EVIDENCE,
@@ -1051,6 +1054,34 @@ const renderRomSection = (ir: SemanticModel): string[] => {
   ];
 };
 
+/**
+ * Multi-rate X-Bridges states: the fast task period and rate, and the interrupt-masking hooks that
+ * bracket the chart-to-task latch (the same hooks as the input events use, defined once).
+ */
+const renderXBTaskMacros = (ir: SemanticModel): string[] => {
+  const timing = separateTaskTiming(ir);
+  if (timing === null) return [];
+  return [
+    '/* Separate-task X-Bridges states: SM_XB_Task() performs one solver step every SM_XB_TASK_PERIOD_US microseconds. */',
+    `#define SM_XB_TASK_PERIOD_US ${timing.periodUs}U`,
+    `#define SM_XB_TASK_STEPS_PER_TICK ${timing.stepsPerTick}U`,
+    ...(eventUsage(ir).input ? [] : [
+      '/*',
+      ' * The chart task latches the fast-task inputs and takes its outputs with SM_ENTER_CRITICAL()/',
+      ' * SM_EXIT_CRITICAL(), so that the fast interrupt cannot observe a torn update. The defaults do',
+      ' * nothing: map them to your interrupt masking (for example __disable_irq()/__enable_irq()) before',
+      ' * including this file.',
+      ' */',
+      '#ifndef SM_ENTER_CRITICAL',
+      '#define SM_ENTER_CRITICAL() ((void)0)',
+      '#endif',
+      '#ifndef SM_EXIT_CRITICAL',
+      '#define SM_EXIT_CRITICAL() ((void)0)',
+      '#endif',
+    ]),
+  ];
+};
+
 export const renderConfigHeader = (ir: SemanticModel): string => {
   const index = buildIndex(ir);
   const states = orderedStates(ir);
@@ -1102,6 +1133,7 @@ export const renderConfigHeader = (ir: SemanticModel): string => {
     `#define SM_TICK_MIN_MS ${Math.max(0, ir.tickMs - (ir.verification.tickToleranceMs > 0 ? ir.verification.tickToleranceMs : Math.max(1, Math.floor(ir.tickMs / 10))))}U`,
     `#define SM_TICK_MAX_MS ${ir.tickMs + (ir.verification.tickToleranceMs > 0 ? ir.verification.tickToleranceMs : Math.max(1, Math.floor(ir.tickMs / 10)))}U`,
     ir.executeAtInitialization === false ? '#define SM_EXECUTE_AT_INIT 0U' : null,
+    ...renderXBTaskMacros(ir),
     `#define SM_NUM_STATES ${states.length}U`,
     `#define SM_NUM_LAYERS ${layers.length}U`,
     `#define SM_NUM_ACTIVE_SLOTS ${ir.activeSlotCount}U`,
@@ -1169,9 +1201,11 @@ export const renderConfigHeader = (ir: SemanticModel): string => {
         `    ${renderCType(variable.type, variable.fixedPoint)} ${variable.cName};`).join('\n'),
     '} SM_Data_t;',
     '',
+    ...renderXBTaskTypes(ir),
     'struct ADIA_Instance {',
     '    SM_Data_t data;',
     ...renderXBInstanceMembers(ir).map((member) => `    ${member}`),
+    ...renderXBTaskInstanceMembers(ir),
     '    SM_Node_t active_states[(SM_NUM_ACTIVE_SLOTS > 0U) ? SM_NUM_ACTIVE_SLOTS : 1U];',
     historyStorageUsage(ir).shallow
       ? '    SM_Node_t history_states[(SM_NUM_ACTIVE_SLOTS > 0U) ? SM_NUM_ACTIVE_SLOTS : 1U];'
@@ -1229,6 +1263,10 @@ export const renderCoreHeader = (cStandard?: string, ir?: SemanticModel): string
   'SM_Error_t SM_Reset(ADIA_Instance_t *instance);',
   'SM_Error_t SM_ReadInputs(ADIA_Instance_t *instance);',
   'SM_Error_t SM_Step(ADIA_Instance_t *instance, uint32_t delta_ms);',
+  ...(ir !== undefined && separateTaskStates(ir).length > 0 ? [
+    '/* Fast task: one solver step of every separate-task X-Bridges state, called every SM_XB_TASK_PERIOD_US from a higher-priority interrupt. */',
+    'SM_Error_t SM_XB_Task(ADIA_Instance_t *instance);',
+  ] : []),
   ...(ir !== undefined && eventUsage(ir).input ? [
     '/* Marks an input event pending for the next SM_Step(). Safe to call from an interrupt (see SM_ENTER_CRITICAL). */',
     'SM_Error_t SM_PostEvent(ADIA_Instance_t *instance, SM_Event_t event);',
@@ -1951,6 +1989,16 @@ const renderCoreSourceBody = (ir: SemanticModel): string => {
   const timerAdvance = renderTimerAdvanceFunctions(ir, index);
   const states = orderedStates(ir);
   const rootLayer = ir.layers[ir.rootLayerId];
+  // Multi-rate X-Bridges states: reset the fast-task buffers, latch their inputs at the end of a chart step.
+  const hasTask = separateTaskStates(ir).length > 0;
+  const taskResetLines = hasTask ? ['    SM_XB_Task_Reset(instance);'] : [];
+  const taskLatchLines = (indent: string): string[] => hasTask
+    ? [
+      `${indent}if (instance->error_status == SM_ERR_NONE) {`,
+      `${indent}    SM_XB_Task_Latch(instance);`,
+      `${indent}}`,
+    ]
+    : [];
   const forwardDeclarations = [
     ...orderedLayers(ir).flatMap((layer) => [
       `static void ${layerFunction(index, 'SM_Enter_Layer_Default', layer.id)}(ADIA_Instance_t *instance);`,
@@ -2157,6 +2205,7 @@ const renderCoreSourceBody = (ir: SemanticModel): string => {
         '        SM_Enter_Fault(instance);',
         '    }',
       ]),
+    ...taskLatchLines('    '),
     '    return instance->error_status;',
     '}',
     '',
@@ -2169,6 +2218,7 @@ const renderCoreSourceBody = (ir: SemanticModel): string => {
     '        return SM_ERR_NULL_INSTANCE;',
     '    }',
     `    ${layerFunction(index, 'SM_Exit_Layer', rootLayer.id)}(instance);`,
+    ...taskResetLines,
     ...states
       .filter((state) => state.xBridges !== null)
       .map((state) => `    ${xbStateFunction(state, 'Init')}(instance);`),
@@ -2211,6 +2261,7 @@ const renderCoreSourceBody = (ir: SemanticModel): string => {
         '        SM_Enter_Fault(instance);',
         '    }',
       ]),
+    ...taskLatchLines('    '),
     '    return SM_WriteOutputs(instance);',
     '}',
     '',
@@ -2229,6 +2280,7 @@ const renderCoreSourceBody = (ir: SemanticModel): string => {
     '    if (instance == NULL) {',
     '        return SM_ERR_NULL_INSTANCE;',
     '    }',
+    ...(hasTask ? ['    SM_XB_Task_TakeFault(instance);'] : []),
     '    if (instance->fault_latched || (instance->error_status != SM_ERR_NONE)) {',
     '        SM_Enter_Fault(instance);',
     '        return (instance->error_status != SM_ERR_NONE) ? instance->error_status : SM_ERR_SAFETY_VIOLATION;',
@@ -2259,6 +2311,7 @@ const renderCoreSourceBody = (ir: SemanticModel): string => {
       '        if (instance->error_status != SM_ERR_NONE) {',
       '            SM_Enter_Fault(instance);',
       '        }',
+      ...taskLatchLines('        '),
       '        return instance->error_status;',
       '    }',
     ] : []),
@@ -2278,6 +2331,7 @@ const renderCoreSourceBody = (ir: SemanticModel): string => {
     '    if (instance->error_status != SM_ERR_NONE) {',
     '        SM_Enter_Fault(instance);',
     '    }',
+    ...taskLatchLines('    '),
     '    return instance->error_status;',
     '}',
     '',

@@ -25,6 +25,12 @@ export interface RandomChartFeatures {
    */
   xBridges?: boolean;
   /**
+   * With xBridges: makes about two thirds of the X-Bridges states 'separate-task' (multi-rate: one solver step
+   * per SM_XB_Task() call, deterministic rate transitions). All separate-task states of a chart share one
+   * random solver step; the other states keep their own random step and run in the chart tick.
+   */
+  xBridgesTasks?: boolean;
+  /**
    * Declares two external C functions (ext_mix over int32, ext_blend over double and int32) called from
    * actions and guards. Their C implementation comes from randomChartExtraSources, passed to the
    * differential harness as DifferentialFixture.extraSources.
@@ -412,6 +418,7 @@ export const buildRandomChart = (seed: number, features: RandomChartFeatures): S
   if (features.xBridges) {
     const leaves = states.filter((state) => !childLayerOf.has(state.id));
     const pool = [...leaves];
+    const taskStep = features.xBridgesTasks ? pick([0.002, 0.005, 0.01]) : 0.01;
     for (const output of xbOutputs) {
       if (pool.length === 0) break;
       const leaf = pool.splice(Math.floor(rnd() * pool.length), 1)[0];
@@ -422,7 +429,9 @@ export const buildRandomChart = (seed: number, features: RandomChartFeatures): S
         nodes: template.nodes,
         edges: template.edges,
         mappings: template.mappings,
-        solver: { kind: 'euler', stepSeconds: pick([0.002, 0.005, 0.01]) },
+        solver: features.xBridgesTasks && chance(0.66)
+          ? { kind: 'euler', stepSeconds: taskStep, execution: 'separate-task' }
+          : { kind: 'euler', stepSeconds: pick([0.002, 0.005, 0.01]) },
         policy: { memory: pick(['reset', 'retain'] as const), numericFault: pick(['signal-only', 'escalate'] as const) },
       };
       leaf.isXBridges = true;

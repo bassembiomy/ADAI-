@@ -14,7 +14,7 @@ import { buildRandomChart, RANDOM_INPUT_EVENTS, randomChartExtraSources, randomS
  * and unsigned, both rounding modes); the 'with-events' group adds input and local events
  * (event-triggered transitions, send() actions, event queue overflow); the 'with-xbridges' group turns
  * leaf states into X-Bridges states (random memory and fault policies, inputs read from and outputs
- * written to chart variables that guards read), the 'with-external-functions' group calls two hand-written C
+ * written to chart variables that guards read), the 'with-xbridges-tasks' group makes about two thirds of those X-Bridges states separate-task (multi-rate: the C harness drives SM_XB_Task N times per chart tick), the 'with-external-functions' group calls two hand-written C
  * functions from actions and guards (their C implementation is compiled in as an extra source), compared exactly like the other groups.
  *
  * Deterministic: each chart is built from a seed. A failure message names the group and
@@ -34,6 +34,7 @@ const groups: Array<[string, RandomChartFeatures, number]> = [
   ['with-events', { innerTransitions: true, arithmetic: true, events: true }, 5_000],
   ['with-fixed-point', { innerTransitions: true, arithmetic: true, fixedPoint: true }, 6_000],
   ['with-xbridges', { innerTransitions: true, arithmetic: true, events: true, xBridges: true }, 6_000],
+  ['with-xbridges-tasks', { innerTransitions: true, arithmetic: true, events: true, xBridges: true, xBridgesTasks: true }, 8_000],
   ['with-external-functions', { innerTransitions: true, arithmetic: true, events: true, externalFunctions: true }, 7_000],
 ];
 

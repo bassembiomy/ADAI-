@@ -37,9 +37,18 @@ export type XBMemoryPolicy = 'reset' | 'retain';
 export type XBSolverKind = 'euler' | 'rk4';
 export type XBFaultPolicy = 'signal-only' | 'escalate';
 
+/**
+ * Where the solver steps of a state run. 'in-tick' (default, absent in the persisted model): all
+ * tick / stepSeconds substeps run inside the chart tick. 'separate-task': one substep per call of
+ * the generated SM_XB_Task(), driven by a faster task (multi-rate, deterministic rate transitions).
+ */
+export type XBSolverExecution = 'in-tick' | 'separate-task';
+
 export interface XBSolverConfig {
   kind: XBSolverKind;
   stepSeconds: number;
+  /** Omitted means 'in-tick'. */
+  execution?: XBSolverExecution;
 }
 
 export interface XBStatePolicy {

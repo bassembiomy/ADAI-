@@ -1294,6 +1294,21 @@ export const buildXBSemanticModel = (
     return { diagnostics };
   }
 
+  if (input.model.solver.execution === 'separate-task') {
+    const periodUs = solverStep === null
+      ? null
+      : multiplyRationalByInteger(solverStep, 1000000n);
+    if (periodUs === null || periodUs.denominator !== 1n || periodUs.numerator <= 0n
+      || periodUs.numerator > 0xFFFFFFFFn) {
+      diagnostics.push(diagnostic(
+        'XB_TASK_PERIOD_NOT_INTEGER_US',
+        'A separate-task solver step must be an integer number of microseconds (SM_XB_TASK_PERIOD_US).',
+        input.stateId,
+      ));
+      return { diagnostics };
+    }
+  }
+
   const executionOrder = deterministicExecutionOrder(
     input.model.nodes,
     input.model.edges,
@@ -1882,6 +1897,9 @@ export const buildXBSemanticModel = (
         kind: input.model.solver.kind,
         stepSeconds: input.model.solver.stepSeconds,
         substepsPerTick,
+        ...(input.model.solver.execution === 'separate-task'
+          ? { execution: 'separate-task' as const }
+          : {}),
       },
       policy: {
         memory: input.model.policy.memory,

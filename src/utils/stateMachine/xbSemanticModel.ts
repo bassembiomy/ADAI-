@@ -30,6 +30,8 @@ export interface XBSemanticModel {
     /** Canonical fixed solver interval, validated against the base tick. */
     readonly stepSeconds: number;
     readonly substepsPerTick: number;
+    /** Present only for 'separate-task' (multi-rate); absent means the substeps run in the chart tick. */
+    readonly execution?: 'separate-task';
   };
   readonly policy: XBStatePolicy;
 }
@@ -181,6 +183,8 @@ export interface XBSemanticModel {
     /** Canonical fixed solver interval, validated against the base tick. */
     readonly stepSeconds: number;
     readonly substepsPerTick: number;
+    /** Present only for 'separate-task' (multi-rate); absent means the substeps run in the chart tick. */
+    readonly execution?: 'separate-task';
   };
   readonly policy: XBStatePolicy;
 }

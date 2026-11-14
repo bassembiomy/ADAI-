@@ -41,6 +41,7 @@ import type {
   XBSemanticStateSlot,
 } from './xbSemanticModel';
 import type { XBNumericType, XBShape } from './xbNumeric';
+import { separateTaskStates } from './xbTaskSchedule';
 
 export interface CProgramOptions {
   directory: string;
@@ -590,7 +591,10 @@ const renderScenarioOperations = (
     ];
   }
   const elapsedMs = operation.elapsedMs ?? ir.tickMs;
+  // Multi-rate X-Bridges states: fast step kN, the chart step, then the other N - 1 fast steps of the period.
+  const fastTask = separateTaskStates(ir).length > 0;
   return [
+    ...(fastTask ? ['    (void)SM_XB_Task(&instance);'] : []),
     ...renderInputAssignments(ir, operation),
     ...renderEventPosts(ir, operation),
     '    action_count = 0U;',
@@ -600,6 +604,11 @@ const renderScenarioOperations = (
     '    if (step_error == SM_ERR_NONE) {',
     '        (void)SM_WriteOutputs(&instance);',
     '    }',
+    ...(fastTask ? [
+      '    for (xb_fast = 1U; xb_fast < SM_XB_TASK_STEPS_PER_TICK; ++xb_fast) {',
+      '        (void)SM_XB_Task(&instance);',
+      '    }',
+    ] : []),
     `    print_frame(&instance, sequence++, ${elapsedMs}U);`,
   ];
 }).join('\n');
@@ -917,6 +926,7 @@ const renderDifferentialHarnessDefaultPrefix = (
     '    ADIA_Instance_t instance = {0};',
     '    unsigned sequence = 0U;',
     '    SM_Error_t step_error = SM_ERR_NONE;',
+    ...(separateTaskStates(ir).length > 0 ? ['    uint32_t xb_fast = 0U;', '    (void)xb_fast;'] : []),
     '    (void)step_error;',
     '    (void)node_id;',
     '    (void)setlocale(LC_NUMERIC, "C");',

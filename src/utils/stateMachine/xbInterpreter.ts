@@ -2362,10 +2362,12 @@ const executeSolverSubstep = (
   runtime.simTime = (runtime.simTime ?? 0) + runtime.ir.solver.stepSeconds;
 };
 
-export const stepXBState = (
+const runXBStep = (
   runtime: XBRuntime,
   data: Record<string, number | boolean>,
-  stateElapsedMs?: number,
+  stateElapsedMs: number | undefined,
+  substeps: number,
+  outputs: Record<string, number | boolean> | null,
 ): XBNumericFault[] => {
   const faults: XBNumericFault[] = [];
   runtime.stateElapsedMs = stateElapsedMs;
@@ -2415,12 +2417,12 @@ export const stepXBState = (
     );
   }
 
-  for (let substep = 0; substep < runtime.ir.solver.substepsPerTick; substep++) {
+  for (let substep = 0; substep < substeps; substep++) {
     executeSolverSubstep(runtime, faults);
   }
 
   for (const mapping of runtime.ir.mappings) {
-    if (mapping.direction !== 'out') continue;
+    if (mapping.direction !== 'out' || outputs === null) continue;
     const varId = mapping.variableId ?? mapping.sourceVariableId ?? mapping.variable?.id;
     const values = signalValues(runtime, mapping.signalId);
     if (values.length !== 1) {
@@ -2429,7 +2431,7 @@ export const stepXBState = (
         + 'must be scalar',
       );
     }
-    data[varId] = convertValue(
+    outputs[varId] = convertValue(
       values[0],
       mapping.numericType,
       faults,
@@ -2437,3 +2439,22 @@ export const stepXBState = (
   }
   return faults;
 };
+
+export const stepXBState = (
+  runtime: XBRuntime,
+  data: Record<string, number | boolean>,
+  stateElapsedMs?: number,
+): XBNumericFault[] =>
+  runXBStep(runtime, data, stateElapsedMs, runtime.ir.solver.substepsPerTick, data);
+
+/**
+ * One fast-task solver step of a separate-task state ('separate-task' execution): the generated C's
+ * SM_XB_<STATE>_TaskStep. `inputs` is the chart data latched for this chart period; the mapped outputs
+ * are converted into `outputs` only when `outputs` is given (the first fast step of the period).
+ */
+export const stepXBTask = (
+  runtime: XBRuntime,
+  inputs: Record<string, number | boolean>,
+  stateElapsedMs: number | undefined,
+  outputs: Record<string, number | boolean> | null,
+): XBNumericFault[] => runXBStep(runtime, inputs, stateElapsedMs, 1, outputs);

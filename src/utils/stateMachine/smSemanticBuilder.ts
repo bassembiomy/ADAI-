@@ -819,6 +819,18 @@ export const buildSemanticModel = (
     })));
     states[stateId].xBridges = result.ir ?? null;
   }
+  const taskSteps = new Set<number>();
+  for (const stateId of hierarchy.orderedStateIds) {
+    const solver = states[stateId]?.xBridges?.solver;
+    if (solver?.execution === 'separate-task') taskSteps.add(solver.stepSeconds);
+  }
+  if (taskSteps.size > 1) {
+    diagnostics.push({
+      code: 'SM_XB_TASK_RATE_MISMATCH',
+      message: `Separate-task X-Bridges states of one chart must share one solver step; found ${[...taskSteps].sort((left, right) => left - right).join(', ')} s.`,
+      severity: 'error',
+    });
+  }
   if (diagnostics.some((item) => item.severity === 'error')) {
     return { diagnostics, variableSymbols, stateSymbols };
   }

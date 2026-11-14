@@ -22,8 +22,10 @@ import {
   enterXBState,
   resetXBState,
   stepXBState,
+  stepXBTask,
   type XBRuntime,
 } from './xbInterpreter';
+import { separateTaskStates } from './xbTaskSchedule';
 import { normalizeLogicalTick } from './smTiming';
 import { coerceTypedValue } from './smTypedValue';
 import {
@@ -49,6 +51,35 @@ export interface SemanticRuntimeError {
   detail?: string;
 }
 
+/** Chart data latched for the fast task at the end of a chart step (the generated C's SM_XB_<S>_Latch_t). */
+interface XBTaskLatch {
+  data: Record<string, number | boolean>;
+  timerMs: number;
+  gen: number;
+  enabled: boolean;
+}
+
+interface XBTaskStateRuntime {
+  pending: XBTaskLatch;
+  live: XBTaskLatch;
+  /** Outputs sampled by the first fast step of the chart period; the chart step takes them. */
+  sampled: Record<string, number | boolean>;
+  entryGen: number;
+  appliedGen: number;
+  running: boolean;
+}
+
+/**
+ * Multi-rate ('separate-task') X-Bridges states: the simulation of SM_XB_Task(). Per chart period k:
+ * fast step kN (first: takes the latch of the end of chart step k-1, samples the outputs), the chart
+ * step k, the latch at its end, fast steps kN+1 .. kN+N-1 with the latch taken at kN.
+ */
+export interface XBTaskRuntime {
+  /** An escalating numeric fault raised in a fast step; taken by the start of the next chart step. */
+  fault: boolean;
+  byStateId: Record<string, XBTaskStateRuntime>;
+}
+
 export interface SemanticRuntime {
   readonly ir: SemanticModel;
   data: Record<string, number | boolean>;
@@ -58,6 +89,8 @@ export interface SemanticRuntime {
   historySlots: Array<string | null>;
   deepHistory: Record<string, string[]>;
   xBridgesByStateId: Record<string, XBRuntime>;
+  /** Null unless the chart has separate-task X-Bridges states. */
+  xbTask: XBTaskRuntime | null;
   error: SemanticRuntimeError | null;
   traceSequence: number;
   /** Set by init/reset when the chart does not execute at initialization: the next step enters it. */
@@ -262,7 +295,12 @@ const markStateEntered = (
     context.runtime.activeSlots[state.activeSlot] = state.id;
   }
   const xBridges = context.runtime.xBridgesByStateId[stateId];
-  if (xBridges !== undefined) enterXBState(xBridges);
+  if (xBridges !== undefined) {
+    const task = context.runtime.xbTask?.byStateId[stateId];
+    if (task === undefined) enterXBState(xBridges);
+    // Separate-task state: the fast task applies the memory reset at its first step after the activation.
+    else if (xBridges.ir.policy.memory === 'reset') task.entryGen += 1;
+  }
   runActions(
     context,
     state.entryActions,
@@ -794,11 +832,15 @@ const executeState = (
 
   const xBridges = context.runtime.xBridgesByStateId[stateId];
   if (xBridges !== undefined) {
-    const faults = stepXBState(
-      xBridges,
-      context.runtime.data,
-      context.runtime.stateTimersMs[state.activityIndex],
-    );
+    const task = context.runtime.xbTask?.byStateId[stateId];
+    // A separate-task state does not solve in the chart step: it takes the outputs of the fast step of this hit.
+    const faults = task !== undefined
+      ? (Object.assign(context.runtime.data, task.sampled), [])
+      : stepXBState(
+        xBridges,
+        context.runtime.data,
+        context.runtime.stateTimersMs[state.activityIndex],
+      );
     if (
       faults.length > 0
       && xBridges.ir.policy.numericFault === 'escalate'
@@ -999,6 +1041,85 @@ const enterFaultConfiguration = (context: StepContext): void => {
   }
 };
 
+const emptyTaskLatch = (): XBTaskLatch => ({ data: {}, timerMs: 0, gen: 0, enabled: false });
+
+/** The generated C's SM_XB_Task_Reset: zeroed buffers and sampled outputs. */
+const resetXBTask = (runtime: SemanticRuntime): void => {
+  const states = separateTaskStates(runtime.ir);
+  if (states.length === 0) {
+    runtime.xbTask = null;
+    return;
+  }
+  runtime.xbTask = {
+    fault: false,
+    byStateId: Object.fromEntries(states.map((state) => {
+      const sampled: Record<string, number | boolean> = {};
+      for (const mapping of state.xBridges!.mappings) {
+        if (mapping.direction !== 'out') continue;
+        const key = mapping.variableId ?? mapping.sourceVariableId ?? mapping.variable?.id;
+        if (key === undefined) continue;
+        sampled[key] = runtime.ir.variables[key]?.type === 'bool' ? false : 0;
+      }
+      return [state.id, {
+        pending: emptyTaskLatch(),
+        live: emptyTaskLatch(),
+        sampled,
+        entryGen: 0,
+        appliedGen: 0,
+        running: false,
+      }];
+    })),
+  };
+};
+
+/** End of a chart step: latch the chart data and the activity of every separate-task state (SM_XB_Task_Latch). */
+const latchXBTask = (runtime: SemanticRuntime): void => {
+  const task = runtime.xbTask;
+  if (task === null || runtime.error !== null) return;
+  for (const [stateId, entry] of Object.entries(task.byStateId)) {
+    const state = runtime.ir.states[stateId];
+    entry.pending = {
+      data: { ...runtime.data },
+      timerMs: runtime.stateTimersMs[state.activityIndex],
+      gen: entry.entryGen,
+      enabled: runtime.stateActive[state.activityIndex],
+    };
+  }
+};
+
+/** One call of SM_XB_Task(): `first` is the first fast step of a chart period (phase 0). */
+const runXBFastStep = (runtime: SemanticRuntime, first: boolean): void => {
+  const task = runtime.xbTask;
+  // The fast task holds while the chart is in an error or fault state.
+  if (task === null || runtime.error !== null) return;
+  const states = separateTaskStates(runtime.ir);
+  if (first) {
+    for (const entry of Object.values(task.byStateId)) {
+      entry.live = { ...entry.pending, data: { ...entry.pending.data } };
+    }
+  }
+  for (const state of states) {
+    const entry = task.byStateId[state.id];
+    const xBridges = runtime.xBridgesByStateId[state.id];
+    if (!entry.live.enabled) {
+      entry.running = false;
+      continue;
+    }
+    if (!entry.running || entry.live.gen !== entry.appliedGen) {
+      if (xBridges.ir.policy.memory === 'reset') resetXBState(xBridges);
+      entry.appliedGen = entry.live.gen;
+      entry.running = true;
+    }
+    const faults = stepXBTask(
+      xBridges,
+      { ...entry.live.data },
+      entry.live.timerMs,
+      first ? entry.sampled : null,
+    );
+    if (faults.length > 0 && xBridges.ir.policy.numericFault === 'escalate') task.fault = true;
+  }
+};
+
 export const createRuntime = (ir: SemanticModel): SemanticRuntime => {
   const stateCount = orderedStates(ir).reduce(
     (count, state) => Math.max(count, state.activityIndex + 1),
@@ -1017,6 +1138,7 @@ export const createRuntime = (ir: SemanticModel): SemanticRuntime => {
         .filter((state) => state.xBridges !== null)
         .map((state) => [state.id, createXBRuntime(state.xBridges!)]),
     ),
+    xbTask: null,
     error: null,
     traceSequence: 0,
     entryPending: false,
@@ -1026,6 +1148,7 @@ export const createRuntime = (ir: SemanticModel): SemanticRuntime => {
     timingViolations: 0,
   };
   restoreDataDefaults(runtime);
+  resetXBTask(runtime);
   return runtime;
 };
 
@@ -1039,12 +1162,16 @@ export const initializeRuntime = (
   for (const xBridges of Object.values(runtime.xBridgesByStateId)) {
     resetXBState(xBridges);
   }
+  resetXBTask(runtime);
   runtime.error = null;
   runtime.traceSequence = 0;
   clearEventState(runtime);
   const context: StepContext = { runtime, actions: [] };
   runtime.entryPending = !executesAtInitialization(runtime.ir);
-  if (runtime.entryPending) return createTraceFrame(context, 0);
+  if (runtime.entryPending) {
+    latchXBTask(runtime);
+    return createTraceFrame(context, 0);
+  }
   try {
     enterLayerDefault(context, runtime.ir.rootLayerId);
     if ((runtime.error as SemanticRuntimeError | null)?.code === 'ARITHMETIC') {
@@ -1053,6 +1180,7 @@ export const initializeRuntime = (
   } catch (error) {
     latchEvaluationError(runtime, error);
   }
+  latchXBTask(runtime);
   return createTraceFrame(context, 0);
 };
 
@@ -1101,7 +1229,23 @@ export const stepRuntime = (
   elapsedMs: number,
 ): SemanticTraceFrame => {
   const context: StepContext = { runtime, actions: [] };
+  // Multi-rate X-Bridges states: fast step kN runs first (higher priority), with the latch of chart step k-1.
+  runXBFastStep(runtime, true);
   if (runtime.error !== null) return createTraceFrame(context, elapsedMs);
+  if (runtime.xbTask?.fault === true) {
+    // A numeric fault escalated by a fast step becomes the chart error at the start of this chart step.
+    runtime.xbTask.fault = false;
+    runtime.error = {
+      code: 'XBRIDGES_NUMERIC',
+      message: 'X-Bridges numeric fault',
+    };
+    try {
+      enterFaultConfiguration(context);
+    } catch (error) {
+      latchEvaluationError(runtime, error);
+    }
+    return createTraceFrame(context, elapsedMs);
+  }
   const timing = normalizeLogicalTick(runtime.ir.tickMs, elapsedMs);
   if (timing.kind === 'invalid') {
     runtime.error = {
@@ -1141,6 +1285,12 @@ export const stepRuntime = (
   } catch (error) {
     latchEvaluationError(runtime, error);
   }
+  if (runtime.xbTask !== null) {
+    // End of the chart step: latch for the next period, then the remaining fast steps of this one.
+    latchXBTask(runtime);
+    const stepsPerTick = separateTaskStates(runtime.ir)[0].xBridges!.solver.substepsPerTick;
+    for (let fast = 1; fast < stepsPerTick; fast += 1) runXBFastStep(runtime, false);
+  }
   return createTraceFrame(context, elapsedMs);
 };
 
@@ -1170,11 +1320,15 @@ export const resetRuntime = (
   for (const xBridges of Object.values(runtime.xBridgesByStateId)) {
     resetXBState(xBridges);
   }
+  resetXBTask(runtime);
   runtime.error = null;
   runtime.timingViolations = 0;
   clearEventState(runtime);
   runtime.entryPending = !executesAtInitialization(runtime.ir);
-  if (runtime.entryPending) return createTraceFrame(context, 0);
+  if (runtime.entryPending) {
+    latchXBTask(runtime);
+    return createTraceFrame(context, 0);
+  }
   try {
     enterLayerDefault(context, runtime.ir.rootLayerId);
     if ((runtime.error as SemanticRuntimeError | null)?.code === 'ARITHMETIC') {
@@ -1183,6 +1337,7 @@ export const resetRuntime = (
   } catch (error) {
     latchEvaluationError(runtime, error);
   }
+  latchXBTask(runtime);
   return createTraceFrame(context, 0);
 };
 

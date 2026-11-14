@@ -308,6 +308,9 @@ export const adaptXBModel = (input: unknown): XBAdaptResult => {
         kind: input.solver.kind ?? (canonicalInput ? undefined : DEFAULT_SOLVER.kind),
         stepSeconds: input.solver.stepSeconds
           ?? (canonicalInput ? undefined : DEFAULT_SOLVER.stepSeconds),
+        ...(input.solver.execution === undefined || input.solver.execution === null
+          ? {}
+          : { execution: input.solver.execution }),
       }
       : null;
   const policy = input.policy === undefined
@@ -327,6 +330,11 @@ export const adaptXBModel = (input: unknown): XBAdaptResult => {
     || (solver.kind !== 'euler' && solver.kind !== 'rk4')
     || typeof solver.stepSeconds !== 'number') {
     invalid(diagnostics, 'X-Bridges solver must select Euler or RK4 with an explicit step.');
+  } else if ('execution' in solver
+    && solver.execution !== undefined
+    && solver.execution !== 'in-tick'
+    && solver.execution !== 'separate-task') {
+    invalid(diagnostics, "X-Bridges solver execution must be 'in-tick' or 'separate-task'.");
   }
   if (policy === null
     || (policy.memory !== 'reset' && policy.memory !== 'retain')
