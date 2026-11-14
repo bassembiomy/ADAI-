@@ -16,8 +16,13 @@
  *   - Integrators are forward Euler: I[k+1] = I[k] + e*dt. A block whose host output uses the freshly
  *     integrated value (the PI controllers) outputs Kp*e + Ki*I[k+1] and stores I[k+1] (the host's nextState).
  *   - `time` is the simulation time at the start of the solver step (k*dt), as the host's `time` argument.
- *   - Default parameter values follow the host factories exactly, including `x || default` (a zero value
- *     selects the default) where the factory uses it and `x !== undefined ? x : default` where it uses that.
+ *   - Default parameter values apply only when a parameter is absent or not finite; an explicit zero is honoured
+ *     (the host factories use the same rule, `finiteOr`).
+ *   - Anti-windup is conditional integration: a PI integrator holds its value in a step where the unclamped
+ *     output is beyond its limit and the error drives it further out; the output is then clamped to the limit.
+ *   - Phase-continuous references keep an electrical angle `theta`: on the first step it is seeded from absolute
+ *     time (theta = wrap(omega * time), as the host always did), afterwards theta_k = wrap(theta_{k-1} + omega_k * dt)
+ *     with wrap(x) = fmod(fmod(x, 2*pi) + 2*pi, 2*pi).
  *   - State is held in the generated instance struct in float32 (or float64 when the first output port is
  *     float64), exactly like PID_BASIC state.
  */
@@ -384,18 +389,23 @@ const firstDefined = (parameters: Params, names: readonly string[]): unknown => 
   return undefined;
 };
 
-/** Host `Number(x) || fallback` (zero, NaN and absent select the fallback). */
-const orDefault = (parameters: Params, names: readonly string[], fallback: number): number => {
-  const value = Number(firstDefined(parameters, names));
-  return Number.isFinite(value) && value !== 0 ? value : fallback;
-};
-
-/** Host `x !== undefined ? Number(x) : fallback` (an explicit zero is honoured). */
-const definedOrDefault = (parameters: Params, names: readonly string[], fallback: number): number => {
+/**
+ * Parameter value with a default: the default applies only when the parameter is absent (undefined or null) or
+ * not a finite number. An explicit zero is honoured. The host factories apply the same rule (`finiteOr`).
+ */
+const paramOr = (parameters: Params, names: readonly string[], fallback: number): number => {
   const raw = firstDefined(parameters, names);
-  if (raw === undefined) return fallback;
+  if (raw === undefined || raw === null) return fallback;
   const value = Number(raw);
   return Number.isFinite(value) ? value : fallback;
+};
+
+/** Optional output limit magnitude: null when the parameter is absent or not finite (no limit). */
+const optionalLimit = (parameters: Params, name: string): number | null => {
+  const raw = parameters[name];
+  if (raw === undefined || raw === null) return null;
+  const value = Number(raw);
+  return Number.isFinite(value) ? Math.abs(value) : null;
 };
 
 const lit = (value: number): string => {
@@ -406,6 +416,41 @@ const lit = (value: number): string => {
 const PI = lit(Math.PI);
 const TWO_PI = lit(2 * Math.PI);
 const SQRT3 = lit(Math.sqrt(3));
+
+/**
+ * Integrator value to store for a PI channel (forward Euler) with conditional-integration anti-windup.
+ * `candidate` = integral + error*dt. With no limit it is plain integration. With a limit the integrator holds
+ * when the unclamped output (computed from the candidate) is beyond +-limit and the error has the same sign as
+ * that excess. Expression text only: callers bind it to a local.
+ */
+const piCandidate = (integral: string, error: string, dt: number): string => `(${integral} + (${error} * ${lit(dt)}))`;
+
+const clampedIntegral = (
+  integral: string, error: string, kp: string, ki: string, dt: number, limit: number | null,
+): string => {
+  const candidate = piCandidate(integral, error, dt);
+  if (limit === null) return candidate;
+  const unclamped = `((${kp} * ${error}) + (${ki} * ${candidate}))`;
+  const high = `((${unclamped} > ${lit(limit)}) && (${error} > 0.0))`;
+  const low = `((${unclamped} < ${lit(-limit)}) && (${error} < 0.0))`;
+  return `(${high} || ${low}) ? ${integral} : ${candidate}`;
+};
+
+/** Output clamped to +-limit (no clamp when there is no limit). */
+const limitOutput = (expression: string, limit: number | null): string => (
+  limit === null ? expression : `fmax(${lit(-limit)}, fmin(${lit(limit)}, ${expression}))`
+);
+
+/** Electrical angle wrapped into [0, 2*pi) with fmod (the host uses the same operations). */
+const wrapAngle = (expression: string): string => `fmod(fmod(${expression}, ${TWO_PI}) + ${TWO_PI}, ${TWO_PI})`;
+
+/**
+ * Electrical angle of a phase-continuous reference: seeded from absolute time on the first step, then integrated
+ * with the block sample period. `primed` is the state slot that records the first step has run.
+ */
+const phaseAngle = (omega: string, dt: number): string => (
+  `((primed > 0.5) ? ${wrapAngle(`(theta + (${omega} * ${lit(dt)}))`)} : ${wrapAngle(`(${omega} * time)`)})`
+);
 
 interface KernelDefinition {
   readonly inputs: readonly string[];
@@ -476,7 +521,7 @@ const KERNELS: Readonly<Record<string, KernelDefinition>> = {
   SVPWM_CORE: {
     inputs: ['v_alpha', 'v_beta'], outputs: ['sector', 't1', 't2', 't0'], stateRoles: [], usesTime: false,
     build: (b, p) => {
-      addSvpwmCore(b, 'v_alpha', 'v_beta', orDefault(p, ['Ts'], 0.0001), orDefault(p, ['Vdc'], 400));
+      addSvpwmCore(b, 'v_alpha', 'v_beta', paramOr(p, ['Ts'], 0.0001), paramOr(p, ['Vdc'], 400));
       b.out('sector', 'c_sector');
       b.out('t1', 'c_t1');
       b.out('t2', 'c_t2');
@@ -499,13 +544,13 @@ const KERNELS: Readonly<Record<string, KernelDefinition>> = {
   SVPWM_GATE_GENERATOR: {
     // Host state is only a lastTime bookkeeping field with no effect on the outputs: stateless here.
     inputs: ['sector', 't1', 't2', 't0'], outputs: ['ga', 'gb', 'gc'], stateRoles: [], usesTime: true,
-    build: (b, p) => addSvpwmGate(b, 'sector', 't1', 't2', 't0', orDefault(p, ['Ts'], 0.0001)),
+    build: (b, p) => addSvpwmGate(b, 'sector', 't1', 't2', 't0', paramOr(p, ['Ts'], 0.0001)),
   },
   SVPWM_MODULATOR: {
     inputs: ['v_alpha', 'v_beta'], outputs: ['ga', 'gb', 'gc'], stateRoles: [], usesTime: true,
     build: (b, p) => {
-      const Ts = orDefault(p, ['Ts'], 0.0001);
-      addSvpwmCore(b, 'v_alpha', 'v_beta', Ts, orDefault(p, ['Vdc'], 400));
+      const Ts = paramOr(p, ['Ts'], 0.0001);
+      addSvpwmCore(b, 'v_alpha', 'v_beta', Ts, paramOr(p, ['Vdc'], 400));
       addSvpwmGate(b, 'c_sector', 'c_t1', 'c_t2', 'c_t0', Ts);
     },
   },
@@ -523,7 +568,7 @@ const KERNELS: Readonly<Record<string, KernelDefinition>> = {
     // cycles per step (golden-ratio step when the step is an exact multiple of the period), as the host.
     inputs: ['duty'], outputs: ['pwm'], stateRoles: ['phase', 'primed'], usesTime: true,
     build: (b, p, dt) => {
-      const frequency = orDefault(p, ['frequency'], 50);
+      const frequency = paramOr(p, ['frequency'], 50);
       const carrierType = String(p.carrierType ?? 'triangle');
       const cycles = dt * frequency;
       const fraction = cycles % 1;
@@ -539,7 +584,7 @@ const KERNELS: Readonly<Record<string, KernelDefinition>> = {
   THREE_PHASE_PWM: {
     inputs: ['va_ref', 'vb_ref', 'vc_ref'], outputs: ['ga', 'gb', 'gc'], stateRoles: ['phase', 'primed'], usesTime: true,
     build: (b, p, dt) => {
-      const frequency = orDefault(p, ['frequency'], 5000);
+      const frequency = paramOr(p, ['frequency'], 5000);
       const method = String(p.method ?? 'SPWM');
       b.let('ph', `(primed > 0.5) ? fmod(fmod(phase + ${lit(dt * frequency)}, 1.0) + 1.0, 1.0) : fmod(time * ${lit(frequency)}, 1.0)`);
       const centred = method === 'Saddle' || method === 'SVPWM';
@@ -556,37 +601,41 @@ const KERNELS: Readonly<Record<string, KernelDefinition>> = {
 
   // ---- Current, speed and flux control ----------------------------------------------------------------
   CURRENT_CONTROLLER_DQ: {
-    // Two PI loops, forward-Euler integrators, no output anti-windup (as the host); iMax limits the
-    // reference vector length. Output uses the freshly integrated value, which is also the next state.
+    // Two PI loops, forward-Euler integrators; iMax limits the reference vector length. Output uses the freshly
+    // integrated value, which is also the next state. With the optional vMax each axis output is limited to
+    // +-vMax with conditional-integration anti-windup; without vMax the loops are unlimited.
     inputs: ['id_ref', 'iq_ref', 'id', 'iq'], outputs: ['vd', 'vq'], stateRoles: ['intD', 'intQ'], usesTime: false,
     build: (b, p, dt) => {
-      const kpD = definedOrDefault(p, ['Kp_d'], 1);
-      const kiD = definedOrDefault(p, ['Ki_d'], 10);
-      const kpQ = definedOrDefault(p, ['Kp_q'], 1);
-      const kiQ = definedOrDefault(p, ['Ki_q'], 10);
-      const iMax = definedOrDefault(p, ['iMax'], 100);
+      const kpD = paramOr(p, ['Kp_d'], 1);
+      const kiD = paramOr(p, ['Ki_d'], 10);
+      const kpQ = paramOr(p, ['Kp_q'], 1);
+      const kiQ = paramOr(p, ['Ki_q'], 10);
+      const iMax = paramOr(p, ['iMax'], 100);
+      const vMax = optionalLimit(p, 'vMax');
       b.let('mag', 'sqrt((id_ref * id_ref) + (iq_ref * iq_ref))');
       b.let('ratio', `((mag > ${lit(iMax)}) && (mag > 0.0)) ? (${lit(iMax)} / mag) : 1.0`);
       b.let('eD', '(id_ref * ratio) - id');
       b.let('eQ', '(iq_ref * ratio) - iq');
-      b.let('nD', `intD + (eD * ${lit(dt)})`);
-      b.let('nQ', `intQ + (eQ * ${lit(dt)})`);
-      b.out('vd', `(${lit(kpD)} * eD) + (${lit(kiD)} * nD)`);
-      b.out('vq', `(${lit(kpQ)} * eQ) + (${lit(kiQ)} * nQ)`);
+      b.let('nD', clampedIntegral('intD', 'eD', lit(kpD), lit(kiD), dt, vMax));
+      b.let('nQ', clampedIntegral('intQ', 'eQ', lit(kpQ), lit(kiQ), dt, vMax));
+      // The output is the unclamped PI output (this step's integration) limited to +-vMax; the stored integrator
+      // holds when that output is beyond the limit (nD / nQ above).
+      b.out('vd', limitOutput(`(${lit(kpD)} * eD) + (${lit(kiD)} * ${piCandidate('intD', 'eD', dt)})`, vMax));
+      b.out('vq', limitOutput(`(${lit(kpQ)} * eQ) + (${lit(kiQ)} * ${piCandidate('intQ', 'eQ', dt)})`, vMax));
       b.nextState('intD', 'nD');
       b.nextState('intQ', 'nQ');
     },
   },
   SPEED_CONTROLLER: {
-    // PI with output saturation to +-maxIq; the host has no anti-windup, the integrator keeps integrating.
+    // PI with output saturation to +-maxIq and conditional-integration anti-windup (see clampedIntegral).
     inputs: ['speed_ref', 'speed_actual'], outputs: ['iq_ref'], stateRoles: ['integral'], usesTime: false,
     build: (b, p, dt) => {
-      const kp = orDefault(p, ['Kp'], 0.5);
-      const ki = orDefault(p, ['Ki'], 5);
-      const maxIq = orDefault(p, ['maxIq'], 10);
+      const kp = paramOr(p, ['Kp'], 0.5);
+      const ki = paramOr(p, ['Ki'], 5);
+      const maxIq = paramOr(p, ['maxIq'], 10);
       b.let('err', 'speed_ref - speed_actual');
-      b.let('nextIntegral', `integral + (err * ${lit(dt)})`);
-      b.out('iq_ref', `fmax(${lit(-maxIq)}, fmin(${lit(maxIq)}, (${lit(kp)} * err) + (${lit(ki)} * nextIntegral)))`);
+      b.let('nextIntegral', clampedIntegral('integral', 'err', lit(kp), lit(ki), dt, Math.abs(maxIq)));
+      b.out('iq_ref', limitOutput(`(${lit(kp)} * err) + (${lit(ki)} * nextIntegral)`, Math.abs(maxIq)));
       b.nextState('integral', 'nextIntegral');
     },
   },
@@ -596,8 +645,9 @@ const KERNELS: Readonly<Record<string, KernelDefinition>> = {
     outputs: ['vd', 'vq', 'va_ref', 'vb_ref', 'vc_ref'],
     stateRoles: ['integralD', 'integralQ'], usesTime: false,
     build: (b, p, dt) => {
-      const kp = definedOrDefault(p, ['Kp'], 1);
-      const ki = definedOrDefault(p, ['Ki'], 10);
+      const kp = paramOr(p, ['Kp'], 1);
+      const ki = paramOr(p, ['Ki'], 10);
+      const vMax = optionalLimit(p, 'vMax');
       b.let('iBeta', `(ia + (2.0 * ib)) / ${SQRT3}`);
       b.let('cosT', 'cos(theta)');
       b.let('sinT', 'sin(theta)');
@@ -605,10 +655,10 @@ const KERNELS: Readonly<Record<string, KernelDefinition>> = {
       b.let('iqMeas', '((-ia) * sinT) + (iBeta * cosT)');
       b.let('errD', 'id_ref - idMeas');
       b.let('errQ', 'iq_ref - iqMeas');
-      b.let('nextD', `integralD + (errD * ${lit(dt)})`);
-      b.let('nextQ', `integralQ + (errQ * ${lit(dt)})`);
-      b.let('vdOut', `(${lit(kp)} * errD) + (${lit(ki)} * nextD)`);
-      b.let('vqOut', `(${lit(kp)} * errQ) + (${lit(ki)} * nextQ)`);
+      b.let('nextD', clampedIntegral('integralD', 'errD', lit(kp), lit(ki), dt, vMax));
+      b.let('nextQ', clampedIntegral('integralQ', 'errQ', lit(kp), lit(ki), dt, vMax));
+      b.let('vdOut', limitOutput(`(${lit(kp)} * errD) + (${lit(ki)} * ${piCandidate('integralD', 'errD', dt)})`, vMax));
+      b.let('vqOut', limitOutput(`(${lit(kp)} * errQ) + (${lit(ki)} * ${piCandidate('integralQ', 'errQ', dt)})`, vMax));
       b.let('vAlpha', '(vdOut * cosT) - (vqOut * sinT)');
       b.let('vBeta', '(vdOut * sinT) + (vqOut * cosT)');
       b.out('vd', 'vdOut');
@@ -623,18 +673,18 @@ const KERNELS: Readonly<Record<string, KernelDefinition>> = {
   FLUX_REFERENCE: {
     // The host outputs the configured value in every mode ('field_weakening' is a placeholder there).
     inputs: [], outputs: ['id_ref'], stateRoles: [], usesTime: false,
-    build: (b, p) => b.out('id_ref', lit(orDefault(p, ['value'], 0))),
+    build: (b, p) => b.out('id_ref', lit(paramOr(p, ['value'], 0))),
   },
   FIELD_WEAKENING: {
     // Voltage-limit PI acting on the d-axis current: integrates only while |V| exceeds v_max, recovers
     // toward zero otherwise, and freezes while the output is clamped in the direction of the error.
     inputs: ['v_mag', 'id_base'], outputs: ['id_ref'], stateRoles: ['integral'], usesTime: false,
     build: (b, p, dt) => {
-      const vMax = orDefault(p, ['v_max'], 300);
-      const kp = orDefault(p, ['Kp'], 0.1);
-      const ki = orDefault(p, ['Ki'], 1);
-      const idMin = definedOrDefault(p, ['id_min', 'min'], -20);
-      const idMax = definedOrDefault(p, ['id_max', 'max'], 10);
+      const vMax = paramOr(p, ['v_max'], 300);
+      const kp = paramOr(p, ['Kp'], 0.1);
+      const ki = paramOr(p, ['Ki'], 1);
+      const idMin = paramOr(p, ['id_min', 'min'], -20);
+      const idMax = paramOr(p, ['id_max', 'max'], 10);
       b.let('vErr', `${lit(vMax)} - v_mag`);
       b.let('stepped', `integral + (vErr * ${lit(dt)})`);
       b.let('integrated', '(vErr < 0.0) ? stepped : fmin(0.0, stepped)');
@@ -650,19 +700,23 @@ const KERNELS: Readonly<Record<string, KernelDefinition>> = {
     // The host's simplified MTPA: iq = Te / (1.5 * 2 pole pairs * psi_m), id = -0.2 |iq|.
     inputs: ['te_ref'], outputs: ['id_ref', 'iq_ref'], stateRoles: [], usesTime: false,
     build: (b, p) => {
-      b.let('iq', `te_ref / ((1.5 * 2.0) * ${lit(orDefault(p, ['psi_m'], 0.1))})`);
+      b.let('iq', `te_ref / ((1.5 * 2.0) * ${lit(paramOr(p, ['psi_m'], 0.1))})`);
       b.out('id_ref', '-fabs(iq * 0.2)');
       b.out('iq_ref', 'iq');
     },
   },
   VOLTAGE_REFERENCE_GENERATOR: {
-    inputs: ['f'], outputs: ['va', 'vb', 'vc'], stateRoles: [], usesTime: true,
-    build: (b, p) => {
-      const amplitude = orDefault(p, ['amplitude'], 1);
+    // Phase-continuous: the electrical angle is integrated from 2*pi*f (see phaseAngle).
+    inputs: ['f'], outputs: ['va', 'vb', 'vc'], stateRoles: ['theta', 'primed'], usesTime: true,
+    build: (b, p, dt) => {
+      const amplitude = paramOr(p, ['amplitude'], 1);
       b.let('w', `${TWO_PI} * f`);
-      b.out('va', `${lit(amplitude)} * sin(w * time)`);
-      b.out('vb', `${lit(amplitude)} * sin((w * time) - (${TWO_PI} / 3.0))`);
-      b.out('vc', `${lit(amplitude)} * sin((w * time) - ((4.0 * ${PI}) / 3.0))`);
+      b.let('th', phaseAngle('w', dt));
+      b.out('va', `${lit(amplitude)} * sin(th)`);
+      b.out('vb', `${lit(amplitude)} * sin(th - (${TWO_PI} / 3.0))`);
+      b.out('vc', `${lit(amplitude)} * sin(th - ((4.0 * ${PI}) / 3.0))`);
+      b.nextState('theta', 'th');
+      b.nextState('primed', '1.0');
     },
   },
   ROTOR_POSITION_ESTIMATOR: {
@@ -691,9 +745,9 @@ const KERNELS: Readonly<Record<string, KernelDefinition>> = {
         b.nextState('theta', 'angle');
         b.nextState('speed', 'speedNew');
       } else {
-        const rs = lit(orDefault(p, ['Rs'], 0.5));
-        const ls = lit(orDefault(p, ['Ls'], 0.01));
-        const poles = lit(orDefault(p, ['P'], 2));
+        const rs = lit(paramOr(p, ['Rs'], 0.5));
+        const ls = lit(paramOr(p, ['Ls'], 0.01));
+        const poles = lit(paramOr(p, ['P'], 2));
         const active = '((fabs(eAlpha) > 0.01) || (fabs(eBeta) > 0.01))';
         b.let('iBeta', `(ia + (2.0 * ib)) / ${SQRT3}`);
         b.let('iBetaPrev', `(ia_prev + (2.0 * ib_prev)) / ${SQRT3}`);
@@ -719,26 +773,33 @@ const KERNELS: Readonly<Record<string, KernelDefinition>> = {
     },
   },
   IM_SCALAR_CONTROL: {
-    // Open-loop V/f: |V| = k*f + boost, angle = w*time (the host does not integrate the frequency).
-    inputs: ['w_ref'], outputs: ['va', 'vb', 'vc'], stateRoles: [], usesTime: true,
-    build: (b, p) => {
+    // Open-loop V/f: |V| = k*f + boost. The electrical angle is integrated from |w_ref| (see phaseAngle).
+    inputs: ['w_ref'], outputs: ['va', 'vb', 'vc'], stateRoles: ['theta', 'primed'], usesTime: true,
+    build: (b, p, dt) => {
       b.let('w', 'fabs(w_ref)');
-      b.let('mag', `(${lit(orDefault(p, ['v_f_ratio'], 4))} * (w / ${TWO_PI})) + ${lit(orDefault(p, ['boost'], 10))}`);
-      b.out('va', 'mag * sin(w * time)');
-      b.out('vb', `mag * sin((w * time) - (${TWO_PI} / 3.0))`);
-      b.out('vc', `mag * sin((w * time) + (${TWO_PI} / 3.0))`);
+      b.let('mag', `(${lit(paramOr(p, ['v_f_ratio'], 4))} * (w / ${TWO_PI})) + ${lit(paramOr(p, ['boost'], 10))}`);
+      b.let('th', phaseAngle('w', dt));
+      b.out('va', 'mag * sin(th)');
+      b.out('vb', `mag * sin(th - (${TWO_PI} / 3.0))`);
+      b.out('vc', `mag * sin(th + (${TWO_PI} / 3.0))`);
+      b.nextState('theta', 'th');
+      b.nextState('primed', '1.0');
     },
   },
   VF_SLIP_COMP: {
-    inputs: ['w_ref', 'iq_actual'], outputs: ['va', 'vb', 'vc', 'w_sync'], stateRoles: [], usesTime: true,
-    build: (b, p) => {
-      b.let('slip', `((iq_actual / ${lit(orDefault(p, ['rated_iq'], 10))}) * ${lit(orDefault(p, ['rated_slip'], 0.05))}) * (${TWO_PI} * 50.0)`);
+    // Synchronous speed w_sync = w_ref + slip; the electrical angle is integrated from w_sync (see phaseAngle).
+    inputs: ['w_ref', 'iq_actual'], outputs: ['va', 'vb', 'vc', 'w_sync'], stateRoles: ['theta', 'primed'], usesTime: true,
+    build: (b, p, dt) => {
+      b.let('slip', `((iq_actual / ${lit(paramOr(p, ['rated_iq'], 10))}) * ${lit(paramOr(p, ['rated_slip'], 0.05))}) * (${TWO_PI} * 50.0)`);
       b.let('sync', 'w_ref + slip');
-      b.let('mag', `(${lit(orDefault(p, ['v_f_ratio'], 4))} * (fabs(sync) / ${TWO_PI})) + 10.0`);
-      b.out('va', 'mag * sin(sync * time)');
-      b.out('vb', `mag * sin((sync * time) - (${TWO_PI} / 3.0))`);
-      b.out('vc', `mag * sin((sync * time) + (${TWO_PI} / 3.0))`);
+      b.let('mag', `(${lit(paramOr(p, ['v_f_ratio'], 4))} * (fabs(sync) / ${TWO_PI})) + 10.0`);
+      b.let('th', phaseAngle('sync', dt));
+      b.out('va', 'mag * sin(th)');
+      b.out('vb', `mag * sin(th - (${TWO_PI} / 3.0))`);
+      b.out('vc', `mag * sin(th + (${TWO_PI} / 3.0))`);
       b.out('w_sync', 'sync');
+      b.nextState('theta', 'th');
+      b.nextState('primed', '1.0');
     },
   },
 };

@@ -913,6 +913,54 @@ export const raycastTwin = (rx: number, ry: number, angle: number, maxRange: num
   return Math.max(0.02, Math.min(maxRange, min_dist + noise));
 };
 
+/** Parameter with a default: absent (undefined or null) or not finite selects the default; zero is honoured. */
+const finiteOr = (value: unknown, fallback: number): number => {
+  if (value === undefined || value === null) return fallback;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+};
+
+/** Optional output limit magnitude: null when absent or not finite (no limit). Mirrors xbControlKernels. */
+const optionalLimitOf = (value: unknown): number | null => {
+  if (value === undefined || value === null) return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.abs(n) : null;
+};
+
+/** Output clamped to +-limit (no clamp when there is no limit). */
+const clampToLimit = (value: number, limit: number | null): number =>
+  (limit === null ? value : Math.max(-limit, Math.min(limit, value)));
+
+/**
+ * Forward-Euler PI integrator with conditional-integration anti-windup (xbControlKernels clampedIntegral): the
+ * integrator holds when the unclamped output is beyond +-limit and the error drives it further out.
+ */
+const clampedPiIntegral = (
+  integral: number, error: number, kp: number, ki: number, dt: number, limit: number | null,
+): number => {
+  const candidate = integral + error * dt;
+  if (limit === null) return candidate;
+  const unclamped = kp * error + ki * candidate;
+  const held = (unclamped > limit && error > 0) || (unclamped < -limit && error < 0);
+  return held ? integral : candidate;
+};
+
+/** Electrical angle wrapped into [0, 2*pi) with fmod, as the kernel. */
+const wrapElectricalAngle = (x: number): number => {
+  const twoPi = 2 * Math.PI;
+  return ((x % twoPi) + twoPi) % twoPi;
+};
+
+/**
+ * Phase-continuous electrical angle (xbControlKernels phaseAngle): seeded from absolute time on the first step,
+ * afterwards integrated with the sample period from the previous call.
+ */
+const phaseAngleStep = (state: Record<string, number>, omega: number, time: number): number => (
+  state.primed > 0.5
+    ? wrapElectricalAngle(state.theta + omega * Math.max(1e-6, time - (state.lastTime || 0)))
+    : wrapElectricalAngle(omega * time)
+);
+
 export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> = {
   // --- Autonomous Vacuum Cleaner Learning Blocks ---
   'ROBOT_VACUUM_LIDAR_SENSOR': (id, params) => ({
@@ -2673,7 +2721,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
 
   'THREE_PHASE_PWM': (id, params) => ({
     id, type: 'THREE_PHASE_PWM',
-    params: { frequency: params.frequency || 5000, method: params.method || 'SPWM' },
+    params: { frequency: finiteOr(params.frequency, 5000), method: params.method || 'SPWM' },
     inputs: [
       createPort('va_ref', 'Va*', 'input', 0, 'left', 'control'),
       createPort('vb_ref', 'Vb*', 'input', 0, 'left', 'control'),
@@ -2922,31 +2970,34 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
   // --- Control & Modulation ---
   'VOLTAGE_REFERENCE_GENERATOR': (id, params) => ({
     id, type: 'VOLTAGE_REFERENCE_GENERATOR',
-    params: { frequency: params.frequency || 50, amplitude: params.amplitude || 1 },
-    inputs: [createPort('f', 'Freq', 'input', params.frequency || 50, 'left', 'control')],
+    params: { frequency: finiteOr(params.frequency, 50), amplitude: finiteOr(params.amplitude, 1) },
+    inputs: [createPort('f', 'Freq', 'input', finiteOr(params.frequency, 50), 'left', 'control')],
     outputs: [
       createPort('va', 'Va*', 'output', 0, 'right', 'control'),
       createPort('vb', 'Vb*', 'output', 0, 'right', 'control'),
       createPort('vc', 'Vc*', 'output', 0, 'right', 'control')
     ],
+    state: { theta: 0, primed: 0, lastTime: 0 },
     execute: (ins, p, state, time) => {
       const f = Number(ins[0]);
       const amp = Number(p.amplitude);
-      const w = 2 * Math.PI * f;
+      // Phase-continuous: electrical angle integrated from 2*pi*f (kernel phaseAngle).
+      const theta = phaseAngleStep(state, 2 * Math.PI * f, time);
 
-      const va = amp * Math.sin(w * time);
-      const vb = amp * Math.sin(w * time - (2 * Math.PI) / 3);
-      const vc = amp * Math.sin(w * time - (4 * Math.PI) / 3);
+      const va = amp * Math.sin(theta);
+      const vb = amp * Math.sin(theta - (2 * Math.PI) / 3);
+      const vc = amp * Math.sin(theta - (4 * Math.PI) / 3);
 
-      return { outputs: [va, vb, vc] };
+      return { outputs: [va, vb, vc], nextState: { theta, primed: 1, lastTime: time } };
     }
   }),
 
   'FIELD_ORIENTED_CONTROL': (id, params) => ({
     id, type: 'FIELD_ORIENTED_CONTROL',
     params: {
-      Kp: params?.Kp !== undefined ? Number(params.Kp) : 1,
-      Ki: params?.Ki !== undefined ? Number(params.Ki) : 10
+      Kp: finiteOr(params?.Kp, 1),
+      Ki: finiteOr(params?.Ki, 10),
+      vMax: optionalLimitOf(params?.vMax)
     },
     isStateful: true,
     inputs: [
@@ -2989,11 +3040,13 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       const errD = id_ref - id;
       const errQ = iq_ref - iq;
 
-      const nextIntD = state.integralD + errD * dt;
-      const nextIntQ = state.integralQ + errQ * dt;
+      // Conditional-integration anti-windup and per-axis output limit when vMax is set (kernel parity).
+      const nextIntD = clampedPiIntegral(state.integralD, errD, p.Kp, p.Ki, dt, p.vMax);
+      const nextIntQ = clampedPiIntegral(state.integralQ, errQ, p.Kp, p.Ki, dt, p.vMax);
 
-      const vd = p.Kp * errD + p.Ki * nextIntD;
-      const vq = p.Kp * errQ + p.Ki * nextIntQ;
+      // Output: unclamped PI output with this step's integration, limited to +-vMax (the state holds, see above).
+      const vd = clampToLimit(p.Kp * errD + p.Ki * (state.integralD + errD * dt), p.vMax);
+      const vq = clampToLimit(p.Kp * errQ + p.Ki * (state.integralQ + errQ * dt), p.vMax);
 
       // 4. Inverse Park (dq -> alpha-beta)
       const vAlpha = vd * cosT - vq * sinT;
@@ -3117,15 +3170,17 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
   }),
 
   'CURRENT_CONTROLLER_DQ': (id, params) => {
-    const Kp_d = params.Kp_d !== undefined ? Number(params.Kp_d) : 1;
-    const Ki_d = params.Ki_d !== undefined ? Number(params.Ki_d) : 10;
-    const Kp_q = params.Kp_q !== undefined ? Number(params.Kp_q) : 1;
-    const Ki_q = params.Ki_q !== undefined ? Number(params.Ki_q) : 10;
-    const iMax = params.iMax !== undefined ? Number(params.iMax) : 100;
+    const Kp_d = finiteOr(params.Kp_d, 1);
+    const Ki_d = finiteOr(params.Ki_d, 10);
+    const Kp_q = finiteOr(params.Kp_q, 1);
+    const Ki_q = finiteOr(params.Ki_q, 10);
+    const iMax = finiteOr(params.iMax, 100);
+    // Optional per-axis output limit: absent means unlimited (no anti-windup clamp).
+    const vMax = optionalLimitOf(params.vMax);
 
     return {
       id, type: 'CURRENT_CONTROLLER_DQ',
-      params: { Kp_d, Ki_d, Kp_q, Ki_q, iMax },
+      params: { Kp_d, Ki_d, Kp_q, Ki_q, iMax, vMax },
       isStateful: true,
       inputs: [
         createPort('id_ref', 'Id*', 'input', 0, 'left', 'control'),
@@ -3155,11 +3210,13 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
         const eD = id_ref - Number(ins[2]);
         const eQ = iq_ref - Number(ins[3]);
 
-        const nextIntD = state.intD + eD * dt;
-        const nextIntQ = state.intQ + eQ * dt;
+        // Conditional-integration anti-windup and per-axis output limit when vMax is set (kernel parity).
+        const nextIntD = clampedPiIntegral(state.intD, eD, p.Kp_d, p.Ki_d, dt, p.vMax);
+        const nextIntQ = clampedPiIntegral(state.intQ, eQ, p.Kp_q, p.Ki_q, dt, p.vMax);
 
-        const vd = p.Kp_d * eD + p.Ki_d * nextIntD;
-        const vq = p.Kp_q * eQ + p.Ki_q * nextIntQ;
+        // Output: unclamped PI output with this step's integration, limited to +-vMax (the state holds, see above).
+        const vd = clampToLimit(p.Kp_d * eD + p.Ki_d * (state.intD + eD * dt), p.vMax);
+        const vq = clampToLimit(p.Kp_q * eQ + p.Ki_q * (state.intQ + eQ * dt), p.vMax);
 
         return {
           outputs: [vd, vq],
@@ -3310,7 +3367,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
 
   'SPEED_CONTROLLER': (id, params) => ({
     id, type: 'SPEED_CONTROLLER',
-    params: { Kp: params.Kp || 0.5, Ki: params.Ki || 5, maxIq: params.maxIq || 10 },
+    params: { Kp: finiteOr(params.Kp, 0.5), Ki: finiteOr(params.Ki, 5), maxIq: finiteOr(params.maxIq, 10) },
     isStateful: true,
     inputs: [
       createPort('speed_ref', 'ω*', 'input', 0, 'left', 'control'),
@@ -3321,11 +3378,11 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     execute: (ins, p, state, time) => {
       const dt = Math.max(1e-6, time - (state.lastTime || 0));
       const err = Number(ins[0]) - Number(ins[1]);
-      const nextInt = state.integral + err * dt;
+      // Conditional-integration anti-windup (kernel parity), then saturation to +-maxIq.
+      const limit = Math.abs(p.maxIq);
+      const nextInt = clampedPiIntegral(state.integral, err, p.Kp, p.Ki, dt, limit);
 
-      let iq = p.Kp * err + p.Ki * nextInt;
-      // Saturation
-      iq = Math.max(-p.maxIq, Math.min(p.maxIq, iq));
+      const iq = clampToLimit(p.Kp * err + p.Ki * nextInt, limit);
 
       return {
         outputs: [iq],
@@ -3336,9 +3393,9 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
 
   'FLUX_REFERENCE': (id, params) => ({
     id, type: 'FLUX_REFERENCE',
-    params: { mode: params.mode || 'constant', value: params.value || 0 },
+    params: { mode: params.mode || 'constant', value: finiteOr(params.value, 0) },
     inputs: [],
-    outputs: [createPort('id_ref', 'Id*', 'output', params.value || 0, 'right', 'control')],
+    outputs: [createPort('id_ref', 'Id*', 'output', finiteOr(params.value, 0), 'right', 'control')],
     execute: (_, p) => {
       // In a real implementation, 'field_weakening' would adjust 'value' based on speed.
       return { outputs: [Number(p.value)] };
@@ -3349,10 +3406,10 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     id, type: 'ROTOR_POSITION_ESTIMATOR',
     params: {
       method: params.method || 'Sensorless_SMO',
-      Rs: params.Rs || 0.5,
-      Ls: params.Ls || 0.01,
-      psi_m: params.psi_m || 0.12,
-      P: params.P || 2
+      Rs: finiteOr(params.Rs, 0.5),
+      Ls: finiteOr(params.Ls, 0.01),
+      psi_m: finiteOr(params.psi_m, 0.12),
+      P: finiteOr(params.P, 2)
     },
     isStateful: true,
     inputs: [
@@ -3450,7 +3507,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
   // --- SVPWM Core ---
   'SVPWM_CORE': (id, params) => ({
     id, type: 'SVPWM_CORE',
-    params: { Ts: params.Ts || 0.0001, Vdc: params.Vdc || 400 },
+    params: { Ts: finiteOr(params.Ts, 0.0001), Vdc: finiteOr(params.Vdc, 400)},
     inputs: [
       createPort('v_alpha', 'Vα', 'input', 0, 'left', 'transform'),
       createPort('v_beta', 'Vβ', 'input', 0, 'left', 'transform')
@@ -3498,7 +3555,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
 
   'SWITCHING_TIME_CALCULATOR': (id, params) => ({
     id, type: 'SWITCHING_TIME_CALCULATOR',
-    params: { Vdc: params.Vdc || 400, Ts: params.Ts || 0.0001 },
+    params: { Vdc: finiteOr(params.Vdc, 400), Ts: finiteOr(params.Ts, 0.0001)},
     inputs: [
       createPort('vref', 'Vref', 'input', 0, 'left', 'control'),
       createPort('theta_s', 'θs', 'input', 0, 'left', 'measurement'),
@@ -3526,7 +3583,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
 
   'SVPWM_GATE_GENERATOR': (id, params) => ({
     id, type: 'SVPWM_GATE_GENERATOR',
-    params: { Ts: params.Ts || 0.0001 },
+    params: { Ts: finiteOr(params.Ts, 0.0001)},
     isStateful: true,
     inputs: [
       createPort('sector', 'Sec', 'input', 1, 'left', 'discrete'),
@@ -3606,7 +3663,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
 
   'SVPWM_MODULATOR': (id, params) => ({
     id, type: 'SVPWM_MODULATOR',
-    params: { Ts: params.Ts || 0.0001, Vdc: params.Vdc || 400 },
+    params: { Ts: finiteOr(params.Ts, 0.0001), Vdc: finiteOr(params.Vdc, 400)},
     isStateful: true,
     inputs: [
       createPort('v_alpha', 'Vα', 'input', 0, 'left', 'transform'),
@@ -5551,9 +5608,9 @@ return block;
                                                     'IM_SCALAR_CONTROL': (id: string, params: any) => ({
                                                       id, type: 'IM_SCALAR_CONTROL',
                                                       params: {
-                                                        v_f_ratio: params.v_f_ratio || 4,
-                                                        boost: params.boost || 10,
-                                                        rated_f: params.rated_f || 50
+                                                        v_f_ratio: finiteOr(params.v_f_ratio, 4),
+                                                        boost: finiteOr(params.boost, 10),
+                                                        rated_f: finiteOr(params.rated_f, 50)
                                                       },
                                                       inputs: [createPort('w_ref', 'ω*', 'input', 0, 'left', 'control')],
                                                       outputs: [
@@ -5561,6 +5618,7 @@ return block;
                                                         createPort('vb', 'Vb*', 'output', 0, 'right', 'control'),
                                                         createPort('vc', 'Vc*', 'output', 0, 'right', 'control')
                                                       ],
+                                                      state: { theta: 0, primed: 0, lastTime: 0 },
                                                       icon: 'activity',
                                                       equation: 'V = Vf * f + Vboost',
                                                       description: 'Open-loop Volts-per-Hertz (Scalar) control for Induction Motors. Maintains constant flux-to-frequency ratio.',
@@ -5569,11 +5627,13 @@ return block;
                                                         const f = wRef / (2 * Math.PI);
                                                         const vMag = p.v_f_ratio * f + p.boost;
 
-                                                        const va = vMag * Math.sin(wRef * time);
-                                                        const vb = vMag * Math.sin(wRef * time - 2 * Math.PI / 3);
-                                                        const vc = vMag * Math.sin(wRef * time + 2 * Math.PI / 3);
+                                                        // Phase-continuous: electrical angle integrated from |w_ref| (kernel phaseAngle).
+                                                        const theta = phaseAngleStep(state, wRef, time);
+                                                        const va = vMag * Math.sin(theta);
+                                                        const vb = vMag * Math.sin(theta - 2 * Math.PI / 3);
+                                                        const vc = vMag * Math.sin(theta + 2 * Math.PI / 3);
 
-                                                        return { outputs: [va, vb, vc] };
+                                                        return { outputs: [va, vb, vc], nextState: { theta, primed: 1, lastTime: time } };
                                                       }
                                                     }),
 
@@ -5670,10 +5730,11 @@ return block;
                                                           'VF_SLIP_COMP': (id: string, params: any) => ({
                                                             id, type: 'VF_SLIP_COMP',
                                                             params: {
-                                                              v_f_ratio: params.v_f_ratio || 4,
-                                                              rated_slip: params.rated_slip || 0.05,
-                                                              rated_iq: params.rated_iq || 10
+                                                              v_f_ratio: finiteOr(params.v_f_ratio, 4),
+                                                              rated_slip: finiteOr(params.rated_slip, 0.05),
+                                                              rated_iq: finiteOr(params.rated_iq, 10)
                                                             },
+                                                            state: { theta: 0, primed: 0, lastTime: 0 },
                                                             inputs: [
                                                               createPort('w_ref', 'ω*', 'input', 0, 'left', 'control'),
                                                               createPort('iq_actual', 'Iq', 'input', 0, 'top', 'measurement')
@@ -5694,22 +5755,24 @@ return block;
                                                               const f = Math.abs(wSync) / (2 * Math.PI);
                                                               const vMag = p.v_f_ratio * f + 10;
 
-                                                              const va = vMag * Math.sin(wSync * time);
-                                                              const vb = vMag * Math.sin(wSync * time - 2 * Math.PI / 3);
-                                                              const vc = vMag * Math.sin(wSync * time + 2 * Math.PI / 3);
+                                                              // Phase-continuous: electrical angle integrated from w_sync (kernel phaseAngle).
+                                                              const theta = phaseAngleStep(state, wSync, time);
+                                                              const va = vMag * Math.sin(theta);
+                                                              const vb = vMag * Math.sin(theta - 2 * Math.PI / 3);
+                                                              const vc = vMag * Math.sin(theta + 2 * Math.PI / 3);
 
-                                                              return { outputs: [va, vb, vc, wSync] };
+                                                              return { outputs: [va, vb, vc, wSync], nextState: { theta, primed: 1, lastTime: time } };
                                                             }
                                                           }),
 
                                                             'FIELD_WEAKENING': (id: string, params: any) => ({
                                                               id, type: 'FIELD_WEAKENING',
                                                               params: {
-                                                                v_max: params.v_max || 300,
-                                                                Kp: params.Kp || 0.1,
-                                                                Ki: params.Ki || 1,
-                                                                id_min: params.id_min !== undefined ? params.id_min : (params.min !== undefined ? params.min : -20),
-                                                                id_max: params.id_max !== undefined ? params.id_max : (params.max !== undefined ? params.max : 10)
+                                                                v_max: finiteOr(params.v_max, 300),
+                                                                Kp: finiteOr(params.Kp, 0.1),
+                                                                Ki: finiteOr(params.Ki, 1),
+                                                                id_min: finiteOr(params.id_min !== undefined ? params.id_min : params.min, -20),
+                                                                id_max: finiteOr(params.id_max !== undefined ? params.id_max : params.max, 10)
                                                               },
                                                               isStateful: true,
                                                               inputs: [
@@ -5750,7 +5813,7 @@ return block;
 
                                                               'MTPA_CONTROLLER': (id: string, params: any) => ({
                                                                 id, type: 'MTPA_CONTROLLER',
-                                                                params: { Ld: params.Ld || 0.01, Lq: params.Lq || 0.02, psi_m: params.psi_m || 0.1 },
+                                                                params: { Ld: finiteOr(params.Ld, 0.01), Lq: finiteOr(params.Lq, 0.02), psi_m: finiteOr(params.psi_m, 0.1)},
                                                                 inputs: [createPort('te_ref', 'Te*', 'input', 0, 'left', 'control')],
                                                                 outputs: [
                                                                   createPort('id_ref', 'Id*', 'output', 0, 'right', 'control'),

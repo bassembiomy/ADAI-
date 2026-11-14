@@ -438,7 +438,7 @@ const focControlFixture = (): DifferentialFixture => {
       createNode('cc', 'CURRENT_CONTROLLER_DQ', { Kp_d: 2, Ki_d: 300, Kp_q: 2.5, Ki_q: 350, iMax: 8 }),
       createNode('spd', 'SPEED_CONTROLLER', { Kp: 0.8, Ki: 40, maxIq: 6 }),
       createNode('spd_linear', 'SPEED_CONTROLLER', { Kp: 0.05, Ki: 0.4, maxIq: 50 }),
-      createNode('foc', 'FIELD_ORIENTED_CONTROL', { Kp: 3, Ki: 500 }),
+      createNode('foc', 'FIELD_ORIENTED_CONTROL', { Kp: 3, Ki: 500, vMax: 12 }),
       createNode('fw', 'FIELD_WEAKENING', { v_max: 30, Kp: 0.2, Ki: 100, id_min: -6, id_max: 1 }),
       createNode('mtpa', 'MTPA_CONTROLLER', { Ld: 0.005, Lq: 0.012, psi_m: 0.08 }),
       createNode('est_smo', 'ROTOR_POSITION_ESTIMATOR', { method: 'Sensorless_SMO', Rs: 0.4, Ls: 0.006, psi_m: 0.08, P: 4 }),
@@ -466,7 +466,8 @@ const focControlFixture = (): DifferentialFixture => {
       id_ref: (step) => (step < 20 ? 0 : -2),
       iq_ref: iqRef,
       id_meas: (step) => 0.8 * Math.sin(0.2 * step),
-      iq_meas: (step) => 0.9 * iqRef(step),
+      // The q current lags the reference (the controllers saturate), then overshoots it (error reverses: recovery).
+      iq_meas: (step) => (step < 30 ? 0.9 * iqRef(step) : iqRef(step) + 1.5),
       w_ref: (step) => (step < 5 ? 0 : 100),
       w_meas: speedMeasured,
       ia: (step) => 5 * Math.sin(angle(step)),
@@ -496,7 +497,8 @@ const imVfFixture = (): DifferentialFixture => kernelFixture(
     ...fromInput('iq', ['slip', 'iq_actual']),
   ],
   {
-    freq: (step) => 20 + (2 * step),
+    // Ramp up, then a frequency step: the electrical angle must stay continuous across it.
+    freq: (step) => (step < 20 ? 20 + (2 * step) : 60),
     w_ref: (step) => (step < 30 ? Math.min(314, 12 * step) : -150),
     iq: (step) => 6 * Math.sin(0.35 * step),
   },
