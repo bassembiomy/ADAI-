@@ -37,7 +37,7 @@ describe('inverter-control blocks generate embedded C', () => {
       const paired = capability.pairedConformanceCaseIds ?? [];
       const cCases = capability.cConformanceCaseIds ?? [];
       expect(paired.length + cCases.length, type).toBeGreaterThan(0);
-      const executable = new Set(XB_EXECUTABLE_C_CASES.map((testCase) => testCase.id));
+      const executable = new Set(Object.keys(XB_EXECUTABLE_C_CASES));
       for (const id of [...paired, ...cCases].filter((caseId) => caseId.includes('C99'))) {
         expect(executable.has(id), `${type}: case ${id} must be an executable C case`).toBe(true);
       }
