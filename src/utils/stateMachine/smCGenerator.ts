@@ -1105,6 +1105,12 @@ export const renderConfigHeader = (ir: SemanticModel): string => {
     `#define SM_NUM_STATES ${states.length}U`,
     `#define SM_NUM_LAYERS ${layers.length}U`,
     `#define SM_NUM_ACTIVE_SLOTS ${ir.activeSlotCount}U`,
+    '/* Rolling consistency scan: units (states, then layers) checked per SM_Step; a corrupted flag is found within',
+    ' * ceil(SM_SCAN_UNITS / SM_CONSISTENCY_SCAN_CHUNK) ticks. The active tree is checked completely every tick. */',
+    '#ifndef SM_CONSISTENCY_SCAN_CHUNK',
+    '#define SM_CONSISTENCY_SCAN_CHUNK 16U',
+    '#endif',
+    '#define SM_SCAN_UNITS (SM_NUM_STATES + SM_NUM_LAYERS)',
     historyStorageUsage(ir).deep
       ? '#define SM_DEEP_HISTORY_BYTES (((SM_NUM_STATES + 1U) + 7U) / 8U)'
       : null,
@@ -1172,6 +1178,7 @@ export const renderConfigHeader = (ir: SemanticModel): string => {
       : null,
     '    bool state_active[SM_NUM_STATES + 1U];',
     '    uint32_t state_timers[SM_NUM_STATES + 1U];',
+    '    uint32_t scan_cursor; /* next unit of the rolling consistency scan */',
     historyStorageUsage(ir).deep
       ? '    uint8_t deep_history[SM_NUM_LAYERS][SM_DEEP_HISTORY_BYTES];'
       : null,
@@ -1280,6 +1287,17 @@ const withExternalIncludes = (ir: SemanticModel, source: string): string => {
 
 export const renderUserLogicSource = (ir: SemanticModel): string =>
   withExternalIncludes(ir, renderUserLogicSourceBody(ir));
+
+/* The tick window check; with a lower bound of 0 ms only the upper bound applies
+ * (an unsigned delta is never below 0, which -Wtype-limits rejects). */
+const tickWindowCondition = (ir: SemanticModel): string => {
+  const tolerance = ir.verification.tickToleranceMs > 0
+    ? ir.verification.tickToleranceMs
+    : Math.max(1, Math.floor(ir.tickMs / 10));
+  return Math.max(0, ir.tickMs - tolerance) === 0
+    ? 'delta_ms > SM_TICK_MAX_MS'
+    : '(delta_ms < SM_TICK_MIN_MS) || (delta_ms > SM_TICK_MAX_MS)';
+};
 
 export const renderCoreSource = (ir: SemanticModel): string =>
   withExternalIncludes(ir, renderCoreSourceBody(ir));
@@ -1456,7 +1474,12 @@ export const renderSafetyHeader = (): string => lines(
   '',
   '#include "sm_config.h"',
   '',
+  '/* Full check of every state and layer: O(states), for init, reset and diagnostics. */',
   'SM_Error_t SM_Validate_State_Consistency(const ADIA_Instance_t *instance);',
+  '/* Active configuration only: O(active states). */',
+  'SM_Error_t SM_Validate_Active_Tree(const ADIA_Instance_t *instance);',
+  '/* Per tick: the active tree plus SM_CONSISTENCY_SCAN_CHUNK units of a rolling full scan. */',
+  'SM_Error_t SM_Validate_Tick_Consistency(ADIA_Instance_t *instance);',
   'void SM_ApplySafeOutputs(ADIA_Instance_t *instance);',
   '',
   '#endif /* SM_SAFETY_H */',
@@ -1465,6 +1488,19 @@ export const renderSafetyHeader = (): string => lines(
 export const renderSafetySource = (ir: SemanticModel): string => {
   const states = orderedStates(ir);
   const layers = orderedLayers(ir);
+  const index = buildIndex(ir);
+  const layerDepth = (layer: SemanticLayer): number => {
+    let depth = 0;
+    let current = layer;
+    while (current.parentStateId !== null) {
+      current = ir.layers[ir.states[current.parentStateId].layerId];
+      depth += 1;
+    }
+    return depth;
+  };
+  /* Deepest layers first: each tree check is defined before the layer check that calls it. */
+  const treeLayers = layers.filter((layer) => layer.children.length > 0)
+    .sort((left, right) => layerDepth(right) - layerDepth(left));
   const mappedOutputs = ir.ioMappings.filter(
     (mapping) => mapping.direction === 'write',
   );
@@ -1512,21 +1548,202 @@ export const renderSafetySource = (ir: SemanticModel): string => {
       '}',
       '',
     ] : []),
-    'SM_Error_t SM_Validate_State_Consistency(const ADIA_Instance_t *instance)',
+    /* One state of the scan: its flag against its parent, its slot, its layer and its deep-history bits. */
+    'static bool SM_Check_State_Unit(const ADIA_Instance_t *instance, uint32_t state_index)',
     '{',
-    /* Parent state numbers (0 = none), kept in flash; read only by this function. */
+    /* Parent state numbers (0 = none), kept in flash. */
     '    static SM_ROM SM_Rom_Index_t SM_State_Parent_Map[SM_NUM_STATES + 1U] = {',
     ...(ir.verification.cStandard === 'c90'
       ? ['        0U,', ...states.map((state) => `        ${state.parentStateId === null ? '0U' : stateIndex(ir, state.parentStateId)},`)]
       : ['        [0] = 0U,', ...states.map((state) => `        [${stateIndex(ir, state.id)}] = ${state.parentStateId === null ? '0U' : stateIndex(ir, state.parentStateId)},`)]),
     '    };',
+    '    uint32_t parent;',
+    historyStorageUsage(ir).deep ? '    uint32_t layer_index;' : null,
+    '    if (instance->state_active[state_index]) {',
+    '        uint32_t active_slot;',
+    '        parent = (uint32_t)SM_ROM_READ_INDEX(SM_State_Parent_Map[state_index]);',
+    '        if ((parent != 0U) && (!instance->state_active[parent])) {',
+    '            return false;',
+    '        }',
+    '        active_slot = (uint32_t)SM_ROM_READ_INDEX(SM_State_Active_Slot_Map[state_index]);',
+    '        if ((active_slot != SM_ROM_INDEX_NONE)',
+    '            && (instance->active_states[active_slot] != (SM_Node_t)state_index)) {',
+    '            return false;',
+    '        }',
+    '    } else {',
+    '        uint32_t active_slot;',
+    '        uint32_t parent_layer;',
+    '        /* Every child of a layer without an active slot is active while its container is. */',
+    '        parent_layer = (uint32_t)SM_ROM_READ_INDEX(SM_State_Parent_Layer_Map[state_index]);',
+    '        active_slot = (uint32_t)SM_ROM_READ_INDEX(SM_Layer_Active_Slot_Map[parent_layer]);',
+    '        if (active_slot == SM_ROM_INDEX_NONE) {',
+    '            parent = (uint32_t)SM_ROM_READ_INDEX(SM_Layer_Parent_State_Map[parent_layer]);',
+    '            if ((parent == 0U) || instance->state_active[parent]) {',
+    '                return false;',
+    '            }',
+    '        }',
+    '    }',
+    ...(historyStorageUsage(ir).deep ? [
+      '    for (layer_index = 0U; layer_index < SM_NUM_LAYERS; ++layer_index) {',
+      '        if (SM_DH_GET(instance, layer_index, state_index)',
+      '            && (!SM_Is_Layer_Descendant(layer_index, (SM_Node_t)state_index))) {',
+      '            return false;',
+      '        }',
+      '    }',
+    ] : []),
+    '    return true;',
+    '}',
+    '',
+    /* One layer of the scan: its slot against its container and its shallow history. */
+    'static bool SM_Check_Layer_Unit(const ADIA_Instance_t *instance, uint32_t layer_index)',
+    '{',
+    '    uint32_t active_slot;',
+    '    uint32_t parent;',
+    '    parent = (uint32_t)SM_ROM_READ_INDEX(SM_Layer_Parent_State_Map[layer_index]);',
+    '    active_slot = (uint32_t)SM_ROM_READ_INDEX(SM_Layer_Active_Slot_Map[layer_index]);',
+    '    if (active_slot != SM_ROM_INDEX_NONE) {',
+    '        SM_Node_t active_node = instance->active_states[active_slot];',
+    historyStorageUsage(ir).shallow ? '        SM_Node_t history_node;' : null,
+    '        if ((parent == 0U) || instance->state_active[parent]) {',
+    '            if ((active_node == SM_NODE_INVALID)',
+    '                || ((uint32_t)active_node > SM_NUM_STATES)',
+    '                || (!SM_Is_Direct_Layer_Child(layer_index, active_node))',
+    '                || (!instance->state_active[(uint32_t)active_node])) {',
+    '                return false;',
+    '            }',
+    '        } else if (active_node != SM_NODE_INVALID) {',
+    '            return false;',
+    '        } else {',
+    '            /* Inactive container without a live slot: nothing to check. */',
+    '        }',
+    ...(historyStorageUsage(ir).shallow ? [
+      '        history_node = instance->history_states[active_slot];',
+      '        if ((history_node != SM_NODE_INVALID)',
+      '            && (((uint32_t)history_node > SM_NUM_STATES)',
+      '                || (!SM_Is_Direct_Layer_Child(layer_index, history_node)))) {',
+      '            return false;',
+      '        }',
+    ] : []),
+    '    }',
+    '    return true;',
+    '}',
+    '',
+    ...treeLayers.map((layer) => {
+      const header = `static bool ${layerFunction(index, 'SM_Check_Tree_Layer', layer.id)}(const ADIA_Instance_t *instance)`;
+      const childCalls = (stateId: string, indent: string): string[] =>
+        ir.states[stateId].childLayerIds
+          .filter((layerId) => ir.layers[layerId].children.length > 0)
+          .flatMap((layerId) => [
+            `${indent}if (!${layerFunction(index, 'SM_Check_Tree_Layer', layerId)}(instance)) {`,
+            `${indent}    return false;`,
+            `${indent}}`,
+          ]);
+      if (layer.decomposition === 'OR' && layer.activeSlot !== null) {
+        return lines(
+          header,
+          '{',
+          historyStorageUsage(ir).shallow ? '    SM_Node_t history_node;' : null,
+          ...(historyStorageUsage(ir).shallow ? [
+            `    history_node = instance->history_states[${layer.activeSlot}U];`,
+            '    if ((history_node != SM_NODE_INVALID)',
+            '        && (((uint32_t)history_node > SM_NUM_STATES)',
+            `            || (!SM_Is_Direct_Layer_Child(${layerMacro(layer)}, history_node)))) {`,
+            '        return false;',
+            '    }',
+          ] : []),
+          `    switch (instance->active_states[${layer.activeSlot}U]) {`,
+          ...layer.children.flatMap((childId) => [
+            `        case ${stateNode(ir, childId)}:`,
+            `            if (!instance->state_active[${stateIndex(ir, childId)}]) {`,
+            '                return false;',
+            '            }',
+            ...childCalls(childId, '            '),
+            '            break;',
+          ]),
+          '        default:',
+          '            return false;',
+          '    }',
+          '    return true;',
+          '}',
+          '',
+        );
+      }
+      return lines(
+        header,
+        '{',
+        ...layer.children.flatMap((childId) => [
+          `    if (!instance->state_active[${stateIndex(ir, childId)}]) {`,
+          '        return false;',
+          '    }',
+          ...childCalls(childId, '    '),
+        ]),
+        '    return true;',
+        '}',
+        '',
+      );
+    }),
+    /* The active tree only: every active layer's slot holds a valid, flagged child; AND children are flagged. */
+    'SM_Error_t SM_Validate_Active_Tree(const ADIA_Instance_t *instance)',
+    '{',
+    '    if (instance == NULL) {',
+    '        return SM_ERR_NULL_INSTANCE;',
+    '    }',
+    ...(ir.executeAtInitialization === false ? [
+      '    if (!instance->chart_entered) {',
+      '        return SM_Validate_State_Consistency(instance);',
+      '    }',
+    ] : []),
+    ir.layers[ir.rootLayerId].children.length > 0
+      ? lines(
+        `    if (!${layerFunction(index, 'SM_Check_Tree_Layer', ir.rootLayerId)}(instance)) {`,
+        '        return SM_ERR_CONFIGURATION;',
+        '    }',
+      ).trimEnd()
+      : null,
+    '    return SM_ERR_NONE;',
+    '}',
+    '',
+    /* Per tick: the active tree plus a rolling slice of the full scan. */
+    'SM_Error_t SM_Validate_Tick_Consistency(ADIA_Instance_t *instance)',
+    '{',
+    '    SM_Error_t result;',
+    '    uint32_t cursor;',
+    '    uint32_t count;',
+    '    bool unit_ok;',
+    '    result = SM_Validate_Active_Tree(instance);',
+    '    if (result != SM_ERR_NONE) {',
+    '        return result;',
+    '    }',
+    ...(ir.executeAtInitialization === false ? [
+      '    if (!instance->chart_entered) {',
+      '        return SM_ERR_NONE;',
+      '    }',
+    ] : []),
+    '    cursor = (instance->scan_cursor < SM_SCAN_UNITS) ? instance->scan_cursor : 0U;',
+    '    for (count = 0U; (count < SM_CONSISTENCY_SCAN_CHUNK) && (count < SM_SCAN_UNITS); ++count) {',
+    '        if (cursor < SM_NUM_STATES) {',
+    '            unit_ok = SM_Check_State_Unit(instance, cursor + 1U);',
+    '        } else {',
+    '            unit_ok = SM_Check_Layer_Unit(instance, cursor - SM_NUM_STATES);',
+    '        }',
+    '        if (!unit_ok) {',
+    '            return SM_ERR_CONFIGURATION;',
+    '        }',
+    '        ++cursor;',
+    '        if (cursor >= SM_SCAN_UNITS) {',
+    '            cursor = 0U;',
+    '        }',
+    '    }',
+    '    instance->scan_cursor = cursor;',
+    '    return SM_ERR_NONE;',
+    '}',
+    '',
+    /* Full O(states + layers) check, for initialization, reset and diagnostics. */
+    'SM_Error_t SM_Validate_State_Consistency(const ADIA_Instance_t *instance)',
+    '{',
     '    uint32_t layer_index;',
     '    uint32_t state_index;',
     ir.activeSlotCount > 0 ? '    uint32_t slot_index;' : null,
-    '    SM_Node_t active_node;',
-    historyStorageUsage(ir).shallow ? '    SM_Node_t history_node;' : null,
-    '    uint32_t active_slot;',
-    '    uint32_t parent;',
     '    if (instance == NULL) {',
     '        return SM_ERR_NULL_INSTANCE;',
     '    }',
@@ -1541,70 +1758,21 @@ export const renderSafetySource = (ir: SemanticModel): string => {
       '    }',
     ] : []),
     '    for (state_index = 1U; state_index <= SM_NUM_STATES; ++state_index) {',
-    '        if (instance->state_active[state_index]) {',
-    '            parent = (uint32_t)SM_ROM_READ_INDEX(SM_State_Parent_Map[state_index]);',
-    '            if ((parent != 0U) && (!instance->state_active[parent])) {',
-    '                return SM_ERR_CONFIGURATION;',
-    '            }',
-    '            active_slot = (uint32_t)SM_ROM_READ_INDEX(SM_State_Active_Slot_Map[state_index]);',
-    '            if ((active_slot != SM_ROM_INDEX_NONE)',
-    '                && (instance->active_states[active_slot] != (SM_Node_t)state_index)) {',
-    '                return SM_ERR_CONFIGURATION;',
-    '            }',
+    '        if (!SM_Check_State_Unit(instance, state_index)) {',
+    '            return SM_ERR_CONFIGURATION;',
     '        }',
     '    }',
     '    for (layer_index = 0U; layer_index < SM_NUM_LAYERS; ++layer_index) {',
-    '        bool container_active;',
-    '        parent = (uint32_t)SM_ROM_READ_INDEX(SM_Layer_Parent_State_Map[layer_index]);',
-    '        container_active = (parent == 0U) || instance->state_active[parent];',
-    '        active_slot = (uint32_t)SM_ROM_READ_INDEX(SM_Layer_Active_Slot_Map[layer_index]);',
-    '        if (container_active) {',
-    '            if (active_slot != SM_ROM_INDEX_NONE) {',
-    '                active_node = instance->active_states[active_slot];',
-    '                if ((active_node == SM_NODE_INVALID)',
-    '                    || ((uint32_t)active_node > SM_NUM_STATES)',
-    '                    || (!SM_Is_Direct_Layer_Child(layer_index, active_node))',
-    '                    || (!instance->state_active[(uint32_t)active_node])) {',
-    '                    return SM_ERR_CONFIGURATION;',
-    '                }',
-    '            } else {',
-    '                for (state_index = 1U; state_index <= SM_NUM_STATES; ++state_index) {',
-    '                    if (SM_Is_Direct_Layer_Child(layer_index, (SM_Node_t)state_index)',
-    '                        && (!instance->state_active[state_index])) {',
-    '                        return SM_ERR_CONFIGURATION;',
-    '                    }',
-    '                }',
-    '            }',
-    '        } else if ((active_slot != SM_ROM_INDEX_NONE)',
-    '            && (instance->active_states[active_slot] != SM_NODE_INVALID)) {',
+    '        if (!SM_Check_Layer_Unit(instance, layer_index)) {',
     '            return SM_ERR_CONFIGURATION;',
-    '        } else {',
-    '            /* Inactive container without a live slot: nothing to check. */',
     '        }',
-    ...(historyStorageUsage(ir).shallow ? [
-      '        if (active_slot != SM_ROM_INDEX_NONE) {',
-      '            history_node = instance->history_states[active_slot];',
-      '            if ((history_node != SM_NODE_INVALID)',
-      '                && (((uint32_t)history_node > SM_NUM_STATES)',
-      '                    || (!SM_Is_Direct_Layer_Child(layer_index, history_node)))) {',
-      '                return SM_ERR_CONFIGURATION;',
-      '            }',
-      '        }',
-    ] : []),
-    ...(historyStorageUsage(ir).deep ? [
-      '        for (state_index = 1U; state_index <= SM_NUM_STATES; ++state_index) {',
-      '            if (SM_DH_GET(instance, layer_index, state_index)',
-      '                && (!SM_Is_Layer_Descendant(layer_index, (SM_Node_t)state_index))) {',
-      '                return SM_ERR_CONFIGURATION;',
-      '            }',
-      '        }',
-    ] : []),
     '    }',
     ir.activeSlotCount > 0
       ? lines(
         '    for (slot_index = 0U; slot_index < SM_NUM_ACTIVE_SLOTS; ++slot_index) {',
-        '        active_node = instance->active_states[slot_index];',
+        '        const SM_Node_t active_node = instance->active_states[slot_index];',
         '        if (active_node != SM_NODE_INVALID) {',
+        '            uint32_t active_slot;',
         '            if (((uint32_t)active_node > SM_NUM_STATES)',
         '                || (!instance->state_active[(uint32_t)active_node])) {',
         '                return SM_ERR_CONFIGURATION;',
@@ -1701,8 +1869,86 @@ export const renderMcalTestStubs = (): string => lines(
   '}',
 );
 
+/*
+ * Timer advance of one tick: walks the active tree (OR layer: the child in its active slot; AND layer: every
+ * active child) with one non-recursive function per layer, so the cost follows the active configuration
+ * and not the number of states. Only layers with children get a function.
+ */
+const renderTimerAdvanceFunctions = (
+  ir: SemanticModel,
+  index: RenderIndex,
+): { declarations: string[]; definitions: string; rootCall: string | null } => {
+  const tickLayers = orderedLayers(ir).filter((layer) => layer.children.length > 0);
+  const fn = (layerId: string): string => layerFunction(index, 'SM_Tick_Layer', layerId);
+  const childLayerCalls = (stateId: string, indent: string): string[] =>
+    ir.states[stateId].childLayerIds
+      .filter((layerId) => ir.layers[layerId].children.length > 0)
+      .map((layerId) => `${indent}${fn(layerId)}(instance);`);
+  const definitions = tickLayers.map((layer) => {
+    const header = `static void ${fn(layer.id)}(ADIA_Instance_t *instance)`;
+    if (layer.decomposition === 'OR' && layer.activeSlot !== null) {
+      const leafOnly = layer.children.every((childId) => childLayerCalls(childId, '').length === 0);
+      if (leafOnly) {
+        return lines(
+          header,
+          '{',
+          `    const uint32_t node = (uint32_t)instance->active_states[${layer.activeSlot}U];`,
+          '    if ((node != 0U) && (node <= SM_NUM_STATES)) {',
+          '        SM_Advance_Timer(instance, node);',
+          '    }',
+          '}',
+        ).trimEnd();
+      }
+      return lines(
+        header,
+        '{',
+        `    switch (instance->active_states[${layer.activeSlot}U]) {`,
+        ...layer.children.flatMap((childId) => [
+          `        case ${stateNode(ir, childId)}:`,
+          `            SM_Advance_Timer(instance, ${stateIndex(ir, childId)});`,
+          ...childLayerCalls(childId, '            '),
+          '            break;',
+        ]),
+        '        default:',
+        '            break;',
+        '    }',
+        '}',
+      ).trimEnd();
+    }
+    return lines(
+      header,
+      '{',
+      ...layer.children.flatMap((childId) => [
+        `    if (instance->state_active[${stateIndex(ir, childId)}]) {`,
+        `        SM_Advance_Timer(instance, ${stateIndex(ir, childId)});`,
+        ...childLayerCalls(childId, '        '),
+        '    }',
+      ]),
+      '}',
+    ).trimEnd();
+  });
+  const root = ir.layers[ir.rootLayerId];
+  return {
+    declarations: tickLayers.map((layer) => `static void ${fn(layer.id)}(ADIA_Instance_t *instance);`),
+    definitions: lines(
+      'static void SM_Advance_Timer(ADIA_Instance_t *instance, uint32_t state_index)',
+      '{',
+      '    if (SM_TICK_MS > (UINT32_MAX - instance->state_timers[state_index])) {',
+      '        instance->state_timers[state_index] = UINT32_MAX;',
+      '    } else {',
+      '        instance->state_timers[state_index] += SM_TICK_MS;',
+      '    }',
+      '}',
+      '',
+      definitions.join('\n\n'),
+    ).trimEnd(),
+    rootCall: root.children.length > 0 ? `    ${fn(root.id)}(instance);` : null,
+  };
+};
+
 const renderCoreSourceBody = (ir: SemanticModel): string => {
   const index = buildIndex(ir);
+  const timerAdvance = renderTimerAdvanceFunctions(ir, index);
   const states = orderedStates(ir);
   const rootLayer = ir.layers[ir.rootLayerId];
   const forwardDeclarations = [
@@ -1726,6 +1972,7 @@ const renderCoreSourceBody = (ir: SemanticModel): string => {
     historyStorageUsage(ir).shallow
       ? 'static void SM_Record_Layer_History(ADIA_Instance_t *instance, uint32_t layer);'
       : null,
+    ...timerAdvance.declarations,
     'static void SM_Exit_All(ADIA_Instance_t *instance);',
     'static void SM_Enter_Safe_State(ADIA_Instance_t *instance);',
     'static void SM_Enter_Fault(ADIA_Instance_t *instance);',
@@ -1841,6 +2088,8 @@ const renderCoreSourceBody = (ir: SemanticModel): string => {
     '',
     renderExecuteFunctions(ir, index).trimEnd(),
     '',
+    timerAdvance.definitions,
+    '',
     faultHelpers,
     '',
     ...(eventUsage(ir).any ? [renderEventExecutionSource(ir, index), ''] : []),
@@ -1948,6 +2197,7 @@ const renderCoreSourceBody = (ir: SemanticModel): string => {
     '        instance->state_active[state_index] = false;',
     '        instance->state_timers[state_index] = 0U;',
     '    }',
+    '    instance->scan_cursor = 0U;',
     '    instance->error_status = SM_ERR_NONE;',
     ir.timingFaultPolicy === 'monitor' ? '    instance->timing_violations = 0U;' : null,
     '    instance->fault_latched = false;',
@@ -1975,7 +2225,6 @@ const renderCoreSourceBody = (ir: SemanticModel): string => {
     '',
     'SM_Error_t SM_Step(ADIA_Instance_t *instance, uint32_t delta_ms)',
     '{',
-    '    uint32_t state_index;',
     ...(eventUsage(ir).input ? ['    uint32_t pending_mask;'] : []),
     '    if (instance == NULL) {',
     '        return SM_ERR_NULL_INSTANCE;',
@@ -1985,20 +2234,20 @@ const renderCoreSourceBody = (ir: SemanticModel): string => {
     '        return (instance->error_status != SM_ERR_NONE) ? instance->error_status : SM_ERR_SAFETY_VIOLATION;',
     '    }',
     ...(ir.timingFaultPolicy === 'monitor' ? [
-      '    if ((delta_ms < SM_TICK_MIN_MS) || (delta_ms > SM_TICK_MAX_MS)) {',
+      `    if (${tickWindowCondition(ir)}) {`,
       '        /* Monitor policy: count the violation; the tick runs on logical time (SM_TICK_MS). */',
       '        if (instance->timing_violations < UINT32_MAX) {',
       '            instance->timing_violations += 1U;',
       '        }',
       '    }',
     ] : [
-      '    if ((delta_ms < SM_TICK_MIN_MS) || (delta_ms > SM_TICK_MAX_MS)) {',
+      `    if (${tickWindowCondition(ir)}) {`,
       '        instance->error_status = SM_ERR_TIMING;',
       '        SM_Enter_Fault(instance);',
       '        return instance->error_status;',
       '    }',
     ]),
-    '    instance->error_status = SM_Validate_State_Consistency(instance);',
+    '    instance->error_status = SM_Validate_Tick_Consistency(instance);',
     '    if (instance->error_status != SM_ERR_NONE) {',
     '        SM_Enter_Fault(instance);',
     '        return instance->error_status;',
@@ -2014,15 +2263,7 @@ const renderCoreSourceBody = (ir: SemanticModel): string => {
       '    }',
     ] : []),
     '    /* delta_ms is observed physical jitter; SM_TICK_MS is behavioral logical time. */',
-    '    for (state_index = 1U; state_index <= SM_NUM_STATES; ++state_index) {',
-    '        if (instance->state_active[state_index]) {',
-    '            if (SM_TICK_MS > (UINT32_MAX - instance->state_timers[state_index])) {',
-    '                instance->state_timers[state_index] = UINT32_MAX;',
-    '            } else {',
-    '                instance->state_timers[state_index] += SM_TICK_MS;',
-    '            }',
-    '        }',
-    '    }',
+    timerAdvance.rootCall,
     ...(eventUsage(ir).any
       ? [
         ...(eventUsage(ir).input ? [
@@ -2081,7 +2322,7 @@ const renderCoreSourceBody = (ir: SemanticModel): string => {
     '        SM_Enter_Fault(instance);',
     '        return (instance->error_status != SM_ERR_NONE) ? instance->error_status : SM_ERR_SAFETY_VIOLATION;',
     '    }',
-    '    instance->error_status = SM_Validate_State_Consistency(instance);',
+    '    instance->error_status = SM_Validate_Active_Tree(instance);',
     '    if (instance->error_status != SM_ERR_NONE) {',
     '        SM_Enter_Fault(instance);',
     '        return instance->error_status;',

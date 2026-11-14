@@ -361,6 +361,7 @@ static bool SM_Execute_State_1(ADIA_Instance_t *instance);
 static void SM_Enter_Deep_2(ADIA_Instance_t *instance);
 static void SM_Exit_State_2(ADIA_Instance_t *instance);
 static bool SM_Execute_State_2(ADIA_Instance_t *instance);
+static void SM_Tick_Layer_0(ADIA_Instance_t *instance);
 static void SM_Exit_All(ADIA_Instance_t *instance);
 static void SM_Enter_Safe_State(ADIA_Instance_t *instance);
 static void SM_Enter_Fault(ADIA_Instance_t *instance);
@@ -467,6 +468,23 @@ static bool SM_Execute_State_2(ADIA_Instance_t *instance)
 }
 /* TRACE-END: traceId=TRACE-STATE-CONTROLLER */
 
+static void SM_Advance_Timer(ADIA_Instance_t *instance, uint32_t state_index)
+{
+    if (SM_TICK_MS > (UINT32_MAX - instance->state_timers[state_index])) {
+        instance->state_timers[state_index] = UINT32_MAX;
+    } else {
+        instance->state_timers[state_index] += SM_TICK_MS;
+    }
+}
+
+static void SM_Tick_Layer_0(ADIA_Instance_t *instance)
+{
+    const uint32_t node = (uint32_t)instance->active_states[0U];
+    if ((node != 0U) && (node <= SM_NUM_STATES)) {
+        SM_Advance_Timer(instance, node);
+    }
+}
+
 static void SM_Exit_All(ADIA_Instance_t *instance)
 {
     SM_Exit_Layer_0(instance);
@@ -547,6 +565,7 @@ SM_Error_t SM_Reset(ADIA_Instance_t *instance)
         instance->state_active[state_index] = false;
         instance->state_timers[state_index] = 0U;
     }
+    instance->scan_cursor = 0U;
     instance->error_status = SM_ERR_NONE;
     instance->fault_latched = false;
     instance->arith_pending = false;
@@ -568,7 +587,6 @@ SM_Error_t SM_ReadInputs(ADIA_Instance_t *instance)
 
 SM_Error_t SM_Step(ADIA_Instance_t *instance, uint32_t delta_ms)
 {
-    uint32_t state_index;
     if (instance == NULL) {
         return SM_ERR_NULL_INSTANCE;
     }
@@ -581,21 +599,13 @@ SM_Error_t SM_Step(ADIA_Instance_t *instance, uint32_t delta_ms)
         SM_Enter_Fault(instance);
         return instance->error_status;
     }
-    instance->error_status = SM_Validate_State_Consistency(instance);
+    instance->error_status = SM_Validate_Tick_Consistency(instance);
     if (instance->error_status != SM_ERR_NONE) {
         SM_Enter_Fault(instance);
         return instance->error_status;
     }
     /* delta_ms is observed physical jitter; SM_TICK_MS is behavioral logical time. */
-    for (state_index = 1U; state_index <= SM_NUM_STATES; ++state_index) {
-        if (instance->state_active[state_index]) {
-            if (SM_TICK_MS > (UINT32_MAX - instance->state_timers[state_index])) {
-                instance->state_timers[state_index] = UINT32_MAX;
-            } else {
-                instance->state_timers[state_index] += SM_TICK_MS;
-            }
-        }
-    }
+    SM_Tick_Layer_0(instance);
     (void)SM_Execute_Layer_0(instance);
     if (instance->error_status != SM_ERR_NONE) {
         SM_Enter_Fault(instance);
@@ -612,7 +622,7 @@ SM_Error_t SM_WriteOutputs(ADIA_Instance_t *instance)
         SM_Enter_Fault(instance);
         return (instance->error_status != SM_ERR_NONE) ? instance->error_status : SM_ERR_SAFETY_VIOLATION;
     }
-    instance->error_status = SM_Validate_State_Consistency(instance);
+    instance->error_status = SM_Validate_Active_Tree(instance);
     if (instance->error_status != SM_ERR_NONE) {
         SM_Enter_Fault(instance);
         return instance->error_status;
@@ -1072,6 +1082,12 @@ typedef uint8_t SM_Rom_Index_t;
 #define SM_NUM_STATES 2U
 #define SM_NUM_LAYERS 1U
 #define SM_NUM_ACTIVE_SLOTS 1U
+/* Rolling consistency scan: units (states, then layers) checked per SM_Step; a corrupted flag is found within
+ * ceil(SM_SCAN_UNITS / SM_CONSISTENCY_SCAN_CHUNK) ticks. The active tree is checked completely every tick. */
+#ifndef SM_CONSISTENCY_SCAN_CHUNK
+#define SM_CONSISTENCY_SCAN_CHUNK 16U
+#endif
+#define SM_SCAN_UNITS (SM_NUM_STATES + SM_NUM_LAYERS)
 #define SM_LYR_ROOT_IDX 0U
 /* State: A | Model ID: s1 | C enum: SM_ST_S1 */
 #define SM_ST_S1_IDX 1U
@@ -1116,6 +1132,7 @@ struct ADIA_Instance {
     SM_Node_t active_states[(SM_NUM_ACTIVE_SLOTS > 0U) ? SM_NUM_ACTIVE_SLOTS : 1U];
     bool state_active[SM_NUM_STATES + 1U];
     uint32_t state_timers[SM_NUM_STATES + 1U];
+    uint32_t scan_cursor; /* next unit of the rolling consistency scan */
     SM_Error_t error_status;
     bool fault_latched;
     bool arith_pending;
@@ -1550,6 +1567,7 @@ static bool SM_Execute_State_1(ADIA_Instance_t *instance);
 static void SM_Enter_Deep_2(ADIA_Instance_t *instance);
 static void SM_Exit_State_2(ADIA_Instance_t *instance);
 static bool SM_Execute_State_2(ADIA_Instance_t *instance);
+static void SM_Tick_Layer_0(ADIA_Instance_t *instance);
 static void SM_Exit_All(ADIA_Instance_t *instance);
 static void SM_Enter_Safe_State(ADIA_Instance_t *instance);
 static void SM_Enter_Fault(ADIA_Instance_t *instance);
@@ -1660,6 +1678,23 @@ static bool SM_Execute_State_2(ADIA_Instance_t *instance)
 }
 /* TRACE-END: traceId=TRACE-STATE-S2 */
 
+static void SM_Advance_Timer(ADIA_Instance_t *instance, uint32_t state_index)
+{
+    if (SM_TICK_MS > (UINT32_MAX - instance->state_timers[state_index])) {
+        instance->state_timers[state_index] = UINT32_MAX;
+    } else {
+        instance->state_timers[state_index] += SM_TICK_MS;
+    }
+}
+
+static void SM_Tick_Layer_0(ADIA_Instance_t *instance)
+{
+    const uint32_t node = (uint32_t)instance->active_states[0U];
+    if ((node != 0U) && (node <= SM_NUM_STATES)) {
+        SM_Advance_Timer(instance, node);
+    }
+}
+
 static void SM_Exit_All(ADIA_Instance_t *instance)
 {
     SM_Exit_Layer_0(instance);
@@ -1736,6 +1771,7 @@ SM_Error_t SM_Reset(ADIA_Instance_t *instance)
         instance->state_active[state_index] = false;
         instance->state_timers[state_index] = 0U;
     }
+    instance->scan_cursor = 0U;
     instance->error_status = SM_ERR_NONE;
     instance->fault_latched = false;
     instance->arith_pending = false;
@@ -1757,7 +1793,6 @@ SM_Error_t SM_ReadInputs(ADIA_Instance_t *instance)
 
 SM_Error_t SM_Step(ADIA_Instance_t *instance, uint32_t delta_ms)
 {
-    uint32_t state_index;
     if (instance == NULL) {
         return SM_ERR_NULL_INSTANCE;
     }
@@ -1770,21 +1805,13 @@ SM_Error_t SM_Step(ADIA_Instance_t *instance, uint32_t delta_ms)
         SM_Enter_Fault(instance);
         return instance->error_status;
     }
-    instance->error_status = SM_Validate_State_Consistency(instance);
+    instance->error_status = SM_Validate_Tick_Consistency(instance);
     if (instance->error_status != SM_ERR_NONE) {
         SM_Enter_Fault(instance);
         return instance->error_status;
     }
     /* delta_ms is observed physical jitter; SM_TICK_MS is behavioral logical time. */
-    for (state_index = 1U; state_index <= SM_NUM_STATES; ++state_index) {
-        if (instance->state_active[state_index]) {
-            if (SM_TICK_MS > (UINT32_MAX - instance->state_timers[state_index])) {
-                instance->state_timers[state_index] = UINT32_MAX;
-            } else {
-                instance->state_timers[state_index] += SM_TICK_MS;
-            }
-        }
-    }
+    SM_Tick_Layer_0(instance);
     (void)SM_Execute_Layer_0(instance);
     if (instance->error_status != SM_ERR_NONE) {
         SM_Enter_Fault(instance);
@@ -1801,7 +1828,7 @@ SM_Error_t SM_WriteOutputs(ADIA_Instance_t *instance)
         SM_Enter_Fault(instance);
         return (instance->error_status != SM_ERR_NONE) ? instance->error_status : SM_ERR_SAFETY_VIOLATION;
     }
-    instance->error_status = SM_Validate_State_Consistency(instance);
+    instance->error_status = SM_Validate_Active_Tree(instance);
     if (instance->error_status != SM_ERR_NONE) {
         SM_Enter_Fault(instance);
         return instance->error_status;
@@ -1931,7 +1958,12 @@ SM_Error_t SM_Test_SetDeepHistory(ADIA_Instance_t *instance, uint32_t layer, SM_
 
 #include "sm_config.h"
 
+/* Full check of every state and layer: O(states), for init, reset and diagnostics. */
 SM_Error_t SM_Validate_State_Consistency(const ADIA_Instance_t *instance);
+/* Active configuration only: O(active states). */
+SM_Error_t SM_Validate_Active_Tree(const ADIA_Instance_t *instance);
+/* Per tick: the active tree plus SM_CONSISTENCY_SCAN_CHUNK units of a rolling full scan. */
+SM_Error_t SM_Validate_Tick_Consistency(ADIA_Instance_t *instance);
 void SM_ApplySafeOutputs(ADIA_Instance_t *instance);
 
 #endif /* SM_SAFETY_H */
@@ -1956,67 +1988,147 @@ static bool SM_Is_Direct_Layer_Child(uint32_t layer_index, SM_Node_t state)
     return result;
 }
 
-SM_Error_t SM_Validate_State_Consistency(const ADIA_Instance_t *instance)
+static bool SM_Check_State_Unit(const ADIA_Instance_t *instance, uint32_t state_index)
 {
     static SM_ROM SM_Rom_Index_t SM_State_Parent_Map[SM_NUM_STATES + 1U] = {
         [0] = 0U,
         [SM_ST_S1_IDX] = 0U,
         [SM_ST_S2_IDX] = 0U,
     };
-    uint32_t layer_index;
-    uint32_t state_index;
-    uint32_t slot_index;
-    SM_Node_t active_node;
-    uint32_t active_slot;
     uint32_t parent;
-    if (instance == NULL) {
-        return SM_ERR_NULL_INSTANCE;
-    }
-    for (state_index = 1U; state_index <= SM_NUM_STATES; ++state_index) {
-        if (instance->state_active[state_index]) {
-            parent = (uint32_t)SM_ROM_READ_INDEX(SM_State_Parent_Map[state_index]);
-            if ((parent != 0U) && (!instance->state_active[parent])) {
-                return SM_ERR_CONFIGURATION;
-            }
-            active_slot = (uint32_t)SM_ROM_READ_INDEX(SM_State_Active_Slot_Map[state_index]);
-            if ((active_slot != SM_ROM_INDEX_NONE)
-                && (instance->active_states[active_slot] != (SM_Node_t)state_index)) {
-                return SM_ERR_CONFIGURATION;
+    if (instance->state_active[state_index]) {
+        uint32_t active_slot;
+        parent = (uint32_t)SM_ROM_READ_INDEX(SM_State_Parent_Map[state_index]);
+        if ((parent != 0U) && (!instance->state_active[parent])) {
+            return false;
+        }
+        active_slot = (uint32_t)SM_ROM_READ_INDEX(SM_State_Active_Slot_Map[state_index]);
+        if ((active_slot != SM_ROM_INDEX_NONE)
+            && (instance->active_states[active_slot] != (SM_Node_t)state_index)) {
+            return false;
+        }
+    } else {
+        uint32_t active_slot;
+        uint32_t parent_layer;
+        /* Every child of a layer without an active slot is active while its container is. */
+        parent_layer = (uint32_t)SM_ROM_READ_INDEX(SM_State_Parent_Layer_Map[state_index]);
+        active_slot = (uint32_t)SM_ROM_READ_INDEX(SM_Layer_Active_Slot_Map[parent_layer]);
+        if (active_slot == SM_ROM_INDEX_NONE) {
+            parent = (uint32_t)SM_ROM_READ_INDEX(SM_Layer_Parent_State_Map[parent_layer]);
+            if ((parent == 0U) || instance->state_active[parent]) {
+                return false;
             }
         }
     }
-    for (layer_index = 0U; layer_index < SM_NUM_LAYERS; ++layer_index) {
-        bool container_active;
-        parent = (uint32_t)SM_ROM_READ_INDEX(SM_Layer_Parent_State_Map[layer_index]);
-        container_active = (parent == 0U) || instance->state_active[parent];
-        active_slot = (uint32_t)SM_ROM_READ_INDEX(SM_Layer_Active_Slot_Map[layer_index]);
-        if (container_active) {
-            if (active_slot != SM_ROM_INDEX_NONE) {
-                active_node = instance->active_states[active_slot];
-                if ((active_node == SM_NODE_INVALID)
-                    || ((uint32_t)active_node > SM_NUM_STATES)
-                    || (!SM_Is_Direct_Layer_Child(layer_index, active_node))
-                    || (!instance->state_active[(uint32_t)active_node])) {
-                    return SM_ERR_CONFIGURATION;
-                }
-            } else {
-                for (state_index = 1U; state_index <= SM_NUM_STATES; ++state_index) {
-                    if (SM_Is_Direct_Layer_Child(layer_index, (SM_Node_t)state_index)
-                        && (!instance->state_active[state_index])) {
-                        return SM_ERR_CONFIGURATION;
-                    }
-                }
+    return true;
+}
+
+static bool SM_Check_Layer_Unit(const ADIA_Instance_t *instance, uint32_t layer_index)
+{
+    uint32_t active_slot;
+    uint32_t parent;
+    parent = (uint32_t)SM_ROM_READ_INDEX(SM_Layer_Parent_State_Map[layer_index]);
+    active_slot = (uint32_t)SM_ROM_READ_INDEX(SM_Layer_Active_Slot_Map[layer_index]);
+    if (active_slot != SM_ROM_INDEX_NONE) {
+        SM_Node_t active_node = instance->active_states[active_slot];
+        if ((parent == 0U) || instance->state_active[parent]) {
+            if ((active_node == SM_NODE_INVALID)
+                || ((uint32_t)active_node > SM_NUM_STATES)
+                || (!SM_Is_Direct_Layer_Child(layer_index, active_node))
+                || (!instance->state_active[(uint32_t)active_node])) {
+                return false;
             }
-        } else if ((active_slot != SM_ROM_INDEX_NONE)
-            && (instance->active_states[active_slot] != SM_NODE_INVALID)) {
-            return SM_ERR_CONFIGURATION;
+        } else if (active_node != SM_NODE_INVALID) {
+            return false;
         } else {
             /* Inactive container without a live slot: nothing to check. */
         }
     }
+    return true;
+}
+
+static bool SM_Check_Tree_Layer_0(const ADIA_Instance_t *instance)
+{
+    switch (instance->active_states[0U]) {
+        case SM_ST_S1:
+            if (!instance->state_active[SM_ST_S1_IDX]) {
+                return false;
+            }
+            break;
+        case SM_ST_S2:
+            if (!instance->state_active[SM_ST_S2_IDX]) {
+                return false;
+            }
+            break;
+        default:
+            return false;
+    }
+    return true;
+}
+
+
+SM_Error_t SM_Validate_Active_Tree(const ADIA_Instance_t *instance)
+{
+    if (instance == NULL) {
+        return SM_ERR_NULL_INSTANCE;
+    }
+    if (!SM_Check_Tree_Layer_0(instance)) {
+        return SM_ERR_CONFIGURATION;
+    }
+    return SM_ERR_NONE;
+}
+
+SM_Error_t SM_Validate_Tick_Consistency(ADIA_Instance_t *instance)
+{
+    SM_Error_t result;
+    uint32_t cursor;
+    uint32_t count;
+    bool unit_ok;
+    result = SM_Validate_Active_Tree(instance);
+    if (result != SM_ERR_NONE) {
+        return result;
+    }
+    cursor = (instance->scan_cursor < SM_SCAN_UNITS) ? instance->scan_cursor : 0U;
+    for (count = 0U; (count < SM_CONSISTENCY_SCAN_CHUNK) && (count < SM_SCAN_UNITS); ++count) {
+        if (cursor < SM_NUM_STATES) {
+            unit_ok = SM_Check_State_Unit(instance, cursor + 1U);
+        } else {
+            unit_ok = SM_Check_Layer_Unit(instance, cursor - SM_NUM_STATES);
+        }
+        if (!unit_ok) {
+            return SM_ERR_CONFIGURATION;
+        }
+        ++cursor;
+        if (cursor >= SM_SCAN_UNITS) {
+            cursor = 0U;
+        }
+    }
+    instance->scan_cursor = cursor;
+    return SM_ERR_NONE;
+}
+
+SM_Error_t SM_Validate_State_Consistency(const ADIA_Instance_t *instance)
+{
+    uint32_t layer_index;
+    uint32_t state_index;
+    uint32_t slot_index;
+    if (instance == NULL) {
+        return SM_ERR_NULL_INSTANCE;
+    }
+    for (state_index = 1U; state_index <= SM_NUM_STATES; ++state_index) {
+        if (!SM_Check_State_Unit(instance, state_index)) {
+            return SM_ERR_CONFIGURATION;
+        }
+    }
+    for (layer_index = 0U; layer_index < SM_NUM_LAYERS; ++layer_index) {
+        if (!SM_Check_Layer_Unit(instance, layer_index)) {
+            return SM_ERR_CONFIGURATION;
+        }
+    }
     for (slot_index = 0U; slot_index < SM_NUM_ACTIVE_SLOTS; ++slot_index) {
-        active_node = instance->active_states[slot_index];
+        const SM_Node_t active_node = instance->active_states[slot_index];
         if (active_node != SM_NODE_INVALID) {
+            uint32_t active_slot;
             if (((uint32_t)active_node > SM_NUM_STATES)
                 || (!instance->state_active[(uint32_t)active_node])) {
                 return SM_ERR_CONFIGURATION;
@@ -2241,9 +2353,9 @@ Evidence labels describe only the checks actually recorded for this generated pa
 | Metric | Value |
 |---|---:|
 | Files measured | 10 |
-| Total lines | 1078 |
-| Functional lines | 923 |
-| Comment/blank density | 14.4% |
+| Total lines | 1180 |
+| Functional lines | 1011 |
+| Comment/blank density | 14.3% |
 
 ## X-Bridges static code-generation metrics
 
