@@ -1176,6 +1176,9 @@ export const renderConfigHeader = (ir: SemanticModel): string => {
       ? '    uint8_t deep_history[SM_NUM_LAYERS][SM_DEEP_HISTORY_BYTES];'
       : null,
     '    SM_Error_t error_status;',
+    ir.timingFaultPolicy === 'monitor'
+      ? '    uint32_t timing_violations; /* timingFaultPolicy monitor: out-of-tolerance ticks counted, saturating */'
+      : null,
     '    bool fault_latched;',
     '    bool arith_pending;',
     ir.executeAtInitialization === false ? '    bool chart_entered;' : null,
@@ -1231,6 +1234,9 @@ export const renderCoreHeader = (cStandard?: string, ir?: SemanticModel): string
   '/* Deprecated: use SM_GetActiveSlot(). The argument is an active-slot ID. */',
   'SM_Node_t SM_GetActive(const ADIA_Instance_t *instance, SM_Group_t slot);',
   'SM_Error_t SM_GetError(const ADIA_Instance_t *instance);',
+  ...(ir?.timingFaultPolicy === 'monitor'
+    ? ['uint32_t SM_GetTimingViolations(const ADIA_Instance_t *instance);']
+    : []),
   '#ifdef SM_TRACE_ENABLED',
   'void SM_SetTraceSink(ADIA_Instance_t *instance, SM_TraceSink_t sink);',
   'void SM_TraceAction(ADIA_Instance_t *instance, const char *action);',
@@ -1943,6 +1949,7 @@ const renderCoreSourceBody = (ir: SemanticModel): string => {
     '        instance->state_timers[state_index] = 0U;',
     '    }',
     '    instance->error_status = SM_ERR_NONE;',
+    ir.timingFaultPolicy === 'monitor' ? '    instance->timing_violations = 0U;' : null,
     '    instance->fault_latched = false;',
     '    instance->arith_pending = false;',
     ...(eventUsage(ir).any ? renderEventResetLines(ir) : []),
@@ -1977,11 +1984,20 @@ const renderCoreSourceBody = (ir: SemanticModel): string => {
     '        SM_Enter_Fault(instance);',
     '        return (instance->error_status != SM_ERR_NONE) ? instance->error_status : SM_ERR_SAFETY_VIOLATION;',
     '    }',
-    '    if ((delta_ms < SM_TICK_MIN_MS) || (delta_ms > SM_TICK_MAX_MS)) {',
-    '        instance->error_status = SM_ERR_TIMING;',
-    '        SM_Enter_Fault(instance);',
-    '        return instance->error_status;',
-    '    }',
+    ...(ir.timingFaultPolicy === 'monitor' ? [
+      '    if ((delta_ms < SM_TICK_MIN_MS) || (delta_ms > SM_TICK_MAX_MS)) {',
+      '        /* Monitor policy: count the violation; the tick runs on logical time (SM_TICK_MS). */',
+      '        if (instance->timing_violations < UINT32_MAX) {',
+      '            instance->timing_violations += 1U;',
+      '        }',
+      '    }',
+    ] : [
+      '    if ((delta_ms < SM_TICK_MIN_MS) || (delta_ms > SM_TICK_MAX_MS)) {',
+      '        instance->error_status = SM_ERR_TIMING;',
+      '        SM_Enter_Fault(instance);',
+      '        return instance->error_status;',
+      '    }',
+    ]),
     '    instance->error_status = SM_Validate_State_Consistency(instance);',
     '    if (instance->error_status != SM_ERR_NONE) {',
     '        SM_Enter_Fault(instance);',
@@ -2132,6 +2148,13 @@ const renderCoreSourceBody = (ir: SemanticModel): string => {
     '    return (instance == NULL) ? SM_ERR_NULL_INSTANCE : instance->error_status;',
     '}',
     '',
+    ...(ir.timingFaultPolicy === 'monitor' ? [
+      'uint32_t SM_GetTimingViolations(const ADIA_Instance_t *instance)',
+      '{',
+      '    return (instance == NULL) ? 0U : instance->timing_violations;',
+      '}',
+      '',
+    ] : []),
     '#ifdef ADIA_TESTING',
     'SM_Error_t SM_Test_SetActiveState(ADIA_Instance_t *instance, uint32_t slot, SM_Node_t state)',
     '{',

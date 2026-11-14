@@ -16,6 +16,9 @@ export interface FixedPointFormat {
 /** Chart option: how fixed-point conversions and divisions round (Simulink Floor / Nearest). */
 export type FixedPointRounding = 'floor' | 'nearest';
 
+/** Chart option: a tick whose observed period is outside the tolerance. 'latch' (default) faults; 'monitor' (Stateflow-like) counts it and runs the tick on logical time. */
+export type TimingFaultPolicy = 'latch' | 'monitor';
+
 export interface VariableDef {
   id: string;
   name: string;

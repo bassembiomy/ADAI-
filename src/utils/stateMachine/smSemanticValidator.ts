@@ -1177,6 +1177,17 @@ const validateFixedPoint = (
   return diagnostics;
 };
 
+const validateTimingFaultPolicy = (
+  model: StateMachineModelV4,
+): ModelDiagnostic[] => {
+  const policy = (model as { timingFaultPolicy?: unknown }).timingFaultPolicy;
+  if (policy === undefined || policy === 'latch' || policy === 'monitor') return [];
+  return [diagnostic(
+    'SM_INVALID_TIMING_POLICY',
+    `Timing fault policy '${String(policy)}' must be 'latch' or 'monitor'.`,
+  )];
+};
+
 const validateTickPeriod = (
   model: StateMachineModelV4,
 ): ModelDiagnostic[] => {
@@ -1281,6 +1292,7 @@ export const validateModelStructure = (
     ...duplicateIds(model.variables, 'VARIABLE'),
     ...validateIdentifierNamespaces(model),
     ...validateTickPeriod(model),
+    ...validateTimingFaultPolicy(model),
   ];
   const { stateLayers, junctionLayers } = buildMembership(model);
   diagnostics.push(

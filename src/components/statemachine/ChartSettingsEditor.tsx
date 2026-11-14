@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import type { FixedPointRounding } from '../../types/sm_types';
+import type { FixedPointRounding, TimingFaultPolicy } from '../../types/sm_types';
 import {
   codePrefixFileHints,
   codePrefixInputProblem,
@@ -9,6 +9,9 @@ import {
 export interface ChartSettingsEditorProps {
   fixedPointRounding: FixedPointRounding | undefined;
   onFixedPointRoundingChange: (rounding: FixedPointRounding | undefined) => void;
+  /** Undefined means 'latch' (fault on a late or early tick). */
+  timingFaultPolicy?: TimingFaultPolicy;
+  onTimingFaultPolicyChange?: (policy: TimingFaultPolicy | undefined) => void;
   /** Stored prefix; undefined is the default 'SM'. */
   codePrefix: string | undefined;
   onCodePrefixChange: (prefix: string | undefined) => void;
@@ -17,9 +20,9 @@ export interface ChartSettingsEditorProps {
   onEnterAtFirstStepChange: (enabled: boolean) => void;
 }
 
-/** "Chart settings" section of the variables panel: fixed-point rounding, code prefix and first-step entry. */
+/** "Chart settings" section of the variables panel: fixed-point rounding, late/early tick policy, code prefix and first-step entry. */
 export const ChartSettingsEditor: React.FC<ChartSettingsEditorProps> = ({
-  fixedPointRounding, onFixedPointRoundingChange, codePrefix, onCodePrefixChange, enterAtFirstStep, onEnterAtFirstStepChange,
+  fixedPointRounding, onFixedPointRoundingChange, timingFaultPolicy, onTimingFaultPolicyChange, codePrefix, onCodePrefixChange, enterAtFirstStep, onEnterAtFirstStepChange,
 }) => {
   const [draft, setDraft] = useState<string | null>(null);
   const shown = draft ?? codePrefix ?? '';
@@ -41,6 +44,18 @@ export const ChartSettingsEditor: React.FC<ChartSettingsEditorProps> = ({
         >
           <option value="floor">Floor</option>
           <option value="nearest">Nearest</option>
+        </select>
+      </label>
+      <label className="flex items-center justify-between gap-2 text-[10px] text-[#aaa]">
+        Late/early tick
+        <select data-help-feature="app-chart-timing-policy" data-help-source="src/App.tsx"
+          aria-label="Late/early tick policy"
+          value={timingFaultPolicy ?? 'latch'}
+          onChange={(e) => onTimingFaultPolicyChange?.(e.target.value === 'monitor' ? 'monitor' : undefined)}
+          className="h-6 max-w-[11rem] text-[10px] font-mono bg-[#0d0d0d] border border-[#222] rounded px-1"
+        >
+          <option value="latch">Latch fault (default)</option>
+          <option value="monitor">Monitor and continue (Stateflow)</option>
         </select>
       </label>
       <label className="flex items-center gap-2 text-[10px] text-[#aaa]">

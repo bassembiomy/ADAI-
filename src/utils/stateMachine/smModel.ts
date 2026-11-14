@@ -7,10 +7,13 @@ import type {
   JunctionData,
   Layer,
   StateData,
+  TimingFaultPolicy,
   TransitionData,
   VariableDef,
   StateMachineDiagramData,
 } from '../../types/sm_types';
+
+export type { TimingFaultPolicy };
 
 export const CURRENT_SM_SCHEMA_VERSION = 5 as const;
 
@@ -88,6 +91,8 @@ export interface StateMachineModelV5 {
   executeAtInitialization?: boolean;
   /** Fixed-point rounding. Undefined means 'floor'. */
   fixedPointRounding?: FixedPointRounding;
+  /** Late/early tick handling. Undefined means 'latch' (fault). 'monitor' counts violations and continues. */
+  timingFaultPolicy?: TimingFaultPolicy;
   /** Declared events in declaration order (input events fire in this order). Optional: absent means no events. */
   events?: EventDef[];
   /** Hand-written C functions callable from guards and actions. Optional: absent means none. */
@@ -113,6 +118,7 @@ export interface LegacyStateMachineModel {
   diagrams?: StateMachineDiagramData[];
   executeAtInitialization?: boolean;
   fixedPointRounding?: FixedPointRounding;
+  timingFaultPolicy?: TimingFaultPolicy;
   events?: EventDef[];
   externalFunctions?: ExternalFunctionDef[];
 }

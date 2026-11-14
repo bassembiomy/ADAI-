@@ -1,4 +1,4 @@
-import type { FixedPointFormat, FixedPointRounding, VariableOverflowPolicy, VariableType } from '../../types/sm_types';
+import type { FixedPointFormat, FixedPointRounding, TimingFaultPolicy, VariableOverflowPolicy, VariableType } from '../../types/sm_types';
 import type { ActionNode, ExpressionNode } from './smExpressions';
 import type {
   ModelDiagnostic,
@@ -217,6 +217,8 @@ export interface SemanticModel {
   executeAtInitialization?: boolean;
   /** Undefined means 'floor'. */
   fixedPointRounding?: FixedPointRounding;
+  /** Undefined means 'latch'. 'monitor' counts out-of-tolerance ticks and runs them on logical time. */
+  timingFaultPolicy?: TimingFaultPolicy;
 }
 
 export interface SemanticBuildResult {

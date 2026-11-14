@@ -908,6 +908,9 @@ export const buildSemanticModel = (
       ...((model as Partial<StateMachineModelV5>).fixedPointRounding === 'nearest'
         ? { fixedPointRounding: 'nearest' as const }
         : {}),
+      ...((model as Partial<StateMachineModelV5>).timingFaultPolicy === 'monitor'
+        ? { timingFaultPolicy: 'monitor' as const }
+        : {}),
       ...(((model as Partial<StateMachineModelV5>).executeAtInitialization) !== undefined
         ? { executeAtInitialization: (model as Partial<StateMachineModelV5>).executeAtInitialization }
         : {}),

@@ -271,7 +271,7 @@ import {
 } from './services/sysmlDiagramWorkspace';
 import { ensureRootStateMachineDiagram } from './features/modelExplorer/adapters/stateMachineExplorerAdapter';
 import { resolveCanvasSymbolDiagramTargets, resolveExactDiagramCanvasContext, resolveTreeOpenTarget } from './features/modelExplorer/diagramTreeContext';
-import type { StateMachineDiagramData, EventDef, ExternalFunctionDef, FixedPointFormat, FixedPointRounding } from './types/sm_types';
+import type { StateMachineDiagramData, EventDef, ExternalFunctionDef, FixedPointFormat, FixedPointRounding, TimingFaultPolicy } from './types/sm_types';
 import { ChartSettingsEditor } from './components/statemachine/ChartSettingsEditor';
 import { ChartExternalFunctionsEditor } from './components/statemachine/ChartExternalFunctionsEditor';
 import { FixedPointFormatEditor } from './components/statemachine/FixedPointFormatEditor';
@@ -4938,6 +4938,8 @@ const ADIA = () => {
   // Fixed-point rounding (Floor default), hand-written C functions callable from actions and guards, per-chart code prefix (default SM).
   // undefined = not set, so old projects save byte-identical.
   const [fixedPointRounding, setFixedPointRounding] = useState<FixedPointRounding | undefined>(undefined);
+  // Late/early tick policy: 'latch' (default, fault) or 'monitor' (Stateflow-like: count and continue).
+  const [timingFaultPolicy, setTimingFaultPolicy] = useState<TimingFaultPolicy | undefined>(undefined);
   const [externalFunctions, setExternalFunctions] = useState<ExternalFunctionDef[] | undefined>(undefined);
   const [codePrefix, setCodePrefix] = useState<string | undefined>(undefined);
   const [newVarFixedPoint, setNewVarFixedPoint] = useState<FixedPointFormat>(DEFAULT_FIXED_POINT);
@@ -5613,7 +5615,7 @@ const ADIA = () => {
         return {
           ...createPersistedAppSimulationModel({
             tickMs, states, junctions, transitions, variables, layers,
-            safetyMode, hilConfig, events, executeAtInitialization, fixedPointRounding, externalFunctions, codePrefix,
+            safetyMode, hilConfig, events, executeAtInitialization, fixedPointRounding, timingFaultPolicy, externalFunctions, codePrefix,
           }),
           view,
         };
@@ -5642,7 +5644,7 @@ const ADIA = () => {
         return null;
     }
   }, [
-    states, junctions, transitions, layers, variables, view, tickMs, safetyMode, events, executeAtInitialization, fixedPointRounding, externalFunctions, codePrefix,
+    states, junctions, transitions, layers, variables, view, tickMs, safetyMode, events, executeAtInitialization, fixedPointRounding, timingFaultPolicy, externalFunctions, codePrefix,
     blocks, relationships, customStereotypes, parts, connectors, interfaceRealizations,
     globalXBridgesNodes, globalXBridgesEdges, vlabNodes, vlabEdges, hilConfig,
     entropyNodes, entropyEdges, opmSimulationConfig, hmiComponents, headers, data, activeModel, taguchiConfig, results,
@@ -5670,6 +5672,7 @@ const ADIA = () => {
       setEvents(restored.events ?? []);
       setExecuteAtInitialization(restored.executeAtInitialization);
       setFixedPointRounding(restored.fixedPointRounding);
+      setTimingFaultPolicy(restored.timingFaultPolicy);
       setExternalFunctions(restored.externalFunctions);
       setCodePrefix(restored.codePrefix);
       setTickMs(restored.tickMs);
@@ -5691,7 +5694,7 @@ const ADIA = () => {
     if (!file.data) {
       switch (file.type) {
         case 'statemachine':
-          setStates([]); setJunctions([]); setTransitions([]); setLayers([]); setVariables([]); setEvents([]); setExecuteAtInitialization(undefined); setFixedPointRounding(undefined); setExternalFunctions(undefined); setCodePrefix(undefined);
+          setStates([]); setJunctions([]); setTransitions([]); setLayers([]); setVariables([]); setEvents([]); setExecuteAtInitialization(undefined); setFixedPointRounding(undefined); setTimingFaultPolicy(undefined); setExternalFunctions(undefined); setCodePrefix(undefined);
           break;
         case 'bdd':
         case 'requirements':
@@ -6281,7 +6284,7 @@ const ADIA = () => {
     const projectPayload = {
       ...createPersistedAppSimulationModel({
         tickMs, states, junctions, transitions, layers, variables,
-        safetyMode, hilConfig, events, executeAtInitialization, fixedPointRounding, externalFunctions, codePrefix,
+        safetyMode, hilConfig, events, executeAtInitialization, fixedPointRounding, timingFaultPolicy, externalFunctions, codePrefix,
       }),
       blocks, relationships, parts, connectors, interfaceRealizations,
     };
@@ -6317,7 +6320,7 @@ const ADIA = () => {
         available: vlabNodes && vlabNodes.length > 0,
       },
     ] as AdiaExportItem[];
-  }, [states, junctions, transitions, layers, variables, tickMs, safetyMode, hilConfig, events, executeAtInitialization, fixedPointRounding, externalFunctions, codePrefix, blocks, relationships, parts, connectors, interfaceRealizations, globalXBridgesNodes, globalXBridgesEdges, vlabNodes, vlabEdges]);
+  }, [states, junctions, transitions, layers, variables, tickMs, safetyMode, hilConfig, events, executeAtInitialization, fixedPointRounding, timingFaultPolicy, externalFunctions, codePrefix, blocks, relationships, parts, connectors, interfaceRealizations, globalXBridgesNodes, globalXBridgesEdges, vlabNodes, vlabEdges]);
 
 
 
@@ -6398,9 +6401,9 @@ const ADIA = () => {
   // TRM simulation verification: the panel edits a repository copy; changes reach the model only as gateway commands.
   const [simVerificationRequirementId, setSimVerificationRequirementId] = useState<string | null>(null);
   const simVerificationProject = useMemo(() => ({
-    states, junctions, transitions, variables, layers, tickMs, hilConfig, safetyMode, events, executeAtInitialization, fixedPointRounding, externalFunctions, codePrefix,
+    states, junctions, transitions, variables, layers, tickMs, hilConfig, safetyMode, events, executeAtInitialization, fixedPointRounding, timingFaultPolicy, externalFunctions, codePrefix,
     globalXBridgesNodes, globalXBridgesEdges, vlabNodes, vlabEdges,
-  }), [states, junctions, transitions, variables, layers, tickMs, hilConfig, safetyMode, events, executeAtInitialization, fixedPointRounding, externalFunctions, codePrefix, globalXBridgesNodes, globalXBridgesEdges, vlabNodes, vlabEdges]);
+  }), [states, junctions, transitions, variables, layers, tickMs, hilConfig, safetyMode, events, executeAtInitialization, fixedPointRounding, timingFaultPolicy, externalFunctions, codePrefix, globalXBridgesNodes, globalXBridgesEdges, vlabNodes, vlabEdges]);
   // Stable XbridgesWorkspace inputs: a fresh array per render re-imports the stored model over unsaved edits.
   const xBridgesWorkspaceInputs = useXBridgesWorkspaceInputs(states, xBridgesStateId, globalXBridgesNodes, globalXBridgesEdges);
   const simEvidenceCurrency = useCallback((evidence: { id: string; simulation?: unknown }): 'current' | 'stale' =>
@@ -6790,7 +6793,7 @@ const ADIA = () => {
     const projectFiles: Record<string, any> = {};
     const persistedStateMachine = createPersistedAppSimulationModel({
       tickMs, states, junctions, transitions, layers, variables,
-      safetyMode, hilConfig, events, executeAtInitialization, fixedPointRounding, externalFunctions, codePrefix,
+      safetyMode, hilConfig, events, executeAtInitialization, fixedPointRounding, timingFaultPolicy, externalFunctions, codePrefix,
     });
 
     if (selectedKeys.includes('statemachine')) {
@@ -6887,7 +6890,7 @@ const ADIA = () => {
     }
     addError('info', 'Selected project modules exported as files.');
   }, [
-    states, junctions, transitions, layers, variables, view, tickMs, safetyMode, events, executeAtInitialization, fixedPointRounding, externalFunctions, codePrefix,
+    states, junctions, transitions, layers, variables, view, tickMs, safetyMode, events, executeAtInitialization, fixedPointRounding, timingFaultPolicy, externalFunctions, codePrefix,
     blocks, relationships, parts, connectors, interfaceRealizations, customStereotypes,
     hmiComponents, vlabNodes, vlabEdges, globalXBridgesNodes, globalXBridgesEdges,
     hilConfig,
@@ -6970,6 +6973,7 @@ const ADIA = () => {
       setEvents(Array.isArray(importedData.events) ? importedData.events : []);
       setExecuteAtInitialization(typeof importedData.executeAtInitialization === 'boolean' ? importedData.executeAtInitialization : undefined);
       setFixedPointRounding(importedData.fixedPointRounding === 'nearest' || importedData.fixedPointRounding === 'floor' ? importedData.fixedPointRounding : undefined);
+      setTimingFaultPolicy(importedData.timingFaultPolicy === 'monitor' ? 'monitor' : undefined);
       setExternalFunctions(Array.isArray(importedData.externalFunctions) ? importedData.externalFunctions : undefined);
       setCodePrefix(typeof importedData.codePrefix === 'string' ? importedData.codePrefix : undefined);
       if (importedData.view) {
@@ -7267,6 +7271,7 @@ const ADIA = () => {
       events,
       executeAtInitialization,
       fixedPointRounding,
+      timingFaultPolicy,
       externalFunctions,
       codePrefix,
       safetyMode,
@@ -7316,6 +7321,7 @@ const ADIA = () => {
     events,
     executeAtInitialization,
     fixedPointRounding,
+    timingFaultPolicy,
     externalFunctions,
     codePrefix,
     safetyMode,
@@ -7777,6 +7783,7 @@ const ADIA = () => {
 
   // CHART SETTINGS: fixed-point rounding, code prefix (stored only when not the default, so old projects save unchanged).
   const changeFixedPointRounding = useCallback((rounding: FixedPointRounding | undefined) => setFixedPointRounding(rounding), []);
+  const changeTimingFaultPolicy = useCallback((policy: TimingFaultPolicy | undefined) => setTimingFaultPolicy(policy), []);
   const changeCodePrefix = useCallback((prefix: string | undefined) => setCodePrefix(prefix), []);
 
   // EXTERNAL FUNCTIONS: hand-written C functions the chart may call from actions and guards.
@@ -7919,7 +7926,7 @@ const ADIA = () => {
     const snapshot = JSON.stringify({
       ...createPersistedAppSimulationModel({
         tickMs, states, junctions, transitions, layers, variables,
-        safetyMode, hilConfig, events, executeAtInitialization, fixedPointRounding, externalFunctions, codePrefix,
+        safetyMode, hilConfig, events, executeAtInitialization, fixedPointRounding, timingFaultPolicy, externalFunctions, codePrefix,
       }),
       // SysML history is owned by the canonical gateway patch history.
     });
@@ -7930,7 +7937,7 @@ const ADIA = () => {
       return newHistory;
     });
     setHistoryIndex(prev => Math.min(prev + 1, 49));
-  }, [states, junctions, transitions, layers, variables, tickMs, safetyMode, hilConfig, events, executeAtInitialization, fixedPointRounding, externalFunctions, codePrefix, historyIndex]);
+  }, [states, junctions, transitions, layers, variables, tickMs, safetyMode, hilConfig, events, executeAtInitialization, fixedPointRounding, timingFaultPolicy, externalFunctions, codePrefix, historyIndex]);
 
   const undo = useCallback(() => {
     if ((sysmlGatewayStateRef.current.patchHistory?.past.length ?? 0) > 0) {
@@ -8392,6 +8399,7 @@ const ADIA = () => {
       events,
       executeAtInitialization,
       fixedPointRounding,
+      timingFaultPolicy,
       externalFunctions,
       codePrefix,
       hilConfig: { ...hilConfig, enabled: false }
@@ -8406,7 +8414,7 @@ const ADIA = () => {
     });
 
     return newErrors;
-  }, [states, transitions, junctions, variables, layers, hilConfig, tickMs, safetyMode, events, executeAtInitialization, fixedPointRounding, externalFunctions, codePrefix]);
+  }, [states, transitions, junctions, variables, layers, hilConfig, tickMs, safetyMode, events, executeAtInitialization, fixedPointRounding, timingFaultPolicy, externalFunctions, codePrefix]);
 
   const validateModel = useCallback(() => {
     const newErrors = performValidation();
@@ -8468,12 +8476,13 @@ const ADIA = () => {
     events,
     executeAtInitialization,
     fixedPointRounding,
+    timingFaultPolicy,
     externalFunctions,
     codePrefix,
     hilConfig
   }, simulationIOMappings), [
     tickMs, states, junctions, transitions, variables, layers,
-    safetyMode, hilConfig, events, executeAtInitialization, fixedPointRounding, externalFunctions, codePrefix, simulationIOMappings
+    safetyMode, hilConfig, events, executeAtInitialization, fixedPointRounding, timingFaultPolicy, externalFunctions, codePrefix, simulationIOMappings
   ]);
   const previousSimulationModelKeyRef = useRef(simulationModelKey);
   useEffect(() => {
@@ -8508,13 +8517,14 @@ const ADIA = () => {
       events,
       executeAtInitialization,
       fixedPointRounding,
+      timingFaultPolicy,
       externalFunctions,
       codePrefix,
       hilConfig
     }, simulationIOMappings)
   ), [
     tickMs, states, junctions, transitions, variables, layers,
-    safetyMode, hilConfig, events, executeAtInitialization, fixedPointRounding, externalFunctions, codePrefix, simulationIOMappings
+    safetyMode, hilConfig, events, executeAtInitialization, fixedPointRounding, timingFaultPolicy, externalFunctions, codePrefix, simulationIOMappings
   ]);
 
   const readFactoryInputs = useCallback(async (): Promise<Record<string, AppSimulationValue>> => {
@@ -13097,7 +13107,7 @@ const ADIA = () => {
     await validateWithAI();
 
     try {
-      const chart = { tickMs, states, junctions, transitions, variables, layers, safetyMode, events, executeAtInitialization, fixedPointRounding, externalFunctions, codePrefix, hilConfig };
+      const chart = { tickMs, states, junctions, transitions, variables, layers, safetyMode, events, executeAtInitialization, fixedPointRounding, timingFaultPolicy, externalFunctions, codePrefix, hilConfig };
       // REQ-ENGINE-003: TS template literals ensure safe string concatenation
       let { files, errors: validationErrors, warnings } = generateMISRACCode(chart);
 
@@ -13187,7 +13197,7 @@ const ADIA = () => {
     } finally {
       setIsGenerating(false);
     }
-  }, [tickMs, states, junctions, transitions, variables, layers, safetyMode, hilConfig, events, executeAtInitialization, fixedPointRounding, externalFunctions, codePrefix, addError, validateModel, calculateChecksum, validateWithAI]);
+  }, [tickMs, states, junctions, transitions, variables, layers, safetyMode, hilConfig, events, executeAtInitialization, fixedPointRounding, timingFaultPolicy, externalFunctions, codePrefix, addError, validateModel, calculateChecksum, validateWithAI]);
 
   const renderStates = useCallback((): React.ReactNode => {
     return currentStates.map(state => {
@@ -15834,6 +15844,8 @@ const ADIA = () => {
                     <ChartSettingsEditor
                       fixedPointRounding={fixedPointRounding}
                       onFixedPointRoundingChange={changeFixedPointRounding}
+                      timingFaultPolicy={timingFaultPolicy}
+                      onTimingFaultPolicyChange={changeTimingFaultPolicy}
                       codePrefix={codePrefix}
                       onCodePrefixChange={changeCodePrefix}
                       enterAtFirstStep={executeAtInitialization === false}
@@ -16050,6 +16062,7 @@ const ADIA = () => {
                   events={events}
                   executeAtInitialization={executeAtInitialization}
                   fixedPointRounding={fixedPointRounding}
+                  timingFaultPolicy={timingFaultPolicy}
                   externalFunctions={externalFunctions}
                   codePrefix={codePrefix}
                   tickMs={tickMs}

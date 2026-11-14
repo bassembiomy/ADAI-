@@ -45,6 +45,8 @@ export interface SemanticRuntimeError {
     | 'TIMING'
     | 'XBRIDGES_NUMERIC';
   message: string;
+  /** Diagnostic detail kept out of the trace text (the trace reports `code: message` only). */
+  detail?: string;
 }
 
 export interface SemanticRuntime {
@@ -66,6 +68,8 @@ export interface SemanticRuntime {
   eventQueue: string[];
   /** The event of the chart execution in progress; null when the execution has no event. */
   currentEvent: string | null;
+  /** 'monitor' timing policy: out-of-tolerance ticks counted (saturating); always 0 under 'latch'. */
+  timingViolations: number;
 }
 
 interface StepContext {
@@ -1019,6 +1023,7 @@ export const createRuntime = (ir: SemanticModel): SemanticRuntime => {
     pendingEvents: new Set<string>(),
     eventQueue: [],
     currentEvent: null,
+    timingViolations: 0,
   };
   restoreDataDefaults(runtime);
   return runtime;
@@ -1106,12 +1111,18 @@ export const stepRuntime = (
     return createTraceFrame(context, elapsedMs);
   }
   if (timing.kind === 'out-of-tolerance') {
-    runtime.error = {
-      code: 'TIMING',
-      message: `observed ${elapsedMs} ms outside ${runtime.ir.tickMs} ms tick tolerance`,
-    };
-    enterFaultConfiguration(context);
-    return createTraceFrame(context, elapsedMs);
+    if (runtime.ir.timingFaultPolicy === 'monitor') {
+      // Stateflow-like: count the violation and run the tick on logical time (timing.logicalMs).
+      runtime.timingViolations = Math.min(runtime.timingViolations + 1, 0xFFFF_FFFF);
+    } else {
+      runtime.error = {
+        code: 'TIMING',
+        message: 'timing error',
+        detail: `observed ${elapsedMs} ms outside ${runtime.ir.tickMs} ms tick tolerance`,
+      };
+      enterFaultConfiguration(context);
+      return createTraceFrame(context, elapsedMs);
+    }
   }
 
   try {
@@ -1160,6 +1171,7 @@ export const resetRuntime = (
     resetXBState(xBridges);
   }
   runtime.error = null;
+  runtime.timingViolations = 0;
   clearEventState(runtime);
   runtime.entryPending = !executesAtInitialization(runtime.ir);
   if (runtime.entryPending) return createTraceFrame(context, 0);
