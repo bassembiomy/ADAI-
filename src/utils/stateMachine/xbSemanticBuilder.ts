@@ -1,4 +1,5 @@
 import { getXBBlockCapability } from './xbCapabilities';
+import { xbControlKernelStateRoles } from './xbControlKernels';
 import { resolveGraphShapes } from './xbShapeResolver';
 import { validateStateSpaceNode } from './stateSpaceValidation';
 import type { ModelDiagnostic } from './smModel';
@@ -536,11 +537,24 @@ const samplePeriodsIn = (
   }
 };
 
+/**
+ * SVPWM blocks name the PWM carrier period `Ts`. That is a modulation parameter (the switching times T1/T2/T0
+ * add up to it), not the block's execution sample time, so it must not select a multi-rate schedule.
+ */
+const PWM_PERIOD_PARAMETER_TYPES: ReadonlySet<string> = new Set([
+  'SVPWM_CORE', 'SVPWM_GATE_GENERATOR', 'SVPWM_MODULATOR', 'SWITCHING_TIME_CALCULATOR',
+]);
+
 const samplePeriodsForNode = (
   node: XBNodeV1,
 ): readonly SamplePeriodSource[] => {
   const values: SamplePeriodSource[] = [];
-  samplePeriodsIn(node.parameters, values);
+  if (PWM_PERIOD_PARAMETER_TYPES.has(node.type)) {
+    const { Ts: _ts, ts: _lowerTs, ...rest } = node.parameters as Record<string, unknown>;
+    samplePeriodsIn(rest, values);
+  } else {
+    samplePeriodsIn(node.parameters, values);
+  }
   return values;
 };
 
@@ -814,6 +828,25 @@ const stateBoundaryForNode = (
       numericType: control.numericType,
       shape: { kind: 'scalar' },
       initialValues: [control.numericType.kind === 'boolean' ? false : 0],
+    })));
+  }
+
+  const kernelRoles = xbControlKernelStateRoles(node.type);
+  if (kernelRoles.length > 0) {
+    const control = signals[outputSignalIds[0] ?? ''];
+    if (control === undefined) return boundary([]);
+    // Kernel state is float32 unless the block's first output is float64 (boolean/fixed outputs keep a float state).
+    const precision = control.numericType.kind === 'float'
+      ? control.numericType.precision
+      : control.numericType.kind;
+    const numericType: XBNumericType = precision === 'float64' ? { kind: 'float64' } : { kind: 'float32' };
+    return boundary(kernelRoles.map((role) => ({
+      id: `${node.id}:${role}$state`,
+      role,
+      signalId: null,
+      numericType,
+      shape: { kind: 'scalar' },
+      initialValues: [0],
     })));
   }
 

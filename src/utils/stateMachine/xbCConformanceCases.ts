@@ -298,9 +298,213 @@ const filterFixture = (): DifferentialFixture => {
   return fixture;
 };
 
-export const XB_EXECUTABLE_C_CASES: Readonly<
-  Record<string, XBExecutableConformanceCase>
-> = Object.freeze({
+/*
+ * Inverter / motor-control kernels (xbControlKernels.ts). The conformance fixtures drive every kernel from
+ * state-machine variables (Inport blocks) with a multi-step input sequence, so the compared trace covers the
+ * modulation sectors, saturation / clamping branches, field-weakening onset and release, and estimator
+ * convergence. Every signal and state slot of every block is part of the compared trace.
+ */
+const SVPWM_COVERAGE: readonly XBConformanceCoverage[] = [
+  'SVPWM_MODULATOR', 'SVPWM_CORE', 'SECTOR_SELECTOR', 'SWITCHING_TIME_CALCULATOR', 'SVPWM_GATE_GENERATOR',
+  'ZERO_SEQUENCE_INJECTION', 'PWM_GENERATOR', 'THREE_PHASE_PWM',
+].map(scalarCoverage);
+
+const FOC_CONTROL_COVERAGE: readonly XBConformanceCoverage[] = [
+  ...['CURRENT_CONTROLLER_DQ', 'SPEED_CONTROLLER', 'FIELD_ORIENTED_CONTROL', 'FIELD_WEAKENING',
+    'MTPA_CONTROLLER', 'ROTOR_POSITION_ESTIMATOR'].map(scalarCoverage),
+  shapedCoverage('FLUX_REFERENCE', [], ['scalar']),
+];
+
+const IM_VF_COVERAGE: readonly XBConformanceCoverage[] = [
+  'VOLTAGE_REFERENCE_GENERATOR', 'IM_SCALAR_CONTROL', 'VF_SLIP_COMP',
+].map(scalarCoverage);
+
+type KernelInputSequence = Readonly<Record<string, (step: number) => number>>;
+
+const kernelFixture = (
+  nodes: readonly XBNodeV1[],
+  edges: readonly XBEdgeV1[],
+  inputs: KernelInputSequence,
+  steps: number,
+  timing: { readonly tickMs: number; readonly stepSeconds: number },
+): DifferentialFixture => {
+  const names = Object.keys(inputs);
+  const sequence: DifferentialScenarioStep[] = Array.from({ length: steps }, (_, step) => ({
+    kind: 'step' as const,
+    inputs: Object.fromEntries(names.map((name) => [name, Math.fround(inputs[name](step))])),
+  }));
+  const fixture = makeXBridgesFixture(
+    [...names.map((name) => createNode(`in_${name}`, 'Inport', { smVarId: name })), ...nodes],
+    edges,
+    names.map((name) => ({ smVarId: name, blockId: `in_${name}`, portId: 'in', direction: 'in' as const })),
+    sequence,
+  );
+  for (const name of names) {
+    fixture.model.variables.push({
+      id: name,
+      name,
+      type: 'float',
+      initialValue: '0',
+      currentValue: 0,
+      visibleInScope: true,
+    });
+  }
+  fixture.model.tickMs = timing.tickMs;
+  const controller = fixture.model.states.find((state) => state.id === 'controller');
+  if (controller?.xBridgesModel?.solver) controller.xBridgesModel.solver.stepSeconds = timing.stepSeconds;
+  return fixture;
+};
+
+/** Edges from a block output (or an input variable's Inport `in_<name>`) to block input ports. */
+const wire = (
+  source: string,
+  sourcePort: string,
+  ...targets: ReadonlyArray<readonly [string, string]>
+): XBEdgeV1[] => targets.map(([target, targetPort]) => ({
+  id: `e_${source}_${sourcePort}_${target}_${targetPort}`,
+  sourceNodeId: source,
+  sourcePortId: sourcePort,
+  targetNodeId: target,
+  targetPortId: targetPort,
+}));
+const fromInput = (name: string, ...targets: ReadonlyArray<readonly [string, string]>): XBEdgeV1[] =>
+  wire(`in_${name}`, 'out', ...targets);
+
+const svpwmFixture = (): DifferentialFixture => {
+  const PWM_PERIOD = 0.00037;
+  const BUS = 48;
+  const angle = (step: number): number => 0.2 + (0.55 * step);
+  // Reference vector rotating through all six sectors; the magnitude passes the linear limit Vdc/sqrt(3)
+  // so the over-modulation (T0 clamped to zero) path is exercised too.
+  const magnitude = (step: number): number => 10 + (1.2 * step);
+  return kernelFixture(
+    [
+      createNode('core', 'SVPWM_CORE', { Ts: PWM_PERIOD, Vdc: BUS }),
+      createNode('gates', 'SVPWM_GATE_GENERATOR', { Ts: PWM_PERIOD }),
+      createNode('mod', 'SVPWM_MODULATOR', { Ts: PWM_PERIOD, Vdc: BUS }),
+      createNode('sector', 'SECTOR_SELECTOR'),
+      createNode('times', 'SWITCHING_TIME_CALCULATOR'),
+      createNode('c_vdc', 'Constant', { value: BUS }),
+      createNode('c_ts', 'Constant', { value: PWM_PERIOD }),
+      createNode('zsi', 'ZERO_SEQUENCE_INJECTION'),
+      createNode('pwm_tri', 'PWM_GENERATOR', { frequency: 3700, carrierType: 'triangle' }),
+      createNode('pwm_sine', 'PWM_GENERATOR', { frequency: 2900, carrierType: 'sine' }),
+      createNode('pwm3', 'THREE_PHASE_PWM', { frequency: 4100, method: 'SVPWM' }),
+    ],
+    [
+      ...fromInput('v_alpha', ['core', 'v_alpha'], ['mod', 'v_alpha']),
+      ...fromInput('v_beta', ['core', 'v_beta'], ['mod', 'v_beta']),
+      ...wire('core', 'sector', ['gates', 'sector']),
+      ...wire('core', 't1', ['gates', 't1']),
+      ...wire('core', 't2', ['gates', 't2']),
+      ...wire('core', 't0', ['gates', 't0']),
+      ...fromInput('theta', ['sector', 'theta']),
+      ...fromInput('vref', ['times', 'vref']),
+      ...fromInput('theta_s', ['times', 'theta_s']),
+      ...wire('c_vdc', 'out', ['times', 'vdc']),
+      ...wire('c_ts', 'out', ['times', 'ts']),
+      ...fromInput('ra', ['zsi', 'va'], ['pwm3', 'va_ref']),
+      ...fromInput('rb', ['zsi', 'vb'], ['pwm3', 'vb_ref']),
+      ...fromInput('rc', ['zsi', 'vc'], ['pwm3', 'vc_ref']),
+      ...fromInput('duty', ['pwm_tri', 'duty'], ['pwm_sine', 'duty']),
+    ],
+    {
+      v_alpha: (step) => magnitude(step) * Math.cos(angle(step)),
+      v_beta: (step) => magnitude(step) * Math.sin(angle(step)),
+      theta: (step) => (step % 2 === 0 ? angle(step) : -angle(step) / 2),
+      vref: (step) => 5 + (1.5 * step),
+      theta_s: (step) => (0.13 * step) % 1.0,
+      duty: (step) => 0.5 + (0.55 * Math.sin(0.7 * step)),
+      ra: (step) => 0.9 * Math.sin(angle(step)),
+      rb: (step) => 0.9 * Math.sin(angle(step) - ((2 * Math.PI) / 3)),
+      rc: (step) => 0.9 * Math.sin(angle(step) + ((2 * Math.PI) / 3)),
+    },
+    24,
+    { tickMs: 10, stepSeconds: 0.0001 },
+  );
+};
+
+const focControlFixture = (): DifferentialFixture => {
+  const angle = (step: number): number => 0.45 * step;
+  // First-order speed response: the controller output is saturated while the error is large, leaves the
+  // limit as the error decays, and is driven to the negative limit by a late speed disturbance.
+  const speedMeasured = (step: number): number => (step < 5 ? 0 : 100 * (1 - Math.exp(-0.12 * (step - 5)))) + (step >= 45 ? 40 : 0);
+  // Terminal voltage ramps past the limit (field-weakening onset and clamp) and back below it (release).
+  const voltage = (step: number): number => (step < 30 ? 20 + (0.9 * step) : 20 + (0.9 * (60 - step)));
+  const iqRef = (step: number): number => Math.min(10, 3 + (0.3 * step));
+  return kernelFixture(
+    [
+      createNode('flux', 'FLUX_REFERENCE', { mode: 'constant', value: -1.5 }),
+      createNode('cc', 'CURRENT_CONTROLLER_DQ', { Kp_d: 2, Ki_d: 300, Kp_q: 2.5, Ki_q: 350, iMax: 8 }),
+      createNode('spd', 'SPEED_CONTROLLER', { Kp: 0.8, Ki: 40, maxIq: 6 }),
+      createNode('spd_linear', 'SPEED_CONTROLLER', { Kp: 0.05, Ki: 0.4, maxIq: 50 }),
+      createNode('foc', 'FIELD_ORIENTED_CONTROL', { Kp: 3, Ki: 500 }),
+      createNode('fw', 'FIELD_WEAKENING', { v_max: 30, Kp: 0.2, Ki: 100, id_min: -6, id_max: 1 }),
+      createNode('mtpa', 'MTPA_CONTROLLER', { Ld: 0.005, Lq: 0.012, psi_m: 0.08 }),
+      createNode('est_smo', 'ROTOR_POSITION_ESTIMATOR', { method: 'Sensorless_SMO', Rs: 0.4, Ls: 0.006, psi_m: 0.08, P: 4 }),
+      createNode('est_hall', 'ROTOR_POSITION_ESTIMATOR', { method: 'Hall_sensor', P: 2 }),
+    ],
+    [
+      ...fromInput('id_ref', ['cc', 'id_ref'], ['foc', 'id_ref']),
+      ...fromInput('iq_ref', ['cc', 'iq_ref'], ['foc', 'iq_ref']),
+      ...fromInput('id_meas', ['cc', 'id']),
+      ...fromInput('iq_meas', ['cc', 'iq']),
+      ...fromInput('w_ref', ['spd', 'speed_ref'], ['spd_linear', 'speed_ref']),
+      ...fromInput('w_meas', ['spd', 'speed_actual'], ['spd_linear', 'speed_actual']),
+      ...fromInput('ia', ['foc', 'ia'], ['est_smo', 'ia'], ['est_hall', 'ia']),
+      ...fromInput('ib', ['foc', 'ib'], ['est_smo', 'ib'], ['est_hall', 'ib']),
+      ...fromInput('ic', ['est_smo', 'ic'], ['est_hall', 'ic']),
+      ...fromInput('theta', ['foc', 'theta']),
+      ...fromInput('va', ['est_smo', 'va'], ['est_hall', 'va']),
+      ...fromInput('vb', ['est_smo', 'vb'], ['est_hall', 'vb']),
+      ...fromInput('vc', ['est_smo', 'vc'], ['est_hall', 'vc']),
+      ...fromInput('v_mag', ['fw', 'v_mag']),
+      ...wire('flux', 'id_ref', ['fw', 'id_base']),
+      ...fromInput('te', ['mtpa', 'te_ref']),
+    ],
+    {
+      id_ref: (step) => (step < 20 ? 0 : -2),
+      iq_ref: iqRef,
+      id_meas: (step) => 0.8 * Math.sin(0.2 * step),
+      iq_meas: (step) => 0.9 * iqRef(step),
+      w_ref: (step) => (step < 5 ? 0 : 100),
+      w_meas: speedMeasured,
+      ia: (step) => 5 * Math.sin(angle(step)),
+      ib: (step) => 5 * Math.sin(angle(step) - ((2 * Math.PI) / 3)),
+      ic: (step) => 5 * Math.sin(angle(step) + ((2 * Math.PI) / 3)),
+      theta: angle,
+      va: (step) => 12 * Math.sin(angle(step) + 0.6),
+      vb: (step) => 12 * Math.sin(angle(step) + 0.6 - ((2 * Math.PI) / 3)),
+      vc: (step) => 12 * Math.sin(angle(step) + 0.6 + ((2 * Math.PI) / 3)),
+      v_mag: voltage,
+      te: (step) => 2 * Math.sin(0.3 * step),
+    },
+    60,
+    { tickMs: 10, stepSeconds: 0.01 },
+  );
+};
+
+const imVfFixture = (): DifferentialFixture => kernelFixture(
+  [
+    createNode('vref', 'VOLTAGE_REFERENCE_GENERATOR', { amplitude: 0.8 }),
+    createNode('vf', 'IM_SCALAR_CONTROL', { v_f_ratio: 3, boost: 6, rated_f: 50 }),
+    createNode('slip', 'VF_SLIP_COMP', { v_f_ratio: 3, rated_slip: 0.04, rated_iq: 8 }),
+  ],
+  [
+    ...fromInput('freq', ['vref', 'f']),
+    ...fromInput('w_ref', ['vf', 'w_ref'], ['slip', 'w_ref']),
+    ...fromInput('iq', ['slip', 'iq_actual']),
+  ],
+  {
+    freq: (step) => 20 + (2 * step),
+    w_ref: (step) => (step < 30 ? Math.min(314, 12 * step) : -150),
+    iq: (step) => 6 * Math.sin(0.35 * step),
+  },
+  45,
+  { tickMs: 10, stepSeconds: 0.005 },
+);
+
+const EXECUTABLE_CASES: Readonly<Record<string, XBExecutableConformanceCase>> = Object.freeze({
   'T14-C99-CORE-DIRECT': {
     id: 'T14-C99-CORE-DIRECT',
     coverage: CORE_SCALAR_COVERAGE,
@@ -849,6 +1053,25 @@ export const XB_EXECUTABLE_C_CASES: Readonly<
     tolerance: DEFAULT_TOLERANCE,
   },
 
+  'T10-C99-SVPWM': {
+    id: 'T10-C99-SVPWM',
+    coverage: SVPWM_COVERAGE,
+    fixture: svpwmFixture(),
+    tolerance: DEFAULT_TOLERANCE,
+  },
+  'T10-C99-FOC-CONTROL': {
+    id: 'T10-C99-FOC-CONTROL',
+    coverage: FOC_CONTROL_COVERAGE,
+    fixture: focControlFixture(),
+    tolerance: DEFAULT_TOLERANCE,
+  },
+  'T10-C99-IM-VF': {
+    id: 'T10-C99-IM-VF',
+    coverage: IM_VF_COVERAGE,
+    fixture: imVfFixture(),
+    tolerance: DEFAULT_TOLERANCE,
+  },
+
   'T10-PAIRED-DISCONTINUOUS': {
     id: 'T10-PAIRED-DISCONTINUOUS',
     coverage: DISCONTINUOUS_COVERAGE,
@@ -874,6 +1097,8 @@ export const XB_EXECUTABLE_C_CASES: Readonly<
     tolerance: DEFAULT_TOLERANCE,
   },
 });
+
+export const XB_EXECUTABLE_C_CASES: Readonly<Record<string, XBExecutableConformanceCase>> = EXECUTABLE_CASES;
 
 export const getExecutedCoverage = (
   caseId: string,

@@ -36,6 +36,7 @@ export const XB_INTERPRETER_CONFORMANCE_CASE_IDS = [
   'T10-INT-PID-CONTROLLER', 'T10-INT-SIX-STEP', 'T10-INT-NOISE',
   'T10-INT-FLIPFLOPS', 'T10-INT-REGISTER-COUNTER', 'T10-INT-WAVEFORMS',
   'XB-W5-KALMAN', 'subsystem_gain_sum',
+  'T10-INT-SVPWM', 'T10-INT-FOC-CONTROL', 'T10-INT-IM-VF',
 ] as const;
 
 export const XB_C_CONFORMANCE_CASE_IDS = [
@@ -47,6 +48,7 @@ export const XB_C_CONFORMANCE_CASE_IDS = [
   'T10-C99-FILTERS', 'T10-C99-VECTOR-POW', 'T10-C99-REDUCTIONS', 'T10-C99-IDENTITY-MATRIX',
   'T10-C99-PID-CONTROLLER', 'T10-C99-SIX-STEP', 'T10-C99-FLIPFLOPS', 'T10-C99-REGISTER-COUNTER',
   'T10-C99-WAVEFORMS', 'XB-W5-NOISE', 'XB-W5-KALMAN', 'subsystem_gain_sum',
+  'T10-C99-SVPWM', 'T10-C99-FOC-CONTROL', 'T10-C99-IM-VF',
 ] as const;
 
 export interface XBConformanceCoverage {
@@ -117,6 +119,22 @@ const DISCONTINUOUS_COVERAGE: readonly XBConformanceCoverage[] = [
   scalarCoverage('RELAY'),
 ];
 
+// Inverter / motor-control kernels (xbControlKernels.ts). Shared by the interpreter and compiled-C manifests.
+export const SVPWM_COVERAGE: readonly XBConformanceCoverage[] = [
+  'SVPWM_MODULATOR', 'SVPWM_CORE', 'SECTOR_SELECTOR', 'SWITCHING_TIME_CALCULATOR', 'SVPWM_GATE_GENERATOR',
+  'ZERO_SEQUENCE_INJECTION', 'PWM_GENERATOR', 'THREE_PHASE_PWM',
+].map(scalarCoverage);
+
+export const FOC_CONTROL_COVERAGE: readonly XBConformanceCoverage[] = [
+  ...['CURRENT_CONTROLLER_DQ', 'SPEED_CONTROLLER', 'FIELD_ORIENTED_CONTROL', 'FIELD_WEAKENING',
+    'MTPA_CONTROLLER', 'ROTOR_POSITION_ESTIMATOR'].map(scalarCoverage),
+  shapedCoverage('FLUX_REFERENCE', [], ['scalar']),
+];
+
+export const IM_VF_COVERAGE: readonly XBConformanceCoverage[] = [
+  'VOLTAGE_REFERENCE_GENERATOR', 'IM_SCALAR_CONTROL', 'VF_SLIP_COMP',
+].map(scalarCoverage);
+
 export const XB_INTERPRETER_CONFORMANCE_CASES: Readonly<Record<
   string, readonly XBConformanceCoverage[]
 >> = Object.freeze({
@@ -140,6 +158,9 @@ export const XB_INTERPRETER_CONFORMANCE_CASES: Readonly<Record<
   'T10-INT-PID-CONTROLLER': [scalarCoverage('PID_CONTROLLER')],
   'T10-INT-NOISE': [shapedCoverage('WHITE_NOISE', [], ['scalar']), shapedCoverage('BAND_LIMITED_NOISE', [], ['scalar'])],
   'XB-W5-KALMAN': [shapedCoverage('KALMAN_FILTER', ['scalar', 'vector', 'matrix'])],
+  'T10-INT-SVPWM': SVPWM_COVERAGE,
+  'T10-INT-FOC-CONTROL': FOC_CONTROL_COVERAGE,
+  'T10-INT-IM-VF': IM_VF_COVERAGE,
   'T10-INT-DISCONTINUOUS': DISCONTINUOUS_COVERAGE,
   'T14-INT-DISCONTINUOUS': DISCONTINUOUS_COVERAGE,
   'T14-INT-CORE-DIRECT': CORE_SCALAR_COVERAGE,
@@ -264,19 +285,19 @@ const POWERTRAIN_HOST_ONLY = hostOnlySet(POWERTRAIN_HOST_ONLY_TYPES, 'Powertrain
 
 const UNCLASSIFIED_HOST_ONLY = hostOnlySet([
   'DC_VOLTAGE_SOURCE', 'THREE_PHASE_LOAD',
-  'Inverse', 'Determinant', 'PWM_GENERATOR', 'THREE_PHASE_PWM',
+  'Inverse', 'Determinant',
   'SENSORLESS_SIX_STEP', 'THREE_PHASE_INVERTER',
-  'SINGLE_PHASE_H_BRIDGE', 'VOLTAGE_REFERENCE_GENERATOR',
-  'FIELD_ORIENTED_CONTROL', 'CURRENT_CONTROLLER_DQ', 'DOE_MODEL',
-  'SPEED_CONTROLLER', 'FLUX_REFERENCE', 'ROTOR_POSITION_ESTIMATOR',
-  'SVPWM_CORE', 'SECTOR_SELECTOR', 'SWITCHING_TIME_CALCULATOR',
-  'SVPWM_GATE_GENERATOR', 'ZERO_SEQUENCE_INJECTION', 'SVPWM_MODULATOR',
+  'SINGLE_PHASE_H_BRIDGE',
+  'DOE_MODEL',
+ 
+ 
+ 
   'SWITCH_CASE', 'INTEGRATOR', 'DERIVATIVE', 'TRANSFER_FUNCTION',
   'ZERO_POLE_GAIN', 'LAPLACE_TRANSFORM',
   'DISCRETE_IMPULSE',
   'EXTENDED_KALMAN_FILTER', 'MPC_CONTROLLER', 'DOE_MODULE',
-  'AC_INDUCTION_MOTOR', 'IM_SCALAR_CONTROL', 'IM_FOC_CONTROL',
-  'IM_FLUX_OBSERVER', 'VF_SLIP_COMP', 'FIELD_WEAKENING', 'MTPA_CONTROLLER',
+  'AC_INDUCTION_MOTOR', 'IM_FOC_CONTROL',
+  'IM_FLUX_OBSERVER',
   'MTPA_FW_MANAGER', 'AC_MOTOR_PID_CONTROL', 'NEURAL_NEURON_LEARNING',
   'RL_Q_LEARNING_CONTROLLER', 'AIR_FRYER_LEARNING_MODEL',
   'ROBOT_VACUUM_BATTERY', 'ROBOT_VACUUM_COMM',
@@ -496,6 +517,29 @@ export const XB_CAPABILITIES: Readonly<Record<string, XBBlockCapability>> = {
   ACOTH: direct(scalar, ['math-library'], ['T10-INT-TRIGONOMETRY'], ['T10-C99-TRIGONOMETRY']),
   ASECH: direct(scalar, ['math-library'], ['T10-INT-TRIGONOMETRY'], ['T10-C99-TRIGONOMETRY']),
   ACOSECH: direct(scalar, ['math-library'], ['T10-INT-TRIGONOMETRY'], ['T10-C99-TRIGONOMETRY']),
+
+  // Inverter and motor-control kernels (xbControlKernels.ts): one discrete program per block, evaluated by the
+  // canonical interpreter and printed as C99, so the paired cases below compare the same expression trees.
+  SECTOR_SELECTOR: direct(scalar, ['math-library'], ['T10-INT-SVPWM'], ['T10-C99-SVPWM']),
+  SVPWM_CORE: direct(scalar, ['math-library'], ['T10-INT-SVPWM'], ['T10-C99-SVPWM']),
+  SWITCHING_TIME_CALCULATOR: direct(scalar, ['math-library'], ['T10-INT-SVPWM'], ['T10-C99-SVPWM']),
+  SVPWM_GATE_GENERATOR: direct(scalar, ['math-library'], ['T10-INT-SVPWM'], ['T10-C99-SVPWM']),
+  SVPWM_MODULATOR: direct(scalar, ['math-library'], ['T10-INT-SVPWM'], ['T10-C99-SVPWM']),
+  ZERO_SEQUENCE_INJECTION: direct(scalar, ['math-library'], ['T10-INT-SVPWM'], ['T10-C99-SVPWM']),
+  PWM_GENERATOR: statefulDirect(scalar, ['math-library'], ['T10-INT-SVPWM'], ['T10-C99-SVPWM']),
+  THREE_PHASE_PWM: statefulDirect(scalar, ['math-library'], ['T10-INT-SVPWM'], ['T10-C99-SVPWM']),
+  CURRENT_CONTROLLER_DQ: statefulDirect(scalar, ['math-library'], ['T10-INT-FOC-CONTROL'], ['T10-C99-FOC-CONTROL']),
+  SPEED_CONTROLLER: statefulDirect(scalar, ['math-library'], ['T10-INT-FOC-CONTROL'], ['T10-C99-FOC-CONTROL']),
+  FIELD_ORIENTED_CONTROL: statefulDirect(scalar, ['math-library'], ['T10-INT-FOC-CONTROL'], ['T10-C99-FOC-CONTROL']),
+  FIELD_WEAKENING: statefulDirect(scalar, ['math-library'], ['T10-INT-FOC-CONTROL'], ['T10-C99-FOC-CONTROL']),
+  MTPA_CONTROLLER: direct(scalar, ['math-library'], ['T10-INT-FOC-CONTROL'], ['T10-C99-FOC-CONTROL']),
+  ROTOR_POSITION_ESTIMATOR: statefulDirect(scalar, ['math-library'], ['T10-INT-FOC-CONTROL'], ['T10-C99-FOC-CONTROL']),
+  FLUX_REFERENCE: direct(scalar, undefined, ['T10-INT-FOC-CONTROL'], ['T10-C99-FOC-CONTROL'], {
+    inputShapes: [], outputShapes: scalar,
+  }),
+  VOLTAGE_REFERENCE_GENERATOR: direct(scalar, ['math-library'], ['T10-INT-IM-VF'], ['T10-C99-IM-VF']),
+  IM_SCALAR_CONTROL: direct(scalar, ['math-library'], ['T10-INT-IM-VF'], ['T10-C99-IM-VF']),
+  VF_SLIP_COMP: direct(scalar, ['math-library'], ['T10-INT-IM-VF'], ['T10-C99-IM-VF']),
 
   // Explicit numeric representation changes.
   DATA_TYPE_CONVERSION: direct(scalar),

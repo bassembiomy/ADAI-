@@ -20,6 +20,14 @@ import type {
 } from './xbSemanticModel';
 import { synthesizeTransferFunctionStateSpace } from './xbSemanticBuilder';
 import { isDiagBlockType, isMatrixSolveBlockType } from './xbCapabilities';
+import {
+  buildXBControlProgram,
+  evaluateXBControlProgram,
+  isXBControlKernelType,
+  xbControlKernelSamplePeriod,
+  type XBControlProgram,
+  type XBControlProgramResult,
+} from './xbControlKernels';
 
 type XBScalar = number | boolean;
 
@@ -503,6 +511,45 @@ const matrixParameter = (
     }
   }
   return fallback;
+};
+
+const controlPrograms = new WeakMap<XBSemanticOperation, XBControlProgram>();
+
+/** Inverter / motor-control kernels (xbControlKernels.ts): one discrete step of the block's program. */
+const evaluateControlKernel = (
+  runtime: XBRuntime,
+  operation: XBSemanticOperation,
+): XBControlProgramResult => {
+  let program = controlPrograms.get(operation);
+  if (program === undefined) {
+    program = buildXBControlProgram(
+      operation.type,
+      operation.parameters,
+      xbControlKernelSamplePeriod(runtime.ir.solver.stepSeconds, operation.schedule.periodSubsteps),
+    );
+    controlPrograms.set(operation, program);
+  }
+  const inputs: Record<string, number> = {};
+  for (const signalId of operation.inputSignalIds) {
+    const portId = runtime.ir.signals[signalId]?.portId;
+    if (portId !== undefined) inputs[portId] = Number(signalValues(runtime, signalId)[0] ?? 0);
+  }
+  const state: Record<string, number> = {};
+  for (const role of program.stateRoles) {
+    const slot = stateSlotForRole(operation, role);
+    if (slot === undefined) throw new Error(`X-Bridges ${operation.type} '${operation.id}' requires a '${role}' state slot`);
+    state[role] = Number((runtime.stateSlots[slot.id] ?? slot.initialValues)[0] ?? 0);
+  }
+  return evaluateXBControlProgram(program, inputs, state, runtime.simTime ?? 0);
+};
+
+const controlKernelOutputs = (
+  runtime: XBRuntime,
+  operation: XBSemanticOperation,
+): number[] => {
+  const result = evaluateControlKernel(runtime, operation);
+  return operation.outputSignalIds.map((signalId) =>
+    result.outputs[runtime.ir.signals[signalId]?.portId ?? ''] ?? 0);
 };
 
 const evaluateDirectOperation = (
@@ -1115,6 +1162,9 @@ const evaluateDirectOperation = (
       writeStateOutputs(runtime, operation, faults);
       return operation.outputSignalIds.map((id) => runtime.signals[id] ?? [0]);
     default:
+      if (isXBControlKernelType(operation.type)) {
+        return controlKernelOutputs(runtime, operation).map((value) => [value]);
+      }
       throw new Error(
         `X-Bridges operation '${operation.id}' has unsupported type `
         + `'${operation.type}'`,
@@ -1334,6 +1384,13 @@ function writeStateOutputs(
       }
       writeSignal(runtime, outputId, [y], faults, operation);
     }
+    return;
+  }
+  if (isXBControlKernelType(operation.type)) {
+    const values = controlKernelOutputs(runtime, operation);
+    operation.outputSignalIds.forEach((signalId, index) => {
+      writeSignal(runtime, signalId, [values[index] ?? 0], faults, operation);
+    });
     return;
   }
   if (operation.type === 'PID_BASIC' || operation.type === 'PID_CONTROLLER') {
@@ -1675,6 +1732,14 @@ const statefulUpdate = (
   operation: XBSemanticOperation,
   faults: XBNumericFault[],
 ): Record<string, XBScalar[]> => {
+  if (isXBControlKernelType(operation.type)) {
+    const next = evaluateControlKernel(runtime, operation).nextState;
+    const updates: Record<string, XBScalar[]> = {};
+    for (const slot of operation.state?.slots ?? []) {
+      updates[slot.id] = [convertValue(next[slot.role] ?? 0, slot.numericType, faults, operation)];
+    }
+    return updates;
+  }
   if (operation.type === 'PID_BASIC' || operation.type === 'PID_CONTROLLER') {
     const values = pidValues(runtime, operation);
     const updates: Record<string, XBScalar[]> = {};

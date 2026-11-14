@@ -1,3 +1,11 @@
+import {
+  buildXBControlProgram,
+  isXBControlKernelType,
+  planXBControlProgramC,
+  xbControlKernelTypes,
+  xbControlKernelUsesTime,
+  xbControlKernelSamplePeriod,
+} from './xbControlKernels';
 import { toCIdentifier } from './smExpressions';
 import type { SemanticModel, SemanticState } from './smSemanticModel';
 import { STATE_MACHINE_XB_TARGET_CAPABILITIES } from './smSemanticValidator';
@@ -76,6 +84,10 @@ const numericFaultContract = (
     );
   }) ?? null,
 };
+
+/** Inverter-control kernels that read the simulation time share one accumulator, advanced once per solver step. */
+const usesKernelTime = (xb: XBSemanticModel): boolean =>
+  Object.values(xb.operations).some((op) => xbControlKernelUsesTime(op.type));
 
 interface XBStateLayout {
   readonly declarations: readonly string[];
@@ -160,6 +172,9 @@ const stateLayout = (state: SemanticState): XBStateLayout => {
 
   if (Object.values(xb.operations).some((op) => op.type === 'Clock' || op.type === 'CLOCK')) {
     declarations.push('    double sim_time;');
+  }
+  if (usesKernelTime(xb)) {
+    declarations.push('    double xb_kernel_time;');
   }
 
   return {
@@ -1853,7 +1868,79 @@ const emitDemux: OperationEmitter = (state, operation, operationIndex, layout, m
   return pieces;
 };
 
+/**
+ * Renders one inverter / motor-control kernel (xbControlKernels.ts) as C99 double arithmetic: the same
+ * expression tree the canonical interpreter evaluates. `outputs` writes the output signals, `nextState`
+ * assigns the state slots; only the locals each part needs are declared.
+ */
+const renderControlKernel = (
+  state: SemanticState,
+  operation: XBSemanticOperation,
+  operationIndex: number,
+  layout: XBStateLayout,
+  member: string,
+  part: 'outputs' | 'nextState',
+): string[] => {
+  const xb = state.xBridges!;
+  const program = buildXBControlProgram(
+    operation.type,
+    operation.parameters,
+    xbControlKernelSamplePeriod(xb.solver.stepSeconds, operation.schedule.periodSubsteps),
+  );
+  const prefix = `xb_k${operationIndex}_`;
+  const signalForPort = (ids: readonly string[], port: string): string | undefined =>
+    ids.find((id) => xb.signals[id]?.portId === port);
+  const present = program.outputs.map((port) => signalForPort(operation.outputSignalIds, port) !== undefined);
+  const plan = planXBControlProgramC(program, part, (name) => `${prefix}${name}`, present);
+  const declarations: string[] = [];
+  for (const port of plan.usedInputs) {
+    const signalId = signalForPort(operation.inputSignalIds, port);
+    declarations.push(`        const double ${prefix}${port} = ${signalId === undefined ? '0.0' : signalRealExpression(state, signalId, layout, member)};`);
+  }
+  for (const role of plan.usedState) {
+    const slot = stateSlotForRole(operation, role);
+    if (slot === undefined) throw new Error(`X-Bridges ${operation.type} '${operation.id}' requires a '${role}' state slot`);
+    declarations.push(`        const double ${prefix}${role} = ${stateSlotRealExpression(slot, layout, member)};`);
+  }
+  if (plan.usesTime) declarations.push(`        const double ${prefix}time = instance->${member}.xb_kernel_time;`);
+  for (const local of plan.locals) declarations.push(`        const double ${prefix}${local.name} = ${local.c};`);
+
+  let body: string[];
+  if (part === 'outputs') {
+    let valueIndex = 0;
+    body = program.outputs.flatMap((port, index) => {
+      const signalId = signalForPort(operation.outputSignalIds, port);
+      if (signalId === undefined) return [];
+      // A named double (not a composite expression) is what the signal write casts (MISRA C:2012 10.8).
+      const expression = `${prefix}result_${index}`;
+      declarations.push(`        const double ${expression} = ${plan.values[valueIndex++]};`);
+      const boolean = requireScalarSignal(state, signalId).numericType.kind === 'boolean';
+      return renderSignalWrite(
+        state, operation, operationIndex, index, signalId,
+        boolean ? `(${expression} != 0.0)` : expression, layout, member,
+      ).map((line) => `    ${line}`);
+    });
+  } else {
+    const updates = program.stateRoles.flatMap((role, index) => {
+      const slot = stateSlotForRole(operation, role);
+      if (slot === undefined) throw new Error(`X-Bridges ${operation.type} '${operation.id}' requires a '${role}' state slot`);
+      const expression = `${prefix}next_${role}`;
+      declarations.push(`        const double ${expression} = ${plan.values[index]};`);
+      return renderStateSlotAssignment(
+        state, slot, expression, layout, member,
+        `${operation.id}_${role}_update`, layout.errorFields.get(operation.id), operation,
+      );
+    });
+    body = renderTransactionalStateUpdates(operation, updates, layout, member).map((line) => `    ${line}`);
+  }
+  return ['    {', ...declarations, ...body, '    }'];
+};
+
+const emitControlKernel: OperationEmitter = (state, operation, operationIndex, layout, member) =>
+  renderControlKernel(state, operation, operationIndex, layout, member, 'outputs');
+
 const OPERATION_EMITTERS: Readonly<Record<string, OperationEmitter>> = {
+  ...Object.fromEntries(xbControlKernelTypes().map((type) => [type, emitControlKernel])),
   Constant: emitConstant,
   Inport: emitInport,
   Outport: emitOutport,
@@ -2333,6 +2420,9 @@ const renderStateOutputs = (
         return lines;
       }
     }
+  }
+  if (isXBControlKernelType(operation.type)) {
+    return renderControlKernel(state, operation, operationIndex, layout, member, 'outputs');
   }
   if (operation.type === 'PID_BASIC') {
     const outputSignalId = operation.outputSignalIds.find((signalId) =>
@@ -3390,6 +3480,12 @@ const renderDiscreteStateUpdates = (
     if (operation.schedule.hold === 'none' || operation.schedule.periodSubsteps <= 1) return withFaultSync(transactional);
     return withFaultSync([`    if (instance->${member}.${counter} == 0U) {`, ...transactional.map((line) => `    ${line}`), '    }']);
   }
+  if (isXBControlKernelType(operation.type)) {
+    const operationIndex = xb.executionOrder.indexOf(operation.id);
+    const block = renderControlKernel(state, operation, operationIndex, layout, member, 'nextState');
+    if (operation.schedule.hold === 'none' || operation.schedule.periodSubsteps <= 1) return withFaultSync(block);
+    return withFaultSync([`    if (instance->${member}.${counter} == 0U) {`, ...block.map((line) => `    ${line}`), '    }']);
+  }
   if (operation.type === 'PID_BASIC') {
     const iSlot = stateSlotForRole(operation, 'i_state');
     const dSlot = stateSlotForRole(operation, 'd_state');
@@ -4152,6 +4248,9 @@ const renderSolverSubstep = (
     ...renderDiscreteStateUpdates(state, xb, layout, member).map((line) => `    ${line}`),
     ...renderContinuousStateUpdates(state, xb, layout, member).map((line) => `    ${line}`),
     ...renderScheduleAdvances(xb, layout, member).map((line) => `    ${line}`),
+    ...(usesKernelTime(xb)
+      ? [`    instance->${member}.xb_kernel_time += (${cNumber(xb.solver.stepSeconds)});`]
+      : []),
   ];
 };
 
