@@ -318,7 +318,28 @@ SM_Error_t ADIA_Component_OneStep(ADIA_Instance_t *instance, ADIA_Scheduler_t *s
 `;
 }
 
-function renderIntegrationGuide(): string {
+/** The shared fast-task rate of a chart with separate-task X-Bridges states (multi-rate). */
+export interface EmbeddedFastTask {
+  periodUs: number;
+  stepsPerTick: number;
+}
+
+function renderFastTaskSection(fastTask: EmbeddedFastTask): string {
+  return `
+## 8. Fast task for X-Bridges states (multi-rate)
+
+This chart has X-Bridges states with solver execution \`separate-task\`. Their solver step is \`SM_XB_TASK_PERIOD_US\` (${fastTask.periodUs} us) and the chart tick is \`SM_XB_TASK_STEPS_PER_TICK\` (${fastTask.stepsPerTick}) fast steps long.
+
+- Call \`SM_XB_Task(&sm)\` every \`SM_XB_TASK_PERIOD_US\` microseconds from a timer or PWM interrupt whose priority is higher than the chart task that calls \`ADIA_Component_OneStep()\` / \`SM_Step()\`. One call performs ONE solver step of every enabled separate-task state.
+- Alignment: the first call of each chart period must precede the chart step of that period (the instance counts the calls, so start the fast timer in phase with the chart timer after \`ADIA_Component_Init()\`). Do not call \`SM_XB_Task()\` while \`SM_Init()\` or \`SM_Reset()\` runs.
+- Deterministic rate transitions (Simulink multitasking with deterministic transfer, the \`model_step0\` fast task and \`model_step1\` slow task of Embedded Coder): fast step kN uses the inputs and the enable latched at the end of chart step k-1; chart step k reads the outputs of fast step kN; the chart's inputs are latched at the end of its step for the next period (one chart period delay, slow to fast). A state entered by chart step k starts at fast step (k+1)N and applies its memory \`reset\` there; outputs are held while the state is disabled. The results do not depend on where the fast interrupt preempts the chart.
+- Critical sections: map \`SM_ENTER_CRITICAL()\` and \`SM_EXIT_CRITICAL()\` to interrupt masking (or a mask of the fast interrupt). They bracket only the short latch and the output copy in the chart task, so the fast interrupt never sees a torn update.
+- Faults: an escalating numeric fault (\`numericFault\` = \`escalate\`) raised in the fast task is latched and becomes the chart error (\`SM_ERR_XBRIDGES_NUMERIC\`) at the start of the next chart step; the fast task does nothing while the chart is in error. A \`signal-only\` fault only sets the block's error signal.
+- CPU budget: the fast task runs \`SM_XB_TASK_STEPS_PER_TICK\` times per chart tick; its worst-case execution time must fit in \`SM_XB_TASK_PERIOD_US\` with the margin your safety case requires, and the chart task must finish before the next first fast step so the sampled outputs are the ones of its hit.
+`;
+}
+
+function renderIntegrationGuide(fastTask?: EmbeddedFastTask): string {
   return `# Stateflow to ADIA integration guide
 
 This guide is for the embedded engineer who integrates the generated ADIA state machine into the target firmware. The chart behaves like the Stateflow chart it replaces, but it runs at one fixed rate, is called through the component API below, and talks to the hardware only through the MCAL layer.
@@ -451,13 +472,14 @@ When the chart declares external functions, the generated \`sm_core.c\` and \`sm
 - Keep each implementation consistent with the simulation expression declared in the chart (same results for the same arguments, same return type); the simulation and the back-to-back tests only model the function through that expression.
 - The functions run in the context of the chart task, once per call site evaluation, inside the tick. They must be reentrant with respect to the chart (no hidden state shared with other contexts without protection), non-blocking, with a bounded execution time that fits in the tick period \`SM_TICK_MS\`, and free of side effects the chart does not expect: a guard may be evaluated several times per tick and in any order.
 - A floating-point result that is not finite raises the chart's arithmetic error (\`SM_ERR_ARITHMETIC\`).
-`;
+${fastTask === undefined ? '' : renderFastTaskSection(fastTask)}`;
 }
 
 export function generateEmbeddedProject(
   config: HILConfig,
   pack: TargetPackManifest,
   codePrefix?: string,
+  fastTask?: EmbeddedFastTask,
 ): EmbeddedProjectResult {
   const selection = resolveTargetSelection(config);
   if (!selection) throw new Error('An exact target selection is required');
@@ -475,7 +497,7 @@ export function generateEmbeddedProject(
   const [componentHeaderFile, componentSourceFile, integrationGuideFile] = applyCodePrefix([
     { name: 'adia_component.h', content: renderComponentHeader() },
     { name: 'adia_component.c', content: renderComponentSource() },
-    { name: 'integration_guide.md', content: renderIntegrationGuide() },
+    { name: 'integration_guide.md', content: renderIntegrationGuide(fastTask) },
   ], codePrefix);
   const componentHeader = componentHeaderFile.content;
   const componentSource = componentSourceFile.content;
