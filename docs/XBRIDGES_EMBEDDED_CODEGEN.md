@@ -38,7 +38,20 @@ sample times, mappings, and target capabilities. Current target limits are a
 maximum vector length of 16 and maximum matrix dimension of 8. `MatrixSolve`
 also requires a configured maximum dimension from 1 through 8. `PID_BASIC`
 requires a positive discrete `sampleTime`; `STATE_SPACE` requires the
-`discrete` representation.
+`discrete` representation; a `continuous` `STATE_SPACE` with an explicit positive `sampleTime` holds its state, as on
+the canvas. The interpreter and the generated C also integrate a truly continuous `STATE_SPACE` (sample time <= 0) and the
+continuous form of `PID_CONTROLLER` (sample time <= 0) with the solver stages of `euler` / `rk4`; the validator still
+refuses the continuous `STATE_SPACE` with `XB_DISCRETE_REPRESENTATION_REQUIRED` (limit test F10).
+
+Block rules that follow the canvas and Simulink: `Mean` of a matrix gives one mean per column (a vector of the column
+count), of a vector the scalar mean; its output shape is derived from the input, never from a declared shape.
+`SubMatrix` indices are one-based and inclusive, every default 1. `ShiftLeft` / `ShiftRight` on int32: a count >= 32
+shifts every bit out (0, or -1 for a negative value under the arithmetic right shift) and a negative count shifts the
+other way. `RELAY` is direct feedthrough: the output of tick k follows the input of tick k and the state of tick k-1
+(Simulink relay with hysteresis). `KALMAN_FILTER` updates first, then predicts (x[0|-1] = x0, P[0|-1] = P0). While
+`reset` is high `PID_BASIC` / `PID_CONTROLLER` clear their states and keep the proportional action and the derivative of
+a zero filter state. `STATE_SPACE` and `DISCRETE_TRANSFER_FUNCTION` derive the `y` and `x` port shapes from the matrices.
+Under `rk4` the discontinuous `Step` and `RELAY` hold their major-step value during the minor stages.
 
 ## State-machine boundary mapping
 
@@ -262,7 +275,8 @@ Simulink and libm: the block publishes `NaN` (or the infinity of the result) and
 raises the numeric fault on the interpreter and in the generated C. There is no
 fallback `0` for these results (decision D11). Two boundaries keep the safe-zero
 fallback: non-finite values mapped into the model from state-machine variables
-and the division-by-zero fault of `VectorDiv`.
+and, under the `signal-only` policy only, the division-by-zero fault of `VectorDiv`. Under `escalate` `VectorDiv` by
+zero publishes the IEEE result (`Inf`, `NaN`) element-wise and raises the numeric fault (XBV-160).
 
 With `signal-only`, the block publishes its error indication (and, for the
 division-by-zero and boundary cases above, the deterministic fallback) while the

@@ -95,7 +95,7 @@ const VECTOR_COVERAGE: readonly XBConformanceCoverage[] =
 
 const REDUCTION_COVERAGE: readonly XBConformanceCoverage[] = [
   shapedCoverage('SumElements', ['vector', 'matrix'], ['scalar']),
-  shapedCoverage('Mean', ['vector', 'matrix'], ['scalar']),
+  shapedCoverage('Mean', ['vector', 'matrix'], ['scalar', 'vector']),
   shapedCoverage('Max', ['vector', 'matrix'], ['scalar']),
 ];
 
@@ -389,7 +389,7 @@ export const XB_CAPABILITIES: Readonly<Record<string, XBBlockCapability>> = {
   UnaryNeg: direct(scalar),
   Abs: direct(scalar),
   SumElements: direct(vectorOrMatrix, undefined, ['T10-INT-REDUCTIONS'], ['T10-C99-REDUCTIONS'], { inputShapes: ['vector', 'matrix'], outputShapes: ['scalar'] }),
-  Mean: direct(vectorOrMatrix, undefined, ['T10-INT-REDUCTIONS'], ['T10-C99-REDUCTIONS'], { inputShapes: ['vector', 'matrix'], outputShapes: ['scalar'] }),
+  Mean: direct(vectorOrMatrix, undefined, ['T10-INT-REDUCTIONS'], ['T10-C99-REDUCTIONS'], { inputShapes: ['vector', 'matrix'], outputShapes: ['scalar', 'vector'] }),
   Max: direct(vectorOrMatrix, undefined, ['T10-INT-REDUCTIONS'], ['T10-C99-REDUCTIONS'], { inputShapes: ['vector', 'matrix'], outputShapes: ['scalar'] }),
 
   // Statically bounded linear algebra. Each entry has interpreter and C99
@@ -462,7 +462,7 @@ export const XB_CAPABILITIES: Readonly<Record<string, XBBlockCapability>> = {
   SATURATION: direct(['scalar', 'vector'], ['math-library'], ['T10-INT-DISCONTINUOUS'], ['T10-C99-DISCONTINUOUS'], {}, ['T10-PAIRED-DISCONTINUOUS']),
   DEADZONE: direct(['scalar', 'vector'], ['math-library'], ['T10-INT-DISCONTINUOUS'], ['T10-C99-DISCONTINUOUS'], {}, ['T10-PAIRED-DISCONTINUOUS']),
   RATE_LIMITER: statefulDirect(['scalar', 'vector'], ['math-library'], ['T10-INT-DISCONTINUOUS'], ['T10-C99-DISCONTINUOUS'], {}, ['T10-PAIRED-DISCONTINUOUS']),
-  RELAY: stateful(scalar, undefined, ['T10-INT-DISCONTINUOUS'], ['T10-C99-DISCONTINUOUS']),
+  RELAY: statefulDirect(scalar, undefined, ['T10-INT-DISCONTINUOUS'], ['T10-C99-DISCONTINUOUS']),
 
   // Motor-control transforms, covered against fixed reference vectors in both
   // the interpreter and generated C conformance suites (Task 10).
@@ -609,4 +609,37 @@ export const isContinuousFilter = (operation: {
   const slot = (operation.state?.slots ?? []).find((candidate) => candidate.role === 'prev_y');
   return typeof raw === 'number' && !(raw > 0) && slot !== undefined && slot.shape.kind === 'scalar';
 };
+
+const positiveSampleTime = (raw: unknown): boolean => {
+  const value = typeof raw === 'string' && raw.trim() !== '' ? Number(raw) : raw;
+  return typeof value === 'number' && Number.isFinite(value) && value > 0;
+};
+
+/**
+ * Continuous form of PID_CONTROLLER (canvas sampleTime <= 0, default -1 = inherited): the integrator and the derivative
+ * filter are continuous states advanced by the solver stages (euler, rk4) like any continuous state (XBV-159).
+ */
+export const isContinuousPid = (operation: {
+  type: string;
+  parameters: Readonly<Record<string, unknown>>;
+}): boolean => {
+  if (operation.type !== 'PID_CONTROLLER') return false;
+  // An explicit non-positive sampleTime (canvas default -1, 0); a block without the parameter keeps the sampled update
+  // with the normalized pidParameters.sampleTime.
+  const raw = operation.parameters.sampleTime;
+  const value = typeof raw === 'string' && raw.trim() !== '' ? Number(raw) : raw;
+  return typeof value === 'number' && Number.isFinite(value) && !(value > 0);
+};
+
+/**
+ * Continuous STATE_SPACE (dx/dt = A x + B u) integrated by the solver stages (XBV-093). The canvas holds the state of a
+ * continuous-representation block with an explicit positive sampleTime constant (no dynamics), so that form is not
+ * continuous here either.
+ */
+export const isContinuousStateSpace = (operation: {
+  type: string;
+  parameters: Readonly<Record<string, unknown>>;
+}): boolean => operation.type === 'STATE_SPACE'
+  && operation.parameters.representation === 'continuous'
+  && !positiveSampleTime(operation.parameters.sampleTime);
 

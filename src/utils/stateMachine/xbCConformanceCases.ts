@@ -778,7 +778,7 @@ export const XB_EXECUTABLE_C_CASES: Readonly<
     id: 'T10-C99-REDUCTIONS',
     coverage: [
       shapedCoverage('SumElements', ['vector', 'matrix'], ['scalar']),
-      shapedCoverage('Mean', ['vector', 'matrix'], ['scalar']),
+      shapedCoverage('Mean', ['vector', 'matrix'], ['scalar', 'vector']),
       shapedCoverage('Max', ['vector', 'matrix'], ['scalar']),
     ],
     fixture: makeXBridgesFixture(
@@ -796,11 +796,21 @@ export const XB_EXECUTABLE_C_CASES: Readonly<
           inputs: [{ id: 'in', direction: 'input', shape: 'vector', dimensions: [4] }],
           outputs: [{ id: 'y', direction: 'output', shape: 'scalar' }],
         }),
+        // MATLAB / Simulink Mean of a matrix: one mean per column (XBV-154).
+        createNode('c_m', 'Constant', {
+          value: [1, 2, 3, 4, 5, 6],
+          outputs: [{ id: 'out', direction: 'output', shape: 'matrix', dimensions: [2, 3] }],
+        }),
+        createNode('mean2', 'Mean', {
+          inputs: [{ id: 'in', direction: 'input', shape: 'matrix', dimensions: [2, 3] }],
+          outputs: [{ id: 'y', direction: 'output', shape: 'vector', dimensions: [3] }],
+        }),
       ],
       [
         { id: 'e1', sourceNodeId: 'c_v', sourcePortId: 'out', targetNodeId: 'sum1', targetPortId: 'in' },
         { id: 'e2', sourceNodeId: 'c_v', sourcePortId: 'out', targetNodeId: 'mean1', targetPortId: 'in' },
         { id: 'e3', sourceNodeId: 'c_v', sourcePortId: 'out', targetNodeId: 'max1', targetPortId: 'in' },
+        { id: 'e4', sourceNodeId: 'c_m', sourcePortId: 'out', targetNodeId: 'mean2', targetPortId: 'in' },
       ],
     ),
     tolerance: DEFAULT_TOLERANCE,

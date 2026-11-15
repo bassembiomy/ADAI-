@@ -220,6 +220,21 @@ const extractPortMeta = (node: XBNodeV1): RawPortMeta[] => {
   return ports;
 };
 
+/** State, input and output counts of a STATE_SPACE / DISCRETE_TRANSFER_FUNCTION node, or null when not (yet) valid. */
+const stateSpaceDimensions = (
+  node: XBNodeV1,
+): { nStates: number; nInputs: number; nOutputs: number } | null => {
+  const ssRes = validateStateSpaceNode(node);
+  if (ssRes.ok) return ssRes.value.dimensions;
+  const p = node.parameters;
+  if (node.type === 'DISCRETE_TRANSFER_FUNCTION' && (p.A === undefined || p.C === undefined)
+    && Array.isArray(p.denominator) && p.denominator.length > 1) {
+    // Single-input single-output realization of numerator / denominator: order = denominator length - 1.
+    return { nStates: p.denominator.length - 1, nInputs: 1, nOutputs: 1 };
+  }
+  return null;
+};
+
 const parseExplicitShape = (meta: RawPortMeta): SemanticShape | null => {
   if (meta.explicitShape === 'scalar') return SCALAR_SHAPE;
   if ((meta.explicitShape === 'vector' || meta.shape === 'vector') && meta.dimensions?.length === 1 && meta.dimensions[0] > 0) {
@@ -280,7 +295,15 @@ const parseConstantValueShape = (node: XBNodeV1): SemanticShape => {
     for (const port of ports) {
       const key = `${node.id}:${port.id}`;
       const explicit = parseExplicitShape(port);
-      if (explicit !== null) {
+      // Mean (MATLAB / Simulink, XBV-154): the output shape is a function of the input shape (scalar, or one mean per
+      // column of a matrix input), so a declared output shape never pins it.
+      // STATE_SPACE / DISCRETE_TRANSFER_FUNCTION: y has one element per row of C and x one per state (rows of A) - both
+      // follow from the matrices, as on the canvas, so a declared shape never pins them (XBV-093).
+      const derivedOutput = (node.type === 'Mean' && port.direction === 'output')
+        || ((node.type === 'STATE_SPACE' || node.type === 'DISCRETE_TRANSFER_FUNCTION')
+          && port.direction === 'output' && (port.id === 'y' || port.id === 'x')
+          && stateSpaceDimensions(node) !== null);
+      if (explicit !== null && !derivedOutput) {
         portShapes.set(key, explicit);
         explicitPortKeys.add(key);
       } else if (port.direction === 'output' && ['WaveformGen', 'WAVEFORM_GEN', 'Clock', 'CLOCK'].includes(node.type)) {
@@ -464,12 +487,16 @@ const parseConstantValueShape = (node: XBNodeV1): SemanticShape => {
           }
         }
       } else if (['SumElements', 'Mean', 'Max'].includes(node.type)) {
+        const meanInput = node.type === 'Mean'
+          ? portShapes.get(`${node.id}:${inputPorts[0]?.id ?? 'in'}`) ?? UNRESOLVED_SHAPE
+          : SCALAR_SHAPE;
+        const reducedShape = meanInput.kind === 'matrix' ? vectorShape(meanInput.dimensions[1] ?? 1) : SCALAR_SHAPE;
         for (const outP of outputPorts) {
           const outKey = `${node.id}:${outP.id}`;
           if (!explicitPortKeys.has(outKey)) {
             const cur = portShapes.get(outKey) ?? UNRESOLVED_SHAPE;
-            if (!shapesAreEqual(cur, SCALAR_SHAPE)) {
-              portShapes.set(outKey, SCALAR_SHAPE);
+            if (!shapesAreEqual(cur, reducedShape)) {
+              portShapes.set(outKey, reducedShape);
               changed = true;
             }
           }
@@ -536,10 +563,9 @@ const parseConstantValueShape = (node: XBNodeV1): SemanticShape => {
             }
           }
         }
-      } else if (node.type === 'STATE_SPACE') {
-        const ssRes = validateStateSpaceNode(node);
-        if (ssRes.ok) {
-          const dims = ssRes.value.dimensions;
+      } else if (node.type === 'STATE_SPACE' || node.type === 'DISCRETE_TRANSFER_FUNCTION') {
+        const dims = stateSpaceDimensions(node);
+        if (dims !== null) {
           for (const p of ports) {
             const portKey = `${node.id}:${p.id}`;
             if (!explicitPortKeys.has(portKey)) {

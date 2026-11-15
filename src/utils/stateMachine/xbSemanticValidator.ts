@@ -434,8 +434,11 @@ const hasContinuousStates = (node: XBNodeV1): boolean => {
     case 'Integrator':
     case 'TRANSFER_FUNCTION':
       return true;
-    case 'STATE_SPACE':
-      return p.representation !== 'discrete';
+    case 'STATE_SPACE': {
+      // The canvas holds a continuous-representation block with an explicit positive sampleTime (no dynamics).
+      const ts = typeof p.sampleTime === 'string' ? Number(p.sampleTime) : p.sampleTime;
+      return p.representation !== 'discrete' && !(typeof ts === 'number' && Number.isFinite(ts) && ts > 0);
+    }
     case 'PID_CONTROLLER': {
       const ts = typeof p.sampleTime === 'string' ? Number(p.sampleTime) : p.sampleTime;
       return !(typeof ts === 'number' && Number.isFinite(ts) && ts > 0);
@@ -585,7 +588,10 @@ export const validateXBModel = (
       ));
     }
     if (node.type === 'STATE_SPACE') {
-      if (parameters.representation !== 'discrete') {
+      // XBV-093: a continuous STATE_SPACE with an explicit positive sampleTime is held, like the canvas (no dynamics);
+      // a truly continuous one (sampleTime <= 0 or absent) is integrated by the solver stages in the interpreter and the
+      // generated C but stays refused here: the F10 limit test in xbCodeParity.test.ts pins XB_DISCRETE_REPRESENTATION_REQUIRED.
+      if (parameters.representation !== 'discrete' && (parameters.representation !== 'continuous' || hasContinuousStates(node))) {
         diagnostics.push(diagnostic(
           'XB_DISCRETE_REPRESENTATION_REQUIRED',
           `STATE_SPACE '${node.id}' requires representation: 'discrete' for embedded generation.`,
