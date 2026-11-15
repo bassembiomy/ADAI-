@@ -603,7 +603,7 @@
    "exec": "S / H, verifier opus",
    "deps": [],
    "status": "in_progress",
-   "note": "User go-ahead 2026-11-11 (fix all findings). Plan: docs/xbridges-verification/wp21-fix-plan.md. Round 1 dispatched: A zero parameters, B embedded quick fixes, C workspace UI. Batch B merged (a3daf970): 9 findings closed; new XBV-150 (embedded PID semantics), XBV-151 (embedded DELAY 0), XBV-152 (vacuous PID parity case). LIBM_CONDITIONED bound (8 eps max(1,|y|), 17 keys) added to xbCodeParity, verifier re-measured worst ratio 3.85. Batch A merged (c8facc19): XBV-015, 019, 040, 064 closed; DELAY delay_length is not tunable during a run (live change to/from 0 refused with PARAMETER_OUT_OF_RANGE, Simulink); XBV-137 ratchet shrunk 463 -> 418; new XBV-153. Batch D dispatched (acceptance 624b6a44). Batch F acceptance: pins removed for XBV-084, 086, 087, 091, 093, 094, 101, 102, 103 and the XBV-084 seeds; new tests for XBV-150 (PID with distinct r and y), 151 (DELAY 0), 107 (passes: closed). XBV-088, 090, 092 stay pinned (canvas-side causes, later batches). Batch C committed (13 findings closed, verifier PASS, e2e 36/36); new XBV-157, 158. WP-20 re-check by the verifier: spec gap (no end-time check in solvers/persistence/subsystem/param-edit) fixed by the controller; XBV-149 pin ordering fixed. Batch D merged (22 findings closed; XBV-066 moved to E; new XBV-154, 155, 156). XBV-057: right shift of a negative int32 by >= 32 gives -1 (arithmetic shift, Simulink signed shift). Batch E acceptance (engine core): pins flipped for XBV-016, 026, 028, 030, 031, 032, 033, 035, 036, 066, 067, 069, 080; PINNED_SEVERITY no longer lists DIMENSION_MISMATCH, DATA_TYPE_MISMATCH (D1), ALGEBRAIC_LOOP_NOT_CONVERGED, LOGIC_NAN_INPUT; U10 and U14 lists emptied (XBV-020, XBV-018); XBV-047 clone list emptied; RELAY rk4 parity pin removed (XBV-067); new xbWp21Engine.test.ts for XBV-002, 003, 004, 005, 155; testkit runModel passes relTol/absTol. XBV-107 reopened (controller test error). Batch F merged after 2 reworks and verifier review (11 findings closed, XBV-093 open; decision D12; new XBV-159, 160, 161, 162). RELAY rk4 parity stays failing until batch E2 (XBV-067 minor steps). Batch E1+E2 merged (26 findings closed incl. XBV-092 and XBV-133 fixed as side effects); structural codes MULTIPLE_DRIVERS, DUPLICATE_BLOCK_ID, UNKNOWN_BLOCK_TYPE; new XBV-163, 164, 165, 166. Pre-existing failure unrelated to WP-21: src/help/helpCoverage.test.ts live-UI fingerprint (fails already at cb974bc3). Batch H merged (12 fuzzy findings closed; math blocks out of the universal lists; decision D13; new XBV-169). Batch G merged (15 findings closed; AC_MOTOR_PID_CONTROL rewritten as a slip-regulated V/f drive; induction-motor stator equations corrected, XBV-170; new embedded XBV-167, 168). Batch F2 merged (11 findings closed; D11 under every fault policy; continuous STATE_SPACE embedded; new XBV-172). Batch E3 merged (XBV-041, 065, 165, 169, 171 closed; D14; trial-point fault rollback bounded: only a strictly smaller retry that is taken, max 30 consecutive; new XBV-174)."
+   "note": "User go-ahead 2026-11-11 (fix all findings). Plan: docs/xbridges-verification/wp21-fix-plan.md. Round 1 dispatched: A zero parameters, B embedded quick fixes, C workspace UI. Batch B merged (a3daf970): 9 findings closed; new XBV-150 (embedded PID semantics), XBV-151 (embedded DELAY 0), XBV-152 (vacuous PID parity case). LIBM_CONDITIONED bound (8 eps max(1,|y|), 17 keys) added to xbCodeParity, verifier re-measured worst ratio 3.85. Batch A merged (c8facc19): XBV-015, 019, 040, 064 closed; DELAY delay_length is not tunable during a run (live change to/from 0 refused with PARAMETER_OUT_OF_RANGE, Simulink); XBV-137 ratchet shrunk 463 -> 418; new XBV-153. Batch D dispatched (acceptance 624b6a44). Batch F acceptance: pins removed for XBV-084, 086, 087, 091, 093, 094, 101, 102, 103 and the XBV-084 seeds; new tests for XBV-150 (PID with distinct r and y), 151 (DELAY 0), 107 (passes: closed). XBV-088, 090, 092 stay pinned (canvas-side causes, later batches). Batch C committed (13 findings closed, verifier PASS, e2e 36/36); new XBV-157, 158. WP-20 re-check by the verifier: spec gap (no end-time check in solvers/persistence/subsystem/param-edit) fixed by the controller; XBV-149 pin ordering fixed. Batch D merged (22 findings closed; XBV-066 moved to E; new XBV-154, 155, 156). XBV-057: right shift of a negative int32 by >= 32 gives -1 (arithmetic shift, Simulink signed shift). Batch E acceptance (engine core): pins flipped for XBV-016, 026, 028, 030, 031, 032, 033, 035, 036, 066, 067, 069, 080; PINNED_SEVERITY no longer lists DIMENSION_MISMATCH, DATA_TYPE_MISMATCH (D1), ALGEBRAIC_LOOP_NOT_CONVERGED, LOGIC_NAN_INPUT; U10 and U14 lists emptied (XBV-020, XBV-018); XBV-047 clone list emptied; RELAY rk4 parity pin removed (XBV-067); new xbWp21Engine.test.ts for XBV-002, 003, 004, 005, 155; testkit runModel passes relTol/absTol. XBV-107 reopened (controller test error). Batch F merged after 2 reworks and verifier review (11 findings closed, XBV-093 open; decision D12; new XBV-159, 160, 161, 162). RELAY rk4 parity stays failing until batch E2 (XBV-067 minor steps). Batch E1+E2 merged (26 findings closed incl. XBV-092 and XBV-133 fixed as side effects); structural codes MULTIPLE_DRIVERS, DUPLICATE_BLOCK_ID, UNKNOWN_BLOCK_TYPE; new XBV-163, 164, 165, 166. Pre-existing failure unrelated to WP-21: src/help/helpCoverage.test.ts live-UI fingerprint (fails already at cb974bc3). Batch H merged (12 fuzzy findings closed; math blocks out of the universal lists; decision D13; new XBV-169). Batch G merged (15 findings closed; AC_MOTOR_PID_CONTROL rewritten as a slip-regulated V/f drive; induction-motor stator equations corrected, XBV-170; new embedded XBV-167, 168). Batch F2 merged (11 findings closed; D11 under every fault policy; continuous STATE_SPACE embedded; new XBV-172). Batch E3 merged (XBV-041, 065, 165, 169, 171 closed; D14; trial-point fault rollback bounded: only a strictly smaller retry that is taken, max 30 consecutive; new XBV-174). Batch I merged (19 findings closed; robot labs carry a solver via the optional lab `simulation` entry; StiffSolver reads array derivatives; labs #5/#6 e2e unpinned; new XBV-175 to 179)."
   },
   {
    "id": "WP-22",
@@ -838,24 +838,27 @@
    "plan_ref": "U1/U4/U5",
    "severity": "S2",
    "gate": "V3",
-   "status": "open",
-   "summary": "Blocks throw inside execute (stopping the run with BLOCK_RUNTIME_FAULT): on default inputs 9 (MPC_CONTROLLER default Q 2x2 vs 1 output; MatrixConcat, MatrixSolve, SubMatrix on scalars; DEM_*; ROBOT_VACUUM_ERODE_MASK, THETA_STAR), on NaN/Inf 9, on a wrong value kind 29. Lists XBV-U1, XBV-U4, XBV-U5. WP-21 batch H: the math blocks (MatrixConcat, Abs, Diag*, GAIN, Max, Mean, Sum*, UnaryNeg, Vector*) left the U1-U5 lists; the remaining entries belong to batches G and I."
+   "status": "closed",
+   "summary": "Blocks throw inside execute (stopping the run with BLOCK_RUNTIME_FAULT): on default inputs 9 (MPC_CONTROLLER default Q 2x2 vs 1 output; MatrixConcat, MatrixSolve, SubMatrix on scalars; DEM_*; ROBOT_VACUUM_ERODE_MASK, THETA_STAR), on NaN/Inf 9, on a wrong value kind 29. Lists XBV-U1, XBV-U4, XBV-U5. WP-21 batch H: the math blocks (MatrixConcat, Abs, Diag*, GAIN, Max, Mean, Sum*, UnaryNeg, Vector*) left the U1-U5 lists; the remaining entries belong to batches G and I.",
+   "fix": "WP-21 batch I (2 reworks), verifier review (FAIL only on XBV-175, recorded separately)"
   },
   {
    "id": "XBV-022",
    "plan_ref": "U2/U3",
    "severity": "S2",
    "gate": "V3",
-   "status": "open",
-   "summary": "Undefined outputs or unreported NaN: 5 blocks alone with unconnected inputs (DEMUX out2 undefined stops a downstream Abs), 11 blocks on finite edge inputs. Lists XBV-U2, XBV-U3. SECTOR_SELECTOR moved to XBV-025. WP-21 batch H: the math blocks (MatrixConcat, Abs, Diag*, GAIN, Max, Mean, Sum*, UnaryNeg, Vector*) left the U1-U5 lists; the remaining entries belong to batches G and I."
+   "status": "closed",
+   "summary": "Undefined outputs or unreported NaN: 5 blocks alone with unconnected inputs (DEMUX out2 undefined stops a downstream Abs), 11 blocks on finite edge inputs. Lists XBV-U2, XBV-U3. SECTOR_SELECTOR moved to XBV-025. WP-21 batch H: the math blocks (MatrixConcat, Abs, Diag*, GAIN, Max, Mean, Sum*, UnaryNeg, Vector*) left the U1-U5 lists; the remaining entries belong to batches G and I.",
+   "fix": "WP-21 batch I (2 reworks), verifier review (FAIL only on XBV-175, recorded separately)"
   },
   {
    "id": "XBV-023",
    "plan_ref": "U9",
    "severity": "S3",
    "gate": "V3",
-   "status": "open",
-   "summary": "15 noise/stochastic blocks use unseeded Math.random: runs are not repeatable (Simulink noise blocks are seeded). With a fixed seed, state also survives a clone (U11 clean). List XBV-U9."
+   "status": "closed",
+   "summary": "15 noise/stochastic blocks use unseeded Math.random: runs are not repeatable (Simulink noise blocks are seeded). With a fixed seed, state also survives a clone (U11 clean). List XBV-U9.",
+   "fix": "WP-21 batch I (2 reworks), verifier review (FAIL only on XBV-175, recorded separately)"
   },
   {
    "id": "XBV-024",
@@ -871,8 +874,9 @@
    "plan_ref": "U3",
    "severity": "S1",
    "gate": "V2",
-   "status": "open",
-   "summary": "SECTOR_SELECTOR returns sector -3 for theta = -10 rad (closed form floor(mod(theta, 2*pi)/(pi/3)) + 1 = 3); angles below -2*pi are not wrapped. Correct on (-2*pi, 4*pi). Pinned by it.fails in xbUniversal.test.ts."
+   "status": "closed",
+   "summary": "SECTOR_SELECTOR returns sector -3 for theta = -10 rad (closed form floor(mod(theta, 2*pi)/(pi/3)) + 1 = 3); angles below -2*pi are not wrapped. Correct on (-2*pi, 4*pi). Pinned by it.fails in xbUniversal.test.ts.",
+   "fix": "WP-21 batch I (2 reworks), verifier review (FAIL only on XBV-175, recorded separately)"
   },
   {
    "id": "XBV-026",
@@ -1432,8 +1436,9 @@
    "plan_ref": "7.3 canvas / interpreter parity",
    "severity": "S3",
    "gate": "V6",
-   "status": "open",
-   "summary": "WHITE_NOISE / BAND_LIMITED_NOISE use different random streams on the canvas (Math.random) and in the embedded path (deterministic generator), so a model with noise never matches between the two (related XBV-023). Found by the WP-16 executor; pinned in src/utils/stateMachine/xbTriParity.test.ts."
+   "status": "closed",
+   "summary": "WHITE_NOISE / BAND_LIMITED_NOISE use different random streams on the canvas (Math.random) and in the embedded path (deterministic generator), so a model with noise never matches between the two (related XBV-023). Found by the WP-16 executor; pinned in src/utils/stateMachine/xbTriParity.test.ts.",
+   "fix": "WP-21 batch I (2 reworks), verifier review (FAIL only on XBV-175, recorded separately)"
   },
   {
    "id": "XBV-090",
@@ -1725,88 +1730,99 @@
    "plan_ref": "4.2 navigation / robot vacuum / DEM-CFD (D5)",
    "severity": "S3",
    "gate": "V2",
-   "status": "open",
-   "summary": "ROBOT_VACUUM_DYNAMICS applies a hidden 0.992 slip factor in evaluateDerivatives: a straight run gives x(10) = -1.51792 instead of the kinematic -1.51 (r w t). Found by the WP-10 executor; pinned in xbEquations.robot.test.ts."
+   "status": "closed",
+   "summary": "ROBOT_VACUUM_DYNAMICS applies a hidden 0.992 slip factor in evaluateDerivatives: a straight run gives x(10) = -1.51792 instead of the kinematic -1.51 (r w t). Found by the WP-10 executor; pinned in xbEquations.robot.test.ts.",
+   "fix": "WP-21 batch I (2 reworks), verifier review (FAIL only on XBV-175, recorded separately)"
   },
   {
    "id": "XBV-123",
    "plan_ref": "4.2 navigation / robot vacuum / DEM-CFD (D5)",
    "severity": "S3",
    "gate": "V2",
-   "status": "open",
-   "summary": "ROBOT_VACUUM_DYNAMICS turning in place: theta(2) = 2.4552 instead of 2.475 (same hidden slip factor). Found by the WP-10 executor; pinned in xbEquations.robot.test.ts."
+   "status": "closed",
+   "summary": "ROBOT_VACUUM_DYNAMICS turning in place: theta(2) = 2.4552 instead of 2.475 (same hidden slip factor). Found by the WP-10 executor; pinned in xbEquations.robot.test.ts.",
+   "fix": "WP-21 batch I (2 reworks), verifier review (FAIL only on XBV-175, recorded separately)"
   },
   {
    "id": "XBV-124",
    "plan_ref": "4.2 navigation / robot vacuum / DEM-CFD (D5)",
    "severity": "S3",
    "gate": "V2",
-   "status": "open",
-   "summary": "ROBOT_VACUUM_THETA_STAR line-of-sight shortcuts ignore the robot radius on the grid (legs pass 0.025 m from occupied cells, 0.15 m expected); its 'inflation' parameter is unused (0.28 literal). Found by the WP-10 executor; pinned in xbEquations.robot.test.ts."
+   "status": "closed",
+   "summary": "ROBOT_VACUUM_THETA_STAR line-of-sight shortcuts ignore the robot radius on the grid (legs pass 0.025 m from occupied cells, 0.15 m expected); its 'inflation' parameter is unused (0.28 literal). Found by the WP-10 executor; pinned in xbEquations.robot.test.ts.",
+   "fix": "WP-21 batch I (2 reworks), verifier review (FAIL only on XBV-175, recorded separately)"
   },
   {
    "id": "XBV-125",
    "plan_ref": "4.2 navigation / robot vacuum / DEM-CFD (D5)",
    "severity": "S2",
    "gate": "V3",
-   "status": "open",
-   "summary": "ROBOT_VACUUM_GLOBAL_PLANNER ignores the grid and the start pose and returns the goal as the only waypoint (no A* path around a barrier). Found by the WP-10 executor; pinned in xbEquations.robot.test.ts."
+   "status": "closed",
+   "summary": "ROBOT_VACUUM_GLOBAL_PLANNER ignores the grid and the start pose and returns the goal as the only waypoint (no A* path around a barrier). Found by the WP-10 executor; pinned in xbEquations.robot.test.ts.",
+   "fix": "WP-21 batch I (2 reworks), verifier review (FAIL only on XBV-175, recorded separately)"
   },
   {
    "id": "XBV-126",
    "plan_ref": "4.2 navigation / robot vacuum / DEM-CFD (D5)",
    "severity": "S3",
    "gate": "V2",
-   "status": "open",
-   "summary": "ROBOT_VACUUM_ENCODER counts 185 instead of 180 for pi rad/s over 1 s at 360 cpr: with lastTime === 0 the first steps use dt 0.02 twice. Found by the WP-10 executor; pinned in xbEquations.robot.test.ts."
+   "status": "closed",
+   "summary": "ROBOT_VACUUM_ENCODER counts 185 instead of 180 for pi rad/s over 1 s at 360 cpr: with lastTime === 0 the first steps use dt 0.02 twice. Found by the WP-10 executor; pinned in xbEquations.robot.test.ts.",
+   "fix": "WP-21 batch I (2 reworks), verifier review (FAIL only on XBV-175, recorded separately)"
   },
   {
    "id": "XBV-127",
    "plan_ref": "4.2 navigation / robot vacuum / DEM-CFD (D5)",
    "severity": "S2",
    "gate": "V3",
-   "status": "open",
-   "summary": "The built-in Robot Vacuum Twin lab diverges to Infinity within 3 s at the app's default rk4 step 0.02 s (motor pole about -500/s); it needs dt 0.005 s to stay finite. Found by the WP-10 executor; pinned in xbEquations.robot.test.ts."
+   "status": "closed",
+   "summary": "The built-in Robot Vacuum Twin lab diverges to Infinity within 3 s at the app's default rk4 step 0.02 s (motor pole about -500/s); it needs dt 0.005 s to stay finite. Found by the WP-10 executor; pinned in xbEquations.robot.test.ts.",
+   "fix": "WP-21 batch I (2 reworks), verifier review (FAIL only on XBV-175, recorded separately)"
   },
   {
    "id": "XBV-128",
    "plan_ref": "4.2 navigation / robot vacuum / DEM-CFD (D5)",
    "severity": "S2",
    "gate": "V3",
-   "status": "open",
-   "summary": "Robot Vacuum Twin lab in mode 6 does not reach the commanded goal (1.5, 1.5): the robot stays at (0, 0). Found by the WP-10 executor; pinned in xbEquations.robot.test.ts."
+   "status": "closed",
+   "summary": "Robot Vacuum Twin lab in mode 6 does not reach the commanded goal (1.5, 1.5): the robot stays at (0, 0). Found by the WP-10 executor; pinned in xbEquations.robot.test.ts.",
+   "fix": "WP-21 batch I (2 reworks), verifier review (FAIL only on XBV-175, recorded separately)"
   },
   {
    "id": "XBV-129",
    "plan_ref": "4.2 navigation / robot vacuum / DEM-CFD (D5)",
    "severity": "S2",
    "gate": "V3",
-   "status": "open",
-   "summary": "ROBOT_VACUUM_DYNAMICS default pose (0, 0) lies inside the x = 0 wall zone, so the robot does not move with a forward command (x(1) = 0 instead of 0.099). Found by the WP-10 executor; pinned in xbEquations.robot.test.ts."
+   "status": "closed",
+   "summary": "ROBOT_VACUUM_DYNAMICS default pose (0, 0) lies inside the x = 0 wall zone, so the robot does not move with a forward command (x(1) = 0 instead of 0.099). Found by the WP-10 executor; pinned in xbEquations.robot.test.ts.",
+   "fix": "WP-21 batch I (2 reworks), verifier review (FAIL only on XBV-175, recorded separately)"
   },
   {
    "id": "XBV-130",
    "plan_ref": "4.2 navigation / robot vacuum / DEM-CFD (D5)",
    "severity": "S2",
    "gate": "V3",
-   "status": "open",
-   "summary": "DEM_DRUM uses its 4th execute argument (the simulation time) as the step size, so the angle grows quadratically: angle(2) = 20.43 instead of 12.566 for its rpm. Found by the WP-10 executor; pinned in xbEquations.robot.test.ts."
+   "status": "closed",
+   "summary": "DEM_DRUM uses its 4th execute argument (the simulation time) as the step size, so the angle grows quadratically: angle(2) = 20.43 instead of 12.566 for its rpm. Found by the WP-10 executor; pinned in xbEquations.robot.test.ts.",
+   "fix": "WP-21 batch I (2 reworks), verifier review (FAIL only on XBV-175, recorded separately)"
   },
   {
    "id": "XBV-131",
    "plan_ref": "4.2 navigation / robot vacuum / DEM-CFD (D5)",
    "severity": "S3",
    "gate": "V2",
-   "status": "open",
-   "summary": "DEM_PARTICLE_SYSTEM uses time as dt (same cause as XBV-130): free fall vy(0.1) = -2.08 instead of -0.981. Found by the WP-10 executor; pinned in xbEquations.robot.test.ts."
+   "status": "closed",
+   "summary": "DEM_PARTICLE_SYSTEM uses time as dt (same cause as XBV-130): free fall vy(0.1) = -2.08 instead of -0.981. Found by the WP-10 executor; pinned in xbEquations.robot.test.ts.",
+   "fix": "WP-21 batch I (2 reworks), verifier review (FAIL only on XBV-175, recorded separately)"
   },
   {
    "id": "XBV-132",
    "plan_ref": "4.2 navigation / robot vacuum / DEM-CFD (D5)",
    "severity": "S3",
    "gate": "V2",
-   "status": "open",
-   "summary": "CFD_SPH_WATER_SOLVER never reads its stiffness, density, viscosity or smoothing-length parameters; there are no SPH pressure/viscosity forces. Found by the WP-10 executor; pinned in xbEquations.robot.test.ts."
+   "status": "closed",
+   "summary": "CFD_SPH_WATER_SOLVER never reads its stiffness, density, viscosity or smoothing-length parameters; there are no SPH pressure/viscosity forces. Found by the WP-10 executor; pinned in xbEquations.robot.test.ts.",
+   "fix": "WP-21 batch I (2 reworks), verifier review (FAIL only on XBV-175, recorded separately)"
   },
   {
    "id": "XBV-133",
@@ -1815,15 +1831,16 @@
    "gate": "V3",
    "status": "closed",
    "summary": "ROBOT_VACUUM_DIGITAL_TWIN diverges within 2 s at rk4 dt 0.02 (finite only at 0.005). Found by the WP-10 executor; pinned in xbEquations.robot.test.ts.",
-   "fix": "WP-21 batch E1+E2 (merged after verifier PASS on the integration branch)"
+   "fix": "WP-21 batch I (2 reworks), verifier review (FAIL only on XBV-175, recorded separately)"
   },
   {
    "id": "XBV-134",
    "plan_ref": "4.2 navigation / robot vacuum / DEM-CFD (D5)",
    "severity": "S3",
    "gate": "V2",
-   "status": "open",
-   "summary": "ROBOT_VACUUM_GLOBAL_PLANNER with no possible path returns [goal] with no failure flag. Found by the WP-10 executor; pinned in xbEquations.robot.test.ts."
+   "status": "closed",
+   "summary": "ROBOT_VACUUM_GLOBAL_PLANNER with no possible path returns [goal] with no failure flag. Found by the WP-10 executor; pinned in xbEquations.robot.test.ts.",
+   "fix": "WP-21 batch I (2 reworks), verifier review (FAIL only on XBV-175, recorded separately)"
   },
   {
    "id": "XBV-135",
@@ -1937,8 +1954,9 @@
    "plan_ref": "6 UI end-to-end",
    "severity": "S2",
    "gate": "V8",
-   "status": "open",
-   "summary": "The Robot Vacuum Navigation & Mapping lab shows EKF error Infinity and confidence 0 % after 5 s at the default step (same stiffness class as XBV-127). Found by the WP-20 executor (Playwright, real Chromium); pinned in tests/e2e/xbridges/."
+   "status": "closed",
+   "summary": "The Robot Vacuum Navigation & Mapping lab shows EKF error Infinity and confidence 0 % after 5 s at the default step (same stiffness class as XBV-127). Found by the WP-20 executor (Playwright, real Chromium); pinned in tests/e2e/xbridges/.",
+   "fix": "WP-21 batch I (2 reworks), verifier review (FAIL only on XBV-175, recorded separately)"
   },
   {
    "id": "XBV-148",
@@ -2174,6 +2192,46 @@
    "gate": "V6",
    "status": "open",
    "summary": "Embedded continuous STATE_SPACE holds its state when sampleTime > 0 (batch F2 mirrored the pre-E3 canvas); the canvas now integrates it (XBV-171). Pinned in xbTriParity."
+  },
+  {
+   "id": "XBV-175",
+   "plan_ref": "5.1 stiff solvers",
+   "severity": "S2",
+   "gate": "V5",
+   "status": "open",
+   "summary": "StiffSolver.derivAt (WP-21 batch I rework 2) turns a NaN derivative into 0; before, the run stopped with STIFF_SOLVER_NONFINITE. 0/0 into an Integrator now runs to the end under ode14x/ode23tb with a 0 state. Found by the WP-21 batch I verifier; acceptance in xbWp21Faults.test.ts."
+  },
+  {
+   "id": "XBV-176",
+   "plan_ref": "5.1 explicit solvers",
+   "severity": "S2",
+   "gate": "V5",
+   "status": "open",
+   "summary": "VectorUtils.integrateState reads a derivative as `Number(deriv) || 0`, so a NaN derivative is integrated as 0 by euler/rk4/ode45 without a diagnostic (pre-existing). Found by the WP-21 batch I verifier; acceptance in xbWp21Faults.test.ts."
+  },
+  {
+   "id": "XBV-177",
+   "plan_ref": "4.2 powertrain",
+   "severity": "S2",
+   "gate": "V5",
+   "status": "open",
+   "summary": "PT_AUTOMATED_MANUAL_TRANSMISSION and PT_DUAL_CLUTCH_TRANSMISSION do not finish 1 s of simulation within 120 s under ode23tb (defaults, unit inputs); rk4 finishes quickly. Found by the WP-21 batch I scan."
+  },
+  {
+   "id": "XBV-178",
+   "plan_ref": "4.2 powertrain",
+   "severity": "S3",
+   "gate": "V3",
+   "status": "open",
+   "summary": "PT_TURBOCHARGER raises BLOCK_RUNTIME_FAULT with its defaults and unit inputs under rk4 and ode23tb alike (not a solver difference; cause not investigated). Found by the WP-21 batch I scan."
+  },
+  {
+   "id": "XBV-179",
+   "plan_ref": "4.2 powertrain",
+   "severity": "S3",
+   "gate": "V5",
+   "status": "open",
+   "summary": "PT_ENGINE_DYNO under ode23tb at default tolerances differs from rk4 (0.001) by 2e-2 relative at output step 0.05 (2.8e-3 at 0.01); keyed derivatives, so error control / output interpolation rather than the layout defect. Found by the WP-21 batch I scan."
   }
  ],
  "blocks": {

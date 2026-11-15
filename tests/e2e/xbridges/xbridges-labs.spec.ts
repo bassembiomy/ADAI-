@@ -13,10 +13,8 @@ useLocalChromium();
 const LAB_COUNT = 11; // XBRIDGES_LEARNING_LABS at the time of writing (cards with a LOAD LAB button)
 
 /** Labs whose run is known to diverge (EKF error shown as Infinity, confidence 0 %). Index is the card position. */
-const PINNED: Record<number, string> = {
-  4: 'XBV-127', // Robot Vacuum Digital Twin Lab: diverges at the default rk4 step (motor pole about -500/s)
-  5: 'XBV-147', // Autonomous Vacuum Navigation & Mapping System: same EKF ERR Infinity symptom, same robot model
-};
+/** Labs whose run is known to fail. Empty since WP-21 batch I (XBV-127, XBV-147: the robot labs carry a stiff-appropriate solver). */
+const PINNED: Record<number, string> = {};
 
 async function loadLab(page: import('@playwright/test').Page, index: number): Promise<string> {
   page.on('dialog', d => d.accept());

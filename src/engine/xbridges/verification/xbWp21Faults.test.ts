@@ -32,3 +32,22 @@ describe('XBV-165 follow-up: a genuine fault still stops a variable-step run and
     }
   }
 });
+
+// XBV-175 / XBV-176 (WP-21): a non-finite derivative is never integrated as 0. 0/0 into an Integrator gives a NaN
+// derivative; every solver must stop the run with an error (stiff: STIFF_SOLVER_NONFINITE; explicit and adaptive: an
+// error diagnostic) or propagate NaN to the state and report it - never continue with a 0 state.
+describe('XBV-175 / XBV-176: a NaN derivative is not integrated as 0', () => {
+  for (const solver of ['euler', 'rk4', 'ode45', 'ode14x', 'ode23tb'] as const) {
+    it(`${solver}: 0/0 into an Integrator stops with an error or yields NaN, never a finite 0 state`, () => {
+      const r = runModel(buildModel({
+        blocks: [{ id: 'z', type: 'Constant', params: { value: 0 } }, { id: 'd', type: 'VectorDiv' }, { id: 'i', type: 'Integrator' }],
+        wires: ['z.out -> d.in1', 'z.out -> d.in2', 'd.out -> i.in'],
+      }), { solver, dt: 0.01, stopTime: 0.1, probes: ['i.out'] });
+      const stopped = r.diagnostics.some((d) => d.severity === 'error');
+      const last = r.signals['i.out'].at(-1);
+      const lastNum = Array.isArray(last) ? Number((last as unknown[])[0]) : Number(last);
+      expect(stopped || Number.isNaN(lastNum), `${solver}: run continued with i.out = ${lastNum}`).toBe(true);
+    }, 20_000);
+  }
+});
+
