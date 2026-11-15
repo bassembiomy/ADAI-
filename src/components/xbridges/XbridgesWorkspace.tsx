@@ -39,6 +39,13 @@ import { XbridgesWorkerClient } from '../../services/xbridgesWorkerClient';
 import {
   parseTimeInput,
   parseFixedStepInput,
+  solverOptionTextsFrom,
+  solverOptionGroup,
+  invalidSolverOptionTexts,
+  solverOptionDiagnostics,
+  solverOptionsForRun,
+  solverOptionsForSave,
+  type SolverOptionTexts,
   resolveSimulationConfig,
   toSimulationSettings,
   fromSimulationSettings,
@@ -169,7 +176,7 @@ function stepLiveSolver(engine: XbridgesEngine, solverType: string, t: number, d
 
 /** Simulation settings as saved with the model: parsed from the toolbar text, 'auto' step resolved for the model's blocks. */
 function buildSimulationSettings(
-  inputs: { solver: string; start: string; stop: string; step: string },
+  inputs: { solver: string; start: string; stop: string; step: string; options: SolverOptionTexts },
   nodes: any[],
 ): XSimulationSettings {
   const start = parseTimeInput(inputs.start);
@@ -180,6 +187,8 @@ function buildSimulationSettings(
     startTime: start ?? 0,
     stopTime: stop ?? 10,
     fixedStep: step ?? ('auto' as const),
+    // Solver options are saved when their text is valid (invalid text is reported on the toolbar and refuses a run).
+    ...solverOptionsForSave(inputs.options),
   };
   const blocks = nodes.map(n => ({ id: n.id, type: n.data?.type, params: n.data?.params ?? {} }));
   const resolved = resolveSimulationConfig(config, blocks as any);
@@ -1421,15 +1430,20 @@ export const XbridgesWorkspace: React.FC<{
       : initialSimConfig ? (initialSimConfig.fixedStep === 'auto' ? 'auto' : String(initialSimConfig.fixedStep))
         : 'auto',
   );
-  const simInputsRef = React.useRef({ solver: solverType as string, start: startTimeInput, stop: stopTimeInput, step: stepSizeInput });
-  simInputsRef.current = { solver: solverType, start: startTimeInput, stop: stopTimeInput, step: stepSizeInput };
+  const [solverOptionTexts, setSolverOptionTexts] = useState<SolverOptionTexts>(() => solverOptionTextsFrom(initialSimConfig));
+  const setSolverOptionText = (key: keyof SolverOptionTexts, value: string) =>
+    setSolverOptionTexts(prev => ({ ...prev, [key]: normalizeNumerals(value).replace(/[^0-9a-zA-Z.+-]/g, '') }));
+  const simInputsRef = React.useRef({ solver: solverType as string, start: startTimeInput, stop: stopTimeInput, step: stepSizeInput, options: solverOptionTexts });
+  simInputsRef.current = { solver: solverType, start: startTimeInput, stop: stopTimeInput, step: stepSizeInput, options: solverOptionTexts };
+  const optionGroup = solverOptionGroup(solverType);
+  const invalidOptionKeys = invalidSolverOptionTexts(solverType, solverOptionTexts);
   const startTimeParsed = parseTimeInput(startTimeInput);
   const stopTimeParsed = parseTimeInput(stopTimeInput);
   const fixedStepParsed = parseFixedStepInput(stepSizeInput);
   const startTimeInvalid = startTimeParsed === null || !Number.isFinite(startTimeParsed);
   const stopTimeInvalid = stopTimeParsed === null || (!startTimeInvalid && stopTimeParsed < (startTimeParsed as number));
   const fixedStepInvalid = fixedStepParsed === null || (fixedStepParsed !== 'auto' && !(Number.isFinite(fixedStepParsed) && fixedStepParsed > 0));
-  const simulationKey = `${solverType}|${startTimeInput}|${stopTimeInput}|${stepSizeInput}`;
+  const simulationKey = `${solverType}|${startTimeInput}|${stopTimeInput}|${stepSizeInput}|${solverOptionTexts.relative}|${solverOptionTexts.absolute}|${solverOptionTexts.extrapolationOrder}|${solverOptionTexts.newtonIterations}`;
   const simLimitRef = React.useRef<number | null>(null);
   const liveStepRef = React.useRef<number | null>(null);
   // Canvas time base (plan 5.1): output step n starts at start + n * step (a product, not an accumulated sum).
@@ -2003,6 +2017,13 @@ export const XbridgesWorkspace: React.FC<{
         setIsSimulating(false);
         return;
       }
+      const optionErrors = solverOptionDiagnostics(solverType, solverOptionTexts);
+      if (optionErrors.length > 0) {
+        addDiagnostics(optionErrors);
+        setRunFailed(true);
+        setIsSimulating(false);
+        return;
+      }
       const invalidEdits = Object.entries(invalidParamEditsRef.current);
       if (invalidEdits.length > 0) {
         addDiagnostics(invalidEdits.map(([id, text]) => {
@@ -2032,6 +2053,7 @@ export const XbridgesWorkspace: React.FC<{
         startTime: resolvedConfig.startTime,
         stopTime: resolvedConfig.stopTime,
         fixedStep: liveStep,
+        ...solverOptionsForRun(solverType, solverOptionTexts),
       };
 
       if (!xbridgesWorkerRef.current) {
@@ -2974,7 +2996,13 @@ export const XbridgesWorkspace: React.FC<{
     if (text === null) delete invalidParamEditsRef.current[id];
     else invalidParamEditsRef.current[id] = text;
   }, []);
-  useEffect(() => { invalidParamEditsRef.current = {}; }, [selectedNodeId]);
+  // XBV-157: the record survives a change of selection; it is dropped only when the block is deleted (or a valid value is entered).
+  useEffect(() => {
+    const alive = new Set(nodes.map((n) => n.id));
+    for (const id of Object.keys(invalidParamEditsRef.current)) {
+      if (!alive.has(id.split('\u0000')[0])) delete invalidParamEditsRef.current[id];
+    }
+  }, [nodes]);
 
   const updateBlock = (blockId: string, data: any) => {
     // A parameter edit is one undo step; keystrokes into the same block within one second share it.
@@ -3645,6 +3673,63 @@ export const XbridgesWorkspace: React.FC<{
                   />
                 </div>
               </div>
+
+              {optionGroup === 'tolerances' && (
+                <>
+              <div className="flex flex-col">
+                <span className="text-[8px] text-slate-400 font-black uppercase tracking-widest mb-1">Rel Tol</span>
+                <input
+                  type="text"
+                  value={solverOptionTexts.relative}
+                  onChange={e => setSolverOptionText('relative', e.target.value)}
+                  disabled={activeSimulating}
+                  title={invalidOptionKeys.includes('relative') ? 'Relative tolerance must be a number greater than 0' : 'Relative tolerance of the variable-step solver (default 1e-3)'}
+                  aria-invalid={invalidOptionKeys.includes('relative')}
+                  className={`w-20 bg-[#0a0a0a] border rounded-xl px-3 py-1.5 text-[10px] font-mono font-bold text-[#e0e0e0] focus:outline-none transition-all hover:bg-[#222] disabled:opacity-50 ${invalidOptionKeys.includes('relative') ? 'border-red-500 focus:border-red-500' : 'border-[#333] focus:border-emerald-500'}`}
+                />
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[8px] text-slate-400 font-black uppercase tracking-widest mb-1">Abs Tol</span>
+                <input
+                  type="text"
+                  value={solverOptionTexts.absolute}
+                  onChange={e => setSolverOptionText('absolute', e.target.value)}
+                  disabled={activeSimulating}
+                  title={invalidOptionKeys.includes('absolute') ? 'Absolute tolerance must be a number greater than 0' : 'Absolute tolerance of the variable-step solver (default 1e-6)'}
+                  aria-invalid={invalidOptionKeys.includes('absolute')}
+                  className={`w-20 bg-[#0a0a0a] border rounded-xl px-3 py-1.5 text-[10px] font-mono font-bold text-[#e0e0e0] focus:outline-none transition-all hover:bg-[#222] disabled:opacity-50 ${invalidOptionKeys.includes('absolute') ? 'border-red-500 focus:border-red-500' : 'border-[#333] focus:border-emerald-500'}`}
+                />
+              </div>
+                </>
+              )}
+              {optionGroup === 'extrapolation' && (
+                <>
+              <div className="flex flex-col">
+                <span className="text-[8px] text-slate-400 font-black uppercase tracking-widest mb-1">Extrap. Order</span>
+                <input
+                  type="text"
+                  value={solverOptionTexts.extrapolationOrder}
+                  onChange={e => setSolverOptionText('extrapolationOrder', e.target.value)}
+                  disabled={activeSimulating}
+                  title={invalidOptionKeys.includes('extrapolationOrder') ? 'Extrapolation order must be an integer of 1 or more' : 'Extrapolation order of ode14x (integer, default 4)'}
+                  aria-invalid={invalidOptionKeys.includes('extrapolationOrder')}
+                  className={`w-20 bg-[#0a0a0a] border rounded-xl px-3 py-1.5 text-[10px] font-mono font-bold text-[#e0e0e0] focus:outline-none transition-all hover:bg-[#222] disabled:opacity-50 ${invalidOptionKeys.includes('extrapolationOrder') ? 'border-red-500 focus:border-red-500' : 'border-[#333] focus:border-emerald-500'}`}
+                />
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[8px] text-slate-400 font-black uppercase tracking-widest mb-1">Newton Iter.</span>
+                <input
+                  type="text"
+                  value={solverOptionTexts.newtonIterations}
+                  onChange={e => setSolverOptionText('newtonIterations', e.target.value)}
+                  disabled={activeSimulating}
+                  title={invalidOptionKeys.includes('newtonIterations') ? 'Newton iterations must be an integer of 1 or more' : 'Newton iterations of ode14x (integer, default 1)'}
+                  aria-invalid={invalidOptionKeys.includes('newtonIterations')}
+                  className={`w-20 bg-[#0a0a0a] border rounded-xl px-3 py-1.5 text-[10px] font-mono font-bold text-[#e0e0e0] focus:outline-none transition-all hover:bg-[#222] disabled:opacity-50 ${invalidOptionKeys.includes('newtonIterations') ? 'border-red-500 focus:border-red-500' : 'border-[#333] focus:border-emerald-500'}`}
+                />
+              </div>
+                </>
+              )}
 
               <div className="flex flex-col">
                 <span className="text-[8px] text-slate-400 font-black uppercase tracking-widest mb-1">Fixed Step</span>

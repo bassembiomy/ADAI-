@@ -28,7 +28,7 @@ const OUTPUT_TYPE_ALL = option(
 const ROUNDING = option('floor', 'ceil', 'ceiling', 'zero', 'nearest', 'round', 'convergent', 'simplest');
 const OVERFLOW = option('saturate', 'wrap', 'error');
 
-export const XB_PARAMETER_SCHEMA: Record<string, Record<string, ParameterKind>> = {
+const BASE_SCHEMA: Record<string, Record<string, ParameterKind>> = {
   // Sources
   Constant: { value: numeric, output_type: option('auto', 'float64', 'float32', 'int8', 'uint8', 'int16', 'uint16', 'int32', 'uint32', 'boolean') },
   WaveformGen: { type: option('Sine', 'Square'), amp: number, freq: number, offset: number, phase: number },
@@ -188,6 +188,94 @@ export const XB_PARAMETER_SCHEMA: Record<string, Record<string, ParameterKind>> 
     timeRange: option('auto', '1', '2', '5', '10', '30', '60'),
   },
 };
+
+const intAny: ParameterKind = { kind: 'integer' };
+const P = positive;
+const N = nonnegative;
+const R = number;
+
+/**
+ * XBV-011 / XBV-137: every numeric parameter of every palette block has a kind. Ranges follow the block equation:
+ *  - positive: divisors, time constants, masses, inertias, lengths, absolute temperatures and pressures, gas constants;
+ *  - nonnegative: rates, damping, friction, resistances and coefficients that are physically 0 or more, but whose value 0
+ *    is legitimate (no divisor);
+ *  - integer kinds: counts, sizes, tooth counts and seeds;
+ *  - number (unbounded): gains, offsets, initial conditions, limits and angles that may be negative or zero.
+ * These add to (and never replace) the entries of BASE_SCHEMA.
+ */
+const EXTRA_SCHEMA: Record<string, Record<string, ParameterKind>> = {
+  AC_INDUCTION_MOTOR: { B: N, Lm: P, P, Rs: N },
+  AC_MOTOR_PID_CONTROL: { B: N, Kd: R, Ki: R, Kp: R, Lm: P, N: R, P, Rs: N, tl: R, w_ref: R },
+  AIR_FRYER_LEARNING_MODEL: {
+    K_c: N, K_evap: N, K_f: N, K_h: N, K_loss: N, T_ambient: R, learning_rate: N, sampleTime,
+    tau_c: P, tau_f: P, tau_h: P, tau_s: P, theta: R,
+  },
+  FABRIC_HARMONIC_ANALYZER: { drum_mass: P },
+  BUS_CREATOR: { Inputs: int1 },
+  DOE_MODULE: { maxLayers: int1, neuronsPerLayer: int1 },
+  FIELD_WEAKENING: { Ki: R, Kp: R, id_max: R, id_min: R, v_max: R },
+  FUZZY_DEFUZZIFY: { range_max: R, range_min: R },
+  FUZZY_MF_GAUSSMF: { c: R, sigma: P },
+  FUZZY_MF_SIGMF: { a: R, c: R },
+  FUZZY_MF_TRAPMF: { a: R, b: R, c: R, d: R },
+  FUZZY_MF_TRIMF: { a: R, b: R, c: R },
+  FUZZY_PID_CONTROLLER: { Kd_base: R, Ki_base: R, Kp_base: R, N: R, max: R, min: R },
+  IM_FLUX_OBSERVER: { Lm: P, P },
+  IM_FOC_CONTROL: { Ki_curr: R, Ki_speed: R, Kp_curr: R, Kp_speed: R, Lm: P, Lr: P, P, Rr: P, psi_ref: R },
+  IM_SCALAR_CONTROL: { boost: R, rated_f: P, v_f_ratio: R },
+  INTERP_PRELOOKUP: { NumberOfTableDimensions: int1 },
+  LOOKUP_ND: { NumberOfTableDimensions: int1 },
+  LMS_ADAPTIVE_FILTER: { lr: N },
+  MPC_CONTROLLER: { u_max: R, u_min: R },
+  MTPA_CONTROLLER: { Ld: P, Lq: N },
+  MTPA_FW_MANAGER: { i_max: R, v_max: R },
+  NEURAL_NEURON_LEARNING: { initBias: R, initW1: R, initW2: R, lr: N },
+  PWM_GENERATOR: { frequency: P },
+  THREE_PHASE_PWM: { frequency: P },
+  RL_Q_LEARNING_CONTROLLER: { alpha: N, epsilon: N, gamma: N },
+  SENSORLESS_SIX_STEP: { threshold: N },
+  SINGLE_PHASE_H_BRIDGE: { Ron: N },
+  THREE_PHASE_INVERTER: { Ron: N, Vf: N },
+  SVPWM_CORE: { Ts: P },
+  SVPWM_GATE_GENERATOR: { Ts: P },
+  SVPWM_MODULATOR: { Ts: P },
+  VF_SLIP_COMP: { rated_slip: N, v_f_ratio: R },
+
+  // Robot vacuum
+  ROBOT_VACUUM_BATTERY: { charge_rate: N, nominal_voltage: P, static_draw_A: N },
+  ROBOT_VACUUM_COMM: { latency_ms: N, packet_loss_rate: N },
+  ROBOT_VACUUM_CONTINUOUS_ENERGY: { safety_margin: N },
+  ROBOT_VACUUM_DIGITAL_TWIN: {
+    Ki_wheel: R, Kp_wheel: R, encoder_cpr: P, lidar_max_range: P, lidar_noise_std: N, motor_K: P, motor_R: P, robot_mass: P,
+  },
+  ROBOT_VACUUM_DYNAMICS: { cg_offset: R, robot_inertia: P, wheel_friction: N, wheel_radius: P },
+  ROBOT_VACUUM_ENCODER: { encoder_cpr: P, noise_std: N },
+  ROBOT_VACUUM_ENVIRONMENT: { lidar_max_range: P, lidar_noise_std: N },
+  ROBOT_VACUUM_ERODE_MASK: { radius: N },
+  ROBOT_VACUUM_FUSION: { filter_gain: N },
+  ROBOT_VACUUM_KINEMATICS: { wheel_separation: P },
+  ROBOT_VACUUM_LIDAR: { lidar_max_range: P, lidar_noise_std: N },
+  ROBOT_VACUUM_LOCALIZATION: { filter_gain: N },
+  ROBOT_VACUUM_MAPPING: { lidar_max_range: P },
+  ROBOT_VACUUM_MOTOR: { encoder_cpr: P, encoder_noise_std: N, motor_K: P, motor_R: P },
+  ROBOT_VACUUM_MOTOR_COMMAND: { Ki_wheel: R, Kp_wheel: R, wheel_separation: P },
+  ROBOT_VACUUM_ODOMETRY: { wheel_radius: P },
+  ROBOT_VACUUM_SLAM: { lidar_max_range: P },
+  ROBOT_VACUUM_THETA_STAR: { inflation: N },
+  ROBOT_VACUUM_WHEEL_CONTROL: { Ki_wheel: R, Kp_wheel: R, V_bat: N },
+
+  // Powertrain (PT_*) blocks are not listed: their factories are registered unwrapped (ptContract), carry their own
+  // parameter specs (powertrain/ptSpec.ts: min, max, exclusive bounds) and report BLOCK_RUNTIME_FAULT for text that is not
+  // a number or a value outside the range. The properties panel derives its kinds from those specs (XBV-137).
+};
+
+/** BASE_SCHEMA and EXTRA_SCHEMA merged per block; a parameter present in both keeps the BASE_SCHEMA kind. */
+export const XB_PARAMETER_SCHEMA: Record<string, Record<string, ParameterKind>> = (() => {
+  const out: Record<string, Record<string, ParameterKind>> = {};
+  for (const [type, params] of Object.entries(EXTRA_SCHEMA)) out[type] = { ...params };
+  for (const [type, params] of Object.entries(BASE_SCHEMA)) out[type] = { ...(out[type] ?? {}), ...params };
+  return out;
+})();
 
 /** The schema kind of a block parameter, or undefined when the parameter is not in the schema. */
 export function parameterKind(blockType: string, param: string): ParameterKind | undefined {

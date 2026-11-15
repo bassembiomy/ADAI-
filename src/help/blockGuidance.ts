@@ -34,7 +34,7 @@ for (const [id, text, example] of [
   ['Determinant', 'Computes the determinant of a square matrix through VectorUtils.', 'Input [[2,0],[0,3]] produces 6.'],
   ['MatrixConcat', 'Concatenates inputs sequentially along the configured axis.', 'With axis 0, concatenate [[1,2]] and [[3,4]] into two rows.'],
   ['IdentityMatrix', 'Emits a square identity matrix; dim is floored and clamped to at least one.', 'Set dim to 2 to emit [[1,0],[0,1]].'],
-  ['SubMatrix', 'Selects a rectangular submatrix using configured row and column index ranges.', 'Use all index defaults (0) on [[1,2],[3,4]] to select the first element.'],
+  ['SubMatrix', 'Selects a rectangular submatrix using configured one-based row and column index ranges (first row and first column are index 1; the end index is included).', 'With rowStart=1, rowEnd=1, colStart=1 and colEnd=1 (the defaults) on [[1,2],[3,4]] the output is the first element, 1.'],
   ['MatrixSolve', 'Solves the linear system A*x=B using VectorUtils.', 'A=[[2,0],[0,4]] and B=[2,8] give x=[1,2].'],
   ['Integrator', 'Integrates a signal from its initial condition.', 'A constant input of 2 with initialCondition 1 gives y=1+2t.', 'The output is the current state. Its derivative is exactly the input; the selected continuous solver advances that state.'],
   ['INTEGRATOR_CONTINUOUS', 'Integrates a scalar signal using continuous solver state.', 'Input 1 and initial_condition 0 yield y=t.', 'The output reads state.y; the derivative is Number(input). The continuous solver advances state.'],
@@ -47,6 +47,8 @@ for (const [id, text, example] of [
   ['TERMINATOR', 'Consumes an input without producing a signal or updating a state.', 'Connect an unused signal to u; there are no output ports.'],
   ['DFlipFlop', 'Stores a boolean data input on a rising clock edge.', 'Drive D=1, CLK from 0 to 1 and RST=0 to obtain Q=1 and Q!=0.', 'Reset has priority and clears Q. Otherwise a rising clock edge samples D; without an edge Q is held. Q! is the complement.'],
 ] as const) add(id, text, example);
+// The bare id is kept as an alias of the namespaced entry (XBV-156 acceptance reads BLOCK_GUIDANCE.SubMatrix).
+BLOCK_GUIDANCE.SubMatrix = BLOCK_GUIDANCE['xbridges:SubMatrix'];
 BLOCK_GUIDANCE['xbridges:Integrator'].behavior = 'The output is the current state. Its derivative is exactly the input; the selected continuous solver advances that state.';
 BLOCK_GUIDANCE['xbridges:INTEGRATOR_CONTINUOUS'].behavior = 'The output reads state.y; the derivative is Number(input). The continuous solver advances state.';
 BLOCK_GUIDANCE['xbridges:DFlipFlop'].behavior = 'Reset has priority and clears Q. Otherwise a rising clock edge samples D; without an edge Q is held. Q! is the complement.';

@@ -11,6 +11,107 @@ export interface XSimulationConfig {
   stopTime: number;
   /** A number, or 'auto' (fundamental sample time, else (stop - start) / 50). */
   fixedStep: number | 'auto';
+  /** Variable-step (ode23, ode45, ode23tb) relative and absolute tolerance; Simulink defaults 1e-3 and 1e-6 (auto). */
+  relTol?: number;
+  absTol?: number;
+  /** ode14x extrapolation order (Simulink default 4) and Newton iterations (default 1). */
+  extrapolationOrder?: number;
+  newtonIterations?: number;
+}
+
+/** Simulink Solver-pane defaults of the solver options (the live stepper applies the same values when unset). */
+export const DEFAULT_SOLVER_OPTIONS = { relTol: 1e-3, absTol: 1e-6, extrapolationOrder: 4, newtonIterations: 1 } as const;
+
+/** Parses a tolerance field: a finite number greater than 0, else null. */
+export function parseToleranceInput(text: string): number | null {
+  const v = parseTimeInput(text);
+  return v !== null && Number.isFinite(v) && v > 0 ? v : null;
+}
+
+/** Parses an integer option field (extrapolation order, Newton iterations): an integer >= 1, else null. */
+export function parseIterationInput(text: string): number | null {
+  const s = (text ?? '').trim();
+  if (!/^\+?\d+$/.test(s)) return null;
+  const v = Number(s);
+  return Number.isSafeInteger(v) && v >= 1 ? v : null;
+}
+
+/** The toolbar texts of the solver options (the canvas keeps them as text so that invalid input stays visible). */
+export interface SolverOptionTexts { relative: string; absolute: string; extrapolationOrder: string; newtonIterations: string }
+export type SolverOptionTextKey = keyof SolverOptionTexts;
+
+export function solverOptionTextsFrom(config: XSimulationConfig | null): SolverOptionTexts {
+  return {
+    relative: String(config?.relTol ?? DEFAULT_SOLVER_OPTIONS.relTol),
+    absolute: String(config?.absTol ?? DEFAULT_SOLVER_OPTIONS.absTol),
+    extrapolationOrder: String(config?.extrapolationOrder ?? DEFAULT_SOLVER_OPTIONS.extrapolationOrder),
+    newtonIterations: String(config?.newtonIterations ?? DEFAULT_SOLVER_OPTIONS.newtonIterations),
+  };
+}
+
+/** Which option group a solver uses: RelTol/AbsTol (ode23, ode45, ode23tb), ode14x options, or none (fixed step). */
+export function solverOptionGroup(solver: string): 'tolerances' | 'extrapolation' | null {
+  if (solver === 'ode45' || solver === 'ode23' || solver === 'ode23tb') return 'tolerances';
+  if (solver === 'ode14x') return 'extrapolation';
+  return null;
+}
+
+/** The option fields whose text is invalid (as toolbar keys), for the solver in use. */
+export function invalidSolverOptionTexts(solver: string, texts: SolverOptionTexts): SolverOptionTextKey[] {
+  const group = solverOptionGroup(solver);
+  const bad: SolverOptionTextKey[] = [];
+  if (group === 'tolerances') {
+    if (parseToleranceInput(texts.relative) === null) bad.push('relative');
+    if (parseToleranceInput(texts.absolute) === null) bad.push('absolute');
+  } else if (group === 'extrapolation') {
+    if (parseIterationInput(texts.extrapolationOrder) === null) bad.push('extrapolationOrder');
+    if (parseIterationInput(texts.newtonIterations) === null) bad.push('newtonIterations');
+  }
+  return bad;
+}
+
+const OPTION_MESSAGES: Record<SolverOptionTextKey, string> = {
+  relative: 'Relative tolerance must be a finite number greater than 0',
+  absolute: 'Absolute tolerance must be a finite number greater than 0',
+  extrapolationOrder: 'Extrapolation order must be an integer >= 1',
+  newtonIterations: 'Newton iterations must be an integer >= 1',
+};
+
+/** Error diagnostics for invalid option text of the solver in use (a run is refused, nothing is clamped). */
+export function solverOptionDiagnostics(solver: string, texts: SolverOptionTexts): ModelDiagnostic[] {
+  return invalidSolverOptionTexts(solver, texts).map((key) => ({
+    severity: 'error' as const,
+    code: 'STIFF_SOLVER_INVALID_OPTION',
+    message: `${OPTION_MESSAGES[key]}; got "${texts[key]}".`,
+  }));
+}
+
+/** Valid option texts as numbers, under the engine option names, for the solver in use (engine.options). */
+export function solverOptionsForRun(solver: string, texts: SolverOptionTexts) {
+  const group = solverOptionGroup(solver);
+  if (group === 'tolerances') {
+    const relTol = parseToleranceInput(texts.relative);
+    const absTol = parseToleranceInput(texts.absolute);
+    return { ...(relTol !== null ? { relTol } : {}), ...(absTol !== null ? { absTol } : {}) };
+  }
+  if (group === 'extrapolation') {
+    const extrapolationOrder = parseIterationInput(texts.extrapolationOrder);
+    const newtonIterations = parseIterationInput(texts.newtonIterations);
+    return { ...(extrapolationOrder !== null ? { extrapolationOrder } : {}), ...(newtonIterations !== null ? { newtonIterations } : {}) };
+  }
+  return {};
+}
+
+/** Valid option texts as saved config fields (all four, whichever solver is selected). */
+export function solverOptionsForSave(texts: SolverOptionTexts) {
+  const relTol = parseToleranceInput(texts.relative);
+  const absTol = parseToleranceInput(texts.absolute);
+  const extrapolationOrder = parseIterationInput(texts.extrapolationOrder);
+  const newtonIterations = parseIterationInput(texts.newtonIterations);
+  return {
+    ...(relTol !== null ? { relTol } : {}), ...(absTol !== null ? { absTol } : {}),
+    ...(extrapolationOrder !== null ? { extrapolationOrder } : {}), ...(newtonIterations !== null ? { newtonIterations } : {}),
+  };
 }
 
 export const DEFAULT_SIMULATION_CONFIG: XSimulationConfig = {
@@ -108,6 +209,10 @@ export interface XSimulationSettings {
   fixedStep: number | 'auto';
   /** Fixed step actually used ('auto' resolved against the model's sample times). */
   resolvedStep?: number;
+  relTol?: number;
+  absTol?: number;
+  extrapolationOrder?: number;
+  newtonIterations?: number;
 }
 
 export function toSimulationSettings(config: XSimulationConfig, resolvedStep?: number): XSimulationSettings {
@@ -117,6 +222,10 @@ export function toSimulationSettings(config: XSimulationConfig, resolvedStep?: n
     stopTime: config.stopTime === Number.POSITIVE_INFINITY ? 'inf' : config.stopTime,
     fixedStep: config.fixedStep,
     ...(resolvedStep !== undefined && Number.isFinite(resolvedStep) ? { resolvedStep } : {}),
+    ...(config.relTol !== undefined ? { relTol: config.relTol } : {}),
+    ...(config.absTol !== undefined ? { absTol: config.absTol } : {}),
+    ...(config.extrapolationOrder !== undefined ? { extrapolationOrder: config.extrapolationOrder } : {}),
+    ...(config.newtonIterations !== undefined ? { newtonIterations: config.newtonIterations } : {}),
   };
 }
 
@@ -130,7 +239,19 @@ export function fromSimulationSettings(raw: unknown): XSimulationConfig | null {
     : typeof r.stopTime === 'number' && !Number.isNaN(r.stopTime) ? r.stopTime : d.stopTime;
   const step = r.fixedStep === 'auto' ? 'auto' as const
     : typeof r.fixedStep === 'number' && Number.isFinite(r.fixedStep) && r.fixedStep > 0 ? r.fixedStep : d.fixedStep;
-  return { solver: typeof r.solver === 'string' && r.solver ? r.solver : d.solver, startTime: start, stopTime: stop, fixedStep: step };
+  const posNum = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : undefined);
+  const posInt = (v: unknown) => (typeof v === 'number' && Number.isSafeInteger(v) && v >= 1 ? v : undefined);
+  const relTol = posNum(r.relTol);
+  const absTol = posNum(r.absTol);
+  const extrapolationOrder = posInt(r.extrapolationOrder);
+  const newtonIterations = posInt(r.newtonIterations);
+  return {
+    solver: typeof r.solver === 'string' && r.solver ? r.solver : d.solver, startTime: start, stopTime: stop, fixedStep: step,
+    ...(relTol !== undefined ? { relTol } : {}),
+    ...(absTol !== undefined ? { absTol } : {}),
+    ...(extrapolationOrder !== undefined ? { extrapolationOrder } : {}),
+    ...(newtonIterations !== undefined ? { newtonIterations } : {}),
+  };
 }
 
 /** Embedded (state machine code generation) solver kind for a workspace solver; other solvers are returned unchanged. */
