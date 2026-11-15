@@ -6,7 +6,7 @@
 import { test, expect } from '@playwright/test';
 import {
   useLocalChromium, trackErrors, openXbridges, buildIntegratorModel, setToolbar, runToEnd, scopeSamples,
-  problemsSummary, statusText, statusTime,
+  problemsSummary, statusText, statusTime, saveProject, SAVE_DEBOUNCE_SETTLE_MS,
 } from './xbHelpers';
 
 useLocalChromium();
@@ -72,5 +72,28 @@ test.describe('X-Bridges solver selector', () => {
     expect(await problemsSummary(page)).toBe('1 error');
     await page.getByRole('button', { name: /Problems:/ }).click();
     await expect(page.getByRole('list', { name: 'Problems' })).toContainText(/continuous/i);
+  });
+
+  // XBV-037 (WP-21 round 4): the variable-step tolerances and the ode14x options are editable on the toolbar and saved
+  // with the model (Simulink Solver pane: RelTol, AbsTol; ode14x extrapolation order, Newton iterations).
+  test('XBV-037 RelTol / AbsTol (ode45) and extrapolation order / Newton iterations (ode14x) are editable and saved', async ({ page }) => {
+    await openXbridges(page);
+    await buildIntegratorModel(page, '2');
+    await setToolbar(page, { solver: 'ode45', start: 0, stop: 1, step: 0.01 });
+    await page.locator('input[title^="Relative tolerance"]').first().fill('1e-6');
+    await page.locator('input[title^="Absolute tolerance"]').first().fill('1e-9');
+    await page.locator('input[title^="Absolute tolerance"]').first().blur();
+    await page.waitForTimeout(SAVE_DEBOUNCE_SETTLE_MS);
+    const a = (await saveProject(page)).globalXBridgesSimulation;
+    expect(a.relTol).toBe(1e-6);
+    expect(a.absTol).toBe(1e-9);
+    await setToolbar(page, { solver: 'ode14x' });
+    await page.locator('input[title^="Extrapolation order"]').first().fill('3');
+    await page.locator('input[title^="Newton iterations"]').first().fill('2');
+    await page.locator('input[title^="Newton iterations"]').first().blur();
+    await page.waitForTimeout(SAVE_DEBOUNCE_SETTLE_MS);
+    const b = (await saveProject(page)).globalXBridgesSimulation;
+    expect(b.extrapolationOrder).toBe(3);
+    expect(b.newtonIterations).toBe(2);
   });
 });

@@ -70,3 +70,27 @@ describe('XBV-165: a fault at a rejected trial point does not stop a variable-st
     expect(r.t.at(-1)).toBeCloseTo(5, 9);
   }, 240_000);
 });
+
+// ---------------------------------------------------------------- batch J (schema and properties panel)
+import { XbridgesEngine } from '../XbridgesEngine';
+import { BLOCK_GUIDANCE } from '../../../help/blockGuidance';
+
+describe('XBV-153: divisor parameters set to 0 are refused at compile', () => {
+  for (const [type, param] of [['IM_FOC_CONTROL', 'Lm'], ['AIR_FRYER_LEARNING_MODEL', 'tau_h'], ['AIR_FRYER_LEARNING_MODEL', 'tau_f'], ['AIR_FRYER_LEARNING_MODEL', 'tau_c'], ['AIR_FRYER_LEARNING_MODEL', 'tau_s'], ['FABRIC_HARMONIC_ANALYZER', 'drum_mass']] as const) {
+    it(`${type}.${param} = 0 gives a PARAMETER_* error naming the block`, () => {
+      const e = new XbridgesEngine(buildModel({ blocks: [{ id: 'u', type, params: { [param]: 0 } }], wires: [] }));
+      const errs = e.compile(0).filter((d) => d.severity === 'error' && d.code.startsWith('PARAMETER_'));
+      expect(errs.length).toBeGreaterThan(0);
+      expect(errs.some((d) => (d.blockIds ?? []).includes('u'))).toBe(true);
+    });
+  }
+});
+
+describe('XBV-156: help text follows the one-based SubMatrix', () => {
+  it('blockGuidance for SubMatrix does not describe zero-based defaults', () => {
+    const g = BLOCK_GUIDANCE.SubMatrix;
+    expect(g).toBeDefined();
+    expect(JSON.stringify(g)).not.toMatch(/defaults? \(0\)|zero-based|index defaults \(0\)/i);
+  });
+});
+

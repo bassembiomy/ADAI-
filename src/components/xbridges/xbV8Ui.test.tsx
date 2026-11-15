@@ -220,98 +220,8 @@ const lastParam = (calls: any[], name: string) => {
 const PINNED_911: string[] = []; // XBV-135 fixed in WP-21 batch C
 const PINNED_912: string[] = []; // XBV-136 fixed in WP-21 batch C
 /** XBV-137 pinned as 'Type: param param ...' (type names contain no spaces, parameter names no spaces). */
-const PINNED_913_GROUPED = [
-  "AC_INDUCTION_MOTOR: B Lm P Rs",
-  "AC_MOTOR_PID_CONTROL: B Kd Ki Kp Lm N P Rs tl w_ref",
-  "AIR_FRYER_LEARNING_MODEL: K_c K_evap K_f K_h K_loss T_ambient learning_rate sampleTime tau_c tau_f tau_h tau_s theta",
-  "BUS_CREATOR: Inputs",
-  "DOE_MODULE: maxLayers neuronsPerLayer",
-  "FIELD_WEAKENING: Ki Kp id_max id_min v_max",
-  "FUZZY_DEFUZZIFY: range_max range_min",
-  "FUZZY_MF_GAUSSMF: c sigma",
-  "FUZZY_MF_SIGMF: a c",
-  "FUZZY_MF_TRAPMF: a b c d",
-  "FUZZY_MF_TRIMF: a b c",
-  "FUZZY_PID_CONTROLLER: Kd_base Ki_base Kp_base N max min",
-  "IM_FLUX_OBSERVER: Lm P",
-  "IM_FOC_CONTROL: Ki_curr Ki_speed Kp_curr Kp_speed Lm Lr P Rr psi_ref",
-  "IM_SCALAR_CONTROL: boost rated_f v_f_ratio",
-  "INTERP_PRELOOKUP: NumberOfTableDimensions",
-  "LMS_ADAPTIVE_FILTER: lr",
-  "LOOKUP_ND: NumberOfTableDimensions",
-  "MPC_CONTROLLER: u_max u_min",
-  "MTPA_CONTROLLER: Ld Lq",
-  "MTPA_FW_MANAGER: i_max v_max",
-  "NEURAL_NEURON_LEARNING: initBias initW1 initW2 lr",
-  "PT_AMBIENT: P_amb RH T_amb",
-  "PT_AMT_CONTROLLER: Gear_o tHold",
-  "PT_AUTOMATED_MANUAL_TRANSMISSION: Gear_o J_in Tc_max b_in omega_tol t_dis t_eng t_syn w_in_o",
-  "PT_CALIBRATION_ECU: default_EgrPos default_PW default_P_rail default_SA default_SOI default_VgtPos",
-  "PT_CI_CORE_ENGINE: AFRst LHV Ncyl R Vd cp_air cp_exh",
-  "PT_CI_CYLINDER: B CR EVO IVC L LHV Ncyl R S T_knee Twall afrStoich aw cfA cfB cfC cfD cpB dTheta etaComb etaTrap gamma k_NOx mw s_diss",
-  "PT_COMPRESSOR: P_ref R T_ref cp",
-  "PT_CONTINUOUSLY_VARIABLE_TRANSMISSION: N_o Nmax Nmin eta tau",
-  "PT_CONTROL_VOLUME: NumPorts P_o R T_o V cp",
-  "PT_CVT_CONTROLLER: Nmax Nmin wMin",
-  "PT_DATASHEET_BATTERY: BattCapInit BattChargeMax Np Ns",
-  "PT_DCT_CONTROLLER: Gear_o tHold",
-  "PT_DISC_CLUTCH: Ap J_in J_out Nf Ri Ro b_in b_out muk mus omega_tol w_in_o w_out_o",
-  "PT_DOE_SWEEPER: Lambda_min NOx_max Pmax_limit Texh_limit averageWindow centerPoints dwell levels samples seed",
-  "PT_DRIVE_CYCLE_SOURCE: Ts",
-  "PT_DRIVE_SHAFT: J b w_o",
-  "PT_DUAL_CLUTCH_TRANSMISSION: Gear_o J_in Tc_max b_in omega_tol t_x w_in_o",
-  "PT_ENGINE_DYNO: J_dyno J_eng Ki Kp N_o",
-  "PT_EQUIVALENT_CIRCUIT_BATTERY: BattCapInit BattChargeMax Np Ns",
-  "PT_FLOW_BOUNDARY: Prs Temp",
-  "PT_FLOW_RESTRICTION: Area Cd R cp",
-  "PT_FUEL_INJECTOR: Cd N_cyl d_noz n_holes rho_f",
-  "PT_HEAT_EXCHANGER: Area Cd R cp eps",
-  "PT_INTAKE_MANIFOLD: P_o R V_m Vd_tot eta_v",
-  "PT_LIMITED_SLIP_DIFFERENTIAL: Fc Jd Jw1 Jw2 Ndiff Np Ri Ro bd bw1 bw2 eta muc w1_o w2_o",
-  "PT_LONGITUDINAL_DRIVER: Kaw Kff Kg Ki Kp vnom",
-  "PT_LONGITUDINAL_WHEEL: B C Crr D E Iyy OMEGA_TH Re Rm VXLOW disc_abore mu_kinetic num_pads omega_o",
-  "PT_MAPPED_MOTOR: Tc",
-  "PT_OPEN_DIFFERENTIAL: Ndiff bw eta",
-  "PT_PLANETARY_GEAR: Jc Jr Js Nr Ns wc_o ws_o",
-  "PT_ROTATIONAL_INERTIA: J b omega_o",
-  "PT_SI_CYLINDER: AFR_stoich B CR EVO IVC L LHV Ncyl ON R S T_knee Twall aw cfA cfB cfC cfD cpB dTheta dTheta_comb dTheta_id etaComb etaTrap gamma k_NOx mw s_diss",
-  "PT_THROTTLE_BODY: A_leak Cd D_th R alpha0 gamma",
-  "PT_TORSIONAL_COMPLIANCE: b k theta_o",
-  "PT_TRANSFER_CASE: Ntc TrqSplitRatio eta",
-  "PT_TURBINE: Cd_wg P_ref R T_ref cp",
-  "PT_TURBOCHARGER: A_t_max A_t_min A_wg_max Cd_t J_tc N_tc0 R cp_c cp_t eta_c eta_m eta_t gamma_c gamma_t r_c sigma",
-  "PT_VEHICLE_BODY_1DOF: Af Cd Cl Cpm M NF NR Pabs a b g h xdot_o",
-  "PT_VVT_VALVETRAIN: B CR D_exh D_int EVC_base EVO_base IVC_base IVO_base L L_max S eta_v0 gamma k_ov",
-  "PWM_GENERATOR: frequency",
-  "RL_Q_LEARNING_CONTROLLER: alpha epsilon gamma",
-  "ROBOT_VACUUM_BATTERY: charge_rate nominal_voltage static_draw_A",
-  "ROBOT_VACUUM_COMM: latency_ms packet_loss_rate",
-  "ROBOT_VACUUM_CONTINUOUS_ENERGY: safety_margin",
-  "ROBOT_VACUUM_DIGITAL_TWIN: Ki_wheel Kp_wheel encoder_cpr lidar_max_range lidar_noise_std motor_K motor_R robot_mass",
-  "ROBOT_VACUUM_DYNAMICS: cg_offset robot_inertia wheel_friction wheel_radius",
-  "ROBOT_VACUUM_ENCODER: encoder_cpr noise_std",
-  "ROBOT_VACUUM_ENVIRONMENT: lidar_max_range lidar_noise_std",
-  "ROBOT_VACUUM_ERODE_MASK: radius",
-  "ROBOT_VACUUM_FUSION: filter_gain",
-  "ROBOT_VACUUM_KINEMATICS: wheel_separation",
-  "ROBOT_VACUUM_LIDAR: lidar_max_range lidar_noise_std",
-  "ROBOT_VACUUM_LOCALIZATION: filter_gain",
-  "ROBOT_VACUUM_MAPPING: lidar_max_range",
-  "ROBOT_VACUUM_MOTOR: encoder_cpr encoder_noise_std motor_K motor_R",
-  "ROBOT_VACUUM_MOTOR_COMMAND: Ki_wheel Kp_wheel wheel_separation",
-  "ROBOT_VACUUM_ODOMETRY: wheel_radius",
-  "ROBOT_VACUUM_SLAM: lidar_max_range",
-  "ROBOT_VACUUM_THETA_STAR: inflation",
-  "ROBOT_VACUUM_WHEEL_CONTROL: Ki_wheel Kp_wheel V_bat",
-  "SENSORLESS_SIX_STEP: threshold",
-  "SINGLE_PHASE_H_BRIDGE: Ron",
-  "SVPWM_CORE: Ts",
-  "SVPWM_GATE_GENERATOR: Ts",
-  "SVPWM_MODULATOR: Ts",
-  "THREE_PHASE_INVERTER: Ron Vf",
-  "THREE_PHASE_PWM: frequency",
-  "VF_SLIP_COMP: rated_slip v_f_ratio",
-];
+// XBV-137 / XBV-011 (WP-21 round 4, batch J): every numeric parameter is validated, so the list is empty.
+const PINNED_913_GROUPED: string[] = [];
 const PINNED_913 = PINNED_913_GROUPED.flatMap((g) => { const [t, ps] = g.split(': '); return ps.split(' ').map((p) => `${t}.${p}`); });
 
 describe('properties panel over every palette block', () => {
@@ -375,6 +285,15 @@ describe('properties panel over every palette block', () => {
     report('XBV-136', bad);
     ratchet(bad, PINNED_912);
   }, 240_000);
+
+  // XBV-156 (WP-21 round 4): an option parameter offers every value of its schema, e.g. SWITCH criteria '~=0' (u2 ~= 0).
+  it('XBV-156: SWITCH criteria editor offers >, <, >=, <= and ~=0', () => {
+    const r = openPanel('SWITCH');
+    const ed = editorFor(r.container, 'SWITCH', 'criteria');
+    expect(ed?.tagName).toBe('SELECT');
+    const values = [...(ed as HTMLSelectElement).options].map((o) => o.value);
+    for (const v of ['>', '<', '>=', '<=', '~=0']) expect(values, v).toContain(v);
+  });
 
   it('XBV-137: invalid text ("abc") in a numeric parameter shows an error', () => {
     const bad: string[] = [];

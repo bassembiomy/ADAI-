@@ -89,4 +89,16 @@ test.describe('X-Bridges parameter edit during a run', () => {
     await expect(page.getByRole('status', { name: 'X-Bridges status bar' })).toContainText('Failed');
     await expect(page.getByRole('status', { name: 'X-Bridges status bar' })).toContainText('1 error');
   });
+
+  // XBV-157 (WP-21 round 4): the invalid text stays recorded when another block is selected, so Run is still refused.
+  test('XBV-157 invalid text "abc" left in a field still refuses the run after another block is selected', async ({ page }) => {
+    await openXbridges(page);
+    const m = await buildIntegratorModel(page, '2');
+    await setConstantValue(page, m.constant, 'abc');
+    await expect(page.locator('[role="alert"]').first()).toContainText('abc');
+    await selectNode(page, m.integrator);
+    await setToolbar(page, { solver: 'rk4', start: 0, stop: 1, step: H });
+    await runButton(page).click();
+    await expect(page.getByRole('status', { name: 'X-Bridges status bar' })).toContainText('Failed');
+  });
 });
