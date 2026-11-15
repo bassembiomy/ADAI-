@@ -88,7 +88,7 @@ describe('XBV-153: divisor parameters set to 0 are refused at compile', () => {
 
 describe('XBV-156: help text follows the one-based SubMatrix', () => {
   it('blockGuidance for SubMatrix does not describe zero-based defaults', () => {
-    const g = BLOCK_GUIDANCE.SubMatrix;
+    const g = BLOCK_GUIDANCE['xbridges:SubMatrix']; // registry keys are namespaced by module
     expect(g).toBeDefined();
     expect(JSON.stringify(g)).not.toMatch(/defaults? \(0\)|zero-based|index defaults \(0\)/i);
   });

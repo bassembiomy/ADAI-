@@ -60,7 +60,10 @@ const LIVE_STEPPERS: Record<CanonicalSolver, Stepper> = {
   ode5: (e, t, dt) => { Solvers.stepODE5(e, t, dt); return true; },
   ode23: (e, t, dt, relTol, absTol) => AdaptiveSolver.stepODE23(e, t, dt, { relTol, absTol }),
   ode45: (e, t, dt, relTol, absTol) => AdaptiveSolver.stepODE45(e, t, dt, { relTol, absTol }),
-  ode14x: (e, t, dt) => StiffSolver.stepODE14x(e, t, dt),
+  ode14x: (e, t, dt) => StiffSolver.stepODE14x(e, t, dt, {
+    extrapolationOrder: e.options?.extrapolationOrder,
+    newtonIterations: e.options?.newtonIterations,
+  }),
   ode23tb: (e, t, dt, relTol, absTol) => StiffSolver.stepLiveODE23TB(e, t, dt, relTol, absTol),
   discrete: (e, t, dt) => { Solvers.stepDiscrete(e, t, dt); return true; },
 };

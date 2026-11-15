@@ -7,6 +7,19 @@ import { VectorUtils } from '../../engine/xbridges/VectorUtils';
 import { evaluateParameter } from '../../engine/xbridges/parameterEvaluation';
 import { parameterKind } from '../../engine/xbridges/parameterSchema';
 import { getPowertrainSpec } from '../../engine/xbridges/powertrain';
+import type { ParameterKind } from '../../engine/xbridges/parameterEvaluation';
+
+/**
+ * Kind of a powertrain (PT_*) scalar parameter from its spec (ptSpec.ts): 0 excluded -> positive, 0 included -> nonnegative,
+ * other or no bounds -> any finite number. The block itself checks the exact range and reports BLOCK_RUNTIME_FAULT.
+ */
+function powertrainParameterKind(type: string, key: string): ParameterKind | undefined {
+  const ps = getPowertrainSpec(type)?.params.find(p => p.name === key);
+  if (!ps || ps.kind !== 'scalar') return undefined;
+  if (ps.min === 0 && ps.minExclusive) return { kind: 'positive' };
+  if (ps.min === 0) return { kind: 'nonnegative' };
+  return { kind: 'number' };
+}
 import { DoeSweeperPanel } from './powertrain/DoeSweeperPanel';
 
 interface Props {
@@ -856,7 +869,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
               }
 
               // Simulink-style check of the entered text: the value is still stored, the model refuses to run until it is fixed.
-              const paramKind = parameterKind(block.type, key);
+              const paramKind = parameterKind(block.type, key) ?? powertrainParameterKind(block.type, key);
               const shownText = localInputValues[key] !== undefined ? localInputValues[key] : String(displayValue);
               const paramCheck = paramKind ? evaluateParameter(shownText, paramKind) : null;
               const paramError = paramCheck && !paramCheck.ok ? paramCheck.reason : null;
@@ -1086,14 +1099,16 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
                           <option value="tustin">Tustin / Trapezoidal</option>
                         </>
                       )}
-                      {key === 'criteria' && (
-                        <>
-                          <option value=">">&gt; (Greater Than)</option>
-                          <option value="<">&lt; (Less Than)</option>
-                          <option value=">=">&gt;= (Greater or Equal)</option>
-                          <option value="<=">&lt;= (Less or Equal)</option>
-                        </>
-                      )}
+                      {key === 'criteria' && (() => {
+                        // The options are the schema's, so a criterion the engine accepts is always offered (XBV-156).
+                        const kind = parameterKind(block.type, 'criteria');
+                        const labels: Record<string, string> = {
+                          '>': '> (Greater Than)', '<': '< (Less Than)', '>=': '>= (Greater or Equal)', '<=': '<= (Less or Equal)',
+                          '~=0': '~= 0 (u2 is not zero)',
+                        };
+                        const opts = kind?.kind === 'option' ? kind.options : ['>', '<', '>=', '<=', '~=0'];
+                        return <>{opts.map((o) => <option key={o} value={o}>{labels[o] ?? o}</option>)}</>;
+                      })()}
                       {key === 'operation' && (
                         <>
                           <option value="multiply">Multiply</option>
