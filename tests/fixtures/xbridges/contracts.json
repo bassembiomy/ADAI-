@@ -1528,6 +1528,14 @@
     "kind": "number",
     "value": 0
    },
+   "sampleTime": {
+    "kind": "number",
+    "value": -1
+   },
+   "seed": {
+    "kind": "number",
+    "value": 23341
+   },
    "variance": {
     "kind": "number",
     "value": 1
@@ -1536,14 +1544,20 @@
   "state": {
    "kind": "object",
    "keys": [
+    "hasSpare",
     "lastTime",
+    "rng",
+    "spare",
     "y"
    ]
   },
   "initialState": {
    "kind": "object",
    "value": {
-    "lastTime": 0,
+    "hasSpare": false,
+    "lastTime": null,
+    "rng": null,
+    "spare": 0,
     "y": 0
    }
   },
@@ -2311,7 +2325,7 @@
     "sampleRate": null,
     "initialValue": {
      "kind": "number",
-     "value": 0
+     "value": 0.35
     }
    },
    {
@@ -2425,6 +2439,10 @@
    "num_fluid_particles": {
     "kind": "number",
     "value": 20
+   },
+   "seed": {
+    "kind": "number",
+    "value": 23341
    },
    "sph_smoothing_length": {
     "kind": "number",
@@ -3665,7 +3683,7 @@
     "sampleRate": null,
     "initialValue": {
      "kind": "number",
-     "value": 0
+     "value": 0.05
     }
    }
   ],
@@ -4054,7 +4072,7 @@
     "sampleRate": null,
     "initialValue": {
      "kind": "number",
-     "value": 0
+     "value": 0.35
     }
    },
    {
@@ -4187,7 +4205,7 @@
     "sampleRate": null,
     "initialValue": {
      "kind": "number",
-     "value": 0
+     "value": 0.05
     }
    }
   ],
@@ -4364,6 +4382,10 @@
    "particle_radius": {
     "kind": "number",
     "value": 0.05
+   },
+   "seed": {
+    "kind": "number",
+    "value": 23341
    }
   },
   "state": {
@@ -22356,6 +22378,10 @@
    "protocol": {
     "kind": "string",
     "value": "CAN"
+   },
+   "seed": {
+    "kind": "number",
+    "value": 23341
    }
   },
   "state": {
@@ -23142,6 +23168,10 @@
     "kind": "number",
     "value": 2.5
    },
+   "seed": {
+    "kind": "number",
+    "value": 23341
+   },
    "wheel_radius": {
     "kind": "number",
     "value": 0.033
@@ -23726,7 +23756,12 @@
     }
    }
   ],
-  "parameters": {},
+  "parameters": {
+   "seed": {
+    "kind": "number",
+    "value": 23341
+   }
+  },
   "state": {
    "kind": "object",
    "keys": [
@@ -23907,7 +23942,7 @@
    "value": {
     "theta": 0,
     "x": 0,
-    "y": 0
+    "y": 1.05
    }
   },
   "flags": {
@@ -23999,6 +24034,10 @@
    "noise_std": {
     "kind": "number",
     "value": 0.1
+   },
+   "seed": {
+    "kind": "number",
+    "value": 23341
    }
   },
   "state": {
@@ -24333,6 +24372,10 @@
    "lidar_noise_std": {
     "kind": "number",
     "value": 0.02
+   },
+   "seed": {
+    "kind": "number",
+    "value": 23341
    }
   },
   "state": {
@@ -24849,6 +24892,14 @@
    "algorithm": {
     "kind": "string",
     "value": "A*"
+   },
+   "inflation": {
+    "kind": "number",
+    "value": 0.3
+   },
+   "robot_radius": {
+    "kind": "number",
+    "value": 0.15
    }
   },
   "state": null,
@@ -25242,6 +25293,10 @@
    }
   ],
   "parameters": {
+   "dropout_rate": {
+    "kind": "number",
+    "value": 0.02
+   },
    "lidar_max_range": {
     "kind": "number",
     "value": 4
@@ -25249,6 +25304,10 @@
    "lidar_noise_std": {
     "kind": "number",
     "value": 0.02
+   },
+   "seed": {
+    "kind": "number",
+    "value": 23341
    }
   },
   "state": null,
@@ -25407,6 +25466,10 @@
    "lidar_noise_std": {
     "kind": "number",
     "value": 0.015
+   },
+   "seed": {
+    "kind": "number",
+    "value": 23341
    }
   },
   "state": null,
@@ -26195,6 +26258,10 @@
    "motor_R": {
     "kind": "number",
     "value": 2.5
+   },
+   "seed": {
+    "kind": "number",
+    "value": 23341
    }
   },
   "state": {
@@ -26990,6 +27057,14 @@
    "encoder_cpr": {
     "kind": "number",
     "value": 360
+   },
+   "seed": {
+    "kind": "number",
+    "value": 23341
+   },
+   "slip_noise": {
+    "kind": "number",
+    "value": 0.05
    },
    "wheel_radius": {
     "kind": "number",
@@ -27945,6 +28020,10 @@
    "lidar_max_range": {
     "kind": "number",
     "value": 4
+   },
+   "seed": {
+    "kind": "number",
+    "value": 23341
    }
   },
   "state": {
@@ -28284,6 +28363,10 @@
    "inflation": {
     "kind": "number",
     "value": 0.3
+   },
+   "robot_radius": {
+    "kind": "number",
+    "value": 0.15
    }
   },
   "state": {
@@ -33304,18 +33387,33 @@
     "kind": "number",
     "value": 0
    },
+   "seed": {
+    "kind": "number",
+    "value": 23341
+   },
    "variance": {
     "kind": "number",
     "value": 1
    }
   },
-  "state": null,
+  "state": {
+   "kind": "object",
+   "keys": [
+    "hasSpare",
+    "rng",
+    "spare"
+   ]
+  },
   "initialState": {
-   "kind": "undefined",
-   "value": null
+   "kind": "object",
+   "value": {
+    "hasSpare": false,
+    "rng": null,
+    "spare": 0
+   }
   },
   "flags": {
-   "isStateful": false,
+   "isStateful": true,
    "directFeedthrough": null,
    "allowDynamicInputs": false,
    "allowDynamicOutputs": false,
