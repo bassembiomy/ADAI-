@@ -1230,14 +1230,17 @@ const sphForces = (
 };
 
 /**
- * Stiff-aware armature inductance of the robot motors. The electrical pole -R/L (-500 1/s for R = 2.5 ohm, L = 5 mH) is
- * stable only for rk4 steps below 5.5 ms, but the app's default step is 20 ms. The electrical time constant L/R is
- * therefore kept at or above 10 ms (h * lambda = 2 at 20 ms, inside the rk4 stability limit 2.78): the current relaxes
- * towards the same steady state i = (V - K w) / R (stall current, steady-state speed and torque are unchanged), only the
- * current transient is slower than the nominal 2 ms. Larger inductances are used as given.
+ * Derivative of an object state given as an array (positional, in the order of the state's keys). The array also carries the
+ * values under the state's key names (non-enumerable, so equality on the array is unchanged): the stiff solvers (ode14x,
+ * ode23tb) read derivatives by key and would otherwise see zero for every state.
  */
-const ROBOT_MOTOR_MIN_TAU_E = 0.01;
-const robotMotorInductance = (L: number, R: number): number => Math.max(L, Math.abs(R) * ROBOT_MOTOR_MIN_TAU_E);
+const xbKeyedDerivative = (state: any, d: number[]): number[] => {
+  if (state !== null && typeof state === 'object' && !Array.isArray(state)) {
+    const keys = Object.keys(state);
+    d.forEach((v, i) => { if (keys[i] !== undefined) Object.defineProperty(d, keys[i], { value: v, enumerable: false }); });
+  }
+  return d;
+};
 
 /** A rows x cols numeric grid, or null. */
 const xbGrid30 = (v: unknown): number[][] | null => {
@@ -6926,7 +6929,7 @@ return block;
                                                                                   const current_draw = Math.abs(I_L) + Math.abs(I_R) + static_draw_A;
                                                                                   dbat = -(current_draw / capacity_Ah) * 100 / 3600;
                                                                                 }
-                                                                                return [dbat];
+                                                                                return xbKeyedDerivative(state, [dbat]);
                                                                               }
                                                                             }),
 
@@ -8431,8 +8434,8 @@ return block;
                                                                                                   const PWM_L = Math.max(-1, Math.min(1, V_L_raw / V_bat));
                                                                                                   const PWM_R = Math.max(-1, Math.min(1, V_R_raw / V_bat));
 
-                                                                                                  const dcurrentL = (PWM_L * V_bat - motor_R * state.currentL - motor_K * state.omegaL) / robotMotorInductance(motor_L, motor_R);
-                                                                                                  const dcurrentR = (PWM_R * V_bat - motor_R * state.currentR - motor_K * state.omegaR) / robotMotorInductance(motor_L, motor_R);
+                                                                                                  const dcurrentL = (PWM_L * V_bat - motor_R * state.currentL - motor_K * state.omegaL) / motor_L;
+                                                                                                  const dcurrentR = (PWM_R * V_bat - motor_R * state.currentR - motor_K * state.omegaR) / motor_L;
 
                                                                                                   const T_L = motor_K * state.currentL;
                                                                                                   const T_R = motor_K * state.currentR;
@@ -8535,11 +8538,11 @@ return block;
                                                                                                     const motor_K = Number(p.motor_K ?? 0.04);
                                                                                                     const inertia = Number(p.inertia ?? 0.0075);
 
-                                                                                                    const dcurrent = (V_in - motor_R * state.current - motor_K * state.omega) / robotMotorInductance(motor_L, motor_R);
+                                                                                                    const dcurrent = (V_in - motor_R * state.current - motor_K * state.omega) / motor_L;
                                                                                                     const domega = (motor_K * state.current - 0.02 * state.omega) / inertia;
                                                                                                     const dtheta_wheel = state.omega;
 
-                                                                                                    return [dtheta_wheel, domega, dcurrent];
+                                                                                                    return xbKeyedDerivative(state, [dtheta_wheel, domega, dcurrent]);
                                                                                                   }
                                                                                                 }),
 
@@ -8611,7 +8614,7 @@ return block;
                                                                                                       const next_y = state.y + dy * 0.08;
                                                                                                       const collided = checkCollisionTwin(next_x, next_y, 0.15, true);
 
-                                                                                                      return [collided ? 0 : dx, collided ? 0 : dy, dtheta];
+                                                                                                      return xbKeyedDerivative(state, [collided ? 0 : dx, collided ? 0 : dy, dtheta]);
                                                                                                     }
                                                                                                   }),
 
@@ -9411,7 +9414,7 @@ return block;
                                                                                                                       dint_errR = 0;
                                                                                                                     }
 
-                                                                                                                    return [dint_errL, dint_errR];
+                                                                                                                    return xbKeyedDerivative(state, [dint_errL, dint_errR]);
                                                                                                                   }
                                                                                                                 }),
 
