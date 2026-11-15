@@ -62,12 +62,6 @@ const PINS: Record<string, string> = {
   'HIGH_PASS_FILTER|rk4': 'XBV-018',
   // XBV-093: scenario dimensions (3-element x for a 1-state system) refused by the embedded builder; continuous STATE_SPACE unsupported.
   // XBV-154: the embedded Mean / SubMatrix still follow the pre-WP-21 canvas rules (mean of all elements, zero-based indices).
-  'Clock|euler': 'XBV-041',
-  'Clock|rk4': 'XBV-041',
-  'Clock|discrete': 'XBV-041',
-  'DEADZONE|euler': 'XBV-065',
-  'DEADZONE|rk4': 'XBV-065',
-  'DEADZONE|discrete': 'XBV-065',
   'MOVING_AVERAGE|euler': 'XBV-068',
   'MOVING_AVERAGE|rk4': 'XBV-068',
   'MOVING_AVERAGE|discrete': 'XBV-068',

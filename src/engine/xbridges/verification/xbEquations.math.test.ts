@@ -55,7 +55,7 @@ describe('sources', () => {
     expect(out('WaveformGen', { type: 'Sine', amp: 0, freq: 1, phase: 0.5, offset: 0 }, [], 0.1)).toBe(0);
   });
   for (const t of [0.3, 1.7]) {
-    it.fails(`XBV-041: the Sources "Clock" outputs the simulation time, like the Simulink Clock block (t = ${t})`, () => {
+    it(`XBV-041: the Sources "Clock" outputs the simulation time, like the Simulink Clock block (t = ${t})`, () => {
       expect(out('Clock', {}, [], t)).toBe(t);
     });
   }
