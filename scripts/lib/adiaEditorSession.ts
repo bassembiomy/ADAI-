@@ -12,7 +12,13 @@
 import { createStateMachineExplorerAdapter, ensureRootStateMachineDiagram } from '../../src/features/modelExplorer/adapters/stateMachineExplorerAdapter';
 import type { ModelExplorerCommand } from '../../src/features/modelExplorer/modelExplorerTypes';
 import type { StateMachineExplorerSnapshot } from '../../src/utils/stateMachine/smStatePruner';
-import type { StateData, TransitionData, VariableDef, VariableType } from '../../src/types/sm_types';
+import type { EventDef, FixedPointFormat, StateData, TransitionData, VariableDef, VariableType } from '../../src/types/sm_types';
+import { addEvent, renameEvent } from '../../src/utils/stateMachine/smEventEditing';
+import { withVariableType } from '../../src/utils/stateMachine/smChartSettingsEditing';
+import { isValidFixedPoint } from '../../src/utils/stateMachine/smFixedPoint';
+import { applyStateHistoryChange, type StateHistoryType } from '../../src/utils/stateMachine/smHistoryRegion';
+import { pruneXBBoundaryMappings } from '../../src/utils/stateMachine/xbBoundaryMappings';
+import type { XBMappingV1 } from '../../src/utils/stateMachine/xbModel';
 import { validateInitialValue } from '../../src/utils/stateMachineCodeGenerator';
 import { createHmiComponent } from '../../src/features/hmi/hmiCatalog';
 import { applyAutostartEdit } from '../../src/utils/stateMachine/smOrthogonalRegions';
@@ -20,10 +26,10 @@ import type { HmiComponent, HmiComponentType } from '../../src/types/sysml_types
 
 /** State panel fields, plus the geometry a state gets by moving / resizing it on the canvas. */
 const STATE_FIELDS = ['name', 'entry', 'during', 'exit', 'autostart', 'historyType', 'internalTransitions', 'isParallel',
-  'isSafeState', 'isTerminalState', 'priority', 'regionId', 'x', 'y', 'width', 'height'] as const;
+  'isSafeState', 'isTerminalState', 'priority', 'regionId', 'x', 'y', 'width', 'height', 'simulationOnly'] as const;
 export type StatePanelEdit = Partial<Pick<StateData, typeof STATE_FIELDS[number]>>;
 /** Transition panel fields. */
-const TRANSITION_FIELDS = ['condition', 'action', 'type', 'afterTicks', 'order', 'isInternal'] as const;
+const TRANSITION_FIELDS = ['condition', 'action', 'type', 'afterTicks', 'order', 'isInternal', 'event'] as const;
 export type TransitionPanelEdit = Partial<Pick<TransitionData, typeof TRANSITION_FIELDS[number]>>;
 
 const only = <T extends object>(patch: T, fields: readonly string[], what: string): T => {
@@ -74,6 +80,35 @@ export function createStateMachineEditor() {
     /** "Transition" from a state to a state. */
     createTransition: (sourceId: string, targetId: string) =>
       execute({ type: 'createRelationship', relationshipKind: 'transition', sourceId, targetId }),
+    /** "New X-Bridges state" in a region. */
+    createXBridgesState: (regionId: string, name: string) => execute({ type: 'createElement', ownerId: regionId, elementKind: 'xBridgesState', name }),
+    /** The State panel's History selector (None / Shallow / Deep): the history junction lives in the state's region. Returns the junction id. */
+    setHistory: (stateId: string, type: StateHistoryType) => {
+      const state = snapshot.states.find(s => s.id === stateId);
+      if (!state) throw new Error(`no state ${stateId}`);
+      const next = applyStateHistoryChange(
+        { layers: snapshot.layers, junctions: snapshot.junctions, transitions: snapshot.transitions },
+        { id: state.id, name: state.name }, type,
+        { newLayerId: crypto.randomUUID(), newJunctionId: crypto.randomUUID() }, { x: 60, y: 60 }, '#ff9900');
+      snapshot = { ...snapshot, ...next, states: snapshot.states.map(s => s.id === stateId ? { ...s, historyType: type } : s) };
+      const layer = next.layers.find(l => l.parentStateId === stateId);
+      const junction = layer?.junctionIds.map(id => next.junctions.find(j => j.id === id)).find(j => j?.type === 'deep-history' || j?.type === 'history');
+      return junction?.id ?? '';
+    },
+    /** The X-Bridges editor's save (handleXBridgesSave): the workspace's nodes, edges and boundary mappings of the state. */
+    saveXBridges: (stateId: string, nodes: unknown[], edges: unknown[], mappings: readonly XBMappingV1[]) => {
+      const state = snapshot.states.find(s => s.id === stateId);
+      if (!state?.isXBridges) throw new Error(`no X-Bridges state ${stateId}`);
+      const pruned = pruneXBBoundaryMappings(mappings, nodes);
+      snapshot = { ...snapshot, states: snapshot.states.map(s => s.id === stateId ? { ...s, xBridgesModel: { ...s.xBridgesModel, nodes, edges, mappings: Array.from(pruned) } as unknown as StateData['xBridgesModel'] } : s) };
+    },
+    /**
+     * The embedded solver (step and execution) of an X-Bridges state. The application has NO control for these fields
+     * (a new X-Bridges state is Euler, 10 ms, in-tick); this is the one place a model script writes data no screen edits.
+     */
+    setEmbeddedSolver: (stateId: string, solver: Record<string, unknown>) => {
+      snapshot = { ...snapshot, states: snapshot.states.map(s => s.id === stateId ? { ...s, xBridgesModel: { ...s.xBridgesModel, solver } as unknown as StateData['xBridgesModel'] } : s) };
+    },
     rename,
     editState,
     editTransition,
@@ -86,14 +121,22 @@ export function createVariablesPanel() {
   const variables: VariableDef[] = [];
   const parse = (type: VariableType, value: string): number | boolean => type === 'bool' ? value === 'true' : Number(value);
   return {
-    add(name: string, type: VariableType, initialValue: string) {
+    add(name: string, type: VariableType, initialValue: string, fixedPoint?: FixedPointFormat, id: string = crypto.randomUUID()) {
       if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)) throw new Error(`invalid variable name ${name}`);
       if (variables.some(v => v.name === name)) throw new Error(`variable ${name} already exists`);
       if (validateInitialValue({ type, initialValue }) === null) throw new Error(`invalid initial value ${initialValue} for ${name}`);
-      const variable: VariableDef = {
-        id: crypto.randomUUID(), name, type, overflowPolicy: 'saturate', initialValue,
+      // the type selector gives a fixdt variable its format (default fixdt(1, 16, 8)); the fraction length input edits it
+      let variable: VariableDef = {
+        id, name, type, overflowPolicy: 'saturate', initialValue,
         currentValue: parse(type, initialValue), visibleInScope: true,
       };
+      if (type === 'fixdt') {
+        variable = withVariableType(variable, 'fixdt');
+        if (fixedPoint) {
+          if (!isValidFixedPoint(fixedPoint)) throw new Error(`invalid fixed-point format for ${name}`);
+          variable = { ...variable, fixedPoint: { ...fixedPoint } };
+        }
+      } else if (fixedPoint) throw new Error(`${name}: only fixdt variables have a fixed-point format`);
       variables.push(variable);
       return variable;
     },
@@ -103,6 +146,23 @@ export function createVariablesPanel() {
       return found.id;
     },
     variables,
+  };
+}
+
+/** The Events editor: ADD EVENT (EVENT_n, Input), then the inline name edit. */
+export function createEventsPanel() {
+  let events: EventDef[] = [];
+  return {
+    add(name: string, scope: EventDef['scope'] = 'input') {
+      const id = crypto.randomUUID();
+      const added = addEvent(events, id, scope);
+      if (!added.ok) throw new Error(added.error);
+      const renamed = renameEvent(added.events, id, name);
+      if (!renamed.ok) throw new Error(renamed.error);
+      events = renamed.events;
+      return id;
+    },
+    get events() { return events; },
   };
 }
 
