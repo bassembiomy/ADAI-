@@ -346,7 +346,7 @@ describe('V7 registry closure', () => {
     REPORT.registry = { codegenTrue: codegenTrue.length, codegenFalse: codegenFalse.length };
   });
 
-  it.fails('XBV-006: every codegen true capability entry has a BLOCK_LIBRARY factory (SUM_JUNCTION has none)', () => {
+  it('XBV-006: every codegen true capability entry has a BLOCK_LIBRARY factory (SUM_JUNCTION has none)', () => {
     expect(codegenTrue.filter((t) => typeof BLOCK_LIBRARY[t] !== 'function')).toEqual([]);
   });
   it('the only codegen true entry without a factory is SUM_JUNCTION', () => {
@@ -392,7 +392,7 @@ describe('V7 registry closure', () => {
     expect(wrong).toEqual([]);
   });
 
-  it.fails('XBV-009: docs/XBRIDGES_EMBEDDED_CODEGEN.md lists exactly the codegen true types (it lists about 40; the registry has 100)', () => {
+  it('XBV-009: docs/XBRIDGES_EMBEDDED_CODEGEN.md lists exactly the codegen true types (it lists about 40; the registry has 100)', () => {
     const doc = readFileSync(join(process.cwd(), 'docs', 'XBRIDGES_EMBEDDED_CODEGEN.md'), 'utf8');
     const section = doc.slice(doc.indexOf('| Family | Embedded-capable block types |'), doc.indexOf('Support is conditional'));
     const listed = [...section.matchAll(/`([A-Za-z_0-9]+)`/g)].map((m) => m[1]).sort();

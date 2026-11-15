@@ -86,12 +86,6 @@ const EXPECTED: Record<string, 'error' | 'warning' | 'info'> = {
 };
 /** Codes whose current behaviour contradicts the expectation; each turns red when fixed (then leaves this map). */
 const PINNED_SEVERITY: Record<string, string> = {
-  EXECUTION_EXCEPTION: 'XBV-034 (DOE fault code only inside a BLOCK_RUNTIME_FAULT message)',
-  INVALID_GMDH_LAYERS: 'XBV-034 (DOE fault code only inside a BLOCK_RUNTIME_FAULT message)',
-  INVALID_TAGUCHI_LEVELS: 'XBV-034 (DOE fault code only inside a BLOCK_RUNTIME_FAULT message)',
-  NO_MODEL_CONFIGURED: 'XBV-034 (DOE fault code only inside a BLOCK_RUNTIME_FAULT message)',
-  CONSTANT_VALUE_NOT_REPRESENTABLE: 'XBV-038 (precision loss is an error in ADIA, a warning in Simulink)',
-  NON_FINITE_INPUT: 'XBV-034 (DOE fault code only inside a BLOCK_RUNTIME_FAULT message)',
 };
 
 describe('diagnostics closure', () => {

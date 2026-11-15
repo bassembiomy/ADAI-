@@ -94,3 +94,35 @@ describe('XBV-156: help text follows the one-based SubMatrix', () => {
   });
 });
 
+// ---------------------------------------------------------------- batch K (catalogue and documentation)
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+const ROOT = join(__dirname, '..', '..', '..', '..');
+const read = (f: string) => readFileSync(join(ROOT, f), 'utf8');
+
+describe('batch K: documentation states what the code does', () => {
+  it('XBV-166: the solver help no longer says the canvas applies ODE23/ODE45/ODE23tb once per tick without adapting (WP-21 E1)', () => {
+    const text = read('src/help/moduleTopics.ts');
+    expect(text).not.toMatch(/do not adapt it|once per tick\)/);
+    expect(text).toMatch(/RelTol|relative tolerance/i);
+  });
+  it('XBV-162: xbAccurateMath does not claim glibc sin is correctly rounded', () => {
+    expect(read('src/utils/stateMachine/xbAccurateMath.ts')).not.toMatch(/glibc[^\n]*correctly rounded in practice/);
+  });
+  it("XBV-108: the embedded codegen document states that under 'retain' the discrete sample-hit counter is frozen while the owning state is inactive", () => {
+    const doc = read('docs/XBRIDGES_EMBEDDED_CODEGEN.md');
+    expect(doc).toMatch(/retain[^]{0,600}(sample[- ]hit counter|sample hits?)[^]{0,300}(frozen|freezes|paused|does not advance)/i);
+  });
+  it('XBV-109: docs/powertrain/ledger.json records per-block gate verdicts for every PT_ block, each citing a test file that exists', () => {
+    const ledger = JSON.parse(read('docs/powertrain/ledger.json')) as { blocks: Record<string, { gates: Record<string, string>; tests: string[] }> };
+    const pt = Object.keys(BLOCK_LIBRARY).filter((t) => t.startsWith('PT_')).sort();
+    expect(Object.keys(ledger.blocks ?? {}).sort()).toEqual(pt);
+    for (const t of pt) {
+      const b = ledger.blocks[t];
+      expect(Object.keys(b.gates ?? {}).length, t).toBeGreaterThan(0);
+      expect((b.tests ?? []).length, t).toBeGreaterThan(0);
+      for (const f of b.tests) expect(() => read(f), `${t}: ${f}`).not.toThrow();
+    }
+  });
+});
+
