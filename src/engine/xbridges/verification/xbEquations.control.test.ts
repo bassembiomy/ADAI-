@@ -345,11 +345,12 @@ describe('E. MPC_CONTROLLER (double integrator, Q = [[10]])', () => {
 describe('F. noise sources', () => {
   afterEach(() => vi.restoreAllMocks());
   const draw = (params: Record<string, unknown>, n: number, seed = 1) => {
-    vi.spyOn(Math, 'random').mockImplementation(mulberry32(seed));
-    const b = BLOCK_LIBRARY['WHITE_NOISE']('w', params);
+    // WP-21 batch I (XBV-023/088): WHITE_NOISE draws from its own seeded sequential generator carried in its state, so the
+    // state is threaded like the engine does; the block seed parameter replaces the Math.random stream.
+    const b = BLOCK_LIBRARY['WHITE_NOISE']('w', { seed, ...params });
     const out = new Array<number>(n);
-    for (let i = 0; i < n; i++) out[i] = Number(b.execute([] as never, b.params, b.state, i * 0.01).outputs[0]);
-    vi.restoreAllMocks();
+    let st = b.state;
+    for (let i = 0; i < n; i++) { const r = b.execute([] as never, b.params, st, i * 0.01); out[i] = Number(r.outputs[0]); st = r.nextState ?? st; }
     return out;
   };
   const stats = (v: number[]) => {

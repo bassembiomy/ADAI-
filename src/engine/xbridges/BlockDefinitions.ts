@@ -21,6 +21,7 @@ import {
   type XBNumericType,
 } from '../../utils/stateMachine/xbNumeric';
 import { parseMatrixEditorValue } from '../../utils/stateMachine/stateSpaceValidation';
+import { nextGaussianPair } from '../../utils/stateMachine/xbDeterministicNoise';
 
 export function polyToString(coeffs: number[], variable = 's'): string {
   if (!coeffs || coeffs.length === 0) return '0';
@@ -831,7 +832,8 @@ export const astar_planner = (
   grid: number[][],
   safetyRadius = 0.36,
   Wd = 1.0,
-  isMatlab = false
+  isMatlab = false,
+  legClearance = 0
 ): [number, number][] => {
   const activeMatlab = isMatlab || g_isMatlabActive || Math.abs(start[0]) > 3.05 || Math.abs(start[1]) > 3.05 || Math.abs(goal[0]) > 3.05 || Math.abs(goal[1]) > 3.05;
   const minVal = activeMatlab ? -6.0 : -3.0;
@@ -982,7 +984,9 @@ export const astar_planner = (
       const p1 = path[currIdx];
       const p2 = path[nextIdx];
       const steps = 15;
-      for (let s = 1; s < steps; s++) {
+      // legClearance > 0: a shortcut leg must keep that distance from every occupied cell and from the walls.
+      if (legClearance > 0 && !xbLegClearOfGrid(p1, p2, grid, legClearance, activeMatlab)) hasCollision = true;
+      for (let s = 1; s < steps && !hasCollision; s++) {
         const t = s / steps;
         const px = p1[0] + (p2[0] - p1[0]) * t;
         const py = p1[1] + (p2[1] - p1[1]) * t;
@@ -1135,7 +1139,11 @@ export const checkCollisionTwin = (x: number, y: number, radius = 0.15, isMatlab
   return false;
 };
 
-export const raycastTwin = (rx: number, ry: number, angle: number, maxRange: number, noiseStd: number, isMatlab = false) => {
+/**
+ * Ray cast against the twin room. `noiseUnit` in [-1, 1] is the caller's seeded range-noise draw (noise = noiseUnit * noiseStd, a
+ * uniform error of half-width noiseStd); the default 0 is noise free. The function itself draws no random numbers.
+ */
+export const raycastTwin = (rx: number, ry: number, angle: number, maxRange: number, noiseStd: number, isMatlab = false, noiseUnit = 0) => {
   if (Math.abs(rx) > 3.05 || Math.abs(ry) > 3.05) {
     g_isMatlabActive = true;
   }
@@ -1189,14 +1197,176 @@ export const raycastTwin = (rx: number, ry: number, angle: number, maxRange: num
     checkSegment(b.x1, b.y2, b.x1, b.y1);
   }
 
-  const noise = (Math.random() - 0.5) * 2 * noiseStd;
+  const noise = noiseUnit * noiseStd;
   return Math.max(0.02, Math.min(maxRange, min_dist + noise));
+};
+
+// ---------------------------------------------------------------------------------------------------------------
+// Seeded randomness for the stochastic blocks (Simulink noise blocks are seeded; a model must be repeatable).
+// ---------------------------------------------------------------------------------------------------------------
+
+/** Default seed of every noise block: Simulink's default seed constant (equal blocks need different 'seed' values to be independent). */
+const xbDefaultSeed = (_id: string): number => 23341;
+
+/** The 'seed' parameter of a block: its value when given (kept as given, validated at execute), else the hash of the block id. */
+const xbSeedParam = (id: string, params: any): number => {
+  const raw = params?.seed;
+  return raw === undefined || raw === null || raw === '' ? xbDefaultSeed(id) : Number(raw);
+};
+
+const xbIsSeed = (v: unknown): boolean => typeof v === 'number' && Number.isFinite(v);
+
+const xbFmix32 = (h0: number): number => {
+  let h = h0 | 0;
+  h ^= h >>> 16; h = Math.imul(h, 0x85ebca6b);
+  h ^= h >>> 13; h = Math.imul(h, 0xc2b2ae35);
+  h ^= h >>> 16;
+  return h >>> 0;
+};
+
+/**
+ * Counter-based uniform generator for sensor noise: draw n of the instant `time` depends only on (seed, time, n). Two fresh
+ * instances give the same stream, a state snapshot needs no generator state, and the repeated evaluations of one instant
+ * (output pass, solver stages, update) see the same measurement noise. Draws are uniform in (0, 1).
+ */
+const xbNoiseAt = (seed: number, time: number): (() => number) => {
+  const q = Number.isFinite(time) ? Math.round(time * 1e6) : 0;
+  const lo = q % 4294967296;
+  const hi = Math.floor(q / 4294967296);
+  let n = 0;
+  return () => {
+    n++;
+    let h = xbFmix32((seed | 0) ^ 0x9e3779b9);
+    h = xbFmix32(h ^ lo);
+    h = xbFmix32(h + Math.imul(hi | 0, 0x7feb352d));
+    h = xbFmix32(h ^ Math.imul(n, 0x85ebca6b));
+    return (h + 0.5) / 4294967296;
+  };
+};
+
+/** Block-level error result: the outputs keep their shape (no NaN), the engine reports the message. */
+const xbParamError = (outputs: unknown[], message: string) => ({ outputs: outputs as any[], error: message });
+
+/** Finite number or the given default; zero, negatives and fractions are kept. */
+const xbFiniteOr = (v: unknown, dflt: number): number => (typeof v === 'number' && Number.isFinite(v) ? v : dflt);
+
+/** A flat array of finite numbers (a missing or scalar input is the empty vector); null when the value is malformed. */
+const xbNumVector = (v: unknown): number[] | null => {
+  if (v === undefined || v === null) return [];
+  if (typeof v === 'number') return Number.isFinite(v) ? [] : null;
+  if (!Array.isArray(v)) return null;
+  for (const x of v) if (typeof x !== 'number' || !Number.isFinite(x)) return null;
+  return v as number[];
+};
+
+/** Step of a stateful block that is not given the step size: time since its last committed sample (0 on the first sample). */
+const demStep = (state: any, time: number): number => {
+  const last = typeof state?.lastTime === 'number' ? state.lastTime : time;
+  const dt = time - last;
+  return Number.isFinite(dt) && dt > 0 ? dt : 0;
+};
+
+/**
+ * Weakly compressible SPH forces (Monaghan 1992; viscosity after Morris et al. 1997), 2D cubic-spline kernel with support 2h.
+ * Density rho_i = sum_j m W(r_ij); pressure p = max(0, k (rho - rho0)) (no tensile pressure at the free surface);
+ * a_i = -sum_j m (p_i/rho_i^2 + p_j/rho_j^2) grad W_ij + sum_j m 2 mu/(rho_i rho_j) (r_ij . grad W_ij)/(r_ij^2 + 0.01 h^2) (v_i - v_j).
+ * Returns the accelerations from pressure and viscosity only (gravity and coupling forces are added by the caller).
+ */
+const sphForces = (
+  px: number[], py: number[], vx: number[], vy: number[],
+  mass: number, rho0: number, stiffness: number, viscosity: number, h: number,
+): { ax: number[]; ay: number[] } => {
+  const n = px.length;
+  const sigma = 10 / (7 * Math.PI * h * h);
+  const W = (r: number): number => {
+    const q = r / h;
+    if (q >= 2) return 0;
+    return q < 1 ? sigma * (1 - 1.5 * q * q + 0.75 * q * q * q) : sigma * 0.25 * Math.pow(2 - q, 3);
+  };
+  const dW = (r: number): number => {
+    const q = r / h;
+    if (q >= 2) return 0;
+    return (sigma / h) * (q < 1 ? -3 * q + 2.25 * q * q : -0.75 * (2 - q) * (2 - q));
+  };
+  const rho: number[] = new Array(n).fill(0);
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < n; j++) rho[i] += mass * W(Math.hypot(px[i] - px[j], py[i] - py[j]));
+  }
+  const pr = rho.map((r) => Math.max(0, stiffness * (r - rho0)));
+  const ax: number[] = new Array(n).fill(0);
+  const ay: number[] = new Array(n).fill(0);
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < n; j++) {
+      if (i === j) continue;
+      const dx = px[i] - px[j];
+      const dy = py[i] - py[j];
+      const r = Math.hypot(dx, dy);
+      if (r >= 2 * h || r === 0 || !(rho[i] > 0) || !(rho[j] > 0)) continue;
+      const g = dW(r) / r; // grad W = g * (dx, dy)
+      const pressure = -mass * (pr[i] / (rho[i] * rho[i]) + pr[j] / (rho[j] * rho[j]));
+      ax[i] += pressure * g * dx;
+      ay[i] += pressure * g * dy;
+      if (viscosity > 0) {
+        const c = (mass * 2 * viscosity) / (rho[i] * rho[j]) * ((dx * g * dx + dy * g * dy) / (r * r + 0.01 * h * h));
+        ax[i] += c * (vx[i] - vx[j]);
+        ay[i] += c * (vy[i] - vy[j]);
+      }
+    }
+  }
+  return { ax, ay };
+};
+
+/** A rows x cols numeric grid, or null. */
+const xbGrid30 = (v: unknown): number[][] | null => {
+  if (!Array.isArray(v) || v.length !== 30) return null;
+  for (const row of v) {
+    if (!Array.isArray(row) || row.length !== 30) return null;
+    for (const x of row) if (typeof x !== 'number' || Number.isNaN(x)) return null;
+  }
+  return v as number[][];
+};
+
+/** [x, y, ...] with at least two finite numbers, or null. */
+const xbPoint = (v: unknown): [number, number] | null =>
+  Array.isArray(v) && v.length >= 2 && Number.isFinite(v[0]) && Number.isFinite(v[1]) && typeof v[0] === 'number' && typeof v[1] === 'number' ? [v[0], v[1]] : null;
+
+/** Shortest distance from (x, y) to the square cell (cx, cy) of side `side`. */
+const xbDistToSquare = (x: number, y: number, cx: number, cy: number, side: number): number =>
+  Math.hypot(Math.max(Math.abs(x - cx) - side / 2, 0), Math.max(Math.abs(y - cy) - side / 2, 0));
+
+/**
+ * A straight leg is clear when every point of it keeps at least `radius` from every occupied cell square (value > 50) of the
+ * 30 x 30 grid and from the room walls (robot footprint = disc of `radius`).
+ */
+const xbLegClearOfGrid = (p1: [number, number], p2: [number, number], grid: number[][], radius: number, isMatlab: boolean): boolean => {
+  const minVal = isMatlab ? -6.0 : -3.0;
+  const sizeVal = isMatlab ? 12.0 : 6.0;
+  const cell = sizeVal / 30;
+  const len = Math.hypot(p2[0] - p1[0], p2[1] - p1[1]);
+  const steps = Math.max(1, Math.ceil(len / (cell / 4)));
+  const reach = Math.ceil(radius / cell) + 1;
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const x = p1[0] + (p2[0] - p1[0]) * t;
+    const y = p1[1] + (p2[1] - p1[1]) * t;
+    if (checkCollisionTwin(x, y, radius, isMatlab)) return false;
+    const col = Math.floor((x - minVal) / cell);
+    const row = Math.floor((y - minVal) / cell);
+    for (let r = row - reach; r <= row + reach; r++) {
+      if (r < 0 || r >= 30) continue;
+      for (let c = col - reach; c <= col + reach; c++) {
+        if (c < 0 || c >= 30) continue;
+        if (grid[r][c] > 50 && xbDistToSquare(x, y, minVal + (c + 0.5) * cell, minVal + (r + 0.5) * cell, cell) < radius) return false;
+      }
+    }
+  }
+  return true;
 };
 
 export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> = {
   // --- Autonomous Vacuum Cleaner Learning Blocks ---
   'ROBOT_VACUUM_LIDAR_SENSOR': (id, params) => ({
-    id, type: 'ROBOT_VACUUM_LIDAR_SENSOR', params: { lidar_max_range: params.lidar_max_range ?? 5.5, lidar_noise_std: params.lidar_noise_std ?? 0.015 },
+    id, type: 'ROBOT_VACUUM_LIDAR_SENSOR', params: { lidar_max_range: params.lidar_max_range ?? 5.5, lidar_noise_std: params.lidar_noise_std ?? 0.015, seed: xbSeedParam(id, params) },
     // Accepts either a pose array [x,y,theta,...] as ins[0] OR individual x/y/theta
     inputs: [createPort('x', 'X / Pose Array', 'input'), createPort('y', 'Y', 'input'), createPort('theta', 'θ', 'input')],
     outputs: [createPort('ranges', 'Ranges', 'output', Array(45).fill(0), 'right', 'vector'), createPort('x_odom', 'X_odom', 'output', 0)],
@@ -1214,16 +1384,25 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
         ry = Number(ins[1] ?? 0);
         rtheta = Number(ins[2] ?? 0);
       }
+      const numBeams = 45;
+      if (!Number.isFinite(rx) || !Number.isFinite(ry) || !Number.isFinite(rtheta)) {
+        return xbParamError([Array(numBeams).fill(0), [0, 0, 0]], 'LIDAR sensor: the pose (x, y, theta) must be finite numbers.');
+      }
+      if (!(Number(p.lidar_max_range) > 0 && Number.isFinite(Number(p.lidar_max_range)))
+        || !(Number(p.lidar_noise_std) >= 0 && Number.isFinite(Number(p.lidar_noise_std)))
+        || !xbIsSeed(Number(p.seed))) {
+        return xbParamError([Array(numBeams).fill(0), [rx, ry, rtheta]], 'LIDAR sensor: lidar_max_range must be > 0, lidar_noise_std >= 0 and seed a finite number.');
+      }
+      const draw = xbNoiseAt(Number(p.seed), time);
       const isMatlab = Math.abs(rx) > 3.1 || Math.abs(ry) > 3.1;
       const ranges: number[] = [];
-      const numBeams = 45;
       const beamAngles: number[] = [];
       for (let i = -180; i <= 179; i += 8) {
         beamAngles.push(i * Math.PI / 180);
       }
       for (let i = 0; i < numBeams; i++) {
         const absAngle = rtheta + beamAngles[i];
-        ranges.push(raycastTwin(rx, ry, absAngle, p.lidar_max_range, p.lidar_noise_std, isMatlab));
+        ranges.push(raycastTwin(rx, ry, absAngle, Number(p.lidar_max_range), Number(p.lidar_noise_std), isMatlab, 2 * draw() - 1));
       }
       return { outputs: [ranges, Array.isArray(poseInput) ? poseInput.slice(0, 3) : [rx, ry, rtheta]] };
     }
@@ -1278,7 +1457,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
   }),
 
   'ROBOT_VACUUM_DUSTBIN_SENSOR': (id, params) => ({
-    id, type: 'ROBOT_VACUUM_DUSTBIN_SENSOR',  params: {},
+    id, type: 'ROBOT_VACUUM_DUSTBIN_SENSOR',  params: { seed: xbSeedParam(id, params) },
     isStateful: true,
     state: { dustPct: 0 },
     // Accepts either a grid OR runs standalone with time-based sim
@@ -1303,7 +1482,8 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
         return { outputs: [pct], nextState: state };
       }
       // Standalone: simulate dust level rising from 5% + small noise
-      state.dustPct = Math.min(100, 5 + (time ?? 0) * 0.5 + Math.random() * 2);
+      if (!xbIsSeed(Number(p.seed))) return xbParamError([0], 'Dustbin sensor: seed must be a finite number.');
+      state.dustPct = Math.min(100, 5 + (time ?? 0) * 0.5 + xbNoiseAt(Number(p.seed), time ?? 0)() * 2);
       return { outputs: [state.dustPct], nextState: state };
     }
   }),
@@ -3818,8 +3998,13 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     inputs: [createPort('theta', 'θ', 'input', 0, 'left', 'measurement')],
     outputs: [createPort('sector', 'Sec', 'output', 1, 'right', 'discrete')],
     execute: (ins) => {
-      const thetaDeg = (Number(ins[0]) * 180 / Math.PI + 360) % 360;
-      const sector = Math.floor(thetaDeg / 60) + 1;
+      // Space-vector sector of any angle: floor(mod(theta, 2 pi) / (pi / 3)) + 1, with the mathematical modulus in [0, 2 pi).
+      const theta = Number(ins[0]);
+      if (typeof ins[0] === 'boolean' || ins[0] === null || ins[0] === undefined || !Number.isFinite(theta)) {
+        return { outputs: [1], diagnostic: { code: 'NON_FINITE_INPUT', severity: 'warning', message: 'SECTOR_SELECTOR needs a finite angle; sector 1 is output.' } };
+      }
+      const wrapped = ((theta % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+      const sector = Math.floor(wrapped / (Math.PI / 3)) + 1;
       return { outputs: [sector] };
     }
   }),
@@ -5345,37 +5530,79 @@ return block;
                             // --- Noise Sources ---
                             'WHITE_NOISE': (id, params) => ({
                               id, type: 'WHITE_NOISE',
-                              params: { mean: params.mean || 0, variance: params.variance ?? 1 },
+                              // Seeded like a Simulink noise block. Same generator, seed handling and draw order as the embedded
+                              // interpreter (xbInterpreter WHITE_NOISE): xorshift32 Box-Muller pairs, the sine value first, the cosine value on the next step.
+                              params: { mean: params.mean ?? 0, variance: params.variance ?? 1, seed: xbSeedParam(id, params) },
+                              isStateful: true,
                               inputs: [],
                               outputs: [createPort('y', 'y', 'output')],
-                              execute: (ins, p) => {
-                                const u1 = Math.random();
-                                const u2 = Math.random();
-                                const standardNormal = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2);
-                                const y = Number(p.mean) + Math.sqrt(Number(p.variance)) * standardNormal;
-                                return { outputs: [y] };
+                              state: { rng: null, spare: 0, hasSpare: false },
+                              execute: (ins, p, state) => {
+                                const mean = Number(p.mean);
+                                const variance = Number(p.variance);
+                                const seed = Number(p.seed);
+                                if (!Number.isFinite(mean) || !Number.isFinite(variance) || variance < 0 || !Number.isFinite(seed)) {
+                                  return xbParamError([0], 'White noise: mean and seed must be finite and variance >= 0.');
+                                }
+                                let rng = typeof state?.rng === 'number' ? state.rng : seed;
+                                let spare = typeof state?.spare === 'number' ? state.spare : 0;
+                                let hasSpare = state?.hasSpare === true;
+                                let gaussian: number;
+                                if (hasSpare) {
+                                  gaussian = spare;
+                                  hasSpare = false;
+                                } else {
+                                  const r = nextGaussianPair(rng);
+                                  rng = r.state;
+                                  gaussian = r.gaussian;
+                                  spare = r.spare;
+                                  hasSpare = r.hasSpare;
+                                }
+                                const y = mean + Math.sqrt(variance) * gaussian;
+                                return { outputs: [y], nextState: { rng, spare, hasSpare } };
                               }
                             }),
 
                               'BAND_LIMITED_NOISE': (id, params) => ({
                                 id, type: 'BAND_LIMITED_NOISE',
-                                params: { mean: params.mean || 0, variance: params.variance ?? 1, fc: params.fc || 100 },
+                                // sampleTime > 0: noise sample time of the block (Simulink Band-Limited White Noise): one draw and one filter update per
+                                // sample period, also the filter interval. sampleTime <= 0 (inherited): the filter interval is the time since the last
+                                // sample, and the first sample is unfiltered because no previous time exists.
+                                params: { mean: params.mean ?? 0, variance: params.variance ?? 1, fc: params.fc ?? 100, sampleTime: params.sampleTime ?? -1, seed: xbSeedParam(id, params) },
                                 isStateful: true,
                                 inputs: [],
                                 outputs: [createPort('y', 'y', 'output')],
-                                state: { y: 0, lastTime: 0 },
+                                state: { rng: null, spare: 0, hasSpare: false, y: 0, lastTime: null },
                                 execute: (ins, p, state, time) => {
-                                  const u1 = Math.random();
-                                  const u2 = Math.random();
-                                  const standardNormal = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2);
-                                  const whiteNoise = Number(p.mean) + Math.sqrt(Number(p.variance)) * standardNormal;
-
-                                  const dt = Math.max(1e-6, time - (state.lastTime || 0));
-                                  const tau = 1 / (2 * Math.PI * Number(p.fc));
-                                  const alpha = dt / (tau + dt);
-                                  const y = alpha * whiteNoise + (1 - alpha) * state.y;
-
-                                  return { outputs: [y], nextState: { y, lastTime: time } };
+                                  const mean = Number(p.mean);
+                                  const variance = Number(p.variance);
+                                  const fc = Number(p.fc);
+                                  const sampleTime = Number(p.sampleTime);
+                                  const seed = Number(p.seed);
+                                  if (!Number.isFinite(mean) || !Number.isFinite(variance) || variance < 0 || !(fc > 0 && Number.isFinite(fc)) || !Number.isFinite(sampleTime) || !Number.isFinite(seed)) {
+                                    return xbParamError([0], 'Band-limited noise: mean and seed must be finite, variance >= 0, fc > 0 and sampleTime finite.');
+                                  }
+                                  let rng = typeof state?.rng === 'number' ? state.rng : seed;
+                                  let spare = typeof state?.spare === 'number' ? state.spare : 0;
+                                  let hasSpare = state?.hasSpare === true;
+                                  let gaussian: number;
+                                  if (hasSpare) {
+                                    gaussian = spare;
+                                    hasSpare = false;
+                                  } else {
+                                    const r = nextGaussianPair(rng);
+                                    rng = r.state;
+                                    gaussian = r.gaussian;
+                                    spare = r.spare;
+                                    hasSpare = r.hasSpare;
+                                  }
+                                  const whiteNoise = mean + Math.sqrt(variance) * gaussian;
+                                  const tau = 1 / (2 * Math.PI * fc);
+                                  const dt = sampleTime > 0 ? sampleTime : typeof state?.lastTime === 'number' ? Math.max(0, time - state.lastTime) : Infinity;
+                                  const alpha = Number.isFinite(dt) ? dt / (tau + dt) : 1;
+                                  const prev = typeof state?.y === 'number' ? state.y : 0;
+                                  const y = prev + alpha * (whiteNoise - prev);
+                                  return { outputs: [y], nextState: { rng, spare, hasSpare, y, lastTime: time } };
                                 }
                               }),
 
@@ -6889,7 +7116,8 @@ execute: (ins, p, state) => {
                                                                                 params: {
                                                                                   latency_ms: params.latency_ms ?? 50.0,
                                                                                   packet_loss_rate: params.packet_loss_rate ?? 0.05,
-                                                                                  protocol: params.protocol || 'CAN'
+                                                                                  protocol: params.protocol || 'CAN',
+                                                                                  seed: xbSeedParam(id, params)
                                                                                 },
                                                                                 isStateful: true,
                                                                                 inputs: [
@@ -6932,6 +7160,10 @@ execute: (ins, p, state) => {
 
                                                                                   const latency_ms = Number(p.latency_ms ?? 50.0);
                                                                                   const packet_loss_rate = Number(p.packet_loss_rate ?? 0.05);
+  if (!(Number.isFinite(latency_ms) && latency_ms >= 0) || !(packet_loss_rate >= 0 && packet_loss_rate <= 1) || !xbIsSeed(Number(p.seed))) {
+    return xbParamError([...(Array.isArray(state?.last_data) && state.last_data.length >= 11 ? state.last_data.slice(0, 11) : [0, 0, 0, 0, 100, 0, 0, 0, 0, 0, 1]), [Number.isFinite(latency_ms) ? latency_ms : 0, 0, 0]], 'Communication link: latency_ms must be >= 0, packet_loss_rate in [0, 1] and seed a finite number.');
+  }
+  const draw = xbNoiseAt(Number(p.seed), time);
 
                                                                                   const current_data = ins.slice(0, 11);
 
@@ -6949,7 +7181,7 @@ execute: (ins, p, state) => {
                                                                                   while (state.history.length > 0 && state.history[0].time < target_time) {
                                                                                     const item = state.history.shift();
                                                                                     state.total_packets++;
-                                                                                    if (Math.random() < packet_loss_rate) {
+                                                                                    if (draw() < packet_loss_rate) {
                                                                                       state.packets_dropped++;
                                                                                     } else {
                                                                                       selected_data = item.data;
@@ -7083,8 +7315,11 @@ execute: (ins, p, state) => {
                                                                                     icon: 'crop',
                                                                                     description: 'Erodes the room free space boundary mask using the robot physical radius to prevent wall collisions.',
                                                                                     execute: (ins: any[], p: any, state: any, time: number) => {
-                                                                                      const grid = ins[0] as number[][];
+                                                                                      const grid = xbGrid30(ins[0]);
                                                                                       const radius = Number(p.radius ?? 0.3);
+                                                                                      const zeros = Array.from({ length: 30 }, () => Array(30).fill(0));
+                                                                                      if (grid === null) return xbParamError([zeros], 'Room mask erosion: the Room Mask input must be a 30 x 30 numeric grid.');
+                                                                                      if (!(Number.isFinite(radius) && radius >= 0)) return xbParamError([zeros], 'Room mask erosion: radius must be a finite number >= 0.');
                                                                                       const cell_size = 12.0 / 30.0;
                                                                                       const k_cells = Math.max(1, Math.round(radius / cell_size));
 
@@ -7113,10 +7348,9 @@ execute: (ins, p, state) => {
                                                                                         }
                                                                                       }
 
-                                                                                      state.erodedGrid = eroded;
                                                                                       return {
                                                                                         outputs: [eroded],
-                                                                                        nextState: state
+                                                                                        nextState: { ...(state ?? {}), erodedGrid: eroded }
                                                                                       };
                                                                                     }
                                                                                   }),
@@ -7224,31 +7458,41 @@ execute: (ins, p, state) => {
                                                                                           icon: 'battery-charging',
                                                                                           description: 'Continuously monitors battery level against estimated energy requirements along the door-hopping path back to the dock.',
                                                                                           execute: (ins: any[], p: any, state: any, time: number) => {
-                                                                                            const battery = Number(ins[0] ?? 100);
-                                                                                            const pose = ins[1] as number[] || [0, 0, 0];
-                                                                                            const rx = pose[0] ?? 0;
-                                                                                            const ry = pose[1] ?? 0;
-                                                                                            const dock_pos = ins[2] as number[] || [-5.1, -5.1];
-                                                                                            const exits = ins[3] as [number, number][];
-
-                                                                                            const energy_per_meter = Number(p.energy_per_meter ?? 0.005);
-                                                                                            const safety_margin = Number(p.safety_margin ?? 5.0);
-
-                                                                                            let dist = 0;
-                                                                                            let cx = rx, cy = ry;
-                                                                                            if (exits && exits.length > 0) {
-                                                                                              for (const e of exits) {
-                                                                                                dist += Math.sqrt(Math.pow(e[0] - cx, 2) + Math.pow(e[1] - cy, 2));
-                                                                                                cx = e[0];
-                                                                                                cy = e[1];
-                                                                                              }
+                                                                                          const battery = ins[0] === undefined || ins[0] === null ? 100 : Number(ins[0]);
+                                                                                          const pose = ins[1] === undefined || ins[1] === null ? [0, 0, 0] : ins[1];
+                                                                                          const dock_pos = ins[2] === undefined || ins[2] === null ? [-5.1, -5.1] : ins[2];
+                                                                                          const exitsIn = ins[3] === undefined || ins[3] === null ? [] : ins[3];
+                                                                                          const energy_per_meter = Number(p.energy_per_meter ?? 0.005);
+                                                                                          const safety_margin = Number(p.safety_margin ?? 5.0);
+                                                                                          const poseP = xbPoint(pose);
+                                                                                          const dockP = xbPoint(dock_pos);
+                                                                                          const exits: [number, number][] = [];
+                                                                                          let exitsOk = Array.isArray(exitsIn);
+                                                                                          if (exitsOk) {
+                                                                                            for (const e of exitsIn as unknown[]) {
+                                                                                              const ep = xbPoint(e);
+                                                                                              if (ep === null) { exitsOk = false; break; }
+                                                                                              exits.push(ep);
                                                                                             }
-                                                                                            dist += Math.sqrt(Math.pow(dock_pos[0] - cx, 2) + Math.pow(dock_pos[1] - cy, 2));
+                                                                                          }
+                                                                                          if (!Number.isFinite(battery) || poseP === null || dockP === null || !exitsOk
+                                                                                            || !Number.isFinite(energy_per_meter) || !Number.isFinite(safety_margin)) {
+                                                                                            return xbParamError([0, 0], 'Continuous energy monitor: battery must be a finite number, pose and dock position [x, y] vectors, exits a list of [x, y] points, and energy_per_meter / safety_margin finite.');
+                                                                                          }
 
-                                                                                            const e_required = dist * energy_per_meter * 100.0 * 1.25;
-                                                                                            const return_trigger = (battery <= e_required + safety_margin);
+                                                                                          let dist = 0;
+                                                                                          let cx = poseP[0], cy = poseP[1];
+                                                                                          for (const e of exits) {
+                                                                                            dist += Math.sqrt(Math.pow(e[0] - cx, 2) + Math.pow(e[1] - cy, 2));
+                                                                                            cx = e[0];
+                                                                                            cy = e[1];
+                                                                                          }
+                                                                                          dist += Math.sqrt(Math.pow(dockP[0] - cx, 2) + Math.pow(dockP[1] - cy, 2));
 
-                                                                                            return {
+                                                                                          const e_required = dist * energy_per_meter * 100.0 * 1.25;
+                                                                                          const return_trigger = (battery <= e_required + safety_margin);
+
+                                                                                          return {
                                                                                               outputs: [e_required, return_trigger ? 1 : 0]
                                                                                             };
                                                                                           }
@@ -7312,7 +7556,8 @@ execute: (ins, p, state) => {
                                                                                             'ROBOT_VACUUM_THETA_STAR': (id: string, params: any) => ({
                                                                                               id, type: 'ROBOT_VACUUM_THETA_STAR',
                                                                                               params: {
-                                                                                                inflation: params.inflation ?? 0.3
+                                                                                                inflation: params.inflation ?? 0.3,
+                                                                                              robot_radius: params.robot_radius ?? 0.15
                                                                                               },
                                                                                               isStateful: true,
                                                                                               inputs: [
@@ -7332,53 +7577,63 @@ execute: (ins, p, state) => {
                                                                                               },
                                                                                               icon: 'activity',
                                                                                               description: 'Calculates path to target using A* with line-of-sight shortcutting optimization (Theta*).',
-                                                                                              execute: (ins: any[], p: any, state: any, time: number) => {
-                                                                                                if (time === 0 || time === 0.0) {
-                                                                                                  g_isMatlabActive = false;
-                                                                                                }
-                                                                                                const grid = ins[0] as number[][];
-                                                                                                const start = ins[1] as number[] || [0, 0];
-                                                                                                const goal = ins[2] as number[] || [0, 0];
+                                                                                              execute: (ins: any[], p: any, committed: any, time: number) => {
+                                                                                            if (time === 0 || time === 0.0) {
+                                                                                              g_isMatlabActive = false;
+                                                                                            }
+                                                                                            const grid = xbGrid30(ins[0]);
+                                                                                            const s_wp = xbPoint(ins[1]);
+                                                                                            const g_wp = xbPoint(ins[2]);
+                                                                                            const inflation = Number(p.inflation ?? 0.3);
+                                                                                            const robotRadius = Number(p.robot_radius ?? 0.15);
+                                                                                            if (grid === null || s_wp === null || g_wp === null) {
+                                                                                              return xbParamError([[], [0, 0], 1], 'Theta* planner: grid must be a 30 x 30 numeric grid and start / goal [x, y] points.');
+                                                                                            }
+                                                                                            if (!(Number.isFinite(inflation) && inflation >= 0) || !(Number.isFinite(robotRadius) && robotRadius >= 0)) {
+                                                                                              return xbParamError([[], [0, 0], 1], 'Theta* planner: inflation and robot_radius must be finite numbers >= 0.');
+                                                                                            }
+                                                                                            const state = cloneState(committed ?? {}); // execute never mutates the committed state
+                                                                                            const lastStart: number[] = Array.isArray(state.lastStart) ? state.lastStart : [0, 0];
+                                                                                            const lastGoal: number[] = Array.isArray(state.lastGoal) ? state.lastGoal : [0, 0];
+                                                                                            if (!Array.isArray(state.path)) state.path = [];
 
-                                                                                                const s_wp = [start[0] ?? 0, start[1] ?? 0] as [number, number];
-                                                                                                const g_wp = [goal[0] ?? 0, goal[1] ?? 0] as [number, number];
+                                                                                            const dist_start = Math.sqrt(Math.pow(s_wp[0] - lastStart[0], 2) + Math.pow(s_wp[1] - lastStart[1], 2));
+                                                                                            const dist_goal = Math.sqrt(Math.pow(g_wp[0] - lastGoal[0], 2) + Math.pow(g_wp[1] - lastGoal[1], 2));
 
-                                                                                                const dist_start = Math.sqrt(Math.pow(s_wp[0] - state.lastStart[0], 2) + Math.pow(s_wp[1] - state.lastStart[1], 2));
-                                                                                                const dist_goal = Math.sqrt(Math.pow(g_wp[0] - state.lastGoal[0], 2) + Math.pow(g_wp[1] - state.lastGoal[1], 2));
+                                                                                            if (dist_start > 0.4 || dist_goal > 0.4 || state.path.length === 0) {
+                                                                                              state.lastStart = s_wp;
+                                                                                              state.lastGoal = g_wp;
+                                                                                              const activeMatlab = g_isMatlabActive || Math.abs(s_wp[0]) > 3.05 || Math.abs(s_wp[1]) > 3.05 || Math.abs(g_wp[0]) > 3.05 || Math.abs(g_wp[1]) > 3.05;
+                                                                                              // A* keeps cell centres `inflation` from occupied cell centres; every leg keeps the robot radius from occupied cells and walls.
+                                                                                              const astarPath = astar_planner(s_wp, g_wp, grid, inflation, 1.0, activeMatlab, robotRadius);
 
-                                                                                                if (dist_start > 0.4 || dist_goal > 0.4 || state.path.length === 0) {
-                                                                                                  state.lastStart = s_wp;
-                                                                                                  state.lastGoal = g_wp;
-                                                                                                  const activeMatlab = g_isMatlabActive || Math.abs(s_wp[0]) > 3.05 || Math.abs(s_wp[1]) > 3.05 || Math.abs(g_wp[0]) > 3.05 || Math.abs(g_wp[1]) > 3.05;
-                                                                                                  const astarPath = astar_planner(s_wp, g_wp, grid, 0.28, 1.0, activeMatlab);
-
-                                                                                                  if (astarPath.length > 2) {
-                                                                                                    const optPath: [number, number][] = [astarPath[0]];
-                                                                                                    let currentIdx = 0;
-                                                                                                    while (currentIdx < astarPath.length - 1) {
-                                                                                                      let furthestLosIdx = currentIdx + 1;
-                                                                                                      for (let j = currentIdx + 2; j < astarPath.length; j++) {
-                                                                                                        if (lineOfSightClear(astarPath[currentIdx], astarPath[j], grid, 0.15, activeMatlab)) {
-                                                                                                          furthestLosIdx = j;
-                                                                                                        }
-                                                                                                      }
-                                                                                                      optPath.push(astarPath[furthestLosIdx]);
-                                                                                                      currentIdx = furthestLosIdx;
+                                                                                              if (astarPath.length > 2) {
+                                                                                                const optPath: [number, number][] = [astarPath[0]];
+                                                                                                let currentIdx = 0;
+                                                                                                while (currentIdx < astarPath.length - 1) {
+                                                                                                  let furthestLosIdx = currentIdx + 1;
+                                                                                                  for (let j = currentIdx + 2; j < astarPath.length; j++) {
+                                                                                                    if (xbLegClearOfGrid(astarPath[currentIdx], astarPath[j], grid, robotRadius, activeMatlab)) {
+                                                                                                      furthestLosIdx = j;
                                                                                                     }
-                                                                                                    state.path = optPath;
-                                                                                                  } else {
-                                                                                                    state.path = astarPath;
                                                                                                   }
+                                                                                                  optPath.push(astarPath[furthestLosIdx]);
+                                                                                                  currentIdx = furthestLosIdx;
                                                                                                 }
-
-                                                                                                const nextPt = state.path[0] || g_wp;
-                                                                                                const failed = (state.path.length === 0);
-
-                                                                                                return {
-                                                                                                  outputs: [state.path, nextPt, failed ? 1 : 0],
-                                                                                                  nextState: state
-                                                                                                };
+                                                                                                state.path = optPath;
+                                                                                              } else {
+                                                                                                state.path = astarPath;
                                                                                               }
+                                                                                            }
+
+                                                                                            const nextPt = state.path[0] || g_wp;
+                                                                                            const failed = (state.path.length === 0);
+
+                                                                                            return {
+                                                                                              outputs: [state.path, nextPt, failed ? 1 : 0],
+                                                                                              nextState: state
+                                                                                            };
+                                                                                          }
                                                                                             }),
 
                                                                                               'ROBOT_VACUUM_DIGITAL_TWIN': (id: string, params: any) => ({
@@ -7395,7 +7650,8 @@ execute: (ins, p, state) => {
                                                                                                   Kp_wheel: params.Kp_wheel ?? 12.0,
                                                                                                   Ki_wheel: params.Ki_wheel ?? 45.0,
                                                                                                   lidar_noise_std: params.lidar_noise_std ?? 0.015,
-                                                                                                  lidar_max_range: params.lidar_max_range ?? 5.5
+                                                                                                  lidar_max_range: params.lidar_max_range ?? 5.5,
+                                                                                                  seed: xbSeedParam(id, params)
                                                                                                 },
                                                                                                 isStateful: true,
                                                                                                 inputs: [
@@ -7497,6 +7753,10 @@ execute: (ins, p, state) => {
 
                                                                                                   const lidar_noise_std = Number(p.lidar_noise_std ?? 0.015);
                                                                                                   const lidar_max_range = Number(p.lidar_max_range ?? 5.5);
+  if (!(Number.isFinite(lidar_max_range) && lidar_max_range > 0) || !(Number.isFinite(lidar_noise_std) && lidar_noise_std >= 0) || !xbIsSeed(Number(p.seed))) {
+    return xbParamError([state.x, state.y, state.theta, state.x_est, state.y_est, state.theta_est, state.lidarRanges, [state.omegaL, state.omegaR], [state.currentL, state.currentR], 0, state.grid, state.astar_path ?? []], 'Digital twin: lidar_max_range must be > 0, lidar_noise_std >= 0 and seed a finite number.');
+  }
+  const draw = xbNoiseAt(Number(p.seed), time);
 
                                                                                                   const dt = 0.08; // Fixed step in MATLAB
                                                                                                   state.lastTime = time;
@@ -7520,7 +7780,7 @@ execute: (ins, p, state) => {
                                                                                                   for (let i = 0; i < numBeams; i++) {
                                                                                                     const absAngle = state.theta + beamAngles[i];
                                                                                                     // Raycast against walls & obstacles (isMatlab = true)
-                                                                                                    let r = raycastTwin(state.x, state.y, absAngle, lidar_max_range, lidar_noise_std, true);
+                                                                                                    let r = raycastTwin(state.x, state.y, absAngle, lidar_max_range, lidar_noise_std, true, 2 * draw() - 1);
 
                                                                                                     // Raycast against dynamic obstacle
                                                                                                     const dx_dyn = state.dyn_x - state.x;
@@ -7546,8 +7806,8 @@ execute: (ins, p, state) => {
                                                                                                     }
 
                                                                                                     // Noise injection (TC-03): 15% random range noise
-                                                                                                    if (Math.random() < 0.15) {
-                                                                                                      r = 0.1 + Math.random() * (lidar_max_range - 0.2);
+                                                                                                    if (draw() < 0.15) {
+                                                                                                      r = 0.1 + draw() * (lidar_max_range - 0.2);
                                                                                                     }
 
                                                                                                     currentRanges.push(r);
@@ -7565,8 +7825,8 @@ execute: (ins, p, state) => {
                                                                                                   state.escape_dir = Math.sign(min_angle + 1e-6);
 
                                                                                                   // 3. Odometry updates with noise
-                                                                                                  const slipL = 1.0 + (Math.random() - 0.5) * 0.05;
-                                                                                                  const slipR = 1.0 + (Math.random() - 0.5) * 0.05;
+                                                                                                  const slipL = 1.0 + (draw() - 0.5) * 0.05;
+                                                                                                  const slipR = 1.0 + (draw() - 0.5) * 0.05;
                                                                                                   const dS_L = state.omegaL * dt * p.wheel_radius * slipL;
                                                                                                   const dS_R = state.omegaR * dt * p.wheel_radius * slipR;
                                                                                                   const dS_drift = (dS_R + dS_L) / 2;
@@ -7603,9 +7863,9 @@ execute: (ins, p, state) => {
                                                                                                   ];
 
                                                                                                   // Measured pose from EKF sensor (adds noise)
-                                                                                                  const meas_x = state.x + (Math.random() - 0.5) * 2 * 0.04;
-                                                                                                  const meas_y = state.y + (Math.random() - 0.5) * 2 * 0.04;
-                                                                                                  const meas_theta = angdiff(state.theta + (Math.random() - 0.5) * 2 * 0.008);
+                                                                                                  const meas_x = state.x + (draw() - 0.5) * 2 * 0.04;
+                                                                                                  const meas_y = state.y + (draw() - 0.5) * 2 * 0.04;
+                                                                                                  const meas_theta = angdiff(state.theta + (draw() - 0.5) * 2 * 0.008);
 
                                                                                                   // K = P_pred * (P_pred + R)^-1
                                                                                                   const S = [
@@ -8405,7 +8665,8 @@ execute: (ins, p, state) => {
                                                                                                     motor_K: params.motor_K ?? 0.04,
                                                                                                     inertia: params.inertia ?? 0.0075,
                                                                                                     encoder_cpr: params.encoder_cpr ?? 360,
-                                                                                                    encoder_noise_std: params.encoder_noise_std ?? 0.1
+                                                                                                    encoder_noise_std: params.encoder_noise_std ?? 0.1,
+                                                                                                  seed: xbSeedParam(id, params)
                                                                                                   },
                                                                                                   isStateful: true,
                                                                                                   inputs: [
@@ -8428,12 +8689,16 @@ execute: (ins, p, state) => {
                                                                                                   execute: (ins: any[], p: any, state: any, time: number) => {
                                                                                                     const encoder_cpr = Number(p.encoder_cpr ?? 360);
                                                                                                     const noise_std = Number(p.encoder_noise_std ?? 0.1);
+  if (!(Number.isFinite(encoder_cpr) && encoder_cpr > 0) || !(Number.isFinite(noise_std) && noise_std >= 0) || !xbIsSeed(Number(p.seed))) {
+    return xbParamError([state.omega, state.current, 0, state.omega], 'Motor: encoder_cpr must be > 0, encoder_noise_std >= 0 and seed a finite number.');
+  }
+  const draw = xbNoiseAt(Number(p.seed), time);
 
                                                                                                     const raw_ticks = state.theta_wheel * (encoder_cpr / (2 * Math.PI));
                                                                                                     const ticks_quantized = Math.floor(raw_ticks);
-                                                                                                    const ticks_noisy = ticks_quantized + (noise_std > 0 ? (Math.random() - 0.5) * 2 * noise_std : 0);
+                                                                                                    const ticks_noisy = ticks_quantized + (noise_std > 0 ? (draw() - 0.5) * 2 * noise_std : 0);
 
-                                                                                                    const omega_est = state.omega + (noise_std > 0 ? (Math.random() - 0.5) * 0.15 : 0);
+                                                                                                    const omega_est = state.omega + (noise_std > 0 ? (draw() - 0.5) * 0.15 : 0);
 
                                                                                                     return {
                                                                                                       outputs: [state.omega, state.current, ticks_noisy, omega_est],
@@ -8467,7 +8732,7 @@ execute: (ins, p, state) => {
                                                                                                       robot_mass: params.robot_mass ?? 2.5,
                                                                                                       robot_inertia: params.robot_inertia ?? 0.015,
                                                                                                       wheel_friction: params.wheel_friction ?? 0.02,
-                                                                                                      cg_offset: params.cg_offset || 0.0
+                                                                                                      cg_offset: params.cg_offset ?? 0.0
                                                                                                     },
                                                                                                     isStateful: true,
                                                                                                     inputs: [
@@ -8483,7 +8748,7 @@ execute: (ins, p, state) => {
                                                                                                     ],
                                                                                                     state: {
                                                                                                       x: 0,
-                                                                                                      y: 0,
+                                                                                                      y: 1.05, // default pose (0, 1.05): free floor of the 12 x 12 m twin map (the origin holds an obstacle), outside every wall zone,
                                                                                                       theta: 0
                                                                                                     },
                                                                                                     icon: 'graduation-cap',
@@ -8509,14 +8774,11 @@ execute: (ins, p, state) => {
                                                                                                       const omega_R = Number(ins[1] ?? 0);
                                                                                                       const wheel_radius = Number(p.wheel_radius ?? 0.033);
                                                                                                       const wheel_separation = Number(p.wheel_separation ?? 0.16);
-                                                                                                      const cg_offset = Number(p.cg_offset || 0.0);
-                                                                                                      const wheel_friction = Number(p.wheel_friction ?? 0.02);
-                                                                                                      const robot_mass = Number(p.robot_mass ?? 2.5);
-
-                                                                                                      // Calculate speeds with basic damping/friction effects
-                                                                                                      const slip_factor = Math.max(0.1, 1.0 - (wheel_friction / robot_mass));
-                                                                                                      const vL = omega_L * wheel_radius * slip_factor;
-                                                                                                      const vR = omega_R * wheel_radius * slip_factor;
+                                                                                                      const cg_offset = Number(p.cg_offset ?? 0.0);
+                                                                                                                                                                                                            
+                                                                                                      // Kinematic differential drive (v = r (wL + wR) / 2, w = r (wR - wL) / L): no hidden slip factor.
+                                                                                                                                                                                                            const vL = omega_L * wheel_radius;
+                                                                                                      const vR = omega_R * wheel_radius;
 
                                                                                                       const V = (vL + vR) / 2;
                                                                                                       const w = (vR - vL) / wheel_separation;
@@ -8528,7 +8790,7 @@ execute: (ins, p, state) => {
 
                                                                                                       const next_x = state.x + dx * 0.08;
                                                                                                       const next_y = state.y + dy * 0.08;
-                                                                                                      const collided = checkCollisionTwin(next_x, next_y, 0.15, false);
+                                                                                                      const collided = checkCollisionTwin(next_x, next_y, 0.15, true);
 
                                                                                                       return [collided ? 0 : dx, collided ? 0 : dy, dtheta];
                                                                                                     }
@@ -8538,7 +8800,8 @@ execute: (ins, p, state) => {
                                                                                                       id, type: 'ROBOT_VACUUM_ENVIRONMENT', directFeedthrough: true, feedthroughInputs: ['x', 'y', 'theta'],
                                                                                                       params: {
                                                                                                         lidar_max_range: params.lidar_max_range ?? 4.0,
-                                                                                                        lidar_noise_std: params.lidar_noise_std ?? 0.02
+                                                                                                        lidar_noise_std: params.lidar_noise_std ?? 0.02,
+                                                                                                      seed: xbSeedParam(id, params)
                                                                                                       },
                                                                                                       isStateful: true,
                                                                                                       inputs: [
@@ -8647,6 +8910,10 @@ execute: (ins, p, state) => {
 
                                                                                                         const lidar_max_range = Number(p.lidar_max_range ?? 4.0);
                                                                                                         const lidar_noise_std = Number(p.lidar_noise_std ?? 0.02);
+  if (!(Number.isFinite(lidar_max_range) && lidar_max_range > 0) || !(Number.isFinite(lidar_noise_std) && lidar_noise_std >= 0) || !xbIsSeed(Number(p.seed))) {
+    return xbParamError([Array(8).fill(0), 0, 0], 'Environment: lidar_max_range must be > 0, lidar_noise_std >= 0 and seed a finite number.');
+  }
+  const draw = xbNoiseAt(Number(p.seed), time);
 
                                                                                                         // 1. Raycast LiDAR with configurable scan rate / frequency / missed detections
                                                                                                         const numBeams = 8;
@@ -8656,10 +8923,10 @@ execute: (ins, p, state) => {
                                                                                                           const absAngle = nextState.theta + beamAngles[i];
 
                                                                                                           // Simulating missed detections (2% rate)
-                                                                                                          if (Math.random() < 0.02) {
+                                                                                                          if (draw() < 0.02) {
                                                                                                             currentRanges.push(lidar_max_range);
                                                                                                           } else {
-                                                                                                            const r = raycastTwin(nextState.x, nextState.y, absAngle, lidar_max_range, lidar_noise_std);
+                                                                                                            const r = raycastTwin(nextState.x, nextState.y, absAngle, lidar_max_range, lidar_noise_std, true, 2 * draw() - 1);
                                                                                                             currentRanges.push(r);
                                                                                                           }
                                                                                                         }
@@ -8698,7 +8965,9 @@ execute: (ins, p, state) => {
                                                                                                         params: {
                                                                                                           wheel_radius: params.wheel_radius ?? 0.033,
                                                                                                           wheel_separation: params.wheel_separation ?? 0.16,
-                                                                                                          encoder_cpr: params.encoder_cpr ?? 360
+                                                                                                          encoder_cpr: params.encoder_cpr ?? 360,
+                                                                                                        slip_noise: params.slip_noise ?? 0.05, // peak-to-peak random wheel slip (relative), seeded
+                                                                                                        seed: xbSeedParam(id, params)
                                                                                                         },
                                                                                                         isStateful: true,
                                                                                                         inputs: [
@@ -8728,6 +8997,10 @@ execute: (ins, p, state) => {
                                                                                                           const wheel_radius = Number(p.wheel_radius ?? 0.033);
                                                                                                           const wheel_separation = Number(p.wheel_separation ?? 0.16);
                                                                                                           const encoder_cpr = Number(p.encoder_cpr ?? 360);
+  if (!Number.isFinite(enc_L) || !Number.isFinite(enc_R) || !(Number.isFinite(encoder_cpr) && encoder_cpr > 0) || !(Number.isFinite(wheel_separation) && wheel_separation > 0) || !(Number(p.slip_noise) >= 0 && Number.isFinite(Number(p.slip_noise))) || !xbIsSeed(Number(p.seed))) {
+    return xbParamError([state.x_odom, state.y_odom, state.theta_odom], 'Odometry: encoder counts must be finite, encoder_cpr and wheel_separation > 0 and seed a finite number.');
+  }
+  const draw = xbNoiseAt(Number(p.seed), time);
 
                                                                                                           const delta_encL = enc_L - state.prev_enc_L;
                                                                                                           const delta_encR = enc_R - state.prev_enc_R;
@@ -8738,8 +9011,8 @@ execute: (ins, p, state) => {
                                                                                                           const dS_L = delta_encL * (2 * Math.PI / encoder_cpr) * wheel_radius;
                                                                                                           const dS_R = delta_encR * (2 * Math.PI / encoder_cpr) * wheel_radius;
 
-                                                                                                          const slipL = 1.0 + (Math.random() - 0.5) * 0.05;
-                                                                                                          const slipR = 1.0 + (Math.random() - 0.5) * 0.05;
+                                                                                                          const slipL = 1.0 + (draw() - 0.5) * Number(p.slip_noise);
+                                                                                                          const slipR = 1.0 + (draw() - 0.5) * Number(p.slip_noise);
 
                                                                                                           const dS_drift = (dS_R * slipR + dS_L * slipL) / 2;
                                                                                                           const dTheta_drift = (dS_R * slipR - dS_L * slipL) / wheel_separation;
@@ -8851,7 +9124,8 @@ execute: (ins, p, state) => {
                                                                                                           'ROBOT_VACUUM_SLAM': (id: string, params: any) => ({
                                                                                                             id, type: 'ROBOT_VACUUM_SLAM', directFeedthrough: true,
                                                                                                             params: {
-                                                                                                              lidar_max_range: params.lidar_max_range ?? 4.0
+                                                                                                              lidar_max_range: params.lidar_max_range ?? 4.0,
+                                                                                                            seed: xbSeedParam(id, params)
                                                                                                             },
                                                                                                             isStateful: true,
                                                                                                             inputs: [
@@ -8917,9 +9191,13 @@ execute: (ins, p, state) => {
                                                                                                                 }
                                                                                                               }
 
-                                                                                                              const icp_noise_x = (Math.random() - 0.5) * 0.01;
-                                                                                                              const icp_noise_y = (Math.random() - 0.5) * 0.01;
-                                                                                                              const icp_noise_theta = (Math.random() - 0.5) * 0.005;
+                                                                                                              if (!xbIsSeed(Number(p.seed)) || !Number.isFinite(x_est) || !Number.isFinite(y_est) || !Number.isFinite(theta_est) || !Number.isFinite(x_true) || !Number.isFinite(y_true) || !Number.isFinite(theta_true)) {
+    return xbParamError([state.grid, x_est, y_est, theta_est, [100, 0]].map((v) => (typeof v === 'number' && !Number.isFinite(v) ? 0 : v)), 'SLAM: the pose inputs must be finite numbers and seed a finite number.');
+  }
+  const draw = xbNoiseAt(Number(p.seed), time);
+  const icp_noise_x = (draw() - 0.5) * 0.01;
+                                                                                                              const icp_noise_y = (draw() - 0.5) * 0.01;
+                                                                                                              const icp_noise_theta = (draw() - 0.5) * 0.005;
 
                                                                                                               const x_corr = x_true + icp_noise_x;
                                                                                                               const y_corr = y_true + icp_noise_y;
@@ -9322,7 +9600,8 @@ execute: (ins, p, state) => {
                                                                                                                     id, type: 'ROBOT_VACUUM_ENCODER', directFeedthrough: true,
                                                                                                                     params: {
                                                                                                                       encoder_cpr: params.encoder_cpr ?? 360,
-                                                                                                                      noise_std: params.noise_std ?? 0.1
+                                                                                                                      noise_std: params.noise_std ?? 0.1,
+                                                                                                                      seed: xbSeedParam(id, params)
                                                                                                                     },
                                                                                                                     isStateful: true,
                                                                                                                     inputs: [
@@ -9345,16 +9624,21 @@ execute: (ins, p, state) => {
                                                                                                                       const omega_R = Number(ins[1] ?? 0);
                                                                                                                       const cpr = Number(p.encoder_cpr ?? 360);
                                                                                                                       const noise_std = Number(p.noise_std ?? 0.1);
+  if (!Number.isFinite(omega_L) || !Number.isFinite(omega_R) || !(Number.isFinite(cpr) && cpr > 0) || !(Number.isFinite(noise_std) && noise_std >= 0) || !xbIsSeed(Number(p.seed))) {
+    return xbParamError([0, 0], 'Encoder: wheel speeds must be finite, encoder_cpr > 0, noise_std >= 0 and seed a finite number.');
+  }
+  const draw = xbNoiseAt(Number(p.seed), time);
 
-                                                                                                                      const dt = state.lastTime === 0 ? 0.02 : Math.max(1e-4, time - state.lastTime);
+                                                                                                                      // Integration step = time since the last committed sample (0 on the first sample at the start time).
+  const dt = Math.max(0, time - (state.lastTime ?? time));
                                                                                                                       const nextThetaL = (state.theta_L ?? 0) + omega_L * dt;
                                                                                                                       const nextThetaR = (state.theta_R ?? 0) + omega_R * dt;
 
                                                                                                                       const rawL = nextThetaL * (cpr / (2 * Math.PI));
                                                                                                                       const rawR = nextThetaR * (cpr / (2 * Math.PI));
 
-                                                                                                                      const enc_L = Math.floor(rawL + (noise_std > 0 ? (Math.random() - 0.5) * 2 * noise_std : 0));
-                                                                                                                      const enc_R = Math.floor(rawR + (noise_std > 0 ? (Math.random() - 0.5) * 2 * noise_std : 0));
+                                                                                                                      const enc_L = Math.floor(rawL + (noise_std > 0 ? (draw() - 0.5) * 2 * noise_std : 0));
+                                                                                                                      const enc_R = Math.floor(rawR + (noise_std > 0 ? (draw() - 0.5) * 2 * noise_std : 0));
 
                                                                                                                       return {
                                                                                                                         outputs: [enc_L, enc_R],
@@ -9367,7 +9651,9 @@ execute: (ins, p, state) => {
                                                                                                                       id, type: 'ROBOT_VACUUM_LIDAR',
                                                                                                                       params: {
                                                                                                                         lidar_max_range: params.lidar_max_range ?? 4.0,
-                                                                                                                        lidar_noise_std: params.lidar_noise_std ?? 0.02
+                                                                                                                        lidar_noise_std: params.lidar_noise_std ?? 0.02,
+                                                                                                                        dropout_rate: params.dropout_rate ?? 0.02, // probability of a missed detection (max-range reading), seeded
+                                                                                                                        seed: xbSeedParam(id, params)
                                                                                                                       },
                                                                                                                       inputs: [
                                                                                                                         createPort('x', 'X_true', 'input', 0, 'left', 'control', 'float32', 'm', 50, 'world'),
@@ -9388,16 +9674,20 @@ execute: (ins, p, state) => {
 
                                                                                                                         const max_range = Number(p.lidar_max_range ?? 4.0);
                                                                                                                         const noise_std = Number(p.lidar_noise_std ?? 0.02);
+  if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(theta) || !(Number.isFinite(max_range) && max_range > 0) || !(Number.isFinite(noise_std) && noise_std >= 0) || !(Number(p.dropout_rate) >= 0 && Number(p.dropout_rate) <= 1) || !xbIsSeed(Number(p.seed))) {
+    return xbParamError([Array(8).fill(0), Array(8).fill(0)], 'LiDAR: the pose must be finite, lidar_max_range > 0, lidar_noise_std >= 0 and seed a finite number.');
+  }
+  const draw = xbNoiseAt(Number(p.seed), time);
 
                                                                                                                         const numBeams = 8;
                                                                                                                         const beamAngles = [0, Math.PI / 4, Math.PI / 2, 3 * Math.PI / 4, Math.PI, -3 * Math.PI / 4, -Math.PI / 2, -Math.PI / 4];
                                                                                                                         const ranges: number[] = [];
 
                                                                                                                         for (let i = 0; i < numBeams; i++) {
-                                                                                                                          if (Math.random() < 0.02) {
+                                                                                                                          if (draw() < Number(p.dropout_rate)) {
                                                                                                                             ranges.push(max_range);
                                                                                                                           } else {
-                                                                                                                            const r = raycastTwin(x, y, theta + beamAngles[i], max_range, noise_std);
+                                                                                                                            const r = raycastTwin(x, y, theta + beamAngles[i], max_range, noise_std, false, 2 * draw() - 1);
                                                                                                                             ranges.push(r);
                                                                                                                           }
                                                                                                                         }
@@ -9661,7 +9951,9 @@ execute: (ins, p, state) => {
                                                                                                                             'ROBOT_VACUUM_GLOBAL_PLANNER': (id: string, params: any) => ({
                                                                                                                               id, type: 'ROBOT_VACUUM_GLOBAL_PLANNER',
                                                                                                                               params: {
-                                                                                                                                algorithm: params.algorithm || 'A*'
+                                                                                                                                algorithm: params.algorithm || 'A*',
+                                                                                                                                inflation: params.inflation ?? 0.3,
+                                                                                                                                robot_radius: params.robot_radius ?? 0.15
                                                                                                                               },
                                                                                                                               inputs: [
                                                                                                                                 createPort('grid', 'Grid', 'input', Array.from({ length: 30 }, () => Array(30).fill(0)), 'left', 'matrix', 'int32', '%', 50, 'world'),
@@ -9678,13 +9970,39 @@ execute: (ins, p, state) => {
                                                                                                                               icon: 'graduation-cap',
                                                                                                                               description: 'Finds collision-free paths using A* and outputs the next local waypoint target.',
                                                                                                                               execute: (ins: any[], p: any, state: any, time: number) => {
-                                                                                                                                const goal_x = Number(ins[3] ?? 0);
-                                                                                                                                const goal_y = Number(ins[4] ?? 0);
-                                                                                                                                return {
-                                                                                                                                  outputs: [[goal_x, goal_y], goal_x, goal_y]
-                                                                                                                                };
-                                                                                                                              }
-                                                                                                                            }),
+                                                                                                                                  const num = (v: unknown) => (typeof v === 'number' ? v : Number.NaN);
+                                                                                                                                  const sx = num(ins[1]), sy = num(ins[2]), goal_x = num(ins[3]), goal_y = num(ins[4]);
+                                                                                                                                  const grid = xbGrid30(ins[0]);
+                                                                                                                                  const inflation = Number(p?.inflation ?? 0.3);
+                                                                                                                                  const robotRadius = Number(p?.robot_radius ?? 0.15);
+                                                                                                                                  if (grid === null || !Number.isFinite(sx) || !Number.isFinite(sy) || !Number.isFinite(goal_x) || !Number.isFinite(goal_y)) {
+                                                                                                                                    return xbParamError([[], Number.isFinite(sx) ? sx : 0, Number.isFinite(sy) ? sy : 0], 'Global planner: the grid must be 30 x 30 numeric and the start and goal coordinates finite numbers.');
+                                                                                                                                  }
+                                                                                                                                  if (!(Number.isFinite(inflation) && inflation >= 0) || !(Number.isFinite(robotRadius) && robotRadius >= 0)) {
+                                                                                                                                    return xbParamError([[], sx, sy], 'Global planner: inflation and robot_radius must be finite numbers >= 0.');
+                                                                                                                                  }
+                                                                                                                                  const start: [number, number] = [sx, sy];
+                                                                                                                                  const goal: [number, number] = [goal_x, goal_y];
+                                                                                                                                  const activeMatlab = g_isMatlabActive || Math.abs(sx) > 3.05 || Math.abs(sy) > 3.05 || Math.abs(goal_x) > 3.05 || Math.abs(goal_y) > 3.05;
+                                                                                                                                  // Straight line free for the robot footprint: the goal is the next waypoint.
+                                                                                                                                  if (xbLegClearOfGrid(start, goal, grid, robotRadius, activeMatlab)) {
+                                                                                                                                    return { outputs: [[start, goal], goal_x, goal_y] };
+                                                                                                                                  }
+                                                                                                                                  // A* around the occupied cells (inflation = distance kept between cell centres).
+                                                                                                                                  const cells = astar_planner(start, goal, grid, inflation, 1.0, activeMatlab, robotRadius);
+                                                                                                                                  if (cells.length === 0) {
+                                                                                                                                    // No path: the planned path is empty (the failure report) and the target holds the current position.
+                                                                                                                                    return { outputs: [[], sx, sy] };
+
+                                                                                                                                  }
+                                                                                                                                  const path: [number, number][] = [start, ...cells.slice(1, -1), goal];
+                                                                                                                                  let next = 1;
+                                                                                                                                  for (let j = path.length - 1; j >= 1; j--) {
+                                                                                                                                    if (xbLegClearOfGrid(start, path[j], grid, robotRadius, activeMatlab)) { next = j; break; }
+                                                                                                                                  }
+                                                                                                                                  return { outputs: [path, path[next][0], path[next][1]] };
+                                                                                                                                }
+                                                                                                                              }),
 
                                                                                                                               'ROBOT_VACUUM_OBSTACLE_AVOIDANCE': (id: string, params: any) => ({
                                                                                                                                 id, type: 'ROBOT_VACUUM_OBSTACLE_AVOIDANCE', directFeedthrough: true,
@@ -10619,14 +10937,18 @@ execute: (ins, p, state) => {
                                                                                                                                                                       createPort('drum_state', 'drum_state', 'output')
                                                                                                                                                                     ],
                                                                                                                                                                     state: { angle: 0, drum_angle: 0, pulsator_angle: 0, initialized: false },
-                                                                                                                                                                    execute: (ins, p, state, dt) => {
-                                                                                                                                                                      const rpm = Number(ins[0]) || 0;
+                                                                                                                                                                    execute: (ins, p, state, time) => {
+                                                                                                                                                                      const rpm = ins[0] === undefined || ins[0] === null ? 0 : Number(ins[0]);
+                 if (!Number.isFinite(rpm) || !(Number.isFinite(p.drum_radius) && p.drum_radius > 0) || !Number.isFinite(p.pulsator_speed_ratio)) {
+                   return xbParamError([state?.angle ?? 0, 0, [Number.isFinite(p.drum_radius) ? p.drum_radius : 0, state?.angle ?? 0, 0]], 'Drum: rpm must be a finite number, drum_radius > 0 and pulsator_speed_ratio finite.');
+                 }
                                                                                                                                                                       const omega = (rpm * 2 * Math.PI) / 60;
-                                                                                                                                                                      const dtSec = (dt !== undefined && dt > 0 && dt < 0.05) ? dt : 0.016;
-                                                                                                                                                                      const nextAngle = (state.angle || 0) + omega * dtSec;
+                                                                                                                                                                      // Integration step = time since the last committed sample (0 on the first sample): the engine passes the simulation time, not the step.
+                 const dtSec = demStep(state, time);
+                                                                                                                                                                      const nextAngle = (state.angle ?? 0) + omega * dtSec;
 
                                                                                                                                                                       const pulsator_omega = p.pulsator_mode ? omega * p.pulsator_speed_ratio : 0;
-                                                                                                                                                                      const nextPulsatorAngle = (state.pulsator_angle || 0) + pulsator_omega * dtSec;
+                                                                                                                                                                      const nextPulsatorAngle = (state.pulsator_angle ?? 0) + pulsator_omega * dtSec;
                                                                                                                                                                       const drumStateArray = [p.drum_radius, nextAngle, omega];
                                                                                                                                                                       if (p.pulsator_mode) {
                                                                                                                                                                         drumStateArray.push(1, nextPulsatorAngle, pulsator_omega);
@@ -10640,7 +10962,9 @@ execute: (ins, p, state) => {
                                                                                                                                                                           pulsator_angle: nextPulsatorAngle,
                                                                                                                                                                           has_pulsator: p.pulsator_mode,
                                                                                                                                                                           pulsator_omega,
-                                                                                                                                                                          initialized: true
+                                                                                                                                                                          initialized: true,
+                     lastTime: time
+
                                                                                                                                                                         }
                                                                                                                                                                       };
                                                                                                                                                                     }
@@ -10649,8 +10973,9 @@ execute: (ins, p, state) => {
 
                                                                                                                                                                   'DEM_PARTICLE_SYSTEM': (id, params) => {
                                                                                                                                                                     const particle_radius = params.particle_radius !== undefined ? Number(params.particle_radius) : 0.05;
+               const seed = xbSeedParam(id, params);
                                                                                                                                                                     return {
-                                                                                                                                                                      id, type: 'DEM_PARTICLE_SYSTEM',  isStateful: true, params: { particle_radius },
+                                                                                                                                                                      id, type: 'DEM_PARTICLE_SYSTEM',  isStateful: true, params: { particle_radius, seed },
                                                                                                                                                                       inputs: [
                                                                                                                                                                         createPort('contact_forces', 'contact_forces', 'input'),
                                                                                                                                                                         createPort('bond_forces', 'bond_forces', 'input'),
@@ -10663,17 +10988,21 @@ execute: (ins, p, state) => {
                                                                                                                                                                         createPort('cleanliness', 'cleanliness', 'output')
                                                                                                                                                                       ],
                                                                                                                                                                       state: { initialized: false, particles: [], bonds: [], drum_angle: 0, cleanliness: 0 },
-                                                                                                                                                                      execute: (ins, p, state, dt) => {
-                                                                                                                                                                        const contactForces = (ins[0] || []) as any;
-                                                                                                                                                                        const bondForces = (ins[1] || []) as any;
-                                                                                                                                                                        const fluidForces = (ins[2] || []) as any;
-                                                                                                                                                                        const drumState = (ins[3] || [0.8, 0, 0, 0, 0, 0]) as any;
-                                                                                                                                                                        const drum_radius = Number(drumState[0]) || 0.8;
-                                                                                                                                                                        const drum_angle = Number(drumState[1]) || 0;
-                                                                                                                                                                        const omega = Number(drumState[2]) || 0;
-                                                                                                                                                                        const has_pulsator = Number(drumState[3]) === 1;
-                                                                                                                                                                        const pulsator_angle = Number(drumState[4]) || 0;
-                                                                                                                                                                        const pulsator_omega = Number(drumState[5]) || 0;
+                                                                                                                                                                      execute: (ins, p, state, time) => {
+                                                                                                                                                                        const contactForces = xbNumVector(ins[0]);
+                   const bondForces = xbNumVector(ins[1]);
+                   const fluidForces = xbNumVector(ins[2]);
+                   const drumState: unknown[] = Array.isArray(ins[3]) ? ins[3] : [0.8, 0, 0, 0, 0, 0];
+                   const drum_radius = xbFiniteOr(drumState[0], 0.8);
+                   const drum_angle = xbFiniteOr(drumState[1], 0);
+                   const omega = xbFiniteOr(drumState[2], 0);
+                   const has_pulsator = Number(drumState[3]) === 1;
+                   const pulsator_angle = xbFiniteOr(drumState[4], 0);
+                   const pulsator_omega = xbFiniteOr(drumState[5], 0);
+                   if (contactForces === null || bondForces === null || fluidForces === null
+                     || !(drum_radius > 0) || !(Number.isFinite(p.particle_radius) && p.particle_radius > 0) || !xbIsSeed(Number(p.seed))) {
+                     return xbParamError([[], [], 0], 'Particle system: the force inputs must be vectors of finite numbers, the drum radius and particle_radius > 0 and seed a finite number.');
+                   }
 
                                                                                                                                                                         const numSheets = p.num_sheets !== undefined ? Number(p.num_sheets) : 2;
                                                                                                                                                                         const gridRows = p.grid_rows !== undefined ? Number(p.grid_rows) : 4;
@@ -10685,15 +11014,16 @@ execute: (ins, p, state) => {
                                                                                                                                                                         let initialized = state.initialized;
 
                                                                                                                                                                         if (!initialized) {
-                                                                                                                                                                          particles = [];
+ particles = [];
+                     const draw = xbNoiseAt(Number(p.seed), 0); // seeded initial jitter: the same cloth for the same seed
                                                                                                                                                                           for (let c = 0; c < numSheets; c++) {
                                                                                                                                                                             const sheetSpacing = 0.15;
                                                                                                                                                                             const startX = -((gridCols - 1) * particleSpacing) / 2;
                                                                                                                                                                             const startY = -((gridRows - 1) * particleSpacing) / 2 + (c - (numSheets - 1) / 2) * sheetSpacing;
                                                                                                                                                                             for (let r = 0; r < gridRows; r++) {
                                                                                                                                                                               for (let col = 0; col < gridCols; col++) {
-                                                                                                                                                                                const x = startX + col * particleSpacing + (Math.random() - 0.5) * 0.01;
-                                                                                                                                                                                const y = startY + r * particleSpacing + (Math.random() - 0.5) * 0.01;
+                                                                                                                                                                                const x = startX + col * particleSpacing + (draw() - 0.5) * 0.01;
+                                                                                                                                                                                const y = startY + r * particleSpacing + (draw() - 0.5) * 0.01;
                                                                                                                                                                                 particles.push({
                                                                                                                                                                                   x,
                                                                                                                                                                                   y,
@@ -10735,16 +11065,17 @@ execute: (ins, p, state) => {
                                                                                                                                                                           initialized = true;
                                                                                                                                                                         }
 
-                                                                                                                                                                        const dtSec = (dt !== undefined && dt > 0 && dt < 0.05) ? dt : 0.016;
+                                                                                                                                                                        // Integration step = time since the last committed sample (0 on the first sample): the engine passes the simulation time, not the step.
+                   const dtSec = demStep(state, time);
                                                                                                                                                                         const nextParticles = particles.map((part: any, idx: number) => {
-                                                                                                                                                                          const fx_c = Number(contactForces[idx * 2]) || 0;
-                                                                                                                                                                          const fy_c = Number(contactForces[idx * 2 + 1]) || 0;
+                                                                                                                                                                          const fx_c = contactForces[idx * 2] ?? 0;
+                                                                                                                                                                          const fy_c = contactForces[idx * 2 + 1] ?? 0;
 
-                                                                                                                                                                          const fx_b = Number(bondForces[idx * 2]) || 0;
-                                                                                                                                                                          const fy_b = Number(bondForces[idx * 2 + 1]) || 0;
+                                                                                                                                                                          const fx_b = bondForces[idx * 2] ?? 0;
+                                                                                                                                                                          const fy_b = bondForces[idx * 2 + 1] ?? 0;
 
-                                                                                                                                                                          const fx_f = Number(fluidForces[idx * 2]) || 0;
-                                                                                                                                                                          const fy_f = Number(fluidForces[idx * 2 + 1]) || 0;
+                                                                                                                                                                          const fx_f = fluidForces[idx * 2] ?? 0;
+                                                                                                                                                                          const fy_f = fluidForces[idx * 2 + 1] ?? 0;
 
                                                                                                                                                                           const fx = fx_c + fx_b + fx_f;
                                                                                                                                                                           const fy = fy_c + fy_b + fy_f - 9.81 * part.mass;
@@ -10923,7 +11254,8 @@ execute: (ins, p, state) => {
                                                                                                                                                                           outputs: [positions, velocities, cleanliness],
                                                                                                                                                                           nextState: {
                                                                                                                                                                             initialized: true,
-                                                                                                                                                                            particles: nextParticles,
+                   lastTime: time,
+                   particles: nextParticles,
                                                                                                                                                                             bonds,
                                                                                                                                                                             drum_angle,
                                                                                                                                                                             has_pulsator,
@@ -10944,23 +11276,26 @@ execute: (ins, p, state) => {
                                                                                                                                                                           createPort('positions', 'positions', 'input'),
                                                                                                                                                                           createPort('velocities', 'velocities', 'input'),
                                                                                                                                                                           createPort('drum_state', 'drum_state', 'input'),
-                                                                                                                                                                          createPort('radius', 'radius', 'input')
+                                                                                                                                                                          createPort('radius', 'radius', 'input', 0.05)
                                                                                                                                                                         ],
                                                                                                                                                                         outputs: [
                                                                                                                                                                           createPort('contact_forces', 'contact_forces', 'output')
                                                                                                                                                                         ],
                                                                                                                                                                         state: { particles: [], drum_angle: 0, initialized: false },
                                                                                                                                                                         execute: (ins, p, state, dt) => {
-                                                                                                                                                                          const positions = (ins[0] || []) as any;
-                                                                                                                                                                          const velocities = (ins[1] || []) as any;
-                                                                                                                                                                          const drumState = (ins[2] || [0.8, 0, 0, 0, 0, 0]) as any;
-                                                                                                                                                                          const radius = Number(ins[3]) || 0.05;
+                                                                                                                                                                          const positions = xbNumVector(ins[0]);
+                   const velocities = xbNumVector(ins[1]);
+                   const drumState: unknown[] = Array.isArray(ins[2]) ? ins[2] : [0.8, 0, 0, 0, 0, 0];
+                   const radius = ins[3] === undefined || ins[3] === null ? 0.05 : Number(ins[3]);
 
-                                                                                                                                                                          const drum_radius = Number(drumState[0]) || 0.8;
-                                                                                                                                                                          const drum_angle = Number(drumState[1]) || 0;
-                                                                                                                                                                          const has_pulsator = Number(drumState[3]) === 1;
-                                                                                                                                                                          const pulsator_angle = Number(drumState[4]) || 0;
-                                                                                                                                                                          const pulsator_omega = Number(drumState[5]) || 0;
+                   const drum_radius = xbFiniteOr(drumState[0], 0.8);
+                   const drum_angle = xbFiniteOr(drumState[1], 0);
+                   const has_pulsator = Number(drumState[3]) === 1;
+                   const pulsator_angle = xbFiniteOr(drumState[4], 0);
+                   const pulsator_omega = xbFiniteOr(drumState[5], 0);
+                   if (positions === null || velocities === null || !(Number.isFinite(radius) && radius > 0) || !(drum_radius > 0) || !Number.isFinite(p.stiffness_normal)) {
+                     return xbParamError([[]], 'Hertz contact: positions and velocities must be vectors of finite numbers, radius and the drum radius > 0 and stiffness_normal finite.');
+                   }
 
                                                                                                                                                                           const numParticles = positions.length / 2;
                                                                                                                                                                           const particles = [];
@@ -10968,8 +11303,8 @@ execute: (ins, p, state) => {
                                                                                                                                                                             particles.push({
                                                                                                                                                                               x: positions[i * 2],
                                                                                                                                                                               y: positions[i * 2 + 1],
-                                                                                                                                                                              vx: velocities[i * 2] || 0,
-                                                                                                                                                                              vy: velocities[i * 2 + 1] || 0
+                                                                                                                                                                              vx: velocities[i * 2] ?? 0,
+                                                                                                                                                                              vy: velocities[i * 2 + 1] ?? 0
                                                                                                                                                                             });
                                                                                                                                                                           }
 
@@ -11025,7 +11360,7 @@ execute: (ins, p, state) => {
                                                                                                                                                                           inputs: [
                                                                                                                                                                             createPort('positions', 'positions', 'input'),
                                                                                                                                                                             createPort('velocities', 'velocities', 'input'),
-                                                                                                                                                                            createPort('radius', 'radius', 'input')
+                                                                                                                                                                            createPort('radius', 'radius', 'input', 0.05)
                                                                                                                                                                           ],
                                                                                                                                                                           outputs: [
                                                                                                                                                                             createPort('bond_forces', 'bond_forces', 'output'),
@@ -11033,9 +11368,12 @@ execute: (ins, p, state) => {
                                                                                                                                                                           ],
                                                                                                                                                                           state: { bonds: [], particles: [], initialized: false },
                                                                                                                                                                           execute: (ins, p, state, dt) => {
-                                                                                                                                                                            const positions = (ins[0] || []) as any;
-                                                                                                                                                                            const velocities = (ins[1] || []) as any;
-                                                                                                                                                                            const radius = Number(ins[2]) || 0.05;
+                                                                                                                                                                            const positions = xbNumVector(ins[0]);
+                   const velocities = xbNumVector(ins[1]);
+                   const radius = ins[2] === undefined || ins[2] === null ? 0.05 : Number(ins[2]);
+                   if (positions === null || velocities === null || !(Number.isFinite(radius) && radius > 0) || !Number.isFinite(p.bond_stiffness)) {
+                     return xbParamError([[], []], 'Bond fabric: positions and velocities must be vectors of finite numbers, radius > 0 and bond_stiffness finite.');
+                   }
 
                                                                                                                                                                             const numParticles = positions.length / 2;
                                                                                                                                                                             const particles: any[] = [];
@@ -11043,8 +11381,8 @@ execute: (ins, p, state) => {
                                                                                                                                                                               particles.push({
                                                                                                                                                                                 x: positions[i * 2],
                                                                                                                                                                                 y: positions[i * 2 + 1],
-                                                                                                                                                                                vx: velocities[i * 2] || 0,
-                                                                                                                                                                                vy: velocities[i * 2 + 1] || 0
+                                                                                                                                                                                vx: velocities[i * 2] ?? 0,
+                                                                                                                                                                                vy: velocities[i * 2 + 1] ?? 0
                                                                                                                                                                               });
                                                                                                                                                                             }
 
@@ -11139,7 +11477,7 @@ execute: (ins, p, state) => {
                                                                                                                                                                             inputs: [
                                                                                                                                                                               createPort('positions', 'positions', 'input'),
                                                                                                                                                                               createPort('velocities', 'velocities', 'input'),
-                                                                                                                                                                              createPort('fill_level', 'fill_level', 'input'),
+                                                                                                                                                                              createPort('fill_level', 'fill_level', 'input', 0.35),
                                                                                                                                                                               createPort('drum_state', 'drum_state', 'input')
                                                                                                                                                                             ],
                                                                                                                                                                             outputs: [
@@ -11147,14 +11485,17 @@ execute: (ins, p, state) => {
                                                                                                                                                                             ],
                                                                                                                                                                             state: { particles: [], drum_angle: 0 },
                                                                                                                                                                             execute: (ins, p, state, dt) => {
-                                                                                                                                                                              const positions = (ins[0] || []) as any;
-                                                                                                                                                                              const velocities = (ins[1] || []) as any;
-                                                                                                                                                                              const fillLevel = Number(ins[2]) || 0.35;
-                                                                                                                                                                              const drumState = (ins[3] || [0.8, 0, 0]) as any;
+                                                                                                                                                                              const positions = xbNumVector(ins[0]);
+                   const velocities = xbNumVector(ins[1]);
+                   const fillLevel = ins[2] === undefined || ins[2] === null ? 0.35 : Number(ins[2]);
+                   const drumState: unknown[] = Array.isArray(ins[3]) ? ins[3] : [0.8, 0, 0];
 
-                                                                                                                                                                              const drum_radius = Number(drumState[0]) || 0.8;
-                                                                                                                                                                              const drum_angle = Number(drumState[1]) || 0;
-                                                                                                                                                                              const drum_omega = Number(drumState[2]) || 0;
+                   const drum_radius = xbFiniteOr(drumState[0], 0.8);
+                   const drum_angle = xbFiniteOr(drumState[1], 0);
+                   const drum_omega = xbFiniteOr(drumState[2], 0);
+                   if (positions === null || velocities === null || !(fillLevel >= 0 && fillLevel <= 1) || !(drum_radius > 0) || !Number.isFinite(p.drag_coeff)) {
+                     return xbParamError([[]], 'Fluid coupling: positions and velocities must be vectors of finite numbers, fill_level in [0, 1], the drum radius > 0 and drag_coeff finite.');
+                   }
 
                                                                                                                                                                               const numParticles = positions.length / 2;
                                                                                                                                                                               const particles: any[] = [];
@@ -11162,8 +11503,9 @@ execute: (ins, p, state) => {
                                                                                                                                                                                 particles.push({
                                                                                                                                                                                   x: positions[i * 2],
                                                                                                                                                                                   y: positions[i * 2 + 1],
-                                                                                                                                                                                  vx: velocities[i * 2],
-                                                                                                                                                                                  vy: velocities[i * 2 + 1]
+                                                                                                                                                                                  vx: velocities[i * 2] ?? 0,
+                                                                                                                                                                                  vy: velocities[i * 2 + 1] ?? 0
+
                                                                                                                                                                                 });
                                                                                                                                                                               }
 
@@ -11197,12 +11539,13 @@ execute: (ins, p, state) => {
                                                                                                                                                                             const fluid_viscosity = params.fluid_viscosity !== undefined ? Number(params.fluid_viscosity) : 1.5;
                                                                                                                                                                             const sph_smoothing_length = params.sph_smoothing_length !== undefined ? Number(params.sph_smoothing_length) : 0.12;
                                                                                                                                                                             const sph_stiffness = params.sph_stiffness !== undefined ? Number(params.sph_stiffness) : 25;
+   const seed = xbSeedParam(id, params);
 
                                                                                                                                                                             return {
                                                                                                                                                                               id, type: 'CFD_SPH_WATER_SOLVER', directFeedthrough: true, isStateful: true,
-                                                                                                                                                                              params: { num_fluid_particles, fluid_density, fluid_viscosity, sph_smoothing_length, sph_stiffness },
+                                                                                                                                                                              params: { num_fluid_particles, fluid_density, fluid_viscosity, sph_smoothing_length, sph_stiffness, seed },
                                                                                                                                                                               inputs: [
-                                                                                                                                                                                createPort('fill_level', 'fill_level', 'input'),
+                                                                                                                                                                                createPort('fill_level', 'fill_level', 'input', 0.35),
                                                                                                                                                                                 createPort('drum_state', 'drum_state', 'input'),
                                                                                                                                                                                 createPort('coupling_forces', 'coupling_forces', 'input')
                                                                                                                                                                               ],
@@ -11213,16 +11556,24 @@ execute: (ins, p, state) => {
                                                                                                                                                                                 createPort('slosh_intensity', 'slosh_intensity', 'output')
                                                                                                                                                                               ],
                                                                                                                                                                               state: { initialized: false, fluidParticles: [], drum_angle: 0 },
-                                                                                                                                                                              execute: (ins, p, state, dt) => {
-                                                                                                                                                                                const fillLevel = Number(ins[0]) || 0.35;
-                                                                                                                                                                                const drumState = (ins[1] || [0.8, 0, 0, 0, 0, 0]) as any;
-                                                                                                                                                                                const couplingForces = (ins[2] || []) as any;
-                                                                                                                                                                                const drum_radius = Number(drumState[0]) || 0.8;
-                                                                                                                                                                                const drum_angle = Number(drumState[1]) || 0;
-                                                                                                                                                                                const drum_omega = Number(drumState[2]) || 0;
-                                                                                                                                                                                const has_pulsator = Number(drumState[3]) === 1;
-                                                                                                                                                                                const pulsator_angle = Number(drumState[4]) || 0;
-                                                                                                                                                                                const pulsator_omega = Number(drumState[5]) || 0;
+                                                                                                                                                                              execute: (ins, p, state, time) => {
+                                                                                                                                                                                const fillLevel = ins[0] === undefined || ins[0] === null ? 0.35 : Number(ins[0]);
+                   const drumState: unknown[] = Array.isArray(ins[1]) ? ins[1] : [0.8, 0, 0, 0, 0, 0];
+                   const couplingForces = xbNumVector(ins[2]);
+                   const drum_radius = xbFiniteOr(drumState[0], 0.8);
+                   const drum_angle = xbFiniteOr(drumState[1], 0);
+                   const drum_omega = xbFiniteOr(drumState[2], 0);
+                   const has_pulsator = Number(drumState[3]) === 1;
+                   const pulsator_angle = xbFiniteOr(drumState[4], 0);
+                   const pulsator_omega = xbFiniteOr(drumState[5], 0);
+                   const nFluid = Math.trunc(Number(p.num_fluid_particles));
+                   if (!(fillLevel >= 0 && fillLevel <= 1) || couplingForces === null || !(drum_radius > 0)
+                     || !(Number.isFinite(nFluid) && nFluid >= 0 && nFluid <= 2000)
+                     || !(Number.isFinite(p.fluid_density) && p.fluid_density > 0) || !(Number.isFinite(p.fluid_viscosity) && p.fluid_viscosity >= 0)
+                     || !(Number.isFinite(p.sph_smoothing_length) && p.sph_smoothing_length > 0) || !(Number.isFinite(p.sph_stiffness) && p.sph_stiffness >= 0)
+                     || !xbIsSeed(Number(p.seed))) {
+                     return xbParamError([[], [], 0, 0], 'SPH water solver: fill_level in [0, 1], coupling forces a vector of finite numbers, the drum radius > 0, 0 <= num_fluid_particles <= 2000, fluid_density and sph_smoothing_length > 0, fluid_viscosity and sph_stiffness >= 0 and seed a finite number.');
+                   }
 
                                                                                                                                                                                 let fluidParticles = (state.fluidParticles || []) as any[];
                                                                                                                                                                                 let initialized = state.initialized;
@@ -11230,9 +11581,10 @@ execute: (ins, p, state) => {
                                                                                                                                                                                 if (!initialized) {
                                                                                                                                                                                   fluidParticles = [];
                                                                                                                                                                                   const y_water = -drum_radius + fillLevel * 2 * drum_radius;
-                                                                                                                                                                                  for (let i = 0; i < p.num_fluid_particles; i++) {
-                                                                                                                                                                                    const angle = Math.PI + (i / p.num_fluid_particles) * Math.PI;
-                                                                                                                                                                                    const r = drum_radius * 0.6 * (0.3 + 0.7 * Math.random());
+                                                                                                                                                                                  const draw = xbNoiseAt(Number(p.seed), 0); // seeded initial placement
+                   for (let i = 0; i < nFluid; i++) {
+                                                                                                                                                                                    const angle = Math.PI + (i / nFluid) * Math.PI;
+                                                                                                                                                                                    const r = drum_radius * 0.6 * (0.3 + 0.7 * draw());
                                                                                                                                                                                     fluidParticles.push({
                                                                                                                                                                                       x: r * Math.cos(angle),
                                                                                                                                                                                       y: Math.min(y_water, r * Math.sin(angle)),
@@ -11243,21 +11595,41 @@ execute: (ins, p, state) => {
                                                                                                                                                                                   initialized = true;
                                                                                                                                                                                 }
 
-                                                                                                                                                                                const dtSec = (dt !== undefined && dt > 0 && dt < 0.05) ? dt : 0.01;
-                                                                                                                                                                                const nextParticles = fluidParticles.map((part: any, idx: number) => {
-                                                                                                                                                                                  const fx_c = Number(couplingForces[idx * 2]) || 0;
-                                                                                                                                                                                  const fy_c = Number(couplingForces[idx * 2 + 1]) || 0;
-
-                                                                                                                                                                                  const ax = fx_c / 0.05;
-                                                                                                                                                                                  const ay = -9.81 + fy_c / 0.05;
-
-                                                                                                                                                                                  const vx_prev = part.vx + ax * dtSec;
-                                                                                                                                                                                  const vy_prev = part.vy + ay * dtSec;
-
-                                                                                                                                                                                  let x = part.x + vx_prev * dtSec;
-                                                                                                                                                                                  let y = part.y + vy_prev * dtSec;
-                                                                                                                                                                                  let vx = vx_prev;
-                                                                                                                                                                                  let vy = vy_prev;
+                                                                                                                                                                                // Integration step = time since the last committed sample (0 on the first sample): the engine passes the simulation time, not the step.
+                   const dtSec = demStep(state, time);
+                   // Weakly compressible SPH: pressure and viscosity forces from the stiffness, density, viscosity and smoothing-length parameters,
+                   // plus gravity and the coupling force on a fluid parcel of 0.05 kg. Particle mass m = rho0 * A_fluid / N so the rest density is rho0
+                   // (A_fluid = area of the circular segment filled to fill_level * 2 R). Sub-stepping keeps the explicit scheme inside the
+                   // sound-speed (c = sqrt(k)) and viscous limits: dt_sub <= 0.25 h / (c + 1) and 0.125 h^2 rho0 / mu.
+                   const cosArg = Math.max(-1, Math.min(1, (drum_radius - fillLevel * 2 * drum_radius) / drum_radius));
+                   const hFill = fillLevel * 2 * drum_radius;
+                   const fluidArea = fillLevel <= 0 ? 0 : drum_radius * drum_radius * Math.acos(cosArg) - (drum_radius - hFill) * Math.sqrt(Math.max(0, 2 * drum_radius * hFill - hFill * hFill));
+                   const sphMass = fluidParticles.length > 0 ? (p.fluid_density * fluidArea) / fluidParticles.length : 0;
+                   const sx = fluidParticles.map((q: any) => q.x as number);
+                   const sy = fluidParticles.map((q: any) => q.y as number);
+                   const svx = fluidParticles.map((q: any) => q.vx as number);
+                   const svy = fluidParticles.map((q: any) => q.vy as number);
+                   if (dtSec > 0 && fluidParticles.length > 0) {
+                     const h = p.sph_smoothing_length;
+                     let dtMax = (0.25 * h) / (Math.sqrt(p.sph_stiffness) + 1);
+                     if (p.fluid_viscosity > 0) dtMax = Math.min(dtMax, (0.125 * h * h * p.fluid_density) / p.fluid_viscosity);
+                     const nSub = Math.max(1, Math.min(400, Math.ceil(dtSec / dtMax)));
+                     const dtSub = dtSec / nSub;
+                     for (let sub = 0; sub < nSub; sub++) {
+                       const f = sphForces(sx, sy, svx, svy, sphMass, p.fluid_density, p.sph_stiffness, p.fluid_viscosity, h);
+                       for (let i = 0; i < sx.length; i++) {
+                         svx[i] += (f.ax[i] + (couplingForces[i * 2] ?? 0) / 0.05) * dtSub;
+                         svy[i] += (f.ay[i] - 9.81 + (couplingForces[i * 2 + 1] ?? 0) / 0.05) * dtSub;
+                         sx[i] += svx[i] * dtSub;
+                         sy[i] += svy[i] * dtSub;
+                       }
+                     }
+                   }
+                   const nextParticles = fluidParticles.map((part: any, idx: number) => {
+                   let x = sx[idx];
+                   let y = sy[idx];
+                   let vx = svx[idx];
+                   let vy = svy[idx];
 
                                                                                                                                                                                   // 1. Drum Outer Shell Collision with Friction
                                                                                                                                                                                   const dist = Math.sqrt(x * x + y * y);
@@ -11443,7 +11815,8 @@ execute: (ins, p, state) => {
                                                                                                                                                                                   outputs: [positions, velocities, drum_fluid_torque, slosh_intensity],
                                                                                                                                                                                   nextState: {
                                                                                                                                                                                     initialized: true,
-                                                                                                                                                                                    fluidParticles: nextParticles,
+                   lastTime: time,
+                   fluidParticles: nextParticles,
                                                                                                                                                                                     drum_angle,
                                                                                                                                                                                     has_pulsator,
                                                                                                                                                                                     pulsator_angle,

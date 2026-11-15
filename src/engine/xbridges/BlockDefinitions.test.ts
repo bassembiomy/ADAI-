@@ -1330,9 +1330,12 @@ describe('X-Bridges Learning Models Block Tests', () => {
   describe('DEM Particle Simulation and Washing Machine Blocks', () => {
     it('should execute DEM_DRUM and update angle based on RPM', () => {
       const drumBlock = BLOCK_LIBRARY['DEM_DRUM']('drum_test', { drum_radius: 0.8 });
-      const state = { angle: 0, initialized: true };
-      const res = drumBlock.execute([45], drumBlock.params, state, 0);
-      expect(res.outputs[0]).toBeGreaterThan(0); // angle
+      // XBV-130 (WP-21 batch I): the angle integrates rpm over the elapsed time, so the first sample (no time elapsed) is 0
+      // and after 0.1 s at 45 rpm it is 45 * 2 pi / 60 * 0.1.
+      const first = drumBlock.execute([45], drumBlock.params, drumBlock.state, 0);
+      expect(first.outputs[0]).toBe(0);
+      const res = drumBlock.execute([45], drumBlock.params, first.nextState ?? drumBlock.state, 0.1);
+      expect(res.outputs[0]).toBeCloseTo((45 * 2 * Math.PI) / 60 * 0.1, 10); // angle
       expect(res.outputs[1]).toBeCloseTo((45 * 2 * Math.PI) / 60, 4); // omega
       expect(res.outputs[2]).toEqual([0.8, res.outputs[0], res.outputs[1]]); // drum_state
     });

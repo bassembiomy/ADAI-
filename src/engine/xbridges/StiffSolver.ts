@@ -31,6 +31,30 @@ function getAt(v: any, path: Path): number {
   return typeof cur === 'number' ? cur : 0;
 }
 
+/**
+ * Derivative of the leaf at `path` of `state`, read with the convention the explicit solvers use (VectorUtils.integrateState):
+ * an object state takes an object derivative by key, an array derivative by position in Object.keys(state), a scalar
+ * derivative for every key; an array state takes an array derivative by index (a scalar for every element); a numeric
+ * state takes Number(derivative) (0 when that is not a number).
+ */
+function derivAt(state: any, deriv: any, path: Path): number {
+  if (path.length === 0) {
+    const d = Number(deriv);
+    return Number.isNaN(d) ? 0 : d;
+  }
+  const [k, ...rest] = path;
+  let sub: any;
+  if (Array.isArray(state)) {
+    sub = Array.isArray(deriv) ? deriv[k as number] : (deriv !== null && typeof deriv === 'object' ? (deriv[k as any] ?? 0) : deriv);
+  } else if (state !== null && typeof state === 'object') {
+    if (deriv !== null && typeof deriv === 'object' && !Array.isArray(deriv)) sub = deriv[k as any];
+    else if (Array.isArray(deriv)) sub = deriv[Object.keys(state).indexOf(k as string)];
+    else sub = deriv;
+  } else return 0;
+  if (sub === undefined || sub === null) return 0;
+  return derivAt(state[k as any], sub, rest);
+}
+
 function cloneState(v: any): any {
   if (Array.isArray(v)) return v.map(cloneState);
   if (v !== null && typeof v === 'object') {
@@ -103,9 +127,9 @@ export class StiffSolver {
     return states;
   }
 
-  static flattenDerivatives(derivs: Map<string, any>, layout: Layout): Float64Array {
+  static flattenDerivatives(derivs: Map<string, any>, layout: Layout, states: Map<string, any>): Float64Array {
     const d = new Float64Array(layout.n);
-    layout.leaves.forEach((l, i) => { d[i] = getAt(derivs.get(l.blockId), l.path); });
+    layout.leaves.forEach((l, i) => { d[i] = derivAt(states.get(l.blockId), derivs.get(l.blockId), l.path); });
     return d;
   }
 
@@ -134,7 +158,7 @@ export class StiffSolver {
     const temp = StiffSolver.unflatten(engine, layout, x);
     // Single pass: the engine's sorted order now evaluates stateful blocks before their feedthrough consumers.
     StiffSolver.computeOutputsTight(engine, t, temp);
-    const d = StiffSolver.flattenDerivatives(engine.computeDerivatives(t, temp), layout);
+    const d = StiffSolver.flattenDerivatives(engine.computeDerivatives(t, temp), layout, temp);
     for (let i = 0; i < d.length; i++) {
       if (!Number.isFinite(d[i])) throw new StiffSolverError('STIFF_SOLVER_NONFINITE', 'Stiff solver: non-finite derivative encountered.');
     }

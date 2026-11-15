@@ -301,6 +301,9 @@ const XBRIDGES_LEARNING_LABS: any[] = [
     name: 'Robot Vacuum Digital Twin Lab',
     category: 'Digital Twins',
     difficulty: 'Advanced',
+    // Solver configuration carried by the lab (like a Simulink model file): the motor electrical pole (-R/L = -500 1/s) is stiff for the
+    // fixed-step solvers at the 0.02 s output step. The step stays the output step.
+    simulation: { solver: 'ode23tb' },
     description: 'Build and simulate a complete differential-drive LiDAR robot vacuum using modular blocks. Observe robot pose estimation, SLAM mapping, sensor fusion, obstacle avoidance, and goal navigation.',
     nodes: [
       { id: 'target_x', type: 'Constant', position: { x: 50, y: 50 }, label: 'Target X (m)', params: { value: 1.5 } },
@@ -405,6 +408,10 @@ const XBRIDGES_LEARNING_LABS: any[] = [
     name: 'Autonomous Vacuum Navigation & Mapping System',
     category: 'Robotics',
     difficulty: 'Expert',
+    // Solver configuration carried by the lab: the motor electrical pole (-R/L = -500 1/s) needs rk4 steps below 5.5 ms. ode23tb is
+    // accurate here but about 30 times slower than rk4 at 5 ms with the planner blocks of this lab (the Jacobian re-evaluates them), so the
+    // lab runs rk4 at 5 ms.
+    simulation: { solver: 'rk4', step: 0.005 },
     description: 'Design and verify a complete closed-loop navigation, localization (EKF), mapping (SLAM), planning, and motion control system for an autonomous vacuum cleaner.',
     nodes: [
       { id: 'mode_select', type: 'Constant', position: { x: 50, y: 50 }, label: 'Cleaning Mode', params: { value: 4 } },
@@ -3285,6 +3292,12 @@ export const XbridgesWorkspace: React.FC<{
     setEdges(newEdges);
     if (lab.solverType) setSolverType(lab.solverType);
     if (lab.fixedStep) { setFixedStep(lab.fixedStep); setStepSizeInput(String(lab.fixedStep)); }
+    // Optional solver configuration of the lab: solver, stop time and output step (labs without it keep the toolbar as it is).
+    if (lab.simulation) {
+      if (lab.simulation.solver) setSolverType(lab.simulation.solver);
+      if (typeof lab.simulation.stopTime === 'number') setStopTimeInput(formatTimeInput(lab.simulation.stopTime));
+      if (typeof lab.simulation.step === 'number') { setFixedStep(lab.simulation.step); setStepSizeInput(String(lab.simulation.step)); }
+    }
 
     if (reactFlowInstance) {
       setTimeout(() => reactFlowInstance.fitView(), 150);

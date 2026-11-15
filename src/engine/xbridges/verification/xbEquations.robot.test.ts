@@ -34,7 +34,14 @@ type Block = ReturnType<(typeof BLOCK_LIBRARY)[string]>;
 
 afterEach(() => { vi.restoreAllMocks(); });
 const seed = (s: number) => vi.spyOn(Math, 'random').mockImplementation(mulberry32(s));
-const noNoise = () => vi.spyOn(Math, 'random').mockImplementation(() => 0.5);
+// WP-21 batch I (XBV-023): sensor blocks draw from their own seeded generator (parameter 'seed'), not Math.random, so
+// noise is switched off through the blocks' noise parameters (the same way a user would).
+const NOISE_OFF: Record<string, Record<string, unknown>> = {
+  ROBOT_VACUUM_ODOMETRY: { slip_noise: 0 },
+  ROBOT_VACUUM_LIDAR: { lidar_noise_std: 0, dropout_rate: 0 },
+  ROBOT_VACUUM_LIDAR_SENSOR: { lidar_noise_std: 0 },
+};
+const quiet = (type: string): Block => mk(type, NOISE_OFF[type] ?? {});
 
 const num = (v: unknown): number => Number(Array.isArray(v) ? (v.flat(Infinity) as unknown[])[0] : v);
 const flat = (v: unknown): number[] => (Array.isArray(v) ? (v as unknown[]).flatMap(flat) : [Number(v)]);
@@ -159,16 +166,14 @@ describe('1. Differential-drive kinematics (KINEMATICS, DYNAMICS, ODOMETRY, ODOM
     const steps: number[][] = [];
     let a = 0, b = 0;
     for (let k = 1; k <= n; k++) { const [dl, dr] = inc(k); a += dl; b += dr; steps.push([a, b]); }
-    return drive(mk(type), steps, 0.1, 0.1).outs.at(-1) as number[];
+    return drive(quiet(type), steps, 0.1, 0.1).outs.at(-1) as number[];
   };
   for (const type of ['ROBOT_VACUUM_ODOMETRY_SENSOR', 'ROBOT_VACUUM_ODOMETRY']) {
     it(`${type}: both wheels roll 1 m -> pose (1, 0, 0)`, () => {
-      noNoise();
       const [x, y, th] = odo(type, () => [counts(0.1), counts(0.1)], 10);
       near(x, 1, 1e-9, 'x'); near(y, 0, 1e-9, 'y'); near(th, 0, 1e-9, 'theta');
     });
     it(`${type}: wheels roll -/+ (pi/2) L/2 -> turn of 90 degrees in place`, () => {
-      noNoise();
       const arc = (Math.PI / 2) * (L_W / 2);
       const [x, y, th] = odo(type, () => [-counts(arc / 90), counts(arc / 90)], 90);
       near(th, Math.PI / 2, 1e-9, 'theta');
@@ -325,15 +330,13 @@ describe('5. Sensors (ENCODER, LIDAR, LIDAR_SENSOR, CLIFF_IR, BUMPER, DUSTBIN, M
   //  135 -> wall x = -3 at sqrt 2; 180 -> wall x = -3 at 1.0; -135 -> corner (-3,-1) at sqrt 2; -90 -> wall y = -1 at 1.0;
   //  -45 -> wall y = -1 at x = -1 at sqrt 2.
   const expected8 = [2, 2 * Math.SQRT2, 1.5, Math.SQRT2, 1, Math.SQRT2, 1, Math.SQRT2];
-  it('characterization (undocumented factory constants): LIDAR (noise off via random = 0.5): the 8 beams read the hand-computed wall distances, a wall straight ahead at 2 m reads 2 at angle 0', () => {
-    noNoise();
-    const [ranges, angles] = once(mk('ROBOT_VACUUM_LIDAR'), [LIDAR_X, 0, 0, 0]) as number[][];
+  it('characterization (undocumented factory constants): LIDAR (noise off via its noise parameters): the 8 beams read the hand-computed wall distances, a wall straight ahead at 2 m reads 2 at angle 0', () => {
+    const [ranges, angles] = once(quiet('ROBOT_VACUUM_LIDAR'), [LIDAR_X, 0, 0, 0]) as number[][];
     expect(angles[0]).toBe(0);
     expected8.forEach((d, i) => near(ranges[i], d, 1e-9, `beam ${i}`));
   });
   it('characterization (undocumented factory constants): LIDAR rotates with the robot heading: theta = pi/2 puts the 2 m wall on beam index 6 (-90 degrees)', () => {
-    noNoise();
-    const [ranges] = once(mk('ROBOT_VACUUM_LIDAR'), [LIDAR_X, 0, Math.PI / 2, 0]) as number[][];
+    const [ranges] = once(quiet('ROBOT_VACUUM_LIDAR'), [LIDAR_X, 0, Math.PI / 2, 0]) as number[][];
     near(ranges[6], 2, 1e-9);
   });
   it('LIDAR with noise (seeded): every range is in [0, max_range], and is the true value +-0.02 or the max-range dropout', () => {
@@ -348,8 +351,7 @@ describe('5. Sensors (ENCODER, LIDAR, LIDAR_SENSOR, CLIFF_IR, BUMPER, DUSTBIN, M
     }
   });
   it('characterization (undocumented factory constants): LIDAR_SENSOR (pose array [-2,0,0], noise off): 45 beams from -180 deg step 8 deg; beams at +-4 deg read 2/cos 4 deg', () => {
-    noNoise();
-    const [ranges, pose] = once(mk('ROBOT_VACUUM_LIDAR_SENSOR'), [[LIDAR_X, 0, 0]]) as number[][];
+    const [ranges, pose] = once(quiet('ROBOT_VACUUM_LIDAR_SENSOR'), [[LIDAR_X, 0, 0]]) as number[][];
     expect(ranges.length).toBe(45);
     near(ranges[22], 2 / Math.cos((4 * Math.PI) / 180), 1e-9, '-4 deg');
     near(ranges[23], 2 / Math.cos((4 * Math.PI) / 180), 1e-9, '+4 deg');
@@ -357,8 +359,7 @@ describe('5. Sensors (ENCODER, LIDAR, LIDAR_SENSOR, CLIFF_IR, BUMPER, DUSTBIN, M
     expect(pose).toEqual([LIDAR_X, 0, 0]);
   });
   it('LIDAR_SENSOR (default noise 0.015, seeded): all ranges in [0, 5.5] and within 0.015 of the noise-free scan', () => {
-    noNoise();
-    const clean = once(mk('ROBOT_VACUUM_LIDAR_SENSOR'), [[LIDAR_X, 0, 0]])[0] as number[];
+    const clean = once(quiet('ROBOT_VACUUM_LIDAR_SENSOR'), [[LIDAR_X, 0, 0]])[0] as number[];
     vi.restoreAllMocks(); seed(4);
     const b = mk('ROBOT_VACUUM_LIDAR_SENSOR');
     for (let k = 0; k < 100; k++) {
