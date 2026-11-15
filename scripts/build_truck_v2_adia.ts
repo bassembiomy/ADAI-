@@ -6,7 +6,8 @@
  *   HW package   the MR-PLD hardware blocks already modelled in ADIA (MR_PLD_A5414465340.adia: ECU, its five
  *                subcircuits and their components, sensors, loads, port definitions, value types, equations),
  *                brought in unchanged with one createElement each (what the editor's paste does), sensors and
- *                loads in their own packages, the HW requirements and the HW views
+ *                loads in their own packages and the HW views; the HW requirements in the top-level HW Requirements
+ *                package (the model tree lists a requirements package under its Requirements pillar only at top level)
  *   SW package   the layered software architecture of SWRS §14 (application components, runtime interface,
  *                services, ECU abstraction, MCAL, bootloader) allocated to the hardware, the ECU events and CAN
  *                messages, the SW requirements (SWR, response times, CAN messages, DTCs, diagnostic services,
@@ -41,6 +42,7 @@ import { projectStateEndpoints } from '../src/engine/sysml/workers/projectIoPayl
 import { createUnifiedProjectPayload } from '../src/utils/adiaProjectPersistence';
 import { createAppSimulationSession } from '../src/utils/stateMachine/smAppAdapter';
 import type { PresentationCoordinates } from '../src/engine/sysml/presentationState';
+import { buildUnifiedModelProjection } from '../src/features/modelExplorer/unifiedModelExplorerProjection';
 import * as DOC from './truck_v2_requirements';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -99,13 +101,18 @@ pkg('pkg_Interfaces', 'HW 04 Interfaces (port definitions)', P.hw);
 pkg('pkg_Parametrics', 'HW 05 Circuit equations', P.hw);
 pkg('pkg_Types', 'HW 06 ECU value types and units', P.hw, 'modelLibrary');
 pkg('pkg_Identification', 'HW 07 Identification', P.hw);
-pkg(P.hwReq, 'HW Requirements', P.hw);
+
 pkg(P.swArch, 'SW 01 Architecture', P.sw);
 pkg('pkg_Signals', 'SW 02 ECU events and signals', P.sw);
 pkg(P.can, 'SW 03 CAN messages', P.sw);
 pkg('pkg_AnalysisAndSimulation', 'SW 04 Calculations', P.sw);
-pkg(P.swReq, 'SW Requirements', P.sw);
-pkg('pkg_Requirements', 'MCM (MR-PLD) system requirements', TRUCK_REQS);
+
+// The model tree files a top-level package under the Requirements pillar only when it directly holds nothing but
+// requirements and requirements diagrams (a sub-package makes it Structural), so every requirements package is
+// top-level: the truck's, the MCM system requirements, the HW requirements and the SW requirements.
+pkg('pkg_Requirements', 'MCM (MR-PLD) system requirements', MODEL);
+pkg(P.hwReq, 'HW Requirements', MODEL);
+pkg(P.swReq, 'SW Requirements', MODEL);
 
 // ------------------------------------- MR-PLD hardware, as modelled in ADIA
 // FR_CabECU is the truck's CPC and OM501LA_EngineSystem its MCM context; the variant / analysis / parametric
@@ -580,15 +587,15 @@ for (const block of [...new Set(allDocReqs.flatMap(r => r.by))]) {
 }
 
 // ---------------------------------------------------------- package views
-const TOP_PACKAGES = [USER_PACKAGE, P.hw, P.sw, TRUCK_REQS, 'pkg-truck-interfaces', 'pkg-truck-types', 'pkg-truck-signals'];
+const TOP_PACKAGES = [USER_PACKAGE, P.hw, P.sw, 'pkg-truck-interfaces', TRUCK_REQS, P.hwReq, P.swReq, 'pkg_Requirements', 'pkg-truck-types', 'pkg-truck-signals'];
 const packageView = (id: string, name: string, ownerId: string, packages: string[], columns: number) => {
   diagram(id, name, 'package', ownerId);
   run({ type: 'addToDiagram', diagramId: id, elementIds: packages,
     coordinates: Object.fromEntries(packages.map((p, i) => [p, box(40 + (i % columns) * 330, 40 + Math.floor(i / columns) * 220, 290, 170)])) }, id);
 };
 packageView('pkg-00-truck', 'PKG 00 - Truck model', MODEL, TOP_PACKAGES, 4);
-packageView('pkg-hw-view', 'PKG HW - Hardware', P.hw, Object.values(R().packages).filter(p => p.ownerId === P.hw).map(p => p.id), 4);
-packageView('pkg-sw-view', 'PKG SW - Software', P.sw, Object.values(R().packages).filter(p => p.ownerId === P.sw).map(p => p.id), 3);
+packageView('pkg-hw-view', 'PKG HW - Hardware', P.hw, [...Object.values(R().packages).filter(p => p.ownerId === P.hw).map(p => p.id), P.hwReq], 4);
+packageView('pkg-sw-view', 'PKG SW - Software', P.sw, [...Object.values(R().packages).filter(p => p.ownerId === P.sw).map(p => p.id), P.swReq], 3);
 
 // ------------------------------------------------------------------ verify
 const blocks = Object.values(R().definitions).filter((d): d is BlockDefinition => d.kind === 'block');
@@ -602,6 +609,16 @@ const ABSTRACT = new Set(['blk_ElectronicComponent', 'blk_EngineSensor']);
 const remaining = findings.filter(d => !(d.code === 'ABSTRACT_INSTANTIATION' && ABSTRACT.has(d.elementId ?? '')));
 if (remaining.length > 0) {
   throw new Error(`The app's validators report ${remaining.length} finding(s):\n${remaining.slice(0, 40).map(d => `${d.severity} ${d.code} ${d.elementId}: ${d.message}`).join('\n')}`);
+}
+// every requirement and requirements diagram is listed under the Requirements pillar of the model tree
+{
+  const tree = buildUnifiedModelProjection({ sysml: R(), externalModels: [], revision: 1, diagramPresentations: state.diagramPresentations ?? {},
+    stateMachine: { states: [], layers: [], transitions: [], junctions: [], diagrams: [], revision: 1 } } as never);
+  const nodes = tree.nodes as Record<string, { parentNodeId: string | null }>;
+  const pillarOf = (nodeId: string): string => { let id: string | null = nodeId; while (id && !id.startsWith('project:pillar:')) id = nodes[id]?.parentNodeId ?? null; return id ?? ''; };
+  const outside = [...Object.keys(R().requirements), ...Object.values(R().diagrams).filter(d => d.diagramKind === 'requirements').map(d => d.id)]
+    .filter(id => pillarOf(`sysml:element:${id}`) !== 'project:pillar:requirements');
+  if (outside.length) throw new Error(`${outside.length} requirement(s) / requirements diagram(s) outside the Requirements pillar: ${outside.slice(0, 10).join(', ')}`);
 }
 console.log(`accepted: ${findings.length - remaining.length} ABSTRACT_INSTANTIATION guidance finding(s) on the abstract MR-PLD blocks`);
 
