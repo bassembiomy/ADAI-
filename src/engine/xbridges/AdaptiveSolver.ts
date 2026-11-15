@@ -94,6 +94,9 @@ function snapshotStates(engine: XbridgesEngine): Map<string, any> {
 
 type ErrorTerm = { err: any; state: any; cand: any };
 
+/** Most consecutive trial-point fault rollbacks before the fault stands (0.25^30 shrinks the step below any hMin). */
+const MAX_TRIAL_ROLLBACKS = 30;
+
 export class AdaptiveSolver {
   /** One trial step of size h from the committed state with the first stage k1; no state is committed. */
   private static trial(engine: XbridgesEngine, tab: Tableau, t: number, h: number, k1: Map<string, any>) {
@@ -208,6 +211,7 @@ export class AdaptiveSolver {
     let event: { tLow: number; tHigh: number } | null = null;
     let zcBase: Map<string, number[]> | null = null;
     let baseStates: Map<string, any> | null = null;
+    let rollbacks = 0; // consecutive trial-point fault rollbacks since the last accepted step
 
     while (t < tEnd && !engine.hasFatalError()) {
       const target = event === null ? tEnd : (t < event.tLow ? event.tLow : event.tHigh);
@@ -248,9 +252,13 @@ export class AdaptiveSolver {
       const mark = engine.faultMark();
       const tr = AdaptiveSolver.trial(engine, tab, t, hTry, k1);
       if (engine.hasFatalError()) {
-        if (!mark.fatal && hTry > cfg.hMin && !sliver) {
+        // The retry must be a strictly smaller step that is really taken next (not stretched back to the remaining
+        // interval, which would repeat the same trial), and the rollbacks in a row are capped.
+        const hRetry = Math.max(cfg.hMin, hTry * 0.25);
+        if (!mark.fatal && !sliver && hRetry < hTry && hRetry < remaining - cfg.hMin && rollbacks < MAX_TRIAL_ROLLBACKS) {
           engine.rollbackFaults(mark);
-          h = Math.max(cfg.hMin, hTry * 0.25);
+          rollbacks++;
+          h = hRetry;
           continue;
         }
         break;
@@ -286,6 +294,7 @@ export class AdaptiveSolver {
       }
 
       engine.commitStateUpdates(tr.candidate);
+      rollbacks = 0;
       if (reachesTarget) { t = target; cTime = 0.0; }
       else {
         const y = hTry - cTime;

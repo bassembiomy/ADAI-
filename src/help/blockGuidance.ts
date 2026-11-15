@@ -173,7 +173,7 @@ const elementaryExamples: Record<string, string> = {
   JKFlipFlop: 'With RST=0 and J=K=1, each rising clock edge toggles Q.',
   Register: 'With default bitWidth=8, Data=257, EN=1 and a rising CLK edge store 1.',
   Counter: 'With maxValue=2 and EN=1, rising edges count 1,2,0; RST clears the count.',
-  Clock: 'At default freq=1 Hz, the output is 1 at t=0 and 0 at t=0.5 seconds.',
+  Clock: 'Outputs the simulation time, like the Simulink Clock block: 0 at t=0, 0.5 at t=0.5 seconds.',
   WaveformGen: 'Default sine settings produce 0 at t=0 and 1 at t=0.25 seconds.',
   Step: 'Default settings output 0 before t=1 second and 1 starting at t=1.',
   Sum: 'Set signs to +-; inputs 5 and 2 produce 3.',
