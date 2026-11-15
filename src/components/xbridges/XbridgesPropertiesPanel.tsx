@@ -1033,6 +1033,12 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
                           <option value="PID">PID - Full Control</option>
                         </>
                       )}
+                      {key === 'mode' && block.type === 'MatrixConcat' && (
+                        <>
+                          <option value="vector">Vector</option>
+                          <option value="multidimensional">Multidimensional array</option>
+                        </>
+                      )}
                       {key === 'mode' && block.type === 'CFD_DEM_SURROGATE_LEARNER' && (
                         <>
                           <option value="training">Training</option>

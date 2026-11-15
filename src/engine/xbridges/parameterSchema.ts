@@ -32,7 +32,6 @@ export const XB_PARAMETER_SCHEMA: Record<string, Record<string, ParameterKind>> 
   // Sources
   Constant: { value: numeric, output_type: option('auto', 'float64', 'float32', 'int8', 'uint8', 'int16', 'uint16', 'int32', 'uint32', 'boolean') },
   WaveformGen: { type: option('Sine', 'Square'), amp: number, freq: number, offset: number, phase: number },
-  Clock: { freq: positive },
   Step: { stepTime: number, initialValue: numeric, finalValue: numeric },
 
   // Element-wise math and reductions
@@ -44,7 +43,7 @@ export const XB_PARAMETER_SCHEMA: Record<string, Record<string, ParameterKind>> 
   Max: { numInputs: int1 },
 
   // Linear algebra
-  MatrixConcat: { axis: { kind: 'integer', min: 0, max: 1 }, numInputs: int1 },
+  MatrixConcat: { axis: { kind: 'integer', min: 0, max: 1 }, mode: option('vector', 'multidimensional'), numInputs: int1 },
   MatrixDiag: { diagMode: option('create', 'extract') },
   IdentityMatrix: { dim: int1 },
   SubMatrix: { rowStart: int1, rowEnd: int1, colStart: int1, colEnd: int1 },

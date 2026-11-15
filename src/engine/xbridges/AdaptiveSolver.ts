@@ -243,8 +243,18 @@ export class AdaptiveSolver {
       }
       if (engine.hasFatalError()) break;
 
+      // A block fault raised only at a trial point (a stage of the step, not the accepted base point) rejects the step
+      // and retries it smaller, as Simulink does; at the minimum step the fault stands and stops the run.
+      const mark = engine.faultMark();
       const tr = AdaptiveSolver.trial(engine, tab, t, hTry, k1);
-      if (engine.hasFatalError()) break;
+      if (engine.hasFatalError()) {
+        if (!mark.fatal && hTry > cfg.hMin && !sliver) {
+          engine.rollbackFaults(mark);
+          h = Math.max(cfg.hMin, hTry * 0.25);
+          continue;
+        }
+        break;
+      }
       const lte = AdaptiveSolver.errorNorm(tr.errors, cfg.relTol, cfg.absTol);
       const atMinStep = hTry <= cfg.hMin;
       const accept = sliver || lte <= 1 || (cfg.batch && atMinStep);

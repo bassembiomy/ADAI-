@@ -3087,12 +3087,7 @@
     }
    }
   ],
-  "parameters": {
-   "freq": {
-    "kind": "number",
-    "value": 1
-   }
-  },
+  "parameters": {},
   "state": null,
   "initialState": {
    "kind": "undefined",
@@ -10304,6 +10299,10 @@
    "axis": {
     "kind": "number",
     "value": 0
+   },
+   "mode": {
+    "kind": "string",
+    "value": "vector"
    },
    "numInputs": {
     "kind": "number",
