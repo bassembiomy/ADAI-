@@ -93,7 +93,7 @@ const nodeRun = (t: string) => {
 
 describe('block node (XBlockNode) over every palette block', () => {
   it('renders every palette block (checked count)', () => {
-    expect(PALETTE_TYPES.length).toBe(228);
+    expect(PALETTE_TYPES.length).toBe(283); // XBV-007 (WP-21 K): every library block a lab uses is on the canvas palette
     for (const t of PALETTE_TYPES) nodeRun(t);
   }, 240_000);
 
@@ -380,7 +380,7 @@ describe('palette in the rendered workspace', () => {
     }
     const shown = Array.from(container.querySelectorAll('[draggable="true"]')).map((e) => (e.lastElementChild?.textContent ?? '').trim()).sort();
     const want = PALETTE.flatMap((c) => c.blocks.map((b) => b.label)).sort();
-    expect(want.length).toBe(228);
+    expect(want.length).toBe(283);
     expect(shown).toEqual(want);
     // category headers: each palette category name is rendered in the library
     for (const c of PALETTE) expect(container.textContent ?? '', c.name).toContain(c.name);
