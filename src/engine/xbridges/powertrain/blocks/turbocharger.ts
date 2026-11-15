@@ -80,9 +80,12 @@ const num = (v: XValue | undefined): number => (typeof v === 'number' ? v : Arra
 
 const psi = orificePsi;
 
+/** An input outside the range the orifice model can represent: reported as a typed INPUT_OUT_OF_RANGE diagnostic naming the input. */
+interface RangeErr { range: string }
+
 interface Res { PR: number; Pboost: number; Tcomp: number; Pc: number; Pt: number; Aeff: number; mt: number; Pback: number }
 
-function evaluate(ins: XValue[], p: Record<string, any>, omega: number): Res | string {
+function evaluate(ins: XValue[], p: Record<string, any>, omega: number): Res | string | RangeErr {
   const mc = num(ins[0]), me = num(ins[1]), Te = num(ins[2]), pos0 = num(ins[3]), Pa = num(ins[4]), Ta = num(ins[5]);
   if (![mc, me, Te, pos0, Pa, Ta, omega].every(Number.isFinite)) return 'Turbocharger inputs must be finite';
   if (Pa <= 0) return 'P_amb must be > 0 Pa';
@@ -104,7 +107,10 @@ function evaluate(ins: XValue[], p: Record<string, any>, omega: number): Res | s
     const k = p.Cd_t * Aeff / Math.sqrt(p.R * Te);
     const f = (pb: number) => k * pb * psi(Pa / pb, p.gamma_t) - me;
     let lo = Pa, hi = Pa * 100;
-    if (f(hi) < 0) return 'Exhaust flow exceeds turbine capacity below 100*P_amb';
+    if (f(hi) < 0) {
+      const cap = f(hi) + me;
+      return { range: `Input mdot_exh = ${me} kg/s exceeds the turbine capacity of ${cap} kg/s at the largest back pressure the model solves for (100*P_amb, with P_amb = ${Pa} Pa, T_exh = ${Te} K, turbine area ${Aeff} m^2). Reduce mdot_exh or raise P_amb / the turbine area.` };
+    }
     for (let i = 0; i < 300 && hi - lo > 1e-13 * hi; i++) {
       const mid = 0.5 * (lo + hi);
       if (f(mid) < 0) lo = mid; else hi = mid;
@@ -119,11 +125,12 @@ const factory = definePtBlock(spec, {
   init: p => ({ omega: rpm2radps(p.N_tc0) }),
   derivatives: (ins, p, state) => {
     const r = evaluate(ins, p, state.omega);
-    return typeof r === 'string' ? { omega: 0 } : { omega: (p.eta_m * r.Pt - r.Pc) / (p.J_tc * Math.max(state.omega, 100)) };
+    return typeof r === 'string' || 'range' in r ? { omega: 0 } : { omega: (p.eta_m * r.Pt - r.Pc) / (p.J_tc * Math.max(state.omega, 100)) };
   },
   execute: (ins, p, state) => {
     const r = evaluate(ins, p, state.omega);
     if (typeof r === 'string') return { outputs: [{}, 0, 0, 0, 0], error: r };
+    if ('range' in r) return { outputs: [{}, 0, 0, 0, 0], diagnostic: { code: 'INPUT_OUT_OF_RANGE', severity: 'error', message: r.range } };
     const info = makeBus(['PR', 'P_c', 'P_t', 'A_eff', 'TurbineFlw', 'omega'], [r.PR, r.Pc, r.Pt, r.Aeff, r.mt, state.omega]);
     return { outputs: [info, r.Pboost, r.Tcomp, radps2rpm(state.omega), r.Pback] };
   },
