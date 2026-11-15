@@ -47,8 +47,6 @@ for (const [id, text, example] of [
   ['TERMINATOR', 'Consumes an input without producing a signal or updating a state.', 'Connect an unused signal to u; there are no output ports.'],
   ['DFlipFlop', 'Stores a boolean data input on a rising clock edge.', 'Drive D=1, CLK from 0 to 1 and RST=0 to obtain Q=1 and Q!=0.', 'Reset has priority and clears Q. Otherwise a rising clock edge samples D; without an edge Q is held. Q! is the complement.'],
 ] as const) add(id, text, example);
-// The bare id is kept as an alias of the namespaced entry (XBV-156 acceptance reads BLOCK_GUIDANCE.SubMatrix).
-BLOCK_GUIDANCE.SubMatrix = BLOCK_GUIDANCE['xbridges:SubMatrix'];
 BLOCK_GUIDANCE['xbridges:Integrator'].behavior = 'The output is the current state. Its derivative is exactly the input; the selected continuous solver advances that state.';
 BLOCK_GUIDANCE['xbridges:INTEGRATOR_CONTINUOUS'].behavior = 'The output reads state.y; the derivative is Number(input). The continuous solver advances state.';
 BLOCK_GUIDANCE['xbridges:DFlipFlop'].behavior = 'Reset has priority and clears Q. Otherwise a rising clock edge samples D; without an edge Q is held. Q! is the complement.';
