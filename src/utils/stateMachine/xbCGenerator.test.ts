@@ -947,7 +947,7 @@ describe('X-Bridges C99 static storage', () => {
         transpose: matrixOperation('transpose', 'Transpose', ['transpose:u'], ['transpose:y']),
         concat: matrixOperation('concat', 'MatrixConcat', ['concat:a', 'concat:b'], ['concat:y'], { axis: 1 }),
         diag: matrixOperation('diag', 'MatrixDiag', ['diag:u'], ['diag:y']),
-        sub: matrixOperation('sub', 'SubMatrix', ['sub:u'], ['sub:y'], { rowStart: 0, rowEnd: 0, colStart: 1, colEnd: 2 }),
+        sub: matrixOperation('sub', 'SubMatrix', ['sub:u'], ['sub:y'], { rowStart: 1, rowEnd: 1, colStart: 2, colEnd: 3 } /* one-based, XBV-052/154 */),
         solve: matrixOperation('solve', 'MatrixSolve', ['solve:a', 'solve:b'], ['solve:y'], { maxDimension: 4 }),
         singular: matrixOperation('singular', 'MatrixSolve', ['singular:a', 'singular:b'], ['singular:y'], { maxDimension: 4 }),
       },
@@ -1010,8 +1010,9 @@ describe('X-Bridges C99 static storage', () => {
       execFileSync('gcc', ['-std=c99', '-pedantic-errors', '-Wall', '-Wextra', '-Werror', '-I.', 'sm_mapping.c', 'sm_core.c', 'sm_safety.c', 'sm_user_logic.c', 'sm_xbridges.c', 'mcal_dio_test_stubs.c', 'harness.c', '-lm', '-o', executable], { cwd: workspace.directory, stdio: 'pipe' });
       const actual = execFileSync(executable, [], { cwd: workspace.directory, encoding: 'utf8' }).trim().split(',').map(Number);
       expect(actual).toHaveLength(expected.length);
-      actual.forEach((value, index) => expect(value).toBeCloseTo(expected[index], 12));
-      expect(expected.slice(-2)).toEqual([0, 0]);
+      // D11 (WP-21 F2): the singular solve publishes NaN in C and in the interpreter ("nan" parses to NaN).
+      actual.forEach((value, index) => (Number.isNaN(expected[index]) ? expect(Number.isNaN(value), `index ${index}`).toBe(true) : expect(value).toBeCloseTo(expected[index], 12)));
+      expect(expected.slice(-2).every(Number.isNaN)).toBe(true);
     } finally { workspace.cleanup(); }
   });
 

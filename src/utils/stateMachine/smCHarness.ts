@@ -916,8 +916,16 @@ const parseXBTraceValue = (
   kind: string,
   encodedValues: string,
 ): XBridgesTraceValue => {
+  // printf("%.17g") writes the IEEE specials as inf / -inf / nan (nan with a sign for negative NaN), which Number() rejects.
+  const decodeNumber = (value: string): number => {
+    const lower = value.toLowerCase();
+    if (lower === 'inf' || lower === '+inf') return Infinity;
+    if (lower === '-inf') return -Infinity;
+    if (lower === 'nan' || lower === '-nan' || lower === '+nan') return Number.NaN;
+    return Number(value);
+  };
   const values = encodedValues === '' ? [] : encodedValues.split(',').map((value) =>
-    kind === 'b' ? value === '1' : Number(value));
+    kind === 'b' ? value === '1' : decodeNumber(value));
   if (shape === 's') return values[0] ?? (kind === 'b' ? false : 0);
   if (shape.startsWith('v')) return values;
   const match = /^m(\d+)x(\d+)$/.exec(shape);

@@ -434,8 +434,11 @@ const hasContinuousStates = (node: XBNodeV1): boolean => {
     case 'Integrator':
     case 'TRANSFER_FUNCTION':
       return true;
-    case 'STATE_SPACE':
-      return p.representation !== 'discrete';
+    case 'STATE_SPACE': {
+      // The canvas holds a continuous-representation block with an explicit positive sampleTime (no dynamics).
+      const ts = typeof p.sampleTime === 'string' ? Number(p.sampleTime) : p.sampleTime;
+      return p.representation !== 'discrete' && !(typeof ts === 'number' && Number.isFinite(ts) && ts > 0);
+    }
     case 'PID_CONTROLLER': {
       const ts = typeof p.sampleTime === 'string' ? Number(p.sampleTime) : p.sampleTime;
       return !(typeof ts === 'number' && Number.isFinite(ts) && ts > 0);
@@ -585,10 +588,13 @@ export const validateXBModel = (
       ));
     }
     if (node.type === 'STATE_SPACE') {
-      if (parameters.representation !== 'discrete') {
+      // XBV-093: a continuous STATE_SPACE (sampleTime <= 0) is integrated by the solver stages (euler, rk4; the discrete
+      // solver is refused by XB_DISCRETE_SOLVER_CONTINUOUS_STATE); with an explicit positive sampleTime it holds its
+      // state, like the canvas. A missing representation is not guessed.
+      if (parameters.representation !== 'discrete' && parameters.representation !== 'continuous') {
         diagnostics.push(diagnostic(
           'XB_DISCRETE_REPRESENTATION_REQUIRED',
-          `STATE_SPACE '${node.id}' requires representation: 'discrete' for embedded generation.`,
+          `STATE_SPACE '${node.id}' requires representation: 'discrete' or 'continuous' for embedded generation.`,
           node.id,
         ));
       }

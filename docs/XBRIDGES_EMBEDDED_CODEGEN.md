@@ -38,7 +38,21 @@ sample times, mappings, and target capabilities. Current target limits are a
 maximum vector length of 16 and maximum matrix dimension of 8. `MatrixSolve`
 also requires a configured maximum dimension from 1 through 8. `PID_BASIC`
 requires a positive discrete `sampleTime`; `STATE_SPACE` requires the
-`discrete` representation.
+`discrete` or `continuous` representation. A continuous `STATE_SPACE` (sample time <= 0) and the continuous form of
+`PID_CONTROLLER` (explicit sample time <= 0) are integrated by the solver stages of `euler` / `rk4` (the Discrete solver
+refuses them); a continuous `STATE_SPACE` with an explicit positive `sampleTime` holds its state, as on the canvas.
+`STATE_SPACE` / `DISCRETE_TRANSFER_FUNCTION` with D != 0 are direct feedthrough (output uses the input of the tick).
+
+Block rules that follow the canvas and Simulink: `Mean` of a matrix gives one mean per column (a vector of the column
+count), of a vector the scalar mean; its output shape is derived from the input, never from a declared shape.
+`SubMatrix` indices are one-based and inclusive, every default 1. `ShiftLeft` / `ShiftRight` on int32: a count >= 32
+shifts every bit out (0, or -1 for a negative value under the arithmetic right shift) and a negative count shifts the
+other way. `RELAY` is direct feedthrough: the output of tick k follows the input of tick k and the state of tick k-1
+(Simulink relay with hysteresis). `KALMAN_FILTER` updates first, then predicts (x[0|-1] = x0, P[0|-1] = P0). While
+`reset` is high `PID_BASIC` / `PID_CONTROLLER` clear their states and keep the proportional action and the derivative of
+a zero filter state. `STATE_SPACE` and `DISCRETE_TRANSFER_FUNCTION` derive the `y` and `x` port shapes from the matrices.
+Under `rk4` the mode-held blocks hold their major-step mode during the minor stages: `Step` and `RELAY` their value,
+`SWITCH` its side and `SATURATION` / `DEADZONE` their region (the data still follows the stage input).
 
 ## State-machine boundary mapping
 
@@ -261,11 +275,13 @@ Out-of-domain results of the math blocks (for example `ACOS`, `ASIN`, `ACOSH`,
 Simulink and libm: the block publishes `NaN` (or the infinity of the result) and
 raises the numeric fault on the interpreter and in the generated C. There is no
 fallback `0` for these results (decision D11). Two boundaries keep the safe-zero
-fallback: non-finite values mapped into the model from state-machine variables
-and the division-by-zero fault of `VectorDiv`.
+fallback: non-finite values mapped into the model from state-machine variables.
+`VectorDiv` by zero publishes the IEEE result (`Inf`, `NaN`) element-wise and a singular `MatrixSolve` publishes `NaN`,
+both with the numeric fault raised, under every fault policy (D11, XBV-160). Integer and fixed-point outputs cannot hold
+a non-finite value and keep the default value with the fault raised; non-finite shift operands give 0.
 
 With `signal-only`, the block publishes its error indication (and, for the
-division-by-zero and boundary cases above, the deterministic fallback) while the
+boundary case above, the deterministic fallback) while the
 state machine continues. With `escalate`, generated code sets
 `SM_ERR_XBRIDGES_NUMERIC`, latches the state-machine fault, applies configured
 safe outputs, and suppresses the watchdog kick through the normal safety path.

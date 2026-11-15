@@ -221,7 +221,9 @@ describe('X-Bridges interpreter', () => {
     expect(runtime.stateSlots['pid:i_state$state'][0]).toBeCloseTo(1.5, 12);
     Object.assign(runtime.signals, { 'pid:enable': [1], 'pid:reset': [1] });
     stepXBState(runtime, {});
-    expect(runtime.signals['pid:u']).toEqual([0]);
+    // XBV-168 (WP-21): during reset the output keeps the proportional action, Kp e = 99 clamped to max 1 (canvas
+    // PID_BASIC execute with the same parameters and inputs gives 1; Simulink PID reset clears the integrator only).
+    expect(runtime.signals['pid:u']).toEqual([1]);
     expect(runtime.stateSlots['pid:i_state$state']).toEqual([0]);
     expect(runtime.stateSlots['pid:d_state$state']).toEqual([0]);
     expect(runtime.stateSlots['pid:last_e$state']).toEqual([0]);
@@ -294,7 +296,8 @@ describe('X-Bridges interpreter', () => {
     // Step 4: Reset
     Object.assign(runtime.signals, { 'pid:r': [100], 'pid:y': [0], 'pid:enable': [1], 'pid:reset': [1] });
     stepXBState(runtime, {});
-    expect(runtime.signals['pid:u']).toEqual([0]); // reset emits 0
+    // XBV-168 (WP-21): reset keeps Kp (b r - y) = 100 plus the reset-time D term, clamped to max 1 (canvas block oracle: 1).
+    expect(runtime.signals['pid:u']).toEqual([1]);
     expect(runtime.stateSlots['pid:last_e$state']).toEqual([0]);
   });
 
@@ -465,7 +468,7 @@ describe('X-Bridges interpreter', () => {
       transpose: operation('transpose', 'Transpose', ['transpose:u'], ['transpose:y']),
       concat: operation('concat', 'MatrixConcat', ['concat:a', 'concat:b'], ['concat:y'], { axis: 1 }),
       diag: operation('diag', 'MatrixDiag', ['diag:u'], ['diag:y']),
-      sub: operation('sub', 'SubMatrix', ['sub:u'], ['sub:y'], { rowStart: 0, rowEnd: 0, colStart: 1, colEnd: 2 }),
+      sub: operation('sub', 'SubMatrix', ['sub:u'], ['sub:y'], { rowStart: 1, rowEnd: 1, colStart: 2, colEnd: 3 } /* one-based, XBV-052/154 */),
     }, {
       'a:y': shapedSignal('a:y', 'output', { kind: 'matrix', rows: 2, columns: 3 }),
       'b:y': shapedSignal('b:y', 'output', { kind: 'matrix', rows: 3, columns: 2 }),
@@ -494,7 +497,8 @@ describe('X-Bridges interpreter', () => {
     expect(runtime.signals['sub:y']).toEqual([64, 58]);
   });
 
-  it('T10-INT-MATRIX-OPS solves a bounded linear system and returns zero for a deterministic pivot failure', () => {
+  // D11 (WP-21 F2): a singular system publishes NaN with the numeric fault, no fallback 0 (MATLAB mldivide of a singular matrix gives Inf/NaN with a warning).
+  it('T10-INT-MATRIX-OPS solves a bounded linear system and returns NaN for a deterministic pivot failure', () => {
     const makeRuntime = (matrix: number[]) => createXBRuntime(model('retain', {
       a: operation('a', 'Constant', [], ['a:y'], { value: matrix }),
       b: operation('b', 'Constant', [], ['b:y'], { value: [5, 5] }),
@@ -513,7 +517,7 @@ describe('X-Bridges interpreter', () => {
     stepXBState(singular, {});
 
     expect(solved.signals['solve:y']).toEqual([2, 1]);
-    expect(singular.signals['solve:y']).toEqual([0, 0]);
+    expect(singular.signals['solve:y'].every(Number.isNaN)).toBe(true);
   });
   it('T14-INT-CONTINUOUS uses five integer solver substeps per tick and holds a 20 ms delay between samples', () => {
     const delay = {

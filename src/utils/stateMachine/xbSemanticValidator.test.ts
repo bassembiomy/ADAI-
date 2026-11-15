@@ -140,9 +140,10 @@ describe('validateXBModel', () => {
     expect(contractCodes).toEqual(expect.arrayContaining([
       'XB_MATRIX_SOLVE_BOUND_INVALID',
       'XB_DISCRETE_SAMPLE_TIME_REQUIRED',
-      'XB_DISCRETE_REPRESENTATION_REQUIRED',
       'XB_TARGET_CAPABILITY_MISSING',
     ]));
+    // XBV-093 (WP-21 F2): continuous STATE_SPACE is supported by the embedded path (continuous state slots).
+    expect(contractCodes).not.toContain('XB_DISCRETE_REPRESENTATION_REQUIRED');
   });
 
   it('accepts target-valid 9-element discrete realization vectors without applying MatrixSolve bounds', () => {

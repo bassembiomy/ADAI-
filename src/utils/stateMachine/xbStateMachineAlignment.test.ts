@@ -575,13 +575,14 @@ describe('XB alignment 5: numeric fault policy', () => {
     });
   };
 
-  it('signal-only: fault indicated, documented fallback 0 published, the state machine keeps running; same in all three', () => {
+  // D11 (WP-21): the fault is indicated and the IEEE result (1/0 = Inf) is published; no fallback 0.
+  it('signal-only: fault indicated, IEEE Inf published, the state machine keeps running; same in all three', () => {
     const f = expectAligned(faultModel('signal-only'), steps([{}, { go: true }, {}, {}])).sim;
     expect(f.map((x) => x.error)).toEqual([null, null, null, null, null]);
     const faults = f.map((x) => x.xBridges.B?.faults ?? []);
     expect(faults.map((x) => x.length > 0)).toEqual([false, false, false, true, true]);
     expect(faults[3]).toEqual(['div']);
-    expect(f[3].xBridges.B.signals['div:y']).toEqual([0, 0]);
+    expect(f[3].xBridges.B.signals['div:y']).toEqual([Infinity, Infinity]);
     expect(f[4].activeStateIds).toEqual(['B']);
   }, T);
 
