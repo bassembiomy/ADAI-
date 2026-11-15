@@ -198,6 +198,8 @@ const meanings: Record<string, string> = {
 };
 
 export function getXBlockParameterDescription(typeId: string, name: string): string | undefined {
+  if (name === 'vMax' && typeId === 'FIELD_ORIENTED_CONTROL') return 'Optional per-axis output voltage limit of the d and q PI regulators (magnitude, ±vMax). Blank or absent means unlimited: the outputs are not clamped and no anti-windup clamp is applied. When set, each integrator is held (conditional-integration anti-windup) while its unclamped output is beyond the limit in the direction of its error; the limited vd and vq then feed the inverse Park and Clarke outputs.';
+  if (name === 'vMax' && typeId === 'CURRENT_CONTROLLER_DQ') return 'Optional per-axis output voltage limit of the d and q PI regulators (magnitude, ±vMax). Blank or absent means unlimited: vd and vq are not clamped and no anti-windup clamp is applied. When set, each integrator is held (conditional-integration anti-windup) while its unclamped output is beyond the limit in the direction of its error; vd and vq are then limited to ±vMax.';
   if (name === 'D' && typeId === 'MPC_CONTROLLER') return 'Stored feedthrough matrix; the current prediction solver uses A, B and C and does not apply D.';
   if (name === 'angle_unit' && ['ASIN','ACOS','ATAN','ACOT','ASEC','ACOSEC'].includes(typeId)) return 'Output angle convention: radians or degrees. Input is dimensionless.';
   if (name === 'delay' && typeId === 'DISCRETE_IMPULSE') return 'Sample index at which the impulse fires, not seconds.';
