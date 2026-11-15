@@ -113,6 +113,15 @@ const AUTHORED: { source: string; handler: RegExp; label: string; body: string }
     body: 'Validate the criterion and store it in the verification case. Errors (duration, step, window, tolerance, value, observed signal, stimulus numbers, unit) are listed in red and nothing is stored until they are fixed. Saving does not run the simulation: press Run.' },
   { source: '/trmSim/SimVerificationPanel.tsx', handler: /setEditing\(null\)/, label: 'Cancel the criterion editor',
     body: 'Close the criterion editor without saving: the draft and its error list are discarded and the stored criterion, if any, is unchanged.' },
+  // --- X-Bridges solver options (toolbar, shown for the solver in use) ---
+  { source: '/xbridges/XbridgesWorkspace.tsx', handler: /setSolverOptionText\('relative'/, label: 'Rel Tol (relative tolerance)',
+    body: 'Relative tolerance of the variable-step solvers Adaptive ODE23, Adaptive ODE45 and Adaptive TR-BDF2 (ode23tb); the field is shown only for these solvers. Default 1e-3. The solver keeps the estimated local error of every internal step within the relative and the absolute tolerance, retries a step that misses it with a smaller one and lands exactly on the end of each output tick. The value must be a number greater than 0: an invalid value is marked in the field and the run is refused, nothing is clamped.' },
+  { source: '/xbridges/XbridgesWorkspace.tsx', handler: /setSolverOptionText\('absolute'/, label: 'Abs Tol (absolute tolerance)',
+    body: 'Absolute tolerance of the variable-step solvers Adaptive ODE23, Adaptive ODE45 and Adaptive TR-BDF2 (ode23tb), used with the relative tolerance for states near zero; the field is shown only for these solvers. Default 1e-6. The value must be a number greater than 0: an invalid value is marked in the field and the run is refused.' },
+  { source: '/xbridges/XbridgesWorkspace.tsx', handler: /setSolverOptionText\('extrapolationOrder'/, label: 'Extrapolation Order (ode14x)',
+    body: 'Extrapolation order of the Implicit Extrapolation solver (ode14x); the field is shown only for this solver. Default 4. The value must be an integer of 1 or more: an invalid value is marked in the field and the run is refused.' },
+  { source: '/xbridges/XbridgesWorkspace.tsx', handler: /setSolverOptionText\('newtonIterations'/, label: 'Newton Iter. (ode14x)',
+    body: 'Number of Newton iterations of each implicit solve of the Implicit Extrapolation solver (ode14x); the field is shown only for this solver. Default 1. The value must be an integer of 1 or more: an invalid value is marked in the field and the run is refused.' },
   // --- DoE Sweeper results (X-Bridges properties panel) ---
   { source: '/powertrain/DoeSweeperPanel.tsx', handler: /doeModuleTable/, label: 'Send the sweep results to the DOE module',
     body: 'Convert the collected rows into a DOE table and pass it to the DOE module: the factor and response columns become experiment columns for fitting a surrogate. It is enabled when there are results and the workspace can open the DOE module. Sending does not change the sweep block or any calibration block.' },

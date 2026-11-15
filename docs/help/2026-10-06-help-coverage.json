@@ -1,7 +1,7 @@
 {
   "scope": "Registered semantic features; UI source candidates reported separately.",
-  "total": 2201,
-  "documented": 2201,
+  "total": 2207,
+  "documented": 2207,
   "missing": 0,
   "coverage": 100,
   "duplicateFeatureIds": [],
@@ -14506,6 +14506,51 @@
       "module": "system"
     },
     {
+      "id": "live:App:34ecff87bb82",
+      "label": "Scroll the workspace toolbar",
+      "topicId": "live:App:34ecff87bb82",
+      "sectionId": "use",
+      "sourcePath": "src/App.tsx",
+      "kind": "action",
+      "module": "system"
+    },
+    {
+      "id": "live:components/xbridges/XbridgesWorkspace:a1623755ef69",
+      "label": "Rel Tol (relative tolerance)",
+      "topicId": "live:components/xbridges/XbridgesWorkspace:a1623755ef69",
+      "sectionId": "use",
+      "sourcePath": "src/components/xbridges/XbridgesWorkspace.tsx",
+      "kind": "action",
+      "module": "system"
+    },
+    {
+      "id": "live:components/xbridges/XbridgesWorkspace:c520f1d4b921",
+      "label": "Abs Tol (absolute tolerance)",
+      "topicId": "live:components/xbridges/XbridgesWorkspace:c520f1d4b921",
+      "sectionId": "use",
+      "sourcePath": "src/components/xbridges/XbridgesWorkspace.tsx",
+      "kind": "action",
+      "module": "system"
+    },
+    {
+      "id": "live:components/xbridges/XbridgesWorkspace:932393242023",
+      "label": "Extrapolation Order (ode14x)",
+      "topicId": "live:components/xbridges/XbridgesWorkspace:932393242023",
+      "sectionId": "use",
+      "sourcePath": "src/components/xbridges/XbridgesWorkspace.tsx",
+      "kind": "action",
+      "module": "system"
+    },
+    {
+      "id": "live:components/xbridges/XbridgesWorkspace:e5d9363ae480",
+      "label": "Newton Iter. (ode14x)",
+      "topicId": "live:components/xbridges/XbridgesWorkspace:e5d9363ae480",
+      "sectionId": "use",
+      "sourcePath": "src/components/xbridges/XbridgesWorkspace.tsx",
+      "kind": "action",
+      "module": "system"
+    },
+    {
       "id": "hmi:component:toggle",
       "label": "Toggle",
       "topicId": "hmi-component-toggle",
@@ -14894,7 +14939,7 @@
     },
     {
       "id": "block:xbridges:ROBOT_VACUUM_LIDAR_SENSOR",
-      "label": "Lidar Sensor",
+      "label": "ROBOT_VACUUM_LIDAR_SENSOR",
       "topicId": "xbridges:ROBOT_VACUUM_LIDAR_SENSOR",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -14904,7 +14949,7 @@
     },
     {
       "id": "block:xbridges:ROBOT_VACUUM_ODOMETRY_SENSOR",
-      "label": "Odometry Sensor",
+      "label": "ROBOT_VACUUM_ODOMETRY_SENSOR",
       "topicId": "xbridges:ROBOT_VACUUM_ODOMETRY_SENSOR",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -14914,7 +14959,7 @@
     },
     {
       "id": "block:xbridges:ROBOT_VACUUM_CLIFF_IR",
-      "label": "Cliff IR Sensor",
+      "label": "ROBOT_VACUUM_CLIFF_IR",
       "topicId": "xbridges:ROBOT_VACUUM_CLIFF_IR",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -14924,7 +14969,7 @@
     },
     {
       "id": "block:xbridges:ROBOT_VACUUM_DUSTBIN_SENSOR",
-      "label": "Dustbin Sensor",
+      "label": "ROBOT_VACUUM_DUSTBIN_SENSOR",
       "topicId": "xbridges:ROBOT_VACUUM_DUSTBIN_SENSOR",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -14934,7 +14979,7 @@
     },
     {
       "id": "block:xbridges:ROBOT_VACUUM_MOTOR_CURRENT",
-      "label": "Motor Current",
+      "label": "ROBOT_VACUUM_MOTOR_CURRENT",
       "topicId": "xbridges:ROBOT_VACUUM_MOTOR_CURRENT",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -14944,7 +14989,7 @@
     },
     {
       "id": "block:xbridges:ROBOT_VACUUM_SENSOR_FUSION_EKF",
-      "label": "EKF Localization",
+      "label": "ROBOT_VACUUM_SENSOR_FUSION_EKF",
       "topicId": "xbridges:ROBOT_VACUUM_SENSOR_FUSION_EKF",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -14954,7 +14999,7 @@
     },
     {
       "id": "block:xbridges:ROBOT_VACUUM_ROOM_SEGMENTATION",
-      "label": "Room Segmentation",
+      "label": "ROBOT_VACUUM_ROOM_SEGMENTATION",
       "topicId": "xbridges:ROBOT_VACUUM_ROOM_SEGMENTATION",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -14964,7 +15009,7 @@
     },
     {
       "id": "block:xbridges:ROBOT_VACUUM_SEMANTIC_MAP",
-      "label": "Semantic Zone Map",
+      "label": "ROBOT_VACUUM_SEMANTIC_MAP",
       "topicId": "xbridges:ROBOT_VACUUM_SEMANTIC_MAP",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -14974,7 +15019,7 @@
     },
     {
       "id": "block:xbridges:ROBOT_VACUUM_COVERAGE_PLANNER",
-      "label": "Coverage Planner",
+      "label": "ROBOT_VACUUM_COVERAGE_PLANNER",
       "topicId": "xbridges:ROBOT_VACUUM_COVERAGE_PLANNER",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -14984,7 +15029,7 @@
     },
     {
       "id": "block:xbridges:ROBOT_VACUUM_ROOM_SCHEDULER",
-      "label": "Room Scheduler",
+      "label": "ROBOT_VACUUM_ROOM_SCHEDULER",
       "topicId": "xbridges:ROBOT_VACUUM_ROOM_SCHEDULER",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -14994,7 +15039,7 @@
     },
     {
       "id": "block:xbridges:ROBOT_VACUUM_BATTERY_MONITOR",
-      "label": "Battery Monitor",
+      "label": "ROBOT_VACUUM_BATTERY_MONITOR",
       "topicId": "xbridges:ROBOT_VACUUM_BATTERY_MONITOR",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -15004,7 +15049,7 @@
     },
     {
       "id": "block:xbridges:ROBOT_VACUUM_GOAL_MANAGER",
-      "label": "Goal Manager",
+      "label": "ROBOT_VACUUM_GOAL_MANAGER",
       "topicId": "xbridges:ROBOT_VACUUM_GOAL_MANAGER",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -15014,7 +15059,7 @@
     },
     {
       "id": "block:xbridges:ROBOT_VACUUM_3D_VIZ_COLORS",
-      "label": "3D Visualization (Room Colors)",
+      "label": "ROBOT_VACUUM_3D_VIZ_COLORS",
       "topicId": "xbridges:ROBOT_VACUUM_3D_VIZ_COLORS",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -15024,7 +15069,7 @@
     },
     {
       "id": "block:xbridges:ROBOT_VACUUM_WAYPOINT_GEN",
-      "label": "Waypoint Generation",
+      "label": "ROBOT_VACUUM_WAYPOINT_GEN",
       "topicId": "xbridges:ROBOT_VACUUM_WAYPOINT_GEN",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -15034,7 +15079,7 @@
     },
     {
       "id": "block:xbridges:ROBOT_VACUUM_COLLISION_AVOID",
-      "label": "Collision Avoidance",
+      "label": "ROBOT_VACUUM_COLLISION_AVOID",
       "topicId": "xbridges:ROBOT_VACUUM_COLLISION_AVOID",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -15044,7 +15089,7 @@
     },
     {
       "id": "block:xbridges:ROBOT_VACUUM_SURFACE_ADAPTER",
-      "label": "Surface Adapter",
+      "label": "ROBOT_VACUUM_SURFACE_ADAPTER",
       "topicId": "xbridges:ROBOT_VACUUM_SURFACE_ADAPTER",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -15054,7 +15099,7 @@
     },
     {
       "id": "block:xbridges:ROBOT_VACUUM_CLIFF_HALT",
-      "label": "Cliff Halt Logic",
+      "label": "ROBOT_VACUUM_CLIFF_HALT",
       "topicId": "xbridges:ROBOT_VACUUM_CLIFF_HALT",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -15064,7 +15109,7 @@
     },
     {
       "id": "block:xbridges:ROBOT_VACUUM_VELOCITY_PID",
-      "label": "Velocity PID",
+      "label": "ROBOT_VACUUM_VELOCITY_PID",
       "topicId": "xbridges:ROBOT_VACUUM_VELOCITY_PID",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -15074,7 +15119,7 @@
     },
     {
       "id": "block:xbridges:ROBOT_VACUUM_MODE_SUPERVISOR",
-      "label": "Mode Supervisor",
+      "label": "ROBOT_VACUUM_MODE_SUPERVISOR",
       "topicId": "xbridges:ROBOT_VACUUM_MODE_SUPERVISOR",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -15084,7 +15129,7 @@
     },
     {
       "id": "block:xbridges:ROBOT_VACUUM_BUMPER_SENSOR",
-      "label": "Bumper Sensor",
+      "label": "ROBOT_VACUUM_BUMPER_SENSOR",
       "topicId": "xbridges:ROBOT_VACUUM_BUMPER_SENSOR",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -15094,7 +15139,7 @@
     },
     {
       "id": "block:xbridges:ROBOT_VACUUM_SIDE_BRUSH",
-      "label": "Side Brush Model",
+      "label": "ROBOT_VACUUM_SIDE_BRUSH",
       "topicId": "xbridges:ROBOT_VACUUM_SIDE_BRUSH",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -15104,7 +15149,7 @@
     },
     {
       "id": "block:xbridges:ROBOT_VACUUM_SUCTION_PWM",
-      "label": "Variable Suction",
+      "label": "ROBOT_VACUUM_SUCTION_PWM",
       "topicId": "xbridges:ROBOT_VACUUM_SUCTION_PWM",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -15114,7 +15159,7 @@
     },
     {
       "id": "block:xbridges:ROBOT_VACUUM_TERRAIN_MODEL",
-      "label": "Terrain Model",
+      "label": "ROBOT_VACUUM_TERRAIN_MODEL",
       "topicId": "xbridges:ROBOT_VACUUM_TERRAIN_MODEL",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -15124,7 +15169,7 @@
     },
     {
       "id": "block:xbridges:ROBOT_VACUUM_COLLISION_MESH",
-      "label": "Collision Mesh",
+      "label": "ROBOT_VACUUM_COLLISION_MESH",
       "topicId": "xbridges:ROBOT_VACUUM_COLLISION_MESH",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -15134,7 +15179,7 @@
     },
     {
       "id": "block:xbridges:ROBOT_VACUUM_DOCK_BEACON",
-      "label": "Dock Station (Beacon)",
+      "label": "ROBOT_VACUUM_DOCK_BEACON",
       "topicId": "xbridges:ROBOT_VACUUM_DOCK_BEACON",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -15144,7 +15189,7 @@
     },
     {
       "id": "block:xbridges:ROBOT_VACUUM_CAPACITY_THRESHOLD",
-      "label": "Capacity Threshold",
+      "label": "ROBOT_VACUUM_CAPACITY_THRESHOLD",
       "topicId": "xbridges:ROBOT_VACUUM_CAPACITY_THRESHOLD",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -15154,7 +15199,7 @@
     },
     {
       "id": "block:xbridges:ROBOT_VACUUM_HALT_ALERT",
-      "label": "Halt & Alert State",
+      "label": "ROBOT_VACUUM_HALT_ALERT",
       "topicId": "xbridges:ROBOT_VACUUM_HALT_ALERT",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -15164,7 +15209,7 @@
     },
     {
       "id": "block:xbridges:ROBOT_VACUUM_DOCK_DETECT",
-      "label": "Dock Detect Logic",
+      "label": "ROBOT_VACUUM_DOCK_DETECT",
       "topicId": "xbridges:ROBOT_VACUUM_DOCK_DETECT",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -15174,7 +15219,7 @@
     },
     {
       "id": "block:xbridges:ROBOT_VACUUM_RESUME_SCHEDULER",
-      "label": "Resume Scheduler",
+      "label": "ROBOT_VACUUM_RESUME_SCHEDULER",
       "topicId": "xbridges:ROBOT_VACUUM_RESUME_SCHEDULER",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -15184,7 +15229,7 @@
     },
     {
       "id": "block:xbridges:ROBOT_VACUUM_3D_SCENE_VIEW",
-      "label": "3D Scene View",
+      "label": "ROBOT_VACUUM_3D_SCENE_VIEW",
       "topicId": "xbridges:ROBOT_VACUUM_3D_SCENE_VIEW",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -15194,7 +15239,7 @@
     },
     {
       "id": "block:xbridges:ROBOT_VACUUM_FURNITURE_MESH",
-      "label": "Furniture Mesh 3D",
+      "label": "ROBOT_VACUUM_FURNITURE_MESH",
       "topicId": "xbridges:ROBOT_VACUUM_FURNITURE_MESH",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -15204,7 +15249,7 @@
     },
     {
       "id": "block:xbridges:ROBOT_VACUUM_DIRT_DENSITY",
-      "label": "Dirt Density Map",
+      "label": "ROBOT_VACUUM_DIRT_DENSITY",
       "topicId": "xbridges:ROBOT_VACUUM_DIRT_DENSITY",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -15214,7 +15259,7 @@
     },
     {
       "id": "block:xbridges:ROBOT_VACUUM_ROOM_ZONE_COLORS",
-      "label": "Room Zone Colors",
+      "label": "ROBOT_VACUUM_ROOM_ZONE_COLORS",
       "topicId": "xbridges:ROBOT_VACUUM_ROOM_ZONE_COLORS",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -15224,7 +15269,7 @@
     },
     {
       "id": "block:xbridges:ROBOT_VACUUM_COVERAGE_HEATMAP",
-      "label": "Coverage Heatmap",
+      "label": "ROBOT_VACUUM_COVERAGE_HEATMAP",
       "topicId": "xbridges:ROBOT_VACUUM_COVERAGE_HEATMAP",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -15234,7 +15279,7 @@
     },
     {
       "id": "block:xbridges:ROBOT_VACUUM_DOCK_ICON",
-      "label": "Dock Station Icon",
+      "label": "ROBOT_VACUUM_DOCK_ICON",
       "topicId": "xbridges:ROBOT_VACUUM_DOCK_ICON",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -15244,7 +15289,7 @@
     },
     {
       "id": "block:xbridges:ROBOT_VACUUM_BATTERY_HUD",
-      "label": "Battery HUD",
+      "label": "ROBOT_VACUUM_BATTERY_HUD",
       "topicId": "xbridges:ROBOT_VACUUM_BATTERY_HUD",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -15254,7 +15299,7 @@
     },
     {
       "id": "block:xbridges:ROBOT_VACUUM_DUSTBIN_HUD",
-      "label": "Dustbin Level HUD",
+      "label": "ROBOT_VACUUM_DUSTBIN_HUD",
       "topicId": "xbridges:ROBOT_VACUUM_DUSTBIN_HUD",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -15473,6 +15518,16 @@
       "documentationGaps": []
     },
     {
+      "id": "block:xbridges:SUM_JUNCTION",
+      "label": "SUM_JUNCTION",
+      "topicId": "xbridges:SUM_JUNCTION",
+      "sectionId": "behavior",
+      "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
+      "kind": "block",
+      "module": "xbridges",
+      "documentationGaps": []
+    },
+    {
       "id": "block:xbridges:VectorAdd",
       "label": "Add",
       "topicId": "xbridges:VectorAdd",
@@ -15614,7 +15669,7 @@
     },
     {
       "id": "block:xbridges:MatrixConcat",
-      "label": "MatrixConcat",
+      "label": "Matrix Concatenate",
       "topicId": "xbridges:MatrixConcat",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -15624,7 +15679,7 @@
     },
     {
       "id": "block:xbridges:MatrixDiag",
-      "label": "MatrixDiag",
+      "label": "Diagonal Matrix / Extract",
       "topicId": "xbridges:MatrixDiag",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -15664,7 +15719,7 @@
     },
     {
       "id": "block:xbridges:IdentityMatrix",
-      "label": "IdentityMatrix",
+      "label": "Identity Matrix Generator",
       "topicId": "xbridges:IdentityMatrix",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -15674,7 +15729,7 @@
     },
     {
       "id": "block:xbridges:SubMatrix",
-      "label": "SubMatrix",
+      "label": "Submatrix Selector",
       "topicId": "xbridges:SubMatrix",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -15684,7 +15739,7 @@
     },
     {
       "id": "block:xbridges:MatrixSolve",
-      "label": "MatrixSolve",
+      "label": "Linear System Solver",
       "topicId": "xbridges:MatrixSolve",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -15754,7 +15809,7 @@
     },
     {
       "id": "block:xbridges:THREE_PHASE_PWM",
-      "label": "3-Phase PWM",
+      "label": "Three-Phase PWM",
       "topicId": "xbridges:THREE_PHASE_PWM",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -15764,7 +15819,7 @@
     },
     {
       "id": "block:xbridges:SIX_STEP_COMMUTATION",
-      "label": "6-Step Commutation",
+      "label": "Six-Step BLDC",
       "topicId": "xbridges:SIX_STEP_COMMUTATION",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -15774,7 +15829,7 @@
     },
     {
       "id": "block:xbridges:SENSORLESS_SIX_STEP",
-      "label": "SENSORLESS_SIX_STEP",
+      "label": "Sensorless BLDC",
       "topicId": "xbridges:SENSORLESS_SIX_STEP",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -15784,7 +15839,7 @@
     },
     {
       "id": "block:xbridges:DC_VOLTAGE_SOURCE",
-      "label": "DC Voltage Source",
+      "label": "DC_VOLTAGE_SOURCE",
       "topicId": "xbridges:DC_VOLTAGE_SOURCE",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -15794,7 +15849,7 @@
     },
     {
       "id": "block:xbridges:THREE_PHASE_LOAD",
-      "label": "3-Phase Load",
+      "label": "THREE_PHASE_LOAD",
       "topicId": "xbridges:THREE_PHASE_LOAD",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -15804,7 +15859,7 @@
     },
     {
       "id": "block:xbridges:THREE_PHASE_INVERTER",
-      "label": "3-Phase Inverter",
+      "label": "Three-Phase Inverter",
       "topicId": "xbridges:THREE_PHASE_INVERTER",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -15814,7 +15869,7 @@
     },
     {
       "id": "block:xbridges:SINGLE_PHASE_H_BRIDGE",
-      "label": "H-Bridge",
+      "label": "H-Bridge Inverter",
       "topicId": "xbridges:SINGLE_PHASE_H_BRIDGE",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -15824,7 +15879,7 @@
     },
     {
       "id": "block:xbridges:VOLTAGE_REFERENCE_GENERATOR",
-      "label": "Voltage Ref Gen",
+      "label": "Voltage Reference Gen",
       "topicId": "xbridges:VOLTAGE_REFERENCE_GENERATOR",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -15834,7 +15889,7 @@
     },
     {
       "id": "block:xbridges:FIELD_ORIENTED_CONTROL",
-      "label": "FIELD_ORIENTED_CONTROL",
+      "label": "Field-Oriented Control",
       "topicId": "xbridges:FIELD_ORIENTED_CONTROL",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -15844,7 +15899,7 @@
     },
     {
       "id": "block:xbridges:CLARKE_TRANSFORM",
-      "label": "Clarke Transform",
+      "label": "CLARKE_TRANSFORM",
       "topicId": "xbridges:CLARKE_TRANSFORM",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -15854,7 +15909,7 @@
     },
     {
       "id": "block:xbridges:PARK_TRANSFORM",
-      "label": "Park Transform",
+      "label": "PARK_TRANSFORM",
       "topicId": "xbridges:PARK_TRANSFORM",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -15864,7 +15919,7 @@
     },
     {
       "id": "block:xbridges:INVERSE_PARK",
-      "label": "Inverse Park",
+      "label": "INVERSE_PARK",
       "topicId": "xbridges:INVERSE_PARK",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -15874,7 +15929,7 @@
     },
     {
       "id": "block:xbridges:INVERSE_CLARKE",
-      "label": "Inverse Clarke",
+      "label": "INVERSE_CLARKE",
       "topicId": "xbridges:INVERSE_CLARKE",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -15884,7 +15939,7 @@
     },
     {
       "id": "block:xbridges:CURRENT_CONTROLLER_DQ",
-      "label": "DQ Current Controller",
+      "label": "dq Current Controller",
       "topicId": "xbridges:CURRENT_CONTROLLER_DQ",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -15894,7 +15949,7 @@
     },
     {
       "id": "block:xbridges:DOE_MODEL",
-      "label": "DOE_MODEL",
+      "label": "DoE Model",
       "topicId": "xbridges:DOE_MODEL",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -15904,7 +15959,7 @@
     },
     {
       "id": "block:xbridges:SPEED_CONTROLLER",
-      "label": "Speed Controller",
+      "label": "PI Speed Controller",
       "topicId": "xbridges:SPEED_CONTROLLER",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -15914,7 +15969,7 @@
     },
     {
       "id": "block:xbridges:FLUX_REFERENCE",
-      "label": "Flux Reference",
+      "label": "Flux Reference Gen",
       "topicId": "xbridges:FLUX_REFERENCE",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -15924,7 +15979,7 @@
     },
     {
       "id": "block:xbridges:ROTOR_POSITION_ESTIMATOR",
-      "label": "Rotor Estimator",
+      "label": "Rotor Position/Speed Estimator",
       "topicId": "xbridges:ROTOR_POSITION_ESTIMATOR",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -15934,7 +15989,7 @@
     },
     {
       "id": "block:xbridges:SVPWM_CORE",
-      "label": "SVPWM Core",
+      "label": "SVPWM Core Timing",
       "topicId": "xbridges:SVPWM_CORE",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -15944,7 +15999,7 @@
     },
     {
       "id": "block:xbridges:SECTOR_SELECTOR",
-      "label": "Sector Selector",
+      "label": "SECTOR_SELECTOR",
       "topicId": "xbridges:SECTOR_SELECTOR",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -15954,7 +16009,7 @@
     },
     {
       "id": "block:xbridges:SWITCHING_TIME_CALCULATOR",
-      "label": "Switching Time Calc",
+      "label": "SWITCHING_TIME_CALCULATOR",
       "topicId": "xbridges:SWITCHING_TIME_CALCULATOR",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -15964,7 +16019,7 @@
     },
     {
       "id": "block:xbridges:SVPWM_GATE_GENERATOR",
-      "label": "SVPWM Gate Gen",
+      "label": "SVPWM Gate Generator",
       "topicId": "xbridges:SVPWM_GATE_GENERATOR",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -15994,7 +16049,7 @@
     },
     {
       "id": "block:xbridges:DELAY",
-      "label": "Delay (Solver Substeps)",
+      "label": "Unit Delay",
       "topicId": "xbridges:DELAY",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -16074,7 +16129,7 @@
     },
     {
       "id": "block:xbridges:IF_ELSE",
-      "label": "If-Else",
+      "label": "If-Else Selector",
       "topicId": "xbridges:IF_ELSE",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -16084,7 +16139,7 @@
     },
     {
       "id": "block:xbridges:SWITCH_CASE",
-      "label": "Switch-Case",
+      "label": "Switch-Case Selector",
       "topicId": "xbridges:SWITCH_CASE",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -16094,7 +16149,7 @@
     },
     {
       "id": "block:xbridges:DATA_TYPE_CONVERSION",
-      "label": "Type Conversion",
+      "label": "Data Type Conversion",
       "topicId": "xbridges:DATA_TYPE_CONVERSION",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -16354,7 +16409,7 @@
     },
     {
       "id": "block:xbridges:PID_CONTROLLER",
-      "label": "PID Controller (Ind)",
+      "label": "Advanced PID Controller",
       "topicId": "xbridges:PID_CONTROLLER",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -16444,7 +16499,7 @@
     },
     {
       "id": "block:xbridges:STATE_SPACE",
-      "label": "State-Space",
+      "label": "State-Space Model",
       "topicId": "xbridges:STATE_SPACE",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -16494,7 +16549,7 @@
     },
     {
       "id": "block:xbridges:PID_BASIC",
-      "label": "PID Controller (Signal)",
+      "label": "Basic PID Controller",
       "topicId": "xbridges:PID_BASIC",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -16504,7 +16559,7 @@
     },
     {
       "id": "block:xbridges:WHITE_NOISE",
-      "label": "White Noise",
+      "label": "White Noise Source",
       "topicId": "xbridges:WHITE_NOISE",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -16554,7 +16609,7 @@
     },
     {
       "id": "block:xbridges:MOVING_AVERAGE",
-      "label": "Moving Average",
+      "label": "Moving Average Filter",
       "topicId": "xbridges:MOVING_AVERAGE",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -16574,7 +16629,7 @@
     },
     {
       "id": "block:xbridges:EXTENDED_KALMAN_FILTER",
-      "label": "Extended Kalman",
+      "label": "Extended Kalman Filter",
       "topicId": "xbridges:EXTENDED_KALMAN_FILTER",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -16594,7 +16649,7 @@
     },
     {
       "id": "block:xbridges:NUMERIC_REPRESENTATION",
-      "label": "Numeric Rep",
+      "label": "Numeric Representation",
       "topicId": "xbridges:NUMERIC_REPRESENTATION",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -16604,7 +16659,7 @@
     },
     {
       "id": "block:xbridges:DOE_MODULE",
-      "label": "DOE Module",
+      "label": "DoE Module",
       "topicId": "xbridges:DOE_MODULE",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -16614,7 +16669,7 @@
     },
     {
       "id": "block:xbridges:AC_INDUCTION_MOTOR",
-      "label": "AC_INDUCTION_MOTOR",
+      "label": "Induction Motor Model",
       "topicId": "xbridges:AC_INDUCTION_MOTOR",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -16624,7 +16679,7 @@
     },
     {
       "id": "block:xbridges:IM_SCALAR_CONTROL",
-      "label": "IM_SCALAR_CONTROL",
+      "label": "Induction Motor Scalar",
       "topicId": "xbridges:IM_SCALAR_CONTROL",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -16634,7 +16689,7 @@
     },
     {
       "id": "block:xbridges:IM_FOC_CONTROL",
-      "label": "IM_FOC_CONTROL",
+      "label": "Induction Motor FOC",
       "topicId": "xbridges:IM_FOC_CONTROL",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -16644,7 +16699,7 @@
     },
     {
       "id": "block:xbridges:IM_FLUX_OBSERVER",
-      "label": "IM_FLUX_OBSERVER",
+      "label": "Flux Observer",
       "topicId": "xbridges:IM_FLUX_OBSERVER",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -16654,7 +16709,7 @@
     },
     {
       "id": "block:xbridges:VF_SLIP_COMP",
-      "label": "VF_SLIP_COMP",
+      "label": "V/f + Slip Comp",
       "topicId": "xbridges:VF_SLIP_COMP",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -16664,7 +16719,7 @@
     },
     {
       "id": "block:xbridges:FIELD_WEAKENING",
-      "label": "FIELD_WEAKENING",
+      "label": "Field Weakening",
       "topicId": "xbridges:FIELD_WEAKENING",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -16674,7 +16729,7 @@
     },
     {
       "id": "block:xbridges:MTPA_CONTROLLER",
-      "label": "MTPA_CONTROLLER",
+      "label": "MTPA Controller",
       "topicId": "xbridges:MTPA_CONTROLLER",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -16684,7 +16739,7 @@
     },
     {
       "id": "block:xbridges:MTPA_FW_MANAGER",
-      "label": "MTPA_FW_MANAGER",
+      "label": "MTPA + FW Manager",
       "topicId": "xbridges:MTPA_FW_MANAGER",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -16734,7 +16789,7 @@
     },
     {
       "id": "block:xbridges:AIR_FRYER_LEARNING_MODEL",
-      "label": "AIR_FRYER_LEARNING_MODEL",
+      "label": "Air Fryer Learning Model",
       "topicId": "xbridges:AIR_FRYER_LEARNING_MODEL",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -17154,7 +17209,7 @@
     },
     {
       "id": "block:xbridges:DEM_WASHING_MACHINE_TWIN",
-      "label": "Washing Machine Twin",
+      "label": "DEM_WASHING_MACHINE_TWIN",
       "topicId": "xbridges:DEM_WASHING_MACHINE_TWIN",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -17164,7 +17219,7 @@
     },
     {
       "id": "block:xbridges:DEM_DRUM",
-      "label": "DEM Drum Geometry",
+      "label": "DEM_DRUM",
       "topicId": "xbridges:DEM_DRUM",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -17174,7 +17229,7 @@
     },
     {
       "id": "block:xbridges:DEM_PARTICLE_SYSTEM",
-      "label": "DEM Particle System",
+      "label": "DEM_PARTICLE_SYSTEM",
       "topicId": "xbridges:DEM_PARTICLE_SYSTEM",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -17184,7 +17239,7 @@
     },
     {
       "id": "block:xbridges:DEM_HERTZ_CONTACT",
-      "label": "Hertz Contact Model",
+      "label": "DEM_HERTZ_CONTACT",
       "topicId": "xbridges:DEM_HERTZ_CONTACT",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -17194,7 +17249,7 @@
     },
     {
       "id": "block:xbridges:DEM_BOND_FABRIC",
-      "label": "Fabric Bond Model",
+      "label": "DEM_BOND_FABRIC",
       "topicId": "xbridges:DEM_BOND_FABRIC",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -17204,7 +17259,7 @@
     },
     {
       "id": "block:xbridges:DEM_FLUID_COUPLING",
-      "label": "Fluid Phase Coupling",
+      "label": "DEM_FLUID_COUPLING",
       "topicId": "xbridges:DEM_FLUID_COUPLING",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -17214,7 +17269,7 @@
     },
     {
       "id": "block:xbridges:CFD_SPH_WATER_SOLVER",
-      "label": "CFD SPH Water Solver",
+      "label": "CFD_SPH_WATER_SOLVER",
       "topicId": "xbridges:CFD_SPH_WATER_SOLVER",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -17224,7 +17279,7 @@
     },
     {
       "id": "block:xbridges:DEM_CFD_COSIMULATION_INTERFACE",
-      "label": "CFD-DEM 2-Way Coupling",
+      "label": "DEM_CFD_COSIMULATION_INTERFACE",
       "topicId": "xbridges:DEM_CFD_COSIMULATION_INTERFACE",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -17234,7 +17289,7 @@
     },
     {
       "id": "block:xbridges:FABRIC_HARMONIC_ANALYZER",
-      "label": "Fabric Harmonic Analyzer",
+      "label": "FABRIC_HARMONIC_ANALYZER",
       "topicId": "xbridges:FABRIC_HARMONIC_ANALYZER",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -17244,7 +17299,7 @@
     },
     {
       "id": "block:xbridges:CFD_DEM_SURROGATE_LEARNER",
-      "label": "CFD-DEM Surrogate Learner",
+      "label": "CFD_DEM_SURROGATE_LEARNER",
       "topicId": "xbridges:CFD_DEM_SURROGATE_LEARNER",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",
@@ -17264,7 +17319,7 @@
     },
     {
       "id": "block:xbridges:Note",
-      "label": "Note",
+      "label": "Note Text Block",
       "topicId": "xbridges:Note",
       "sectionId": "behavior",
       "sourcePath": "src/engine/xbridges/BlockDefinitions.ts",

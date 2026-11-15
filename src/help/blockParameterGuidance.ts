@@ -2,6 +2,9 @@
 const meanings: Record<string, string> = {
   lidar_max_range: 'Maximum raycast range used when reporting a lidar obstacle distance.',
   lidar_noise_std: 'Standard deviation of noise added to simulated lidar ranges.',
+  robot_radius: 'Robot body radius in metres; the planner inflates the obstacles by it so that the path keeps that clearance from walls. It must be a finite number >= 0.',
+  slip_noise: 'Peak-to-peak random wheel slip, relative to the travelled distance, drawn from the block seed; 0 gives ideal dead reckoning.',
+  dropout_rate: 'Probability, between 0 and 1, that a lidar beam misses its target and reports the maximum range instead of the measured distance (seeded).',
   wheel_radius: 'Wheel radius used to convert wheel rotation to linear robot travel.',
   wheel_separation: 'Distance between wheels in the differential-drive heading calculation.',
   encoder_cpr: 'Encoder count scale for converting wheel rotation to measured encoder counts.',
@@ -198,6 +201,7 @@ const meanings: Record<string, string> = {
 };
 
 export function getXBlockParameterDescription(typeId: string, name: string): string | undefined {
+  if (name === 'seed') return 'Seed of the block\'s pseudo-random generator: a finite number. The same seed reproduces the same random sequence in every run; when it is left empty a fixed default seed (23341) is used. A seed that is not finite is a block error.';
   if (name === 'output_type' && typeId === 'Constant') return 'Output data type: auto (inherit), float64, float32, boolean, or int8, uint8, int16, uint16, int32, uint32. In simulation an integer type rounds to nearest and saturates; code generation reports a non-integer or out-of-range value (XB_CONSTANT_VALUE_NOT_REPRESENTABLE, XB_CONSTANT_VALUE_OUT_OF_RANGE).';
   if (['numerator', 'denominator'].includes(name) && ['TRANSFER_FUNCTION', 'DISCRETE_TRANSFER_FUNCTION', 'ZERO_POLE_GAIN'].includes(typeId)) return `${name === 'numerator' ? 'Numerator' : 'Denominator'} coefficients in descending powers of ${typeId === 'DISCRETE_TRANSFER_FUNCTION' ? 'z' : 's'}. They must be finite and the numerator order must not exceed the denominator order (TF_IMPROPER); the leading denominator coefficient must not be 0 (TF_DENOMINATOR_LEADING_ZERO).`;
   if (['lowerLimit', 'upperLimit'].includes(name) && ['SATURATION', 'DEADZONE'].includes(typeId)) return `${name === 'lowerLimit' ? 'Lower' : 'Upper'} boundary of the ${typeId === 'SATURATION' ? 'saturation range' : 'dead zone'}. The lower limit must not exceed the upper limit (LIMITS_INVALID).`;

@@ -177,6 +177,7 @@ const elementaryExamples: Record<string, string> = {
   WaveformGen: 'Default sine settings produce 0 at t=0 and 1 at t=0.25 seconds.',
   Step: 'Default settings output 0 before t=1 second and 1 starting at t=1.',
   Sum: 'Set signs to +-; inputs 5 and 2 produce 3.',
+  SUM_JUNCTION: 'Older type name of the Sum block with the same behaviour: set signs to +-; inputs 5 and 2 produce 3.',
   MUX: 'Inputs 2 and 5 produce the vector [2,5], preserving input ordering.',
   GAIN: 'Set gain=3; input [1,2] produces [3,6].',
   SWITCH: 'Default criteria >= and threshold 0 select u1=5 for ctrl=1, otherwise u2=2.',

@@ -2996,5 +2996,63 @@
     "featureIds": [
       "live:components/common/ResizablePanel:82b534eeb763"
     ]
+  },
+  {
+    "source": "src/App.tsx",
+    "signature": "header|onWheel:{handleHorizontalToolbarWheel}",
+    "id": "live:App:34ecff87bb82",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:App:34ecff87bb82"
+    ]
+  },
+  {
+    "source": "src/components/xbridges/XbridgesWorkspace.tsx",
+    "signature": "input|onChange:{e=>setSolverOptionText('relative',e.target.value)}",
+    "id": "live:components/xbridges/XbridgesWorkspace:a1623755ef69",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/xbridges/XbridgesWorkspace:a1623755ef69"
+    ]
+  },
+  {
+    "source": "src/components/xbridges/XbridgesWorkspace.tsx",
+    "signature": "input|onChange:{e=>setSolverOptionText('absolute',e.target.value)}",
+    "id": "live:components/xbridges/XbridgesWorkspace:c520f1d4b921",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/xbridges/XbridgesWorkspace:c520f1d4b921"
+    ]
+  },
+  {
+    "source": "src/components/xbridges/XbridgesWorkspace.tsx",
+    "signature": "input|onChange:{e=>setSolverOptionText('extrapolationOrder',e.target.value)}",
+    "id": "live:components/xbridges/XbridgesWorkspace:932393242023",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/xbridges/XbridgesWorkspace:932393242023"
+    ]
+  },
+  {
+    "source": "src/components/xbridges/XbridgesWorkspace.tsx",
+    "signature": "input|onChange:{e=>setSolverOptionText('newtonIterations',e.target.value)}",
+    "id": "live:components/xbridges/XbridgesWorkspace:e5d9363ae480",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/xbridges/XbridgesWorkspace:e5d9363ae480"
+    ]
+  },
+  {
+    "source": "src/components/xbridges/XbridgesWorkspace.tsx",
+    "signature": "XbridgesPropertiesPanel|onClose:{()=>setSelectedNodeId(null)}|onCollapseToggle:{setIsPropsCollapsed}|onExportDoeData:{onExportDoeData}|onInvalidParameter:{onInvalidParameter}|onLaunchDoe:{onLaunchDoe}|onUpdate:{updateBlock}",
+    "id": "live:components/xbridges/XbridgesWorkspace:82f6b801f6bc",
+    "status": "excluded",
+    "reason": "XbridgesPropertiesPanel callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
+    "featureIds": []
   }
 ]
