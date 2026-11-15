@@ -48,25 +48,9 @@ const PIN_CAUSE: Record<string, string> = {
 };
 const PINS: Record<string, string> = {
   // XBV-167: embedded KALMAN_FILTER still predicts first; the canvas follows the Simulink order (update with x[0|-1] = x0, then predict) since WP-21 batch G.
-  'KALMAN_FILTER|euler': 'XBV-167',
-  'KALMAN_FILTER|rk4': 'XBV-167',
-  'KALMAN_FILTER|discrete': 'XBV-167',
   // XBV-168: during reset the canvas PID outputs Kp e (XBV-077, WP-21 batch G); the embedded PID outputs 0. The harness drives reset with 0.7.
-  'PID_BASIC|euler': 'XBV-168',
-  'PID_BASIC|rk4': 'XBV-168',
-  'PID_CONTROLLER|euler': 'XBV-168',
-  'PID_CONTROLLER|rk4': 'XBV-168',
   // XBV-163: the embedded Relay reads the previous tick's input (one sample late); the canvas switches on at u(0.3) = 1.016 >= 1 (Simulink).
-  'RELAY|euler': 'XBV-163',
-  'RELAY|rk4': 'XBV-163',
-  'RELAY|discrete': 'XBV-163',
   // XBV-161: embedded shifts mask the count to 5 bits; the canvas (WP-21 batch D, XBV-057) shifts every bit out at >= 32 and shifts the other way for a negative count.
-  'ShiftLeft|euler': 'XBV-161',
-  'ShiftLeft|rk4': 'XBV-161',
-  'ShiftLeft|discrete': 'XBV-161',
-  'ShiftRight|euler': 'XBV-161',
-  'ShiftRight|rk4': 'XBV-161',
-  'ShiftRight|discrete': 'XBV-161',
   // XBV-018: the canvas reads a stale input 0 at t = 0 (ordering); under D12 the first output is clamp(0.7, 0 +/- 0.1) = 0.1.
   'RATE_LIMITER|discrete': 'XBV-018',
   'RATE_LIMITER|rk4': 'XBV-018',
@@ -77,18 +61,7 @@ const PINS: Record<string, string> = {
   'HIGH_PASS_FILTER|euler': 'XBV-018',
   'HIGH_PASS_FILTER|rk4': 'XBV-018',
   // XBV-093: scenario dimensions (3-element x for a 1-state system) refused by the embedded builder; continuous STATE_SPACE unsupported.
-  'DISCRETE_TRANSFER_FUNCTION|euler': 'XBV-093',
-  'DISCRETE_TRANSFER_FUNCTION|rk4': 'XBV-093',
-  'DISCRETE_TRANSFER_FUNCTION|discrete': 'XBV-093',
-  'STATE_SPACE|euler': 'XBV-093',
-  'STATE_SPACE|rk4': 'XBV-093',
   // XBV-154: the embedded Mean / SubMatrix still follow the pre-WP-21 canvas rules (mean of all elements, zero-based indices).
-  'Mean|euler': 'XBV-154',
-  'Mean|rk4': 'XBV-154',
-  'Mean|discrete': 'XBV-154',
-  'SubMatrix|euler': 'XBV-154',
-  'SubMatrix|rk4': 'XBV-154',
-  'SubMatrix|discrete': 'XBV-154',
   'Clock|euler': 'XBV-041',
   'Clock|rk4': 'XBV-041',
   'Clock|discrete': 'XBV-041',
@@ -100,12 +73,6 @@ const PINS: Record<string, string> = {
   'MOVING_AVERAGE|discrete': 'XBV-068',
 };
 const CORPUS_PINS: Record<string, string> = {
-  'all|rk4|1': 'XBV-164',
-  'all|rk4|5': 'XBV-164',
-  'all|rk4|9': 'XBV-164',
-  'all|rk4|12': 'XBV-164',
-  'all|rk4|28': 'XBV-164',
-  'all|rk4|30': 'XBV-164',
 };
 
 const pinTitle = (pin: string, title: string) => `${pin.split(' ')[0]}: ${title} - ${PIN_CAUSE[pin.split(' ')[0]]}${pin.includes(' ') ? ` ${pin.slice(pin.indexOf(' ') + 1)}` : ''}`;
@@ -201,6 +168,20 @@ const scenariosFor = (type: string): Scenario[] => {
   if (ins.length === 0) {
     out.push({ name: 'no-input', spec: { blocks: [{ id: 'b', type, params }], wires: [] }, probes });
     return out;
+  }
+  // XBV-152 (WP-21 round 4): the PID blocks get a real stimulus - reference and measurement from two different sines,
+  // enable 1 and reset 0 - so the per-block case exercises the controller (r = y would give e = 0).
+  if (type === 'PID_CONTROLLER' || type === 'PID_BASIC') {
+    const src: Record<string, { type: string; params: Record<string, unknown> }> = {
+      r: { type: 'WaveformGen', params: SINE_A }, e: { type: 'WaveformGen', params: SINE_A },
+      y: { type: 'WaveformGen', params: SINE_B },
+      enable: { type: 'Constant', params: { value: 1 } }, reset: { type: 'Constant', params: { value: 0 } },
+    };
+    const spec: ModelSpec = {
+      blocks: [{ id: 'b', type, params }, ...ins.map((p: string, i: number) => ({ id: `s${i}`, ...src[p] }))],
+      wires: ins.map((p: string, i: number) => `s${i}.out -> b.${p}`),
+    };
+    return [{ name: 'r/y sines, enabled', spec, probes }];
   }
   const drive = (srcs: { type: string; params: Record<string, unknown> }[]): ModelSpec => ({
     blocks: [{ id: 'b', type, params }, ...ins.map((_, i) => ({ id: `s${i}`, ...srcs[Math.min(i, srcs.length - 1)] }))],
@@ -348,8 +329,7 @@ describe('WP-21 batch F acceptance: embedded PID, Delay 0, Product divide equal 
       // pinned to XBV-018 until the canvas sorts PID_CONTROLLER as direct feedthrough (engine batch E2); the continuous-form
       // PID (sample time <= 0, i.e. every variant but 'sample time 0.1') under rk4 is also XBV-159 (embedded integrates i/d with
       // forward Euler whatever the solver).
-      const continuousRk4 = solver === 'rk4' && !(typeof params.sampleTime === 'number' && params.sampleTime > 0);
-      (continuousRk4 ? it.fails : it)(`${continuousRk4 ? 'XBV-159: ' : ''}XBV-150: PID_CONTROLLER ${name}, ${solver}: canvas = embedded on u, error, p_term, i_term, d_term`, () => {
+      it(`XBV-150 / XBV-159: PID_CONTROLLER ${name}, ${solver}: canvas = embedded on u, error, p_term, i_term, d_term`, () => {
         assertOutcome(compareSpec(`PID ${name} ${solver}`, pidSpec(params), solver, PID_PROBES));
       });
     }
@@ -378,4 +358,73 @@ describe('WP-21 batch F acceptance: embedded PID, Delay 0, Product divide equal 
       assertOutcome(compareSpec(`PRODUCT divide ${solver}`, spec, solver, ['b.y']));
     });
   }
+});
+
+// ---------------------------------------------------------------- WP-21 round 4 acceptance (controller)
+describe('WP-21 round 4: embedded division by zero and embedded limits', () => {
+  // XBV-160 / D11: VectorDiv by zero gives IEEE Inf (and the numeric fault) on every path, like the canvas and PRODUCT.
+  for (const solver of ['euler', 'rk4', 'discrete'] as const) {
+    it(`XBV-160: VectorDiv [1 2] ./ [0 1] = [Inf 2] in both paths (${solver})`, () => {
+      const spec: ModelSpec = {
+        blocks: [
+          { id: 'b', type: 'VectorDiv' },
+          { id: 'a', type: 'Constant', params: { value: [1, 2] } },
+          { id: 'z', type: 'Constant', params: { value: [0, 1] } },
+        ],
+        wires: ['a.out -> b.in1', 'z.out -> b.in2'],
+      };
+      const dims = { 'a.out': [2], 'z.out': [2], 'b.in1': [2], 'b.in2': [2], 'b.out': [2] };
+      const emb = runEmbedded(spec, { solver, dt: DT, steps: 3, probes: ['b.out'], portDimensions: dims });
+      expect(emb.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
+      expect(emb.signals['b.out'][0]).toEqual([Infinity, 2]);
+    });
+  }
+  // XBV-168: while reset is active the PID output keeps its proportional action Kp e (Simulink; canvas since XBV-077).
+  for (const [type, ports] of [['PID_CONTROLLER', ['r', 'y', 'enable', 'reset']], ['PID_BASIC', ['e', 'enable', 'reset']]] as const) {
+    for (const solver of ['euler', 'rk4'] as const) {
+      it(`XBV-168: ${type} with reset = 1: canvas = embedded on every output (${solver})`, () => {
+        const src: Record<string, Record<string, unknown>> = {
+          r: { type: 'WaveformGen', params: SINE_A }, e: { type: 'WaveformGen', params: SINE_A }, y: { type: 'WaveformGen', params: SINE_B },
+          enable: { type: 'Constant', params: { value: 1 } }, reset: { type: 'Constant', params: { value: 1 } },
+        };
+        const proto = BLOCK_LIBRARY[type]('b', {});
+        const spec: ModelSpec = {
+          // PID_BASIC is discrete-only in the embedded path: sample time 0.1 as in the per-block cases.
+          blocks: [{ id: 'b', type, params: type === 'PID_BASIC' ? { sampleTime: 0.1 } : {} }, ...ports.map((p, i) => ({ id: `s${i}`, ...(src[p] as { type: string; params: Record<string, unknown> }) }))],
+          wires: ports.map((p, i) => `s${i}.out -> b.${p}`),
+        };
+        assertOutcome(compareSpec(`${type} reset ${solver}`, spec, solver, proto.outputs.map((o: { id: string }) => `b.${o.id}`)));
+      });
+    }
+  }
+  // XBV-010: the embedded limits hold on both sides of each boundary (docs/XBRIDGES_EMBEDDED_CODEGEN.md: vector 16,
+  // matrix 8x8, fixed-step euler/rk4/discrete, no algebraic loops).
+  // VectorAdd is registered for vector and matrix shapes in the embedded path (GAIN is scalar-only there).
+  const gainOf = (dims: number[]) => runEmbedded(
+    { blocks: [{ id: 'k', type: 'Constant', params: { value: dims.length === 1 ? new Array(dims[0]).fill(1) : new Array(dims[0]).fill(0).map(() => new Array(dims[1]).fill(1)) } }, { id: 'g', type: 'VectorAdd' }], wires: ['k.out -> g.in1', 'k.out -> g.in2'] },
+    { solver: 'discrete', dt: DT, steps: 2, probes: ['g.out'], portDimensions: { 'k.out': dims, 'g.in1': dims, 'g.in2': dims, 'g.out': dims } },
+  );
+  const refused = (r: ReturnType<typeof runEmbedded>) => r.diagnostics.some((d) => d.severity === 'error');
+  it('XBV-010: vector width 16 is accepted, 17 is refused with an error diagnostic', () => {
+    expect(refused(gainOf([16]))).toBe(false);
+    expect(refused(gainOf([17]))).toBe(true);
+  });
+  it('XBV-010: matrix 8x8 is accepted, 9x9 is refused with an error diagnostic', () => {
+    expect(refused(gainOf([8, 8]))).toBe(false);
+    expect(refused(gainOf([9, 9]))).toBe(true);
+  });
+  it('XBV-010: an algebraic loop is refused, the same loop broken by a Unit Delay is accepted', () => {
+    const loop = (withDelay: boolean): ModelSpec => ({
+      blocks: [{ id: 'k', type: 'Constant', params: { value: 1 } }, { id: 's', type: 'Sum' }, { id: 'g', type: 'GAIN', params: { gain: 0.5 } },
+        ...(withDelay ? [{ id: 'd', type: 'UNIT_DELAY', params: { sampleTime: DT } }] : [])],
+      wires: withDelay ? ['k.out -> s.in1', 's.out -> g.u', 'g.y -> d.u', 'd.y -> s.in2'] : ['k.out -> s.in1', 's.out -> g.u', 'g.y -> s.in2'],
+    });
+    expect(refused(runEmbedded(loop(false), { solver: 'discrete', dt: DT, steps: 2, probes: ['s.out'] }))).toBe(true);
+    expect(refused(runEmbedded(loop(true), { solver: 'discrete', dt: DT, steps: 2, probes: ['s.out'] }))).toBe(false);
+  });
+  it('XBV-010: euler, rk4 and discrete are accepted; ode45 is refused for code generation', () => {
+    const spec: ModelSpec = { blocks: [{ id: 'k', type: 'Constant', params: { value: 1 } }, { id: 'i', type: 'Integrator' }], wires: ['k.out -> i.in'] };
+    for (const solver of ['euler', 'rk4'] as const) expect(refused(runEmbedded(spec, { solver, dt: DT, steps: 2, probes: ['i.out'] })), solver).toBe(false);
+    expect(refused(runEmbedded(spec, { solver: 'ode45' as never, dt: DT, steps: 2, probes: ['i.out'] }))).toBe(true);
+  });
 });

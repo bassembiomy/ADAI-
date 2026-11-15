@@ -264,11 +264,6 @@ const PIN_CAUSE: Record<string, string> = {
 };
 const PINS: Record<string, string> = {
   // XBV-093: the embedded builder refuses these scenarios (dimensions / continuous STATE_SPACE).
-  'DISCRETE_TRANSFER_FUNCTION|euler|static': 'XBV-093',
-  'DISCRETE_TRANSFER_FUNCTION|rk4|static': 'XBV-093',
-  'DISCRETE_TRANSFER_FUNCTION|discrete|static': 'XBV-093',
-  'STATE_SPACE|euler|static': 'XBV-093',
-  'STATE_SPACE|rk4|static': 'XBV-093',
   // Revealed when the absolute ULP floor was restricted to |x| < 1e-3 (WP-17 verifier): sub-1e-15 differences from
   // the XBV-098 time rounding; each has a 1e-13 secondary check below.
   // ATANH sine inputs leave the domain at tick 7 (amplitude 1.3): XBV-086; ticks before are within the libm-conditioned bound.
