@@ -5,12 +5,12 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 ## Summary
 
 - Work packages: 20 done of 29; 2 in progress; 7 to do.
-- Findings: 45 open, 126 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
-  - S1 (wrong number in simulation or generated C): 3 open
+- Findings: 42 open, 131 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
+  - S1 (wrong number in simulation or generated C): 2 open
   - S2 (crash, stop, freeze or silent no-op): 11 open
-  - S3 (diagnostic, UI or convention deviation): 23 open
+  - S3 (diagnostic, UI or convention deviation): 21 open
   - S4 (documentation): 8 open
-- Decisions recorded: 13; open: 0.
+- Decisions recorded: 14; open: 0.
 
 ## Work packages
 
@@ -64,13 +64,12 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 
 ## Open findings by severity
 
-### S1 - wrong number in simulation or generated C (3)
+### S1 - wrong number in simulation or generated C (2)
 
 | Id | Gate | Plan ref | Summary |
 | --- | --- | --- | --- |
 | XBV-001 | V6 | F1 | Canvas engine and state-machine interpreter are compared only by xbSimEmbeddedParity.test.ts: unit-constant input, 6 ticks, scalar, discrete solver. WP-16 measured it: 281 (type, solver) cases, 178 equal; random graphs fail via XBV-083/084/085. |
 | XBV-025 | V2 | U3 | SECTOR_SELECTOR returns sector -3 for theta = -10 rad (closed form floor(mod(theta, 2*pi)/(pi/3)) + 1 = 3); angles below -2*pi are not wrapped. Correct on (-2*pi, 4*pi). Pinned by it.fails in xbUniversal.test.ts. |
-| XBV-065 | V2 | 4.2 continuous / discrete / discontinuities / buses | SATURATION is scalar-only: a vector input or vector limits give NaN (Number(array)); Simulink Saturation is element-wise with scalar or vector limits. Found by the WP-06 executor; pinned in xbEquations.dynamics.test.ts. DEADZONE is scalar-only on the canvas too; the embedded path is element-wise and correct (WP-16). WP-21 batch D: SATURATION element-wise fixed; DEADZONE vector parity pins remain open. |
 
 ### S2 - crash, stop, freeze or silent no-op (11)
 
@@ -86,9 +85,9 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 | XBV-130 | V3 | 4.2 navigation / robot vacuum / DEM-CFD (D5) | DEM_DRUM uses its 4th execute argument (the simulation time) as the step size, so the angle grows quadratically: angle(2) = 20.43 instead of 12.566 for its rpm. Found by the WP-10 executor; pinned in xbEquations.robot.test.ts. |
 | XBV-147 | V8 | 6 UI end-to-end | The Robot Vacuum Navigation & Mapping lab shows EKF error Infinity and confidence 0 % after 5 s at the default step (same stiffness class as XBV-127). Found by the WP-20 executor (Playwright, real Chromium); pinned in tests/e2e/xbridges/. |
 | XBV-153 | V3 | U7 / 5.2 diagnostics | Six divisor parameters give a non-finite output without a diagnostic when set to 0 (present before WP-21): IM_FOC_CONTROL.Lm, AIR_FRYER_LEARNING_MODEL tau_h, tau_f, tau_c, tau_s, FABRIC_HARMONIC_ANALYZER.drum_mass. They need parameterSchema entries rejecting 0 (batch J). Found by the WP-21 batch A verifier's zero-parameter scan. |
-| XBV-165 | V5 | 5.1 / 5.2 diagnostics | A block fault raised in a trial (minor) stage of a variable-step solver stops the run: the om501 lab with ode45 at default tolerance stops at 2.92 s with BLOCK_RUNTIME_FAULT (Intake Manifold P = -4360 at a rejected trial point); Simulink rejects the step and retries smaller. Euler/rk4/ode23/ode23tb and ode45 at RelTol 1e-6 run through. Found by the WP-21 E verifier. |
+| XBV-174 | V6 | 7.3 canvas / interpreter parity | Embedded continuous STATE_SPACE holds its state when sampleTime > 0 (batch F2 mirrored the pre-E3 canvas); the canvas now integrates it (XBV-171). Pinned in xbTriParity. |
 
-### S3 - diagnostic, UI or convention deviation (23)
+### S3 - diagnostic, UI or convention deviation (21)
 
 | Id | Gate | Plan ref | Summary |
 | --- | --- | --- | --- |
@@ -99,7 +98,6 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 | XBV-023 | V3 | U9 | 15 noise/stochastic blocks use unseeded Math.random: runs are not repeatable (Simulink noise blocks are seeded). With a fixed seed, state also survives a clone (U11 clean). List XBV-U9. |
 | XBV-034 | V4 | 5.2 diagnostics | DOE_MODEL fault codes EXECUTION_EXCEPTION, INVALID_GMDH_LAYERS, INVALID_TAGUCHI_LEVELS, NO_MODEL_CONFIGURED, NON_FINITE_INPUT exist only in nextState.lastFault and inside one BLOCK_RUNTIME_FAULT message; they never appear as diagnostics, and the run continues (XBV-033). Pinned in xbDiagnostics.test.ts. |
 | XBV-038 | V3 | 5.2 diagnostics | CONSTANT_VALUE_NOT_REPRESENTABLE (a Constant value that loses precision in its data type) is a compile error that refuses the model; Simulink reports parameter precision loss as a warning by default (out-of-range overflow stays an error). Pinned in xbDiagnostics.test.ts. |
-| XBV-041 | V2 | 4.2 sources / element-wise math / reductions / trig | The Sources 'Clock' block is a 50% square-wave pulse generator (freq parameter), not the Simulink Clock (output = simulation time); a Simulink user wiring Clock as time gets a 0/1 square wave. No block outputs t. Pinned in xbEquations.math.test.ts. The embedded path implements Clock as time (WP-16), so the canvas and the state machine also disagree. |
 | XBV-088 | V6 | 7.3 canvas / interpreter parity | WHITE_NOISE / BAND_LIMITED_NOISE use different random streams on the canvas (Math.random) and in the embedded path (deterministic generator), so a model with noise never matches between the two (related XBV-023). Found by the WP-16 executor; pinned in src/utils/stateMachine/xbTriParity.test.ts. |
 | XBV-106 | V7 | 7.2 state-machine alignment | State-machine variables are scalar only: mapping a vector (3) or matrix (2x2) X-Bridges port to an SM variable is refused (XB_MAPPING_INVALID), so plan 7.2's vector/matrix boundary mappings are not expressible; vector/matrix signals work inside the model. Reported by the WP-18 executor. |
 | XBV-122 | V2 | 4.2 navigation / robot vacuum / DEM-CFD (D5) | ROBOT_VACUUM_DYNAMICS applies a hidden 0.992 slip factor in evaluateDerivatives: a straight run gives x(10) = -1.51792 instead of the kinematic -1.51 (r w t). Found by the WP-10 executor; pinned in xbEquations.robot.test.ts. |
@@ -112,7 +110,6 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 | XBV-137 | V8 | 6 UI | 463 numeric (block, parameter) pairs show no error for invalid text ('abc'): only the 74 block types in parameterSchema.ts are validated (same root as XBV-011; ratchet in xbV8Ui.test.tsx). Found by the WP-19 executor; pinned in src/components/xbridges/xbV8Ui.test.tsx. |
 | XBV-157 | V8 | 6 UI | The record of invalid parameter text is cleared when the selection changes: leaving 'abc' in a field and selecting another block lets Run start again with the last valid value and no message. Found by the WP-21 batch C verifier. |
 | XBV-156 | V8 | 6 UI | The properties panel's Switch criterion dropdown (XbridgesPropertiesPanel.tsx ~1077) does not offer the new 'u2 ~= 0' criterion, and blockGuidance still documents SubMatrix indices as zero-based ('defaults 0'). Found by the WP-21 batch D executor. |
-| XBV-169 | V2 | 4.2 routing / matrix | MatrixConcat axis 0 mixes Simulink's Vector and Multidimensional modes: scalars only give a 2x1 matrix, vectors only (or vector plus scalar) give a longer 1-D vector; the block has no mode parameter (Simulink Matrix Concatenate has 'Vector' / 'Multidimensional array'). Found by the WP-21 batch H verifier. |
 | XBV-172 | V6 | 7.3 canvas / interpreter parity | A non-finite operand of ShiftLeft/ShiftRight (Inf, NaN) gives 0 without a numeric fault in the embedded path (JS ToInt32 / C helper), while the canvas raises a block error. Found by the WP-21 batch F2 executor and verifier. |
 | XBV-173 | V8 | 6 UI / help | Help coverage is out of date after WP-21 UI and parameter changes: src/help/helpCoverage.test.ts fails on the live-UI fingerprint and on an unmapped reviewed feature (new inline controls such as the toolbar and panel editors), and src/help/blockReference.test.ts reports a parameter-interpretation gap for RL_Q_LEARNING_CONTROLLER (new 'seed' parameter, batch G). The fingerprint test already failed before WP-21 round 1 (cb974bc3). Batch K. |
 
@@ -155,6 +152,7 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 - XBV-035 (closed): Dimension checking is inactive: library factories never set port dimensions (only PT_VEHICLE_BODY_1DOF inputs do), so DIMENSION_MISMATCH cannot fire for any canvas-built model; Simulink propagates and
 - XBV-036 (closed): Batch variable-step runs (Solvers.runFixedStep with ode45 or ode23) hang - no result after 60 s - as soon as they bracket a Step event: Step at 0.3, 0.5 or 0.55 s with default tolerances, or at the st
 - XBV-040 (closed): WaveformGen amplitude 0 (also freq 0, offset 0) is replaced by 1/1/0 through `\|\|` (instance of XBV-019); a 0-amplitude sine outputs a full sine. Pinned in xbEquations.math.test.ts.
+- XBV-041 (closed): The Sources 'Clock' block is a 50% square-wave pulse generator (freq parameter), not the Simulink Clock (output = simulation time); a Simulink user wiring Clock as time gets a 0/1 square wave. No bloc
 - XBV-042 (closed): PRODUCT works on scalars only (Number(vector) = NaN); Simulink Product multiplies/divides vectors and matrices element-wise. Pinned in xbEquations.math.test.ts.
 - XBV-043 (closed): Max (element-wise, two inputs) turns NaN into 0 (Number(x) \|\| 0): Max(NaN, -3) = 0; MATLAB max ignores NaN (-3), Simulink MinMax propagates NaN. Negative values and ties are correct. Pinned in xbEqu
 - XBV-044 (closed): Sum signs with the '\|' spacer before a sign ('+\|-', '\|+-', '+ -') add instead of subtract: the spacer shifts the sign positions at execute time (factory strips it for the port count only). '+-\|' w
@@ -178,6 +176,7 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 - XBV-062 (closed): INTEGRATOR_CONTINUOUS is scalar-only: vector IC [1 2] with input [1 1] stays [1 2] (Number(vector) = NaN; NUMERICAL_INSTABILITY), Simulink integrates element-wise to [2 3] at t = 1. Found by the WP-06
 - XBV-063 (closed): INTEGRATOR (limited/reset integrator) drops a vector initial condition (Number([1 2]) \|\| 0 = 0) and keeps a scalar state; vector integration gives 0 instead of [2 3]. Found by the WP-06 executor; pi
 - XBV-064 (closed): DELAY with delay_length 0 is refused: the factory turns 0 into 1 (`\|\|`) and compile reports DELAY_LENGTH_INVALID and PARAMETER_OUT_OF_RANGE; Simulink Delay accepts 0 as direct feedthrough. Found by 
+- XBV-065 (closed): SATURATION is scalar-only: a vector input or vector limits give NaN (Number(array)); Simulink Saturation is element-wise with scalar or vector limits. Found by the WP-06 executor; pinned in xbEquation
 - XBV-066 (closed): A bus through UNIT_DELAY outputs scalar 0 at the first sample (IC not expanded over the bus elements), so a downstream BUS_SELECTOR raises BLOCK_RUNTIME_FAULT 'Input must be a bus signal' at t = 0. Fo
 - XBV-067 (closed): Engine (canvas fixed-step loop): discontinuous sources change inside a step - the rk4 stage at t + dt already sees a Step's new value, so the plain Integrator of Step(0 -> 1 at 0.5) is off by h/6 per 
 - XBV-068 (closed): MOVING_AVERAGE starts with its window filled with the first sample (3, 6, 9, 12 -> 3, 4, 6, 9); a sliding-window average with zero initial state gives 1, 3, 6, 9. Found by the WP-06 executor; pinned i
@@ -254,9 +253,12 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 - XBV-161 (closed): Embedded ShiftLeft/ShiftRight mask the shift count to 5 bits (& 31) in interpreter and C; Simulink and the canvas (since XBV-057, WP-21 batch D) shift every bit out for counts >= 32 (0, or -1 for a ne
 - XBV-163 (closed): Embedded RELAY reads the previous tick's input and switches one sample late: SINE_A u(0.30) = 1.0162 >= switch-on 1, so Simulink (and the canvas, direct feedthrough since WP-21 E2) gives 1 at t = 0.3 
 - XBV-164 (closed): Embedded rk4 evaluates Step at the stage times; the canvas holds discontinuous outputs at their major-step value during minor steps (Simulink, WP-21 E2 / XBV-067), so 6 rk4 corpus seeds differ by h/6 
+- XBV-165 (closed): A block fault raised in a trial (minor) stage of a variable-step solver stops the run: the om501 lab with ode45 at default tolerance stops at 2.92 s with BLOCK_RUNTIME_FAULT (Intake Manifold P = -4360
+- XBV-169 (closed): MatrixConcat axis 0 mixes Simulink's Vector and Multidimensional modes: scalars only give a 2x1 matrix, vectors only (or vector plus scalar) give a longer 1-D vector; the block has no mode parameter (
 - XBV-167 (closed): Embedded KALMAN_FILTER still predicts before the first update (P[0\|-1] = A P0 A' + Q); the canvas follows the Simulink order (update with x[0\|-1] = x0, P0, then predict) since WP-21 batch G (XBV-078
 - XBV-168 (closed): Embedded PID_BASIC / PID_CONTROLLER output 0 while reset is active; Simulink and the canvas (since XBV-077, WP-21 batch G) keep the proportional action Kp e. Pinned in xbTriParity.
 - XBV-170 (closed): AC_INDUCTION_MOTOR and AC_MOTOR_PID_CONTROL stator-current equations divided the resistive and back-EMF terms by sigma once too often (sigma Ls dis/dt = vs - (Rs + kr^2 Rr) is + (kr/tau_r) psir -/+ kr
+- XBV-171 (closed): A continuous STATE_SPACE with an explicit sampleTime > 0 held its state (evaluateDerivatives only ran for sampleTime <= 0); Simulink's continuous State-Space has no sample time and always integrates. 
 
 ## Decisions
 
@@ -273,6 +275,7 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 - **D11** (2026-11-11, out-of-domain math in the embedded path (XBV-086)): Out-of-domain inputs (acos(2), atanh(1.5), (-8)^(1/3)) publish NaN and raise the numeric fault on every path, as the canvas (NaN + MATH_DOMAIN_ERROR) and Simulink-generated C (libm returns NaN) do; the documented 'deterministic fallback 0' of the signal-only fault policy is replaced by NaN + fault flag. Adopted by the controller under the 'fix all' go-ahead.
 - **D12** (2026-11-12, Rate Limiter initial condition): ADIA's Rate Limiter has an explicit initialCondition parameter (default 0) that Simulink's block lacks; it is the output before the first sample, y(-1) = IC. Ts > 0: y(0) = clamp(u(0), IC + falling Ts, IC + rising Ts); inherited/continuous sample time: y(0) = IC (no time has elapsed). This is the canvas behaviour, adopted for the embedded path.
 - **D13** (2026-11-12, new diagnostic codes in WP-21): Structural compile errors MULTIPLE_DRIVERS, DUPLICATE_BLOCK_ID, UNKNOWN_BLOCK_TYPE (error) and the fuzzy warning FUZZY_EMPTY_AGGREGATE (MATLAB 'no rules fired': output mid-range) are dedicated codes rather than reuses of BLOCK_RUNTIME_FAULT / MATH_DOMAIN_ERROR; each has a recipe and guidance.
+- **D14** (2026-11-15, Clock block): The Clock block outputs the simulation time (Simulink Clock; the embedded path already did). The old square-wave behaviour remains available as WaveformGen type 'Square'; no lab, example or saved model used Clock.freq. Adopted by the controller under the 'fix all' go-ahead.
 
 ## Deferred items (notes for follow-up WPs)
 

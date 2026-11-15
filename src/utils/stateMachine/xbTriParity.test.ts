@@ -22,6 +22,7 @@ import { XB_CAPABILITIES } from './xbCapabilities';
  * Each cause was settled against an oracle (closed form / Simulink definition) where one exists; 'unresolved' means none.
  */
 const PIN_CAUSE: Record<string, string> = {
+  'XBV-174': 'embedded continuous STATE_SPACE holds its state when sampleTime > 0; the canvas (XBV-171, Simulink) integrates it; embedded wrong',
   'XBV-167': 'embedded KALMAN_FILTER predicts before the first update (P[0|-1] = A P0 A\' + Q); Simulink and the canvas update first from x0, P0; embedded wrong',
   'XBV-168': 'embedded PID_BASIC / PID_CONTROLLER output 0 while reset is active; Simulink (and the canvas since XBV-077) keep the proportional action Kp e; embedded wrong',
   'XBV-163': 'embedded RELAY uses the previous tick input (switches one sample late); canvas (direct feedthrough since WP-21 E2) matches the Simulink relay; embedded wrong',
@@ -47,6 +48,9 @@ const PIN_CAUSE: Record<string, string> = {
   'XBV-091': 'canvas y(0)=0 then explicit-Euler instability (|y| exceeds the closed-form bound amp=1.3 from step 3), embedded stays bounded but one tick ahead; filter discretisation differs, neither exact, unresolved',
 };
 const PINS: Record<string, string> = {
+  // XBV-174: since XBV-171 (WP-21 E3) the canvas integrates a continuous STATE_SPACE whatever its sampleTime; the embedded path (F2) still holds the state when sampleTime > 0.
+  'STATE_SPACE|euler': 'XBV-174',
+  'STATE_SPACE|rk4': 'XBV-174',
   // XBV-167: embedded KALMAN_FILTER still predicts first; the canvas follows the Simulink order (update with x[0|-1] = x0, then predict) since WP-21 batch G.
   // XBV-168: during reset the canvas PID outputs Kp e (XBV-077, WP-21 batch G); the embedded PID outputs 0. The harness drives reset with 0.7.
   // XBV-163: the embedded Relay reads the previous tick's input (one sample late); the canvas switches on at u(0.3) = 1.016 >= 1 (Simulink).
