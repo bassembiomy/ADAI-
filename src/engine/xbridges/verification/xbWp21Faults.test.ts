@@ -51,3 +51,34 @@ describe('XBV-175 / XBV-176: a NaN derivative is not integrated as 0', () => {
   }
 });
 
+// XBV-177 / XBV-178 / XBV-179 (WP-21 batch I scan): powertrain blocks under the stiff solver. Defaults, unit inputs, 1 s.
+// Oracle: rk4 at 0.001 (fixed step, converged for these smooth models) - ode23tb with tight tolerances must agree, and the
+// run must finish in reasonable time; a block must not fault on its own defaults with unit inputs.
+describe('XBV-177 / 178 / 179: powertrain blocks under ode23tb', () => {
+  const unit = (type: string) => {
+    const proto = BLOCK_LIBRARY[type]('b', {}) as { inputs: { id: string }[]; outputs: { id: string }[] };
+    return {
+      spec: { blocks: [{ id: 'b', type }, ...proto.inputs.map((p, i) => ({ id: `k${i}`, type: 'Constant', params: { value: 1 } }))], wires: proto.inputs.map((p, i) => `k${i}.out -> b.${p.id}`) },
+      probes: proto.outputs.map((o) => `b.${o.id}`),
+    };
+  };
+  const lastNums = (r: { signals: Record<string, unknown[]> }, probes: string[]) => probes.flatMap((p) => { const v = r.signals[p].at(-1); return (Array.isArray(v) ? (v as unknown[]).flat(4) : [v]).map(Number); });
+  for (const type of ['PT_AUTOMATED_MANUAL_TRANSMISSION', 'PT_DUAL_CLUTCH_TRANSMISSION', 'PT_ENGINE_DYNO']) {
+    it(`${type}: ode23tb (RelTol 1e-6, AbsTol 1e-9, output step 0.05) finishes 1 s within 30 s and agrees with rk4 0.001 within 1e-4 relative`, () => {
+      const { spec, probes } = unit(type);
+      const ref = runModel(buildModel(spec), { solver: 'rk4', dt: 0.001, stopTime: 1, probes });
+      const t0 = Date.now();
+      const r = runModel(buildModel(spec), { solver: 'ode23tb', dt: 0.05, stopTime: 1, probes, relTol: 1e-6, absTol: 1e-9 });
+      expect(Date.now() - t0).toBeLessThan(30_000);
+      expect(r.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
+      const a = lastNums(ref, probes), b = lastNums(r, probes);
+      a.forEach((x, i) => { if (Number.isFinite(x)) expect(Math.abs(b[i] - x) / Math.max(1, Math.abs(x)), `${probes} [${i}]`).toBeLessThanOrEqual(1e-4); });
+    }, 60_000);
+  }
+  it('PT_TURBOCHARGER runs 1 s with its defaults and unit inputs under rk4 without a block fault (or refuses the inputs at compile with a parameter/range diagnostic that names the input)', () => {
+    const { spec, probes } = unit('PT_TURBOCHARGER');
+    const r = runModel(buildModel(spec), { solver: 'rk4', dt: 0.001, stopTime: 1, probes });
+    expect(r.diagnostics.filter((d) => d.code === 'BLOCK_RUNTIME_FAULT').map((d) => d.message)).toEqual([]);
+  }, 60_000);
+});
+

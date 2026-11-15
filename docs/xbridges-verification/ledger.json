@@ -603,7 +603,7 @@
    "exec": "S / H, verifier opus",
    "deps": [],
    "status": "in_progress",
-   "note": "User go-ahead 2026-11-11 (fix all findings). Plan: docs/xbridges-verification/wp21-fix-plan.md. Round 1 dispatched: A zero parameters, B embedded quick fixes, C workspace UI. Batch B merged (a3daf970): 9 findings closed; new XBV-150 (embedded PID semantics), XBV-151 (embedded DELAY 0), XBV-152 (vacuous PID parity case). LIBM_CONDITIONED bound (8 eps max(1,|y|), 17 keys) added to xbCodeParity, verifier re-measured worst ratio 3.85. Batch A merged (c8facc19): XBV-015, 019, 040, 064 closed; DELAY delay_length is not tunable during a run (live change to/from 0 refused with PARAMETER_OUT_OF_RANGE, Simulink); XBV-137 ratchet shrunk 463 -> 418; new XBV-153. Batch D dispatched (acceptance 624b6a44). Batch F acceptance: pins removed for XBV-084, 086, 087, 091, 093, 094, 101, 102, 103 and the XBV-084 seeds; new tests for XBV-150 (PID with distinct r and y), 151 (DELAY 0), 107 (passes: closed). XBV-088, 090, 092 stay pinned (canvas-side causes, later batches). Batch C committed (13 findings closed, verifier PASS, e2e 36/36); new XBV-157, 158. WP-20 re-check by the verifier: spec gap (no end-time check in solvers/persistence/subsystem/param-edit) fixed by the controller; XBV-149 pin ordering fixed. Batch D merged (22 findings closed; XBV-066 moved to E; new XBV-154, 155, 156). XBV-057: right shift of a negative int32 by >= 32 gives -1 (arithmetic shift, Simulink signed shift). Batch E acceptance (engine core): pins flipped for XBV-016, 026, 028, 030, 031, 032, 033, 035, 036, 066, 067, 069, 080; PINNED_SEVERITY no longer lists DIMENSION_MISMATCH, DATA_TYPE_MISMATCH (D1), ALGEBRAIC_LOOP_NOT_CONVERGED, LOGIC_NAN_INPUT; U10 and U14 lists emptied (XBV-020, XBV-018); XBV-047 clone list emptied; RELAY rk4 parity pin removed (XBV-067); new xbWp21Engine.test.ts for XBV-002, 003, 004, 005, 155; testkit runModel passes relTol/absTol. XBV-107 reopened (controller test error). Batch F merged after 2 reworks and verifier review (11 findings closed, XBV-093 open; decision D12; new XBV-159, 160, 161, 162). RELAY rk4 parity stays failing until batch E2 (XBV-067 minor steps). Batch E1+E2 merged (26 findings closed incl. XBV-092 and XBV-133 fixed as side effects); structural codes MULTIPLE_DRIVERS, DUPLICATE_BLOCK_ID, UNKNOWN_BLOCK_TYPE; new XBV-163, 164, 165, 166. Pre-existing failure unrelated to WP-21: src/help/helpCoverage.test.ts live-UI fingerprint (fails already at cb974bc3). Batch H merged (12 fuzzy findings closed; math blocks out of the universal lists; decision D13; new XBV-169). Batch G merged (15 findings closed; AC_MOTOR_PID_CONTROL rewritten as a slip-regulated V/f drive; induction-motor stator equations corrected, XBV-170; new embedded XBV-167, 168). Batch F2 merged (11 findings closed; D11 under every fault policy; continuous STATE_SPACE embedded; new XBV-172). Batch E3 merged (XBV-041, 065, 165, 169, 171 closed; D14; trial-point fault rollback bounded: only a strictly smaller retry that is taken, max 30 consecutive; new XBV-174). Batch I merged (19 findings closed; robot labs carry a solver via the optional lab `simulation` entry; StiffSolver reads array derivatives; labs #5/#6 e2e unpinned; new XBV-175 to 179)."
+   "note": "User go-ahead 2026-11-11 (fix all findings). Plan: docs/xbridges-verification/wp21-fix-plan.md. Round 1 dispatched: A zero parameters, B embedded quick fixes, C workspace UI. Batch B merged (a3daf970): 9 findings closed; new XBV-150 (embedded PID semantics), XBV-151 (embedded DELAY 0), XBV-152 (vacuous PID parity case). LIBM_CONDITIONED bound (8 eps max(1,|y|), 17 keys) added to xbCodeParity, verifier re-measured worst ratio 3.85. Batch A merged (c8facc19): XBV-015, 019, 040, 064 closed; DELAY delay_length is not tunable during a run (live change to/from 0 refused with PARAMETER_OUT_OF_RANGE, Simulink); XBV-137 ratchet shrunk 463 -> 418; new XBV-153. Batch D dispatched (acceptance 624b6a44). Batch F acceptance: pins removed for XBV-084, 086, 087, 091, 093, 094, 101, 102, 103 and the XBV-084 seeds; new tests for XBV-150 (PID with distinct r and y), 151 (DELAY 0), 107 (passes: closed). XBV-088, 090, 092 stay pinned (canvas-side causes, later batches). Batch C committed (13 findings closed, verifier PASS, e2e 36/36); new XBV-157, 158. WP-20 re-check by the verifier: spec gap (no end-time check in solvers/persistence/subsystem/param-edit) fixed by the controller; XBV-149 pin ordering fixed. Batch D merged (22 findings closed; XBV-066 moved to E; new XBV-154, 155, 156). XBV-057: right shift of a negative int32 by >= 32 gives -1 (arithmetic shift, Simulink signed shift). Batch E acceptance (engine core): pins flipped for XBV-016, 026, 028, 030, 031, 032, 033, 035, 036, 066, 067, 069, 080; PINNED_SEVERITY no longer lists DIMENSION_MISMATCH, DATA_TYPE_MISMATCH (D1), ALGEBRAIC_LOOP_NOT_CONVERGED, LOGIC_NAN_INPUT; U10 and U14 lists emptied (XBV-020, XBV-018); XBV-047 clone list emptied; RELAY rk4 parity pin removed (XBV-067); new xbWp21Engine.test.ts for XBV-002, 003, 004, 005, 155; testkit runModel passes relTol/absTol. XBV-107 reopened (controller test error). Batch F merged after 2 reworks and verifier review (11 findings closed, XBV-093 open; decision D12; new XBV-159, 160, 161, 162). RELAY rk4 parity stays failing until batch E2 (XBV-067 minor steps). Batch E1+E2 merged (26 findings closed incl. XBV-092 and XBV-133 fixed as side effects); structural codes MULTIPLE_DRIVERS, DUPLICATE_BLOCK_ID, UNKNOWN_BLOCK_TYPE; new XBV-163, 164, 165, 166. Pre-existing failure unrelated to WP-21: src/help/helpCoverage.test.ts live-UI fingerprint (fails already at cb974bc3). Batch H merged (12 fuzzy findings closed; math blocks out of the universal lists; decision D13; new XBV-169). Batch G merged (15 findings closed; AC_MOTOR_PID_CONTROL rewritten as a slip-regulated V/f drive; induction-motor stator equations corrected, XBV-170; new embedded XBV-167, 168). Batch F2 merged (11 findings closed; D11 under every fault policy; continuous STATE_SPACE embedded; new XBV-172). Batch E3 merged (XBV-041, 065, 165, 169, 171 closed; D14; trial-point fault rollback bounded: only a strictly smaller retry that is taken, max 30 consecutive; new XBV-174). Batch I merged (19 findings closed; robot labs carry a solver via the optional lab `simulation` entry; StiffSolver reads array derivatives; labs #5/#6 e2e unpinned; new XBV-175 to 179). Batch J merged (5 findings closed, XBV-037 partly; new XBV-180 to 183)."
   },
   {
    "id": "WP-22",
@@ -752,8 +752,9 @@
    "plan_ref": "F11",
    "severity": "S3",
    "gate": "V3",
-   "status": "open",
-   "summary": "The parameter schema covers 74 of 290 block types; PARAMETER_* errors do not apply to the others."
+   "status": "closed",
+   "summary": "The parameter schema covers 74 of 290 block types; PARAMETER_* errors do not apply to the others.",
+   "fix": "WP-21 batch J (1 rework), verifier PASS"
   },
   {
    "id": "XBV-012",
@@ -982,7 +983,7 @@
    "severity": "S4",
    "gate": "V5",
    "status": "open",
-   "summary": "Stiff-solver options (ode14x extrapolationOrder/newtonIterations, ode23tb relTol/absTol/minStep/maxStep) are not editable on the canvas; STIFF_SOLVER_INVALID_OPTION and STIFF_SOLVER_STEP_TOO_SMALL are reachable only from a batch configuration. Related to decision D3 (user tolerances)."
+   "summary": "Stiff-solver options (ode14x extrapolationOrder/newtonIterations, ode23tb relTol/absTol/minStep/maxStep) are not editable on the canvas; STIFF_SOLVER_INVALID_OPTION and STIFF_SOLVER_STEP_TOO_SMALL are reachable only from a batch configuration. Related to decision D3 (user tolerances). WP-21 batch J: RelTol/AbsTol (ode23/ode45/ode23tb) and ode14x extrapolation order / Newton iterations are on the toolbar, saved and restored; ode23tb minStep/maxStep are still not editable."
   },
   {
    "id": "XBV-038",
@@ -1865,8 +1866,9 @@
    "plan_ref": "6 UI",
    "severity": "S3",
    "gate": "V8",
-   "status": "open",
-   "summary": "463 numeric (block, parameter) pairs show no error for invalid text ('abc'): only the 74 block types in parameterSchema.ts are validated (same root as XBV-011; ratchet in xbV8Ui.test.tsx). Found by the WP-19 executor; pinned in src/components/xbridges/xbV8Ui.test.tsx."
+   "status": "closed",
+   "summary": "463 numeric (block, parameter) pairs show no error for invalid text ('abc'): only the 74 block types in parameterSchema.ts are validated (same root as XBV-011; ratchet in xbV8Ui.test.tsx). Found by the WP-19 executor; pinned in src/components/xbridges/xbV8Ui.test.tsx.",
+   "fix": "WP-21 batch J (1 rework), verifier PASS"
   },
   {
    "id": "XBV-138",
@@ -2008,16 +2010,18 @@
    "plan_ref": "U7 / 5.2 diagnostics",
    "severity": "S2",
    "gate": "V3",
-   "status": "open",
-   "summary": "Six divisor parameters give a non-finite output without a diagnostic when set to 0 (present before WP-21): IM_FOC_CONTROL.Lm, AIR_FRYER_LEARNING_MODEL tau_h, tau_f, tau_c, tau_s, FABRIC_HARMONIC_ANALYZER.drum_mass. They need parameterSchema entries rejecting 0 (batch J). Found by the WP-21 batch A verifier's zero-parameter scan."
+   "status": "closed",
+   "summary": "Six divisor parameters give a non-finite output without a diagnostic when set to 0 (present before WP-21): IM_FOC_CONTROL.Lm, AIR_FRYER_LEARNING_MODEL tau_h, tau_f, tau_c, tau_s, FABRIC_HARMONIC_ANALYZER.drum_mass. They need parameterSchema entries rejecting 0 (batch J). Found by the WP-21 batch A verifier's zero-parameter scan.",
+   "fix": "WP-21 batch J (1 rework), verifier PASS"
   },
   {
    "id": "XBV-157",
    "plan_ref": "6 UI",
    "severity": "S3",
    "gate": "V8",
-   "status": "open",
-   "summary": "The record of invalid parameter text is cleared when the selection changes: leaving 'abc' in a field and selecting another block lets Run start again with the last valid value and no message. Found by the WP-21 batch C verifier."
+   "status": "closed",
+   "summary": "The record of invalid parameter text is cleared when the selection changes: leaving 'abc' in a field and selecting another block lets Run start again with the last valid value and no message. Found by the WP-21 batch C verifier.",
+   "fix": "WP-21 batch J (1 rework), verifier PASS"
   },
   {
    "id": "XBV-158",
@@ -2051,8 +2055,9 @@
    "plan_ref": "6 UI",
    "severity": "S3",
    "gate": "V8",
-   "status": "open",
-   "summary": "The properties panel's Switch criterion dropdown (XbridgesPropertiesPanel.tsx ~1077) does not offer the new 'u2 ~= 0' criterion, and blockGuidance still documents SubMatrix indices as zero-based ('defaults 0'). Found by the WP-21 batch D executor."
+   "status": "closed",
+   "summary": "The properties panel's Switch criterion dropdown (XbridgesPropertiesPanel.tsx ~1077) does not offer the new 'u2 ~= 0' criterion, and blockGuidance still documents SubMatrix indices as zero-based ('defaults 0'). Found by the WP-21 batch D executor.",
+   "fix": "WP-21 batch J (1 rework), verifier PASS"
   },
   {
    "id": "XBV-159",
@@ -2232,6 +2237,38 @@
    "gate": "V5",
    "status": "open",
    "summary": "PT_ENGINE_DYNO under ode23tb at default tolerances differs from rk4 (0.001) by 2e-2 relative at output step 0.05 (2.8e-3 at 0.01); keyed derivatives, so error control / output interpolation rather than the layout defect. Found by the WP-21 batch I scan."
+  },
+  {
+   "id": "XBV-180",
+   "plan_ref": "3 parameters",
+   "severity": "S3",
+   "gate": "V3",
+   "status": "open",
+   "summary": "Some parameterSchema 'positive' entries reject 0 although 0 is not degenerate in the block equation: ROBOT_VACUUM_MOTOR motor_R/motor_K, Lm of AC_INDUCTION_MOTOR/IM_FLUX_OBSERVER/AC_MOTOR_PID_CONTROL (numerator only), ROBOT_VACUUM_BATTERY.nominal_voltage, SVPWM_CORE.Ts, MTPA_CONTROLLER.Ld; motor_R positive contradicts Rs/Ron nonnegative. Some positive entries belong to parameters execute does not use (IM_FOC Rr/Lr/P, IM_SCALAR rated_f, DIGITAL_TWIN motor_*). Found by the WP-21 batch J verifier."
+  },
+  {
+   "id": "XBV-181",
+   "plan_ref": "6 UI",
+   "severity": "S3",
+   "gate": "V8",
+   "status": "open",
+   "summary": "After a block with recorded invalid parameter text is selected again, the properties panel shows the stored (last valid) number while the kept record still refuses the run; the Problems message names the block, parameter and text. Found by the WP-21 batch J verifier."
+  },
+  {
+   "id": "XBV-182",
+   "plan_ref": "6 UI",
+   "severity": "S3",
+   "gate": "V8",
+   "status": "open",
+   "summary": "The panel maps PT_* parameter specs to editor kinds only for min = 0 (nonnegative); specs with min > 0 or a max become plain 'number', so the panel accepts out-of-range text that the block refuses at its first step (BLOCK_RUNTIME_FAULT). Found by the WP-21 batch J verifier."
+  },
+  {
+   "id": "XBV-183",
+   "plan_ref": "5.1 stiff solvers",
+   "severity": "S3",
+   "gate": "V5",
+   "status": "open",
+   "summary": "ode23tb with RelTol 1e-9 (now reachable from the toolbar) fails at t = 6.1e-6 with STIFF_SOLVER_STEP_TOO_SMALL on the cos(10 t) integrator; tight tolerances should take smaller steps down to the documented minimum, not fail on a smooth problem. Found by the WP-21 batch J verifier."
   }
  ],
  "blocks": {

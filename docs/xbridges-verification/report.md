@@ -5,9 +5,9 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 ## Summary
 
 - Work packages: 20 done of 29; 2 in progress; 7 to do.
-- Findings: 29 open, 149 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
+- Findings: 28 open, 154 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
   - S1 (wrong number in simulation or generated C): 1 open
-  - S2 (crash, stop, freeze or silent no-op): 6 open
+  - S2 (crash, stop, freeze or silent no-op): 5 open
   - S3 (diagnostic, UI or convention deviation): 14 open
   - S4 (documentation): 8 open
 - Decisions recorded: 14; open: 0.
@@ -70,12 +70,11 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 | --- | --- | --- | --- |
 | XBV-001 | V6 | F1 | Canvas engine and state-machine interpreter are compared only by xbSimEmbeddedParity.test.ts: unit-constant input, 6 ticks, scalar, discrete solver. WP-16 measured it: 281 (type, solver) cases, 178 equal; random graphs fail via XBV-083/084/085. |
 
-### S2 - crash, stop, freeze or silent no-op (6)
+### S2 - crash, stop, freeze or silent no-op (5)
 
 | Id | Gate | Plan ref | Summary |
 | --- | --- | --- | --- |
 | XBV-039 | V6 | 7.2 boundary mappings | In canvas simulation (main thread and worker) a state-machine variable mapped to a top-level Inport never reaches the X-Bridges model: the canvas writes the value with setSignalValue and params.value, but Inport.execute returns its own unconnected input (default 0), which overwrites it at the next evaluation (BlockDefinitions.ts ~2610). Measured: Inport override 2.5 into an Integrator for 1 s gives 0 instead of 2.5. Pinned in xbWorker.test.ts. The embedded interpreter/C path is checked in WP-16/18. Scope (verifier): this is the canvas run inside the X-Bridges workspace; a state machine running in the app uses App.tsx runAppSimulationTick -> smAppAdapter -> smInterpreter -> xbInterpreter, which WP-16/18 verify. Also: an Inport's own 'value' parameter (2.5, no override) gives 0 on the canvas. Severity lowered to S2. |
-| XBV-153 | V3 | U7 / 5.2 diagnostics | Six divisor parameters give a non-finite output without a diagnostic when set to 0 (present before WP-21): IM_FOC_CONTROL.Lm, AIR_FRYER_LEARNING_MODEL tau_h, tau_f, tau_c, tau_s, FABRIC_HARMONIC_ANALYZER.drum_mass. They need parameterSchema entries rejecting 0 (batch J). Found by the WP-21 batch A verifier's zero-parameter scan. |
 | XBV-174 | V6 | 7.3 canvas / interpreter parity | Embedded continuous STATE_SPACE holds its state when sampleTime > 0 (batch F2 mirrored the pre-E3 canvas); the canvas now integrates it (XBV-171). Pinned in xbTriParity. |
 | XBV-175 | V5 | 5.1 stiff solvers | StiffSolver.derivAt (WP-21 batch I rework 2) turns a NaN derivative into 0; before, the run stopped with STIFF_SOLVER_NONFINITE. 0/0 into an Integrator now runs to the end under ode14x/ode23tb with a 0 state. Found by the WP-21 batch I verifier; acceptance in xbWp21Faults.test.ts. |
 | XBV-176 | V5 | 5.1 explicit solvers | VectorUtils.integrateState reads a derivative as `Number(deriv) \|\| 0`, so a NaN derivative is integrated as 0 by euler/rk4/ode45 without a diagnostic (pre-existing). Found by the WP-21 batch I verifier; acceptance in xbWp21Faults.test.ts. |
@@ -87,18 +86,18 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 | --- | --- | --- | --- |
 | XBV-006 | V7 | F6 | SUM_JUNCTION has a codegen capability and no factory; DiagExtract, ExtractDiag, Diag have a factory and no capability entry of their own. |
 | XBV-007 | V8 | F7 | The canvas palette and the help/AI palette differ: 20 types only on the canvas palette, 55 only on the help palette (inventory.json: onCanvasPaletteOnly, onHelpPaletteOnly). |
-| XBV-011 | V3 | F11 | The parameter schema covers 74 of 290 block types; PARAMETER_* errors do not apply to the others. |
 | XBV-014 | V1 | V1 | 56 blocks use port types outside XSignalType (control, object, data, load, boolean); the engine's type checks do not know them. Ratchet list in tests/fixtures/xbridges/known-gaps.json. |
 | XBV-034 | V4 | 5.2 diagnostics | DOE_MODEL fault codes EXECUTION_EXCEPTION, INVALID_GMDH_LAYERS, INVALID_TAGUCHI_LEVELS, NO_MODEL_CONFIGURED, NON_FINITE_INPUT exist only in nextState.lastFault and inside one BLOCK_RUNTIME_FAULT message; they never appear as diagnostics, and the run continues (XBV-033). Pinned in xbDiagnostics.test.ts. |
 | XBV-038 | V3 | 5.2 diagnostics | CONSTANT_VALUE_NOT_REPRESENTABLE (a Constant value that loses precision in its data type) is a compile error that refuses the model; Simulink reports parameter precision loss as a warning by default (out-of-range overflow stays an error). Pinned in xbDiagnostics.test.ts. |
 | XBV-106 | V7 | 7.2 state-machine alignment | State-machine variables are scalar only: mapping a vector (3) or matrix (2x2) X-Bridges port to an SM variable is refused (XB_MAPPING_INVALID), so plan 7.2's vector/matrix boundary mappings are not expressible; vector/matrix signals work inside the model. Reported by the WP-18 executor. |
-| XBV-137 | V8 | 6 UI | 463 numeric (block, parameter) pairs show no error for invalid text ('abc'): only the 74 block types in parameterSchema.ts are validated (same root as XBV-011; ratchet in xbV8Ui.test.tsx). Found by the WP-19 executor; pinned in src/components/xbridges/xbV8Ui.test.tsx. |
-| XBV-157 | V8 | 6 UI | The record of invalid parameter text is cleared when the selection changes: leaving 'abc' in a field and selecting another block lets Run start again with the last valid value and no message. Found by the WP-21 batch C verifier. |
-| XBV-156 | V8 | 6 UI | The properties panel's Switch criterion dropdown (XbridgesPropertiesPanel.tsx ~1077) does not offer the new 'u2 ~= 0' criterion, and blockGuidance still documents SubMatrix indices as zero-based ('defaults 0'). Found by the WP-21 batch D executor. |
 | XBV-172 | V6 | 7.3 canvas / interpreter parity | A non-finite operand of ShiftLeft/ShiftRight (Inf, NaN) gives 0 without a numeric fault in the embedded path (JS ToInt32 / C helper), while the canvas raises a block error. Found by the WP-21 batch F2 executor and verifier. |
 | XBV-173 | V8 | 6 UI / help | Help coverage is out of date after WP-21 UI and parameter changes: src/help/helpCoverage.test.ts fails on the live-UI fingerprint and on an unmapped reviewed feature (new inline controls such as the toolbar and panel editors), and src/help/blockReference.test.ts reports a parameter-interpretation gap for RL_Q_LEARNING_CONTROLLER (new 'seed' parameter, batch G). The fingerprint test already failed before WP-21 round 1 (cb974bc3). Batch K. |
 | XBV-178 | V3 | 4.2 powertrain | PT_TURBOCHARGER raises BLOCK_RUNTIME_FAULT with its defaults and unit inputs under rk4 and ode23tb alike (not a solver difference; cause not investigated). Found by the WP-21 batch I scan. |
 | XBV-179 | V5 | 4.2 powertrain | PT_ENGINE_DYNO under ode23tb at default tolerances differs from rk4 (0.001) by 2e-2 relative at output step 0.05 (2.8e-3 at 0.01); keyed derivatives, so error control / output interpolation rather than the layout defect. Found by the WP-21 batch I scan. |
+| XBV-180 | V3 | 3 parameters | Some parameterSchema 'positive' entries reject 0 although 0 is not degenerate in the block equation: ROBOT_VACUUM_MOTOR motor_R/motor_K, Lm of AC_INDUCTION_MOTOR/IM_FLUX_OBSERVER/AC_MOTOR_PID_CONTROL (numerator only), ROBOT_VACUUM_BATTERY.nominal_voltage, SVPWM_CORE.Ts, MTPA_CONTROLLER.Ld; motor_R positive contradicts Rs/Ron nonnegative. Some positive entries belong to parameters execute does not use (IM_FOC Rr/Lr/P, IM_SCALAR rated_f, DIGITAL_TWIN motor_*). Found by the WP-21 batch J verifier. |
+| XBV-181 | V8 | 6 UI | After a block with recorded invalid parameter text is selected again, the properties panel shows the stored (last valid) number while the kept record still refuses the run; the Problems message names the block, parameter and text. Found by the WP-21 batch J verifier. |
+| XBV-182 | V8 | 6 UI | The panel maps PT_* parameter specs to editor kinds only for min = 0 (nonnegative); specs with min > 0 or a max become plain 'number', so the panel accepts out-of-range text that the block refuses at its first step (BLOCK_RUNTIME_FAULT). Found by the WP-21 batch J verifier. |
+| XBV-183 | V5 | 5.1 stiff solvers | ode23tb with RelTol 1e-9 (now reachable from the toolbar) fails at t = 6.1e-6 with STIFF_SOLVER_STEP_TOO_SMALL on the cos(10 t) integrator; tight tolerances should take smaller steps down to the documented minimum, not fail on a smooth problem. Found by the WP-21 batch J verifier. |
 
 ### S4 - documentation (8)
 
@@ -107,7 +106,7 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 | XBV-009 | V7 | F9 | docs/XBRIDGES_EMBEDDED_CODEGEN.md lists about 40 embedded-capable types and two solvers; the registry has 100 and three. WP-17: the document lists 38 types, the registry has 100 codegen-capable types. |
 | XBV-012 | V1 | V1 | 174 blocks have no equation text in their factory; ratchet list in tests/fixtures/xbridges/known-gaps.json. |
 | XBV-013 | V1 | V1 | 233 blocks have at least one port without a unit; ratchet list in tests/fixtures/xbridges/known-gaps.json. |
-| XBV-037 | V5 | 5.1 | Stiff-solver options (ode14x extrapolationOrder/newtonIterations, ode23tb relTol/absTol/minStep/maxStep) are not editable on the canvas; STIFF_SOLVER_INVALID_OPTION and STIFF_SOLVER_STEP_TOO_SMALL are reachable only from a batch configuration. Related to decision D3 (user tolerances). |
+| XBV-037 | V5 | 5.1 | Stiff-solver options (ode14x extrapolationOrder/newtonIterations, ode23tb relTol/absTol/minStep/maxStep) are not editable on the canvas; STIFF_SOLVER_INVALID_OPTION and STIFF_SOLVER_STEP_TOO_SMALL are reachable only from a batch configuration. Related to decision D3 (user tolerances). WP-21 batch J: RelTol/AbsTol (ode23/ode45/ode23tb) and ode14x extrapolation order / Newton iterations are on the toolbar, saved and restored; ode23tb minStep/maxStep are still not editable. |
 | XBV-108 | V7 | 7.2 state-machine alignment | Under the 'retain' memory policy the discrete sample-hit counter freezes while the owning state is inactive (hits at ticks 1, 3, 7, 9 across exit/re-entry); simulator, runtime and C agree, but docs/XBRIDGES_EMBEDDED_CODEGEN.md does not state it. Reported by the WP-18 executor. |
 | XBV-109 | G | WP-11 | docs/powertrain/ledger.json has no per-block gate records ('blocks' is {} and no PT_ type appears), so the powertrain G1-G5 verdicts the plan imports do not exist; the 45 PT_* blocks are covered by 28 powertrain test files (204 tests pass) but their Simulink-golden gate is pending everywhere. |
 | XBV-162 | V7 | documentation | src/utils/stateMachine/xbAccurateMath.ts says glibc sin is correctly rounded; glibc 2.39 differs from the correctly rounded value in 195 of 208k samples (verifier). The interpreter's accurateSin is correctly rounded (0 mismatches) and differs from the canvas Math.sin by 1 ULP in about 1.8 % of cases, absorbed by the parity tolerance. Comment to correct. |
@@ -121,6 +120,7 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 - XBV-005 (closed): Only Step and three PT_ blocks declare zero crossings. Decision D2: add ZeroCrossingFn to SATURATION, DEADZONE, RELAY, SWITCH, Abs and the PWM carrier blocks.
 - XBV-008 (superseded by XBV-029): DIMENSION_MISMATCH and DATA_TYPE_MISMATCH on a connection are warnings. Decision D1: compile errors, as in Simulink.
 - XBV-010 (closed): Embedded limits (fixed-step euler/rk4/discrete, no algebraic loops, vector 16, matrix 8) have no test on both sides of each boundary.
+- XBV-011 (closed): The parameter schema covers 74 of 290 block types; PARAMETER_* errors do not apply to the others.
 - XBV-015 (closed): GAIN treats gain 0 (and -0) as 1: factory uses params.gain \|\| 1 (BlockDefinitions.ts ~3783); confirmed by run, also with per-tick applyParameterUpdates: input 3 gives 3, Simulink gives 0. PRODUCT nu
 - XBV-016 (closed): Stiff solvers with an algebraic loop: y = 0.5*y + 1 feeding an Integrator, dt 0.1, stop 1 (expected integral 2): ode14x gives 51.588135932457256, ode23tb 1.7999999999948573; every other solver gives a
 - XBV-017 (closed): The canvas accumulates time (timeRef += stepNow) instead of t0 + n*dt; the test kit uses multiplication (plan 5.1). Against an accumulating emulation, signals differ at rounding level for 40 block typ
@@ -235,6 +235,7 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 - XBV-134 (closed): ROBOT_VACUUM_GLOBAL_PLANNER with no possible path returns [goal] with no failure flag. Found by the WP-10 executor; pinned in xbEquations.robot.test.ts.
 - XBV-135 (closed): Properties panel renders MatrixConcat.axis, SWITCH_CASE.numCases, Scope.numSignals and Scope.bufferSize as selects, so values such as 0, -2.5 or 0.125 cannot be entered (ratchet in xbV8Ui.test.tsx). F
 - XBV-136 (closed): Properties panel renders LAPLACE_TRANSFORM.mappingType (schema kind option) as free text instead of a select. Found by the WP-19 executor; pinned in src/components/xbridges/xbV8Ui.test.tsx.
+- XBV-137 (closed): 463 numeric (block, parameter) pairs show no error for invalid text ('abc'): only the 74 block types in parameterSchema.ts are validated (same root as XBV-011; ratchet in xbV8Ui.test.tsx). Found by th
 - XBV-138 (closed): Typing 'abc' into any numeric parameter and leaving the field stores the raw string 'abc' as the parameter value (576 numeric parameters); plan 6: invalid text must not overwrite the stored value. Fou
 - XBV-139 (closed): Properties panel labels are not tied to their editors (no htmlFor, no aria-label), so screen readers cannot name the fields. Found by the WP-19 executor; pinned in src/components/xbridges/xbV8Ui.test.
 - XBV-140 (closed): Canvas wiring accepts a second driver on an already-connected input: onConnect adds the edge and the workspace has no isValidConnection (XbridgesWorkspace.tsx ~2306); the canvas side of XBV-031. Found
@@ -250,9 +251,12 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 - XBV-150 (closed): Embedded PID_CONTROLLER differs from the canvas PID: the embedded side ignores setpoint weights beta and gamma (unit step, canvas defaults gamma 0: u(0) 1.1667 vs 1.0), always uses the backward-Euler 
 - XBV-151 (closed): The embedded builder still refuses DELAY delay_length 0 (xbSemanticBuilder.ts ~1146 XB_DELAY_LENGTH_INVALID, diagnosticGuidance.ts) although the canvas now treats it as direct feedthrough (XBV-064, Si
 - XBV-152 (closed): The per-block V6 parity case for PID_CONTROLLER is vacuous: every input port gets the same source, so r = y and e = 0; it passes without exercising the controller. Test-side gap (controller), to be re
+- XBV-153 (closed): Six divisor parameters give a non-finite output without a diagnostic when set to 0 (present before WP-21): IM_FOC_CONTROL.Lm, AIR_FRYER_LEARNING_MODEL tau_h, tau_f, tau_c, tau_s, FABRIC_HARMONIC_ANALY
+- XBV-157 (closed): The record of invalid parameter text is cleared when the selection changes: leaving 'abc' in a field and selecting another block lets Run start again with the last valid value and no message. Found by
 - XBV-158 (closed): The worker logs the final sample at the summed time (stop time within a few ULP), the main-thread path at exactly the stop time. Found by the WP-21 batch C verifier.
 - XBV-154 (closed): Embedded Mean (mean of all elements) and SubMatrix (zero-based indices) still follow the pre-WP-21 canvas rules; the canvas now gives MATLAB/Simulink column means and one-based indices (WP-21 batch D)
 - XBV-155 (closed): A vector input with a scalar initial condition is not scalar-expanded for the plain Integrator (bare-number state) on any solver, and for INTEGRATOR / INTEGRATOR_CONTINUOUS on the stiff solvers ode14x
+- XBV-156 (closed): The properties panel's Switch criterion dropdown (XbridgesPropertiesPanel.tsx ~1077) does not offer the new 'u2 ~= 0' criterion, and blockGuidance still documents SubMatrix indices as zero-based ('def
 - XBV-159 (closed): Embedded continuous-form PID_CONTROLLER (sample time <= 0) advances its integrator and derivative-filter states with forward Euler whatever the solver: under rk4 the embedded trace equals the euler tr
 - XBV-160 (closed): Embedded VectorDiv by zero publishes 0 (documented safe-zero fallback kept by batch F) while the canvas gives Inf with DIVIDE_BY_ZERO and PRODUCT divide gives Inf; D11 (NaN/Inf + fault flag) should ap
 - XBV-161 (closed): Embedded ShiftLeft/ShiftRight mask the shift count to 5 bits (& 31) in interpreter and C; Simulink and the canvas (since XBV-057, WP-21 batch D) shift every bit out for counts >= 32 (0, or -1 for a ne
