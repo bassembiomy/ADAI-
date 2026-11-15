@@ -163,7 +163,9 @@ describe('compile reports invalid parameters of every block (Simulink: "Invalid 
   it('a Constant with an integer data type checks its value in simulation too', () => {
     expect(compileErrors([b('Constant', 'k', { value: 'abc', output_type: 'int8' })]).map((d) => d.code)).toContain('PARAMETER_INVALID');
     expect(compileErrors([b('Constant', 'k', { value: 300, output_type: 'int8' })]).map((d) => d.code)).toContain('CONSTANT_VALUE_OUT_OF_RANGE');
-    expect(compileErrors([b('Constant', 'k', { value: 2.5, output_type: 'uint8' })]).map((d) => d.code)).toContain('CONSTANT_VALUE_NOT_REPRESENTABLE');
+    // XBV-038 (WP-21 K): precision loss is a warning (Simulink default), not an error; out-of-range overflow stays an error.
+    expect(compileErrors([b('Constant', 'k', { value: 2.5, output_type: 'uint8' })]).map((d) => d.code)).not.toContain('CONSTANT_VALUE_NOT_REPRESENTABLE');
+    expect(engineOf([b('Constant', 'k', { value: 2.5, output_type: 'uint8' })]).compile().filter((d) => d.severity === 'warning').map((d) => d.code)).toContain('CONSTANT_VALUE_NOT_REPRESENTABLE');
     expect(compileErrors([b('Constant', 'k', { value: '2*50', output_type: 'int8' })])).toEqual([]);
   });
 

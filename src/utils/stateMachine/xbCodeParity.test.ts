@@ -349,8 +349,9 @@ describe('V7 registry closure', () => {
   it('XBV-006: every codegen true capability entry has a BLOCK_LIBRARY factory (SUM_JUNCTION has none)', () => {
     expect(codegenTrue.filter((t) => typeof BLOCK_LIBRARY[t] !== 'function')).toEqual([]);
   });
-  it('the only codegen true entry without a factory is SUM_JUNCTION', () => {
-    expect(codegenTrue.filter((t) => typeof BLOCK_LIBRARY[t] !== 'function')).toEqual(['SUM_JUNCTION']);
+  // XBV-006 (WP-21 K): SUM_JUNCTION now has a factory, so no codegen-capable entry lacks one.
+  it('every codegen true entry has a factory', () => {
+    expect(codegenTrue.filter((t) => typeof BLOCK_LIBRARY[t] !== 'function')).toEqual([]);
   });
 
   it('every codegen false entry has a non-empty reason', () => {
