@@ -12804,11 +12804,77 @@ const CATALOGUE_PORT_UNITS: Readonly<Record<string, Readonly<Record<string, stri
   ZERO_SEQUENCE_INJECTION: { va: 'V', vb: 'V', vc: 'V', va_mod: 'V', vb_mod: 'V', vc_mod: 'V' },
 };
 
+/**
+ * Ports with the role 'control' (enable / reset / learning signals, controller commands and the robot control bundle): the
+ * canvas draws their handles amber. They were typed 'control' before XBV-014 moved every port type into XSignalType, so
+ * the distinction is kept as a port role (XPort.role), not as a signal type.
+ */
+const CONTROL_ROLE_PORTS: Readonly<Record<string, readonly string[]>> = {
+  AC_MOTOR_PID_CONTROL: ['w_ref'],
+  AIR_FRYER_LEARNING_MODEL: ['power', 'fan_speed', 'measured_temp', 'lr', 'temp_actual', 'estimated_gain', 'estimated_tau_c', 'prediction_error', 'temp_pred'],
+  CURRENT_CONTROLLER_DQ: ['id_ref', 'iq_ref', 'vd', 'vq'],
+  DOE_MODULE: ['pred'],
+  FIELD_ORIENTED_CONTROL: ['id_ref', 'iq_ref', 'vd', 'vq', 'va_ref', 'vb_ref', 'vc_ref'],
+  FIELD_WEAKENING: ['id_base', 'id_ref'],
+  FLUX_REFERENCE: ['id_ref'],
+  FUZZY_PID_CONTROLLER: ['enable', 'reset', 'u'],
+  IM_FOC_CONTROL: ['w_ref', 'va', 'vb', 'vc'],
+  IM_SCALAR_CONTROL: ['w_ref', 'va', 'vb', 'vc'],
+  LMS_ADAPTIVE_FILTER: ['x', 'd', 'lr', 'y', 'err', 'w1', 'w2'],
+  MPC_CONTROLLER: ['u'],
+  MTPA_CONTROLLER: ['te_ref', 'id_ref', 'iq_ref'],
+  MTPA_FW_MANAGER: ['te_ref', 'id_ref', 'iq_ref'],
+  NEURAL_NEURON_LEARNING: ['x1', 'x2', 'target', 'lr', 'y', 'err', 'w1', 'w2', 'bias'],
+  PID_BASIC: ['enable', 'reset', 'u'],
+  PID_CONTROLLER: ['enable', 'reset', 'u'],
+  PWM_GENERATOR: ['duty'],
+  RL_Q_LEARNING_CONTROLLER: ['error', 'reward', 'action', 'max_q'],
+  ROBOT_VACUUM_3D_SCENE_VIEW: ['x', 'y', 'theta', 'battery', 'dust'],
+  ROBOT_VACUUM_BATTERY: ['I_L', 'I_R', 'battery_level', 'battery_voltage'],
+  ROBOT_VACUUM_BOUSTROPHEDON_SWEEP: ['room_id', 'done'],
+  ROBOT_VACUUM_COMM: ['enc_L_in', 'enc_R_in', 'omega_L_in', 'omega_R_in', 'battery_in', 'x_odom_in', 'y_odom_in', 'theta_odom_in', 'v_ref_in', 'w_ref_in', 'nav_state_in', 'enc_L', 'enc_R', 'omega_L', 'omega_R', 'battery', 'x_odom', 'y_odom', 'theta_odom', 'v_ref', 'w_ref', 'nav_state'],
+  ROBOT_VACUUM_CONTINUOUS_ENERGY: ['battery', 'e_required', 'return_trigger'],
+  ROBOT_VACUUM_COVERAGE: ['x_est', 'y_est', 'goal_x', 'goal_y'],
+  ROBOT_VACUUM_DIGITAL_TWIN: ['target_x', 'target_y', 'mode_select', 'x_pos', 'y_pos', 'theta', 'x_est', 'y_est', 'theta_est', 'nav_state'],
+  ROBOT_VACUUM_DOOR_CROSSING: ['target_room', 'crossed'],
+  ROBOT_VACUUM_DYNAMICS: ['omega_L', 'omega_R', 'x', 'y', 'theta', 'v_chassis', 'w_chassis'],
+  ROBOT_VACUUM_ENCODER: ['omega_L', 'omega_R', 'enc_L', 'enc_R'],
+  ROBOT_VACUUM_ENVIRONMENT: ['x', 'y', 'theta', 'x_est', 'y_est', 'theta_est', 'target_x_in', 'target_y_in', 'nav_state', 'battery_level', 'confidence', 'collision', 'is_docked'],
+  ROBOT_VACUUM_FUSION: ['x_odom', 'y_odom', 'theta_odom', 'x_true', 'y_true', 'theta_true', 'yaw_rate_imu', 'x_est', 'y_est', 'theta_est', 'confidence'],
+  ROBOT_VACUUM_GLOBAL_PLANNER: ['x_est', 'y_est', 'goal_x', 'goal_y', 'target_x', 'target_y'],
+  ROBOT_VACUUM_KINEMATICS: ['v_ref', 'w_ref', 'omegaL_ref', 'omegaR_ref'],
+  ROBOT_VACUUM_LIDAR: ['x', 'y', 'theta'],
+  ROBOT_VACUUM_LOCALIZATION: ['x_odom', 'y_odom', 'theta_odom', 'x_true', 'y_true', 'theta_true', 'x_est', 'y_est', 'theta_est', 'confidence'],
+  ROBOT_VACUUM_MAPPING: ['x_est', 'y_est', 'theta_est'],
+  ROBOT_VACUUM_MOTION_CONTROLLER: ['x_est', 'y_est', 'theta_est', 'target_x', 'target_y', 'v_cmd', 'w_cmd'],
+  ROBOT_VACUUM_MOTOR: ['pwm_duty', 'v_bat', 'omega', 'current', 'encoder', 'omega_est'],
+  ROBOT_VACUUM_MOTOR_COMMAND: ['v_cmd', 'w_cmd', 'omega_L', 'omega_R', 'V_cmd_L', 'V_cmd_R'],
+  ROBOT_VACUUM_NAV: ['x_est', 'y_est', 'theta_est', 'target_x_in', 'target_y_in', 'mode_select', 'battery_level', 'is_docked', 'v_ref', 'w_ref', 'nav_state', 'target_x_active', 'target_y_active'],
+  ROBOT_VACUUM_OBSTACLE_AVOIDANCE: ['target_x', 'target_y', 'safe_x', 'safe_y', 'nav_state'],
+  ROBOT_VACUUM_ODOMETRY: ['enc_L', 'enc_R', 'x_odom', 'y_odom', 'theta_odom'],
+  ROBOT_VACUUM_SLAM: ['x_est', 'y_est', 'theta_est', 'x_true', 'y_true', 'theta_true', 'x_corr', 'y_corr', 'theta_corr'],
+  ROBOT_VACUUM_THETA_STAR: ['failed'],
+  ROBOT_VACUUM_TOPOLOGY_RETURN: ['current_room', 'dock_room'],
+  ROBOT_VACUUM_VISUALIZATION: ['x', 'y', 'theta', 'x_est', 'y_est', 'theta_est', 'target_x', 'target_y', 'nav_state', 'battery_level', 'confidence', 'animation'],
+  ROBOT_VACUUM_WHEEL_CONTROL: ['omegaL_ref', 'omegaR_ref', 'omega_L', 'omega_R', 'V_L', 'V_R'],
+  SPEED_CONTROLLER: ['speed_ref', 'iq_ref'],
+  SWITCH: ['ctrl'],
+  SWITCHING_TIME_CALCULATOR: ['vref', 'vdc', 'ts'],
+  THREE_PHASE_PWM: ['va_ref', 'vb_ref', 'vc_ref'],
+  VF_SLIP_COMP: ['w_ref', 'va', 'vb', 'vc'],
+  VOLTAGE_REFERENCE_GENERATOR: ['f', 'va', 'vb', 'vc'],
+  ZERO_SEQUENCE_INJECTION: ['va', 'vb', 'vc', 'va_mod', 'vb_mod', 'vc_mod'],
+};
+
 /** Fills the equation and the port units a factory left out (never overrides what the factory sets). */
 function applyCatalogueText(block: XBlock): XBlock {
   if (!block.equation) {
     const equation = CATALOGUE_EQUATIONS[block.type];
     if (equation !== undefined) block.equation = equation;
+  }
+  const controlPorts = CONTROL_ROLE_PORTS[block.type];
+  if (controlPorts !== undefined) {
+    for (const port of [...block.inputs, ...block.outputs]) if (controlPorts.includes(port.id)) port.role = 'control';
   }
   const units = CATALOGUE_PORT_UNITS[block.type];
   if (units !== undefined) {
@@ -12823,12 +12889,26 @@ function applyCatalogueText(block: XBlock): XBlock {
 }
 for (const type of Object.keys(BLOCK_LIBRARY)) {
   // Only the types the tables cover are wrapped (the powertrain, lookup and bus factories carry their own text).
-  if (!Object.prototype.hasOwnProperty.call(CATALOGUE_EQUATIONS, type) && !Object.prototype.hasOwnProperty.call(CATALOGUE_PORT_UNITS, type)) continue;
+  if (!Object.prototype.hasOwnProperty.call(CATALOGUE_EQUATIONS, type) && !Object.prototype.hasOwnProperty.call(CATALOGUE_PORT_UNITS, type) && !Object.prototype.hasOwnProperty.call(CONTROL_ROLE_PORTS, type)) continue;
   const build = BLOCK_LIBRARY[type];
   BLOCK_LIBRARY[type] = (id, params) => applyCatalogueText(build(id, params));
 }
 
 export const XBRIDGES_CATEGORIES = [
+  {
+    name: 'DEM & Particle Simulation',
+    blocks: [
+      { type: 'DEM_WASHING_MACHINE_TWIN', label: 'Washing Machine Twin', icon: 'rotate-cw' },
+      { type: 'DEM_DRUM', label: 'DEM Drum Geometry', icon: 'rotate-cw' },
+      { type: 'DEM_PARTICLE_SYSTEM', label: 'DEM Particle System', icon: 'layers' },
+      { type: 'DEM_HERTZ_CONTACT', label: 'Hertz Contact Model', icon: 'activity' },
+      { type: 'DEM_BOND_FABRIC', label: 'Fabric Bond Model', icon: 'network' },
+      { type: 'DEM_FLUID_COUPLING', label: 'Fluid Phase Coupling', icon: 'wind' },
+      { type: 'CFD_SPH_WATER_SOLVER', label: 'CFD SPH Water Solver', icon: 'wind' },
+      { type: 'DEM_CFD_COSIMULATION_INTERFACE', label: 'CFD-DEM 2-Way Coupling', icon: 'refresh-ccw' },
+      { type: 'FABRIC_HARMONIC_ANALYZER', label: 'Fabric Harmonic Analyzer', icon: 'activity' }
+    ]
+  },
   {
     name: 'Navigation & Autonomous',
     blocks: [
@@ -12870,7 +12950,8 @@ export const XBRIDGES_CATEGORIES = [
       { type: 'ROBOT_VACUUM_OBSTACLE_AVOIDANCE', label: 'Robot Obstacle Avoidance', icon: 'graduation-cap' },
       { type: 'ROBOT_VACUUM_MOTION_CONTROLLER', label: 'Robot Motion Controller', icon: 'graduation-cap' },
       { type: 'ROBOT_VACUUM_MOTOR_COMMAND', label: 'Robot Motor Command Gen', icon: 'graduation-cap' },
-      { type: 'ROBOT_VACUUM_VISUALIZATION', label: 'Robot Visualization Twin', icon: 'graduation-cap' }
+      { type: 'ROBOT_VACUUM_VISUALIZATION', label: 'Robot Visualization Twin', icon: 'graduation-cap' },
+      { type: 'CFD_DEM_SURROGATE_LEARNER', label: 'CFD-DEM Surrogate Learner', icon: 'graduation-cap' }
     ]
   },
   {
@@ -12996,7 +13077,9 @@ export const XBRIDGES_CATEGORIES = [
     name: 'Power Electronics & Bridges',
     blocks: [
       { type: 'SINGLE_PHASE_H_BRIDGE', label: 'H-Bridge Inverter', icon: 'zap' },
-      { type: 'THREE_PHASE_INVERTER', label: 'Three-Phase Inverter', icon: 'zap' }
+      { type: 'THREE_PHASE_INVERTER', label: 'Three-Phase Inverter', icon: 'zap' },
+      { type: 'DC_VOLTAGE_SOURCE', label: 'DC Voltage Source', icon: 'zap' },
+      { type: 'THREE_PHASE_LOAD', label: '3-Phase Load', icon: 'activity' }
     ]
   },
   {
@@ -13007,7 +13090,9 @@ export const XBRIDGES_CATEGORIES = [
       { type: 'SVPWM_MODULATOR', label: 'SVPWM Modulator', icon: 'network' },
       { type: 'SVPWM_CORE', label: 'SVPWM Core Timing', icon: 'network' },
       { type: 'SVPWM_GATE_GENERATOR', label: 'SVPWM Gate Generator', icon: 'network' },
-      { type: 'ZERO_SEQUENCE_INJECTION', label: 'Zero Sequence Injection', icon: 'network' }
+      { type: 'ZERO_SEQUENCE_INJECTION', label: 'Zero Sequence Injection', icon: 'network' },
+      { type: 'SECTOR_SELECTOR', label: 'Sector Selector', icon: 'rotate-cw' },
+      { type: 'SWITCHING_TIME_CALCULATOR', label: 'Switching Time Calc', icon: 'activity' }
     ]
   },
   {
@@ -13140,6 +13225,57 @@ export const XBRIDGES_CATEGORIES = [
     name: 'Annotations',
     blocks: [
       { type: 'Note', label: 'Note Text Block', icon: 'file-text' }
+    ]
+  },
+  {
+    name: 'Reference Frame Transformations',
+    blocks: [
+      { type: 'CLARKE_TRANSFORM', label: 'Clarke Transform', icon: 'refresh-ccw' },
+      { type: 'PARK_TRANSFORM', label: 'Park Transform', icon: 'refresh-ccw' },
+      { type: 'INVERSE_PARK', label: 'Inverse Park', icon: 'refresh-ccw' },
+      { type: 'INVERSE_CLARKE', label: 'Inverse Clarke', icon: 'refresh-ccw' }
+    ]
+  },
+  {
+    name: 'Robot Vacuum Learning',
+    blocks: [
+      { type: 'ROBOT_VACUUM_LIDAR_SENSOR', label: 'Lidar Sensor', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_ODOMETRY_SENSOR', label: 'Odometry Sensor', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_CLIFF_IR', label: 'Cliff IR Sensor', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_DUSTBIN_SENSOR', label: 'Dustbin Sensor', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_MOTOR_CURRENT', label: 'Motor Current', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_SENSOR_FUSION_EKF', label: 'EKF Localization', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_ROOM_SEGMENTATION', label: 'Room Segmentation', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_SEMANTIC_MAP', label: 'Semantic Zone Map', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_COVERAGE_PLANNER', label: 'Coverage Planner', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_ROOM_SCHEDULER', label: 'Room Scheduler', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_BATTERY_MONITOR', label: 'Battery Monitor', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_GOAL_MANAGER', label: 'Goal Manager', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_3D_VIZ_COLORS', label: '3D Visualization (Room Colors)', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_WAYPOINT_GEN', label: 'Waypoint Generation', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_COLLISION_AVOID', label: 'Collision Avoidance', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_SURFACE_ADAPTER', label: 'Surface Adapter', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_CLIFF_HALT', label: 'Cliff Halt Logic', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_VELOCITY_PID', label: 'Velocity PID', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_MODE_SUPERVISOR', label: 'Mode Supervisor', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_BUMPER_SENSOR', label: 'Bumper Sensor', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_SIDE_BRUSH', label: 'Side Brush Model', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_SUCTION_PWM', label: 'Variable Suction', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_TERRAIN_MODEL', label: 'Terrain Model', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_COLLISION_MESH', label: 'Collision Mesh', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_DOCK_BEACON', label: 'Dock Station (Beacon)', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_CAPACITY_THRESHOLD', label: 'Capacity Threshold', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_HALT_ALERT', label: 'Halt & Alert State', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_DOCK_DETECT', label: 'Dock Detect Logic', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_RESUME_SCHEDULER', label: 'Resume Scheduler', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_3D_SCENE_VIEW', label: '3D Scene View', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_FURNITURE_MESH', label: 'Furniture Mesh 3D', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_DIRT_DENSITY', label: 'Dirt Density Map', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_ROOM_ZONE_COLORS', label: 'Room Zone Colors', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_COVERAGE_HEATMAP', label: 'Coverage Heatmap', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_DOCK_ICON', label: 'Dock Station Icon', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_BATTERY_HUD', label: 'Battery HUD', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_DUSTBIN_HUD', label: 'Dustbin Level HUD', icon: 'graduation-cap' }
     ]
   },
   ...POWERTRAIN_CATEGORIES

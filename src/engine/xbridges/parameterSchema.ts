@@ -221,7 +221,7 @@ const EXTRA_SCHEMA: Record<string, Record<string, ParameterKind>> = {
     K_c: N, K_evap: N, K_f: N, K_h: N, K_loss: N, T_ambient: R, learning_rate: N, sampleTime,
     tau_c: P, tau_f: P, tau_h: P, tau_s: P, theta: R,
   },
-  FABRIC_HARMONIC_ANALYZER: { drum_mass: P },
+  FABRIC_HARMONIC_ANALYZER: { drum_mass: P, suspension_stiffness: N },
   BUS_CREATOR: { Inputs: int1 },
   DOE_MODULE: { maxLayers: int1, neuronsPerLayer: int1 },
   FIELD_WEAKENING: { Ki: R, Kp: R, id_max: R, id_min: R, v_max: R },
@@ -252,7 +252,29 @@ const EXTRA_SCHEMA: Record<string, Record<string, ParameterKind>> = {
   SVPWM_MODULATOR: { Ts: P },
   VF_SLIP_COMP: { rated_slip: N, v_f_ratio: R },
 
+
+  // DEM / CFD / power-electronics blocks that joined the canvas palette (XBV-007)
+  CFD_DEM_SURROGATE_LEARNER: { learning_rate: N },
+  CFD_SPH_WATER_SOLVER: { fluid_density: P, fluid_viscosity: N, num_fluid_particles: int1, sph_smoothing_length: P, sph_stiffness: N },
+  DC_VOLTAGE_SOURCE: { voltage: R },
+  DEM_BOND_FABRIC: { bond_stiffness: N },
+  DEM_CFD_COSIMULATION_INTERFACE: { drag_coeff: N },
+  DEM_DRUM: { drum_radius: P, pulsator_speed_ratio: R },
+  DEM_FLUID_COUPLING: { drag_coeff: N },
+  DEM_HERTZ_CONTACT: { stiffness_normal: N },
+  DEM_PARTICLE_SYSTEM: { particle_radius: P },
+  SWITCHING_TIME_CALCULATOR: { Ts: N },
+  THREE_PHASE_LOAD: { R: P },
+
   // Robot vacuum
+  ROBOT_VACUUM_BATTERY_MONITOR: { drain_rate: N, safety_margin: N },
+  ROBOT_VACUUM_CAPACITY_THRESHOLD: { limit: R },
+  ROBOT_VACUUM_CLIFF_IR: { cliff_threshold: R },
+  ROBOT_VACUUM_COLLISION_AVOID: { collision_dist: N },
+  ROBOT_VACUUM_LIDAR_SENSOR: { lidar_max_range: P, lidar_noise_std: N },
+  ROBOT_VACUUM_ODOMETRY_SENSOR: { wheel_radius: P },
+  ROBOT_VACUUM_SENSOR_FUSION_EKF: { filter_gain: N },
+  ROBOT_VACUUM_VELOCITY_PID: { Ki: R, Kp: R },
   ROBOT_VACUUM_BATTERY: { charge_rate: N, nominal_voltage: P, static_draw_A: N },
   ROBOT_VACUUM_COMM: { latency_ms: N, packet_loss_rate: N },
   ROBOT_VACUUM_CONTINUOUS_ENERGY: { safety_margin: N },
