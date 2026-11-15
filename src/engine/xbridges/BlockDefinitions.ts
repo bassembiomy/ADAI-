@@ -1229,19 +1229,6 @@ const sphForces = (
   return { ax, ay };
 };
 
-/**
- * Derivative of an object state given as an array (positional, in the order of the state's keys). The array also carries the
- * values under the state's key names (non-enumerable, so equality on the array is unchanged): the stiff solvers (ode14x,
- * ode23tb) read derivatives by key and would otherwise see zero for every state.
- */
-const xbKeyedDerivative = (state: any, d: number[]): number[] => {
-  if (state !== null && typeof state === 'object' && !Array.isArray(state)) {
-    const keys = Object.keys(state);
-    d.forEach((v, i) => { if (keys[i] !== undefined) Object.defineProperty(d, keys[i], { value: v, enumerable: false }); });
-  }
-  return d;
-};
-
 /** A rows x cols numeric grid, or null. */
 const xbGrid30 = (v: unknown): number[][] | null => {
   if (!Array.isArray(v) || v.length !== 30) return null;
@@ -6929,7 +6916,7 @@ return block;
                                                                                   const current_draw = Math.abs(I_L) + Math.abs(I_R) + static_draw_A;
                                                                                   dbat = -(current_draw / capacity_Ah) * 100 / 3600;
                                                                                 }
-                                                                                return xbKeyedDerivative(state, [dbat]);
+                                                                                return [dbat];
                                                                               }
                                                                             }),
 
@@ -8542,7 +8529,7 @@ return block;
                                                                                                     const domega = (motor_K * state.current - 0.02 * state.omega) / inertia;
                                                                                                     const dtheta_wheel = state.omega;
 
-                                                                                                    return xbKeyedDerivative(state, [dtheta_wheel, domega, dcurrent]);
+                                                                                                    return [dtheta_wheel, domega, dcurrent];
                                                                                                   }
                                                                                                 }),
 
@@ -8614,7 +8601,7 @@ return block;
                                                                                                       const next_y = state.y + dy * 0.08;
                                                                                                       const collided = checkCollisionTwin(next_x, next_y, 0.15, true);
 
-                                                                                                      return xbKeyedDerivative(state, [collided ? 0 : dx, collided ? 0 : dy, dtheta]);
+                                                                                                      return [collided ? 0 : dx, collided ? 0 : dy, dtheta];
                                                                                                     }
                                                                                                   }),
 
@@ -9414,7 +9401,7 @@ return block;
                                                                                                                       dint_errR = 0;
                                                                                                                     }
 
-                                                                                                                    return xbKeyedDerivative(state, [dint_errL, dint_errR]);
+                                                                                                                    return [dint_errL, dint_errR];
                                                                                                                   }
                                                                                                                 }),
 
