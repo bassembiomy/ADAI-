@@ -63,7 +63,42 @@ function all(){fitHmi();zoomers();}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',all);else all();
 window.addEventListener('load',all);window.addEventListener('resize',fitHmi);window.addEventListener('beforeprint',fitHmi);window.addEventListener('afterprint',fitHmi);
 if(window.matchMedia){var m=window.matchMedia('print');if(m.addEventListener)m.addEventListener('change',fitHmi);else if(m.addListener)m.addListener(fitHmi);}
-window.ADIA_REPORT_FIT=fitHmi;})();</script>`;
+window.ADIA_REPORT_FIT=fitHmi;})();
+(function(){
+var back=[],fwd=[],bar=null,hlTimer=null;
+function btn(a){return bar&&bar.querySelector('[data-nav="'+a+'"]');}
+function barH(){return bar?bar.getBoundingClientRect().height:0;}
+function labelHere(){var limit=barH()+16,best=null,hs=document.querySelectorAll('.report h1,.report h2,.report h3,.report h4,.report h5,.report h6');for(var i=0;i<hs.length;i++){if(hs[i].getBoundingClientRect().top<=limit)best=hs[i];else break;}var t=best&&(best.textContent||'').replace(/\\s+/g,' ').trim();return t||'start of report';}
+function cur(){return{x:window.scrollX,y:window.scrollY,label:labelHere()};}
+function here(){return cur();}
+function refresh(){var b=btn('back'),f=btn('forward');if(b){b.disabled=!back.length;b.title=back.length?'Back to: '+back[back.length-1].label:'Back';}if(f){f.disabled=!fwd.length;f.title=fwd.length?'Forward to: '+fwd[fwd.length-1].label:'Forward';}}
+function highlight(el){if(hlTimer){clearTimeout(hlTimer);hlTimer=null;}var old=document.querySelectorAll('.nav-target');for(var i=0;i<old.length;i++)old[i].classList.remove('nav-target');if(!el||!el.classList)return;el.classList.add('nav-target');hlTimer=setTimeout(function(){el.classList.remove('nav-target');hlTimer=null;},1800);}
+function goTo(el){var top=el.getBoundingClientRect().top+window.scrollY-barH()-8;window.scrollTo(window.scrollX,Math.max(0,top));highlight(el);}
+function follow(id){var el=document.getElementById(id);if(!el)return false;back.push(here());fwd.length=0;goTo(el);refresh();return true;}
+function go(from,to){if(!from.length)return;to.push(here());var p=from.pop();window.scrollTo(p.x,p.y);refresh();}
+function doBack(){go(back,fwd);}
+function doFwd(){go(fwd,back);}
+document.addEventListener('click',function(e){
+if(e.button!==0||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;
+var t=e.target;if(!t||!t.closest)return;
+var nb=t.closest('[data-nav]');
+if(nb&&bar&&bar.contains(nb)){if(nb.disabled)return;var k=nb.getAttribute('data-nav');
+if(k==='back')doBack();else if(k==='forward')doFwd();else if(k==='contents')follow('contents');else if(k==='top'){back.push(here());fwd.length=0;window.scrollTo(0,0);refresh();}
+return;}
+var a=t.closest('a');if(!a)return;
+var h=a.getAttribute('href')||a.getAttribute('xlink:href')||'';
+if(h.charAt(0)!=='#'||h.length<2)return;
+var id=h.slice(1);try{id=decodeURIComponent(id);}catch(_){}
+if(!document.getElementById(id))return;
+e.preventDefault();follow(id);
+});
+document.addEventListener('keydown',function(e){
+if(!e.altKey||e.ctrlKey||e.metaKey||e.shiftKey)return;
+if(e.key==='ArrowLeft'){e.preventDefault();doBack();}else if(e.key==='ArrowRight'){e.preventDefault();doFwd();}
+});
+function init(){bar=document.querySelector('.report-nav');refresh();}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+})();</script>`;
 const SEP = ' &#8250; ';
 const dash = '<span class="muted">&#8212;</span>';
 const NON_BLOCK_STEREOTYPES = new Set([
@@ -842,7 +877,7 @@ ${req?.rationale ? `<div class="req-spec-rationale"><em>Rationale:</em> ${esc(re
 </section>`;
 
   const front = `<section class="front">${control}
-<h2 class="first">Contents</h2>
+<h2 class="first" id="contents">Contents</h2>
 ${num.tableOfContents()}
 <h3>List of figures</h3>
 ${num.listOfFigures()}
@@ -852,7 +887,7 @@ ${num.listOfTables()}
 
   return `<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><title>${esc(input.projectName)} - System Architecture &amp; Design Report</title><style>${SYSTEM_REPORT_CSS}</style></head>
-<body><div class="report">
+<body><nav class="report-nav" aria-label="Report navigation"><button type="button" data-nav="back" title="Back" disabled>&#8592; Back</button><button type="button" data-nav="forward" title="Forward" disabled>Forward &#8594;</button><button type="button" data-nav="contents" title="Go to the table of contents">Contents</button><button type="button" data-nav="top" title="Go to the top of the report">Top</button></nav><div class="report">
 ${cover}
 ${front}
 ${body.join('\n')}

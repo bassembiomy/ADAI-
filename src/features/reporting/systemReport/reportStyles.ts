@@ -168,4 +168,13 @@ figure.report-figure.fig-full svg { max-width:none !important; }
   figure.report-figure.fig-full svg { max-width:100% !important; }
 }
 @media screen and (max-width: 800px) { .report { margin:0; padding:14px; } .cover { padding-left:10px; } }
+.report-nav { position:sticky; top:0; z-index:1000; display:flex; gap:6px; align-items:center; padding:6px 12px; background:var(--navy); border-bottom:2px solid var(--accent); box-shadow:0 1px 4px rgba(0,0,0,.25); font-family:'Segoe UI','Helvetica Neue',Arial,sans-serif; }
+.report-nav button { font:inherit; font-size:9.5pt; line-height:1.2; padding:3px 10px; color:#fff; background:transparent; border:1px solid rgba(255,255,255,.45); border-radius:3px; cursor:pointer; }
+.report-nav button:hover:not(:disabled) { background:var(--accent); border-color:var(--accent); }
+.report-nav button:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+.report-nav button:disabled { opacity:.4; cursor:default; }
+[id] { scroll-margin-top:56px; }
+@keyframes nav-flash { from { background-color:rgba(249,115,22,.35); } to { background-color:transparent; } }
+.nav-target { animation:nav-flash 1.8s ease-out; }
+@media print { .report-nav { display:none; } }
 `;
