@@ -2139,6 +2139,14 @@
    "gate": "V6",
    "status": "open",
    "summary": "A non-finite operand of ShiftLeft/ShiftRight (Inf, NaN) gives 0 without a numeric fault in the embedded path (JS ToInt32 / C helper), while the canvas raises a block error. Found by the WP-21 batch F2 executor and verifier."
+  },
+  {
+   "id": "XBV-173",
+   "plan_ref": "6 UI / help",
+   "severity": "S3",
+   "gate": "V8",
+   "status": "open",
+   "summary": "Help coverage is out of date after WP-21 UI and parameter changes: src/help/helpCoverage.test.ts fails on the live-UI fingerprint and on an unmapped reviewed feature (new inline controls such as the toolbar and panel editors), and src/help/blockReference.test.ts reports a parameter-interpretation gap for RL_Q_LEARNING_CONTROLLER (new 'seed' parameter, batch G). The fingerprint test already failed before WP-21 round 1 (cb974bc3). Batch K."
   }
  ],
  "blocks": {
