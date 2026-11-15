@@ -30,6 +30,7 @@ import { DEFAULT_XB_EMBEDDED_LIMITS } from './xbEmbeddedProfile';
 import type { XBTargetCapabilities } from './xbModel';
 import { adaptXBModel } from './xbModelAdapter';
 import { validateXBModel } from './xbSemanticValidator';
+import { validateSimulationOnly } from './smPlantRegion';
 
 const diagnostic = (
   code: string,
@@ -1309,6 +1310,7 @@ export const validateModelStructure = (
     ...validateInitialValues(model),
     ...validateFixedPoint(model),
     ...validateXBridges(model),
+    ...validateSimulationOnly(model),
   );
   return diagnostics;
 };

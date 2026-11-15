@@ -31,7 +31,7 @@ import type {
   SemanticState,
   SemanticVariable,
 } from './smSemanticModel';
-import { historyStorageUsage, SM_MAX_EXECUTIONS_PER_STEP, semanticEvents } from './smSemanticModel';
+import { codegenIr, historyStorageUsage, SM_MAX_EXECUTIONS_PER_STEP, semanticEvents } from './smSemanticModel';
 import type {
   SemanticTraceFrame,
   XBridgesTraceValue,
@@ -389,7 +389,50 @@ const observeFrame = (
   }),
 });
 
+/**
+ * The trace frame without the simulation-only (plant) part: the generated C contains only the
+ * controller, so a differential comparison against C uses this view of the interpreter trace.
+ */
+export const controllerTraceFrame = <F extends SemanticTraceFrame>(ir: SemanticModel, frame: F): F => {
+  const plantStates = new Set(Object.values(ir.states).filter((state) => state.simulationOnly === true).map((state) => state.id));
+  if (plantStates.size === 0) return frame;
+  const plantLayers = new Set(Object.values(ir.layers).filter((layer) => layer.parentStateId !== null && plantStates.has(layer.parentStateId)).map((layer) => layer.id));
+  const plantTransitions = new Set(Object.values(ir.transitions).filter((transition) => {
+    if (transition.sourceKind === 'state') return plantStates.has(transition.sourceStateId);
+    const layerId = ir.junctions[transition.sourceStateId]?.layerId;
+    return layerId !== undefined && plantLayers.has(layerId);
+  }).map((transition) => transition.id));
+  const plantLabels = new Set([...plantStates].map((id) => ir.states[id].enumName.replace(/^SM_ST_/, '')));
+  const plantAction = (action: string): boolean => {
+    const separator = action.indexOf(':');
+    const kind = action.slice(0, separator);
+    const subject = action.slice(separator + 1);
+    if (kind === 'transition') return plantTransitions.has(subject);
+    return (kind === 'entry' || kind === 'during' || kind === 'exit' || kind === 'xbridges') && plantLabels.has(subject);
+  };
+  const without = <T,>(record: Record<string, T>, drop: (key: string) => boolean): Record<string, T> =>
+    Object.fromEntries(Object.entries(record).filter(([key]) => !drop(key)));
+  return {
+    ...frame,
+    activeStateIds: frame.activeStateIds.filter((id) => !plantStates.has(id)),
+    actions: frame.actions.filter((action) => !plantAction(action)),
+    stateTimersMs: without(frame.stateTimersMs, (id) => plantStates.has(id)),
+    history: without(frame.history, (key) => plantLayers.has(key.replace(/:deep$/, ''))),
+    xBridges: without(frame.xBridges, (id) => plantStates.has(id)),
+  };
+};
+
 export const runInterpreterTrace = (
+  fixture: DifferentialFixture,
+  options: { controllerOnly?: boolean } = {},
+): SemanticTraceFrame[] => {
+  const frames = runFullInterpreterTrace(fixture);
+  if (options.controllerOnly !== true) return frames;
+  const ir = buildFixtureIr(fixture);
+  return frames.map((frame) => controllerTraceFrame(ir, frame));
+};
+
+const runFullInterpreterTrace = (
   fixture: DifferentialFixture,
 ): SemanticTraceFrame[] => {
   const ir = buildFixtureIr(fixture);
@@ -874,13 +917,13 @@ const renderFramePrinter = (ir: SemanticModel): string => {
 };
 
 export const renderDifferentialHarness = (
-  ir: SemanticModel,
+  fullIr: SemanticModel,
   steps: readonly DifferentialScenarioStep[],
-): string => applyCodePrefixToSource(
+): string => ((ir) => applyCodePrefixToSource(
   renderDifferentialHarnessDefaultPrefix(ir, steps),
   ir.codePrefix ?? DEFAULT_CODE_PREFIX,
   preservedNamesOf(ir),
-);
+))(codegenIr(fullIr));
 
 const renderDifferentialHarnessDefaultPrefix = (
   ir: SemanticModel,

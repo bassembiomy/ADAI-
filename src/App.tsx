@@ -17084,6 +17084,15 @@ const ADIA = () => {
                   </div>
 
                   <div className="flex items-center gap-2">
+                    <Checkbox data-help-feature="app-state-simulationOnly" data-help-source="src/App.tsx"
+                      checked={selectedState.simulationOnly === true}
+                      onCheckedChange={(checked) => updateState(selectedState.id, { simulationOnly: checked === true ? true : undefined })}
+                      id="simulationOnly"
+                    />
+                    <Label htmlFor="simulationOnly">Simulation only (plant)</Label>
+                  </div>
+
+                  <div className="flex items-center gap-2">
                     <Checkbox data-help-feature="app-state-isSafeState" data-help-source="src/App.tsx"
                       checked={selectedState.isSafeState || false}
                       onCheckedChange={(checked) => updateState(selectedState.id, { isSafeState: checked as boolean })}

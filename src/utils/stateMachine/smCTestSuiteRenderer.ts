@@ -1,5 +1,6 @@
 import { toCIdentifier } from './smExpressions';
 import type { SMCStandard } from './smModel';
+import { codegenIr } from './smSemanticModel';
 import type {
   SemanticIOMapping,
   SemanticModel,
@@ -336,10 +337,11 @@ int run_suite_${suite}(void)
 };
 
 export const renderSMCTestPackage = (
-  ir: SemanticModel,
+  fullIr: SemanticModel,
   manifest: SMTestManifest,
   options: CTestSuiteRenderOptions = {},
 ): readonly GeneratedCFile[] => {
+  const ir = codegenIr(fullIr);
   const standard = options.standard ?? ir.verification.cStandard;
   const files: GeneratedCFile[] = [];
 

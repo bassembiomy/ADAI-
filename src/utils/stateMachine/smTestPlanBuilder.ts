@@ -3,6 +3,7 @@ import type {
   ActionNode,
   ExpressionNode,
 } from './smExpressions';
+import { codegenIr } from './smSemanticModel';
 import type {
   SemanticIOMapping,
   SemanticLayer,
@@ -238,7 +239,8 @@ const buildOracleTransitionCases = (
   return result;
 };
 
-export const buildSMTestManifest = (ir: SemanticModel): SMTestManifest => {
+export const buildSMTestManifest = (fullIr: SemanticModel): SMTestManifest => {
+  const ir = codegenIr(fullIr);
   const modelId = (ir as any).id ?? (ir as any).modelId ?? 'state_machine';
   const modelHash = ir.modelHash ?? '0000000000000000';
 

@@ -1,4 +1,4 @@
-import type { SemanticModel } from './smSemanticModel';
+import { codegenIr, type SemanticModel } from './smSemanticModel';
 
 export interface GeneratedFile {
   name: string;
@@ -6,7 +6,8 @@ export interface GeneratedFile {
   overwritePolicy?: 'ALWAYS' | 'CREATE_IF_MISSING';
 }
 
-export function renderRuntimeFiles(ir: SemanticModel): GeneratedFile[] {
+export function renderRuntimeFiles(fullIr: SemanticModel): GeneratedFile[] {
+  const ir = codegenIr(fullIr);
   const configHeader = `#ifndef SM_CONFIG_H\n#define SM_CONFIG_H\n\n#include <stdint.h>\n#include <stdbool.h>\n\n#define SM_ENABLE_TRACE 1\n#define SM_ENABLE_ASSERTS 1\n#define SM_ENABLE_RUNTIME_CHECKS 1\n#define SM_ENABLE_COVERAGE 0\n#define SM_MAX_ACTIVE_STATES 16\n#define SM_TIMEBASE_UNIT_MS 1\n#define SM_XB_ABS_EPSILON (1.0e-7F)\n#define SM_XB_REL_EPSILON (1.0e-6F)\n\n#if defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 201112L)\n#define SM_STATIC_ASSERT(cond, msg) _Static_assert((cond), msg)\n#else\n#define SM_STATIC_ASSERT_GLUE_(a, b) a##b\n#define SM_STATIC_ASSERT_GLUE(a, b) SM_STATIC_ASSERT_GLUE_(a, b)\n#define SM_STATIC_ASSERT(cond, msg) typedef char SM_STATIC_ASSERT_GLUE(sm_static_assert_, __LINE__)[(cond) ? 1 : -1]\n#endif\n\nSM_STATIC_ASSERT(sizeof(float) == 4U, "Unsupported float storage width");\nSM_STATIC_ASSERT(sizeof(double) == 8U, "Unsupported double storage width");\n\n#endif /* SM_CONFIG_H */\n`;
 
   const versionHeader = `#ifndef SM_VERSION_H\n#define SM_VERSION_H\n\n#define SM_GENERATOR_VERSION "3.1"\n#define SM_MODEL_HASH "${ir.modelHash || '0000000000000000'}"\n#define SM_CODE_VERSION 0x030100\n\n#endif /* SM_VERSION_H */\n`;

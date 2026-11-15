@@ -36,6 +36,7 @@ import type {
 } from './smSemanticModel';
 import { fxStoreDouble, fxToDouble, isValidFixedPoint } from './smFixedPoint';
 import { adaptXBModel } from './xbModelAdapter';
+import { pruneSimulationOnlyModel, simulationOnlyStateIds } from './smPlantRegion';
 import { buildXBSemanticModel } from './xbSemanticBuilder';
 import {
   STATE_MACHINE_XB_TARGET_CAPABILITIES,
@@ -392,6 +393,7 @@ export const buildSemanticModel = (
       || layer.junctionIds.length > 0
       || layer.transitionIds.length > 0),
   };
+  const plantStateIds = simulationOnlyStateIds(model);
   const hierarchy = buildHierarchyIndex(codegenModel);
   const slots = allocateActiveSlots(hierarchy);
   const activityIndexByStateId = new Map(
@@ -457,6 +459,7 @@ export const buildSemanticModel = (
       activeSlot: slots.get(containingLayer.id) ?? -1,
       activityIndex: activityIndexByStateId.get(state.id)!,
       terminal: state.isTerminalState === true || state.isTerminal === true,
+      ...(plantStateIds.has(state.id) ? { simulationOnly: true } : {}),
       ancestorStateIds: ancestorsFromSelf(
         state.id,
         hierarchy.parentByStateId,
@@ -877,6 +880,19 @@ export const buildSemanticModel = (
     });
   }
 
+  let controller: SemanticModel | undefined;
+  if (plantStateIds.size > 0) {
+    const pruned = buildSemanticModel(pruneSimulationOnlyModel(model), options);
+    if (pruned.ir === undefined) {
+      diagnostics.push(...pruned.diagnostics.map((item) => ({
+        ...item,
+        message: `Controller without simulation-only regions: ${item.message}`,
+      })));
+      return { diagnostics, variableSymbols, stateSymbols };
+    }
+    controller = pruned.ir;
+  }
+
   return {
     diagnostics,
     variableSymbols,
@@ -902,6 +918,7 @@ export const buildSemanticModel = (
       ).length,
       traceableElements,
       events,
+      ...(controller !== undefined ? { controller } : {}),
       ...(externalFunctions !== undefined && externalFunctions.length > 0
         ? {
           externalFunctions: externalFunctions.map((def) => ({

@@ -71,6 +71,8 @@ export interface StateData {
   isTerminalState?: boolean;
   isTerminal?: boolean;
   isXBridges?: boolean;
+  /** Plant region: simulated only, never generated as C. Allowed on a region of the root parallel layer. */
+  simulationOnly?: boolean;
   /**
    * Legacy UI data is accepted only at the persistence boundary. Task 3 must
    * normalize it to `XBPersistedModelV1` before semantic validation or codegen.

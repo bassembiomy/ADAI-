@@ -80,6 +80,8 @@ export interface SemanticState {
   duringActions: ActionNode[];
   exitActions: ActionNode[];
   xBridges: XBSemanticModel | null;
+  /** True for a plant region and every state below it; absent otherwise. */
+  simulationOnly?: boolean;
 }
 
 export interface SemanticLayer {
@@ -219,6 +221,11 @@ export interface SemanticModel {
   fixedPointRounding?: FixedPointRounding;
   /** Undefined means 'latch'. 'monitor' counts out-of-tolerance ticks and runs them on logical time. */
   timingFaultPolicy?: TimingFaultPolicy;
+  /**
+   * Present only when the chart has simulation-only (plant) regions: the same chart with every
+   * plant subtree removed and indices renumbered. C generation, generated tests and the oracle use it.
+   */
+  controller?: SemanticModel;
 }
 
 export interface SemanticBuildResult {
@@ -314,3 +321,7 @@ export const historyStorageUsage = (
   const deep = kinds.includes('deep-history');
   return { shallow: deep || kinds.includes('history'), deep };
 };
+
+/** The chart that C generation, generated tests and the oracle work on: the controller without plant regions. */
+export const codegenIr = <T extends Pick<SemanticModel, 'controller'>>(ir: T): T =>
+  (ir?.controller ?? ir) as unknown as T;

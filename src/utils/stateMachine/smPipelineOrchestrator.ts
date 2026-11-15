@@ -1,6 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { SemanticModel } from './smSemanticModel';
+import { codegenIr, type SemanticModel } from './smSemanticModel';
 import type { SMVerificationVector } from './smReferenceInterpreter';
 import { runReferenceInterpreter } from './smReferenceInterpreter';
 import { generateCArtifacts } from './smCGenerator';
@@ -81,7 +81,9 @@ export async function runVerificationPipeline(
         adapters: createDefaultAdapters(),
       };
 
-  const { ir, outputDirectory, adapters } = request;
+  const { outputDirectory, adapters } = request;
+  // Plant (simulation-only) regions are never generated, tested or verified: work on the controller.
+  const ir = codegenIr(request.ir);
   const generatedAt = new Date().toISOString();
 
   if (!fs.existsSync(outputDirectory)) {

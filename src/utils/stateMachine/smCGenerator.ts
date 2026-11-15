@@ -22,6 +22,7 @@ import type {
   SemanticTransitionRoute,
 } from './smSemanticModel';
 import {
+  codegenIr,
   historyStorageUsage,
   routeExitStateIds,
   SM_EVENT_QUEUE_LEN,
@@ -2657,6 +2658,7 @@ export const generateCArtifacts = (
   ir: SemanticModel,
   options: CGeneratorOptions = {},
 ): CGeneratorResult => {
+  ir = codegenIr(ir);
   const generated = generateCArtifactsDefaultPrefix(ir, options);
   if (ir.codePrefix === undefined || ir.codePrefix === DEFAULT_CODE_PREFIX) return generated;
   return { ...generated, files: applyCodePrefix(generated.files, ir.codePrefix, preservedNamesOf(ir)) };

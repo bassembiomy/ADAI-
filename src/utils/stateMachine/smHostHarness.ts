@@ -1,6 +1,7 @@
-import type { SemanticModel } from './smSemanticModel';
+import { codegenIr, type SemanticModel } from './smSemanticModel';
 
-export const renderHostSmokeHarness = (ir: SemanticModel, vectorCount = 1): string => {
+export const renderHostSmokeHarness = (fullIr: SemanticModel, vectorCount = 1): string => {
+  const ir = codegenIr(fullIr);
   const stateKeys = Object.keys(ir.states);
   const firstEnum = stateKeys.length > 0 ? ir.states[stateKeys[0]].enumName : 'SM_ST_IDLE';
 

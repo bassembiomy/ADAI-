@@ -886,7 +886,9 @@ function executeLayer(
   const orderedChildIds = [...layer.children].sort((leftId, rightId) => {
     const left = context.runtime.ir.states[leftId];
     const right = context.runtime.ir.states[rightId];
-    return left.priority - right.priority || left.id.localeCompare(right.id);
+    // Plant (simulation-only) regions run first: they produce this tick's sensor values.
+    return Number(right.simulationOnly === true) - Number(left.simulationOnly === true)
+      || left.priority - right.priority || left.id.localeCompare(right.id);
   });
   for (const childId of orderedChildIds) {
     const child = context.runtime.ir.states[childId];
