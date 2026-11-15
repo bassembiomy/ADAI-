@@ -66,11 +66,16 @@ const simulate = (steps: DifferentialScenarioStep[]) =>
   runInterpreterTrace({ name: 'flat-priority', model: washingMachineChart(), steps } as DifferentialFixture);
 
 const run = (program: number, ticks: number, extra: (tick: number) => Partial<DifferentialScenarioStep> = () => ({})) =>
-  simulate(Array.from({ length: ticks }, (_, tick) => ({
-    kind: 'step' as const,
-    ...(tick === 0 ? { inputs: { program, door_closed: true }, events: ['START'] } : {}),
-    ...extra(tick),
-  }) as DifferentialScenarioStep));
+  simulate(Array.from({ length: ticks }, (_, tick) => {
+    const more = extra(tick);
+    const start = tick === 0 ? { program, door_closed: true } : {};
+    return {
+      kind: 'step' as const,
+      ...more,
+      ...(tick === 0 || more.inputs ? { inputs: { ...start, ...(more.inputs ?? {}) } } : {}),
+      ...(tick === 0 ? { events: ['START', ...(more.events ?? [])] } : {}),
+    } as DifferentialScenarioStep;
+  }));
 
 const checkSafety = (frames: Frame[]) => {
   frames.forEach((frame, tick) => {
