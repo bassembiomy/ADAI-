@@ -551,12 +551,25 @@ export const isXBDirectDiscreteIntegratorMethod = (method: unknown): boolean => 
   return m === 'backward_euler' || m === 'trapezoidal' || m === 'tustin';
 };
 
+const stateSpaceHasFeedthrough = (parameters: Record<string, unknown>): boolean => {
+  const flatten = (value: unknown): unknown[] => (Array.isArray(value) ? value.flatMap(flatten) : [value]);
+  if (parameters.D !== undefined) return flatten(parameters.D).some((entry) => !(Number(entry) === 0));
+  const numerator = flatten(parameters.numerator).map(Number);
+  const denominator = flatten(parameters.denominator).map(Number);
+  // Transfer function without matrices: D = b0 / a0, non-zero only when numerator and denominator have the same order.
+  return numerator.length > 0 && numerator.length >= denominator.length && Number(numerator[0]) !== 0;
+};
+
 /** Direct feedthrough of one node: the type's contract, except the discrete integrator which depends on its method. */
 export const xbNodeDirectFeedthrough = (
   node: { type: string; parameters?: Record<string, unknown> },
 ): boolean => {
   if (node.type === 'INTEGRATOR_DISCRETE') {
     return isXBDirectDiscreteIntegratorMethod(node.parameters?.method);
+  }
+  // y = C x + D u: direct feedthrough only when D is not zero (Simulink State-Space / Transfer Fcn).
+  if (node.type === 'STATE_SPACE' || node.type === 'DISCRETE_TRANSFER_FUNCTION') {
+    return stateSpaceHasFeedthrough(node.parameters ?? {});
   }
   // Delay with delay length 0 passes its input straight through (Simulink Delay, XBV-151).
   if (node.type === 'DELAY') {

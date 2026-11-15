@@ -588,13 +588,13 @@ export const validateXBModel = (
       ));
     }
     if (node.type === 'STATE_SPACE') {
-      // XBV-093: a continuous STATE_SPACE with an explicit positive sampleTime is held, like the canvas (no dynamics);
-      // a truly continuous one (sampleTime <= 0 or absent) is integrated by the solver stages in the interpreter and the
-      // generated C but stays refused here: the F10 limit test in xbCodeParity.test.ts pins XB_DISCRETE_REPRESENTATION_REQUIRED.
-      if (parameters.representation !== 'discrete' && (parameters.representation !== 'continuous' || hasContinuousStates(node))) {
+      // XBV-093: a continuous STATE_SPACE (sampleTime <= 0) is integrated by the solver stages (euler, rk4; the discrete
+      // solver is refused by XB_DISCRETE_SOLVER_CONTINUOUS_STATE); with an explicit positive sampleTime it holds its
+      // state, like the canvas. A missing representation is not guessed.
+      if (parameters.representation !== 'discrete' && parameters.representation !== 'continuous') {
         diagnostics.push(diagnostic(
           'XB_DISCRETE_REPRESENTATION_REQUIRED',
-          `STATE_SPACE '${node.id}' requires representation: 'discrete' for embedded generation.`,
+          `STATE_SPACE '${node.id}' requires representation: 'discrete' or 'continuous' for embedded generation.`,
           node.id,
         ));
       }

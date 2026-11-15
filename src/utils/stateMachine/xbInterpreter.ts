@@ -33,6 +33,8 @@ export interface XBRuntime {
   operationFaults: Record<string, { active: boolean; fault: XBNumericFault | null }>;
   numericFaults: Array<{ operationId: string; fault: XBNumericFault }>;
   simTime?: number;
+  /** Inputs of the mode-held blocks (SWITCH, SATURATION, DEADZONE) at the major step, set during the rk4 minor stages. */
+  heldInputs?: ReadonlyMap<string, readonly (readonly XBScalar[])[]>;
 }
 
 interface XBSnapshot {
@@ -296,11 +298,16 @@ const recordOperationFault = (
     if (contract.fallback === 'previous-value') continue;
     // D11: an out-of-domain float result is published as the non-finite value (NaN, like Simulink / libm) and raises the
     // fault; it is not replaced by a fallback 0.
-    // VectorDiv under the signal-only policy keeps the documented safe-zero fallback (the state machine keeps running on
-    // finite values); under 'escalate' it publishes the IEEE result like every other block (XBV-160).
-    const vectorDivSafeZero = operation.type === 'VectorDiv' && runtime.ir.policy.numericFault === 'signal-only';
-    if (!vectorDivSafeZero && (fault === 'non-finite' || (fault === 'division-by-zero' && operation.type === 'VectorDiv')) && (signal.numericType.kind === 'float32' || signal.numericType.kind === 'float64'
-      || signal.numericType.kind === 'float16' || signal.numericType.kind === 'float')) continue;
+    // D11 under every fault policy: a float result of VectorDiv by zero publishes the IEEE value (Inf / NaN) and a singular
+    // MatrixSolve publishes NaN, both with the fault raised (XBV-160); only integer / fixed-point outputs, which cannot hold
+    // a non-finite value, fall back to the default value.
+    const isFloatSignal = signal.numericType.kind === 'float32' || signal.numericType.kind === 'float64'
+      || signal.numericType.kind === 'float16' || signal.numericType.kind === 'float';
+    if (isFloatSignal && fault === 'solve-pivot-failure') {
+      runtime.signals[signalId] = Array.from({ length: signal.elementCount }, () => Number.NaN);
+      continue;
+    }
+    if (isFloatSignal && (fault === 'non-finite' || (fault === 'division-by-zero' && operation.type === 'VectorDiv'))) continue;
     runtime.signals[signalId] = Array.from(
       { length: signal.elementCount },
       () => defaultValue(signal.numericType),
@@ -807,7 +814,10 @@ const evaluateDirectOperation = (
         return idx >= 0 ? inputs[idx] : undefined;
       };
       const ctrlSignal = getSignal(['ctrl', 'control', 'cond', 'condition']);
-      const ctrl = Number((ctrlSignal ?? (operation.inputSignalIds.length === 3 ? inputs[0] : inputs[1]))?.[0] ?? 0);
+      // The control decision is a mode: decided at the major step and held during the rk4 minor stages (Simulink Switch).
+      const heldInputs = runtime.heldInputs?.get(operation.id);
+      const ctrlIndex = ctrlSignal === undefined ? (operation.inputSignalIds.length === 3 ? 0 : 1) : inputs.indexOf(ctrlSignal);
+      const ctrl = Number((heldInputs?.[ctrlIndex] ?? ctrlSignal ?? (operation.inputSignalIds.length === 3 ? inputs[0] : inputs[1]))?.[0] ?? 0);
       const u1 = getSignal(['u1', 'in1', 'pass', 'u_true']) ?? (ctrlSignal === inputs[0] ? inputs[1] : inputs[0]) ?? [0];
       const u2 = getSignal(['u2', 'in2', 'fail', 'u_false']) ?? inputs[2] ?? [0];
       const threshold = Number(parameter(operation, ['threshold', 'Threshold'], 0));
@@ -888,13 +898,16 @@ const evaluateDirectOperation = (
       const lowerArr = Array.isArray(lower) ? lower.map(Number) : [Number(lower)];
       const upperArr = Array.isArray(upper) ? upper.map(Number) : [Number(upper)];
 
+      const held = runtime.heldInputs?.get(operation.id)?.[0];
       const res = inputs0.map((uVal, idx) => {
         const u = Number(uVal);
         if (Number.isNaN(u)) return NaN;
         const l = lowerArr[idx % lowerArr.length];
         const h = upperArr[idx % upperArr.length];
-        if (u > h) return h;
-        if (u < l) return l;
+        // The region (above, below, linear) is a mode held during the minor stages; the output follows the stage input.
+        const m = held === undefined ? u : Number(held[idx % held.length]);
+        if (m > h) return h;
+        if (m < l) return l;
         return u;
       });
       return [res];
@@ -906,13 +919,15 @@ const evaluateDirectOperation = (
       const lowerArr = Array.isArray(lower) ? lower.map(Number) : [Number(lower)];
       const upperArr = Array.isArray(upper) ? upper.map(Number) : [Number(upper)];
 
+      const held = runtime.heldInputs?.get(operation.id)?.[0];
       const res = inputs0.map((uVal, idx) => {
         const u = Number(uVal);
         if (Number.isNaN(u)) return NaN;
         const l = lowerArr[idx % lowerArr.length];
         const h = upperArr[idx % upperArr.length];
-        if (u > h) return u - h;
-        if (u < l) return u - l;
+        const m = held === undefined ? u : Number(held[idx % held.length]);
+        if (m > h) return u - h;
+        if (m < l) return u - l;
         return 0;
       });
       return [res];
@@ -2333,6 +2348,8 @@ const statefulUpdate = (
 };
 
 /** Blocks whose output is a function of a mode decided at the major step: Step (time reached), Relay (on / off). */
+/** Blocks whose region / side is a mode decided from their input at the major step. */
+const XB_MODE_HELD_INPUT_TYPES: ReadonlySet<string> = new Set(['SWITCH', 'SATURATION', 'DEADZONE']);
 const XB_MODE_HELD_TYPES: ReadonlySet<string> = new Set(['Step', 'RELAY']);
 
 const executeDirectOperations = (
@@ -2555,6 +2572,15 @@ const updateContinuousState = (
   } else {
     // Minor stages see the stage time (t + h/2, t + h/2, t + h) like the canvas solver; t_k is restored afterwards.
     const tK = runtime.simTime ?? 0;
+    // Mode-held blocks keep the mode decided at the major step during the minor stages (Simulink; canvas heldMode).
+    const heldInputs = new Map<string, readonly (readonly XBScalar[])[]>();
+    for (const operationId of runtime.ir.executionOrder) {
+      const operation = runtime.ir.operations[operationId];
+      if (operation !== undefined && XB_MODE_HELD_INPUT_TYPES.has(operation.type)) {
+        heldInputs.set(operation.id, operation.inputSignalIds.map((id) => [...signalValues(runtime, id)]));
+      }
+    }
+    runtime.heldInputs = heldInputs;
     writeContinuousStage(runtime, slots, k1, step / 2, faults, snapshots);
     runtime.simTime = tK + step / 2;
     executeDirectOperations(runtime, faults, true, true);
@@ -2566,6 +2592,7 @@ const updateContinuousState = (
     runtime.simTime = tK + step;
     executeDirectOperations(runtime, faults, true, true);
     const k4 = continuousDerivatives(runtime, slots);
+    runtime.heldInputs = undefined;
     runtime.simTime = tK;
     slots.forEach((slot, index) => {
       if (runtime.operationFaults[slot.operation.id]?.active) return;

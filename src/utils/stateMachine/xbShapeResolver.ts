@@ -741,7 +741,8 @@ const parseConstantValueShape = (node: XBNodeV1): SemanticShape => {
       if (!shapesAreEqual(srcShape, tgtShape)) {
         // Exception: MUX allows scalar/vector inputs to combine, so target is handled by MUX rule
         const tgtNode = nodesById.get(edge.targetNodeId);
-        const is1DKalmanPort = (tgtNode?.type === 'KALMAN_FILTER' || tgtNode?.type === 'EXTENDED_KALMAN_FILTER') &&
+        const is1DKalmanPort = (tgtNode?.type === 'KALMAN_FILTER' || tgtNode?.type === 'EXTENDED_KALMAN_FILTER'
+          || tgtNode?.type === 'STATE_SPACE' || tgtNode?.type === 'DISCRETE_TRANSFER_FUNCTION') &&
           srcShape.elementCount === 1 && tgtShape.elementCount === 1;
 
         if (tgtNode?.type !== 'MUX' && tgtNode?.type !== 'DEMUX' && !is1DKalmanPort) {

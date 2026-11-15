@@ -592,11 +592,9 @@ const renderSignalElementWrite = (
   const valueName = index === '0U'
     ? `xb_value_${operationIndex}_${outputIndex}`
     : `xb_value_${operationIndex}_${outputIndex}_${toCIdentifier(signalId)}_${toCIdentifier(index)}`;
-  // Mapped state-machine inputs keep the documented safe-zero fallback, and so does VectorDiv by zero under the signal-only policy
-  // (the state machine keeps running on finite values); every other block output - VectorDiv under 'escalate' included, XBV-160 -
-  // publishes the IEEE non-finite values and raises the numeric fault (D11).
-  const boundaryInput = operation.id.startsWith('mapping_in_')
-    || (operation.type === 'VectorDiv' && state.xBridges!.policy.numericFault === 'signal-only');
+  // Mapped state-machine inputs keep the documented safe-zero fallback (docs/XBRIDGES_EMBEDDED_CODEGEN.md); every block output -
+  // VectorDiv by zero under every fault policy included, XBV-160 - publishes the IEEE non-finite values and raises the numeric fault (D11).
+  const boundaryInput = operation.id.startsWith('mapping_in_');
   const errorField = layout.errorFields.get(operation.id);
   const faultLines = [
     ...(errorField === undefined ? [] : [`            instance->${member}.${errorField} = true;`]),
@@ -752,11 +750,9 @@ const renderSignalWrite = (
   }
   const resultName = `xb_result_${operationIndex}_${outputIndex}_${toCIdentifier(signalId)}`;
   const valueName = `xb_value_${operationIndex}_${outputIndex}_${toCIdentifier(signalId)}`;
-  // Mapped state-machine inputs keep the documented safe-zero fallback, and so does VectorDiv by zero under the signal-only policy
-  // (the state machine keeps running on finite values); every other block output - VectorDiv under 'escalate' included, XBV-160 -
-  // publishes the IEEE non-finite values and raises the numeric fault (D11).
-  const boundaryInput = operation.id.startsWith('mapping_in_')
-    || (operation.type === 'VectorDiv' && state.xBridges!.policy.numericFault === 'signal-only');
+  // Mapped state-machine inputs keep the documented safe-zero fallback (docs/XBRIDGES_EMBEDDED_CODEGEN.md); every block output -
+  // VectorDiv by zero under every fault policy included, XBV-160 - publishes the IEEE non-finite values and raises the numeric fault (D11).
+  const boundaryInput = operation.id.startsWith('mapping_in_');
   const errorField = layout.errorFields.get(operation.id);
   const faultLines = [
     ...(errorField === undefined ? [] : [`        instance->${member}.${errorField} = true;`]),
@@ -1111,19 +1107,51 @@ const emitElementwise = (
   ];
 };
 
-const emitSaturation = emitElementwise((inputs, operation) => {
+/**
+ * True while the direct blocks are rendered for an rk4 minor stage. SWITCH, SATURATION and DEADZONE then take their mode
+ * (side, region) from the snapshot of their input at the major step (`xb_held_<operation index>`) and the data from the
+ * stage input, like the canvas heldMode (Simulink block modes).
+ */
+let heldModeStage = false;
+const heldSnapshotName = (operationIndex: number): string => `xb_held_${operationIndex}`;
+
+const heldRegionEmitter = (
+  expression: (u: string, held: string, operation: XBSemanticOperation) => string,
+): OperationEmitter => (state, operation, operationIndex, layout, member) => {
+  const outputId = operation.outputSignalIds[0];
+  const inputId = operation.inputSignalIds[0];
+  if (outputId === undefined || inputId === undefined) return [];
+  const count = requireSignal(state, outputId).elementCount;
+  const single = requireSignal(state, inputId).elementCount === 1;
+  const index = single ? '0U' : 'xb_i';
+  return [
+    '    {',
+    `        for (uint32_t xb_i = 0U; xb_i < ${count}U; ++xb_i) {`,
+    ...renderSignalElementWrite(state, operation, operationIndex, 0, outputId, 'xb_i',
+      expression(signalElementRealExpression(state, inputId, layout, member, index), `${heldSnapshotName(operationIndex)}[${index}]`, operation),
+      layout, member),
+    '        }',
+    '    }',
+  ];
+};
+
+const saturationExpression = (u: string, region: string, operation: XBSemanticOperation): string => {
   const upper = cNumber(scalarParameter(operation, ['upperLimit', 'upper'], 1));
   const lower = cNumber(scalarParameter(operation, ['lowerLimit', 'lower'], -1));
-  const u = inputs[0] ?? '0.0';
-  return `((${u} > ${upper}) ? ${upper} : ((${u} < ${lower}) ? ${lower} : ${u}))`;
-});
+  return `((${region} > ${upper}) ? ${upper} : ((${region} < ${lower}) ? ${lower} : ${u}))`;
+};
+const emitSaturationCurrent = emitElementwise((inputs, operation) => saturationExpression(inputs[0] ?? '0.0', inputs[0] ?? '0.0', operation));
+const emitSaturationHeld = heldRegionEmitter(saturationExpression);
+const emitSaturation: OperationEmitter = (...args) => (heldModeStage ? emitSaturationHeld : emitSaturationCurrent)(...args);
 
-const emitDeadzone = emitElementwise((inputs, operation) => {
+const deadzoneExpression = (u: string, region: string, operation: XBSemanticOperation): string => {
   const upper = cNumber(scalarParameter(operation, ['upperLimit', 'start'], 0.5));
   const lower = cNumber(scalarParameter(operation, ['lowerLimit', 'end'], -0.5));
-  const u = inputs[0] ?? '0.0';
-  return `(isnan(${u}) ? ${u} : ((${u} > ${upper}) ? (${u} - ${upper}) : ((${u} < ${lower}) ? (${u} - ${lower}) : 0.0)))`;
-});
+  return `(isnan(${u}) ? ${u} : ((${region} > ${upper}) ? (${u} - ${upper}) : ((${region} < ${lower}) ? (${u} - ${lower}) : 0.0)))`;
+};
+const emitDeadzoneCurrent = emitElementwise((inputs, operation) => deadzoneExpression(inputs[0] ?? '0.0', inputs[0] ?? '0.0', operation));
+const emitDeadzoneHeld = heldRegionEmitter(deadzoneExpression);
+const emitDeadzone: OperationEmitter = (...args) => (heldModeStage ? emitDeadzoneHeld : emitDeadzoneCurrent)(...args);
 
 const emitVectorElementwiseSum: OperationEmitter = (...args) =>
   emitElementwise((inputs, operation) => {
@@ -1484,7 +1512,7 @@ const emitMatrixSolve: OperationEmitter = (state, operation, operationIndex, lay
     '        if (xb_pivot_failed) {', ...pivotFault, '        } else {',
     `            for (int32_t xb_row = ${matrix.rows - 1}; xb_row >= 0; --xb_row) for (uint32_t xb_column = 0U; xb_column < ${right.columns}U; ++xb_column) { double xb_value = xb_solve_b[(uint32_t)xb_row * SM_XB_MAX_SOLVE_DIMENSION + xb_column]; for (uint32_t xb_k = (uint32_t)xb_row + 1U; xb_k < ${matrix.rows}U; ++xb_k) xb_value -= xb_solve_a[(uint32_t)xb_row * SM_XB_MAX_SOLVE_DIMENSION + xb_k] * xb_solve_b[xb_k * SM_XB_MAX_SOLVE_DIMENSION + xb_column]; xb_solve_b[(uint32_t)xb_row * SM_XB_MAX_SOLVE_DIMENSION + xb_column] = xb_value / xb_solve_a[(uint32_t)xb_row * SM_XB_MAX_SOLVE_DIMENSION + (uint32_t)xb_row]; }`, '        }',
     `        for (uint32_t xb_row = 0U; xb_row < ${output.rows}U; ++xb_row) for (uint32_t xb_column = 0U; xb_column < ${output.columns}U; ++xb_column) {`,
-    ...renderSignalElementWrite(state, operation, operationIndex, 0, outputId, `xb_row * ${output.columns}U + xb_column`, `(xb_pivot_failed ? 0.0 : xb_solve_b[xb_row * SM_XB_MAX_SOLVE_DIMENSION + xb_column])`, layout, member).map((line) => `    ${line}`), '        }', '    }'];
+    ...renderSignalElementWrite(state, operation, operationIndex, 0, outputId, `xb_row * ${output.columns}U + xb_column`, `(xb_pivot_failed ? ((double)NAN) : xb_solve_b[xb_row * SM_XB_MAX_SOLVE_DIMENSION + xb_column])`, layout, member).map((line) => `    ${line}`), '        }', '    }'];
 };
 
 const resolveInputExpression = (
@@ -1722,8 +1750,17 @@ const switchExpression = (control: string, first: string, second: string, operat
     : (criteriaValue === '>' || criteriaValue === 'u2 > Threshold' ? '>' : '>=');
   return `((${control}) ${criteria} ${threshold} ? (${first}) : (${second}))`;
 };
-const emitSwitch: OperationEmitter = (...args) =>
+const emitSwitchCurrent: OperationEmitter = (...args) =>
   emitSelector(emitSwitchScalar, 1, switchExpression, [0, 2])(...args);
+// Held side: the control decision comes from the snapshot of the control input at the major step.
+const emitSwitchHeld: OperationEmitter = (state, operation, operationIndex, layout, member) => {
+  const held = `${heldSnapshotName(operationIndex)}[0]`;
+  const scalar: OperationEmitter = (...args) => emitSingleOutput((inputs, op) =>
+    switchExpression(held, inputs[0] ?? '0.0', inputs[2] ?? '0.0', op))(...args);
+  return emitSelector(scalar, 1, (_control, first, second, op) => switchExpression(held, first, second, op), [0, 2])(
+    state, operation, operationIndex, layout, member);
+};
+const emitSwitch: OperationEmitter = (...args) => (heldModeStage ? emitSwitchHeld : emitSwitchCurrent)(...args);
 
 const ifElseExpression = (cond: string, trueVal: string, falseVal: string, operation: XBSemanticOperation): string => {
   const thresholdParam = operation.parameters.threshold ?? operation.parameters.Threshold;
@@ -3541,17 +3578,29 @@ const renderDirectEvaluation = (
   }
   // Discontinuous blocks decide their mode at major steps and hold it during the solver stages (Simulink, XBV-164).
   if (minorStage && (operation.type === 'Step' || operation.type === 'RELAY')) return [];
-  if (operation.stateful && operation.type !== 'RELAY') return [];
+  // STATE_SPACE / DISCRETE_TRANSFER_FUNCTION with D != 0 are direct feedthrough: y = C x + D u uses the input of this tick.
+  const stateSpaceFeedthrough = operation.stateful && operation.directFeedthrough
+    && (operation.type === 'STATE_SPACE' || operation.type === 'DISCRETE_TRANSFER_FUNCTION');
+  if (operation.stateful && operation.type !== 'RELAY' && !stateSpaceFeedthrough) return [];
   const errorField = layout.errorFields.get(operation.id);
-  const emitted = [
-    ...operationEmitter(operation)(
-    state,
-    operation,
-    operationIndex,
-    layout,
-    member,
-  ),
-  ];
+  heldModeStage = minorStage;
+  let emitted: string[];
+  try {
+    emitted = stateSpaceFeedthrough
+      ? renderTransactionalStateOutputs(
+        state, operation, renderStateOutputs(state, operation, operationIndex, layout, member), layout, member)
+      : [
+        ...operationEmitter(operation)(
+          state,
+          operation,
+          operationIndex,
+          layout,
+          member,
+        ),
+      ];
+  } finally {
+    heldModeStage = false;
+  }
   const guarded = errorField === undefined ? emitted : [
     `    if (!instance->${member}.${errorField}) {`,
     ...emitted.map((line) => `    ${line}`),
@@ -4496,6 +4545,21 @@ const renderContinuousStateUpdates = (
       `    ${rkName(`xb_rk_${label}`, entry)} = ${derivative(entry)};`),
     '    }',
   ];
+  // Mode-held blocks (SWITCH side, SATURATION / DEADZONE region): snapshot of their input at the major step.
+  const heldSnapshots = xb.executionOrder.flatMap((operationId, operationIndex) => {
+    const operation = xb.operations[operationId];
+    if (operation === undefined || !['SWITCH', 'SATURATION', 'DEADZONE'].includes(operation.type)) return [];
+    const inputId = operation.type === 'SWITCH' ? operation.inputSignalIds[1] : operation.inputSignalIds[0];
+    if (inputId === undefined) return [];
+    const count = operation.type === 'SWITCH' ? 1 : requireSignal(state, inputId).elementCount;
+    const name = heldSnapshotName(operationIndex);
+    return [
+      `    double ${name}[${count}];`,
+      `    for (uint32_t xb_i = 0U; xb_i < ${count}U; ++xb_i) {`,
+      `        ${name}[xb_i] = ${signalElementRealExpression(state, inputId, layout, member, count === 1 ? '0U' : 'xb_i')};`,
+      '    }',
+    ];
+  });
   const k1 = slots.map((entry) =>
     `    const double ${rkName('xb_rk_k1', entry)} = ${derivative(entry)};`);
   const laterStages = slots.flatMap((entry) => [
@@ -4525,6 +4589,7 @@ const renderContinuousStateUpdates = (
   ];
   return [
     ...baseLines,
+    ...heldSnapshots,
     ...k1,
     ...laterStages,
     ...(timed ? [`    const double xb_rk_t0 = ${timeMember};`] : []),
@@ -4612,7 +4677,8 @@ const renderSolverSubstep = (
     ...renderDirectEvaluation(state, xb, layout, member).map((line) => `    ${line}`),
     ...xb.executionOrder.flatMap((operationId, operationIndex) => {
       const operation = xb.operations[operationId];
-      if (!operation?.stateful || !operation.directFeedthrough || operation.type === 'RELAY') return [];
+      if (!operation?.stateful || !operation.directFeedthrough || operation.type === 'RELAY'
+        || operation.type === 'STATE_SPACE' || operation.type === 'DISCRETE_TRANSFER_FUNCTION') return [];
       const outputs = renderTransactionalStateAndOutputs(
         state,
         operation,
