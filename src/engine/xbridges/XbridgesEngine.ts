@@ -22,6 +22,16 @@ export class XbridgesEngine {
     return this.diagnostics.some(d => d.severity === 'error' && d.code.startsWith('STIFF_SOLVER_'));
   }
 
+  /** Snapshot of the fault state; a variable-step solver uses it to discard a fault raised only at a rejected trial point. */
+  public faultMark(): { fatal: boolean; count: number } {
+    return { fatal: this.fatal, count: this.diagnostics.length };
+  }
+  /** Restores the fault state of `faultMark` (the trial point is rejected, so its faults are not those of the run). */
+  public rollbackFaults(mark: { fatal: boolean; count: number }) {
+    this.fatal = mark.fatal;
+    this.diagnostics.length = Math.min(this.diagnostics.length, mark.count);
+  }
+
   /** Mode of discontinuous blocks decided at the last major step (kept during minor steps). */
   private heldModes = new Map<string, any>();
   /** True while bracketZeroCrossing probes: those evaluations are treated as major steps. */

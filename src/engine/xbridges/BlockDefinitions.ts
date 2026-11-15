@@ -2356,17 +2356,13 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
   }),
 
   'Clock': (id, params) => ({
-    id, type: 'Clock', params: { freq: params.freq || 1 },
+    id, type: 'Clock', params: {},
     inputs: [],
     outputs: [createPort('clk', 'CLK', 'output')],
     icon: 'zap',
-    equation: 'Clock = (t % T < T/2) ? 1 : 0',
-    description: 'Generates a periodic square wave signal (1/0) at a specified frequency.',
-    execute: (ins, p, state, time) => {
-      const period = 1 / p.freq;
-      const clk = (time % period) < (period / 2) ? 1 : 0;
-      return { outputs: [clk] };
-    }
+    equation: 'Clock = t',
+    description: 'Outputs the current simulation time (Simulink Clock). For a periodic square wave use the Waveform Generator with type Square.',
+    execute: (ins, p, state, time) => ({ outputs: [time] })
   }),
 
   'WaveformGen': (id, params) => ({
@@ -2696,7 +2692,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     const numInputs = params?.numInputs || 2;
     return {
       id, type: 'MatrixConcat',
-      params: { axis: params.axis ?? 0, numInputs, ...params },
+      params: { axis: params.axis ?? 0, mode: params.mode ?? 'vector', numInputs, ...params },
       allowDynamicInputs: true,
       inputs: Array.from({ length: numInputs }, (_, i) => createPort(`in${i + 1}`, `In${i + 1}`, 'input')),
       outputs: [createPort('out', 'Out', 'output')],
@@ -2705,38 +2701,44 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
         if (axis !== 0 && axis !== 1) return { outputs: [NaN], error: `MatrixConcat: axis must be 0 (vertical) or 1 (horizontal), got ${String(p.axis)}.` };
         if (ins.length === 0) return { outputs: [[]] };
         // Simulink Matrix Concatenate: a scalar is a 1x1 matrix. Next to a matrix a 1-D vector is a row for vertical
-        // (axis 0) and a column for horizontal (axis 1) concatenation. Only 1-D vectors and scalars: axis 0 joins them
-        // into a longer vector, axis 1 makes them columns. Sizes that do not match are a block error, never a ragged array.
+        // (axis 0) and a column for horizontal (axis 1) concatenation. Multidimensional mode promotes scalars and 1-D vectors
+        // that way; vector mode joins them into one 1-D vector. Sizes that do not match are a block error, never a ragged array.
         const is2D = (v: any) => Array.isArray(v) && v.length > 0 && Array.isArray(v[0]);
-        const matrixMode = ins.some(is2D) || ins.every((v) => !Array.isArray(v));
-        if (!matrixMode && axis === 0) {
+        const mode = p.mode ?? 'vector';
+        if (mode !== 'vector' && mode !== 'multidimensional') return { outputs: [NaN], error: `MatrixConcat: mode must be 'vector' or 'multidimensional', got ${String(p.mode)}.` };
+        // Vector mode (Simulink default): scalars and 1-D vectors join into one 1-D vector on either axis.
+        if (mode === 'vector' && !ins.some(is2D)) {
           return { outputs: [ins.reduce((acc: any[], v: any) => acc.concat(Array.isArray(v) ? v : [v]), [])] };
         }
+        try {
         const mats: any[][][] = ins.map((v: any, k: number) => {
-          let m: any[][];
-          if (!Array.isArray(v)) m = [[v]];
-          else if (is2D(v)) m = v;
-          else m = axis === 0 ? [v] : v.map((x: any) => [x]);
-          if (m.some((row) => !Array.isArray(row) || row.length !== m[0].length)) {
-            throw new Error(`input ${k + 1} is not a rectangular matrix.`);
+            let m: any[][];
+            if (!Array.isArray(v)) m = [[v]];
+            else if (is2D(v)) m = v;
+            else m = axis === 0 ? [v] : v.map((x: any) => [x]);
+            if (m.some((row) => !Array.isArray(row) || row.length !== m[0].length)) {
+              throw new Error(`input ${k + 1} is not a rectangular matrix.`);
+            }
+            return m;
+          });
+          const result: any[][] = [];
+          if (axis === 0) {
+            const width = mats[0][0].length;
+            mats.forEach((m, k) => {
+              if (m[0].length !== width) throw new Error(`dimension mismatch: input ${k + 1} has ${m[0].length} columns, expected ${width} for vertical concatenation.`);
+              m.forEach((row) => result.push([...row]));
+            });
+          } else {
+            const height = mats[0].length;
+            mats.forEach((m, k) => {
+              if (m.length !== height) throw new Error(`dimension mismatch: input ${k + 1} has ${m.length} rows, expected ${height} for horizontal concatenation.`);
+            });
+            for (let r = 0; r < height; r++) result.push(mats.flatMap((m) => m[r]));
           }
-          return m;
-        });
-        const result: any[][] = [];
-        if (axis === 0) {
-          const width = mats[0][0].length;
-          mats.forEach((m, k) => {
-            if (m[0].length !== width) throw new Error(`dimension mismatch: input ${k + 1} has ${m[0].length} columns, expected ${width} for vertical concatenation.`);
-            m.forEach((row) => result.push([...row]));
-          });
-        } else {
-          const height = mats[0].length;
-          mats.forEach((m, k) => {
-            if (m.length !== height) throw new Error(`dimension mismatch: input ${k + 1} has ${m.length} rows, expected ${height} for horizontal concatenation.`);
-          });
-          for (let r = 0; r < height; r++) result.push(mats.flatMap((m) => m[r]));
+          return { outputs: [result] };
+        } catch (e) {
+          return { outputs: [NaN], error: `MatrixConcat: ${e instanceof Error ? e.message : String(e)}` };
         }
-        return { outputs: [result] };
       }
     };
   },
@@ -4828,22 +4830,39 @@ return block;
       'DEADZONE': (id, params) => {
         const lowerLimit = params.lowerLimit ?? params.end ?? -0.5;
         const upperLimit = params.upperLimit ?? params.start ?? 0.5;
+        // Simulink Dead Zone is element-wise: scalar or vector input, scalar or vector limits (a vector limit matches the input size).
+        const leaves = (v: any): number[] => (Array.isArray(v) ? v.flatMap(leaves) : [Number(v)]);
+        const shape = (v: any, f: (x: number, k: number) => any, c = { k: 0 }): any =>
+          (Array.isArray(v) ? v.map((x) => shape(x, f, c)) : f(Number(v), c.k++));
+        const limitAt = (lim: any, k: number): number => {
+          const l = leaves(lim);
+          return l.length === 1 ? l[0] : l[k];
+        };
+        const regionOf = (u: number, lo: number, hi: number) => (u > hi ? 1 : (u < lo ? -1 : 0));
         return {
           id, type: 'DEADZONE',
           params: { lowerLimit, upperLimit },
           inputs: [createPort('u', 'u', 'input')],
           outputs: [createPort('y', 'y', 'output')],
           execute: (ins: any[], p: any, _s: any, _t: any, ctx?: BlockEvalContext) => {
-            const u = Number(ins[0]);
-            if (Number.isNaN(u)) return { outputs: [NaN] };
+            const n = leaves(ins[0]).length;
+            for (const lim of [p.lowerLimit, p.upperLimit]) {
+              const len = leaves(lim).length;
+              if (len !== 1 && len !== n) return { outputs: [NaN], error: `DEADZONE: limit has ${len} elements but the input has ${n}.` };
+            }
+            if (leaves(ins[0]).some((x) => Number.isNaN(x))) return { outputs: [shape(ins[0], () => NaN)] };
             // Region (above, inside, below the dead zone) is decided at major steps and held in minor steps.
-            const region = heldMode(ctx, () => (u > p.upperLimit ? 1 : (u < p.lowerLimit ? -1 : 0)));
-            const y = region > 0 ? (u - p.upperLimit) : (region < 0 ? (u - p.lowerLimit) : 0);
+            const regions: number[] = heldMode(ctx, () => leaves(ins[0]).map((u, k) => regionOf(u, limitAt(p.lowerLimit, k), limitAt(p.upperLimit, k))));
+            const y = shape(ins[0], (u, k) => {
+              const r = regions[k];
+              return r > 0 ? u - limitAt(p.upperLimit, k) : (r < 0 ? u - limitAt(p.lowerLimit, k) : 0);
+            });
             return { outputs: [y] };
           },
           ZeroCrossingFn: (ins: any[], p: any) => {
-            const u = Number(ins[0]);
-            return Number.isFinite(u) ? [u - Number(p.upperLimit), u - Number(p.lowerLimit)] : [];
+            const u = leaves(ins[0]);
+            if (!u.every(Number.isFinite)) return [];
+            return u.flatMap((x, k) => [x - limitAt(p.upperLimit, k), x - limitAt(p.lowerLimit, k)]);
           }
         };
       },
@@ -5020,7 +5039,7 @@ return block;
                     }
                   };
 
-                  if (representation === 'continuous' && sampleTime <= 0) {
+                  if (representation === 'continuous') {
                     block.evaluateDerivatives = (ins, p, state) => {
                       const uRaw = Array.isArray(ins[0]) ? ins[0] : [Number(ins[0]) || 0];
                       const u = uRaw.flat(Infinity).map((v: any) => Number(v) || 0);

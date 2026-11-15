@@ -667,7 +667,7 @@ export const XB_EXECUTABLE_C_CASES: Readonly<
     ],
     fixture: makeXBridgesFixture(
       [
-        createNode('clk1', 'Clock', { freq: 1 }),
+        createNode('clk1', 'Clock', {}),
         createNode('wav1', 'WaveformGen', { type: 'Sine', freq: 2, amp: 5, offset: 1 }),
         createNode('wav2', 'WaveformGen', { type: 'Square', freq: 3, amp: 2 }),
       ],
