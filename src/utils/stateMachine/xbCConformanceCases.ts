@@ -559,9 +559,11 @@ const EXECUTABLE_CASES: Readonly<Record<string, XBExecutableConformanceCase>> = 
       [
         createNode('c1', 'Constant', { value: 3 }),
         createNode('ud1', 'UNIT_DELAY', { initialCondition: 0 }),
+        createNode('ig1', 'INTEGRATOR_DISCRETE', { initial_condition: 0, sample_time: 0.002, method: 'forward_euler' }),
       ],
       [
         { id: 'e1', sourceNodeId: 'c1', sourcePortId: 'out', targetNodeId: 'ud1', targetPortId: 'u' },
+        { id: 'e2', sourceNodeId: 'ud1', sourcePortId: 'y', targetNodeId: 'ig1', targetPortId: 'u' },
       ],
     ),
     tolerance: DEFAULT_TOLERANCE,

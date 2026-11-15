@@ -3852,9 +3852,9 @@ const renderDiscreteStateUpdates = (
         let updateExpr: string;
         if (method === 'trapezoidal' || method === 'tustin') {
           const uPrev = uPrevSlot ? stateSlotRealExpression(uPrevSlot, layout, member) : input;
-          updateExpr = `${stateExpr} + (0.5 * (${dt})) * ((${input}) + (${uPrev}))`;
+          updateExpr = `${stateExpr} + ((0.5 * (${dt})) * ((${input}) + (${uPrev})))`;
         } else {
-          updateExpr = `${stateExpr} + (${dt}) * (${uInputExpr})`;
+          updateExpr = `${stateExpr} + ((${dt}) * (${uInputExpr}))`;
         }
         return renderStateSlotAssignment(
           state,

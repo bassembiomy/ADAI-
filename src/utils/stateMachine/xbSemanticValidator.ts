@@ -28,6 +28,15 @@ interface PortDescriptor {
 const isRecord = (value: unknown): value is UnknownRecord =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
+/** Block parameter that is the PWM / SVPWM carrier period (Ts) or carrier frequency; it must be > 0 when present. */
+const PWM_PERIOD_PARAMETER: Readonly<Record<string, string>> = {
+  SVPWM_CORE: 'Ts',
+  SVPWM_GATE_GENERATOR: 'Ts',
+  SVPWM_MODULATOR: 'Ts',
+  PWM_GENERATOR: 'frequency',
+  THREE_PHASE_PWM: 'frequency',
+};
+
 const diagnostic = (
   code: string,
   message: string,
@@ -545,6 +554,23 @@ export const validateXBModel = (
           `${node.type} '${node.id}' lowerLimit must be finite and <= upperLimit.`,
           node.id,
         ));
+      }
+    }
+
+    const pwmPeriodParameter = PWM_PERIOD_PARAMETER[node.type];
+    if (pwmPeriodParameter !== undefined) {
+      const raw = parameters[pwmPeriodParameter];
+      // An absent parameter takes the kernel default; a present one must be a finite number above zero, because
+      // the carrier and gate timing divide by or take fmod of it.
+      if (raw !== undefined && raw !== null) {
+        const value = Number(raw);
+        if (!Number.isFinite(value) || value <= 0) {
+          diagnostics.push(diagnostic(
+            'XB_PARAMETER_OUT_OF_RANGE',
+            `${node.type} '${node.id}' ${pwmPeriodParameter} must be a finite number greater than 0.`,
+            node.id,
+          ));
+        }
       }
     }
 

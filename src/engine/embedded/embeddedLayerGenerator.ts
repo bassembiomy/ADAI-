@@ -324,11 +324,13 @@ export interface EmbeddedFastTask {
   stepsPerTick: number;
 }
 
-function renderFastTaskSection(fastTask: EmbeddedFastTask): string {
+function renderFastTaskSection(fastTask?: EmbeddedFastTask): string {
+  const periodText = fastTask === undefined ? '' : ` (${fastTask.periodUs} us)`;
+  const stepsText = fastTask === undefined ? '' : ` (${fastTask.stepsPerTick})`;
   return `
 ## 8. Fast task for X-Bridges states (multi-rate)
 
-This chart has X-Bridges states with solver execution \`separate-task\`. Their solver step is \`SM_XB_TASK_PERIOD_US\` (${fastTask.periodUs} us) and the chart tick is \`SM_XB_TASK_STEPS_PER_TICK\` (${fastTask.stepsPerTick}) fast steps long.
+If the chart has X-Bridges states with solver.execution = 'separate-task', their solver step is \`SM_XB_TASK_PERIOD_US\`${periodText} and the chart tick is \`SM_XB_TASK_STEPS_PER_TICK\`${stepsText} fast steps long. Charts without such states do not use a fast task: skip this section.
 
 - Call \`SM_XB_Task(&sm)\` every \`SM_XB_TASK_PERIOD_US\` microseconds from a timer or PWM interrupt whose priority is higher than the chart task that calls \`ADIA_Component_OneStep()\` / \`SM_Step()\`. One call performs ONE solver step of every enabled separate-task state.
 - Alignment: the first call of each chart period must precede the chart step of that period (the instance counts the calls, so start the fast timer in phase with the chart timer after \`ADIA_Component_Init()\`). Do not call \`SM_XB_Task()\` while \`SM_Init()\` or \`SM_Reset()\` runs.
@@ -472,7 +474,7 @@ When the chart declares external functions, the generated \`sm_core.c\` and \`sm
 - Keep each implementation consistent with the simulation expression declared in the chart (same results for the same arguments, same return type); the simulation and the back-to-back tests only model the function through that expression.
 - The functions run in the context of the chart task, once per call site evaluation, inside the tick. They must be reentrant with respect to the chart (no hidden state shared with other contexts without protection), non-blocking, with a bounded execution time that fits in the tick period \`SM_TICK_MS\`, and free of side effects the chart does not expect: a guard may be evaluated several times per tick and in any order.
 - A floating-point result that is not finite raises the chart's arithmetic error (\`SM_ERR_ARITHMETIC\`).
-${fastTask === undefined ? '' : renderFastTaskSection(fastTask)}`;
+${renderFastTaskSection(fastTask)}`;
 }
 
 export function generateEmbeddedProject(
