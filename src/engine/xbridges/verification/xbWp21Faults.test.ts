@@ -82,3 +82,18 @@ describe('XBV-177 / 178 / 179: powertrain blocks under ode23tb', () => {
   }, 60_000);
 });
 
+// XBV-183 (WP-21 E4): ode23tb accepts tight tolerances on a smooth problem. x' = cos(10 t), x(0) = 0: x = sin(10 t)/10.
+describe('XBV-183: ode23tb with RelTol 1e-9', () => {
+  for (const dt of [0.01, 0.1]) {
+    it(`RelTol 1e-9, AbsTol 1e-12, output step ${dt}: no error, |x(1) - sin(10)/10| <= 1e-8`, () => {
+      const r = runModel(buildModel({
+        blocks: [{ id: 'w', type: 'WaveformGen', params: { type: 'Sine', amp: 1, freq: 10 / (2 * Math.PI), phase: Math.PI / 2, offset: 0 } }, { id: 'i', type: 'Integrator' }],
+        wires: ['w.out -> i.in'],
+      }), { solver: 'ode23tb', dt, stopTime: 1, probes: ['i.out'], relTol: 1e-9, absTol: 1e-12 });
+      expect(r.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
+      const last = r.signals['i.out'].at(-1);
+      expect(Math.abs((Array.isArray(last) ? Number((last as unknown[])[0]) : Number(last)) - Math.sin(10) / 10)).toBeLessThanOrEqual(1e-8);
+    }, 60_000);
+  }
+});
+
