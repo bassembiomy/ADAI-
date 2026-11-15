@@ -730,12 +730,12 @@ describe('V7 limits on both sides (F10): exact diagnostic code, never truncated'
       expect(codesOf(b)).toContain('XB_MATRIX_SOLVE_BOUND_INVALID');
     });
   }
-  it('continuous STATE_SPACE is refused with XB_DISCRETE_REPRESENTATION_REQUIRED (euler and rk4)', () => {
+  // XBV-093 (WP-21 F2): continuous STATE_SPACE is supported (continuous state slots integrated by the solver stages).
+  it('continuous STATE_SPACE is accepted for euler and rk4 (no XB_DISCRETE_REPRESENTATION_REQUIRED)', () => {
     for (const solver of ['euler', 'rk4'] as const) {
       const b = REFUSED({ blocks: [{ id: 'k', type: 'Constant', params: { value: 0.7 } }, { id: 'b', type: 'STATE_SPACE' }], wires: ['k.out -> b.u'] }, { solver });
-      expect(b.ok).toBe(false);
-      expect(b.ir).toBeUndefined();
-      expect(codesOf(b)).toContain('XB_DISCRETE_REPRESENTATION_REQUIRED');
+      expect(codesOf(b)).not.toContain('XB_DISCRETE_REPRESENTATION_REQUIRED');
+      expect(b.ok).toBe(true);
     }
   });
   it('a variable-step solver is refused with XB_SAMPLE_TIME_INVALID', () => {
