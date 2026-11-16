@@ -381,6 +381,23 @@ type OperationEmitter = (
   member: string,
 ) => readonly string[];
 
+const oneElementScalar = (value: unknown): number | boolean | undefined => {
+  if (typeof value === 'number' || typeof value === 'boolean') return value;
+  let element: unknown;
+  if (Array.isArray(value)) {
+    if (value.length !== 1) return undefined;
+    element = value[0];
+  } else if (typeof value === 'string') {
+    const match = /^\s*\[([^\]]*)\]\s*$/.exec(value);
+    const tokens = (match ? match[1] : value).split(/[\s,]+/).filter((token) => token !== '');
+    if (tokens.length !== 1) return undefined;
+    element = tokens[0];
+  } else return undefined;
+  if (typeof element === 'number' || typeof element === 'boolean') return element;
+  if (typeof element === 'string' && element.trim() !== '' && Number.isFinite(Number(element))) return Number(element);
+  return undefined;
+};
+
 const scalarParameter = (
   operation: XBSemanticOperation,
   names: readonly string[],
@@ -388,7 +405,8 @@ const scalarParameter = (
 ): number | boolean => {
   for (const name of names) {
     const value = operation.parameters[name];
-    if (typeof value === 'number' || typeof value === 'boolean') return value;
+    const scalar = oneElementScalar(value);
+    if (scalar !== undefined) return scalar;
   }
   return fallback;
 };
