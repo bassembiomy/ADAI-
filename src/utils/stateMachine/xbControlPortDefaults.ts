@@ -2,7 +2,7 @@ import type { XBEdgeV1, XBNodeV1, XBPersistedModelV1 } from './xbModel';
 
 /**
  * Control input ports with a default value (Simulink: Enable/Reset of a PID block) may stay unconnected.
- * The default comes from the persisted port (`type: 'control'` with a numeric/boolean `value`) or, for ports of
+ * The default comes from the persisted port (`role: 'control'` or the older `type: 'control'` with a numeric/boolean `value`) or, for ports of
  * models persisted without it, from the block type's contract. Data inputs never have a default.
  */
 const TYPE_PORT_DEFAULTS: Readonly<Record<string, Readonly<Record<string, number>>>> = {
@@ -16,10 +16,11 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const defaultForPort = (node: XBNodeV1, port: Record<string, unknown>): number | null => {
   const id = port.id;
   if (typeof id !== 'string') return null;
-  if (port.type === 'control' && (typeof port.value === 'number' || typeof port.value === 'boolean')) {
+  const isControl = port.type === 'control' || port.role === 'control'; // role: the canvas port role; type 'control' is the older persisted form
+  if (isControl && (typeof port.value === 'number' || typeof port.value === 'boolean')) {
     return Number(port.value);
   }
-  if (port.type !== undefined && port.type !== 'control' && port.type !== 'auto') return null;
+  if (!isControl && port.type !== undefined && port.type !== 'auto') return null;
   const fromType = TYPE_PORT_DEFAULTS[node.type]?.[id];
   return fromType ?? null;
 };

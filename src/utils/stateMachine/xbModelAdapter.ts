@@ -115,6 +115,7 @@ const cloneLegacyPorts = (
     };
     for (const key of [
       'type',
+      'role',
       'shape',
       'dimensions',
       'dataType',
@@ -129,7 +130,7 @@ const cloneLegacyPorts = (
     // A control input keeps its default value so an unconnected port can use it (e.g. PID Enable = 1).
     if (
       expectedDirection === 'input'
-      && entry.type === 'control'
+      && (entry.type === 'control' || entry.role === 'control')
       && (typeof entry.value === 'number' || typeof entry.value === 'boolean')
     ) {
       port.value = entry.value;

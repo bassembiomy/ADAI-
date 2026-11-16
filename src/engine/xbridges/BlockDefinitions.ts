@@ -8833,7 +8833,7 @@ execute: (ins, p, state) => {
                                                                                                       outputs: [
                                                                                                         createPort('lidar_ranges', 'LiDAR', 'output', [0, 0, 0, 0, 0, 0, 0, 0], 'right', 'vector'),
                                                                                                         createPort('collision', 'Crash', 'output', 0, 'right', 'continuous'),
-                                                                                                        createPort('is_docked', 'Docked', 'output', 0, 'right', 'continuous')
+                                                                                                        createPort('is_docked', 'Docked', 'output', 0, 'right', 'logical')
                                                                                                       ],
                                                                                                       state: {
                                                                                                         trail: [],
@@ -9259,7 +9259,7 @@ execute: (ins, p, state) => {
                                                                                                                 createPort('target_y_in', 'Target Y', 'input', 0, 'left', 'continuous'),
                                                                                                                 createPort('mode_select', 'Mode In', 'input', 5, 'bottom', 'continuous'),
                                                                                                                 createPort('battery_level', 'Bat', 'input', 100, 'bottom', 'continuous'),
-                                                                                                                createPort('is_docked', 'Docked', 'input', 0, 'bottom', 'continuous')
+                                                                                                                createPort('is_docked', 'Docked', 'input', 0, 'bottom', 'logical')
                                                                                                               ],
                                                                                                               outputs: [
                                                                                                                 createPort('v_ref', 'V_ref', 'output', 0, 'right', 'continuous'),
@@ -12732,7 +12732,7 @@ const CATALOGUE_PORT_UNITS: Readonly<Record<string, Readonly<Record<string, stri
   ROBOT_VACUUM_KINEMATICS: { v_ref: 'm/s', w_ref: 'rad/s', omegaL_ref: 'rad/s', omegaR_ref: 'rad/s' },
   ROBOT_VACUUM_LIDAR_SENSOR: { x: 'm', y: 'm', theta: 'rad', ranges: 'm', x_odom: 'm' },
   ROBOT_VACUUM_MODE_SUPERVISOR: { halt_cmd: '1', suction_pwm: '1', brush_pwm: '1' },
-  ROBOT_VACUUM_MOTOR: { pwm_duty: '1', v_bat: 'V', omega: 'rad/s', current: 'A', encoder: 'ticks', omega_est: 'rad/s' },
+  ROBOT_VACUUM_MOTOR: { pwm_duty: 'V', v_bat: 'V', omega: 'rad/s', current: 'A', encoder: 'ticks', omega_est: 'rad/s' },
   ROBOT_VACUUM_MOTOR_CURRENT: { current_L: 'A', current_R: 'A', current: 'A' },
   ROBOT_VACUUM_NAV: { x_est: 'm', y_est: 'm', theta_est: 'rad', lidar_ranges: 'm', target_x_in: 'm', target_y_in: 'm', mode_select: 'none', battery_level: '%', is_docked: '1', v_ref: 'm/s', w_ref: 'rad/s', nav_state: 'none', target_x_active: 'm', target_y_active: 'm', nav_stats: 'none' },
   ROBOT_VACUUM_ODOMETRY: { enc_L: 'ticks', enc_R: 'ticks', x_odom: 'm', y_odom: 'm', theta_odom: 'rad' },
@@ -12886,6 +12886,11 @@ function applyCatalogueText(block: XBlock): XBlock {
     }
   }
   return block;
+}
+/** The unit of a port at compile time: an '@angle' unit follows the angle_unit parameter as it is now (it may be edited after the block was created). */
+export function effectivePortUnit(block: XBlock, port: XPort): string | undefined {
+  if (CATALOGUE_PORT_UNITS[block.type]?.[port.id] === '@angle') return block.params?.angle_unit === 'degrees' ? 'deg' : 'rad';
+  return port.unit;
 }
 for (const type of Object.keys(BLOCK_LIBRARY)) {
   // Only the types the tables cover are wrapped (the powertrain, lookup and bus factories carry their own text).
