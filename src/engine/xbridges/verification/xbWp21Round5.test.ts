@@ -125,3 +125,25 @@ describe('XBV-187: clutch lock-up with fixed-step solvers', () => {
     }
   }
 });
+
+// XBV-192 (batch D3): RATE_LIMITER slew rates may be vectors of the input size, applied element by element (per-element
+// rates); a rate vector whose size differs from the input is refused with a diagnostic instead of skipping the limit.
+describe('XBV-192: Rate Limiter with vector slew rates', () => {
+  it('rates [1 2 4] per s, Ts 0.1, u = [10 10 10]: y(0) = [0.1 0.2 0.4] and y(0.2) = [0.3 0.6 1.2]', () => {
+    const r = runModel(buildModel({
+      blocks: [{ id: 'c', type: 'Constant', params: { value: [10, 10, 10] } }, { id: 'r', type: 'RATE_LIMITER', params: { risingSlewRate: [1, 2, 4], fallingSlewRate: [-1, -2, -4], sampleTime: 0.1 } }],
+      wires: ['c.out -> r.u'],
+    }), { solver: 'discrete', dt: 0.1, stopTime: 0.2, probes: ['r.y'] });
+    expect(r.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
+    const at = (k: number) => (r.signals['r.y'][k] as number[]).map(Number);
+    at(0).forEach((v, i) => expect(v).toBeCloseTo([0.1, 0.2, 0.4][i], 12));
+    at(2).forEach((v, i) => expect(v).toBeCloseTo([0.3, 0.6, 1.2][i], 12));
+  });
+  it('a rate vector of size 2 for a 3-element input is refused with an error diagnostic', () => {
+    const r = runModel(buildModel({
+      blocks: [{ id: 'c', type: 'Constant', params: { value: [10, 10, 10] } }, { id: 'r', type: 'RATE_LIMITER', params: { risingSlewRate: [1, 2], fallingSlewRate: -1, sampleTime: 0.1 } }],
+      wires: ['c.out -> r.u'],
+    }), { solver: 'discrete', dt: 0.1, stopTime: 0.2, probes: ['r.y'] });
+    expect(r.diagnostics.some((d) => d.severity === 'error')).toBe(true);
+  });
+});
