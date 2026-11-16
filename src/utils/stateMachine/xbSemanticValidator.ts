@@ -634,8 +634,33 @@ export const validateXBModel = (
     }
 
     if (node.type === 'RATE_LIMITER') {
-      const rising = Number(parameters.risingSlewRate ?? parameters.risingLimit ?? 1);
-      const falling = parameters.fallingSlewRate !== undefined ? Number(parameters.fallingSlewRate) : (parameters.fallingLimit !== undefined ? -Math.abs(Number(parameters.fallingLimit)) : -1);
+      // Elements of an array or bracketed string ('[1 2 4]'); undefined for a plain scalar.
+      const slewElements = (value: unknown): unknown[] | undefined => {
+        if (Array.isArray(value)) return value;
+        if (typeof value === 'string') {
+          const match = /^\s*\[([^\]]*)\]\s*$/.exec(value);
+          return match ? match[1].split(/[\s,]+/).filter((token) => token !== '') : undefined;
+        }
+        return undefined;
+      };
+      // A one-element array or string ([2], '[2]') is the scalar 2 (MATLAB/Simulink semantics).
+      const slewScalar = (value: unknown): unknown => {
+        const elements = slewElements(value);
+        return elements !== undefined && elements.length === 1 ? elements[0] : value;
+      };
+      const isVectorSlewRate = (value: unknown) => {
+        const elements = slewElements(value);
+        return elements !== undefined && elements.length !== 1;
+      };
+
+      const risingRaw = parameters.risingSlewRate ?? parameters.risingLimit;
+      const fallingRaw = parameters.fallingSlewRate !== undefined ? parameters.fallingSlewRate : parameters.fallingLimit;
+      const risingVector = isVectorSlewRate(risingRaw);
+      const fallingVector = isVectorSlewRate(fallingRaw);
+      const rising = Number(slewScalar(risingRaw ?? 1));
+      const falling = parameters.fallingSlewRate !== undefined
+        ? Number(slewScalar(parameters.fallingSlewRate))
+        : (parameters.fallingLimit !== undefined ? -Math.abs(Number(slewScalar(parameters.fallingLimit))) : -1);
       const initCond = parameters.initialCondition ?? 0;
       const st = parameters.sampleTime ?? parameters.dt;
 
@@ -644,17 +669,17 @@ export const validateXBModel = (
 
       const stNum = typeof st === 'number' ? st : (st === 'inherited' ? 0.1 : Number(st));
 
-      const isVectorSlewRate = (value: unknown) => Array.isArray(value) || (typeof value === 'string' && /^\s*\[[^\]]*\]\s*$/.test(value));
-      const slewIsVector = isVectorSlewRate(parameters.risingSlewRate ?? parameters.risingLimit)
-        || isVectorSlewRate(parameters.fallingSlewRate ?? parameters.fallingLimit);
-
-      if (slewIsVector) {
+      // A vector rate is reported by its own message; the scalar '>= 0' check is skipped for that rate only.
+      if (risingVector || fallingVector) {
         diagnostics.push(diagnostic(
           'XB_PARAMETER_INVALID',
           `RATE_LIMITER '${node.id}' slew rates: Generate C supports only scalar slew rates (the canvas accepts per-element vector rates); use a scalar risingSlewRate and fallingSlewRate for embedded code.`,
           node.id,
         ));
-      } else if (!Number.isFinite(rising) || rising < 0 || !Number.isFinite(falling) || falling > 0 || !initValid || !Number.isFinite(stNum) || stNum <= 0) {
+      }
+      const scalarRateInvalid = (!risingVector && (!Number.isFinite(rising) || rising < 0))
+        || (!fallingVector && (!Number.isFinite(falling) || falling > 0));
+      if (scalarRateInvalid || !initValid || !Number.isFinite(stNum) || stNum <= 0) {
         diagnostics.push(diagnostic(
           'XB_PARAMETER_INVALID',
           `RATE_LIMITER '${node.id}' parameters invalid: risingSlewRate must be >= 0, fallingSlewRate <= 0, initialCondition finite, and sampleTime > 0.`,
