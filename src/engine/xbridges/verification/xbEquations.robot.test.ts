@@ -190,24 +190,41 @@ describe('1. Differential-drive kinematics (KINEMATICS, DYNAMICS, ODOMETRY, ODOM
 // ---------------------------------------------------------------------------------------------------------------
 describe('2. ROBOT_VACUUM_MOTOR (DC motor)', () => {
   const K = 0.04, Rm = 2.5, J = 0.0075, B = 0.02;
-  const motor = (duty: number, vbat: number, stop: number, init: Record<string, unknown> = {}) => {
+  // XBV-189 (WP-21 batch R): the 'pwm_duty' port is the motor voltage command in V (one meaning per port), saturated by
+  // the H-bridge to [-V_bat, V_bat]. Before, |u| <= 1 was read as a duty cycle (V = u V_bat) and larger values as volts.
+  const motor = (volts: number, vbat: number, stop: number, init: Record<string, unknown> = {}) => {
     seed(3);
-    return sim([constant('u', duty), constant('vb', vbat), { id: 'm', type: 'ROBOT_VACUUM_MOTOR' }],
+    return sim([constant('u', volts), constant('vb', vbat), { id: 'm', type: 'ROBOT_VACUUM_MOTOR' }],
       ['u.out -> m.pwm_duty', 'vb.out -> m.v_bat'], ['m.omega', 'm.current'], { dt: 0.002, stop, init: { m: init } });
   };
-  it('steady state for constant duty 1 and V_bat 12: w = K V/(R B + K^2), i = B w/K', () => {
-    const r = motor(1, 12, 8);
+  it('steady state for a 12 V command and V_bat 12: w = K V/(R B + K^2), i = B w/K', () => {
+    const r = motor(12, 12, 8);
     const w = (K * 12) / (Rm * B + K * K);
     near(num(last(r, 'm.omega')), w, 1e-4, 'omega');
     near(num(last(r, 'm.current')), (B * w) / K, 1e-4, 'current');
   });
-  it('steady state scales with V_bat and duty (duty 0.5, V_bat 8: V = 4)', () => {
-    const r = motor(0.5, 8, 8);
+  it('steady state for a 4 V command with V_bat 8: V = 4', () => {
+    const r = motor(4, 8, 8);
     near(num(last(r, 'm.omega')), (K * 4) / (Rm * B + K * K), 1e-4);
+  });
+  it('XBV-189: a command below 1 V is volts, not a duty cycle (0.5 V with V_bat 12 gives V = 0.5)', () => {
+    const r = motor(0.5, 12, 8);
+    near(num(last(r, 'm.omega')), (K * 0.5) / (Rm * B + K * K), 1e-4);
+  });
+  it('XBV-189: the voltage is continuous across 1 V (di/dt at rest for 0.999 V and 1.001 V differ by 0.2 %)', () => {
+    const b = mk('ROBOT_VACUUM_MOTOR');
+    const st = { theta_wheel: 0, omega: 0, current: 0 };
+    const lo = (b.evaluateDerivatives!([0.999, 12], b.params, st, 0) as number[])[2];
+    const hi = (b.evaluateDerivatives!([1.001, 12], b.params, st, 0) as number[])[2];
+    near(hi / lo, 1.001 / 0.999, 1e-12, 'ratio');
+  });
+  it('XBV-189: the H-bridge saturates the command at +-V_bat (20 V and -20 V with V_bat 12 give +-12 V)', () => {
+    near(num(last(motor(20, 12, 8), 'm.omega')), (K * 12) / (Rm * B + K * K), 1e-4, '+');
+    near(num(last(motor(-20, 12, 8), 'm.omega')), -(K * 12) / (Rm * B + K * K), 1e-4, '-');
   });
   it('stall: with w = 0 and i = V/R the electrical derivative is zero and the torque is K i', () => {
     const b = mk('ROBOT_VACUUM_MOTOR');
-    const d = b.evaluateDerivatives!([1, 12], b.params, { theta_wheel: 0, omega: 0, current: 12 / Rm }, 0) as number[];
+    const d = b.evaluateDerivatives!([12, 12], b.params, { theta_wheel: 0, omega: 0, current: 12 / Rm }, 0) as number[];
     near(d[2], 0, 1e-9, 'di/dt');
     near(d[1], (K * (12 / Rm)) / J, 1e-9, 'dw/dt');
     near(d[0], 0, 0, 'dtheta/dt');
