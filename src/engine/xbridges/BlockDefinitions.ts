@@ -5109,8 +5109,18 @@ return block;
             const dt = Number.isFinite(t) && typeof last === 'number' && Number.isFinite(last)
               ? Math.max(0, t - last)
               : (Number.isFinite(explicitTs) && explicitTs > 0 ? explicitTs : 0);
-            const maxIncrease = p.risingSlewRate * dt;
-            const maxDecrease = p.fallingSlewRate * dt;
+            // Slew rates: scalar (every element) or a vector of the input's element count (per element).
+            const leaves = (v: any): number[] => (Array.isArray(v) ? v.flatMap(leaves) : [Number(v)]);
+            const n = leaves(ins[0]).length;
+            for (const [name, rate] of [['rising', p.risingSlewRate], ['falling', p.fallingSlewRate]] as const) {
+              const len = leaves(rate).length;
+              if (len !== 1 && len !== n) return { outputs: [NaN], error: `RATE_LIMITER: ${name} slew rate has ${len} elements but the input has ${n}.` };
+            }
+            const rateAt = (rate: any, k: number): number => {
+              const l = leaves(rate);
+              return l.length === 1 ? l[0] : l[k];
+            };
+            let elementIndex = 0;
             const lastTime = Number.isFinite(t) ? t : last;
             const prevState = state.previousOutput ?? initialCondition;
             // Element-wise on a vector input with per-element state (a scalar IC is expanded over the input).
@@ -5120,6 +5130,9 @@ return block;
                 const u = Number(uu);
                 const prev = Number(pp);
                 if (Number.isNaN(u) || Number.isNaN(prev)) return NaN;
+                const k = elementIndex++ % n;
+                const maxIncrease = rateAt(p.risingSlewRate, k) * dt;
+                const maxDecrease = rateAt(p.fallingSlewRate, k) * dt;
                 const delta = u - prev;
                 if (delta > maxIncrease) return prev + maxIncrease;
                 if (delta < maxDecrease) return prev + maxDecrease;

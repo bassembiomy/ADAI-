@@ -69,7 +69,7 @@ const BASE_SCHEMA: Record<string, Record<string, ParameterKind>> = {
   // Discontinuities
   SATURATION: { lowerLimit: number, upperLimit: number },
   DEADZONE: { lowerLimit: number, upperLimit: number },
-  RATE_LIMITER: { risingSlewRate: number, fallingSlewRate: number, initialCondition: number, sampleTime },
+  RATE_LIMITER: { risingSlewRate: numeric, fallingSlewRate: numeric, initialCondition: number, sampleTime },
   RELAY: { switchOn: number, switchOff: number, onValue: number, offValue: number },
 
   // Discrete and delay
