@@ -644,7 +644,17 @@ export const validateXBModel = (
 
       const stNum = typeof st === 'number' ? st : (st === 'inherited' ? 0.1 : Number(st));
 
-      if (!Number.isFinite(rising) || rising < 0 || !Number.isFinite(falling) || falling > 0 || !initValid || !Number.isFinite(stNum) || stNum <= 0) {
+      const isVectorSlewRate = (value: unknown) => Array.isArray(value) || (typeof value === 'string' && /^\s*\[[^\]]*\]\s*$/.test(value));
+      const slewIsVector = isVectorSlewRate(parameters.risingSlewRate ?? parameters.risingLimit)
+        || isVectorSlewRate(parameters.fallingSlewRate ?? parameters.fallingLimit);
+
+      if (slewIsVector) {
+        diagnostics.push(diagnostic(
+          'XB_PARAMETER_INVALID',
+          `RATE_LIMITER '${node.id}' slew rates: Generate C supports only scalar slew rates (the canvas accepts per-element vector rates); use a scalar risingSlewRate and fallingSlewRate for embedded code.`,
+          node.id,
+        ));
+      } else if (!Number.isFinite(rising) || rising < 0 || !Number.isFinite(falling) || falling > 0 || !initValid || !Number.isFinite(stNum) || stNum <= 0) {
         diagnostics.push(diagnostic(
           'XB_PARAMETER_INVALID',
           `RATE_LIMITER '${node.id}' parameters invalid: risingSlewRate must be >= 0, fallingSlewRate <= 0, initialCondition finite, and sampleTime > 0.`,
