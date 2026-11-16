@@ -642,14 +642,17 @@ describe('TypeScript-versus-generated-C differential gate', () => {
         { kind: 'step' as const },
         { kind: 'step' as const },
         { kind: 'step' as const },
+        { kind: 'step' as const },
       ],
     };
     const expected = runInterpreterTrace(fixture);
     const actual = compileAndRunCTrace(fixture);
 
+    // D9 (start-of-tick time base, WP-21 batch F; XBV-195): tick 10 ms, euler substeps 2 ms evaluated at their start. The
+    // published value is the last substep's: 8, 18, 28 ms give 2 (step_time 30 ms); tick 4 runs 30..38 ms and publishes 5.
     expect(expected.map((frame) =>
       frame.xBridges.controller.signals['step:out']))
-      .toEqual([0, 2, 2, 5]);
+      .toEqual([0, 2, 2, 2, 5]);
     expect(compareSemanticTraces(expected, actual)).toBeNull();
   }, 60_000);
 
