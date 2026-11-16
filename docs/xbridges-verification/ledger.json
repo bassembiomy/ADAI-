@@ -2373,8 +2373,17 @@
    "plan_ref": "4.2 equations",
    "severity": "S3",
    "gate": "V3",
+   "status": "closed",
+   "summary": "RATE_LIMITER with vector slew rates: p.risingSlewRate * dt is NaN, so limiting is silently skipped and u passes through (also on the base). Simulink Rate Limiter accepts only scalar rates; a vector rate must be a diagnostic or element-wise. Found by the WP-21 D2 verifier.",
+   "fix": "WP-21 batch D3: RATE_LIMITER takes scalar or vector rising/falling rates applied per element (D12 kept, scalar results identical on 300 random models); a size mismatch stops the run at the first step with BLOCK_RUNTIME_FAULT; modelChecks checks rates element-wise. The embedded path refuses vector rates at validation (XB_PARAMETER_INVALID)."
+  },
+  {
+   "id": "XBV-193",
+   "plan_ref": "4.6 parity",
+   "severity": "S4",
+   "gate": "V6",
    "status": "open",
-   "summary": "RATE_LIMITER with vector slew rates: p.risingSlewRate * dt is NaN, so limiting is silently skipped and u passes through (also on the base). Simulink Rate Limiter accepts only scalar rates; a vector rate must be a diagnostic or element-wise. Found by the WP-21 D2 verifier."
+   "summary": "The embedded validator refuses RATE_LIMITER vector slew rates with the generic message 'risingSlewRate must be >= 0...' instead of saying that vector rates are not supported by Generate C (the canvas accepts them since XBV-192). Found by the WP-21 D3 verifier."
   }
  ],
  "blocks": {
