@@ -132,8 +132,10 @@ function solveClutches(cls: Clutch[], lockIdx: number, wIn: number, Teng: number
   if (lockIdx >= 0) {
     Tc[lockIdx] = free - others(lockIdx);
   } else {
-    // Inside the tolerance band the slip direction is the direction of the torque that breaks the clutch away.
-    cls.forEach((c, j) => { if (Math.abs(slip[j]) <= tol) Tc[j] = c.cap * sign(free - others(j)); });
+    // Inside the tolerance band the friction keeps opposing the slip, so the shaft runs through the band to the slip zero
+    // where the solver stops and the clutch locks (no reversal at the band edge: a torque that reverses there traps an
+    // implicit solver on the edge). Only at a slip of exactly zero the direction is that of the torque that breaks the clutch away.
+    cls.forEach((c, j) => { if (Math.abs(slip[j]) <= tol) Tc[j] = c.cap * (slip[j] !== 0 ? sign(slip[j]) : sign(free - others(j))); });
     aIn = (free - Tc.reduce((a, t) => a + t, 0)) / p.J_in;
   }
   const diffTrq = cls.reduce((a, c, i) => a + c.N * (Tc[i] * wEng >= 0 ? c.eta : 1 / c.eta) * Tc[i], 0) + 0;

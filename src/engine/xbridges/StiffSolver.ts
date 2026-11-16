@@ -4,6 +4,7 @@
 // Jacobian is global (it couples blocks), as in Simulink.
 import { XbridgesEngine } from './XbridgesEngine';
 import { SolverOptions } from './types';
+import { VectorUtils } from './VectorUtils';
 
 type Path = (string | number)[];
 interface Leaf { blockId: string; path: Path }
@@ -79,6 +80,44 @@ function snapshotStates(engine: XbridgesEngine): Map<string, any> {
   const m = new Map<string, any>();
   engine.executionOrder.forEach(b => { if (b.state !== undefined) m.set(b.id, JSON.parse(JSON.stringify(b.state))); });
   return m;
+}
+
+/**
+ * Zero-crossing test of a trial step [t, t + h] (statesPrev at t, statesCurr = the trial state at t + h).
+ * Returns the step length that ends at the located event, or null when the step has no event inside or the event is at
+ * its end. The caller restores statesPrev and retakes the step to that length WITH the error test (XBV-177); the blocks then
+ * update their discrete state at the event (clutch lock, switch mode).
+ */
+function eventStepLength(
+  engine: XbridgesEngine, t: number, h: number, statesPrev: Map<string, any>, statesCurr: Map<string, any>,
+  zeroTol: number, hMin: number,
+): number | null {
+  engine.computeOutputs(t, statesPrev);
+  const zcPrev = engine.getZeroCrossings(t, statesPrev);
+  engine.computeOutputs(t + h, statesCurr);
+  const zcCurr = engine.getZeroCrossings(t + h, statesCurr);
+  if (!engine.hasZeroCrossingSignChange(zcPrev, zcCurr)) return null;
+  // Own bisection (engine.bracketZeroCrossing compares against the signals left by the previous evaluation, which are the
+  // ones of the trial end, not of the base). Much tighter than the step: the mode of a Switch flips at the next major step.
+  const tol = Math.min(zeroTol, 1e-9 * Math.max(1, Math.abs(t)));
+  let lo = t, hi = t + h;
+  for (let iter = 0; iter < 80 && hi - lo > tol; iter++) {
+    const mid = (lo + hi) / 2;
+    if (!(mid > lo && mid < hi)) break;
+    const frac = (mid - t) / h;
+    const sMid = new Map<string, any>();
+    statesPrev.forEach((sPrev, blockId) => {
+      const sCurr = statesCurr.get(blockId);
+      sMid.set(blockId, sCurr === undefined ? sPrev
+        : VectorUtils.integrateState(sPrev, VectorUtils.applyElementWise(sCurr, sPrev, 'subtract'), frac));
+    });
+    engine.computeOutputs(mid, sMid);
+    const zcMid = engine.getZeroCrossings(mid, sMid);
+    if (engine.hasZeroCrossingSignChange(zcPrev, zcMid)) hi = mid; else lo = mid;
+  }
+  const tEvent = hi;
+  const hEv = tEvent - t;
+  return hEv > hMin && hEv < h ? hEv : null;
 }
 
 function reportError(engine: XbridgesEngine, code: string, message: string) {
@@ -424,8 +463,8 @@ export class StiffSolver {
         return null;
       };
 
-      // When the implicit stages do not converge (a switching instant inside the step) the explicit Euler predictor is
-      // the trial state the caller uses to find the zero crossing.
+      // Trial state for event detection only when the implicit stages do not converge (a derivative jump inside the step):
+      // the explicit Euler predictor. It is never committed; the event retake is a full TR-BDF2 step with the error test.
       const predictor = () => {
         const xe = new Float64Array(n);
         for (let i = 0; i < n; i++) xe[i] = x0[i] + h * f0[i];
@@ -462,19 +501,9 @@ export class StiffSolver {
       const hNext = h * factor;
       // The trial state is returned also for a rejected step: a step across a switching instant is rejected by the error
       // estimate, and the caller needs the trial state to find the zero crossing inside it.
-      // Local extrapolation (as ode23 / ode45 propagate the higher-order solution): est is the local error of y1, so
-      // y1 - est is third-order accurate while the step is still controlled by est. Without it the propagated solution
-      // carries the full estimated error at every step and the global error of a smooth run is ~16x that of ode23 at the
-      // same RelTol (XBV-179: PT_ENGINE_DYNO 1.9e-4 against rk4 at RelTol 1e-6).
-      const yc = new Float64Array(n);
-      // Only where the implicit filter W^-1 is inactive (|est| >= 0.9 |raw|: the component is not stiff at this step):
-      // extrapolating a stiff component loses the L-stability of the BDF2 stage and the decay would overshoot its sign.
-      for (let i = 0; i < n; i++) yc[i] = Math.abs(est[i]) >= 0.9 * Math.abs(raw[i]) ? y1[i] - est[i] : y1[i];
-      const candidate = StiffSolver.unflatten(engine, layout, yc);
+      const candidate = StiffSolver.unflatten(engine, layout, y1);
       if (err <= 1) {
         engine.commitStateUpdates(candidate);
-        // The signals left by the last stage belong to y1; refresh them for the committed (extrapolated) state.
-        engine.computeOutputs(t1);
         return { accepted: true, err, hNext, candidate };
       }
       return { accepted: false, err, hNext, candidate };
@@ -509,42 +538,24 @@ export class StiffSolver {
     let tc = t;
     const hasZc = engine.executionOrder.some(b => !!b.ZeroCrossingFn);
     let eventStep = false;
-    let hPreEvent = 0;
     while (tc < tEnd && !engine.hasFatalError()) {
       const remaining = tc === t ? dt : tEnd - tc; // the first substep measures the output step itself, not (t + dt) - t
       let hTry = Math.min(h, hMax);
       let reaches = false;
       if (hTry >= remaining - hMin) { hTry = remaining; reaches = true; }
       const statesPrev = hasZc ? snapshotStates(engine) : null;
-      let res = StiffSolver.stepODE23TB(engine, tc, hTry, relTol, absTol, false);
+      const res = StiffSolver.stepODE23TB(engine, tc, hTry, relTol, absTol, false);
       if (res.failed) return false;
-      if (statesPrev !== null && res.candidate !== undefined) {
-        // A step across a zero crossing (clutch lock, relay, ...) is retaken up to the located event, where the blocks
-        // update their discrete state; a discontinuous right-hand side stepped across makes the error control chatter
-        // down to the minimum step (XBV-177).
-        if (!eventStep) {
-          const statesCurr = res.candidate;
-          engine.computeOutputs(tc, statesPrev);
-          const zcPrev = engine.getZeroCrossings(tc, statesPrev);
-          engine.computeOutputs(tc + hTry, statesCurr);
-          const zcCurr = engine.getZeroCrossings(tc + hTry, statesCurr);
-          if (engine.hasZeroCrossingSignChange(zcPrev, zcCurr)) {
-            const tEvent = engine.bracketZeroCrossing(tc, tc + hTry, statesPrev, statesCurr, engine.options?.zeroTol ?? 1e-6);
-            engine.commitStateUpdates(statesPrev);
-            const hEv = tEvent - (engine.options?.zeroTol ?? 1e-6) - tc; // just before the crossing, see runODE23TB
-            if (hEv > hMin && hEv < hTry) { hPreEvent = hTry; h = hEv; eventStep = true; continue; }
-            if (res.accepted) { engine.computeOutputs(tc + hTry, statesCurr); engine.commitStateUpdates(statesCurr); }
-          }
-        } else {
-          // Landing on the event: accepted as it is (the derivative jump at the switching instant is not resolved by the
-          // error estimate; as in ode45 the located bracket is crossed without an error test), then the blocks update.
+      if (statesPrev !== null) {
+        // A step across a zero crossing (clutch lock, switch, ...) is retaken up to the located event with the error test;
+        // the blocks then update their discrete state there (XBV-177).
+        if (res.candidate !== undefined && !eventStep) {
+          const hEv = eventStepLength(engine, tc, hTry, statesPrev, res.candidate, engine.options?.zeroTol ?? 1e-6, hMin);
+          if (hEv !== null) { engine.commitStateUpdates(statesPrev); h = hEv; eventStep = true; continue; }
+        }
+        if (res.accepted) {
           eventStep = false;
-          if (!res.accepted) { engine.commitStateUpdates(res.candidate); res = { ...res, accepted: true, hNext: hPreEvent * 0.5 }; }
-          else res = { ...res, hNext: Math.max(res.hNext, hPreEvent * 0.5) };
-          if (hTry < remaining) {
-            engine.computeOutputs(tc + hTry);
-            engine.updateDiscreteStates(tc + hTry);
-          }
+          if (!reaches) { engine.computeOutputs(tc + hTry); engine.updateDiscreteStates(tc + hTry); }
         }
       }
       if (res.accepted) {
@@ -584,7 +595,6 @@ export class StiffSolver {
     const hasZc = engine.executionOrder.some(b => !!b.ZeroCrossingFn);
     const zeroTol = options.zeroTol ?? 1e-6;
     let eventStep = false;
-    let hPreEvent = 0;
 
     while (stopTime - t > landTol && !engine.hasFatalError()) {
       const remaining = stopTime - t;
@@ -605,34 +615,15 @@ export class StiffSolver {
         res = StiffSolver.stepODE23TB(engine, t, hTry, relTol, absTol, false);
         if (res.failed) break;
         if (res.candidate !== undefined && !eventStep) {
-          const statesCurr = res.candidate;
-          engine.computeOutputs(t, statesPrev);
-          const zcPrev = engine.getZeroCrossings(t, statesPrev);
-          engine.computeOutputs(t + hTry, statesCurr);
-          const zcCurr = engine.getZeroCrossings(t + hTry, statesCurr);
-          if (engine.hasZeroCrossingSignChange(zcPrev, zcCurr)) {
-            const tEvent = engine.bracketZeroCrossing(t, t + hTry, statesPrev, statesCurr, zeroTol);
+          const hEv = eventStepLength(engine, t, hTry, statesPrev, res.candidate, zeroTol, hMin);
+          if (hEv !== null) {
             engine.commitStateUpdates(statesPrev);
-            // land just before the crossing (the located bracket is zeroTol wide): a step ending exactly on the switching
-            // instant would again straddle it and be rejected
-            const hEv = tEvent - zeroTol - t;
-            if (hEv > hMin && hEv < hTry) {
-              hPreEvent = hTry;
-              h = hEv; // retake up to the event; no event test on that retake (the located event is not found again)
-              eventStep = true;
-              continue;
-            }
-            if (res.accepted) { engine.computeOutputs(t + hTry, statesCurr); engine.commitStateUpdates(statesCurr); }
+            h = hEv; // retake up to the event with the error test; shorter than the event, so it is not found again
+            eventStep = true;
+            continue;
           }
         }
-        if (eventStep && res.candidate !== undefined && res.candidate !== null) {
-          // Landing on the event: the retake is accepted as it is (the switching instant itself, e.g. a clutch slip band
-          // edge just before the lock, is a derivative jump the error estimate cannot resolve; as in ode45 the located
-          // bracket is crossed without an error test).
-          if (!res.accepted) { engine.commitStateUpdates(res.candidate); res = { ...res, accepted: true, hNext: hPreEvent * 0.5 }; }
-          else res = { ...res, hNext: Math.max(res.hNext, hPreEvent * 0.5) };
-          eventStep = false;
-        }
+        if (res.accepted) eventStep = false;
       } else res = StiffSolver.stepODE23TB(engine, t, hTry, relTol, absTol);
       if (res.accepted) {
         t = hTry === remaining ? stopTime : t + hTry;
