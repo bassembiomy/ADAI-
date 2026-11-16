@@ -726,6 +726,15 @@ export const seedGridWithWalls = (): number[][] => {
 
 export let g_isMatlabActive = false;
 
+/**
+ * The twin grid mode (house 6 m x 6 m or MATLAB map 12 m x 12 m) latches to MATLAB once a lidar hit or pose leaves the house,
+ * and stays latched for the rest of the run. It is run state kept outside the blocks, so the engine resets it at the start of
+ * every run (XBV-188): nothing carries over between simulations, a second run starts exactly like the first.
+ */
+export const resetTwinRunState = (): void => {
+  g_isMatlabActive = false;
+};
+
 export const getTwinGridCoords = (gx: number, gy: number, isMatlab = false) => {
   if (Math.abs(gx) > 3.05 || Math.abs(gy) > 3.05) {
     g_isMatlabActive = true;
@@ -8724,9 +8733,10 @@ execute: (ins, p, state) => {
                                                                                                   },
                                                                                                   evaluateDerivatives: (ins: any[], p: any, state: any, time: number) => {
                                                                                                     const pwm_duty_raw = Number(ins[0] ?? 0);
-                                                                                                    const v_bat = Math.max(0.1, Number(ins[1] ?? 12.0));
-                                                                                                    const pwm_duty = Math.max(-1.0, Math.min(1.0, Math.abs(pwm_duty_raw) > 1.0001 ? pwm_duty_raw / v_bat : pwm_duty_raw));
-                                                                                                    const V_in = pwm_duty * v_bat;
+                                                                                                    // The 'pwm_duty' port is the motor voltage command in V; the H-bridge saturates it at +-V_bat (V_bat <= 0 gives 0 V).
+                                                                                                    const v_bat = Number(ins[1] ?? 12.0);
+                                                                                                    const v_max = Math.max(v_bat, 0);
+                                                                                                    const V_in = Math.max(-v_max, Math.min(v_max, pwm_duty_raw));
 
                                                                                                     const motor_R = Number(p.motor_R ?? 2.5);
                                                                                                     const motor_L = Number(p.motor_L ?? 0.005);
@@ -12544,7 +12554,7 @@ const CATALOGUE_EQUATIONS: Readonly<Record<string, string>> = {
   ROBOT_VACUUM_BATTERY: 'V_bat = nominal_voltage (0.7 + 0.3 level / 100); level (percent, clamped to [0, 100]) is a state with d level/dt = charge_rate when docked, else -(|I_L| + |I_R| + static_draw_A) / capacity_Ah * 100 / 3600',
   ROBOT_VACUUM_KINEMATICS: 'wL_ref = (V_ref - w_ref L_sep / 2) / r_wheel; wR_ref = (V_ref + w_ref L_sep / 2) / r_wheel',
   ROBOT_VACUUM_WHEEL_CONTROL: 'dual PI speed loops: V_x = Kp_wheel e_x + Ki_wheel integral(e_x) dt with e_x = w_x_ref - w_x, limited to the battery voltage V_bat with integrator anti-windup',
-  ROBOT_VACUUM_MOTOR: 'V = duty v_bat (duty = PWM, or PWM / v_bat when |PWM| > 1, limited to [-1, 1]); L di/dt = V - R i - K w; J dw/dt = K i - 0.02 w; dtheta/dt = w; encoder = wheel angle quantised to encoder_cpr counts plus seeded noise of encoder_noise_std; omega_est = w plus seeded noise',
+  ROBOT_VACUUM_MOTOR: 'V = voltage command (pwm_duty port, in V) saturated by the H-bridge to [-V_bat, V_bat]; L di/dt = V - R i - K w; J dw/dt = K i - 0.02 w; dtheta/dt = w; encoder = wheel angle quantised to encoder_cpr counts plus seeded noise of encoder_noise_std; omega_est = w plus seeded noise',
   ROBOT_VACUUM_ENCODER: 'theta_x = integral(omega_x) dt; enc_x = floor(theta_x * cpr / (2 pi) + n) with n a seeded uniform noise in [-noise_std, noise_std] ticks, as int32 ticks',
   ROBOT_VACUUM_DYNAMICS: 'vL = wL r, vR = wR r; V = (vL + vR) / 2; w = (vR - vL) / L_sep; dx/dt = V cos(theta) - cg_offset w sin(theta), dy/dt = V sin(theta) + cg_offset w cos(theta), dtheta/dt = w; a step into a wall of the twin room is blocked',
   ROBOT_VACUUM_ODOMETRY: 'dL = (encL - prevL) 2 pi r / cpr (with seeded relative wheel slip of slip_noise), dR likewise; dS = (dL + dR) / 2, dTheta = (dR - dL) / L_sep; the pose integrates x += dS cos(theta), y += dS sin(theta), theta += dTheta',

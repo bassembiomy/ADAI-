@@ -1,6 +1,6 @@
 // src/engine/xbridges/XbridgesEngine.ts
 import { XModel, XBlock, ModelDiagnostic, SolverOptions, BlockEvalContext } from './types';
-import { BLOCK_LIBRARY, getPolynomialCoefficients, trimLeadingZeros, effectivePortUnit } from './BlockDefinitions';
+import { BLOCK_LIBRARY, resetTwinRunState, getPolynomialCoefficients, trimLeadingZeros, effectivePortUnit } from './BlockDefinitions';
 import { VectorUtils } from './VectorUtils';
 import { runModelChecks, getBlockSampleTime, evaluateBlockParameters, parameterKindsOf, describeParameterProblem } from './modelChecks';
 import { evaluateParameter } from './parameterEvaluation';
@@ -425,6 +425,7 @@ export class XbridgesEngine {
   }
 
   public compile(startTime = 0): ModelDiagnostic[] {
+    resetTwinRunState(); // run-level state held outside the blocks starts from its initial value (XBV-188)
     this.diagnostics = [];
     this.fatal = false;
     this.flatten();
