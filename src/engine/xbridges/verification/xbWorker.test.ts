@@ -157,7 +157,7 @@ describe('worker protocol', () => {
 
   // Inport.execute returns its own (unconnected) input, whose default value is 0, so the override written by
   // setSignalValue is overwritten at the next evaluation. The main-thread canvas path uses the same code.
-  it.fails('XBV-039: a state-machine Inport value (inportOverrides) drives the model like a Constant of that value', () => {
+  it('XBV-039: a state-machine Inport value (inportOverrides) drives the model like a Constant of that value', () => {
     const viaInport = (() => {
       send({ type: 'compile', model: buildModel({ blocks: [{ id: 'in', type: 'Inport' }, { id: 'x', type: 'Integrator' }], wires: ['in.out -> x.in'] }), time: 0, dt: 0.1, solverType: 'rk4' });
       let r: XbridgesWorkerResponse | undefined;

@@ -49,8 +49,6 @@ const PIN_CAUSE: Record<string, string> = {
 };
 const PINS: Record<string, string> = {
   // XBV-174: since XBV-171 (WP-21 E3) the canvas integrates a continuous STATE_SPACE whatever its sampleTime; the embedded path (F2) still holds the state when sampleTime > 0.
-  'STATE_SPACE|euler': 'XBV-174',
-  'STATE_SPACE|rk4': 'XBV-174',
   // XBV-167: embedded KALMAN_FILTER still predicts first; the canvas follows the Simulink order (update with x[0|-1] = x0, then predict) since WP-21 batch G.
   // XBV-168: during reset the canvas PID outputs Kp e (XBV-077, WP-21 batch G); the embedded PID outputs 0. The harness drives reset with 0.7.
   // XBV-163: the embedded Relay reads the previous tick's input (one sample late); the canvas switches on at u(0.3) = 1.016 >= 1 (Simulink).
@@ -426,3 +424,24 @@ describe('WP-21 round 4: embedded division by zero and embedded limits', () => {
     expect(refused(runEmbedded(spec, { solver: 'ode45' as never, dt: DT, steps: 2, probes: ['i.out'] }))).toBe(true);
   });
 });
+
+// ---------------------------------------------------------------- WP-21 batch F3 acceptance (controller)
+// XBV-172: a non-finite operand of a shift block is refused on both paths (the canvas raises a block error; the embedded
+// path must raise its numeric fault instead of publishing ToInt32(Inf) = 0).
+describe('WP-21 F3: non-finite shift operands', () => {
+  for (const type of ['ShiftLeft', 'ShiftRight'] as const) {
+    for (const solver of ['euler', 'discrete'] as const) {
+      it(`XBV-172: ${type} with an Inf operand is refused by both paths (${solver})`, () => {
+        const proto = BLOCK_LIBRARY[type]('b', {});
+        const ins = proto.inputs.map((p: { id: string }) => p.id);
+        const spec: ModelSpec = {
+          blocks: [{ id: 'b', type }, ...ins.map((p: string, i: number) => ({ id: `s${i}`, type: 'Constant', params: { value: i === 0 ? 'inf' : 1 } }))],
+          wires: ins.map((p: string, i: number) => `s${i}.out -> b.${p}`),
+        };
+        const o = compareSpec(`${type} Inf ${solver}`, spec, solver, proto.outputs.map((x: { id: string }) => `b.${x.id}`));
+        expect(o.kind, (o as { detail?: string }).detail).toBe('both-refused');
+      });
+    }
+  }
+});
+
