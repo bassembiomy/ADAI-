@@ -53,20 +53,9 @@ const PINS: Record<string, string> = {
   // XBV-168: during reset the canvas PID outputs Kp e (XBV-077, WP-21 batch G); the embedded PID outputs 0. The harness drives reset with 0.7.
   // XBV-163: the embedded Relay reads the previous tick's input (one sample late); the canvas switches on at u(0.3) = 1.016 >= 1 (Simulink).
   // XBV-161: embedded shifts mask the count to 5 bits; the canvas (WP-21 batch D, XBV-057) shifts every bit out at >= 32 and shifts the other way for a negative count.
-  // XBV-018: the canvas reads a stale input 0 at t = 0 (ordering); under D12 the first output is clamp(0.7, 0 +/- 0.1) = 0.1.
-  'RATE_LIMITER|discrete': 'XBV-018',
-  'RATE_LIMITER|rk4': 'XBV-018',
-  'RATE_LIMITER|euler': 'XBV-018',
-  // XBV-018: canvas sorts these stateful blocks before their sources (stale input); embedded follows the block equation.
-  'LOW_PASS_FILTER|euler': 'XBV-018',
-  'LOW_PASS_FILTER|rk4': 'XBV-018',
-  'HIGH_PASS_FILTER|euler': 'XBV-018',
-  'HIGH_PASS_FILTER|rk4': 'XBV-018',
-  // XBV-093: scenario dimensions (3-element x for a 1-state system) refused by the embedded builder; continuous STATE_SPACE unsupported.
-  // XBV-154: the embedded Mean / SubMatrix still follow the pre-WP-21 canvas rules (mean of all elements, zero-based indices).
-  'MOVING_AVERAGE|euler': 'XBV-068',
-  'MOVING_AVERAGE|rk4': 'XBV-068',
-  'MOVING_AVERAGE|discrete': 'XBV-068',
+  // WP-21 round 5: the remaining XBV-018 / XBV-068 pins were other gaps, recorded as XBV-190 (canvas LOW_PASS_FILTER,
+  // HIGH_PASS_FILTER and MOVING_AVERAGE are not element-wise on a vector input) and XBV-191 (canvas RATE_LIMITER first
+  // output at t = 0 is 0; D12 gives clamp(0.7, 0 +/- 0.1) = 0.1). Unpinned as the acceptance of batch D2.
 };
 const CORPUS_PINS: Record<string, string> = {
 };

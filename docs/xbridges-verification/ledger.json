@@ -2346,6 +2346,22 @@
    "gate": "V2",
    "status": "open",
    "summary": "ROBOT_VACUUM_MOTOR pwm_duty reads |u| <= 1 as a duty cycle and larger values as volts; the port unit is 'V' since WP-21 K (fits the labs), but one port mixes two meanings. Simulink-style: one meaning per port. Found by the WP-21 K verifier."
+  },
+  {
+   "id": "XBV-190",
+   "plan_ref": "4.6 parity",
+   "severity": "S2",
+   "gate": "V6",
+   "status": "open",
+   "summary": "Canvas LOW_PASS_FILTER, HIGH_PASS_FILTER and MOVING_AVERAGE are not element-wise on a vector input: a 3-vector gives the scalar [0] (filters) or [null] (moving average) at step 0, while the embedded path and Simulink (Lowpass/Highpass Filter, Moving Average are element-wise) give a 3-vector. Pinned under XBV-018/XBV-068 in xbTriParity until WP-21 round 5."
+  },
+  {
+   "id": "XBV-191",
+   "plan_ref": "4.6 parity",
+   "severity": "S2",
+   "gate": "V6",
+   "status": "open",
+   "summary": "Canvas RATE_LIMITER outputs 0 at t = 0 for a constant 0.7 input with rising/falling limits 0.1 per step; decision D12 (initial condition y(-1) = IC = 0) gives clamp(0.7, 0 +/- 0.1) = 0.1, which the embedded path outputs. Pinned under XBV-018 in xbTriParity until WP-21 round 5."
   }
  ],
  "blocks": {
