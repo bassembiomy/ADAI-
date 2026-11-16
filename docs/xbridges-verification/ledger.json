@@ -711,16 +711,18 @@
    "plan_ref": "F6",
    "severity": "S3",
    "gate": "V7",
-   "status": "open",
-   "summary": "SUM_JUNCTION has a codegen capability and no factory; DiagExtract, ExtractDiag, Diag have a factory and no capability entry of their own."
+   "status": "closed",
+   "summary": "SUM_JUNCTION has a codegen capability and no factory; DiagExtract, ExtractDiag, Diag have a factory and no capability entry of their own.",
+   "fix": "WP-21 batch K: every codegen-capable capability entry has a BLOCK_LIBRARY factory and every factory a capability entry (ratchet lists empty)."
   },
   {
    "id": "XBV-007",
    "plan_ref": "F7",
    "severity": "S3",
    "gate": "V8",
-   "status": "open",
-   "summary": "The canvas palette and the help/AI palette differ: 20 types only on the canvas palette, 55 only on the help palette (inventory.json: onCanvasPaletteOnly, onHelpPaletteOnly)."
+   "status": "closed",
+   "summary": "The canvas palette and the help/AI palette differ: 20 types only on the canvas palette, 55 only on the help palette (inventory.json: onCanvasPaletteOnly, onHelpPaletteOnly).",
+   "fix": "WP-21 batch K: the canvas palette and the help/AI palette list the same types (palette 228 -> 283; ratchet lists empty)."
   },
   {
    "id": "XBV-008",
@@ -735,8 +737,9 @@
    "plan_ref": "F9",
    "severity": "S4",
    "gate": "V7",
-   "status": "open",
-   "summary": "docs/XBRIDGES_EMBEDDED_CODEGEN.md lists about 40 embedded-capable types and two solvers; the registry has 100 and three. WP-17: the document lists 38 types, the registry has 100 codegen-capable types."
+   "status": "closed",
+   "summary": "docs/XBRIDGES_EMBEDDED_CODEGEN.md lists about 40 embedded-capable types and two solvers; the registry has 100 and three. WP-17: the document lists 38 types, the registry has 100 codegen-capable types.",
+   "fix": "WP-21 batch K: docs/XBRIDGES_EMBEDDED_CODEGEN.md lists exactly the codegen-capable types and the embedded solvers."
   },
   {
    "id": "XBV-010",
@@ -761,24 +764,27 @@
    "plan_ref": "V1",
    "severity": "S4",
    "gate": "V1",
-   "status": "open",
-   "summary": "174 blocks have no equation text in their factory; ratchet list in tests/fixtures/xbridges/known-gaps.json."
+   "status": "closed",
+   "summary": "174 blocks have no equation text in their factory; ratchet list in tests/fixtures/xbridges/known-gaps.json.",
+   "fix": "WP-21 batch K: every block has equation text (ratchet list empty)."
   },
   {
    "id": "XBV-013",
    "plan_ref": "V1",
    "severity": "S4",
    "gate": "V1",
-   "status": "open",
-   "summary": "233 blocks have at least one port without a unit; ratchet list in tests/fixtures/xbridges/known-gaps.json."
+   "status": "closed",
+   "summary": "233 blocks have at least one port without a unit; ratchet list in tests/fixtures/xbridges/known-gaps.json.",
+   "fix": "WP-21 batch K: every port has a unit ('1' dimensionless, 'none' structured data, '@angle' resolved from angle_unit at compile; ratchet list empty)."
   },
   {
    "id": "XBV-014",
    "plan_ref": "V1",
    "severity": "S3",
    "gate": "V1",
-   "status": "open",
-   "summary": "56 blocks use port types outside XSignalType (control, object, data, load, boolean); the engine's type checks do not know them. Ratchet list in tests/fixtures/xbridges/known-gaps.json."
+   "status": "closed",
+   "summary": "56 blocks use port types outside XSignalType (control, object, data, load, boolean); the engine's type checks do not know them. Ratchet list in tests/fixtures/xbridges/known-gaps.json.",
+   "fix": "WP-21 batch K: port types are XSignalType values; control ports carry role 'control' and the embedded adapter finds optional-input defaults by role (verified: PID with Enable/Reset open generates C; no lab diagnostic added)."
   },
   {
    "id": "XBV-015",
@@ -956,8 +962,9 @@
    "plan_ref": "5.2 diagnostics",
    "severity": "S3",
    "gate": "V4",
-   "status": "open",
-   "summary": "DOE_MODEL fault codes EXECUTION_EXCEPTION, INVALID_GMDH_LAYERS, INVALID_TAGUCHI_LEVELS, NO_MODEL_CONFIGURED, NON_FINITE_INPUT exist only in nextState.lastFault and inside one BLOCK_RUNTIME_FAULT message; they never appear as diagnostics, and the run continues (XBV-033). Pinned in xbDiagnostics.test.ts."
+   "status": "closed",
+   "summary": "DOE_MODEL fault codes EXECUTION_EXCEPTION, INVALID_GMDH_LAYERS, INVALID_TAGUCHI_LEVELS, NO_MODEL_CONFIGURED, NON_FINITE_INPUT exist only in nextState.lastFault and inside one BLOCK_RUNTIME_FAULT message; they never appear as diagnostics, and the run continues (XBV-033). Pinned in xbDiagnostics.test.ts.",
+   "fix": "WP-21 batch K: DOE_MODEL fault codes are documented and reported as diagnostics."
   },
   {
    "id": "XBV-035",
@@ -990,8 +997,9 @@
    "plan_ref": "5.2 diagnostics",
    "severity": "S3",
    "gate": "V3",
-   "status": "open",
-   "summary": "CONSTANT_VALUE_NOT_REPRESENTABLE (a Constant value that loses precision in its data type) is a compile error that refuses the model; Simulink reports parameter precision loss as a warning by default (out-of-range overflow stays an error). Pinned in xbDiagnostics.test.ts."
+   "status": "closed",
+   "summary": "CONSTANT_VALUE_NOT_REPRESENTABLE (a Constant value that loses precision in its data type) is a compile error that refuses the model; Simulink reports parameter precision loss as a warning by default (out-of-range overflow stays an error). Pinned in xbDiagnostics.test.ts.",
+   "fix": "WP-21 batch K: CONSTANT_VALUE_NOT_REPRESENTABLE (precision loss in the data type) is a warning, as in Simulink."
   },
   {
    "id": "XBV-039",
@@ -1607,16 +1615,18 @@
    "plan_ref": "7.2 state-machine alignment",
    "severity": "S4",
    "gate": "V7",
-   "status": "open",
-   "summary": "Under the 'retain' memory policy the discrete sample-hit counter freezes while the owning state is inactive (hits at ticks 1, 3, 7, 9 across exit/re-entry); simulator, runtime and C agree, but docs/XBRIDGES_EMBEDDED_CODEGEN.md does not state it. Reported by the WP-18 executor."
+   "status": "closed",
+   "summary": "Under the 'retain' memory policy the discrete sample-hit counter freezes while the owning state is inactive (hits at ticks 1, 3, 7, 9 across exit/re-entry); simulator, runtime and C agree, but docs/XBRIDGES_EMBEDDED_CODEGEN.md does not state it. Reported by the WP-18 executor.",
+   "fix": "WP-21 batch K: docs/XBRIDGES_EMBEDDED_CODEGEN.md states that under 'retain' the sample-hit counter is frozen while the owning state is inactive."
   },
   {
    "id": "XBV-109",
    "plan_ref": "WP-11",
    "severity": "S4",
    "gate": "G",
-   "status": "open",
-   "summary": "docs/powertrain/ledger.json has no per-block gate records ('blocks' is {} and no PT_ type appears), so the powertrain G1-G5 verdicts the plan imports do not exist; the 45 PT_* blocks are covered by 28 powertrain test files (204 tests pass) but their Simulink-golden gate is pending everywhere."
+   "status": "closed",
+   "summary": "docs/powertrain/ledger.json has no per-block gate records ('blocks' is {} and no PT_ type appears), so the powertrain G1-G5 verdicts the plan imports do not exist; the 45 PT_* blocks are covered by 28 powertrain test files (204 tests pass) but their Simulink-golden gate is pending everywhere.",
+   "fix": "WP-21 batch K: docs/powertrain/ledger.json records per-block gate verdicts for every PT_ block, each citing an existing test file."
   },
   {
    "id": "XBV-110",
@@ -2091,8 +2101,9 @@
    "plan_ref": "documentation",
    "severity": "S4",
    "gate": "V7",
-   "status": "open",
-   "summary": "src/utils/stateMachine/xbAccurateMath.ts says glibc sin is correctly rounded; glibc 2.39 differs from the correctly rounded value in 195 of 208k samples (verifier). The interpreter's accurateSin is correctly rounded (0 mismatches) and differs from the canvas Math.sin by 1 ULP in about 1.8 % of cases, absorbed by the parity tolerance. Comment to correct."
+   "status": "closed",
+   "summary": "src/utils/stateMachine/xbAccurateMath.ts says glibc sin is correctly rounded; glibc 2.39 differs from the correctly rounded value in 195 of 208k samples (verifier). The interpreter's accurateSin is correctly rounded (0 mismatches) and differs from the canvas Math.sin by 1 ULP in about 1.8 % of cases, absorbed by the parity tolerance. Comment to correct.",
+   "fix": "WP-21 batch K: xbAccurateMath no longer claims glibc sin is correctly rounded."
   },
   {
    "id": "XBV-163",
@@ -2126,8 +2137,9 @@
    "plan_ref": "documentation",
    "severity": "S4",
    "gate": "V5",
-   "status": "open",
-   "summary": "src/help/moduleTopics.ts still says the canvas does not adapt its step; since WP-21 E1 the canvas ode45/ode23/ode23tb control the error with RelTol/AbsTol."
+   "status": "closed",
+   "summary": "src/help/moduleTopics.ts still says the canvas does not adapt its step; since WP-21 E1 the canvas ode45/ode23/ode23tb control the error with RelTol/AbsTol.",
+   "fix": "WP-21 batch K: the solver help describes the error-controlled variable-step solvers (RelTol/AbsTol)."
   },
   {
    "id": "XBV-169",
@@ -2178,8 +2190,9 @@
    "plan_ref": "6 UI / help",
    "severity": "S3",
    "gate": "V8",
-   "status": "open",
-   "summary": "Help coverage is out of date after WP-21 UI and parameter changes: src/help/helpCoverage.test.ts fails on the live-UI fingerprint and on an unmapped reviewed feature (new inline controls such as the toolbar and panel editors), and src/help/blockReference.test.ts reports a parameter-interpretation gap for RL_Q_LEARNING_CONTROLLER (new 'seed' parameter, batch G). The fingerprint test already failed before WP-21 round 1 (cb974bc3). Batch K."
+   "status": "closed",
+   "summary": "Help coverage is out of date after WP-21 UI and parameter changes: src/help/helpCoverage.test.ts fails on the live-UI fingerprint and on an unmapped reviewed feature (new inline controls such as the toolbar and panel editors), and src/help/blockReference.test.ts reports a parameter-interpretation gap for RL_Q_LEARNING_CONTROLLER (new 'seed' parameter, batch G). The fingerprint test already failed before WP-21 round 1 (cb974bc3). Batch K.",
+   "fix": "WP-21 batch K: help coverage regenerated after the palette and parameter changes."
   },
   {
    "id": "XBV-171",

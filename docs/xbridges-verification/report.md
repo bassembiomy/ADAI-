@@ -5,11 +5,11 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 ## Summary
 
 - Work packages: 20 done of 29; 2 in progress; 7 to do.
-- Findings: 28 open, 154 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
+- Findings: 15 open, 167 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
   - S1 (wrong number in simulation or generated C): 1 open
   - S2 (crash, stop, freeze or silent no-op): 5 open
-  - S3 (diagnostic, UI or convention deviation): 14 open
-  - S4 (documentation): 8 open
+  - S3 (diagnostic, UI or convention deviation): 8 open
+  - S4 (documentation): 1 open
 - Decisions recorded: 14; open: 0.
 
 ## Work packages
@@ -80,18 +80,12 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 | XBV-176 | V5 | 5.1 explicit solvers | VectorUtils.integrateState reads a derivative as `Number(deriv) \|\| 0`, so a NaN derivative is integrated as 0 by euler/rk4/ode45 without a diagnostic (pre-existing). Found by the WP-21 batch I verifier; acceptance in xbWp21Faults.test.ts. |
 | XBV-177 | V5 | 4.2 powertrain | PT_AUTOMATED_MANUAL_TRANSMISSION and PT_DUAL_CLUTCH_TRANSMISSION do not finish 1 s of simulation within 120 s under ode23tb (defaults, unit inputs); rk4 finishes quickly. Found by the WP-21 batch I scan. |
 
-### S3 - diagnostic, UI or convention deviation (14)
+### S3 - diagnostic, UI or convention deviation (8)
 
 | Id | Gate | Plan ref | Summary |
 | --- | --- | --- | --- |
-| XBV-006 | V7 | F6 | SUM_JUNCTION has a codegen capability and no factory; DiagExtract, ExtractDiag, Diag have a factory and no capability entry of their own. |
-| XBV-007 | V8 | F7 | The canvas palette and the help/AI palette differ: 20 types only on the canvas palette, 55 only on the help palette (inventory.json: onCanvasPaletteOnly, onHelpPaletteOnly). |
-| XBV-014 | V1 | V1 | 56 blocks use port types outside XSignalType (control, object, data, load, boolean); the engine's type checks do not know them. Ratchet list in tests/fixtures/xbridges/known-gaps.json. |
-| XBV-034 | V4 | 5.2 diagnostics | DOE_MODEL fault codes EXECUTION_EXCEPTION, INVALID_GMDH_LAYERS, INVALID_TAGUCHI_LEVELS, NO_MODEL_CONFIGURED, NON_FINITE_INPUT exist only in nextState.lastFault and inside one BLOCK_RUNTIME_FAULT message; they never appear as diagnostics, and the run continues (XBV-033). Pinned in xbDiagnostics.test.ts. |
-| XBV-038 | V3 | 5.2 diagnostics | CONSTANT_VALUE_NOT_REPRESENTABLE (a Constant value that loses precision in its data type) is a compile error that refuses the model; Simulink reports parameter precision loss as a warning by default (out-of-range overflow stays an error). Pinned in xbDiagnostics.test.ts. |
 | XBV-106 | V7 | 7.2 state-machine alignment | State-machine variables are scalar only: mapping a vector (3) or matrix (2x2) X-Bridges port to an SM variable is refused (XB_MAPPING_INVALID), so plan 7.2's vector/matrix boundary mappings are not expressible; vector/matrix signals work inside the model. Reported by the WP-18 executor. |
 | XBV-172 | V6 | 7.3 canvas / interpreter parity | A non-finite operand of ShiftLeft/ShiftRight (Inf, NaN) gives 0 without a numeric fault in the embedded path (JS ToInt32 / C helper), while the canvas raises a block error. Found by the WP-21 batch F2 executor and verifier. |
-| XBV-173 | V8 | 6 UI / help | Help coverage is out of date after WP-21 UI and parameter changes: src/help/helpCoverage.test.ts fails on the live-UI fingerprint and on an unmapped reviewed feature (new inline controls such as the toolbar and panel editors), and src/help/blockReference.test.ts reports a parameter-interpretation gap for RL_Q_LEARNING_CONTROLLER (new 'seed' parameter, batch G). The fingerprint test already failed before WP-21 round 1 (cb974bc3). Batch K. |
 | XBV-178 | V3 | 4.2 powertrain | PT_TURBOCHARGER raises BLOCK_RUNTIME_FAULT with its defaults and unit inputs under rk4 and ode23tb alike (not a solver difference; cause not investigated). Found by the WP-21 batch I scan. |
 | XBV-179 | V5 | 4.2 powertrain | PT_ENGINE_DYNO under ode23tb at default tolerances differs from rk4 (0.001) by 2e-2 relative at output step 0.05 (2.8e-3 at 0.01); keyed derivatives, so error control / output interpolation rather than the layout defect. Found by the WP-21 batch I scan. |
 | XBV-180 | V3 | 3 parameters | Some parameterSchema 'positive' entries reject 0 although 0 is not degenerate in the block equation: ROBOT_VACUUM_MOTOR motor_R/motor_K, Lm of AC_INDUCTION_MOTOR/IM_FLUX_OBSERVER/AC_MOTOR_PID_CONTROL (numerator only), ROBOT_VACUUM_BATTERY.nominal_voltage, SVPWM_CORE.Ts, MTPA_CONTROLLER.Ld; motor_R positive contradicts Rs/Ron nonnegative. Some positive entries belong to parameters execute does not use (IM_FOC Rr/Lr/P, IM_SCALAR rated_f, DIGITAL_TWIN motor_*). Found by the WP-21 batch J verifier. |
@@ -99,18 +93,11 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 | XBV-182 | V8 | 6 UI | The panel maps PT_* parameter specs to editor kinds only for min = 0 (nonnegative); specs with min > 0 or a max become plain 'number', so the panel accepts out-of-range text that the block refuses at its first step (BLOCK_RUNTIME_FAULT). Found by the WP-21 batch J verifier. |
 | XBV-183 | V5 | 5.1 stiff solvers | ode23tb with RelTol 1e-9 (now reachable from the toolbar) fails at t = 6.1e-6 with STIFF_SOLVER_STEP_TOO_SMALL on the cos(10 t) integrator; tight tolerances should take smaller steps down to the documented minimum, not fail on a smooth problem. Found by the WP-21 batch J verifier. |
 
-### S4 - documentation (8)
+### S4 - documentation (1)
 
 | Id | Gate | Plan ref | Summary |
 | --- | --- | --- | --- |
-| XBV-009 | V7 | F9 | docs/XBRIDGES_EMBEDDED_CODEGEN.md lists about 40 embedded-capable types and two solvers; the registry has 100 and three. WP-17: the document lists 38 types, the registry has 100 codegen-capable types. |
-| XBV-012 | V1 | V1 | 174 blocks have no equation text in their factory; ratchet list in tests/fixtures/xbridges/known-gaps.json. |
-| XBV-013 | V1 | V1 | 233 blocks have at least one port without a unit; ratchet list in tests/fixtures/xbridges/known-gaps.json. |
 | XBV-037 | V5 | 5.1 | Stiff-solver options (ode14x extrapolationOrder/newtonIterations, ode23tb relTol/absTol/minStep/maxStep) are not editable on the canvas; STIFF_SOLVER_INVALID_OPTION and STIFF_SOLVER_STEP_TOO_SMALL are reachable only from a batch configuration. Related to decision D3 (user tolerances). WP-21 batch J: RelTol/AbsTol (ode23/ode45/ode23tb) and ode14x extrapolation order / Newton iterations are on the toolbar, saved and restored; ode23tb minStep/maxStep are still not editable. |
-| XBV-108 | V7 | 7.2 state-machine alignment | Under the 'retain' memory policy the discrete sample-hit counter freezes while the owning state is inactive (hits at ticks 1, 3, 7, 9 across exit/re-entry); simulator, runtime and C agree, but docs/XBRIDGES_EMBEDDED_CODEGEN.md does not state it. Reported by the WP-18 executor. |
-| XBV-109 | G | WP-11 | docs/powertrain/ledger.json has no per-block gate records ('blocks' is {} and no PT_ type appears), so the powertrain G1-G5 verdicts the plan imports do not exist; the 45 PT_* blocks are covered by 28 powertrain test files (204 tests pass) but their Simulink-golden gate is pending everywhere. |
-| XBV-162 | V7 | documentation | src/utils/stateMachine/xbAccurateMath.ts says glibc sin is correctly rounded; glibc 2.39 differs from the correctly rounded value in 195 of 208k samples (verifier). The interpreter's accurateSin is correctly rounded (0 mismatches) and differs from the canvas Math.sin by 1 ULP in about 1.8 % of cases, absorbed by the parity tolerance. Comment to correct. |
-| XBV-166 | V5 | documentation | src/help/moduleTopics.ts still says the canvas does not adapt its step; since WP-21 E1 the canvas ode45/ode23/ode23tb control the error with RelTol/AbsTol. |
 
 ## Closed, merged or superseded findings
 
@@ -118,9 +105,15 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 - XBV-003 (closed): Canvas ode23/ode45/ode23tb are stepped with the fixed step and hard-coded tolerances; no error control. Decision D3: control error with the user's RelTol/AbsTol.
 - XBV-004 (closed): SolverOptions.solver admits ode113, ode23s, ode15s that no dispatcher implements. Decision D3: remove them from the type; unknown names keep UNSUPPORTED_SOLVER.
 - XBV-005 (closed): Only Step and three PT_ blocks declare zero crossings. Decision D2: add ZeroCrossingFn to SATURATION, DEADZONE, RELAY, SWITCH, Abs and the PWM carrier blocks.
+- XBV-006 (closed): SUM_JUNCTION has a codegen capability and no factory; DiagExtract, ExtractDiag, Diag have a factory and no capability entry of their own.
+- XBV-007 (closed): The canvas palette and the help/AI palette differ: 20 types only on the canvas palette, 55 only on the help palette (inventory.json: onCanvasPaletteOnly, onHelpPaletteOnly).
 - XBV-008 (superseded by XBV-029): DIMENSION_MISMATCH and DATA_TYPE_MISMATCH on a connection are warnings. Decision D1: compile errors, as in Simulink.
+- XBV-009 (closed): docs/XBRIDGES_EMBEDDED_CODEGEN.md lists about 40 embedded-capable types and two solvers; the registry has 100 and three. WP-17: the document lists 38 types, the registry has 100 codegen-capable types.
 - XBV-010 (closed): Embedded limits (fixed-step euler/rk4/discrete, no algebraic loops, vector 16, matrix 8) have no test on both sides of each boundary.
 - XBV-011 (closed): The parameter schema covers 74 of 290 block types; PARAMETER_* errors do not apply to the others.
+- XBV-012 (closed): 174 blocks have no equation text in their factory; ratchet list in tests/fixtures/xbridges/known-gaps.json.
+- XBV-013 (closed): 233 blocks have at least one port without a unit; ratchet list in tests/fixtures/xbridges/known-gaps.json.
+- XBV-014 (closed): 56 blocks use port types outside XSignalType (control, object, data, load, boolean); the engine's type checks do not know them. Ratchet list in tests/fixtures/xbridges/known-gaps.json.
 - XBV-015 (closed): GAIN treats gain 0 (and -0) as 1: factory uses params.gain \|\| 1 (BlockDefinitions.ts ~3783); confirmed by run, also with per-tick applyParameterUpdates: input 3 gives 3, Simulink gives 0. PRODUCT nu
 - XBV-016 (closed): Stiff solvers with an algebraic loop: y = 0.5*y + 1 feeding an Integrator, dt 0.1, stop 1 (expected integral 2): ode14x gives 51.588135932457256, ode23tb 1.7999999999948573; every other solver gives a
 - XBV-017 (closed): The canvas accumulates time (timeRef += stepNow) instead of t0 + n*dt; the test kit uses multiplication (plan 5.1). Against an accumulating emulation, signals differ at rounding level for 40 block typ
@@ -140,8 +133,10 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 - XBV-031 (closed): The engine accepts malformed models silently: two drivers on one input port, two blocks with the same id, and an unknown block type (skipped as a no-op) give no compile error. The canvas may prevent s
 - XBV-032 (closed): Run time is quadratic in the number of blocks (1000/2000/4000-block chains: 188/435/1633 ms for 10 rk4 steps; 10 000 blocks about 22 s); gatherInputs searches the connection list per input. Pinned aga
 - XBV-033 (closed): Runtime diagnostics of severity error do not stop the run: a block's typed diagnostic (e.g. LOGIC_NAN_INPUT) and a block-returned error (BLOCK_RUNTIME_FAULT via result.error) are recorded but never se
+- XBV-034 (closed): DOE_MODEL fault codes EXECUTION_EXCEPTION, INVALID_GMDH_LAYERS, INVALID_TAGUCHI_LEVELS, NO_MODEL_CONFIGURED, NON_FINITE_INPUT exist only in nextState.lastFault and inside one BLOCK_RUNTIME_FAULT messa
 - XBV-035 (closed): Dimension checking is inactive: library factories never set port dimensions (only PT_VEHICLE_BODY_1DOF inputs do), so DIMENSION_MISMATCH cannot fire for any canvas-built model; Simulink propagates and
 - XBV-036 (closed): Batch variable-step runs (Solvers.runFixedStep with ode45 or ode23) hang - no result after 60 s - as soon as they bracket a Step event: Step at 0.3, 0.5 or 0.55 s with default tolerances, or at the st
+- XBV-038 (closed): CONSTANT_VALUE_NOT_REPRESENTABLE (a Constant value that loses precision in its data type) is a compile error that refuses the model; Simulink reports parameter precision loss as a warning by default (
 - XBV-040 (closed): WaveformGen amplitude 0 (also freq 0, offset 0) is replaced by 1/1/0 through `\|\|` (instance of XBV-019); a 0-amplitude sine outputs a full sine. Pinned in xbEquations.math.test.ts.
 - XBV-041 (closed): The Sources 'Clock' block is a 50% square-wave pulse generator (freq parameter), not the Simulink Clock (output = simulation time); a Simulink user wiring Clock as time gets a 0/1 square wave. No bloc
 - XBV-042 (closed): PRODUCT works on scalars only (Number(vector) = NaN); Simulink Product multiplies/divides vectors and matrices element-wise. Pinned in xbEquations.math.test.ts.
@@ -208,6 +203,8 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 - XBV-104 (closed): Generated C for an integrator loop fails -Wshadow (gcc and clang): 'xb_value_0_0_i_out' shadows a previous local (sm_core.c:78). Found by the WP-17 executor; pinned in src/utils/stateMachine/xbCodePar
 - XBV-105 (closed): Generated C for discontinuity blocks fails -Wdouble-promotion (gcc sm_core.c:143, clang sm_core.c:100): float promoted to double in a conditional. Found by the WP-17 executor; pinned in src/utils/stat
 - XBV-107 (closed): PRODUCT with operation 'divide' is not available in the embedded (state-machine / C) path although the canvas offers it; divide inside a state requires VectorDiv on vectors. Reported by the WP-18 exec
+- XBV-108 (closed): Under the 'retain' memory policy the discrete sample-hit counter freezes while the owning state is inactive (hits at ticks 1, 3, 7, 9 across exit/re-entry); simulator, runtime and C agree, but docs/XB
+- XBV-109 (closed): docs/powertrain/ledger.json has no per-block gate records ('blocks' is {} and no PT_ type appears), so the powertrain G1-G5 verdicts the plan imports do not exist; the 45 PT_* blocks are covered by 28
 - XBV-110 (closed): FUZZY_MF_TRIMF shoulder: with a = b (or b = c) the membership at the shoulder vertex is 0 instead of 1 (x <= a \|\| x >= c returns 0 first); MATLAB trimf gives 1. Found by the WP-09 executor; pinned i
 - XBV-111 (closed): FUZZY_MF_TRAPMF shoulder: with a = b (or c = d) the membership at the shoulder vertex is 0 instead of 1. Found by the WP-09 executor; pinned in xbEquations.fuzzy.test.ts.
 - XBV-112 (closed): FUZZY_AND clips its inputs to [0, 1] and turns NaN into 0 silently (min(1.5, 2) = 1, product = 1 instead of 1.5 and 3); MATLAB does not clip. Out-of-range memberships are invalid inputs, so clipping i
@@ -260,13 +257,16 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 - XBV-159 (closed): Embedded continuous-form PID_CONTROLLER (sample time <= 0) advances its integrator and derivative-filter states with forward Euler whatever the solver: under rk4 the embedded trace equals the euler tr
 - XBV-160 (closed): Embedded VectorDiv by zero publishes 0 (documented safe-zero fallback kept by batch F) while the canvas gives Inf with DIVIDE_BY_ZERO and PRODUCT divide gives Inf; D11 (NaN/Inf + fault flag) should ap
 - XBV-161 (closed): Embedded ShiftLeft/ShiftRight mask the shift count to 5 bits (& 31) in interpreter and C; Simulink and the canvas (since XBV-057, WP-21 batch D) shift every bit out for counts >= 32 (0, or -1 for a ne
+- XBV-162 (closed): src/utils/stateMachine/xbAccurateMath.ts says glibc sin is correctly rounded; glibc 2.39 differs from the correctly rounded value in 195 of 208k samples (verifier). The interpreter's accurateSin is co
 - XBV-163 (closed): Embedded RELAY reads the previous tick's input and switches one sample late: SINE_A u(0.30) = 1.0162 >= switch-on 1, so Simulink (and the canvas, direct feedthrough since WP-21 E2) gives 1 at t = 0.3 
 - XBV-164 (closed): Embedded rk4 evaluates Step at the stage times; the canvas holds discontinuous outputs at their major-step value during minor steps (Simulink, WP-21 E2 / XBV-067), so 6 rk4 corpus seeds differ by h/6 
 - XBV-165 (closed): A block fault raised in a trial (minor) stage of a variable-step solver stops the run: the om501 lab with ode45 at default tolerance stops at 2.92 s with BLOCK_RUNTIME_FAULT (Intake Manifold P = -4360
+- XBV-166 (closed): src/help/moduleTopics.ts still says the canvas does not adapt its step; since WP-21 E1 the canvas ode45/ode23/ode23tb control the error with RelTol/AbsTol.
 - XBV-169 (closed): MatrixConcat axis 0 mixes Simulink's Vector and Multidimensional modes: scalars only give a 2x1 matrix, vectors only (or vector plus scalar) give a longer 1-D vector; the block has no mode parameter (
 - XBV-167 (closed): Embedded KALMAN_FILTER still predicts before the first update (P[0\|-1] = A P0 A' + Q); the canvas follows the Simulink order (update with x[0\|-1] = x0, P0, then predict) since WP-21 batch G (XBV-078
 - XBV-168 (closed): Embedded PID_BASIC / PID_CONTROLLER output 0 while reset is active; Simulink and the canvas (since XBV-077, WP-21 batch G) keep the proportional action Kp e. Pinned in xbTriParity.
 - XBV-170 (closed): AC_INDUCTION_MOTOR and AC_MOTOR_PID_CONTROL stator-current equations divided the resistive and back-EMF terms by sigma once too often (sigma Ls dis/dt = vs - (Rs + kr^2 Rr) is + (kr/tau_r) psir -/+ kr
+- XBV-173 (closed): Help coverage is out of date after WP-21 UI and parameter changes: src/help/helpCoverage.test.ts fails on the live-UI fingerprint and on an unmapped reviewed feature (new inline controls such as the t
 - XBV-171 (closed): A continuous STATE_SPACE with an explicit sampleTime > 0 held its state (evaluateDerivatives only ran for sampleTime <= 0); Simulink's continuous State-Space has no sample time and always integrates. 
 
 ## Decisions
