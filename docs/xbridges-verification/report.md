@@ -5,10 +5,10 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 ## Summary
 
 - Work packages: 20 done of 29; 2 in progress; 7 to do.
-- Findings: 13 open, 177 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
+- Findings: 11 open, 179 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
   - S1 (wrong number in simulation or generated C): 1 open
   - S2 (crash, stop, freeze or silent no-op): 4 open
-  - S3 (diagnostic, UI or convention deviation): 7 open
+  - S3 (diagnostic, UI or convention deviation): 5 open
   - S4 (documentation): 1 open
 - Decisions recorded: 15; open: 0.
 
@@ -79,7 +79,7 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 | XBV-190 | V6 | 4.6 parity | Canvas LOW_PASS_FILTER, HIGH_PASS_FILTER and MOVING_AVERAGE are not element-wise on a vector input: a 3-vector gives the scalar [0] (filters) or [null] (moving average) at step 0, while the embedded path and Simulink (Lowpass/Highpass Filter, Moving Average are element-wise) give a 3-vector. Pinned under XBV-018/XBV-068 in xbTriParity until WP-21 round 5. |
 | XBV-191 | V6 | 4.6 parity | Canvas RATE_LIMITER outputs 0 at t = 0 for a constant 0.7 input with rising/falling limits 0.1 per step; decision D12 (initial condition y(-1) = IC = 0) gives clamp(0.7, 0 +/- 0.1) = 0.1, which the embedded path outputs. Pinned under XBV-018 in xbTriParity until WP-21 round 5. |
 
-### S3 - diagnostic, UI or convention deviation (7)
+### S3 - diagnostic, UI or convention deviation (5)
 
 | Id | Gate | Plan ref | Summary |
 | --- | --- | --- | --- |
@@ -88,8 +88,6 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 | XBV-181 | V8 | 6 UI | After a block with recorded invalid parameter text is selected again, the properties panel shows the stored (last valid) number while the kept record still refuses the run; the Problems message names the block, parameter and text. Found by the WP-21 batch J verifier. |
 | XBV-182 | V8 | 6 UI | The panel maps PT_* parameter specs to editor kinds only for min = 0 (nonnegative); specs with min > 0 or a max become plain 'number', so the panel accepts out-of-range text that the block refuses at its first step (BLOCK_RUNTIME_FAULT). Found by the WP-21 batch J verifier. |
 | XBV-187 | V5 | powertrain | PT_AUTOMATED_MANUAL_TRANSMISSION under rk4 at 1e-3 never locks within 0.05 s (DiffTrq +-1600 chatter) and locks late (0.0115 s vs 0.0019 s) at 1e-4; same on the base. Simulink locks the clutch with a zero crossing on slip; depends on XBV-186. Found by the WP-21 E4 verifier. |
-| XBV-188 | V4 | labs | robot_vacuum_twin: the first run in a fresh process differs from later runs in robot_nav.nav_stats and robot_slam.* (Math.random seeded), so a block keeps state across runs (module-level state not reset on Play). Found by the WP-21 F3 verifier. |
-| XBV-189 | V2 | robot | ROBOT_VACUUM_MOTOR pwm_duty reads \|u\| <= 1 as a duty cycle and larger values as volts; the port unit is 'V' since WP-21 K (fits the labs), but one port mixes two meanings. Simulink-style: one meaning per port. Found by the WP-21 K verifier. |
 
 ### S4 - documentation (1)
 
@@ -276,6 +274,8 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 - XBV-179 (closed): PT_ENGINE_DYNO under ode23tb at default tolerances differs from rk4 (0.001) by 2e-2 relative at output step 0.05 (2.8e-3 at 0.01); keyed derivatives, so error control / output interpolation rather tha
 - XBV-183 (closed): ode23tb with RelTol 1e-9 (now reachable from the toolbar) fails at t = 6.1e-6 with STIFF_SOLVER_STEP_TOO_SMALL on the cos(10 t) integrator; tight tolerances should take smaller steps down to the docum
 - XBV-184 (closed): Live ode23tb with Relay/Switch changed mode only once per output step (errors 0.57 / 1.99 at output step 0.1). Found by the WP-21 E4 verifier.
+- XBV-188 (closed): robot_vacuum_twin: the first run in a fresh process differs from later runs in robot_nav.nav_stats and robot_slam.* (Math.random seeded), so a block keeps state across runs (module-level state not res
+- XBV-189 (closed): ROBOT_VACUUM_MOTOR pwm_duty reads \|u\| <= 1 as a duty cycle and larger values as volts; the port unit is 'V' since WP-21 K (fits the labs), but one port mixes two meanings. Simulink-style: one meanin
 
 ## Decisions
 

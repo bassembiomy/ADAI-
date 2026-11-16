@@ -2336,16 +2336,18 @@
    "plan_ref": "labs",
    "severity": "S3",
    "gate": "V4",
-   "status": "open",
-   "summary": "robot_vacuum_twin: the first run in a fresh process differs from later runs in robot_nav.nav_stats and robot_slam.* (Math.random seeded), so a block keeps state across runs (module-level state not reset on Play). Found by the WP-21 F3 verifier."
+   "status": "closed",
+   "summary": "robot_vacuum_twin: the first run in a fresh process differs from later runs in robot_nav.nav_stats and robot_slam.* (Math.random seeded), so a block keeps state across runs (module-level state not reset on Play). Found by the WP-21 F3 verifier.",
+   "fix": "WP-21 batch R: root cause was the module-level g_isMatlabActive in BlockDefinitions.ts (latches the 12 m map once a lidar hit or pose leaves the 6 m house, reset only by three blocks the twin lab does not contain). XbridgesEngine.compile() now calls resetTwinRunState(), so every run starts from the initial grid mode; robot_vacuum_twin runs are identical run after run (verified with a 3-run reproduction)."
   },
   {
    "id": "XBV-189",
    "plan_ref": "robot",
    "severity": "S3",
    "gate": "V2",
-   "status": "open",
-   "summary": "ROBOT_VACUUM_MOTOR pwm_duty reads |u| <= 1 as a duty cycle and larger values as volts; the port unit is 'V' since WP-21 K (fits the labs), but one port mixes two meanings. Simulink-style: one meaning per port. Found by the WP-21 K verifier."
+   "status": "closed",
+   "summary": "ROBOT_VACUUM_MOTOR pwm_duty reads |u| <= 1 as a duty cycle and larger values as volts; the port unit is 'V' since WP-21 K (fits the labs), but one port mixes two meanings. Simulink-style: one meaning per port. Found by the WP-21 K verifier.",
+   "fix": "WP-21 batch R: pwm_duty is a voltage command, V_in = clamp(u, -max(V_bat,0), max(V_bat,0)); the 0.1 V floor on V_bat is gone; label V_cmd. Commands below 1 V were driven 12x too hard before (di/dt at rest 1200 vs 100 for 0.5 V)."
   },
   {
    "id": "XBV-190",
