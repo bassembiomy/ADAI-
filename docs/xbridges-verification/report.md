@@ -5,10 +5,10 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 ## Summary
 
 - Work packages: 20 done of 29; 2 in progress; 7 to do.
-- Findings: 4 open, 188 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
+- Findings: 1 open, 195 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
   - S1 (wrong number in simulation or generated C): 0 open
-  - S2 (crash, stop, freeze or silent no-op): 2 open
-  - S3 (diagnostic, UI or convention deviation): 1 open
+  - S2 (crash, stop, freeze or silent no-op): 0 open
+  - S3 (diagnostic, UI or convention deviation): 0 open
   - S4 (documentation): 1 open
 - Decisions recorded: 16; open: 0.
 
@@ -64,24 +64,11 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 
 ## Open findings by severity
 
-### S2 - crash, stop, freeze or silent no-op (2)
-
-| Id | Gate | Plan ref | Summary |
-| --- | --- | --- | --- |
-| XBV-185 | V5 | 4.5 solvers | Robertson problem: ode23tb stops at step 1 with STIFF_SOLVER_NONFINITE when a Newton iterate overflows, instead of rejecting the step and retrying smaller (MATLAB ode23tb treats a failed Newton iteration as a step failure). Found by the WP-21 E4 verifier. |
-| XBV-186 | V5 | 4.5 solvers | Fixed-step euler, ode2, ode3, rk4, ode5 (Solvers.ts) and ode14x (StiffSolver.ts ~384) compute zcPrev = getZeroCrossings(t, statesPrev) without computeOutputs first, so gatherInputs reads the trial-end signals, the sign change is never seen and bracketZeroCrossing is never called (0 calls on the Switch test model); bracketZeroCrossing has the same flaw internally. ode45/ode23 use their own locateEvent and are not affected. Found by the WP-21 E4 verifier. |
-
-### S3 - diagnostic, UI or convention deviation (1)
-
-| Id | Gate | Plan ref | Summary |
-| --- | --- | --- | --- |
-| XBV-187 | V5 | powertrain | PT_AUTOMATED_MANUAL_TRANSMISSION under rk4 at 1e-3 never locks within 0.05 s (DiffTrq +-1600 chatter) and locks late (0.0115 s vs 0.0019 s) at 1e-4; same on the base. Simulink locks the clutch with a zero crossing on slip; depends on XBV-186. Found by the WP-21 E4 verifier. |
-
 ### S4 - documentation (1)
 
 | Id | Gate | Plan ref | Summary |
 | --- | --- | --- | --- |
-| XBV-193 | V6 | 4.6 parity | The embedded validator refuses RATE_LIMITER vector slew rates with the generic message 'risingSlewRate must be >= 0...' instead of saying that vector rates are not supported by Generate C (the canvas accepts them since XBV-192). Found by the WP-21 D3 verifier. |
+| XBV-197 | V3 | 4.6 parity | RATE_LIMITER legacy aliases risingLimit / fallingLimit set to '' pass the embedded validator as Number('') = 0, while the readers fall back to the default 1 (interpreter = C, so no parity gap); an empty alias should be refused like an empty slew rate. Older than WP-21 batch S. Found by the batch S verifier. |
 
 ## Closed, merged or superseded findings
 
@@ -268,11 +255,18 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 - XBV-182 (closed): The panel maps PT_* parameter specs to editor kinds only for min = 0 (nonnegative); specs with min > 0 or a max become plain 'number', so the panel accepts out-of-range text that the block refuses at 
 - XBV-183 (closed): ode23tb with RelTol 1e-9 (now reachable from the toolbar) fails at t = 6.1e-6 with STIFF_SOLVER_STEP_TOO_SMALL on the cos(10 t) integrator; tight tolerances should take smaller steps down to the docum
 - XBV-184 (closed): Live ode23tb with Relay/Switch changed mode only once per output step (errors 0.57 / 1.99 at output step 0.1). Found by the WP-21 E4 verifier.
+- XBV-185 (closed): Robertson problem: ode23tb stops at step 1 with STIFF_SOLVER_NONFINITE when a Newton iterate overflows, instead of rejecting the step and retrying smaller (MATLAB ode23tb treats a failed Newton iterat
+- XBV-186 (closed): Fixed-step euler, ode2, ode3, rk4, ode5 (Solvers.ts) and ode14x (StiffSolver.ts ~384) compute zcPrev = getZeroCrossings(t, statesPrev) without computeOutputs first, so gatherInputs reads the trial-end
+- XBV-187 (closed): PT_AUTOMATED_MANUAL_TRANSMISSION under rk4 at 1e-3 never locks within 0.05 s (DiffTrq +-1600 chatter) and locks late (0.0115 s vs 0.0019 s) at 1e-4; same on the base. Simulink locks the clutch with a 
 - XBV-188 (closed): robot_vacuum_twin: the first run in a fresh process differs from later runs in robot_nav.nav_stats and robot_slam.* (Math.random seeded), so a block keeps state across runs (module-level state not res
 - XBV-189 (closed): ROBOT_VACUUM_MOTOR pwm_duty reads \|u\| <= 1 as a duty cycle and larger values as volts; the port unit is 'V' since WP-21 K (fits the labs), but one port mixes two meanings. Simulink-style: one meanin
 - XBV-190 (closed): Canvas LOW_PASS_FILTER, HIGH_PASS_FILTER and MOVING_AVERAGE are not element-wise on a vector input: a 3-vector gives the scalar [0] (filters) or [null] (moving average) at step 0, while the embedded p
 - XBV-191 (closed): Canvas RATE_LIMITER outputs 0 at t = 0 for a constant 0.7 input with rising/falling limits 0.1 per step; decision D12 (initial condition y(-1) = IC = 0) gives clamp(0.7, 0 +/- 0.1) = 0.1, which the em
 - XBV-192 (closed): RATE_LIMITER with vector slew rates: p.risingSlewRate * dt is NaN, so limiting is silently skipped and u passes through (also on the base). Simulink Rate Limiter accepts only scalar rates; a vector ra
+- XBV-193 (closed): The embedded validator refuses RATE_LIMITER vector slew rates with the generic message 'risingSlewRate must be >= 0...' instead of saying that vector rates are not supported by Generate C (the canvas 
+- XBV-194 (closed): A RATE_LIMITER slew rate given as the one-element array [2] passes the embedded validator, but xbInterpreter.parameter and xbCGenerator.scalarParameter read only numbers and silently fall back to the 
+- XBV-195 (closed): src/utils/stateMachine smDifferential: the state-timer Step value is [0,2,2,2] where [0,2,2,5] is expected (not an environment issue; fails on the base too). Found by the WP-21 XBV-193 verifier; root 
+- XBV-196 (closed): An empty RATE_LIMITER slew rate [] / '[]' is refused by the embedded validator with the 'vector slew rates' message although it has no elements (the base silently ran it at rate 1); the message should
 
 ## Decisions
 

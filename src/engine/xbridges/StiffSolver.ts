@@ -352,7 +352,6 @@ export class StiffSolver {
     const startTime = options.startTime;
     const stopTime = options.stopTime;
     const dt = options.fixedStep ?? 0.01;
-    const zeroTol = options.zeroTol ?? 1e-6;
     if (!(dt > 0)) {
       reportError(engine, 'STIFF_SOLVER_INVALID_OPTION', 'ode14x requires fixedStep > 0.');
       return;
@@ -362,30 +361,12 @@ export class StiffSolver {
     let c = 0.0;
     engine.options = options;
 
-    const snapshot = () => {
-      const m = new Map<string, any>();
-      engine.executionOrder.forEach(b => { if (b.state !== undefined) m.set(b.id, JSON.parse(JSON.stringify(b.state))); });
-      return m;
-    };
-
     while (t < stopTime && !engine.hasFatalError()) {
       let currentStep = dt;
       if (t + currentStep > stopTime) currentStep = stopTime - t;
 
-      const statesPrev = snapshot();
       if (!this.stepODE14x(engine, t, currentStep, opts)) break;
-      const statesCurr = snapshot();
-
-      const zcPrev = engine.getZeroCrossings(t, statesPrev);
-      const zcCurr = engine.getZeroCrossings(t + currentStep, statesCurr);
-
-      let advance = currentStep;
-      if (engine.hasZeroCrossingSignChange(zcPrev, zcCurr)) {
-        const tEvent = engine.bracketZeroCrossing(t, t + currentStep, statesPrev, statesCurr, zeroTol);
-        engine.commitStateUpdates(statesPrev);
-        advance = tEvent - t;
-        if (!this.stepODE14x(engine, t, advance, opts)) break;
-      }
+      const advance = currentStep;
       const y = advance - c;
       const temp = t + y;
       c = (temp - t) - y;
@@ -438,12 +419,21 @@ export class StiffSolver {
         return Math.sqrt(s / n);
       };
       const newtonTol = Math.min(1e-3, relTol / 10);
+      // A non-finite derivative at a trial (stage / Newton iterate) state is a failed step (shrink h and retry, as a Newton
+      // non-convergence); only the derivative at the accepted base state x0 (above) stops the run (XBV-175, XBV-185).
+      const trialF = (ts: number, y: ArrayLike<number>): Float64Array | null => {
+        try { return StiffSolver.f(engine, layout, ts, y); } catch (e) {
+          if (e instanceof StiffSolverError && e.code === 'STIFF_SOLVER_NONFINITE') return null;
+          throw e;
+        }
+      };
       const MAX_IT = 10;
       // Newton on r(y) = y - base - d*h*f(ts, y) = 0, base = known part of the stage equation
       const newtonStage = (ts: number, base: Float64Array, guess: Float64Array): Float64Array | null => {
         let y = Float64Array.from(guess);
         for (let it = 0; it < MAX_IT; it++) {
-          const fk = StiffSolver.f(engine, layout, ts, y);
+          const fk = trialF(ts, y);
+          if (!fk) return null;
           const r = new Float64Array(n);
           for (let i = 0; i < n; i++) r[i] = -(y[i] - base[i] - d * h * fk[i]);
           const dx = StiffSolver.solve(W, n, r);
@@ -486,8 +476,9 @@ export class StiffSolver {
       const y1 = newtonStage(t1, base2, yg);
       if (!y1) return { accepted: false, err: Infinity, hNext: h * 0.25, candidate: predictor() };
 
-      const fg = StiffSolver.f(engine, layout, tg, yg);
-      const f1 = StiffSolver.f(engine, layout, t1, y1);
+      const fg = trialF(tg, yg);
+      const f1 = fg ? trialF(t1, y1) : null;
+      if (!fg || !f1) return { accepted: false, err: Infinity, hNext: h * 0.25, candidate: predictor() };
       const C = (3 * gamma * gamma - 4 * gamma + 2) / (12 * (2 - gamma));
       const raw = new Float64Array(n);
       for (let i = 0; i < n; i++) {

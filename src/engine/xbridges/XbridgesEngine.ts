@@ -34,8 +34,6 @@ export class XbridgesEngine {
 
   /** Mode of discontinuous blocks decided at the last major step (kept during minor steps). */
   private heldModes = new Map<string, any>();
-  /** True while bracketZeroCrossing probes: those evaluations are treated as major steps. */
-  private bracketing = false;
   private contextOf(block: XBlock, minor: boolean): BlockEvalContext {
     return {
       minor,
@@ -652,7 +650,7 @@ export class XbridgesEngine {
     const currentState = tempStates?.has(block.id) ? tempStates.get(block.id) : block.state;
     
     try {
-      const result = block.execute(inputValues, block.params, currentState, time, this.contextOf(block, tempStates !== undefined && !this.bracketing));
+      const result = block.execute(inputValues, block.params, currentState, time, this.contextOf(block, tempStates !== undefined));
       result.outputs.forEach((val, i) => {
         this.checkNumericalStability(block, val, `Output[${i}]`);
       });
@@ -699,7 +697,7 @@ export class XbridgesEngine {
     this.solveAlgebraicLoopCore(time, tempStates, algTol, maxIter);
     // Modes of discontinuous blocks inside the loop must reflect the solution, not an intermediate iterate: one more
     // pass at the solution fixes them (major steps) before minor steps hold them.
-    if (!this.fatal && !(tempStates !== undefined && !this.bracketing)) {
+    if (!this.fatal && !(tempStates !== undefined)) {
       this.cycleBlocks.forEach(b => this.executeBlockOrCache(b, time, tempStates));
     }
   }
@@ -785,7 +783,7 @@ export class XbridgesEngine {
         const inputValues = this.gatherInputs(block);
         const currentState = tempStates?.has(block.id) ? tempStates.get(block.id) : block.state;
         try {
-          const result = block.execute(inputValues, block.params, currentState, time, this.contextOf(block, tempStates !== undefined && !this.bracketing));
+          const result = block.execute(inputValues, block.params, currentState, time, this.contextOf(block, tempStates !== undefined));
           block.outputs.forEach((outPort, i) => {
             this.signalValues.set(`${block.id}.${outPort.id}`, result.outputs[i]);
           });
@@ -876,7 +874,7 @@ export class XbridgesEngine {
         const inputValues = this.gatherInputs(block);
         const currentState = tempStates?.has(block.id) ? tempStates.get(block.id) : block.state;
         try {
-          const dx = block.evaluateDerivatives(inputValues, block.params, currentState, time, this.contextOf(block, tempStates !== undefined && !this.bracketing));
+          const dx = block.evaluateDerivatives(inputValues, block.params, currentState, time, this.contextOf(block, tempStates !== undefined));
           this.checkNumericalStability(block, dx, 'Derivative');
           // A scalar initial condition on a vector input is expanded over the derivative's shape (Simulink).
           if (!tempStates) {
@@ -990,55 +988,6 @@ export class XbridgesEngine {
       }
     }
     return false;
-  }
-
-  public bracketZeroCrossing(
-    tPrev: number,
-    tCurr: number,
-    statesPrev: Map<string, any>,
-    statesCurr: Map<string, any>,
-    zeroTol = 1e-6
-  ): number {
-    let tLow = tPrev;
-    let tHigh = tCurr;
-    
-    const interpolateStates = (frac: number): Map<string, any> => {
-      const inter = new Map<string, any>();
-      statesPrev.forEach((sPrev, blockId) => {
-        const sCurr = statesCurr.get(blockId);
-        if (sCurr !== undefined) {
-          inter.set(blockId, VectorUtils.integrateState(sPrev, VectorUtils.applyElementWise(sCurr, sPrev, 'subtract'), frac));
-        } else {
-          inter.set(blockId, sPrev);
-        }
-      });
-      return inter;
-    };
-
-    const zcPrev = this.getZeroCrossings(tPrev, statesPrev);
-
-    this.bracketing = true;
-    try {
-    for (let iter = 0; iter < 30; iter++) {
-      if (tHigh - tLow < zeroTol) {
-        break;
-      }
-      const tMid = (tLow + tHigh) / 2;
-      const frac = (tMid - tPrev) / (tCurr - tPrev || 1e-9);
-      const statesMid = interpolateStates(frac);
-      
-      this.computeOutputs(tMid, statesMid);
-      const zcMid = this.getZeroCrossings(tMid, statesMid);
-      
-      if (this.hasZeroCrossingSignChange(zcPrev, zcMid)) {
-        tHigh = tMid;
-      } else {
-        tLow = tMid;
-      }
-    }
-    } finally { this.bracketing = false; }
-
-    return tHigh;
   }
 
   public commitStateUpdates(nextStates: Map<string, any>) {

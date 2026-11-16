@@ -12456,10 +12456,16 @@
   "state": {
    "kind": "object",
    "keys": [
+    "d0",
+    "d1",
     "gF",
     "gT",
     "lk",
     "lkG",
+    "pg0",
+    "pg1",
+    "pv0",
+    "pv1",
     "sh",
     "t0",
     "w_in"
@@ -12468,10 +12474,16 @@
   "initialState": {
    "kind": "object",
    "value": {
+    "d0": 0,
+    "d1": 0,
     "gF": 1,
     "gT": 1,
     "lk": 0,
     "lkG": 1,
+    "pg0": -9007199254740991,
+    "pg1": -9007199254740991,
+    "pv0": 0,
+    "pv1": 0,
     "sh": 0,
     "t0": 0,
     "w_in": 0
@@ -12490,7 +12502,13 @@
     "sh",
     "t0",
     "lk",
-    "lkG"
+    "lkG",
+    "pg0",
+    "pv0",
+    "pg1",
+    "pv1",
+    "d0",
+    "d1"
    ],
    "zeroCrossing": true
   }
@@ -15118,6 +15136,10 @@
   "state": {
    "kind": "object",
    "keys": [
+    "hd",
+    "hs",
+    "lk",
+    "sp",
     "w_in",
     "w_out"
    ]
@@ -15125,6 +15147,10 @@
   "initialState": {
    "kind": "object",
    "value": {
+    "hd": 0,
+    "hs": 0,
+    "lk": 0,
+    "sp": 0,
     "w_in": 0,
     "w_out": 0
    }
@@ -15135,8 +15161,13 @@
    "allowDynamicInputs": false,
    "allowDynamicOutputs": false,
    "evaluateDerivatives": true,
-   "updateDiscrete": false,
-   "discreteStateKeys": null,
+   "updateDiscrete": true,
+   "discreteStateKeys": [
+    "lk",
+    "sp",
+    "hs",
+    "hd"
+   ],
    "zeroCrossing": true
   }
  },
@@ -15693,10 +15724,16 @@
   "state": {
    "kind": "object",
    "keys": [
+    "d0",
+    "d1",
     "gF",
     "gT",
     "lk",
     "lkG",
+    "pg0",
+    "pg1",
+    "pv0",
+    "pv1",
     "sh",
     "t0",
     "w_in"
@@ -15705,10 +15742,16 @@
   "initialState": {
    "kind": "object",
    "value": {
+    "d0": 0,
+    "d1": 0,
     "gF": 1,
     "gT": 1,
     "lk": 0,
     "lkG": 1,
+    "pg0": -9007199254740991,
+    "pg1": -9007199254740991,
+    "pv0": 0,
+    "pv1": 0,
     "sh": 0,
     "t0": 0,
     "w_in": 0
@@ -15727,7 +15770,13 @@
     "sh",
     "t0",
     "lk",
-    "lkG"
+    "lkG",
+    "pg0",
+    "pv0",
+    "pg1",
+    "pv1",
+    "d0",
+    "d1"
    ],
    "zeroCrossing": true
   }
