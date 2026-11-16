@@ -996,8 +996,9 @@
    "plan_ref": "5.1",
    "severity": "S4",
    "gate": "V5",
-   "status": "open",
-   "summary": "Stiff-solver options (ode14x extrapolationOrder/newtonIterations, ode23tb relTol/absTol/minStep/maxStep) are not editable on the canvas; STIFF_SOLVER_INVALID_OPTION and STIFF_SOLVER_STEP_TOO_SMALL are reachable only from a batch configuration. Related to decision D3 (user tolerances). WP-21 batch J: RelTol/AbsTol (ode23/ode45/ode23tb) and ode14x extrapolation order / Newton iterations are on the toolbar, saved and restored; ode23tb minStep/maxStep are still not editable."
+   "status": "closed",
+   "summary": "Stiff-solver options (ode14x extrapolationOrder/newtonIterations, ode23tb relTol/absTol/minStep/maxStep) are not editable on the canvas; STIFF_SOLVER_INVALID_OPTION and STIFF_SOLVER_STEP_TOO_SMALL are reachable only from a batch configuration. Related to decision D3 (user tolerances). WP-21 batch J: RelTol/AbsTol (ode23/ode45/ode23tb) and ode14x extrapolation order / Newton iterations are on the toolbar, saved and restored; ode23tb minStep/maxStep are still not editable.",
+   "fix": "WP-21 batches J and J2: RelTol/AbsTol (ode23/ode45/ode23tb), ode14x extrapolation order / Newton iterations and Max/Min step size (ode23/ode45/ode23tb, empty = auto) are on the toolbar, saved with the model and passed to the live, worker and batch engine; invalid values are refused with a message."
   },
   {
    "id": "XBV-038",
@@ -2271,24 +2272,27 @@
    "plan_ref": "3 parameters",
    "severity": "S3",
    "gate": "V3",
-   "status": "open",
-   "summary": "Some parameterSchema 'positive' entries reject 0 although 0 is not degenerate in the block equation: ROBOT_VACUUM_MOTOR motor_R/motor_K, Lm of AC_INDUCTION_MOTOR/IM_FLUX_OBSERVER/AC_MOTOR_PID_CONTROL (numerator only), ROBOT_VACUUM_BATTERY.nominal_voltage, SVPWM_CORE.Ts, MTPA_CONTROLLER.Ld; motor_R positive contradicts Rs/Ron nonnegative. Some positive entries belong to parameters execute does not use (IM_FOC Rr/Lr/P, IM_SCALAR rated_f, DIGITAL_TWIN motor_*). Found by the WP-21 batch J verifier."
+   "status": "closed",
+   "summary": "Some parameterSchema 'positive' entries reject 0 although 0 is not degenerate in the block equation: ROBOT_VACUUM_MOTOR motor_R/motor_K, Lm of AC_INDUCTION_MOTOR/IM_FLUX_OBSERVER/AC_MOTOR_PID_CONTROL (numerator only), ROBOT_VACUUM_BATTERY.nominal_voltage, SVPWM_CORE.Ts, MTPA_CONTROLLER.Ld; motor_R positive contradicts Rs/Ron nonnegative. Some positive entries belong to parameters execute does not use (IM_FOC Rr/Lr/P, IM_SCALAR rated_f, DIGITAL_TWIN motor_*). Found by the WP-21 batch J verifier.",
+   "fix": "WP-21 batch J2: the 14 parameters that are never divisors (checked in execute and derivatives) accept 0 and refuse negatives; IM_FOC_CONTROL.Lm stays positive."
   },
   {
    "id": "XBV-181",
    "plan_ref": "6 UI",
    "severity": "S3",
    "gate": "V8",
-   "status": "open",
-   "summary": "After a block with recorded invalid parameter text is selected again, the properties panel shows the stored (last valid) number while the kept record still refuses the run; the Problems message names the block, parameter and text. Found by the WP-21 batch J verifier."
+   "status": "closed",
+   "summary": "After a block with recorded invalid parameter text is selected again, the properties panel shows the stored (last valid) number while the kept record still refuses the run; the Problems message names the block, parameter and text. Found by the WP-21 batch J verifier.",
+   "fix": "WP-21 batch J2: the panel shows a block's recorded invalid parameter text with its error when the block is selected again; a valid value clears the record."
   },
   {
    "id": "XBV-182",
    "plan_ref": "6 UI",
    "severity": "S3",
    "gate": "V8",
-   "status": "open",
-   "summary": "The panel maps PT_* parameter specs to editor kinds only for min = 0 (nonnegative); specs with min > 0 or a max become plain 'number', so the panel accepts out-of-range text that the block refuses at its first step (BLOCK_RUNTIME_FAULT). Found by the WP-21 batch J verifier."
+   "status": "closed",
+   "summary": "The panel maps PT_* parameter specs to editor kinds only for min = 0 (nonnegative); specs with min > 0 or a max become plain 'number', so the panel accepts out-of-range text that the block refuses at its first step (BLOCK_RUNTIME_FAULT). Found by the WP-21 batch J verifier.",
+   "fix": "WP-21 batch J2: PT_* scalar parameters are checked against their full spec range (ParameterKind 'range'); an out-of-range value is never committed (neither while typing nor on blur), the value stored before the edit is kept and the text stays shown with its error (Simulink keeps the previous dialog value)."
   },
   {
    "id": "XBV-183",

@@ -5,11 +5,11 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 ## Summary
 
 - Work packages: 20 done of 29; 2 in progress; 7 to do.
-- Findings: 9 open, 183 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
+- Findings: 5 open, 187 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
   - S1 (wrong number in simulation or generated C): 0 open
   - S2 (crash, stop, freeze or silent no-op): 2 open
-  - S3 (diagnostic, UI or convention deviation): 5 open
-  - S4 (documentation): 2 open
+  - S3 (diagnostic, UI or convention deviation): 2 open
+  - S4 (documentation): 1 open
 - Decisions recorded: 15; open: 0.
 
 ## Work packages
@@ -71,21 +71,17 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 | XBV-185 | V5 | 4.5 solvers | Robertson problem: ode23tb stops at step 1 with STIFF_SOLVER_NONFINITE when a Newton iterate overflows, instead of rejecting the step and retrying smaller (MATLAB ode23tb treats a failed Newton iteration as a step failure). Found by the WP-21 E4 verifier. |
 | XBV-186 | V5 | 4.5 solvers | Fixed-step euler, ode2, ode3, rk4, ode5 (Solvers.ts) and ode14x (StiffSolver.ts ~384) compute zcPrev = getZeroCrossings(t, statesPrev) without computeOutputs first, so gatherInputs reads the trial-end signals, the sign change is never seen and bracketZeroCrossing is never called (0 calls on the Switch test model); bracketZeroCrossing has the same flaw internally. ode45/ode23 use their own locateEvent and are not affected. Found by the WP-21 E4 verifier. |
 
-### S3 - diagnostic, UI or convention deviation (5)
+### S3 - diagnostic, UI or convention deviation (2)
 
 | Id | Gate | Plan ref | Summary |
 | --- | --- | --- | --- |
 | XBV-106 | V7 | 7.2 state-machine alignment | State-machine variables are scalar only: mapping a vector (3) or matrix (2x2) X-Bridges port to an SM variable is refused (XB_MAPPING_INVALID), so plan 7.2's vector/matrix boundary mappings are not expressible; vector/matrix signals work inside the model. Reported by the WP-18 executor. |
-| XBV-180 | V3 | 3 parameters | Some parameterSchema 'positive' entries reject 0 although 0 is not degenerate in the block equation: ROBOT_VACUUM_MOTOR motor_R/motor_K, Lm of AC_INDUCTION_MOTOR/IM_FLUX_OBSERVER/AC_MOTOR_PID_CONTROL (numerator only), ROBOT_VACUUM_BATTERY.nominal_voltage, SVPWM_CORE.Ts, MTPA_CONTROLLER.Ld; motor_R positive contradicts Rs/Ron nonnegative. Some positive entries belong to parameters execute does not use (IM_FOC Rr/Lr/P, IM_SCALAR rated_f, DIGITAL_TWIN motor_*). Found by the WP-21 batch J verifier. |
-| XBV-181 | V8 | 6 UI | After a block with recorded invalid parameter text is selected again, the properties panel shows the stored (last valid) number while the kept record still refuses the run; the Problems message names the block, parameter and text. Found by the WP-21 batch J verifier. |
-| XBV-182 | V8 | 6 UI | The panel maps PT_* parameter specs to editor kinds only for min = 0 (nonnegative); specs with min > 0 or a max become plain 'number', so the panel accepts out-of-range text that the block refuses at its first step (BLOCK_RUNTIME_FAULT). Found by the WP-21 batch J verifier. |
 | XBV-187 | V5 | powertrain | PT_AUTOMATED_MANUAL_TRANSMISSION under rk4 at 1e-3 never locks within 0.05 s (DiffTrq +-1600 chatter) and locks late (0.0115 s vs 0.0019 s) at 1e-4; same on the base. Simulink locks the clutch with a zero crossing on slip; depends on XBV-186. Found by the WP-21 E4 verifier. |
 
-### S4 - documentation (2)
+### S4 - documentation (1)
 
 | Id | Gate | Plan ref | Summary |
 | --- | --- | --- | --- |
-| XBV-037 | V5 | 5.1 | Stiff-solver options (ode14x extrapolationOrder/newtonIterations, ode23tb relTol/absTol/minStep/maxStep) are not editable on the canvas; STIFF_SOLVER_INVALID_OPTION and STIFF_SOLVER_STEP_TOO_SMALL are reachable only from a batch configuration. Related to decision D3 (user tolerances). WP-21 batch J: RelTol/AbsTol (ode23/ode45/ode23tb) and ode14x extrapolation order / Newton iterations are on the toolbar, saved and restored; ode23tb minStep/maxStep are still not editable. |
 | XBV-193 | V6 | 4.6 parity | The embedded validator refuses RATE_LIMITER vector slew rates with the generic message 'risingSlewRate must be >= 0...' instead of saying that vector rates are not supported by Generate C (the canvas accepts them since XBV-192). Found by the WP-21 D3 verifier. |
 
 ## Closed, merged or superseded findings
@@ -126,6 +122,7 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 - XBV-034 (closed): DOE_MODEL fault codes EXECUTION_EXCEPTION, INVALID_GMDH_LAYERS, INVALID_TAGUCHI_LEVELS, NO_MODEL_CONFIGURED, NON_FINITE_INPUT exist only in nextState.lastFault and inside one BLOCK_RUNTIME_FAULT messa
 - XBV-035 (closed): Dimension checking is inactive: library factories never set port dimensions (only PT_VEHICLE_BODY_1DOF inputs do), so DIMENSION_MISMATCH cannot fire for any canvas-built model; Simulink propagates and
 - XBV-036 (closed): Batch variable-step runs (Solvers.runFixedStep with ode45 or ode23) hang - no result after 60 s - as soon as they bracket a Step event: Step at 0.3, 0.5 or 0.55 s with default tolerances, or at the st
+- XBV-037 (closed): Stiff-solver options (ode14x extrapolationOrder/newtonIterations, ode23tb relTol/absTol/minStep/maxStep) are not editable on the canvas; STIFF_SOLVER_INVALID_OPTION and STIFF_SOLVER_STEP_TOO_SMALL are
 - XBV-038 (closed): CONSTANT_VALUE_NOT_REPRESENTABLE (a Constant value that loses precision in its data type) is a compile error that refuses the model; Simulink reports parameter precision loss as a warning by default (
 - XBV-039 (closed): In canvas simulation (main thread and worker) a state-machine variable mapped to a top-level Inport never reaches the X-Bridges model: the canvas writes the value with setSignalValue and params.value,
 - XBV-040 (closed): WaveformGen amplitude 0 (also freq 0, offset 0) is replaced by 1/1/0 through `\|\|` (instance of XBV-019); a 0-amplitude sine outputs a full sine. Pinned in xbEquations.math.test.ts.
@@ -266,6 +263,9 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 - XBV-177 (closed): PT_AUTOMATED_MANUAL_TRANSMISSION and PT_DUAL_CLUTCH_TRANSMISSION do not finish 1 s of simulation within 120 s under ode23tb (defaults, unit inputs); rk4 finishes quickly. Found by the WP-21 batch I sc
 - XBV-178 (closed): PT_TURBOCHARGER raises BLOCK_RUNTIME_FAULT with its defaults and unit inputs under rk4 and ode23tb alike (not a solver difference; cause not investigated). Found by the WP-21 batch I scan.
 - XBV-179 (closed): PT_ENGINE_DYNO under ode23tb at default tolerances differs from rk4 (0.001) by 2e-2 relative at output step 0.05 (2.8e-3 at 0.01); keyed derivatives, so error control / output interpolation rather tha
+- XBV-180 (closed): Some parameterSchema 'positive' entries reject 0 although 0 is not degenerate in the block equation: ROBOT_VACUUM_MOTOR motor_R/motor_K, Lm of AC_INDUCTION_MOTOR/IM_FLUX_OBSERVER/AC_MOTOR_PID_CONTROL 
+- XBV-181 (closed): After a block with recorded invalid parameter text is selected again, the properties panel shows the stored (last valid) number while the kept record still refuses the run; the Problems message names 
+- XBV-182 (closed): The panel maps PT_* parameter specs to editor kinds only for min = 0 (nonnegative); specs with min > 0 or a max become plain 'number', so the panel accepts out-of-range text that the block refuses at 
 - XBV-183 (closed): ode23tb with RelTol 1e-9 (now reachable from the toolbar) fails at t = 6.1e-6 with STIFF_SOLVER_STEP_TOO_SMALL on the cos(10 t) integrator; tight tolerances should take smaller steps down to the docum
 - XBV-184 (closed): Live ode23tb with Relay/Switch changed mode only once per output step (errors 0.57 / 1.99 at output step 0.1). Found by the WP-21 E4 verifier.
 - XBV-188 (closed): robot_vacuum_twin: the first run in a fresh process differs from later runs in robot_nav.nav_stats and robot_slam.* (Math.random seeded), so a block keeps state across runs (module-level state not res
