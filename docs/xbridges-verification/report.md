@@ -5,12 +5,12 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 ## Summary
 
 - Work packages: 20 done of 29; 2 in progress; 7 to do.
-- Findings: 11 open, 177 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
+- Findings: 13 open, 177 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
   - S1 (wrong number in simulation or generated C): 1 open
-  - S2 (crash, stop, freeze or silent no-op): 2 open
+  - S2 (crash, stop, freeze or silent no-op): 4 open
   - S3 (diagnostic, UI or convention deviation): 7 open
   - S4 (documentation): 1 open
-- Decisions recorded: 14; open: 0.
+- Decisions recorded: 15; open: 0.
 
 ## Work packages
 
@@ -70,12 +70,14 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 | --- | --- | --- | --- |
 | XBV-001 | V6 | F1 | Canvas engine and state-machine interpreter are compared only by xbSimEmbeddedParity.test.ts: unit-constant input, 6 ticks, scalar, discrete solver. WP-16 measured it: 281 (type, solver) cases, 178 equal; random graphs fail via XBV-083/084/085. |
 
-### S2 - crash, stop, freeze or silent no-op (2)
+### S2 - crash, stop, freeze or silent no-op (4)
 
 | Id | Gate | Plan ref | Summary |
 | --- | --- | --- | --- |
 | XBV-185 | V5 | 4.5 solvers | Robertson problem: ode23tb stops at step 1 with STIFF_SOLVER_NONFINITE when a Newton iterate overflows, instead of rejecting the step and retrying smaller (MATLAB ode23tb treats a failed Newton iteration as a step failure). Found by the WP-21 E4 verifier. |
 | XBV-186 | V5 | 4.5 solvers | Fixed-step euler, ode2, ode3, rk4, ode5 (Solvers.ts) and ode14x (StiffSolver.ts ~384) compute zcPrev = getZeroCrossings(t, statesPrev) without computeOutputs first, so gatherInputs reads the trial-end signals, the sign change is never seen and bracketZeroCrossing is never called (0 calls on the Switch test model); bracketZeroCrossing has the same flaw internally. ode45/ode23 use their own locateEvent and are not affected. Found by the WP-21 E4 verifier. |
+| XBV-190 | V6 | 4.6 parity | Canvas LOW_PASS_FILTER, HIGH_PASS_FILTER and MOVING_AVERAGE are not element-wise on a vector input: a 3-vector gives the scalar [0] (filters) or [null] (moving average) at step 0, while the embedded path and Simulink (Lowpass/Highpass Filter, Moving Average are element-wise) give a 3-vector. Pinned under XBV-018/XBV-068 in xbTriParity until WP-21 round 5. |
+| XBV-191 | V6 | 4.6 parity | Canvas RATE_LIMITER outputs 0 at t = 0 for a constant 0.7 input with rising/falling limits 0.1 per step; decision D12 (initial condition y(-1) = IC = 0) gives clamp(0.7, 0 +/- 0.1) = 0.1, which the embedded path outputs. Pinned under XBV-018 in xbTriParity until WP-21 round 5. |
 
 ### S3 - diagnostic, UI or convention deviation (7)
 
@@ -291,6 +293,7 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 - **D12** (2026-11-12, Rate Limiter initial condition): ADIA's Rate Limiter has an explicit initialCondition parameter (default 0) that Simulink's block lacks; it is the output before the first sample, y(-1) = IC. Ts > 0: y(0) = clamp(u(0), IC + falling Ts, IC + rising Ts); inherited/continuous sample time: y(0) = IC (no time has elapsed). This is the canvas behaviour, adopted for the embedded path.
 - **D13** (2026-11-12, new diagnostic codes in WP-21): Structural compile errors MULTIPLE_DRIVERS, DUPLICATE_BLOCK_ID, UNKNOWN_BLOCK_TYPE (error) and the fuzzy warning FUZZY_EMPTY_AGGREGATE (MATLAB 'no rules fired': output mid-range) are dedicated codes rather than reuses of BLOCK_RUNTIME_FAULT / MATH_DOMAIN_ERROR; each has a recipe and guidance.
 - **D14** (2026-11-15, Clock block): The Clock block outputs the simulation time (Simulink Clock; the embedded path already did). The old square-wave behaviour remains available as WaveformGen type 'Square'; no lab, example or saved model used Clock.freq. Adopted by the controller under the 'fix all' go-ahead.
+- **D15** (2026-11-16, XBV-186 fixed-step zero crossings): Fixed-step solvers (euler, ode2, ode3, rk4, ode5, ode14x) do not locate zero crossings, as Simulink with 'Enable zero-crossing detection for fixed-step simulation' off (its default): a block mode changes at a major step, the output grid stays k*h, and batch runs equal the live canvas step. Variable-step ode23, ode45 and ode23tb keep event location.
 
 ## Deferred items (notes for follow-up WPs)
 
