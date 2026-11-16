@@ -523,6 +523,15 @@ const expandLike = (ic: any, like: any): any => {
   }
   return ic;
 };
+/** Element-wise filter state: a scalar initial state is expanded over a vector input, an array state is kept. */
+const stateLike = (state: any, like: any): any => (Array.isArray(state) ? state : expandLike(state ?? 0, like));
+/** Runs an element-wise stateful block body: size errors become the block `error` (NaN output, state kept). */
+const ewStateful = (state: any, body: () => { outputs: any[]; nextState?: any }): any => {
+  try { return body(); } catch (e) {
+    if (e instanceof ElementWiseError) return { outputs: [NaN], error: e.message, ...(state !== undefined ? { nextState: state } : {}) };
+    throw e;
+  }
+};
 const SHIFT_WORD_LENGTH = 32;
 const shiftLeft32 = (x: number, n: number): number => {
   if (!Number.isFinite(x) || !Number.isFinite(n)) throw new ElementWiseError('shift operands must be finite.');
@@ -5092,20 +5101,32 @@ return block;
           outputs: [createPort('y', 'y', 'output')],
           state: { previousOutput: initialCondition, lastTime: undefined },
           execute: (ins: any[], p: any, state: any, time?: number) => {
-            const u = Number(ins[0]);
-            const prev = state.previousOutput ?? initialCondition;
-            if (Number.isNaN(u) || Number.isNaN(prev)) return { outputs: [NaN], nextState: { previousOutput: NaN, lastTime: time } };
-            // Slew rates are per second: limit on the time elapsed since the previous output (first call: no time elapsed).
+            // Slew rates are per second: limit on the time elapsed since the previous output.
             const t = Number(time);
             const last = state.lastTime;
-            const dt = Number.isFinite(t) && typeof last === 'number' && Number.isFinite(last) ? Math.max(0, t - last) : 0;
+            // First call (D12, y(-1) = IC): an explicit sample time Ts elapsed since y(-1); an inherited one has no time elapsed.
+            const explicitTs = Number(p.sampleTime);
+            const dt = Number.isFinite(t) && typeof last === 'number' && Number.isFinite(last)
+              ? Math.max(0, t - last)
+              : (Number.isFinite(explicitTs) && explicitTs > 0 ? explicitTs : 0);
             const maxIncrease = p.risingSlewRate * dt;
             const maxDecrease = p.fallingSlewRate * dt;
-            const delta = u - prev;
-            let y = u;
-            if (delta > maxIncrease) y = prev + maxIncrease;
-            else if (delta < maxDecrease) y = prev + maxDecrease;
-            return { outputs: [y], nextState: { previousOutput: y, lastTime: Number.isFinite(t) ? t : last } };
+            const lastTime = Number.isFinite(t) ? t : last;
+            const prevState = state.previousOutput ?? initialCondition;
+            // Element-wise on a vector input with per-element state (a scalar IC is expanded over the input).
+            return ewStateful(state, () => {
+              const prevAll = Array.isArray(ins[0]) ? stateLike(prevState, ins[0]) : prevState;
+              const y = ewMap([ins[0], prevAll], ([uu, pp]) => {
+                const u = Number(uu);
+                const prev = Number(pp);
+                if (Number.isNaN(u) || Number.isNaN(prev)) return NaN;
+                const delta = u - prev;
+                if (delta > maxIncrease) return prev + maxIncrease;
+                if (delta < maxDecrease) return prev + maxDecrease;
+                return u;
+              });
+              return { outputs: [y], nextState: { previousOutput: y, lastTime } };
+            });
           }
         };
       },
@@ -5668,24 +5689,25 @@ return block;
                                       inputs: [createPort('u', 'u', 'input')],
                                       outputs: [createPort('y', 'y', 'output')],
                                       state: { y: 0 },
-                                      execute: (ins, p, state) => {
-                                        const u = Number(ins[0]) || 0;
+                                      // Element-wise on a vector input with per-element state (scalar behaviour unchanged).
+                                      execute: (ins, p, state) => ewStateful(state, () => {
+                                        const ys = stateLike(state.y, ins[0]);
                                         if (p.sampleTime > 0) {
                                           const dt = p.sampleTime;
                                           const tau = 1 / (2 * Math.PI * p.fc);
                                           const alpha = dt / (tau + dt);
-                                          const y = alpha * u + (1 - alpha) * (state.y || 0);
+                                          const y = ewMap([ins[0], ys], ([uu, yy]) => alpha * (Number(uu) || 0) + (1 - alpha) * (Number(yy) || 0));
                                           return { outputs: [y], nextState: { y } };
                                         } else {
-                                          return { outputs: [state.y || 0] };
+                                          return { outputs: [ewMap([ys], ([yy]) => Number(yy) || 0)] };
                                         }
-                                      }
+                                      })
                                     };
                                     if (sampleTime <= 0) {
                                       block.evaluateDerivatives = (ins, p, state) => {
-                                        const u = Number(ins[0]) || 0;
                                         const tau = 1 / (2 * Math.PI * p.fc);
-                                        return { y: (u - (state.y || 0)) / tau };
+                                        // A vector input gives a vector derivative; the engine expands a scalar state to its shape.
+                                        return { y: ewMap([ins[0], stateLike(state.y, ins[0])], ([uu, yy]) => ((Number(uu) || 0) - (Number(yy) || 0)) / tau) };
                                       };
                                     }
                                     return block;
@@ -5701,29 +5723,30 @@ return block;
                                         inputs: [createPort('u', 'u', 'input')],
                                         outputs: [createPort('y', 'y', 'output')],
                                         state: { y: 0, last_u: 0 },
-                                        execute: (ins, p, state) => {
-                                          const u = Number(ins[0]) || 0;
+                                        // Element-wise on a vector input with per-element state (scalar behaviour unchanged).
+                                        execute: (ins, p, state) => ewStateful(state, () => {
+                                          const ys = stateLike(state.y, ins[0]);
                                           if (p.sampleTime > 0) {
                                             const dt = p.sampleTime;
                                             const tau = 1 / (2 * Math.PI * p.fc);
                                             const alpha = tau / (tau + dt);
-                                            const y = alpha * ((state.y || 0) + u - (state.last_u || 0));
-                                            return { outputs: [y], nextState: { y, last_u: u } };
+                                            const us = stateLike(state.last_u, ins[0]);
+                                            const y = ewMap([ins[0], ys, us], ([uu, yy, lu]) => alpha * ((Number(yy) || 0) + (Number(uu) || 0) - (Number(lu) || 0)));
+                                            const lastU = ewMap([ins[0]], ([uu]) => Number(uu) || 0);
+                                            return { outputs: [y], nextState: { y, last_u: lastU } };
                                           } else {
-                                            return { outputs: [state.y || 0] };
+                                            return { outputs: [ewMap([ys], ([yy]) => Number(yy) || 0)] };
                                           }
-                                        }
+                                        })
                                       };
                                       if (sampleTime <= 0) {
                                         block.evaluateDerivatives = (ins, p, state) => {
-                                          const u = Number(ins[0]) || 0;
                                           const invTau = 2 * Math.PI * p.fc;
-                                          return { y: -invTau * (state.y || 0) - invTau * u };
+                                          return { y: ewMap([ins[0], stateLike(state.y, ins[0])], ([uu, yy]) => -invTau * (Number(yy) || 0) - invTau * (Number(uu) || 0)) };
                                         };
-                                        block.execute = (ins, p, state) => {
-                                          const u = Number(ins[0]) || 0;
-                                          return { outputs: [(state.y || 0) + u] };
-                                        };
+                                        block.execute = (ins, p, state) => ewStateful(undefined, () => ({
+                                          outputs: [ewMap([ins[0], stateLike(state.y, ins[0])], ([uu, yy]) => (Number(yy) || 0) + (Number(uu) || 0))],
+                                        }));
                                       }
                                       return block;
                                     },
@@ -5738,15 +5761,16 @@ return block;
                                         inputs: [createPort('u', 'u', 'input')],
                                         outputs: [createPort('y', 'y', 'output')],
                                         state: { buffer: [], index: 0 },
-                                        execute: (ins, p, state) => {
-                                          const u = Number(ins[0]);
+                                        // Element-wise on a vector input: each buffer slot holds a scalar or one value per element.
+                                        execute: (ins, p, state) => ewStateful(state, () => {
                                           const N = Number(p.window_size);
-                                          let buffer = state.buffer.length === 0 ? new Array(N).fill(0) : [...state.buffer]; // zero initial state
+                                          const u = Array.isArray(ins[0]) ? [...ins[0]] : Number(ins[0]);
+                                          const buffer = state.buffer.length === 0 ? new Array(N).fill(0) : [...state.buffer]; // zero initial state
                                           buffer[state.index] = u;
                                           const nextIndex = (state.index + 1) % N;
-                                          const y = buffer.reduce((a: number, b: number) => a + b, 0) / N;
+                                          const y = ewMap(buffer, (vals) => vals.reduce((a: number, b: number) => a + Number(b), 0) / N);
                                           return { outputs: [y], nextState: { buffer, index: nextIndex } };
-                                        }
+                                        })
                                       }),
 
                                         'KALMAN_FILTER': (id, params) => ({
