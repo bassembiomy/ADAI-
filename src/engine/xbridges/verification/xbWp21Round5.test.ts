@@ -71,3 +71,28 @@ describe('XBV-186 / D15: fixed-step solvers change modes at major steps, batch =
     for (const f of ['Solvers.ts', 'StiffSolver.ts']) expect(readFileSync(join(root, f), 'utf8'), f).not.toMatch(/bracketZeroCrossing\(/);
   });
 });
+
+// ---------------------------------------------------------------- batch J2 (schema)
+// XBV-180: a parameter whose value 0 is not degenerate in the block equation (or that execute does not use) accepts 0 at
+// compile; a negative physical value is still refused. Simulink mask checks follow the equation, not a blanket > 0.
+describe('XBV-180: parameters that are not divisors accept 0', () => {
+  const ZERO_OK: Array<[string, string]> = [
+    ['ROBOT_VACUUM_MOTOR', 'motor_R'], ['ROBOT_VACUUM_MOTOR', 'motor_K'],
+    ['ROBOT_VACUUM_DIGITAL_TWIN', 'motor_R'], ['ROBOT_VACUUM_DIGITAL_TWIN', 'motor_K'],
+    ['AC_INDUCTION_MOTOR', 'Lm'], ['IM_FLUX_OBSERVER', 'Lm'], ['AC_MOTOR_PID_CONTROL', 'Lm'],
+    ['ROBOT_VACUUM_BATTERY', 'nominal_voltage'], ['SVPWM_CORE', 'Ts'], ['MTPA_CONTROLLER', 'Ld'],
+    ['IM_FOC_CONTROL', 'Rr'], ['IM_FOC_CONTROL', 'Lr'], ['IM_FOC_CONTROL', 'P'], ['IM_SCALAR_CONTROL', 'rated_f'],
+  ];
+  const paramErrors = (type: string, params: Record<string, unknown>) =>
+    new XbridgesEngine(buildModel({ blocks: [{ id: 'u', type, params }], wires: [] })).compile(0)
+      .filter((d) => d.severity === 'error' && d.code.startsWith('PARAMETER_')).map((d) => `${d.code}: ${d.message}`);
+  for (const [type, param] of ZERO_OK) {
+    it(`${type}.${param} = 0 compiles without a PARAMETER_* error; -1 is refused`, () => {
+      expect(paramErrors(type, { [param]: 0 })).toEqual([]);
+      expect(paramErrors(type, { [param]: -1 }).length).toBeGreaterThan(0);
+    });
+  }
+  it('IM_FOC_CONTROL.Lm = 0 is still refused (divisor, XBV-153)', () => {
+    expect(paramErrors('IM_FOC_CONTROL', { Lm: 0 }).length).toBeGreaterThan(0);
+  });
+});

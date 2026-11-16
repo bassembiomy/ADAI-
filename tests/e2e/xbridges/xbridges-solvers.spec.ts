@@ -96,4 +96,27 @@ test.describe('X-Bridges solver selector', () => {
     expect(b.extrapolationOrder).toBe(3);
     expect(b.newtonIterations).toBe(2);
   });
+
+  // XBV-037 remainder (WP-21 batch J2): Simulink's Solver pane has Max step size and Min step size for every variable-step
+  // solver ('auto' when empty). They are on the toolbar for ode23, ode45 and ode23tb, saved with the model and passed to
+  // the engine; an invalid value (0, negative, min > max) is refused with a message instead of being stored.
+  test('XBV-037 Max step size / Min step size (ode23tb, ode45) are editable, saved, and invalid values are refused', async ({ page }) => {
+    await openXbridges(page);
+    await buildIntegratorModel(page, '2');
+    for (const solver of ['ode23tb', 'ode45']) {
+      await setToolbar(page, { solver, start: 0, stop: 1, step: 0.01 });
+      await page.locator('input[title^="Max step size"]').first().fill('0.001');
+      await page.locator('input[title^="Min step size"]').first().fill('1e-8');
+      await page.locator('input[title^="Min step size"]').first().blur();
+      await page.waitForTimeout(SAVE_DEBOUNCE_SETTLE_MS);
+      const a = (await saveProject(page)).globalXBridgesSimulation;
+      expect(a.maxStep, solver).toBe(0.001);
+      expect(a.minStep, solver).toBe(1e-8);
+    }
+    await page.locator('input[title^="Max step size"]').first().fill('-1');
+    await page.locator('input[title^="Max step size"]').first().blur();
+    await page.waitForTimeout(SAVE_DEBOUNCE_SETTLE_MS);
+    expect((await saveProject(page)).globalXBridgesSimulation.maxStep).toBe(0.001);
+    await expect(page.locator('input[title^="Max step size"]').first()).toHaveAttribute('aria-invalid', 'true');
+  });
 });
