@@ -14,6 +14,9 @@ export interface XSimulationConfig {
   /** Variable-step (ode23, ode45, ode23tb) relative and absolute tolerance; Simulink defaults 1e-3 and 1e-6 (auto). */
   relTol?: number;
   absTol?: number;
+  /** Variable-step max / min step size; unset means auto (the engine default). */
+  maxStep?: number;
+  minStep?: number;
   /** ode14x extrapolation order (Simulink default 4) and Newton iterations (default 1). */
   extrapolationOrder?: number;
   newtonIterations?: number;
@@ -37,7 +40,7 @@ export function parseIterationInput(text: string): number | null {
 }
 
 /** The toolbar texts of the solver options (the canvas keeps them as text so that invalid input stays visible). */
-export interface SolverOptionTexts { relative: string; absolute: string; extrapolationOrder: string; newtonIterations: string }
+export interface SolverOptionTexts { relative: string; absolute: string; extrapolationOrder: string; newtonIterations: string; maxStep: string; minStep: string }
 export type SolverOptionTextKey = keyof SolverOptionTexts;
 
 export function solverOptionTextsFrom(config: XSimulationConfig | null): SolverOptionTexts {
@@ -46,7 +49,16 @@ export function solverOptionTextsFrom(config: XSimulationConfig | null): SolverO
     absolute: String(config?.absTol ?? DEFAULT_SOLVER_OPTIONS.absTol),
     extrapolationOrder: String(config?.extrapolationOrder ?? DEFAULT_SOLVER_OPTIONS.extrapolationOrder),
     newtonIterations: String(config?.newtonIterations ?? DEFAULT_SOLVER_OPTIONS.newtonIterations),
+    maxStep: config?.maxStep !== undefined ? String(config.maxStep) : '',
+    minStep: config?.minStep !== undefined ? String(config.minStep) : '',
   };
+}
+
+/** Parses a max/min step field: empty (auto) gives undefined, a finite number > 0 gives the number, anything else null. */
+export function parseStepLimitInput(text: string): number | undefined | null {
+  const s = (text ?? '').trim();
+  if (s === '' || s.toLowerCase() === 'auto') return undefined;
+  return parseToleranceInput(s);
 }
 
 /** Which option group a solver uses: RelTol/AbsTol (ode23, ode45, ode23tb), ode14x options, or none (fixed step). */
@@ -63,6 +75,11 @@ export function invalidSolverOptionTexts(solver: string, texts: SolverOptionText
   if (group === 'tolerances') {
     if (parseToleranceInput(texts.relative) === null) bad.push('relative');
     if (parseToleranceInput(texts.absolute) === null) bad.push('absolute');
+    const maxS = parseStepLimitInput(texts.maxStep);
+    const minS = parseStepLimitInput(texts.minStep);
+    if (maxS === null) bad.push('maxStep');
+    if (minS === null) bad.push('minStep');
+    if (typeof maxS === 'number' && typeof minS === 'number' && minS > maxS) bad.push('minStep');
   } else if (group === 'extrapolation') {
     if (parseIterationInput(texts.extrapolationOrder) === null) bad.push('extrapolationOrder');
     if (parseIterationInput(texts.newtonIterations) === null) bad.push('newtonIterations');
@@ -75,6 +92,8 @@ const OPTION_MESSAGES: Record<SolverOptionTextKey, string> = {
   absolute: 'Absolute tolerance must be a finite number greater than 0',
   extrapolationOrder: 'Extrapolation order must be an integer >= 1',
   newtonIterations: 'Newton iterations must be an integer >= 1',
+  maxStep: 'Max step size must be a finite number greater than 0 (or empty for auto)',
+  minStep: 'Min step size must be a finite number greater than 0 and not greater than Max step size (or empty for auto)',
 };
 
 /** Error diagnostics for invalid option text of the solver in use (a run is refused, nothing is clamped). */
@@ -92,7 +111,13 @@ export function solverOptionsForRun(solver: string, texts: SolverOptionTexts) {
   if (group === 'tolerances') {
     const relTol = parseToleranceInput(texts.relative);
     const absTol = parseToleranceInput(texts.absolute);
-    return { ...(relTol !== null ? { relTol } : {}), ...(absTol !== null ? { absTol } : {}) };
+    const bad = invalidSolverOptionTexts(solver, texts);
+    const maxStep = bad.includes('maxStep') ? undefined : parseStepLimitInput(texts.maxStep);
+    const minStep = bad.includes('minStep') ? undefined : parseStepLimitInput(texts.minStep);
+    return {
+      ...(relTol !== null ? { relTol } : {}), ...(absTol !== null ? { absTol } : {}),
+      ...(maxStep !== undefined && maxStep !== null ? { maxStep } : {}), ...(minStep !== undefined && minStep !== null ? { minStep } : {}),
+    };
   }
   if (group === 'extrapolation') {
     const extrapolationOrder = parseIterationInput(texts.extrapolationOrder);
@@ -108,7 +133,11 @@ export function solverOptionsForSave(texts: SolverOptionTexts) {
   const absTol = parseToleranceInput(texts.absolute);
   const extrapolationOrder = parseIterationInput(texts.extrapolationOrder);
   const newtonIterations = parseIterationInput(texts.newtonIterations);
+  const maxS = parseStepLimitInput(texts.maxStep);
+  const minS = parseStepLimitInput(texts.minStep);
+  const orderOk = !(typeof maxS === 'number' && typeof minS === 'number' && minS > maxS);
   return {
+    ...(typeof maxS === 'number' && orderOk ? { maxStep: maxS } : {}), ...(typeof minS === 'number' && orderOk ? { minStep: minS } : {}),
     ...(relTol !== null ? { relTol } : {}), ...(absTol !== null ? { absTol } : {}),
     ...(extrapolationOrder !== null ? { extrapolationOrder } : {}), ...(newtonIterations !== null ? { newtonIterations } : {}),
   };
@@ -211,6 +240,8 @@ export interface XSimulationSettings {
   resolvedStep?: number;
   relTol?: number;
   absTol?: number;
+  maxStep?: number;
+  minStep?: number;
   extrapolationOrder?: number;
   newtonIterations?: number;
 }
@@ -224,6 +255,8 @@ export function toSimulationSettings(config: XSimulationConfig, resolvedStep?: n
     ...(resolvedStep !== undefined && Number.isFinite(resolvedStep) ? { resolvedStep } : {}),
     ...(config.relTol !== undefined ? { relTol: config.relTol } : {}),
     ...(config.absTol !== undefined ? { absTol: config.absTol } : {}),
+    ...(config.maxStep !== undefined ? { maxStep: config.maxStep } : {}),
+    ...(config.minStep !== undefined ? { minStep: config.minStep } : {}),
     ...(config.extrapolationOrder !== undefined ? { extrapolationOrder: config.extrapolationOrder } : {}),
     ...(config.newtonIterations !== undefined ? { newtonIterations: config.newtonIterations } : {}),
   };
@@ -243,12 +276,16 @@ export function fromSimulationSettings(raw: unknown): XSimulationConfig | null {
   const posInt = (v: unknown) => (typeof v === 'number' && Number.isSafeInteger(v) && v >= 1 ? v : undefined);
   const relTol = posNum(r.relTol);
   const absTol = posNum(r.absTol);
+  const maxStep = posNum(r.maxStep);
+  const minStep = posNum(r.minStep);
   const extrapolationOrder = posInt(r.extrapolationOrder);
   const newtonIterations = posInt(r.newtonIterations);
   return {
     solver: typeof r.solver === 'string' && r.solver ? r.solver : d.solver, startTime: start, stopTime: stop, fixedStep: step,
     ...(relTol !== undefined ? { relTol } : {}),
     ...(absTol !== undefined ? { absTol } : {}),
+    ...(maxStep !== undefined ? { maxStep } : {}),
+    ...(minStep !== undefined && (maxStep === undefined || minStep <= maxStep) ? { minStep } : {}),
     ...(extrapolationOrder !== undefined ? { extrapolationOrder } : {}),
     ...(newtonIterations !== undefined ? { newtonIterations } : {}),
   };

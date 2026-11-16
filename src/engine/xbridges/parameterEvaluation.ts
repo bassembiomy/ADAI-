@@ -17,6 +17,7 @@ export type ParameterKind =
   | { kind: 'integer'; min?: number; max?: number }
   | { kind: 'positive' }
   | { kind: 'nonnegative' }
+  | { kind: 'range'; min?: number; max?: number; minExclusive?: boolean; maxExclusive?: boolean }
   | { kind: 'sampleTime' }
   | { kind: 'boolean' }
   | { kind: 'option'; options: readonly string[] };
@@ -364,6 +365,18 @@ function evaluate(raw: unknown, kind: ParameterKind): { value: number | number[]
     case 'nonnegative': {
       const x = needScalar();
       if (!(x >= 0)) throw new ParamError('PARAMETER_OUT_OF_RANGE', `Value ${x} must be 0 or greater.`);
+      return { value: x };
+    }
+    case 'range': {
+      const x = needScalar();
+      const lo = kind.min === undefined ? '' : `${kind.minExclusive ? 'greater than' : 'at least'} ${kind.min}`;
+      const hi = kind.max === undefined ? '' : `${kind.maxExclusive ? 'less than' : 'at most'} ${kind.max}`;
+      const named = [lo, hi].filter(Boolean).join(' and ');
+      if (!Number.isFinite(x)
+        || (kind.min !== undefined && (kind.minExclusive ? x <= kind.min : x < kind.min))
+        || (kind.max !== undefined && (kind.maxExclusive ? x >= kind.max : x > kind.max))) {
+        throw new ParamError('PARAMETER_OUT_OF_RANGE', `Value ${x} must be ${named || 'finite'}.`);
+      }
       return { value: x };
     }
     case 'sampleTime': {
