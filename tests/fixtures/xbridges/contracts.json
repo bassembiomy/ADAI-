@@ -26139,7 +26139,7 @@
   "inputs": [
    {
     "id": "pwm_duty",
-    "name": "PWM",
+    "name": "V_cmd",
     "direction": "input",
     "type": "continuous",
     "unit": "V",

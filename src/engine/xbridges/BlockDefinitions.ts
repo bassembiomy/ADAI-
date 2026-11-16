@@ -8696,7 +8696,7 @@ execute: (ins, p, state) => {
                                                                                                   },
                                                                                                   isStateful: true,
                                                                                                   inputs: [
-                                                                                                    createPort('pwm_duty', 'PWM', 'input', 0, 'left', 'continuous'),
+                                                                                                    createPort('pwm_duty', 'V_cmd', 'input', 0, 'left', 'continuous'),
                                                                                                     createPort('v_bat', 'V_bat', 'input', 12.0, 'left', 'continuous')
                                                                                                   ],
                                                                                                   outputs: [
@@ -8711,7 +8711,7 @@ execute: (ins, p, state) => {
                                                                                                     current: 0
                                                                                                   },
                                                                                                   icon: 'graduation-cap',
-                                                                                                  description: 'Simulates single-wheel DC motor H-Bridge terminal voltage scaling, mechanical dynamics, and noisy quantized incremental encoder counts.',
+                                                                                                  description: 'Simulates a single-wheel DC motor driven by a voltage command (saturated at +-V_bat by the H-bridge), mechanical dynamics, and noisy quantized incremental encoder counts.',
                                                                                                   execute: (ins: any[], p: any, state: any, time: number) => {
                                                                                                     const encoder_cpr = Number(p.encoder_cpr ?? 360);
                                                                                                     const noise_std = Number(p.encoder_noise_std ?? 0.1);
