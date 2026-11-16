@@ -583,7 +583,10 @@ const scheduleForNode = (
   stateful: boolean,
   diagnostics: ModelDiagnostic[],
 ): XBSemanticSchedule => {
-  const samplePeriodSources = samplePeriodsForNode(node);
+  // XBV-174: a continuous STATE_SPACE has no sample time (Simulink); whatever its sampleTime holds, it runs on the solver grid.
+  const samplePeriodSources = node.type === 'STATE_SPACE' && node.parameters.representation === 'continuous'
+    ? []
+    : samplePeriodsForNode(node);
   let periodSubsteps = 1;
   let canonicalPeriod: Rational | null = null;
   let timingInvalid = false;

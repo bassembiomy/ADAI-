@@ -1,6 +1,7 @@
 // src/components/xbridges/XbridgesWorkspace.tsx
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { copyBlocks, snapshotBlocks } from './blockCopy';
+import { buildCanvasRunModel } from './canvasRunModel';
 import { createDragCopyController } from './dragCopyController';
 import {
   ReactFlow,
@@ -105,6 +106,7 @@ import { PtLibraryIcon } from './powertrain/PtSymbol';
 import { getPowertrainSpec } from '../../engine/xbridges/powertrain/index';
 import { XbridgesEngine } from '../../engine/xbridges/XbridgesEngine';
 import { liveStep as liveSolverStep } from '../../engine/xbridges/liveStep';
+import { applyInportOverrides } from '../../engine/xbridges/liveStep';
 import { ModelDiagnostic } from '../../engine/xbridges/types';
 import { ResizablePanel } from '../common/ResizablePanel';
 import { XbridgesStatusBar, type XbRunStatus } from './diagnostics/XbridgesStatusBar';
@@ -1974,34 +1976,7 @@ export const XbridgesWorkspace: React.FC<{
 
     if (isSimulating) {
       // Rebuild engine model on start - use BLOCK_LIBRARY to get live execute() functions
-      const model = {
-        blocks: nodes.map(n => {
-          const d = n.data as any;
-          // Try to rebuild via BLOCK_LIBRARY to get live execute() function
-          if (BLOCK_LIBRARY[d.type]) {
-            try {
-              let freshParams = { ...d.params };
-              if (d.type === 'FUZZY_SURFACE_VIEWER' && typeof d.params.fisConfig === 'string') {
-                const targetNode = nodes.find(x => x.id === d.params.fisConfig);
-                if (targetNode && targetNode.data.type === 'FUZZY_INFERENCE_SYSTEM') {
-                  freshParams.fisConfig = targetNode.data.params;
-                } else {
-                  freshParams.fisConfig = null;
-                }
-              }
-              const freshBlock = BLOCK_LIBRARY[d.type](d.id, freshParams || {});
-              // Always start with fresh state on Play - never resume trained/stale state
-              return { ...freshBlock, id: d.id, state: freshBlock.state, params: { ...freshParams, ...freshBlock.params } };
-            } catch (e) {
-              return d; // fallback to raw data if rebuild fails
-            }
-          }
-          return d;
-        }),
-        connections: edges.map(e => ({
-          sourceBlock: e.source, sourcePort: e.sourceHandle!, targetBlock: e.target, targetPort: e.targetHandle!
-        }))
-      };
+      const model = buildCanvasRunModel(nodes, edges);
 
       setDiagnostics([]);
       announcedDiagnosticsRef.current = [];
@@ -2199,12 +2174,10 @@ export const XbridgesWorkspace: React.FC<{
                     : paramUpdates[node.id];
                   engineRef.current!.applyParameterUpdates(node.id, updates);
                 }
-                if (inportOverrides[node.id] !== undefined) {
-                  engineRef.current!.setSignalValue(node.id, 'out', inportOverrides[node.id]);
-                  if (block.params) block.params.value = inportOverrides[node.id];
-                }
               }
             });
+
+            applyInportOverrides(engineRef.current, inportOverrides);
 
             const stepped = stepLiveSolver(engineRef.current, solverType, timeRef.current, stepNow);
 

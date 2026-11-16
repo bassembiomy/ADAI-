@@ -424,15 +424,16 @@ const relayOutputValue = (runtime: XBRuntime, operation: XBSemanticOperation): n
 // Shift counts follow Simulink and the canvas (XBV-161): a count >= 32 shifts every bit out (0, or -1 for a negative
 // value under the arithmetic right shift), a negative count shifts the other way. int32 two's complement (D10).
 const SHIFT_WORD_LENGTH = 32;
+// XBV-172 (D11): a non-finite operand gives NaN (not ToInt32(Inf) = 0); the non-finite write raises the numeric fault.
 const shiftLeft32 = (value: number, count: number): number => {
   const c = Math.trunc(count);
-  if (!Number.isFinite(value) || !Number.isFinite(count)) return 0;
+  if (!Number.isFinite(value) || !Number.isFinite(count)) return Number.NaN;
   if (c < 0) return shiftRight32(value, -c);
   return c >= SHIFT_WORD_LENGTH ? 0 : (value << c) | 0;
 };
 const shiftRight32 = (value: number, count: number): number => {
   const c = Math.trunc(count);
-  if (!Number.isFinite(value) || !Number.isFinite(count)) return 0;
+  if (!Number.isFinite(value) || !Number.isFinite(count)) return Number.NaN;
   if (c < 0) return shiftLeft32(value, -c);
   return c >= SHIFT_WORD_LENGTH ? ((value | 0) < 0 ? -1 : 0) : (value >> c) | 0;
 };

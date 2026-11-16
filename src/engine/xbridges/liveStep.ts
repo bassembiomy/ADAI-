@@ -123,3 +123,24 @@ export function runBatchSolver(engine: XbridgesEngine, solver: string, options: 
     default: return false;
   }
 }
+
+/**
+ * XBV-039: applies the state-machine variable overrides to the top-level Inports of a live run. An override marks the block
+ * (params.smOverride) so Inport.execute outputs the value in every evaluation; an Inport inside a subsystem (parentId other
+ * than 'root') keeps taking its parent's input and ignores the entry; a block whose id is no longer in the overrides is
+ * released (the mapping was removed mid-run).
+ */
+export function applyInportOverrides(engine: XbridgesEngine, overrides: Record<string, unknown> | undefined): void {
+  for (const block of engine.getFlatBlocks()) {
+    if (block.type !== 'Inport' || !block.params) continue;
+    const topLevel = (block.parentId ?? 'root') === 'root';
+    if (topLevel && overrides !== undefined && Object.prototype.hasOwnProperty.call(overrides, block.id)) {
+      const value = overrides[block.id];
+      engine.setSignalValue(block.id, 'out', value);
+      block.params.value = value;
+      block.params.smOverride = true;
+    } else if (block.params.smOverride === true) {
+      delete block.params.smOverride;
+    }
+  }
+}
