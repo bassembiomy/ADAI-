@@ -194,6 +194,8 @@ describe('XBV-196: empty slew rate message', () => {
       expect(msgs).not.toMatch(/supports only scalar slew rates/i);
     });
   }
+});
+
 // XBV-187 rework (E5 verifier): the held friction direction must not outlive a located lock-up under the variable-step
 // solvers. Disc clutch (wp13 parameters, P 200 kPa, no torques, w_in_o 100): t* = 100 / (Tk (1/J_in + 1/J_out)) = 0.04386 s;
 // after t* both sides turn at 0.2 * 100 / 0.3 = 66.667 rad/s with Locked = 1, live ode45 / ode23 at output step 0.01 as well.
