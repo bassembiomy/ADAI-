@@ -182,6 +182,26 @@ describe('worker protocol', () => {
     expect(Math.abs(Number(r!.outputValues?.['x.out']) - 7)).toBeLessThan(1e-9);
   });
 
+  // WP-21 F3 rework 2 (verifier): the canvas run model must keep each node's parentId, or every engine block looks top
+  // level and the override reaches Inports inside subsystems. The node -> run-model mapping of the workspace is the
+  // exported buildCanvasRunModel (src/components/xbridges/canvasRunModel.ts), used for the main thread and the worker.
+  it('XBV-039: the canvas run model keeps parentId, and an override for an Inport inside a subsystem is not applied', async () => {
+    const { buildCanvasRunModel } = await import('../../../components/xbridges/canvasRunModel');
+    const { applyInportOverrides } = await import('../liveStep');
+    const node = (id: string, type: string, params: Record<string, unknown>, parentId?: string) => ({ id, type: 'xblock', position: { x: 0, y: 0 }, data: { id, type, params, ...(parentId ? { parentId } : {}) } });
+    const nodes = [node('top', 'Inport', {}), node('sub', 'Subsystem', {}), node('inner', 'Inport', {}, 'sub')];
+    const model = buildCanvasRunModel(nodes as never, [] as never);
+    const byId = Object.fromEntries(model.blocks.map((b: { id: string }) => [b.id, b])) as Record<string, { parentId?: string; params: Record<string, unknown> }>;
+    expect(byId.inner.parentId).toBe('sub');
+    expect(byId.top.parentId ?? 'root').toBe('root');
+    const engine = new XbridgesEngine(model as never);
+    engine.compile(0);
+    applyInportOverrides(engine, { top: 2.5, inner: 9 });
+    const flat = Object.fromEntries(engine.getFlatBlocks().map((b) => [b.id, b]));
+    expect(flat.top?.params.smOverride).toBe(true);
+    expect(flat.inner?.params.smOverride).not.toBe(true);
+  });
+
   it('a block that raises an exception fails the step with BLOCK_RUNTIME_FAULT, and the worker accepts a new model afterwards', () => {
     // WP-21 round 3: no library block throws any more (universal battery U1-U5 empty), so the fault path is exercised with a
     // test-only block type registered for this test and removed afterwards.
