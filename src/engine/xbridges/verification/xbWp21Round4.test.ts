@@ -126,3 +126,55 @@ describe('batch K: documentation states what the code does', () => {
   });
 });
 
+
+// ---------------------------------------------------------------- batch K rework 1 (WP-21 K verifier)
+// 1. Optional control inputs keep their default after the control -> continuous port-type remap: a canvas PID with
+//    Enable / Reset left open generates C without XB_PORT_DANGLING (Simulink: an unconnected optional input is not an
+//    error; base before batch K: 0 errors).
+// 2. The catalogue units and types added by batch K add no new compile warnings to shipped lab wiring
+//    (robot_vacuum_twin: wheel control V_L / V_R -> motor pwm_duty; environment is_docked -> battery / navigation).
+// 3. An '@angle' unit follows angle_unit when the parameter is edited after the block was created.
+import { adaptXBModel } from '../../../utils/stateMachine/xbModelAdapter';
+import { validateXBModel } from '../../../utils/stateMachine/xbSemanticValidator';
+import { EMBEDDED_TARGET } from '../testkit/embedded';
+
+describe('batch K rework: optional control inputs stay optional for Generate C', () => {
+  for (const t of ['PID_CONTROLLER', 'PID_BASIC']) {
+    it(`${t} with Enable and Reset open validates for the embedded target without errors`, () => {
+      const c = BLOCK_LIBRARY['Constant']('c', { value: 1 });
+      const p = BLOCK_LIBRARY[t]('p', { sampleTime: 0.01 });
+      const nodes = [c, p].map((b) => ({ id: b.id, data: { type: b.type, params: b.params, inputs: b.inputs.map((x) => ({ ...x, direction: 'input' })), outputs: b.outputs.map((x) => ({ ...x, direction: 'output' })) } }));
+      const edges = p.inputs.filter((x) => x.id !== 'enable' && x.id !== 'reset').map((x, i) => ({ id: `e${i}`, source: 'c', sourceHandle: 'out', target: 'p', targetHandle: x.id }));
+      const ad = adaptXBModel({ nodes, edges } as never);
+      expect(ad.model).toBeDefined();
+      const errs = validateXBModel(ad.model!, {}, EMBEDDED_TARGET).filter((d) => d.severity === 'error').map((d) => `${d.code}: ${d.message}`);
+      expect(errs).toEqual([]);
+    });
+  }
+});
+
+describe('batch K rework: no new unit / type warnings on robot vacuum lab wiring', () => {
+  it('wheel control V_L / V_R -> motor pwm_duty and is_docked -> battery / navigation compile without UNIT_INCONSISTENCY or SIGNAL_TYPE_MISMATCH', () => {
+    const e = new XbridgesEngine(buildModel({
+      blocks: [
+        { id: 'pid', type: 'ROBOT_VACUUM_WHEEL_CONTROL', params: { Kp_wheel: 12, Ki_wheel: 45, V_bat: 12 } },
+        { id: 'ml', type: 'ROBOT_VACUUM_MOTOR', params: {} }, { id: 'mr', type: 'ROBOT_VACUUM_MOTOR', params: {} },
+        { id: 'env', type: 'ROBOT_VACUUM_ENVIRONMENT', params: {} },
+        { id: 'bat', type: 'ROBOT_VACUUM_BATTERY', params: {} }, { id: 'nav', type: 'ROBOT_VACUUM_NAV', params: {} },
+      ],
+      wires: ['pid.V_L -> ml.pwm_duty', 'pid.V_R -> mr.pwm_duty', 'env.is_docked -> bat.is_docked', 'env.is_docked -> nav.is_docked'],
+    }));
+    const w = e.compile(0).filter((d) => d.code === 'UNIT_INCONSISTENCY' || d.code === 'SIGNAL_TYPE_MISMATCH').map((d) => d.message);
+    expect(w).toEqual([]);
+  });
+});
+
+describe("batch K rework: '@angle' units follow angle_unit edited after creation", () => {
+  it('ACOS (deg) -> COS created in rad then edited to deg compiles without UNIT_INCONSISTENCY', () => {
+    const m = buildModel({ blocks: [{ id: 'a', type: 'ACOS', params: { angle_unit: 'deg' } }, { id: 'c', type: 'COS', params: {} }], wires: ['a.y -> c.u'] });
+    const cos = m.blocks.find((b) => b.id === 'c')!;
+    cos.params = { ...cos.params, angle_unit: 'deg' }; // the properties panel edits params only
+    const w = new XbridgesEngine(m).compile(0).filter((d) => d.code === 'UNIT_INCONSISTENCY').map((d) => d.message);
+    expect(w).toEqual([]);
+  });
+});
