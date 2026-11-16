@@ -191,7 +191,7 @@ describe('worker protocol', () => {
     const node = (id: string, type: string, params: Record<string, unknown>, parentId?: string) => ({ id, type: 'xblock', position: { x: 0, y: 0 }, data: { id, type, params, ...(parentId ? { parentId } : {}) } });
     const nodes = [node('top', 'Inport', {}), node('sub', 'Subsystem', {}), node('inner', 'Inport', {}, 'sub')];
     const model = buildCanvasRunModel(nodes as never, [] as never);
-    const byId = Object.fromEntries(model.blocks.map((b: { id: string }) => [b.id, b])) as Record<string, { parentId?: string; params: Record<string, unknown> }>;
+    const byId = Object.fromEntries(model.blocks.map((b: { id: string }) => [b.id, b])) as unknown as Record<string, { parentId?: string; params: Record<string, unknown> }>;
     expect(byId.inner.parentId).toBe('sub');
     expect(byId.top.parentId ?? 'root').toBe('root');
     const engine = new XbridgesEngine(model as never);
