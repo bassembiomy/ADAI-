@@ -883,7 +883,8 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
               }
 
               // Simulink-style check of the entered text: the value is still stored, the model refuses to run until it is fixed.
-              const paramKind = parameterKind(block.type, key) ?? powertrainParameterKind(block.type, key);
+              const ptKind = powertrainParameterKind(block.type, key);
+              const paramKind = parameterKind(block.type, key) ?? ptKind;
               const shownText = localInputValues[key] !== undefined ? localInputValues[key] : String(displayValue);
               const paramCheck = paramKind ? evaluateParameter(shownText, paramKind) : null;
               const paramError = paramCheck && !paramCheck.ok ? paramCheck.reason : null;
@@ -1265,10 +1266,14 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
                         // 3. Commit valid scalar numbers to allow real-time tuning
                         if (!isNaN(Number(trimmedRaw))) {
                           const val = Number(trimmedRaw);
-                          // A bounded (range) parameter remembers its last in-range value; blur restores it when the text stays outside.
-                          if (paramKind?.kind === 'range') {
-                            if (evaluateParameter(trimmedRaw, paramKind).ok) lastInRangeRef.current[key] = isObjectParam ? { ...block.params[key], value: val } : val;
-                            else if (!(key in lastInRangeRef.current)) lastInRangeRef.current[key] = block.params[key];
+                          // A bounded (range) parameter keeps the value stored before the edit; a value outside the range is never committed.
+                          if (ptKind) {
+                            if (!(key in lastInRangeRef.current)) lastInRangeRef.current[key] = { before: block.params[key], committed: false };
+                            if (!evaluateParameter(trimmedRaw, ptKind).ok) {
+                              onInvalidParameter?.(block.id, key, raw);
+                              return;
+                            }
+                            lastInRangeRef.current[key].committed = true;
                           }
                           let finalVal = val;
                           if (isObjectParam) {
@@ -1295,16 +1300,15 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
                         // Invalid text in a numeric parameter must not overwrite the stored number: the error stays shown
                         // and the stored value is kept until the text is valid (Simulink refuses a bad dialog value).
                         const notNumeric = typeof val === 'string' && !(trimmedRaw.startsWith('[') || trimmedRaw.startsWith('{'));
-                        const outOfRange = paramKind?.kind === 'range' && !notNumeric && !evaluateParameter(raw, paramKind).ok;
+                        const outOfRange = !!ptKind && !notNumeric && !evaluateParameter(raw, ptKind).ok;
                         const rejected = notNumeric && (paramKind ? !evaluateParameter(raw, paramKind).ok : typeof displayValue === 'number');
-                        if (rejected) {
-                          setLocalInputValues(prev => ({ ...prev, [key]: raw }));
-                          onInvalidParameter?.(block.id, key, raw);
-                          return;
-                        }
-                        if (outOfRange) {
-                          const kept = key in lastInRangeRef.current ? lastInRangeRef.current[key] : block.params[key];
-                          onUpdate(block.id, { params: { ...block.params, [key]: kept } });
+                        if (rejected || outOfRange) {
+                          // Restore the pre-edit value when an in-range prefix replaced it while typing.
+                          const edit = lastInRangeRef.current[key];
+                          if (ptKind && edit?.committed) {
+                            onUpdate(block.id, { params: { ...block.params, [key]: edit.before } });
+                            edit.committed = false;
+                          }
                           setLocalInputValues(prev => ({ ...prev, [key]: raw }));
                           onInvalidParameter?.(block.id, key, raw);
                           return;
