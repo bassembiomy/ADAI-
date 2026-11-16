@@ -147,3 +147,17 @@ describe('XBV-192: Rate Limiter with vector slew rates', () => {
     expect(r.diagnostics.some((d) => d.severity === 'error')).toBe(true);
   });
 });
+
+// XBV-193: Generate C (embedded validator) refuses vector Rate Limiter slew rates with a message that says so.
+import { runEmbedded } from '../testkit';
+describe('XBV-193: embedded refusal of vector slew rates names the cause', () => {
+  it('RATE_LIMITER risingSlewRate [1 2 4]: an error diagnostic whose message mentions vector / scalar rates', () => {
+    const r = runEmbedded({
+      blocks: [{ id: 'c', type: 'Constant', params: { value: [10, 10, 10] } }, { id: 'r', type: 'RATE_LIMITER', params: { risingSlewRate: [1, 2, 4], fallingSlewRate: -1, sampleTime: 0.1 } }],
+      wires: ['c.out -> r.u'],
+    }, { solver: 'discrete', dt: 0.1, steps: 2, probes: ['r.y'], portDimensions: { 'c.out': [3], 'r.u': [3], 'r.y': [3] } });
+    const errs = r.diagnostics.filter((d) => d.severity === 'error');
+    expect(errs.length).toBeGreaterThan(0);
+    expect(errs.map((d) => d.message).join(' | ')).toMatch(/vector|scalar/i);
+  });
+});
