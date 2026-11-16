@@ -233,7 +233,7 @@ const elementaryExamples: Record<string, string> = {
   ROBOT_VACUUM_TOPOLOGY_RETURN: 'Supply current room and the dock room using the fixed connectivity graph. Inspect the ordered door-hop sequence and use it as targets for the local path planner.',
   ROBOT_VACUUM_THETA_STAR: 'Supply a free-space grid, start and goal. Inspect the path around occupied cells and line-of-sight shortcuts; increase inflation to keep the route farther from walls.',
   ROBOT_VACUUM_DIGITAL_TWIN: 'Run the integrated twin with default geometry and motor parameters. Inspect true pose, estimated pose, battery and coverage together as the mission advances through cleaning and docking states.',
-  ROBOT_VACUUM_MOTOR: 'Drive a wheel voltage command and inspect wheel speed, current and encoder counts. Reverse voltage to examine direction while keeping motor_R,motor_L,motor_K and inertia consistent.',
+  ROBOT_VACUUM_MOTOR: 'Drive a wheel voltage command (in V, saturated at +-V_bat by the H-bridge) and inspect wheel speed, current and encoder counts. Reverse voltage to examine direction while keeping motor_R,motor_L,motor_K and inertia consistent.',
   ROBOT_VACUUM_DYNAMICS: 'Apply equal left/right wheel speeds and observe forward motion with near-zero yaw rate. Apply unequal speeds and inspect the resulting heading change.',
   ROBOT_VACUUM_ENVIRONMENT: 'Drive pose around the fixed room map. Inspect the collision flag and LiDAR ranges as the robot approaches an obstacle; compare the displayed map with the detected geometry.',
   ROBOT_VACUUM_ODOMETRY: 'Increase both encoder counts equally. Compare forward displacement with one wheel circumference per encoder_cpr and inspect near-zero heading change.',
