@@ -88,6 +88,12 @@
    "date": "2026-11-15",
    "topic": "Clock block",
    "decision": "The Clock block outputs the simulation time (Simulink Clock; the embedded path already did). The old square-wave behaviour remains available as WaveformGen type 'Square'; no lab, example or saved model used Clock.freq. Adopted by the controller under the 'fix all' go-ahead."
+  },
+  {
+   "id": "D15",
+   "date": "2026-11-16",
+   "topic": "XBV-186 fixed-step zero crossings",
+   "decision": "Fixed-step solvers (euler, ode2, ode3, rk4, ode5, ode14x) do not locate zero crossings, as Simulink with 'Enable zero-crossing detection for fixed-step simulation' off (its default): a block mode changes at a major step, the output grid stays k*h, and batch runs equal the live canvas step. Variable-step ode23, ode45 and ode23tb keep event location."
   }
  ],
  "wps": [
