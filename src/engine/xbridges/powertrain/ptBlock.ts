@@ -9,7 +9,7 @@ type Params = Record<string, any>;
 
 export interface PtBlockImpl {
   init?(p: Params): any;
-  execute(ins: XValue[], p: Params, state: any, t: number): { outputs: XValue[]; nextState?: any; error?: string };
+  execute(ins: XValue[], p: Params, state: any, t: number): { outputs: XValue[]; nextState?: any; error?: string; diagnostic?: { code: string; severity: 'error' | 'warning' | 'info'; message: string } };
   /** Discrete update of a hybrid block at a major step; returns the new state (pure). */
   update?(ins: XValue[], p: Params, state: any, t: number): any;
   /** Top-level state keys updated only by update (discrete states of a hybrid block). */
@@ -126,6 +126,7 @@ export function definePtBlock(spec: PtBlockSpec, impl: PtBlockImpl): (id: string
         } catch (e) {
           return { outputs: zeroOutputs(outs), error: e instanceof Error ? e.message : String(e) };
         }
+        if (r.diagnostic) return { outputs: zeroOutputs(outs), diagnostic: r.diagnostic };
         if (r.error) return { outputs: zeroOutputs(outs), error: r.error };
         for (let i = 0; i < r.outputs.length; i++) {
           if (nonFinitePath(r.outputs[i])) {

@@ -4,6 +4,7 @@
 // Jacobian is global (it couples blocks), as in Simulink.
 import { XbridgesEngine } from './XbridgesEngine';
 import { SolverOptions } from './types';
+import { VectorUtils } from './VectorUtils';
 
 type Path = (string | number)[];
 interface Leaf { blockId: string; path: Path }
@@ -39,8 +40,9 @@ function getAt(v: any, path: Path): number {
  */
 function derivAt(state: any, deriv: any, path: Path): number {
   if (path.length === 0) {
-    const d = Number(deriv);
-    return Number.isNaN(d) ? 0 : d;
+    // Only a missing derivative (unconnected input) counts as 0; NaN / Inf propagate so STIFF_SOLVER_NONFINITE fires (XBV-175).
+    if (deriv === undefined || deriv === null) return 0;
+    return Number(deriv);
   }
   const [k, ...rest] = path;
   let sub: any;
@@ -73,6 +75,50 @@ function setAt(root: any, path: Path, value: number) {
 
 /** Output step suggested for the next live output step, per engine. */
 const LIVE_TB_HINT = new WeakMap<object, { h: number }>();
+
+function snapshotStates(engine: XbridgesEngine): Map<string, any> {
+  const m = new Map<string, any>();
+  engine.executionOrder.forEach(b => { if (b.state !== undefined) m.set(b.id, JSON.parse(JSON.stringify(b.state))); });
+  return m;
+}
+
+/**
+ * Zero-crossing test of a trial step [t, t + h] (statesPrev at t, statesCurr = the trial state at t + h).
+ * Returns the step length that ends at the located event, or null when the step has no event inside or the event is at
+ * its end. The caller restores statesPrev and retakes the step to that length WITH the error test (XBV-177); the blocks then
+ * update their discrete state at the event (clutch lock, switch mode).
+ */
+function eventStepLength(
+  engine: XbridgesEngine, t: number, h: number, statesPrev: Map<string, any>, statesCurr: Map<string, any>,
+  zeroTol: number, hMin: number,
+): number | null {
+  engine.computeOutputs(t, statesPrev);
+  const zcPrev = engine.getZeroCrossings(t, statesPrev);
+  engine.computeOutputs(t + h, statesCurr);
+  const zcCurr = engine.getZeroCrossings(t + h, statesCurr);
+  if (!engine.hasZeroCrossingSignChange(zcPrev, zcCurr)) return null;
+  // Own bisection (engine.bracketZeroCrossing compares against the signals left by the previous evaluation, which are the
+  // ones of the trial end, not of the base). Much tighter than the step: the mode of a Switch flips at the next major step.
+  const tol = Math.min(zeroTol, 1e-9 * Math.max(1, Math.abs(t)));
+  let lo = t, hi = t + h;
+  for (let iter = 0; iter < 80 && hi - lo > tol; iter++) {
+    const mid = (lo + hi) / 2;
+    if (!(mid > lo && mid < hi)) break;
+    const frac = (mid - t) / h;
+    const sMid = new Map<string, any>();
+    statesPrev.forEach((sPrev, blockId) => {
+      const sCurr = statesCurr.get(blockId);
+      sMid.set(blockId, sCurr === undefined ? sPrev
+        : VectorUtils.integrateState(sPrev, VectorUtils.applyElementWise(sCurr, sPrev, 'subtract'), frac));
+    });
+    engine.computeOutputs(mid, sMid);
+    const zcMid = engine.getZeroCrossings(mid, sMid);
+    if (engine.hasZeroCrossingSignChange(zcPrev, zcMid)) hi = mid; else lo = mid;
+  }
+  const tEvent = hi;
+  const hEv = tEvent - t;
+  return hEv > hMin && hEv < h ? hEv : null;
+}
 
 function reportError(engine: XbridgesEngine, code: string, message: string) {
   if (!engine.diagnostics.some(d => d.code === code)) {
@@ -367,7 +413,7 @@ export class StiffSolver {
    */
   static stepODE23TB(
     engine: XbridgesEngine, t: number, h: number, relTol: number, absTol: number, discrete = true,
-  ): { accepted: boolean; err: number; hNext: number; failed?: boolean } {
+  ): { accepted: boolean; err: number; hNext: number; failed?: boolean; candidate?: Map<string, any> } {
     const gamma = 2 - Math.SQRT2;
     const d = gamma / 2;
     engine.computeOutputs(t);
@@ -406,10 +452,24 @@ export class StiffSolver {
           y = next;
           if (!Number.isFinite(dx[0]) || !dx.every(Number.isFinite)) return null;
           if (wrms(dx, y) <= newtonTol) return y;
+          // Round-off floor: the corrections cannot get below the rounding of the terms of the stage equation, so a
+          // tolerance tighter than eps/RelTol would never be met (RelTol 1e-9 on x' = cos(10 t) failed at t = 6e-6, XBV-183).
+          let atRoundoff = true;
+          for (let i = 0; i < n && atRoundoff; i++) {
+            if (Math.abs(dx[i]) > 64 * Number.EPSILON * (Math.abs(y[i]) + Math.abs(base[i]) + d * h * Math.abs(fk[i]))) atRoundoff = false;
+          }
+          if (atRoundoff) return y;
         }
         return null;
       };
 
+      // Trial state for event detection only when the implicit stages do not converge (a derivative jump inside the step):
+      // the explicit Euler predictor. It is never committed; the event retake is a full TR-BDF2 step with the error test.
+      const predictor = () => {
+        const xe = new Float64Array(n);
+        for (let i = 0; i < n; i++) xe[i] = x0[i] + h * f0[i];
+        return StiffSolver.unflatten(engine, layout, xe);
+      };
       const tg = t + gamma * h;
       const t1 = t + h;
       const base1 = new Float64Array(n);
@@ -417,14 +477,14 @@ export class StiffSolver {
       const guess1 = new Float64Array(n);
       for (let i = 0; i < n; i++) guess1[i] = x0[i] + gamma * h * f0[i];
       const yg = newtonStage(tg, base1, guess1);
-      if (!yg) return { accepted: false, err: Infinity, hNext: h * 0.25 };
+      if (!yg) return { accepted: false, err: Infinity, hNext: h * 0.25, candidate: predictor() };
 
       const a = 1 / (gamma * (2 - gamma));
       const b = ((1 - gamma) * (1 - gamma)) / (gamma * (2 - gamma));
       const base2 = new Float64Array(n);
       for (let i = 0; i < n; i++) base2[i] = a * yg[i] - b * x0[i];
       const y1 = newtonStage(t1, base2, yg);
-      if (!y1) return { accepted: false, err: Infinity, hNext: h * 0.25 };
+      if (!y1) return { accepted: false, err: Infinity, hNext: h * 0.25, candidate: predictor() };
 
       const fg = StiffSolver.f(engine, layout, tg, yg);
       const f1 = StiffSolver.f(engine, layout, t1, y1);
@@ -435,15 +495,18 @@ export class StiffSolver {
       }
       const est = StiffSolver.solve(W, n, raw);
       const err = wrms(est, x0, y1);
-      if (!Number.isFinite(err)) return { accepted: false, err: Infinity, hNext: h * 0.25 };
+      if (!Number.isFinite(err)) return { accepted: false, err: Infinity, hNext: h * 0.25, candidate: predictor() };
 
       const factor = err > 0 ? Math.min(5, Math.max(0.2, 0.8 * Math.pow(err, -1 / 3))) : 5;
       const hNext = h * factor;
+      // The trial state is returned also for a rejected step: a step across a switching instant is rejected by the error
+      // estimate, and the caller needs the trial state to find the zero crossing inside it.
+      const candidate = StiffSolver.unflatten(engine, layout, y1);
       if (err <= 1) {
-        engine.commitStateUpdates(StiffSolver.unflatten(engine, layout, y1));
-        return { accepted: true, err, hNext };
+        engine.commitStateUpdates(candidate);
+        return { accepted: true, err, hNext, candidate };
       }
-      return { accepted: false, err, hNext };
+      return { accepted: false, err, hNext, candidate };
     } catch (e) {
       if (e instanceof StiffSolverError) {
         reportError(engine, e.code, e.message);
@@ -473,13 +536,28 @@ export class StiffSolver {
     if (hints === undefined) { hints = { h: dt }; LIVE_TB_HINT.set(engine, hints); }
     let h = Math.min(hints.h, hMax, dt);
     let tc = t;
+    const hasZc = engine.executionOrder.some(b => !!b.ZeroCrossingFn);
+    let eventStep = false;
     while (tc < tEnd && !engine.hasFatalError()) {
       const remaining = tc === t ? dt : tEnd - tc; // the first substep measures the output step itself, not (t + dt) - t
       let hTry = Math.min(h, hMax);
       let reaches = false;
       if (hTry >= remaining - hMin) { hTry = remaining; reaches = true; }
+      const statesPrev = hasZc ? snapshotStates(engine) : null;
       const res = StiffSolver.stepODE23TB(engine, tc, hTry, relTol, absTol, false);
       if (res.failed) return false;
+      if (statesPrev !== null) {
+        // A step across a zero crossing (clutch lock, switch, ...) is retaken up to the located event with the error test;
+        // the blocks then update their discrete state there (XBV-177).
+        if (res.candidate !== undefined && !eventStep) {
+          const hEv = eventStepLength(engine, tc, hTry, statesPrev, res.candidate, engine.options?.zeroTol ?? 1e-6, hMin);
+          if (hEv !== null) { engine.commitStateUpdates(statesPrev); h = hEv; eventStep = true; continue; }
+        }
+        if (res.accepted) {
+          eventStep = false;
+          if (!reaches) { engine.computeOutputs(tc + hTry); engine.updateDiscreteStates(tc + hTry); }
+        }
+      }
       if (res.accepted) {
         tc = reaches ? tEnd : tc + hTry;
         let hNew = Math.min(hMax, Math.max(res.hNext, hMin));
@@ -514,6 +592,9 @@ export class StiffSolver {
     let t = startTime;
     let h = Math.min(hMax, span / 100);
     const landTol = 1e-12 * Math.max(1, Math.abs(stopTime));
+    const hasZc = engine.executionOrder.some(b => !!b.ZeroCrossingFn);
+    const zeroTol = options.zeroTol ?? 1e-6;
+    let eventStep = false;
 
     while (stopTime - t > landTol && !engine.hasFatalError()) {
       const remaining = stopTime - t;
@@ -523,8 +604,27 @@ export class StiffSolver {
         reportError(engine, 'STIFF_SOLVER_STEP_TOO_SMALL', `ode23tb step size fell below minStep (${hMin}) at t=${t}.`);
         break;
       }
-      const res = StiffSolver.stepODE23TB(engine, t, hTry, relTol, absTol);
-      if (res.failed) break;
+      let res: ReturnType<typeof StiffSolver.stepODE23TB>;
+      if (hasZc) {
+        // Zero-crossing blocks (clutch lock, relay, ...): a discontinuous right-hand side stepped across its switching
+        // instant makes the error control chatter down to the minimum step (XBV-177). As ode45 and ode14x do, the step
+        // that crosses an event is retaken to the located event time, where the block then updates its discrete state.
+        engine.computeOutputs(t);
+        engine.updateDiscreteStates(t);
+        const statesPrev = snapshotStates(engine);
+        res = StiffSolver.stepODE23TB(engine, t, hTry, relTol, absTol, false);
+        if (res.failed) break;
+        if (res.candidate !== undefined && !eventStep) {
+          const hEv = eventStepLength(engine, t, hTry, statesPrev, res.candidate, zeroTol, hMin);
+          if (hEv !== null) {
+            engine.commitStateUpdates(statesPrev);
+            h = hEv; // retake up to the event with the error test; shorter than the event, so it is not found again
+            eventStep = true;
+            continue;
+          }
+        }
+        if (res.accepted) eventStep = false;
+      } else res = StiffSolver.stepODE23TB(engine, t, hTry, relTol, absTol);
       if (res.accepted) {
         t = hTry === remaining ? stopTime : t + hTry;
         h = Math.min(hMax, res.hNext);

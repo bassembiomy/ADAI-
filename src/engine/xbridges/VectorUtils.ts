@@ -163,7 +163,9 @@ export class VectorUtils {
       return state;
     }
     if (typeof state === 'number') {
-      return state + (Number(deriv) || 0) * factor;
+      // A missing derivative (undefined / null) is 0; NaN / Inf propagate into the state (XBV-176).
+      const d = deriv === undefined || deriv === null ? 0 : Number(deriv);
+      return state + d * factor;
     }
     if (Array.isArray(state)) {
       return state.map((val, idx) => {
