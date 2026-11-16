@@ -97,7 +97,12 @@ const sign = (x: number): number => (x > 0 ? 1 : x < 0 ? -1 : 0);
 // fields and the time, so all RK stages see one consistent description. The fields are advanced (shift start and end,
 // lock and release, re-seeding w_in to the kinematic speed while locked) in the pure discrete update of the block,
 // which the engine calls once per major step and which returns a new state object (Simulink mdlUpdate).
-interface ShiftState { w_in: number; gF: number; gT: number; sh: number; t0: number; lk: number; lkG: number }
+//   pg0, pv0, pg1, pv1  gear and slip speed of clutch 0 / 1 at the previous major step (pg = NO_GEAR when none): a lock is
+//   also taken when the slip changed sign since then (fixed-step solvers do not locate the zero crossing, XBV-187)
+//   d0, d1  friction direction of clutch 0 / 1 held from the last major step while no clutch is locked (minor steps keep it,
+//           so a Runge-Kutta stage does not straddle the sign change of the slip)
+const NO_GEAR = Number.MIN_SAFE_INTEGER;
+interface ShiftState { w_in: number; gF: number; gT: number; sh: number; t0: number; lk: number; lkG: number; pg0: number; pv0: number; pg1: number; pv1: number; d0: number; d1: number }
 interface Clutch { gear: number; N: number; eta: number; cap: number }
 interface Profile { cls: Clutch[]; gear: number; frac: number }
 interface GearTable { nums: number[]; ratios: number[]; effs: number[] }
@@ -121,11 +126,12 @@ const makeClutch = (tb: GearTable, gear: number, cap: number): Clutch => {
 interface Sol { wEng: number; Tc: number[]; aIn: number; diffTrq: number }
 
 /** Torques and input-shaft acceleration for the given clutches; lockIdx >= 0 ties the input shaft to that clutch. */
-function solveClutches(cls: Clutch[], lockIdx: number, wIn: number, Teng: number, wd: number, p: Record<string, any>): Sol {
+function solveClutches(cls: Clutch[], lockIdx: number, wIn: number, Teng: number, wd: number, p: Record<string, any>, held?: number[]): Sol {
   const wEng = lockIdx >= 0 ? cls[lockIdx].N * wd : wIn;
   const tol = p.omega_tol as number;
   const slip = cls.map(c => wEng - c.N * wd);
-  const Tc = cls.map((c, j) => (j === lockIdx ? 0 : c.cap * (lockIdx >= 0 || Math.abs(slip[j]) > tol ? sign(slip[j]) : 0)));
+  const hd = (j: number) => (lockIdx < 0 && held ? held[j] ?? 0 : 0);
+  const Tc = cls.map((c, j) => (j === lockIdx ? 0 : c.cap * (hd(j) !== 0 ? hd(j) : lockIdx >= 0 || Math.abs(slip[j]) > tol ? sign(slip[j]) : 0)));
   const free = Teng - p.b_in * wEng;
   const others = (j: number) => Tc.reduce((a, t, k) => (k === j ? a : a + t), 0);
   let aIn = 0;
@@ -135,7 +141,7 @@ function solveClutches(cls: Clutch[], lockIdx: number, wIn: number, Teng: number
     // Inside the tolerance band the friction keeps opposing the slip, so the shaft runs through the band to the slip zero
     // where the solver stops and the clutch locks (no reversal at the band edge: a torque that reverses there traps an
     // implicit solver on the edge). Only at a slip of exactly zero the direction is that of the torque that breaks the clutch away.
-    cls.forEach((c, j) => { if (Math.abs(slip[j]) <= tol) Tc[j] = c.cap * (slip[j] !== 0 ? sign(slip[j]) : sign(free - others(j))); });
+    cls.forEach((c, j) => { if (hd(j) === 0 && Math.abs(slip[j]) <= tol) Tc[j] = c.cap * (slip[j] !== 0 ? sign(slip[j]) : sign(free - others(j))); });
     aIn = (free - Tc.reduce((a, t) => a + t, 0)) / p.J_in;
   }
   const diffTrq = cls.reduce((a, c, i) => a + c.N * (Tc[i] * wEng >= 0 ? c.eta : 1 / c.eta) * Tc[i], 0) + 0;
@@ -154,11 +160,18 @@ function advanceShift(m: ShiftModel, s0: ShiftState, cmd: number | undefined, Te
   if (li >= 0 && !(cls[li].cap > 0 && Math.abs(solveClutches(cls, li, s.w_in, Teng, wd, p).Tc[li]) <= cls[li].cap)) li = -1;
   if (li < 0) {
     for (let i = 0; i < cls.length; i++) {
-      if (cls[i].cap > 0 && Math.abs(s.w_in - cls[i].N * wd) <= p.omega_tol
+      const slip = s.w_in - cls[i].N * wd;
+      const prevG = i === 0 ? s0.pg0 : s0.pg1, prevV = i === 0 ? s0.pv0 : s0.pv1;
+      const crossed = prevG === cls[i].gear && prevV * slip < 0;
+      if (cls[i].cap > 0 && (Math.abs(slip) <= p.omega_tol || crossed)
         && Math.abs(solveClutches(cls, i, s.w_in, Teng, wd, p).Tc[i]) <= cls[i].cap) { li = i; break; }
     }
   }
+  const slips = cls.map((c, i) => (i === li ? 0 : s.w_in - c.N * wd));
   if (li >= 0) { s.lk = 1; s.lkG = cls[li].gear; s.w_in = cls[li].N * wd; } else { s.lk = 0; }
+  s.pg0 = cls.length > 0 ? cls[0].gear : NO_GEAR; s.pv0 = cls.length > 0 ? slips[0] : 0;
+  s.d0 = li === 0 || cls.length < 1 ? 0 : sign(slips[0]); s.d1 = li === 1 || cls.length < 2 ? 0 : sign(slips[1]);
+  s.pg1 = cls.length > 1 ? cls[1].gear : NO_GEAR; s.pv1 = cls.length > 1 ? slips[1] : 0;
   return s;
 }
 
@@ -175,14 +188,14 @@ interface ShiftView { prof: Profile; li: number; sol: Sol }
 function shiftView(m: ShiftModel, s: ShiftState, p: Record<string, any>, tb: GearTable, t: number, i: ShiftIns): ShiftView {
   const prof = m.profile(s, p, tb, t);
   const li = s.lk === 1 ? prof.cls.findIndex(c => c.gear === s.lkG) : -1;
-  return { prof, li, sol: solveClutches(prof.cls, li, s.w_in, i.Teng, i.wd, p) };
+  return { prof, li, sol: solveClutches(prof.cls, li, s.w_in, i.Teng, i.wd, p, [s.d0, s.d1]) };
 }
 
 /** Discrete fields of the shift state: engaged/target gear, shift flag and start time, lock flag and locked gear. */
-const SHIFT_DISCRETE_KEYS = ['gF', 'gT', 'sh', 't0', 'lk', 'lkG'];
+const SHIFT_DISCRETE_KEYS = ['gF', 'gT', 'sh', 't0', 'lk', 'lkG', 'pg0', 'pv0', 'pg1', 'pv1', 'd0', 'd1'];
 
 function shiftInit(p: Record<string, any>): ShiftState {
-  return { w_in: p.w_in_o, gF: p.Gear_o, gT: p.Gear_o, sh: 0, t0: 0, lk: 0, lkG: p.Gear_o };
+  return { w_in: p.w_in_o, gF: p.Gear_o, gT: p.Gear_o, sh: 0, t0: 0, lk: 0, lkG: p.Gear_o, pg0: NO_GEAR, pv0: 0, pg1: NO_GEAR, pv1: 0, d0: 0, d1: 0 };
 }
 
 function shiftUpdate(m: ShiftModel, ins: XValue[], p: Record<string, any>, s: ShiftState, t: number): ShiftState {
