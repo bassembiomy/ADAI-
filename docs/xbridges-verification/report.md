@@ -5,10 +5,10 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 ## Summary
 
 - Work packages: 20 done of 29; 2 in progress; 7 to do.
-- Findings: 15 open, 167 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
+- Findings: 11 open, 177 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
   - S1 (wrong number in simulation or generated C): 1 open
-  - S2 (crash, stop, freeze or silent no-op): 5 open
-  - S3 (diagnostic, UI or convention deviation): 8 open
+  - S2 (crash, stop, freeze or silent no-op): 2 open
+  - S3 (diagnostic, UI or convention deviation): 7 open
   - S4 (documentation): 1 open
 - Decisions recorded: 14; open: 0.
 
@@ -70,28 +70,24 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 | --- | --- | --- | --- |
 | XBV-001 | V6 | F1 | Canvas engine and state-machine interpreter are compared only by xbSimEmbeddedParity.test.ts: unit-constant input, 6 ticks, scalar, discrete solver. WP-16 measured it: 281 (type, solver) cases, 178 equal; random graphs fail via XBV-083/084/085. |
 
-### S2 - crash, stop, freeze or silent no-op (5)
+### S2 - crash, stop, freeze or silent no-op (2)
 
 | Id | Gate | Plan ref | Summary |
 | --- | --- | --- | --- |
-| XBV-039 | V6 | 7.2 boundary mappings | In canvas simulation (main thread and worker) a state-machine variable mapped to a top-level Inport never reaches the X-Bridges model: the canvas writes the value with setSignalValue and params.value, but Inport.execute returns its own unconnected input (default 0), which overwrites it at the next evaluation (BlockDefinitions.ts ~2610). Measured: Inport override 2.5 into an Integrator for 1 s gives 0 instead of 2.5. Pinned in xbWorker.test.ts. The embedded interpreter/C path is checked in WP-16/18. Scope (verifier): this is the canvas run inside the X-Bridges workspace; a state machine running in the app uses App.tsx runAppSimulationTick -> smAppAdapter -> smInterpreter -> xbInterpreter, which WP-16/18 verify. Also: an Inport's own 'value' parameter (2.5, no override) gives 0 on the canvas. Severity lowered to S2. |
-| XBV-174 | V6 | 7.3 canvas / interpreter parity | Embedded continuous STATE_SPACE holds its state when sampleTime > 0 (batch F2 mirrored the pre-E3 canvas); the canvas now integrates it (XBV-171). Pinned in xbTriParity. |
-| XBV-175 | V5 | 5.1 stiff solvers | StiffSolver.derivAt (WP-21 batch I rework 2) turns a NaN derivative into 0; before, the run stopped with STIFF_SOLVER_NONFINITE. 0/0 into an Integrator now runs to the end under ode14x/ode23tb with a 0 state. Found by the WP-21 batch I verifier; acceptance in xbWp21Faults.test.ts. |
-| XBV-176 | V5 | 5.1 explicit solvers | VectorUtils.integrateState reads a derivative as `Number(deriv) \|\| 0`, so a NaN derivative is integrated as 0 by euler/rk4/ode45 without a diagnostic (pre-existing). Found by the WP-21 batch I verifier; acceptance in xbWp21Faults.test.ts. |
-| XBV-177 | V5 | 4.2 powertrain | PT_AUTOMATED_MANUAL_TRANSMISSION and PT_DUAL_CLUTCH_TRANSMISSION do not finish 1 s of simulation within 120 s under ode23tb (defaults, unit inputs); rk4 finishes quickly. Found by the WP-21 batch I scan. |
+| XBV-185 | V5 | 4.5 solvers | Robertson problem: ode23tb stops at step 1 with STIFF_SOLVER_NONFINITE when a Newton iterate overflows, instead of rejecting the step and retrying smaller (MATLAB ode23tb treats a failed Newton iteration as a step failure). Found by the WP-21 E4 verifier. |
+| XBV-186 | V5 | 4.5 solvers | Fixed-step euler, ode2, ode3, rk4, ode5 (Solvers.ts) and ode14x (StiffSolver.ts ~384) compute zcPrev = getZeroCrossings(t, statesPrev) without computeOutputs first, so gatherInputs reads the trial-end signals, the sign change is never seen and bracketZeroCrossing is never called (0 calls on the Switch test model); bracketZeroCrossing has the same flaw internally. ode45/ode23 use their own locateEvent and are not affected. Found by the WP-21 E4 verifier. |
 
-### S3 - diagnostic, UI or convention deviation (8)
+### S3 - diagnostic, UI or convention deviation (7)
 
 | Id | Gate | Plan ref | Summary |
 | --- | --- | --- | --- |
 | XBV-106 | V7 | 7.2 state-machine alignment | State-machine variables are scalar only: mapping a vector (3) or matrix (2x2) X-Bridges port to an SM variable is refused (XB_MAPPING_INVALID), so plan 7.2's vector/matrix boundary mappings are not expressible; vector/matrix signals work inside the model. Reported by the WP-18 executor. |
-| XBV-172 | V6 | 7.3 canvas / interpreter parity | A non-finite operand of ShiftLeft/ShiftRight (Inf, NaN) gives 0 without a numeric fault in the embedded path (JS ToInt32 / C helper), while the canvas raises a block error. Found by the WP-21 batch F2 executor and verifier. |
-| XBV-178 | V3 | 4.2 powertrain | PT_TURBOCHARGER raises BLOCK_RUNTIME_FAULT with its defaults and unit inputs under rk4 and ode23tb alike (not a solver difference; cause not investigated). Found by the WP-21 batch I scan. |
-| XBV-179 | V5 | 4.2 powertrain | PT_ENGINE_DYNO under ode23tb at default tolerances differs from rk4 (0.001) by 2e-2 relative at output step 0.05 (2.8e-3 at 0.01); keyed derivatives, so error control / output interpolation rather than the layout defect. Found by the WP-21 batch I scan. |
 | XBV-180 | V3 | 3 parameters | Some parameterSchema 'positive' entries reject 0 although 0 is not degenerate in the block equation: ROBOT_VACUUM_MOTOR motor_R/motor_K, Lm of AC_INDUCTION_MOTOR/IM_FLUX_OBSERVER/AC_MOTOR_PID_CONTROL (numerator only), ROBOT_VACUUM_BATTERY.nominal_voltage, SVPWM_CORE.Ts, MTPA_CONTROLLER.Ld; motor_R positive contradicts Rs/Ron nonnegative. Some positive entries belong to parameters execute does not use (IM_FOC Rr/Lr/P, IM_SCALAR rated_f, DIGITAL_TWIN motor_*). Found by the WP-21 batch J verifier. |
 | XBV-181 | V8 | 6 UI | After a block with recorded invalid parameter text is selected again, the properties panel shows the stored (last valid) number while the kept record still refuses the run; the Problems message names the block, parameter and text. Found by the WP-21 batch J verifier. |
 | XBV-182 | V8 | 6 UI | The panel maps PT_* parameter specs to editor kinds only for min = 0 (nonnegative); specs with min > 0 or a max become plain 'number', so the panel accepts out-of-range text that the block refuses at its first step (BLOCK_RUNTIME_FAULT). Found by the WP-21 batch J verifier. |
-| XBV-183 | V5 | 5.1 stiff solvers | ode23tb with RelTol 1e-9 (now reachable from the toolbar) fails at t = 6.1e-6 with STIFF_SOLVER_STEP_TOO_SMALL on the cos(10 t) integrator; tight tolerances should take smaller steps down to the documented minimum, not fail on a smooth problem. Found by the WP-21 batch J verifier. |
+| XBV-187 | V5 | powertrain | PT_AUTOMATED_MANUAL_TRANSMISSION under rk4 at 1e-3 never locks within 0.05 s (DiffTrq +-1600 chatter) and locks late (0.0115 s vs 0.0019 s) at 1e-4; same on the base. Simulink locks the clutch with a zero crossing on slip; depends on XBV-186. Found by the WP-21 E4 verifier. |
+| XBV-188 | V4 | labs | robot_vacuum_twin: the first run in a fresh process differs from later runs in robot_nav.nav_stats and robot_slam.* (Math.random seeded), so a block keeps state across runs (module-level state not reset on Play). Found by the WP-21 F3 verifier. |
+| XBV-189 | V2 | robot | ROBOT_VACUUM_MOTOR pwm_duty reads \|u\| <= 1 as a duty cycle and larger values as volts; the port unit is 'V' since WP-21 K (fits the labs), but one port mixes two meanings. Simulink-style: one meaning per port. Found by the WP-21 K verifier. |
 
 ### S4 - documentation (1)
 
@@ -137,6 +133,7 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 - XBV-035 (closed): Dimension checking is inactive: library factories never set port dimensions (only PT_VEHICLE_BODY_1DOF inputs do), so DIMENSION_MISMATCH cannot fire for any canvas-built model; Simulink propagates and
 - XBV-036 (closed): Batch variable-step runs (Solvers.runFixedStep with ode45 or ode23) hang - no result after 60 s - as soon as they bracket a Step event: Step at 0.3, 0.5 or 0.55 s with default tolerances, or at the st
 - XBV-038 (closed): CONSTANT_VALUE_NOT_REPRESENTABLE (a Constant value that loses precision in its data type) is a compile error that refuses the model; Simulink reports parameter precision loss as a warning by default (
+- XBV-039 (closed): In canvas simulation (main thread and worker) a state-machine variable mapped to a top-level Inport never reaches the X-Bridges model: the canvas writes the value with setSignalValue and params.value,
 - XBV-040 (closed): WaveformGen amplitude 0 (also freq 0, offset 0) is replaced by 1/1/0 through `\|\|` (instance of XBV-019); a 0-amplitude sine outputs a full sine. Pinned in xbEquations.math.test.ts.
 - XBV-041 (closed): The Sources 'Clock' block is a 50% square-wave pulse generator (freq parameter), not the Simulink Clock (output = simulation time); a Simulink user wiring Clock as time gets a 0/1 square wave. No bloc
 - XBV-042 (closed): PRODUCT works on scalars only (Number(vector) = NaN); Simulink Product multiplies/divides vectors and matrices element-wise. Pinned in xbEquations.math.test.ts.
@@ -266,8 +263,17 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 - XBV-167 (closed): Embedded KALMAN_FILTER still predicts before the first update (P[0\|-1] = A P0 A' + Q); the canvas follows the Simulink order (update with x[0\|-1] = x0, P0, then predict) since WP-21 batch G (XBV-078
 - XBV-168 (closed): Embedded PID_BASIC / PID_CONTROLLER output 0 while reset is active; Simulink and the canvas (since XBV-077, WP-21 batch G) keep the proportional action Kp e. Pinned in xbTriParity.
 - XBV-170 (closed): AC_INDUCTION_MOTOR and AC_MOTOR_PID_CONTROL stator-current equations divided the resistive and back-EMF terms by sigma once too often (sigma Ls dis/dt = vs - (Rs + kr^2 Rr) is + (kr/tau_r) psir -/+ kr
+- XBV-172 (closed): A non-finite operand of ShiftLeft/ShiftRight (Inf, NaN) gives 0 without a numeric fault in the embedded path (JS ToInt32 / C helper), while the canvas raises a block error. Found by the WP-21 batch F2
 - XBV-173 (closed): Help coverage is out of date after WP-21 UI and parameter changes: src/help/helpCoverage.test.ts fails on the live-UI fingerprint and on an unmapped reviewed feature (new inline controls such as the t
 - XBV-171 (closed): A continuous STATE_SPACE with an explicit sampleTime > 0 held its state (evaluateDerivatives only ran for sampleTime <= 0); Simulink's continuous State-Space has no sample time and always integrates. 
+- XBV-174 (closed): Embedded continuous STATE_SPACE holds its state when sampleTime > 0 (batch F2 mirrored the pre-E3 canvas); the canvas now integrates it (XBV-171). Pinned in xbTriParity.
+- XBV-175 (closed): StiffSolver.derivAt (WP-21 batch I rework 2) turns a NaN derivative into 0; before, the run stopped with STIFF_SOLVER_NONFINITE. 0/0 into an Integrator now runs to the end under ode14x/ode23tb with a 
+- XBV-176 (closed): VectorUtils.integrateState reads a derivative as `Number(deriv) \|\| 0`, so a NaN derivative is integrated as 0 by euler/rk4/ode45 without a diagnostic (pre-existing). Found by the WP-21 batch I verif
+- XBV-177 (closed): PT_AUTOMATED_MANUAL_TRANSMISSION and PT_DUAL_CLUTCH_TRANSMISSION do not finish 1 s of simulation within 120 s under ode23tb (defaults, unit inputs); rk4 finishes quickly. Found by the WP-21 batch I sc
+- XBV-178 (closed): PT_TURBOCHARGER raises BLOCK_RUNTIME_FAULT with its defaults and unit inputs under rk4 and ode23tb alike (not a solver difference; cause not investigated). Found by the WP-21 batch I scan.
+- XBV-179 (closed): PT_ENGINE_DYNO under ode23tb at default tolerances differs from rk4 (0.001) by 2e-2 relative at output step 0.05 (2.8e-3 at 0.01); keyed derivatives, so error control / output interpolation rather tha
+- XBV-183 (closed): ode23tb with RelTol 1e-9 (now reachable from the toolbar) fails at t = 6.1e-6 with STIFF_SOLVER_STEP_TOO_SMALL on the cos(10 t) integrator; tight tolerances should take smaller steps down to the docum
+- XBV-184 (closed): Live ode23tb with Relay/Switch changed mode only once per output step (errors 0.57 / 1.99 at output step 0.1). Found by the WP-21 E4 verifier.
 
 ## Decisions
 

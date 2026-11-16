@@ -1006,8 +1006,9 @@
    "plan_ref": "7.2 boundary mappings",
    "severity": "S2",
    "gate": "V6",
-   "status": "open",
-   "summary": "In canvas simulation (main thread and worker) a state-machine variable mapped to a top-level Inport never reaches the X-Bridges model: the canvas writes the value with setSignalValue and params.value, but Inport.execute returns its own unconnected input (default 0), which overwrites it at the next evaluation (BlockDefinitions.ts ~2610). Measured: Inport override 2.5 into an Integrator for 1 s gives 0 instead of 2.5. Pinned in xbWorker.test.ts. The embedded interpreter/C path is checked in WP-16/18. Scope (verifier): this is the canvas run inside the X-Bridges workspace; a state machine running in the app uses App.tsx runAppSimulationTick -> smAppAdapter -> smInterpreter -> xbInterpreter, which WP-16/18 verify. Also: an Inport's own 'value' parameter (2.5, no override) gives 0 on the canvas. Severity lowered to S2."
+   "status": "closed",
+   "summary": "In canvas simulation (main thread and worker) a state-machine variable mapped to a top-level Inport never reaches the X-Bridges model: the canvas writes the value with setSignalValue and params.value, but Inport.execute returns its own unconnected input (default 0), which overwrites it at the next evaluation (BlockDefinitions.ts ~2610). Measured: Inport override 2.5 into an Integrator for 1 s gives 0 instead of 2.5. Pinned in xbWorker.test.ts. The embedded interpreter/C path is checked in WP-16/18. Scope (verifier): this is the canvas run inside the X-Bridges workspace; a state machine running in the app uses App.tsx runAppSimulationTick -> smAppAdapter -> smInterpreter -> xbInterpreter, which WP-16/18 verify. Also: an Inport's own 'value' parameter (2.5, no override) gives 0 on the canvas. Severity lowered to S2.",
+   "fix": "WP-21 batch F3: a state-machine variable mapped to a top-level Inport drives it like a Constant (smOverride) on the main thread and in the worker through one applyInportOverrides; Inports inside subsystems keep their parent's input (the canvas run model now keeps parentId, buildCanvasRunModel); the override is released when the mapping is removed."
   },
   {
    "id": "XBV-040",
@@ -2182,8 +2183,9 @@
    "plan_ref": "7.3 canvas / interpreter parity",
    "severity": "S3",
    "gate": "V6",
-   "status": "open",
-   "summary": "A non-finite operand of ShiftLeft/ShiftRight (Inf, NaN) gives 0 without a numeric fault in the embedded path (JS ToInt32 / C helper), while the canvas raises a block error. Found by the WP-21 batch F2 executor and verifier."
+   "status": "closed",
+   "summary": "A non-finite operand of ShiftLeft/ShiftRight (Inf, NaN) gives 0 without a numeric fault in the embedded path (JS ToInt32 / C helper), while the canvas raises a block error. Found by the WP-21 batch F2 executor and verifier.",
+   "fix": "WP-21 batch F3: a non-finite shift operand gives NaN and the normal numeric-fault path (D11): XBRIDGES_NUMERIC under escalate and NaN plus fault under signal-only, identical in the interpreter, the standalone runtime and generated C."
   },
   {
    "id": "XBV-173",
@@ -2208,48 +2210,54 @@
    "plan_ref": "7.3 canvas / interpreter parity",
    "severity": "S2",
    "gate": "V6",
-   "status": "open",
-   "summary": "Embedded continuous STATE_SPACE holds its state when sampleTime > 0 (batch F2 mirrored the pre-E3 canvas); the canvas now integrates it (XBV-171). Pinned in xbTriParity."
+   "status": "closed",
+   "summary": "Embedded continuous STATE_SPACE holds its state when sampleTime > 0 (batch F2 mirrored the pre-E3 canvas); the canvas now integrates it (XBV-171). Pinned in xbTriParity.",
+   "fix": "WP-21 batch F3: embedded continuous STATE_SPACE integrates whatever sampleTime holds (schedule and validator ignore it), same as the canvas and generated C."
   },
   {
    "id": "XBV-175",
    "plan_ref": "5.1 stiff solvers",
    "severity": "S2",
    "gate": "V5",
-   "status": "open",
-   "summary": "StiffSolver.derivAt (WP-21 batch I rework 2) turns a NaN derivative into 0; before, the run stopped with STIFF_SOLVER_NONFINITE. 0/0 into an Integrator now runs to the end under ode14x/ode23tb with a 0 state. Found by the WP-21 batch I verifier; acceptance in xbWp21Faults.test.ts."
+   "status": "closed",
+   "summary": "StiffSolver.derivAt (WP-21 batch I rework 2) turns a NaN derivative into 0; before, the run stopped with STIFF_SOLVER_NONFINITE. 0/0 into an Integrator now runs to the end under ode14x/ode23tb with a 0 state. Found by the WP-21 batch I verifier; acceptance in xbWp21Faults.test.ts.",
+   "fix": "WP-21 batch E4: StiffSolver no longer turns a NaN derivative into 0; the run stops with a non-finite diagnostic."
   },
   {
    "id": "XBV-176",
    "plan_ref": "5.1 explicit solvers",
    "severity": "S2",
    "gate": "V5",
-   "status": "open",
-   "summary": "VectorUtils.integrateState reads a derivative as `Number(deriv) || 0`, so a NaN derivative is integrated as 0 by euler/rk4/ode45 without a diagnostic (pre-existing). Found by the WP-21 batch I verifier; acceptance in xbWp21Faults.test.ts."
+   "status": "closed",
+   "summary": "VectorUtils.integrateState reads a derivative as `Number(deriv) || 0`, so a NaN derivative is integrated as 0 by euler/rk4/ode45 without a diagnostic (pre-existing). Found by the WP-21 batch I verifier; acceptance in xbWp21Faults.test.ts.",
+   "fix": "WP-21 batch E4: VectorUtils.integrateState keeps a NaN derivative (no `|| 0`)."
   },
   {
    "id": "XBV-177",
    "plan_ref": "4.2 powertrain",
    "severity": "S2",
    "gate": "V5",
-   "status": "open",
-   "summary": "PT_AUTOMATED_MANUAL_TRANSMISSION and PT_DUAL_CLUTCH_TRANSMISSION do not finish 1 s of simulation within 120 s under ode23tb (defaults, unit inputs); rk4 finishes quickly. Found by the WP-21 batch I scan."
+   "status": "closed",
+   "summary": "PT_AUTOMATED_MANUAL_TRANSMISSION and PT_DUAL_CLUTCH_TRANSMISSION do not finish 1 s of simulation within 120 s under ode23tb (defaults, unit inputs); rk4 finishes quickly. Found by the WP-21 batch I scan.",
+   "fix": "WP-21 batch E4: ode23tb locates events by bisection from the base state and retakes the step with the error test (never committing the Euler predictor); AMT/DCT clutch friction inside the lock band is kinetic (cap*sign(slip), Coulomb/Simscape), lock still gated by static capacity. Both transmissions finish 1 s under ode23tb; event accuracy 8.2e-6 vs closed form."
   },
   {
    "id": "XBV-178",
    "plan_ref": "4.2 powertrain",
    "severity": "S3",
    "gate": "V3",
-   "status": "open",
-   "summary": "PT_TURBOCHARGER raises BLOCK_RUNTIME_FAULT with its defaults and unit inputs under rk4 and ode23tb alike (not a solver difference; cause not investigated). Found by the WP-21 batch I scan."
+   "status": "closed",
+   "summary": "PT_TURBOCHARGER raises BLOCK_RUNTIME_FAULT with its defaults and unit inputs under rk4 and ode23tb alike (not a solver difference; cause not investigated). Found by the WP-21 batch I scan.",
+   "fix": "WP-21 batch E4: PT_TURBOCHARGER runs with its defaults and unit inputs under rk4 and ode23tb."
   },
   {
    "id": "XBV-179",
    "plan_ref": "4.2 powertrain",
    "severity": "S3",
    "gate": "V5",
-   "status": "open",
-   "summary": "PT_ENGINE_DYNO under ode23tb at default tolerances differs from rk4 (0.001) by 2e-2 relative at output step 0.05 (2.8e-3 at 0.01); keyed derivatives, so error control / output interpolation rather than the layout defect. Found by the WP-21 batch I scan."
+   "status": "closed",
+   "summary": "PT_ENGINE_DYNO under ode23tb at default tolerances differs from rk4 (0.001) by 2e-2 relative at output step 0.05 (2.8e-3 at 0.01); keyed derivatives, so error control / output interpolation rather than the layout defect. Found by the WP-21 batch I scan.",
+   "fix": "WP-21 batch E4: ode23tb propagates the TR-BDF2 solution (MATLAB practice); PT_ENGINE_DYNO converges to rk4 0.001 as RelTol tightens (1.89e-4 at RelTol 1e-6)."
   },
   {
    "id": "XBV-180",
@@ -2280,8 +2288,58 @@
    "plan_ref": "5.1 stiff solvers",
    "severity": "S3",
    "gate": "V5",
+   "status": "closed",
+   "summary": "ode23tb with RelTol 1e-9 (now reachable from the toolbar) fails at t = 6.1e-6 with STIFF_SOLVER_STEP_TOO_SMALL on the cos(10 t) integrator; tight tolerances should take smaller steps down to the documented minimum, not fail on a smooth problem. Found by the WP-21 batch J verifier.",
+   "fix": "WP-21 batch E4: ode23tb at RelTol 1e-9 runs (round-off floor on the Newton test)."
+  },
+  {
+   "id": "XBV-184",
+   "plan_ref": "4.5 solvers",
+   "severity": "S2",
+   "gate": "V5",
+   "status": "closed",
+   "summary": "Live ode23tb with Relay/Switch changed mode only once per output step (errors 0.57 / 1.99 at output step 0.1). Found by the WP-21 E4 verifier.",
+   "fix": "WP-21 batch E4 rework 1 (event location from the base state, retake with error test): Relay into stiff lag 1.0e-3 (RelTol 1e-3) / 8.0e-6 (RelTol 1e-6); Switch 6.8e-6. Closed for ode23tb; the fixed-step solvers are XBV-186."
+  },
+  {
+   "id": "XBV-185",
+   "plan_ref": "4.5 solvers",
+   "severity": "S2",
+   "gate": "V5",
    "status": "open",
-   "summary": "ode23tb with RelTol 1e-9 (now reachable from the toolbar) fails at t = 6.1e-6 with STIFF_SOLVER_STEP_TOO_SMALL on the cos(10 t) integrator; tight tolerances should take smaller steps down to the documented minimum, not fail on a smooth problem. Found by the WP-21 batch J verifier."
+   "summary": "Robertson problem: ode23tb stops at step 1 with STIFF_SOLVER_NONFINITE when a Newton iterate overflows, instead of rejecting the step and retrying smaller (MATLAB ode23tb treats a failed Newton iteration as a step failure). Found by the WP-21 E4 verifier."
+  },
+  {
+   "id": "XBV-186",
+   "plan_ref": "4.5 solvers",
+   "severity": "S2",
+   "gate": "V5",
+   "status": "open",
+   "summary": "Fixed-step euler, ode2, ode3, rk4, ode5 (Solvers.ts) and ode14x (StiffSolver.ts ~384) compute zcPrev = getZeroCrossings(t, statesPrev) without computeOutputs first, so gatherInputs reads the trial-end signals, the sign change is never seen and bracketZeroCrossing is never called (0 calls on the Switch test model); bracketZeroCrossing has the same flaw internally. ode45/ode23 use their own locateEvent and are not affected. Found by the WP-21 E4 verifier."
+  },
+  {
+   "id": "XBV-187",
+   "plan_ref": "powertrain",
+   "severity": "S3",
+   "gate": "V5",
+   "status": "open",
+   "summary": "PT_AUTOMATED_MANUAL_TRANSMISSION under rk4 at 1e-3 never locks within 0.05 s (DiffTrq +-1600 chatter) and locks late (0.0115 s vs 0.0019 s) at 1e-4; same on the base. Simulink locks the clutch with a zero crossing on slip; depends on XBV-186. Found by the WP-21 E4 verifier."
+  },
+  {
+   "id": "XBV-188",
+   "plan_ref": "labs",
+   "severity": "S3",
+   "gate": "V4",
+   "status": "open",
+   "summary": "robot_vacuum_twin: the first run in a fresh process differs from later runs in robot_nav.nav_stats and robot_slam.* (Math.random seeded), so a block keeps state across runs (module-level state not reset on Play). Found by the WP-21 F3 verifier."
+  },
+  {
+   "id": "XBV-189",
+   "plan_ref": "robot",
+   "severity": "S3",
+   "gate": "V2",
+   "status": "open",
+   "summary": "ROBOT_VACUUM_MOTOR pwm_duty reads |u| <= 1 as a duty cycle and larger values as volts; the port unit is 'V' since WP-21 K (fits the labs), but one port mixes two meanings. Simulink-style: one meaning per port. Found by the WP-21 K verifier."
   }
  ],
  "blocks": {
