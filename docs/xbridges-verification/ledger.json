@@ -94,6 +94,12 @@
    "date": "2026-11-16",
    "topic": "XBV-186 fixed-step zero crossings",
    "decision": "Fixed-step solvers (euler, ode2, ode3, rk4, ode5, ode14x) do not locate zero crossings, as Simulink with 'Enable zero-crossing detection for fixed-step simulation' off (its default): a block mode changes at a major step, the output grid stays k*h, and batch runs equal the live canvas step. Variable-step ode23, ode45 and ode23tb keep event location."
+  },
+  {
+   "id": "D16",
+   "date": "2026-11-16",
+   "topic": "XBV-106 vector/matrix state-machine variables",
+   "decision": "Recorded as a product limitation, not fixed in WP-21: state-machine variables stay scalar; vector/matrix signals work inside an X-Bridges model and cross the state-machine boundary element by element (one scalar variable per element). Building vector/matrix variables is a feature (model, interpreter, C generator, validator, UI) estimated at 1-2 days; reversible on request."
   }
  ],
  "wps": [
@@ -1607,8 +1613,9 @@
    "plan_ref": "7.2 state-machine alignment",
    "severity": "S3",
    "gate": "V7",
-   "status": "open",
-   "summary": "State-machine variables are scalar only: mapping a vector (3) or matrix (2x2) X-Bridges port to an SM variable is refused (XB_MAPPING_INVALID), so plan 7.2's vector/matrix boundary mappings are not expressible; vector/matrix signals work inside the model. Reported by the WP-18 executor."
+   "status": "limitation",
+   "summary": "State-machine variables are scalar only: mapping a vector (3) or matrix (2x2) X-Bridges port to an SM variable is refused (XB_MAPPING_INVALID), so plan 7.2's vector/matrix boundary mappings are not expressible; vector/matrix signals work inside the model. Reported by the WP-18 executor.",
+   "fix": "Decision D16: recorded as a limitation; listed in the close-out report."
   },
   {
    "id": "XBV-107",

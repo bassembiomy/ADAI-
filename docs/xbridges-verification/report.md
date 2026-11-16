@@ -5,12 +5,12 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 ## Summary
 
 - Work packages: 20 done of 29; 2 in progress; 7 to do.
-- Findings: 5 open, 187 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
+- Findings: 4 open, 188 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
   - S1 (wrong number in simulation or generated C): 0 open
   - S2 (crash, stop, freeze or silent no-op): 2 open
-  - S3 (diagnostic, UI or convention deviation): 2 open
+  - S3 (diagnostic, UI or convention deviation): 1 open
   - S4 (documentation): 1 open
-- Decisions recorded: 15; open: 0.
+- Decisions recorded: 16; open: 0.
 
 ## Work packages
 
@@ -71,11 +71,10 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 | XBV-185 | V5 | 4.5 solvers | Robertson problem: ode23tb stops at step 1 with STIFF_SOLVER_NONFINITE when a Newton iterate overflows, instead of rejecting the step and retrying smaller (MATLAB ode23tb treats a failed Newton iteration as a step failure). Found by the WP-21 E4 verifier. |
 | XBV-186 | V5 | 4.5 solvers | Fixed-step euler, ode2, ode3, rk4, ode5 (Solvers.ts) and ode14x (StiffSolver.ts ~384) compute zcPrev = getZeroCrossings(t, statesPrev) without computeOutputs first, so gatherInputs reads the trial-end signals, the sign change is never seen and bracketZeroCrossing is never called (0 calls on the Switch test model); bracketZeroCrossing has the same flaw internally. ode45/ode23 use their own locateEvent and are not affected. Found by the WP-21 E4 verifier. |
 
-### S3 - diagnostic, UI or convention deviation (2)
+### S3 - diagnostic, UI or convention deviation (1)
 
 | Id | Gate | Plan ref | Summary |
 | --- | --- | --- | --- |
-| XBV-106 | V7 | 7.2 state-machine alignment | State-machine variables are scalar only: mapping a vector (3) or matrix (2x2) X-Bridges port to an SM variable is refused (XB_MAPPING_INVALID), so plan 7.2's vector/matrix boundary mappings are not expressible; vector/matrix signals work inside the model. Reported by the WP-18 executor. |
 | XBV-187 | V5 | powertrain | PT_AUTOMATED_MANUAL_TRANSMISSION under rk4 at 1e-3 never locks within 0.05 s (DiffTrq +-1600 chatter) and locks late (0.0115 s vs 0.0019 s) at 1e-4; same on the base. Simulink locks the clutch with a zero crossing on slip; depends on XBV-186. Found by the WP-21 E4 verifier. |
 
 ### S4 - documentation (1)
@@ -190,6 +189,7 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 - XBV-103 (closed): BAND_LIMITED_NOISE: interpreter and generated C produce different streams from tick 1 (-1.03300 vs -1.00272); WHITE_NOISE agrees on both sides. Found by the WP-17 executor; pinned in src/utils/stateMa
 - XBV-104 (closed): Generated C for an integrator loop fails -Wshadow (gcc and clang): 'xb_value_0_0_i_out' shadows a previous local (sm_core.c:78). Found by the WP-17 executor; pinned in src/utils/stateMachine/xbCodePar
 - XBV-105 (closed): Generated C for discontinuity blocks fails -Wdouble-promotion (gcc sm_core.c:143, clang sm_core.c:100): float promoted to double in a conditional. Found by the WP-17 executor; pinned in src/utils/stat
+- XBV-106 (limitation): State-machine variables are scalar only: mapping a vector (3) or matrix (2x2) X-Bridges port to an SM variable is refused (XB_MAPPING_INVALID), so plan 7.2's vector/matrix boundary mappings are not ex
 - XBV-107 (closed): PRODUCT with operation 'divide' is not available in the embedded (state-machine / C) path although the canvas offers it; divide inside a state requires VectorDiv on vectors. Reported by the WP-18 exec
 - XBV-108 (closed): Under the 'retain' memory policy the discrete sample-hit counter freezes while the owning state is inactive (hits at ticks 1, 3, 7, 9 across exit/re-entry); simulator, runtime and C agree, but docs/XB
 - XBV-109 (closed): docs/powertrain/ledger.json has no per-block gate records ('blocks' is {} and no PT_ type appears), so the powertrain G1-G5 verdicts the plan imports do not exist; the 45 PT_* blocks are covered by 28
@@ -291,6 +291,7 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 - **D13** (2026-11-12, new diagnostic codes in WP-21): Structural compile errors MULTIPLE_DRIVERS, DUPLICATE_BLOCK_ID, UNKNOWN_BLOCK_TYPE (error) and the fuzzy warning FUZZY_EMPTY_AGGREGATE (MATLAB 'no rules fired': output mid-range) are dedicated codes rather than reuses of BLOCK_RUNTIME_FAULT / MATH_DOMAIN_ERROR; each has a recipe and guidance.
 - **D14** (2026-11-15, Clock block): The Clock block outputs the simulation time (Simulink Clock; the embedded path already did). The old square-wave behaviour remains available as WaveformGen type 'Square'; no lab, example or saved model used Clock.freq. Adopted by the controller under the 'fix all' go-ahead.
 - **D15** (2026-11-16, XBV-186 fixed-step zero crossings): Fixed-step solvers (euler, ode2, ode3, rk4, ode5, ode14x) do not locate zero crossings, as Simulink with 'Enable zero-crossing detection for fixed-step simulation' off (its default): a block mode changes at a major step, the output grid stays k*h, and batch runs equal the live canvas step. Variable-step ode23, ode45 and ode23tb keep event location.
+- **D16** (2026-11-16, XBV-106 vector/matrix state-machine variables): Recorded as a product limitation, not fixed in WP-21: state-machine variables stay scalar; vector/matrix signals work inside an X-Bridges model and cross the state-machine boundary element by element (one scalar variable per element). Building vector/matrix variables is a feature (model, interpreter, C generator, validator, UI) estimated at 1-2 days; reversible on request.
 
 ## Deferred items (notes for follow-up WPs)
 
