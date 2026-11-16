@@ -360,12 +360,22 @@ export function checkParameters(blocks: XBlock[]): ModelDiagnostic[] {
         break;
       }
       case 'RATE_LIMITER': {
-        const rise = Number(p.risingSlewRate);
-        const fall = Number(p.fallingSlewRate);
-        if (Number.isNaN(rise) || Number.isNaN(fall)) {
+        // Scalar or vector slew rates; a vector pairs rising and falling element by element (a scalar applies to all).
+        const flat = (v: unknown): number[] => (Array.isArray(v) ? (v as unknown[]).flat(Infinity).map(Number) : [Number(v)]);
+        const rises = flat(p.risingSlewRate);
+        const falls = flat(p.fallingSlewRate);
+        if (rises.some(Number.isNaN) || falls.some(Number.isNaN)) {
           err(b, 'PARAMETER_NOT_FINITE', `Block '${nameOf(b)}': a slew rate is NaN.`);
-        } else if (rise < fall) {
-          err(b, 'LIMITS_INVALID', `Block '${nameOf(b)}': rising slew rate ${fmt(rise)} must be >= falling slew rate ${fmt(fall)}.`);
+        } else {
+          const n = Math.max(rises.length, falls.length);
+          for (let k = 0; k < n; k++) {
+            const rise = rises.length === 1 ? rises[0] : rises[k];
+            const fall = falls.length === 1 ? falls[0] : falls[k];
+            if (rise !== undefined && fall !== undefined && rise < fall) {
+              err(b, 'LIMITS_INVALID', `Block '${nameOf(b)}': rising slew rate ${fmt(rise)} must be >= falling slew rate ${fmt(fall)}.`);
+              break;
+            }
+          }
         }
         break;
       }
