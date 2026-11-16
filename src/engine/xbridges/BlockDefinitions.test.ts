@@ -1194,7 +1194,9 @@ describe('X-Bridges Learning Models Block Tests', () => {
     expect(val).toBeCloseTo(2.71828, 3);
   });
 
-  it('TC-SIM-08: Zero-Crossing Detection and Step Correction', () => {
+  // D15 (WP-21 E5): fixed-step solvers do not locate zero crossings; event location is a variable-step feature, so this
+  // check runs the batch with ode45 (output step 0.1).
+  it('TC-SIM-08: Zero-Crossing Detection and Step Correction (variable step, ode45)', () => {
     const evalTimes: number[] = [];
     const blocks = [
       BLOCK_LIBRARY['Step']('step_src', { stepTime: 0.573, initialValue: 0.0, finalValue: 2.0 }),
@@ -1218,7 +1220,7 @@ describe('X-Bridges Learning Models Block Tests', () => {
     const engine = new XbridgesEngine(model as any);
 
     Solvers.runFixedStep(engine, {
-      solver: 'rk4',
+      solver: 'ode45',
       startTime: 0,
       stopTime: 1.0,
       fixedStep: 0.1,

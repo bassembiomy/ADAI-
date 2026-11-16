@@ -272,11 +272,12 @@ describe('multirate and events', () => {
       return { y: Number.NaN, errors: [(e as { killed?: boolean }).killed ? 'TIMEOUT' : String(e)] };
     }
   };
-  it('the probe itself works: batch rk4 with the same Step finishes with a finite integral between 0.4 and 0.5', () => {
+  // D15 (WP-21 E5): fixed-step rk4 does not locate the Step event; the mode switches at the major step t = 0.6, so the
+  // integral over [0, 1] is exactly 0.4 (Simulink fixed-step without zero-crossing detection).
+  it('the probe itself works: batch rk4 with the same Step finishes with the fixed-step integral 0.4 (D15)', () => {
     const r = probe('rk4', 0.55);
     expect(r.errors).toEqual([]);
-    expect(r.y).toBeGreaterThan(0.4);
-    expect(r.y).toBeLessThan(0.5);
+    expect(r.y).toBeCloseTo(0.4, 12);
   }, 30_000);
   for (const solver of ['ode45', 'ode23']) {
     it(`XBV-036: batch ${solver} locates the Step event: integral of Step(0.55) over [0, 1] is 0.45 (finishes in 15 s)`, () => {

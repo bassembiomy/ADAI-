@@ -14,6 +14,7 @@ import { join } from 'node:path';
 import { XbridgesEngine } from '../XbridgesEngine';
 import { Solvers } from '../Solvers';
 import { buildModel, runModel, type ModelSpec } from '../testkit';
+import { BLOCK_LIBRARY } from '../BlockDefinitions';
 
 const ROBERTSON: ModelSpec = {
   blocks: [
@@ -70,4 +71,57 @@ describe('XBV-186 / D15: fixed-step solvers change modes at major steps, batch =
     const root = join(__dirname, '..');
     for (const f of ['Solvers.ts', 'StiffSolver.ts']) expect(readFileSync(join(root, f), 'utf8'), f).not.toMatch(/bracketZeroCrossing\(/);
   });
+});
+
+// ---------------------------------------------------------------- batch J2 (schema)
+// XBV-180: a parameter whose value 0 is not degenerate in the block equation (or that execute does not use) accepts 0 at
+// compile; a negative physical value is still refused. Simulink mask checks follow the equation, not a blanket > 0.
+describe('XBV-180: parameters that are not divisors accept 0', () => {
+  const ZERO_OK: Array<[string, string]> = [
+    ['ROBOT_VACUUM_MOTOR', 'motor_R'], ['ROBOT_VACUUM_MOTOR', 'motor_K'],
+    ['ROBOT_VACUUM_DIGITAL_TWIN', 'motor_R'], ['ROBOT_VACUUM_DIGITAL_TWIN', 'motor_K'],
+    ['AC_INDUCTION_MOTOR', 'Lm'], ['IM_FLUX_OBSERVER', 'Lm'], ['AC_MOTOR_PID_CONTROL', 'Lm'],
+    ['ROBOT_VACUUM_BATTERY', 'nominal_voltage'], ['SVPWM_CORE', 'Ts'], ['MTPA_CONTROLLER', 'Ld'],
+    ['IM_FOC_CONTROL', 'Rr'], ['IM_FOC_CONTROL', 'Lr'], ['IM_FOC_CONTROL', 'P'], ['IM_SCALAR_CONTROL', 'rated_f'],
+  ];
+  const paramErrors = (type: string, params: Record<string, unknown>) =>
+    new XbridgesEngine(buildModel({ blocks: [{ id: 'u', type, params }], wires: [] })).compile(0)
+      .filter((d) => d.severity === 'error' && d.code.startsWith('PARAMETER_')).map((d) => `${d.code}: ${d.message}`);
+  for (const [type, param] of ZERO_OK) {
+    it(`${type}.${param} = 0 compiles without a PARAMETER_* error; -1 is refused`, () => {
+      expect(paramErrors(type, { [param]: 0 })).toEqual([]);
+      expect(paramErrors(type, { [param]: -1 }).length).toBeGreaterThan(0);
+    });
+  }
+  it('IM_FOC_CONTROL.Lm = 0 is still refused (divisor, XBV-153)', () => {
+    expect(paramErrors('IM_FOC_CONTROL', { Lm: 0 }).length).toBeGreaterThan(0);
+  });
+});
+
+// XBV-187 (WP-21 E5 rework, D15): with fixed-step solvers a clutch locks at the major step where the slip has changed sign
+// since the previous major step (or is within omega_tol), with the holding torque within the static capacity, as
+// Simulink's clutch models do without zero-crossing detection. Reference: the ode23tb lock time (event located).
+describe('XBV-187: clutch lock-up with fixed-step solvers', () => {
+  const lockTime = (r: { t: number[]; signals: Record<string, unknown[]> }) => {
+    const w = r.signals['b.EngSpd'].map(Number);
+    const j = w.findIndex((_, k) => w.slice(k).every((x) => Math.abs(x - w.at(-1)!) < 1e-9));
+    return j >= 0 && j < w.length - 1 ? r.t[j] : Number.NaN;
+  };
+  for (const type of ['PT_AUTOMATED_MANUAL_TRANSMISSION', 'PT_DUAL_CLUTCH_TRANSMISSION']) {
+    const proto = BLOCK_LIBRARY[type]('b', {});
+    const vals = [1, 50, 1];
+    const spec: ModelSpec = {
+      blocks: [{ id: 'b', type }, ...proto.inputs.map((_p: { id: string }, i: number) => ({ id: `k${i}`, type: 'Constant', params: { value: vals[i] ?? 1 } }))],
+      wires: proto.inputs.map((p: { id: string }, i: number) => `k${i}.out -> b.${p.id}`),
+    };
+    for (const dt of [1e-3, 1e-4]) {
+      it(`${type} (Teng 50): rk4 ${dt} locks within 2 steps of the ode23tb lock time`, () => {
+        const ref = lockTime(runModel(buildModel(spec), { solver: 'ode23tb', dt: 1e-4, stopTime: 0.05, probes: ['b.EngSpd'], relTol: 1e-6, absTol: 1e-9 }));
+        expect(Number.isFinite(ref)).toBe(true);
+        const r = runModel(buildModel(spec), { solver: 'rk4', dt, stopTime: 0.05, probes: ['b.EngSpd'] });
+        expect(r.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
+        expect(Math.abs(lockTime(r) - ref)).toBeLessThanOrEqual(2 * dt + 1e-12);
+      }, 120_000);
+    }
+  }
 });

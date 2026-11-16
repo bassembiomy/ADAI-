@@ -517,3 +517,61 @@ describe('undo, redo, copy and paste in the workspace', () => {
     expect(copy.data.params.value).toBe(5);
   });
 });
+
+// ---------------------------------------------------------------------------------------------------------------------
+// WP-21 batch J2 acceptance (controller)
+// ---------------------------------------------------------------------------------------------------------------------
+// XBV-181: the invalid text a block keeps (it still refuses the run) is what the panel shows when the block is selected
+// again, with its error, not the last valid number (Simulink keeps the rejected dialog text on screen).
+describe('XBV-181: recorded invalid text is shown again on reselection', () => {
+  it('GAIN.gain "abc", select another block, select GAIN again: the editor shows "abc" with an error', async () => {
+    renderWorkspace();
+    await wait(50);
+    await dropBlock('GAIN');
+    await dropBlock('Constant');
+    const gain = rfNodes().find((n) => n.data.type === 'GAIN')!.id;
+    const other = rfNodes().find((n) => n.data.type === 'Constant')!.id;
+    await selectNode(gain);
+    let ed = editorFor(document.body, 'GAIN', 'gain') as HTMLInputElement;
+    fireEvent.change(ed, { target: { value: 'abc' } });
+    fireEvent.blur(ed);
+    await wait(20);
+    await selectNode(other);
+    await wait(20);
+    await selectNode(gain);
+    await wait(20);
+    ed = editorFor(document.body, 'GAIN', 'gain') as HTMLInputElement;
+    expect(ed.value).toBe('abc');
+    expect((ed.parentElement as HTMLElement).querySelector('[role="alert"]')).toBeTruthy();
+  });
+});
+
+// XBV-182: a PT_* scalar parameter whose spec has a bound other than min = 0 (min > 0, min < 0, or a max) is checked
+// against that range in the panel: an out-of-range value shows an error and is not stored (the block would refuse it at
+// its first step with BLOCK_RUNTIME_FAULT).
+describe('XBV-182: powertrain parameter ranges are enforced in the panel', () => {
+  it('every bounded PT_* scalar parameter refuses a value outside its spec range', () => {
+    const bad: string[] = [];
+    let checked = 0;
+    for (const t of PALETTE_TYPES.filter((x) => x.startsWith('PT_'))) {
+      const spec = getPowertrainSpec(t);
+      const bounded = (spec?.params ?? []).filter((p) => p.kind === 'scalar' && (p.max !== undefined || (p.min !== undefined && p.min !== 0)));
+      if (bounded.length === 0) continue;
+      const run = openPanel(t);
+      for (const p of bounded) {
+        const ed = editorFor(run.container, t, p.name) as HTMLInputElement | null;
+        if (!ed || ed.tagName !== 'INPUT') { bad.push(`${t}.${p.name} (no text editor)`); continue; }
+        const outside = p.max !== undefined ? p.max + Math.max(1, Math.abs(p.max)) : (p.min as number) - Math.max(1, Math.abs(p.min as number));
+        fireEvent.change(ed, { target: { value: String(outside) } });
+        fireEvent.blur(ed);
+        checked++;
+        const stored = lastParam(run.calls, p.name);
+        const alert = (ed.parentElement as HTMLElement).querySelector('[role="alert"]');
+        if (!alert || (stored.found && stored.value === outside)) bad.push(`${t}.${p.name}=${outside}`);
+      }
+      run.unmount();
+    }
+    expect(checked).toBeGreaterThan(0);
+    expect(bad).toEqual([]);
+  }, 240_000);
+});
