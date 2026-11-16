@@ -700,3 +700,42 @@ describe('XB alignment 8: AUTOSAR path', () => {
     }
   }, 620_000);
 });
+
+/* ------------------------------------------------------------------------------------------------ XBV-172 */
+// WP-21 F3 rework (verifier): an Inf operand of ShiftLeft goes through the numeric-fault path in all three executions.
+// float32: 1e38 * 1000 overflows to Inf upstream of the shift. Under escalate the state machine is faulted with
+// XBRIDGES_NUMERIC in the same tick in the interpreter, the standalone runtime and the generated C (no evaluation error).
+describe('XBV-172: non-finite shift operand under the numeric fault policy', () => {
+  const shiftModel = (numericFault: 'signal-only' | 'escalate') => {
+    const b = asXbOwner(smState('B', { priority: 2 }), {
+      nodes: [
+        xbNode('x', 'Constant', { value: 1e38 }, [], ['y']),
+        xbNode('g', 'GAIN', { gain: 1000 }, ['u'], ['y']),
+        xbNode('n', 'Constant', { value: 1 }, [], ['y']),
+        xbNode('shl', 'ShiftLeft', {}, ['in', 'sh'], ['out']),
+        xbNode('sink', 'TERMINATOR', {}, ['u'], []),
+      ],
+      edges: [xbEdge('x.y', 'g.u'), xbEdge('g.y', 'shl.in'), xbEdge('n.y', 'shl.sh'), xbEdge('shl.out', 'sink.u')],
+      numericFault,
+    });
+    return buildSmModel({
+      tickMs: 100,
+      states: [smState('A', { autostart: true }), b],
+      transitions: [smTransition('ab', 'A', 'B', { condition: 'go' })],
+      variables: [smVar('go', 'bool', false)],
+      layers: [{ id: 'root', parent: null, states: ['A', 'B'], transitions: ['ab'] }],
+    });
+  };
+  it('escalate: XBRIDGES_NUMERIC at tick 3 in all three, aligned', () => {
+    const three = expectAligned(shiftModel('escalate'), steps([{}, { go: true }, {}]));
+    for (const t of [three.sim, three.standalone, three.c]) {
+      expect(t.map((x) => x.error)).toEqual([null, null, null, 'XBRIDGES_NUMERIC: X-Bridges numeric fault']);
+    }
+  }, T);
+  it('signal-only: the shift output is NaN with the fault indicated, the machine keeps running; aligned', () => {
+    const f = expectAligned(shiftModel('signal-only'), steps([{}, { go: true }, {}, {}])).sim;
+    expect(f.map((x) => x.error)).toEqual([null, null, null, null, null]);
+    expect(f[3].xBridges.B.faults).toContain('shl');
+    expect([f[3].xBridges.B.signals['shl:out']].flat().every((v) => Number.isNaN(Number(v)))).toBe(true);
+  }, T);
+});

@@ -125,7 +125,12 @@ export function runEmbedded(spec: ModelSpec, options: EmbeddedOptions): Embedded
   }
   for (let i = 0; i < options.steps; i++) {
     try {
-      stepXBState(runtime, {});
+      // Recorded numeric faults are reported (warning level, first per run) so a test can see the fault was raised; the
+      // values keep being compared as published (D11: the fault is indicated under every policy).
+      const faults = stepXBState(runtime, {});
+      if (faults.length > 0 && !diagnostics.some((d) => d.code === 'XBRIDGES_NUMERIC')) {
+        diagnostics.push({ stage: 'run', severity: 'warning', code: 'XBRIDGES_NUMERIC', message: `numeric fault at step ${i}: ${JSON.stringify(faults[0])}` });
+      }
     } catch (err) {
       diagnostics.push({ stage: 'run', severity: 'error', code: 'EMBEDDED_THROW', message: err instanceof Error ? err.message : String(err) });
       return { signals, diagnostics, ok: false };

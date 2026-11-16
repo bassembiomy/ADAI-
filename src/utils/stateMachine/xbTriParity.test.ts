@@ -426,8 +426,9 @@ describe('WP-21 round 4: embedded division by zero and embedded limits', () => {
 });
 
 // ---------------------------------------------------------------- WP-21 batch F3 acceptance (controller)
-// XBV-172: a non-finite operand of a shift block is refused on both paths (the canvas raises a block error; the embedded
-// path must raise its numeric fault instead of publishing ToInt32(Inf) = 0).
+// XBV-172: a non-finite operand of a shift block is refused by the canvas (block error) and raises the embedded numeric
+// fault (D11; never published as ToInt32(Inf) = 0). Rework after the F3 verifier: the fault goes through the normal
+// numeric-fault path (NaN result, fault recorded), not a thrown evaluation error.
 describe('WP-21 F3: non-finite shift operands', () => {
   for (const type of ['ShiftLeft', 'ShiftRight'] as const) {
     for (const solver of ['euler', 'discrete'] as const) {
@@ -438,8 +439,13 @@ describe('WP-21 F3: non-finite shift operands', () => {
           blocks: [{ id: 'b', type }, ...ins.map((p: string, i: number) => ({ id: `s${i}`, type: 'Constant', params: { value: i === 0 ? 'inf' : 1 } }))],
           wires: ins.map((p: string, i: number) => `s${i}.out -> b.${p}`),
         };
-        const o = compareSpec(`${type} Inf ${solver}`, spec, solver, proto.outputs.map((x: { id: string }) => `b.${x.id}`));
-        expect(o.kind, (o as { detail?: string }).detail).toBe('both-refused');
+        const probes = proto.outputs.map((x: { id: string }) => `b.${x.id}`);
+        const canvas = runModel(buildModel(spec), { solver, dt: DT, stopTime: (STEPS - 1) * DT, probes });
+        expect(canvas.diagnostics.some((d) => d.severity === 'error'), 'canvas refuses').toBe(true);
+        const emb = runEmbedded(spec, { solver, dt: DT, steps: STEPS, probes });
+        expect(emb.diagnostics.map((d) => d.code)).toContain('XBRIDGES_NUMERIC');
+        expect(emb.diagnostics.filter((d) => d.code === 'EMBEDDED_THROW')).toEqual([]);
+        for (const p of probes) expect(emb.signals[p][0]?.every((v) => Number.isNaN(v)), `${p} is NaN, not ToInt32(Inf)`).toBe(true);
       });
     }
   }
