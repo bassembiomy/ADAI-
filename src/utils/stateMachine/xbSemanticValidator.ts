@@ -319,6 +319,8 @@ const validateSampleTimes = (
   }
 
   for (const node of model.nodes) {
+    // XBV-174: a continuous STATE_SPACE has no sample time; whatever its sampleTime holds is not checked against the grid.
+    if (node.type === 'STATE_SPACE' && (node.parameters as Record<string, unknown>).representation === 'continuous') continue;
     visitObjects(node.parameters, (value) => {
       for (const key of ['sampleTime', 'sample_time', 'sampleRate']) {
         if (!Object.prototype.hasOwnProperty.call(value, key)) continue;
@@ -435,9 +437,8 @@ const hasContinuousStates = (node: XBNodeV1): boolean => {
     case 'TRANSFER_FUNCTION':
       return true;
     case 'STATE_SPACE': {
-      // The canvas holds a continuous-representation block with an explicit positive sampleTime (no dynamics).
-      const ts = typeof p.sampleTime === 'string' ? Number(p.sampleTime) : p.sampleTime;
-      return p.representation !== 'discrete' && !(typeof ts === 'number' && Number.isFinite(ts) && ts > 0);
+      // XBV-174: a continuous-representation block integrates whatever its sampleTime holds.
+      return p.representation !== 'discrete';
     }
     case 'PID_CONTROLLER': {
       const ts = typeof p.sampleTime === 'string' ? Number(p.sampleTime) : p.sampleTime;
@@ -588,9 +589,9 @@ export const validateXBModel = (
       ));
     }
     if (node.type === 'STATE_SPACE') {
-      // XBV-093: a continuous STATE_SPACE (sampleTime <= 0) is integrated by the solver stages (euler, rk4; the discrete
-      // solver is refused by XB_DISCRETE_SOLVER_CONTINUOUS_STATE); with an explicit positive sampleTime it holds its
-      // state, like the canvas. A missing representation is not guessed.
+      // XBV-093 / XBV-174: a continuous STATE_SPACE is integrated by the solver stages (euler, rk4; the discrete solver is
+      // refused by XB_DISCRETE_SOLVER_CONTINUOUS_STATE) whatever its sampleTime holds, like the canvas. A missing
+      // representation is not guessed.
       if (parameters.representation !== 'discrete' && parameters.representation !== 'continuous') {
         diagnostics.push(diagnostic(
           'XB_DISCRETE_REPRESENTATION_REQUIRED',

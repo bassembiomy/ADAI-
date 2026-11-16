@@ -3140,7 +3140,13 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     inputs: [createPort('in', 'In', 'input')], // Bridge from parent
     outputs: [createPort('out', 'Out', 'output', params.value ?? 0)],
     state: { value: 0 },
-    execute: (ins, p, state) => ({ outputs: [ins[0] !== undefined ? ins[0] : (state.value || Number(p.value || 0))] })
+    execute: (ins, p, state) => {
+      // XBV-039: a state-machine variable drives a top-level Inport like a Constant of that value. The canvas run
+      // (main thread and worker) marks the block with smOverride and writes the value; every evaluation, major or
+      // minor, outputs it. An Inport inside a subsystem is never marked and takes its parent's input.
+      if (p.smOverride === true) return { outputs: [p.value] };
+      return { outputs: [ins[0] !== undefined ? ins[0] : (state.value || Number(p.value || 0))] };
+    }
   }),
 
   'Outport': (id, params) => ({

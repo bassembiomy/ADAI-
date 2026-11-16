@@ -38,16 +38,16 @@ sample times, mappings, and target capabilities. Current target limits are a
 maximum vector length of 16 and maximum matrix dimension of 8. `MatrixSolve`
 also requires a configured maximum dimension from 1 through 8. `PID_BASIC`
 requires a positive discrete `sampleTime`; `STATE_SPACE` requires the
-`discrete` or `continuous` representation. A continuous `STATE_SPACE` (sample time <= 0) and the continuous form of
+`discrete` or `continuous` representation. A continuous-representation `STATE_SPACE` (whatever its `sampleTime` holds: Simulink's continuous State-Space has no sample time, XBV-174) and the continuous form of
 `PID_CONTROLLER` (explicit sample time <= 0) are integrated by the solver stages of `euler` / `rk4` (the Discrete solver
-refuses them); a continuous `STATE_SPACE` with an explicit positive `sampleTime` holds its state, as on the canvas.
+refuses them).
 `STATE_SPACE` / `DISCRETE_TRANSFER_FUNCTION` with D != 0 are direct feedthrough (output uses the input of the tick).
 
 Block rules that follow the canvas and Simulink: `Mean` of a matrix gives one mean per column (a vector of the column
 count), of a vector the scalar mean; its output shape is derived from the input, never from a declared shape.
 `SubMatrix` indices are one-based and inclusive, every default 1. `ShiftLeft` / `ShiftRight` on int32: a count >= 32
 shifts every bit out (0, or -1 for a negative value under the arithmetic right shift) and a negative count shifts the
-other way. `RELAY` is direct feedthrough: the output of tick k follows the input of tick k and the state of tick k-1
+other way. A non-finite operand (Inf, NaN) of a shift is a numeric fault (D11, XBV-172): the C helper and the interpreter give NaN (the fault is raised when the non-finite result is published) and, under the `escalate` policy, the interpreter step throws `X-Bridges numeric fault (non-finite) ...` like the canvas block error. `RELAY` is direct feedthrough: the output of tick k follows the input of tick k and the state of tick k-1
 (Simulink relay with hysteresis). `KALMAN_FILTER` updates first, then predicts (x[0|-1] = x0, P[0|-1] = P0). While
 `reset` is high `PID_BASIC` / `PID_CONTROLLER` clear their states and keep the proportional action and the derivative of
 a zero filter state. `STATE_SPACE` and `DISCRETE_TRANSFER_FUNCTION` derive the `y` and `x` port shapes from the matrices.

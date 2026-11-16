@@ -2201,7 +2201,7 @@ export const XbridgesWorkspace: React.FC<{
                 }
                 if (inportOverrides[node.id] !== undefined) {
                   engineRef.current!.setSignalValue(node.id, 'out', inportOverrides[node.id]);
-                  if (block.params) block.params.value = inportOverrides[node.id];
+                  if (block.params) { block.params.value = inportOverrides[node.id]; block.params.smOverride = true; }
                 }
               }
             });

@@ -2234,7 +2234,9 @@ const shiftRightStatements = (indent: string): string => [
   '}',
   'return SM_XB_BitcastU32ToI32(shifted);',
 ].map((line) => `${indent}${line}`).join('\n');
-const shiftHelper = (name: string, left: boolean): string => `static int32_t ${name}(double value, double amount)
+// XBV-172: a non-finite operand yields NaN (the numeric fault of D11 is raised when the non-finite result is published),
+// not ToInt32(Inf) = 0; the canvas raises a block error for it.
+const shiftHelper = (name: string, left: boolean): string => `static double ${name}(double value, double amount)
 {
     const uint32_t bits = SM_XB_BitcastI32ToU32(SM_XB_ToInt32(value));
     const int negative = ((bits & UINT32_C(0x80000000)) != UINT32_C(0));
@@ -2242,7 +2244,7 @@ const shiftHelper = (name: string, left: boolean): string => `static int32_t ${n
     uint32_t shifted = UINT32_C(0);
     (void)shifted;
     if (!isfinite(value) || !isfinite(amount)) {
-        return INT32_C(0);
+        return (double)NAN;
     }
     count = trunc(amount);
     if (count < 0.0) {

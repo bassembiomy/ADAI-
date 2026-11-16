@@ -623,11 +623,6 @@ export const isContinuousFilter = (operation: {
   return typeof raw === 'number' && !(raw > 0) && slot !== undefined && slot.shape.kind === 'scalar';
 };
 
-const positiveSampleTime = (raw: unknown): boolean => {
-  const value = typeof raw === 'string' && raw.trim() !== '' ? Number(raw) : raw;
-  return typeof value === 'number' && Number.isFinite(value) && value > 0;
-};
-
 /**
  * Continuous form of PID_CONTROLLER (canvas sampleTime <= 0, default -1 = inherited): the integrator and the derivative
  * filter are continuous states advanced by the solver stages (euler, rk4) like any continuous state (XBV-159).
@@ -646,13 +641,12 @@ export const isContinuousPid = (operation: {
 
 /**
  * Continuous STATE_SPACE (dx/dt = A x + B u) integrated by the solver stages (XBV-093). The canvas holds the state of a
- * continuous-representation block with an explicit positive sampleTime constant (no dynamics), so that form is not
- * continuous here either.
+ * continuous-representation block whatever its sampleTime holds (XBV-171, XBV-174: Simulink's continuous State-Space has
+ * no sample time), so the embedded block does too.
  */
 export const isContinuousStateSpace = (operation: {
   type: string;
   parameters: Readonly<Record<string, unknown>>;
 }): boolean => operation.type === 'STATE_SPACE'
-  && operation.parameters.representation === 'continuous'
-  && !positiveSampleTime(operation.parameters.sampleTime);
+  && operation.parameters.representation === 'continuous';
 

@@ -104,6 +104,7 @@ export function handleXbridgesWorkerMessage(request: XbridgesWorkerRequest): Xbr
         const block = workerEngine.getBlock(id);
         if (block && block.params) {
           block.params.value = val;
+          block.params.smOverride = true;
         }
       }
     }
