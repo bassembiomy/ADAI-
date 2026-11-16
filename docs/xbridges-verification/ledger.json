@@ -673,8 +673,9 @@
    "plan_ref": "F1",
    "severity": "S1",
    "gate": "V6",
-   "status": "open",
-   "summary": "Canvas engine and state-machine interpreter are compared only by xbSimEmbeddedParity.test.ts: unit-constant input, 6 ticks, scalar, discrete solver. WP-16 measured it: 281 (type, solver) cases, 178 equal; random graphs fail via XBV-083/084/085."
+   "status": "closed",
+   "summary": "Canvas engine and state-machine interpreter are compared only by xbSimEmbeddedParity.test.ts: unit-constant input, 6 ticks, scalar, discrete solver. WP-16 measured it: 281 (type, solver) cases, 178 equal; random graphs fail via XBV-083/084/085.",
+   "fix": "WP-21: the canvas and the embedded interpreter are compared per block for every codegen-capable type under euler, rk4 and discrete plus random graphs (xbTriParity, 498 cases), the interpreter against generated C (xbCodeParity) and the three state-machine executions (xbStateMachineAlignment); after batch D2 no parity pin remains."
   },
   {
    "id": "XBV-002",
@@ -2354,16 +2355,26 @@
    "plan_ref": "4.6 parity",
    "severity": "S2",
    "gate": "V6",
-   "status": "open",
-   "summary": "Canvas LOW_PASS_FILTER, HIGH_PASS_FILTER and MOVING_AVERAGE are not element-wise on a vector input: a 3-vector gives the scalar [0] (filters) or [null] (moving average) at step 0, while the embedded path and Simulink (Lowpass/Highpass Filter, Moving Average are element-wise) give a 3-vector. Pinned under XBV-018/XBV-068 in xbTriParity until WP-21 round 5."
+   "status": "closed",
+   "summary": "Canvas LOW_PASS_FILTER, HIGH_PASS_FILTER and MOVING_AVERAGE are not element-wise on a vector input: a 3-vector gives the scalar [0] (filters) or [null] (moving average) at step 0, while the embedded path and Simulink (Lowpass/Highpass Filter, Moving Average are element-wise) give a 3-vector. Pinned under XBV-018/XBV-068 in xbTriParity until WP-21 round 5.",
+   "fix": "WP-21 batch D2: LOW_PASS_FILTER, HIGH_PASS_FILTER (continuous and discrete) and MOVING_AVERAGE are element-wise with per-element state; verified against the closed forms per element; scalar results bit-identical to the base."
   },
   {
    "id": "XBV-191",
    "plan_ref": "4.6 parity",
    "severity": "S2",
    "gate": "V6",
+   "status": "closed",
+   "summary": "Canvas RATE_LIMITER outputs 0 at t = 0 for a constant 0.7 input with rising/falling limits 0.1 per step; decision D12 (initial condition y(-1) = IC = 0) gives clamp(0.7, 0 +/- 0.1) = 0.1, which the embedded path outputs. Pinned under XBV-018 in xbTriParity until WP-21 round 5.",
+   "fix": "WP-21 batch D2: with an explicit Ts the first Rate Limiter output is clamp(u, IC - F*Ts, IC + R*Ts) (D12); with an inherited sample time y(0) = IC, as the interpreter. Rate Limiter is element-wise."
+  },
+  {
+   "id": "XBV-192",
+   "plan_ref": "4.2 equations",
+   "severity": "S3",
+   "gate": "V3",
    "status": "open",
-   "summary": "Canvas RATE_LIMITER outputs 0 at t = 0 for a constant 0.7 input with rising/falling limits 0.1 per step; decision D12 (initial condition y(-1) = IC = 0) gives clamp(0.7, 0 +/- 0.1) = 0.1, which the embedded path outputs. Pinned under XBV-018 in xbTriParity until WP-21 round 5."
+   "summary": "RATE_LIMITER with vector slew rates: p.risingSlewRate * dt is NaN, so limiting is silently skipped and u passes through (also on the base). Simulink Rate Limiter accepts only scalar rates; a vector rate must be a diagnostic or element-wise. Found by the WP-21 D2 verifier."
   }
  ],
  "blocks": {
