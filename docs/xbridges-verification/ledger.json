@@ -2393,8 +2393,33 @@
    "plan_ref": "4.6 parity",
    "severity": "S4",
    "gate": "V6",
+   "status": "closed",
+   "summary": "The embedded validator refuses RATE_LIMITER vector slew rates with the generic message 'risingSlewRate must be >= 0...' instead of saying that vector rates are not supported by Generate C (the canvas accepts them since XBV-192). Found by the WP-21 D3 verifier.",
+   "fix": "WP-21: the embedded validator refuses vector Rate Limiter slew rates with 'Generate C supports only scalar slew rates (the canvas accepts per-element vector rates)', keeps the other parameter checks in the same pass, and treats one-element [2] / '[2]' as scalars."
+  },
+  {
+   "id": "XBV-194",
+   "plan_ref": "4.6 parity",
+   "severity": "S2",
+   "gate": "V7",
    "status": "open",
-   "summary": "The embedded validator refuses RATE_LIMITER vector slew rates with the generic message 'risingSlewRate must be >= 0...' instead of saying that vector rates are not supported by Generate C (the canvas accepts them since XBV-192). Found by the WP-21 D3 verifier."
+   "summary": "A RATE_LIMITER slew rate given as the one-element array [2] passes the embedded validator, but xbInterpreter.parameter and xbCGenerator.scalarParameter read only numbers and silently fall back to the default rate 1 (0.1/0.2/0.3 instead of 0.2/0.4/0.6 per tick at dt 0.1, u = 10); the string '[2]' works. Generate C produces the wrong rate with no diagnostic. Same on the base. Found by the WP-21 XBV-193 verifier."
+  },
+  {
+   "id": "XBV-195",
+   "plan_ref": "state machine",
+   "severity": "S2",
+   "gate": "V6",
+   "status": "open",
+   "summary": "src/utils/stateMachine smDifferential: the state-timer Step value is [0,2,2,2] where [0,2,2,5] is expected (not an environment issue; fails on the base too). Found by the WP-21 XBV-193 verifier; root cause not yet analysed."
+  },
+  {
+   "id": "XBV-196",
+   "plan_ref": "4.6 parity",
+   "severity": "S4",
+   "gate": "V3",
+   "status": "open",
+   "summary": "An empty RATE_LIMITER slew rate [] / '[]' is refused by the embedded validator with the 'vector slew rates' message although it has no elements (the base silently ran it at rate 1); the message should say the rate is empty. A legacy fallingLimit '[1,2]' gets only the generic message because the factory turns it into NaN first. Found by the WP-21 XBV-193 verifier."
   }
  ],
  "blocks": {
