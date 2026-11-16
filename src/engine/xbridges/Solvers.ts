@@ -40,7 +40,6 @@ export class Solvers {
     const startTime = options.startTime;
     const stopTime = options.stopTime;
     const dt = options.fixedStep || 0.01;
-    const zeroTol = options.zeroTol || 1e-6;
     
     let t = startTime;
     let c = 0.0;
@@ -53,38 +52,11 @@ export class Solvers {
         currentStep = stopTime - t;
       }
       
-      const statesPrev = new Map<string, any>();
-      engine.executionOrder.forEach(b => {
-        if (b.state !== undefined) statesPrev.set(b.id, JSON.parse(JSON.stringify(b.state)));
-      });
-      
       this.stepEuler(engine, t, currentStep);
-      
-      const statesCurr = new Map<string, any>();
-      engine.executionOrder.forEach(b => {
-        if (b.state !== undefined) statesCurr.set(b.id, JSON.parse(JSON.stringify(b.state)));
-      });
-      
-      const zcPrev = engine.getZeroCrossings(t, statesPrev);
-      const zcCurr = engine.getZeroCrossings(t + currentStep, statesCurr);
-      
-      if (engine.hasZeroCrossingSignChange(zcPrev, zcCurr)) {
-        const tEvent = engine.bracketZeroCrossing(t, t + currentStep, statesPrev, statesCurr, zeroTol);
-        engine.commitStateUpdates(statesPrev);
-        
-        const hEvent = tEvent - t;
-        this.stepEuler(engine, t, hEvent);
-        
-        const y = hEvent - c;
-        const temp = t + y;
-        c = (temp - t) - y;
-        t = temp;
-      } else {
-        const y = currentStep - c;
-        const temp = t + y;
-        c = (temp - t) - y;
-        t = temp;
-      }
+      const y = currentStep - c;
+      const temp = t + y;
+      c = (temp - t) - y;
+      t = temp;
     }
     engine.computeOutputs(stopTime);
   }
@@ -143,7 +115,6 @@ export class Solvers {
     const startTime = options.startTime;
     const stopTime = options.stopTime;
     const dt = options.fixedStep || 0.01;
-    const zeroTol = options.zeroTol || 1e-6;
     
     let t = startTime;
     let c = 0.0;
@@ -156,38 +127,11 @@ export class Solvers {
         currentStep = stopTime - t;
       }
       
-      const statesPrev = new Map<string, any>();
-      engine.executionOrder.forEach(b => {
-        if (b.state !== undefined) statesPrev.set(b.id, JSON.parse(JSON.stringify(b.state)));
-      });
-      
       this.stepODE2(engine, t, currentStep);
-      
-      const statesCurr = new Map<string, any>();
-      engine.executionOrder.forEach(b => {
-        if (b.state !== undefined) statesCurr.set(b.id, JSON.parse(JSON.stringify(b.state)));
-      });
-      
-      const zcPrev = engine.getZeroCrossings(t, statesPrev);
-      const zcCurr = engine.getZeroCrossings(t + currentStep, statesCurr);
-      
-      if (engine.hasZeroCrossingSignChange(zcPrev, zcCurr)) {
-        const tEvent = engine.bracketZeroCrossing(t, t + currentStep, statesPrev, statesCurr, zeroTol);
-        engine.commitStateUpdates(statesPrev);
-        
-        const hEvent = tEvent - t;
-        this.stepODE2(engine, t, hEvent);
-        
-        const y = hEvent - c;
-        const temp = t + y;
-        c = (temp - t) - y;
-        t = temp;
-      } else {
-        const y = currentStep - c;
-        const temp = t + y;
-        c = (temp - t) - y;
-        t = temp;
-      }
+      const y = currentStep - c;
+      const temp = t + y;
+      c = (temp - t) - y;
+      t = temp;
     }
     engine.computeOutputs(stopTime);
   }
@@ -247,7 +191,6 @@ export class Solvers {
     const startTime = options.startTime;
     const stopTime = options.stopTime;
     const dt = options.fixedStep || 0.01;
-    const zeroTol = options.zeroTol || 1e-6;
     
     let t = startTime;
     let c = 0.0;
@@ -260,38 +203,11 @@ export class Solvers {
         currentStep = stopTime - t;
       }
       
-      const statesPrev = new Map<string, any>();
-      engine.executionOrder.forEach(b => {
-        if (b.state !== undefined) statesPrev.set(b.id, JSON.parse(JSON.stringify(b.state)));
-      });
-      
       this.stepODE3(engine, t, currentStep);
-      
-      const statesCurr = new Map<string, any>();
-      engine.executionOrder.forEach(b => {
-        if (b.state !== undefined) statesCurr.set(b.id, JSON.parse(JSON.stringify(b.state)));
-      });
-      
-      const zcPrev = engine.getZeroCrossings(t, statesPrev);
-      const zcCurr = engine.getZeroCrossings(t + currentStep, statesCurr);
-      
-      if (engine.hasZeroCrossingSignChange(zcPrev, zcCurr)) {
-        const tEvent = engine.bracketZeroCrossing(t, t + currentStep, statesPrev, statesCurr, zeroTol);
-        engine.commitStateUpdates(statesPrev);
-        
-        const hEvent = tEvent - t;
-        this.stepODE3(engine, t, hEvent);
-        
-        const y = hEvent - c;
-        const temp = t + y;
-        c = (temp - t) - y;
-        t = temp;
-      } else {
-        const y = currentStep - c;
-        const temp = t + y;
-        c = (temp - t) - y;
-        t = temp;
-      }
+      const y = currentStep - c;
+      const temp = t + y;
+      c = (temp - t) - y;
+      t = temp;
     }
     engine.computeOutputs(stopTime);
   }
@@ -363,7 +279,6 @@ export class Solvers {
     const startTime = options.startTime;
     const stopTime = options.stopTime;
     const dt = options.fixedStep || 0.01;
-    const zeroTol = options.zeroTol || 1e-6;
     
     let t = startTime;
     let c = 0.0;
@@ -376,38 +291,11 @@ export class Solvers {
         currentStep = stopTime - t;
       }
       
-      const statesPrev = new Map<string, any>();
-      engine.executionOrder.forEach(b => {
-        if (b.state !== undefined) statesPrev.set(b.id, JSON.parse(JSON.stringify(b.state)));
-      });
-      
       this.stepRK4(engine, t, currentStep);
-      
-      const statesCurr = new Map<string, any>();
-      engine.executionOrder.forEach(b => {
-        if (b.state !== undefined) statesCurr.set(b.id, JSON.parse(JSON.stringify(b.state)));
-      });
-      
-      const zcPrev = engine.getZeroCrossings(t, statesPrev);
-      const zcCurr = engine.getZeroCrossings(t + currentStep, statesCurr);
-      
-      if (engine.hasZeroCrossingSignChange(zcPrev, zcCurr)) {
-        const tEvent = engine.bracketZeroCrossing(t, t + currentStep, statesPrev, statesCurr, zeroTol);
-        engine.commitStateUpdates(statesPrev);
-        
-        const hEvent = tEvent - t;
-        this.stepRK4(engine, t, hEvent);
-        
-        const y = hEvent - c;
-        const temp = t + y;
-        c = (temp - t) - y;
-        t = temp;
-      } else {
-        const y = currentStep - c;
-        const temp = t + y;
-        c = (temp - t) - y;
-        t = temp;
-      }
+      const y = currentStep - c;
+      const temp = t + y;
+      c = (temp - t) - y;
+      t = temp;
     }
     engine.computeOutputs(stopTime);
   }
@@ -460,7 +348,6 @@ export class Solvers {
     const startTime = options.startTime;
     const stopTime = options.stopTime;
     const h = options.fixedStep || 0.01;
-    const zeroTol = options.zeroTol || 1e-6;
     
     let t = startTime;
     let c = 0.0;
@@ -473,38 +360,11 @@ export class Solvers {
         currentStep = stopTime - t;
       }
       
-      const statesPrev = new Map<string, any>();
-      engine.executionOrder.forEach(b => {
-        if (b.state !== undefined) statesPrev.set(b.id, JSON.parse(JSON.stringify(b.state)));
-      });
-      
       this.stepODE5(engine, t, currentStep);
-      
-      const statesCurr = new Map<string, any>();
-      engine.executionOrder.forEach(b => {
-        if (b.state !== undefined) statesCurr.set(b.id, JSON.parse(JSON.stringify(b.state)));
-      });
-      
-      const zcPrev = engine.getZeroCrossings(t, statesPrev);
-      const zcCurr = engine.getZeroCrossings(t + currentStep, statesCurr);
-      
-      if (engine.hasZeroCrossingSignChange(zcPrev, zcCurr)) {
-        const tEvent = engine.bracketZeroCrossing(t, t + currentStep, statesPrev, statesCurr, zeroTol);
-        engine.commitStateUpdates(statesPrev);
-        
-        const hEvent = tEvent - t;
-        this.stepODE5(engine, t, hEvent);
-        
-        const y = hEvent - c;
-        const temp = t + y;
-        c = (temp - t) - y;
-        t = temp;
-      } else {
-        const y = currentStep - c;
-        const temp = t + y;
-        c = (temp - t) - y;
-        t = temp;
-      }
+      const y = currentStep - c;
+      const temp = t + y;
+      c = (temp - t) - y;
+      t = temp;
     }
     engine.computeOutputs(stopTime);
   }

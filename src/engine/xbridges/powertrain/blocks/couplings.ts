@@ -163,7 +163,22 @@ interface ClutchEval {
   locked: boolean; aIn: number; aOut: number; wIn: number; wOut: number; slip: number;
 }
 
-function clutchEval(ins: XValue[], p: Record<string, any>, s: { w_in: number; w_out: number }): ClutchEval | string {
+interface ClutchState { w_in: number; w_out: number; lk: number; sp: number; hd: number; hs: number }
+
+/** A restored state without the discrete fields starts as an initial state: slipping, nothing recorded, no held direction. */
+const finiteOr = (v: unknown, d: number): number => (typeof v === 'number' && Number.isFinite(v) ? v : d);
+function withClutchDefaults(s: ClutchState): ClutchState {
+  return { w_in: s.w_in, w_out: s.w_out, lk: finiteOr(s.lk, 0), sp: finiteOr(s.sp, 0), hs: finiteOr(s.hs, 0), hd: finiteOr(s.hd, 0) };
+}
+
+/**
+ * Lock mode (lk), previous major-step slip (sp, hs = 1 once recorded) and the friction direction while slipping (hd) are
+ * discrete states, updated only at major steps (clutchUpdate): fixed-step solvers do not locate the zero crossing of the slip,
+ * so the clutch locks at the major step where the slip changed sign since the previous one or is within omega_tol, with the
+ * holding torque within the static capacity (XBV-187). Minor steps hold the mode.
+ */
+function clutchEval(ins: XValue[], p: Record<string, any>, s0: ClutchState): ClutchEval | string {
+  const s = withClutchDefaults(s0);
   const P = num(ins[0]), Tin = num(ins[1]), Tl = num(ins[2]);
   if (![P, Tin, Tl, s.w_in, s.w_out].every(Number.isFinite)) return 'Disc clutch inputs must be finite';
   if (!(p.Ro > p.Ri)) return 'Disc clutch needs Ro > Ri';
@@ -173,12 +188,13 @@ function clutchEval(ins: XValue[], p: Record<string, any>, s: { w_in: number; w_
   const slip = s.w_in - s.w_out;
   const aLock = (Tin - Tl - p.b_in * s.w_in - p.b_out * s.w_out) / (p.J_in + p.J_out);
   const Tlock = Tin - p.b_in * s.w_in - p.J_in * aLock;
-  if (Math.abs(slip) <= p.omega_tol && Math.abs(Tlock) <= Ts) {
+  if (s.lk === 1) {
     const m = (p.J_in * s.w_in + p.J_out * s.w_out) / (p.J_in + p.J_out);
     return { Tk, Ts, Tc: Tlock, Tlock, Reff, locked: true, aIn: aLock, aOut: aLock, wIn: m, wOut: m, slip: 0 };
   }
-  // Inside the tolerance band the slip direction is the direction of the torque that broke the clutch away.
-  const dir = Math.abs(slip) > p.omega_tol ? sign(slip) : sign(Tlock);
+  // While slipping the friction direction is the one held from the last major step (the direction of the torque that broke
+  // the clutch away when the slip was inside the tolerance band); before the first major step it follows the current slip.
+  const dir = s.hd !== 0 ? s.hd : Math.abs(slip) > p.omega_tol ? sign(slip) : sign(Tlock);
   const Tc = Tk * dir;
   return {
     Tk, Ts, Tc, Tlock, Reff, locked: false,
@@ -187,14 +203,36 @@ function clutchEval(ins: XValue[], p: Record<string, any>, s: { w_in: number; w_
   };
 }
 
+/** Major-step decision of the lock mode: lock, hold or break away. Pure; returns the new state. */
+function clutchUpdate(ins: XValue[], p: Record<string, any>, s0: ClutchState): ClutchState {
+  const s = withClutchDefaults(s0);
+  const P = num(ins[0]), Tin = num(ins[1]), Tl = num(ins[2]);
+  if (![P, Tin, Tl, s.w_in, s.w_out].every(Number.isFinite) || !(p.Ro > p.Ri)) return s;
+  const Reff = (2 / 3) * (p.Ro ** 3 - p.Ri ** 3) / (p.Ro ** 2 - p.Ri ** 2);
+  const Ts = p.mus * Math.max(P, 0) * p.Ap * Reff * p.Nf;
+  const slip = s.w_in - s.w_out;
+  const aLock = (Tin - Tl - p.b_in * s.w_in - p.b_out * s.w_out) / (p.J_in + p.J_out);
+  const Tlock = Tin - p.b_in * s.w_in - p.J_in * aLock;
+  const crossed = s.hs === 1 && s.sp * slip < 0;
+  const holds = Math.abs(Tlock) <= Ts;
+  const lock = s.lk === 1 ? holds : (Math.abs(slip) <= p.omega_tol || crossed) && holds;
+  if (lock) {
+    const m = (p.J_in * s.w_in + p.J_out * s.w_out) / (p.J_in + p.J_out);
+    return { w_in: m, w_out: m, lk: 1, sp: 0, hs: 1, hd: 0 };
+  }
+  return { ...s, lk: 0, sp: slip, hs: 1, hd: Math.abs(slip) > p.omega_tol ? sign(slip) : sign(Tlock) };
+}
+
 const clutchFactory = definePtBlock(clutchSpec, {
-  init: p => ({ w_in: p.w_in_o, w_out: p.w_out_o }),
+  init: p => ({ w_in: p.w_in_o, w_out: p.w_out_o, lk: 0, sp: 0, hs: 0, hd: 0 }),
+  discreteStateKeys: ['lk', 'sp', 'hs', 'hd'],
+  update: (ins, p, s) => clutchUpdate(ins, p, s),
   derivatives: (ins, p, s) => {
     const e = clutchEval(ins, p, s);
     if (typeof e === 'string') return { w_in: 0, w_out: 0 };
     return { w_in: e.aIn, w_out: e.aOut };
   },
-  zeroCrossings: (_ins, _p, s) => [s.w_in - s.w_out],
+  zeroCrossings: (_ins, _p, s) => [s.lk === 1 ? 0 : s.w_in - s.w_out],
   execute: (ins, p, s) => {
     const e = clutchEval(ins, p, s);
     if (typeof e === 'string') return { outputs: [{}, 0, 0, 0], error: e };

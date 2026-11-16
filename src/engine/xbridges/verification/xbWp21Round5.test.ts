@@ -194,4 +194,30 @@ describe('XBV-196: empty slew rate message', () => {
       expect(msgs).not.toMatch(/supports only scalar slew rates/i);
     });
   }
+// XBV-187 rework (E5 verifier): the held friction direction must not outlive a located lock-up under the variable-step
+// solvers. Disc clutch (wp13 parameters, P 200 kPa, no torques, w_in_o 100): t* = 100 / (Tk (1/J_in + 1/J_out)) = 0.04386 s;
+// after t* both sides turn at 0.2 * 100 / 0.3 = 66.667 rad/s with Locked = 1, live ode45 / ode23 at output step 0.01 as well.
+describe('XBV-187: clutch lock-up under the variable-step solvers (live)', () => {
+  const P = { muk: 0.3, mus: 0.35, Ro: 0.15, Ri: 0.1, Nf: 2, Ap: 0.01, J_in: 0.2, J_out: 0.1, b_in: 0, b_out: 0, omega_tol: 1e-2, w_in_o: 100, w_out_o: 0 };
+  const disc: ModelSpec = {
+    blocks: [{ id: 'b', type: 'PT_DISC_CLUTCH', params: P }, { id: 'p', type: 'Constant', params: { value: 2e5 } }, { id: 'ti', type: 'Constant', params: { value: 0 } }, { id: 'tl', type: 'Constant', params: { value: 0 } }],
+    wires: ['p.out -> b.P', 'ti.out -> b.InTrq', 'tl.out -> b.LoadTrq'],
+  };
+  for (const solver of ['ode45', 'ode23', 'ode23tb']) {
+    for (const dt of [0.01, 0.001]) {
+      it(`PT_DISC_CLUTCH ${solver} output step ${dt}: Locked = 1 and both speeds 66.667 at t = 0.05`, () => {
+        const r = runModel(buildModel(disc), { solver, dt, stopTime: 0.05, probes: ['b.Locked', 'b.InSpd', 'b.OutSpd'], relTol: 1e-6, absTol: 1e-9 });
+        expect(r.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
+        expect(Number(r.signals['b.Locked'].at(-1))).toBe(1);
+        expect(Number(r.signals['b.InSpd'].at(-1))).toBeCloseTo(200 / 3, 3);
+        expect(Number(r.signals['b.OutSpd'].at(-1))).toBeCloseTo(200 / 3, 3);
+      }, 60_000);
+    }
+  }
+  it('a restored disc-clutch state without the held direction does not give NaN torque', () => {
+    const b = BLOCK_LIBRARY['PT_DISC_CLUTCH']('b', P) as unknown as { state: Record<string, unknown>; execute: (i: unknown[], p: unknown, s: unknown, t: number) => { outputs: unknown[] } };
+    const legacy = Object.fromEntries(Object.entries(b.state).filter(([k]) => !['lk', 'sp', 'hs', 'hd'].includes(k)));
+    const out = b.execute([2e5, 0, 0], (b as unknown as { params: unknown }).params, legacy, 0).outputs;
+    for (const v of out.slice(1)) expect(Number.isNaN(Number(v))).toBe(false);
+  });
 });

@@ -309,7 +309,12 @@ export class AdaptiveSolver {
         if (hTry < h) hNew = Math.max(hNew, Math.min(h, cfg.hMax));
         h = hNew;
       }
-      if (sliver && reachesTarget) event = null;
+      if (sliver && reachesTarget) {
+        event = null;
+        // The step that ends at the located event is a major step: modes held between major steps (clutch lock, friction
+        // direction ...) are decided here. Batch runs do it at the start of the next loop pass.
+        if (!cfg.batch && t < tEnd) { engine.computeOutputs(t); engine.updateDiscreteStates(t); }
+      }
       k1 = tr.stages[lastStage];
       majorDone = false;
       k1Valid = cfg.batch; // FSAL in batch runs; live steps recompute the first stage at the new base
