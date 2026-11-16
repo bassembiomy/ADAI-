@@ -161,3 +161,37 @@ describe('XBV-193: embedded refusal of vector slew rates names the cause', () =>
     expect(errs.map((d) => d.message).join(' | ')).toMatch(/vector|scalar/i);
   });
 });
+
+// XBV-194: a one-element array slew rate [2] is the scalar 2 on every path (MATLAB semantics). The embedded interpreter
+// (and, through the same parameter reader, generated C) must use rate 2, not fall back to the default 1: rising 2 /s,
+// Ts 0.1, u = 10 gives 0.2, 0.4, 0.6, equal to the canvas.
+describe('XBV-194: one-element array slew rates are scalars in the embedded path', () => {
+  for (const rate of [2, [2], '[2]'] as const) {
+    it(`risingSlewRate ${JSON.stringify(rate)}: embedded gives 0.2, 0.4, 0.6 like the canvas`, () => {
+      const spec: ModelSpec = {
+        blocks: [{ id: 'c', type: 'Constant', params: { value: 10 } }, { id: 'r', type: 'RATE_LIMITER', params: { risingSlewRate: rate, fallingSlewRate: -2, sampleTime: 0.1 } }],
+        wires: ['c.out -> r.u'],
+      };
+      const emb = runEmbedded(spec, { solver: 'discrete', dt: 0.1, steps: 3, probes: ['r.y'] });
+      expect(emb.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
+      emb.signals['r.y'].forEach((v, k) => expect(v[0]).toBeCloseTo([0.2, 0.4, 0.6][k], 12));
+      const canvas = runModel(buildModel(spec), { solver: 'discrete', dt: 0.1, stopTime: 0.2, probes: ['r.y'] });
+      canvas.signals['r.y'].forEach((v, k) => expect(Number(Array.isArray(v) ? v[0] : v)).toBeCloseTo([0.2, 0.4, 0.6][k], 12));
+    });
+  }
+});
+
+// XBV-196: an empty slew rate is refused with a message that says it is empty (not 'vector').
+describe('XBV-196: empty slew rate message', () => {
+  for (const rate of [[], '[]'] as const) {
+    it(`risingSlewRate ${JSON.stringify(rate)}: an error whose message says empty`, () => {
+      const r = runEmbedded({
+        blocks: [{ id: 'c', type: 'Constant', params: { value: 10 } }, { id: 'r', type: 'RATE_LIMITER', params: { risingSlewRate: rate, fallingSlewRate: -1, sampleTime: 0.1 } }],
+        wires: ['c.out -> r.u'],
+      }, { solver: 'discrete', dt: 0.1, steps: 2, probes: ['r.y'] });
+      const msgs = r.diagnostics.filter((d) => d.severity === 'error').map((d) => d.message).join(' | ');
+      expect(msgs).toMatch(/empty/i);
+      expect(msgs).not.toMatch(/supports only scalar slew rates/i);
+    });
+  }
+});
