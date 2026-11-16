@@ -224,6 +224,15 @@ const PINNED_912: string[] = []; // XBV-136 fixed in WP-21 batch C
 const PINNED_913_GROUPED: string[] = [];
 const PINNED_913 = PINNED_913_GROUPED.flatMap((g) => { const [t, ps] = g.split(': '); return ps.split(' ').map((p) => `${t}.${p}`); });
 
+/** True when v is inside the PT_* spec range of t.n (or the parameter has no spec range). */
+const ptInRange = (t: string, n: string, v: number) => {
+  const p = getPowertrainSpec(t)?.params.find((x) => x.name === n);
+  if (!p || p.kind !== 'scalar') return true;
+  if (p.min !== undefined && (p.minExclusive ? v <= p.min : v < p.min)) return false;
+  if (p.max !== undefined && (p.maxExclusive ? v >= p.max : v > p.max)) return false;
+  return true;
+};
+
 describe('properties panel over every palette block', () => {
   const pairs: [string, string, any][] = PALETTE_TYPES.flatMap((t) => paramsOf(t).map(([n, v]) => [t, n, v] as [string, string, any]));
   const numeric = pairs.filter(([t, n, v]) => typeof v === 'number' && !isEnum(t, n));
@@ -256,9 +265,13 @@ describe('properties panel over every palette block', () => {
       for (const [, n] of mine) {
         const ed = editorFor(run.container, t, n) as HTMLInputElement | null;
         if (!ed || ed.tagName !== 'INPUT') { bad.push(`${t}.${n}`); continue; }
+        // WP-21 J2 (XBV-182): a PT_* parameter with a spec range stores only in-range values; an out-of-range value is
+        // never committed (Simulink keeps the previous dialog value), so for it the check is that v was not stored.
         fireEvent.change(ed, { target: { value: '99' } });
         const ok = [0, -2.5, 0.125].every((v) => {
+          const before = run.calls.length;
           fireEvent.change(ed, { target: { value: String(v) } });
+          if (!ptInRange(t, n, v)) return !run.calls.slice(before).some((c) => c?.params && Object.is(c.params[n], v));
           const r = lastParam(run.calls, n);
           return r.found && Object.is(r.value, v);
         });
@@ -575,3 +588,29 @@ describe('XBV-182: powertrain parameter ranges are enforced in the panel', () =>
     expect(bad).toEqual([]);
   }, 240_000);
 });
+
+// XBV-182 follow-up (WP-21 J2 verifier): typing an out-of-range value keystroke by keystroke never commits it, and on blur
+// the value stored before the edit is kept (Simulink keeps the previous dialog value), with the text and its error shown.
+describe('XBV-182: an out-of-range entry keeps the value stored before the edit', () => {
+  it('PT_AMBIENT.RH (range 0..100) at 50: typing 1, 15, 150 then blur stores 50 in the end and never 150', () => {
+    const spec = getPowertrainSpec('PT_AMBIENT')!.params.find((x) => x.name === 'RH')!;
+    expect(spec.max).toBe(100);
+    const block = make('PT_AMBIENT', { RH: 50 });
+    const calls: any[] = [];
+    let current = block;
+    const onUpdate = vi.fn((_id: string, d: any) => { calls.push(d); current = { ...current, ...d }; });
+    const { container, rerender } = render(<XbridgesPropertiesPanel block={current} onUpdate={onUpdate} onClose={vi.fn()} availableVariables={[]} />);
+    const ed = () => editorFor(container, 'PT_AMBIENT', 'RH') as HTMLInputElement;
+    for (const text of ['1', '15', '150']) {
+      fireEvent.change(ed(), { target: { value: text } });
+      rerender(<XbridgesPropertiesPanel block={current} onUpdate={onUpdate} onClose={vi.fn()} availableVariables={[]} />);
+    }
+    fireEvent.blur(ed());
+    rerender(<XbridgesPropertiesPanel block={current} onUpdate={onUpdate} onClose={vi.fn()} availableVariables={[]} />);
+    expect(calls.some((c) => c?.params?.RH === 150)).toBe(false);
+    expect(current.params.RH).toBe(50);
+    expect(ed().value).toBe('150');
+    expect((ed().parentElement as HTMLElement).querySelector('[role="alert"]')).toBeTruthy();
+  });
+});
+

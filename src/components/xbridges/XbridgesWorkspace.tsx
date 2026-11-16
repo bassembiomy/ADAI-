@@ -1442,8 +1442,20 @@ export const XbridgesWorkspace: React.FC<{
   const [solverOptionTexts, setSolverOptionTexts] = useState<SolverOptionTexts>(() => solverOptionTextsFrom(initialSimConfig));
   const setSolverOptionText = (key: keyof SolverOptionTexts, value: string) =>
     setSolverOptionTexts(prev => ({ ...prev, [key]: normalizeNumerals(value).replace(/[^0-9a-zA-Z.+-]/g, '') }));
-  const simInputsRef = React.useRef({ solver: solverType as string, start: startTimeInput, stop: stopTimeInput, step: stepSizeInput, options: solverOptionTexts });
-  simInputsRef.current = { solver: solverType, start: startTimeInput, stop: stopTimeInput, step: stepSizeInput, options: solverOptionTexts };
+  // An invalid Max / Min step size is not stored: the saved model keeps the last valid text of the field (XBV-037).
+  const lastValidStepTextsRef = React.useRef({ maxStep: solverOptionTexts.maxStep, minStep: solverOptionTexts.minStep });
+  {
+    const badStep = invalidSolverOptionTexts('ode45', solverOptionTexts);
+    if (!badStep.includes('maxStep')) lastValidStepTextsRef.current.maxStep = solverOptionTexts.maxStep;
+    if (!badStep.includes('minStep')) lastValidStepTextsRef.current.minStep = solverOptionTexts.minStep;
+  }
+  const savedOptionTexts: SolverOptionTexts = {
+    ...solverOptionTexts,
+    maxStep: invalidSolverOptionTexts('ode45', solverOptionTexts).includes('maxStep') ? lastValidStepTextsRef.current.maxStep : solverOptionTexts.maxStep,
+    minStep: invalidSolverOptionTexts('ode45', solverOptionTexts).includes('minStep') ? lastValidStepTextsRef.current.minStep : solverOptionTexts.minStep,
+  };
+  const simInputsRef = React.useRef({ solver: solverType as string, start: startTimeInput, stop: stopTimeInput, step: stepSizeInput, options: savedOptionTexts });
+  simInputsRef.current = { solver: solverType, start: startTimeInput, stop: stopTimeInput, step: stepSizeInput, options: savedOptionTexts };
   const optionGroup = solverOptionGroup(solverType);
   const invalidOptionKeys = invalidSolverOptionTexts(solverType, solverOptionTexts);
   const startTimeParsed = parseTimeInput(startTimeInput);
@@ -1452,7 +1464,7 @@ export const XbridgesWorkspace: React.FC<{
   const startTimeInvalid = startTimeParsed === null || !Number.isFinite(startTimeParsed);
   const stopTimeInvalid = stopTimeParsed === null || (!startTimeInvalid && stopTimeParsed < (startTimeParsed as number));
   const fixedStepInvalid = fixedStepParsed === null || (fixedStepParsed !== 'auto' && !(Number.isFinite(fixedStepParsed) && fixedStepParsed > 0));
-  const simulationKey = `${solverType}|${startTimeInput}|${stopTimeInput}|${stepSizeInput}|${solverOptionTexts.relative}|${solverOptionTexts.absolute}|${solverOptionTexts.extrapolationOrder}|${solverOptionTexts.newtonIterations}`;
+  const simulationKey = `${solverType}|${startTimeInput}|${stopTimeInput}|${stepSizeInput}|${solverOptionTexts.relative}|${solverOptionTexts.absolute}|${solverOptionTexts.extrapolationOrder}|${solverOptionTexts.newtonIterations}|${solverOptionTexts.maxStep}|${solverOptionTexts.minStep}`;
   const simLimitRef = React.useRef<number | null>(null);
   const liveStepRef = React.useRef<number | null>(null);
   // Canvas time base (plan 5.1): output step n starts at start + n * step (a product, not an accumulated sum).
@@ -3686,6 +3698,38 @@ export const XbridgesWorkspace: React.FC<{
                   className={`w-20 bg-[#0a0a0a] border rounded-xl px-3 py-1.5 text-[10px] font-mono font-bold text-[#e0e0e0] focus:outline-none transition-all hover:bg-[#222] disabled:opacity-50 ${invalidOptionKeys.includes('absolute') ? 'border-red-500 focus:border-red-500' : 'border-[#333] focus:border-emerald-500'}`}
                 />
               </div>
+              <div className="flex flex-col">
+                <span className="text-[8px] text-slate-400 font-black uppercase tracking-widest mb-1">Max Step</span>
+                <input
+                  type="text"
+                  value={solverOptionTexts.maxStep}
+                  onChange={e => setSolverOptionText('maxStep', e.target.value)}
+                  disabled={activeSimulating}
+                  placeholder="auto"
+                  title={invalidOptionKeys.includes('maxStep') ? 'Max step size must be a number greater than 0 (or empty for auto)' : 'Max step size of the variable-step solver (empty = auto)'}
+                  aria-invalid={invalidOptionKeys.includes('maxStep')}
+                  className={`w-20 bg-[#0a0a0a] border rounded-xl px-3 py-1.5 text-[10px] font-mono font-bold text-[#e0e0e0] focus:outline-none transition-all hover:bg-[#222] disabled:opacity-50 ${invalidOptionKeys.includes('maxStep') ? 'border-red-500 focus:border-red-500' : 'border-[#333] focus:border-emerald-500'}`}
+                />
+                {invalidOptionKeys.includes('maxStep') && (
+                  <span role="alert" className="text-[8px] text-red-400 mt-0.5">Must be greater than 0 or empty</span>
+                )}
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[8px] text-slate-400 font-black uppercase tracking-widest mb-1">Min Step</span>
+                <input
+                  type="text"
+                  value={solverOptionTexts.minStep}
+                  onChange={e => setSolverOptionText('minStep', e.target.value)}
+                  disabled={activeSimulating}
+                  placeholder="auto"
+                  title={invalidOptionKeys.includes('minStep') ? 'Min step size must be a number greater than 0 and not greater than Max step size (or empty for auto)' : 'Min step size of the variable-step solver (empty = auto)'}
+                  aria-invalid={invalidOptionKeys.includes('minStep')}
+                  className={`w-20 bg-[#0a0a0a] border rounded-xl px-3 py-1.5 text-[10px] font-mono font-bold text-[#e0e0e0] focus:outline-none transition-all hover:bg-[#222] disabled:opacity-50 ${invalidOptionKeys.includes('minStep') ? 'border-red-500 focus:border-red-500' : 'border-[#333] focus:border-emerald-500'}`}
+                />
+                {invalidOptionKeys.includes('minStep') && (
+                  <span role="alert" className="text-[8px] text-red-400 mt-0.5">Must be greater than 0 and not above Max step</span>
+                )}
+              </div>
                 </>
               )}
               {optionGroup === 'extrapolation' && (
@@ -4119,6 +4163,12 @@ export const XbridgesWorkspace: React.FC<{
               availableBlocks={panelBlocks}
               onExportDoeData={onExportDoeData}
               onInvalidParameter={onInvalidParameter}
+              invalidParameterTexts={(() => {
+                const prefix = `${selectedNode.id}\u0000`;
+                const out: Record<string, string> = {};
+                for (const [id, text] of Object.entries(invalidParamEditsRef.current)) if (id.startsWith(prefix)) out[id.slice(prefix.length)] = text;
+                return out;
+              })()}
               onClose={() => setSelectedNodeId(null)}
               isCollapsed={isPropsCollapsed}
               onCollapseToggle={setIsPropsCollapsed}

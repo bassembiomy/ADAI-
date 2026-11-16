@@ -10,15 +10,22 @@ import { getPowertrainSpec } from '../../engine/xbridges/powertrain';
 import type { ParameterKind } from '../../engine/xbridges/parameterEvaluation';
 
 /**
- * Kind of a powertrain (PT_*) scalar parameter from its spec (ptSpec.ts): 0 excluded -> positive, 0 included -> nonnegative,
- * other or no bounds -> any finite number. The block itself checks the exact range and reports BLOCK_RUNTIME_FAULT.
+ * Kind of a powertrain (PT_*) scalar parameter from its spec (ptSpec.ts): the full range (min / max, each inclusive or
+ * exclusive) is enforced; no bounds -> any finite number. Plain 0-exclusive and 0-inclusive bounds keep their short kinds.
  */
 function powertrainParameterKind(type: string, key: string): ParameterKind | undefined {
   const ps = getPowertrainSpec(type)?.params.find(p => p.name === key);
   if (!ps || ps.kind !== 'scalar') return undefined;
-  if (ps.min === 0 && ps.minExclusive) return { kind: 'positive' };
-  if (ps.min === 0) return { kind: 'nonnegative' };
-  return { kind: 'number' };
+  if (ps.max === undefined) {
+    if (ps.min === 0 && ps.minExclusive) return { kind: 'positive' };
+    if (ps.min === 0) return { kind: 'nonnegative' };
+  }
+  if (ps.min === undefined && ps.max === undefined) return { kind: 'number' };
+  return {
+    kind: 'range',
+    ...(ps.min !== undefined ? { min: ps.min, minExclusive: !!ps.minExclusive } : {}),
+    ...(ps.max !== undefined ? { max: ps.max, maxExclusive: !!ps.maxExclusive } : {}),
+  };
 }
 import { DoeSweeperPanel } from './powertrain/DoeSweeperPanel';
 
@@ -36,6 +43,8 @@ interface Props {
   onExportDoeData?: (headers: string[], data: number[][]) => void;
   /** Reports invalid text left in a parameter editor (text) or its correction (null); the stored value is unchanged. */
   onInvalidParameter?: (blockId: string, key: string, text: string | null) => void;
+  /** Invalid texts recorded earlier for this block (parameter key -> text); shown again, with the error, on reselection. */
+  invalidParameterTexts?: Record<string, string>;
 }
 
 const normalizeNumerals = (val: string) => {
@@ -62,7 +71,8 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
   requirementAssignments,
   availableBlocks,
   onExportDoeData,
-  onInvalidParameter
+  onInvalidParameter,
+  invalidParameterTexts
 }) => {
   if (!block) return null;
 
@@ -85,14 +95,18 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
   const [localLabel, setLocalLabel] = useState(block.label || block.type);
   const [localParams, setLocalParams] = useState(JSON.stringify(block.params, null, 2));
   // Local string state for numeric param inputs to allow decimal mid-typing (e.g. "0." → "0.1")
-  const [localInputValues, setLocalInputValues] = useState<Record<string, string>>({});
+  const [localInputValues, setLocalInputValues] = useState<Record<string, string>>(() => ({ ...(invalidParameterTexts ?? {}) }));
+
+  // Last in-range value of a bounded (range) parameter while its text is being edited.
+  const lastInRangeRef = React.useRef<Record<string, any>>({});
 
   // Sync when block changes
   useEffect(() => {
     setLocalLabel(block.label || block.type);
     setLocalParams(JSON.stringify(block.params, null, 2));
+    lastInRangeRef.current = {};
     // Reset local string inputs when switching blocks
-    setLocalInputValues({});
+    setLocalInputValues({ ...(invalidParameterTexts ?? {}) });
     setIsCollapsed(false); // Auto-expand when a new block is selected
     if (onCollapseToggle) {
       onCollapseToggle(false);
@@ -869,7 +883,8 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
               }
 
               // Simulink-style check of the entered text: the value is still stored, the model refuses to run until it is fixed.
-              const paramKind = parameterKind(block.type, key) ?? powertrainParameterKind(block.type, key);
+              const ptKind = powertrainParameterKind(block.type, key);
+              const paramKind = parameterKind(block.type, key) ?? ptKind;
               const shownText = localInputValues[key] !== undefined ? localInputValues[key] : String(displayValue);
               const paramCheck = paramKind ? evaluateParameter(shownText, paramKind) : null;
               const paramError = paramCheck && !paramCheck.ok ? paramCheck.reason : null;
@@ -1251,6 +1266,15 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
                         // 3. Commit valid scalar numbers to allow real-time tuning
                         if (!isNaN(Number(trimmedRaw))) {
                           const val = Number(trimmedRaw);
+                          // A bounded (range) parameter keeps the value stored before the edit; a value outside the range is never committed.
+                          if (ptKind) {
+                            if (!(key in lastInRangeRef.current)) lastInRangeRef.current[key] = { before: block.params[key], committed: false };
+                            if (!evaluateParameter(trimmedRaw, ptKind).ok) {
+                              onInvalidParameter?.(block.id, key, raw);
+                              return;
+                            }
+                            lastInRangeRef.current[key].committed = true;
+                          }
                           let finalVal = val;
                           if (isObjectParam) {
                             finalVal = { ...block.params[key], value: val };
@@ -1276,12 +1300,20 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
                         // Invalid text in a numeric parameter must not overwrite the stored number: the error stays shown
                         // and the stored value is kept until the text is valid (Simulink refuses a bad dialog value).
                         const notNumeric = typeof val === 'string' && !(trimmedRaw.startsWith('[') || trimmedRaw.startsWith('{'));
+                        const outOfRange = !!ptKind && !notNumeric && !evaluateParameter(raw, ptKind).ok;
                         const rejected = notNumeric && (paramKind ? !evaluateParameter(raw, paramKind).ok : typeof displayValue === 'number');
-                        if (rejected) {
+                        if (rejected || outOfRange) {
+                          // Restore the pre-edit value when an in-range prefix replaced it while typing.
+                          const edit = lastInRangeRef.current[key];
+                          if (ptKind && edit?.committed) {
+                            onUpdate(block.id, { params: { ...block.params, [key]: edit.before } });
+                            edit.committed = false;
+                          }
                           setLocalInputValues(prev => ({ ...prev, [key]: raw }));
                           onInvalidParameter?.(block.id, key, raw);
                           return;
                         }
+                        delete lastInRangeRef.current[key];
                         onInvalidParameter?.(block.id, key, null);
                         let finalVal = val;
                         if (isObjectParam) {
