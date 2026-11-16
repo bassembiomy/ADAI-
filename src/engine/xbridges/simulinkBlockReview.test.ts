@@ -58,9 +58,10 @@ describe('R3 Rate Limiter: slew rates are per second (Simulink)', () => {
     const y = (fixedStep: number) => chain(b('Constant', 'src', { value: 10 }), b('RATE_LIMITER', 'r', { risingSlewRate: 1, fallingSlewRate: -1 }), 'u', 'y', { fixedStep });
     expect(Math.abs(y(0.01) - y(0.001))).toBeLessThan(0.02);
   });
-  it('explicit discrete sample time Ts = 0.1: slew per second, updated at hits', () => {
+  // D12 (y(-1) = IC): hits at t = 0, 0.1, ..., 1.0 each add rising * Ts = 0.1, so y(1) = 11 * 0.1 = 1.1 (XBV-191, WP-21 D2).
+  it('explicit discrete sample time Ts = 0.1: slew per second, updated at hits (y(1) = 1.1 under D12)', () => {
     expect(chain(b('Constant', 'src', { value: 10 }), b('RATE_LIMITER', 'r', { risingSlewRate: 1, fallingSlewRate: -1, sampleTime: 0.1 }), 'u', 'y', {}))
-      .toBeCloseTo(1, 1);
+      .toBeCloseTo(1.1, 9);
   });
 });
 
