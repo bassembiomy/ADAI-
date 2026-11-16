@@ -14,6 +14,7 @@ import { join } from 'node:path';
 import { XbridgesEngine } from '../XbridgesEngine';
 import { Solvers } from '../Solvers';
 import { buildModel, runModel, type ModelSpec } from '../testkit';
+import { BLOCK_LIBRARY } from '../BlockDefinitions';
 
 const ROBERTSON: ModelSpec = {
   blocks: [
@@ -95,4 +96,32 @@ describe('XBV-180: parameters that are not divisors accept 0', () => {
   it('IM_FOC_CONTROL.Lm = 0 is still refused (divisor, XBV-153)', () => {
     expect(paramErrors('IM_FOC_CONTROL', { Lm: 0 }).length).toBeGreaterThan(0);
   });
+});
+
+// XBV-187 (WP-21 E5 rework, D15): with fixed-step solvers a clutch locks at the major step where the slip has changed sign
+// since the previous major step (or is within omega_tol), with the holding torque within the static capacity, as
+// Simulink's clutch models do without zero-crossing detection. Reference: the ode23tb lock time (event located).
+describe('XBV-187: clutch lock-up with fixed-step solvers', () => {
+  const lockTime = (r: { t: number[]; signals: Record<string, unknown[]> }) => {
+    const w = r.signals['b.EngSpd'].map(Number);
+    const j = w.findIndex((_, k) => w.slice(k).every((x) => Math.abs(x - w.at(-1)!) < 1e-9));
+    return j >= 0 && j < w.length - 1 ? r.t[j] : Number.NaN;
+  };
+  for (const type of ['PT_AUTOMATED_MANUAL_TRANSMISSION', 'PT_DUAL_CLUTCH_TRANSMISSION']) {
+    const proto = BLOCK_LIBRARY[type]('b', {});
+    const vals = [1, 50, 1];
+    const spec: ModelSpec = {
+      blocks: [{ id: 'b', type }, ...proto.inputs.map((_p: { id: string }, i: number) => ({ id: `k${i}`, type: 'Constant', params: { value: vals[i] ?? 1 } }))],
+      wires: proto.inputs.map((p: { id: string }, i: number) => `k${i}.out -> b.${p.id}`),
+    };
+    for (const dt of [1e-3, 1e-4]) {
+      it(`${type} (Teng 50): rk4 ${dt} locks within 2 steps of the ode23tb lock time`, () => {
+        const ref = lockTime(runModel(buildModel(spec), { solver: 'ode23tb', dt: 1e-4, stopTime: 0.05, probes: ['b.EngSpd'], relTol: 1e-6, absTol: 1e-9 }));
+        expect(Number.isFinite(ref)).toBe(true);
+        const r = runModel(buildModel(spec), { solver: 'rk4', dt, stopTime: 0.05, probes: ['b.EngSpd'] });
+        expect(r.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
+        expect(Math.abs(lockTime(r) - ref)).toBeLessThanOrEqual(2 * dt + 1e-12);
+      }, 120_000);
+    }
+  }
 });
