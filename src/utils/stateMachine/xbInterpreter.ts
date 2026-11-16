@@ -424,6 +424,7 @@ const relayOutputValue = (runtime: XBRuntime, operation: XBSemanticOperation): n
 // Shift counts follow Simulink and the canvas (XBV-161): a count >= 32 shifts every bit out (0, or -1 for a negative
 // value under the arithmetic right shift), a negative count shifts the other way. int32 two's complement (D10).
 const SHIFT_WORD_LENGTH = 32;
+// XBV-172 (D11): a non-finite operand gives NaN (not ToInt32(Inf) = 0); the non-finite write raises the numeric fault.
 const shiftLeft32 = (value: number, count: number): number => {
   const c = Math.trunc(count);
   if (!Number.isFinite(value) || !Number.isFinite(count)) return Number.NaN;
@@ -435,22 +436,6 @@ const shiftRight32 = (value: number, count: number): number => {
   if (!Number.isFinite(value) || !Number.isFinite(count)) return Number.NaN;
   if (c < 0) return shiftLeft32(value, -c);
   return c >= SHIFT_WORD_LENGTH ? ((value | 0) < 0 ? -1 : 0) : (value >> c) | 0;
-};
-
-// XBV-172 (D11): a non-finite operand of a shift is a numeric fault, like the canvas block error (not ToInt32(Inf) = 0). The
-// result is NaN, which the non-finite write raises as the fault. Under the 'escalate' policy the embedded step is refused with
-// an error as well (a thrown Error, the same channel as the other refused evaluations, latched by the state-machine
-// interpreter as an evaluation error).
-const requireFiniteShiftOperands = (
-  runtime: XBRuntime,
-  operation: XBSemanticOperation,
-  inputs: readonly (readonly XBScalar[])[],
-): void => {
-  if (runtime.ir.policy.numericFault !== 'escalate') return;
-  const finite = (values: readonly XBScalar[] | undefined) => (values ?? []).every((value) => Number.isFinite(Number(value)));
-  if (!finite(inputs[0]) || !finite(inputs[1])) {
-    throw new Error(`X-Bridges numeric fault (non-finite) in ${operation.type} '${operation.id}': shift operands must be finite`);
-  }
 };
 
 const matrixShape = (
@@ -818,10 +803,8 @@ const evaluateDirectOperation = (
     case 'BitwiseNOT':
       return [unary(inputs[0] ?? [0], (value) => (~Number(value)) | 0)];
     case 'ShiftLeft':
-      requireFiniteShiftOperands(runtime, operation, inputs);
       return [binary(inputs[0] ?? [0], inputs[1] ?? [0], (left, right) => shiftLeft32(Number(left), Number(right)))];
     case 'ShiftRight':
-      requireFiniteShiftOperands(runtime, operation, inputs);
       return [binary(inputs[0] ?? [0], inputs[1] ?? [0], (left, right) => shiftRight32(Number(left), Number(right)))];
     case 'SWITCH': {
       const getSignal = (kw: string[]) => {

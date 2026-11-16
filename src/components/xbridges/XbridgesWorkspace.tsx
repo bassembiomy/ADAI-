@@ -105,6 +105,7 @@ import { PtLibraryIcon } from './powertrain/PtSymbol';
 import { getPowertrainSpec } from '../../engine/xbridges/powertrain/index';
 import { XbridgesEngine } from '../../engine/xbridges/XbridgesEngine';
 import { liveStep as liveSolverStep } from '../../engine/xbridges/liveStep';
+import { applyInportOverrides } from '../../engine/xbridges/liveStep';
 import { ModelDiagnostic } from '../../engine/xbridges/types';
 import { ResizablePanel } from '../common/ResizablePanel';
 import { XbridgesStatusBar, type XbRunStatus } from './diagnostics/XbridgesStatusBar';
@@ -2199,12 +2200,10 @@ export const XbridgesWorkspace: React.FC<{
                     : paramUpdates[node.id];
                   engineRef.current!.applyParameterUpdates(node.id, updates);
                 }
-                if (inportOverrides[node.id] !== undefined) {
-                  engineRef.current!.setSignalValue(node.id, 'out', inportOverrides[node.id]);
-                  if (block.params) { block.params.value = inportOverrides[node.id]; block.params.smOverride = true; }
-                }
               }
             });
+
+            applyInportOverrides(engineRef.current, inportOverrides);
 
             const stepped = stepLiveSolver(engineRef.current, solverType, timeRef.current, stepNow);
 

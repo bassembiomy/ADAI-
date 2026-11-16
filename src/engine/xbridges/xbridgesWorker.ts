@@ -1,5 +1,6 @@
 import { XbridgesEngine } from './XbridgesEngine';
 import { liveStep } from './liveStep';
+import { applyInportOverrides } from './liveStep';
 import type { SolverOptions } from './types';
 import type {
   XbridgesWorkerRequest,
@@ -97,17 +98,8 @@ export function handleXbridgesWorkerMessage(request: XbridgesWorkerRequest): Xbr
       }
     }
 
-    // Inport signal value overrides (e.g. state machine variables)
-    if (request.inportOverrides) {
-      for (const [id, val] of Object.entries(request.inportOverrides)) {
-        workerEngine.setSignalValue(id, 'out', val);
-        const block = workerEngine.getBlock(id);
-        if (block && block.params) {
-          block.params.value = val;
-          block.params.smOverride = true;
-        }
-      }
-    }
+    // Inport signal value overrides (e.g. state machine variables): top-level Inports only (liveStep.ts)
+    applyInportOverrides(workerEngine, request.inportOverrides);
 
     // Restore state from snapshot if provided
     if (request.engineSnapshot?.blockStates) {
