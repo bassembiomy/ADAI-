@@ -165,13 +165,20 @@ interface ClutchEval {
 
 interface ClutchState { w_in: number; w_out: number; lk: number; sp: number; hd: number; hs: number }
 
+/** A restored state without the discrete fields starts as an initial state: slipping, nothing recorded, no held direction. */
+const finiteOr = (v: unknown, d: number): number => (typeof v === 'number' && Number.isFinite(v) ? v : d);
+function withClutchDefaults(s: ClutchState): ClutchState {
+  return { w_in: s.w_in, w_out: s.w_out, lk: finiteOr(s.lk, 0), sp: finiteOr(s.sp, 0), hs: finiteOr(s.hs, 0), hd: finiteOr(s.hd, 0) };
+}
+
 /**
  * Lock mode (lk), previous major-step slip (sp, hs = 1 once recorded) and the friction direction while slipping (hd) are
  * discrete states, updated only at major steps (clutchUpdate): fixed-step solvers do not locate the zero crossing of the slip,
  * so the clutch locks at the major step where the slip changed sign since the previous one or is within omega_tol, with the
  * holding torque within the static capacity (XBV-187). Minor steps hold the mode.
  */
-function clutchEval(ins: XValue[], p: Record<string, any>, s: ClutchState): ClutchEval | string {
+function clutchEval(ins: XValue[], p: Record<string, any>, s0: ClutchState): ClutchEval | string {
+  const s = withClutchDefaults(s0);
   const P = num(ins[0]), Tin = num(ins[1]), Tl = num(ins[2]);
   if (![P, Tin, Tl, s.w_in, s.w_out].every(Number.isFinite)) return 'Disc clutch inputs must be finite';
   if (!(p.Ro > p.Ri)) return 'Disc clutch needs Ro > Ri';
@@ -197,7 +204,8 @@ function clutchEval(ins: XValue[], p: Record<string, any>, s: ClutchState): Clut
 }
 
 /** Major-step decision of the lock mode: lock, hold or break away. Pure; returns the new state. */
-function clutchUpdate(ins: XValue[], p: Record<string, any>, s: ClutchState): ClutchState {
+function clutchUpdate(ins: XValue[], p: Record<string, any>, s0: ClutchState): ClutchState {
+  const s = withClutchDefaults(s0);
   const P = num(ins[0]), Tin = num(ins[1]), Tl = num(ins[2]);
   if (![P, Tin, Tl, s.w_in, s.w_out].every(Number.isFinite) || !(p.Ro > p.Ri)) return s;
   const Reff = (2 / 3) * (p.Ro ** 3 - p.Ri ** 3) / (p.Ro ** 2 - p.Ri ** 2);
