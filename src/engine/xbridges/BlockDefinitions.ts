@@ -284,6 +284,13 @@ const divideByZeroDiagnostic = (divisors: any[]): { diagnostic?: BlockDiagnostic
     ? { diagnostic: { code: 'DIVIDE_BY_ZERO', severity: 'warning', message: 'division by zero (IEEE result: Inf or NaN).' } }
     : {};
 
+/** DOE_MODEL faults that are typed error diagnostics (XBV-034); the evaluator's other codes stay inside the block fault. */
+const DOE_TYPED_FAULT_CODES = new Set(['EXECUTION_EXCEPTION', 'INVALID_GMDH_LAYERS', 'INVALID_TAGUCHI_LEVELS', 'NO_MODEL_CONFIGURED', 'NON_FINITE_INPUT']);
+const doeFaultDiagnostic = (d: any): { diagnostic?: BlockDiagnostic } =>
+  d && typeof d.code === 'string' && DOE_TYPED_FAULT_CODES.has(d.code)
+    ? { diagnostic: { code: d.code, severity: 'error', message: String(d.message ?? d.code) } }
+    : {};
+
 const isBusObject = (v: any): boolean => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 /**
@@ -2163,12 +2170,12 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     id, type: 'ROBOT_VACUUM_3D_SCENE_VIEW', params: {},
     isStateful: true,
     inputs: [
-      createPort('x', 'X', 'input', 0, 'left', 'control'),
-      createPort('y', 'Y', 'input', 0, 'left', 'control'),
-      createPort('theta', 'θ', 'input', 0, 'left', 'control'),
+      createPort('x', 'X', 'input', 0, 'left', 'continuous'),
+      createPort('y', 'Y', 'input', 0, 'left', 'continuous'),
+      createPort('theta', 'θ', 'input', 0, 'left', 'continuous'),
       createPort('room_colors', 'Room Colors', 'input', ['#10b981', '#3b82f6', '#f59e0b', '#ef4444'], 'bottom', 'vector'),
-      createPort('battery', 'Battery Level', 'input', 100, 'bottom', 'control'),
-      createPort('dust', 'Dustbin Level', 'input', 0, 'bottom', 'control'),
+      createPort('battery', 'Battery Level', 'input', 100, 'bottom', 'continuous'),
+      createPort('dust', 'Dustbin Level', 'input', 0, 'bottom', 'continuous'),
       createPort('grid', 'Grid', 'input', Array.from({ length: 30 }, () => Array(30).fill(0)), 'bottom', 'matrix'),
       createPort('lidar_ranges', 'Ranges', 'input', Array(45).fill(0), 'bottom', 'vector'),
       createPort('astar_path', 'A* Path', 'input', [], 'bottom', 'vector')
@@ -2687,6 +2694,9 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     };
   },
 
+  /** Legacy summing-junction type: the Sum block under its older type name (the embedded path generates code for it, XBV-006). */
+  'SUM_JUNCTION': (id, params) => ({ ...BLOCK_LIBRARY['Sum'](id, params), type: 'SUM_JUNCTION' }),
+
   'VectorAdd': (id, params) => {
     const numInputs = params?.numInputs || 2;
     return {
@@ -3177,7 +3187,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       frequency: params.frequency !== undefined ? params.frequency : 50,
       carrierType: params.carrierType || 'triangle',
     },
-    inputs: [createPort('duty', 'Duty Cycle (0–1)', 'input', 0.5, 'left', 'control')],
+    inputs: [createPort('duty', 'Duty Cycle (0–1)', 'input', 0.5, 'left', 'continuous')],
     outputs: [createPort('pwm', 'PWM', 'output', 0, 'right', 'logical')],
     state: { phase: 0.0, lastTime: -1.0 },
     execute: (ins, p, state, time) => {
@@ -3199,9 +3209,9 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     id, type: 'THREE_PHASE_PWM',
     params: { frequency: params.frequency ?? 5000, method: params.method || 'SPWM' },
     inputs: [
-      createPort('va_ref', 'Va*', 'input', 0, 'left', 'control'),
-      createPort('vb_ref', 'Vb*', 'input', 0, 'left', 'control'),
-      createPort('vc_ref', 'Vc*', 'input', 0, 'left', 'control')
+      createPort('va_ref', 'Va*', 'input', 0, 'left', 'continuous'),
+      createPort('vb_ref', 'Vb*', 'input', 0, 'left', 'continuous'),
+      createPort('vc_ref', 'Vc*', 'input', 0, 'left', 'continuous')
     ],
     outputs: [
       createPort('ga', 'Ga', 'output', 0, 'right', 'logical'),
@@ -3434,11 +3444,11 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
   'VOLTAGE_REFERENCE_GENERATOR': (id, params) => ({
     id, type: 'VOLTAGE_REFERENCE_GENERATOR',
     params: { frequency: params.frequency ?? 50, amplitude: params.amplitude ?? 1 },
-    inputs: [createPort('f', 'Freq', 'input', params.frequency ?? 50, 'left', 'control')],
+    inputs: [createPort('f', 'Freq', 'input', params.frequency ?? 50, 'left', 'continuous')],
     outputs: [
-      createPort('va', 'Va*', 'output', 0, 'right', 'control'),
-      createPort('vb', 'Vb*', 'output', 0, 'right', 'control'),
-      createPort('vc', 'Vc*', 'output', 0, 'right', 'control')
+      createPort('va', 'Va*', 'output', 0, 'right', 'continuous'),
+      createPort('vb', 'Vb*', 'output', 0, 'right', 'continuous'),
+      createPort('vc', 'Vc*', 'output', 0, 'right', 'continuous')
     ],
     execute: (ins, p, state, time) => {
       const f = Number(ins[0]);
@@ -3461,18 +3471,18 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     },
     isStateful: true,
     inputs: [
-      createPort('id_ref', 'Id*', 'input', 0, 'left', 'control'),
-      createPort('iq_ref', 'Iq*', 'input', 0, 'left', 'control'),
+      createPort('id_ref', 'Id*', 'input', 0, 'left', 'continuous'),
+      createPort('iq_ref', 'Iq*', 'input', 0, 'left', 'continuous'),
       createPort('ia', 'Ia', 'input', 0, 'top', 'measurement'),
       createPort('ib', 'Ib', 'input', 0, 'top', 'measurement'),
       createPort('theta', 'θ', 'input', 0, 'top', 'measurement')
     ],
     outputs: [
-      createPort('vd', 'Vd*', 'output', 0, 'right', 'control'),
-      createPort('vq', 'Vq*', 'output', 0, 'right', 'control'),
-      createPort('va_ref', 'Va*', 'output', 0, 'right', 'control'),
-      createPort('vb_ref', 'Vb*', 'output', 0, 'right', 'control'),
-      createPort('vc_ref', 'Vc*', 'output', 0, 'right', 'control')
+      createPort('vd', 'Vd*', 'output', 0, 'right', 'continuous'),
+      createPort('vq', 'Vq*', 'output', 0, 'right', 'continuous'),
+      createPort('va_ref', 'Va*', 'output', 0, 'right', 'continuous'),
+      createPort('vb_ref', 'Vb*', 'output', 0, 'right', 'continuous'),
+      createPort('vc_ref', 'Vc*', 'output', 0, 'right', 'continuous')
     ],
     state: { integralD: 0, integralQ: 0, lastTime: 0 },
     icon: 'cpu',
@@ -3639,14 +3649,14 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       params: { Kp_d, Ki_d, Kp_q, Ki_q, iMax },
       isStateful: true,
       inputs: [
-        createPort('id_ref', 'Id*', 'input', 0, 'left', 'control'),
-        createPort('iq_ref', 'Iq*', 'input', 0, 'left', 'control'),
+        createPort('id_ref', 'Id*', 'input', 0, 'left', 'continuous'),
+        createPort('iq_ref', 'Iq*', 'input', 0, 'left', 'continuous'),
         createPort('id', 'Id', 'input', 0, 'top', 'measurement'),
         createPort('iq', 'Iq', 'input', 0, 'top', 'measurement')
       ],
       outputs: [
-        createPort('vd', 'Vd*', 'output', 0, 'right', 'control'),
-        createPort('vq', 'Vq*', 'output', 0, 'right', 'control')
+        createPort('vd', 'Vd*', 'output', 0, 'right', 'continuous'),
+        createPort('vq', 'Vq*', 'output', 0, 'right', 'continuous')
       ],
       state: { intD: 0, intQ: 0, lastT: 0 },
       execute: (ins, p, state, t) => {
@@ -3721,7 +3731,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
             if (!res.success) {
               return {
                 outputs: [NaN],
-                error: res.diagnostic?.message || 'DOE model evaluation failed.',
+                error: res.diagnostic?.message || 'DOE model evaluation failed.', ...doeFaultDiagnostic(res.diagnostic),
                 nextState: { ...(state || {}), lastFault: res.diagnostic }
               };
             }
@@ -3742,7 +3752,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
             if (!res.success) {
               return {
                 outputs: [NaN],
-                error: res.diagnostic?.message || 'Legacy DOE equation evaluation failed.',
+                error: res.diagnostic?.message || 'Legacy DOE equation evaluation failed.', ...doeFaultDiagnostic(res.diagnostic),
                 nextState: { ...(state || {}), lastFault: res.diagnostic }
               };
             }
@@ -3756,13 +3766,13 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
 
             if (!layers || !Array.isArray(layers) || layers.length === 0) {
               const diag = { code: 'INVALID_GMDH_LAYERS', message: 'GMDH layers missing or empty.', severity: 'error' as const };
-              return { outputs: [NaN], error: diag.message, nextState: { ...(state || {}), lastFault: diag } };
+              return { outputs: [NaN], error: diag.message, diagnostic: diag, nextState: { ...(state || {}), lastFault: diag } };
             }
 
             for (let i = 0; i < rawInputs.length; i++) {
               if (!Number.isFinite(rawInputs[i])) {
                 const diag = { code: 'NON_FINITE_INPUT', message: `Non-finite input at index ${i}.`, severity: 'error' as const };
-                return { outputs: [NaN], error: diag.message, nextState: { ...(state || {}), lastFault: diag } };
+                return { outputs: [NaN], error: diag.message, diagnostic: diag, nextState: { ...(state || {}), lastFault: diag } };
               }
             }
 
@@ -3779,7 +3789,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
             };
             const gres = evaluateDOEModelDetailed(legacyGmdh, rawInputs);
             if (!gres.success) {
-              return { outputs: [NaN], error: gres.diagnostic?.message || 'Legacy GMDH evaluation failed.', nextState: { ...(state || {}), lastFault: gres.diagnostic } };
+              return { outputs: [NaN], error: gres.diagnostic?.message || 'Legacy GMDH evaluation failed.', ...doeFaultDiagnostic(gres.diagnostic), nextState: { ...(state || {}), lastFault: gres.diagnostic } };
             }
             return { outputs: [gres.value], nextState: { ...(state || {}), lastFault: null } };
           } else if (mType === 'Taguchi') {
@@ -3788,7 +3798,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
 
             if (!Array.isArray(factorLevels) || factorLevels.length === 0) {
               const diag = { code: 'INVALID_TAGUCHI_LEVELS', message: 'Taguchi factorLevels missing or empty.', severity: 'error' as const };
-              return { outputs: [NaN], error: diag.message, nextState: { ...(state || {}), lastFault: diag } };
+              return { outputs: [NaN], error: diag.message, diagnostic: diag, nextState: { ...(state || {}), lastFault: diag } };
             }
 
             const legacyTaguchi: any = {
@@ -3805,15 +3815,15 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
             };
             const tres = evaluateDOEModelDetailed(legacyTaguchi, rawInputs);
             if (!tres.success) {
-              return { outputs: [NaN], error: tres.diagnostic?.message || 'Legacy Taguchi evaluation failed.', nextState: { ...(state || {}), lastFault: tres.diagnostic } };
+              return { outputs: [NaN], error: tres.diagnostic?.message || 'Legacy Taguchi evaluation failed.', ...doeFaultDiagnostic(tres.diagnostic), nextState: { ...(state || {}), lastFault: tres.diagnostic } };
             }
             return { outputs: [tres.value], nextState: { ...(state || {}), lastFault: null } };
           }
           const noModelDiag = { code: 'NO_MODEL_CONFIGURED', message: 'No valid DOE model configured on block.', severity: 'error' as const };
-          return { outputs: [NaN], error: noModelDiag.message, nextState: { ...(state || {}), lastFault: noModelDiag } };
+          return { outputs: [NaN], error: noModelDiag.message, diagnostic: noModelDiag, nextState: { ...(state || {}), lastFault: noModelDiag } };
         } catch (err: any) {
           const exDiag = { code: 'EXECUTION_EXCEPTION', message: err?.message || 'Unknown execution exception.', severity: 'error' as const };
-          return { outputs: [NaN], error: exDiag.message, nextState: { ...(state || {}), lastFault: exDiag } };
+          return { outputs: [NaN], error: exDiag.message, diagnostic: exDiag, nextState: { ...(state || {}), lastFault: exDiag } };
         }
       }
     };
@@ -3824,10 +3834,10 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     params: { Kp: params.Kp ?? 0.5, Ki: params.Ki ?? 5, maxIq: params.maxIq ?? 10 },
     isStateful: true,
     inputs: [
-      createPort('speed_ref', 'ω*', 'input', 0, 'left', 'control'),
+      createPort('speed_ref', 'ω*', 'input', 0, 'left', 'continuous'),
       createPort('speed_actual', 'ω', 'input', 0, 'top', 'measurement')
     ],
-    outputs: [createPort('iq_ref', 'Iq*', 'output', 0, 'right', 'control')],
+    outputs: [createPort('iq_ref', 'Iq*', 'output', 0, 'right', 'continuous')],
     state: { integral: 0, lastTime: 0 },
     execute: (ins, p, state, time) => {
       const dt = Math.max(0, time - (state.lastTime ?? 0)); // zero elapsed time integrates nothing
@@ -3849,7 +3859,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     id, type: 'FLUX_REFERENCE',
     params: { mode: params.mode || 'constant', value: params.value || 0 },
     inputs: [],
-    outputs: [createPort('id_ref', 'Id*', 'output', params.value || 0, 'right', 'control')],
+    outputs: [createPort('id_ref', 'Id*', 'output', params.value || 0, 'right', 'continuous')],
     execute: (_, p) => {
       // In a real implementation, 'field_weakening' would adjust 'value' based on speed.
       return { outputs: [Number(p.value)] };
@@ -4013,10 +4023,10 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     id, type: 'SWITCHING_TIME_CALCULATOR',
     params: { Vdc: params.Vdc ?? 400, Ts: params.Ts ?? 0.0001 },
     inputs: [
-      createPort('vref', 'Vref', 'input', 0, 'left', 'control'),
+      createPort('vref', 'Vref', 'input', 0, 'left', 'continuous'),
       createPort('theta_s', 'θs', 'input', 0, 'left', 'measurement'),
-      createPort('vdc', 'Vdc', 'input', 400, 'bottom', 'control'),
-      createPort('ts', 'Ts', 'input', 0.0001, 'bottom', 'control')
+      createPort('vdc', 'Vdc', 'input', 400, 'bottom', 'continuous'),
+      createPort('ts', 'Ts', 'input', 0.0001, 'bottom', 'continuous')
     ],
     outputs: [
       createPort('t1', 'T1', 'output', 0, 'right', 'measurement'),
@@ -4067,14 +4077,14 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
   'ZERO_SEQUENCE_INJECTION': (id) => ({
     id, type: 'ZERO_SEQUENCE_INJECTION', params: {},
     inputs: [
-      createPort('va', 'Va*', 'input', 0, 'left', 'control'),
-      createPort('vb', 'Vb*', 'input', 0, 'left', 'control'),
-      createPort('vc', 'Vc*', 'input', 0, 'left', 'control')
+      createPort('va', 'Va*', 'input', 0, 'left', 'continuous'),
+      createPort('vb', 'Vb*', 'input', 0, 'left', 'continuous'),
+      createPort('vc', 'Vc*', 'input', 0, 'left', 'continuous')
     ],
     outputs: [
-      createPort('va_mod', 'Va_mod', 'output', 0, 'right', 'control'),
-      createPort('vb_mod', 'Vb_mod', 'output', 0, 'right', 'control'),
-      createPort('vc_mod', 'Vc_mod', 'output', 0, 'right', 'control')
+      createPort('va_mod', 'Va_mod', 'output', 0, 'right', 'continuous'),
+      createPort('vb_mod', 'Vb_mod', 'output', 0, 'right', 'continuous'),
+      createPort('vc_mod', 'Vc_mod', 'output', 0, 'right', 'continuous')
     ],
     execute: (ins) => {
       const v = ins.map(Number);
@@ -4280,7 +4290,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     inputs: [
       createPort('u1', 'u1', 'input'),
       createPort('u2', 'u2', 'input'),
-      createPort('ctrl', 'ctrl', 'input', 0, 'bottom', 'control')
+      createPort('ctrl', 'ctrl', 'input', 0, 'bottom', 'continuous')
     ],
     outputs: [createPort('y', 'y', 'output')],
     icon: 'activity',
@@ -4741,8 +4751,8 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     const inputs = [
       createPort('r', 'Ref', 'input'),
       createPort('y', 'Feedback', 'input'),
-      createPort('enable', 'Enable', 'input', 1, 'bottom', 'control'),
-      createPort('reset', 'Reset', 'input', 0, 'bottom', 'control')
+      createPort('enable', 'Enable', 'input', 1, 'bottom', 'continuous'),
+      createPort('reset', 'Reset', 'input', 0, 'bottom', 'continuous')
     ];
 
     const block: XBlock = {
@@ -4751,7 +4761,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       isStateful: true,
       inputs,
       outputs: [
-        createPort('u', 'Control', 'output', 0, 'right', 'control'),
+        createPort('u', 'Control', 'output', 0, 'right', 'continuous'),
         createPort('error', 'Error', 'output', 0, 'top', 'measurement'),
         createPort('p_term', 'P', 'output', 0, 'top', 'measurement'),
         createPort('i_term', 'I', 'output', 0, 'top', 'measurement'),
@@ -4882,7 +4892,7 @@ return block;
 
   const inputs = [createPort('u', 'u', 'input')];
   if (resetMode !== 'none') {
-    inputs.push(createPort('reset', 'Reset', 'input', 0, 'bottom', 'control'));
+    inputs.push(createPort('reset', 'Reset', 'input', 0, 'bottom', 'continuous'));
   }
 
   return {
@@ -5355,7 +5365,7 @@ return block;
                           icon: 'settings-2',
                           inputs: [
                             createPort('u', 'In', 'input', 0, 'left', 'continuous'),
-                            createPort('doe', 'DOE', 'input', null, 'left', 'object')
+                            createPort('doe', 'DOE', 'input', null, 'left', 'auto')
                           ],
                           outputs: [
                             createPort('y', 'Out', 'output', 0, 'right', 'continuous'),
@@ -5423,8 +5433,8 @@ return block;
 
                             const inputs = [
                               createPort('e', 'Error', 'input'),
-                              createPort('enable', 'Enable', 'input', 1, 'bottom', 'control'),
-                              createPort('reset', 'Reset', 'input', 0, 'bottom', 'control')
+                              createPort('enable', 'Enable', 'input', 1, 'bottom', 'continuous'),
+                              createPort('reset', 'Reset', 'input', 0, 'bottom', 'continuous')
                             ];
 
                             const block: XBlock = {
@@ -5436,7 +5446,7 @@ return block;
                               isStateful: true,
                               inputs,
                               outputs: [
-                                createPort('u', 'Control', 'output', 0, 'right', 'control')
+                                createPort('u', 'Control', 'output', 0, 'right', 'continuous')
                               ],
                               state: { i_state: 0, d_state: 0, last_e: 0 },
                               execute: (ins, p, state) => {
@@ -5958,7 +5968,7 @@ return block;
                                                   createPort('r', 'r(k)', 'input', [1], 'left', 'vector')
                                                 ],
                                                 outputs: [
-                                                  createPort('u', 'u(k)', 'output', 0, 'right', 'control'),
+                                                  createPort('u', 'u(k)', 'output', 0, 'right', 'continuous'),
                                                   createPort('pred_y', 'Predicted Y', 'output', [], 'top', 'vector')
                                                 ],
                                                 state: { u_seq: null },
@@ -6150,12 +6160,12 @@ execute: (ins, p, state) => {
                                                   },
                                                   isStateful: true,
                                                   inputs: [
-                                                    createPort('dataset', 'Data', 'input', null, 'left', 'data'),
+                                                    createPort('dataset', 'Data', 'input', null, 'left', 'auto'),
                                                     createPort('trigger', 'Train', 'input', 0, 'top', 'logical')
                                                   ],
                                                   outputs: [
-                                                    createPort('model', 'Model', 'output', null, 'right', 'object'),
-                                                    createPort('pred', 'Pred', 'output', 0, 'right', 'control')
+                                                    createPort('model', 'Model', 'output', null, 'right', 'auto'),
+                                                    createPort('pred', 'Pred', 'output', 0, 'right', 'continuous')
                                                   ],
                                                   state: { model: null, results: null },
                                                   execute: (ins: any[], p: any, state: any) => {
@@ -6175,7 +6185,7 @@ execute: (ins, p, state) => {
                                                       createPort('va', 'Va', 'input', 0, 'left', 'power'),
                                                       createPort('vb', 'Vb', 'input', 0, 'left', 'power'),
                                                       createPort('vc', 'Vc', 'input', 0, 'left', 'power'),
-                                                      createPort('tl', 'Tl', 'input', 0, 'bottom', 'load')
+                                                      createPort('tl', 'Tl', 'input', 0, 'bottom', 'power')
                                                     ],
                                                     outputs: [
                                                       createPort('ia', 'Ia', 'output', 0, 'right', 'measurement'),
@@ -6232,11 +6242,11 @@ execute: (ins, p, state) => {
                                                         boost: params.boost ?? 10,
                                                         rated_f: params.rated_f ?? 50
                                                       },
-                                                      inputs: [createPort('w_ref', 'ω*', 'input', 0, 'left', 'control')],
+                                                      inputs: [createPort('w_ref', 'ω*', 'input', 0, 'left', 'continuous')],
                                                       outputs: [
-                                                        createPort('va', 'Va*', 'output', 0, 'right', 'control'),
-                                                        createPort('vb', 'Vb*', 'output', 0, 'right', 'control'),
-                                                        createPort('vc', 'Vc*', 'output', 0, 'right', 'control')
+                                                        createPort('va', 'Va*', 'output', 0, 'right', 'continuous'),
+                                                        createPort('vb', 'Vb*', 'output', 0, 'right', 'continuous'),
+                                                        createPort('vc', 'Vc*', 'output', 0, 'right', 'continuous')
                                                       ],
                                                       icon: 'activity',
                                                       equation: 'V = Vf * f + Vboost',
@@ -6269,16 +6279,16 @@ execute: (ins, p, state) => {
                                                         },
                                                         isStateful: true,
                                                         inputs: [
-                                                          createPort('w_ref', 'ω*', 'input', 0, 'left', 'control'),
+                                                          createPort('w_ref', 'ω*', 'input', 0, 'left', 'continuous'),
                                                           createPort('w_meas', 'ω', 'input', 0, 'top', 'measurement'),
                                                           createPort('ia', 'Ia', 'input', 0, 'top', 'measurement'),
                                                           createPort('ib', 'Ib', 'input', 0, 'top', 'measurement'),
                                                           createPort('theta', 'θ_flux', 'input', 0, 'bottom', 'measurement')
                                                         ],
                                                         outputs: [
-                                                          createPort('va', 'Va*', 'output', 0, 'right', 'control'),
-                                                          createPort('vb', 'Vb*', 'output', 0, 'right', 'control'),
-                                                          createPort('vc', 'Vc*', 'output', 0, 'right', 'control'),
+                                                          createPort('va', 'Va*', 'output', 0, 'right', 'continuous'),
+                                                          createPort('vb', 'Vb*', 'output', 0, 'right', 'continuous'),
+                                                          createPort('vc', 'Vc*', 'output', 0, 'right', 'continuous'),
                                                           createPort('id_ref', 'Id*', 'output', 0, 'top', 'measurement'),
                                                           createPort('iq_ref', 'Iq*', 'output', 0, 'top', 'measurement')
                                                         ],
@@ -6352,13 +6362,13 @@ execute: (ins, p, state) => {
                                                               rated_iq: params.rated_iq ?? 10
                                                             },
                                                             inputs: [
-                                                              createPort('w_ref', 'ω*', 'input', 0, 'left', 'control'),
+                                                              createPort('w_ref', 'ω*', 'input', 0, 'left', 'continuous'),
                                                               createPort('iq_actual', 'Iq', 'input', 0, 'top', 'measurement')
                                                             ],
                                                             outputs: [
-                                                              createPort('va', 'Va*', 'output', 0, 'right', 'control'),
-                                                              createPort('vb', 'Vb*', 'output', 0, 'right', 'control'),
-                                                              createPort('vc', 'Vc*', 'output', 0, 'right', 'control'),
+                                                              createPort('va', 'Va*', 'output', 0, 'right', 'continuous'),
+                                                              createPort('vb', 'Vb*', 'output', 0, 'right', 'continuous'),
+                                                              createPort('vc', 'Vc*', 'output', 0, 'right', 'continuous'),
                                                               createPort('w_sync', 'ω_sync', 'output', 0, 'top', 'measurement')
                                                             ],
                                                             icon: 'zap',
@@ -6391,9 +6401,9 @@ execute: (ins, p, state) => {
                                                               isStateful: true,
                                                               inputs: [
                                                                 createPort('v_mag', '|V|', 'input', 0, 'left', 'measurement'),
-                                                                createPort('id_base', 'Id_base', 'input', 10, 'left', 'control')
+                                                                createPort('id_base', 'Id_base', 'input', 10, 'left', 'continuous')
                                                               ],
-                                                              outputs: [createPort('id_ref', 'Id*', 'output', 0, 'right', 'control')],
+                                                              outputs: [createPort('id_ref', 'Id*', 'output', 0, 'right', 'continuous')],
                                                               state: { integral: 0, lastTime: 0 },
                                                               icon: 'activity',
                                                               description: 'Field weakening controller. Reduces the d-axis current (flux reference) when the terminal voltage exceeds the maximum limit.',
@@ -6428,10 +6438,10 @@ execute: (ins, p, state) => {
                                                               'MTPA_CONTROLLER': (id: string, params: any) => ({
                                                                 id, type: 'MTPA_CONTROLLER',
                                                                 params: { Ld: params.Ld ?? 0.01, Lq: params.Lq ?? 0.02, psi_m: params.psi_m ?? 0.1, P: params.P ?? 2 },
-                                                                inputs: [createPort('te_ref', 'Te*', 'input', 0, 'left', 'control')],
+                                                                inputs: [createPort('te_ref', 'Te*', 'input', 0, 'left', 'continuous')],
                                                                 outputs: [
-                                                                  createPort('id_ref', 'Id*', 'output', 0, 'right', 'control'),
-                                                                  createPort('iq_ref', 'Iq*', 'output', 0, 'right', 'control')
+                                                                  createPort('id_ref', 'Id*', 'output', 0, 'right', 'continuous'),
+                                                                  createPort('iq_ref', 'Iq*', 'output', 0, 'right', 'continuous')
                                                                 ],
                                                                 icon: 'zap',
                                                                 description: 'Maximum Torque Per Ampere (MTPA) trajectory generator for salient-pole motors (IPMSM).',
@@ -6471,13 +6481,13 @@ execute: (ins, p, state) => {
                                                                     v_max: params.v_max ?? 300
                                                                   },
                                                                   inputs: [
-                                                                    createPort('te_ref', 'Te*', 'input', 0, 'left', 'control'),
+                                                                    createPort('te_ref', 'Te*', 'input', 0, 'left', 'continuous'),
                                                                     createPort('speed', 'ω', 'input', 0, 'left', 'measurement'),
                                                                     createPort('vdc', 'Vdc', 'input', 400, 'bottom', 'measurement')
                                                                   ],
                                                                   outputs: [
-                                                                    createPort('id_ref', 'Id*', 'output', 0, 'right', 'control'),
-                                                                    createPort('iq_ref', 'Iq*', 'output', 0, 'right', 'control'),
+                                                                    createPort('id_ref', 'Id*', 'output', 0, 'right', 'continuous'),
+                                                                    createPort('iq_ref', 'Iq*', 'output', 0, 'right', 'continuous'),
                                                                     createPort('fw_active', 'FW_Active', 'output', 0, 'top', 'logical')
                                                                   ],
                                                                   execute: (ins, p) => {
@@ -6563,8 +6573,8 @@ execute: (ins, p, state) => {
                                                                       icon: 'graduation-cap',
                                                                       description: 'A complete pedagogical model for PID Speed Control of an Induction Motor. It integrates the motor dynamics and the speed regulator into one block for easy analysis of tuning effects.',
                                                                       inputs: [
-                                                                        createPort('w_ref', 'ω*', 'input', params.w_ref ?? 157, 'left', 'control'),
-                                                                        createPort('tl', 'Tl', 'input', params.tl ?? 0, 'bottom', 'load')
+                                                                        createPort('w_ref', 'ω*', 'input', params.w_ref ?? 157, 'left', 'continuous'),
+                                                                        createPort('tl', 'Tl', 'input', params.tl ?? 0, 'bottom', 'power')
                                                                       ],
                                                                       outputs: [
                                                                         createPort('omega', 'ω', 'output', 0, 'right', 'measurement'),
@@ -6639,15 +6649,15 @@ execute: (ins, p, state) => {
                                                                       params: { lr: params.lr ?? 0.05 },
                                                                       isStateful: true,
                                                                       inputs: [
-                                                                        createPort('x', 'x', 'input', 0, 'left', 'control'),
-                                                                        createPort('d', 'd', 'input', 0, 'left', 'control'),
-                                                                        createPort('lr', 'Learning Rate', 'input', params.lr ?? 0.05, 'bottom', 'control')
+                                                                        createPort('x', 'x', 'input', 0, 'left', 'continuous'),
+                                                                        createPort('d', 'd', 'input', 0, 'left', 'continuous'),
+                                                                        createPort('lr', 'Learning Rate', 'input', params.lr ?? 0.05, 'bottom', 'continuous')
                                                                       ],
                                                                       outputs: [
-                                                                        createPort('y', 'y', 'output', 0, 'right', 'control'),
-                                                                        createPort('err', 'err', 'output', 0, 'right', 'control'),
-                                                                        createPort('w1', 'w1', 'output', 0, 'right', 'control'),
-                                                                        createPort('w2', 'w2', 'output', 0, 'right', 'control')
+                                                                        createPort('y', 'y', 'output', 0, 'right', 'continuous'),
+                                                                        createPort('err', 'err', 'output', 0, 'right', 'continuous'),
+                                                                        createPort('w1', 'w1', 'output', 0, 'right', 'continuous'),
+                                                                        createPort('w2', 'w2', 'output', 0, 'right', 'continuous')
                                                                       ],
                                                                       state: { w1: 0, w2: 0, x_prev: 0 },
                                                                       icon: 'graduation-cap',
@@ -6680,17 +6690,17 @@ execute: (ins, p, state) => {
                                                                         params: { lr: params.lr ?? 0.1, initW1: params.initW1 ?? 0.5, initW2: params.initW2 ?? -0.5, initBias: params.initBias || 0.0 },
                                                                         isStateful: true,
                                                                         inputs: [
-                                                                          createPort('x1', 'x1', 'input', 0, 'left', 'control'),
-                                                                          createPort('x2', 'x2', 'input', 0, 'left', 'control'),
-                                                                          createPort('target', 'target', 'input', 0, 'left', 'control'),
-                                                                          createPort('lr', 'Learning Rate', 'input', params.lr ?? 0.1, 'bottom', 'control')
+                                                                          createPort('x1', 'x1', 'input', 0, 'left', 'continuous'),
+                                                                          createPort('x2', 'x2', 'input', 0, 'left', 'continuous'),
+                                                                          createPort('target', 'target', 'input', 0, 'left', 'continuous'),
+                                                                          createPort('lr', 'Learning Rate', 'input', params.lr ?? 0.1, 'bottom', 'continuous')
                                                                         ],
                                                                         outputs: [
-                                                                          createPort('y', 'y', 'output', 0, 'right', 'control'),
-                                                                          createPort('err', 'err', 'output', 0, 'right', 'control'),
-                                                                          createPort('w1', 'w1', 'output', params.initW1 ?? 0.5, 'right', 'control'),
-                                                                          createPort('w2', 'w2', 'output', params.initW2 ?? -0.5, 'right', 'control'),
-                                                                          createPort('bias', 'bias', 'output', params.initBias || 0.0, 'right', 'control')
+                                                                          createPort('y', 'y', 'output', 0, 'right', 'continuous'),
+                                                                          createPort('err', 'err', 'output', 0, 'right', 'continuous'),
+                                                                          createPort('w1', 'w1', 'output', params.initW1 ?? 0.5, 'right', 'continuous'),
+                                                                          createPort('w2', 'w2', 'output', params.initW2 ?? -0.5, 'right', 'continuous'),
+                                                                          createPort('bias', 'bias', 'output', params.initBias || 0.0, 'right', 'continuous')
                                                                         ],
                                                                         state: {
                                                                           w1: params.initW1 ?? 0.5,
@@ -6743,13 +6753,13 @@ execute: (ins, p, state) => {
                                                                             },
                                                                             isStateful: true,
                                                                             inputs: [
-                                                                              createPort('error', 'error', 'input', 0, 'left', 'control'),
-                                                                              createPort('reward', 'reward', 'input', 0, 'left', 'control'),
+                                                                              createPort('error', 'error', 'input', 0, 'left', 'continuous'),
+                                                                              createPort('reward', 'reward', 'input', 0, 'left', 'continuous'),
                                                                               createPort('reset', 'reset', 'input', 0, 'bottom', 'logical')
                                                                             ],
                                                                             outputs: [
-                                                                              createPort('action', 'action', 'output', 0, 'right', 'control'),
-                                                                              createPort('max_q', 'max_q', 'output', 0, 'right', 'control')
+                                                                              createPort('action', 'action', 'output', 0, 'right', 'continuous'),
+                                                                              createPort('max_q', 'max_q', 'output', 0, 'right', 'continuous')
                                                                             ],
                                                                             state: {
                                                                               qTable: Array.from({ length: numStates }, () => Array(numActions).fill(0)),
@@ -6885,18 +6895,18 @@ execute: (ins, p, state) => {
                                                                               },
                                                                               isStateful: true,
                                                                               inputs: [
-                                                                                createPort('power', 'Power', 'input', 0, 'left', 'control'),
-                                                                                createPort('fan_speed', 'Fan Speed', 'input', 1.0, 'left', 'control'),
-                                                                                createPort('measured_temp', 'Measured Temp', 'input', -999.0, 'left', 'control'),
-                                                                                createPort('lr', 'Learning Rate', 'input', learning_rate, 'bottom', 'control'),
+                                                                                createPort('power', 'Power', 'input', 0, 'left', 'continuous'),
+                                                                                createPort('fan_speed', 'Fan Speed', 'input', 1.0, 'left', 'continuous'),
+                                                                                createPort('measured_temp', 'Measured Temp', 'input', -999.0, 'left', 'continuous'),
+                                                                                createPort('lr', 'Learning Rate', 'input', learning_rate, 'bottom', 'continuous'),
                                                                                 createPort('cavity_dim', 'Cavity Dimensions [W,D,H]', 'input', [0.3, 0.3, 0.2], 'left', 'vector')
                                                                               ],
                                                                               outputs: [
-                                                                                createPort('temp_actual', 'Temp Actual', 'output', T_ambient, 'right', 'control'),
-                                                                                createPort('estimated_gain', 'Est. Gain (K)', 'output', K_h * K_c, 'right', 'control'),
-                                                                                createPort('estimated_tau_c', 'Est. Tau_c', 'output', tau_c, 'right', 'control'),
-                                                                                createPort('prediction_error', 'Pred. Error', 'output', 0.0, 'right', 'control'),
-                                                                                createPort('temp_pred', 'Temp Pred', 'output', T_ambient, 'right', 'control')
+                                                                                createPort('temp_actual', 'Temp Actual', 'output', T_ambient, 'right', 'continuous'),
+                                                                                createPort('estimated_gain', 'Est. Gain (K)', 'output', K_h * K_c, 'right', 'continuous'),
+                                                                                createPort('estimated_tau_c', 'Est. Tau_c', 'output', tau_c, 'right', 'continuous'),
+                                                                                createPort('prediction_error', 'Pred. Error', 'output', 0.0, 'right', 'continuous'),
+                                                                                createPort('temp_pred', 'Temp Pred', 'output', T_ambient, 'right', 'continuous')
                                                                               ],
                                                                               state: {
                                                                                 T_heater: T_ambient,
@@ -7068,13 +7078,13 @@ execute: (ins, p, state) => {
                                                                               },
                                                                               isStateful: true,
                                                                               inputs: [
-                                                                                createPort('I_L', 'I_L', 'input', 0, 'left', 'control'),
-                                                                                createPort('I_R', 'I_R', 'input', 0, 'left', 'control'),
-                                                                                createPort('is_docked', 'Docked', 'input', 0, 'left', 'boolean')
+                                                                                createPort('I_L', 'I_L', 'input', 0, 'left', 'continuous'),
+                                                                                createPort('I_R', 'I_R', 'input', 0, 'left', 'continuous'),
+                                                                                createPort('is_docked', 'Docked', 'input', 0, 'left', 'logical')
                                                                               ],
                                                                               outputs: [
-                                                                                createPort('battery_level', 'Bat %', 'output', 100.0, 'right', 'control'),
-                                                                                createPort('battery_voltage', 'V_bat', 'output', 12.0, 'right', 'control')
+                                                                                createPort('battery_level', 'Bat %', 'output', 100.0, 'right', 'continuous'),
+                                                                                createPort('battery_voltage', 'V_bat', 'output', 12.0, 'right', 'continuous')
                                                                               ],
                                                                               state: {
                                                                                 battery_level: 100.0,
@@ -7121,30 +7131,30 @@ execute: (ins, p, state) => {
                                                                                 },
                                                                                 isStateful: true,
                                                                                 inputs: [
-                                                                                  createPort('enc_L_in', 'Enc L In', 'input', 0, 'left', 'control'),
-                                                                                  createPort('enc_R_in', 'Enc R In', 'input', 0, 'left', 'control'),
-                                                                                  createPort('omega_L_in', 'ωL In', 'input', 0, 'left', 'control'),
-                                                                                  createPort('omega_R_in', 'ωR In', 'input', 0, 'left', 'control'),
-                                                                                  createPort('battery_in', 'Bat In', 'input', 100, 'left', 'control'),
-                                                                                  createPort('x_odom_in', 'Xod In', 'input', 0, 'left', 'control'),
-                                                                                  createPort('y_odom_in', 'Yod In', 'input', 0, 'left', 'control'),
-                                                                                  createPort('theta_odom_in', 'θod In', 'input', 0, 'left', 'control'),
-                                                                                  createPort('v_ref_in', 'Vref In', 'input', 0, 'left', 'control'),
-                                                                                  createPort('w_ref_in', 'wref In', 'input', 0, 'left', 'control'),
-                                                                                  createPort('nav_state_in', 'State In', 'input', 1, 'left', 'control')
+                                                                                  createPort('enc_L_in', 'Enc L In', 'input', 0, 'left', 'continuous'),
+                                                                                  createPort('enc_R_in', 'Enc R In', 'input', 0, 'left', 'continuous'),
+                                                                                  createPort('omega_L_in', 'ωL In', 'input', 0, 'left', 'continuous'),
+                                                                                  createPort('omega_R_in', 'ωR In', 'input', 0, 'left', 'continuous'),
+                                                                                  createPort('battery_in', 'Bat In', 'input', 100, 'left', 'continuous'),
+                                                                                  createPort('x_odom_in', 'Xod In', 'input', 0, 'left', 'continuous'),
+                                                                                  createPort('y_odom_in', 'Yod In', 'input', 0, 'left', 'continuous'),
+                                                                                  createPort('theta_odom_in', 'θod In', 'input', 0, 'left', 'continuous'),
+                                                                                  createPort('v_ref_in', 'Vref In', 'input', 0, 'left', 'continuous'),
+                                                                                  createPort('w_ref_in', 'wref In', 'input', 0, 'left', 'continuous'),
+                                                                                  createPort('nav_state_in', 'State In', 'input', 1, 'left', 'continuous')
                                                                                 ],
                                                                                 outputs: [
-                                                                                  createPort('enc_L', 'Enc L', 'output', 0, 'right', 'control'),
-                                                                                  createPort('enc_R', 'Enc R', 'output', 0, 'right', 'control'),
-                                                                                  createPort('omega_L', 'ωL', 'output', 0, 'right', 'control'),
-                                                                                  createPort('omega_R', 'ωR', 'output', 0, 'right', 'control'),
-                                                                                  createPort('battery', 'Bat', 'output', 100, 'right', 'control'),
-                                                                                  createPort('x_odom', 'Xod', 'output', 0, 'right', 'control'),
-                                                                                  createPort('y_odom', 'Yod', 'output', 0, 'right', 'control'),
-                                                                                  createPort('theta_odom', 'θod', 'output', 0, 'right', 'control'),
-                                                                                  createPort('v_ref', 'Vref', 'output', 0, 'right', 'control'),
-                                                                                  createPort('w_ref', 'wref', 'output', 0, 'right', 'control'),
-                                                                                  createPort('nav_state', 'State', 'output', 1, 'right', 'control'),
+                                                                                  createPort('enc_L', 'Enc L', 'output', 0, 'right', 'continuous'),
+                                                                                  createPort('enc_R', 'Enc R', 'output', 0, 'right', 'continuous'),
+                                                                                  createPort('omega_L', 'ωL', 'output', 0, 'right', 'continuous'),
+                                                                                  createPort('omega_R', 'ωR', 'output', 0, 'right', 'continuous'),
+                                                                                  createPort('battery', 'Bat', 'output', 100, 'right', 'continuous'),
+                                                                                  createPort('x_odom', 'Xod', 'output', 0, 'right', 'continuous'),
+                                                                                  createPort('y_odom', 'Yod', 'output', 0, 'right', 'continuous'),
+                                                                                  createPort('theta_odom', 'θod', 'output', 0, 'right', 'continuous'),
+                                                                                  createPort('v_ref', 'Vref', 'output', 0, 'right', 'continuous'),
+                                                                                  createPort('w_ref', 'wref', 'output', 0, 'right', 'continuous'),
+                                                                                  createPort('nav_state', 'State', 'output', 1, 'right', 'continuous'),
                                                                                   createPort('comm_stats', 'Comm Stats', 'output', [50.0, 0, 0], 'right', 'vector')
                                                                                 ],
                                                                                 state: {
@@ -7216,14 +7226,14 @@ execute: (ins, p, state) => {
                                                                                   },
                                                                                   isStateful: true,
                                                                                   inputs: [
-                                                                                    createPort('room_id', 'Room ID', 'input', 0, 'left', 'control'),
+                                                                                    createPort('room_id', 'Room ID', 'input', 0, 'left', 'continuous'),
                                                                                     createPort('grid', 'Grid Mask', 'input', Array.from({ length: 30 }, () => Array(30).fill(0)), 'left', 'matrix'),
                                                                                     createPort('pose', 'Robot Pose', 'input', [0, 0, 0], 'left', 'vector')
                                                                                   ],
                                                                                   outputs: [
                                                                                     createPort('waypoints', 'Waypoints', 'output', [], 'right', 'matrix'),
                                                                                     createPort('current_waypoint', 'Active WP', 'output', [0, 0], 'right', 'vector'),
-                                                                                    createPort('done', 'Done', 'output', 0, 'right', 'control')
+                                                                                    createPort('done', 'Done', 'output', 0, 'right', 'continuous')
                                                                                   ],
                                                                                   state: {
                                                                                     sweepWaypoints: [] as [number, number][],
@@ -7412,10 +7422,10 @@ execute: (ins, p, state) => {
                                                                                         inputs: [
                                                                                           createPort('pose', 'Robot Pose', 'input', [0, 0, 0], 'left', 'vector'),
                                                                                           createPort('door_pos', 'Door Pos', 'input', [0, 0], 'left', 'vector'),
-                                                                                          createPort('target_room', 'Target Room', 'input', 0, 'bottom', 'control')
+                                                                                          createPort('target_room', 'Target Room', 'input', 0, 'bottom', 'continuous')
                                                                                         ],
                                                                                         outputs: [
-                                                                                          createPort('crossed', 'Crossed', 'output', 0, 'right', 'control')
+                                                                                          createPort('crossed', 'Crossed', 'output', 0, 'right', 'continuous')
                                                                                         ],
                                                                                         icon: 'check-square',
                                                                                         description: 'Completes door traversal and returns true when the robot centroid has physically passed into the target room cells.',
@@ -7446,14 +7456,14 @@ execute: (ins, p, state) => {
                                                                                           },
                                                                                           isStateful: false,
                                                                                           inputs: [
-                                                                                            createPort('battery', 'Bat %', 'input', 100, 'left', 'control'),
+                                                                                            createPort('battery', 'Bat %', 'input', 100, 'left', 'continuous'),
                                                                                             createPort('pose', 'Robot Pose', 'input', [0, 0, 0], 'left', 'vector'),
                                                                                             createPort('dock_pos', 'Dock Pos', 'input', [-5.1, -5.1], 'left', 'vector'),
                                                                                             createPort('exits_sequence', 'Exits Seq', 'input', [], 'left', 'matrix')
                                                                                           ],
                                                                                           outputs: [
-                                                                                            createPort('e_required', 'E Req', 'output', 0, 'right', 'control'),
-                                                                                            createPort('return_trigger', 'Return Trig', 'output', 0, 'right', 'control')
+                                                                                            createPort('e_required', 'E Req', 'output', 0, 'right', 'continuous'),
+                                                                                            createPort('return_trigger', 'Return Trig', 'output', 0, 'right', 'continuous')
                                                                                           ],
                                                                                           icon: 'battery-charging',
                                                                                           description: 'Continuously monitors battery level against estimated energy requirements along the door-hopping path back to the dock.',
@@ -7504,8 +7514,8 @@ execute: (ins, p, state) => {
                                                                                             isStateful: true,
                                                                                             inputs: [
                                                                                               createPort('topo_graph', 'Graph', 'input', [], 'left', 'matrix'),
-                                                                                              createPort('current_room', 'Room ID', 'input', 0, 'left', 'control'),
-                                                                                              createPort('dock_room', 'Dock Room', 'input', 0, 'left', 'control'),
+                                                                                              createPort('current_room', 'Room ID', 'input', 0, 'left', 'continuous'),
+                                                                                              createPort('dock_room', 'Dock Room', 'input', 0, 'left', 'continuous'),
                                                                                               createPort('exits', 'Detected Exits', 'input', [], 'left', 'matrix')
                                                                                             ],
                                                                                             outputs: [
@@ -7568,7 +7578,7 @@ execute: (ins, p, state) => {
                                                                                               outputs: [
                                                                                                 createPort('path', 'Path', 'output', [], 'right', 'matrix'),
                                                                                                 createPort('next_point', 'Next Pt', 'output', [0, 0], 'right', 'vector'),
-                                                                                                createPort('failed', 'Failed', 'output', 0, 'right', 'control')
+                                                                                                createPort('failed', 'Failed', 'output', 0, 'right', 'continuous')
                                                                                               ],
                                                                                               state: {
                                                                                                 lastStart: [0, 0],
@@ -7655,22 +7665,22 @@ execute: (ins, p, state) => {
                                                                                                 },
                                                                                                 isStateful: true,
                                                                                                 inputs: [
-                                                                                                  createPort('target_x', 'Target X', 'input', 0, 'left', 'control'),
-                                                                                                  createPort('target_y', 'Target Y', 'input', 0, 'left', 'control'),
-                                                                                                  createPort('mode_select', 'Mode', 'input', 4, 'bottom', 'control'),
+                                                                                                  createPort('target_x', 'Target X', 'input', 0, 'left', 'continuous'),
+                                                                                                  createPort('target_y', 'Target Y', 'input', 0, 'left', 'continuous'),
+                                                                                                  createPort('mode_select', 'Mode', 'input', 4, 'bottom', 'continuous'),
                                                                                                   createPort('vel_cmd', 'Vel CMD', 'input', [0, 0], 'left', 'vector')
                                                                                                 ],
                                                                                                 outputs: [
-                                                                                                  createPort('x_pos', 'X', 'output', 0, 'right', 'control'),
-                                                                                                  createPort('y_pos', 'Y', 'output', 0, 'right', 'control'),
-                                                                                                  createPort('theta', 'θ', 'output', 0, 'right', 'control'),
-                                                                                                  createPort('x_est', 'X_est', 'output', 0, 'right', 'control'),
-                                                                                                  createPort('y_est', 'Y_est', 'output', 0, 'right', 'control'),
-                                                                                                  createPort('theta_est', 'θ_est', 'output', 0, 'right', 'control'),
+                                                                                                  createPort('x_pos', 'X', 'output', 0, 'right', 'continuous'),
+                                                                                                  createPort('y_pos', 'Y', 'output', 0, 'right', 'continuous'),
+                                                                                                  createPort('theta', 'θ', 'output', 0, 'right', 'continuous'),
+                                                                                                  createPort('x_est', 'X_est', 'output', 0, 'right', 'continuous'),
+                                                                                                  createPort('y_est', 'Y_est', 'output', 0, 'right', 'continuous'),
+                                                                                                  createPort('theta_est', 'θ_est', 'output', 0, 'right', 'continuous'),
                                                                                                   createPort('lidar_ranges', 'LiDAR', 'output', Array(45).fill(0), 'right', 'vector'),
                                                                                                   createPort('wheel_vels', 'V_wheels', 'output', [0, 0], 'right', 'vector'),
                                                                                                   createPort('control_signals', 'PWM', 'output', [0, 0], 'right', 'vector'),
-                                                                                                  createPort('nav_state', 'Mode_out', 'output', 0, 'right', 'control'),
+                                                                                                  createPort('nav_state', 'Mode_out', 'output', 0, 'right', 'continuous'),
                                                                                                   createPort('grid', 'Grid', 'output', Array.from({ length: 30 }, () => Array(30).fill(0)), 'right', 'matrix'),
                                                                                                   createPort('astar_path', 'A* Path', 'output', [], 'right', 'vector')
                                                                                                 ],
@@ -8670,14 +8680,14 @@ execute: (ins, p, state) => {
                                                                                                   },
                                                                                                   isStateful: true,
                                                                                                   inputs: [
-                                                                                                    createPort('pwm_duty', 'PWM', 'input', 0, 'left', 'control'),
-                                                                                                    createPort('v_bat', 'V_bat', 'input', 12.0, 'left', 'control')
+                                                                                                    createPort('pwm_duty', 'PWM', 'input', 0, 'left', 'continuous'),
+                                                                                                    createPort('v_bat', 'V_bat', 'input', 12.0, 'left', 'continuous')
                                                                                                   ],
                                                                                                   outputs: [
-                                                                                                    createPort('omega', 'ω', 'output', 0, 'right', 'control'),
-                                                                                                    createPort('current', 'I', 'output', 0, 'right', 'control'),
-                                                                                                    createPort('encoder', 'Enc', 'output', 0, 'right', 'control'),
-                                                                                                    createPort('omega_est', 'ω_est', 'output', 0, 'right', 'control')
+                                                                                                    createPort('omega', 'ω', 'output', 0, 'right', 'continuous'),
+                                                                                                    createPort('current', 'I', 'output', 0, 'right', 'continuous'),
+                                                                                                    createPort('encoder', 'Enc', 'output', 0, 'right', 'continuous'),
+                                                                                                    createPort('omega_est', 'ω_est', 'output', 0, 'right', 'continuous')
                                                                                                   ],
                                                                                                   state: {
                                                                                                     theta_wheel: 0,
@@ -8736,15 +8746,15 @@ execute: (ins, p, state) => {
                                                                                                     },
                                                                                                     isStateful: true,
                                                                                                     inputs: [
-                                                                                                      createPort('omega_L', 'ω_L', 'input', 0, 'left', 'control'),
-                                                                                                      createPort('omega_R', 'ω_R', 'input', 0, 'left', 'control')
+                                                                                                      createPort('omega_L', 'ω_L', 'input', 0, 'left', 'continuous'),
+                                                                                                      createPort('omega_R', 'ω_R', 'input', 0, 'left', 'continuous')
                                                                                                     ],
                                                                                                     outputs: [
-                                                                                                      createPort('x', 'X', 'output', 0, 'right', 'control'),
-                                                                                                      createPort('y', 'Y', 'output', 0, 'right', 'control'),
-                                                                                                      createPort('theta', 'θ', 'output', 0, 'right', 'control'),
-                                                                                                      createPort('v_chassis', 'V', 'output', 0, 'right', 'control'),
-                                                                                                      createPort('w_chassis', 'ω', 'output', 0, 'right', 'control')
+                                                                                                      createPort('x', 'X', 'output', 0, 'right', 'continuous'),
+                                                                                                      createPort('y', 'Y', 'output', 0, 'right', 'continuous'),
+                                                                                                      createPort('theta', 'θ', 'output', 0, 'right', 'continuous'),
+                                                                                                      createPort('v_chassis', 'V', 'output', 0, 'right', 'continuous'),
+                                                                                                      createPort('w_chassis', 'ω', 'output', 0, 'right', 'continuous')
                                                                                                     ],
                                                                                                     state: {
                                                                                                       x: 0,
@@ -8805,25 +8815,25 @@ execute: (ins, p, state) => {
                                                                                                       },
                                                                                                       isStateful: true,
                                                                                                       inputs: [
-                                                                                                        createPort('x', 'X_true', 'input', 0, 'left', 'control'),
-                                                                                                        createPort('y', 'Y_true', 'input', 0, 'left', 'control'),
-                                                                                                        createPort('theta', 'θ_true', 'input', 0, 'left', 'control'),
-                                                                                                        createPort('x_est', 'X_est', 'input', 0, 'left', 'control'),
-                                                                                                        createPort('y_est', 'Y_est', 'input', 0, 'left', 'control'),
-                                                                                                        createPort('theta_est', 'θ_est', 'input', 0, 'left', 'control'),
-                                                                                                        createPort('target_x_in', 'Target X', 'input', 0, 'left', 'control'),
-                                                                                                        createPort('target_y_in', 'Target Y', 'input', 0, 'left', 'control'),
-                                                                                                        createPort('nav_state', 'Nav State', 'input', 5, 'bottom', 'control'),
+                                                                                                        createPort('x', 'X_true', 'input', 0, 'left', 'continuous'),
+                                                                                                        createPort('y', 'Y_true', 'input', 0, 'left', 'continuous'),
+                                                                                                        createPort('theta', 'θ_true', 'input', 0, 'left', 'continuous'),
+                                                                                                        createPort('x_est', 'X_est', 'input', 0, 'left', 'continuous'),
+                                                                                                        createPort('y_est', 'Y_est', 'input', 0, 'left', 'continuous'),
+                                                                                                        createPort('theta_est', 'θ_est', 'input', 0, 'left', 'continuous'),
+                                                                                                        createPort('target_x_in', 'Target X', 'input', 0, 'left', 'continuous'),
+                                                                                                        createPort('target_y_in', 'Target Y', 'input', 0, 'left', 'continuous'),
+                                                                                                        createPort('nav_state', 'Nav State', 'input', 5, 'bottom', 'continuous'),
                                                                                                         createPort('grid', 'SLAM Grid', 'input', Array.from({ length: 30 }, () => Array(30).fill(0)), 'bottom', 'matrix'),
-                                                                                                        createPort('battery_level', 'Bat', 'input', 100, 'bottom', 'control'),
+                                                                                                        createPort('battery_level', 'Bat', 'input', 100, 'bottom', 'continuous'),
                                                                                                         createPort('comm_stats', 'Comm Stats', 'input', [50.0, 0, 0], 'bottom', 'vector'),
                                                                                                         createPort('nav_stats', 'Nav Stats', 'input', [0, 100, 0, 100], 'bottom', 'vector'),
-                                                                                                        createPort('confidence', 'Conf', 'input', 100, 'bottom', 'control')
+                                                                                                        createPort('confidence', 'Conf', 'input', 100, 'bottom', 'continuous')
                                                                                                       ],
                                                                                                       outputs: [
                                                                                                         createPort('lidar_ranges', 'LiDAR', 'output', [0, 0, 0, 0, 0, 0, 0, 0], 'right', 'vector'),
-                                                                                                        createPort('collision', 'Crash', 'output', 0, 'right', 'control'),
-                                                                                                        createPort('is_docked', 'Docked', 'output', 0, 'right', 'control')
+                                                                                                        createPort('collision', 'Crash', 'output', 0, 'right', 'continuous'),
+                                                                                                        createPort('is_docked', 'Docked', 'output', 0, 'right', 'logical')
                                                                                                       ],
                                                                                                       state: {
                                                                                                         trail: [],
@@ -8971,13 +8981,13 @@ execute: (ins, p, state) => {
                                                                                                         },
                                                                                                         isStateful: true,
                                                                                                         inputs: [
-                                                                                                          createPort('enc_L', 'Enc L', 'input', 0, 'left', 'control'),
-                                                                                                          createPort('enc_R', 'Enc R', 'input', 0, 'left', 'control')
+                                                                                                          createPort('enc_L', 'Enc L', 'input', 0, 'left', 'continuous'),
+                                                                                                          createPort('enc_R', 'Enc R', 'input', 0, 'left', 'continuous')
                                                                                                         ],
                                                                                                         outputs: [
-                                                                                                          createPort('x_odom', 'X_odom', 'output', 0, 'right', 'control'),
-                                                                                                          createPort('y_odom', 'Y_odom', 'output', 0, 'right', 'control'),
-                                                                                                          createPort('theta_odom', 'θ_odom', 'output', 0, 'right', 'control')
+                                                                                                          createPort('x_odom', 'X_odom', 'output', 0, 'right', 'continuous'),
+                                                                                                          createPort('y_odom', 'Y_odom', 'output', 0, 'right', 'continuous'),
+                                                                                                          createPort('theta_odom', 'θ_odom', 'output', 0, 'right', 'continuous')
                                                                                                         ],
                                                                                                         state: {
                                                                                                           x_odom: 0,
@@ -9036,19 +9046,19 @@ execute: (ins, p, state) => {
                                                                                                           },
                                                                                                           isStateful: true,
                                                                                                           inputs: [
-                                                                                                            createPort('x_odom', 'X_odom', 'input', 0, 'left', 'control'),
-                                                                                                            createPort('y_odom', 'Y_odom', 'input', 0, 'left', 'control'),
-                                                                                                            createPort('theta_odom', 'θ_odom', 'input', 0, 'left', 'control'),
-                                                                                                            createPort('x_true', 'X_true', 'input', 0, 'left', 'control'),
-                                                                                                            createPort('y_true', 'Y_true', 'input', 0, 'left', 'control'),
-                                                                                                            createPort('theta_true', 'θ_true', 'input', 0, 'left', 'control'),
-                                                                                                            createPort('yaw_rate_imu', 'Yaw Rate', 'input', 0, 'bottom', 'control')
+                                                                                                            createPort('x_odom', 'X_odom', 'input', 0, 'left', 'continuous'),
+                                                                                                            createPort('y_odom', 'Y_odom', 'input', 0, 'left', 'continuous'),
+                                                                                                            createPort('theta_odom', 'θ_odom', 'input', 0, 'left', 'continuous'),
+                                                                                                            createPort('x_true', 'X_true', 'input', 0, 'left', 'continuous'),
+                                                                                                            createPort('y_true', 'Y_true', 'input', 0, 'left', 'continuous'),
+                                                                                                            createPort('theta_true', 'θ_true', 'input', 0, 'left', 'continuous'),
+                                                                                                            createPort('yaw_rate_imu', 'Yaw Rate', 'input', 0, 'bottom', 'continuous')
                                                                                                           ],
                                                                                                           outputs: [
-                                                                                                            createPort('x_est', 'X_est', 'output', 0, 'right', 'control'),
-                                                                                                            createPort('y_est', 'Y_est', 'output', 0, 'right', 'control'),
-                                                                                                            createPort('theta_est', 'θ_est', 'output', 0, 'right', 'control'),
-                                                                                                            createPort('confidence', 'Conf', 'output', 100, 'right', 'control')
+                                                                                                            createPort('x_est', 'X_est', 'output', 0, 'right', 'continuous'),
+                                                                                                            createPort('y_est', 'Y_est', 'output', 0, 'right', 'continuous'),
+                                                                                                            createPort('theta_est', 'θ_est', 'output', 0, 'right', 'continuous'),
+                                                                                                            createPort('confidence', 'Conf', 'output', 100, 'right', 'continuous')
                                                                                                           ],
                                                                                                           state: {
                                                                                                             x_est: 0,
@@ -9129,19 +9139,19 @@ execute: (ins, p, state) => {
                                                                                                             },
                                                                                                             isStateful: true,
                                                                                                             inputs: [
-                                                                                                              createPort('x_est', 'X_est', 'input', 0, 'left', 'control'),
-                                                                                                              createPort('y_est', 'Y_est', 'input', 0, 'left', 'control'),
-                                                                                                              createPort('theta_est', 'θ_est', 'input', 0, 'left', 'control'),
+                                                                                                              createPort('x_est', 'X_est', 'input', 0, 'left', 'continuous'),
+                                                                                                              createPort('y_est', 'Y_est', 'input', 0, 'left', 'continuous'),
+                                                                                                              createPort('theta_est', 'θ_est', 'input', 0, 'left', 'continuous'),
                                                                                                               createPort('lidar_ranges', 'LiDAR', 'input', [0, 0, 0, 0, 0, 0, 0, 0], 'left', 'vector'),
-                                                                                                              createPort('x_true', 'X_true', 'input', 0, 'left', 'control'),
-                                                                                                              createPort('y_true', 'Y_true', 'input', 0, 'left', 'control'),
-                                                                                                              createPort('theta_true', 'θ_true', 'input', 0, 'left', 'control')
+                                                                                                              createPort('x_true', 'X_true', 'input', 0, 'left', 'continuous'),
+                                                                                                              createPort('y_true', 'Y_true', 'input', 0, 'left', 'continuous'),
+                                                                                                              createPort('theta_true', 'θ_true', 'input', 0, 'left', 'continuous')
                                                                                                             ],
                                                                                                             outputs: [
                                                                                                               createPort('grid', 'SLAM Grid', 'output', Array.from({ length: 30 }, () => Array(30).fill(0)), 'right', 'matrix'),
-                                                                                                              createPort('x_corr', 'X_corr', 'output', 0, 'right', 'control'),
-                                                                                                              createPort('y_corr', 'Y_corr', 'output', 0, 'right', 'control'),
-                                                                                                              createPort('theta_corr', 'θ_corr', 'output', 0, 'right', 'control'),
+                                                                                                              createPort('x_corr', 'X_corr', 'output', 0, 'right', 'continuous'),
+                                                                                                              createPort('y_corr', 'Y_corr', 'output', 0, 'right', 'continuous'),
+                                                                                                              createPort('theta_corr', 'θ_corr', 'output', 0, 'right', 'continuous'),
                                                                                                               createPort('slam_stats', 'SLAM Stats', 'output', [100, 0], 'right', 'vector')
                                                                                                             ],
                                                                                                             state: {
@@ -9241,22 +9251,22 @@ execute: (ins, p, state) => {
                                                                                                               params: {},
                                                                                                               isStateful: true,
                                                                                                               inputs: [
-                                                                                                                createPort('x_est', 'X_est', 'input', 0, 'left', 'control'),
-                                                                                                                createPort('y_est', 'Y_est', 'input', 0, 'left', 'control'),
-                                                                                                                createPort('theta_est', 'θ_est', 'input', 0, 'left', 'control'),
+                                                                                                                createPort('x_est', 'X_est', 'input', 0, 'left', 'continuous'),
+                                                                                                                createPort('y_est', 'Y_est', 'input', 0, 'left', 'continuous'),
+                                                                                                                createPort('theta_est', 'θ_est', 'input', 0, 'left', 'continuous'),
                                                                                                                 createPort('lidar_ranges', 'LiDAR', 'input', [0, 0, 0, 0, 0, 0, 0, 0], 'left', 'vector'),
-                                                                                                                createPort('target_x_in', 'Target X', 'input', 0, 'left', 'control'),
-                                                                                                                createPort('target_y_in', 'Target Y', 'input', 0, 'left', 'control'),
-                                                                                                                createPort('mode_select', 'Mode In', 'input', 5, 'bottom', 'control'),
-                                                                                                                createPort('battery_level', 'Bat', 'input', 100, 'bottom', 'control'),
-                                                                                                                createPort('is_docked', 'Docked', 'input', 0, 'bottom', 'control')
+                                                                                                                createPort('target_x_in', 'Target X', 'input', 0, 'left', 'continuous'),
+                                                                                                                createPort('target_y_in', 'Target Y', 'input', 0, 'left', 'continuous'),
+                                                                                                                createPort('mode_select', 'Mode In', 'input', 5, 'bottom', 'continuous'),
+                                                                                                                createPort('battery_level', 'Bat', 'input', 100, 'bottom', 'continuous'),
+                                                                                                                createPort('is_docked', 'Docked', 'input', 0, 'bottom', 'logical')
                                                                                                               ],
                                                                                                               outputs: [
-                                                                                                                createPort('v_ref', 'V_ref', 'output', 0, 'right', 'control'),
-                                                                                                                createPort('w_ref', 'w_ref', 'output', 0, 'right', 'control'),
-                                                                                                                createPort('nav_state', 'Nav State', 'output', 5, 'right', 'control'),
-                                                                                                                createPort('target_x_active', 'Act Tx', 'output', 0, 'right', 'control'),
-                                                                                                                createPort('target_y_active', 'Act Ty', 'output', 0, 'right', 'control'),
+                                                                                                                createPort('v_ref', 'V_ref', 'output', 0, 'right', 'continuous'),
+                                                                                                                createPort('w_ref', 'w_ref', 'output', 0, 'right', 'continuous'),
+                                                                                                                createPort('nav_state', 'Nav State', 'output', 5, 'right', 'continuous'),
+                                                                                                                createPort('target_x_active', 'Act Tx', 'output', 0, 'right', 'continuous'),
+                                                                                                                createPort('target_y_active', 'Act Ty', 'output', 0, 'right', 'continuous'),
                                                                                                                 createPort('nav_stats', 'Nav Stats', 'output', [0, 100, 0, 100], 'right', 'vector')
                                                                                                               ],
                                                                                                               state: {
@@ -9494,12 +9504,12 @@ execute: (ins, p, state) => {
                                                                                                                   wheel_separation: params.wheel_separation ?? 0.16
                                                                                                                 },
                                                                                                                 inputs: [
-                                                                                                                  createPort('v_ref', 'V_ref', 'input', 0, 'left', 'control'),
-                                                                                                                  createPort('w_ref', 'w_ref', 'input', 0, 'left', 'control')
+                                                                                                                  createPort('v_ref', 'V_ref', 'input', 0, 'left', 'continuous'),
+                                                                                                                  createPort('w_ref', 'w_ref', 'input', 0, 'left', 'continuous')
                                                                                                                 ],
                                                                                                                 outputs: [
-                                                                                                                  createPort('omegaL_ref', 'ωL_ref', 'output', 0, 'right', 'control'),
-                                                                                                                  createPort('omegaR_ref', 'ωR_ref', 'output', 0, 'right', 'control')
+                                                                                                                  createPort('omegaL_ref', 'ωL_ref', 'output', 0, 'right', 'continuous'),
+                                                                                                                  createPort('omegaR_ref', 'ωR_ref', 'output', 0, 'right', 'continuous')
                                                                                                                 ],
                                                                                                                 icon: 'graduation-cap',
                                                                                                                 description: 'Performs inverse kinematic transforms. Converts linear speed target V_ref and angular speed target w_ref to Left/Right wheel speed references: w_L_ref = (V_ref - w_ref * L_sep/2) / r_wheel, w_R_ref = (V_ref + w_ref * L_sep/2) / r_wheel.',
@@ -9527,14 +9537,14 @@ execute: (ins, p, state) => {
                                                                                                                   },
                                                                                                                   isStateful: true,
                                                                                                                   inputs: [
-                                                                                                                    createPort('omegaL_ref', 'ωL_ref', 'input', 0, 'left', 'control'),
-                                                                                                                    createPort('omegaR_ref', 'ωR_ref', 'input', 0, 'left', 'control'),
-                                                                                                                    createPort('omega_L', 'ω_L', 'input', 0, 'left', 'control'),
-                                                                                                                    createPort('omega_R', 'ω_R', 'input', 0, 'left', 'control')
+                                                                                                                    createPort('omegaL_ref', 'ωL_ref', 'input', 0, 'left', 'continuous'),
+                                                                                                                    createPort('omegaR_ref', 'ωR_ref', 'input', 0, 'left', 'continuous'),
+                                                                                                                    createPort('omega_L', 'ω_L', 'input', 0, 'left', 'continuous'),
+                                                                                                                    createPort('omega_R', 'ω_R', 'input', 0, 'left', 'continuous')
                                                                                                                   ],
                                                                                                                   outputs: [
-                                                                                                                    createPort('V_L', 'V_L', 'output', 0, 'right', 'control'),
-                                                                                                                    createPort('V_R', 'V_R', 'output', 0, 'right', 'control')
+                                                                                                                    createPort('V_L', 'V_L', 'output', 0, 'right', 'continuous'),
+                                                                                                                    createPort('V_R', 'V_R', 'output', 0, 'right', 'continuous')
                                                                                                                   ],
                                                                                                                   state: {
                                                                                                                     int_errL: 0,
@@ -9605,12 +9615,12 @@ execute: (ins, p, state) => {
                                                                                                                     },
                                                                                                                     isStateful: true,
                                                                                                                     inputs: [
-                                                                                                                      createPort('omega_L', 'ω_L', 'input', 0, 'left', 'control', 'float32', 'rad/s', 100, 'motor'),
-                                                                                                                      createPort('omega_R', 'ω_R', 'input', 0, 'left', 'control', 'float32', 'rad/s', 100, 'motor')
+                                                                                                                      createPort('omega_L', 'ω_L', 'input', 0, 'left', 'continuous', 'float32', 'rad/s', 100, 'motor'),
+                                                                                                                      createPort('omega_R', 'ω_R', 'input', 0, 'left', 'continuous', 'float32', 'rad/s', 100, 'motor')
                                                                                                                     ],
                                                                                                                     outputs: [
-                                                                                                                      createPort('enc_L', 'Enc L', 'output', 0, 'right', 'control', 'int32', 'ticks', 100, 'motor'),
-                                                                                                                      createPort('enc_R', 'Enc R', 'output', 0, 'right', 'control', 'int32', 'ticks', 100, 'motor')
+                                                                                                                      createPort('enc_L', 'Enc L', 'output', 0, 'right', 'continuous', 'int32', 'ticks', 100, 'motor'),
+                                                                                                                      createPort('enc_R', 'Enc R', 'output', 0, 'right', 'continuous', 'int32', 'ticks', 100, 'motor')
                                                                                                                     ],
                                                                                                                     state: {
                                                                                                                       theta_L: 0,
@@ -9656,9 +9666,9 @@ execute: (ins, p, state) => {
                                                                                                                         seed: xbSeedParam(id, params)
                                                                                                                       },
                                                                                                                       inputs: [
-                                                                                                                        createPort('x', 'X_true', 'input', 0, 'left', 'control', 'float32', 'm', 50, 'world'),
-                                                                                                                        createPort('y', 'Y_true', 'input', 0, 'left', 'control', 'float32', 'm', 50, 'world'),
-                                                                                                                        createPort('theta', 'θ_true', 'input', 0, 'left', 'control', 'float32', 'rad', 50, 'world'),
+                                                                                                                        createPort('x', 'X_true', 'input', 0, 'left', 'continuous', 'float32', 'm', 50, 'world'),
+                                                                                                                        createPort('y', 'Y_true', 'input', 0, 'left', 'continuous', 'float32', 'm', 50, 'world'),
+                                                                                                                        createPort('theta', 'θ_true', 'input', 0, 'left', 'continuous', 'float32', 'rad', 50, 'world'),
                                                                                                                         createPort('env_geom', 'Env Geom', 'input', 0, 'left', 'vector', 'float32', 'none', 50, 'world')
                                                                                                                       ],
                                                                                                                       outputs: [
@@ -9706,20 +9716,20 @@ execute: (ins, p, state) => {
                                                                                                                         },
                                                                                                                         isStateful: true,
                                                                                                                         inputs: [
-                                                                                                                          createPort('x_odom', 'X_odom', 'input', 0, 'left', 'control', 'float32', 'm', 100, 'world'),
-                                                                                                                          createPort('y_odom', 'Y_odom', 'input', 0, 'left', 'control', 'float32', 'm', 100, 'world'),
-                                                                                                                          createPort('theta_odom', 'θ_odom', 'input', 0, 'left', 'control', 'float32', 'rad', 100, 'world'),
+                                                                                                                          createPort('x_odom', 'X_odom', 'input', 0, 'left', 'continuous', 'float32', 'm', 100, 'world'),
+                                                                                                                          createPort('y_odom', 'Y_odom', 'input', 0, 'left', 'continuous', 'float32', 'm', 100, 'world'),
+                                                                                                                          createPort('theta_odom', 'θ_odom', 'input', 0, 'left', 'continuous', 'float32', 'rad', 100, 'world'),
                                                                                                                           createPort('lidar_ranges', 'Ranges', 'input', [0, 0, 0, 0, 0, 0, 0, 0], 'left', 'vector', 'float32', 'm', 50, 'body'),
-                                                                                                                          createPort('x_true', 'X_true', 'input', 0, 'left', 'control', 'float32', 'm', 100, 'world'),
-                                                                                                                          createPort('y_true', 'Y_true', 'input', 0, 'left', 'control', 'float32', 'm', 100, 'world'),
-                                                                                                                          createPort('theta_true', 'θ_true', 'input', 0, 'left', 'control', 'float32', 'rad', 100, 'world')
+                                                                                                                          createPort('x_true', 'X_true', 'input', 0, 'left', 'continuous', 'float32', 'm', 100, 'world'),
+                                                                                                                          createPort('y_true', 'Y_true', 'input', 0, 'left', 'continuous', 'float32', 'm', 100, 'world'),
+                                                                                                                          createPort('theta_true', 'θ_true', 'input', 0, 'left', 'continuous', 'float32', 'rad', 100, 'world')
                                                                                                                         ],
                                                                                                                         outputs: [
-                                                                                                                          createPort('x_est', 'X_est', 'output', 0, 'right', 'control', 'float32', 'm', 50, 'world'),
-                                                                                                                          createPort('y_est', 'Y_est', 'output', 0, 'right', 'control', 'float32', 'm', 50, 'world'),
-                                                                                                                          createPort('theta_est', 'θ_est', 'output', 0, 'right', 'control', 'float32', 'rad', 50, 'world'),
+                                                                                                                          createPort('x_est', 'X_est', 'output', 0, 'right', 'continuous', 'float32', 'm', 50, 'world'),
+                                                                                                                          createPort('y_est', 'Y_est', 'output', 0, 'right', 'continuous', 'float32', 'm', 50, 'world'),
+                                                                                                                          createPort('theta_est', 'θ_est', 'output', 0, 'right', 'continuous', 'float32', 'rad', 50, 'world'),
                                                                                                                           createPort('covariance', 'Cov', 'output', [0.01, 0.01, 0.005], 'right', 'vector', 'float32', 'none', 50, 'none'),
-                                                                                                                          createPort('confidence', 'Conf', 'output', 100, 'right', 'control', 'float32', '%', 50, 'none')
+                                                                                                                          createPort('confidence', 'Conf', 'output', 100, 'right', 'continuous', 'float32', '%', 50, 'none')
                                                                                                                         ],
                                                                                                                         state: {
                                                                                                                           x_est: 0,
@@ -9796,9 +9806,9 @@ execute: (ins, p, state) => {
                                                                                                                           },
                                                                                                                           isStateful: true,
                                                                                                                           inputs: [
-                                                                                                                            createPort('x_est', 'X_est', 'input', 0, 'left', 'control', 'float32', 'm', 50, 'world'),
-                                                                                                                            createPort('y_est', 'Y_est', 'input', 0, 'left', 'control', 'float32', 'm', 50, 'world'),
-                                                                                                                            createPort('theta_est', 'θ_est', 'input', 0, 'left', 'control', 'float32', 'rad', 50, 'world'),
+                                                                                                                            createPort('x_est', 'X_est', 'input', 0, 'left', 'continuous', 'float32', 'm', 50, 'world'),
+                                                                                                                            createPort('y_est', 'Y_est', 'input', 0, 'left', 'continuous', 'float32', 'm', 50, 'world'),
+                                                                                                                            createPort('theta_est', 'θ_est', 'input', 0, 'left', 'continuous', 'float32', 'rad', 50, 'world'),
                                                                                                                             createPort('lidar_ranges', 'Ranges', 'input', [0, 0, 0, 0, 0, 0, 0, 0], 'left', 'vector', 'float32', 'm', 50, 'body')
                                                                                                                           ],
                                                                                                                           outputs: [
@@ -9869,12 +9879,12 @@ execute: (ins, p, state) => {
                                                                                                                             isStateful: true,
                                                                                                                             inputs: [
                                                                                                                               createPort('grid', 'Grid', 'input', Array.from({ length: 30 }, () => Array(30).fill(0)), 'left', 'matrix', 'int32', '%', 50, 'world'),
-                                                                                                                              createPort('x_est', 'X_est', 'input', 0, 'left', 'control', 'float32', 'm', 50, 'world'),
-                                                                                                                              createPort('y_est', 'Y_est', 'input', 0, 'left', 'control', 'float32', 'm', 50, 'world')
+                                                                                                                              createPort('x_est', 'X_est', 'input', 0, 'left', 'continuous', 'float32', 'm', 50, 'world'),
+                                                                                                                              createPort('y_est', 'Y_est', 'input', 0, 'left', 'continuous', 'float32', 'm', 50, 'world')
                                                                                                                             ],
                                                                                                                             outputs: [
-                                                                                                                              createPort('goal_x', 'Goal X', 'output', 0, 'right', 'control', 'float32', 'm', 50, 'world'),
-                                                                                                                              createPort('goal_y', 'Goal Y', 'output', 0, 'right', 'control', 'float32', 'm', 50, 'world'),
+                                                                                                                              createPort('goal_x', 'Goal X', 'output', 0, 'right', 'continuous', 'float32', 'm', 50, 'world'),
+                                                                                                                              createPort('goal_y', 'Goal Y', 'output', 0, 'right', 'continuous', 'float32', 'm', 50, 'world'),
                                                                                                                               createPort('coverage_status', 'Stats', 'output', [0, 0, 0], 'right', 'vector', 'float32', 'none', 50, 'none')
                                                                                                                             ],
                                                                                                                             state: {
@@ -9957,15 +9967,15 @@ execute: (ins, p, state) => {
                                                                                                                               },
                                                                                                                               inputs: [
                                                                                                                                 createPort('grid', 'Grid', 'input', Array.from({ length: 30 }, () => Array(30).fill(0)), 'left', 'matrix', 'int32', '%', 50, 'world'),
-                                                                                                                                createPort('x_est', 'X_est', 'input', 0, 'left', 'control', 'float32', 'm', 50, 'world'),
-                                                                                                                                createPort('y_est', 'Y_est', 'input', 0, 'left', 'control', 'float32', 'm', 50, 'world'),
-                                                                                                                                createPort('goal_x', 'Goal X', 'input', 0, 'left', 'control', 'float32', 'm', 50, 'world'),
-                                                                                                                                createPort('goal_y', 'Goal Y', 'input', 0, 'left', 'control', 'float32', 'm', 50, 'world')
+                                                                                                                                createPort('x_est', 'X_est', 'input', 0, 'left', 'continuous', 'float32', 'm', 50, 'world'),
+                                                                                                                                createPort('y_est', 'Y_est', 'input', 0, 'left', 'continuous', 'float32', 'm', 50, 'world'),
+                                                                                                                                createPort('goal_x', 'Goal X', 'input', 0, 'left', 'continuous', 'float32', 'm', 50, 'world'),
+                                                                                                                                createPort('goal_y', 'Goal Y', 'input', 0, 'left', 'continuous', 'float32', 'm', 50, 'world')
                                                                                                                               ],
                                                                                                                               outputs: [
                                                                                                                                 createPort('planned_path', 'Path', 'output', [0, 0], 'right', 'vector', 'float32', 'm', 50, 'world'),
-                                                                                                                                createPort('target_x', 'Target X', 'output', 0, 'right', 'control', 'float32', 'm', 50, 'world'),
-                                                                                                                                createPort('target_y', 'Target Y', 'output', 0, 'right', 'control', 'float32', 'm', 50, 'world')
+                                                                                                                                createPort('target_x', 'Target X', 'output', 0, 'right', 'continuous', 'float32', 'm', 50, 'world'),
+                                                                                                                                createPort('target_y', 'Target Y', 'output', 0, 'right', 'continuous', 'float32', 'm', 50, 'world')
                                                                                                                               ],
                                                                                                                               icon: 'graduation-cap',
                                                                                                                               description: 'Finds collision-free paths using A* and outputs the next local waypoint target.',
@@ -10012,14 +10022,14 @@ execute: (ins, p, state) => {
                                                                                                                                 isStateful: true,
                                                                                                                                 inputs: [
                                                                                                                                   createPort('lidar_ranges', 'Ranges', 'input', [0, 0, 0, 0, 0, 0, 0, 0], 'left', 'vector', 'float32', 'm', 50, 'body'),
-                                                                                                                                  createPort('target_x', 'Target X', 'input', 0, 'left', 'control', 'float32', 'm', 50, 'world'),
-                                                                                                                                  createPort('target_y', 'Target Y', 'input', 0, 'left', 'control', 'float32', 'm', 50, 'world')
+                                                                                                                                  createPort('target_x', 'Target X', 'input', 0, 'left', 'continuous', 'float32', 'm', 50, 'world'),
+                                                                                                                                  createPort('target_y', 'Target Y', 'input', 0, 'left', 'continuous', 'float32', 'm', 50, 'world')
                                                                                                                                 ],
                                                                                                                                 outputs: [
-                                                                                                                                  createPort('safe_x', 'Safe X', 'output', 0, 'right', 'control', 'float32', 'm', 50, 'world'),
-                                                                                                                                  createPort('safe_y', 'Safe Y', 'output', 0, 'right', 'control', 'float32', 'm', 50, 'world'),
+                                                                                                                                  createPort('safe_x', 'Safe X', 'output', 0, 'right', 'continuous', 'float32', 'm', 50, 'world'),
+                                                                                                                                  createPort('safe_y', 'Safe Y', 'output', 0, 'right', 'continuous', 'float32', 'm', 50, 'world'),
                                                                                                                                   createPort('velocity_constraints', 'V_const', 'output', [0.22, 1.6], 'right', 'vector', 'float32', 'none', 50, 'none'),
-                                                                                                                                  createPort('nav_state', 'State', 'output', 5, 'right', 'control', 'int32', 'none', 50, 'none')
+                                                                                                                                  createPort('nav_state', 'State', 'output', 5, 'right', 'continuous', 'int32', 'none', 50, 'none')
                                                                                                                                 ],
                                                                                                                                 state: {
                                                                                                                                   navState: 5,
@@ -10068,16 +10078,16 @@ execute: (ins, p, state) => {
                                                                                                                                     controller_type: params.controller_type || 'Pure Pursuit'
                                                                                                                                   },
                                                                                                                                   inputs: [
-                                                                                                                                    createPort('x_est', 'X_est', 'input', 0, 'left', 'control', 'float32', 'm', 50, 'world'),
-                                                                                                                                    createPort('y_est', 'Y_est', 'input', 0, 'left', 'control', 'float32', 'm', 50, 'world'),
-                                                                                                                                    createPort('theta_est', 'θ_est', 'input', 0, 'left', 'control', 'float32', 'rad', 50, 'world'),
-                                                                                                                                    createPort('target_x', 'Target X', 'input', 0, 'left', 'control', 'float32', 'm', 50, 'world'),
-                                                                                                                                    createPort('target_y', 'Target Y', 'input', 0, 'left', 'control', 'float32', 'm', 50, 'world'),
+                                                                                                                                    createPort('x_est', 'X_est', 'input', 0, 'left', 'continuous', 'float32', 'm', 50, 'world'),
+                                                                                                                                    createPort('y_est', 'Y_est', 'input', 0, 'left', 'continuous', 'float32', 'm', 50, 'world'),
+                                                                                                                                    createPort('theta_est', 'θ_est', 'input', 0, 'left', 'continuous', 'float32', 'rad', 50, 'world'),
+                                                                                                                                    createPort('target_x', 'Target X', 'input', 0, 'left', 'continuous', 'float32', 'm', 50, 'world'),
+                                                                                                                                    createPort('target_y', 'Target Y', 'input', 0, 'left', 'continuous', 'float32', 'm', 50, 'world'),
                                                                                                                                     createPort('velocity_constraints', 'V_const', 'input', [0.22, 1.6], 'left', 'vector', 'float32', 'none', 50, 'none')
                                                                                                                                   ],
                                                                                                                                   outputs: [
-                                                                                                                                    createPort('v_cmd', 'V_cmd', 'output', 0, 'right', 'control', 'float32', 'm/s', 50, 'body'),
-                                                                                                                                    createPort('w_cmd', 'w_cmd', 'output', 0, 'right', 'control', 'float32', 'rad/s', 50, 'body')
+                                                                                                                                    createPort('v_cmd', 'V_cmd', 'output', 0, 'right', 'continuous', 'float32', 'm/s', 50, 'body'),
+                                                                                                                                    createPort('w_cmd', 'w_cmd', 'output', 0, 'right', 'continuous', 'float32', 'rad/s', 50, 'body')
                                                                                                                                   ],
                                                                                                                                   icon: 'graduation-cap',
                                                                                                                                   description: 'Steering motion controller executing path tracking algorithms like Pure Pursuit.',
@@ -10127,14 +10137,14 @@ execute: (ins, p, state) => {
                                                                                                                                     },
                                                                                                                                     isStateful: true,
                                                                                                                                     inputs: [
-                                                                                                                                      createPort('v_cmd', 'V_cmd', 'input', 0, 'left', 'control', 'float32', 'm/s', 50, 'body'),
-                                                                                                                                      createPort('w_cmd', 'w_cmd', 'input', 0, 'left', 'control', 'float32', 'rad/s', 50, 'body'),
-                                                                                                                                      createPort('omega_L', 'ω_L', 'input', 0, 'left', 'control', 'float32', 'rad/s', 100, 'motor'),
-                                                                                                                                      createPort('omega_R', 'ω_R', 'input', 0, 'left', 'control', 'float32', 'rad/s', 100, 'motor')
+                                                                                                                                      createPort('v_cmd', 'V_cmd', 'input', 0, 'left', 'continuous', 'float32', 'm/s', 50, 'body'),
+                                                                                                                                      createPort('w_cmd', 'w_cmd', 'input', 0, 'left', 'continuous', 'float32', 'rad/s', 50, 'body'),
+                                                                                                                                      createPort('omega_L', 'ω_L', 'input', 0, 'left', 'continuous', 'float32', 'rad/s', 100, 'motor'),
+                                                                                                                                      createPort('omega_R', 'ω_R', 'input', 0, 'left', 'continuous', 'float32', 'rad/s', 100, 'motor')
                                                                                                                                     ],
                                                                                                                                     outputs: [
-                                                                                                                                      createPort('V_cmd_L', 'V_L', 'output', 0, 'right', 'control', 'float32', 'V', 100, 'motor'),
-                                                                                                                                      createPort('V_cmd_R', 'V_R', 'output', 0, 'right', 'control', 'float32', 'V', 100, 'motor')
+                                                                                                                                      createPort('V_cmd_L', 'V_L', 'output', 0, 'right', 'continuous', 'float32', 'V', 100, 'motor'),
+                                                                                                                                      createPort('V_cmd_R', 'V_R', 'output', 0, 'right', 'continuous', 'float32', 'V', 100, 'motor')
                                                                                                                                     ],
                                                                                                                                     state: {
                                                                                                                                       int_errL: 0,
@@ -10183,24 +10193,24 @@ execute: (ins, p, state) => {
                                                                                                                                       params: {},
                                                                                                                                       isStateful: true,
                                                                                                                                       inputs: [
-                                                                                                                                        createPort('x', 'X_true', 'input', 0, 'left', 'control', 'float32', 'm', 100, 'world'),
-                                                                                                                                        createPort('y', 'Y_true', 'input', 0, 'left', 'control', 'float32', 'm', 100, 'world'),
-                                                                                                                                        createPort('theta', 'θ_true', 'input', 0, 'left', 'control', 'float32', 'rad', 100, 'world'),
-                                                                                                                                        createPort('x_est', 'X_est', 'input', 0, 'left', 'control', 'float32', 'm', 50, 'world'),
-                                                                                                                                        createPort('y_est', 'Y_est', 'input', 0, 'left', 'control', 'float32', 'm', 50, 'world'),
-                                                                                                                                        createPort('theta_est', 'θ_est', 'input', 0, 'left', 'control', 'float32', 'rad', 50, 'world'),
+                                                                                                                                        createPort('x', 'X_true', 'input', 0, 'left', 'continuous', 'float32', 'm', 100, 'world'),
+                                                                                                                                        createPort('y', 'Y_true', 'input', 0, 'left', 'continuous', 'float32', 'm', 100, 'world'),
+                                                                                                                                        createPort('theta', 'θ_true', 'input', 0, 'left', 'continuous', 'float32', 'rad', 100, 'world'),
+                                                                                                                                        createPort('x_est', 'X_est', 'input', 0, 'left', 'continuous', 'float32', 'm', 50, 'world'),
+                                                                                                                                        createPort('y_est', 'Y_est', 'input', 0, 'left', 'continuous', 'float32', 'm', 50, 'world'),
+                                                                                                                                        createPort('theta_est', 'θ_est', 'input', 0, 'left', 'continuous', 'float32', 'rad', 50, 'world'),
                                                                                                                                         createPort('grid', 'Grid', 'input', Array.from({ length: 30 }, () => Array(30).fill(0)), 'bottom', 'matrix', 'int32', '%', 50, 'world'),
                                                                                                                                         createPort('lidar_ranges', 'Ranges', 'input', [0, 0, 0, 0, 0, 0, 0, 0], 'bottom', 'vector', 'float32', 'm', 50, 'body'),
-                                                                                                                                        createPort('target_x', 'Target X', 'input', 0, 'bottom', 'control', 'float32', 'm', 50, 'world'),
-                                                                                                                                        createPort('target_y', 'Target Y', 'input', 0, 'bottom', 'control', 'float32', 'm', 50, 'world'),
-                                                                                                                                        createPort('nav_state', 'State', 'input', 5, 'bottom', 'control', 'int32', 'none', 50, 'none'),
-                                                                                                                                        createPort('battery_level', 'Bat', 'input', 100, 'bottom', 'control', 'float32', '%', 100, 'none'),
+                                                                                                                                        createPort('target_x', 'Target X', 'input', 0, 'bottom', 'continuous', 'float32', 'm', 50, 'world'),
+                                                                                                                                        createPort('target_y', 'Target Y', 'input', 0, 'bottom', 'continuous', 'float32', 'm', 50, 'world'),
+                                                                                                                                        createPort('nav_state', 'State', 'input', 5, 'bottom', 'continuous', 'int32', 'none', 50, 'none'),
+                                                                                                                                        createPort('battery_level', 'Bat', 'input', 100, 'bottom', 'continuous', 'float32', '%', 100, 'none'),
                                                                                                                                         createPort('comm_stats', 'Comm Stats', 'input', [50.0, 0, 0], 'bottom', 'vector', 'float32', 'none', 50, 'none'),
                                                                                                                                         createPort('nav_stats', 'Nav Stats', 'input', [0, 100, 0, 100], 'bottom', 'vector', 'float32', 'none', 50, 'none'),
-                                                                                                                                        createPort('confidence', 'Conf', 'input', 100, 'bottom', 'control', 'float32', '%', 50, 'none')
+                                                                                                                                        createPort('confidence', 'Conf', 'input', 100, 'bottom', 'continuous', 'float32', '%', 50, 'none')
                                                                                                                                       ],
                                                                                                                                       outputs: [
-                                                                                                                                        createPort('animation', 'Anim', 'output', 0, 'right', 'control', 'float32', 'none', 50, 'none'),
+                                                                                                                                        createPort('animation', 'Anim', 'output', 0, 'right', 'continuous', 'float32', 'none', 50, 'none'),
                                                                                                                                         createPort('diagnostic_plots', 'Diag', 'output', [0, 0], 'right', 'vector', 'float32', 'none', 50, 'none')
                                                                                                                                       ],
                                                                                                                                       state: {
@@ -10749,11 +10759,11 @@ execute: (ins, p, state) => {
                                                                                                                                                               inputs: [
                                                                                                                                                                 createPort('r', 'Ref', 'input', 0, 'left', 'continuous'),
                                                                                                                                                                 createPort('y', 'Feedback', 'input', 0, 'left', 'continuous'),
-                                                                                                                                                                createPort('enable', 'Enable', 'input', 1, 'bottom', 'control'),
-                                                                                                                                                                createPort('reset', 'Reset', 'input', 0, 'bottom', 'control')
+                                                                                                                                                                createPort('enable', 'Enable', 'input', 1, 'bottom', 'continuous'),
+                                                                                                                                                                createPort('reset', 'Reset', 'input', 0, 'bottom', 'continuous')
                                                                                                                                                               ],
                                                                                                                                                               outputs: [
-                                                                                                                                                                createPort('u', 'Control', 'output', 0, 'right', 'control'),
+                                                                                                                                                                createPort('u', 'Control', 'output', 0, 'right', 'continuous'),
                                                                                                                                                                 createPort('error', 'Error', 'output', 0, 'top', 'measurement'),
                                                                                                                                                                 createPort('kp_eff', 'Kp_eff', 'output', 0, 'top', 'measurement'),
                                                                                                                                                                 createPort('ki_eff', 'Ki_eff', 'output', 0, 'top', 'measurement'),
@@ -12374,7 +12384,536 @@ for (const type of NUMERIC_INPUT_GUARDED) {
   };
 }
 
+/**
+ * Catalogue text of the library blocks (XBV-012, XBV-013): the equation each block implements and the unit of each port.
+ * Applied below to every factory output that does not already carry its own value. Units: SI symbols; '1' is a
+ * dimensionless signal; 'inherit' means the unit follows the connected signal (element-wise and signal-processing
+ * blocks); 'none' marks structured data without a unit (maps, lists, state bundles); '@angle' is rad or deg
+ * according to the angle_unit parameter.
+ */
+const CATALOGUE_EQUATIONS: Readonly<Record<string, string>> = {
+  COS: 'y = cos(u)  (u in rad or deg per angle_unit)',
+  TAN: 'y = tan(u)  (u in rad or deg per angle_unit)',
+  COT: 'y = 1 / tan(u)  (u in rad or deg per angle_unit)',
+  SEC: 'y = 1 / cos(u)  (u in rad or deg per angle_unit)',
+  COSEC: 'y = 1 / sin(u)  (u in rad or deg per angle_unit)',
+  ASIN: 'y = asin(u), |u| <= 1; y in rad or deg per angle_unit',
+  ACOS: 'y = acos(u), |u| <= 1; y in rad or deg per angle_unit',
+  ATAN: 'y = atan(u); y in rad or deg per angle_unit',
+  ACOT: 'y = atan(1 / u); y in rad or deg per angle_unit',
+  ASEC: 'y = acos(1 / u), |u| >= 1; y in rad or deg per angle_unit',
+  ACOSEC: 'y = asin(1 / u), |u| >= 1; y in rad or deg per angle_unit',
+  SINH: 'y = sinh(u)',
+  COSH: 'y = cosh(u)',
+  TANH: 'y = tanh(u)',
+  COTH: 'y = 1 / tanh(u)',
+  SECH: 'y = 1 / cosh(u)',
+  COSECH: 'y = 1 / sinh(u)',
+  ASINH: 'y = asinh(u)',
+  ACOSH: 'y = acosh(u), u >= 1',
+  ATANH: 'y = atanh(u), |u| <= 1',
+  ACOTH: 'y = atanh(1 / u), |u| >= 1',
+  ASECH: 'y = acosh(1 / u), 0 < u <= 1',
+  ACOSECH: 'y = asinh(1 / u)',
+  Abs: 'y = |u| (element-wise)',
+  UnaryNeg: 'Out = -In (element-wise)',
+  VectorSub: 'Out = A - B (element-wise, scalars expanded)',
+  VectorDiv: 'Out = Num / Den (element-wise IEEE division; Den = 0 reports DIVIDE_BY_ZERO)',
+  VectorPow: 'Out = Base ^ Exp (element-wise; a negative base with a non-integer exponent gives NaN)',
+  SumElements: 'Out = sum of all elements of In',
+  Mean: 'vector: Out = mean of the elements (NaN when empty); matrix: Out(j) = mean of column j',
+  Max: 'one input: Out = largest element of In (empty gives []); several inputs: element-wise maximum, NaN propagates',
+  MatrixMul: 'Out = A * B (matrix product; incompatible shapes are a block error)',
+  Transpose: 'Out = A^T',
+  Inverse: 'Out = A^-1 (a singular matrix is a block error)',
+  Determinant: 'Out = det(A)',
+  MatrixConcat: 'axis 0: Out = [In1; In2; ...] (vertical), axis 1: Out = [In1, In2, ...] (horizontal); mode vector joins scalars and vectors into one vector, multidimensional promotes them to matrices; mismatched sizes are a block error',
+  MatrixDiag: 'diag(In): a vector gives the diagonal matrix, a matrix gives its main diagonal as a vector',
+  DiagExtract: 'Out = diag(In): a vector gives the diagonal matrix, a matrix gives its main diagonal as a vector',
+  ExtractDiag: 'Out = diag(In): a vector gives the diagonal matrix, a matrix gives its main diagonal as a vector',
+  Diag: 'Out = diag(In): a vector gives the diagonal matrix, a matrix gives its main diagonal as a vector',
+  IdentityMatrix: 'Out = I(dim), the dim-by-dim identity matrix (dim = 3 when not valid)',
+  SubMatrix: 'Out = In(rowStart:rowEnd, colStart:colEnd), one-based and inclusive; an index outside the input is a block error',
+  MatrixSolve: 'x = A \\ B (LU solution of A x = B; x has the shape of B; a singular A is a block error)',
+  Constant: 'y = value, cast to output_type: auto and float64 keep it, float32 rounds to single, boolean is (value != 0), intN / uintN round to nearest and saturate',
+  DATA_TYPE_CONVERSION: 'y = Q(u): u converted to output_type (fixed point wordLength / fractionLength, integer, boolean or float) with the chosen rounding and overflow (saturate, wrap or error)',
+  NUMERIC_REPRESENTATION: 'y = Q(u) quantised to the chosen floating-point or fixed-point representation (rounding, overflow, word and fraction length); e = the quantization error of that conversion',
+  PRODUCT: 'operation multiply: y = u1 * u2 * ... ; operation divide: y = u1 / u2 / ... (one input gives 1 / u1); element-wise, division by 0 reports DIVIDE_BY_ZERO',
+  BitwiseOR: 'Out = A | B (32-bit signed integer OR, element-wise)',
+  BitwiseXOR: 'Out = A ^ B (32-bit signed integer XOR, element-wise)',
+  BitwiseNOT: 'Out = ~In (32-bit signed integer complement, element-wise)',
+  ShiftLeft: 'Out = In << Shift (32-bit signed integer; a Shift of 32 or more shifts every bit out, a negative Shift shifts the other way)',
+  ShiftRight: 'Out = In >> Shift (arithmetic shift of a 32-bit signed integer; a Shift of 32 or more gives 0 or -1, a negative Shift shifts the other way)',
+  MUX: 'y = [u1, u2, ...] (inputs concatenated into one vector; vector inputs are flattened)',
+  DEMUX: 'the elements of u are split in order into numOutputs chunks of near-equal length (the first n mod q chunks one element longer); more outputs than elements is a block error',
+  IF_ELSE: 'y = cond ? u_true : u_false',
+  SWITCH_CASE: 'y = in_k with k = floor(sel); sel outside 1..numCases is a block error',
+  INTEGRATOR_CONTINUOUS: 'dy/dt = u, y(0) = initial_condition',
+  TERMINATOR: 'the input is discarded (no output)',
+  Inport: 'Out = In when connected, otherwise the stored value (parameter value)',
+  Outport: 'Out = In',
+  Subsystem: 'container: its contents are flattened at compile time; the block itself computes nothing',
+  Scope: 'no output: the inputs are recorded and displayed',
+  THREE_PHASE_PWM: 'Reference k is mapped to r = clamp((Vk* + 1) / 2, 0, 1) (for method Saddle or SVPWM first Vk* - (max + min) / 2); Gk = 1 when r >= 1 or r > carrier, carrier = symmetric triangle of the given frequency in [0, 1]',
+  SIX_STEP_COMMUTATION: 'Hall code h = 4 H1 + 2 H2 + H3 selects the gate pattern [AH AL BH BL CH CL]: 5 -> A+ B-, 1 -> A+ C-, 3 -> B+ C-, 2 -> B+ A-, 6 -> C+ A-, 4 -> C+ B-, other codes -> all off',
+  SENSORLESS_SIX_STEP: 'floating phase voltage minus neutral (va + vb + vc) / 3 is tested for a sign change; on a zero crossing the step advances (step mod 6) + 1 and speed = 2 pi / (2 (t - t_zc)); theta advances by speed * dt (mod 2 pi); gates follow the six-step table',
+  DC_VOLTAGE_SOURCE: 'V+ = voltage, V- = 0',
+  THREE_PHASE_LOAD: 'Ik = Vk / max(0.001, R) for each phase',
+  THREE_PHASE_INVERTER: 'vdc = Vdc+ - Vdc-; vPh,k = vdc when gate k > 0.5 else 0; Vk = vPh,k - mean(vPh) (line-to-neutral voltages)',
+  SINGLE_PHASE_H_BRIDGE: 'Vout = (S1 > 0.5 ? vdc : 0) - (S2 > 0.5 ? vdc : 0) with vdc = Vdc+ - Vdc-',
+  VOLTAGE_REFERENCE_GENERATOR: 'Va = A sin(2 pi f t), Vb = A sin(2 pi f t - 2 pi / 3), Vc = A sin(2 pi f t - 4 pi / 3)',
+  CURRENT_CONTROLLER_DQ: 'the reference (id*, iq*) is scaled to magnitude iMax when larger; Vd = Kp_d (id* - id) + Ki_d integral(id* - id) dt, Vq = Kp_q (iq* - iq) + Ki_q integral(iq* - iq) dt',
+  SPEED_CONTROLLER: 'Iq* = clamp(Kp (w* - w) + Ki integral(w* - w) dt, -maxIq, maxIq)',
+  FLUX_REFERENCE: 'Id* = value (constant)',
+  PARK_TRANSFORM: 'Id = Ialpha cos(theta) + Ibeta sin(theta); Iq = -Ialpha sin(theta) + Ibeta cos(theta)',
+  INVERSE_PARK: 'Valpha = Vd cos(theta) - Vq sin(theta); Vbeta = Vd sin(theta) + Vq cos(theta)',
+  INVERSE_CLARKE: 'Va = Valpha; Vb = -Valpha / 2 + (sqrt(3) / 2) Vbeta; Vc = -Valpha / 2 - (sqrt(3) / 2) Vbeta',
+  ZERO_SEQUENCE_INJECTION: 'Vx_mod = Vx - (max(Va, Vb, Vc) + min(Va, Vb, Vc)) / 2',
+  SECTOR_SELECTOR: 'sector = floor(mod(theta, 2 pi) / (pi / 3)) + 1; a non-finite angle gives sector 1 with a NON_FINITE_INPUT warning',
+  SWITCHING_TIME_CALCULATOR: 'SVPWM dwell times T1, T2 of the two active vectors of the sector of theta_s for the reference Vref, DC link Vdc and period Ts, and T0 = Ts - T1 - T2 (svpwmTimes); non-finite inputs, Vdc <= 0 or Ts < 0 are block errors',
+  SVPWM_GATE_GENERATOR: 't = triangular time within the period Ts (t = Ts - (time mod Ts) in the second half); compare levels da, db, dc from sector, T0 / 4, T1 / 2 and T2 / 2 (for sector 1: da = T0/4, db = T0/4 + T1/2, dc = T0/4 + T1/2 + T2/2); Gx = 1 when t > dx, else 0',
+  ROTOR_POSITION_ESTIMATOR: 'method Hall_sensor: sector code from the phase voltages above their mean selects theta from a 60-degree table and speed = wrapped dtheta / dt; otherwise back-EMF: e = v - Rs i - Ls di/dt in the alpha-beta frame, theta = atan2(-e_alpha, e_beta) wrapped to [0, 2 pi) and speed from its change',
+  AC_MOTOR_PID_CONTROL: 'Induction motor (same model as AC_INDUCTION_MOTOR) closed with a PID speed controller on e = w_ref - w (Kp, Ki, Kd, derivative filter N); outputs w, e and Te = 1.5 P (Lm / Lr) (psi_ar i_bs - psi_br i_as)',
+  IM_FLUX_OBSERVER: 'current-model observer: dpsi_ar/dt = (Lm i_alpha - psi_ar) / Tr - w psi_br ..., Tr = Lr / Rr; theta = atan2(psi_br, psi_ar); psi_r = sqrt(psi_ar^2 + psi_br^2)',
+  IM_FOC_CONTROL: 'Iq* = Kp_speed (w* - w) + Ki_speed integral(w* - w) dt; Id* = psi_ref / Lm; currents rotated into the flux frame by theta; PI current loops (Kp_curr, Ki_curr) give Vd, Vq, rotated back to Va*, Vb*, Vc*',
+  VF_SLIP_COMP: 'w_slip = (Iq / rated_iq) rated_slip 2 pi 50; w_sync = w* + w_slip; V = v_f_ratio |w_sync| / (2 pi) + 10; Va, Vb, Vc = V sin(w_sync t - phase)',
+  MTPA_CONTROLLER: 'd = Lq - Ld; on the MTPA locus id(iq) = -2 d iq^2 / (psi_m + sqrt(psi_m^2 + 4 d^2 iq^2)); iq is found by bisection so that 1.5 P iq (psi_m - d id) = |Te*|; the sign of iq follows Te*',
+  FIELD_WEAKENING: 'e = v_max - |V|; the integral accumulates e while e < 0 and is released toward 0 otherwise; Id* = clamp(Id_base + Kp min(e, 0) + Ki integral, id_min, id_max)',
+  MTPA_FW_MANAGER: 'iq = Te* / (1.5 P psi_m) with the MTPA id for a salient motor, limited to |i| <= i_max; when the voltage estimate exceeds 0.95 Vdc / sqrt(3) at electrical speed w_e = P w, field weakening sets id = (-psi_m - sqrt((vMax / w_e)^2 - (Lq iq)^2)) / Ld and FW_Active = 1',
+  WHITE_NOISE: 'y = mean + sqrt(variance) * g, g standard normal from the seeded generator (Box-Muller pairs)',
+  BAND_LIMITED_NOISE: 'w = mean + sqrt(variance) * g (seeded standard normal g); y = y_prev + alpha (w - y_prev) with alpha = dt / (tau + dt), tau = 1 / (2 pi fc), dt = sampleTime or the elapsed time',
+  DEADZONE: 'y = u - upperLimit for u > upperLimit, y = u - lowerLimit for u < lowerLimit, else y = 0 (element-wise; the region is held during minor steps)',
+  SATURATION: 'y = upperLimit for u >= upperLimit, y = lowerLimit for u <= lowerLimit, else y = u (element-wise; the region is held during minor steps)',
+  RELAY: 'on when u >= switchOn, off when u <= switchOff, otherwise unchanged (hysteresis); y = onValue when on, offValue when off',
+  RATE_LIMITER: 'y = u when fallingSlewRate * dt <= u - y_prev <= risingSlewRate * dt, else y = y_prev + risingSlewRate * dt (rising) or y_prev + fallingSlewRate * dt (falling)',
+  HIGH_PASS_FILTER: 'continuous (sampleTime <= 0): dy/dt = -2 pi fc (y + u); discrete: y[k] = alpha (y[k-1] + u[k] - u[k-1]) with alpha = tau / (tau + Ts), tau = 1 / (2 pi fc)',
+  DOE_MODEL: 'y = f(x1 ... xn) with f the deployed DoE model (RSM polynomial, GMDH layers or Taguchi level means) evaluated on the inputs; an invalid or missing model, a non-finite input or an exception is a block error',
+  DOE_MODULE: 'Model = the DoE model held in the block state (null until one is assigned); Pred = 0 (the block does not train or predict during simulation)',
+  Note: 'no equation: a text annotation without ports',
+  DEM_WASHING_MACHINE_TWIN: 'out = in',
+  DEM_DRUM: 'omega = 2 pi rpm / 60; the drum angle advances by omega dt; drum_state = [drum_radius, drum_angle, omega, pulsator flag, pulsator angle, pulsator omega] (pulsator speed = pulsator_speed_ratio times the drum speed when pulsator_mode is on)',
+  DEM_PARTICLE_SYSTEM: 'explicit time stepping of the particles: acceleration from the contact, bond and fluid forces and gravity, drum wall and pulsator limits taken from drum_state; outputs the positions, velocities and the cleanliness accumulated by the mechanical action',
+  DEM_HERTZ_CONTACT: 'normal contact force fn = stiffness_normal * overlap^1.5 along the contact normal, with overlap = 2 radius - distance between two particles and overlap = distance - wall limit against the drum wall; summed per particle into contact_forces',
+  DEM_BOND_FABRIC: 'linear spring bonds between particles: force = bond_stiffness * (distance - restLength) along the bond; bond_forces per particle and bond_magnitudes per bond',
+  DEM_FLUID_COUPLING: 'drag force on each particle proportional to the relative velocity (fluid velocity - particle velocity) with coefficient drag_coeff, the fluid velocity following the drum rotation within the fill_level',
+  CFD_SPH_WATER_SOLVER: 'smoothed-particle hydrodynamics of num_fluid_particles water particles (density, viscosity, smoothing length, stiffness) in the rotating drum with the coupling forces; outputs fluid positions and velocities, the fluid torque on the drum and the slosh intensity',
+  DEM_CFD_COSIMULATION_INTERFACE: 'two-way coupling: the drag_model (default Gidaspow) force on each DEM particle from the nearby fluid particles and the opposite reaction on the fluid particles',
+  FABRIC_HARMONIC_ANALYZER: 'eccentricity = mean particle position; the drum suspension (drum_mass, suspension_stiffness) is integrated under the unbalance and the fluid forces; vibration_amplitude = displacement amplitude',
+  CFD_DEM_SURROGATE_LEARNER: 'online linear surrogates predicted = w * input + b (rpm, fill) of vibration, cleanliness, torque and slosh, updated by gradient steps of learning_rate toward the actual values in training mode; recommended_rpm and recommended_fill from the predictions',
+  ROBOT_VACUUM_LIDAR_SENSOR: 'ranges(i) = distance from the pose (x, y, theta) along each of 45 beams to the nearest wall, obstacle or furniture of the room, limited to lidar_max_range, plus noise of lidar_noise_std; x_odom = x',
+  ROBOT_VACUUM_ODOMETRY_SENSOR: 'dL = (encL - prevL) 2 pi r / cpr, dR likewise; dS = (dL + dR) / 2; dTheta = (dR - dL) / L; the pose integrates dS along the heading: x += dS cos(theta), y += dS sin(theta), theta += dTheta',
+  ROBOT_VACUUM_CLIFF_IR: 'cliff = 0.6 when |x| > 2.8 or |y| > 2.8, else 0.05',
+  ROBOT_VACUUM_DUSTBIN_SENSOR: 'dust level (percent) from the cleaned fraction of the clean grid: 100 * (number of cells > 0) / (number of cells), as held in the sensor state',
+  ROBOT_VACUUM_MOTOR_CURRENT: 'I = |I_L| + |I_R| when positive, else 0.5 + 0.15 sin(3.7 t)',
+  ROBOT_VACUUM_SENSOR_FUSION_EKF: 'extended Kalman filter on the pose (x, y, theta): prediction from the odometry increments, correction toward the measured true pose with the state covariance P; outputs the estimated pose',
+  ROBOT_VACUUM_ROOM_SEGMENTATION: 'room = 1 for x < 0.5 and y > -1, 2 for x >= 0.5 and y > -1, 4 for x < 0.5 and y <= -1, else 3',
+  ROBOT_VACUUM_SEMANTIC_MAP: 'cell type 2 (dock) when y < -2.5 and |x| < 0.5; 1 (door) when |x| < 0.2 and -1 < y < 0.8; else 0',
+  ROBOT_VACUUM_COVERAGE_PLANNER: 'coverage_plan = room_seg',
+  ROBOT_VACUUM_ROOM_SCHEDULER: 'room_schedule = [1, 2, 4, 3]',
+  ROBOT_VACUUM_BATTERY_MONITOR: 'needed = drain_rate * distance to the dock (0, -2.8) + safety_margin; status = 1 when the battery level <= needed, else 0',
+  ROBOT_VACUUM_GOAL_MANAGER: 'goal = dock (0, -2.8) when the battery status is low, else (1.5, 1.5)',
+  ROBOT_VACUUM_3D_VIZ_COLORS: 'room_colors = the fixed palette [#10b981, #3b82f6, #f59e0b, #ef4444]',
+  ROBOT_VACUUM_BATTERY_HUD: 'hud = \'hud_battery\' (constant label)',
+  ROBOT_VACUUM_BUMPER_SENSOR: 'bump = 1 when the point (x, y) collides with a wall or obstacle of the twin room, else 0',
+  ROBOT_VACUUM_CAPACITY_THRESHOLD: 'flag = 1 when dust > limit, else 0',
+  ROBOT_VACUUM_CLIFF_HALT: 'halt_cmd = 1 when cliff_val > 0.3, else 0',
+  ROBOT_VACUUM_COLLISION_MESH: 'mesh = [\'circle1\', \'circle2\', \'box1\', \'box2\'] (constant list of collision shapes)',
+  ROBOT_VACUUM_COVERAGE_HEATMAP: 'heatmap = a 30 by 30 matrix of zeros',
+  ROBOT_VACUUM_DIRT_DENSITY: 'density = a 30 by 30 matrix of zeros',
+  ROBOT_VACUUM_DOCK_BEACON: 'beacon = max(0, 1 / (1 + d^2)) with d the distance from (x, y) to the dock (0, -2.8)',
+  ROBOT_VACUUM_DOCK_DETECT: 'docked = 1 when the battery monitor flag is set or beacon > 0.95, else 0',
+  ROBOT_VACUUM_DOCK_ICON: 'icon = \'dock-icon.png\' (constant)',
+  ROBOT_VACUUM_DUSTBIN_HUD: 'hud = \'hud_dustbin\' (constant label)',
+  ROBOT_VACUUM_FURNITURE_MESH: 'mesh = [\'sofa\', \'bed\'] (constant list)',
+  ROBOT_VACUUM_HALT_ALERT: 'alert = 1 when flag is non-zero, else 0',
+  ROBOT_VACUUM_MODE_SUPERVISOR: 'halt: suction_pwm = 0, brush_pwm = 0; otherwise suction_pwm = 0.8, brush_pwm = 0.6',
+  ROBOT_VACUUM_RESUME_SCHEDULER: 'resume = 0 when docked, else 1',
+  ROBOT_VACUUM_ROOM_ZONE_COLORS: 'colors = the fixed palette [#10b981, #3b82f6, #f59e0b, #ef4444]',
+  ROBOT_VACUUM_SIDE_BRUSH: 'torque = brush_pwm (1 + 0.1 w) with w the angular component of the speed command',
+  ROBOT_VACUUM_SUCTION_PWM: 'suction_force = 240 * suction_pwm',
+  ROBOT_VACUUM_SURFACE_ADAPTER: 'surface = 1 (carpet) when (x > 0 and y > 0) or (x < -1 and y < -1), else 0 (hard floor)',
+  ROBOT_VACUUM_TERRAIN_MODEL: 'friction = 0.35 on carpet ((x > 0 and y > 0) or (x < -1 and y < -1)), else 0.15',
+  ROBOT_VACUUM_VELOCITY_PID: 'speed_pwm = [v, w] taken unchanged from vel_cmd (no PID action is applied)',
+  ROBOT_VACUUM_BATTERY: 'V_bat = nominal_voltage (0.7 + 0.3 level / 100); level (percent, clamped to [0, 100]) is a state with d level/dt = charge_rate when docked, else -(|I_L| + |I_R| + static_draw_A) / capacity_Ah * 100 / 3600',
+  ROBOT_VACUUM_KINEMATICS: 'wL_ref = (V_ref - w_ref L_sep / 2) / r_wheel; wR_ref = (V_ref + w_ref L_sep / 2) / r_wheel',
+  ROBOT_VACUUM_WHEEL_CONTROL: 'dual PI speed loops: V_x = Kp_wheel e_x + Ki_wheel integral(e_x) dt with e_x = w_x_ref - w_x, limited to the battery voltage V_bat with integrator anti-windup',
+  ROBOT_VACUUM_MOTOR: 'V = duty v_bat (duty = PWM, or PWM / v_bat when |PWM| > 1, limited to [-1, 1]); L di/dt = V - R i - K w; J dw/dt = K i - 0.02 w; dtheta/dt = w; encoder = wheel angle quantised to encoder_cpr counts plus seeded noise of encoder_noise_std; omega_est = w plus seeded noise',
+  ROBOT_VACUUM_ENCODER: 'theta_x = integral(omega_x) dt; enc_x = floor(theta_x * cpr / (2 pi) + n) with n a seeded uniform noise in [-noise_std, noise_std] ticks, as int32 ticks',
+  ROBOT_VACUUM_DYNAMICS: 'vL = wL r, vR = wR r; V = (vL + vR) / 2; w = (vR - vL) / L_sep; dx/dt = V cos(theta) - cg_offset w sin(theta), dy/dt = V sin(theta) + cg_offset w cos(theta), dtheta/dt = w; a step into a wall of the twin room is blocked',
+  ROBOT_VACUUM_ODOMETRY: 'dL = (encL - prevL) 2 pi r / cpr (with seeded relative wheel slip of slip_noise), dR likewise; dS = (dL + dR) / 2, dTheta = (dR - dL) / L_sep; the pose integrates x += dS cos(theta), y += dS sin(theta), theta += dTheta',
+  ROBOT_VACUUM_MOTOR_COMMAND: 'wL_ref = (v_cmd - w_cmd L_sep / 2) / r, wR_ref = (v_cmd + w_cmd L_sep / 2) / r; PI speed loops (Kp_wheel, Ki_wheel) on the wheel speeds give the wheel voltages V_cmd_L, V_cmd_R',
+  ROBOT_VACUUM_COMM: 'the signal bundle is delayed by latency_ms: the packet that left the history at time t - latency_ms is delivered unless a seeded draw is below packet_loss_rate, in which case the last delivered values are held; the 12th output is [latency_ms, packets dropped, packets total]',
+  ROBOT_VACUUM_CONTINUOUS_ENERGY: 'dist = polyline length from the pose through the exit sequence to the dock; e_required = dist * energy_per_meter * 100 * 1.25 (percent); return_trigger = 1 when the battery level is at or below e_required + safety_margin',
+  ROBOT_VACUUM_ENVIRONMENT: 'models the physical room map, obstacle collision physics (15 cm clearance check) and raycasts the LiDAR scan vectors; displays the live 2D virtual twin',
+  ROBOT_VACUUM_FUSION: 'complementary filter of the dead-reckoning odometry increments, the virtual IMU gyro rate and the global references; outputs the corrected pose and the localization confidence',
+  ROBOT_VACUUM_LOCALIZATION: 'EKF localization: dead-reckoning odometry increments corrected by the true references; outputs the pose estimate, the confidence and the covariance',
+  ROBOT_VACUUM_MAPPING: 'occupancy, obstacle and free-space grid maps by Bayesian (log-odds) updates from the LiDAR ranges at the estimated pose',
+  ROBOT_VACUUM_COVERAGE: 'coverage waypoints by a lawnmower (boustrophedon) sweep and the coverage status of the grid',
+  ROBOT_VACUUM_GLOBAL_PLANNER: 'A* path on the grid from the estimated pose to the goal; target = next waypoint of the path',
+  ROBOT_VACUUM_OBSTACLE_AVOIDANCE: 'velocity limits and a safe local waypoint (safe_x, safe_y) from the target and the unexpected obstacles in the scan',
+  ROBOT_VACUUM_MOTION_CONTROLLER: 'Pure Pursuit path tracking: the steering and speed commands v_cmd, w_cmd toward the target from the estimated pose, within the velocity constraints',
+  ROBOT_VACUUM_NAV: '12-state mission state machine: cleaning sweeps, return to dock on low battery, charging, obstacle avoidance; outputs v_ref, w_ref, the nav state, the active target and the cleaning statistics (coverage, efficiency)',
+  ROBOT_VACUUM_SLAM: 'occupancy probability grid from the LiDAR scan at the estimated pose, ICP scan matching to correct the pose (x_corr, y_corr, theta_corr) and detection of topological loop closures',
+  ROBOT_VACUUM_THETA_STAR: 'Theta*: A* on the grid with line-of-sight shortcutting; outputs the path, the next point and a failed flag when no path exists',
+  ROBOT_VACUUM_TOPOLOGY_RETURN: 'room-by-room door-hopping return sequence by graph search on the room connectivity (topo_graph) from the current room to the dock room using the recorded exits',
+  ROBOT_VACUUM_VISUALIZATION: 'visualizer of the coverage grid trails, the true robot, the EKF estimated chevrons and the LiDAR scans; outputs the animation state',
+  ROBOT_VACUUM_DIGITAL_TWIN: 'closed-loop co-simulation of the vacuum cleaner plant (kinematics, motors, battery), perception (LiDAR, odometry, fusion, SLAM), planning (A*) and control (navigation state machine); outputs the true and estimated pose, the scan, the wheel speeds and the control signals',
+  ROBOT_VACUUM_DOOR_CROSSING: 'crossed = true when the robot centroid has physically passed into the cells of the target room',
+  ROBOT_VACUUM_DOOR_TRACKER: 'records the door (exit) used to enter the current room from the pose and the zone map, for the return path planning; log keeps the entries',
+  ROBOT_VACUUM_ERODE_MASK: 'morphological erosion of the free-space mask by the robot physical radius so that paths keep clear of walls',
+  ROBOT_VACUUM_BOUSTROPHEDON_SWEEP: 'boustrophedon sweep waypoints inside the selected room zone of the grid and tracking of the current waypoint; done when the sweep is complete',
+  ROBOT_VACUUM_LIDAR: 'range vector and scan angles of an 8-beam raycast LiDAR sensor to the room geometry (env_geom)',
+  ROBOT_VACUUM_WAYPOINT_GEN: 'coverage waypoints of the selected room (a boustrophedon sweep of its bounds, MAPPING then CLEANING phase); a low battery status switches to the DOCKING phase with the single waypoint (0, -2.8)',
+  ROBOT_VACUUM_COLLISION_AVOID: 'turns the 45 LiDAR ranges into obstacle points, takes the front and 360-degree minimum ranges and adjusts the velocity command toward the waypoint to avoid them',
+  ROBOT_VACUUM_3D_SCENE_VIEW: 'visualisation sink: renders the pose (true and estimated), room colors, battery, dust, grid, LiDAR ranges and A* path as the animation output',
+};
+
+const CATALOGUE_PORT_UNITS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+  ACOS: { u: '1', y: '@angle' },
+  ACOSEC: { u: '1', y: '@angle' },
+  ACOSECH: { u: '1', y: '1' },
+  ACOSH: { u: '1', y: '1' },
+  ACOT: { u: '1', y: '@angle' },
+  ACOTH: { u: '1', y: '1' },
+  AC_INDUCTION_MOTOR: { va: 'V', vb: 'V', vc: 'V', tl: 'N*m', ia: 'A', ib: 'A', ic: 'A', omega: 'rad/s', theta: 'rad', te: 'N*m' },
+  AC_MOTOR_PID_CONTROL: { w_ref: 'rad/s', tl: 'N*m', omega: 'rad/s', error: 'rad/s', te: 'N*m' },
+  AIR_FRYER_LEARNING_MODEL: { power: 'W', fan_speed: '%', measured_temp: 'K', lr: '1', cavity_dim: 'm', temp_actual: 'K', estimated_gain: 'K/W', estimated_tau_c: 's', prediction_error: 'K', temp_pred: 'K' },
+  AND: { in1: '1', in2: '1', out: '1' },
+  ASEC: { u: '1', y: '@angle' },
+  ASECH: { u: '1', y: '1' },
+  ASIN: { u: '1', y: '@angle' },
+  ASINH: { u: '1', y: '1' },
+  ATAN: { u: '1', y: '@angle' },
+  ATANH: { u: '1', y: '1' },
+  Abs: { in: 'inherit', out: 'inherit' },
+  BAND_LIMITED_NOISE: { y: 'inherit' },
+  BUS_CREATOR: { in1: 'inherit', in2: 'inherit' },
+  BUS_SELECTOR: { out1: 'inherit', out2: 'inherit' },
+  BitwiseAND: { in1: '1', in2: '1', out: '1' },
+  BitwiseNOT: { in: '1', out: '1' },
+  BitwiseOR: { in1: '1', in2: '1', out: '1' },
+  BitwiseXOR: { in1: '1', in2: '1', out: '1' },
+  CFD_DEM_SURROGATE_LEARNER: { rpm: 'rpm', fill: '1', actual_vibration: 'm', actual_cleanliness: '%', fluid_torque: 'N*m', slosh_intensity: '1', predicted_vibration: 'm', predicted_cleanliness: '%', predicted_torque: 'N*m', predicted_slosh: '1', recommended_rpm: 'rpm', recommended_fill: '1', recommended_radius: 'm', recommended_lifters: '1', motion_pattern: 'none', rotation_direction: '1' },
+  CFD_SPH_WATER_SOLVER: { fill_level: '1', drum_state: 'none', coupling_forces: 'N', fluid_positions: 'm', fluid_velocities: 'm/s', drum_fluid_torque: 'N*m', slosh_intensity: '1' },
+  CLARKE_TRANSFORM: { ia: 'inherit', ib: 'inherit', ic: 'inherit', alpha: 'inherit', beta: 'inherit' },
+  COS: { u: '@angle', y: '1' },
+  COSEC: { u: '@angle', y: '1' },
+  COSECH: { u: '1', y: '1' },
+  COSH: { u: '1', y: '1' },
+  COT: { u: '@angle', y: '1' },
+  COTH: { u: '1', y: '1' },
+  CURRENT_CONTROLLER_DQ: { id_ref: 'A', iq_ref: 'A', id: 'A', iq: 'A', vd: 'V', vq: 'V' },
+  Clock: { clk: 's' },
+  Constant: { out: 'inherit' },
+  Counter: { clk: '1', en: '1', rst: '1', out: '1' },
+  DATA_TYPE_CONVERSION: { u: 'inherit', y: 'inherit' },
+  DC_VOLTAGE_SOURCE: { v_pos: 'V', v_neg: 'V' },
+  DEADZONE: { u: 'inherit', y: 'inherit' },
+  DELAY: { u: 'inherit', y: 'inherit' },
+  DEMUX: { u: 'inherit', out1: 'inherit', out2: 'inherit' },
+  DEM_BOND_FABRIC: { positions: 'm', velocities: 'm/s', radius: 'm', bond_forces: 'N', bond_magnitudes: 'N' },
+  DEM_CFD_COSIMULATION_INTERFACE: { dem_positions: 'm', dem_velocities: 'm/s', fluid_positions: 'm', fluid_velocities: 'm/s', drum_state: 'none', dem_coupling_forces: 'N', fluid_coupling_forces: 'N' },
+  DEM_DRUM: { rpm: 'rpm', angle: 'rad', omega: 'rad/s', drum_state: 'none' },
+  DEM_FLUID_COUPLING: { positions: 'm', velocities: 'm/s', fill_level: '1', drum_state: 'none', fluid_forces: 'N' },
+  DEM_HERTZ_CONTACT: { positions: 'm', velocities: 'm/s', drum_state: 'none', radius: 'm', contact_forces: 'N' },
+  DEM_PARTICLE_SYSTEM: { contact_forces: 'N', bond_forces: 'N', fluid_forces: 'N', drum_state: 'none', positions: 'm', velocities: 'm/s', cleanliness: '%' },
+  DEM_WASHING_MACHINE_TWIN: { in: 'inherit', out: 'inherit' },
+  DERIVATIVE: { u: 'inherit', y: 'inherit' },
+  DFlipFlop: { d: '1', clk: '1', rst: '1', q: '1', qbar: '1' },
+  DISCRETE_IMPULSE: { out: 'inherit' },
+  DISCRETE_TRANSFER_FUNCTION: { u: 'inherit', y: 'inherit', x: 'inherit' },
+  DOE_MODEL: { in1: 'inherit', out: 'inherit' },
+  DOE_MODULE: { dataset: 'none', trigger: '1', model: 'none', pred: 'inherit' },
+  Determinant: { in: 'inherit', out: 'inherit' },
+  Diag: { in: 'inherit', out: 'inherit' },
+  DiagExtract: { in: 'inherit', out: 'inherit' },
+  EXTENDED_KALMAN_FILTER: { u: 'inherit', y_meas: 'inherit', x_hat: 'inherit', y_hat: 'inherit', innovation: 'inherit', kg: 'inherit' },
+  ExtractDiag: { in: 'inherit', out: 'inherit' },
+  FABRIC_HARMONIC_ANALYZER: { dem_positions: 'm', dem_velocities: 'm/s', fluid_forces: 'N', drum_state: 'none', vibration_amplitude: 'm', eccentricity: 'm' },
+  FIELD_ORIENTED_CONTROL: { id_ref: 'A', iq_ref: 'A', ia: 'A', ib: 'A', theta: 'rad', vd: 'V', vq: 'V', va_ref: 'V', vb_ref: 'V', vc_ref: 'V' },
+  FIELD_WEAKENING: { v_mag: 'V', id_base: 'A', id_ref: 'A' },
+  FLUX_REFERENCE: { id_ref: 'A' },
+  FUZZY_AND: { in1: '1', in2: '1', out: '1' },
+  FUZZY_DEFUZZIFY: { agg: '1', y: 'inherit' },
+  FUZZY_INFERENCE_SYSTEM: { x1: 'inherit', x2: 'inherit', y: 'inherit', strengths: '1' },
+  FUZZY_MF_GAUSSMF: { x: 'inherit', mu: '1' },
+  FUZZY_MF_SIGMF: { x: 'inherit', mu: '1' },
+  FUZZY_MF_TRAPMF: { x: 'inherit', mu: '1' },
+  FUZZY_MF_TRIMF: { x: 'inherit', mu: '1' },
+  FUZZY_NOT: { in: '1', out: '1' },
+  FUZZY_OR: { in1: '1', in2: '1', out: '1' },
+  FUZZY_PID_CONTROLLER: { r: 'inherit', y: 'inherit', enable: '1', reset: '1', u: 'inherit', error: 'inherit', kp_eff: 'inherit', ki_eff: 'inherit', kd_eff: 'inherit' },
+  FUZZY_RULE: { ant1: '1', ant2: '1', cons: '1', strength: '1', weighted: '1' },
+  FUZZY_SURFACE_VIEWER: { x1: 'inherit', x2: 'inherit', surface: 'inherit', y: 'inherit' },
+  GAIN: { u: 'inherit', y: 'inherit' },
+  HIGH_PASS_FILTER: { u: 'inherit', y: 'inherit' },
+  IF_ELSE: { cond: '1', u_true: 'inherit', u_false: 'inherit', y: 'inherit' },
+  IM_FLUX_OBSERVER: { ia: 'A', ib: 'A', omega: 'rad/s', theta: 'rad', psi_r: 'Wb' },
+  IM_FOC_CONTROL: { w_ref: 'rad/s', w_meas: 'rad/s', ia: 'A', ib: 'A', theta: 'rad', va: 'V', vb: 'V', vc: 'V', id_ref: 'A', iq_ref: 'A' },
+  IM_SCALAR_CONTROL: { w_ref: 'rad/s', va: 'V', vb: 'V', vc: 'V' },
+  INTEGRATOR: { u: 'inherit', y: 'inherit' },
+  INTEGRATOR_CONTINUOUS: { u: 'inherit', y: 'inherit' },
+  INTEGRATOR_DISCRETE: { u: 'inherit', y: 'inherit' },
+  INTERP_PRELOOKUP: { k1: '1', f1: '1', k2: '1', f2: '1', y: 'inherit' },
+  INVERSE_CLARKE: { alpha: 'inherit', beta: 'inherit', va: 'inherit', vb: 'inherit', vc: 'inherit' },
+  INVERSE_PARK: { vd: 'inherit', vq: 'inherit', theta: 'rad', alpha: 'inherit', beta: 'inherit' },
+  IdentityMatrix: { out: '1' },
+  Inport: { in: 'inherit', out: 'inherit' },
+  Integrator: { in: 'inherit', out: 'inherit' },
+  Inverse: { in: 'inherit', out: 'inherit' },
+  JKFlipFlop: { j: '1', k: '1', clk: '1', rst: '1', q: '1', qbar: '1' },
+  KALMAN_FILTER: { u: 'inherit', y_meas: 'inherit', x_hat: 'inherit', y_hat: 'inherit', innovation: 'inherit', kg: 'inherit' },
+  LAPLACE_TRANSFORM: { u: 'inherit', doe: 'none', y: 'inherit', x: 'inherit' },
+  LMS_ADAPTIVE_FILTER: { x: 'inherit', d: 'inherit', lr: '1', y: 'inherit', err: 'inherit', w1: '1', w2: '1' },
+  LOOKUP_1D: { u1: 'inherit', y: 'inherit' },
+  LOOKUP_2D: { u1: 'inherit', u2: 'inherit', y: 'inherit' },
+  LOOKUP_ND: { u1: 'inherit', u2: 'inherit', y: 'inherit' },
+  LOW_PASS_FILTER: { u: 'inherit', y: 'inherit' },
+  MEMORY: { u: 'inherit', y: 'inherit' },
+  MOVING_AVERAGE: { u: 'inherit', y: 'inherit' },
+  MPC_CONTROLLER: { x: 'inherit', r: 'inherit', u: 'inherit', pred_y: 'inherit' },
+  MTPA_CONTROLLER: { te_ref: 'N*m', id_ref: 'A', iq_ref: 'A' },
+  MTPA_FW_MANAGER: { te_ref: 'N*m', speed: 'rad/s', vdc: 'V', id_ref: 'A', iq_ref: 'A', fw_active: '1' },
+  MUX: { in1: 'inherit', in2: 'inherit', y: 'inherit' },
+  MatrixConcat: { in1: 'inherit', in2: 'inherit', out: 'inherit' },
+  MatrixDiag: { in: 'inherit', out: 'inherit' },
+  MatrixMul: { in1: 'inherit', in2: 'inherit', out: 'inherit' },
+  MatrixSolve: { in1: 'inherit', in2: 'inherit', out: 'inherit' },
+  Max: { in1: 'inherit', out: 'inherit' },
+  Mean: { in: 'inherit', out: 'inherit' },
+  NAND: { in1: '1', in2: '1', out: '1' },
+  NEURAL_NEURON_LEARNING: { x1: 'inherit', x2: 'inherit', target: 'inherit', lr: '1', y: 'inherit', err: 'inherit', w1: '1', w2: '1', bias: 'inherit' },
+  NOR: { in1: '1', in2: '1', out: '1' },
+  NOT: { in: '1', out: '1' },
+  NUMERIC_REPRESENTATION: { u: 'inherit', y: 'inherit', e: 'inherit' },
+  OR: { in1: '1', in2: '1', out: '1' },
+  Outport: { in: 'inherit', out: 'inherit' },
+  PARK_TRANSFORM: { alpha: 'inherit', beta: 'inherit', theta: 'rad', id: 'inherit', iq: 'inherit' },
+  PID_BASIC: { e: 'inherit', enable: '1', reset: '1', u: 'inherit' },
+  PID_CONTROLLER: { r: 'inherit', y: 'inherit', enable: '1', reset: '1', u: 'inherit', error: 'inherit', p_term: 'inherit', i_term: 'inherit', d_term: 'inherit' },
+  PRELOOKUP: { u: 'inherit', k: '1', f: '1' },
+  PRODUCT: { in1: 'inherit', in2: 'inherit', y: 'inherit' },
+  PWM_GENERATOR: { duty: '1', pwm: '1' },
+  RATE_LIMITER: { u: 'inherit', y: 'inherit' },
+  RELAY: { u: 'inherit', y: 'inherit' },
+  RL_Q_LEARNING_CONTROLLER: { error: 'inherit', reward: '1', reset: '1', action: '1', max_q: '1' },
+  ROBOT_VACUUM_3D_SCENE_VIEW: { x: 'm', y: 'm', theta: 'rad', room_colors: 'none', battery: '%', dust: '%', grid: '%', lidar_ranges: 'm', astar_path: 'm', animation: 'none' },
+  ROBOT_VACUUM_3D_VIZ_COLORS: { goal_path: 'm', room_colors: 'none' },
+  ROBOT_VACUUM_BATTERY: { I_L: 'A', I_R: 'A', is_docked: '1', battery_level: '%', battery_voltage: 'V' },
+  ROBOT_VACUUM_BATTERY_HUD: { hud: 'none' },
+  ROBOT_VACUUM_BATTERY_MONITOR: { battery_level: '%', x_est: 'm', y_est: 'm', battery_status: '1' },
+  ROBOT_VACUUM_BOUSTROPHEDON_SWEEP: { room_id: 'none', grid: '%', pose: 'm', waypoints: 'm', current_waypoint: 'm', done: '1' },
+  ROBOT_VACUUM_BUMPER_SENSOR: { x: 'm', y: 'm', bump: '1' },
+  ROBOT_VACUUM_CAPACITY_THRESHOLD: { dust: '%', flag: '1' },
+  ROBOT_VACUUM_CLIFF_HALT: { surface: '1', cliff_val: '1', halt_cmd: '1' },
+  ROBOT_VACUUM_CLIFF_IR: { x: 'm', y: 'm', cliff_val: '1' },
+  ROBOT_VACUUM_COLLISION_AVOID: { current: 'A', waypoints: 'm', ranges: 'm', x_est: 'm', y_est: 'm', theta_est: 'rad', vel_cmd: 'none' },
+  ROBOT_VACUUM_COLLISION_MESH: { x: 'm', y: 'm', mesh: 'none' },
+  ROBOT_VACUUM_COMM: { enc_L_in: 'ticks', enc_R_in: 'ticks', omega_L_in: 'rad/s', omega_R_in: 'rad/s', battery_in: '%', x_odom_in: 'm', y_odom_in: 'm', theta_odom_in: 'rad', v_ref_in: 'm/s', w_ref_in: 'rad/s', nav_state_in: 'none', enc_L: 'ticks', enc_R: 'ticks', omega_L: 'rad/s', omega_R: 'rad/s', battery: '%', x_odom: 'm', y_odom: 'm', theta_odom: 'rad', v_ref: 'm/s', w_ref: 'rad/s', nav_state: 'none', comm_stats: 'none' },
+  ROBOT_VACUUM_CONTINUOUS_ENERGY: { battery: '%', pose: 'm', dock_pos: 'm', exits_sequence: 'none', e_required: '%', return_trigger: '1' },
+  ROBOT_VACUUM_COVERAGE_HEATMAP: { heatmap: '1' },
+  ROBOT_VACUUM_COVERAGE_PLANNER: { room_seg: 'none', semantic_map: 'none', coverage_plan: 'none' },
+  ROBOT_VACUUM_DIGITAL_TWIN: { target_x: 'm', target_y: 'm', mode_select: 'none', vel_cmd: 'none', x_pos: 'm', y_pos: 'm', theta: 'rad', x_est: 'm', y_est: 'm', theta_est: 'rad', lidar_ranges: 'm', wheel_vels: 'rad/s', control_signals: 'none', nav_state: 'none', grid: '%', astar_path: 'm' },
+  ROBOT_VACUUM_DIRT_DENSITY: { density: '1' },
+  ROBOT_VACUUM_DOCK_BEACON: { x: 'm', y: 'm', beacon: '1' },
+  ROBOT_VACUUM_DOCK_DETECT: { battery: '1', beacon: '1', docked: '1' },
+  ROBOT_VACUUM_DOCK_ICON: { icon: 'none' },
+  ROBOT_VACUUM_DOOR_CROSSING: { pose: 'm', door_pos: 'm', target_room: 'none', crossed: '1' },
+  ROBOT_VACUUM_DOOR_TRACKER: { pose: 'm', zone_map: 'none', entry_door: 'none', log: 'none' },
+  ROBOT_VACUUM_DUSTBIN_HUD: { hud: 'none' },
+  ROBOT_VACUUM_DUSTBIN_SENSOR: { clean_grid: '%', dust_level: '%' },
+  ROBOT_VACUUM_DYNAMICS: { omega_L: 'rad/s', omega_R: 'rad/s', x: 'm', y: 'm', theta: 'rad', v_chassis: 'm/s', w_chassis: 'rad/s' },
+  ROBOT_VACUUM_ENVIRONMENT: { x: 'm', y: 'm', theta: 'rad', x_est: 'm', y_est: 'm', theta_est: 'rad', target_x_in: 'm', target_y_in: 'm', nav_state: 'none', grid: '%', battery_level: '%', comm_stats: 'none', nav_stats: 'none', confidence: '1', lidar_ranges: 'm', collision: '1', is_docked: '1' },
+  ROBOT_VACUUM_ERODE_MASK: { grid: '%', eroded: '%' },
+  ROBOT_VACUUM_FURNITURE_MESH: { mesh: 'none' },
+  ROBOT_VACUUM_FUSION: { x_odom: 'm', y_odom: 'm', theta_odom: 'rad', x_true: 'm', y_true: 'm', theta_true: 'rad', yaw_rate_imu: 'rad/s', x_est: 'm', y_est: 'm', theta_est: 'rad', confidence: '1' },
+  ROBOT_VACUUM_GOAL_MANAGER: { room_schedule: 'none', battery_status: '1', x_est: 'm', y_est: 'm', goal_path: 'm' },
+  ROBOT_VACUUM_HALT_ALERT: { flag: '1', alert: '1' },
+  ROBOT_VACUUM_KINEMATICS: { v_ref: 'm/s', w_ref: 'rad/s', omegaL_ref: 'rad/s', omegaR_ref: 'rad/s' },
+  ROBOT_VACUUM_LIDAR_SENSOR: { x: 'm', y: 'm', theta: 'rad', ranges: 'm', x_odom: 'm' },
+  ROBOT_VACUUM_MODE_SUPERVISOR: { halt_cmd: '1', suction_pwm: '1', brush_pwm: '1' },
+  ROBOT_VACUUM_MOTOR: { pwm_duty: 'V', v_bat: 'V', omega: 'rad/s', current: 'A', encoder: 'ticks', omega_est: 'rad/s' },
+  ROBOT_VACUUM_MOTOR_CURRENT: { current_L: 'A', current_R: 'A', current: 'A' },
+  ROBOT_VACUUM_NAV: { x_est: 'm', y_est: 'm', theta_est: 'rad', lidar_ranges: 'm', target_x_in: 'm', target_y_in: 'm', mode_select: 'none', battery_level: '%', is_docked: '1', v_ref: 'm/s', w_ref: 'rad/s', nav_state: 'none', target_x_active: 'm', target_y_active: 'm', nav_stats: 'none' },
+  ROBOT_VACUUM_ODOMETRY: { enc_L: 'ticks', enc_R: 'ticks', x_odom: 'm', y_odom: 'm', theta_odom: 'rad' },
+  ROBOT_VACUUM_ODOMETRY_SENSOR: { enc_L: 'ticks', enc_R: 'ticks', x_odom: 'm', y_odom: 'm', theta_odom: 'rad' },
+  ROBOT_VACUUM_RESUME_SCHEDULER: { docked: '1', resume: '1' },
+  ROBOT_VACUUM_ROOM_SCHEDULER: { semantic_map: 'none', room_schedule: 'none' },
+  ROBOT_VACUUM_ROOM_SEGMENTATION: { x_est: 'm', y_est: 'm', room_seg: 'none' },
+  ROBOT_VACUUM_ROOM_ZONE_COLORS: { colors: 'none' },
+  ROBOT_VACUUM_SEMANTIC_MAP: { x_est: 'm', y_est: 'm', semantic_map: 'none' },
+  ROBOT_VACUUM_SENSOR_FUSION_EKF: { x_true: 'm', y_true: 'm', theta_true: 'rad', x_odom: 'm', y_odom: 'm', theta_odom: 'rad', x_est: 'm', y_est: 'm', theta_est: 'rad' },
+  ROBOT_VACUUM_SIDE_BRUSH: { speed_pwm: 'none', brush_pwm: '1', torque: '1' },
+  ROBOT_VACUUM_SLAM: { x_est: 'm', y_est: 'm', theta_est: 'rad', lidar_ranges: 'm', x_true: 'm', y_true: 'm', theta_true: 'rad', grid: '%', x_corr: 'm', y_corr: 'm', theta_corr: 'rad', slam_stats: 'none' },
+  ROBOT_VACUUM_SUCTION_PWM: { suction_pwm: '1', suction_force: '1' },
+  ROBOT_VACUUM_SURFACE_ADAPTER: { x_est: 'm', y_est: 'm', surface: '1' },
+  ROBOT_VACUUM_TERRAIN_MODEL: { x: 'm', y: 'm', friction: '1' },
+  ROBOT_VACUUM_THETA_STAR: { grid: '%', start: 'm', goal: 'm', path: 'm', next_point: 'm', failed: '1' },
+  ROBOT_VACUUM_TOPOLOGY_RETURN: { topo_graph: 'none', current_room: 'none', dock_room: 'none', exits: 'none', path_rooms: 'none', exits_sequence: 'none' },
+  ROBOT_VACUUM_VELOCITY_PID: { vel_cmd: 'none', speed_pwm: 'none' },
+  ROBOT_VACUUM_WAYPOINT_GEN: { coverage_plan: 'none', battery_status: '1', x_est: 'm', y_est: 'm', waypoints: 'm' },
+  ROBOT_VACUUM_WHEEL_CONTROL: { omegaL_ref: 'rad/s', omegaR_ref: 'rad/s', omega_L: 'rad/s', omega_R: 'rad/s', V_L: 'V', V_R: 'V' },
+  ROOT_LOCUS: { u: 'inherit', y: 'inherit' },
+  ROTOR_POSITION_ESTIMATOR: { ia: 'A', ib: 'A', ic: 'A', va: 'V', vb: 'V', vc: 'V', theta: 'rad', speed: 'rad/s' },
+  Register: { in: 'inherit', clk: '1', en: '1', rst: '1', out: 'inherit' },
+  SATURATION: { u: 'inherit', y: 'inherit' },
+  SEC: { u: '@angle', y: '1' },
+  SECH: { u: '1', y: '1' },
+  SECTOR_SELECTOR: { theta: 'rad', sector: '1' },
+  SENSORLESS_SIX_STEP: { va: 'V', vb: 'V', vc: 'V', vdc: 'V', ga: '1', gb: '1', gc: '1', theta: 'rad', speed: 'rad/s' },
+  SIN: { u: '@angle', y: '1' },
+  SINGLE_PHASE_H_BRIDGE: { vdc_p: 'V', vdc_n: 'V', g1: '1', g2: '1', vout: 'V' },
+  SINH: { u: '1', y: '1' },
+  SIX_STEP_COMMUTATION: { h1: '1', h2: '1', h3: '1', ah: '1', al: '1', bh: '1', bl: '1', ch: '1', cl: '1' },
+  SPEED_CONTROLLER: { speed_ref: 'rad/s', speed_actual: 'rad/s', iq_ref: 'A' },
+  STATE_SPACE: { u: 'inherit', y: 'inherit', x: 'inherit' },
+  SVPWM_CORE: { v_alpha: 'V', v_beta: 'V', sector: '1', t1: 's', t2: 's', t0: 's' },
+  SVPWM_GATE_GENERATOR: { sector: '1', t1: 's', t2: 's', t0: 's', ga: '1', gb: '1', gc: '1' },
+  SVPWM_MODULATOR: { v_alpha: 'V', v_beta: 'V', ga: '1', gb: '1', gc: '1' },
+  SWITCH: { u1: 'inherit', u2: 'inherit', ctrl: '1', y: 'inherit' },
+  SWITCHING_TIME_CALCULATOR: { vref: 'V', theta_s: 'rad', vdc: 'V', ts: 's', t1: 's', t2: 's', t0: 's' },
+  SWITCH_CASE: { sel: '1', in1: 'inherit', in2: 'inherit', y: 'inherit' },
+  Scope: { in1: 'inherit' },
+  ShiftLeft: { in: '1', sh: '1', out: '1' },
+  ShiftRight: { in: '1', sh: '1', out: '1' },
+  Step: { out: 'inherit' },
+  SubMatrix: { in: 'inherit', out: 'inherit' },
+  Sum: { in1: 'inherit', in2: 'inherit', out: 'inherit' },
+  SumElements: { in: 'inherit', out: 'inherit' },
+  TAN: { u: '@angle', y: '1' },
+  TANH: { u: '1', y: '1' },
+  TERMINATOR: { u: 'inherit' },
+  THREE_PHASE_INVERTER: { vdc_p: 'V', vdc_n: 'V', ga: '1', gb: '1', gc: '1', va: 'V', vb: 'V', vc: 'V' },
+  THREE_PHASE_LOAD: { va: 'V', vb: 'V', vc: 'V', ia: 'A', ib: 'A', ic: 'A' },
+  THREE_PHASE_PWM: { va_ref: 'V', vb_ref: 'V', vc_ref: 'V', ga: '1', gb: '1', gc: '1' },
+  TRANSFER_FUNCTION: { u: 'inherit', y: 'inherit', x: 'inherit' },
+  Transpose: { in: 'inherit', out: 'inherit' },
+  UNIT_DELAY: { u: 'inherit', y: 'inherit' },
+  UnaryNeg: { in: 'inherit', out: 'inherit' },
+  VF_SLIP_COMP: { w_ref: 'rad/s', iq_actual: 'A', va: 'V', vb: 'V', vc: 'V', w_sync: 'rad/s' },
+  VOLTAGE_REFERENCE_GENERATOR: { f: 'Hz', va: 'V', vb: 'V', vc: 'V' },
+  VectorAdd: { in1: 'inherit', in2: 'inherit', out: 'inherit' },
+  VectorDiv: { in1: 'inherit', in2: 'inherit', out: 'inherit' },
+  VectorMul: { in1: 'inherit', in2: 'inherit', out: 'inherit' },
+  VectorPow: { in1: 'inherit', in2: 'inherit', out: 'inherit' },
+  VectorSub: { in1: 'inherit', in2: 'inherit', out: 'inherit' },
+  WHITE_NOISE: { y: 'inherit' },
+  WaveformGen: { out: 'inherit' },
+  XOR: { in1: '1', in2: '1', out: '1' },
+  ZERO_POLE_GAIN: { u: 'inherit', y: 'inherit', x: 'inherit' },
+  ZERO_SEQUENCE_INJECTION: { va: 'V', vb: 'V', vc: 'V', va_mod: 'V', vb_mod: 'V', vc_mod: 'V' },
+};
+
+/**
+ * Ports with the role 'control' (enable / reset / learning signals, controller commands and the robot control bundle): the
+ * canvas draws their handles amber. They were typed 'control' before XBV-014 moved every port type into XSignalType, so
+ * the distinction is kept as a port role (XPort.role), not as a signal type.
+ */
+const CONTROL_ROLE_PORTS: Readonly<Record<string, readonly string[]>> = {
+  AC_MOTOR_PID_CONTROL: ['w_ref'],
+  AIR_FRYER_LEARNING_MODEL: ['power', 'fan_speed', 'measured_temp', 'lr', 'temp_actual', 'estimated_gain', 'estimated_tau_c', 'prediction_error', 'temp_pred'],
+  CURRENT_CONTROLLER_DQ: ['id_ref', 'iq_ref', 'vd', 'vq'],
+  DOE_MODULE: ['pred'],
+  FIELD_ORIENTED_CONTROL: ['id_ref', 'iq_ref', 'vd', 'vq', 'va_ref', 'vb_ref', 'vc_ref'],
+  FIELD_WEAKENING: ['id_base', 'id_ref'],
+  FLUX_REFERENCE: ['id_ref'],
+  FUZZY_PID_CONTROLLER: ['enable', 'reset', 'u'],
+  IM_FOC_CONTROL: ['w_ref', 'va', 'vb', 'vc'],
+  IM_SCALAR_CONTROL: ['w_ref', 'va', 'vb', 'vc'],
+  LMS_ADAPTIVE_FILTER: ['x', 'd', 'lr', 'y', 'err', 'w1', 'w2'],
+  MPC_CONTROLLER: ['u'],
+  MTPA_CONTROLLER: ['te_ref', 'id_ref', 'iq_ref'],
+  MTPA_FW_MANAGER: ['te_ref', 'id_ref', 'iq_ref'],
+  NEURAL_NEURON_LEARNING: ['x1', 'x2', 'target', 'lr', 'y', 'err', 'w1', 'w2', 'bias'],
+  PID_BASIC: ['enable', 'reset', 'u'],
+  PID_CONTROLLER: ['enable', 'reset', 'u'],
+  PWM_GENERATOR: ['duty'],
+  RL_Q_LEARNING_CONTROLLER: ['error', 'reward', 'action', 'max_q'],
+  ROBOT_VACUUM_3D_SCENE_VIEW: ['x', 'y', 'theta', 'battery', 'dust'],
+  ROBOT_VACUUM_BATTERY: ['I_L', 'I_R', 'battery_level', 'battery_voltage'],
+  ROBOT_VACUUM_BOUSTROPHEDON_SWEEP: ['room_id', 'done'],
+  ROBOT_VACUUM_COMM: ['enc_L_in', 'enc_R_in', 'omega_L_in', 'omega_R_in', 'battery_in', 'x_odom_in', 'y_odom_in', 'theta_odom_in', 'v_ref_in', 'w_ref_in', 'nav_state_in', 'enc_L', 'enc_R', 'omega_L', 'omega_R', 'battery', 'x_odom', 'y_odom', 'theta_odom', 'v_ref', 'w_ref', 'nav_state'],
+  ROBOT_VACUUM_CONTINUOUS_ENERGY: ['battery', 'e_required', 'return_trigger'],
+  ROBOT_VACUUM_COVERAGE: ['x_est', 'y_est', 'goal_x', 'goal_y'],
+  ROBOT_VACUUM_DIGITAL_TWIN: ['target_x', 'target_y', 'mode_select', 'x_pos', 'y_pos', 'theta', 'x_est', 'y_est', 'theta_est', 'nav_state'],
+  ROBOT_VACUUM_DOOR_CROSSING: ['target_room', 'crossed'],
+  ROBOT_VACUUM_DYNAMICS: ['omega_L', 'omega_R', 'x', 'y', 'theta', 'v_chassis', 'w_chassis'],
+  ROBOT_VACUUM_ENCODER: ['omega_L', 'omega_R', 'enc_L', 'enc_R'],
+  ROBOT_VACUUM_ENVIRONMENT: ['x', 'y', 'theta', 'x_est', 'y_est', 'theta_est', 'target_x_in', 'target_y_in', 'nav_state', 'battery_level', 'confidence', 'collision', 'is_docked'],
+  ROBOT_VACUUM_FUSION: ['x_odom', 'y_odom', 'theta_odom', 'x_true', 'y_true', 'theta_true', 'yaw_rate_imu', 'x_est', 'y_est', 'theta_est', 'confidence'],
+  ROBOT_VACUUM_GLOBAL_PLANNER: ['x_est', 'y_est', 'goal_x', 'goal_y', 'target_x', 'target_y'],
+  ROBOT_VACUUM_KINEMATICS: ['v_ref', 'w_ref', 'omegaL_ref', 'omegaR_ref'],
+  ROBOT_VACUUM_LIDAR: ['x', 'y', 'theta'],
+  ROBOT_VACUUM_LOCALIZATION: ['x_odom', 'y_odom', 'theta_odom', 'x_true', 'y_true', 'theta_true', 'x_est', 'y_est', 'theta_est', 'confidence'],
+  ROBOT_VACUUM_MAPPING: ['x_est', 'y_est', 'theta_est'],
+  ROBOT_VACUUM_MOTION_CONTROLLER: ['x_est', 'y_est', 'theta_est', 'target_x', 'target_y', 'v_cmd', 'w_cmd'],
+  ROBOT_VACUUM_MOTOR: ['pwm_duty', 'v_bat', 'omega', 'current', 'encoder', 'omega_est'],
+  ROBOT_VACUUM_MOTOR_COMMAND: ['v_cmd', 'w_cmd', 'omega_L', 'omega_R', 'V_cmd_L', 'V_cmd_R'],
+  ROBOT_VACUUM_NAV: ['x_est', 'y_est', 'theta_est', 'target_x_in', 'target_y_in', 'mode_select', 'battery_level', 'is_docked', 'v_ref', 'w_ref', 'nav_state', 'target_x_active', 'target_y_active'],
+  ROBOT_VACUUM_OBSTACLE_AVOIDANCE: ['target_x', 'target_y', 'safe_x', 'safe_y', 'nav_state'],
+  ROBOT_VACUUM_ODOMETRY: ['enc_L', 'enc_R', 'x_odom', 'y_odom', 'theta_odom'],
+  ROBOT_VACUUM_SLAM: ['x_est', 'y_est', 'theta_est', 'x_true', 'y_true', 'theta_true', 'x_corr', 'y_corr', 'theta_corr'],
+  ROBOT_VACUUM_THETA_STAR: ['failed'],
+  ROBOT_VACUUM_TOPOLOGY_RETURN: ['current_room', 'dock_room'],
+  ROBOT_VACUUM_VISUALIZATION: ['x', 'y', 'theta', 'x_est', 'y_est', 'theta_est', 'target_x', 'target_y', 'nav_state', 'battery_level', 'confidence', 'animation'],
+  ROBOT_VACUUM_WHEEL_CONTROL: ['omegaL_ref', 'omegaR_ref', 'omega_L', 'omega_R', 'V_L', 'V_R'],
+  SPEED_CONTROLLER: ['speed_ref', 'iq_ref'],
+  SWITCH: ['ctrl'],
+  SWITCHING_TIME_CALCULATOR: ['vref', 'vdc', 'ts'],
+  THREE_PHASE_PWM: ['va_ref', 'vb_ref', 'vc_ref'],
+  VF_SLIP_COMP: ['w_ref', 'va', 'vb', 'vc'],
+  VOLTAGE_REFERENCE_GENERATOR: ['f', 'va', 'vb', 'vc'],
+  ZERO_SEQUENCE_INJECTION: ['va', 'vb', 'vc', 'va_mod', 'vb_mod', 'vc_mod'],
+};
+
+/** Fills the equation and the port units a factory left out (never overrides what the factory sets). */
+function applyCatalogueText(block: XBlock): XBlock {
+  if (!block.equation) {
+    const equation = CATALOGUE_EQUATIONS[block.type];
+    if (equation !== undefined) block.equation = equation;
+  }
+  const controlPorts = CONTROL_ROLE_PORTS[block.type];
+  if (controlPorts !== undefined) {
+    for (const port of [...block.inputs, ...block.outputs]) if (controlPorts.includes(port.id)) port.role = 'control';
+  }
+  const units = CATALOGUE_PORT_UNITS[block.type];
+  if (units !== undefined) {
+    for (const port of [...block.inputs, ...block.outputs]) {
+      if (port.unit) continue;
+      const unit = units[port.id];
+      if (unit === undefined) continue;
+      port.unit = unit === '@angle' ? (block.params?.angle_unit === 'degrees' ? 'deg' : 'rad') : unit;
+    }
+  }
+  return block;
+}
+/** The unit of a port at compile time: an '@angle' unit follows the angle_unit parameter as it is now (it may be edited after the block was created). */
+export function effectivePortUnit(block: XBlock, port: XPort): string | undefined {
+  if (CATALOGUE_PORT_UNITS[block.type]?.[port.id] === '@angle') return block.params?.angle_unit === 'degrees' ? 'deg' : 'rad';
+  return port.unit;
+}
+for (const type of Object.keys(BLOCK_LIBRARY)) {
+  // Only the types the tables cover are wrapped (the powertrain, lookup and bus factories carry their own text).
+  if (!Object.prototype.hasOwnProperty.call(CATALOGUE_EQUATIONS, type) && !Object.prototype.hasOwnProperty.call(CATALOGUE_PORT_UNITS, type) && !Object.prototype.hasOwnProperty.call(CONTROL_ROLE_PORTS, type)) continue;
+  const build = BLOCK_LIBRARY[type];
+  BLOCK_LIBRARY[type] = (id, params) => applyCatalogueText(build(id, params));
+}
+
 export const XBRIDGES_CATEGORIES = [
+  {
+    name: 'DEM & Particle Simulation',
+    blocks: [
+      { type: 'DEM_WASHING_MACHINE_TWIN', label: 'Washing Machine Twin', icon: 'rotate-cw' },
+      { type: 'DEM_DRUM', label: 'DEM Drum Geometry', icon: 'rotate-cw' },
+      { type: 'DEM_PARTICLE_SYSTEM', label: 'DEM Particle System', icon: 'layers' },
+      { type: 'DEM_HERTZ_CONTACT', label: 'Hertz Contact Model', icon: 'activity' },
+      { type: 'DEM_BOND_FABRIC', label: 'Fabric Bond Model', icon: 'network' },
+      { type: 'DEM_FLUID_COUPLING', label: 'Fluid Phase Coupling', icon: 'wind' },
+      { type: 'CFD_SPH_WATER_SOLVER', label: 'CFD SPH Water Solver', icon: 'wind' },
+      { type: 'DEM_CFD_COSIMULATION_INTERFACE', label: 'CFD-DEM 2-Way Coupling', icon: 'refresh-ccw' },
+      { type: 'FABRIC_HARMONIC_ANALYZER', label: 'Fabric Harmonic Analyzer', icon: 'activity' }
+    ]
+  },
   {
     name: 'Navigation & Autonomous',
     blocks: [
@@ -12416,7 +12955,8 @@ export const XBRIDGES_CATEGORIES = [
       { type: 'ROBOT_VACUUM_OBSTACLE_AVOIDANCE', label: 'Robot Obstacle Avoidance', icon: 'graduation-cap' },
       { type: 'ROBOT_VACUUM_MOTION_CONTROLLER', label: 'Robot Motion Controller', icon: 'graduation-cap' },
       { type: 'ROBOT_VACUUM_MOTOR_COMMAND', label: 'Robot Motor Command Gen', icon: 'graduation-cap' },
-      { type: 'ROBOT_VACUUM_VISUALIZATION', label: 'Robot Visualization Twin', icon: 'graduation-cap' }
+      { type: 'ROBOT_VACUUM_VISUALIZATION', label: 'Robot Visualization Twin', icon: 'graduation-cap' },
+      { type: 'CFD_DEM_SURROGATE_LEARNER', label: 'CFD-DEM Surrogate Learner', icon: 'graduation-cap' }
     ]
   },
   {
@@ -12470,11 +13010,11 @@ export const XBRIDGES_CATEGORIES = [
     blocks: [
       { type: 'Integrator', label: 'Integrator', icon: 'integral' },
       { type: 'INTEGRATOR_CONTINUOUS', label: 'Continuous Integrator', icon: 'integral' },
-      { type: 'STATE_SPACE', label: 'State-Space Model', icon: 'settings-2' },
-      { type: 'TRANSFER_FUNCTION', label: 'Transfer Function', icon: 'settings-2' },
-      { type: 'ZERO_POLE_GAIN', label: 'Zero-Pole-Gain', icon: 'settings-2' },
+      { type: 'STATE_SPACE', label: 'State-Space Model', icon: 'activity' },
+      { type: 'TRANSFER_FUNCTION', label: 'Transfer Function', icon: 'activity' },
+      { type: 'ZERO_POLE_GAIN', label: 'Zero-Pole-Gain', icon: 'activity' },
       { type: 'ROOT_LOCUS', label: 'Root Locus Plotter', icon: 'activity' },
-      { type: 'LAPLACE_TRANSFORM', label: 'Laplace Transform', icon: 'settings-2' }
+      { type: 'LAPLACE_TRANSFORM', label: 'Laplace Transform', icon: 'activity' }
     ]
   },
   {
@@ -12491,7 +13031,7 @@ export const XBRIDGES_CATEGORIES = [
     blocks: [
       { type: 'DELAY', label: 'Unit Delay', icon: 'database' },
       { type: 'INTEGRATOR_DISCRETE', label: 'Discrete Integrator', icon: 'layers' },
-      { type: 'DISCRETE_TRANSFER_FUNCTION', label: 'Discrete TF', icon: 'settings-2' },
+      { type: 'DISCRETE_TRANSFER_FUNCTION', label: 'Discrete TF', icon: 'activity' },
       { type: 'Counter', label: 'Counter', icon: 'trending-up' }
     ]
   },
@@ -12529,8 +13069,8 @@ export const XBRIDGES_CATEGORIES = [
   {
     name: 'Control & Feedback',
     blocks: [
-      { type: 'PID_BASIC', label: 'Basic PID Controller', icon: 'settings-2' },
-      { type: 'PID_CONTROLLER', label: 'Advanced PID Controller', icon: 'settings-2' },
+      { type: 'PID_BASIC', label: 'Basic PID Controller', icon: 'settings' },
+      { type: 'PID_CONTROLLER', label: 'Advanced PID Controller', icon: 'cpu' },
       { type: 'SPEED_CONTROLLER', label: 'PI Speed Controller', icon: 'cpu' },
       { type: 'CURRENT_CONTROLLER_DQ', label: 'dq Current Controller', icon: 'cpu' },
       { type: 'VOLTAGE_REFERENCE_GENERATOR', label: 'Voltage Reference Gen', icon: 'activity' },
@@ -12542,7 +13082,9 @@ export const XBRIDGES_CATEGORIES = [
     name: 'Power Electronics & Bridges',
     blocks: [
       { type: 'SINGLE_PHASE_H_BRIDGE', label: 'H-Bridge Inverter', icon: 'zap' },
-      { type: 'THREE_PHASE_INVERTER', label: 'Three-Phase Inverter', icon: 'zap' }
+      { type: 'THREE_PHASE_INVERTER', label: 'Three-Phase Inverter', icon: 'zap' },
+      { type: 'DC_VOLTAGE_SOURCE', label: 'DC Voltage Source', icon: 'zap' },
+      { type: 'THREE_PHASE_LOAD', label: '3-Phase Load', icon: 'activity' }
     ]
   },
   {
@@ -12553,7 +13095,9 @@ export const XBRIDGES_CATEGORIES = [
       { type: 'SVPWM_MODULATOR', label: 'SVPWM Modulator', icon: 'network' },
       { type: 'SVPWM_CORE', label: 'SVPWM Core Timing', icon: 'network' },
       { type: 'SVPWM_GATE_GENERATOR', label: 'SVPWM Gate Generator', icon: 'network' },
-      { type: 'ZERO_SEQUENCE_INJECTION', label: 'Zero Sequence Injection', icon: 'network' }
+      { type: 'ZERO_SEQUENCE_INJECTION', label: 'Zero Sequence Injection', icon: 'network' },
+      { type: 'SECTOR_SELECTOR', label: 'Sector Selector', icon: 'rotate-cw' },
+      { type: 'SWITCHING_TIME_CALCULATOR', label: 'Switching Time Calc', icon: 'activity' }
     ]
   },
   {
@@ -12686,6 +13230,57 @@ export const XBRIDGES_CATEGORIES = [
     name: 'Annotations',
     blocks: [
       { type: 'Note', label: 'Note Text Block', icon: 'file-text' }
+    ]
+  },
+  {
+    name: 'Reference Frame Transformations',
+    blocks: [
+      { type: 'CLARKE_TRANSFORM', label: 'Clarke Transform', icon: 'refresh-ccw' },
+      { type: 'PARK_TRANSFORM', label: 'Park Transform', icon: 'refresh-ccw' },
+      { type: 'INVERSE_PARK', label: 'Inverse Park', icon: 'refresh-ccw' },
+      { type: 'INVERSE_CLARKE', label: 'Inverse Clarke', icon: 'refresh-ccw' }
+    ]
+  },
+  {
+    name: 'Robot Vacuum Learning',
+    blocks: [
+      { type: 'ROBOT_VACUUM_LIDAR_SENSOR', label: 'Lidar Sensor', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_ODOMETRY_SENSOR', label: 'Odometry Sensor', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_CLIFF_IR', label: 'Cliff IR Sensor', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_DUSTBIN_SENSOR', label: 'Dustbin Sensor', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_MOTOR_CURRENT', label: 'Motor Current', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_SENSOR_FUSION_EKF', label: 'EKF Localization', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_ROOM_SEGMENTATION', label: 'Room Segmentation', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_SEMANTIC_MAP', label: 'Semantic Zone Map', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_COVERAGE_PLANNER', label: 'Coverage Planner', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_ROOM_SCHEDULER', label: 'Room Scheduler', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_BATTERY_MONITOR', label: 'Battery Monitor', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_GOAL_MANAGER', label: 'Goal Manager', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_3D_VIZ_COLORS', label: '3D Visualization (Room Colors)', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_WAYPOINT_GEN', label: 'Waypoint Generation', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_COLLISION_AVOID', label: 'Collision Avoidance', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_SURFACE_ADAPTER', label: 'Surface Adapter', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_CLIFF_HALT', label: 'Cliff Halt Logic', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_VELOCITY_PID', label: 'Velocity PID', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_MODE_SUPERVISOR', label: 'Mode Supervisor', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_BUMPER_SENSOR', label: 'Bumper Sensor', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_SIDE_BRUSH', label: 'Side Brush Model', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_SUCTION_PWM', label: 'Variable Suction', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_TERRAIN_MODEL', label: 'Terrain Model', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_COLLISION_MESH', label: 'Collision Mesh', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_DOCK_BEACON', label: 'Dock Station (Beacon)', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_CAPACITY_THRESHOLD', label: 'Capacity Threshold', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_HALT_ALERT', label: 'Halt & Alert State', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_DOCK_DETECT', label: 'Dock Detect Logic', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_RESUME_SCHEDULER', label: 'Resume Scheduler', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_3D_SCENE_VIEW', label: '3D Scene View', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_FURNITURE_MESH', label: 'Furniture Mesh 3D', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_DIRT_DENSITY', label: 'Dirt Density Map', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_ROOM_ZONE_COLORS', label: 'Room Zone Colors', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_COVERAGE_HEATMAP', label: 'Coverage Heatmap', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_DOCK_ICON', label: 'Dock Station Icon', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_BATTERY_HUD', label: 'Battery HUD', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_DUSTBIN_HUD', label: 'Dustbin Level HUD', icon: 'graduation-cap' }
     ]
   },
   ...POWERTRAIN_CATEGORIES

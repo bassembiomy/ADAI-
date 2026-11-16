@@ -23,6 +23,8 @@ export interface XPort {
   inferredType?: string; // For UI display in properties panel
   dataType?: string;
   unit?: string;
+  /** 'control': an enable / reset / command port (drawn amber on the canvas); a role, not a signal type. */
+  role?: 'control';
   sampleRate?: number;
   frame?: string;
 }

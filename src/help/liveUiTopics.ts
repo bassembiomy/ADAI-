@@ -1575,6 +1575,51 @@ export const LIVE_UI_FEATURES: HelpFeature[] = [
     "sourcePath": "src/components/common/ResizablePanel.tsx",
     "kind": "action",
     "module": "system"
+  },
+  {
+    "id": "live:App:34ecff87bb82",
+    "label": "Scroll the workspace toolbar",
+    "topicId": "live:App:34ecff87bb82",
+    "sectionId": "use",
+    "sourcePath": "src/App.tsx",
+    "kind": "action",
+    "module": "system"
+  },
+  {
+    "id": "live:components/xbridges/XbridgesWorkspace:a1623755ef69",
+    "label": "Rel Tol (relative tolerance)",
+    "topicId": "live:components/xbridges/XbridgesWorkspace:a1623755ef69",
+    "sectionId": "use",
+    "sourcePath": "src/components/xbridges/XbridgesWorkspace.tsx",
+    "kind": "action",
+    "module": "system"
+  },
+  {
+    "id": "live:components/xbridges/XbridgesWorkspace:c520f1d4b921",
+    "label": "Abs Tol (absolute tolerance)",
+    "topicId": "live:components/xbridges/XbridgesWorkspace:c520f1d4b921",
+    "sectionId": "use",
+    "sourcePath": "src/components/xbridges/XbridgesWorkspace.tsx",
+    "kind": "action",
+    "module": "system"
+  },
+  {
+    "id": "live:components/xbridges/XbridgesWorkspace:932393242023",
+    "label": "Extrapolation Order (ode14x)",
+    "topicId": "live:components/xbridges/XbridgesWorkspace:932393242023",
+    "sectionId": "use",
+    "sourcePath": "src/components/xbridges/XbridgesWorkspace.tsx",
+    "kind": "action",
+    "module": "system"
+  },
+  {
+    "id": "live:components/xbridges/XbridgesWorkspace:e5d9363ae480",
+    "label": "Newton Iter. (ode14x)",
+    "topicId": "live:components/xbridges/XbridgesWorkspace:e5d9363ae480",
+    "sectionId": "use",
+    "sourcePath": "src/components/xbridges/XbridgesWorkspace.tsx",
+    "kind": "action",
+    "module": "system"
   }
 ];
 export const LIVE_UI_TOPICS: Record<string,HelpTopic> = {
@@ -4901,6 +4946,101 @@ export const LIVE_UI_TOPICS: Record<string,HelpTopic> = {
     ],
     "sources": [
       "src/components/common/ResizablePanel.tsx"
+    ]
+  },
+  "live:App:34ecff87bb82": {
+    "title": "Scroll the workspace toolbar",
+    "category": "Workspace Controls",
+    "description": "When the toolbar is wider than its visible area, use the mouse wheel over it to scroll horizontally and reveal hidden tools. Without horizontal overflow, the handler leaves normal scrolling unchanged. This changes only the toolbar viewport.",
+    "content": "When the toolbar is wider than its visible area, use the mouse wheel over it to scroll horizontally and reveal hidden tools. Without horizontal overflow, the handler leaves normal scrolling unchanged. This changes only the toolbar viewport.",
+    "sections": [
+      {
+        "id": "use",
+        "title": "Scroll the workspace toolbar",
+        "body": "When the toolbar is wider than its visible area, use the mouse wheel over it to scroll horizontally and reveal hidden tools. Without horizontal overflow, the handler leaves normal scrolling unchanged. This changes only the toolbar viewport.",
+        "sources": [
+          "src/App.tsx"
+        ]
+      }
+    ],
+    "sources": [
+      "src/App.tsx"
+    ]
+  },
+  "live:components/xbridges/XbridgesWorkspace:a1623755ef69": {
+    "title": "Rel Tol (relative tolerance)",
+    "category": "Workspace Controls",
+    "description": "Relative tolerance of the variable-step solvers Adaptive ODE23, Adaptive ODE45 and Adaptive TR-BDF2 (ode23tb); the field is shown only for these solvers. Default 1e-3. The solver keeps the estimated local error of every internal step within the relative and the absolute tolerance, retries a step that misses it with a smaller one and lands exactly on the end of each output tick. The value must be a number greater than 0: an invalid value is marked in the field and the run is refused, nothing is clamped.",
+    "content": "Relative tolerance of the variable-step solvers Adaptive ODE23, Adaptive ODE45 and Adaptive TR-BDF2 (ode23tb); the field is shown only for these solvers. Default 1e-3. The solver keeps the estimated local error of every internal step within the relative and the absolute tolerance, retries a step that misses it with a smaller one and lands exactly on the end of each output tick. The value must be a number greater than 0: an invalid value is marked in the field and the run is refused, nothing is clamped.",
+    "sections": [
+      {
+        "id": "use",
+        "title": "Rel Tol (relative tolerance)",
+        "body": "Relative tolerance of the variable-step solvers Adaptive ODE23, Adaptive ODE45 and Adaptive TR-BDF2 (ode23tb); the field is shown only for these solvers. Default 1e-3. The solver keeps the estimated local error of every internal step within the relative and the absolute tolerance, retries a step that misses it with a smaller one and lands exactly on the end of each output tick. The value must be a number greater than 0: an invalid value is marked in the field and the run is refused, nothing is clamped.",
+        "sources": [
+          "src/components/xbridges/XbridgesWorkspace.tsx"
+        ]
+      }
+    ],
+    "sources": [
+      "src/components/xbridges/XbridgesWorkspace.tsx"
+    ]
+  },
+  "live:components/xbridges/XbridgesWorkspace:c520f1d4b921": {
+    "title": "Abs Tol (absolute tolerance)",
+    "category": "Workspace Controls",
+    "description": "Absolute tolerance of the variable-step solvers Adaptive ODE23, Adaptive ODE45 and Adaptive TR-BDF2 (ode23tb), used with the relative tolerance for states near zero; the field is shown only for these solvers. Default 1e-6. The value must be a number greater than 0: an invalid value is marked in the field and the run is refused.",
+    "content": "Absolute tolerance of the variable-step solvers Adaptive ODE23, Adaptive ODE45 and Adaptive TR-BDF2 (ode23tb), used with the relative tolerance for states near zero; the field is shown only for these solvers. Default 1e-6. The value must be a number greater than 0: an invalid value is marked in the field and the run is refused.",
+    "sections": [
+      {
+        "id": "use",
+        "title": "Abs Tol (absolute tolerance)",
+        "body": "Absolute tolerance of the variable-step solvers Adaptive ODE23, Adaptive ODE45 and Adaptive TR-BDF2 (ode23tb), used with the relative tolerance for states near zero; the field is shown only for these solvers. Default 1e-6. The value must be a number greater than 0: an invalid value is marked in the field and the run is refused.",
+        "sources": [
+          "src/components/xbridges/XbridgesWorkspace.tsx"
+        ]
+      }
+    ],
+    "sources": [
+      "src/components/xbridges/XbridgesWorkspace.tsx"
+    ]
+  },
+  "live:components/xbridges/XbridgesWorkspace:932393242023": {
+    "title": "Extrapolation Order (ode14x)",
+    "category": "Workspace Controls",
+    "description": "Extrapolation order of the Implicit Extrapolation solver (ode14x); the field is shown only for this solver. Default 4. The value must be an integer of 1 or more: an invalid value is marked in the field and the run is refused.",
+    "content": "Extrapolation order of the Implicit Extrapolation solver (ode14x); the field is shown only for this solver. Default 4. The value must be an integer of 1 or more: an invalid value is marked in the field and the run is refused.",
+    "sections": [
+      {
+        "id": "use",
+        "title": "Extrapolation Order (ode14x)",
+        "body": "Extrapolation order of the Implicit Extrapolation solver (ode14x); the field is shown only for this solver. Default 4. The value must be an integer of 1 or more: an invalid value is marked in the field and the run is refused.",
+        "sources": [
+          "src/components/xbridges/XbridgesWorkspace.tsx"
+        ]
+      }
+    ],
+    "sources": [
+      "src/components/xbridges/XbridgesWorkspace.tsx"
+    ]
+  },
+  "live:components/xbridges/XbridgesWorkspace:e5d9363ae480": {
+    "title": "Newton Iter. (ode14x)",
+    "category": "Workspace Controls",
+    "description": "Number of Newton iterations of each implicit solve of the Implicit Extrapolation solver (ode14x); the field is shown only for this solver. Default 1. The value must be an integer of 1 or more: an invalid value is marked in the field and the run is refused.",
+    "content": "Number of Newton iterations of each implicit solve of the Implicit Extrapolation solver (ode14x); the field is shown only for this solver. Default 1. The value must be an integer of 1 or more: an invalid value is marked in the field and the run is refused.",
+    "sections": [
+      {
+        "id": "use",
+        "title": "Newton Iter. (ode14x)",
+        "body": "Number of Newton iterations of each implicit solve of the Implicit Extrapolation solver (ode14x); the field is shown only for this solver. Default 1. The value must be an integer of 1 or more: an invalid value is marked in the field and the run is refused.",
+        "sources": [
+          "src/components/xbridges/XbridgesWorkspace.tsx"
+        ]
+      }
+    ],
+    "sources": [
+      "src/components/xbridges/XbridgesWorkspace.tsx"
     ]
   }
 };

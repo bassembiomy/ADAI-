@@ -1981,11 +1981,11 @@ export const XBlockNode = React.memo(({ data, selected, id }: any) => {
     }
   };
 
-  const getHandleColor = (type: string) => {
+  const getHandleColor = (type: string, role?: string) => {
+    if (role === 'control') return '#f59e0b'; // Amber: control port (a role, XPort.role)
     switch (type) {
       case 'vector': return '#3b82f6'; // Blue
-      case 'boolean': return '#ef4444'; // Red
-      case 'control': return '#f59e0b'; // Amber
+      case 'logical': return '#ef4444'; // Red
       case 'transform': return '#a855f7'; // Purple
       default: return '#94a3b8'; // Gray
     }
@@ -2030,7 +2030,7 @@ export const XBlockNode = React.memo(({ data, selected, id }: any) => {
           id={port.id}
           className="cursor-pointer hover:scale-125 transition-all duration-300"
           style={{
-            background: isSelected ? '#c9a86c' : getHandleColor(port.type),
+            background: isSelected ? '#c9a86c' : getHandleColor(port.type, port.role),
             width: isSelected ? 14 : 10,
             height: isSelected ? 14 : 10,
             border: isSelected ? '2px solid #000000' : '1.5px solid #1e293b',

@@ -707,7 +707,613 @@
       "note": "OM 501 LA V6 / MR-PLD calibration lab (examples/om501MrPldLab.ts, mrPldMaps.ts): injector flow bench -> map 3 Injection Duration; engine dyno DoE (speed x Q x SOI x wastegate, limits P_max/T_exh/Lambda/NOx) -> map 1 Base SOI, 6 Smoke Limiter, 7 Full-load fuel limit/torque, Mapped Engine. Additions: CI Info Lambda/P_map, injector Info m_f/ET, DoE Lambda_min and NOx_max, DoE panel 'Calibration map' writer. Reviewer fix: NOx_max (30 g/kWh model scale) so the SOI map is NOx-shaped instead of pinned at max advance; layout. Not generatable (no blocks): maps 2, 4, 5, 8-16. Known model limits: smoke map speed-independent (constant eta_v), 3-level SOI grid."
     }
   ],
-  "blocks": {},
+  "blocks": {
+    "PT_AMBIENT": {
+      "gates": {
+        "G1": "pass",
+        "G2": "pass",
+        "G3": "pending",
+        "G4": "pass",
+        "G5": "pending"
+      },
+      "tests": [
+        "src/engine/xbridges/powertrain/ptContract.test.ts",
+        "src/engine/xbridges/powertrain/ec02_airPath.test.ts"
+      ]
+    },
+    "PT_AMT_CONTROLLER": {
+      "gates": {
+        "G1": "pass",
+        "G2": "pass",
+        "G3": "pending",
+        "G4": "pass",
+        "G5": "pending"
+      },
+      "tests": [
+        "src/engine/xbridges/powertrain/ptContract.test.ts",
+        "src/engine/xbridges/powertrain/wp14b_15b_16_drivetrain.test.ts"
+      ]
+    },
+    "PT_AUTOMATED_MANUAL_TRANSMISSION": {
+      "gates": {
+        "G1": "pass",
+        "G2": "pass",
+        "G3": "pending",
+        "G4": "pass",
+        "G5": "pending"
+      },
+      "tests": [
+        "src/engine/xbridges/powertrain/ptContract.test.ts",
+        "src/engine/xbridges/powertrain/wp14b_15b_16_drivetrain.test.ts"
+      ]
+    },
+    "PT_CALIBRATION_ECU": {
+      "gates": {
+        "G1": "pass",
+        "G2": "pass",
+        "G3": "pending",
+        "G4": "pass",
+        "G5": "pending"
+      },
+      "tests": [
+        "src/engine/xbridges/powertrain/ptContract.test.ts",
+        "src/engine/xbridges/powertrain/ec05_testCellControl.test.ts"
+      ]
+    },
+    "PT_CALIBRATION_MAP_2D": {
+      "gates": {
+        "G1": "pass",
+        "G2": "pass",
+        "G3": "pending",
+        "G4": "pass",
+        "G5": "pending"
+      },
+      "tests": [
+        "src/engine/xbridges/powertrain/ptContract.test.ts",
+        "src/engine/xbridges/powertrain/ciV8MappingLab.test.ts",
+        "src/engine/xbridges/powertrain/ec05_testCellControl.test.ts",
+        "src/engine/xbridges/powertrain/mrPldMaps.test.ts",
+        "src/engine/xbridges/powertrain/om501MrPldLab.test.ts"
+      ]
+    },
+    "PT_CI_CONTROLLER": {
+      "gates": {
+        "G1": "pass",
+        "G2": "pass",
+        "G3": "pending",
+        "G4": "pass",
+        "G5": "pending"
+      },
+      "tests": [
+        "src/engine/xbridges/powertrain/ptContract.test.ts",
+        "src/engine/xbridges/powertrain/wp24_ciController.test.ts"
+      ]
+    },
+    "PT_CI_CORE_ENGINE": {
+      "gates": {
+        "G1": "pass",
+        "G2": "pass",
+        "G3": "pending",
+        "G4": "pass",
+        "G5": "pending"
+      },
+      "tests": [
+        "src/engine/xbridges/powertrain/ptContract.test.ts",
+        "src/engine/xbridges/powertrain/wp27_ciCoreEngine.test.ts",
+        "src/engine/xbridges/powertrain/wp27b_characterization.test.ts"
+      ]
+    },
+    "PT_CI_CYLINDER": {
+      "gates": {
+        "G1": "pass",
+        "G2": "pass",
+        "G3": "pending",
+        "G4": "pass",
+        "G5": "pending"
+      },
+      "tests": [
+        "src/engine/xbridges/powertrain/ptContract.test.ts",
+        "src/engine/xbridges/powertrain/ciV8MappingLab.test.ts",
+        "src/engine/xbridges/powertrain/ec01_cylinder.test.ts",
+        "src/engine/xbridges/powertrain/om501MrPldLab.test.ts",
+        "src/engine/xbridges/powertrain/wp27b_characterization.test.ts"
+      ]
+    },
+    "PT_COMPRESSOR": {
+      "gates": {
+        "G1": "pass",
+        "G2": "pass",
+        "G3": "pending",
+        "G4": "pass",
+        "G5": "pending"
+      },
+      "tests": [
+        "src/engine/xbridges/powertrain/ptContract.test.ts",
+        "src/engine/xbridges/powertrain/wp26_boostDrive.test.ts"
+      ]
+    },
+    "PT_CONTINUOUSLY_VARIABLE_TRANSMISSION": {
+      "gates": {
+        "G1": "pass",
+        "G2": "pass",
+        "G3": "pending",
+        "G4": "pass",
+        "G5": "pending"
+      },
+      "tests": [
+        "src/engine/xbridges/powertrain/ptContract.test.ts",
+        "src/engine/xbridges/powertrain/wp14b_15b_16_drivetrain.test.ts"
+      ]
+    },
+    "PT_CONTROL_VOLUME": {
+      "gates": {
+        "G1": "pass",
+        "G2": "pass",
+        "G3": "pending",
+        "G4": "pass",
+        "G5": "pending"
+      },
+      "tests": [
+        "src/engine/xbridges/powertrain/ptContract.test.ts",
+        "src/engine/xbridges/powertrain/wp25_fundamentalFlow.test.ts",
+        "src/engine/xbridges/powertrain/wp26_boostDrive.test.ts",
+        "src/engine/xbridges/powertrain/wp27_ciCoreEngine.test.ts"
+      ]
+    },
+    "PT_CVT_CONTROLLER": {
+      "gates": {
+        "G1": "pass",
+        "G2": "pass",
+        "G3": "pending",
+        "G4": "pass",
+        "G5": "pending"
+      },
+      "tests": [
+        "src/engine/xbridges/powertrain/ptContract.test.ts",
+        "src/engine/xbridges/powertrain/wp14b_15b_16_drivetrain.test.ts"
+      ]
+    },
+    "PT_DATASHEET_BATTERY": {
+      "gates": {
+        "G1": "pass",
+        "G2": "pass",
+        "G3": "pending",
+        "G4": "pass",
+        "G5": "pending"
+      },
+      "tests": [
+        "src/engine/xbridges/powertrain/ptContract.test.ts",
+        "src/engine/xbridges/powertrain/wp17_batteries.test.ts"
+      ]
+    },
+    "PT_DCT_CONTROLLER": {
+      "gates": {
+        "G1": "pass",
+        "G2": "pass",
+        "G3": "pending",
+        "G4": "pass",
+        "G5": "pending"
+      },
+      "tests": [
+        "src/engine/xbridges/powertrain/ptContract.test.ts",
+        "src/engine/xbridges/powertrain/wp14b_15b_16_drivetrain.test.ts"
+      ]
+    },
+    "PT_DISC_CLUTCH": {
+      "gates": {
+        "G1": "pass",
+        "G2": "pass",
+        "G3": "pending",
+        "G4": "pass",
+        "G5": "pending"
+      },
+      "tests": [
+        "src/engine/xbridges/powertrain/ptContract.test.ts",
+        "src/engine/xbridges/powertrain/wp13_couplings.test.ts"
+      ]
+    },
+    "PT_DOE_SWEEPER": {
+      "gates": {
+        "G1": "pass",
+        "G2": "pass",
+        "G3": "pending",
+        "G4": "pass",
+        "G5": "pending"
+      },
+      "tests": [
+        "src/engine/xbridges/powertrain/ptContract.test.ts",
+        "src/engine/xbridges/powertrain/ec06_doe.test.ts",
+        "src/engine/xbridges/powertrain/ec08_calibrationExport.test.ts",
+        "src/engine/xbridges/powertrain/om501MrPldLab.test.ts"
+      ]
+    },
+    "PT_DRIVE_CYCLE_SOURCE": {
+      "gates": {
+        "G1": "pass",
+        "G2": "pass",
+        "G3": "pending",
+        "G4": "pass",
+        "G5": "pending"
+      },
+      "tests": [
+        "src/engine/xbridges/powertrain/ptContract.test.ts",
+        "src/engine/xbridges/powertrain/wp10_scenarios.test.ts"
+      ]
+    },
+    "PT_DRIVE_SHAFT": {
+      "gates": {
+        "G1": "pass",
+        "G2": "pass",
+        "G3": "pending",
+        "G4": "pass",
+        "G5": "pending"
+      },
+      "tests": [
+        "src/engine/xbridges/powertrain/ptContract.test.ts",
+        "src/engine/xbridges/powertrain/wp26_boostDrive.test.ts"
+      ]
+    },
+    "PT_DUAL_CLUTCH_TRANSMISSION": {
+      "gates": {
+        "G1": "pass",
+        "G2": "pass",
+        "G3": "pending",
+        "G4": "pass",
+        "G5": "pending"
+      },
+      "tests": [
+        "src/engine/xbridges/powertrain/ptContract.test.ts",
+        "src/engine/xbridges/powertrain/wp14b_15b_16_drivetrain.test.ts"
+      ]
+    },
+    "PT_ENGINE_DYNO": {
+      "gates": {
+        "G1": "pass",
+        "G2": "pass",
+        "G3": "pending",
+        "G4": "pass",
+        "G5": "pending"
+      },
+      "tests": [
+        "src/engine/xbridges/powertrain/ptContract.test.ts",
+        "src/engine/xbridges/powertrain/ec05_testCellControl.test.ts"
+      ]
+    },
+    "PT_EQUIVALENT_CIRCUIT_BATTERY": {
+      "gates": {
+        "G1": "pass",
+        "G2": "pass",
+        "G3": "pending",
+        "G4": "pass",
+        "G5": "pending"
+      },
+      "tests": [
+        "src/engine/xbridges/powertrain/ptContract.test.ts",
+        "src/engine/xbridges/powertrain/wp17_batteries.test.ts"
+      ]
+    },
+    "PT_FLOW_BOUNDARY": {
+      "gates": {
+        "G1": "pass",
+        "G2": "pass",
+        "G3": "pending",
+        "G4": "pass",
+        "G5": "pending"
+      },
+      "tests": [
+        "src/engine/xbridges/powertrain/ptContract.test.ts",
+        "src/engine/xbridges/powertrain/wp25_fundamentalFlow.test.ts",
+        "src/engine/xbridges/powertrain/wp26_boostDrive.test.ts",
+        "src/engine/xbridges/powertrain/wp27_ciCoreEngine.test.ts"
+      ]
+    },
+    "PT_FLOW_RESTRICTION": {
+      "gates": {
+        "G1": "pass",
+        "G2": "pass",
+        "G3": "pending",
+        "G4": "pass",
+        "G5": "pending"
+      },
+      "tests": [
+        "src/engine/xbridges/powertrain/ptContract.test.ts",
+        "src/engine/xbridges/powertrain/wp25_fundamentalFlow.test.ts",
+        "src/engine/xbridges/powertrain/wp26_boostDrive.test.ts",
+        "src/engine/xbridges/powertrain/wp27_ciCoreEngine.test.ts"
+      ]
+    },
+    "PT_FUEL_INJECTOR": {
+      "gates": {
+        "G1": "pass",
+        "G2": "pass",
+        "G3": "pending",
+        "G4": "pass",
+        "G5": "pending"
+      },
+      "tests": [
+        "src/engine/xbridges/powertrain/ptContract.test.ts",
+        "src/engine/xbridges/powertrain/ec04_fuelingActuation.test.ts",
+        "src/engine/xbridges/powertrain/om501MrPldLab.test.ts"
+      ]
+    },
+    "PT_HEAT_EXCHANGER": {
+      "gates": {
+        "G1": "pass",
+        "G2": "pass",
+        "G3": "pending",
+        "G4": "pass",
+        "G5": "pending"
+      },
+      "tests": [
+        "src/engine/xbridges/powertrain/ptContract.test.ts",
+        "src/engine/xbridges/powertrain/wp25_fundamentalFlow.test.ts"
+      ]
+    },
+    "PT_IDEAL_FIXED_GEAR_TRANSMISSION": {
+      "gates": {
+        "G1": "pass",
+        "G2": "pass",
+        "G3": "pending",
+        "G4": "pass",
+        "G5": "pending"
+      },
+      "tests": [
+        "src/engine/xbridges/powertrain/ptContract.test.ts",
+        "src/engine/xbridges/powertrain/wp13_couplings.test.ts"
+      ]
+    },
+    "PT_INTAKE_MANIFOLD": {
+      "gates": {
+        "G1": "pass",
+        "G2": "pass",
+        "G3": "pending",
+        "G4": "pass",
+        "G5": "pending"
+      },
+      "tests": [
+        "src/engine/xbridges/powertrain/ptContract.test.ts",
+        "src/engine/xbridges/powertrain/ec02_airPath.test.ts"
+      ]
+    },
+    "PT_LIMITED_SLIP_DIFFERENTIAL": {
+      "gates": {
+        "G1": "pass",
+        "G2": "pass",
+        "G3": "pending",
+        "G4": "pass",
+        "G5": "pending"
+      },
+      "tests": [
+        "src/engine/xbridges/powertrain/ptContract.test.ts",
+        "src/engine/xbridges/powertrain/wp14b_15b_16_drivetrain.test.ts"
+      ]
+    },
+    "PT_LONGITUDINAL_DRIVER": {
+      "gates": {
+        "G1": "pass",
+        "G2": "pass",
+        "G3": "pending",
+        "G4": "pass",
+        "G5": "pending"
+      },
+      "tests": [
+        "src/engine/xbridges/powertrain/ptContract.test.ts",
+        "src/engine/xbridges/powertrain/wp10_scenarios.test.ts"
+      ]
+    },
+    "PT_LONGITUDINAL_WHEEL": {
+      "gates": {
+        "G1": "pass",
+        "G2": "pass",
+        "G3": "pending",
+        "G4": "pass",
+        "G5": "pending"
+      },
+      "tests": [
+        "src/engine/xbridges/powertrain/ptContract.test.ts",
+        "src/engine/xbridges/powertrain/wp12_wheel.test.ts"
+      ]
+    },
+    "PT_MAPPED_CI_ENGINE": {
+      "gates": {
+        "G1": "pass",
+        "G2": "pass",
+        "G3": "pending",
+        "G4": "pass",
+        "G5": "pending"
+      },
+      "tests": [
+        "src/engine/xbridges/powertrain/ptContract.test.ts",
+        "src/engine/xbridges/powertrain/ciV8MappingLab.test.ts",
+        "src/engine/xbridges/powertrain/om501MrPldLab.test.ts",
+        "src/engine/xbridges/powertrain/wp23_mappedEngines.test.ts"
+      ]
+    },
+    "PT_MAPPED_MOTOR": {
+      "gates": {
+        "G1": "pass",
+        "G2": "pass",
+        "G3": "pending",
+        "G4": "pass",
+        "G5": "pending"
+      },
+      "tests": [
+        "src/engine/xbridges/powertrain/ptContract.test.ts",
+        "src/engine/xbridges/powertrain/wp19_mappedMotor.test.ts"
+      ]
+    },
+    "PT_MAPPED_SI_ENGINE": {
+      "gates": {
+        "G1": "pass",
+        "G2": "pass",
+        "G3": "pending",
+        "G4": "pass",
+        "G5": "pending"
+      },
+      "tests": [
+        "src/engine/xbridges/powertrain/ptContract.test.ts",
+        "src/engine/xbridges/powertrain/wp23_mappedEngines.test.ts"
+      ]
+    },
+    "PT_OPEN_DIFFERENTIAL": {
+      "gates": {
+        "G1": "pass",
+        "G2": "pass",
+        "G3": "pending",
+        "G4": "pass",
+        "G5": "pending"
+      },
+      "tests": [
+        "src/engine/xbridges/powertrain/ptContract.test.ts",
+        "src/engine/xbridges/powertrain/ec08_calibrationExport.test.ts",
+        "src/engine/xbridges/powertrain/wp14_openDifferential.test.ts"
+      ]
+    },
+    "PT_PLANETARY_GEAR": {
+      "gates": {
+        "G1": "pass",
+        "G2": "pass",
+        "G3": "pending",
+        "G4": "pass",
+        "G5": "pending"
+      },
+      "tests": [
+        "src/engine/xbridges/powertrain/ptContract.test.ts",
+        "src/engine/xbridges/powertrain/wp13_couplings.test.ts"
+      ]
+    },
+    "PT_ROTATIONAL_INERTIA": {
+      "gates": {
+        "G1": "pass",
+        "G2": "pass",
+        "G3": "pending",
+        "G4": "pass",
+        "G5": "pending"
+      },
+      "tests": [
+        "src/engine/xbridges/powertrain/ptContract.test.ts",
+        "src/engine/xbridges/powertrain/wp13_couplings.test.ts"
+      ]
+    },
+    "PT_SI_CYLINDER": {
+      "gates": {
+        "G1": "pass",
+        "G2": "pass",
+        "G3": "pending",
+        "G4": "pass",
+        "G5": "pending"
+      },
+      "tests": [
+        "src/engine/xbridges/powertrain/ptContract.test.ts",
+        "src/engine/xbridges/powertrain/ciV8MappingLab.test.ts",
+        "src/engine/xbridges/powertrain/ec01_cylinder.test.ts"
+      ]
+    },
+    "PT_THROTTLE_BODY": {
+      "gates": {
+        "G1": "pass",
+        "G2": "pass",
+        "G3": "pending",
+        "G4": "pass",
+        "G5": "pending"
+      },
+      "tests": [
+        "src/engine/xbridges/powertrain/ptContract.test.ts",
+        "src/engine/xbridges/powertrain/ec02_airPath.test.ts"
+      ]
+    },
+    "PT_TORQUE_CONVERTER": {
+      "gates": {
+        "G1": "pass",
+        "G2": "pass",
+        "G3": "pending",
+        "G4": "pass",
+        "G5": "pending"
+      },
+      "tests": [
+        "src/engine/xbridges/powertrain/ptContract.test.ts",
+        "src/engine/xbridges/powertrain/wp13_couplings.test.ts"
+      ]
+    },
+    "PT_TORSIONAL_COMPLIANCE": {
+      "gates": {
+        "G1": "pass",
+        "G2": "pass",
+        "G3": "pending",
+        "G4": "pass",
+        "G5": "pending"
+      },
+      "tests": [
+        "src/engine/xbridges/powertrain/ptContract.test.ts",
+        "src/engine/xbridges/powertrain/wp13_couplings.test.ts"
+      ]
+    },
+    "PT_TRANSFER_CASE": {
+      "gates": {
+        "G1": "pass",
+        "G2": "pass",
+        "G3": "pending",
+        "G4": "pass",
+        "G5": "pending"
+      },
+      "tests": [
+        "src/engine/xbridges/powertrain/ptContract.test.ts",
+        "src/engine/xbridges/powertrain/wp14b_15b_16_drivetrain.test.ts"
+      ]
+    },
+    "PT_TURBINE": {
+      "gates": {
+        "G1": "pass",
+        "G2": "pass",
+        "G3": "pending",
+        "G4": "pass",
+        "G5": "pending"
+      },
+      "tests": [
+        "src/engine/xbridges/powertrain/ptContract.test.ts",
+        "src/engine/xbridges/powertrain/wp26_boostDrive.test.ts"
+      ]
+    },
+    "PT_TURBOCHARGER": {
+      "gates": {
+        "G1": "pass",
+        "G2": "pass",
+        "G3": "pending",
+        "G4": "pass",
+        "G5": "pending"
+      },
+      "tests": [
+        "src/engine/xbridges/powertrain/ptContract.test.ts",
+        "src/engine/xbridges/powertrain/ec03_turbocharger.test.ts"
+      ]
+    },
+    "PT_VEHICLE_BODY_1DOF": {
+      "gates": {
+        "G1": "pass",
+        "G2": "pass",
+        "G3": "pending",
+        "G4": "pass",
+        "G5": "pending"
+      },
+      "tests": [
+        "src/engine/xbridges/powertrain/ptContract.test.ts",
+        "src/engine/xbridges/powertrain/wp11_vehicleBody.test.ts"
+      ]
+    },
+    "PT_VVT_VALVETRAIN": {
+      "gates": {
+        "G1": "pass",
+        "G2": "pass",
+        "G3": "pending",
+        "G4": "pass",
+        "G5": "pending"
+      },
+      "tests": [
+        "src/engine/xbridges/powertrain/ptContract.test.ts",
+        "src/engine/xbridges/powertrain/ec04_fuelingActuation.test.ts"
+      ]
+    }
+  },
   "user_decisions": [
     "2026-10-20: skip Antigravity and the MATLAB inventory; proceed with the block data in plan \u00a72 (docs-based). G3 Simulink goldens stay pending until MATLAB runs are available."
   ],

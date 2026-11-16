@@ -23,14 +23,19 @@ pass-through behavior.
 
 | Family | Embedded-capable block types |
 |---|---|
-| Sources and mappings | `Constant`, `Inport`, `Outport` |
-| Arithmetic | `Sum`, `SUM_JUNCTION`, `GAIN`, `PRODUCT`, `VectorAdd`, `VectorSub`, `VectorMul`, `VectorDiv`, `UnaryNeg`, `Abs` |
-| Matrix | `MatrixMul`, `Transpose`, `MatrixConcat`, `MatrixDiag`, `SubMatrix`, `MatrixSolve` |
-| Logic | `AND`, `OR`, `NOT` |
-| Routing | `TERMINATOR` |
+| Sources and mappings | `Constant`, `Inport`, `Outport`, `Clock`, `WaveformGen`, `Step`, `WHITE_NOISE`, `BAND_LIMITED_NOISE` |
+| Arithmetic | `Sum`, `SUM_JUNCTION`, `GAIN`, `PRODUCT`, `UnaryNeg`, `Abs`, `VectorAdd`, `VectorSub`, `VectorMul`, `VectorDiv`, `VectorPow` |
+| Reductions | `SumElements`, `Mean`, `Max` |
+| Matrix | `MatrixMul`, `Transpose`, `MatrixConcat`, `MatrixDiag`, `IdentityMatrix`, `SubMatrix`, `MatrixSolve` |
+| Logic and bitwise | `AND`, `OR`, `NOT`, `NAND`, `NOR`, `XOR`, `BitwiseAND`, `BitwiseOR`, `BitwiseXOR`, `BitwiseNOT`, `ShiftLeft`, `ShiftRight` |
+| Routing | `SWITCH`, `MUX`, `DEMUX`, `IF_ELSE`, `TERMINATOR`, `Subsystem` |
+| Discontinuities | `SATURATION`, `DEADZONE`, `RATE_LIMITER`, `RELAY` |
+| Sequential | `DFlipFlop`, `JKFlipFlop`, `Register`, `Counter` |
 | Stateful | `DELAY`, `UNIT_DELAY`, `MEMORY`, `INTEGRATOR_DISCRETE`, `INTEGRATOR_CONTINUOUS`, `Integrator` |
-| Control and linear systems | `PID_BASIC`, `DISCRETE_TRANSFER_FUNCTION`, `STATE_SPACE` |
+| Filters | `LOW_PASS_FILTER`, `HIGH_PASS_FILTER`, `MOVING_AVERAGE` |
+| Control and linear systems | `PID_BASIC`, `PID_CONTROLLER`, `DISCRETE_TRANSFER_FUNCTION`, `STATE_SPACE`, `KALMAN_FILTER`, `SIX_STEP_COMMUTATION` |
 | Motor transforms | `CLARKE_TRANSFORM`, `PARK_TRANSFORM`, `INVERSE_PARK`, `INVERSE_CLARKE` |
+| Trigonometric and hyperbolic | `SIN`, `COS`, `TAN`, `COT`, `SEC`, `COSEC`, `ASIN`, `ACOS`, `ATAN`, `ACOT`, `ASEC`, `ACOSEC`, `SINH`, `COSH`, `TANH`, `COTH`, `SECH`, `COSECH`, `ASINH`, `ACOSH`, `ATANH`, `ACOTH`, `ASECH`, `ACOSECH` |
 | Numeric conversion | `DATA_TYPE_CONVERSION`, `NUMERIC_REPRESENTATION` |
 
 Support is conditional on valid static dimensions, parameters, numeric types,
@@ -68,30 +73,24 @@ Outport output.
 
 ### Host-only and unsupported blocks
 
-The following categories are explicitly rejected because no paired canonical
-interpreter and strict-C99 embedded conformance case is registered:
+Every type that is not in the table above is rejected (`codegen: false` with a stated reason in the registry, or no
+entry at all) because no paired canonical interpreter and strict-C99 embedded conformance case is registered. The
+registry holds 100 embedded-capable types (the table above lists exactly them; a test compares the two) and the
+rejected categories are:
 
-- `Step`, `VectorPow`, reductions, `IdentityMatrix`, extended logic/bitwise,
-  switches/muxes, low/high-pass and moving-average filters, and the standalone
-  trigonometric family. Some have a partial emitter or host implementation, but
-  partial support is not enough to authorize embedded generation;
-- digital/UI simulation helpers such as flip-flops, registers, counters,
-  clocks, waveform generators, notes, subsystems, inverse, and determinant;
-- PWM, inverter, motor, FOC/SVPWM, estimator, Kalman, MPC, transfer-function,
-  derivative, noise, impulse, Laplace, root-locus, and DOE variants not named in
-  the supported table;
+- the `Scope` sink and the `Note` annotation, and the other digital/UI simulation helpers (inverse, determinant);
+- PWM, inverter, motor, FOC/SVPWM, estimator, extended Kalman, MPC, transfer-function, derivative, impulse, Laplace,
+  root-locus, and DOE variants not named in the supported table;
 - neural, reinforcement-learning, adaptive-learning, and optimization blocks;
-- robot-vacuum navigation, perception, mapping, planning, digital-twin,
-  visualization, sensor, actuator, and supervisory blocks;
-- fuzzy inference, membership, rule, controller, defuzzification, and surface
-  visualization blocks;
+- robot-vacuum navigation, perception, mapping, planning, digital-twin, visualization, sensor, actuator, and supervisory
+  blocks;
+- fuzzy inference, membership, rule, controller, defuzzification, and surface visualization blocks;
+- lookup-table, bus, and Powertrain Blockset blocks;
 - DEM, CFD, fabric, co-simulation, and surrogate-learning blocks.
 
-`Scope` is host visualization. `LMS_ADAPTIVE_FILTER` and the other learning
-blocks require online learning. `PID_CONTROLLER` lacks a compiled-C conformance
-contract; use `PID_BASIC` for the embedded path. The generated testing report
-lists every registered unsupported type and its exact reason. A block may remain
-available in normal application simulation while being rejected for embedded C.
+`Scope` is host visualization. `LMS_ADAPTIVE_FILTER` and the other learning blocks require online learning. The
+generated testing report lists every registered unsupported type and its exact reason. A block may remain available in
+normal application simulation while being rejected for embedded C.
 
 ## Numeric behavior
 
@@ -226,7 +225,13 @@ type, control-port defaults and the integrator methods are
 
 An X-Bridges model belongs to an ordinary state. Its default memory policy is
 `reset`: state slots initialize on every ordinary state entry. `retain` keeps
-the slots while the owner is inactive. `SM_Reset()` initializes all X-Bridges
+the slots while the owner is inactive. Under `retain` the discrete
+sample-hit counter (the tick counter that decides on which ticks a discrete block runs) is
+part of that memory: it is frozen while the owning state is inactive, it does
+not advance during the ticks the owner is not executing, and it continues from
+its frozen value on re-entry. The hits of a discrete block after a re-entry are
+therefore shifted by the number of inactive ticks, relative to the free-running
+tick count. The simulator, the runtime and the generated C agree on this. `SM_Reset()` initializes all X-Bridges
 memory regardless of the entry policy.
 
 Shallow and deep history restore state-machine configuration. They do not

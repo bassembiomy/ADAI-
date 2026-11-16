@@ -105,6 +105,65 @@ const CONSTANT_INTEGER_RANGES: Readonly<Record<string, readonly [number, number]
   int32: [-2147483648, 2147483647], uint32: [0, 4294967295],
 };
 
+/**
+ * Input ports that are optional: control inputs (Enable / Reset / learning rate ...) have defaults and the DOE link
+ * ('doe', 'model') is optional, so an unconnected one is not reported. These ports used to be recognised by the port
+ * types 'control' and 'object', which are not signal types (XSignalType, XBV-014); the exemption is kept per block type.
+ */
+const OPTIONAL_INPUT_PORTS: Readonly<Record<string, readonly string[]>> = {
+  AC_MOTOR_PID_CONTROL: ['w_ref'],
+  AIR_FRYER_LEARNING_MODEL: ['power', 'fan_speed', 'measured_temp', 'lr'],
+  CURRENT_CONTROLLER_DQ: ['id_ref', 'iq_ref'],
+  FIELD_ORIENTED_CONTROL: ['id_ref', 'iq_ref'],
+  FIELD_WEAKENING: ['id_base'],
+  FUZZY_PID_CONTROLLER: ['enable', 'reset'],
+  IM_FOC_CONTROL: ['w_ref'],
+  IM_SCALAR_CONTROL: ['w_ref'],
+  LAPLACE_TRANSFORM: ['doe'],
+  LMS_ADAPTIVE_FILTER: ['x', 'd', 'lr'],
+  MTPA_CONTROLLER: ['te_ref'],
+  MTPA_FW_MANAGER: ['te_ref'],
+  NEURAL_NEURON_LEARNING: ['x1', 'x2', 'target', 'lr'],
+  PID_BASIC: ['enable', 'reset'],
+  PID_CONTROLLER: ['enable', 'reset'],
+  PWM_GENERATOR: ['duty'],
+  RL_Q_LEARNING_CONTROLLER: ['error', 'reward'],
+  ROBOT_VACUUM_3D_SCENE_VIEW: ['x', 'y', 'theta', 'battery', 'dust'],
+  ROBOT_VACUUM_BATTERY: ['I_L', 'I_R'],
+  ROBOT_VACUUM_BOUSTROPHEDON_SWEEP: ['room_id'],
+  ROBOT_VACUUM_COMM: ['enc_L_in', 'enc_R_in', 'omega_L_in', 'omega_R_in', 'battery_in', 'x_odom_in', 'y_odom_in', 'theta_odom_in', 'v_ref_in', 'w_ref_in', 'nav_state_in'],
+  ROBOT_VACUUM_CONTINUOUS_ENERGY: ['battery'],
+  ROBOT_VACUUM_COVERAGE: ['x_est', 'y_est'],
+  ROBOT_VACUUM_DIGITAL_TWIN: ['target_x', 'target_y', 'mode_select'],
+  ROBOT_VACUUM_DOOR_CROSSING: ['target_room'],
+  ROBOT_VACUUM_DYNAMICS: ['omega_L', 'omega_R'],
+  ROBOT_VACUUM_ENCODER: ['omega_L', 'omega_R'],
+  ROBOT_VACUUM_ENVIRONMENT: ['x', 'y', 'theta', 'x_est', 'y_est', 'theta_est', 'target_x_in', 'target_y_in', 'nav_state', 'battery_level', 'confidence'],
+  ROBOT_VACUUM_FUSION: ['x_odom', 'y_odom', 'theta_odom', 'x_true', 'y_true', 'theta_true', 'yaw_rate_imu'],
+  ROBOT_VACUUM_GLOBAL_PLANNER: ['x_est', 'y_est', 'goal_x', 'goal_y'],
+  ROBOT_VACUUM_KINEMATICS: ['v_ref', 'w_ref'],
+  ROBOT_VACUUM_LIDAR: ['x', 'y', 'theta'],
+  ROBOT_VACUUM_LOCALIZATION: ['x_odom', 'y_odom', 'theta_odom', 'x_true', 'y_true', 'theta_true'],
+  ROBOT_VACUUM_MAPPING: ['x_est', 'y_est', 'theta_est'],
+  ROBOT_VACUUM_MOTION_CONTROLLER: ['x_est', 'y_est', 'theta_est', 'target_x', 'target_y'],
+  ROBOT_VACUUM_MOTOR: ['pwm_duty', 'v_bat'],
+  ROBOT_VACUUM_MOTOR_COMMAND: ['v_cmd', 'w_cmd', 'omega_L', 'omega_R'],
+  ROBOT_VACUUM_NAV: ['x_est', 'y_est', 'theta_est', 'target_x_in', 'target_y_in', 'mode_select', 'battery_level', 'is_docked'],
+  ROBOT_VACUUM_OBSTACLE_AVOIDANCE: ['target_x', 'target_y'],
+  ROBOT_VACUUM_ODOMETRY: ['enc_L', 'enc_R'],
+  ROBOT_VACUUM_SLAM: ['x_est', 'y_est', 'theta_est', 'x_true', 'y_true', 'theta_true'],
+  ROBOT_VACUUM_TOPOLOGY_RETURN: ['current_room', 'dock_room'],
+  ROBOT_VACUUM_VISUALIZATION: ['x', 'y', 'theta', 'x_est', 'y_est', 'theta_est', 'target_x', 'target_y', 'nav_state', 'battery_level', 'confidence'],
+  ROBOT_VACUUM_WHEEL_CONTROL: ['omegaL_ref', 'omegaR_ref', 'omega_L', 'omega_R'],
+  SPEED_CONTROLLER: ['speed_ref'],
+  SWITCH: ['ctrl'],
+  SWITCHING_TIME_CALCULATOR: ['vref', 'vdc', 'ts'],
+  THREE_PHASE_PWM: ['va_ref', 'vb_ref', 'vc_ref'],
+  VF_SLIP_COMP: ['w_ref'],
+  VOLTAGE_REFERENCE_GENERATOR: ['f'],
+  ZERO_SEQUENCE_INJECTION: ['va', 'vb', 'vc'],
+};
+
 /** A. Connectivity */
 export function checkConnectivity(blocks: XBlock[], conns: FlatConnection[]): ModelDiagnostic[] {
   const out: ModelDiagnostic[] = [];
@@ -112,8 +171,8 @@ export function checkConnectivity(blocks: XBlock[], conns: FlatConnection[]): Mo
   const used = new Set(conns.map((c) => `${c.sourceBlock}.${c.sourcePort}`));
   for (const b of blocks) {
     for (const p of b.inputs || []) {
-      // Control ports (Enable/Reset) have defaults; 'object' ports (DOE link) are optional.
-      if ((p.type as string) === 'control' || (p.type as string) === 'object') continue;
+      // Control ports (Enable/Reset) have defaults; the DOE link ports are optional.
+      if (OPTIONAL_INPUT_PORTS[b.type]?.includes(p.id)) continue;
       if (!driven.has(`${b.id}.${p.id}`)) {
         out.push({
           severity: 'warning', code: 'UNCONNECTED_INPUT_PORT', blockIds: [b.id],
@@ -245,7 +304,8 @@ export function checkParameters(blocks: XBlock[]): ModelDiagnostic[] {
         if (range && ev.ok && typeof ev.value !== 'string' && typeof ev.value !== 'boolean') {
           for (const x of ([ev.value] as unknown[]).flat(2) as number[]) {
             if (!Number.isInteger(x)) {
-              err(b, 'CONSTANT_VALUE_NOT_REPRESENTABLE', `Block '${nameOf(b)}': value ${x} is not an integer and cannot be represented as ${outType}.`);
+              // Simulink reports parameter precision loss as a warning by default (out-of-range overflow below stays an error).
+              out.push({ severity: 'warning', code: 'CONSTANT_VALUE_NOT_REPRESENTABLE', message: `Block '${nameOf(b)}': value ${x} is not an integer and cannot be represented as ${outType} without loss of precision.`, blockIds: [b.id] });
             } else if (x < range[0] || x > range[1]) {
               err(b, 'CONSTANT_VALUE_OUT_OF_RANGE', `Block '${nameOf(b)}': value ${x} is outside the ${outType} range [${range[0]}, ${range[1]}].`);
             }

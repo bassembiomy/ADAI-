@@ -1,6 +1,6 @@
 // src/engine/xbridges/XbridgesEngine.ts
 import { XModel, XBlock, ModelDiagnostic, SolverOptions, BlockEvalContext } from './types';
-import { BLOCK_LIBRARY, getPolynomialCoefficients, trimLeadingZeros } from './BlockDefinitions';
+import { BLOCK_LIBRARY, getPolynomialCoefficients, trimLeadingZeros, effectivePortUnit } from './BlockDefinitions';
 import { VectorUtils } from './VectorUtils';
 import { runModelChecks, getBlockSampleTime, evaluateBlockParameters, parameterKindsOf, describeParameterProblem } from './modelChecks';
 import { evaluateParameter } from './parameterEvaluation';
@@ -207,11 +207,12 @@ export class XbridgesEngine {
 
       // Unit consistency validation
       // 'inherit' (Simulink unit inheritance) takes the unit of the connected signal and is never inconsistent.
-      if (outPort.unit && inPort.unit && outPort.unit !== 'inherit' && inPort.unit !== 'inherit' && outPort.unit !== inPort.unit) {
+      const outUnit = effectivePortUnit(sourceBlock, outPort), inUnit = effectivePortUnit(targetBlock, inPort);
+      if (outUnit && inUnit && outUnit !== 'inherit' && inUnit !== 'inherit' && outUnit !== inUnit) {
         this.diagnostics.push({
           severity: 'warning',
           code: 'UNIT_INCONSISTENCY',
-          message: `Unit inconsistency: Port '${outPort.name}' on block '${sourceBlock.label || sourceBlock.type}' has unit '${outPort.unit}' but is connected to port '${inPort.name}' on block '${targetBlock.label || targetBlock.type}' with unit '${inPort.unit}'.`,
+          message: `Unit inconsistency: Port '${outPort.name}' on block '${sourceBlock.label || sourceBlock.type}' has unit '${outUnit}' but is connected to port '${inPort.name}' on block '${targetBlock.label || targetBlock.type}' with unit '${inUnit}'.`,
           blockIds: [sourceBlock.id, targetBlock.id]
         });
       }

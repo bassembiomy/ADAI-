@@ -1,9 +1,11 @@
 /**
  * Correctly rounded sin(x) for the interpreter's time-driven sources (double-double evaluation).
  *
- * V8's Math.sin (fdlibm) is within 1 ULP, glibc's sin used by the generated C is correctly rounded in practice; the
- * wave blocks feed ill-conditioned blocks (acos near 1), so the interpreter must produce the same input value as the
- * generated code. Falls back to Math.sin for non-finite and very large arguments (range reduction would need more
+ * V8's Math.sin (fdlibm) is within 1 ULP. glibc's sin (2.39) used by the generated C is not correctly rounded in every
+ * case: it differs from the correctly rounded value in about 0.1 % of samples (195 of 208k in the WP-21 check), whereas
+ * accurateSin below is correctly rounded (no mismatch in that check) and differs from Math.sin by 1 ULP in about 1.8 % of
+ * cases, which the parity tolerance absorbs. The wave blocks feed ill-conditioned blocks (acos near 1), so the
+ * interpreter must produce an input value as close as possible to the generated code's. Falls back to Math.sin for non-finite and very large arguments (range reduction would need more
  * constant parts).
  */
 type DD = readonly [number, number];
