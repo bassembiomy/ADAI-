@@ -42,3 +42,15 @@ describe('XBV-197: empty legacy slew-rate aliases are refused', () => {
     });
   }
 });
+
+// XBV-310 (FUZZY_DEFUZZIFY, found by the WP-03b verifier): an unknown or wrong-case defuzzification method is refused at
+// compile (PARAMETER_OPTION_INVALID) instead of silently using the centroid.
+import { XbridgesEngine } from '../XbridgesEngine';
+describe('XBV-310: FUZZY_DEFUZZIFY.method is validated', () => {
+  for (const method of ['zz_unknown', 'MOM']) {
+    it(`method '${method}' gives a compile error naming the block`, () => {
+      const ds = new XbridgesEngine(buildModel({ blocks: [{ id: 'd', type: 'FUZZY_DEFUZZIFY', params: { method } }], wires: [] })).compile(0);
+      expect(ds.some((d) => d.severity === 'error' && (d.blockIds ?? []).includes('d'))).toBe(true);
+    });
+  }
+});
