@@ -183,7 +183,11 @@
    "deps": [
     "WP-03"
    ],
-   "status": "todo"
+   "status": "done",
+   "verification": {
+    "executor": "Sonnet harness (xbUniversalB.test.ts, 21 tests, about 40 s), rework 1 after verifier FAIL (XBV-301/304 were not defects; 17 panel enums added)",
+    "verifier": "Opus PASS (21/21 twice; full suite 4043/4043); findings reproduced independently; FUZZY_DEFUZZIFY/PT_SI_CYLINDER/PT_TURBOCHARGER enums shown to have effect."
+   }
   },
   {
    "id": "WP-04",
@@ -2434,6 +2438,78 @@
    "gate": "V3",
    "status": "open",
    "summary": "RATE_LIMITER legacy aliases risingLimit / fallingLimit set to '' pass the embedded validator as Number('') = 0, while the readers fall back to the default 1 (interpreter = C, so no parity gap); an empty alias should be refused like an empty slew rate. Older than WP-21 batch S. Found by the batch S verifier."
+  },
+  {
+   "id": "XBV-300",
+   "plan_ref": "4.1 universal battery",
+   "severity": "S2",
+   "gate": "U6",
+   "status": "open",
+   "summary": "44 blocks (CLARKE/PARK/INVERSE_* transforms, AC_MOTOR_PID_CONTROL, FIELD_ORIENTED_CONTROL, FUZZY_MF_GAUSSMF/SIGMF, ROBOT_VACUUM_*, DEM_BOND_FABRIC, LMS/NEURAL, SVPWM_CORE, ...) coerce a vector, matrix or ragged input with Number() and output NaN with only the generic NUMERICAL_INSTABILITY warning (858 type.port:shape cases); Simulink computes element-wise or reports a dimension error. Found by WP-03b (xbUniversalB.test.ts, ratchet tests/fixtures/xbridges/universal-gaps-b.json), reproduced by the verifier."
+  },
+  {
+   "id": "XBV-302",
+   "plan_ref": "4.1 universal battery",
+   "severity": "S3",
+   "gate": "U6",
+   "status": "open",
+   "summary": "Determinant throws for non-square / vector / 1xn / nx1 / ragged input and Transpose for ragged input, instead of a dimension diagnostic (BlockDefinitions.ts / VectorUtils.ts). Found by WP-03b (xbUniversalB.test.ts, ratchet tests/fixtures/xbridges/universal-gaps-b.json), reproduced by the verifier."
+  },
+  {
+   "id": "XBV-303",
+   "plan_ref": "4.1 universal battery",
+   "severity": "S4",
+   "gate": "U8",
+   "status": "open",
+   "summary": "parameterSchema lists representation continuous|discrete for TRANSFER_FUNCTION, ZERO_POLE_GAIN, LAPLACE_TRANSFORM and DISCRETE_TRANSFER_FUNCTION; the factories fix the domain (as Simulink's separate blocks do) and the panel hides the parameter, so the schema option list is wrong. Found by WP-03b (xbUniversalB.test.ts, ratchet tests/fixtures/xbridges/universal-gaps-b.json), reproduced by the verifier."
+  },
+  {
+   "id": "XBV-305",
+   "plan_ref": "4.1 universal battery",
+   "severity": "S2",
+   "gate": "U8",
+   "status": "open",
+   "summary": "FLUX_REFERENCE mode field_weakening gives the same output as constant (silent no-op; the code comment says not implemented, BlockDefinitions.ts ~3883). Found by WP-03b (xbUniversalB.test.ts, ratchet tests/fixtures/xbridges/universal-gaps-b.json), reproduced by the verifier."
+  },
+  {
+   "id": "XBV-306",
+   "plan_ref": "4.1 universal battery",
+   "severity": "S2",
+   "gate": "U8",
+   "status": "open",
+   "summary": "MatrixDiag, Diag, DiagExtract and ExtractDiag ignore diagMode create|extract; VectorUtils.diag decides from the input shape (silent no-op). Found by WP-03b (xbUniversalB.test.ts, ratchet tests/fixtures/xbridges/universal-gaps-b.json), reproduced by the verifier."
+  },
+  {
+   "id": "XBV-307",
+   "plan_ref": "4.1 universal battery",
+   "severity": "S1",
+   "gate": "U13",
+   "status": "open",
+   "summary": "Discrete sample hits accumulate nextTime += Ts: with Ts 0.1 and h 0.01 from t = 0 the hit at t = 5094.2 s (tick 509420) and every later hit fire one tick late, so the outputs are wrong (XbridgesEngine.updateDiscreteStates). Found by WP-03b (xbUniversalB.test.ts, ratchet tests/fixtures/xbridges/universal-gaps-b.json), reproduced by the verifier."
+  },
+  {
+   "id": "XBV-308",
+   "plan_ref": "4.1 universal battery",
+   "severity": "S4",
+   "gate": "U16",
+   "status": "open",
+   "summary": "Generated C member names are not unique in the first 63 characters (C99 5.2.4.1) for ids that differ only later; smCIdentifierPolicy is not applied to members (xbCGenerator.ts). Found by WP-03b (xbUniversalB.test.ts, ratchet tests/fixtures/xbridges/universal-gaps-b.json), reproduced by the verifier."
+  },
+  {
+   "id": "XBV-309",
+   "plan_ref": "4.1 universal battery",
+   "severity": "S2",
+   "gate": "U8",
+   "status": "open",
+   "summary": "FUZZY_INFERENCE_SYSTEM.orMethod (max|probor) is stored but never read: both give 0.083979 while andMethod changes the output (BlockDefinitions.ts ~10551). Found by WP-03b (xbUniversalB.test.ts, ratchet tests/fixtures/xbridges/universal-gaps-b.json), reproduced by the verifier."
+  },
+  {
+   "id": "XBV-310",
+   "plan_ref": "4.1 universal battery",
+   "severity": "S3",
+   "gate": "U8",
+   "status": "open",
+   "summary": "16 panel enums outside parameterSchema accept unknown and wrong-case values silently (CLARKE_TRANSFORM.mode runs an unknown value as power-invariant; PWM_GENERATOR.carrierType; THREE_PHASE_PWM.method; CFD_DEM_SURROGATE_LEARNER.mode; Diag*.diagMode; FUZZY_INFERENCE_SYSTEM type/andMethod/orMethod/defuzzMethod; FUZZY_RULE operator/implication; FUZZY_AND/OR method; FUZZY_DEFUZZIFY.method, where 'zz_unknown' and 'MOM' silently give the centroid); Simulink refuses an invalid dialog value (PARAMETER_OPTION_INVALID). Found by WP-03b (xbUniversalB.test.ts, ratchet tests/fixtures/xbridges/universal-gaps-b.json), reproduced by the verifier."
   }
  ],
  "blocks": {

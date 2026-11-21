@@ -4,12 +4,12 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 
 ## Summary
 
-- Work packages: 20 done of 29; 2 in progress; 7 to do.
-- Findings: 1 open, 195 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
-  - S1 (wrong number in simulation or generated C): 0 open
-  - S2 (crash, stop, freeze or silent no-op): 0 open
-  - S3 (diagnostic, UI or convention deviation): 0 open
-  - S4 (documentation): 1 open
+- Work packages: 21 done of 29; 2 in progress; 6 to do.
+- Findings: 10 open, 195 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
+  - S1 (wrong number in simulation or generated C): 1 open
+  - S2 (crash, stop, freeze or silent no-op): 4 open
+  - S3 (diagnostic, UI or convention deviation): 2 open
+  - S4 (documentation): 3 open
 - Decisions recorded: 16; open: 0.
 
 ## Work packages
@@ -20,7 +20,7 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 | WP-01 | V1 contract snapshot and catalogue closure tests | done | H / F |
 | WP-02 | Test kit | done | S / F |
 | WP-03 | Universal battery U1-U16 | done | S / F |
-| WP-03b | Universal battery part B: U6 shapes (incl. ragged), U8 enums, U12 reset, U13 long runs, U15 dynamic ports, U16 names | todo | S / F |
+| WP-03b | Universal battery part B: U6 shapes (incl. ragged), U8 enums, U12 reset, U13 long runs, U15 dynamic ports, U16 names | done | S / F |
 | WP-04 | V2/V3 sources, element-wise math, reductions, trigonometric | done | S / F |
 | WP-05 | V2/V3 linear algebra, routing, logic, bitwise, sequential, sinks | done | S / F |
 | WP-06 | V2/V3/V4 continuous, discrete and delay, discontinuities, lookup, buses | done | S (tests from controller oracle spec, D7) / F |
@@ -64,11 +64,35 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 
 ## Open findings by severity
 
-### S4 - documentation (1)
+### S1 - wrong number in simulation or generated C (1)
+
+| Id | Gate | Plan ref | Summary |
+| --- | --- | --- | --- |
+| XBV-307 | U13 | 4.1 universal battery | Discrete sample hits accumulate nextTime += Ts: with Ts 0.1 and h 0.01 from t = 0 the hit at t = 5094.2 s (tick 509420) and every later hit fire one tick late, so the outputs are wrong (XbridgesEngine.updateDiscreteStates). Found by WP-03b (xbUniversalB.test.ts, ratchet tests/fixtures/xbridges/universal-gaps-b.json), reproduced by the verifier. |
+
+### S2 - crash, stop, freeze or silent no-op (4)
+
+| Id | Gate | Plan ref | Summary |
+| --- | --- | --- | --- |
+| XBV-300 | U6 | 4.1 universal battery | 44 blocks (CLARKE/PARK/INVERSE_* transforms, AC_MOTOR_PID_CONTROL, FIELD_ORIENTED_CONTROL, FUZZY_MF_GAUSSMF/SIGMF, ROBOT_VACUUM_*, DEM_BOND_FABRIC, LMS/NEURAL, SVPWM_CORE, ...) coerce a vector, matrix or ragged input with Number() and output NaN with only the generic NUMERICAL_INSTABILITY warning (858 type.port:shape cases); Simulink computes element-wise or reports a dimension error. Found by WP-03b (xbUniversalB.test.ts, ratchet tests/fixtures/xbridges/universal-gaps-b.json), reproduced by the verifier. |
+| XBV-305 | U8 | 4.1 universal battery | FLUX_REFERENCE mode field_weakening gives the same output as constant (silent no-op; the code comment says not implemented, BlockDefinitions.ts ~3883). Found by WP-03b (xbUniversalB.test.ts, ratchet tests/fixtures/xbridges/universal-gaps-b.json), reproduced by the verifier. |
+| XBV-306 | U8 | 4.1 universal battery | MatrixDiag, Diag, DiagExtract and ExtractDiag ignore diagMode create\|extract; VectorUtils.diag decides from the input shape (silent no-op). Found by WP-03b (xbUniversalB.test.ts, ratchet tests/fixtures/xbridges/universal-gaps-b.json), reproduced by the verifier. |
+| XBV-309 | U8 | 4.1 universal battery | FUZZY_INFERENCE_SYSTEM.orMethod (max\|probor) is stored but never read: both give 0.083979 while andMethod changes the output (BlockDefinitions.ts ~10551). Found by WP-03b (xbUniversalB.test.ts, ratchet tests/fixtures/xbridges/universal-gaps-b.json), reproduced by the verifier. |
+
+### S3 - diagnostic, UI or convention deviation (2)
+
+| Id | Gate | Plan ref | Summary |
+| --- | --- | --- | --- |
+| XBV-302 | U6 | 4.1 universal battery | Determinant throws for non-square / vector / 1xn / nx1 / ragged input and Transpose for ragged input, instead of a dimension diagnostic (BlockDefinitions.ts / VectorUtils.ts). Found by WP-03b (xbUniversalB.test.ts, ratchet tests/fixtures/xbridges/universal-gaps-b.json), reproduced by the verifier. |
+| XBV-310 | U8 | 4.1 universal battery | 16 panel enums outside parameterSchema accept unknown and wrong-case values silently (CLARKE_TRANSFORM.mode runs an unknown value as power-invariant; PWM_GENERATOR.carrierType; THREE_PHASE_PWM.method; CFD_DEM_SURROGATE_LEARNER.mode; Diag*.diagMode; FUZZY_INFERENCE_SYSTEM type/andMethod/orMethod/defuzzMethod; FUZZY_RULE operator/implication; FUZZY_AND/OR method; FUZZY_DEFUZZIFY.method, where 'zz_unknown' and 'MOM' silently give the centroid); Simulink refuses an invalid dialog value (PARAMETER_OPTION_INVALID). Found by WP-03b (xbUniversalB.test.ts, ratchet tests/fixtures/xbridges/universal-gaps-b.json), reproduced by the verifier. |
+
+### S4 - documentation (3)
 
 | Id | Gate | Plan ref | Summary |
 | --- | --- | --- | --- |
 | XBV-197 | V3 | 4.6 parity | RATE_LIMITER legacy aliases risingLimit / fallingLimit set to '' pass the embedded validator as Number('') = 0, while the readers fall back to the default 1 (interpreter = C, so no parity gap); an empty alias should be refused like an empty slew rate. Older than WP-21 batch S. Found by the batch S verifier. |
+| XBV-303 | U8 | 4.1 universal battery | parameterSchema lists representation continuous\|discrete for TRANSFER_FUNCTION, ZERO_POLE_GAIN, LAPLACE_TRANSFORM and DISCRETE_TRANSFER_FUNCTION; the factories fix the domain (as Simulink's separate blocks do) and the panel hides the parameter, so the schema option list is wrong. Found by WP-03b (xbUniversalB.test.ts, ratchet tests/fixtures/xbridges/universal-gaps-b.json), reproduced by the verifier. |
+| XBV-308 | U16 | 4.1 universal battery | Generated C member names are not unique in the first 63 characters (C99 5.2.4.1) for ids that differ only later; smCIdentifierPolicy is not applied to members (xbCGenerator.ts). Found by WP-03b (xbUniversalB.test.ts, ratchet tests/fixtures/xbridges/universal-gaps-b.json), reproduced by the verifier. |
 
 ## Closed, merged or superseded findings
 
