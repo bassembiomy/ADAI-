@@ -60,6 +60,7 @@ export interface XBlock {
   equation?: string; // For Help Center documentation
   icon?: string; // For Help Center documentation
   description?: string; // For Help Center documentation
+  hitIndex?: number; // Integer sample-hit counter: next hit at t = hitIndex * Ts
   nextTick?: number; // Scheduled sample-time tick for discrete blocks
   
   execute: (inputs: XValue[], params: Record<string, any>, state: any, time: number, ctx?: BlockEvalContext) => { 

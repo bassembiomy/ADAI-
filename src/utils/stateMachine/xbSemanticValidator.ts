@@ -670,11 +670,14 @@ export const validateXBModel = (
       const stNum = typeof st === 'number' ? st : (st === 'inherited' ? 0.1 : Number(st));
 
       // A vector rate is reported by its own message; the scalar '>= 0' check is skipped for that rate only.
-      const emptyRate = [risingRaw, fallingRaw].some((raw) => slewElements(raw)?.length === 0);
+      const emptyRate = [risingRaw, fallingRaw].some((raw) => slewElements(raw)?.length === 0
+        || (typeof raw === 'string' && raw.trim() === ''))
+        // A blank legacy alias is refused even when the canvas default filled the primary rate (it would read as 0).
+        || [parameters.risingLimit, parameters.fallingLimit].some((raw) => typeof raw === 'string' && raw.trim() === '');
       if (emptyRate) {
         diagnostics.push(diagnostic(
           'XB_PARAMETER_INVALID',
-          `RATE_LIMITER '${node.id}' slew rates: a slew rate is empty ([]); give a scalar risingSlewRate and fallingSlewRate.`,
+          `RATE_LIMITER '${node.id}' slew rates: a slew rate is empty ([] or an empty string); give a scalar risingSlewRate and fallingSlewRate.`,
           node.id,
         ));
       } else if (risingVector || fallingVector) {

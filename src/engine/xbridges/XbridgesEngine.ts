@@ -6,6 +6,9 @@ import { runModelChecks, getBlockSampleTime, evaluateBlockParameters, parameterK
 import { evaluateParameter } from './parameterEvaluation';
 import * as math from 'mathjs';
 
+/** Tolerance for "sample time reached": 1e-9 s plus a few dozen ulps of t (floating-point error of t = start + k*h), far below any step. */
+const hitTolerance = (t: number) => 1e-9 + 64 * Number.EPSILON * Math.abs(t);
+
 export class XbridgesEngine {
   private model: XModel;
   public executionOrder: XBlock[] = [];
@@ -575,7 +578,9 @@ export class XbridgesEngine {
       const ts = this.sampleTimeOf(b);
       if (ts > 0) {
         // Sample hits lie on the absolute grid t = n*Ts: first hit is the smallest n*Ts >= startTime (1e-9 tolerance).
-        const firstHit = Math.ceil(startTime / ts - 1e-9) * ts;
+        const n0 = Math.ceil(startTime / ts - 1e-6);
+        const firstHit = n0 * ts;
+        b.hitIndex = n0;
         b.nextTick = firstHit;
         this.nextSampleTime.set(b.id, firstHit);
         this.lastOutputs.set(b.id, b.outputs.map(out => out.value));
@@ -635,7 +640,7 @@ export class XbridgesEngine {
     if (ts > 0) {
       const nextTime = block.nextTick ?? this.nextSampleTime.get(block.id) ?? 0;
       // Minor stages (tempStates) of a solver step never trigger a sample hit: discrete outputs are held (ZOH).
-      if (time < nextTime - 1e-9 || tempStates) {
+      if (time < nextTime - hitTolerance(time) || tempStates) {
         const cached = this.lastOutputs.get(block.id);
         if (cached) {
           block.outputs.forEach((outPort, i) => {
@@ -936,14 +941,17 @@ export class XbridgesEngine {
         const ts = this.sampleTimeOf(block);
         if (ts > 0) {
           const nextTime = block.nextTick ?? this.nextSampleTime.get(block.id) ?? 0;
-          if (time >= nextTime - 1e-9) {
+          if (time >= nextTime - hitTolerance(time)) {
             const inputValues = this.gatherInputs(block);
             try {
               const result = block.execute(inputValues, block.params, block.state, time);
               if (result.nextState !== undefined) {
                  block.state = result.nextState;
               }
-              const nextScheduled = nextTime + ts;
+              // Integer-tick schedule: hit n happens at t = n*Ts (never a running sum, which drifts past the tolerance).
+              const hitIndex = (block.hitIndex ?? Math.round(nextTime / ts)) + 1;
+              block.hitIndex = hitIndex;
+              const nextScheduled = hitIndex * ts;
               block.nextTick = nextScheduled;
               this.nextSampleTime.set(block.id, nextScheduled);
             } catch (err: any) { this.reportBlockException(block, "updating its discrete states", err); }

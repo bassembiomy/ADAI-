@@ -2436,8 +2436,9 @@
    "plan_ref": "4.6 parity",
    "severity": "S4",
    "gate": "V3",
-   "status": "open",
-   "summary": "RATE_LIMITER legacy aliases risingLimit / fallingLimit set to '' pass the embedded validator as Number('') = 0, while the readers fall back to the default 1 (interpreter = C, so no parity gap); an empty alias should be refused like an empty slew rate. Older than WP-21 batch S. Found by the batch S verifier."
+   "status": "closed",
+   "summary": "RATE_LIMITER legacy aliases risingLimit / fallingLimit set to '' pass the embedded validator as Number('') = 0, while the readers fall back to the default 1 (interpreter = C, so no parity gap); an empty alias should be refused like an empty slew rate. Older than WP-21 batch S. Found by the batch S verifier.",
+   "fix": "WP-21 batch E6: blank risingLimit / fallingLimit aliases are refused by the embedded validator with the 'empty' message."
   },
   {
    "id": "XBV-300",
@@ -2484,8 +2485,9 @@
    "plan_ref": "4.1 universal battery",
    "severity": "S1",
    "gate": "U13",
-   "status": "open",
-   "summary": "Discrete sample hits accumulate nextTime += Ts: with Ts 0.1 and h 0.01 from t = 0 the hit at t = 5094.2 s (tick 509420) and every later hit fire one tick late, so the outputs are wrong (XbridgesEngine.updateDiscreteStates). Found by WP-03b (xbUniversalB.test.ts, ratchet tests/fixtures/xbridges/universal-gaps-b.json), reproduced by the verifier."
+   "status": "closed",
+   "summary": "Discrete sample hits accumulate nextTime += Ts: with Ts 0.1 and h 0.01 from t = 0 the hit at t = 5094.2 s (tick 509420) and every later hit fire one tick late, so the outputs are wrong (XbridgesEngine.updateDiscreteStates). Found by WP-03b (xbUniversalB.test.ts, ratchet tests/fixtures/xbridges/universal-gaps-b.json), reproduced by the verifier.",
+   "fix": "WP-21 batch E6: discrete hits are scheduled on integer indices (hit n at n*Ts, per-block hitIndex), never by nextTime += Ts; the hit test tolerates only the floating-point error of t (1e-9 + 64 eps |t|, 1.4e-7 s at 1e7 s); first hit n0 = ceil(start/Ts - 1e-6). Verified on the grid at starts 0..1e7 s, 1e6-tick runs and worker resume."
   },
   {
    "id": "XBV-308",
@@ -2510,6 +2512,30 @@
    "gate": "U8",
    "status": "open",
    "summary": "16 panel enums outside parameterSchema accept unknown and wrong-case values silently (CLARKE_TRANSFORM.mode runs an unknown value as power-invariant; PWM_GENERATOR.carrierType; THREE_PHASE_PWM.method; CFD_DEM_SURROGATE_LEARNER.mode; Diag*.diagMode; FUZZY_INFERENCE_SYSTEM type/andMethod/orMethod/defuzzMethod; FUZZY_RULE operator/implication; FUZZY_AND/OR method; FUZZY_DEFUZZIFY.method, where 'zz_unknown' and 'MOM' silently give the centroid); Simulink refuses an invalid dialog value (PARAMETER_OPTION_INVALID). Found by WP-03b (xbUniversalB.test.ts, ratchet tests/fixtures/xbridges/universal-gaps-b.json), reproduced by the verifier."
+  },
+  {
+   "id": "XBV-311",
+   "plan_ref": "4.1 universal battery",
+   "severity": "S4",
+   "gate": "U13",
+   "status": "open",
+   "summary": "XbridgesEngine.compile first-hit margin n0 = ceil(start/Ts - 1e-6) is below the ulp of start/Ts from about 1e11 ticks (start 1.8e7 s at Ts 1e-4, 1.3e8 s at Ts 1e-3): the first hit at an on-grid start is skipped in 0.8-7% of random starts. Suggested margin max(1e-6, 64 eps |start/Ts|). Found by the WP-21 E6 verifier."
+  },
+  {
+   "id": "XBV-312",
+   "plan_ref": "4.1 universal battery",
+   "severity": "S3",
+   "gate": "U13",
+   "status": "open",
+   "summary": "Scope sampleTime decimation compares time - lastSampleTime with an absolute 1e-9 (BlockDefinitions.ts ~3107): at start 1e8 s, h 0.01, Ts 0.1 it logs 12000 of 20000 samples (0.2 s gaps); clean at 0, 1e6, 1e7 s. Needs the integer-index grid of XBV-307. Found by the WP-21 E6 verifier."
+  },
+  {
+   "id": "XBV-313",
+   "plan_ref": "4.1 universal battery",
+   "severity": "S4",
+   "gate": "U13",
+   "status": "open",
+   "summary": "PWM carrier phase += dt*f (BlockDefinitions.ts ~447) accumulates a bounded error (5e-12 after 1e6 steps from 0, 3.6e-8 at 1e8 s); a duty exactly equal to the carrier value (e.g. 0.3) can flip the gate on a tie. Derive the phase from t (frac(f t + phase0)). Found by the WP-21 E6 verifier."
   }
  ],
  "blocks": {

@@ -14,10 +14,7 @@
  "XBV-310 wrong case": [],
  "U12 run after reset differs from pristine": [],
  "U12 run changes the node parameters": [],
- "XBV-307": [
-  "delay: tick 509420",
-  "hits: tick 509420"
- ],
+ "XBV-307": [],
  "U13 start 1e6 clean": [],
  "U15 port structure": [],
  "U15 documented semantics": [],

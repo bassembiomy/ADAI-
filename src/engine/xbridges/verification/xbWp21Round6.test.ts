@@ -54,3 +54,28 @@ describe('XBV-310: FUZZY_DEFUZZIFY.method is validated', () => {
     });
   }
 });
+
+// XBV-307 rework (E6 verifier): the hit test must not misfire at large times. A tolerance proportional to |t| reaches one
+// solver step (1e-3 s) at t = 1e6 s, so hits fired one tick early (and several per tick from 1e7 s). Simulink decides hits
+// on integer tick counts. Oracle: from start T0 (a multiple of Ts), the integrator of 1 has y(k) - y(0) = Ts * floor(k h / Ts).
+describe('XBV-307: sample hits stay on the grid at large start times', () => {
+  for (const T0 of [1e5, 1e6, 1e7]) {
+    for (const Ts of [0.01, 0.002]) {
+      it(`start ${T0} s, solver step 0.001, Ts ${Ts}: every sample on the integer grid`, () => {
+        const h = 0.001;
+        const r = runModel(buildModel({
+          blocks: [{ id: 'c', type: 'Constant', params: { value: 1 } }, { id: 'i', type: 'INTEGRATOR_DISCRETE', params: { sample_time: Ts } }],
+          wires: ['c.out -> i.u'],
+        }), { solver: 'discrete', dt: h, startTime: T0, stopTime: T0 + 0.05, probes: ['i.y'] });
+        expect(r.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
+        const ys = r.signals['i.y'].map(Number);
+        const bad: string[] = [];
+        for (let k = 0; k < ys.length && bad.length < 3; k++) {
+          const want = Ts * Math.floor((k * h) / Ts + 1e-6);
+          if (Math.abs(ys[k] - ys[0] - want) > 1e-9) bad.push(`k=${k}: ${ys[k] - ys[0]} vs ${want}`);
+        }
+        expect(bad).toEqual([]);
+      });
+    }
+  }
+});

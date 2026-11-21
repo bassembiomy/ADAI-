@@ -5,11 +5,11 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 ## Summary
 
 - Work packages: 21 done of 29; 2 in progress; 6 to do.
-- Findings: 10 open, 195 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
-  - S1 (wrong number in simulation or generated C): 1 open
+- Findings: 11 open, 197 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
+  - S1 (wrong number in simulation or generated C): 0 open
   - S2 (crash, stop, freeze or silent no-op): 4 open
-  - S3 (diagnostic, UI or convention deviation): 2 open
-  - S4 (documentation): 3 open
+  - S3 (diagnostic, UI or convention deviation): 3 open
+  - S4 (documentation): 4 open
 - Decisions recorded: 16; open: 0.
 
 ## Work packages
@@ -64,12 +64,6 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 
 ## Open findings by severity
 
-### S1 - wrong number in simulation or generated C (1)
-
-| Id | Gate | Plan ref | Summary |
-| --- | --- | --- | --- |
-| XBV-307 | U13 | 4.1 universal battery | Discrete sample hits accumulate nextTime += Ts: with Ts 0.1 and h 0.01 from t = 0 the hit at t = 5094.2 s (tick 509420) and every later hit fire one tick late, so the outputs are wrong (XbridgesEngine.updateDiscreteStates). Found by WP-03b (xbUniversalB.test.ts, ratchet tests/fixtures/xbridges/universal-gaps-b.json), reproduced by the verifier. |
-
 ### S2 - crash, stop, freeze or silent no-op (4)
 
 | Id | Gate | Plan ref | Summary |
@@ -79,20 +73,22 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 | XBV-306 | U8 | 4.1 universal battery | MatrixDiag, Diag, DiagExtract and ExtractDiag ignore diagMode create\|extract; VectorUtils.diag decides from the input shape (silent no-op). Found by WP-03b (xbUniversalB.test.ts, ratchet tests/fixtures/xbridges/universal-gaps-b.json), reproduced by the verifier. |
 | XBV-309 | U8 | 4.1 universal battery | FUZZY_INFERENCE_SYSTEM.orMethod (max\|probor) is stored but never read: both give 0.083979 while andMethod changes the output (BlockDefinitions.ts ~10551). Found by WP-03b (xbUniversalB.test.ts, ratchet tests/fixtures/xbridges/universal-gaps-b.json), reproduced by the verifier. |
 
-### S3 - diagnostic, UI or convention deviation (2)
+### S3 - diagnostic, UI or convention deviation (3)
 
 | Id | Gate | Plan ref | Summary |
 | --- | --- | --- | --- |
 | XBV-302 | U6 | 4.1 universal battery | Determinant throws for non-square / vector / 1xn / nx1 / ragged input and Transpose for ragged input, instead of a dimension diagnostic (BlockDefinitions.ts / VectorUtils.ts). Found by WP-03b (xbUniversalB.test.ts, ratchet tests/fixtures/xbridges/universal-gaps-b.json), reproduced by the verifier. |
 | XBV-310 | U8 | 4.1 universal battery | 16 panel enums outside parameterSchema accept unknown and wrong-case values silently (CLARKE_TRANSFORM.mode runs an unknown value as power-invariant; PWM_GENERATOR.carrierType; THREE_PHASE_PWM.method; CFD_DEM_SURROGATE_LEARNER.mode; Diag*.diagMode; FUZZY_INFERENCE_SYSTEM type/andMethod/orMethod/defuzzMethod; FUZZY_RULE operator/implication; FUZZY_AND/OR method; FUZZY_DEFUZZIFY.method, where 'zz_unknown' and 'MOM' silently give the centroid); Simulink refuses an invalid dialog value (PARAMETER_OPTION_INVALID). Found by WP-03b (xbUniversalB.test.ts, ratchet tests/fixtures/xbridges/universal-gaps-b.json), reproduced by the verifier. |
+| XBV-312 | U13 | 4.1 universal battery | Scope sampleTime decimation compares time - lastSampleTime with an absolute 1e-9 (BlockDefinitions.ts ~3107): at start 1e8 s, h 0.01, Ts 0.1 it logs 12000 of 20000 samples (0.2 s gaps); clean at 0, 1e6, 1e7 s. Needs the integer-index grid of XBV-307. Found by the WP-21 E6 verifier. |
 
-### S4 - documentation (3)
+### S4 - documentation (4)
 
 | Id | Gate | Plan ref | Summary |
 | --- | --- | --- | --- |
-| XBV-197 | V3 | 4.6 parity | RATE_LIMITER legacy aliases risingLimit / fallingLimit set to '' pass the embedded validator as Number('') = 0, while the readers fall back to the default 1 (interpreter = C, so no parity gap); an empty alias should be refused like an empty slew rate. Older than WP-21 batch S. Found by the batch S verifier. |
 | XBV-303 | U8 | 4.1 universal battery | parameterSchema lists representation continuous\|discrete for TRANSFER_FUNCTION, ZERO_POLE_GAIN, LAPLACE_TRANSFORM and DISCRETE_TRANSFER_FUNCTION; the factories fix the domain (as Simulink's separate blocks do) and the panel hides the parameter, so the schema option list is wrong. Found by WP-03b (xbUniversalB.test.ts, ratchet tests/fixtures/xbridges/universal-gaps-b.json), reproduced by the verifier. |
 | XBV-308 | U16 | 4.1 universal battery | Generated C member names are not unique in the first 63 characters (C99 5.2.4.1) for ids that differ only later; smCIdentifierPolicy is not applied to members (xbCGenerator.ts). Found by WP-03b (xbUniversalB.test.ts, ratchet tests/fixtures/xbridges/universal-gaps-b.json), reproduced by the verifier. |
+| XBV-311 | U13 | 4.1 universal battery | XbridgesEngine.compile first-hit margin n0 = ceil(start/Ts - 1e-6) is below the ulp of start/Ts from about 1e11 ticks (start 1.8e7 s at Ts 1e-4, 1.3e8 s at Ts 1e-3): the first hit at an on-grid start is skipped in 0.8-7% of random starts. Suggested margin max(1e-6, 64 eps \|start/Ts\|). Found by the WP-21 E6 verifier. |
+| XBV-313 | U13 | 4.1 universal battery | PWM carrier phase += dt*f (BlockDefinitions.ts ~447) accumulates a bounded error (5e-12 after 1e6 steps from 0, 3.6e-8 at 1e8 s); a duty exactly equal to the carrier value (e.g. 0.3) can flip the gate on a tie. Derive the phase from t (frac(f t + phase0)). Found by the WP-21 E6 verifier. |
 
 ## Closed, merged or superseded findings
 
@@ -291,6 +287,8 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 - XBV-194 (closed): A RATE_LIMITER slew rate given as the one-element array [2] passes the embedded validator, but xbInterpreter.parameter and xbCGenerator.scalarParameter read only numbers and silently fall back to the 
 - XBV-195 (closed): src/utils/stateMachine smDifferential: the state-timer Step value is [0,2,2,2] where [0,2,2,5] is expected (not an environment issue; fails on the base too). Found by the WP-21 XBV-193 verifier; root 
 - XBV-196 (closed): An empty RATE_LIMITER slew rate [] / '[]' is refused by the embedded validator with the 'vector slew rates' message although it has no elements (the base silently ran it at rate 1); the message should
+- XBV-197 (closed): RATE_LIMITER legacy aliases risingLimit / fallingLimit set to '' pass the embedded validator as Number('') = 0, while the readers fall back to the default 1 (interpreter = C, so no parity gap); an emp
+- XBV-307 (closed): Discrete sample hits accumulate nextTime += Ts: with Ts 0.1 and h 0.01 from t = 0 the hit at t = 5094.2 s (tick 509420) and every later hit fire one tick late, so the outputs are wrong (XbridgesEngine
 
 ## Decisions
 
