@@ -910,7 +910,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
                     >
                       {(getPowertrainSpec(block.type)!.params.find(p => p.name === key)!.options ?? []).map(o => <option key={o} value={o}>{o}</option>)}
                     </select>
-                  ) : ['representation', 'mode', 'method', 'criteria', 'operation', 'angle_unit', 'output_type', 'rounding', 'overflow', 'type', 'andMethod', 'orMethod', 'defuzzMethod', 'operator', 'implication', 'limitDataPoints', 'showGrid', 'showLegend', 'timeRange', 'diagMode', 'axis', 'carrierType', 'simulationType'].includes(key) && !(key === 'axis' && typeof displayValue === 'number') &&
+                  ) : ['representation', 'mode', 'method', 'criteria', 'operation', 'angle_unit', 'output_type', 'rounding', 'overflow', 'type', 'andMethod', 'orMethod', 'defuzzMethod', 'operator', 'implication', 'limitDataPoints', 'showGrid', 'showLegend', 'timeRange', 'axis', 'carrierType', 'simulationType'].includes(key) && !(key === 'axis' && typeof displayValue === 'number') &&
                   (key !== 'type' || block.type === 'WaveformGen' || block.type === 'FUZZY_INFERENCE_SYSTEM') ? (
                     <select data-help-feature="ui:xbridges/XbridgesPropertiesPanel:efa3cb1669d5" data-help-source="src/components/xbridges/XbridgesPropertiesPanel.tsx"
                       id={paramEditorId}
@@ -1128,12 +1128,6 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
                         <>
                           <option value="multiply">Multiply</option>
                           <option value="divide">Divide</option>
-                        </>
-                      )}
-                      {key === 'diagMode' && (
-                        <>
-                          <option value="create">Create Diagonal Matrix from Vector</option>
-                          <option value="extract">Extract Diagonal Vector from Matrix</option>
                         </>
                       )}
                       {key === 'axis' && (

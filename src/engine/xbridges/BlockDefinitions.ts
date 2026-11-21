@@ -305,29 +305,13 @@ const fzTrimf = (x: number, a: number, b: number, c: number): number => {
   return Number.isNaN(m) ? 0 : m;
 };
 
-/**
- * MatrixDiag / Diag / DiagExtract / ExtractDiag share one execute that honours diagMode: 'create' builds a diagonal matrix
- * from a vector (a scalar is a 1-element vector), 'extract' returns the main diagonal of a matrix (a scalar is a 1-by-1
- * matrix). A shape that does not fit the mode is a block error.
- */
-const diagFactory = (id: string, type: string, params: any, defaultMode: string): XBlock => ({
+/** MatrixDiag / Diag / DiagExtract / ExtractDiag follow MATLAB diag: a vector builds a diagonal matrix, a matrix gives its diagonal (D17). A stray diagMode param is ignored. */
+const diagFactory = (id: string, type: string): XBlock => ({
   id, type,
-  params: { diagMode: params.diagMode ?? defaultMode },
+  params: {},
   inputs: [createPort('in', 'In', 'input')],
   outputs: [createPort('out', 'Out', 'output')],
-  execute: (ins, p) => {
-    const mode = p.diagMode;
-    if (mode !== 'create' && mode !== 'extract') return { outputs: [NaN], error: `${type}: diagMode must be 'create' or 'extract' (got '${String(mode)}').` };
-    const u: any = ins[0] ?? 0;
-    const isMatrix = Array.isArray(u) && u.length > 0 && u.every((row: unknown) => Array.isArray(row));
-    if (mode === 'create') {
-      if (isMatrix) return { outputs: [NaN], error: `${type}: diagMode 'create' needs a vector input, got a ${u.length}-row matrix.` };
-      return { outputs: [VectorUtils.diag(u)] };
-    }
-    if (Array.isArray(u) && !isMatrix) return { outputs: [NaN], error: `${type}: diagMode 'extract' needs a matrix input, got a vector of length ${u.length}.` };
-    if (!Array.isArray(u)) return { outputs: [[Number(u)]] };
-    return { outputs: [VectorUtils.diag(u)] };
-  }
+  execute: (ins) => ({ outputs: [VectorUtils.diag(ins[0])] })
 });
 const fzTrapmf = (x: number, a: number, b: number, c: number, d: number): number => {
   if (a === b && b === c && c === d) return x === a ? 1 : 0; // singleton: 1 at the point
@@ -2976,10 +2960,10 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     };
   },
 
-  'MatrixDiag': (id, params) => diagFactory(id, 'MatrixDiag', params, 'create'),
-  'DiagExtract': (id, params) => diagFactory(id, 'DiagExtract', params, 'extract'),
-  'ExtractDiag': (id, params) => diagFactory(id, 'ExtractDiag', params, 'extract'),
-  'Diag': (id, params) => diagFactory(id, 'Diag', params, 'extract'),
+  'MatrixDiag': (id, params) => diagFactory(id, 'MatrixDiag'),
+  'DiagExtract': (id, params) => diagFactory(id, 'DiagExtract'),
+  'ExtractDiag': (id, params) => diagFactory(id, 'ExtractDiag'),
+  'Diag': (id, params) => diagFactory(id, 'Diag'),
 
   'IdentityMatrix': (id, params) => ({
     id, type: 'IdentityMatrix',
@@ -3880,9 +3864,9 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
 
   'FLUX_REFERENCE': (id, params) => ({
     id, type: 'FLUX_REFERENCE', directFeedthrough: true,
-    params: { mode: params.mode ?? 'constant', value: params.value ?? 1, base_speed: params.base_speed ?? 100 },
+    params: { mode: params.mode ?? 'constant', value: params.value ?? 0, base_speed: params.base_speed ?? 100 },
     inputs: [createPort('speed', 'ω', 'input', 0, 'left', 'measurement')],
-    outputs: [createPort('id_ref', 'Id*', 'output', params.value ?? 1, 'right', 'continuous')],
+    outputs: [createPort('id_ref', 'Id*', 'output', params.value ?? 0, 'right', 'continuous')],
     execute: (ins, p) => {
       const rated = Number(p.value);
       if (!Number.isFinite(rated)) return { outputs: [NaN], error: 'FLUX_REFERENCE: value must be a finite number.' };
@@ -10700,8 +10684,7 @@ execute: (ins, p, state) => {
                 const outMf = outMfSet.mfs[rule.consequent];
                 if (outMf) {
                   const impliedVal = Math.min(w, evalMF(y, outMf)); // min implication (Mamdani)
-                  // Aggregation is the union of the implied sets: the OR (s-norm) method, max or probabilistic sum
-                  maxMu = orMethod === 'probor' ? maxMu + impliedVal - maxMu * impliedVal : Math.max(maxMu, impliedVal);
+                  maxMu = Math.max(maxMu, impliedVal);               // max aggregation
                 }
               }
             });

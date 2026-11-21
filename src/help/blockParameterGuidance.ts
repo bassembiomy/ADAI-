@@ -31,7 +31,6 @@ const meanings: Record<string, string> = {
   finalValue: 'Output at and after the configured step time.',
   signs: 'Input sign pattern for Sum: + adds and - subtracts the corresponding input.',
   axis: 'Matrix concatenation axis selecting row or column concatenation in the implemented helper.',
-  diagMode: 'create builds a diagonal matrix from a vector input; extract returns the main diagonal of a matrix input; a shape that does not fit the mode is a block error.',
   dim: 'Dimension of the square identity matrix to produce.',
   rowStart: 'First row index selected from the input matrix.', rowEnd: 'End row bound selected from the input matrix; follow the block slice convention.',
   colStart: 'First column index selected from the input matrix.', colEnd: 'End column bound selected from the input matrix; follow the block slice convention.',

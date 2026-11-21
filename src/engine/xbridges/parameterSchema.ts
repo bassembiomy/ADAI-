@@ -26,7 +26,6 @@ const OUTPUT_TYPE_ALL = option(
   'fixed_point', 'float16', 'float32', 'float64', 'boolean', 'int8', 'uint8', 'int16', 'uint16', 'int32', 'uint32',
 );
 const ROUNDING = option('floor', 'ceil', 'ceiling', 'zero', 'nearest', 'round', 'convergent', 'simplest');
-const DIAG_MODE = option('create', 'extract');
 const FUZZY_DEFUZZ = option('centroid', 'bisector', 'mom', 'som', 'lom');
 const OVERFLOW = option('saturate', 'wrap', 'error');
 
@@ -46,10 +45,6 @@ const BASE_SCHEMA: Record<string, Record<string, ParameterKind>> = {
 
   // Linear algebra
   MatrixConcat: { axis: { kind: 'integer', min: 0, max: 1 }, mode: option('vector', 'multidimensional'), numInputs: int1 },
-  MatrixDiag: { diagMode: DIAG_MODE },
-  Diag: { diagMode: DIAG_MODE },
-  DiagExtract: { diagMode: DIAG_MODE },
-  ExtractDiag: { diagMode: DIAG_MODE },
   IdentityMatrix: { dim: int1 },
   SubMatrix: { rowStart: int1, rowEnd: int1, colStart: int1, colEnd: int1 },
 

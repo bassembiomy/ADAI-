@@ -50,7 +50,7 @@ for (const [id, text, example] of [
 BLOCK_GUIDANCE['xbridges:Integrator'].behavior = 'The output is the current state. Its derivative is exactly the input; the selected continuous solver advances that state.';
 BLOCK_GUIDANCE['xbridges:INTEGRATOR_CONTINUOUS'].behavior = 'The output reads state.y; the derivative is Number(input). The continuous solver advances state.';
 BLOCK_GUIDANCE['xbridges:DFlipFlop'].behavior = 'Reset has priority and clears Q. Otherwise a rising clock edge samples D; without an edge Q is held. Q! is the complement.';
-for (const id of ['MatrixDiag', 'DiagExtract', 'ExtractDiag', 'Diag']) add(id, 'diagMode create builds a diagonal matrix from a vector input; diagMode extract returns the main diagonal of a matrix input. A shape that does not fit the mode (a matrix to create, a vector to extract) is a block error.', 'With diagMode create, input [2,3] gives [[2,0],[0,3]]. With diagMode extract, input [[1,2],[3,4]] gives [1,4].');
+for (const id of ['MatrixDiag', 'DiagExtract', 'ExtractDiag', 'Diag']) add(id, 'Follows MATLAB diag: a vector input builds a diagonal matrix and a matrix input gives its main diagonal as a vector. There is no mode parameter.', 'Input [2,3] creates [[2,0],[0,3]]. Input [[1,2],[3,4]] extracts [1,4].');
 BLOCK_GUIDANCE['vlab:resistor'] = { description: 'Models an electrical resistance with Ohm’s law and dissipates electrical energy.', behavior: 'The terminal voltage is v_p−v_n. Current flows p to n as I=(v_p−v_n)/R. R must be strictly positive.', example: 'With R=100 Ω and a 10 V terminal voltage, current is 0.1 A and dissipation is 1 W.' };
 
 const robot: Record<string, [string, string]> = {
