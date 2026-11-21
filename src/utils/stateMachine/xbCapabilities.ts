@@ -402,7 +402,7 @@ export const XB_CAPABILITIES: Readonly<Record<string, XBBlockCapability>> = {
   }),
   // Type names that are aliases of MatrixDiag on the canvas (XBV-006). The embedded conformance cases cover MatrixDiag only,
   // and these names default to the extract mode, so they are explicit host-only entries instead of an implicit fallback.
-  ...Object.fromEntries(['DiagExtract', 'ExtractDiag', 'Diag'].map((alias) => [alias, hostOnly('Alias of MatrixDiag without its own embedded conformance case; use MatrixDiag and select create or extract with diagMode.')])),
+  ...Object.fromEntries(['DiagExtract', 'ExtractDiag', 'Diag'].map((alias) => [alias, hostOnly('Alias of MatrixDiag without its own embedded conformance case; follows MATLAB diag (a vector input builds a diagonal matrix, a matrix input extracts the diagonal).')])),
   IdentityMatrix: direct(['matrix'], undefined, ['T10-INT-IDENTITY-MATRIX'], ['T10-C99-IDENTITY-MATRIX'], { inputShapes: [], outputShapes: ['matrix'] }),
   SubMatrix: direct(['matrix'], undefined, ['T10-INT-MATRIX-OPS'], ['T10-C99-VECTOR-MATRIX']),
   MatrixSolve: direct(vectorOrMatrix, undefined, ['T10-INT-MATRIX-OPS'], ['T10-C99-VECTOR-MATRIX'], {
